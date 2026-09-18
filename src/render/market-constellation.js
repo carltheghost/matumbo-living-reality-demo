@@ -15,11 +15,11 @@ export function mountMarketConstellation({host,onSelect}) {
     records.filter(r=>!r.parentId).forEach(r=>place(r,0));
     const center=new THREE.Vector3();for(const p of positions.values())center.add(p);if(positions.size)center.divideScalar(positions.size);for(const p of positions.values())p.sub(center);
     for(const record of records){const color=record.id===selected?0xefbc73:record.state==='closed'?0x596a7a:record.kind==='pool'?0x986bd8:0x3abce8;
-      const mesh=new THREE.Mesh(new THREE.BoxGeometry(1.2,1.2,1.2),new THREE.MeshStandardMaterial({color,metalness:.55,roughness:.3,transparent:true,opacity:.8}));mesh.position.copy(positions.get(record.id));mesh.userData.id=record.id;group.add(mesh);meshes.push(mesh);
-      mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry),new THREE.LineBasicMaterial({color:0xbfe9ff})));
+      const mesh=new THREE.Mesh(new THREE.BoxGeometry(1.2,1.2,1.2),new THREE.MeshStandardMaterial({color,metalness:.15,roughness:.15,transparent:true,opacity:.62,emissive:color,emissiveIntensity:.28,depthWrite:false}));mesh.position.copy(positions.get(record.id));mesh.userData.id=record.id;group.add(mesh);meshes.push(mesh);
+      mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry),new THREE.LineBasicMaterial({color:0xdff3ff,transparent:true,opacity:.9})));
       // Selection opens six face panels like petals around the immutable core.
       if(record.id===selected)for(const [x,y,z] of [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]]){
-        const face=new THREE.Mesh(new THREE.BoxGeometry(x?.08:.95,y?.08:.95,z?.08:.95),new THREE.MeshStandardMaterial({color:0x8abfe8,metalness:.5,roughness:.3,transparent:true,opacity:.55}));face.position.set(x*1.05,y*1.05,z*1.05);mesh.add(face);
+        const face=new THREE.Mesh(new THREE.BoxGeometry(x?.08:.95,y?.08:.95,z?.08:.95),new THREE.MeshStandardMaterial({color:0x8abfe8,metalness:.15,roughness:.15,transparent:true,opacity:.5,depthWrite:false}));face.position.set(x*1.05,y*1.05,z*1.05);mesh.add(face);
       }
       const beacon=new THREE.Mesh(new THREE.BoxGeometry(.1,.22,.1),new THREE.MeshStandardMaterial({color:0xcd3553,emissive:0xa91c37,emissiveIntensity:2}));beacon.position.y=1.4;mesh.add(beacon);
       if(record.parentId)group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([positions.get(record.parentId),mesh.position]),new THREE.LineBasicMaterial({color:0x69baff})));

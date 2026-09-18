@@ -17,6 +17,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   root.innerHTML=`<header class="assembly-header"><a class="assembly-brand" href="?feature=reality-lens"><span aria-hidden="true">◇</span><div>maTumbo<small>People × planet × possibility</small></div></a><nav aria-label="Assembly navigation"><button data-home>Explore</button><button data-enter-person>Your space</button><button data-enter-contracts>Contracts</button><button data-grid>Cube editor</button></nav><button data-clean>Hide panels</button></header>
   <aside class="assembly-directory"><p class="assembly-eyebrow">Reality Lens Ω</p><h1>Many worlds.<br><em>One reality.</em></h1><p class="assembly-intro">Open a world. Follow a connection.<br>Stay with the same object through time.</p><label class="assembly-search-label">Find a connected feature<input data-search placeholder="Search worlds, contracts…" type="search"></label><nav class="assembly-catalog" aria-label="Feature objects"></nav><p class="assembly-note">Designed 3D architecture.<br>Feature routes, not real cities or online populations.</p></aside>
   <div class="assembly-labels" aria-label="Spatial feature labels"></div>
+  <div class="assembly-world-label" data-world-label hidden>maTumbo Living Reality Ω · one world — scroll or pinch to approach</div>
   <aside class="assembly-inspector" aria-label="Selected object"><header><span class="assembly-eyebrow">Object inspector</span><button data-fold-inspector aria-label="Minimize inspector">−</button></header><div class="assembly-inspector-body"><div class="assembly-object-symbol" aria-hidden="true">◇</div><h2 data-title></h2><p data-description></p><div class="assembly-tags"><span data-mode>Present</span><span>Same feature identity</span></div><dl><dt>Object ID</dt><dd data-object-id></dd><dt>Coordinates</dt><dd data-coordinate></dd><dt>View state</dt><dd data-open-state></dd><dt>Sources</dt><dd data-source-count></dd></dl><div class="assembly-actions"><button data-open>Open cube</button><button data-focus>Approach</button><button data-enter class="assembly-primary">Enter feature ↗</button></div><h3>Connected source references</h3><div data-sources></div><p class="assembly-note" data-boundary></p><p class="assembly-source-detail" data-source-detail></p></div></aside>
   <div class="assembly-selection-hint" data-hover-label>Hover to peek · click to select · double-click to open</div>
   <footer class="assembly-toolbar"><div class="assembly-view"><span class="assembly-eyebrow">View</span><button data-view="3d" aria-pressed="true">3D</button><button data-view="4d" aria-pressed="false">4D · time</button></div><div class="assembly-tools"><button data-interaction="orbit" aria-pressed="true">Orbit</button><button data-interaction="move" aria-pressed="false">Move</button><button data-open-secondary>Open / close</button><button data-home>Overview</button></div><div class="assembly-timeline"><label>Observed local history<input data-time type="range" min="0" max="0" value="0" step="1" aria-label="Recorded view frame"></label><span data-time-label>No previous observations</span><button data-present>Present</button></div><button data-export>Export history</button></footer>
@@ -80,7 +81,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     const outward=new THREE.Vector3(position.x,0,position.z);if(outward.length()<1)outward.set(.15,0,1);outward.normalize().multiplyScalar(mobile?11:9);outward.y=3.2;
     focusTarget=position.clone();focusPosition=position.clone().add(outward);spatial.focus(object.id);onFrame?.();
   }
-  function overview(){focusTarget=new THREE.Vector3(0,2,0);focusPosition=new THREE.Vector3(innerWidth<700?3:4,innerWidth<700?13:10,innerWidth<700?43:30);spatial.focus(null);onFrame?.();}
+  function overview(){focusTarget=new THREE.Vector3(0,2,0);focusPosition=new THREE.Vector3(innerWidth<700?8:6,innerWidth<700?20:15,innerWidth<700?68:50);spatial.focus(null);onFrame?.();}
   function setMode(mode){viewMode=mode;all('[data-view]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.view===mode)));render();}
   function setInteraction(next){interaction=next;all('[data-interaction]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.interaction===next)));say(next==='move'?'Drag a cube to move its local layout. Arrow keys move the selected cube; Page Up / Down changes its height.':'Drag to orbit. Scroll or pinch to approach.');}
   const enter=()=>onNavigate?.(owner.getSnapshot().selectedId);
@@ -156,7 +157,8 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     update(dt,time){
       if(!active)return;
       if(focusTarget&&!renderer.xr.isPresenting){const blend=reducedMotion?1:1-Math.exp(-dt*6);controls.target.lerp(focusTarget,blend);camera.position.lerp(focusPosition,blend);if(camera.position.distanceTo(focusPosition)<.02){focusTarget=null;focusPosition=null;}}
-      spatial.update(dt,time,{reducedMotion});spatial.layer.updateMatrixWorld(true);camera.updateMatrixWorld();
+      const cameraDistance=camera.position.distanceTo(controls.target);
+      spatial.update(dt,time,{reducedMotion,cameraDistance,cameraPosition:camera.position});spatial.layer.updateMatrixWorld(true);camera.updateMatrixWorld();
       const overlaps=(a,b)=>a.left<b.right+4&&a.right>b.left-4&&a.top<b.bottom+4&&a.bottom>b.top-4;
       const occupied=all('.assembly-header,.assembly-directory,.assembly-inspector,.assembly-toolbar,.assembly-branches').filter(element=>!element.hidden&&getComputedStyle(element).display!=='none'&&getComputedStyle(element).visibility!=='hidden').map(element=>element.getBoundingClientRect());
       const selectedId=owner.getSnapshot().selectedId;
@@ -175,6 +177,10 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
         }
         occupied.push(bounds);
       }
+      const lod=spatial.getSnapshot().lod,worldLabel=find('[data-world-label]');
+      worldLabel.hidden=lod!=='world-block';
+      if(lod==='world-block'){for(const [,label] of labels)label.hidden=true;}
+      else{
       const orderedLabels=[...labels].sort(([a],[b])=>(a===selectedId?-2:a===hovered?-1:0)-(b===selectedId?-2:b===hovered?-1:0));
       for(const [id,label] of orderedLabels){
         if(label===focusedLabel)continue;
@@ -184,6 +190,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
         const bounds=label.getBoundingClientRect();
         if(bounds.left<8||bounds.right>innerWidth-8||bounds.top<8||bounds.bottom>innerHeight-8||occupied.some(rect=>overlaps(bounds,rect))){label.hidden=true;continue;}
         occupied.push(bounds);label.style.zIndex=id===selectedId?'2':'1';
+      }
       }
     },
     destroy(){close();window.removeEventListener('resize',resizeFocus);selectionObserver.disconnect();spatial.destroy();root.remove();stylesheet.remove();canvas.removeEventListener('pointerdown',down,true);canvas.removeEventListener('pointermove',move);canvas.removeEventListener('pointerup',release);canvas.removeEventListener('pointercancel',release);canvas.removeEventListener('dblclick',double);document.removeEventListener('keydown',keys);}};
