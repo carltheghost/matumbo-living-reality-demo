@@ -19,8 +19,8 @@ function avatarSpec(avatarId) {
   return BOT_AVATARS.find((entry) => entry.id === avatarId) ?? BOT_AVATARS[0];
 }
 
-function makeLabelSprite(THREE, text, color) {
-  const canvas = document.createElement("canvas");
+function makeLabelSprite(THREE, documentRoot, text, color) {
+  const canvas = documentRoot.createElement("canvas");
   canvas.width = 512;
   canvas.height = 128;
   const ctx = canvas.getContext("2d");
@@ -40,15 +40,17 @@ function makeLabelSprite(THREE, text, color) {
 }
 
 export function mountBotPresence({
-  THREE,
+  three,
   scene,
   camera,
   container,
+  documentRoot = globalThis.document,
   getBots = () => [],
-  onBotClick = null,
+  onOrbClick = null,
   reducedMotion = false,
 } = {}) {
-  if (!THREE || !scene || !camera || !container) throw new TypeError("bot presence needs THREE, scene, camera, and container");
+  const THREE = three;
+  if (!THREE || !scene || !camera || !container) throw new TypeError("bot presence needs three, scene, camera, and container");
   const group = new THREE.Group();
   group.position.set(BOT_PRESENCE_CENTER.x, BOT_PRESENCE_CENTER.y, BOT_PRESENCE_CENTER.z);
   scene.add(group);
@@ -62,7 +64,7 @@ export function mountBotPresence({
   ring.position.y = -1.1;
   group.add(ring);
 
-  const bubbleLayer = document.createElement("div");
+  const bubbleLayer = documentRoot.createElement("div");
   bubbleLayer.className = "bot-presence-bubbles";
   bubbleLayer.setAttribute("aria-hidden", "true");
   container.appendChild(bubbleLayer);
@@ -110,7 +112,7 @@ export function mountBotPresence({
     entryGroup.add(core);
     const light = new THREE.PointLight(color, 6, 7, 1.8);
     entryGroup.add(light);
-    const label = makeLabelSprite(THREE, bot.name, spec.color ?? "#2fe8d4");
+    const label = makeLabelSprite(THREE, documentRoot, bot.name, spec.color ?? "#2fe8d4");
     label.position.y = 1.15;
     entryGroup.add(label);
     if (spec.kind === "image" && spec.src) {
@@ -125,7 +127,7 @@ export function mountBotPresence({
         entryGroup.add(portrait);
       }, undefined, () => { /* portrait is decorative; orb still works */ });
     }
-    const bubble = document.createElement("div");
+    const bubble = documentRoot.createElement("div");
     bubble.className = "bot-presence-bubble";
     bubble.hidden = true;
     bubbleLayer.appendChild(bubble);
@@ -215,7 +217,7 @@ export function mountBotPresence({
     if (!downAt) return;
     const moved = Math.hypot(event.clientX - downAt.x, event.clientY - downAt.y);
     downAt = null;
-    if (moved > 6 || typeof onBotClick !== "function") return;
+    if (moved > 6 || typeof onOrbClick !== "function") return;
     const rect = container.getBoundingClientRect?.();
     if (!rect) return;
     pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -224,7 +226,7 @@ export function mountBotPresence({
     const targets = [...orbs.values()].map((entry) => entry.mesh);
     const hit = raycaster.intersectObjects(targets, false)[0];
     const botId = hit?.object?.userData?.botId;
-    if (botId) onBotClick(botId);
+    if (botId) onOrbClick(botId);
   }
   container.addEventListener("pointerdown", onPointerDown);
   container.addEventListener("pointerup", onPointerUp);

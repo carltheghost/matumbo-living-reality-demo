@@ -88,7 +88,7 @@ import { BOT_PLAZA_CONSOLE_SOURCE, createBotPlazaConsole } from './render/bot-pl
 import { createBotRegistry, createBotRuntime } from './domains/bot-plaza.js?v=20260918-botplaza1';
 import { createProposalQueue } from './domains/bot-plaza.js?v=20260918-ctr2';
 import { createOutcomeContracts } from './domains/outcome-contracts.js?v=20260918-ctr2';
-import { mountBotPresence } from './render/bot-presence.js?v=20260918-botplaza1';
+import { mountBotPresence } from './render/bot-presence.js?v=20260918-botpresence1';
 import { CONTRACT_ATELIER_CONSOLE_SOURCE, createContractAtelierConsole } from './render/contract-atelier.js?v=20260918-ctr1';
 import { LUNA_CONSOLE_SOURCE, createLunaCompanionConsole } from './render/luna-companion.js?v=20260918-luna1';
 import { WARDROBE_ATELIER_CONSOLE_SOURCE, createWardrobeAtelierConsole } from './render/wardrobe-atelier.js?v=20260918-wdr1';
@@ -3068,14 +3068,14 @@ window.__TUMBO_BOT_PLAZA__ = { registry: botPlazaRegistry, runtime: botPlazaRunt
 // speech bubbles above them, and clicking one opens the chat.
 botPresence = mountBotPresence({
   documentRoot: document,
+  three: THREE,
   scene,
   camera,
   container: document.body,
   getBots: () => botPlazaRegistry.listBots(),
   getRuntime: () => botPlazaRuntime,
   onOrbClick: (botId) => {
-    botPlazaConsole?.open();
-    botPlazaConsole?.selectBot?.(botId);
+    botPlazaConsole?.openWithBot?.(botId);
   },
 });
 botPlazaRuntime.getBus().subscribe((entry) => {
