@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>maTumbo Living Reality — Live White Paper</title>
+<style>
+  :root { --gold: #d9ae60; --ink: #e8e2d4; --dim: #9a917f; --bg: #0b0d12; --panel: #12151d; --line: #2a2f3d; --live: #7fd08a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { border-bottom: 1px solid var(--line); padding: 28px 24px 20px; max-width: 900px; margin: 0 auto; }
+  .kicker { color: var(--gold); letter-spacing: .18em; font-size: 12px; text-transform: uppercase; }
+  h1 { margin: 8px 0 4px; font-size: 30px; }
+  .sub { color: var(--dim); margin: 0; }
+  .toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; align-items: center; }
+  .toolbar button { background: none; border: 1px solid var(--gold); color: var(--gold); border-radius: 8px; padding: 10px 18px; font-size: 14px; cursor: pointer; }
+  .toolbar button:hover { background: rgba(217,174,96,.12); }
+  #paper-status { color: var(--dim); font-size: 13px; }
+  main { max-width: 900px; margin: 0 auto; padding: 24px; }
+  section.paper-section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 20px 22px; margin: 0 0 18px; }
+  h2 { color: var(--gold); font-size: 19px; margin: 0 0 10px; display: inline-block; }
+  .badge { display: inline-block; font-size: 11px; letter-spacing: .12em; border: 1px solid var(--line); border-radius: 20px; padding: 2px 10px; margin-left: 10px; color: var(--dim); vertical-align: middle; }
+  .badge.live { border-color: var(--live); color: var(--live); }
+  .badge.frozen { border-color: var(--gold); color: var(--gold); }
+  p { margin: 0 0 12px; }
+  ul { margin: 8px 0 12px; padding-left: 20px; }
+  li { margin: 4px 0; }
+  .dim { color: var(--dim); }
+  .asof { color: var(--dim); font-size: 13px; }
+  .feature-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; margin-top: 10px; }
+  .feature-grid a { display: block; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; text-decoration: none; color: var(--ink); }
+  .feature-grid a:hover { border-color: var(--gold); }
+  .feature-grid strong { display: block; color: var(--gold); font-size: 14px; }
+  .feature-grid span { font-size: 12px; color: var(--dim); }
+  .boundaries { border-left: 3px solid #c0574f; padding-left: 14px; }
+  .boundaries li { color: #d8c9c4; }
+  footer { max-width: 900px; margin: 0 auto; padding: 0 24px 40px; color: var(--dim); font-size: 13px; }
+  footer a { color: var(--gold); }
+  .ports { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
+  .ports a { border: 1px solid var(--gold); border-radius: 8px; padding: 10px 18px; text-decoration: none; }
+</style>
+</head>
+<body>
+<header>
+  <div class="kicker">Living document · rendered from the local projection</div>
+  <h1>maTumbo Living Reality — Live White Paper</h1>
+  <p class="sub">The same system as the 3D world, rendered as a document. Every live number below is composed from the same typed projection contributions the 3D renderer uses — no separate data source, no network. DOM only; zero WebGL.</p>
+  <div class="toolbar">
+    <button id="paper-refresh" type="button">Refresh from local projection</button>
+    <span id="paper-status" role="status" aria-live="polite">LOADING · LOCAL PROJECTION</span>
+  </div>
+  <div class="ports">
+    <a href="index.html">Open the 3D demo · :8080</a>
+    <a href="paper.html">Static paper · frozen text</a>
+  </div>
+</header>
+<main id="paper-document" aria-live="polite"></main>
+<footer>
+  <p>Private demo for its builder. Read-only: this page never changes system state. No wallet, chain, custody, mainnet, real money, or external execution. Reality Lens Ω everywhere — World Eye is retired.</p>
+</footer>
+<script type="module">
+  import { createLivingRealityProjection } from "./src/core/demo-projection.js";
+  import { createWhitePaperDocument } from "./src/domains/white-paper.js";
+  import { FEATURE_DEFINITIONS } from "./src/render/feature-navigator.js";
+
+  const documentEl = document.getElementById("paper-document");
+  const statusEl = document.getElementById("paper-status");
+  const refreshButton = document.getElementById("paper-refresh");
+
+  const el = (tag, className, text) => {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = String(text);
+    return node;
+  };
+
+  function renderSection(section) {
+    const wrap = el("section", "paper-section");
+    wrap.append(el("h2", null, section.title));
+    const badge = el("span", `badge ${section.kind === "frozen" ? "frozen" : section.status === "live" ? "live" : ""}`,
+      section.kind === "frozen" ? "FROZEN" : section.status === "live" ? "LIVE" : "NOT YET LIVE");
+    wrap.append(badge);
+    if (section.status === "not yet live") {
+      wrap.append(el("p", "dim", section.note ?? "Not yet live in this projection."));
+      return wrap;
+    }
+    if (section.id === "vision") wrap.append(el("p", null, section.body));
+    if (section.id === "features") {
+      wrap.append(el("p", null, `${section.count} navigable systems · statuses are live from the local projection.`));
+      const grid = el("div", "feature-grid");
+      section.features.forEach((feature) => {
+        const link = el("a", null);
+        link.href = `index.html?feature=${encodeURIComponent(feature.id)}`;
+        link.append(el("strong", null, feature.label), el("span", null, feature.kicker || feature.id));
+        link.title = feature.description || feature.label;
+        grid.append(link);
+      });
+      wrap.append(grid);
+    }
+    if (section.id === "neural-mesh") {
+      wrap.append(el("p", null,
+        `${section.agents.length} agents · ${section.intentCount} intents · ${section.proposalCount} proposals · ${section.relationshipCount} relationships · ${section.ancestryCount} ancestry links`));
+      const list = el("ul", null);
+      section.agents.forEach((agent) => list.append(el("li", null, `${agent.label} — ${agent.role}`)));
+      wrap.append(list);
+      if (section.asOf) wrap.append(el("p", "asof", `Projection as of ${section.asOf}`));
+    }
+    if (section.id === "contracts-ledger") {
+      if (section.contracts) {
+        const c = section.contracts;
+        wrap.append(el("p", null, `Contract Atelier: ${c.open} open · ${c.resolved} resolved (rehearsal credits, zero real value).`));
+        const list = el("ul", null);
+        c.contracts.slice(0, 8).forEach((contract) =>
+          list.append(el("li", null, `${contract.title} — ${contract.type} · ${contract.role} · ${contract.status}`)));
+        if (c.contracts.length > 8) list.append(el("li", "dim", `…and ${c.contracts.length - 8} more`));
+        wrap.append(list);
+      }
+      if (section.ledger) {
+        const l = section.ledger;
+        wrap.append(el("p", null,
+          `Prime Ledger + EchoProof: ${l.records.length} journal records · ${l.proofCount} proof links · summaries only, not an authoritative ledger.`));
+        const list = el("ul", null);
+        l.records.forEach((record) => list.append(el("li", null, `${record.label} — ${record.status} · ${record.unit}`)));
+        wrap.append(list);
+      }
+    }
+    if (section.id === "rooms-people") {
+      wrap.append(el("p", null, `${section.rooms.length} rooms visible · ${section.membershipCount} memberships (simulated metadata).`));
+      const list = el("ul", null);
+      section.rooms.forEach((room) => list.append(el("li", null, `${room.label} — ${room.context}`)));
+      wrap.append(list);
+      if (section.person) wrap.append(el("p", null, `Person profile projection present · ${section.person.entityCount} entities · local fixture only.`));
+    }
+    if (section.id === "boundaries") {
+      const list = el("ul", "boundaries");
+      section.items.forEach((item) => list.append(el("li", null, item)));
+      wrap.append(list);
+    }
+    return wrap;
+  }
+
+  function render() {
+    let document;
+    try {
+      document = createWhitePaperDocument({
+        envelope: createLivingRealityProjection(),
+        features: FEATURE_DEFINITIONS,
+      });
+    } catch (error) {
+      statusEl.textContent = `PROJECTION FAILED · ${String(error?.message ?? error).slice(0, 80)}`;
+      return;
+    }
+    statusEl.textContent = `${document.sectionCount} SECTIONS · ${document.liveSectionCount} LIVE · LOCAL PROJECTION ONLY · NO NETWORK`;
+    documentEl.replaceChildren();
+    document.sections.forEach((section) => documentEl.append(renderSection(section)));
+  }
+
+  refreshButton.addEventListener("click", render);
+  render();
+</script>
+</body>
+</html>

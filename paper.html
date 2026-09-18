@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>maTumbo Living Reality — White Paper</title>
+<style>
+  :root { --gold: #d9ae60; --ink: #e8e2d4; --dim: #9a917f; --bg: #0b0d12; --panel: #12151d; --line: #2a2f3d; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { border-bottom: 1px solid var(--line); padding: 28px 24px 20px; max-width: 860px; margin: 0 auto; }
+  .kicker { color: var(--gold); letter-spacing: .18em; font-size: 12px; text-transform: uppercase; }
+  h1 { margin: 8px 0 4px; font-size: 30px; }
+  .sub { color: var(--dim); margin: 0; }
+  main { max-width: 860px; margin: 0 auto; padding: 24px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 20px 22px; margin: 0 0 18px; }
+  h2 { color: var(--gold); font-size: 19px; margin: 0 0 10px; }
+  p { margin: 0 0 12px; }
+  ul { margin: 8px 0 12px; padding-left: 20px; }
+  li { margin: 4px 0; }
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 6px 18px; }
+  .tag { display: inline-block; border: 1px solid var(--gold); color: var(--gold); border-radius: 20px; padding: 2px 12px; font-size: 13px; margin: 2px 6px 2px 0; }
+  .new { border-color: #7fd08a; color: #7fd08a; }
+  .bound { border-left: 3px solid #c0574f; padding-left: 14px; }
+  .bound li { color: #d8c9c4; }
+  a { color: var(--gold); }
+  footer { max-width: 860px; margin: 0 auto; padding: 0 24px 40px; color: var(--dim); font-size: 13px; }
+  .ports { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
+  .ports a { border: 1px solid var(--gold); border-radius: 8px; padding: 10px 18px; text-decoration: none; }
+</style>
+</head>
+<body>
+<header>
+  <div class="kicker">Living document · runs on localhost</div>
+  <h1>maTumbo Living Reality — White Paper</h1>
+  <p class="sub">Don't display information. Materialize it. A private, local-first 3D world where every system is a place you can walk into.</p>
+  <div class="ports">
+    <a href="http://localhost:8080/index.html">Open the 3D demo · :8080</a>
+    <a href="http://localhost:8181/paper.html">This paper · :8181</a>
+  </div>
+</header>
+<main>
+  <section>
+    <h2>The idea</h2>
+    <p>maTumbo Living Reality is a single local runtime that turns abstract systems — contracts, ledgers, rooms, identities, markets — into navigable 3D space. You don't read about a contract; you stand in front of it, open it, stake on it, resolve it. The 3D world is a projection of local state: everything you see is computed on your machine, from your machine's data.</p>
+    <p>Every object in the world is mutable: tap anything to move it through all three dimensions, rotate it, or stretch it. Where you leave it is where it stays — arrangements persist across snapshots and replay.</p>
+  </section>
+
+  <section>
+    <h2>What's inside</h2>
+    <p>Twenty-nine navigable systems. The newest:</p>
+    <p>
+      <span class="tag new">NFT Atelier</span>
+      <span class="tag new">Contract Atelier</span>
+      <span class="tag new">Luna Companion</span>
+      <span class="tag new">Wardrobe Atelier</span>
+      <span class="tag new">Full 3D manipulation</span>
+    </p>
+    <div class="cols">
+      <ul>
+        <li>Reality Lens Ω — system-scale semantic zoom</li>
+        <li>Person Ω — your 3D self, four outfits</li>
+        <li>Rooms + Messaging — sealed local rooms</li>
+        <li>Block World / Fabric — the ground you build on</li>
+        <li>NFT Atelier — fictional local collectibles</li>
+        <li>Contract Atelier — fictional rehearsal contracts</li>
+        <li>Luna Companion — local guide, no cloud</li>
+        <li>Wardrobe Atelier — dress your person</li>
+      </ul>
+      <ul>
+        <li>Contracts + Pools, Prime Ledger + EchoProof</li>
+        <li>PAYCORE balances, T402 value routing</li>
+        <li>TUMBO Asset Token, Asset Market, Launch Distribution</li>
+        <li>Neural Mesh / Agents, Picture Matter</li>
+        <li>Arena / Game Lab, Financial Academy</li>
+        <li>World + Sports Events, Social Explorer</li>
+        <li>Gateway, Projections, Shared Session, XR Host</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>How it runs</h2>
+    <ul>
+      <li><strong>:8080</strong> — the full 3D demo (<code>index.html</code>). Three.js runs locally from vendored files; no CDN, no network calls.</li>
+      <li><strong>:8181</strong> — this paper (<code>paper.html</code>). Pure document, zero 3D dependency, always loads.</li>
+      <li>Both served from the same checkout with <code>python -m http.server</code>. Never open the files directly with <code>file://</code> — the 3D modules require a server.</li>
+    </ul>
+  </section>
+
+  <section class="bound">
+    <h2>Hard boundaries</h2>
+    <ul>
+      <li>Local simulation only. Nothing here is a wallet, a chain, custody, or settlement.</li>
+      <li>No real money, no wagering, no mainnet. Rehearsal credits are fictional and zero-valued.</li>
+      <li>Luna runs on a deterministic local grammar — no cloud AI, no speech recognition, no network.</li>
+      <li>The camera layer (Gesture Lens, in progress) processes video on-device only. Camera off by default; no recording, no upload.</li>
+      <li>The 3D world is a projection. It is never authority over money, identity, or agreements.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>What's next</h2>
+    <ul>
+      <li><strong>Gesture Lens</strong> — Minority-Report-style hand tracking driving the same 3D handles. Camera off by default, on-device only.</li>
+      <li><strong>Living document</strong> — this paper rendered from the same live projection state as the 3D world, instead of a static page.</li>
+    </ul>
+  </section>
+</main>
+<footer>
+  Private demo for its builder. World Eye is retired — Reality Lens Ω everywhere.
+</footer>
+</body>
+</html>
