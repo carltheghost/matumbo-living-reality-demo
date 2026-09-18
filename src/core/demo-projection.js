@@ -17,6 +17,7 @@ import { createBlockMigrationManifest } from "../domains/block-migration.js";
 import { createArenaGamesContribution } from "../domains/arena-games.js";
 import { createAcademyContribution } from "../domains/academy.js";
 import { createNftAtelierContribution } from "../domains/nft-atelier.js";
+import { createMuseAgentContribution } from "../domains/muse-agent.js";
 import { createContractAtelierContribution } from "../domains/contract-atelier.js";
 import { createLunaCompanionContribution } from "../domains/luna-companion.js";
 import { createWardrobeAtelierContribution } from "../domains/wardrobe-atelier.js";
@@ -121,6 +122,7 @@ export function createLivingRealityProjection({ projectedAt = LIVING_REALITY_SAM
   // the page-session console; the canonical contribution is the fixed path.
   const academy = createAcademyContribution({ updatedAt: projectedAt });
   const nftAtelier = createNftAtelierContribution({ updatedAt: projectedAt });
+  const museAgent = createMuseAgentContribution({ updatedAt: projectedAt });
   const contractAtelier = createContractAtelierContribution({ updatedAt: projectedAt });
   const lunaCompanion = createLunaCompanionContribution({ updatedAt: projectedAt });
   const wardrobeAtelier = createWardrobeAtelierContribution({ updatedAt: projectedAt });
@@ -225,6 +227,7 @@ export function createLivingRealityProjection({ projectedAt = LIVING_REALITY_SAM
       arenaGames,
       academy,
       nftAtelier,
+      museAgent,
       contractAtelier,
       lunaCompanion,
       wardrobeAtelier,

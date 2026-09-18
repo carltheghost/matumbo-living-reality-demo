@@ -171,6 +171,15 @@ export const FEATURE_DEFINITIONS = Object.freeze([
     boundary: "Minted pieces are simulated collectibles. No wallet, chain, transfer, sale, custody, royalty, or external publication exists.",
   }),
   Object.freeze({
+    id: "muse-agent",
+    label: "Muse Agent",
+    kicker: "design · avatar · image",
+    focusOrganId: "person",
+    sources: ["muse-agent"],
+    description: "Meet the in-world design companion: add a local profile, then compose deterministic image and avatar designs. Avatar designs dress the Person Studio hologram.",
+    boundary: "Profiles are local display names only — no login, no external account linking. Designs are deterministic and local; no AI service or network is used.",
+  }),
+  Object.freeze({
     id: "luna-companion",
     label: "Luna Companion",
     kicker: "talk · navigate · ask",
@@ -304,6 +313,42 @@ export const FEATURE_FUTURE_OPTIONS = Object.freeze([
 
 const FEATURE_BY_ID = new Map(FEATURE_DEFINITIONS.map((feature) => [feature.id, feature]));
 
+// Infinite-handoff graph (2026-09-18): every feature links onward to a few
+// related features so one interaction always pushes into the next. Rendered
+// as the KEEP GOING strip in the feature detail; every id must resolve.
+export const FEATURE_HANDOFF_LINKS = Object.freeze({
+  "reality-lens": Object.freeze(["person", "block-world", "projections"]),
+  person: Object.freeze(["wardrobe-atelier", "muse-agent", "arena"]),
+  rooms: Object.freeze(["social-explorer", "neural-mesh", "block-world"]),
+  "block-world": Object.freeze(["reality-lens", "projections", "migration"]),
+  "runtime-sync": Object.freeze(["block-world", "projections", "gateway"]),
+  migration: Object.freeze(["block-world", "runtime-sync", "reality-lens"]),
+  "asset-token": Object.freeze(["asset-market", "launch-distribution", "ledger"]),
+  "asset-market": Object.freeze(["asset-token", "contracts", "ledger"]),
+  "launch-distribution": Object.freeze(["asset-token", "asset-market", "white-paper"]),
+  "social-explorer": Object.freeze(["rooms", "neural-mesh", "luna-companion"]),
+  paycore: Object.freeze(["ledger", "t402", "contracts"]),
+  contracts: Object.freeze(["contract-atelier", "paycore", "ledger"]),
+  "contract-atelier": Object.freeze(["contracts", "paycore", "academy"]),
+  ledger: Object.freeze(["paycore", "t402", "contracts"]),
+  t402: Object.freeze(["paycore", "ledger", "gateway"]),
+  "neural-mesh": Object.freeze(["luna-companion", "rooms", "social-explorer"]),
+  "picture-matter": Object.freeze(["nft-atelier", "white-paper", "reality-lens"]),
+  "nft-atelier": Object.freeze(["picture-matter", "muse-agent", "asset-market"]),
+  "muse-agent": Object.freeze(["person", "wardrobe-atelier", "nft-atelier"]),
+  "luna-companion": Object.freeze(["neural-mesh", "rooms", "academy"]),
+  "wardrobe-atelier": Object.freeze(["person", "muse-agent", "arena"]),
+  "white-paper": Object.freeze(["projections", "reality-lens", "academy"]),
+  "gesture-lens": Object.freeze(["block-world", "person", "neural-mesh"]),
+  gateway: Object.freeze(["t402", "world-events", "runtime-sync"]),
+  "world-events": Object.freeze(["sports-events", "multi-sport-events", "gateway"]),
+  "sports-events": Object.freeze(["world-events", "multi-sport-events", "arena"]),
+  "multi-sport-events": Object.freeze(["sports-events", "world-events", "arena"]),
+  arena: Object.freeze(["person", "wardrobe-atelier", "academy"]),
+  academy: Object.freeze(["arena", "contract-atelier", "white-paper"]),
+  projections: Object.freeze(["reality-lens", "block-world", "white-paper"]),
+});
+
 // Every feature gets a small, deterministic "surface route".  The route is
 // deliberately renderer metadata: it tells the viewer what becomes visible
 // after opening a feature, without pretending that a missing domain adapter is
@@ -399,6 +444,11 @@ const FEATURE_SURFACE_ROUTES = Object.freeze({
     Object.freeze(["FICTIONAL MINT", "name a piece · deterministic local id"]),
     Object.freeze(["PROVENANCE", "designed → minted → burned trail"]),
     Object.freeze(["NO CHAIN", "no wallet · no transfer · no sale"]),
+  ]),
+  "muse-agent": Object.freeze([
+    Object.freeze(["ADD ACCOUNT", "local profile · Muse or other tag · no login"]),
+    Object.freeze(["DESIGN", "prompt → deterministic avatar / image spec"]),
+    Object.freeze(["APPLY", "dress the Person Studio hologram"]),
   ]),
   "luna-companion": Object.freeze([
     Object.freeze(["SAY IT", "plain words · quick chips"]),
@@ -734,6 +784,29 @@ export function createFeatureNavigator({
     });
     actionBar.appendChild(action);
     detail.appendChild(actionBar);
+
+    // KEEP GOING (2026-09-18): the infinite-handoff strip. Every feature
+    // links onward to related features so one interaction always pushes
+    // into the next — same-page handoff, no reload, no dead ends.
+    const handoff = addClass(documentRoot.createElement("section"), "feature-handoff");
+    handoff.setAttribute("aria-label", "Keep going");
+    appendText(handoff, "div", "feature-handoff-label", "KEEP GOING");
+    const handoffRows = addClass(documentRoot.createElement("div"), "feature-handoff-rows");
+    (FEATURE_HANDOFF_LINKS[feature.id] ?? []).forEach((targetId) => {
+      const target = FEATURE_BY_ID.get(targetId);
+      if (!target) return;
+      const handoffAction = documentRoot.createElement("button");
+      handoffAction.type = "button";
+      handoffAction.className = "feature-handoff-action";
+      handoffAction.dataset.handoffTarget = targetId;
+      handoffAction.textContent = `OPEN ${target.label.toUpperCase()}`;
+      handoffAction.title = target.description;
+      handoffAction.setAttribute("aria-label", `Keep going: open ${target.label}`);
+      handoffAction.addEventListener("click", () => select(targetId, "handoff"));
+      handoffRows.appendChild(handoffAction);
+    });
+    handoff.appendChild(handoffRows);
+    detail.appendChild(handoff);
 
     const boundary = addClass(documentRoot.createElement("div"), "feature-boundary");
     appendText(boundary, "strong", "", "BOUNDARY");

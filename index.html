@@ -125,6 +125,11 @@
     .feature-pill-future{flex:0 0 auto;color:#f4c98b;border-color:rgba(242,183,108,.24);background:rgba(155,91,26,.1)}
     .feature-future-action{appearance:none;flex:0 1 auto;max-width:100%;border:1px solid rgba(140,223,241,.26);border-radius:6px;padding:5px 6px;background:rgba(42,127,150,.12);color:#b8e5ee;font-size:7px;font-weight:700;letter-spacing:.06em;line-height:1.2;text-align:left;cursor:pointer;transition:.18s ease}
     .feature-future-action:hover,.feature-future-action:focus-visible{border-color:rgba(190,246,255,.72);background:rgba(55,158,183,.26);color:#f4feff;outline:none;transform:translateY(-1px)}
+    .feature-handoff{margin-top:8px;border-top:1px dashed rgba(140,223,241,.18);padding-top:8px}
+    .feature-handoff-label{font-size:8px;font-weight:700;letter-spacing:.14em;color:#8fd8e8;margin-bottom:6px}
+    .feature-handoff-rows{display:flex;flex-wrap:wrap;gap:6px}
+    .feature-handoff-action{appearance:none;flex:1 1 30%;border:1px solid rgba(126,231,255,.4);border-radius:8px;padding:8px 6px;background:rgba(126,231,255,.1);color:#d8f4ff;font-size:8px;font-weight:700;letter-spacing:.06em;line-height:1.2;text-align:center;cursor:pointer;transition:.18s ease}
+    .feature-handoff-action:hover,.feature-handoff-action:focus-visible{border-color:rgba(190,246,255,.8);background:rgba(126,231,255,.24);color:#ffffff;outline:none;transform:translateY(-1px)}
     #reality-lens{position:absolute;right:20px;bottom:19px;display:flex;align-items:center;gap:6px;padding:7px 8px 7px 10px;border:1px solid rgba(145,232,255,.18);border-radius:999px;background:rgba(3,9,14,.52);backdrop-filter:blur(12px);pointer-events:auto;box-shadow:0 10px 38px rgba(0,0,0,.24)}
     #reality-lens .lens-label{margin-right:3px;color:#9edfeb;font-size:9px;font-weight:650;letter-spacing:.14em;text-transform:uppercase;white-space:nowrap}
     #reality-lens button{appearance:none;border:1px solid transparent;background:transparent;color:#6f97a3;border-radius:999px;padding:5px 7px;font-size:9px;letter-spacing:.08em;cursor:pointer;transition:.2s ease}
@@ -895,6 +900,40 @@
      .nft-atelier-trace-row{font-size:11px;color:#e8d9b8;opacity:.85}
      #nft-atelier-boundary{font-size:10px;color:#e8d9b8;opacity:.6;line-height:1.5}
      @media(max-width:700px){#nft-atelier-console{left:12px;right:12px;top:86px;width:auto;max-height:calc(100vh - 112px);padding:11px}#nft-atelier-head h2{font-size:17px}}
+     #muse-agent-console{position:absolute;right:20px;top:145px;z-index:31;width:min(560px,calc(100vw - 40px));max-height:calc(100vh - 190px);display:flex;flex-direction:column;gap:9px;padding:15px;border:1px solid rgba(126,231,255,.38);border-radius:14px;background:linear-gradient(160deg,rgba(10,30,42,.98),rgba(4,8,12,.98));box-shadow:0 24px 80px rgba(0,0,0,.64),inset 0 0 42px rgba(126,231,255,.08);pointer-events:auto;overflow:auto;scrollbar-width:thin}
+     #muse-agent-console[hidden]{display:none}
+     #muse-agent-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+     #muse-agent-head .eyebrow{font-size:9px;letter-spacing:.2em;color:#7ee7ff;text-transform:uppercase}
+     #muse-agent-head h2{margin:4px 0;font-size:20px;color:#f2fbff}
+     #muse-agent-head p{margin:6px 0 0;font-size:12px;color:#c8e2ee;opacity:.85}
+     #muse-agent-close{background:none;border:1px solid rgba(126,231,255,.4);border-radius:8px;color:#7ee7ff;font-size:16px;width:30px;height:30px;cursor:pointer;flex:none}
+     #muse-agent-status{font-size:11px;letter-spacing:.08em;color:#7ee7ff}
+     #muse-agent-profiles{display:flex;flex-wrap:wrap;gap:8px}
+     .muse-agent-profile{display:flex;flex-direction:column;gap:2px;align-items:flex-start;text-align:left;padding:8px 10px;border:1px solid rgba(126,231,255,.28);border-radius:10px;background:rgba(126,231,255,.06);color:#f2fbff;cursor:pointer}
+     .muse-agent-profile[aria-pressed="true"]{border-color:#7ee7ff;background:rgba(126,231,255,.14)}
+     .muse-agent-profile-name{font-size:13px}
+     .muse-agent-profile-meta{font-size:10px;letter-spacing:.06em;color:#c8e2ee;opacity:.8}
+     .muse-agent-empty{font-size:12px;color:#c8e2ee;opacity:.7;padding:8px 0}
+     .muse-agent-field{display:flex;flex-direction:column;gap:4px;font-size:11px;letter-spacing:.06em;color:#c8e2ee;margin-bottom:8px}
+     .muse-agent-field input,.muse-agent-field select{background:rgba(0,0,0,.4);border:1px solid rgba(126,231,255,.3);border-radius:8px;color:#f2fbff;font-size:13px;padding:8px 10px}
+     #muse-agent-add,#muse-agent-generate{background:rgba(126,231,255,.14);border:1px solid rgba(126,231,255,.45);border-radius:8px;color:#7ee7ff;font-size:12px;padding:8px 12px;cursor:pointer}
+     .muse-agent-card{display:flex;flex-direction:column;gap:8px;padding:12px;border:1px solid rgba(126,231,255,.34);border-radius:12px;background:rgba(126,231,255,.05)}
+     .muse-agent-card-kicker{font-size:9px;letter-spacing:.2em;color:#7ee7ff}
+     .muse-agent-card-title{font-size:16px;color:#f2fbff}
+     .muse-agent-swatches{display:flex;gap:6px}
+     .muse-agent-swatch{width:26px;height:26px;border-radius:8px;border:1px solid rgba(255,255,255,.25);background:var(--swatch,#7ee7ff)}
+     .muse-agent-spec{display:flex;justify-content:space-between;gap:8px;font-size:11px;padding:5px 8px;border-radius:8px;background:rgba(126,231,255,.07)}
+     .muse-agent-spec-label{color:#7ee7ff;letter-spacing:.04em}
+     .muse-agent-spec-value{color:#f2fbff}
+     .muse-agent-brief{font-size:12px;color:#dceef7;margin:0;line-height:1.55}
+     .muse-agent-actions{display:flex;gap:8px;flex-wrap:wrap}
+     .muse-agent-actions button{background:rgba(126,231,255,.14);border:1px solid rgba(126,231,255,.45);border-radius:8px;color:#7ee7ff;font-size:12px;padding:8px 12px;cursor:pointer}
+     #muse-agent-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+     .muse-agent-design{display:flex;flex-direction:column;gap:4px;align-items:flex-start;text-align:left;padding:10px;border:1px solid rgba(126,231,255,.28);border-radius:10px;background:rgba(126,231,255,.06);color:#f2fbff;cursor:pointer}
+     .muse-agent-design-title{font-size:13px}
+     .muse-agent-design-meta{font-size:10px;letter-spacing:.06em;color:#c8e2ee;opacity:.8}
+     #muse-agent-boundary{font-size:10px;color:#c8e2ee;opacity:.6;line-height:1.5}
+     @media(max-width:700px){#muse-agent-console{left:12px;right:12px;top:86px;width:auto;max-height:calc(100vh - 112px);padding:11px}#muse-agent-head h2{font-size:17px}}
      #contract-atelier-console{position:absolute;right:20px;top:145px;z-index:31;width:min(600px,calc(100vw - 40px));max-height:calc(100vh - 190px);display:flex;flex-direction:column;gap:9px;padding:15px;border:1px solid rgba(224,154,90,.42);border-radius:14px;background:linear-gradient(160deg,rgba(46,26,12,.98),rgba(12,8,5,.98));box-shadow:0 24px 80px rgba(0,0,0,.64),inset 0 0 42px rgba(224,154,90,.08);pointer-events:auto;overflow:auto;scrollbar-width:thin}
      #contract-atelier-console[hidden]{display:none}
      #contract-atelier-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
@@ -1822,6 +1861,33 @@
       #block-world-quick-actions { left: 10px; right: 10px; bottom: 56px; width: auto; max-height: 34vh; }
     }
     @media(max-width:700px){#academy-console{left:12px;right:12px;top:86px;width:auto;max-height:calc(100vh - 112px);padding:11px}#academy-head h2{font-size:17px}#academy-lessons{grid-template-columns:1fr}}
+    /* Mobile panel manager (2026-09-18): one floating panel at a time on
+       narrow screens. While any console is up, the bottom cube-field hint bar
+       hides so it cannot collide with panels; every panel is boxed inside the
+       viewport and keeps 44px touch targets on its chrome. Layout-only. */
+    @media (max-width: 700px) {
+      body.mobile-panel-open #hint { display: none; }
+      aside[id$="-console"], #camera-input-panel, #intent-timeline,
+      #world-events-projection, #gesture-input-panel, #media-preview,
+      #city-journey {
+        box-sizing: border-box;
+        max-width: calc(100vw - 20px);
+      }
+      #media-preview { left: 12px; right: 12px; width: auto; bottom: 12px; }
+      #media-preview summary {
+        min-height: 44px; display: flex; align-items: center; cursor: pointer;
+      }
+      #media-preview[open] { max-height: 52vh; overflow-y: auto; }
+      #media-preview button { min-height: 44px; }
+      #city-journey { max-width: calc(100vw - 16px); }
+      #city-journey summary { min-height: 44px; display: flex; align-items: center; }
+      #city-journey nav button { min-height: 44px; }
+      aside[id$="-console"] [id$="-close"],
+      #camera-input-close, #intent-timeline-close,
+      #world-events-projection-open {
+        min-height: 44px; min-width: 44px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -1876,6 +1942,7 @@
             <li><a class="feature-nav-fallback-item" href="?feature=neural-mesh&amp;build=control4&amp;fresh=20260903-reality-lens"><strong>Neural Mesh / Agents</strong><span>advisory network</span></a></li>
             <li><a class="feature-nav-fallback-item" href="?feature=picture-matter&amp;build=control4&amp;fresh=20260903-reality-lens"><strong>Picture Matter</strong><span>word → statement</span></a></li>
             <li><a class="feature-nav-fallback-item" href="?feature=nft-atelier&amp;build=control4&amp;fresh=20260903-reality-lens"><strong>NFT Atelier</strong><span>mint · collect · inspect</span></a></li>
+            <li><a class="feature-nav-fallback-item" href="?feature=muse-agent&amp;build=control4&amp;fresh=20260903-reality-lens"><strong>Muse Agent</strong><span>design · avatar · image</span></a></li>
             <li><a class="feature-nav-fallback-item" href="?feature=luna-companion&amp;build=control4&amp;fresh=20260903-reality-lens"><strong>Luna Companion</strong><span>talk · navigate · ask</span></a></li>
             <li><a class="feature-nav-fallback-item" href="?feature=wardrobe-atelier&amp;build=control4&amp;fresh=20260903-reality-lens"><strong>Wardrobe Atelier</strong><span>dress · equip · express</span></a></li>
             <li><a class="feature-nav-fallback-item" href="?feature=white-paper&amp;build=control4&amp;fresh=20260918-whitepaper"><strong>White Paper</strong><span>read · live document</span></a></li>
@@ -3048,6 +3115,47 @@
       </section>
       <div id="nft-atelier-boundary"></div>
     </aside>
+    <aside id="muse-agent-console" hidden aria-hidden="true" aria-labelledby="muse-agent-title">
+      <div id="muse-agent-head">
+        <div>
+          <div class="eyebrow">Muse Agent · in-world design companion</div>
+          <h2 id="muse-agent-title">Design with Muse</h2>
+          <p>Add your account, describe a look or an image, and the agent composes a deterministic local design. Avatar designs dress your Person Studio hologram.</p>
+        </div>
+        <button id="muse-agent-close" type="button" aria-label="Close Muse Agent">×</button>
+      </div>
+      <div id="muse-agent-status" role="status" aria-live="polite">READY · LOCAL SESSION ONLY</div>
+      <section aria-labelledby="muse-agent-accounts-title">
+        <h3 id="muse-agent-accounts-title" class="room-console-section-title">Your accounts</h3>
+        <div id="muse-agent-profiles" role="list" aria-label="Local profiles"></div>
+        <label class="muse-agent-field" for="muse-agent-name">Display name
+          <input id="muse-agent-name" type="text" maxlength="40" autocomplete="off" placeholder="e.g. Tumbo">
+        </label>
+        <label class="muse-agent-field" for="muse-agent-provider">Account type
+          <select id="muse-agent-provider"></select>
+        </label>
+        <button id="muse-agent-add" type="button">Add account (local only)</button>
+      </section>
+      <section aria-labelledby="muse-agent-design-title">
+        <h3 id="muse-agent-design-title" class="room-console-section-title">Compose a design</h3>
+        <label class="muse-agent-field" for="muse-agent-kind">Design kind
+          <select id="muse-agent-kind">
+            <option value="avatar">Avatar design</option>
+            <option value="image">Image design</option>
+          </select>
+        </label>
+        <label class="muse-agent-field" for="muse-agent-prompt">Prompt
+          <input id="muse-agent-prompt" type="text" maxlength="280" autocomplete="off" placeholder="e.g. royal crimson champion hologram">
+        </label>
+        <button id="muse-agent-generate" type="button">Generate design</button>
+        <div id="muse-agent-result" aria-live="polite"></div>
+      </section>
+      <section aria-labelledby="muse-agent-gallery-title">
+        <h3 id="muse-agent-gallery-title" class="room-console-section-title">Saved designs</h3>
+        <div id="muse-agent-gallery" role="list" aria-label="Saved design gallery"></div>
+      </section>
+      <div id="muse-agent-boundary"></div>
+    </aside>
     <aside id="contract-atelier-console" hidden aria-hidden="true" aria-labelledby="contract-atelier-title">
       <div id="contract-atelier-head">
         <div>
@@ -3463,6 +3571,6 @@
       }, 30000) ?? null;
     })();
   </script>
-    <script type="module" src="./src/main.js?v=20260901-reality-lens" onerror="globalThis.__MATUMBO_RUNTIME__?.markFailed?.(event, 'module load')"></script>
+    <script type="module" src="./src/main.js?v=20260918-muse-agent" onerror="globalThis.__MATUMBO_RUNTIME__?.markFailed?.(event, 'module load')"></script>
 </body>
 </html>

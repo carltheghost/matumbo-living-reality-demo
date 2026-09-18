@@ -1,7 +1,7 @@
 import {STUDIO_MODEL,STUDIO_OUTFITS,STUDIO_ROOMS} from '../domains/person-studio.js';
 
-/** Original reference-built geometry. No screenshots, webcam textures or external assets. */
-export function buildPersonStudioScene({THREE,parent,targets=[],compact=false}) {
+/** Reference-built likeness: Tumbo's approved avatar texture drives the camera-facing hologram; the procedural rig stays as interaction targets. */
+export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,avatarTextureUrl='assets/avatar/avatar.webp'}) {
   const layer=new THREE.Group();layer.name='PERSON Ω / open lens space';parent.add(layer);layer.visible=false;
   const materials=new Set(),geometries=new Set(),selectable=[];
   const material=(color,metalness=.2,roughness=.5,extra={})=>{const m=new THREE.MeshStandardMaterial({color,metalness,roughness,...extra});materials.add(m);return m;};
@@ -192,6 +192,31 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false}) 
   // Lens space has no ground to receive shadows; the glow sprite and rings
   // carry the grounding read. Meshes neither cast nor receive.
   avatar.traverse(object=>{if(object.isMesh){object.castShadow=false;object.receiveShadow=false;}});
+  // Reference avatar hologram (2026-09-18): Tumbo's approved likeness,
+  // generated from his PERSON Ω concept art, as a camera-facing hologram
+  // sprite. The procedural rig is hidden but stays registered in `targets`,
+  // and three.js raycast ignores `visible`, so identity/wardrobe tab clicks
+  // keep working through the hologram.
+  avatar.traverse(object=>{if(object.isMesh)object.visible=false;});
+  const avatarHologram=(()=>{
+    if(!THREE||typeof THREE.Sprite!=='function'||typeof THREE.SpriteMaterial!=='function')return null;
+    const material=new THREE.SpriteMaterial({transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,opacity:.96});
+    const sprite=new THREE.Sprite(material);
+    sprite.name='Reference avatar hologram';
+    sprite.scale.set(1.5,2.25,1);
+    sprite.position.set(0,1.15,0);
+    sprite.visible=false;
+    sprite.userData.avatarHologram=true;
+    sprite.userData.avatarHologramUrl=avatarTextureUrl;
+    const canLoad=typeof THREE.TextureLoader==='function'&&typeof Image!=='undefined'&&typeof avatarTextureUrl==='string'&&avatarTextureUrl.length>0;
+    if(canLoad){
+      new THREE.TextureLoader().load(avatarTextureUrl,texture=>{
+        material.map=texture;material.needsUpdate=true;sprite.visible=true;
+      },undefined,()=>{/* keep the hologram hidden; rig targets still work */});
+    }
+    avatar.add(sprite);
+    return sprite;
+  })();
   // Everything structural floats: the avatar, the lens-ring and the set
   // pieces bob gently in lens space (frozen under reduced motion).
   const floaters=[{obj:avatar,base:.55,amp:.045,speed:1.15,phase:.6},{obj:lensRing,base:.46,amp:.06,speed:1.05,phase:0}];
@@ -252,7 +277,21 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false}) 
     companion.rotation.y=reducedMotion?0:Math.sin(time*.8)*.14;
     wings.forEach((wing,i)=>{wing.rotation.z=(i===0?-1:1)*(.55+(form==='bird'&&!reducedMotion?Math.sin(time*5)*.35:0));});
   }
-  function getSnapshot(){return {source:'person-studio-scene',modelId:STUDIO_MODEL.id,visible:layer.visible,outfitId:outfit,roomId:room,companionForm:form,jointNames:Object.keys(joints),meshCount:geometries.size,identityHeadGeometry:headMesh.geometry.uuid,geometryOnly:true,referenceImagesUsedAsTextures:false};}
-  function destroy(){selectable.forEach(m=>{const i=targets.indexOf(m);if(i>=0)targets.splice(i,1);});geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());layer.removeFromParent();}
-  return {layer,avatar,joints,apply,update,getSnapshot,destroy,fingerprint,resolve:object=>object?.userData?.personStudioAction??null};
+  function getSnapshot(){return {source:'person-studio-scene',modelId:STUDIO_MODEL.id,visible:layer.visible,outfitId:outfit,roomId:room,companionForm:form,jointNames:Object.keys(joints),meshCount:geometries.size,identityHeadGeometry:headMesh.geometry.uuid,geometryOnly:false,referenceImagesUsedAsTextures:true,avatarHologramUrl:avatarTextureUrl,avatarHologramPresent:!!avatarHologram,avatarHologramTint:avatarHologramTint};}
+  // Muse Agent dressing: re-tint the reference hologram when an avatar design
+  // is applied. Presentation only — identity geometry and outfit rig are
+  // untouched; `null` restores the neutral hologram.
+  let avatarHologramTint=null;
+  function setHologramTint(tint,opacity){
+    avatarHologramTint=typeof tint==='string'&&tint?tint:null;
+    if(!avatarHologram)return avatarHologramTint;
+    try{
+      if(avatarHologramTint&&avatarHologram.material?.color?.set)avatarHologram.material.color.set(avatarHologramTint);
+      else if(avatarHologram.material?.color?.set)avatarHologram.material.color.set('#ffffff');
+      if(Number.isFinite(Number(opacity))&&avatarHologram.material)avatarHologram.material.opacity=Number(opacity);
+    }catch{/* presentation only */}
+    return avatarHologramTint;
+  }
+  function destroy(){selectable.forEach(m=>{const i=targets.indexOf(m);if(i>=0)targets.splice(i,1);});geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());if(avatarHologram){avatarHologram.material.map?.dispose?.();avatarHologram.material.dispose?.();}layer.removeFromParent();}
+  return {layer,avatar,joints,apply,update,getSnapshot,destroy,fingerprint,avatarHologram,setHologramTint,resolve:object=>object?.userData?.personStudioAction??null};
 }

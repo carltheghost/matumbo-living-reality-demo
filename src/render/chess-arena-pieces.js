@@ -146,135 +146,100 @@ function createMaterialSet(THREE, appearance) {
   };
 }
 
-/** Shared humanoid avatar body: glow ring, robed torso, pauldrons, head with
- *  the user's skin/hair, glowing side-colored eyes, cape. Returns the group
- *  plus an adder and head metrics for per-type regalia. */
-function buildFigure(THREE, G, M, color, {height = 1.2, bodyR = 0.22, headR = 0.2, cape = true} = {}) {
+/** Reference avatar chess textures (2026-09-18): Tumbo's approved likeness,
+ *  generated from his PERSON \u03a9 concept art, one full-body figure per chess
+ *  role. Local projection assets only - no network beyond the static host. */
+export const CHESS_PIECE_TEXTURE_URLS = Object.freeze({
+  p: 'assets/avatar/piece-pawn.webp',
+  n: 'assets/avatar/piece-knight.webp',
+  b: 'assets/avatar/piece-bishop.webp',
+  r: 'assets/avatar/piece-rook.webp',
+  q: 'assets/avatar/piece-queen.webp',
+  k: 'assets/avatar/piece-king.webp',
+});
+/** Hologram heights in arena units: the king stands tallest, the pawn shortest. */
+export const CHESS_PIECE_HEIGHTS = Object.freeze({p: 1.3, n: 1.5, b: 1.55, r: 1.6, q: 1.75, k: 1.9});
+/** Cropped texture aspects (width / height) from assets/avatar/manifest.json. */
+export const CHESS_PIECE_ASPECTS = Object.freeze({
+  p: 1.7009, n: 0.5828, b: 1.3633, r: 0.7681, q: 0.4877, k: 1.7808,
+});
+const CHESS_PIECE_TINTS = Object.freeze({w: 0xffe2ae, b: 0xc4a4ff});
+
+/** Hologram avatar piece: the user's own likeness as the chess figure,
+ *  billboarded so it reads from every camera angle, standing on the
+ *  side-colored glow ring. Textures load lazily from local assets; without a
+ *  DOM Image (node tests) the sprite is built untextured and every structural
+ *  assertion still holds. */
+function buildHologramPiece(THREE, G, M, color, type, hologramRegistry = null) {
   const side = M.side[color];
   const group = new THREE.Group();
-  const add = (mesh, x, y, z, part) => {
-    mesh.position.set(x, y, z);
-    if (part) mesh.userData.part = part;
-    group.add(mesh);
-    return mesh;
-  };
-  const ring = new THREE.Mesh(G.torus(0.3, 0.045), side.ring);
+  const ring = new THREE.Mesh(G.torus(0.34, 0.05), side.ring);
   ring.rotation.x = Math.PI / 2;
-  add(ring, 0, 0.05, 0, 'ring');
-  add(new THREE.Mesh(G.capsule(bodyR, height * 0.42), M.outfit), 0, height * 0.44, 0, 'body');
-  const chest = new THREE.Mesh(G.sphere(0.2), side.base);
-  chest.scale.set(1.05, 0.72, 0.72);
-  add(chest, 0, height * 0.55, 0.07, 'chest');
-  for (const s of [-1, 1]) add(new THREE.Mesh(G.sphere(0.1), M.trim), s * (bodyR + 0.07), height * 0.62, 0, 'pauldron');
-  const headY = height * 0.8;
-  add(new THREE.Mesh(G.sphere(headR), M.skin), 0, headY, 0, 'head');
-  const hair = new THREE.Mesh(G.hairCap(headR * 1.08), M.hair);
-  hair.rotation.x = -0.38;
-  add(hair, 0, headY + 0.035, -0.02, 'hair');
-  add(new THREE.Mesh(G.box(0.17, 0.05, 0.05), side.glow), 0, headY + 0.01, headR * 1.0, 'eyes');
-  if (cape) add(new THREE.Mesh(G.cone(bodyR * 1.35, height * 0.6, 7), M.outfit), 0, height * 0.45, -(bodyR + 0.08), 'cape');
-  return {group, add, headY, headR};
-}
-
-function buildPawn(THREE, G, M, color) {
-  const f = buildFigure(THREE, G, M, color, {height: 1.02, bodyR: 0.2});
-  const shield = new THREE.Mesh(G.cylinder(0.17, 0.17, 0.035, 14), M.trim);
-  shield.rotation.z = Math.PI / 2;
-  f.add(shield, -0.3, 0.52, 0.12, 'shield');
-  f.add(new THREE.Mesh(G.sphere(0.06), M.side[color].glow), -0.33, 0.52, 0.12, 'shield-boss');
-  return f.group;
-}
-
-function buildKnight(THREE, G, M, color) {
-  const side = M.side[color];
-  const group = new THREE.Group();
-  const add = (mesh, x, y, z, part) => {
-    mesh.position.set(x, y, z);
-    if (part) mesh.userData.part = part;
-    group.add(mesh);
-    return mesh;
-  };
-  const ring = new THREE.Mesh(G.torus(0.36, 0.05), side.ring);
-  ring.rotation.x = Math.PI / 2;
-  add(ring, 0, 0.05, 0, 'ring');
-  const body = new THREE.Mesh(G.capsule(0.21, 0.55), side.base);
-  body.rotation.z = Math.PI / 2;
-  add(body, 0, 0.62, -0.02, 'horse-body');
-  for (const sx of [-1, 1]) {
-    for (const sz of [-1, 1]) {
-      add(new THREE.Mesh(G.cylinder(0.055, 0.045, 0.58, 8), side.base), sx * 0.2, 0.31, -0.02 + sz * 0.15, 'horse-leg');
-    }
+  ring.position.set(0, 0.05, 0);
+  ring.userData.part = 'ring';
+  group.add(ring);
+  const height = CHESS_PIECE_HEIGHTS[type] ?? 1.4;
+  const width = height * (CHESS_PIECE_ASPECTS[type] ?? 1);
+  const material = new THREE.SpriteMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    color: CHESS_PIECE_TINTS[color] ?? 0xffffff,
+    opacity: 0.97,
+  });
+  const sprite = new THREE.Sprite(material);
+  sprite.scale.set(width, height, 1);
+  sprite.position.set(0, height / 2 + 0.04, 0);
+  sprite.userData.part = 'hologram';
+  sprite.userData.pieceType = type;
+  sprite.userData.textureUrl = CHESS_PIECE_TEXTURE_URLS[type];
+  sprite.visible = false;
+  group.add(sprite);
+  if (hologramRegistry) hologramRegistry.add({ material, getTexture: () => material.map ?? null });
+  const canLoad = typeof THREE.TextureLoader === 'function'
+    && typeof Image !== 'undefined'
+    && typeof CHESS_PIECE_TEXTURE_URLS[type] === 'string';
+  if (canLoad) {
+    new THREE.TextureLoader().load(
+      CHESS_PIECE_TEXTURE_URLS[type],
+      (texture) => {
+        material.map = texture;
+        material.needsUpdate = true;
+        sprite.visible = true;
+      },
+      undefined,
+      () => { sprite.visible = false; },
+    );
+  } else {
+    // Deterministic in node: the hologram slot exists with its metadata even
+    // though no pixels load outside the browser.
+    sprite.visible = true;
   }
-  const neck = new THREE.Mesh(G.box(0.2, 0.52, 0.24), side.base);
-  neck.rotation.x = -0.45;
-  add(neck, 0, 0.98, 0.3, 'horse-neck');
-  add(new THREE.Mesh(G.box(0.19, 0.22, 0.46), side.base), 0, 1.22, 0.5, 'horse-head');
-  for (const s of [-1, 1]) add(new THREE.Mesh(G.cone(0.05, 0.15, 6), side.base), s * 0.07, 1.38, 0.42, 'horse-ear');
-  const mane = new THREE.Mesh(G.box(0.07, 0.5, 0.12), side.glow);
-  mane.rotation.x = -0.45;
-  add(mane, 0, 1.06, 0.18, 'horse-mane');
-  const tail = new THREE.Mesh(G.cone(0.06, 0.34, 6), M.hair);
-  tail.rotation.x = 0.7;
-  add(tail, 0, 0.72, -0.44, 'horse-tail');
-  add(new THREE.Mesh(G.box(0.32, 0.09, 0.34), M.outfit), 0, 0.86, -0.04, 'saddle');
-  const rider = buildFigure(THREE, G, M, color, {height: 0.78, bodyR: 0.15, headR: 0.14, cape: false});
-  rider.group.position.set(0, 0.9, -0.04);
-  rider.group.userData.part = 'rider';
-  const helm = new THREE.Mesh(G.hairCap(0.155), M.trim);
-  helm.rotation.x = -0.3;
-  rider.add(helm, 0, rider.headY + 0.03, -0.01, 'helm');
-  group.add(rider.group);
   return group;
 }
 
-function buildBishop(THREE, G, M, color) {
-  const side = M.side[color];
-  const f = buildFigure(THREE, G, M, color, {height: 1.3, bodyR: 0.22});
-  for (const s of [-1, 1]) {
-    const horn = new THREE.Mesh(G.cone(0.07, 0.32, 6), M.trim);
-    horn.rotation.z = -s * 0.55;
-    f.add(horn, s * 0.17, f.headY + 0.14, 0, 'horn');
-  }
-  f.add(new THREE.Mesh(G.cylinder(0.028, 0.028, 1.5, 8), M.trim), 0.34, 0.78, 0, 'staff');
-  f.add(new THREE.Mesh(G.sphere(0.09), side.glow), 0.34, 1.58, 0, 'staff-orb');
-  return f.group;
+function buildPawn(THREE, G, M, color, _type, hologramRegistry = null) {
+  return buildHologramPiece(THREE, G, M, color, 'p', hologramRegistry);
 }
 
-function buildRook(THREE, G, M, color) {
-  const side = M.side[color];
-  const f = buildFigure(THREE, G, M, color, {height: 1.22, bodyR: 0.3});
-  for (const s of [-1, 1]) f.add(new THREE.Mesh(G.box(0.18, 0.13, 0.18), side.base), s * 0.38, 1.22 * 0.62, 0, 'bulwark');
-  const crownY = f.headY + f.headR + 0.1;
-  f.add(new THREE.Mesh(G.cylinder(0.24, 0.26, 0.15, 8), M.trim), 0, crownY, 0, 'battlement');
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI * 2;
-    f.add(new THREE.Mesh(G.box(0.1, 0.11, 0.1), M.trim), Math.cos(a) * 0.2, crownY + 0.12, Math.sin(a) * 0.2, 'merlon');
-  }
-  return f.group;
+function buildKnight(THREE, G, M, color, _type, hologramRegistry = null) {
+  return buildHologramPiece(THREE, G, M, color, 'n', hologramRegistry);
 }
 
-function buildQueen(THREE, G, M, color) {
-  const side = M.side[color];
-  const f = buildFigure(THREE, G, M, color, {height: 1.45, bodyR: 0.23});
-  const crownY = f.headY + f.headR + 0.05;
-  const band = new THREE.Mesh(G.torus(0.16, 0.032), M.trim);
-  band.rotation.x = Math.PI / 2;
-  f.add(band, 0, crownY, 0, 'crown-band');
-  for (let i = 0; i < 5; i++) {
-    const a = (i / 5) * Math.PI * 2;
-    f.add(new THREE.Mesh(G.cone(0.045, 0.17, 6), side.glow), Math.cos(a) * 0.15, crownY + 0.1, Math.sin(a) * 0.15, 'crown-point');
-  }
-  return f.group;
+function buildBishop(THREE, G, M, color, _type, hologramRegistry = null) {
+  return buildHologramPiece(THREE, G, M, color, 'b', hologramRegistry);
 }
 
-function buildKing(THREE, G, M, color) {
-  const side = M.side[color];
-  const f = buildFigure(THREE, G, M, color, {height: 1.58, bodyR: 0.25});
-  const crownY = f.headY + f.headR + 0.09;
-  f.add(new THREE.Mesh(G.cylinder(0.2, 0.23, 0.17, 10), M.trim), 0, crownY, 0, 'crown-band');
-  f.add(new THREE.Mesh(G.box(0.05, 0.24, 0.05), side.glow), 0, crownY + 0.2, 0, 'crown-cross');
-  f.add(new THREE.Mesh(G.box(0.15, 0.05, 0.05), side.glow), 0, crownY + 0.22, 0, 'crown-cross');
-  return f.group;
+function buildRook(THREE, G, M, color, _type, hologramRegistry = null) {
+  return buildHologramPiece(THREE, G, M, color, 'r', hologramRegistry);
+}
+
+function buildQueen(THREE, G, M, color, _type, hologramRegistry = null) {
+  return buildHologramPiece(THREE, G, M, color, 'q', hologramRegistry);
+}
+
+function buildKing(THREE, G, M, color, _type, hologramRegistry = null) {
+  return buildHologramPiece(THREE, G, M, color, 'k', hologramRegistry);
 }
 
 /** Piece foundry with shared geometry/material caches. Dispose when the
@@ -285,11 +250,14 @@ export function createPieceBuilders(THREE, appearance = null) {
   const G = createGeometryCache(THREE);
   const M = createMaterialSet(THREE, resolved);
   const builders = {p: buildPawn, n: buildKnight, b: buildBishop, r: buildRook, q: buildQueen, k: buildKing};
+  // Every hologram piece owns a SpriteMaterial (and, in the browser, a loaded
+  // texture). Track them so dispose() releases per-sprite GPU resources too.
+  const hologramRegistry = new Set();
   function buildPiece(type, color) {
     const build = builders[type];
     if (!build) throw new Error(`Unknown chess piece type: ${type}`);
     if (color !== 'w' && color !== 'b') throw new Error(`Unknown chess side: ${color}`);
-    const group = build(THREE, G, M, color);
+    const group = build(THREE, G, M, color, type, hologramRegistry);
     group.userData.avatarPiece = true;
     group.userData.pieceType = type;
     group.userData.color = color;
@@ -299,6 +267,11 @@ export function createPieceBuilders(THREE, appearance = null) {
     G.dispose();
     const mats = [M.skin, M.hair, M.outfit, M.trim, M.side.w.base, M.side.w.glow, M.side.w.ring, M.side.b.base, M.side.b.glow, M.side.b.ring];
     mats.forEach((mat) => mat.dispose());
+    hologramRegistry.forEach(({material, getTexture}) => {
+      try { getTexture()?.dispose?.(); } catch { /* already released */ }
+      try { material.dispose?.(); } catch { /* already released */ }
+    });
+    hologramRegistry.clear();
   }
   return Object.freeze({appearance: resolved, buildPiece, dispose});
 }

@@ -7,6 +7,7 @@ if(resolveCityRoute(location.search).status==='rejected'){
 import { mountCenteredSurfaces } from './render/centered-surfaces.js';
 import { createImmersiveSession } from './render/immersive-session.js';
 import { createMediaPreview } from './render/media-preview.js';
+import { initMobilePanelManager } from './render/mobile-panel-manager.js';
 import { createPersonStudio } from './render/person-studio.js';
 import { createRealityAssembly } from './render/reality-assembly.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -15,12 +16,12 @@ import { MANIPULATE_MODES } from './render/manipulate-controls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { createLivingRealityProjection } from './core/demo-projection.js?v=20260826-paycore1';
+import { createLivingRealityProjection } from './core/demo-projection.js?v=20260918-muse2';
 import { createDeviceProjection, readBrowserProjectionPreferences } from './projections/device-projection.js';
 import { createDistributionExplorer } from './render/distribution-explorer.js';
 import { createLaunchDistributionRehearsal } from './domains/distribution-registry.js?v=20260828-distribution163';
 import { createPersonOrganisms } from './render/person-organisms.js';
-import { FEATURE_DEFINITIONS, createFeatureNavigator } from './render/feature-navigator.js?v=20260830-session218';
+import { FEATURE_DEFINITIONS, createFeatureNavigator } from './render/feature-navigator.js?v=20260918-muse2';
 import { createLaunchConsole, validateLaunchCohortRoute, validateLaunchCohortCompareRoute } from './render/launch-console.js';
 import { LAUNCH_RECEIPT_CONSOLE_SOURCE, createLaunchReceiptConsole } from './render/launch-receipt.js?v=20260827-receipt2';
 import { createSocialExplorerConsole } from './render/social-explorer.js?v=20260828-social-pulse1';
@@ -42,7 +43,7 @@ import {
 } from './render/gaze-hand-coupling.js?v=20260829-gaze-hand185';
 import { createProjectionBridge } from './render/projection-bridge.js';
 import { createIntentTimeline } from './render/intent-timeline.js';
-import { createBlockWorldLayer } from './render/block-world.js?v=20260829-gaze-hand185';
+import { createBlockWorldLayer } from './render/block-world.js?v=20260918-glass-open';
 import { createProjectionSession } from './render/projection-session.js?v=20260830-session218';
 import { applyBlockWorldFocusMode } from './render/block-world-focus.js?v=20260827-block-focus1';
 import { createBlockWorldQuickActions } from './render/cube-quick-actions.js?v=20260828-cube-actions155';
@@ -80,6 +81,7 @@ import { MATTER_FORGE_SOURCE } from './domains/matter-forge.js?v=20260827-pictur
 import { PICTURE_MATTER_METADATA_SOURCE, createUnavailablePictureMatterMetadata, fetchPictureMatterMetadata } from './domains/picture-matter-metadata.js?v=20260828-picture-metadata1';
 import { PICTURE_MATTER_CONSOLE_SOURCE, createPictureMatterConsole } from './render/picture-matter.js?v=20260828-picture-metadata1';
 import { NFT_ATELIER_CONSOLE_SOURCE, createNftAtelierConsole } from './render/nft-atelier.js?v=20260918-nft1';
+import { MUSE_AGENT_CONSOLE_SOURCE, createMuseAgentConsole } from './render/muse-agent.js?v=20260918-muse1';
 import { CONTRACT_ATELIER_CONSOLE_SOURCE, createContractAtelierConsole } from './render/contract-atelier.js?v=20260918-ctr1';
 import { LUNA_CONSOLE_SOURCE, createLunaCompanionConsole } from './render/luna-companion.js?v=20260918-luna1';
 import { WARDROBE_ATELIER_CONSOLE_SOURCE, createWardrobeAtelierConsole } from './render/wardrobe-atelier.js?v=20260918-wdr1';
@@ -154,6 +156,7 @@ let neuralMeshConsole = null;
 let pictureMatterConsole = null;
 let pictureMatterMetadata = createUnavailablePictureMatterMetadata();
 let nftAtelierConsole = null;
+let museAgentConsole = null;
 let contractAtelierConsole = null;
 let lunaCompanionConsole = null;
 let wardrobeAtelierConsole = null;
@@ -196,6 +199,7 @@ const PORTAL_CUBE_SUBSTRATE_FEATURES = new Set([
   'neural-mesh',
   'picture-matter',
   'nft-atelier',
+  'muse-agent',
   'contract-atelier',
   'ledger',
   'gateway',
@@ -644,6 +648,7 @@ blockWorld = createBlockWorldLayer({
       'neural-mesh': () => neuralMeshConsole?.open(),
       'picture-matter': () => pictureMatterConsole?.open(),
       'nft-atelier': () => nftAtelierConsole?.open(),
+      'muse-agent': () => museAgentConsole?.open(),
       'contract-atelier': () => contractAtelierConsole?.open(),
       'luna-companion': () => lunaCompanionConsole?.open(),
       'wardrobe-atelier': () => wardrobeAtelierConsole?.open(),
@@ -2845,6 +2850,61 @@ nftAtelierConsole = createNftAtelierConsole({
   })),
 });
 window.__TUMBO_NFT_ATELIER__ = nftAtelierConsole;
+// Muse Agent is the in-world design companion: anyone opening Matumbo meets
+// the agent, adds a local profile (their Muse account tag or another
+// account tag — display names only, no login, no token, no external
+// linking), and composes deterministic local image/avatar designs. Avatar
+// designs dress the Person Studio projection (outfit + hologram tint);
+// image designs are copy-ready briefs. No AI service or network is used.
+museAgentConsole = createMuseAgentConsole({
+  documentRoot: document,
+  onApplyAvatar: (design, snapshot) => {
+    if (design?.outfitId) {
+      try { personStudio?.chooseOutfit?.(design.outfitId); } catch {}
+    }
+    try { personStudio?.setHologramTint?.(design?.hologramTint ?? null, design?.hologramOpacity ?? 0.96); } catch {}
+    projectionBridge.emitIntent('projection.muse-agent-apply-avatar', `${MUSE_AGENT_CONSOLE_SOURCE}:${design?.id ?? 'unknown'}`, Object.freeze({
+      action: snapshot.action,
+      designId: design?.id ?? null,
+      outfitId: design?.outfitId ?? null,
+      hologramTint: design?.hologramTint ?? null,
+      profileName: design?.profileName ?? null,
+      method: snapshot.method,
+      simulation: true,
+      localOnly: true,
+      deterministic: true,
+      executable: false,
+    }));
+  },
+  onGenerate: (snapshot, design) => projectionBridge.emitIntent('projection.muse-agent-generate', `${MUSE_AGENT_CONSOLE_SOURCE}:${design?.id ?? 'draft'}`, Object.freeze({
+    action: snapshot.action,
+    kind: design?.kind ?? null,
+    title: design?.title ?? null,
+    method: snapshot.method,
+    simulation: true,
+    localOnly: true,
+    deterministic: true,
+    executable: false,
+  })),
+  onProfile: (snapshot, detail) => projectionBridge.emitIntent('projection.muse-agent-profile', `${MUSE_AGENT_CONSOLE_SOURCE}:${detail?.profileId ?? 'unknown'}`, Object.freeze({
+    action: snapshot.action,
+    profileId: detail?.profileId ?? null,
+    method: snapshot.method,
+    simulation: true,
+    localOnly: true,
+    externalAuth: false,
+    executable: false,
+  })),
+  onReplay: (snapshot) => projectionBridge.emitIntent('projection.replay-muse-agent', MUSE_AGENT_CONSOLE_SOURCE, Object.freeze({
+    action: snapshot.action,
+    method: snapshot.method,
+    simulation: true,
+    deterministic: true,
+    localOnly: true,
+    executable: false,
+  })),
+});
+window.__TUMBO_MUSE_AGENT__ = museAgentConsole;
 // Contract Atelier is a standalone fictional market surface: anyone can open
 // a pool, binary, or multi-outcome contract on any topic as the house or a
 // player, stake rehearsal credits, and resolve it with TRUE/FALSE, AND, OR,
@@ -4193,6 +4253,7 @@ function openLaunchKit(method = 'button') {
   neuralMeshConsole?.close();
   pictureMatterConsole?.close();
   nftAtelierConsole?.close();
+  museAgentConsole?.close();
   contractAtelierConsole?.close();
   lunaCompanionConsole?.close();
   wardrobeAtelierConsole?.close();
@@ -4281,6 +4342,7 @@ function openWorldEvents(method = 'button', refresh = true, options = {}) {
   neuralMeshConsole?.close();
   pictureMatterConsole?.close();
   nftAtelierConsole?.close();
+  museAgentConsole?.close();
   contractAtelierConsole?.close();
   lunaCompanionConsole?.close();
   wardrobeAtelierConsole?.close();
@@ -4428,6 +4490,7 @@ function openLivePublicStatus(method = 'button', refresh = true, options = {}) {
   neuralMeshConsole?.close();
   pictureMatterConsole?.close();
   nftAtelierConsole?.close();
+  museAgentConsole?.close();
   contractAtelierConsole?.close();
   lunaCompanionConsole?.close();
   wardrobeAtelierConsole?.close();
@@ -4580,6 +4643,7 @@ function openSportsEvents(method = 'button', refresh = true, options = {}) {
   neuralMeshConsole?.close();
   pictureMatterConsole?.close();
   nftAtelierConsole?.close();
+  museAgentConsole?.close();
   contractAtelierConsole?.close();
   lunaCompanionConsole?.close();
   wardrobeAtelierConsole?.close();
@@ -4670,6 +4734,7 @@ function openMultiSportEvents(method = 'button', refresh = true, options = {}) {
   neuralMeshConsole?.close();
   pictureMatterConsole?.close();
   nftAtelierConsole?.close();
+  museAgentConsole?.close();
   contractAtelierConsole?.close();
   lunaCompanionConsole?.close();
   wardrobeAtelierConsole?.close();
@@ -4731,6 +4796,7 @@ function openAssetMarket(method = 'button', refresh = true) {
   neuralMeshConsole?.close();
   pictureMatterConsole?.close();
   nftAtelierConsole?.close();
+  museAgentConsole?.close();
   contractAtelierConsole?.close();
   lunaCompanionConsole?.close();
   wardrobeAtelierConsole?.close();
@@ -5971,6 +6037,7 @@ featureNavigator = createFeatureNavigator({
       neuralMeshConsole?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
+      museAgentConsole?.close();
       contractAtelierConsole?.close();
       lunaCompanionConsole?.close();
       wardrobeAtelierConsole?.close();
@@ -5997,6 +6064,7 @@ featureNavigator = createFeatureNavigator({
       neuralMeshConsole?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
+      museAgentConsole?.close();
       contractAtelierConsole?.close();
       lunaCompanionConsole?.close();
       wardrobeAtelierConsole?.close();
@@ -6027,6 +6095,7 @@ featureNavigator = createFeatureNavigator({
       neuralMeshConsole?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
+      museAgentConsole?.close();
       contractAtelierConsole?.close();
       lunaCompanionConsole?.close();
       wardrobeAtelierConsole?.close();
@@ -6049,6 +6118,7 @@ featureNavigator = createFeatureNavigator({
       neuralMeshConsole?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
+      museAgentConsole?.close();
       contractAtelierConsole?.close();
       lunaCompanionConsole?.close();
       wardrobeAtelierConsole?.close();
@@ -6071,6 +6141,7 @@ featureNavigator = createFeatureNavigator({
       neuralMeshConsole?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
+      museAgentConsole?.close();
       contractAtelierConsole?.close();
       lunaCompanionConsole?.close();
       wardrobeAtelierConsole?.close();
@@ -6091,6 +6162,7 @@ featureNavigator = createFeatureNavigator({
       neuralMeshConsole?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
+      museAgentConsole?.close();
       contractAtelierConsole?.close();
       lunaCompanionConsole?.close();
       wardrobeAtelierConsole?.close();
@@ -6127,6 +6199,7 @@ featureNavigator = createFeatureNavigator({
       neuralMeshConsole?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
+      museAgentConsole?.close();
       contractAtelierConsole?.close();
       lunaCompanionConsole?.close();
       wardrobeAtelierConsole?.close();
@@ -6152,6 +6225,7 @@ featureNavigator = createFeatureNavigator({
       neuralMeshConsole?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
+      museAgentConsole?.close();
       contractAtelierConsole?.close();
       lunaCompanionConsole?.close();
       wardrobeAtelierConsole?.close();
@@ -6179,6 +6253,7 @@ featureNavigator = createFeatureNavigator({
       neuralMeshConsole?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
+      museAgentConsole?.close();
       contractAtelierConsole?.close();
       lunaCompanionConsole?.close();
       wardrobeAtelierConsole?.close();
@@ -6200,6 +6275,7 @@ featureNavigator = createFeatureNavigator({
       neuralMeshConsole?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
+      museAgentConsole?.close();
       contractAtelierConsole?.close();
       lunaCompanionConsole?.close();
       wardrobeAtelierConsole?.close();
@@ -6220,6 +6296,7 @@ featureNavigator = createFeatureNavigator({
       neuralMeshConsole?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
+      museAgentConsole?.close();
       contractAtelierConsole?.close();
       lunaCompanionConsole?.close();
       wardrobeAtelierConsole?.close();
@@ -6247,6 +6324,7 @@ featureNavigator = createFeatureNavigator({
       neuralMeshConsole?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
+      museAgentConsole?.close();
       contractAtelierConsole?.close();
       lunaCompanionConsole?.close();
       wardrobeAtelierConsole?.close();
@@ -6267,6 +6345,7 @@ featureNavigator = createFeatureNavigator({
       neuralMeshConsole?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
+      museAgentConsole?.close();
       contractAtelierConsole?.close();
       lunaCompanionConsole?.close();
       wardrobeAtelierConsole?.close();
@@ -6287,6 +6366,7 @@ featureNavigator = createFeatureNavigator({
       neuralMeshConsole?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
+      museAgentConsole?.close();
       contractAtelierConsole?.close();
       lunaCompanionConsole?.close();
       wardrobeAtelierConsole?.close();
@@ -6307,6 +6387,7 @@ featureNavigator = createFeatureNavigator({
       neuralMeshConsole?.open();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
+      museAgentConsole?.close();
       contractAtelierConsole?.close();
       lunaCompanionConsole?.close();
       wardrobeAtelierConsole?.close();
@@ -6327,6 +6408,7 @@ featureNavigator = createFeatureNavigator({
       neuralMeshConsole?.close();
       pictureMatterConsole?.open();
       nftAtelierConsole?.close();
+      museAgentConsole?.close();
       contractAtelierConsole?.close();
       lunaCompanionConsole?.close();
       wardrobeAtelierConsole?.close();
@@ -6354,6 +6436,27 @@ featureNavigator = createFeatureNavigator({
       gestureLensConsole?.close();
       ledgerProofConsole?.close();
       sportsEventsConsole?.close();
+    } else if (feature.id === 'muse-agent') {
+      launchConsole?.close();
+      socialExplorer?.close();
+      roomSpaces?.close();
+      blockWorld?.close();
+      blockMigration?.close();
+      arenaGames?.close();
+      contractsMarkets?.close();
+      paycoreConsole?.close();
+      t402Console?.close();
+      neuralMeshConsole?.close();
+      pictureMatterConsole?.close();
+      nftAtelierConsole?.close();
+      museAgentConsole?.open();
+      contractAtelierConsole?.close();
+      lunaCompanionConsole?.close();
+      wardrobeAtelierConsole?.close();
+      whitePaperConsole?.close();
+      gestureLensConsole?.close();
+      ledgerProofConsole?.close();
+      sportsEventsConsole?.close();
     } else if (feature.id === 'contract-atelier') {
       launchConsole?.close();
       socialExplorer?.close();
@@ -6367,6 +6470,7 @@ featureNavigator = createFeatureNavigator({
       neuralMeshConsole?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
+      museAgentConsole?.close();
       contractAtelierConsole?.open();
       ledgerProofConsole?.close();
       sportsEventsConsole?.close();
@@ -6383,6 +6487,7 @@ featureNavigator = createFeatureNavigator({
       neuralMeshConsole?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
+      museAgentConsole?.close();
       contractAtelierConsole?.close();
       lunaCompanionConsole?.open();
       wardrobeAtelierConsole?.close();
@@ -6403,6 +6508,7 @@ featureNavigator = createFeatureNavigator({
       neuralMeshConsole?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
+      museAgentConsole?.close();
       contractAtelierConsole?.close();
       lunaCompanionConsole?.close();
       wardrobeAtelierConsole?.open();
@@ -6426,6 +6532,7 @@ featureNavigator = createFeatureNavigator({
       neuralMeshConsole?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
+      museAgentConsole?.close();
       contractAtelierConsole?.close();
       lunaCompanionConsole?.close();
       wardrobeAtelierConsole?.close();
@@ -6449,6 +6556,7 @@ featureNavigator = createFeatureNavigator({
       neuralMeshConsole?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
+      museAgentConsole?.close();
       contractAtelierConsole?.close();
       lunaCompanionConsole?.close();
       wardrobeAtelierConsole?.close();
@@ -6469,6 +6577,7 @@ featureNavigator = createFeatureNavigator({
       neuralMeshConsole?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
+      museAgentConsole?.close();
       contractAtelierConsole?.close();
       lunaCompanionConsole?.close();
       wardrobeAtelierConsole?.close();
@@ -6489,6 +6598,7 @@ featureNavigator = createFeatureNavigator({
       neuralMeshConsole?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
+      museAgentConsole?.close();
       contractAtelierConsole?.close();
       lunaCompanionConsole?.close();
       wardrobeAtelierConsole?.close();
@@ -6516,6 +6626,7 @@ featureNavigator = createFeatureNavigator({
       neuralMeshConsole?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
+      museAgentConsole?.close();
       contractAtelierConsole?.close();
       lunaCompanionConsole?.close();
       wardrobeAtelierConsole?.close();
@@ -6539,6 +6650,7 @@ featureNavigator = createFeatureNavigator({
       neuralMeshConsole?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
+      museAgentConsole?.close();
       contractAtelierConsole?.close();
       lunaCompanionConsole?.close();
       wardrobeAtelierConsole?.close();
@@ -6564,6 +6676,7 @@ featureNavigator = createFeatureNavigator({
       neuralMeshConsole?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
+      museAgentConsole?.close();
       contractAtelierConsole?.close();
       lunaCompanionConsole?.close();
       wardrobeAtelierConsole?.close();
@@ -6592,6 +6705,7 @@ featureNavigator = createFeatureNavigator({
       neuralMeshConsole?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
+      museAgentConsole?.close();
       contractAtelierConsole?.close();
       lunaCompanionConsole?.close();
       wardrobeAtelierConsole?.close();
@@ -6616,6 +6730,7 @@ featureNavigator = createFeatureNavigator({
       neuralMeshConsole?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
+      museAgentConsole?.close();
       contractAtelierConsole?.close();
       lunaCompanionConsole?.close();
       wardrobeAtelierConsole?.close();
@@ -6651,6 +6766,7 @@ featureNavigator = createFeatureNavigator({
     if (feature.id === 'neural-mesh' && method === 'replay') neuralMeshConsole?.replay('feature-navigator');
     if (feature.id === 'picture-matter' && method === 'replay') pictureMatterConsole?.replay('feature-navigator');
     if (feature.id === 'nft-atelier' && method === 'replay') nftAtelierConsole?.replay('feature-navigator');
+    if (feature.id === 'muse-agent' && method === 'replay') museAgentConsole?.replay('feature-navigator');
     if (feature.id === 'contract-atelier' && method === 'replay') contractAtelierConsole?.replay('feature-navigator');
     if (feature.id === 'luna-companion' && method === 'replay') lunaCompanionConsole?.replay('feature-navigator');
     if (feature.id === 'wardrobe-atelier' && method === 'replay') wardrobeAtelierConsole?.replay('feature-navigator');
@@ -6834,6 +6950,7 @@ projectionSession = createProjectionSession({
     "neural-mesh": neuralMeshConsole?.getSnapshot?.(),
     "picture-matter": pictureMatterConsole?.getSnapshot?.(),
     "nft-atelier": nftAtelierConsole?.getSnapshot?.(),
+    "muse-agent": museAgentConsole?.getSnapshot?.(),
     "contract-atelier": contractAtelierConsole?.getSnapshot?.(),
     "luna-companion": lunaCompanionConsole?.getSnapshot?.(),
     "wardrobe-atelier": wardrobeAtelierConsole?.getSnapshot?.(),
@@ -7853,6 +7970,10 @@ const immersiveSession = createImmersiveSession({THREE,renderer,scene,camera,con
   const room=roomSpaces.resolveTarget(object);if(room)roomSpaces.selectRoom(room.id,'xr');
 }});
 const mediaPreview = createMediaPreview();
+// Narrow viewports: one floating panel at a time; collapses the camera/audio
+// preview and city dropdown when a console opens, and hides the bottom hint
+// bar while a console is up. Desktop layout is untouched.
+initMobilePanelManager();
 function animate(){
   const rawDt=Math.min(clock.getDelta(),.035),dt=rawDt*(reducedMotion?.22:1),t=clock.elapsedTime;
   if(realityAssembly?.active){

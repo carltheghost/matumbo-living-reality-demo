@@ -809,6 +809,10 @@ export function createBlockWorldLayer({
   let selectionCues = new Map();
   let gazeLockCues = new Map();
   let containerCues = new Map();
+  // Reality Lens open animation (2026-09-18): per-block 0..1 open amount,
+  // damped in update(). 1 = fully open. The shell shrinks slightly, the lid
+  // swings open like a hatch, and nested contents rise out of the glass.
+  let openAmounts = new Map();
   let interactiveMeshes = new Set();
   let contentMeshes = [];
   let hoverPreviewMeshes = new Map();
@@ -1128,18 +1132,22 @@ export function createBlockWorldLayer({
       const definition = BLOCK_TYPES[type] ?? BLOCK_TYPES.stone;
       const isContainer = role === "container" || role === "container-open";
       const isOpen = role === "container-open";
+      // Reality Lens translucency (2026-09-18): every cube reads as a glass
+      // shell tinted by its block type, matching the Reality Assembly city
+      // blocks. Containers keep a stronger accent glow so the openable
+      // affordance survives the glass; the interior (lid + contents) stays
+      // opaque so it reads as the solid thing inside the glass.
       materials.set(key, new three.MeshStandardMaterial({
-        // Accent color and stronger emission make openable shells legible at
-        // a glance without changing the semantic block type.
-        color: isContainer ? definition.accent : definition.color,
-        emissive: definition.color,
+        color: definition.color,
+        emissive: isContainer ? definition.accent : definition.color,
         emissiveIntensity: isContainer
-          ? (isOpen ? 1.15 : 1.35)
-          : (type === "portal" || type === "crystal" ? 0.95 : 0.18),
-        metalness: isContainer ? 0.42 : 0.2,
-        roughness: isContainer ? 0.42 : (type === "water" ? 0.12 : 0.68),
-        transparent: !isContainer && type === "water",
-        opacity: !isContainer && type === "water" ? 0.72 : 1,
+          ? (isOpen ? 0.8 : 0.95)
+          : (type === "portal" || type === "crystal" ? 0.85 : 0.42),
+        metalness: 0.22,
+        roughness: 0.16,
+        transparent: true,
+        opacity: isContainer ? (isOpen ? 0.4 : 0.52) : 0.55,
+        depthWrite: false,
       }));
     }
     return materials.get(key);
@@ -1227,6 +1235,39 @@ export function createBlockWorldLayer({
     cue.userData.blockWorldGazeLockBoundary = BLOCK_WORLD_GAZE_LOCK_BOUNDARY;
     mesh.add(cue);
     gazeLockCues.set(blockId, cue);
+  }
+
+  // Reality Lens glass frame (2026-09-18): every cube gets a subtle
+  // always-visible edge frame in its type accent, like the Reality Assembly
+  // city blocks. It is a child of the owning mesh, never a raycast target,
+  // and carries no block state.
+  const glassFrameMaterials = new Map();
+  function glassFrameMaterialFor(type) {
+    if (!three || typeof three.LineBasicMaterial !== "function") return null;
+    if (!glassFrameMaterials.has(type)) {
+      const definition = BLOCK_TYPES[type] ?? BLOCK_TYPES.stone;
+      glassFrameMaterials.set(type, new three.LineBasicMaterial({
+        color: definition.accent,
+        transparent: true,
+        opacity: 0.5,
+        depthWrite: false,
+      }));
+    }
+    return glassFrameMaterials.get(type);
+  }
+
+  function addGlassFrame(mesh, blockId, kind = "solid", type = "stone") {
+    if (!mesh || !three || typeof three.LineSegments !== "function" || typeof mesh.add !== "function") return;
+    const edgeGeometry = selectionEdges[kind] ?? selectionEdges.solid;
+    const material = glassFrameMaterialFor(type);
+    if (!edgeGeometry || !material) return;
+    const frame = new three.LineSegments(edgeGeometry, material);
+    frame.name = "block-world-glass-frame";
+    frame.scale.setScalar(1.015);
+    frame.renderOrder = 4;
+    frame.userData.blockWorldId = blockId;
+    frame.userData.blockWorldGlassFrame = true;
+    mesh.add(frame);
   }
 
   function updateSelectionCues() {
@@ -1826,10 +1867,22 @@ export function createBlockWorldLayer({
     mesh.visible = !culled && (isPreviewContent ? isHovered || mesh.userData.blockWorldOpen === true : true);
     const active = isHovered || isSelected;
     const hoverLift = !motionReduced && isHovered ? (isPreviewContent ? 0.08 : 0.16) : 0;
+    // Reality Lens open (2026-09-18): the animated openAmount shrinks the
+    // glass shell slightly while the lid swings open like a hatch and nested
+    // contents rise out from inside. update() damps the amount; reduced motion
+    // snaps it, so the same targets serve both paths.
+    const openAmount = openAmounts.get(id) ?? 0;
+    const isLid = mesh.userData.blockWorldLid === true;
+    const isContainerBody = mesh.userData.blockWorldContainer === true
+      && !isLid
+      && mesh.userData.blockWorldContent === undefined
+      && mesh.userData.blockWorldContainerCue !== true;
+    const openShrink = isContainerBody ? 1 - 0.28 * openAmount : 1;
     const targetScale = mesh.userData.blockWorldBaseScale
       * (motionReduced
         ? (isGazeLocked ? 1.045 : 1)
-        : isHovered ? 1.1 : isSelected ? 1.025 : isGazeLocked ? 1.055 : 1);
+        : isHovered ? 1.1 : isSelected ? 1.025 : isGazeLocked ? 1.055 : 1)
+      * openShrink;
     const bloomAngle = Number(mesh.userData?.blockWorldBloom?.angle);
     const bloomRotation = !motionReduced && Number.isFinite(bloomAngle)
       ? Math.max(-0.18, Math.min(0.18, bloomAngle * 0.22))
@@ -1841,11 +1894,11 @@ export function createBlockWorldLayer({
       : bloomRotation + (!motionReduced && isHovered ? 0.075 : 0);
     const targetRotationX = manipulated
       ? manipulated.rotation[0]
-      : !motionReduced && isHovered ? -0.035 : 0;
+      : isLid ? -1.25 * openAmount : !motionReduced && isHovered ? -0.035 : 0;
     const targetRotationZ = manipulated ? manipulated.rotation[2] : 0;
     const snap = motionReduced || dt <= 0;
     mesh.position.x = dampValue(mesh.position.x, manipulated ? manipulated.position[0] : base.x + scatter.x + depth.x, 11, dt, snap);
-    mesh.position.y = dampValue(mesh.position.y, (manipulated ? manipulated.position[1] : base.y + scatter.y + depth.y) + hoverLift, 11, dt, snap);
+    mesh.position.y = dampValue(mesh.position.y, (manipulated ? manipulated.position[1] : base.y + scatter.y + depth.y) + hoverLift + (isLid ? openAmount * 0.27 : 0), 11, dt, snap);
     mesh.position.z = dampValue(mesh.position.z, manipulated ? manipulated.position[2] : base.z + scatter.z + depth.z, 11, dt, snap);
     const currentScale = Number.isFinite(Number(mesh.scale.x))
       ? Number(mesh.scale.x)
@@ -1859,9 +1912,9 @@ export function createBlockWorldLayer({
         ? (isGazeLocked ? 1.045 : 1)
         : isHovered ? 1.1 : isSelected ? 1.025 : isGazeLocked ? 1.055 : 1;
       mesh.scale.set(
-        dampValue(mesh.scale.x, manipulated.scale[0] * selectionScaleMult, 12, dt, snap),
-        dampValue(mesh.scale.y, manipulated.scale[1] * selectionScaleMult, 12, dt, snap),
-        dampValue(mesh.scale.z, manipulated.scale[2] * selectionScaleMult, 12, dt, snap),
+        dampValue(mesh.scale.x, manipulated.scale[0] * selectionScaleMult * openShrink, 12, dt, snap),
+        dampValue(mesh.scale.y, manipulated.scale[1] * selectionScaleMult * openShrink, 12, dt, snap),
+        dampValue(mesh.scale.z, manipulated.scale[2] * selectionScaleMult * openShrink, 12, dt, snap),
       );
     } else {
       mesh.scale.setScalar(dampValue(currentScale, targetScale, 12, dt, snap));
@@ -2475,7 +2528,7 @@ export function createBlockWorldLayer({
       ["WORLD", ["reality-lens", "person", "wardrobe-atelier", "rooms", "block-world", "runtime-sync", "migration", "social-explorer", "projections"]],
       ["VALUE", ["asset-token", "asset-market", "launch-distribution", "paycore", "contracts", "contract-atelier", "ledger", "t402"]],
       ["EVIDENCE", ["gateway", "world-events", "sports-events", "multi-sport-events", "picture-matter", "nft-atelier", "white-paper"]],
-      ["AGENTS + PLAY", ["neural-mesh", "arena", "academy", "luna-companion", "gesture-lens"]],
+      ["AGENTS + PLAY", ["neural-mesh", "arena", "academy", "luna-companion", "gesture-lens", "muse-agent"]],
     ];
     groups.forEach(([groupName, ids]) => {
       const members = featureInventory.filter((feature) => ids.includes(feature.id));
@@ -2621,15 +2674,28 @@ export function createBlockWorldLayer({
     containerCues = new Map();
     contentMeshes = [];
     interactiveMeshes = new Set();
+    // Drop open-animation state for blocks that left the projection; the rest
+    // persists so open/close keeps animating smoothly across rebuilds.
+    {
+      const liveIds = new Set(currentProjection.blocks.map((block) => block.id));
+      openAmounts.forEach((amount, id) => {
+        if (!liveIds.has(id)) openAmounts.delete(id);
+      });
+    }
     const width = currentProjection.dimensions.width;
     const depth = currentProjection.dimensions.depth;
     currentProjection.blocks.forEach((block) => {
       const open = block.container === true && block.open === true;
-      // Closed containers use the slightly larger shell so their affordance
-      // reads in the field; opening swaps to the inset body and lifted cap.
-      // Both paths remain ordinary box geometry and keep the owning block ID.
-      const bodyGeometry = open ? openGeometry : block.container ? containerGeometry : geometry;
+      // Reality Lens open (2026-09-18): the shell no longer swaps geometry on
+      // open. Containers keep the larger glass shell and the open look is an
+      // animated openAmount: the shell shrinks slightly, the lid swings open
+      // like a hatch, and nested contents rise out of the glass from inside.
+      const bodyGeometry = block.container ? containerGeometry : geometry;
       const bodyRole = block.container ? (open ? "container-open" : "container") : "solid";
+      const previousOpenAmount = openAmounts.get(block.id);
+      const openTarget = open ? 1 : 0;
+      if (previousOpenAmount === undefined) openAmounts.set(block.id, openTarget);
+      const newlyOpened = block.container === true && openTarget === 1 && (previousOpenAmount ?? 1) < 1;
       const mesh = new three.Mesh(bodyGeometry, materialFor(block.blockType, bodyRole));
       const baseY = block.y * 0.82 - 0.25;
       setBasePosition(mesh, {
@@ -2647,8 +2713,13 @@ export function createBlockWorldLayer({
       mesh.userData.blockWorldOpenable = block.canOpen === true;
       mesh.castShadow = false;
       mesh.receiveShadow = false;
-      addSelectionCue(mesh, block.id, open ? "open" : block.container ? "container" : "solid");
-      addGazeLockCue(mesh, block.id, open ? "open" : block.container ? "container" : "solid");
+      // Containers keep the container-sized edge cues in both states now that
+      // the open look is animated: the "open" cue geometry would end up
+      // inside the shrunken shell instead of framing it.
+      const cueKind = block.container ? "container" : "solid";
+      addSelectionCue(mesh, block.id, cueKind);
+      addGazeLockCue(mesh, block.id, cueKind);
+      addGlassFrame(mesh, block.id, cueKind, block.blockType);
       layer.add(mesh);
       raycastTargets.push(mesh);
       interactiveMeshes.add(mesh);
@@ -2682,8 +2753,11 @@ export function createBlockWorldLayer({
         // closed. This makes an openable cube legible in the field before the
         // user discovers it through the directory, while keeping the visual
         // language strictly box-shaped (no rings, spheres, or round markers).
+        // The lid's open lift and hatch swing are driven by the animated
+        // openAmount in applyPresentation, so its base position stays at the
+        // closed rest pose and the opening animates instead of popping.
         const lid = new three.Mesh(lidGeometry, contentMaterialFor(block.blockType));
-        setBasePosition(lid, { x: mesh.position.x, y: baseY + (open ? 0.48 : 0.43), z: mesh.position.z });
+        setBasePosition(lid, { x: mesh.position.x, y: baseY + 0.43, z: mesh.position.z });
         setBaseScale(lid, 1);
         lid.userData.blockWorld = cloneSnapshot(block);
         lid.userData.blockWorldId = block.id;
@@ -2712,6 +2786,13 @@ export function createBlockWorldLayer({
             z: mesh.position.z + peekOffset.z,
           });
           setBaseScale(contentMesh, 1);
+          if (newlyOpened && !reducedMotion) {
+            // Rise-from-inside intro: the cube starts at the shell's heart,
+            // near invisible, and applyPresentation damps it up to its peek
+            // perch while the shell opens around it.
+            contentMesh.position.set(mesh.position.x, baseY + 0.1, mesh.position.z);
+            contentMesh.scale.setScalar(0.01);
+          }
           contentMesh.userData.blockWorld = cloneSnapshot(block);
           contentMesh.userData.blockWorldId = block.id;
           contentMesh.userData.blockWorldContent = cloneSnapshot(content);
@@ -3771,6 +3852,18 @@ export function createBlockWorldLayer({
     const motionReduced = reducedMotion || updateOptions.reducedMotion === true;
     const scatterById = updateProximity(updateOptions);
     updateSelectionCues();
+    // Damp per-block open amounts toward their targets before presentation so
+    // the shell shrink, lid hatch, and content rise animate smoothly instead
+    // of popping. Reduced motion snaps straight to the target.
+    {
+      const blockById = new Map(currentProjection.blocks.map((block) => [block.id, block]));
+      blockMeshes.forEach((mesh, id) => {
+        const block = blockById.get(id);
+        const target = block?.container === true && block.open === true ? 1 : 0;
+        const current = openAmounts.get(id) ?? target;
+        openAmounts.set(id, dampValue(current, target, 8, dt, motionReduced));
+      });
+    }
     const presentationMeshes = new Set([
       ...blockMeshes.values(),
       ...containerCues.values(),
