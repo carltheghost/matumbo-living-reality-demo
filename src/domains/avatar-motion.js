@@ -74,6 +74,65 @@ export function avatarBlink({ time, seed = 0, reducedMotion = false } = {}) {
   return 1 - (1 - AVATAR_BLINK.closed) * Math.sin(Math.PI * u);
 }
 
+/** Greet reaction cycle: each click advances wave → spin → jump. */
+export const AVATAR_GREET = Object.freeze({
+  order: Object.freeze(['wave', 'spin', 'jump']),
+  durations: Object.freeze({ wave: 1.6, spin: 1.2, jump: 0.9 }),
+});
+
+/**
+ * Wave pose at `t` in [0,1]: right arm raises sideways, the hand oscillates,
+ * the head tilts in, and a tiny happy bounce lifts the body.
+ * Returns frozen radians/envelopes { armRaise, handWave, headTilt, bounce }.
+ */
+export function avatarWavePose({ t } = {}) {
+  if (!Number.isFinite(t)) throw Error('avatarWavePose needs a finite t');
+  const c = Math.min(1, Math.max(0, t));
+  const env = Math.sin(Math.PI * c);
+  return Object.freeze({
+    armRaise: env * 1.9,
+    handWave: Math.sin(c * Math.PI * 6) * env * 0.45,
+    headTilt: env * 0.12,
+    bounce: Math.abs(Math.sin(c * Math.PI * 2)) * env,
+  });
+}
+
+/**
+ * Spin pose at `t` in [0,1]: one full turn with a small opening hop.
+ * Returns frozen { turn, hop } — turn in radians, hop a 0..1 envelope.
+ */
+export function avatarSpinPose({ t } = {}) {
+  if (!Number.isFinite(t)) throw Error('avatarSpinPose needs a finite t');
+  const c = Math.min(1, Math.max(0, t));
+  const e = c * c * (3 - 2 * c);
+  return Object.freeze({ turn: e * Math.PI * 2, hop: Math.sin(Math.PI * c) });
+}
+
+/**
+ * Jump pose at `t` in [0,1]: a quick crouch, then the leap.
+ * Returns frozen { lift, crouch } envelopes.
+ */
+export function avatarJumpPose({ t } = {}) {
+  if (!Number.isFinite(t)) throw Error('avatarJumpPose needs a finite t');
+  const c = Math.min(1, Math.max(0, t));
+  return Object.freeze({
+    lift: Math.sin(Math.PI * c),
+    crouch: c < 0.25 ? Math.sin((c / 0.25) * Math.PI) : 0,
+  });
+}
+
+/**
+ * Walk-cycle phase at `time` (seconds): opposite legs swing, arms counter
+ * the same-side leg. Returns frozen { legL, legR, armL, armR } in [-1,1].
+ */
+export function avatarWalkPhase({ time, strideHz = 2.2 } = {}) {
+  if (!Number.isFinite(time)) throw Error('avatarWalkPhase needs a finite time');
+  if (!Number.isFinite(strideHz) || strideHz <= 0) throw Error('avatarWalkPhase needs a positive strideHz');
+  const p = time * Math.PI * 2 * strideHz;
+  const legL = Math.sin(p), legR = Math.sin(p + Math.PI);
+  return Object.freeze({ legL, legR, armL: -legL, armR: -legR });
+}
+
 function easeInOut(t) {
   const clamped = Math.min(1, Math.max(0, t));
   return clamped < 0.5 ? 2 * clamped * clamped : 1 - Math.pow(-2 * clamped + 2, 2) / 2;

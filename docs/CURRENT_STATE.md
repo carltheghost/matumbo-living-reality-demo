@@ -1,5 +1,26 @@
 # Current State
 
+## Packet 227 — the Person avatar greets, walks, and can be moved (2026-09-18)
+
+The 3D avatar is now interactive. Clicking it plays the next reaction in a
+greet cycle — a wave (arm raise, hand oscillation, head tilt, happy bounce),
+a full spin with a hop, then a crouch-and-leap jump — each driven by pure
+keyframe helpers in `src/domains/avatar-motion.js`
+(`avatarWavePose`/`avatarSpinPose`/`avatarJumpPose`, all frozen,
+deterministic, throwing on bad input). Dragging the avatar moves it across
+the personal space on a chest-height plane (clamped to the room): it eases
+toward the drag target, plays a walk cycle (opposing leg swings, counter
+arm swings from `avatarWalkPhase`), turns smoothly to face its travel
+direction, and drifts back to facing forward at rest. Dragging empty space
+still orbits and the scroll still zooms; the orbit controls yield while an
+avatar drag is in flight. A soft presence light now travels with the rig so
+it reads as the hero of the lens space. Reduced motion keeps greetings to a
+gentle wave with no spin, hop, or walk. The focused suites pass 26/26
+(greet/walk math) and 20/20 (greet cycle, drag clamp/damping, walk travel)
+in local node runs, with the Packet 226 suites re-verified 16/16 and 31/31;
+all touched files pass `node --check`. No provider request, credential,
+advice, reward token, persistence, wallet, or external authority was added.
+
 ## Packet 226 — the Person avatar is a living 3D rig (2026-09-18)
 
 `?feature=person` no longer shows a flat AI-portrait picture. The retired

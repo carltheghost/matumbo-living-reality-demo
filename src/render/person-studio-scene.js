@@ -1,5 +1,5 @@
 import {STUDIO_MODEL,STUDIO_OUTFITS,STUDIO_ROOMS} from '../domains/person-studio.js';
-import {avatarBlink,avatarIdlePose} from '../domains/avatar-motion.js';
+import {AVATAR_GREET,avatarBlink,avatarIdlePose,avatarJumpPose,avatarSpinPose,avatarWalkPhase,avatarWavePose} from '../domains/avatar-motion.js';
 
 /** PERSON Ω avatar: the fully articulated procedural rig IS the avatar — head,
  *  torso, arms with elbows/hands/fingers, legs, all built from Three.js
@@ -126,7 +126,7 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
   // Lathed torso includes waist, chest, shoulder taper rather than a scaled cube.
   const profile=[[.18,0],[.205,.1],[.22,.3],[.3,.61],[.295,.68],[.20,.75]];
   const torsoMesh=mesh(new THREE.LatheGeometry(profile.map(([x,y])=>new THREE.Vector2(x,y)),24),jacket,[0,0,0],[1,1,.63],torso);
-  target(torsoMesh,{kind:'tab',id:'wardrobe'});
+  target(torsoMesh,{kind:'greet'});
   box(.23,.57,.032,shirt,[0,.4,.182],torso);
   const belt=mesh(new THREE.CylinderGeometry(.213,.22,.07,24),dark,[0,.025,0],[1,1,.7],torso);
   box(.08,.06,.025,trim,[0,.025,.164],torso);
@@ -142,7 +142,7 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
   const emblem=mesh(new THREE.ConeGeometry(.029,.055,3),trim,[0,.45,.235],[1,1,.3],torso);emblem.rotation.z=Math.PI;
   const neck=bone('neck',[0,.765,0],torso);mesh(new THREE.CylinderGeometry(.068,.085,.14,20),skin,[0,.02,0],[1,1,1],neck);
   const head=bone('head',[0,.165,0],neck);
-  const headMesh=sphere(skin,[0,.025,0],[.175,.225,.16],head);target(headMesh,{kind:'tab',id:'identity'});
+  const headMesh=sphere(skin,[0,.025,0],[.175,.225,.16],head);target(headMesh,{kind:'greet'});
   sphere(skin,[0,-.1,.025],[.145,.11,.138],head);
   sphere(skinLight,[0,-.075,.084],[.124,.073,.095],head);
   for(const side of [-1,1]){
@@ -208,6 +208,14 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
   // `setAvatarFace`/`setHologramTint` below remain as state-keeping APIs for
   // the face-choice feature and agent designs, without a hologram to show.
   const avatarHologram=null;
+  // Every rig mesh is clickable for greet/drag (Packet 227): the wrapper
+  // raycasts this list, so clicks and drags land on the avatar itself.
+  const avatarPickMeshes=[];
+  avatar.traverse(object=>{if(object.isMesh)avatarPickMeshes.push(object);});
+  // A soft presence light travels with the avatar so the rig reads as the
+  // hero of the lens space against the darker set pieces.
+  const presenceLight=new THREE.PointLight('#9fd8ff',14,10,1.8);
+  presenceLight.position.set(0,3.2,1.6);avatar.add(presenceLight);
   // Everything structural floats: the avatar, the lens-ring and the set
   // pieces bob gently in lens space (frozen under reduced motion). The
   // avatar's own bob/sway/glow/torso follow the shared avatarIdlePose motion
@@ -257,6 +265,28 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
     rimFrame.visible=form==='drone';wings.forEach(w=>w.visible=form!=='spark');tail.visible=form!=='drone';
   }
   const restQuaternions=Object.fromEntries(Object.entries(joints).map(([name,j])=>[name,j.quaternion.clone()]));
+  const qFromEuler=(x,y,z)=>new THREE.Quaternion().setFromEuler(new THREE.Euler(x,y,z));
+  // Greet reactions (Packet 227): each greet() call starts the next reaction
+  // in the AVATAR_GREET cycle — wave, spin, jump.
+  let greetState=null,greetIndex=0;
+  function greet(){
+    const kind=AVATAR_GREET.order[greetIndex%AVATAR_GREET.order.length];greetIndex++;
+    greetState={kind,t:0};
+    return kind;
+  }
+  function getGreetKind(){return greetState?.kind??null;}
+  // Drag-to-move (Packet 227): the wrapper sets a target offset on the lens
+  // floor plane; update() eases the avatar toward it with a walk cycle and a
+  // smooth turn toward the travel direction. Clamped to the personal space.
+  const AVATAR_DRAG_RADIUS=3.4;
+  const avatarTarget={x:0,z:0},avatarCurrent={x:0,z:0};
+  let heading=0;
+  function setAvatarOffset(x,z){
+    if(!Number.isFinite(x)||!Number.isFinite(z))return {x:avatarTarget.x,z:avatarTarget.z};
+    const r=Math.hypot(x,z),k=r>AVATAR_DRAG_RADIUS?AVATAR_DRAG_RADIUS/r:1;
+    avatarTarget.x=x*k;avatarTarget.z=z*k;
+    return {x:avatarTarget.x,z:avatarTarget.z};
+  }
   function update(dt,time,pose={joints:{}},reducedMotion=false){
     if(!layer.visible)return;
     for(const [name,joint] of Object.entries(joints)){
@@ -272,10 +302,57 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
     if(!reducedMotion){
       const breath=Math.sin(time*1.4);
       torso.scale.set(1-.006*breath,1+.012*breath,1-.006*breath);
-      joints.head.quaternion.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.sin(time*.7+1)*.04,Math.sin(time*.5)*.06,0)));
+      joints.head.quaternion.multiply(qFromEuler(Math.sin(time*.7+1)*.04,Math.sin(time*.5)*.06,0));
     }else{torso.scale.set(1,1,1);}
     const openness=avatarBlink({time,seed:0,reducedMotion});
     for(const eye of eyeBalls)eye.scale.y=eye.userData.baseScaleY*openness;
+    // Drag-to-move: ease toward the target, walk while travelling, turn to
+    // face the travel direction, drift back to facing forward at rest.
+    const dx=avatarTarget.x-avatarCurrent.x,dz=avatarTarget.z-avatarCurrent.z;
+    const travel=Math.hypot(dx,dz);
+    if(!reducedMotion&&travel>0.0005){
+      const step=Math.min(1,dt*7);
+      avatarCurrent.x+=dx*step;avatarCurrent.z+=dz*step;
+    }else{avatarCurrent.x=avatarTarget.x;avatarCurrent.z=avatarTarget.z;}
+    const moving=!reducedMotion&&travel>0.06;
+    const turnTo=target=>{let d=target-heading;while(d>Math.PI)d-=Math.PI*2;while(d<-Math.PI)d+=Math.PI*2;return d;};
+    heading+=turnTo(moving?Math.atan2(dx,dz):0)*Math.min(1,dt*(moving?6:2));
+    avatar.position.x=avatarCurrent.x;avatar.position.z=avatarCurrent.z;
+    let spinAngle=0,greetLift=0;
+    if(greetState){
+      // Reduced motion keeps the greeting to a gentle wave: no spin, no hop.
+      const kind=reducedMotion?'wave':greetState.kind;
+      greetState.t+=dt;
+      const t=Math.min(1,greetState.t/AVATAR_GREET.durations[kind]);
+      if(kind==='wave'){
+        const w=avatarWavePose({t});
+        joints.rightArm.quaternion.multiply(qFromEuler(0,0,w.armRaise));
+        joints.rightHand.quaternion.multiply(qFromEuler(0,0,w.handWave));
+        joints.head.quaternion.multiply(qFromEuler(0,0,w.headTilt));
+        greetLift+=w.bounce*(reducedMotion?0:0.12);
+      }else if(kind==='spin'){
+        const s=avatarSpinPose({t});
+        spinAngle=s.turn;greetLift+=s.hop*0.18;
+        joints.leftArm.quaternion.multiply(qFromEuler(0,0,-0.7*Math.sin(Math.PI*t)));
+        joints.rightArm.quaternion.multiply(qFromEuler(0,0,0.7*Math.sin(Math.PI*t)));
+      }else{
+        const j=avatarJumpPose({t});
+        greetLift+=j.lift*0.55;avatar.position.y-=j.crouch*0.1;
+        joints.leftArm.quaternion.multiply(qFromEuler(0,0,-1.1*j.lift));
+        joints.rightArm.quaternion.multiply(qFromEuler(0,0,1.1*j.lift));
+      }
+      if(greetState.t>=AVATAR_GREET.durations[kind])greetState=null;
+    }else if(moving){
+      // Walk cycle while the avatar travels to its drag target.
+      const wp=avatarWalkPhase({time}),swing=0.5;
+      joints.leftLeg.quaternion.multiply(qFromEuler(wp.legL*swing,0,0));
+      joints.rightLeg.quaternion.multiply(qFromEuler(wp.legR*swing,0,0));
+      joints.leftArm.quaternion.multiply(qFromEuler(wp.armL*swing*0.7,0,0));
+      joints.rightArm.quaternion.multiply(qFromEuler(wp.armR*swing*0.7,0,0));
+      greetLift+=Math.abs(wp.legL)*0.04;
+    }
+    avatar.rotation.y=idle.swayY+heading+spinAngle;
+    avatar.position.y+=greetLift;
     if(reducedMotion){for(const f of floaters)f.obj.position.y=f.base;}
     else{for(const f of floaters)f.obj.position.y=f.base+Math.sin(time*f.speed+f.phase)*f.amp;
       lensRing.rotation.y+=dt*.22;ringInner.rotation.y-=dt*.31;}
@@ -283,7 +360,7 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
     companion.rotation.y=reducedMotion?0:Math.sin(time*.8)*.14;
     wings.forEach((wing,i)=>{wing.rotation.z=(i===0?-1:1)*(.55+(form==='bird'&&!reducedMotion?Math.sin(time*5)*.35:0));});
   }
-  function getSnapshot(){return {source:'person-studio-scene',modelId:STUDIO_MODEL.id,visible:layer.visible,outfitId:outfit,roomId:room,companionForm:form,jointNames:Object.keys(joints),meshCount:geometries.size,identityHeadGeometry:headMesh.geometry.uuid,geometryOnly:false,referenceImagesUsedAsTextures:false,rigVisible:true,avatarHologramPresent:false,avatarHologramUrl:avatarTextureUrl,avatarHologramTint:avatarHologramTint};}
+  function getSnapshot(){return {source:'person-studio-scene',modelId:STUDIO_MODEL.id,visible:layer.visible,outfitId:outfit,roomId:room,companionForm:form,jointNames:Object.keys(joints),meshCount:geometries.size,identityHeadGeometry:headMesh.geometry.uuid,geometryOnly:false,referenceImagesUsedAsTextures:false,rigVisible:true,avatarHologramPresent:false,avatarHologramUrl:avatarTextureUrl,avatarHologramTint:avatarHologramTint,greetKind:getGreetKind(),avatarOffset:{x:avatarTarget.x,z:avatarTarget.z},avatarPickMeshCount:avatarPickMeshes.length};}
   // Face choice state: the user's chosen avatar face — default Tumbo
   // character, Tumbo's own likeness, or their locally-styled photo. The
   // hologram sprite is retired, so this keeps the stored choice (chess
@@ -302,5 +379,5 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
     return avatarHologramTint;
   }
   function destroy(){selectable.forEach(m=>{const i=targets.indexOf(m);if(i>=0)targets.splice(i,1);});geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());if(avatarHologram){avatarHologram.material.map?.dispose?.();avatarHologram.material.dispose?.();}layer.removeFromParent();}
-  return {layer,avatar,joints,apply,update,getSnapshot,destroy,fingerprint,avatarHologram,setAvatarFace,setHologramTint,resolve:object=>object?.userData?.personStudioAction??null};
+  return {layer,avatar,joints,apply,update,getSnapshot,destroy,fingerprint,avatarHologram,avatarPickMeshes,greet,getGreetKind,setAvatarOffset,setAvatarFace,setHologramTint,resolve:object=>object?.userData?.personStudioAction??null};
 }
