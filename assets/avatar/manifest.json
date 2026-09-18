@@ -1,47 +1,52 @@
 {
+  "avatar-bust.webp": {
+    "aspect": 1.0,
+    "height": 1600,
+    "width": 1600
+  },
   "avatar.webp": {
-    "width": 1296,
+    "aspect": 0.6835,
     "height": 1896,
-    "aspect": 0.6835
+    "width": 1296
   },
-  "piece-pawn.webp": {
-    "width": 1990,
-    "height": 1170,
-    "aspect": 1.7009
-  },
-  "piece-knight.webp": {
-    "width": 690,
-    "height": 1184,
-    "aspect": 0.5828
+  "fluffy-body-template.webp": {
+    "aspect": 1.0,
+    "height": 1600,
+    "width": 1600
   },
   "piece-bishop.webp": {
-    "width": 1606,
+    "aspect": 1.3633,
     "height": 1178,
-    "aspect": 1.3633
-  },
-  "piece-rook.webp": {
-    "width": 904,
-    "height": 1177,
-    "aspect": 0.7681
-  },
-  "piece-queen.webp": {
-    "width": 1075,
-    "height": 2204,
-    "aspect": 0.4877
+    "width": 1606
   },
   "piece-king.webp": {
-    "width": 2096,
+    "aspect": 1.7808,
     "height": 1177,
-    "aspect": 1.7808
+    "width": 2096
   },
-  "avatar-bust.webp": {
-    "width": 1600,
+  "piece-knight.webp": {
+    "aspect": 0.5828,
+    "height": 1184,
+    "width": 690
+  },
+  "piece-pawn.webp": {
+    "aspect": 1.7009,
+    "height": 1170,
+    "width": 1990
+  },
+  "piece-queen.webp": {
+    "aspect": 0.4877,
+    "height": 2204,
+    "width": 1075
+  },
+  "piece-rook.webp": {
+    "aspect": 0.7681,
+    "height": 1177,
+    "width": 904
+  },
+  "tumbo-chibi.webp": {
+    "aspect": 1.0,
     "height": 1600,
-    "aspect": 1.0
-  },
-  "tumbo-personal.webp": {
-    "width": 1376,
-    "height": 1824,
-    "aspect": 0.7544
+    "width": 1600
   }
 }

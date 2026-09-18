@@ -3,7 +3,7 @@ import {STUDIO_MODEL,STUDIO_OUTFITS,STUDIO_ROOMS} from '../domains/person-studio
 /** AI-built likeness: Tumbo's approved avatar bust portrait (cinematic teal/violet
  *  rim light) drives the camera-facing hologram; the procedural rig stays as
  *  interaction targets. */
-export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,avatarTextureUrl='assets/avatar/avatar-bust.webp'}) {
+export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,avatarTextureUrl='assets/avatar/fluffy-body-template.webp'}) {
   const layer=new THREE.Group();layer.name='PERSON Ω / open lens space';parent.add(layer);layer.visible=false;
   const materials=new Set(),geometries=new Set(),selectable=[];
   const material=(color,metalness=.2,roughness=.5,extra={})=>{const m=new THREE.MeshStandardMaterial({color,metalness,roughness,...extra});materials.add(m);return m;};

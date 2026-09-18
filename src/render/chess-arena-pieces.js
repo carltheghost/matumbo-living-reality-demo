@@ -93,9 +93,9 @@ export function readArenaAvatarAppearance({storage = null} = {}) {
     outfitTrim: outfit.trim,
     displayName: typeof saved.displayName === 'string' ? saved.displayName.slice(0, 60) : '',
     approved: true,
-    // The face every champion wears: the user's chosen avatar face — the
-    // default Tumbo character, Tumbo's own likeness, or their own photo
-    // styled locally ("Become Tumbo"). Always resolves to a usable URL.
+    // The face every champion wears: the user's chosen chibi — the
+    // default character, Tumbo's own chibi, or their own chibi built
+    // locally ("Become Tumbo"). Always resolves to a usable URL.
     faceUrl: resolveAvatarFaceUrl(store),
   });
 }
@@ -154,10 +154,9 @@ function createMaterialSet(THREE, appearance) {
   };
 }
 
-/** AI-built avatar bust portrait (2026-09-18): Tumbo's approved likeness from
- *  his PERSON Ω concept art. Every chess piece wears this same face; role is
- *  carried by stature, glyph badge, and ring. Local projection asset only. */
-export const AVATAR_BUST_PORTRAIT_URL = 'assets/avatar/avatar-bust.webp';
+/** Fallback face every chess piece wears when no choice resolves: the generic
+ *  chibi character. Local projection asset only. */
+export const AVATAR_CHIBI_FALLBACK_URL = 'assets/avatar/fluffy-body-template.webp';
 /** Hologram heights in arena units: the king stands tallest, the pawn shortest. */
 export const CHESS_PIECE_HEIGHTS = Object.freeze({p: 1.3, n: 1.5, b: 1.55, r: 1.6, q: 1.75, k: 1.9});
 /** Glow-ring radii in arena units: stature reads per role at a glance. */
@@ -215,20 +214,21 @@ function buildRoleBadge(THREE, color, type, textureRegistry = null) {
   return badge;
 }
 
-/** Avatar chess piece: the same AI-built likeness on every piece, billboarded
- *  so it reads from every camera angle, standing on the role-sized,
- *  side-colored glow ring with its role glyph badge at the base. The portrait
- *  texture loads lazily from local assets; without a DOM Image (node tests)
- *  the sprite is built untextured and every structural assertion still holds. */
+/** Avatar chess piece: the user's chosen chibi on every piece,
+ *  billboarded so it reads from every camera angle, standing on the
+ *  role-sized, side-colored glow ring with its role glyph badge at the base.
+ *  The chibi texture loads lazily from local assets; without a DOM Image
+ *  (node tests) the sprite is built untextured and every structural
+ *  assertion still holds. */
 function buildHologramPiece(THREE, G, M, color, type, hologramRegistry = null, appearance = null) {
   const side = M.side[color];
   const group = new THREE.Group();
-  // The face every champion wears: the user's chosen avatar face — the default
-  // Tumbo bust, Tumbo's own likeness, or the player's own "Become Tumbo"
-  // styled photo — resolved per device by readArenaAvatarAppearance.
+  // The face every champion wears: the user's chosen chibi — the
+  // default character, Tumbo's own chibi, or the player's own "Become
+  // Tumbo" chibi — resolved per device by readArenaAvatarAppearance.
   const faceUrl = (appearance && typeof appearance.faceUrl === 'string' && appearance.faceUrl)
     ? appearance.faceUrl
-    : AVATAR_BUST_PORTRAIT_URL;
+    : AVATAR_CHIBI_FALLBACK_URL;
   const ringRadius = CHESS_PIECE_RING_RADII[type] ?? 0.34;
   const ring = new THREE.Mesh(G.torus(ringRadius, 0.05), side.ring);
   ring.rotation.x = Math.PI / 2;
