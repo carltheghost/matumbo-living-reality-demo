@@ -8,7 +8,7 @@ import { mountCenteredSurfaces } from './render/centered-surfaces.js?v=20260918-
 import { createImmersiveSession } from './render/immersive-session.js';
 import { createMediaPreview } from './render/media-preview.js';
 import { initMobilePanelManager } from './render/mobile-panel-manager.js';
-import { createPersonStudio } from './render/person-studio.js';
+import { createPersonStudio } from './render/person-studio.js?v=20260918-avatar-chess';
 import { createRealityAssembly } from './render/reality-assembly.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
@@ -55,7 +55,7 @@ import { BLOCK_WORLD_SNAPSHOT_CONSOLE_SOURCE, createBlockWorldSnapshotConsole } 
 import { BLOCK_WORLD_RUNTIME_SYNC_SOURCE, createBlockWorldRuntimeSync } from './render/block-world-runtime-sync.js?v=20260828-runtime-sync171';
 import { ARENA_GAMES_SOURCE, ARENA_GAMES_CONSOLE_SOURCE } from './domains/arena-games.js?v=20260826-arena1';
 import { createArenaGamesConsole } from './render/arena-games.js?v=20260826-arena1';
-import { mountChessArena } from './render/chess-arena.js';
+import { mountChessArena } from './render/chess-arena.js?v=20260918-avatar-chess';
 import { ACADEMY_CONSOLE_SOURCE, createAcademyConsole } from './render/academy.js?v=20260904-academy1';
 import {
   CONTRACTS_MARKETS_SOURCE,
@@ -82,6 +82,9 @@ import { PICTURE_MATTER_METADATA_SOURCE, createUnavailablePictureMatterMetadata,
 import { PICTURE_MATTER_CONSOLE_SOURCE, createPictureMatterConsole } from './render/picture-matter.js?v=20260828-picture-metadata1';
 import { NFT_ATELIER_CONSOLE_SOURCE, createNftAtelierConsole } from './render/nft-atelier.js?v=20260918-nft1';
 import { MUSE_AGENT_CONSOLE_SOURCE, createMuseAgentConsole } from './render/muse-agent.js?v=20260918-muse1';
+import { BOT_PLAZA_CONSOLE_SOURCE, createBotPlazaConsole } from './render/bot-plaza.js?v=20260918-botplaza1';
+import { createBotRegistry, createBotRuntime } from './domains/bot-plaza.js?v=20260918-botplaza1';
+import { mountBotPresence } from './render/bot-presence.js?v=20260918-botplaza1';
 import { CONTRACT_ATELIER_CONSOLE_SOURCE, createContractAtelierConsole } from './render/contract-atelier.js?v=20260918-ctr1';
 import { LUNA_CONSOLE_SOURCE, createLunaCompanionConsole } from './render/luna-companion.js?v=20260918-luna1';
 import { WARDROBE_ATELIER_CONSOLE_SOURCE, createWardrobeAtelierConsole } from './render/wardrobe-atelier.js?v=20260918-wdr1';
@@ -157,6 +160,10 @@ let pictureMatterConsole = null;
 let pictureMatterMetadata = createUnavailablePictureMatterMetadata();
 let nftAtelierConsole = null;
 let museAgentConsole = null;
+let botPlazaRegistry = null;
+let botPlazaRuntime = null;
+let botPlazaConsole = null;
+let botPresence = null;
 let contractAtelierConsole = null;
 let lunaCompanionConsole = null;
 let wardrobeAtelierConsole = null;
@@ -200,6 +207,7 @@ const PORTAL_CUBE_SUBSTRATE_FEATURES = new Set([
   'picture-matter',
   'nft-atelier',
   'muse-agent',
+  'bot-plaza',
   'contract-atelier',
   'ledger',
   'gateway',
@@ -399,6 +407,7 @@ blockWorld = createBlockWorldLayer({
       externalTransfer: false,
       executable: false,
     }));
+    try { botPlazaRuntime?.publishWorldEvent('cube.selected', { cubeId: block?.id ?? null, blockType: block?.blockType ?? null, method: String(method ?? '') }); } catch {}
     cubeQuickActions?.refresh?.();
     refreshManipulateButtons();
   },
@@ -422,6 +431,7 @@ blockWorld = createBlockWorldLayer({
       externalTransfer: false,
       executable: false,
     }));
+    try { botPlazaRuntime?.publishWorldEvent('cube.opened', { cubeId: block?.id ?? null, action: String(action ?? '') }); } catch {}
     cubeQuickActions?.refresh?.();
   },
   onMove: (snapshot, action) => {
@@ -649,6 +659,7 @@ blockWorld = createBlockWorldLayer({
       'picture-matter': () => pictureMatterConsole?.open(),
       'nft-atelier': () => nftAtelierConsole?.open(),
       'muse-agent': () => museAgentConsole?.open(),
+      'bot-plaza': () => botPlazaConsole?.open(),
       'contract-atelier': () => contractAtelierConsole?.open(),
       'luna-companion': () => lunaCompanionConsole?.open(),
       'wardrobe-atelier': () => wardrobeAtelierConsole?.open(),
@@ -2905,6 +2916,83 @@ museAgentConsole = createMuseAgentConsole({
   })),
 });
 window.__TUMBO_MUSE_AGENT__ = museAgentConsole;
+// Bot Plaza — bring-your-own-bot plugin layer. The in-world agent is now a
+// bot: anyone can plug in their own bot, build one with the no-code Bot
+// Atelier, chat user↔bot and bot↔bot, and let bots do things in the world
+// inside per-bot approved capabilities. 100% browser-local: no network, no
+// tokens, no OAuth, no external bot APIs. The Muse Agent plugin ships as the
+// built-in default bot.
+botPlazaRegistry = createBotRegistry();
+botPlazaRuntime = createBotRuntime({
+  registry: botPlazaRegistry,
+  actionHandlers: {
+    'world.announce': ({ botId, params }) => {
+      botPresence?.speak(botId, params.text);
+      return { announced: true };
+    },
+    'world.focus-cube': ({ params }) => {
+      blockWorld?.setHoveredBlock?.(params.cubeId);
+      return { cubeId: params.cubeId };
+    },
+    'world.select-cube': ({ params }) => {
+      blockWorld?.selectBlock?.(params.cubeId, 'bot-plaza');
+      botPlazaRuntime.publishWorldEvent('cube.selected', { cubeId: params.cubeId });
+      return { cubeId: params.cubeId };
+    },
+    'world.open-cube': ({ params }) => {
+      if (params.cubeId) blockWorld?.selectBlock?.(params.cubeId, 'bot-plaza');
+      blockWorld?.openBlock?.(true);
+      botPlazaRuntime.publishWorldEvent('cube.opened', { cubeId: params.cubeId ?? null });
+      return { cubeId: params.cubeId ?? null };
+    },
+    'world.move-camera': ({ params }) => {
+      const x = Math.max(-60, Math.min(60, Number(params.x) || 0));
+      const y = Math.max(1, Math.min(60, Number(params.y) || 10));
+      const z = Math.max(-60, Math.min(60, Number(params.z) || 20));
+      desiredCameraPosition.set(x, y, z);
+      cameraPositionTween = reducedMotion ? .16 : 1;
+      return { x, y, z };
+    },
+    'world.launch-feature': ({ params }) => {
+      featureNavigator?.select?.(params.featureId, 'bot-plaza');
+      return { featureId: params.featureId };
+    },
+  },
+});
+botPlazaConsole = createBotPlazaConsole({
+  documentRoot: document,
+  registry: botPlazaRegistry,
+  runtime: botPlazaRuntime,
+  onReplay: (snapshot) => projectionBridge.emitIntent('projection.replay-bot-plaza', BOT_PLAZA_CONSOLE_SOURCE, Object.freeze({
+    action: snapshot.action,
+    method: snapshot.method,
+    simulation: true,
+    deterministic: true,
+    localOnly: true,
+    executable: false,
+  })),
+});
+window.__TUMBO_BOT_PLAZA__ = { registry: botPlazaRegistry, runtime: botPlazaRuntime, console: botPlazaConsole };
+// Bot presences live in the 3D world as glass orbs; bot chatter shows as
+// speech bubbles above them, and clicking one opens the chat.
+botPresence = mountBotPresence({
+  documentRoot: document,
+  scene,
+  camera,
+  container: document.body,
+  getBots: () => botPlazaRegistry.listBots(),
+  getRuntime: () => botPlazaRuntime,
+  onOrbClick: (botId) => {
+    botPlazaConsole?.open();
+    botPlazaConsole?.selectBot?.(botId);
+  },
+});
+botPlazaRuntime.getBus().subscribe((entry) => {
+  if (entry.kind === 'chat' || entry.kind === 'announce' || entry.kind === 'event') {
+    if (entry.from !== 'user' && entry.from !== 'world') botPresence?.speak(entry.from, entry.text);
+  }
+  botPresence?.refresh();
+});
 // Contract Atelier is a standalone fictional market surface: anyone can open
 // a pool, binary, or multi-outcome contract on any topic as the house or a
 // player, stake rehearsal credits, and resolve it with TRUE/FALSE, AND, OR,
@@ -5952,6 +6040,8 @@ featureNavigator = createFeatureNavigator({
   onFocus: (feature, method) => {
     personStudio?.close();
     realityAssembly?.close();
+    try { botPlazaRuntime?.publishWorldEvent('feature.entered', { featureId: feature?.id ?? null, method: String(method ?? '') }); } catch {}
+    if (feature?.id !== 'bot-plaza') botPlazaConsole?.close();
     const genericUserSelection = method === 'button'
       || method === 'keyboard'
       || method === 'feature-navigator'
@@ -6457,6 +6547,29 @@ featureNavigator = createFeatureNavigator({
       gestureLensConsole?.close();
       ledgerProofConsole?.close();
       sportsEventsConsole?.close();
+      botPlazaConsole?.close();
+    } else if (feature.id === 'bot-plaza') {
+      launchConsole?.close();
+      socialExplorer?.close();
+      roomSpaces?.close();
+      blockWorld?.close();
+      blockMigration?.close();
+      arenaGames?.close();
+      contractsMarkets?.close();
+      paycoreConsole?.close();
+      t402Console?.close();
+      neuralMeshConsole?.close();
+      pictureMatterConsole?.close();
+      nftAtelierConsole?.close();
+      museAgentConsole?.close();
+      botPlazaConsole?.open();
+      contractAtelierConsole?.close();
+      lunaCompanionConsole?.close();
+      wardrobeAtelierConsole?.close();
+      whitePaperConsole?.close();
+      gestureLensConsole?.close();
+      ledgerProofConsole?.close();
+      sportsEventsConsole?.close();
     } else if (feature.id === 'contract-atelier') {
       launchConsole?.close();
       socialExplorer?.close();
@@ -6767,6 +6880,7 @@ featureNavigator = createFeatureNavigator({
     if (feature.id === 'picture-matter' && method === 'replay') pictureMatterConsole?.replay('feature-navigator');
     if (feature.id === 'nft-atelier' && method === 'replay') nftAtelierConsole?.replay('feature-navigator');
     if (feature.id === 'muse-agent' && method === 'replay') museAgentConsole?.replay('feature-navigator');
+    if (feature.id === 'bot-plaza' && method === 'replay') botPlazaConsole?.replay('feature-navigator');
     if (feature.id === 'contract-atelier' && method === 'replay') contractAtelierConsole?.replay('feature-navigator');
     if (feature.id === 'luna-companion' && method === 'replay') lunaCompanionConsole?.replay('feature-navigator');
     if (feature.id === 'wardrobe-atelier' && method === 'replay') wardrobeAtelierConsole?.replay('feature-navigator');
@@ -6951,6 +7065,7 @@ projectionSession = createProjectionSession({
     "picture-matter": pictureMatterConsole?.getSnapshot?.(),
     "nft-atelier": nftAtelierConsole?.getSnapshot?.(),
     "muse-agent": museAgentConsole?.getSnapshot?.(),
+    "bot-plaza": botPlazaConsole?.getSnapshot?.(),
     "contract-atelier": contractAtelierConsole?.getSnapshot?.(),
     "luna-companion": lunaCompanionConsole?.getSnapshot?.(),
     "wardrobe-atelier": wardrobeAtelierConsole?.getSnapshot?.(),

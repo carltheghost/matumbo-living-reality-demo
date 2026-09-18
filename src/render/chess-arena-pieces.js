@@ -5,10 +5,12 @@
  * against the vendored build. The browser mount (./chess-arena.js) passes the
  * import-mapped namespace.
  *
- * Pieces are stylized humanoid avatars wearing the user's approved Person
- * Studio appearance (skin, hair, outfit colors) read from the same
- * localStorage profile the studio saves. Side identity stays a chess read:
- * ivory/gold for white, obsidian/violet-glow for black.
+ * Every piece is the same character — Tumbo's AI-built avatar bust portrait —
+ * reimagined per chess role through stature (height), a role glyph badge, and
+ * the side's material language (light/gold for white, dark/obsidian with
+ * violet glow for black). The portrait's face region is cropped per role via
+ * texture offset/repeat so the likeness reads at board scale; role identity
+ * comes from the badge, not a different face.
  *
  * Projection only: no network, no identity authority, no wallet, no
  * settlement. Geometries and materials are shared across every piece so the
@@ -146,40 +148,84 @@ function createMaterialSet(THREE, appearance) {
   };
 }
 
-/** Reference avatar chess textures (2026-09-18): Tumbo's approved likeness,
- *  generated from his PERSON \u03a9 concept art, one full-body figure per chess
- *  role. Local projection assets only - no network beyond the static host. */
-export const CHESS_PIECE_TEXTURE_URLS = Object.freeze({
-  p: 'assets/avatar/piece-pawn.webp',
-  n: 'assets/avatar/piece-knight.webp',
-  b: 'assets/avatar/piece-bishop.webp',
-  r: 'assets/avatar/piece-rook.webp',
-  q: 'assets/avatar/piece-queen.webp',
-  k: 'assets/avatar/piece-king.webp',
-});
+/** AI-built avatar bust portrait (2026-09-18): Tumbo's approved likeness from
+ *  his PERSON Ω concept art. Every chess piece wears this same face; role is
+ *  carried by stature, glyph badge, and ring. Local projection asset only. */
+export const AVATAR_BUST_PORTRAIT_URL = 'assets/avatar/avatar-bust.webp';
 /** Hologram heights in arena units: the king stands tallest, the pawn shortest. */
 export const CHESS_PIECE_HEIGHTS = Object.freeze({p: 1.3, n: 1.5, b: 1.55, r: 1.6, q: 1.75, k: 1.9});
-/** Cropped texture aspects (width / height) from assets/avatar/manifest.json. */
-export const CHESS_PIECE_ASPECTS = Object.freeze({
-  p: 1.7009, n: 0.5828, b: 1.3633, r: 0.7681, q: 0.4877, k: 1.7808,
+/** Glow-ring radii in arena units: stature reads per role at a glance. */
+export const CHESS_PIECE_RING_RADII = Object.freeze({p: 0.30, n: 0.33, b: 0.34, r: 0.35, q: 0.38, k: 0.42});
+/** Role glyphs for the badge each piece carries at its base. */
+export const CHESS_ROLE_GLYPHS = Object.freeze({p: '♟', n: '♞', b: '♝', r: '♜', q: '♛', k: '♚'});
+/** Face-region crops of the square bust portrait in UV space (center + size).
+ *  The portrait's face sits near (0.5, 0.69); higher roles frame a slightly
+ *  wider bust for presence. Applied via texture offset/repeat in the browser. */
+export const CHESS_BUST_CROPS = Object.freeze({
+  p: Object.freeze({cx: 0.5, cy: 0.69, size: 0.30}),
+  n: Object.freeze({cx: 0.5, cy: 0.69, size: 0.32}),
+  b: Object.freeze({cx: 0.5, cy: 0.69, size: 0.34}),
+  r: Object.freeze({cx: 0.5, cy: 0.69, size: 0.36}),
+  q: Object.freeze({cx: 0.5, cy: 0.69, size: 0.40}),
+  k: Object.freeze({cx: 0.5, cy: 0.69, size: 0.44}),
 });
 const CHESS_PIECE_TINTS = Object.freeze({w: 0xffe2ae, b: 0xc4a4ff});
+const ROLE_BADGE_RING = Object.freeze({w: '#ffd98a', b: '#b48cff'});
+const ROLE_BADGE_GLYPH = Object.freeze({w: '#ffe9c0', b: '#d9c2ff'});
 
-/** Hologram avatar piece: the user's own likeness as the chess figure,
- *  billboarded so it reads from every camera angle, standing on the
- *  side-colored glow ring. Textures load lazily from local assets; without a
- *  DOM Image (node tests) the sprite is built untextured and every structural
- *  assertion still holds. */
+/** Role badge: a small billboarded plaque at the piece's base carrying the
+ *  role glyph in the side's color. In the browser the glyph is drawn on a
+ *  canvas texture; in node (tests) the badge records its metadata and stays
+ *  untextured so every structural assertion still holds. */
+function buildRoleBadge(THREE, color, type, textureRegistry = null) {
+  const material = new THREE.SpriteMaterial({transparent: true, depthWrite: false, opacity: 0.95});
+  const badge = new THREE.Sprite(material);
+  const size = 0.36;
+  badge.scale.set(size, size, 1);
+  badge.position.set(0, 0.32, 0);
+  badge.userData.part = 'role-badge';
+  badge.userData.roleGlyph = CHESS_ROLE_GLYPHS[type];
+  badge.userData.roleBadgeSide = color;
+  if (textureRegistry) textureRegistry.add({material, getTexture: () => material.map ?? null});
+  const canDraw = typeof document !== 'undefined'
+    && typeof document.createElement === 'function'
+    && typeof THREE.CanvasTexture === 'function';
+  if (canDraw) {
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = 128; canvas.height = 128;
+      const ctx = canvas.getContext('2d');
+      ctx.beginPath(); ctx.arc(64, 64, 58, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(6,8,14,0.85)'; ctx.fill();
+      ctx.lineWidth = 6; ctx.strokeStyle = ROLE_BADGE_RING[color]; ctx.stroke();
+      ctx.font = '68px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = ROLE_BADGE_GLYPH[color];
+      ctx.fillText(CHESS_ROLE_GLYPHS[type], 64, 68);
+      const texture = new THREE.CanvasTexture(canvas);
+      material.map = texture;
+      material.needsUpdate = true;
+    } catch { /* badge keeps its glyph metadata; the plaque simply stays untextured */ }
+  }
+  return badge;
+}
+
+/** Avatar chess piece: the same AI-built likeness on every piece, billboarded
+ *  so it reads from every camera angle, standing on the role-sized,
+ *  side-colored glow ring with its role glyph badge at the base. The portrait
+ *  texture loads lazily from local assets; without a DOM Image (node tests)
+ *  the sprite is built untextured and every structural assertion still holds. */
 function buildHologramPiece(THREE, G, M, color, type, hologramRegistry = null) {
   const side = M.side[color];
   const group = new THREE.Group();
-  const ring = new THREE.Mesh(G.torus(0.34, 0.05), side.ring);
+  const ringRadius = CHESS_PIECE_RING_RADII[type] ?? 0.34;
+  const ring = new THREE.Mesh(G.torus(ringRadius, 0.05), side.ring);
   ring.rotation.x = Math.PI / 2;
   ring.position.set(0, 0.05, 0);
   ring.userData.part = 'ring';
+  ring.userData.ringRadius = ringRadius;
   group.add(ring);
   const height = CHESS_PIECE_HEIGHTS[type] ?? 1.4;
-  const width = height * (CHESS_PIECE_ASPECTS[type] ?? 1);
+  const crop = CHESS_BUST_CROPS[type] ?? CHESS_BUST_CROPS.p;
   const material = new THREE.SpriteMaterial({
     transparent: true,
     depthWrite: false,
@@ -188,21 +234,28 @@ function buildHologramPiece(THREE, G, M, color, type, hologramRegistry = null) {
     opacity: 0.97,
   });
   const sprite = new THREE.Sprite(material);
-  sprite.scale.set(width, height, 1);
+  sprite.scale.set(height, height, 1);
   sprite.position.set(0, height / 2 + 0.04, 0);
   sprite.userData.part = 'hologram';
   sprite.userData.pieceType = type;
-  sprite.userData.textureUrl = CHESS_PIECE_TEXTURE_URLS[type];
+  sprite.userData.textureUrl = AVATAR_BUST_PORTRAIT_URL;
+  sprite.userData.bustCrop = {...crop};
   sprite.visible = false;
   group.add(sprite);
-  if (hologramRegistry) hologramRegistry.add({ material, getTexture: () => material.map ?? null });
+  group.add(buildRoleBadge(THREE, color, type, hologramRegistry));
+  if (hologramRegistry) hologramRegistry.add({material, getTexture: () => material.map ?? null});
   const canLoad = typeof THREE.TextureLoader === 'function'
     && typeof Image !== 'undefined'
-    && typeof CHESS_PIECE_TEXTURE_URLS[type] === 'string';
+    && typeof AVATAR_BUST_PORTRAIT_URL === 'string';
   if (canLoad) {
     new THREE.TextureLoader().load(
-      CHESS_PIECE_TEXTURE_URLS[type],
+      AVATAR_BUST_PORTRAIT_URL,
       (texture) => {
+        texture.wrapS = THREE.ClampToEdgeWrapping;
+        texture.wrapT = THREE.ClampToEdgeWrapping;
+        texture.repeat.set(crop.size, crop.size);
+        texture.offset.set(crop.cx - crop.size / 2, crop.cy - crop.size / 2);
+        texture.needsUpdate = true;
         material.map = texture;
         material.needsUpdate = true;
         sprite.visible = true;

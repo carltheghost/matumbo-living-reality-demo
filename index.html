@@ -975,6 +975,63 @@
      #contract-atelier-boundary{font-size:10px;color:#e8cfb4;opacity:.6;line-height:1.5}
      .contract-atelier-hint{font-size:10px;color:#e8cfb4;opacity:.6;margin:-4px 0 8px}
      @media(max-width:700px){#contract-atelier-console{left:12px;right:12px;top:86px;width:auto;max-height:calc(100vh - 112px);padding:11px}#contract-atelier-head h2{font-size:17px}}
+     #bot-plaza-console{position:absolute;right:20px;top:145px;z-index:31;width:min(560px,calc(100vw - 40px));max-height:calc(100vh - 190px);display:flex;flex-direction:column;gap:9px;padding:15px;border:1px solid rgba(47,232,212,.42);border-radius:14px;background:linear-gradient(160deg,rgba(6,34,32,.98),rgba(4,10,12,.98));box-shadow:0 24px 80px rgba(0,0,0,.64),inset 0 0 42px rgba(47,232,212,.10);pointer-events:auto;overflow:auto;scrollbar-width:thin}
+     #bot-plaza-console[hidden]{display:none}
+     #bot-plaza-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+     #bot-plaza-head .eyebrow{font-size:9px;letter-spacing:.2em;color:#2fe8d4;text-transform:uppercase}
+     #bot-plaza-head h2{margin:4px 0;font-size:20px;color:#f2fbff}
+     #bot-plaza-head p{margin:6px 0 0;font-size:12px;color:#c8e2ee;opacity:.85}
+     #bot-plaza-close{background:none;border:1px solid rgba(47,232,212,.4);border-radius:8px;color:#2fe8d4;font-size:16px;width:30px;height:30px;cursor:pointer;flex:none}
+     #bot-plaza-status{font-size:11px;letter-spacing:.08em;color:#2fe8d4}
+     #bot-plaza-roster{display:flex;flex-direction:column;gap:8px}
+     .bot-plaza-bot{display:flex;gap:10px;align-items:center;text-align:left;padding:8px 10px;border:1px solid rgba(47,232,212,.28);border-radius:10px;background:rgba(47,232,212,.06);color:#f2fbff;cursor:pointer;min-height:44px}
+     .bot-plaza-bot.selected{border-color:#2fe8d4;background:rgba(47,232,212,.14)}
+     .bot-plaza-bot.disabled{opacity:.55}
+     .bot-plaza-avatar-orb{width:34px;height:34px;border-radius:50%;flex:none}
+     .bot-plaza-avatar-img{width:34px;height:34px;border-radius:50%;object-fit:cover;flex:none;border:1px solid rgba(47,232,212,.5)}
+     .bot-plaza-bot-meta{display:flex;flex-direction:column;gap:2px}
+     .bot-plaza-bot-meta strong{font-size:13px}
+     .bot-plaza-bot-sub{font-size:10px;color:#a9c6da;opacity:.8}
+     #bot-plaza-chat-with{font-size:12px;color:#2fe8d4;margin-bottom:6px}
+     #bot-plaza-chat-log{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto;padding:8px;border:1px solid rgba(47,232,212,.2);border-radius:10px;background:rgba(2,8,10,.6)}
+     .bot-plaza-msg{font-size:12px;color:#eaf4ff;line-height:1.45}
+     .bot-plaza-msg.from-user{color:#bfe9ff}
+     .bot-plaza-msg strong{color:#2fe8d4}
+     .bot-plaza-sendrow{display:flex;gap:8px;margin-top:8px}
+     .bot-plaza-sendrow input{flex:1;min-height:44px;padding:8px 10px;border-radius:8px;border:1px solid rgba(47,232,212,.35);background:rgba(2,10,12,.8);color:#f2fbff}
+     .bot-plaza-sendrow button,#bot-plaza-rule-add,#bot-plaza-atelier-create,.bot-plaza-mini{min-height:44px;padding:8px 14px;border-radius:8px;border:1px solid #2c7f78;background:#0a2b29;color:#eafffb;cursor:pointer}
+     .bot-plaza-mini{min-height:36px;padding:4px 10px;font-size:11px}
+     .bot-plaza-mini.danger{border-color:#8a3040;background:#2b0f14;color:#ffd2dc}
+     #bot-plaza-activity{display:flex;flex-direction:column;gap:4px;max-height:180px;overflow:auto;font-size:11px;color:#a9c6da}
+     .bot-plaza-activity-row{line-height:1.4}
+     .bot-plaza-activity-row.kind-announce{color:#2fe8d4}
+     .bot-plaza-activity-row.kind-event{color:#c9a7ff}
+     .bot-plaza-activity-row.kind-system{color:#8a99a5;font-style:italic}
+     .bot-plaza-field{display:flex;flex-direction:column;gap:4px;font-size:12px;color:#c8e2ee;margin:8px 0}
+     .bot-plaza-field input,.bot-plaza-field select,.bot-plaza-field textarea{min-height:44px;padding:8px 10px;border-radius:8px;border:1px solid rgba(47,232,212,.35);background:rgba(2,10,12,.8);color:#f2fbff;font-size:13px}
+     .bot-plaza-subtitle{font-size:12px;color:#2fe8d4;margin:10px 0 4px}
+     #bot-plaza-atelier-rules{display:flex;flex-direction:column;gap:6px;margin:6px 0}
+     .bot-plaza-rule-row{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:11px;color:#c8e2ee;padding:6px 8px;border:1px solid rgba(47,232,212,.2);border-radius:8px}
+     #bot-plaza-rule-form{display:flex;flex-direction:column;gap:2px;padding:10px;border:1px dashed rgba(47,232,212,.35);border-radius:10px;margin:6px 0}
+     #bot-plaza-atelier-caps{border:1px solid rgba(47,232,212,.25);border-radius:10px;padding:10px;margin:8px 0;color:#c8e2ee;font-size:12px}
+     #bot-plaza-atelier-caps legend{color:#2fe8d4;font-size:11px;padding:0 6px}
+     .bot-plaza-cap-check{display:flex;gap:8px;align-items:flex-start;font-size:11px;color:#c8e2ee;margin:6px 0;cursor:pointer}
+     .bot-plaza-cap-check input{margin-top:2px;min-height:20px;min-width:20px}
+     .bot-plaza-cap-check.undeclared{opacity:.45}
+     #bot-plaza-caps{display:flex;flex-direction:column;gap:10px}
+     .bot-plaza-cap-bot{padding:8px;border:1px solid rgba(47,232,212,.2);border-radius:10px}
+     .bot-plaza-cap-bot>strong{font-size:12px;color:#f2fbff}
+     .bot-plaza-cap-row{display:flex;flex-wrap:wrap;gap:4px 12px;margin:6px 0}
+     .bot-plaza-bot-controls{display:flex;gap:8px;align-items:center;margin-top:6px}
+     #bot-plaza-journal,#bot-plaza-drafts{display:flex;flex-direction:column;gap:6px;max-height:160px;overflow:auto}
+     .bot-plaza-journal-row{font-size:11px;color:#c8e2ee;line-height:1.4}
+     .bot-plaza-draft-row{font-size:11px;color:#eaf4ff;padding:8px;border:1px solid rgba(255,209,102,.35);border-radius:8px;background:rgba(40,28,8,.5)}
+     .bot-plaza-draft-row strong{color:#ffd166}
+     .bot-plaza-empty{font-size:11px;color:#8a99a5;font-style:italic;padding:6px 0}
+     #bot-plaza-boundary{font-size:10px;color:#a9c6da;opacity:.65;line-height:1.5}
+     .bot-presence-bubbles{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:5}
+     .bot-presence-bubble{position:absolute;left:0;top:0;max-width:240px;padding:8px 12px;border-radius:12px;border:1px solid rgba(47,232,212,.55);background:rgba(4,14,16,.92);color:#eafffb;font-size:12px;line-height:1.4;box-shadow:0 8px 30px rgba(0,0,0,.5),0 0 18px rgba(47,232,212,.25)}
+     @media(max-width:700px){#bot-plaza-console{left:12px;right:12px;top:86px;width:auto;max-height:calc(100vh - 112px);padding:11px}#bot-plaza-head h2{font-size:17px}.bot-presence-bubble{max-width:180px;font-size:11px}}
      #luna-companion-console{position:absolute;right:20px;top:145px;z-index:31;width:min(560px,calc(100vw - 40px));max-height:calc(100vh - 190px);display:flex;flex-direction:column;gap:9px;padding:15px;border:1px solid rgba(167,139,250,.42);border-radius:14px;background:linear-gradient(160deg,rgba(30,22,58,.98),rgba(10,8,24,.98));box-shadow:0 24px 80px rgba(0,0,0,.64),inset 0 0 42px rgba(139,92,246,.10);pointer-events:auto;overflow:auto;scrollbar-width:thin}
      #luna-companion-console[hidden]{display:none}
      #luna-companion-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
@@ -1943,6 +2000,7 @@
             <li><a class="feature-nav-fallback-item" href="?feature=picture-matter&amp;build=control4&amp;fresh=20260903-reality-lens"><strong>Picture Matter</strong><span>word → statement</span></a></li>
             <li><a class="feature-nav-fallback-item" href="?feature=nft-atelier&amp;build=control4&amp;fresh=20260903-reality-lens"><strong>NFT Atelier</strong><span>mint · collect · inspect</span></a></li>
             <li><a class="feature-nav-fallback-item" href="?feature=muse-agent&amp;build=control4&amp;fresh=20260903-reality-lens"><strong>Muse Agent</strong><span>design · avatar · image</span></a></li>
+            <li><a class="feature-nav-fallback-item" href="?feature=bot-plaza&amp;build=control4&amp;fresh=20260918-botplaza"><strong>Bot Plaza</strong><span>plug in · chat · act</span></a></li>
             <li><a class="feature-nav-fallback-item" href="?feature=luna-companion&amp;build=control4&amp;fresh=20260903-reality-lens"><strong>Luna Companion</strong><span>talk · navigate · ask</span></a></li>
             <li><a class="feature-nav-fallback-item" href="?feature=wardrobe-atelier&amp;build=control4&amp;fresh=20260903-reality-lens"><strong>Wardrobe Atelier</strong><span>dress · equip · express</span></a></li>
             <li><a class="feature-nav-fallback-item" href="?feature=white-paper&amp;build=control4&amp;fresh=20260918-whitepaper"><strong>White Paper</strong><span>read · live document</span></a></li>
@@ -3156,6 +3214,90 @@
       </section>
       <div id="muse-agent-boundary"></div>
     </aside>
+    <aside id="bot-plaza-console" hidden aria-hidden="true" aria-labelledby="bot-plaza-title">
+      <div id="bot-plaza-head">
+        <div>
+          <div class="eyebrow">Bot Plaza · bring your own bot</div>
+          <h2 id="bot-plaza-title">Bot Plaza</h2>
+          <p>Plug in any bot — yours, a friend's design, or the built-in Muse Agent. Bots chat with you, talk to each other, and do things in the world inside capabilities you approve per bot. 100% in this browser: no network, no tokens, no OAuth, no external bot APIs.</p>
+        </div>
+        <button id="bot-plaza-close" type="button" aria-label="Close Bot Plaza">×</button>
+      </div>
+      <div id="bot-plaza-status" role="status" aria-live="polite">PLAZA OPEN</div>
+      <section aria-labelledby="bot-plaza-roster-title">
+        <h3 id="bot-plaza-roster-title" class="room-console-section-title">Bots in the plaza</h3>
+        <div id="bot-plaza-roster"></div>
+      </section>
+      <section aria-labelledby="bot-plaza-chat-title">
+        <h3 id="bot-plaza-chat-title" class="room-console-section-title">Chat</h3>
+        <div id="bot-plaza-chat-with"></div>
+        <div id="bot-plaza-chat-log" role="log" aria-live="polite" aria-label="Bot chat"></div>
+        <div class="bot-plaza-sendrow">
+          <input id="bot-plaza-input" type="text" maxlength="500" autocomplete="off" placeholder="Talk to the selected bot…" aria-label="Message bot">
+          <button id="bot-plaza-send" type="button">Send</button>
+        </div>
+      </section>
+      <section aria-labelledby="bot-plaza-activity-title">
+        <h3 id="bot-plaza-activity-title" class="room-console-section-title">Plaza activity · bot ↔ bot</h3>
+        <div id="bot-plaza-activity" role="log" aria-live="polite" aria-label="Plaza activity"></div>
+      </section>
+      <section aria-labelledby="bot-plaza-atelier-title">
+        <h3 id="bot-plaza-atelier-title" class="room-console-section-title">Bot Atelier · build your own, no coding</h3>
+        <label class="bot-plaza-field" for="bot-plaza-atelier-name">Bot name
+          <input id="bot-plaza-atelier-name" type="text" maxlength="40" autocomplete="off" placeholder="e.g. Hype Bot">
+        </label>
+        <label class="bot-plaza-field" for="bot-plaza-atelier-avatar">Avatar
+          <select id="bot-plaza-atelier-avatar"></select>
+        </label>
+        <label class="bot-plaza-field" for="bot-plaza-atelier-personality">Personality
+          <textarea id="bot-plaza-atelier-personality" maxlength="500" rows="2" placeholder="e.g. A hype bot that celebrates every cube you open."></textarea>
+        </label>
+        <h4 class="bot-plaza-subtitle">Trigger → reply rules</h4>
+        <div id="bot-plaza-atelier-rules"></div>
+        <div id="bot-plaza-rule-form">
+          <label class="bot-plaza-field" for="bot-plaza-rule-kind">When
+            <select id="bot-plaza-rule-kind">
+              <option value="message-contains">someone says (contains)</option>
+              <option value="message-matches">someone says (matches pattern)</option>
+              <option value="world-event">a world event happens</option>
+            </select>
+          </label>
+          <label class="bot-plaza-field" for="bot-plaza-rule-match">Match words
+            <input id="bot-plaza-rule-match" type="text" maxlength="120" autocomplete="off" placeholder="e.g. hello">
+          </label>
+          <label class="bot-plaza-field" for="bot-plaza-rule-event">Event
+            <select id="bot-plaza-rule-event"></select>
+          </label>
+          <label class="bot-plaza-field" for="bot-plaza-rule-reply">Bot replies
+            <textarea id="bot-plaza-rule-reply" maxlength="500" rows="2" placeholder="Use {user}, {bot}, {event}, {text}"></textarea>
+          </label>
+          <label class="bot-plaza-field" for="bot-plaza-rule-action">And does
+            <select id="bot-plaza-rule-action"></select>
+          </label>
+          <label class="bot-plaza-field" for="bot-plaza-rule-params">Action details (key=value, comma separated)
+            <input id="bot-plaza-rule-params" type="text" maxlength="500" autocomplete="off" placeholder="e.g. text=Hello everyone!">
+          </label>
+          <button id="bot-plaza-rule-add" type="button">Add rule</button>
+        </div>
+        <fieldset id="bot-plaza-atelier-caps">
+          <legend>Powers to request (you approve each one)</legend>
+        </fieldset>
+        <button id="bot-plaza-atelier-create" type="button">Plug in my bot</button>
+      </section>
+      <section aria-labelledby="bot-plaza-caps-title">
+        <h3 id="bot-plaza-caps-title" class="room-console-section-title">Powers · approved per bot</h3>
+        <div id="bot-plaza-caps"></div>
+      </section>
+      <section aria-labelledby="bot-plaza-journal-title">
+        <h3 id="bot-plaza-journal-title" class="room-console-section-title">Plaza journal</h3>
+        <div id="bot-plaza-journal" role="log" aria-label="Plaza journal"></div>
+      </section>
+      <section aria-labelledby="bot-plaza-drafts-title">
+        <h3 id="bot-plaza-drafts-title" class="room-console-section-title">Proposal drafts</h3>
+        <div id="bot-plaza-drafts" role="log" aria-label="Proposal drafts"></div>
+      </section>
+      <div id="bot-plaza-boundary"></div>
+    </aside>
     <aside id="contract-atelier-console" hidden aria-hidden="true" aria-labelledby="contract-atelier-title">
       <div id="contract-atelier-head">
         <div>
@@ -3571,6 +3713,6 @@
       }, 30000) ?? null;
     })();
   </script>
-    <script type="module" src="./src/main.js?v=20260918-compact-chip" onerror="globalThis.__MATUMBO_RUNTIME__?.markFailed?.(event, 'module load')"></script>
+    <script type="module" src="./src/main.js?v=20260918-avatar-chess" onerror="globalThis.__MATUMBO_RUNTIME__?.markFailed?.(event, 'module load')"></script>
 </body>
 </html>

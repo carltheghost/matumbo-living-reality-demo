@@ -180,6 +180,15 @@ export const FEATURE_DEFINITIONS = Object.freeze([
     boundary: "Profiles are local display names only — no login, no external account linking. Designs are deterministic and local; no AI service or network is used.",
   }),
   Object.freeze({
+    id: "bot-plaza",
+    label: "Bot Plaza",
+    kicker: "plug in · chat · act",
+    focusOrganId: "bots",
+    sources: ["bot-plaza"],
+    description: "Plug in any bot — yours, a friend's design, or the built-in Muse Agent. Bots chat with you, talk to each other, react to world events, and do things in the world inside capabilities you approve.",
+    boundary: "Bots are local scripted plugins. No network, no tokens, no OAuth, no external bot APIs, no identity authority. World actions are renderer-local presentation only.",
+  }),
+  Object.freeze({
     id: "luna-companion",
     label: "Luna Companion",
     kicker: "talk · navigate · ask",
@@ -335,7 +344,8 @@ export const FEATURE_HANDOFF_LINKS = Object.freeze({
   "neural-mesh": Object.freeze(["luna-companion", "rooms", "social-explorer"]),
   "picture-matter": Object.freeze(["nft-atelier", "white-paper", "reality-lens"]),
   "nft-atelier": Object.freeze(["picture-matter", "muse-agent", "asset-market"]),
-  "muse-agent": Object.freeze(["person", "wardrobe-atelier", "nft-atelier"]),
+  "muse-agent": Object.freeze(["person", "wardrobe-atelier", "nft-atelier", "bot-plaza"]),
+  "bot-plaza": Object.freeze(["muse-agent", "luna-companion", "person"]),
   "luna-companion": Object.freeze(["neural-mesh", "rooms", "academy"]),
   "wardrobe-atelier": Object.freeze(["person", "muse-agent", "arena"]),
   "white-paper": Object.freeze(["projections", "reality-lens", "academy"]),
@@ -449,6 +459,11 @@ const FEATURE_SURFACE_ROUTES = Object.freeze({
     Object.freeze(["ADD ACCOUNT", "local profile · Muse or other tag · no login"]),
     Object.freeze(["DESIGN", "prompt → deterministic avatar / image spec"]),
     Object.freeze(["APPLY", "dress the Person Studio hologram"]),
+  ]),
+  "bot-plaza": Object.freeze([
+    Object.freeze(["PLUG IN", "any bot · no code · no network · no tokens"]),
+    Object.freeze(["CHAT", "you ↔ bot · bot ↔ bot, all visible"]),
+    Object.freeze(["DO STUFF", "cubes · camera · features · drafts — your approved powers only"]),
   ]),
   "luna-companion": Object.freeze([
     Object.freeze(["SAY IT", "plain words · quick chips"]),

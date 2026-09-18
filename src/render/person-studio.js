@@ -1,5 +1,5 @@
 import {createPersonStudioOwner,STUDIO_OUTFITS,STUDIO_ROOMS,STUDIO_COMPANIONS} from '../domains/person-studio.js';
-import {buildPersonStudioScene} from './person-studio-scene.js';
+import {buildPersonStudioScene} from './person-studio-scene.js?v=20260918-avatar-chess';
 
 export function createPersonStudio({THREE,renderer,scene,camera,controls,world,targets,documentRoot=document,onNavigate,onFrame,onIntent,reducedMotion=false}) {
   let storage=null;try{storage=globalThis.localStorage;}catch{}

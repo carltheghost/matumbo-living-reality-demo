@@ -1,7 +1,9 @@
 import {STUDIO_MODEL,STUDIO_OUTFITS,STUDIO_ROOMS} from '../domains/person-studio.js';
 
-/** Reference-built likeness: Tumbo's approved avatar texture drives the camera-facing hologram; the procedural rig stays as interaction targets. */
-export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,avatarTextureUrl='assets/avatar/avatar.webp'}) {
+/** AI-built likeness: Tumbo's approved avatar bust portrait (cinematic teal/violet
+ *  rim light) drives the camera-facing hologram; the procedural rig stays as
+ *  interaction targets. */
+export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,avatarTextureUrl='assets/avatar/avatar-bust.webp'}) {
   const layer=new THREE.Group();layer.name='PERSON Ω / open lens space';parent.add(layer);layer.visible=false;
   const materials=new Set(),geometries=new Set(),selectable=[];
   const material=(color,metalness=.2,roughness=.5,extra={})=>{const m=new THREE.MeshStandardMaterial({color,metalness,roughness,...extra});materials.add(m);return m;};
@@ -192,8 +194,8 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
   // Lens space has no ground to receive shadows; the glow sprite and rings
   // carry the grounding read. Meshes neither cast nor receive.
   avatar.traverse(object=>{if(object.isMesh){object.castShadow=false;object.receiveShadow=false;}});
-  // Reference avatar hologram (2026-09-18): Tumbo's approved likeness,
-  // generated from his PERSON Ω concept art, as a camera-facing hologram
+  // Reference avatar hologram (2026-09-18): Tumbo's AI-built likeness (the bust
+  // portrait from his PERSON Ω concept art) as a camera-facing hologram
   // sprite. The procedural rig is hidden but stays registered in `targets`,
   // and three.js raycast ignores `visible`, so identity/wardrobe tab clicks
   // keep working through the hologram.
@@ -203,7 +205,8 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
     const material=new THREE.SpriteMaterial({transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,opacity:.96});
     const sprite=new THREE.Sprite(material);
     sprite.name='Reference avatar hologram';
-    sprite.scale.set(1.5,2.25,1);
+    // The AI bust portrait is square (1:1); the hologram frames the bust.
+    sprite.scale.set(1.7,1.7,1);
     sprite.position.set(0,1.15,0);
     sprite.visible=false;
     sprite.userData.avatarHologram=true;
