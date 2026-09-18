@@ -17,6 +17,8 @@
 import * as THREE from 'three';
 import {createChessArenaState,applyChessArenaMove} from '../domains/chess-arena.js?v=20260918-avatar-chess';
 import {chooseAiMove,CHESS_AI_DIFFICULTIES,resolveAiDifficulty} from '../domains/chess-ai.js?v=20260918-avatar-chess';
+import {avatarIdlePose,avatarGlide,AVATAR_MOTION} from '../domains/avatar-motion.js?v=20260918-avatar-chess';
+import {AVATAR_FACE_STORAGE_KEY} from '../domains/avatar-style.js?v=20260918-avatar-chess';
 import {PERSON_STUDIO_STORAGE_KEY} from '../domains/person-studio.js';
 import {buildArenaHall,createPieceBuilders,readArenaAvatarAppearance,squarePosition,CHESS_ROLE_GLYPHS} from './chess-arena-pieces.js?v=20260918-avatar-chess';
 
@@ -101,14 +103,39 @@ export function mountChessArena({documentRoot=document,host}){
   let pendingPromotion=null;
   let alive=true;
   let aiGeneration=0; // invalidates stale AI timeouts across newGame()
-  let activeHops=0; // concurrent hop animations (castling moves two pieces)
+  let activeGlides=0; // concurrent glide animations (castling moves two pieces)
+  const gliding=new Set(); // meshes currently traveling; the idle loop leaves them alone
+  const reducedMotion=!!(documentRoot.defaultView?.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches);
   const sanLog=[];
   const meshes=new Map(); // square -> piece group
 
   const humanSide=()=>mode==='white'?'w':mode==='black'?'b':null;
   const aiSide=()=>mode==='white'?'b':mode==='black'?'w':null;
-  const inputOpen=()=>alive&&!state.gameOver&&!resigned&&!aiThinking&&activeHops===0&&!pendingPromotion;
+  const inputOpen=()=>alive&&!state.gameOver&&!resigned&&!aiThinking&&activeGlides===0&&!pendingPromotion;
   const pieceAt=(square)=>state.board.flat().find((p)=>p?.square===square)??null;
+
+  /** A stable per-square seed so every champion pulses on its own phase —
+   *  the board never moves in lockstep, like a crowd of avatars. */
+  function motionSeedFor(square){
+    let h=0;const s=String(square);
+    for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))|0;
+    return ((h>>>0)%1000)/1000;
+  }
+
+  /** Give a built piece its share of the avatar motion language: an idle
+   *  bob/sway, and its own clone of the side glow-ring material so the pulse
+   *  is per-champion, not per-side. */
+  function attachMotion(mesh,square){
+    mesh.userData.motionSeed=motionSeedFor(square);
+    mesh.traverse((child)=>{
+      if(child?.userData?.part==='ring'&&!child.userData.ringMatOwned){
+        child.material=child.material.clone();
+        child.userData.ringMatOwned=true;
+        mesh.userData.motionRing=child;
+        mesh.userData.motionRingBase=child.material.emissiveIntensity;
+      }
+    });
+  }
 
   // ---- three.js scene ----
   let appearance=readArenaAvatarAppearance();
@@ -131,13 +158,17 @@ export function mountChessArena({documentRoot=document,host}){
     badge.title=appearance.approved?'Pieces wear your approved Person Studio appearance.':'Approve a Person Studio profile and the pieces will wear your look.';
   }
 
-  /** Dispose per-piece sprite resources. Ring geometry/materials are shared
-   *  caches owned by the foundry and must survive individual captures. */
+  /** Dispose per-piece sprite resources and per-champion ring-material clones.
+   *  Shared ring geometry and the foundry's side materials survive. */
   function releasePiece(group){
     group.traverse((child)=>{
       if(child.isSprite){
         try{child.material.map?.dispose?.();}catch{/* already released */}
         try{child.material.dispose?.();}catch{/* already released */}
+      }
+      if(child?.userData?.ringMatOwned){
+        try{child.material.dispose?.();}catch{/* already released */}
+        child.userData.ringMatOwned=false;
       }
     });
   }
@@ -152,6 +183,7 @@ export function mountChessArena({documentRoot=document,host}){
       mesh.position.set(x,y,z);
       mesh.userData.square=piece.square;
       mesh.userData.baseY=y;
+      attachMotion(mesh,piece.square);
       pieces.add(mesh);
       meshes.set(piece.square,mesh);
     }
@@ -185,9 +217,11 @@ export function mountChessArena({documentRoot=document,host}){
     moveList.scrollTop=moveList.scrollHeight;
   }
 
+  /** Selection lift is a flag now: the motion loop composes it with the idle
+   *  bob every frame, so a selected champion keeps breathing while raised. */
   function lift(mesh,on){
     if(!mesh)return;
-    mesh.position.y=(mesh.userData.baseY??0.06)+(on?0.22:0);
+    mesh.userData.lifted=!!on;
   }
 
   function clearSelection(){
@@ -203,22 +237,31 @@ export function mountChessArena({documentRoot=document,host}){
     if(targets.length)hall.markers.show(targets);else hall.markers.hide();
   }
 
-  function animateHop(mesh,fromSquare,toSquare,onDone){
+  /** Glide a champion across the board in the avatar's movement language:
+   *  eased travel with a soft lift, turning into the move. Captures take the
+   *  higher arc — the drama stays, statue-hopping goes. */
+  function animateGlide(mesh,fromSquare,toSquare,{arc=AVATAR_MOTION.moveArc}={},onDone){
     const [fx,,fz]=squarePosition(fromSquare);
     const [tx,,tz]=squarePosition(toSquare);
     const baseY=mesh.userData.baseY??0.06;
-    const from=new THREE.Vector3(fx,baseY,fz);
-    const to=new THREE.Vector3(tx,baseY,tz);
+    const from=[fx,baseY,fz];
+    const to=[tx,baseY,tz];
     const start=performance.now();
-    activeHops++;
+    const duration=AVATAR_MOTION.moveDurationMs;
+    const seed=mesh.userData.motionSeed??0;
+    activeGlides++;
+    gliding.add(mesh);
     const tick=(now)=>{
       if(!alive)return;
-      const t=Math.min(1,(now-start)/480);
-      mesh.position.lerpVectors(from,to,t);
-      mesh.position.y=baseY+Math.sin(t*Math.PI)*0.7;
+      const t=Math.min(1,(now-start)/duration);
+      const p=avatarGlide({from,to,t,arc});
+      mesh.position.set(p.x,p.y,p.z);
+      const pose=avatarIdlePose({time:now/1000,seed,reducedMotion});
+      mesh.rotation.y=pose.swayY+Math.sin(t*Math.PI)*0.9;
       if(t<1){requestAnimationFrame(tick);return;}
-      mesh.position.y=baseY;
-      activeHops=Math.max(0,activeHops-1);
+      mesh.position.set(to[0],to[1],to[2]);
+      gliding.delete(mesh);
+      activeGlides=Math.max(0,activeGlides-1);
       onDone?.();
     };
     requestAnimationFrame(tick);
@@ -254,7 +297,8 @@ export function mountChessArena({documentRoot=document,host}){
     if(!result.accepted){refreshStatus();status.textContent=result.reason;return false;}
     clearSelection();
     const movingMesh=meshes.get(from);
-    if(meshes.has(capturedSquare)&&capturedSquare!==from){
+    const wasCapture=meshes.has(capturedSquare)&&capturedSquare!==from;
+    if(wasCapture){
       const victim=meshes.get(capturedSquare);
       meshes.delete(capturedSquare);
       shrinkOut(victim,()=>{pieces.remove(victim);releasePiece(victim);});
@@ -272,13 +316,16 @@ export function mountChessArena({documentRoot=document,host}){
       const [x,y,z]=squarePosition(from);
       mesh.position.set(x,y,z);
       mesh.userData.baseY=y;
+      attachMotion(mesh,to);
       pieces.add(mesh);
     }
     if(mesh){
       mesh.userData.square=to;
       mesh.userData.baseY=0.06;
+      mesh.userData.motionSeed=motionSeedFor(to);
       meshes.set(to,mesh);
-      animateHop(mesh,from,to,afterMove);
+      const glideArc=wasCapture?AVATAR_MOTION.captureArc:AVATAR_MOTION.moveArc;
+      animateGlide(mesh,from,to,{arc:glideArc},afterMove);
     }
     if(isCastle){
       const rank=from[1];
@@ -289,8 +336,9 @@ export function mountChessArena({documentRoot=document,host}){
       if(rookMesh){
         meshes.delete(rookFrom);
         rookMesh.userData.square=rookTo;
+        rookMesh.userData.motionSeed=motionSeedFor(rookTo);
         meshes.set(rookTo,rookMesh);
-        animateHop(rookMesh,rookFrom,rookTo,null);
+        animateGlide(rookMesh,rookFrom,rookTo,{},null);
       }
     }
     if(!mesh)afterMove();
@@ -389,7 +437,7 @@ export function mountChessArena({documentRoot=document,host}){
     aiGeneration++; // strand any in-flight AI timeout from the old game
     hidePromotionPicker();
     clearSelection();
-    resigned=null;selected=null;aiThinking=false;activeHops=0;
+    resigned=null;selected=null;aiThinking=false;activeGlides=0;gliding.clear();
     thinking.hidden=true;
     sanLog.length=0;renderMoveList();
     state=createChessArenaState();
@@ -418,8 +466,12 @@ export function mountChessArena({documentRoot=document,host}){
     return getSnapshot();
   }
   const view=documentRoot.defaultView??null;
-  const onStorage=(event)=>{if(!event||event.key===null||event.key===PERSON_STUDIO_STORAGE_KEY)refreshAppearance();};
+  const onStorage=(event)=>{
+    if(!event||event.key===null||event.key===PERSON_STUDIO_STORAGE_KEY||event.key===AVATAR_FACE_STORAGE_KEY)refreshAppearance();
+  };
   view?.addEventListener?.('storage',onStorage);
+  const onAvatarFaceChanged=()=>{refreshAppearance();};
+  documentRoot.addEventListener?.('person-studio:avatar-changed',onAvatarFaceChanged);
 
   // Orbit on drag, board tap on tap: a press that barely moves is a move.
   let yaw=0,pitch=-0.45,dist=13,drag=null,downInfo=null;
@@ -457,9 +509,38 @@ export function mountChessArena({documentRoot=document,host}){
   };
   const ro=new ResizeObserver(draw);ro.observe(stage);
 
+  /** Continuous idle loop: every champion breathes the avatar motion language
+   *  — bob, sway-turn, glow-ring pulse — while the camera orbits or glides run.
+   *  Frozen when the OS asks for reduced motion. */
+  let motionRaf=0;
+  function startMotionLoop(){
+    if(motionRaf||reducedMotion)return;
+    const tick=(now)=>{
+      if(!alive)return;
+      const time=now/1000;
+      for(const [,mesh] of meshes){
+        if(gliding.has(mesh))continue; // glide writes the pose itself
+        const pose=avatarIdlePose({time,seed:mesh.userData.motionSeed??0});
+        const baseY=mesh.userData.baseY??0.06;
+        const liftY=mesh.userData.lifted?0.22:0;
+        mesh.position.y=baseY+pose.bobY+liftY;
+        mesh.rotation.y=pose.swayY;
+        const ring=mesh.userData.motionRing;
+        if(ring)ring.material.emissiveIntensity=(mesh.userData.motionRingBase??1.2)*(0.85+0.3*pose.glow);
+      }
+      draw();
+      motionRaf=requestAnimationFrame(tick);
+    };
+    motionRaf=requestAnimationFrame(tick);
+  }
+  function stopMotionLoop(){
+    if(motionRaf){cancelAnimationFrame(motionRaf);motionRaf=0;}
+  }
+
   buildAllPieces();
   refreshStatus();
   draw();
+  startMotionLoop();
   maybeAiMove(); // AI opens when it plays White
 
   return {
@@ -467,8 +548,10 @@ export function mountChessArena({documentRoot=document,host}){
     refreshAppearance,
     destroy:()=>{
       alive=false;
+      stopMotionLoop();
       ro.disconnect();
       view?.removeEventListener?.('storage',onStorage);
+      documentRoot.removeEventListener?.('person-studio:avatar-changed',onAvatarFaceChanged);
       hall.dispose();
       for(const [,group] of meshes){pieces.remove(group);releasePiece(group);}
       meshes.clear();

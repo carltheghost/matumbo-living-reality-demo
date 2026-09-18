@@ -1,9 +1,10 @@
 import {createPersonStudioOwner,STUDIO_OUTFITS,STUDIO_ROOMS,STUDIO_COMPANIONS} from '../domains/person-studio.js';
 import {buildPersonStudioScene} from './person-studio-scene.js?v=20260918-avatar-chess';
+import {AVATAR_FACE_CHOICES,AVATAR_FACE_MAX_DIM,loadAvatarFaceChoice,resolveAvatarFaceUrl,saveAvatarFace,saveAvatarFaceChoice,stylizeTumboPortrait} from '../domains/avatar-style.js';
 
 export function createPersonStudio({THREE,renderer,scene,camera,controls,world,targets,documentRoot=document,onNavigate,onFrame,onIntent,reducedMotion=false}) {
   let storage=null;try{storage=globalThis.localStorage;}catch{}
-  const spatial=buildPersonStudioScene({THREE,parent:scene,targets,compact:innerWidth<700});
+  const spatial=buildPersonStudioScene({THREE,parent:scene,targets,compact:innerWidth<700,avatarTextureUrl:resolveAvatarFaceUrl(storage)});
   const owner=createPersonStudioOwner({storage,modelFingerprint:spatial.fingerprint()});
   // A small procedural lighting environment gives real material reflections;
   // it is not a background image or a second application renderer.
@@ -26,7 +27,7 @@ export function createPersonStudio({THREE,renderer,scene,camera,controls,world,t
     <div class="studio-title"><span class="studio-kicker">01 / Person Ω</span><h1>The same you.<br><i>Everywhere.</i></h1><p>Your identity stays yours.<br>Dress it. Move it. Make this space your own.</p></div>
     <aside class="studio-identity"><span class="studio-kicker">Your persistent identity</span><h2 data-display-name>Your digital self</h2><p class="studio-lock" data-identity-lock>Awaiting your approval</p><p>Camera input controls motion.<br>Only you change the appearance.</p><dl><dt>Appearance</dt><dd data-version>Preview</dd><dt>Identity</dt><dd data-short-id>Not created</dd><dt>Storage</dt><dd data-storage>Not saved</dd></dl></aside>
     <aside class="studio-inspector" aria-label="Personal space controls">
-      <section data-panel="identity" role="tabpanel"><span class="studio-kicker">Identity / by choice</span><h2>Make it yours.</h2><p>An original, stylized 3D avatar built from your design references. Approve this model to lock its identity; outfits remain yours to change.</p><form data-approve-form><label>Your display name<input name="displayName" type="text" maxlength="60" autocomplete="nickname" placeholder="Your name" required></label><button class="studio-primary" type="submit">Approve this avatar</button></form><div data-approved-actions hidden><button class="studio-primary" type="button" data-save>Save profile & look</button><button class="studio-secondary" type="button" data-export>Export profile</button><div class="studio-projection-record" data-identity-hash></div></div><p class="studio-subtle">Local approval is not account verification or biometric enrollment. Nothing is uploaded.</p></section>
+      <section data-panel="identity" role="tabpanel"><span class="studio-kicker">Identity / by choice</span><h2>Make it yours.</h2><p>An original, stylized 3D avatar built from your design references. Approve this model to lock its identity; outfits remain yours to change.</p><form data-approve-form><label>Your display name<input name="displayName" type="text" maxlength="60" autocomplete="nickname" placeholder="Your name" required></label><button class="studio-primary" type="submit">Approve this avatar</button></form><div data-approved-actions hidden><button class="studio-primary" type="button" data-save>Save profile & look</button><button class="studio-secondary" type="button" data-export>Export profile</button><div class="studio-projection-record" data-identity-hash></div></div><div class="studio-face" data-face-block><span class="studio-kicker">Face / your look</span><h2>Whose face?</h2><p>Choose the face your avatar wears — here and on your chess pieces.</p><div class="studio-face-options" data-face-options></div><label class="studio-photo-upload">Use my photo<input type="file" accept="image/*" data-photo-input hidden></label><p class="studio-subtle">Your photo is styled on this device only — a look, not identity verification. Nothing is uploaded.</p></div><p class="studio-subtle">Local approval is not account verification or biometric enrollment. Nothing is uploaded.</p></section>
       <section data-panel="wardrobe" role="tabpanel" hidden><span class="studio-kicker">Wear your world</span><h2>A look of your own.</h2><p>Change the clothing. Keep the person.</p><div class="studio-outfits"></div><button class="studio-primary studio-secondary" type="button" data-save>Save this look</button><p class="studio-subtle">These are selectable 3D outfits, not owned marketplace products.</p></section>
       <section data-panel="room" role="tabpanel" hidden><span class="studio-kicker">Your space / your atmosphere</span><h2>Somewhere to belong.</h2><p>Same avatar. A different light, horizon and mood.</p><div class="studio-room-options"></div><button class="studio-secondary" type="button" data-center>Recenter the room</button></section>
       <section data-panel="presence" role="tabpanel" hidden><span class="studio-kicker">Identity persists / motion flows</span><h2>Move. Stay you.</h2><p>Test the articulated rig. These controls supply pose only—they cannot change the face, hair or clothing.</p><label>Head rotation<input data-head type="range" min="-0.75" max="0.75" step="0.01" value="0"></label><label>Raise left arm<input data-arm type="range" min="0" max="1.4" step="0.01" value="0"></label><button class="studio-secondary" data-rest type="button">Release to rest</button><button class="studio-secondary" data-xr type="button">Enter this room in VR</button><p class="studio-subtle">Camera-to-skeleton tracking and hardware XR validation remain pending. Manual pose requires an approved avatar.</p></section>
@@ -71,6 +72,63 @@ export function createPersonStudio({THREE,renderer,scene,camera,controls,world,t
   }
   for(const room of STUDIO_ROOMS){const b=documentRoot.createElement('button');b.type='button';b.dataset.room=room.id;const name=documentRoot.createElement('strong'),caption=documentRoot.createElement('small');name.textContent=room.name;caption.textContent=room.caption;b.append(name,caption);b.onclick=guard(()=>{owner.chooseRoom(room.id);announce(`${room.name} · the same avatar stays with you.`);});find('.studio-room-options').append(b);}
   for(const form of STUDIO_COMPANIONS){const b=documentRoot.createElement('button');b.type='button';b.dataset.companion=form;b.textContent=form;b.onclick=guard(()=>{owner.chooseCompanion(form);announce('Companion form changed · companion identity preserved.');});find('.studio-companion-options').append(b);}
+  // Face options: the default Tumbo character, Tumbo's own likeness, or the
+  // user's own photo styled locally ("Become Tumbo"). The choice dresses the
+  // hologram here and the user's chess pieces; a photo never leaves the device.
+  function refreshFacePressed(){
+    const current=loadAvatarFaceChoice(storage);
+    all('[data-face]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.face===current)));
+  }
+  function chooseFace(id){
+    if(!saveAvatarFaceChoice(storage,id)){announce('Could not save the face choice on this browser.');return;}
+    spatial.setAvatarFace(resolveAvatarFaceUrl(storage));
+    refreshFacePressed();
+    const choice=AVATAR_FACE_CHOICES.find(c=>c.id===id);
+    announce(`${choice?choice.label:'Face'} selected · your avatar and chess pieces wear it now.`);
+  }
+  for(const choice of AVATAR_FACE_CHOICES){
+    const b=documentRoot.createElement('button');b.type='button';b.className='studio-face-option';b.dataset.face=choice.id;
+    const name=documentRoot.createElement('strong'),caption=documentRoot.createElement('small');
+    name.textContent=choice.label;caption.textContent=choice.blurb;b.append(name,caption);
+    b.onclick=choice.id==='your-photo'?()=>find('[data-photo-input]').click():guard(()=>chooseFace(choice.id));
+    find('[data-face-options]').append(b);
+  }
+  refreshFacePressed();
+  function loadPhotoImage(file){
+    if(typeof globalThis.createImageBitmap==='function')return globalThis.createImageBitmap(file);
+    return new Promise((resolve,reject)=>{
+      const url=URL.createObjectURL(file);
+      const img=new Image();
+      img.onload=()=>{URL.revokeObjectURL(url);resolve(img);};
+      img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('Could not read that image.'));};
+      img.src=url;
+    });
+  }
+  async function stylizeUploadedPhoto(file){
+    const image=await loadPhotoImage(file);
+    try{
+      const naturalW=image.width||image.naturalWidth,naturalH=image.height||image.naturalHeight;
+      if(!naturalW||!naturalH)throw new Error('Could not read that image.');
+      const scale=Math.min(1,AVATAR_FACE_MAX_DIM/Math.max(naturalW,naturalH));
+      const w=Math.max(1,Math.round(naturalW*scale)),h=Math.max(1,Math.round(naturalH*scale));
+      const canvas=documentRoot.createElement('canvas');canvas.width=w;canvas.height=h;
+      const ctx=canvas.getContext('2d',{willReadFrequently:true});
+      ctx.drawImage(image,0,0,w,h);
+      const styled=stylizeTumboPortrait(ctx.getImageData(0,0,w,h).data,w,h,{seed:7});
+      const out=documentRoot.createElement('canvas');out.width=w;out.height=h;
+      out.getContext('2d').putImageData(new ImageData(styled.data,w,h),0,0);
+      return {photoDataURL:canvas.toDataURL('image/jpeg',0.85),stylizedDataURL:out.toDataURL('image/jpeg',0.85)};
+    }finally{if(image.close)image.close();}
+  }
+  find('[data-photo-input]').addEventListener('change',guard(async e=>{
+    const file=e.target.files&&e.target.files[0];
+    e.target.value='';
+    if(!file)return;
+    announce('Styling your photo on this device…');
+    const {photoDataURL,stylizedDataURL}=await stylizeUploadedPhoto(file);
+    if(!saveAvatarFace(storage,{photoDataURL,stylizedDataURL}))throw new Error('Could not keep the styled photo on this browser — storage may be full or blocked.');
+    chooseFace('your-photo');
+  }));
   all('[data-tab]').forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
   find('.studio-tabs').addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight'].includes(e.key))return;const tabs=all('[data-tab]'),index=tabs.findIndex(b=>b.dataset.tab===tab),next=tabs[(index+(e.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length];setTab(next.dataset.tab);next.focus();e.preventDefault();});
   all('[data-world]').forEach(b=>b.onclick=guard(()=>{owner.projectInto(b.dataset.world);onNavigate?.(b.dataset.world);}));

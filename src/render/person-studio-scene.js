@@ -284,6 +284,28 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
   // Muse Agent dressing: re-tint the reference hologram when an avatar design
   // is applied. Presentation only — identity geometry and outfit rig are
   // untouched; `null` restores the neutral hologram.
+  // Swap the hologram's face at runtime: the user's chosen avatar face —
+  // default Tumbo character, Tumbo's own likeness, or their locally-styled
+  // photo. Presentation only — identity geometry and outfit rig are untouched.
+  // A failed load keeps the previous face; the hologram never goes blank.
+  function setAvatarFace(url){
+    if(typeof url!=='string'||!url.length)return avatarTextureUrl;
+    if(!avatarHologram)return avatarTextureUrl;
+    const canLoad=typeof THREE.TextureLoader==='function'&&typeof Image!=='undefined';
+    if(!canLoad)return avatarTextureUrl;
+    avatarTextureUrl=url;
+    avatarHologram.userData.avatarHologramUrl=url;
+    new THREE.TextureLoader().load(url,texture=>{
+      try{
+        avatarHologram.material.map?.dispose?.();
+        avatarHologram.material.map=texture;
+        avatarHologram.material.needsUpdate=true;
+        avatarHologram.visible=true;
+        if(avatarHologramTint&&avatarHologram.material?.color?.set)avatarHologram.material.color.set(avatarHologramTint);
+      }catch{/* keep the previous face on failure */}
+    },undefined,()=>{/* keep the previous face on failure */});
+    return avatarTextureUrl;
+  }
   let avatarHologramTint=null;
   function setHologramTint(tint,opacity){
     avatarHologramTint=typeof tint==='string'&&tint?tint:null;
@@ -296,5 +318,5 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
     return avatarHologramTint;
   }
   function destroy(){selectable.forEach(m=>{const i=targets.indexOf(m);if(i>=0)targets.splice(i,1);});geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());if(avatarHologram){avatarHologram.material.map?.dispose?.();avatarHologram.material.dispose?.();}layer.removeFromParent();}
-  return {layer,avatar,joints,apply,update,getSnapshot,destroy,fingerprint,avatarHologram,setHologramTint,resolve:object=>object?.userData?.personStudioAction??null};
+  return {layer,avatar,joints,apply,update,getSnapshot,destroy,fingerprint,avatarHologram,setAvatarFace,setHologramTint,resolve:object=>object?.userData?.personStudioAction??null};
 }

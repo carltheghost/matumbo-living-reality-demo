@@ -5,18 +5,20 @@
  * against the vendored build. The browser mount (./chess-arena.js) passes the
  * import-mapped namespace.
  *
- * Every piece is the same character — Tumbo's AI-built avatar bust portrait —
- * reimagined per chess role through stature (height), a role glyph badge, and
- * the side's material language (light/gold for white, dark/obsidian with
- * violet glow for black). The portrait's face region is cropped per role via
- * texture offset/repeat so the likeness reads at board scale; role identity
- * comes from the badge, not a different face.
+ * Every piece is the same character — the user's chosen avatar face (the
+ * default Tumbo bust portrait, Tumbo's own likeness, or their own photo
+ * styled into the Tumbo look) — reimagined per chess role through stature
+ * (height), a role glyph badge, and the side's material language (light/gold
+ * for white, dark/obsidian with violet glow for black). The portrait's face
+ * region is cropped per role via texture offset/repeat so the likeness reads
+ * at board scale; role identity comes from the badge, not a different face.
  *
  * Projection only: no network, no identity authority, no wallet, no
  * settlement. Geometries and materials are shared across every piece so the
  * cinematic staging does not explode draw state.
  */
 import {PERSON_STUDIO_STORAGE_KEY, STUDIO_MODEL, STUDIO_OUTFITS} from '../domains/person-studio.js';
+import {resolveAvatarFaceUrl} from '../domains/avatar-style.js';
 
 export const CHESS_ARENA_PIECE_TYPES = Object.freeze(['p', 'n', 'b', 'r', 'q', 'k']);
 const FILES = 'abcdefgh';
@@ -91,6 +93,10 @@ export function readArenaAvatarAppearance({storage = null} = {}) {
     outfitTrim: outfit.trim,
     displayName: typeof saved.displayName === 'string' ? saved.displayName.slice(0, 60) : '',
     approved: true,
+    // The face every champion wears: the user's chosen avatar face — the
+    // default Tumbo character, Tumbo's own likeness, or their own photo
+    // styled locally ("Become Tumbo"). Always resolves to a usable URL.
+    faceUrl: resolveAvatarFaceUrl(store),
   });
 }
 
@@ -214,9 +220,15 @@ function buildRoleBadge(THREE, color, type, textureRegistry = null) {
  *  side-colored glow ring with its role glyph badge at the base. The portrait
  *  texture loads lazily from local assets; without a DOM Image (node tests)
  *  the sprite is built untextured and every structural assertion still holds. */
-function buildHologramPiece(THREE, G, M, color, type, hologramRegistry = null) {
+function buildHologramPiece(THREE, G, M, color, type, hologramRegistry = null, appearance = null) {
   const side = M.side[color];
   const group = new THREE.Group();
+  // The face every champion wears: the user's chosen avatar face — the default
+  // Tumbo bust, Tumbo's own likeness, or the player's own "Become Tumbo"
+  // styled photo — resolved per device by readArenaAvatarAppearance.
+  const faceUrl = (appearance && typeof appearance.faceUrl === 'string' && appearance.faceUrl)
+    ? appearance.faceUrl
+    : AVATAR_BUST_PORTRAIT_URL;
   const ringRadius = CHESS_PIECE_RING_RADII[type] ?? 0.34;
   const ring = new THREE.Mesh(G.torus(ringRadius, 0.05), side.ring);
   ring.rotation.x = Math.PI / 2;
@@ -238,7 +250,7 @@ function buildHologramPiece(THREE, G, M, color, type, hologramRegistry = null) {
   sprite.position.set(0, height / 2 + 0.04, 0);
   sprite.userData.part = 'hologram';
   sprite.userData.pieceType = type;
-  sprite.userData.textureUrl = AVATAR_BUST_PORTRAIT_URL;
+  sprite.userData.textureUrl = faceUrl;
   sprite.userData.bustCrop = {...crop};
   sprite.visible = false;
   group.add(sprite);
@@ -246,10 +258,10 @@ function buildHologramPiece(THREE, G, M, color, type, hologramRegistry = null) {
   if (hologramRegistry) hologramRegistry.add({material, getTexture: () => material.map ?? null});
   const canLoad = typeof THREE.TextureLoader === 'function'
     && typeof Image !== 'undefined'
-    && typeof AVATAR_BUST_PORTRAIT_URL === 'string';
+    && typeof faceUrl === 'string';
   if (canLoad) {
     new THREE.TextureLoader().load(
-      AVATAR_BUST_PORTRAIT_URL,
+      faceUrl,
       (texture) => {
         texture.wrapS = THREE.ClampToEdgeWrapping;
         texture.wrapT = THREE.ClampToEdgeWrapping;
@@ -310,7 +322,7 @@ export function createPieceBuilders(THREE, appearance = null) {
     const build = builders[type];
     if (!build) throw new Error(`Unknown chess piece type: ${type}`);
     if (color !== 'w' && color !== 'b') throw new Error(`Unknown chess side: ${color}`);
-    const group = build(THREE, G, M, color, type, hologramRegistry);
+    const group = build(THREE, G, M, color, type, hologramRegistry, resolved);
     group.userData.avatarPiece = true;
     group.userData.pieceType = type;
     group.userData.color = color;
