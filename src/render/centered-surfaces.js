@@ -151,6 +151,9 @@ const PANEL_SPACE_CSS = `
 [data-panel-space]{transform-origin:0 0;transition-property:opacity !important}
 [data-panel-space][data-compact="true"]{width:auto !important;max-width:min(340px,calc(100vw - 16px)) !important}
 [data-panel-space][data-compact="true"] > :not(.surface-grip){display:none !important}
+/* An expanded (materialized) console must never swallow the world: it stays
+   bounded so the 3D field remains visible and interactive around it. */
+[data-panel-space]:not([data-compact="true"]){max-width:min(80vw,calc(100vw - 16px)) !important;max-height:80vh !important}
 @keyframes panelSpaceIn{from{opacity:0}to{opacity:1}}
 .panel-space-appearing{animation:panelSpaceIn .18s ease-out}
 #hint[data-panel-space]{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
@@ -192,12 +195,18 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
   }
 
   function setCompact(rec, on, ctx) {
-    if (!rec.compactible || !rec.placed) return;
-    if (on) rec.el.setAttribute('data-compact', 'true');
-    else rec.el.removeAttribute('data-compact');
+    if (!rec.compactible) return;
+    if (on) {
+      // Compact applies even before placement: a console that materializes
+      // must be small from its very first visible frame.
+      rec.el.setAttribute('data-compact', 'true');
+    } else {
+      if (!rec.placed) return; // cannot measure an unplaced panel; stay a chip
+      rec.el.removeAttribute('data-compact');
+    }
     if (rec.actionEl) rec.actionEl.textContent = on ? 'Open' : 'Minimize';
     if (rec.toggleBtn) rec.toggleBtn.setAttribute('aria-expanded', String(!on));
-    if (!on) {
+    if (!on && rec.placed) {
       // The grown panel must stay in reach.
       const r = rec.el.getBoundingClientRect();
       const v = viewport();
@@ -224,9 +233,9 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
 
   function placePanel(rec, ctx) {
     const el = rec.el;
-    if (rec.placed || !isPanelVisible(el, view)) return;
+    if (rec.placed || !isPanelVisible(el, view)) return false;
     const r = el.getBoundingClientRect();
-    if (!r || (r.width === 0 && r.height === 0)) return; // not laid out yet
+    if (!r || (r.width === 0 && r.height === 0)) return false; // not laid out yet; caller retries
     const saved = ctx.store[rec.id] || {};
     const v = viewport();
     const sx = Number(saved.x);
@@ -243,14 +252,21 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
     el.classList.add('panel-space-appearing');
     setTimeout(() => el.classList.remove('panel-space-appearing'), 260);
     persistSoon(ctx);
+    return true;
   }
 
-  function requestPlace(rec, ctx) {
+  function requestPlace(rec, ctx, attempt = 0) {
     if (rec.placed || rec.placeQueued) return;
     rec.placeQueued = true;
     raf(() => {
       rec.placeQueued = false;
-      placePanel(rec, ctx);
+      if (rec.placed || !isPanelVisible(rec.el, view)) return;
+      if (placePanel(rec, ctx)) return; // placed and chipped
+      // Layout was not ready (zero rect): retry with backoff instead of
+      // giving up forever. Any later visibility signal also re-arms this.
+      if (attempt < 10) {
+        setTimeout(() => requestPlace(rec, ctx, attempt + 1), 150);
+      }
     });
   }
 
@@ -258,10 +274,16 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
     const visible = isPanelVisible(rec.el, view);
     const was = rec.wasVisible === true;
     rec.wasVisible = visible;
-    if (!visible || was) return;
+    if (!visible) return;
+    if (!rec.placed) {
+      // Visible but not yet in panel space: chip it immediately so it is
+      // small from the first frame, then place it (with retries).
+      if (rec.compactible) setCompact(rec, true, ctx);
+      requestPlace(rec, ctx);
+      return;
+    }
     // Closed -> open transition: appear small; interaction materializes.
-    if (!rec.placed) requestPlace(rec, ctx);
-    else if (rec.compactible) setCompact(rec, true, ctx);
+    if (!was && rec.compactible) setCompact(rec, true, ctx);
   }
 
   function attachPlaneDepthDrag(rec, ctx, handle, { tapToggles }) {
@@ -416,7 +438,7 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
     if (MO && documentRoot.documentElement) {
       observer = new MO(onMutations);
       observer.observe(documentRoot.documentElement, {
-        subtree: true, attributes: true, attributeFilter: ['hidden', 'open', 'class'],
+        subtree: true, attributes: true, attributeFilter: ['hidden', 'open', 'class', 'style'],
       });
     }
 
