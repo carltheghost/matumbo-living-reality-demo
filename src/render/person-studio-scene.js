@@ -2,12 +2,15 @@ import {STUDIO_MODEL,STUDIO_OUTFITS,STUDIO_ROOMS} from '../domains/person-studio
 import {AVATAR_GREET,avatarBlink,avatarIdlePose,avatarJumpPose,avatarSpinPose,avatarWalkPhase,avatarWavePose} from '../domains/avatar-motion.js';
 
 /** PERSON Ω avatar: the fully articulated procedural rig IS the avatar — head,
- *  torso, arms with elbows/hands/fingers, legs, all built from Three.js
- *  primitives in chibi proportions. It idles (breathing, blink, sway) and
- *  responds to clicks; no flat picture is shown. The reference hologram
- *  sprite was retired in Packet 226; its presentation APIs remain as
- *  state-keeping no-ops so face choices and agent tints keep working where
- *  they still apply (chess pieces, design records). */
+ *  torso, arms with elbows/paws, legs, all built from Three.js primitives in
+ *  reference-chibi proportions. Packet 230 restyled it to the Tumbo reference
+ *  portraits: big chibi head, fluffy earmuffs (wardrobe-tinted), black hoodie
+ *  with gold TUMBO chest text, brown furry paws, fluffy tail, locs, beauty
+ *  mark and goatee. It idles (breathing, blink, sway, tail wag) and responds
+ *  to clicks; no flat picture is shown. The reference hologram sprite was
+ *  retired in Packet 226; its presentation APIs remain as state-keeping
+ *  no-ops so face choices and agent tints keep working where they still apply
+ *  (chess pieces, design records). */
 export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,avatarTextureUrl='assets/avatar/fluffy-body-template.webp'}) {
   const layer=new THREE.Group();layer.name='PERSON Ω / open lens space';parent.add(layer);layer.visible=false;
   const materials=new Set(),geometries=new Set(),selectable=[];
@@ -106,6 +109,8 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
     box(.045,.74,.025,seam,[.105,-.05,.09],g);box(.045,.74,.025,seam,[-.105,-.05,.09],g);
     for(const side of [-1,1]){const sleeve=box(.12,.56,.13,cloth,[side*.23,.02,0],g);sleeve.rotation.z=side*.16;target(sleeve,{kind:'outfit',id:item.id});}
     target(garment,{kind:'outfit',id:item.id});garmentDisplays.push(g);
+    // Earmuff swatch: the outfit's muff tint reads on the display frame.
+    sphere(material(item.muffs??'#f5f2ea',.02,1),[.24,.62,0],[.07,.07,.07],g);
     // Each wardrobe display hangs in lens space with its own hologram ring.
     const displayRing=mesh(new THREE.TorusGeometry(.45,.016,8,56),ringBlue,[0,-.86,0],[1,1,1],g);displayRing.rotation.x=Math.PI/2;
   }
@@ -116,8 +121,38 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
   const eyeBalls=[],eyelids=[];
   const skin=material(STUDIO_MODEL.skin,.02,.66),skinLight=material('#85563f',.02,.64),hair=material(STUDIO_MODEL.hair,.15,.72);
   const jacket=material(STUDIO_OUTFITS[0].color,.07,.65),trim=material(STUDIO_OUTFITS[0].trim,.8,.32);
-  const shirt=material('#181a22',.01,.9),pants=material('#20232d',.04,.82),sole=material('#25252a',.1,.65);
-  const eyes=material('#c3b4a4',0,.5),iris=material('#2a1a11',.05,.25),pupil=material('#050506',0,.25),lips=material('#4e2b25',0,.7);
+  const pants=material('#20232d',.04,.82);
+  const eyes=material('#c3b4a4',0,.5),iris=material('#6b4426',.05,.25),pupil=material('#050506',0,.25),lips=material('#4e2b25',0,.7);
+  // Tumbo reference look (Packet 230): procedural fur. The fur grain is a
+  // seeded-noise DataTexture (no DOM needed, so node tests keep working);
+  // roughness 1 sells the plush read under the lens lights.
+  const furGrain=(()=>{const size=64,data=new Uint8Array(size*size*4);let s=0x2b6f1d;
+    const rnd=()=>((s=(s*1664525+1013904223)>>>0)/4294967296);
+    for(let i=0;i<size*size;i++){const v=190+Math.floor(rnd()*65),j=i*4;data[j]=v;data[j+1]=v;data[j+2]=v;data[j+3]=255;}
+    const tex=new THREE.DataTexture(data,size,size);tex.needsUpdate=true;return tex;})();
+  geometries.add(furGrain);
+  const pawFur=material('#8a5a33',.02,1,{bumpMap:furGrain,bumpScale:.5});
+  // Earmuff fluff: wardrobe-tinted in apply() (white default, teal option).
+  const muffMat=material('#f5f2ea',.02,1,{bumpMap:furGrain,bumpScale:.8});
+  let muffColor='#f5f2ea';
+  // Procedural chest-text decal (Packet 230). Canvas needs DOM, so in node
+  // (focused suites) this returns null and the builder stays exception-free.
+  function makeTextDecal(text){
+    try{
+      if(typeof document==='undefined'||typeof THREE.CanvasTexture==='undefined')return null;
+      const c=document.createElement('canvas');c.width=256;c.height=64;
+      const g=c.getContext('2d');if(!g)return null;
+      g.clearRect(0,0,256,64);
+      g.font='600 40px Georgia,"Times New Roman",serif';
+      g.textAlign='center';g.textBaseline='middle';
+      g.fillStyle='#d9ae60';
+      g.fillText(text,128,34);
+      const tex=new THREE.CanvasTexture(c);tex.needsUpdate=true;
+      const m=new THREE.MeshBasicMaterial({map:tex,transparent:true});materials.add(m);
+      const geo=new THREE.PlaneGeometry(.17,.0425);geometries.add(geo);
+      return new THREE.Mesh(geo,m);
+    }catch{return null;}
+  }
   const joints={};
   const bone=(name,pos,owner)=>{const g=group(name,pos,owner);joints[name]=g;return g;};
   const hips=bone('root',[0,.94,0],avatar);
@@ -127,35 +162,58 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
   const profile=[[.18,0],[.205,.1],[.22,.3],[.3,.61],[.295,.68],[.20,.75]];
   const torsoMesh=mesh(new THREE.LatheGeometry(profile.map(([x,y])=>new THREE.Vector2(x,y)),24),jacket,[0,0,0],[1,1,.63],torso);
   target(torsoMesh,{kind:'greet'});
-  box(.23,.57,.032,shirt,[0,.4,.182],torso);
   const belt=mesh(new THREE.CylinderGeometry(.213,.22,.07,24),dark,[0,.025,0],[1,1,.7],torso);
   box(.08,.06,.025,trim,[0,.025,.164],torso);
+  // Hoodie restyle (Packet 230): drawstrings, kangaroo pocket, resting hood.
+  // The suit lapels and shirt inset are retired; the jacket tails read as the
+  // hoodie hem now.
   for(const side of [-1,1]){
-    const lapel=box(.080,.46,.035,jacket,[side*.13,.48,.185],torso);lapel.rotation.z=-side*.27;
-    const piping=box(.009,.46,.012,trim,[side*.155,.48,.209],torso);piping.rotation.z=-side*.27;
-    box(.011,.34,.015,trim,[side*.175,.20,.16],torso);
+    mesh(new THREE.CylinderGeometry(.008,.008,.17,8),dark,[side*.055,.52,.175],[1,1,1],torso);
+    sphere(dark,[side*.055,.425,.175],[.011,.014,.011],torso);
     const tail=box(.17,.53,.035,jacket,[side*.20,-.21,-.07],torso);tail.rotation.z=-side*.1;
     const edging=box(.012,.53,.043,trim,[side*.281,-.21,-.07],torso);edging.rotation.z=-side*.1;
-    const pocket=box(.085,.06,.026,dark,[side*.20,.20,.165],torso);pocket.rotation.z=side*.07;
+    box(.011,.34,.015,trim,[side*.175,.20,.16],torso);
   }
+  box(.21,.15,.045,jacket,[0,.10,.150],torso);
+  box(.215,.02,.048,trim,[0,.178,.150],torso);
+  const hood=mesh(new THREE.TorusGeometry(.155,.052,10,28,Math.PI*1.2),jacket,[0,.60,-.20],[1,1,1],torso);
+  hood.rotation.x=1.2;hood.rotation.z=Math.PI*1.35;
   tube([[-.075,.72,.12],[-.09,.61,.22],[0,.48,.225],[.09,.61,.22],[.075,.72,.12]],.006,trim,torso);
-  const emblem=mesh(new THREE.ConeGeometry(.029,.055,3),trim,[0,.45,.235],[1,1,.3],torso);emblem.rotation.z=Math.PI;
+  // Gold TUMBO chest text on the left chest, per the reference portrait.
+  const tumboDecal=makeTextDecal('TUMBO');
+  if(tumboDecal){tumboDecal.position.set(-.078,.505,.180);tumboDecal.rotation.x=-.06;torso.add(tumboDecal);}
   const neck=bone('neck',[0,.765,0],torso);mesh(new THREE.CylinderGeometry(.068,.085,.14,20),skin,[0,.02,0],[1,1,1],neck);
   const head=bone('head',[0,.165,0],neck);
+  // Reference chibi proportions (Packet 230): the head is scaled up — big-head
+  // Tumbo read, matching the reference portraits.
+  head.scale.setScalar(1.3);
   const headMesh=sphere(skin,[0,.025,0],[.175,.225,.16],head);target(headMesh,{kind:'greet'});
   sphere(skin,[0,-.1,.025],[.145,.11,.138],head);
   sphere(skinLight,[0,-.075,.084],[.124,.073,.095],head);
+  // Fluffy earmuffs (Packet 230): a headband arc over the crown plus two plush
+  // cups over the ears. Wardrobe tints the fluff (white default, teal option).
+  const muffs=group('Earmuffs',[0,0,0],head);
+  mesh(new THREE.TorusGeometry(.205,.024,10,40,Math.PI),muffMat,[0,.10,-.01],[1,1,1],muffs);
+  for(const side of [-1,1]){
+    sphere(muffMat,[side*.205,.015,0],[.078,.095,.078],muffs);
+    sphere(muffMat,[side*.205,.015,.012],[.060,.075,.060],muffs);
+  }
+  const liner=material('#14100d',.1,.5);
   for(const side of [-1,1]){
     sphere(skin,[side*.174,.005,0],[.031,.068,.026],head);
     sphere(skinLight,[side*.110,-.013,.108],[.045,.041,.027],head);
-    const eye=sphere(eyes,[side*.073,.034,.141],[.038,.016,.016],head);
-    eye.userData.expressionPart='eye';eye.userData.baseScaleY=.016;eyeBalls.push(eye);
-    sphere(iris,[side*.073,.034,.153],[.015,.015,.005],head);sphere(pupil,[side*.073,.034,.158],[.007,.008,.003],head);
-    const brow=box(.074,.014,.02,hair,[side*.074,.071,.147],head);brow.rotation.z=-side*.10;
-    const lid=sphere(skin,[side*.073,.052,.138],[.040,.012,.018],head);lid.rotation.z=-side*.03;eyelids.push(lid);
+    // Eyeliner rims the eye from behind the white.
+    sphere(liner,[side*.073,.034,.136],[.046,.022,.010],head);
+    const eye=sphere(eyes,[side*.073,.034,.141],[.046,.022,.016],head);
+    eye.userData.expressionPart='eye';eye.userData.baseScaleY=.022;eyeBalls.push(eye);
+    sphere(iris,[side*.073,.034,.153],[.020,.020,.006],head);sphere(pupil,[side*.073,.034,.158],[.009,.010,.004],head);
+    const brow=box(.085,.016,.02,hair,[side*.074,.073,.147],head);brow.rotation.z=-side*.10;
+    const lid=sphere(skin,[side*.073,.054,.138],[.048,.014,.018],head);lid.rotation.z=-side*.03;eyelids.push(lid);
     sphere(hair,[side*.134,-.107,.059],[.026,.07,.055],head);
     eye.userData.expressionPart='eye';
   }
+  // Beauty mark on the cheek, per the reference portrait.
+  sphere(material('#241812',0,.6),[.058,-.052,.168],[.0085,.0085,.005],head);
   sphere(skinLight,[0,-.006,.159],[.030,.064,.028],head);
   sphere(skin,[0,-.040,.184],[.037,.024,.033],head);
   for(const x of [-.029,.029])sphere(skin,[x,-.041,.176],[.017,.015,.017],head);
@@ -182,23 +240,29 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
     const elbow=group(name+' elbow',[side*.026,-.45,.005],arm);elbow.rotation.x=-.09;
     mesh(new THREE.CapsuleGeometry(.072,.22,6,14),jacket,[0,-.16,0],[1,1,.94],elbow);
     mesh(new THREE.CylinderGeometry(.078,.077,.035,16),trim,[0,-.29,0],[1,1,1],elbow);
+    // Furry paws (Packet 230): plush mitten paws replace the bare hands,
+    // per the reference portrait. The hand bone stays for the wave.
     const hand=bone(name+'Hand',[0,-.36,0],elbow);
-    sphere(skin,[0,-.035,0],[.054,.082,.036],hand);
-    for(let finger=0;finger<4;finger++){
-      const digit=group(`${name} finger ${finger}`,[(finger-1.5)*.025,-.092,.004],hand);
-      const length=.047+(finger===1?.012:0);
-      mesh(new THREE.CapsuleGeometry(.010,length,3,7),skin,[0,-length*.45,0],[1,1,1],digit);
-    }
-    const thumb=mesh(new THREE.CapsuleGeometry(.016,.045,4,8),skin,[side*.052,-.03,.025],[1,1,1],hand);thumb.rotation.z=-side*.5;
+    sphere(pawFur,[0,-.045,0],[.062,.080,.052],hand);
+    sphere(pawFur,[side*.052,-.035,.022],[.020,.032,.020],hand);
+    sphere(pawFur,[0,-.108,.028],[.048,.028,.040],hand);
     const leg=bone(name+'Leg',[side*.129,-.075,0],hips);
     mesh(new THREE.LatheGeometry([[.075,-.76],[.086,-.67],[.09,-.51],[.102,-.38],[.113,-.2],[.116,-.04],[.097,.07]].map(([x,y])=>new THREE.Vector2(x,y)),20),pants,[0,0,0],[1,1,.98],leg);
     box(.035,.13,.055,jacket,[0,-.4,.097],leg);
     box(.012,.59,.013,trim,[side*.104,-.35,.015],leg);
-    sphere(dark,[0,-.788,.054],[.114,.105,.185],leg);
-    box(.222,.035,.35,sole,[0,-.85,.055],leg);
-    box(.226,.016,.355,trim,[0,-.825,.055],leg);
-    for(let y=0;y<3;y++)box(.123,.01,.014,trim,[0,-.724-y*.026,.18-y*.013],leg);
+    // Furry feet (Packet 230): plush paws replace the shoes, per the reference.
+    sphere(pawFur,[0,-.795,.055],[.115,.092,.175],leg);
+    for(const toe of [-.045,0,.045])sphere(pawFur,[toe,-.815,.20],[.032,.030,.032],leg);
   }
+  // Fluffy tail (Packet 230): a plush curl rising beside the hip, per the
+  // reference portrait. It wags gently in the idle loop (frozen under
+  // reduced motion).
+  const tailWag=group('Fluffy tail',[.10,.45,-.19],hips);
+  const tailCurl=[[.0,.0,.0],[.03,.10,-.06],[.08,.22,-.08],[.15,.32,-.05],[.22,.37,.01]];
+  tailCurl.forEach(([x,y,z],i)=>{
+    const r=.078-i*.007;
+    sphere(pawFur,[x,y,z],[r,r*1.05,r],tailWag);
+  });
   // Lens space has no ground to receive shadows; the glow sprite and rings
   // carry the grounding read. Meshes neither cast nor receive.
   avatar.traverse(object=>{if(object.isMesh){object.castShadow=false;object.receiveShadow=false;}});
@@ -258,6 +322,8 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
     const theme=STUDIO_ROOMS.find(v=>v.id===snapshot.roomId)??STUDIO_ROOMS[0];
     outfit=clothing.id;room=theme.id;form=snapshot.companion;
     jacket.color.set(clothing.color);trim.color.set(clothing.trim);
+    // Earmuff tint follows the wardrobe (Packet 230): white default, teal option.
+    muffColor=clothing.muffs??'#f5f2ea';muffMat.color.set(muffColor);
     light.color.set(theme.light);light.emissive.set(theme.light);
     skyMat.color.set(theme.sky);skyMat.emissive.set(theme.sky);rim.color.set(theme.light);
     skyline.visible=room!=='ocean';moon.visible=room==='night';
@@ -358,9 +424,11 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
       lensRing.rotation.y+=dt*.22;ringInner.rotation.y-=dt*.31;}
     companion.position.y=2.78+(reducedMotion?0:Math.sin(time*1.8)*.075);
     companion.rotation.y=reducedMotion?0:Math.sin(time*.8)*.14;
+    tailWag.rotation.y=reducedMotion?0:Math.sin(time*2.2)*.16;
+    tailWag.rotation.x=reducedMotion?0:Math.sin(time*1.7+1)*.08;
     wings.forEach((wing,i)=>{wing.rotation.z=(i===0?-1:1)*(.55+(form==='bird'&&!reducedMotion?Math.sin(time*5)*.35:0));});
   }
-  function getSnapshot(){return {source:'person-studio-scene',modelId:STUDIO_MODEL.id,visible:layer.visible,outfitId:outfit,roomId:room,companionForm:form,jointNames:Object.keys(joints),meshCount:geometries.size,identityHeadGeometry:headMesh.geometry.uuid,geometryOnly:false,referenceImagesUsedAsTextures:false,rigVisible:true,avatarHologramPresent:false,avatarHologramUrl:avatarTextureUrl,avatarHologramTint:avatarHologramTint,greetKind:getGreetKind(),avatarOffset:{x:avatarTarget.x,z:avatarTarget.z},avatarPickMeshCount:avatarPickMeshes.length};}
+  function getSnapshot(){return {source:'person-studio-scene',modelId:STUDIO_MODEL.id,visible:layer.visible,outfitId:outfit,roomId:room,companionForm:form,jointNames:Object.keys(joints),meshCount:geometries.size,identityHeadGeometry:headMesh.geometry.uuid,geometryOnly:false,referenceImagesUsedAsTextures:false,rigVisible:true,referenceLook:'tumbo-chibi-v1',earmuffColor:muffColor,tumboDecalPresent:!!tumboDecal,avatarHologramPresent:false,avatarHologramUrl:avatarTextureUrl,avatarHologramTint:avatarHologramTint,greetKind:getGreetKind(),avatarOffset:{x:avatarTarget.x,z:avatarTarget.z},avatarPickMeshCount:avatarPickMeshes.length};}
   // Face choice state: the user's chosen avatar face — default Tumbo
   // character, Tumbo's own likeness, or their locally-styled photo. The
   // hologram sprite is retired, so this keeps the stored choice (chess

@@ -1,5 +1,29 @@
 # Current State
 
+## Packet 230 — Tumbo reference look for the Person avatar (2026-09-18)
+
+The 3D avatar now reads as the Tumbo reference character. The rig is restyled
+to the reference portraits: the head is scaled up to big-chibi proportions;
+fluffy earmuffs (headband arc + two plush cups, procedural seeded-noise fur
+grain — no DOM, no external images) sit over the ears and tint with the
+wardrobe (white default on Obsidian/Ivory, teal on Cobalt/Oxblood, matching
+the reference variant); the torso is a black hoodie with drawstrings,
+kangaroo pocket and resting hood, plus gold `TUMBO` chest text drawn as a
+procedural canvas decal (browser only; the builder stays node-safe without
+DOM); hands and feet are brown furry paws; a fluffy tail curls beside the hip
+and wags gently in the idle loop; locs are kept; the face gains eyeliner,
+brown irises, a cheek beauty mark and a fuller goatee. Everything from
+Packets 226/227 keeps working: articulation, idle breathing/blinking, the
+wave→spin→jump greet cycle, drag-to-move with walk cycle, orbit/zoom, and
+reduced-motion support (tail wag and greet flourishes freeze). Wardrobe
+displays carry an earmuff swatch so the tint option reads at a glance. The
+focused suite passes 24/24 in local node runs (chibi scale, earmuff build +
+wardrobe tint, decal path with fake DOM and node-safe fallback, paws, tail
+wag/freeze, beauty mark, brown irises, greet + drag intact), with the Packet
+227 suites re-verified 20/20 and 26/26; all touched files pass `node --check`.
+No provider request, credential, advice, reward token, persistence, wallet, or
+external authority was added.
+
 ## Packet 227 — the Person avatar greets, walks, and can be moved (2026-09-18)
 
 The 3D avatar is now interactive. Clicking it plays the next reaction in a

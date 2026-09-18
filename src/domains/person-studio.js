@@ -7,10 +7,10 @@ export const STUDIO_MODEL = Object.freeze({
   geometrySource:'procedural-reference-built', likenessVerified:false,
 });
 export const STUDIO_OUTFITS = Object.freeze([
-  Object.freeze({id:'obsidian',name:'Obsidian',subtitle:'Signature · black & gold',color:'#111620',trim:'#d9ae60'}),
-  Object.freeze({id:'cobalt',name:'Cobalt',subtitle:'Technical · deep blue',color:'#153b78',trim:'#90c9fa'}),
-  Object.freeze({id:'ivory',name:'Ivory',subtitle:'Tailored · warm white',color:'#d6cdc0',trim:'#b28c4b'}),
-  Object.freeze({id:'oxblood',name:'Oxblood',subtitle:'Evening · red & graphite',color:'#5d1b29',trim:'#dba270'}),
+  Object.freeze({id:'obsidian',name:'Obsidian',subtitle:'Signature · black & gold',color:'#111620',trim:'#d9ae60',muffs:'#f5f2ea'}),
+  Object.freeze({id:'cobalt',name:'Cobalt',subtitle:'Technical · deep blue',color:'#153b78',trim:'#90c9fa',muffs:'#4fd8cc'}),
+  Object.freeze({id:'ivory',name:'Ivory',subtitle:'Tailored · warm white',color:'#d6cdc0',trim:'#b28c4b',muffs:'#f5f2ea'}),
+  Object.freeze({id:'oxblood',name:'Oxblood',subtitle:'Evening · red & graphite',color:'#5d1b29',trim:'#dba270',muffs:'#4fd8cc'}),
 ]);
 export const STUDIO_ROOMS = Object.freeze([
   Object.freeze({id:'city',name:'City atelier',caption:'Architecture / gold / midnight',light:'#ddb878',sky:'#081d3a'}),
