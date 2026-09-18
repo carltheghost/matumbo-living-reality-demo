@@ -900,6 +900,48 @@
      .nft-atelier-trace-row{font-size:11px;color:#e8d9b8;opacity:.85}
      #nft-atelier-boundary{font-size:10px;color:#e8d9b8;opacity:.6;line-height:1.5}
      @media(max-width:700px){#nft-atelier-console{left:12px;right:12px;top:86px;width:auto;max-height:calc(100vh - 112px);padding:11px}#nft-atelier-head h2{font-size:17px}}
+     /* Frozen Relics: living glass cubes inside the NFT Atelier console */
+     .frozen-relics-hint{font-size:11px;color:#e8d9b8;opacity:.8;margin:0 0 8px;line-height:1.5}
+     #frozen-relics-status{font-size:11px;letter-spacing:.08em;color:#ffd166;margin-bottom:8px}
+     #frozen-relics-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;margin-bottom:10px}
+     .frozen-relics-piece{display:flex;gap:10px;align-items:center;text-align:left;padding:10px;border:1px solid rgba(126,231,255,.28);border-radius:10px;background:rgba(126,231,255,.05);color:#fff7e6;cursor:pointer}
+     .frozen-relics-piece[aria-pressed="true"]{border-color:#7ee7ff;background:rgba(126,231,255,.13)}
+     .frozen-relics-piece-label{display:flex;flex-direction:column;gap:3px;min-width:0}
+     .frozen-relics-piece-name{font-size:13px}
+     .frozen-relics-piece-meta{font-size:10px;letter-spacing:.06em;color:#cfeef7;opacity:.85}
+     .frozen-relics-piece-id{font-size:9px;color:#cfeef7;opacity:.55;font-family:monospace}
+     .frozen-relics-empty{font-size:12px;color:#e8d9b8;opacity:.7;padding:8px 0}
+     .frozen-relics-card{display:flex;flex-direction:column;gap:10px;padding:12px;border:1px solid rgba(126,231,255,.34);border-radius:12px;background:rgba(126,231,255,.05);margin-bottom:10px}
+     .frozen-relics-card-head{display:flex;gap:12px;align-items:center}
+     .frozen-relics-card-name{font-size:16px;color:#fff7e6}
+     .frozen-relics-card-id{font-size:10px;font-family:monospace;color:#7ee7ff;opacity:.8}
+     .frozen-relics-card-meta{font-size:11px;letter-spacing:.06em;color:#cfeef7}
+     .frozen-relics-core{border:1px solid rgba(255,209,102,.45);border-radius:10px;padding:10px;background:rgba(255,209,102,.05)}
+     .frozen-relics-life{border:1px solid rgba(126,231,255,.35);border-radius:10px;padding:10px;background:rgba(126,231,255,.04)}
+     .frozen-relics-section-label{font-size:9px;letter-spacing:.2em;color:#ffd166;margin-bottom:6px}
+     .frozen-relics-life .frozen-relics-section-label{color:#7ee7ff}
+     .frozen-relics-kv{display:flex;justify-content:space-between;gap:8px;font-size:11px;padding:5px 8px;border-radius:8px;background:rgba(0,0,0,.25);margin-bottom:4px}
+     .frozen-relics-kv-name{color:#ffd166;letter-spacing:.04em;flex:none}
+     .frozen-relics-kv-value{color:#fff7e6;text-align:right;word-break:break-word}
+     .frozen-relics-history-row{font-size:11px;color:#cfeef7;padding:4px 0;border-top:1px solid rgba(126,231,255,.14)}
+     .frozen-relics-verify{align-self:flex-start;background:rgba(255,209,102,.12);border:1px solid rgba(255,209,102,.5);border-radius:8px;color:#ffd166;font-size:11px;padding:7px 12px;cursor:pointer;margin-top:6px}
+     .frozen-relics-action{background:rgba(126,231,255,.12);border:1px solid rgba(126,231,255,.45);border-radius:8px;color:#7ee7ff;font-size:11px;padding:7px 12px;cursor:pointer}
+     .frozen-relics-transfer{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+     .frozen-relics-text-input,.frozen-relics-field input{background:rgba(0,0,0,.4);border:1px solid rgba(126,231,255,.3);border-radius:8px;color:#fff7e6;font-size:13px;padding:8px 10px}
+     .frozen-relics-field{display:flex;flex-direction:column;gap:4px;font-size:11px;letter-spacing:.06em;color:#cfeef7;margin-bottom:8px}
+     #frozen-relics-mint-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+     #frozen-relics-mint-actions button{background:rgba(126,231,255,.14);border:1px solid rgba(126,231,255,.45);border-radius:8px;color:#7ee7ff;font-size:12px;padding:8px 12px;cursor:pointer}
+     #frozen-relics-boundary{font-size:10px;color:#e8d9b8;opacity:.6;line-height:1.5;margin-top:8px}
+     /* The glass cube: the world's cube language, small */
+     .frozen-relics-cube{width:36px;height:36px;flex:none;position:relative;transform-style:preserve-3d;transform:rotateX(-18deg) rotateY(24deg);animation:frozen-relics-spin 9s linear infinite}
+     .frozen-relics-cube i{position:absolute;inset:0;border:1px solid rgba(255,209,102,.85);background:linear-gradient(135deg,rgba(126,231,255,.34),rgba(126,231,255,.07));box-shadow:inset 0 0 10px rgba(126,231,255,.35)}
+     .frozen-relics-face-0{transform:translateZ(18px)}
+     .frozen-relics-face-1{transform:rotateY(180deg) translateZ(18px)}
+     .frozen-relics-face-2{transform:rotateY(90deg) translateZ(18px)}
+     .frozen-relics-face-3{transform:rotateY(-90deg) translateZ(18px)}
+     .frozen-relics-face-4{transform:rotateX(90deg) translateZ(18px)}
+     .frozen-relics-face-5{transform:rotateX(-90deg) translateZ(18px)}
+     @keyframes frozen-relics-spin{to{transform:rotateX(-18deg) rotateY(384deg)}}
      #muse-agent-console{position:absolute;right:20px;top:145px;z-index:31;width:min(560px,calc(100vw - 40px));max-height:calc(100vh - 190px);display:flex;flex-direction:column;gap:9px;padding:15px;border:1px solid rgba(126,231,255,.38);border-radius:14px;background:linear-gradient(160deg,rgba(10,30,42,.98),rgba(4,8,12,.98));box-shadow:0 24px 80px rgba(0,0,0,.64),inset 0 0 42px rgba(126,231,255,.08);pointer-events:auto;overflow:auto;scrollbar-width:thin}
      #muse-agent-console[hidden]{display:none}
      #muse-agent-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
@@ -3166,6 +3208,29 @@
           <button id="nft-atelier-mint" type="button">Mint fictional piece</button>
           <button id="nft-atelier-reset" type="button">Reset atelier</button>
         </div>
+      </section>
+      <section aria-labelledby="frozen-relics-title">
+        <h3 id="frozen-relics-title" class="room-console-section-title">Frozen Relics · living cubes</h3>
+        <p class="frozen-relics-hint">Seal a glass-cube relic: its frozen core (origin, creator, terms, genesis hash) can never change, while its life — stages, patina, witnessed events, transfers — keeps growing. Award NFTs from outcome contracts arrive here as living relics. All fictional, local only.</p>
+        <div id="frozen-relics-status" role="status" aria-live="polite">READY · LOCAL SESSION ONLY</div>
+        <div id="frozen-relics-gallery" role="list" aria-label="Frozen Relics gallery"></div>
+        <div id="frozen-relics-detail"></div>
+        <label class="frozen-relics-field" for="frozen-relics-name">Relic name
+          <input id="frozen-relics-name" type="text" maxlength="48" autocomplete="off" placeholder="e.g. Derby Award Cube">
+        </label>
+        <label class="frozen-relics-field" for="frozen-relics-origin">Origin (what it was born from)
+          <input id="frozen-relics-origin" type="text" maxlength="160" autocomplete="off" placeholder="e.g. outcome-contract:oct:abc123">
+        </label>
+        <label class="frozen-relics-field" for="frozen-relics-creator">Creator
+          <input id="frozen-relics-creator" type="text" maxlength="160" autocomplete="off" placeholder="e.g. house">
+        </label>
+        <label class="frozen-relics-field" for="frozen-relics-amount">Frozen claim amount (simulated TUMBO points, optional)
+          <input id="frozen-relics-amount" type="number" min="0" step="0.01" autocomplete="off" placeholder="e.g. 150">
+        </label>
+        <div id="frozen-relics-mint-actions">
+          <button id="frozen-relics-mint" type="button">Seal a frozen relic</button>
+        </div>
+        <div id="frozen-relics-boundary"></div>
       </section>
       <section aria-labelledby="nft-atelier-trace-title">
         <h3 id="nft-atelier-trace-title" class="room-console-section-title">Local atelier trace</h3>

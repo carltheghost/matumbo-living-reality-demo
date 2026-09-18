@@ -71,6 +71,7 @@ function buildLogic(kind, propA, propB, propC) {
 export function createContractAtelierConsole({
   documentRoot = globalThis.document,
   atelier = null,
+  relicVault = null,
   onSelect = null,
   onReplay = null,
   onReset = null,
@@ -322,7 +323,7 @@ export function createContractAtelierConsole({
   // Place a contract on an event and walk away: grading is automatic and
   // deterministic, wins never expire and never decay, awards ride as local
   // simulated NFTs whose claim follows the holder.
-  const outcomesStudio = createOutcomeContracts({ seed: "local-outcomes" });
+  const outcomesStudio = createOutcomeContracts({ seed: "local-outcomes", relicVault });
   let selectedOutcomeId = null;
 
   const outcomeSection = element(documentRoot, "div", "contract-atelier-box");

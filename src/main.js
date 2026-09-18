@@ -81,6 +81,8 @@ import { MATTER_FORGE_SOURCE } from './domains/matter-forge.js?v=20260827-pictur
 import { PICTURE_MATTER_METADATA_SOURCE, createUnavailablePictureMatterMetadata, fetchPictureMatterMetadata } from './domains/picture-matter-metadata.js?v=20260828-picture-metadata1';
 import { PICTURE_MATTER_CONSOLE_SOURCE, createPictureMatterConsole } from './render/picture-matter.js?v=20260828-picture-metadata1';
 import { NFT_ATELIER_CONSOLE_SOURCE, createNftAtelierConsole } from './render/nft-atelier.js?v=20260918-nft1';
+import { createFrozenRelics } from './domains/frozen-relics.js?v=20260918-fr1';
+import { FROZEN_RELICS_CONSOLE_SOURCE, createFrozenRelicsConsole } from './render/frozen-relics.js?v=20260918-fr1';
 import { MUSE_AGENT_CONSOLE_SOURCE, createMuseAgentConsole } from './render/muse-agent.js?v=20260918-muse1';
 import { BOT_PLAZA_CONSOLE_SOURCE, createBotPlazaConsole } from './render/bot-plaza.js?v=20260918-botplaza1';
 import { createBotRegistry, createBotRuntime } from './domains/bot-plaza.js?v=20260918-botplaza1';
@@ -159,6 +161,8 @@ let neuralMeshConsole = null;
 let pictureMatterConsole = null;
 let pictureMatterMetadata = createUnavailablePictureMatterMetadata();
 let nftAtelierConsole = null;
+let frozenRelicsVault = null;
+let frozenRelicsConsole = null;
 let museAgentConsole = null;
 let botPlazaRegistry = null;
 let botPlazaRuntime = null;
@@ -2822,6 +2826,10 @@ window.__TUMBO_PICTURE_MATTER__ = pictureMatterConsole;
 // NFT Atelier is a standalone fictional collection surface: simulated mints,
 // provenance inspection, and local burns. No wallet, chain, transfer, sale,
 // custody, or external publication exists.
+// Frozen Relics share one vault across the whole page session: the NFT
+// Atelier section seals standalone relics, and the Contract Atelier's
+// outcome desk mints award NFTs as living relics from the same vault.
+frozenRelicsVault = createFrozenRelics({ seed: 'local-relics' });
 nftAtelierConsole = createNftAtelierConsole({
   documentRoot: document,
   onSelect: (snapshot) => {
@@ -2861,6 +2869,66 @@ nftAtelierConsole = createNftAtelierConsole({
   })),
 });
 window.__TUMBO_NFT_ATELIER__ = nftAtelierConsole;
+// Frozen Relics live as a section inside the NFT Atelier console: living
+// glass cubes with an immutable frozen core and an append-only life.
+// Selecting a relic focuses the proof organ — the world's relic aesthetic.
+frozenRelicsConsole = createFrozenRelicsConsole({
+  documentRoot: document,
+  vault: frozenRelicsVault,
+  onMint: (snapshot) => {
+    const organ = organs.find((candidate) => candidate.id === 'proof');
+    if (organ) focusOrgan(organ, `frozen-relics-mint:${snapshot.selectedId}`);
+    projectionBridge.emitIntent('projection.mint-frozen-relic', `${FROZEN_RELICS_CONSOLE_SOURCE}:${snapshot.selectedId}`, Object.freeze({
+      action: snapshot.action,
+      relicId: snapshot.selectedId,
+      method: snapshot.method,
+      simulation: true,
+      localOnly: true,
+      wallet: false,
+      chain: false,
+      sale: false,
+      custody: false,
+      executable: false,
+    }));
+  },
+  onSelect: (snapshot) => {
+    const organ = organs.find((candidate) => candidate.id === 'proof');
+    if (organ) focusOrgan(organ, `frozen-relics-select:${snapshot.selectedId}`);
+    projectionBridge.emitIntent('projection.select-frozen-relic', `${FROZEN_RELICS_CONSOLE_SOURCE}:${snapshot.selectedId}`, Object.freeze({
+      action: snapshot.action,
+      relicId: snapshot.selectedId,
+      method: snapshot.method,
+      simulation: true,
+      localOnly: true,
+      wallet: false,
+      chain: false,
+      executable: false,
+    }));
+  },
+  onVerify: (snapshot) => projectionBridge.emitIntent('projection.verify-frozen-relic', `${FROZEN_RELICS_CONSOLE_SOURCE}:${snapshot.selectedId}`, Object.freeze({
+    action: snapshot.action,
+    relicId: snapshot.selectedId,
+    method: snapshot.method,
+    simulation: true,
+    deterministic: true,
+    localOnly: true,
+    wallet: false,
+    chain: false,
+    executable: false,
+  })),
+  onTransfer: (snapshot) => projectionBridge.emitIntent('projection.transfer-frozen-relic', `${FROZEN_RELICS_CONSOLE_SOURCE}:${snapshot.selectedId}`, Object.freeze({
+    action: snapshot.action,
+    relicId: snapshot.selectedId,
+    method: snapshot.method,
+    simulation: true,
+    localOnly: true,
+    wallet: false,
+    chain: false,
+    custody: false,
+    executable: false,
+  })),
+});
+window.__TUMBO_FROZEN_RELICS__ = frozenRelicsConsole;
 // Muse Agent is the in-world design companion: anyone opening Matumbo meets
 // the agent, adds a local profile (their Muse account tag or another
 // account tag — display names only, no login, no token, no external
@@ -3000,6 +3068,9 @@ botPlazaRuntime.getBus().subscribe((entry) => {
 // money exists.
 contractAtelierConsole = createContractAtelierConsole({
   documentRoot: document,
+  // Award NFTs from outcome contracts are minted as Frozen Relics from the
+  // shared vault: the claim freezes in the relic core, its life keeps growing.
+  relicVault: frozenRelicsVault,
   onSelect: (snapshot) => {
     const organ = organs.find((candidate) => candidate.id === 'contract');
     if (organ) focusOrgan(organ, `contract-atelier-select:${snapshot.selectedId}`);

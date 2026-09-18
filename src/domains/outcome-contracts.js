@@ -120,9 +120,14 @@ function splitPoolCents(winningStakes, poolCents) {
 /**
  * Create an outcome-contracts desk. `seed` rebuilds the same starter set;
  * `now` is injectable for deterministic tests (including the 10-year
- * time-travel claim test).
+ * time-travel claim test). `relicVault` is an optional Frozen Relics vault:
+ * when provided, every award NFT is ALSO minted as a Frozen Relic — the
+ * claim terms freeze in the relic's immutable core while its life
+ * (grading → transfers → claim) keeps growing. Escrow guarantees are
+ * untouched: the claim still follows the holder, double-claim stays
+ * impossible, and claims never expire.
  */
-export function createOutcomeContracts({ seed = "local-outcomes", now = null } = {}) {
+export function createOutcomeContracts({ seed = "local-outcomes", now = null, relicVault = null } = {}) {
   const deskSeed = safeText(seed) || "local-outcomes";
   let counter = 0;
   let escrowCounter = 0;
@@ -174,10 +179,28 @@ export function createOutcomeContracts({ seed = "local-outcomes", now = null } =
     return record;
   }
 
-  function mintAwardNft({ escrow }) {
+  function mintAwardNft({ escrow, eventLabel = "", creator = "" }) {
     nftCounter += 1;
     const tokenHash = hashOutcomeSeed(`${deskSeed}:award-nft:${nftCounter}:${escrow.id}`);
     const id = `award-nft:${tokenHash.slice(0, 8)}:${String(nftCounter).padStart(4, "0")}`;
+    // The award can also live as a Frozen Relic: the claim terms freeze in
+    // the relic's immutable core while its life keeps growing. The vault is
+    // optional — without it the award is a plain local NFT as before.
+    let relicId = null;
+    if (relicVault) {
+      const relic = relicVault.mintRelicFromAward({
+        awardNftId: id,
+        escrowId: escrow.id,
+        contractId: escrow.contractId,
+        eventLabel,
+        creator,
+        holder: escrow.participant,
+        amount: escrow.amount,
+        kind: escrow.kind,
+        unit: OUTCOME_STAKE_UNIT,
+      });
+      relicId = relic.id;
+    }
     const nft = freeze({
       id,
       escrowId: escrow.id,
@@ -186,6 +209,7 @@ export function createOutcomeContracts({ seed = "local-outcomes", now = null } =
       unit: OUTCOME_STAKE_UNIT,
       holder: escrow.participant,
       kind: escrow.kind,
+      relicId,
       claimed: false,
       claimedAt: null,
       transfers: freeze([]),
@@ -309,7 +333,7 @@ export function createOutcomeContracts({ seed = "local-outcomes", now = null } =
     const nftIds = [];
     for (const award of awards) {
       const escrow = escrowFor({ contractId: contract.id, participant: award.participant, amount: award.amount, kind });
-      const nft = mintAwardNft({ escrow });
+      const nft = mintAwardNft({ escrow, eventLabel: contract.eventLabel, creator: contract.creator });
       const linked = freeze({ ...escrow, nftId: nft.id });
       escrows.set(linked.id, linked);
       escrowIds.push(linked.id);
@@ -362,6 +386,9 @@ export function createOutcomeContracts({ seed = "local-outcomes", now = null } =
       holder: next,
       transfers: freeze([...nft.transfers, freeze({ from: nft.holder, to: next, at: nowIso(now) })]),
     });
+    // The relic's life grows with the award: record the transfer first so a
+    // vault disagreement never leaves the desk inconsistent.
+    if (nft.relicId && relicVault) relicVault.recordRelicTransfer({ relicId: nft.relicId, toHolder: next });
     nfts.set(nft.id, moved);
     recordTrace("transfer", nft.id, `${nft.holder} → ${next}`);
     return moved;
@@ -382,6 +409,9 @@ export function createOutcomeContracts({ seed = "local-outcomes", now = null } =
     const claimedNft = freeze({ ...nft, claimed: true, claimedAt });
     nfts.set(nft.id, claimedNft);
     escrows.set(escrow.id, freeze({ ...escrow, claimedAt }));
+    // The relic's life records the claim; its frozen core already holds the
+    // exact terms, so the claim honors them to the cent.
+    if (nft.relicId && relicVault) relicVault.recordRelicClaim({ relicId: nft.relicId, holder: nft.holder, amount: escrow.amount });
     const receipt = freeze({
       nftId: nft.id,
       escrowId: escrow.id,
@@ -468,6 +498,7 @@ export function createOutcomeContracts({ seed = "local-outcomes", now = null } =
         holder: nft.holder,
         amount: nft.amount,
         kind: nft.kind,
+        relicId: nft.relicId ?? null,
         claimed: nft.claimed,
         transfers: nft.transfers.length,
       })),
