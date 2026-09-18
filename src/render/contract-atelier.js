@@ -75,6 +75,8 @@ export function createContractAtelierConsole({
   onSelect = null,
   onReplay = null,
   onReset = null,
+  proposalQueue = null,
+  outcomeDesk = null,
 } = {}) {
   const panel = documentRoot?.getElementById?.("contract-atelier-console");
   const closeButton = documentRoot?.getElementById?.("contract-atelier-close");
@@ -94,10 +96,11 @@ export function createContractAtelierConsole({
   const resetButton = documentRoot?.getElementById?.("contract-atelier-reset");
   const traceEl = documentRoot?.getElementById?.("contract-atelier-trace");
   const boundaryEl = documentRoot?.getElementById?.("contract-atelier-boundary");
+  const reviewEl = documentRoot?.getElementById?.("contract-atelier-review");
   if (!panel || !closeButton || !statusEl || !listEl || !detailEl || !typeInput
     || !roleInput || !topicInput || !titleInput || !logicKindInput || !propAInput
     || !propBInput || !propCInput || !outcomesInput || !createButton || !resetButton
-    || !traceEl || !boundaryEl) {
+    || !traceEl || !boundaryEl || !reviewEl) {
     throw new Error("Contract Atelier console mount points are missing");
   }
 
@@ -106,6 +109,7 @@ export function createContractAtelierConsole({
   let selectedId = null;
 
   function snapshot(action = "read", method = "api") {
+    const review = proposalQueue ? readReviewQueue() : null;
     return deepFreeze({
       source: CONTRACT_ATELIER_CONSOLE_SOURCE,
       action,
@@ -113,7 +117,8 @@ export function createContractAtelierConsole({
       opened,
       selectedId,
       atelier: studio.getSnapshot(),
-      outcomes: outcomesStudio.getSnapshot(),
+      outcomes: deskSnapshot(),
+      reviewQueue: review ? { wired: true, pending: review.pending.length, decided: review.decided.length } : null,
       localOnly: true,
       simulation: true,
       persistence: false,
@@ -134,7 +139,8 @@ export function createContractAtelierConsole({
     // have no dedicated callbacks, so their snapshots ride along here too.
     if (action === "select" || action === "create" || action === "stake" || action === "resolve"
       || action === "outcome-select" || action === "outcome-create" || action === "outcome-join"
-      || action === "outcome-grade" || action === "outcome-claim" || action === "outcome-transfer") onSelect?.(next);
+      || action === "outcome-grade" || action === "outcome-claim" || action === "outcome-transfer"
+      || action === "review-approve" || action === "review-edit" || action === "review-dismiss") onSelect?.(next);
     if (action === "replay") onReplay?.(next);
     if (action === "reset") onReset?.(next);
     return next;
@@ -280,6 +286,7 @@ export function createContractAtelierConsole({
         `${entry.seq} · ${entry.action.toUpperCase()} · ${entry.detail || entry.contractId}`));
     });
     boundaryEl.textContent = CONTRACT_ATELIER_BOUNDARY;
+    renderReview();
   }
 
   function setOpen(next, method = "api") {
@@ -323,7 +330,34 @@ export function createContractAtelierConsole({
   // Place a contract on an event and walk away: grading is automatic and
   // deterministic, wins never expire and never decay, awards ride as local
   // simulated NFTs whose claim follows the holder.
-  const outcomesStudio = createOutcomeContracts({ seed: "local-outcomes", relicVault });
+  //
+  // Part 3b: the desk may be injected as a shared instance (main.js wires
+  // one). The injected desk is either the hardened lifecycle desk
+  // (draft → open → locked → graded → settled → claimed, idempotent joins /
+  // grades / claims, claim/transferNft) or the classic rehearsal desk
+  // (claimAward/transferAward, get/listNfts). The adapters below call
+  // whichever surface exists so the console works with either.
+  const outcomesStudio = outcomeDesk ?? createOutcomeContracts({ seed: "local-outcomes", relicVault });
+  const deskSnapshot = () => outcomesStudio.getSnapshot();
+  const deskListContracts = () => outcomesStudio.list();
+  const deskGetContract = (id) => (typeof outcomesStudio.getContract === "function"
+    ? outcomesStudio.getContract(id) : outcomesStudio.get(id));
+  const deskJoinContract = ({ contractId, participant, outcome, stakeAmount }) =>
+    outcomesStudio.join({ contractId, participant, outcome, stakeAmount });
+  const deskRecordResult = ({ contractId, result }) =>
+    outcomesStudio.recordResult({ contractId, result });
+  const deskListNfts = () => (typeof outcomesStudio.listNfts === "function" ? outcomesStudio.listNfts() : []);
+  const deskGetNft = (nftId) => (typeof outcomesStudio.getNft === "function" ? outcomesStudio.getNft(nftId) : null);
+  const deskClaimNft = (nftId) => (typeof outcomesStudio.claim === "function"
+    ? outcomesStudio.claim({ nftId }) : outcomesStudio.claimAward({ nftId }));
+  const deskTransferNft = (nftId, toHolder) => {
+    if (typeof outcomesStudio.transferNft === "function") {
+      const current = deskGetNft(nftId);
+      return outcomesStudio.transferNft({ nftId, from: current?.holder ?? toHolder, to: toHolder });
+    }
+    return outcomesStudio.transferAward({ nftId, toHolder });
+  };
+  const deskReset = () => { if (typeof outcomesStudio.reset === "function") outcomesStudio.reset(); };
   let selectedOutcomeId = null;
 
   const outcomeSection = element(documentRoot, "div", "contract-atelier-box");
@@ -348,6 +382,7 @@ export function createContractAtelierConsole({
         eventLabel: ocEventLabel.value,
         outcomes: parseOutcomes(ocOutcomes.value),
         creator: ocCreator.value,
+        status: "open",
       });
       selectedOutcomeId = contract.id;
       ocEventId.value = "";
@@ -377,7 +412,7 @@ export function createContractAtelierConsole({
 
   function renderOutcomeDetail() {
     outcomeDetailEl.replaceChildren();
-    const contract = selectedOutcomeId ? outcomesStudio.get(selectedOutcomeId) : null;
+    const contract = selectedOutcomeId ? deskGetContract(selectedOutcomeId) : null;
     if (!contract) {
       outcomeDetailEl.append(element(documentRoot, "div", "contract-atelier-empty", "Select an outcome book to join it or record its result."));
       return;
@@ -418,7 +453,7 @@ export function createContractAtelierConsole({
       joinButton.type = "button";
       joinButton.addEventListener("click", () => {
         try {
-          outcomesStudio.join({ contractId: contract.id, participant: whoInput.value, outcome: sideSelect.value, stakeAmount: amountInput.value });
+          deskJoinContract({ contractId: contract.id, participant: whoInput.value, outcome: sideSelect.value, stakeAmount: amountInput.value });
           statusEl.textContent = `JOINED · ${sideSelect.value} · YOU CAN WALK AWAY · SIMULATED ONLY`;
           whoInput.value = "";
           amountInput.value = "";
@@ -445,7 +480,7 @@ export function createContractAtelierConsole({
       gradeButton.type = "button";
       gradeButton.addEventListener("click", () => {
         try {
-          const graded = outcomesStudio.recordResult({ contractId: contract.id, result: resultSelect.value });
+          const graded = deskRecordResult({ contractId: contract.id, result: resultSelect.value });
           statusEl.textContent = `GRADED · ${graded.grading.result} · ${graded.grading.kind.toUpperCase()} · ${graded.grading.escrowIds.length} ESCROWED FOREVER`;
         } catch (error) {
           statusEl.textContent = `GRADE BLOCKED · ${String(error?.message ?? error).toUpperCase().slice(0, 80)}`;
@@ -472,7 +507,7 @@ export function createContractAtelierConsole({
 
   function renderOutcomeEscrow() {
     outcomeEscrowEl.replaceChildren();
-    const nfts = outcomesStudio.listNfts();
+    const nfts = deskListNfts();
     if (!nfts.length) {
       outcomeEscrowEl.append(element(documentRoot, "div", "contract-atelier-empty", "No awards escrowed yet. Grade a book to escrow its awards forever."));
       return;
@@ -488,8 +523,10 @@ export function createContractAtelierConsole({
         claimButton.type = "button";
         claimButton.addEventListener("click", () => {
           try {
-            const receipt = outcomesStudio.claimAward({ nftId: nft.id });
-            statusEl.textContent = `CLAIMED · ${receipt.amount} ${OUTCOME_STAKE_UNIT} → ${receipt.holder} · SIMULATED ONLY`;
+            const receipt = deskClaimNft(nft.id);
+            const receiptAmount = receipt?.amount ?? nft.amount;
+            const receiptHolder = receipt?.holder ?? nft.holder;
+            statusEl.textContent = `CLAIMED · ${receiptAmount} ${OUTCOME_STAKE_UNIT} → ${receiptHolder} · SIMULATED ONLY`;
           } catch (error) {
             statusEl.textContent = `CLAIM BLOCKED · ${String(error?.message ?? error).toUpperCase().slice(0, 80)}`;
           }
@@ -502,8 +539,8 @@ export function createContractAtelierConsole({
         transferButton.type = "button";
         transferButton.addEventListener("click", () => {
           try {
-            const moved = outcomesStudio.transferAward({ nftId: nft.id, toHolder: toInput.value });
-            statusEl.textContent = `AWARD MOVED · now held by ${moved.holder} · the claim follows the NFT`;
+            const moved = deskTransferNft(nft.id, toInput.value);
+            statusEl.textContent = `AWARD MOVED · now held by ${moved?.holder ?? toInput.value} · the claim follows the NFT`;
             toInput.value = "";
           } catch (error) {
             statusEl.textContent = `TRANSFER BLOCKED · ${String(error?.message ?? error).toUpperCase().slice(0, 80)}`;
@@ -519,7 +556,7 @@ export function createContractAtelierConsole({
 
   function renderOutcomes() {
     outcomeListEl.replaceChildren();
-    outcomesStudio.list().forEach((contract) => {
+    deskListContracts().forEach((contract) => {
       const button = element(documentRoot, "button", "contract-atelier-item");
       button.type = "button";
       button.setAttribute("aria-pressed", String(contract.id === selectedOutcomeId));
@@ -541,12 +578,234 @@ export function createContractAtelierConsole({
   }
 
   panel.append(outcomeSection);
+
+  // ---- Contracts for your review: bot proposals brought to Tumbo ----
+  // Bots draft outcome contracts and bring them here; nothing executes until
+  // Tumbo approves. APPROVE opens the book on the outcome desk (via the
+  // injected shared desk when one is wired). EDIT changes the permitted
+  // draft fields inline. DISMISS returns the draft to the bot.
+  let editingProposalId = null;
+
+  function isEffectivelyExpired(proposal, nowMs) {
+    if (!proposal) return false;
+    if (proposal.status === "expired") return true;
+    if (!proposal.expiresAt) return false;
+    const target = new Date(proposal.expiresAt).getTime();
+    return Number.isFinite(target) && target <= nowMs;
+  }
+
+  function formatExpiry(expiresAt, nowMs) {
+    if (!expiresAt) return "no expiry";
+    const target = new Date(expiresAt).getTime();
+    if (!Number.isFinite(target)) return "no expiry";
+    const diff = target - nowMs;
+    if (diff <= 0) return "EXPIRED";
+    const mins = Math.floor(diff / 60000);
+    if (mins < 60) return `in ${mins}m`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 48) {
+      const rest = mins % 60;
+      return `in ${hours}h${rest ? ` ${rest}m` : ""}`;
+    }
+    return `in ${Math.floor(hours / 24)}d`;
+  }
+
+  function formatStakeRange(proposal) {
+    const min = proposal.minStake;
+    const max = proposal.maxStake;
+    if (min === null || min === undefined) {
+      if (max === null || max === undefined) return "any stake";
+      return `up to ${max} ${OUTCOME_STAKE_UNIT}`;
+    }
+    if (max === null || max === undefined) return `from ${min} ${OUTCOME_STAKE_UNIT}`;
+    return `${min}–${max} ${OUTCOME_STAKE_UNIT}`;
+  }
+
+  function readReviewQueue() {
+    if (!proposalQueue) return { pending: [], decided: [] };
+    const nowMs = Date.now();
+    const all = proposalQueue.getProposals();
+    return {
+      pending: all.filter((proposal) => proposal.status === "pending" && !isEffectivelyExpired(proposal, nowMs)),
+      decided: all.filter((proposal) => proposal.status !== "pending" || isEffectivelyExpired(proposal, nowMs)),
+    };
+  }
+
+  function approveProposal(proposal) {
+    try {
+      outcomesStudio.createContract({
+        eventId: proposal.eventId ?? proposal.id,
+        eventLabel: proposal.eventLabel,
+        outcomes: [...(proposal.outcomes ?? [])],
+        creator: `bot:${proposal.botName}`,
+        status: "open",
+      });
+      proposalQueue.setProposalStatus(proposal.id, "approved", { by: "user" });
+      statusEl.textContent = `APPROVED · BOOK OPENED · "${String(proposal.eventLabel).toUpperCase().slice(0, 44)}" · SIMULATED ONLY`;
+    } catch (error) {
+      // The draft stays pending so Tumbo can fix it and approve again.
+      statusEl.textContent = `APPROVE BLOCKED · ${String(error?.message ?? error).toUpperCase().slice(0, 80)}`;
+    }
+    editingProposalId = null;
+    renderReview();
+    renderOutcomes();
+    publish("review-approve", "button");
+  }
+
+  function dismissProposal(proposal) {
+    try {
+      proposalQueue.dismissProposal(proposal.id, { by: "user" });
+      statusEl.textContent = `DISMISSED · "${String(proposal.title).toUpperCase().slice(0, 44)}" RETURNED TO THE BOT`;
+    } catch (error) {
+      statusEl.textContent = `DISMISS BLOCKED · ${String(error?.message ?? error).toUpperCase().slice(0, 80)}`;
+    }
+    editingProposalId = null;
+    renderReview();
+    publish("review-dismiss", "button");
+  }
+
+  function reviewEditField(label, placeholder, value) {
+    const wrap = element(documentRoot, "label", "contract-atelier-field", label);
+    const input = element(documentRoot, "input", "contract-atelier-text-input");
+    input.type = "text";
+    input.placeholder = placeholder;
+    input.value = value ?? "";
+    wrap.append(input);
+    return input;
+  }
+
+  function renderProposalEdit(proposal) {
+    const card = element(documentRoot, "div", "contract-atelier-card");
+    card.append(element(documentRoot, "div", "contract-atelier-card-id", proposal.id));
+    card.append(element(documentRoot, "strong", "contract-atelier-card-name", `Editing: ${proposal.title}`));
+    const titleInput = reviewEditField("Title", "Title", proposal.title);
+    const eventLabelInput = reviewEditField("Event label", "Event label", proposal.eventLabel);
+    const outcomesInput = reviewEditField("Outcomes", "Outcomes (comma-separated)", (proposal.outcomes ?? []).join(", "));
+    const minStakeInput = reviewEditField("Min stake", "Min stake (blank = none)", proposal.minStake ?? null);
+    const maxStakeInput = reviewEditField("Max stake", "Max stake (blank = none)", proposal.maxStake ?? null);
+    const sourceNotesInput = reviewEditField("Source notes", "Source notes", proposal.sourceNotes ?? "");
+    const researchNotesInput = reviewEditField("Research notes", "Research notes", proposal.researchNotes ?? "");
+    const expiresAtInput = reviewEditField("Expires at", "Expires at (ISO date, blank = none)", proposal.expiresAt ?? "");
+    const errorEl = element(documentRoot, "div", "contract-atelier-review-error");
+    errorEl.hidden = true;
+    const actions = element(documentRoot, "div", "contract-atelier-review-actions");
+    const saveButton = element(documentRoot, "button", "contract-atelier-action", "SAVE CHANGES");
+    saveButton.type = "button";
+    saveButton.addEventListener("click", () => {
+      const parseStake = (raw, name) => {
+        const text = String(raw ?? "").trim();
+        if (!text) return null;
+        const value = Number(text);
+        if (!Number.isFinite(value) || value < 0) throw new TypeError(`${name} must be a non-negative number`);
+        return value;
+      };
+      try {
+        proposalQueue.updateProposal(proposal.id, {
+          title: titleInput.value,
+          eventLabel: eventLabelInput.value,
+          outcomes: parseOutcomes(outcomesInput.value),
+          minStake: parseStake(minStakeInput.value, "Min stake"),
+          maxStake: parseStake(maxStakeInput.value, "Max stake"),
+          sourceNotes: sourceNotesInput.value,
+          researchNotes: researchNotesInput.value,
+          expiresAt: String(expiresAtInput.value ?? "").trim() || null,
+        }, { by: "user" });
+        editingProposalId = null;
+        statusEl.textContent = "DRAFT EDITED · BACK TO PENDING REVIEW";
+        renderReview();
+        publish("review-edit", "button");
+      } catch (error) {
+        errorEl.hidden = false;
+        errorEl.textContent = `EDIT BLOCKED · ${String(error?.message ?? error).slice(0, 160)}`;
+      }
+    });
+    const cancelButton = element(documentRoot, "button", "contract-atelier-action", "CANCEL");
+    cancelButton.type = "button";
+    cancelButton.addEventListener("click", () => {
+      editingProposalId = null;
+      renderReview();
+    });
+    actions.append(saveButton, cancelButton);
+    card.append(errorEl, actions);
+    return card;
+  }
+
+  function renderProposalCard(proposal) {
+    const card = element(documentRoot, "div", "contract-atelier-card");
+    card.append(element(documentRoot, "div", "contract-atelier-card-id", proposal.id));
+    card.append(element(documentRoot, "strong", "contract-atelier-card-name", proposal.title));
+    card.append(element(documentRoot, "div", "contract-atelier-card-meta",
+      `${proposal.eventLabel} · DRAFTED BY ${proposal.botName}`));
+    card.append(kvRow(documentRoot, "OUTCOMES", (proposal.outcomes ?? []).join(" · ") || "—"));
+    card.append(kvRow(documentRoot, "STAKE RANGE", formatStakeRange(proposal)));
+    card.append(kvRow(documentRoot, "EXPIRES", formatExpiry(proposal.expiresAt, Date.now())));
+    if (proposal.sourceNotes) card.append(kvRow(documentRoot, "SOURCES", proposal.sourceNotes));
+    if (proposal.researchNotes) card.append(kvRow(documentRoot, "RESEARCH", proposal.researchNotes));
+    const actions = element(documentRoot, "div", "contract-atelier-review-actions");
+    const approveButton = element(documentRoot, "button", "contract-atelier-action", "APPROVE");
+    approveButton.type = "button";
+    approveButton.addEventListener("click", () => approveProposal(proposal));
+    const editButton = element(documentRoot, "button", "contract-atelier-action", "EDIT");
+    editButton.type = "button";
+    editButton.addEventListener("click", () => {
+      editingProposalId = proposal.id;
+      renderReview();
+    });
+    const dismissButton = element(documentRoot, "button", "contract-atelier-action", "DISMISS");
+    dismissButton.type = "button";
+    dismissButton.addEventListener("click", () => dismissProposal(proposal));
+    actions.append(approveButton, editButton, dismissButton);
+    card.append(actions);
+    return card;
+  }
+
+  function renderReview() {
+    reviewEl.replaceChildren();
+    reviewEl.append(element(documentRoot, "div", "contract-atelier-section-label", "CONTRACTS FOR YOUR REVIEW"));
+    if (!proposalQueue) {
+      reviewEl.append(element(documentRoot, "div", "contract-atelier-empty",
+        "No proposal queue wired — bots have nowhere to bring contracts yet."));
+      return;
+    }
+    reviewEl.append(element(documentRoot, "div", "contract-atelier-hint",
+      `Bots bring outcome contracts here for your call. Nothing executes until you approve — all stakes are ${OUTCOME_STAKE_UNIT} with zero real value.`));
+    const { pending, decided } = readReviewQueue();
+    if (!pending.length) {
+      reviewEl.append(element(documentRoot, "div", "contract-atelier-empty",
+        "Nothing waiting. When a bot drafts a contract it will appear here."));
+    }
+    pending.forEach((proposal) => {
+      reviewEl.append(proposal.id === editingProposalId ? renderProposalEdit(proposal) : renderProposalCard(proposal));
+    });
+    if (decided.length) {
+      const details = element(documentRoot, "details", "contract-atelier-review-decided");
+      details.append(element(documentRoot, "summary", null, `DECIDED · ${decided.length}`));
+      const nowMs = Date.now();
+      decided.forEach((proposal) => {
+        const label = proposal.status === "pending" && isEffectivelyExpired(proposal, nowMs)
+          ? "EXPIRED" : String(proposal.status).toUpperCase();
+        details.append(element(documentRoot, "div", "contract-atelier-review-row",
+          `${proposal.title} · ${label} · by ${proposal.botName}`));
+      });
+      reviewEl.append(details);
+    }
+  }
+
+  let unsubscribeReviewQueue = null;
+  if (proposalQueue && typeof proposalQueue.subscribe === "function") {
+    unsubscribeReviewQueue = proposalQueue.subscribe(() => {
+      if (opened) renderReview();
+    });
+  }
+  void unsubscribeReviewQueue;
+
   resetButton.addEventListener("click", () => {
-    outcomesStudio.reset();
+    deskReset();
     selectedOutcomeId = null;
     renderOutcomes();
   });
   renderOutcomes();
+  renderReview();
   resetButton.addEventListener("click", () => {
     studio.reset();
     selectedId = null;
@@ -559,7 +818,7 @@ export function createContractAtelierConsole({
   return Object.freeze({
     open: (method = "api") => setOpen(true, method),
     close: (method = "api") => setOpen(false, method),
-    reset: (method = "api") => { studio.reset(); selectedId = null; outcomesStudio.reset(); selectedOutcomeId = null; render(); renderOutcomes(); return publish("reset", method); },
+    reset: (method = "api") => { studio.reset(); selectedId = null; deskReset(); selectedOutcomeId = null; editingProposalId = null; render(); renderOutcomes(); renderReview(); return publish("reset", method); },
     select: (contractId, method = "api") => { selectedId = contractId; render(); return publish("select", method); },
     create: (input, method = "api") => {
       const contract = studio.createContract(input);
@@ -579,7 +838,8 @@ export function createContractAtelierConsole({
     },
     replay: (method = "api") => publish("replay", method),
     getSnapshot: () => snapshot(),
-    getOutcomeSnapshot: () => outcomesStudio.getSnapshot(),
+    getOutcomeSnapshot: () => deskSnapshot(),
+    getReviewQueue: () => proposalQueue,
     outcomeBoundary: OUTCOME_CONTRACTS_BOUNDARY,
     boundary: CONTRACT_ATELIER_BOUNDARY,
   });

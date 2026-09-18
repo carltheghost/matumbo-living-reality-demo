@@ -442,6 +442,11 @@ export function createFrozenRelics({ seed = "local-relics", now = null } = {}) {
   /**
    * The win is claimed: the frozen core's terms are honored exactly, the
    * life records it, and the relic becomes spent (no further transfers).
+   *
+   * Holder proof: a supplied `holder` must EQUAL the relic's current
+   * holder — it is proof of who claims, never a replacement. A mismatched
+   * holder throws and the relic is left unspent, so a claim can never be
+   * seized by naming someone else.
    */
   function recordRelicClaim({ relicId, holder, amount } = {}) {
     const record = getRecord(relicId);
@@ -452,8 +457,15 @@ export function createFrozenRelics({ seed = "local-relics", now = null } = {}) {
     if (expected !== undefined && String(amount) !== String(expected)) {
       throw new TypeError(`claim honors the frozen core: expected ${expected}, got ${amount}`);
     }
+    if (holder !== undefined && holder !== null && holder !== "") {
+      const claimedBy = boundedHolder(holder);
+      if (claimedBy !== record.holder) {
+        throw new TypeError(
+          `claim holder mismatch: the relic is held by "${record.holder}", not "${claimedBy}" — the claim follows the current holder and cannot be seized`,
+        );
+      }
+    }
     record.claimed = true;
-    if (holder) record.holder = boundedHolder(holder);
     recordLifeEventInternal(
       record,
       "claimed",

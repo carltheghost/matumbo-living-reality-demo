@@ -1,4 +1,5 @@
 import {
+  BOT_ATELIER_TEMPLATES,
   BOT_AVATARS,
   BOT_CAPABILITIES,
   BOT_PLAZA_BOUNDARY,
@@ -7,6 +8,7 @@ import {
   BOT_WORLD_EVENT_TYPES,
   createBotRegistry,
   createBotRuntime,
+  getAtelierTemplate,
   validateAtelierRule,
 } from "../domains/bot-plaza.js";
 
@@ -87,11 +89,72 @@ export function createBotPlazaConsole({
   const botRegistry = registry ?? createBotRegistry();
   const botRuntime = runtime ?? createBotRuntime({ registry: botRegistry });
   const bus = botRuntime.getBus();
+  const proposalQueue = typeof botRuntime.getProposalQueue === "function" ? botRuntime.getProposalQueue() : null;
   let opened = panel.hidden !== true;
   let selectedBotId = botRegistry.listEnabled()[0]?.id ?? null;
   let draftRules = [];
 
   boundaryEl.textContent = BOT_PLAZA_BOUNDARY;
+
+  // Atelier template picker: one-click starting points. The picker pre-fills
+  // the form below — capabilities are NOT auto-approved; the user reviews
+  // and checks every power before plugging the bot in.
+  function applyAtelierTemplate(templateId) {
+    const template = getAtelierTemplate(templateId);
+    if (!template) return;
+    const prefill = template.prefill;
+    atelierName.value = prefill.name ?? "";
+    atelierAvatar.value = prefill.avatar ?? "orb-teal";
+    atelierPersonality.value = prefill.personality ?? "";
+    try {
+      draftRules = (prefill.rules ?? []).map((rule) => validateAtelierRule(rule));
+    } catch (error) {
+      draftRules = [];
+      setStatus(`Template rule rejected: ${error?.message ?? "invalid rule"}`);
+      renderAtelierRules();
+      return;
+    }
+    const wanted = new Set(prefill.capabilities ?? []);
+    for (const box of atelierCaps.querySelectorAll("input[type=checkbox]")) {
+      box.checked = wanted.has(box.value);
+    }
+    setStatus(`Template loaded: ${template.label}. Review it, tweak it, then plug it in.`);
+    renderAtelierRules();
+  }
+
+  function mountAtelierTemplates() {
+    if (!BOT_ATELIER_TEMPLATES.length) return;
+    const host = $("bot-plaza-atelier-templates");
+    const wrap = element(documentRoot, "label", "bot-plaza-field");
+    wrap.append(element(documentRoot, "span", null, "Start from a template"));
+    const select = documentRoot.createElement("select");
+    select.setAttribute("aria-label", "Bot template");
+    const blank = element(documentRoot, "option", null, "Start blank");
+    blank.value = "";
+    select.append(blank);
+    for (const template of BOT_ATELIER_TEMPLATES) {
+      const option = element(documentRoot, "option", null, template.label);
+      option.value = template.id;
+      option.title = template.description;
+      select.append(option);
+    }
+    select.addEventListener("change", () => {
+      if (select.value) applyAtelierTemplate(select.value);
+      select.value = "";
+    });
+    wrap.append(select);
+    if (host) {
+      host.append(wrap);
+      return;
+    }
+    // Fallback: insert above the atelier name field without touching index.html.
+    const nameLabel = atelierName?.parentNode;
+    const section = nameLabel?.parentNode;
+    if (nameLabel && section && typeof section.insertBefore === "function") {
+      section.insertBefore(wrap, nameLabel);
+    }
+  }
+  mountAtelierTemplates();
 
   // Populate atelier selects.
   for (const avatar of BOT_AVATARS) {
@@ -278,19 +341,59 @@ export function createBotPlazaConsole({
     }
   }
 
+  function formatStakeRange(proposal) {
+    if (proposal.minStake === undefined && proposal.maxStake === undefined) return "any stake";
+    const points = (cents) => (cents / 100).toLocaleString("en-US", { maximumFractionDigits: 2 });
+    const min = proposal.minStake === undefined ? "…" : points(proposal.minStake);
+    const max = proposal.maxStake === undefined ? "…" : points(proposal.maxStake);
+    return `${min} – ${max} TUMBO pts (simulated)`;
+  }
+
+  function formatExpiry(proposal) {
+    if (proposal.status !== "pending") return null;
+    const ms = Date.parse(proposal.expiresAt) - Date.now();
+    if (!Number.isFinite(ms) || ms <= 0) return "expiring now";
+    const hours = Math.floor(ms / 3600000);
+    const minutes = Math.floor((ms % 3600000) / 60000);
+    if (hours >= 48) return `expires in ${Math.floor(hours / 24)}d ${hours % 24}h`;
+    if (hours >= 1) return `expires in ${hours}h ${minutes}m`;
+    return `expires in ${Math.max(1, Math.floor(ms / 60000))}m`;
+  }
+
   function renderDrafts() {
     draftsEl.replaceChildren();
     const drafts = botRuntime.getDrafts().slice().reverse();
-    if (!drafts.length) {
-      draftsEl.append(element(documentRoot, "div", "bot-plaza-empty", "No drafts yet. Bots with the drafting power turn world events into proposals here."));
-      return;
-    }
     for (const draft of drafts) {
       const row = element(documentRoot, "div", "bot-plaza-draft-row");
       row.append(element(documentRoot, "strong", null, `DRAFT · ${draft.title} `));
       row.append(element(documentRoot, "span", "bot-plaza-bot-sub", `by ${draft.botName}${draft.fromEvent ? ` · from ${draft.fromEvent}` : ""}`));
       row.append(element(documentRoot, "div", null, draft.body));
       draftsEl.append(row);
+    }
+    const proposals = proposalQueue ? proposalQueue.getProposals().slice().reverse() : [];
+    if (proposals.length) {
+      draftsEl.append(element(documentRoot, "div", "bot-plaza-subtitle", "Contract proposals · brought to you by your bots"));
+    }
+    for (const proposal of proposals) {
+      const row = element(documentRoot, "div", "bot-plaza-draft-row bot-plaza-proposal-row");
+      const badge = proposal.status.toUpperCase();
+      row.append(element(documentRoot, "strong", null, `PROPOSAL · ${badge} · ${proposal.title} `));
+      row.append(element(documentRoot, "span", "bot-plaza-bot-sub",
+        `by ${proposal.botName} · ${proposal.eventLabel}`));
+      const expiry = formatExpiry(proposal);
+      row.append(element(documentRoot, "div", null,
+        `Outcomes: ${proposal.outcomes.join(" · ")}`));
+      row.append(element(documentRoot, "div", null, `Stake: ${formatStakeRange(proposal)}`));
+      if (proposal.sourceNotes) row.append(element(documentRoot, "div", null, `Why: ${proposal.sourceNotes}`));
+      if (proposal.researchNotes) row.append(element(documentRoot, "div", null, `Notes: ${proposal.researchNotes}`));
+      row.append(element(documentRoot, "span", "bot-plaza-bot-sub",
+        `${expiry ? `${expiry} · ` : ""}submitted ${proposal.createdAt.slice(0, 10)}`));
+      draftsEl.append(row);
+    }
+    if (!drafts.length && !proposals.length) {
+      draftsEl.append(element(documentRoot, "div", "bot-plaza-empty", "No drafts yet. Bots with the drafting power turn world events into proposals here."));
+    } else if (proposals.length) {
+      draftsEl.append(element(documentRoot, "div", "bot-plaza-empty", "Review in Contract Atelier → Contracts for your review."));
     }
   }
 
@@ -394,6 +497,12 @@ export function createBotPlazaConsole({
       renderDrafts();
     }
   });
+
+  if (proposalQueue) {
+    proposalQueue.subscribe(() => {
+      if (opened) renderDrafts();
+    });
+  }
 
   function open() {
     panel.hidden = false;

@@ -1016,6 +1016,12 @@
      .contract-atelier-trace-row{font-size:11px;color:#e8cfb4;opacity:.85}
      #contract-atelier-boundary{font-size:10px;color:#e8cfb4;opacity:.6;line-height:1.5}
      .contract-atelier-hint{font-size:10px;color:#e8cfb4;opacity:.6;margin:-4px 0 8px}
+     .contract-atelier-review-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+     .contract-atelier-review-error{font-size:11px;color:#ffb3a0;padding:6px 8px;border:1px solid rgba(255,140,110,.45);border-radius:8px;background:rgba(255,120,90,.08);margin-top:6px}
+     .contract-atelier-review-error[hidden]{display:none}
+     .contract-atelier-review-decided{margin-top:10px}
+     .contract-atelier-review-decided summary{cursor:pointer;font-size:11px;letter-spacing:.08em;color:#e09a5a;padding:4px 0}
+     .contract-atelier-review-row{font-size:11px;color:#e8cfb4;padding:5px 0;border-top:1px solid rgba(224,154,90,.14)}
      @media(max-width:700px){#contract-atelier-console{left:12px;right:12px;top:86px;width:auto;max-height:calc(100vh - 112px);padding:11px}#contract-atelier-head h2{font-size:17px}}
      #bot-plaza-console{position:absolute;right:20px;top:145px;z-index:31;width:min(560px,calc(100vw - 40px));max-height:calc(100vh - 190px);display:flex;flex-direction:column;gap:9px;padding:15px;border:1px solid rgba(47,232,212,.42);border-radius:14px;background:linear-gradient(160deg,rgba(6,34,32,.98),rgba(4,10,12,.98));box-shadow:0 24px 80px rgba(0,0,0,.64),inset 0 0 42px rgba(47,232,212,.10);pointer-events:auto;overflow:auto;scrollbar-width:thin}
      #bot-plaza-console[hidden]{display:none}
@@ -3377,6 +3383,10 @@
       <section aria-labelledby="contract-atelier-detail-title">
         <h3 id="contract-atelier-detail-title" class="room-console-section-title">Contract detail</h3>
         <div id="contract-atelier-detail"></div>
+      </section>
+      <section aria-labelledby="contract-atelier-review-title">
+        <h3 id="contract-atelier-review-title" class="room-console-section-title">Contracts for your review</h3>
+        <div id="contract-atelier-review"></div>
       </section>
       <section aria-labelledby="contract-atelier-create-title">
         <h3 id="contract-atelier-create-title" class="room-console-section-title">Open a fictional contract</h3>

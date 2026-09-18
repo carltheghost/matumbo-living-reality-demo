@@ -95,6 +95,7 @@ export const BOT_CAPABILITIES = freeze([
   { id: "world.launch-feature", label: "Launch features", description: "Open feature consoles by name." },
   { id: "world.post-journal", label: "Post journal entries", description: "Write entries into the plaza journal (local)." },
   { id: "world.draft-contract", label: "Draft proposals", description: "Draft meme/contract proposals from world events. Drafts only — nothing executes." },
+  { id: "world.propose-contracts", label: "Propose contracts", description: "Draft structured outcome-contract proposals and bring them to you for review in the Contract Atelier. Proposals only — nothing executes until you approve them." },
 ]);
 
 const CAPABILITY_IDS = new Set(BOT_CAPABILITIES.map((entry) => entry.id));
@@ -109,6 +110,10 @@ export const BOT_WORLD_ACTIONS = freeze({
   "world.launch-feature": { capability: "world.launch-feature", params: ["featureId"] },
   "world.post-journal": { capability: "world.post-journal", params: ["text"] },
   "world.draft-contract": { capability: "world.draft-contract", params: ["title", "body"] },
+  "world.propose-contract": {
+    capability: "world.propose-contracts",
+    params: ["title", "eventLabel", "outcomes", "minStake", "maxStake", "sourceNotes", "researchNotes", "expiresMinutes"],
+  },
 });
 
 export const BOT_WORLD_EVENT_TYPES = freeze([
@@ -397,6 +402,409 @@ export function createMessageBus({ now = null, maxLog = BOT_PLAZA_MAX_LOG } = {}
 }
 
 // ---------------------------------------------------------------------------
+// Contract proposal queue: bots draft STRUCTURED outcome-contract proposals
+// and bring them to the user for review (Contract Atelier → Contracts for
+// your review). A proposal is not a contract: it only becomes one when the
+// user approves it elsewhere. 100% local: simulated TUMBO points only, no
+// network, no live sports API — bots learn about events from user chat or
+// built-in local knowledge only.
+// ---------------------------------------------------------------------------
+
+export const BOT_PROPOSAL_STORAGE_KEY = "tumbo.contract-proposals.v1";
+export const BOT_PROPOSAL_SCHEMA_VERSION = 1;
+export const BOT_PROPOSAL_MAX_TITLE = 96;
+export const BOT_PROPOSAL_MAX_EVENT_LABEL = 160;
+export const BOT_PROPOSAL_MAX_EVENT_ID = 160;
+export const BOT_PROPOSAL_MAX_OUTCOMES = 12;
+export const BOT_PROPOSAL_MAX_OUTCOME_LABEL = 80;
+export const BOT_PROPOSAL_MAX_NOTES = 2000;
+export const BOT_PROPOSAL_DEFAULT_TTL_MS = 72 * 3600 * 1000; // 72h
+
+const BOT_PROPOSAL_EVENT_ID_PATTERN = /^[a-z0-9:_.\-]{1,160}$/;
+const BOT_PROPOSAL_FINAL_STATUSES = new Set(["approved", "dismissed", "expired"]);
+const BOT_PROPOSAL_EDITABLE_FIELDS = new Set([
+  "title", "eventLabel", "outcomes", "minStake", "maxStake", "sourceNotes", "researchNotes", "expiresAt",
+]);
+
+function proposalText(value, min, max, field) {
+  const text = safeText(value).trim().replace(/\s+/g, " ");
+  if (text.length < min) throw new TypeError(`${field} must be at least ${min} character${min === 1 ? "" : "s"}`);
+  if (text.length > max) throw new TypeError(`${field} is too long (max ${max})`);
+  return text;
+}
+
+function normalizeOutcomeLabel(value) {
+  const text = safeText(value).trim().replace(/\s+/g, " ");
+  if (!text) throw new TypeError("outcome labels must be non-empty");
+  if (text.length > BOT_PROPOSAL_MAX_OUTCOME_LABEL) {
+    throw new TypeError(`outcome label is too long (max ${BOT_PROPOSAL_MAX_OUTCOME_LABEL})`);
+  }
+  return text;
+}
+
+function validateProposalOutcomes(value) {
+  if (!Array.isArray(value)) throw new TypeError("outcomes must be an array");
+  const seen = new Set();
+  const labels = [];
+  for (const entry of value) {
+    const label = normalizeOutcomeLabel(entry);
+    const key = label.toLowerCase();
+    if (seen.has(key)) throw new TypeError(`duplicate outcome: ${label}`);
+    seen.add(key);
+    labels.push(label);
+  }
+  if (labels.length < 2) throw new TypeError("a proposal needs at least 2 distinct outcomes");
+  if (labels.length > BOT_PROPOSAL_MAX_OUTCOMES) throw new TypeError(`too many outcomes (max ${BOT_PROPOSAL_MAX_OUTCOMES})`);
+  return labels;
+}
+
+function validateProposalStake(value, field) {
+  if (value === undefined || value === null || value === "") return undefined;
+  const amount = typeof value === "number" ? value : Number(String(value).trim());
+  if (!Number.isInteger(amount) || amount <= 0) throw new TypeError(`${field} must be a positive integer (cents)`);
+  if (amount > Number.MAX_SAFE_INTEGER) throw new TypeError(`${field} is too large`);
+  return amount;
+}
+
+function validateProposalEventId(value) {
+  if (value === undefined || value === null || value === "") return undefined;
+  const text = safeText(value).trim();
+  if (!BOT_PROPOSAL_EVENT_ID_PATTERN.test(text)) {
+    throw new TypeError("eventId must be 1-160 chars of a-z 0-9 : _ . -");
+  }
+  return text;
+}
+
+function validateProposalNotes(value, field) {
+  if (value === undefined || value === null || value === "") return undefined;
+  const text = safeText(value);
+  if (text.length > BOT_PROPOSAL_MAX_NOTES) throw new TypeError(`${field} is too long (max ${BOT_PROPOSAL_MAX_NOTES})`);
+  return text;
+}
+
+function proposalNowMs(now) {
+  const iso = nowIso(now);
+  const ms = Date.parse(iso);
+  return Number.isNaN(ms) ? Date.now() : ms;
+}
+
+function validateProposalExpiresAt(value, now) {
+  const nowMs = proposalNowMs(now);
+  if (value === undefined || value === null || value === "") {
+    return new Date(nowMs + BOT_PROPOSAL_DEFAULT_TTL_MS).toISOString();
+  }
+  const text = safeText(value).trim();
+  const ms = Date.parse(text);
+  if (Number.isNaN(ms)) throw new TypeError("expiresAt must be a valid ISO date string");
+  if (ms <= nowMs) throw new TypeError("expiresAt must be in the future");
+  return new Date(ms).toISOString();
+}
+
+function readProposalStore(storage) {
+  if (!storage) return null;
+  try {
+    const raw = storage.getItem(BOT_PROPOSAL_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.proposals)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeProposalStore(storage, state) {
+  if (!storage) return;
+  try {
+    storage.setItem(BOT_PROPOSAL_STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // Private mode etc: the in-memory copy still works.
+  }
+}
+
+export function createProposalQueue({ storage = null, now = null } = {}) {
+  const store = storage ?? (() => { try { return globalThis.localStorage; } catch { return null; } })();
+  const subscribers = new Set();
+  let proposals = [];
+  let counter = 0;
+
+  function notify() {
+    for (const subscriber of [...subscribers]) {
+      try {
+        subscriber();
+      } catch {
+        // A failing subscriber never breaks the queue.
+      }
+    }
+  }
+
+  function persist() {
+    writeProposalStore(store, {
+      schemaVersion: BOT_PROPOSAL_SCHEMA_VERSION,
+      counter,
+      proposals: proposals.map((proposal) => ({
+        ...proposal,
+        outcomes: [...proposal.outcomes],
+        history: proposal.history.map((entry) => ({ ...entry })),
+      })),
+    });
+  }
+
+  function stamp(proposal) {
+    return freeze({
+      ...proposal,
+      outcomes: freeze([...proposal.outcomes]),
+      history: freeze(proposal.history.map((entry) => freeze({ ...entry }))),
+    });
+  }
+
+  function indexOf(id) {
+    return proposals.findIndex((proposal) => proposal.id === safeText(id));
+  }
+
+  function sweepExpired() {
+    const nowMs = proposalNowMs(now);
+    let changed = false;
+    proposals = proposals.map((proposal) => {
+      if (proposal.status !== "pending") return proposal;
+      if (Date.parse(proposal.expiresAt) > nowMs) return proposal;
+      changed = true;
+      return {
+        ...proposal,
+        status: "expired",
+        history: [...proposal.history, { status: "expired", at: nowIso(now), note: "expired without review", by: null }],
+      };
+    });
+    if (changed) {
+      persist();
+      notify();
+    }
+    return changed;
+  }
+
+  function submitProposal({ botId, botName }, proposal) {
+    if (!proposal || typeof proposal !== "object") throw new TypeError("proposal must be an object");
+    const id = safeText(botId).trim();
+    if (!id) throw new TypeError("proposal needs a botId");
+    const title = proposalText(proposal.title, 1, BOT_PROPOSAL_MAX_TITLE, "title");
+    const eventLabel = proposalText(proposal.eventLabel, 1, BOT_PROPOSAL_MAX_EVENT_LABEL, "eventLabel");
+    const eventId = validateProposalEventId(proposal.eventId);
+    const outcomes = validateProposalOutcomes(proposal.outcomes);
+    const minStake = validateProposalStake(proposal.minStake, "minStake");
+    const maxStake = validateProposalStake(proposal.maxStake, "maxStake");
+    if (minStake !== undefined && maxStake !== undefined && minStake > maxStake) {
+      throw new TypeError("minStake cannot be larger than maxStake");
+    }
+    const sourceNotes = validateProposalNotes(proposal.sourceNotes, "sourceNotes");
+    const researchNotes = validateProposalNotes(proposal.researchNotes, "researchNotes");
+    const expiresAt = validateProposalExpiresAt(proposal.expiresAt, now);
+    counter += 1;
+    const at = nowIso(now);
+    const entry = {
+      id: `proposal:${counter.toString(36)}:${hashBotPlazaSeed(`${counter}:${title}:${id}`).slice(0, 6)}`,
+      botId: id,
+      botName: safeText(botName ?? "").trim().slice(0, BOT_PLAZA_MAX_NAME) || id,
+      title,
+      eventLabel,
+      eventId,
+      outcomes,
+      minStake,
+      maxStake,
+      sourceNotes,
+      researchNotes,
+      expiresAt,
+      status: "pending",
+      createdAt: at,
+      history: [{ status: "pending", at, note: "submitted for review", by: safeText(botName ?? id).slice(0, BOT_PLAZA_MAX_NAME) }],
+    };
+    proposals = [...proposals, entry];
+    persist();
+    notify();
+    return stamp(entry);
+  }
+
+  function getProposals({ status } = {}) {
+    sweepExpired();
+    const wanted = status === undefined || status === null ? null : safeText(status);
+    if (wanted !== null && !BOT_PROPOSAL_FINAL_STATUSES.has(wanted) && wanted !== "pending") {
+      throw new TypeError(`unknown proposal status: ${wanted}`);
+    }
+    const list = wanted === null ? proposals : proposals.filter((proposal) => proposal.status === wanted);
+    return freeze(list.map(stamp));
+  }
+
+  function getProposal(id) {
+    sweepExpired();
+    const index = indexOf(id);
+    return index < 0 ? null : stamp(proposals[index]);
+  }
+
+  function updateProposal(id, patch, { by } = {}) {
+    if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new TypeError("patch must be an object");
+    const index = indexOf(id);
+    if (index < 0) throw new TypeError("unknown proposal id");
+    const current = proposals[index];
+    if (current.status !== "pending") throw new TypeError("only pending proposals can be edited");
+    const fields = Object.keys(patch);
+    if (!fields.length) throw new TypeError("patch is empty");
+    for (const field of fields) {
+      if (!BOT_PROPOSAL_EDITABLE_FIELDS.has(field)) throw new TypeError(`cannot change field: ${field}`);
+    }
+    const next = { ...current };
+    if (fields.includes("title")) next.title = proposalText(patch.title, 1, BOT_PROPOSAL_MAX_TITLE, "title");
+    if (fields.includes("eventLabel")) next.eventLabel = proposalText(patch.eventLabel, 1, BOT_PROPOSAL_MAX_EVENT_LABEL, "eventLabel");
+    if (fields.includes("outcomes")) next.outcomes = validateProposalOutcomes(patch.outcomes);
+    if (fields.includes("minStake")) next.minStake = validateProposalStake(patch.minStake, "minStake");
+    if (fields.includes("maxStake")) next.maxStake = validateProposalStake(patch.maxStake, "maxStake");
+    if (next.minStake !== undefined && next.maxStake !== undefined && next.minStake > next.maxStake) {
+      throw new TypeError("minStake cannot be larger than maxStake");
+    }
+    if (fields.includes("sourceNotes")) next.sourceNotes = validateProposalNotes(patch.sourceNotes, "sourceNotes");
+    if (fields.includes("researchNotes")) next.researchNotes = validateProposalNotes(patch.researchNotes, "researchNotes");
+    if (fields.includes("expiresAt")) next.expiresAt = validateProposalExpiresAt(patch.expiresAt, now);
+    next.history = [...current.history, {
+      status: "pending",
+      at: nowIso(now),
+      note: `edited: ${fields.join(", ")}`,
+      by: by === undefined || by === null ? null : safeText(by).slice(0, BOT_PLAZA_MAX_NAME),
+    }];
+    proposals = proposals.map((proposal, i) => (i === index ? next : proposal));
+    persist();
+    notify();
+    return stamp(next);
+  }
+
+  function setProposalStatus(id, status, { by, note } = {}) {
+    const wanted = safeText(status);
+    if (!BOT_PROPOSAL_FINAL_STATUSES.has(wanted) || wanted === "expired") {
+      throw new TypeError('status must be "approved" or "dismissed"');
+    }
+    const index = indexOf(id);
+    if (index < 0) throw new TypeError("unknown proposal id");
+    const current = proposals[index];
+    if (current.status !== "pending") throw new TypeError("only pending proposals can be approved or dismissed");
+    const entry = {
+      ...current,
+      status: wanted,
+      history: [...current.history, {
+        status: wanted,
+        at: nowIso(now),
+        note: safeText(note ?? "").trim().slice(0, 280) || (wanted === "approved" ? "approved by reviewer" : "dismissed by reviewer"),
+        by: by === undefined || by === null ? null : safeText(by).slice(0, BOT_PLAZA_MAX_NAME),
+      }],
+    };
+    proposals = proposals.map((proposal, i) => (i === index ? entry : proposal));
+    persist();
+    notify();
+    return stamp(entry);
+  }
+
+  function dismissProposal(id, { by } = {}) {
+    return setProposalStatus(id, "dismissed", { by });
+  }
+
+  function clear() {
+    proposals = [];
+    counter = 0;
+    persist();
+    notify();
+  }
+
+  // Restore persisted proposals; expired pendings are marked on the way in.
+  const stored = readProposalStore(store);
+  if (stored) {
+    try {
+      counter = Number.isInteger(stored.counter) && stored.counter >= 0 ? stored.counter : 0;
+      proposals = stored.proposals
+        .filter((entry) => entry && typeof entry.id === "string" && typeof entry.title === "string")
+        .map((entry) => ({
+          id: entry.id,
+          botId: safeText(entry.botId),
+          botName: safeText(entry.botName),
+          title: entry.title,
+          eventLabel: safeText(entry.eventLabel),
+          eventId: entry.eventId ?? undefined,
+          outcomes: Array.isArray(entry.outcomes) ? entry.outcomes.map((label) => safeText(label)) : [],
+          minStake: entry.minStake,
+          maxStake: entry.maxStake,
+          sourceNotes: entry.sourceNotes ?? undefined,
+          researchNotes: entry.researchNotes ?? undefined,
+          expiresAt: entry.expiresAt,
+          status: BOT_PROPOSAL_FINAL_STATUSES.has(entry.status) || entry.status === "pending" ? entry.status : "pending",
+          createdAt: entry.createdAt,
+          history: Array.isArray(entry.history) ? entry.history.map((item) => ({
+            status: safeText(item?.status),
+            at: safeText(item?.at),
+            note: safeText(item?.note),
+            by: item?.by ?? null,
+          })) : [],
+        }));
+      sweepExpired();
+    } catch {
+      // Corrupt storage never breaks the queue; it starts clean.
+    }
+  }
+
+  return freeze({
+    submitProposal,
+    getProposals,
+    getProposal,
+    updateProposal,
+    setProposalStatus,
+    dismissProposal,
+    clear,
+    subscribe(fn) {
+      if (typeof fn !== "function") throw new TypeError("subscriber must be a function");
+      subscribers.add(fn);
+      return () => subscribers.delete(fn);
+    },
+    source: BOT_PLAZA_SOURCE,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Bot Atelier templates: one-click starting points for no-code bots. A
+// template pre-fills the atelier form; the user still reviews and approves
+// every capability before plugging the bot in.
+// ---------------------------------------------------------------------------
+
+export const BOT_ATELIER_TEMPLATES = freeze([
+  freeze({
+    id: "contract-scout",
+    label: "Contract scout",
+    description: "Sports/events contract scout: spots contract ideas, asks for the missing details, and drafts structured outcome-contract proposals for your review.",
+    prefill: freeze({
+      name: "Contract Scout",
+      avatar: "orb-gold",
+      personality: "A sharp sports-and-events contract scout. I watch for contract ideas, ask for the missing details, and draft structured outcome-contract proposals for your review. I never fetch live data — I only use what you tell me or what I already know. Nothing executes until you approve it.",
+      rules: freeze([
+        freeze({
+          trigger: freeze({ kind: "message-contains", text: "scout" }),
+          reply: "Scouting, {user}. Give me the event, the outcomes, and a stake range — I'll draft a structured proposal you can review in the Contract Atelier.",
+          actions: freeze([]),
+        }),
+        freeze({
+          trigger: freeze({ kind: "message-contains", text: "contract" }),
+          reply: "On it, {user}. Tell me: which event, which outcomes, and a stake range — or say “scout it” and I'll draft a proposal from what you've told me.",
+          actions: freeze([]),
+        }),
+        freeze({
+          trigger: freeze({ kind: "world-event", eventType: "journal.committed" }),
+          reply: "Saw the journal land — if that's an event worth a contract, say “scout it” and I'll draft a proposal for your review.",
+          actions: freeze([]),
+        }),
+      ]),
+      capabilities: freeze(["world.propose-contracts", "world.post-journal", "world.message-bots"]),
+    }),
+  }),
+]);
+
+export function getAtelierTemplate(id) {
+  const template = BOT_ATELIER_TEMPLATES.find((entry) => entry.id === safeText(id));
+  return template ?? null;
+}
+
+// ---------------------------------------------------------------------------
 // World Action API: capability-gated. Handlers are injected by the host
 // (renderer wiring); in tests they are mocks. An action outside the bot's
 // approved capabilities is refused — never executed.
@@ -599,13 +1007,16 @@ export function createBotRegistry({ storage = null, now = null } = {}) {
 // publishes world events, and hosts the plaza journal + contract drafts.
 // ---------------------------------------------------------------------------
 
-export function createBotRuntime({ registry, bus = null, actionExecutor = null, actionHandlers = {}, now = null, userName = "you" } = {}) {
+export function createBotRuntime({ registry, bus = null, actionExecutor = null, actionHandlers = {}, now = null, userName = "you", proposalQueue = null, onProposal = null } = {}) {
   if (!registry) throw new TypeError("bot runtime needs a registry");
   const messageBus = bus ?? createMessageBus({ now });
+  const contractQueue = proposalQueue ?? createProposalQueue({ now });
+  const proposalHandler = typeof onProposal === "function" ? onProposal : null;
   const executor = actionExecutor ?? createWorldActionExecutor({
     handlers: {
       "world.post-journal": ({ botId, params }) => postJournalEntry(botId, params.text),
       "world.draft-contract": ({ botId, params }) => draftContractProposal(botId, params),
+      "world.propose-contract": ({ botId, params }) => proposeContractProposal(botId, params),
       ...actionHandlers,
     },
   });
@@ -713,18 +1124,32 @@ export function createBotRuntime({ registry, bus = null, actionExecutor = null, 
     if (!bot.approvedCapabilities.includes("world.post-journal")) {
       return freeze({ ok: false, reason: "capability-not-approved", capability: "world.post-journal" });
     }
-    const clean = boundedText(text, BOT_PLAZA_MAX_TEXT * 2, "journal entry");
+    const entry = recordJournalEntry(bot.id, bot.name, text);
+    if (!entry) throw new TypeError("journal entry text is invalid");
+    return freeze({ ok: true, entry });
+  }
+
+  // The runtime's own bookkeeping write — not a bot action, so it never goes
+  // through the capability gate (e.g. a contract-scout that proposed a
+  // contract announces it in the journal without needing world.post-journal).
+  function recordJournalEntry(botId, botName, text) {
+    let clean;
+    try {
+      clean = boundedText(text, BOT_PLAZA_MAX_TEXT * 2, "journal entry");
+    } catch {
+      return null;
+    }
     journalCounter += 1;
     const entry = freeze({
       id: `journal:${journalCounter.toString(36)}:${hashBotPlazaSeed(`${journalCounter}:${clean}`).slice(0, 6)}`,
-      botId: bot.id,
-      botName: bot.name,
+      botId: safeText(botId),
+      botName: safeText(botName),
       text: clean,
       at: nowIso(now),
     });
     journal = [...journal.slice(-(BOT_PLAZA_MAX_JOURNAL - 1)), entry];
-    activity("event", bot.id, "plaza", `${bot.name} posted a journal entry.`);
-    return freeze({ ok: true, entry });
+    activity("event", safeText(botId), "plaza", `${safeText(botName)} posted a journal entry.`);
+    return entry;
   }
 
   function draftContractProposal(botId, { title, body, fromEvent = null }) {
@@ -751,6 +1176,85 @@ export function createBotRuntime({ registry, bus = null, actionExecutor = null, 
     return freeze({ ok: true, draft });
   }
 
+  // -------------------------------------------------------------------------
+  // world.propose-contract: a bot drafts a STRUCTURED outcome-contract
+  // proposal and brings it to the user for review. String params come in
+  // from the World Action API; outcomes arrive comma/semicolon-separated.
+  // Bots learn about events from user chat or built-in local knowledge —
+  // this path never calls a sports API or any network.
+  // -------------------------------------------------------------------------
+
+  function parseProposalOutcomesParam(value) {
+    const raw = Array.isArray(value) ? value : safeText(value).split(/[,;]/);
+    return raw.map((entry) => safeText(entry).trim().replace(/\s+/g, " ")).filter((entry) => entry.length > 0);
+  }
+
+  function parseProposalStakeParam(value) {
+    const text = safeText(value).trim();
+    if (!text) return undefined;
+    const amount = Number(text);
+    if (!Number.isInteger(amount) || amount <= 0) throw new TypeError("stake must be a positive integer (cents)");
+    return amount;
+  }
+
+  function parseExpiresMinutesParam(value) {
+    const text = safeText(value).trim();
+    if (!text) return 4320; // default: 72h
+    const minutes = Number(text);
+    if (!Number.isInteger(minutes)) throw new TypeError("expiresMinutes must be an integer");
+    return Math.min(43200, Math.max(5, minutes)); // clamp 5m .. 30d
+  }
+
+  function proposeContractProposal(botId, params) {
+    const bot = registry.getBot(safeText(botId));
+    if (!bot) throw new TypeError("unknown bot id");
+    if (!bot.approvedCapabilities.includes("world.propose-contracts")) {
+      return freeze({ ok: false, reason: "capability-not-approved", capability: "world.propose-contracts" });
+    }
+    let draft;
+    try {
+      const title = safeText(params?.title).trim();
+      if (!title) throw new TypeError("title is required");
+      const eventLabel = safeText(params?.eventLabel).trim();
+      if (!eventLabel) throw new TypeError("eventLabel is required");
+      const outcomes = parseProposalOutcomesParam(params?.outcomes);
+      const minStake = parseProposalStakeParam(params?.minStake);
+      const maxStake = parseProposalStakeParam(params?.maxStake);
+      const sourceNotes = safeText(params?.sourceNotes ?? "").trim() || undefined;
+      const researchNotes = safeText(params?.researchNotes ?? "").trim() || undefined;
+      const expiresMinutes = parseExpiresMinutesParam(params?.expiresMinutes);
+      draft = {
+        title,
+        eventLabel,
+        eventId: safeText(params?.eventId ?? "").trim() || undefined,
+        outcomes,
+        minStake,
+        maxStake,
+        sourceNotes,
+        researchNotes,
+        expiresAt: new Date(proposalNowMs(now) + expiresMinutes * 60 * 1000).toISOString(),
+      };
+    } catch (error) {
+      return freeze({ ok: false, reason: "invalid-params", detail: safeText(error?.message).slice(0, 200) });
+    }
+    let proposal;
+    try {
+      proposal = contractQueue.submitProposal({ botId: bot.id, botName: bot.name }, draft);
+    } catch (error) {
+      return freeze({ ok: false, reason: "invalid-params", detail: safeText(error?.message).slice(0, 200) });
+    }
+    activity("event", bot.id, "plaza", `${bot.name} proposed a contract for your review: ${proposal.title}`);
+    recordJournalEntry(bot.id, bot.name, `proposed a contract for your review: ${proposal.title}`);
+    if (proposalHandler) {
+      try {
+        proposalHandler(proposal, freeze({ botId: bot.id, botName: bot.name }));
+      } catch {
+        // A host notification failure never fails the proposal.
+      }
+    }
+    return freeze({ ok: true, proposal });
+  }
+
   function getJournal() {
     return freeze([...journal]);
   }
@@ -766,6 +1270,7 @@ export function createBotRuntime({ registry, bus = null, actionExecutor = null, 
     draftContractProposal,
     getJournal,
     getDrafts,
+    getProposalQueue: () => contractQueue,
     getBus: () => messageBus,
     source: BOT_PLAZA_SOURCE,
   });

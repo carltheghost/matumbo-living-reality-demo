@@ -86,6 +86,8 @@ import { FROZEN_RELICS_CONSOLE_SOURCE, createFrozenRelicsConsole } from './rende
 import { MUSE_AGENT_CONSOLE_SOURCE, createMuseAgentConsole } from './render/muse-agent.js?v=20260918-muse1';
 import { BOT_PLAZA_CONSOLE_SOURCE, createBotPlazaConsole } from './render/bot-plaza.js?v=20260918-botplaza1';
 import { createBotRegistry, createBotRuntime } from './domains/bot-plaza.js?v=20260918-botplaza1';
+import { createProposalQueue } from './domains/bot-plaza.js?v=20260918-ctr2';
+import { createOutcomeContracts } from './domains/outcome-contracts.js?v=20260918-ctr2';
 import { mountBotPresence } from './render/bot-presence.js?v=20260918-botplaza1';
 import { CONTRACT_ATELIER_CONSOLE_SOURCE, createContractAtelierConsole } from './render/contract-atelier.js?v=20260918-ctr1';
 import { LUNA_CONSOLE_SOURCE, createLunaCompanionConsole } from './render/luna-companion.js?v=20260918-luna1';
@@ -168,6 +170,9 @@ let botPlazaRegistry = null;
 let botPlazaRuntime = null;
 let botPlazaConsole = null;
 let botPresence = null;
+let contractProposalQueue = null;
+let sharedOutcomeDesk = null;
+const recentProposalTitles = new Map();
 let contractAtelierConsole = null;
 let lunaCompanionConsole = null;
 let wardrobeAtelierConsole = null;
@@ -2991,8 +2996,26 @@ window.__TUMBO_MUSE_AGENT__ = museAgentConsole;
 // tokens, no OAuth, no external bot APIs. The Muse Agent plugin ships as the
 // built-in default bot.
 botPlazaRegistry = createBotRegistry();
+// Contract mission part 3b: one shared bot-proposal queue and one shared
+// outcome desk. Bots bring outcome contracts to the queue; the Contract
+// Atelier console reviews them, and APPROVE opens the book on this desk.
+// The queue factory lands with the bot-plaza proposal-queue change, hence
+// the guard — without it the atelier simply shows "no proposal queue wired".
+contractProposalQueue = typeof createProposalQueue === "function" ? createProposalQueue() : null;
+sharedOutcomeDesk = createOutcomeContracts({ seed: "local-outcomes", relicVault: frozenRelicsVault });
+window.__TUMBO_PROPOSAL_QUEUE__ = contractProposalQueue;
+window.__TUMBO_OUTCOME_DESK__ = sharedOutcomeDesk;
 botPlazaRuntime = createBotRuntime({
   registry: botPlazaRegistry,
+  proposalQueue: contractProposalQueue,
+  onProposal: ({ botId, proposal }) => {
+    // Announce the draft like any other bot announcement (same speech-bubble
+    // path as the 'world.announce' handler below). Recorded so the bus
+    // subscribe can skip the duplicate if the runtime also posts it.
+    const title = proposal?.title ?? "a new proposal";
+    recentProposalTitles.set(botId, { title: String(title), at: Date.now() });
+    botPresence?.speak(botId, `I drafted a contract for your review: ${title}`);
+  },
   actionHandlers: {
     'world.announce': ({ botId, params }) => {
       botPresence?.speak(botId, params.text);
@@ -3057,7 +3080,15 @@ botPresence = mountBotPresence({
 });
 botPlazaRuntime.getBus().subscribe((entry) => {
   if (entry.kind === 'chat' || entry.kind === 'announce' || entry.kind === 'event') {
-    if (entry.from !== 'user' && entry.from !== 'world') botPresence?.speak(entry.from, entry.text);
+    if (entry.from !== 'user' && entry.from !== 'world') {
+      // Skip the duplicate bubble when the bot runtime both calls onProposal
+      // and posts the proposal as an announce-kind bus entry.
+      const recent = recentProposalTitles.get(entry.from);
+      const duplicate = entry.kind === 'announce' && recent
+        && Date.now() - recent.at < 5000
+        && typeof entry.text === 'string' && recent.title && entry.text.includes(recent.title);
+      if (!duplicate) botPresence?.speak(entry.from, entry.text);
+    }
   }
   botPresence?.refresh();
 });
@@ -3071,6 +3102,9 @@ contractAtelierConsole = createContractAtelierConsole({
   // Award NFTs from outcome contracts are minted as Frozen Relics from the
   // shared vault: the claim freezes in the relic core, its life keeps growing.
   relicVault: frozenRelicsVault,
+  // Part 3b: the shared bot-proposal queue and the shared outcome desk.
+  proposalQueue: contractProposalQueue,
+  outcomeDesk: sharedOutcomeDesk,
   onSelect: (snapshot) => {
     const organ = organs.find((candidate) => candidate.id === 'contract');
     if (organ) focusOrgan(organ, `contract-atelier-select:${snapshot.selectedId}`);
