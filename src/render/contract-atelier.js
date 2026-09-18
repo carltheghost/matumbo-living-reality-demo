@@ -5,6 +5,14 @@ import {
   createContractAtelier,
   describeContractLogic,
 } from "../domains/contract-atelier.js";
+import {
+  OUTCOME_CONTRACTS_BOUNDARY,
+  OUTCOME_CONTRACTS_NO_VALUE,
+  OUTCOME_RESULT_DRAW,
+  OUTCOME_RESULT_VOID,
+  OUTCOME_STAKE_UNIT,
+  createOutcomeContracts,
+} from "../domains/outcome-contracts.js";
 
 export { CONTRACT_ATELIER_CONSOLE_SOURCE };
 export const CONTRACT_ATELIER_RENDER_SOURCE = CONTRACT_ATELIER_CONSOLE_SOURCE;
@@ -104,6 +112,7 @@ export function createContractAtelierConsole({
       opened,
       selectedId,
       atelier: studio.getSnapshot(),
+      outcomes: outcomesStudio.getSnapshot(),
       localOnly: true,
       simulation: true,
       persistence: false,
@@ -122,7 +131,9 @@ export function createContractAtelierConsole({
     const next = snapshot(action, method);
     // onSelect doubles as the "state changed" channel: create/stake/resolve
     // have no dedicated callbacks, so their snapshots ride along here too.
-    if (action === "select" || action === "create" || action === "stake" || action === "resolve") onSelect?.(next);
+    if (action === "select" || action === "create" || action === "stake" || action === "resolve"
+      || action === "outcome-select" || action === "outcome-create" || action === "outcome-join"
+      || action === "outcome-grade" || action === "outcome-claim" || action === "outcome-transfer") onSelect?.(next);
     if (action === "replay") onReplay?.(next);
     if (action === "reset") onReset?.(next);
     return next;
@@ -306,6 +317,235 @@ export function createContractAtelierConsole({
   });
 
   closeButton.addEventListener("click", () => setOpen(false, "button"));
+
+  // ---- Outcome contracts · eternal escrow (the lifecycle after creation) ----
+  // Place a contract on an event and walk away: grading is automatic and
+  // deterministic, wins never expire and never decay, awards ride as local
+  // simulated NFTs whose claim follows the holder.
+  const outcomesStudio = createOutcomeContracts({ seed: "local-outcomes" });
+  let selectedOutcomeId = null;
+
+  const outcomeSection = element(documentRoot, "div", "contract-atelier-box");
+  outcomeSection.append(element(documentRoot, "div", "contract-atelier-section-label", "OUTCOME CONTRACTS · ETERNAL ESCROW"));
+  outcomeSection.append(element(documentRoot, "div", "contract-atelier-hint",
+    `Place a contract on an event and walk away. Grading is automatic — winners are paid, losers' stakes are taken, nobody needs to be online. Wins never expire and never decay. All stakes and awards are ${OUTCOME_STAKE_UNIT} with zero real value.`));
+
+  const ocEventId = element(documentRoot, "input", "contract-atelier-text-input");
+  ocEventId.placeholder = "Event id (e.g. evt:derby-3)";
+  const ocEventLabel = element(documentRoot, "input", "contract-atelier-text-input");
+  ocEventLabel.placeholder = "Event label (e.g. Derby rematch — who takes it?)";
+  const ocOutcomes = element(documentRoot, "input", "contract-atelier-text-input");
+  ocOutcomes.placeholder = "Outcomes, comma separated (e.g. HOME, AWAY)";
+  const ocCreator = element(documentRoot, "input", "contract-atelier-text-input");
+  ocCreator.placeholder = "Creator name";
+  const ocCreate = element(documentRoot, "button", "contract-atelier-action", "Open outcome contract");
+  ocCreate.type = "button";
+  ocCreate.addEventListener("click", () => {
+    try {
+      const contract = outcomesStudio.createContract({
+        eventId: ocEventId.value,
+        eventLabel: ocEventLabel.value,
+        outcomes: parseOutcomes(ocOutcomes.value),
+        creator: ocCreator.value,
+      });
+      selectedOutcomeId = contract.id;
+      ocEventId.value = "";
+      ocEventLabel.value = "";
+      ocOutcomes.value = "";
+      ocCreator.value = "";
+      statusEl.textContent = `OUTCOME BOOK OPEN · ${contract.eventLabel.toUpperCase()} · SIMULATED ONLY`;
+    } catch (error) {
+      statusEl.textContent = `OUTCOME CREATE BLOCKED · ${String(error?.message ?? error).toUpperCase().slice(0, 80)}`;
+    }
+    renderOutcomes();
+    publish("outcome-create", "button");
+  });
+  outcomeSection.append(ocEventId, ocEventLabel, ocOutcomes, ocCreator, ocCreate);
+
+  const outcomeListEl = element(documentRoot, "div", "contract-atelier-list");
+  const outcomeDetailEl = element(documentRoot, "div", null);
+  const outcomeEscrowEl = element(documentRoot, "div", null);
+  outcomeSection.append(
+    element(documentRoot, "div", "contract-atelier-section-label", "BOOKS"),
+    outcomeListEl,
+    outcomeDetailEl,
+    element(documentRoot, "div", "contract-atelier-section-label", "ETERNAL ESCROW · AWARD NFTS"),
+    outcomeEscrowEl,
+    element(documentRoot, "div", "contract-atelier-hint", OUTCOME_CONTRACTS_NO_VALUE),
+  );
+
+  function renderOutcomeDetail() {
+    outcomeDetailEl.replaceChildren();
+    const contract = selectedOutcomeId ? outcomesStudio.get(selectedOutcomeId) : null;
+    if (!contract) {
+      outcomeDetailEl.append(element(documentRoot, "div", "contract-atelier-empty", "Select an outcome book to join it or record its result."));
+      return;
+    }
+    const card = element(documentRoot, "div", "contract-atelier-card");
+    card.append(element(documentRoot, "div", "contract-atelier-card-id", contract.id));
+    card.append(element(documentRoot, "strong", "contract-atelier-card-name", contract.eventLabel));
+    card.append(element(documentRoot, "div", "contract-atelier-card-meta",
+      `EVENT ${contract.eventId} · ${contract.status.toUpperCase()}`));
+    card.append(kvRow(documentRoot, "OUTCOMES", contract.outcomes.join(" · ")));
+    const total = contract.stakes.reduce((sum, stake) => sum + stake.amount, 0);
+    card.append(kvRow(documentRoot, "STAKED", `${Math.round(total * 100) / 100} ${OUTCOME_STAKE_UNIT}`));
+    if (contract.stakes.length) {
+      const stakes = element(documentRoot, "div", "contract-atelier-stakes");
+      stakes.append(element(documentRoot, "div", "contract-atelier-section-label", "STAKES (SIMULATED)"));
+      contract.stakes.forEach((stake) => {
+        stakes.append(element(documentRoot, "div", "contract-atelier-stake-row",
+          `${stake.participant} · ${stake.outcome} · ${stake.amount} ${OUTCOME_STAKE_UNIT}`));
+      });
+      card.append(stakes);
+    }
+    if (contract.status === "open") {
+      const joinBox = element(documentRoot, "div", "contract-atelier-box");
+      joinBox.append(element(documentRoot, "div", "contract-atelier-section-label", "JOIN WITH SIMULATED TUMBO POINTS"));
+      const whoInput = element(documentRoot, "input", "contract-atelier-text-input");
+      whoInput.placeholder = "Your name";
+      const sideSelect = element(documentRoot, "select", "contract-atelier-select-input");
+      contract.outcomes.forEach((outcome) => {
+        const option = element(documentRoot, "option", null, outcome);
+        option.value = outcome;
+        sideSelect.append(option);
+      });
+      const amountInput = element(documentRoot, "input", "contract-atelier-text-input");
+      amountInput.type = "number";
+      amountInput.min = "1";
+      amountInput.placeholder = `Amount (${OUTCOME_STAKE_UNIT})`;
+      const joinButton = element(documentRoot, "button", "contract-atelier-action", "Join (simulated)");
+      joinButton.type = "button";
+      joinButton.addEventListener("click", () => {
+        try {
+          outcomesStudio.join({ contractId: contract.id, participant: whoInput.value, outcome: sideSelect.value, stakeAmount: amountInput.value });
+          statusEl.textContent = `JOINED · ${sideSelect.value} · YOU CAN WALK AWAY · SIMULATED ONLY`;
+          whoInput.value = "";
+          amountInput.value = "";
+        } catch (error) {
+          statusEl.textContent = `JOIN BLOCKED · ${String(error?.message ?? error).toUpperCase().slice(0, 80)}`;
+        }
+        renderOutcomes();
+        publish("outcome-join", "button");
+      });
+      joinBox.append(whoInput, sideSelect, amountInput, joinButton);
+      card.append(joinBox);
+
+      const resultBox = element(documentRoot, "div", "contract-atelier-box");
+      resultBox.append(element(documentRoot, "div", "contract-atelier-section-label", "EVENT LANDED — RECORD RESULT & GRADE"));
+      resultBox.append(element(documentRoot, "div", "contract-atelier-hint",
+        "Grading is automatic and deterministic. Winners are paid, losers' stakes are taken — nobody needs to be online."));
+      const resultSelect = element(documentRoot, "select", "contract-atelier-select-input");
+      [...contract.outcomes, OUTCOME_RESULT_DRAW, OUTCOME_RESULT_VOID].forEach((outcome) => {
+        const option = element(documentRoot, "option", null, outcome);
+        option.value = outcome;
+        resultSelect.append(option);
+      });
+      const gradeButton = element(documentRoot, "button", "contract-atelier-action", "Record result & grade");
+      gradeButton.type = "button";
+      gradeButton.addEventListener("click", () => {
+        try {
+          const graded = outcomesStudio.recordResult({ contractId: contract.id, result: resultSelect.value });
+          statusEl.textContent = `GRADED · ${graded.grading.result} · ${graded.grading.kind.toUpperCase()} · ${graded.grading.escrowIds.length} ESCROWED FOREVER`;
+        } catch (error) {
+          statusEl.textContent = `GRADE BLOCKED · ${String(error?.message ?? error).toUpperCase().slice(0, 80)}`;
+        }
+        renderOutcomes();
+        publish("outcome-grade", "button");
+      });
+      resultBox.append(resultSelect, gradeButton);
+      card.append(resultBox);
+    } else if (contract.grading) {
+      const grading = element(documentRoot, "div", "contract-atelier-resolution");
+      grading.append(element(documentRoot, "div", "contract-atelier-section-label", "GRADING (AUTOMATIC)"));
+      grading.append(kvRow(documentRoot, "RESULT", contract.grading.result));
+      grading.append(kvRow(documentRoot, "KIND", contract.grading.kind.toUpperCase()));
+      contract.grading.awards.forEach((award) => {
+        grading.append(element(documentRoot, "div", "contract-atelier-payout-row",
+          `${award.participant} · ${award.amount} ${OUTCOME_STAKE_UNIT} · eternal escrow`));
+      });
+      grading.append(element(documentRoot, "div", "contract-atelier-resolution-note", contract.grading.note));
+      card.append(grading);
+    }
+    outcomeDetailEl.append(card);
+  }
+
+  function renderOutcomeEscrow() {
+    outcomeEscrowEl.replaceChildren();
+    const nfts = outcomesStudio.listNfts();
+    if (!nfts.length) {
+      outcomeEscrowEl.append(element(documentRoot, "div", "contract-atelier-empty", "No awards escrowed yet. Grade a book to escrow its awards forever."));
+      return;
+    }
+    nfts.forEach((nft) => {
+      const row = element(documentRoot, "div", "contract-atelier-card");
+      row.append(kvRow(documentRoot, "AWARD NFT", nft.id));
+      row.append(kvRow(documentRoot, "HOLDER", nft.holder));
+      row.append(kvRow(documentRoot, "AMOUNT", `${nft.amount} ${OUTCOME_STAKE_UNIT} · ${nft.kind.toUpperCase()}`));
+      row.append(kvRow(documentRoot, "STATUS", nft.claimed ? `CLAIMED · ${nft.claimedAt}` : "CLAIMABLE FOREVER · never expires"));
+      if (!nft.claimed) {
+        const claimButton = element(documentRoot, "button", "contract-atelier-action", "Claim my win");
+        claimButton.type = "button";
+        claimButton.addEventListener("click", () => {
+          try {
+            const receipt = outcomesStudio.claimAward({ nftId: nft.id });
+            statusEl.textContent = `CLAIMED · ${receipt.amount} ${OUTCOME_STAKE_UNIT} → ${receipt.holder} · SIMULATED ONLY`;
+          } catch (error) {
+            statusEl.textContent = `CLAIM BLOCKED · ${String(error?.message ?? error).toUpperCase().slice(0, 80)}`;
+          }
+          renderOutcomes();
+          publish("outcome-claim", "button");
+        });
+        const toInput = element(documentRoot, "input", "contract-atelier-text-input");
+        toInput.placeholder = "Transfer award to (name)";
+        const transferButton = element(documentRoot, "button", "contract-atelier-action", "Transfer award");
+        transferButton.type = "button";
+        transferButton.addEventListener("click", () => {
+          try {
+            const moved = outcomesStudio.transferAward({ nftId: nft.id, toHolder: toInput.value });
+            statusEl.textContent = `AWARD MOVED · now held by ${moved.holder} · the claim follows the NFT`;
+            toInput.value = "";
+          } catch (error) {
+            statusEl.textContent = `TRANSFER BLOCKED · ${String(error?.message ?? error).toUpperCase().slice(0, 80)}`;
+          }
+          renderOutcomes();
+          publish("outcome-transfer", "button");
+        });
+        row.append(claimButton, toInput, transferButton);
+      }
+      outcomeEscrowEl.append(row);
+    });
+  }
+
+  function renderOutcomes() {
+    outcomeListEl.replaceChildren();
+    outcomesStudio.list().forEach((contract) => {
+      const button = element(documentRoot, "button", "contract-atelier-item");
+      button.type = "button";
+      button.setAttribute("aria-pressed", String(contract.id === selectedOutcomeId));
+      button.append(
+        element(documentRoot, "strong", "contract-atelier-item-name", contract.eventLabel),
+        element(documentRoot, "span", "contract-atelier-item-meta",
+          `${contract.outcomes.join(" / ")} · ${contract.status.toUpperCase()}`),
+        element(documentRoot, "span", "contract-atelier-item-id", contract.id),
+      );
+      button.addEventListener("click", () => {
+        selectedOutcomeId = contract.id;
+        renderOutcomes();
+        publish("outcome-select", "button");
+      });
+      outcomeListEl.append(button);
+    });
+    renderOutcomeDetail();
+    renderOutcomeEscrow();
+  }
+
+  panel.append(outcomeSection);
+  resetButton.addEventListener("click", () => {
+    outcomesStudio.reset();
+    selectedOutcomeId = null;
+    renderOutcomes();
+  });
+  renderOutcomes();
   resetButton.addEventListener("click", () => {
     studio.reset();
     selectedId = null;
@@ -318,7 +558,7 @@ export function createContractAtelierConsole({
   return Object.freeze({
     open: (method = "api") => setOpen(true, method),
     close: (method = "api") => setOpen(false, method),
-    reset: (method = "api") => { studio.reset(); selectedId = null; render(); return publish("reset", method); },
+    reset: (method = "api") => { studio.reset(); selectedId = null; outcomesStudio.reset(); selectedOutcomeId = null; render(); renderOutcomes(); return publish("reset", method); },
     select: (contractId, method = "api") => { selectedId = contractId; render(); return publish("select", method); },
     create: (input, method = "api") => {
       const contract = studio.createContract(input);
@@ -338,6 +578,8 @@ export function createContractAtelierConsole({
     },
     replay: (method = "api") => publish("replay", method),
     getSnapshot: () => snapshot(),
+    getOutcomeSnapshot: () => outcomesStudio.getSnapshot(),
+    outcomeBoundary: OUTCOME_CONTRACTS_BOUNDARY,
     boundary: CONTRACT_ATELIER_BOUNDARY,
   });
 }
