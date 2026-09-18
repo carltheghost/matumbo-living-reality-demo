@@ -1,5 +1,27 @@
 # Current State
 
+## Packet 226 — the Person avatar is a living 3D rig (2026-09-18)
+
+`?feature=person` no longer shows a flat AI-portrait picture. The retired
+reference-avatar hologram sprite is gone; the fully articulated procedural
+rig built from Three.js primitives — head, lathed torso, arms with elbows,
+hands and fingers, legs, chibi proportions in Tumbo's approved look
+(headphones-era dreads, black TUMBO hoodie styling via the outfit system) —
+is the avatar itself, visible and animated in the lens space. The idle loop
+now runs on the shared motion language (`src/domains/avatar-motion.js`):
+gentle bob and sway-turn from `avatarIdlePose`, breathing torso scale, a
+slow head drift, and periodic blinks from the new pure `avatarBlink` helper
+(frozen open under reduced motion, matching the studio accessibility
+contract). Face choices and the Muse Agent hologram tint remain as
+state-keeping APIs — the face choice still dresses chess pieces and design
+records — but nothing renders a flat portrait in the studio anymore. The
+focused suites pass 16/16 (motion math) and 31/31 (scene build, rig
+visibility, blink drive, apply/destroy) in local node runs; all touched
+files pass `node --check`. Click-to-greet and drag-to-move arrive in the
+next packet; orbit (drag empty space) and zoom (scroll) are unchanged. No
+provider request, credential, advice, reward token, persistence, wallet, or
+external authority was added.
+
 ## Packet 225 — Connected City foundation (2026-09-18)
 
 Connected City lands as the next connected-site concept after Financial

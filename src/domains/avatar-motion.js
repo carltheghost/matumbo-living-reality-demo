@@ -50,6 +50,30 @@ export function avatarIdlePose({ time, seed = 0, reducedMotion = false } = {}) {
   });
 }
 
+export const AVATAR_BLINK = Object.freeze({
+  /** Seconds between blinks. */
+  period: 3.4,
+  /** Seconds for one close-open cycle. */
+  duration: 0.16,
+  /** Eye openness at the bottom of a blink (1 = fully open). */
+  closed: 0.12,
+});
+
+/**
+ * Eye openness at `time` (seconds): 1 while open, dipping to
+ * AVATAR_BLINK.closed mid-blink and back. Deterministic per (time, seed);
+ * frozen open (1) under `reducedMotion`, mirroring the studio's
+ * accessibility contract.
+ */
+export function avatarBlink({ time, seed = 0, reducedMotion = false } = {}) {
+  if (!Number.isFinite(time)) throw Error('avatarBlink needs a finite time');
+  if (reducedMotion) return 1;
+  const phase = (((time + (Number(seed) || 0) * 0.7) % AVATAR_BLINK.period) + AVATAR_BLINK.period) % AVATAR_BLINK.period;
+  if (phase >= AVATAR_BLINK.duration) return 1;
+  const u = phase / AVATAR_BLINK.duration;
+  return 1 - (1 - AVATAR_BLINK.closed) * Math.sin(Math.PI * u);
+}
+
 function easeInOut(t) {
   const clamped = Math.min(1, Math.max(0, t));
   return clamped < 0.5 ? 2 * clamped * clamped : 1 - Math.pow(-2 * clamped + 2, 2) / 2;
@@ -59,8 +83,7 @@ function easeInOut(t) {
  * Glide a presence from one [x,y,z] point to another: eased horizontal travel
  * with a soft sine lift, like the avatar floats instead of hopping.
  * `t` in [0,1]; returns a frozen { x, y, z }.
- */
-export function avatarGlide({ from, to, t, arc = AVATAR_MOTION.moveArc } = {}) {
+ */export function avatarGlide({ from, to, t, arc = AVATAR_MOTION.moveArc } = {}) {
   if (!Array.isArray(from) || !Array.isArray(to) || from.length !== 3 || to.length !== 3
     || ![...from, ...to].every(Number.isFinite)) {
     throw Error('avatarGlide needs finite [x,y,z] from/to points');

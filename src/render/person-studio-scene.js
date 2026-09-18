@@ -1,8 +1,13 @@
 import {STUDIO_MODEL,STUDIO_OUTFITS,STUDIO_ROOMS} from '../domains/person-studio.js';
+import {avatarBlink,avatarIdlePose} from '../domains/avatar-motion.js';
 
-/** AI-built likeness: Tumbo's approved avatar bust portrait (cinematic teal/violet
- *  rim light) drives the camera-facing hologram; the procedural rig stays as
- *  interaction targets. */
+/** PERSON Ω avatar: the fully articulated procedural rig IS the avatar — head,
+ *  torso, arms with elbows/hands/fingers, legs, all built from Three.js
+ *  primitives in chibi proportions. It idles (breathing, blink, sway) and
+ *  responds to clicks; no flat picture is shown. The reference hologram
+ *  sprite was retired in Packet 226; its presentation APIs remain as
+ *  state-keeping no-ops so face choices and agent tints keep working where
+ *  they still apply (chess pieces, design records). */
 export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,avatarTextureUrl='assets/avatar/fluffy-body-template.webp'}) {
   const layer=new THREE.Group();layer.name='PERSON Ω / open lens space';parent.add(layer);layer.visible=false;
   const materials=new Set(),geometries=new Set(),selectable=[];
@@ -107,6 +112,8 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
 
   // Articulated human. Stable facial geometry lives outside the outfit materials.
   const avatar=group('Reference-built avatar',[0,.55,0]);avatar.scale.setScalar(1.32);
+  // Eye parts for the idle blink: collected at build so update() can drive them.
+  const eyeBalls=[],eyelids=[];
   const skin=material(STUDIO_MODEL.skin,.02,.66),skinLight=material('#85563f',.02,.64),hair=material(STUDIO_MODEL.hair,.15,.72);
   const jacket=material(STUDIO_OUTFITS[0].color,.07,.65),trim=material(STUDIO_OUTFITS[0].trim,.8,.32);
   const shirt=material('#181a22',.01,.9),pants=material('#20232d',.04,.82),sole=material('#25252a',.1,.65);
@@ -142,9 +149,10 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
     sphere(skin,[side*.174,.005,0],[.031,.068,.026],head);
     sphere(skinLight,[side*.110,-.013,.108],[.045,.041,.027],head);
     const eye=sphere(eyes,[side*.073,.034,.141],[.038,.016,.016],head);
+    eye.userData.expressionPart='eye';eye.userData.baseScaleY=.016;eyeBalls.push(eye);
     sphere(iris,[side*.073,.034,.153],[.015,.015,.005],head);sphere(pupil,[side*.073,.034,.158],[.007,.008,.003],head);
     const brow=box(.074,.014,.02,hair,[side*.074,.071,.147],head);brow.rotation.z=-side*.10;
-    const lid=sphere(skin,[side*.073,.052,.138],[.040,.012,.018],head);lid.rotation.z=-side*.03;
+    const lid=sphere(skin,[side*.073,.052,.138],[.040,.012,.018],head);lid.rotation.z=-side*.03;eyelids.push(lid);
     sphere(hair,[side*.134,-.107,.059],[.026,.07,.055],head);
     eye.userData.expressionPart='eye';
   }
@@ -194,35 +202,18 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
   // Lens space has no ground to receive shadows; the glow sprite and rings
   // carry the grounding read. Meshes neither cast nor receive.
   avatar.traverse(object=>{if(object.isMesh){object.castShadow=false;object.receiveShadow=false;}});
-  // Reference avatar hologram (2026-09-18): Tumbo's AI-built likeness (the bust
-  // portrait from his PERSON Ω concept art) as a camera-facing hologram
-  // sprite. The procedural rig is hidden but stays registered in `targets`,
-  // and three.js raycast ignores `visible`, so identity/wardrobe tab clicks
-  // keep working through the hologram.
-  avatar.traverse(object=>{if(object.isMesh)object.visible=false;});
-  const avatarHologram=(()=>{
-    if(!THREE||typeof THREE.Sprite!=='function'||typeof THREE.SpriteMaterial!=='function')return null;
-    const material=new THREE.SpriteMaterial({transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,opacity:.96});
-    const sprite=new THREE.Sprite(material);
-    sprite.name='Reference avatar hologram';
-    // The AI bust portrait is square (1:1); the hologram frames the bust.
-    sprite.scale.set(1.7,1.7,1);
-    sprite.position.set(0,1.15,0);
-    sprite.visible=false;
-    sprite.userData.avatarHologram=true;
-    sprite.userData.avatarHologramUrl=avatarTextureUrl;
-    const canLoad=typeof THREE.TextureLoader==='function'&&typeof Image!=='undefined'&&typeof avatarTextureUrl==='string'&&avatarTextureUrl.length>0;
-    if(canLoad){
-      new THREE.TextureLoader().load(avatarTextureUrl,texture=>{
-        material.map=texture;material.needsUpdate=true;sprite.visible=true;
-      },undefined,()=>{/* keep the hologram hidden; rig targets still work */});
-    }
-    avatar.add(sprite);
-    return sprite;
-  })();
+  // The articulated rig is the avatar: it stays fully visible and animated.
+  // Packet 226 retired the reference-avatar hologram sprite (the flat AI
+  // portrait picture). The rig carries identity/wardrobe tab targets itself;
+  // `setAvatarFace`/`setHologramTint` below remain as state-keeping APIs for
+  // the face-choice feature and agent designs, without a hologram to show.
+  const avatarHologram=null;
   // Everything structural floats: the avatar, the lens-ring and the set
-  // pieces bob gently in lens space (frozen under reduced motion).
-  const floaters=[{obj:avatar,base:.55,amp:.045,speed:1.15,phase:.6},{obj:lensRing,base:.46,amp:.06,speed:1.05,phase:0}];
+  // pieces bob gently in lens space (frozen under reduced motion). The
+  // avatar's own bob/sway/glow/torso follow the shared avatarIdlePose motion
+  // language (src/domains/avatar-motion.js); the set pieces keep their
+  // per-piece floaters.
+  const floaters=[{obj:lensRing,base:.46,amp:.06,speed:1.05,phase:0}];
   floaters.push({obj:sofa,base:.08,amp:.05,speed:.8,phase:1.2},{obj:desk,base:.65,amp:.045,speed:.9,phase:2.4});
   garmentDisplays.forEach((g,i)=>floaters.push({obj:g,base:1.8,amp:.05,speed:1.0,phase:2.9+i*.7}));
   // Freeze a geometry fingerprint in the bind pose, before clothes or motion
@@ -272,49 +263,42 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
       const q=pose.joints?.[name];const targetQ=q?new THREE.Quaternion(...q):restQuaternions[name];
       joint.quaternion.slerp(targetQ,Math.min(1,dt*12));
     }
-    torso.position.y=.12+(reducedMotion?0:Math.sin(time*1.4)*.007);
+    // The avatar is alive even at rest: idle bob + sway-turn from the shared
+    // motion language, breathing torso, a slow head drift, periodic blinks.
+    const idle=avatarIdlePose({time,seed:0,reducedMotion});
+    avatar.position.y=.55+idle.bobY;avatar.rotation.y=idle.swayY;
+    torso.position.y=.12+idle.torso;
+    glow.material.opacity=idle.glow;
+    if(!reducedMotion){
+      const breath=Math.sin(time*1.4);
+      torso.scale.set(1-.006*breath,1+.012*breath,1-.006*breath);
+      joints.head.quaternion.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.sin(time*.7+1)*.04,Math.sin(time*.5)*.06,0)));
+    }else{torso.scale.set(1,1,1);}
+    const openness=avatarBlink({time,seed:0,reducedMotion});
+    for(const eye of eyeBalls)eye.scale.y=eye.userData.baseScaleY*openness;
     if(reducedMotion){for(const f of floaters)f.obj.position.y=f.base;}
     else{for(const f of floaters)f.obj.position.y=f.base+Math.sin(time*f.speed+f.phase)*f.amp;
-      lensRing.rotation.y+=dt*.22;ringInner.rotation.y-=dt*.31;glow.material.opacity=.46+Math.sin(time*1.6)*.06;}
+      lensRing.rotation.y+=dt*.22;ringInner.rotation.y-=dt*.31;}
     companion.position.y=2.78+(reducedMotion?0:Math.sin(time*1.8)*.075);
     companion.rotation.y=reducedMotion?0:Math.sin(time*.8)*.14;
     wings.forEach((wing,i)=>{wing.rotation.z=(i===0?-1:1)*(.55+(form==='bird'&&!reducedMotion?Math.sin(time*5)*.35:0));});
   }
-  function getSnapshot(){return {source:'person-studio-scene',modelId:STUDIO_MODEL.id,visible:layer.visible,outfitId:outfit,roomId:room,companionForm:form,jointNames:Object.keys(joints),meshCount:geometries.size,identityHeadGeometry:headMesh.geometry.uuid,geometryOnly:false,referenceImagesUsedAsTextures:true,avatarHologramUrl:avatarTextureUrl,avatarHologramPresent:!!avatarHologram,avatarHologramTint:avatarHologramTint};}
-  // Muse Agent dressing: re-tint the reference hologram when an avatar design
-  // is applied. Presentation only — identity geometry and outfit rig are
-  // untouched; `null` restores the neutral hologram.
-  // Swap the hologram's face at runtime: the user's chosen avatar face —
-  // default Tumbo character, Tumbo's own likeness, or their locally-styled
-  // photo. Presentation only — identity geometry and outfit rig are untouched.
-  // A failed load keeps the previous face; the hologram never goes blank.
+  function getSnapshot(){return {source:'person-studio-scene',modelId:STUDIO_MODEL.id,visible:layer.visible,outfitId:outfit,roomId:room,companionForm:form,jointNames:Object.keys(joints),meshCount:geometries.size,identityHeadGeometry:headMesh.geometry.uuid,geometryOnly:false,referenceImagesUsedAsTextures:false,rigVisible:true,avatarHologramPresent:false,avatarHologramUrl:avatarTextureUrl,avatarHologramTint:avatarHologramTint};}
+  // Face choice state: the user's chosen avatar face — default Tumbo
+  // character, Tumbo's own likeness, or their locally-styled photo. The
+  // hologram sprite is retired, so this keeps the stored choice (chess
+  // pieces and design records still wear it); the 3D rig is untouched.
   function setAvatarFace(url){
     if(typeof url!=='string'||!url.length)return avatarTextureUrl;
-    if(!avatarHologram)return avatarTextureUrl;
-    const canLoad=typeof THREE.TextureLoader==='function'&&typeof Image!=='undefined';
-    if(!canLoad)return avatarTextureUrl;
     avatarTextureUrl=url;
-    avatarHologram.userData.avatarHologramUrl=url;
-    new THREE.TextureLoader().load(url,texture=>{
-      try{
-        avatarHologram.material.map?.dispose?.();
-        avatarHologram.material.map=texture;
-        avatarHologram.material.needsUpdate=true;
-        avatarHologram.visible=true;
-        if(avatarHologramTint&&avatarHologram.material?.color?.set)avatarHologram.material.color.set(avatarHologramTint);
-      }catch{/* keep the previous face on failure */}
-    },undefined,()=>{/* keep the previous face on failure */});
     return avatarTextureUrl;
   }
   let avatarHologramTint=null;
+  // Muse Agent dressing: records the design tint for the avatar. The
+  // hologram is retired so there is no hologram to tint; the value is kept
+  // in the design record and snapshot.
   function setHologramTint(tint,opacity){
     avatarHologramTint=typeof tint==='string'&&tint?tint:null;
-    if(!avatarHologram)return avatarHologramTint;
-    try{
-      if(avatarHologramTint&&avatarHologram.material?.color?.set)avatarHologram.material.color.set(avatarHologramTint);
-      else if(avatarHologram.material?.color?.set)avatarHologram.material.color.set('#ffffff');
-      if(Number.isFinite(Number(opacity))&&avatarHologram.material)avatarHologram.material.opacity=Number(opacity);
-    }catch{/* presentation only */}
     return avatarHologramTint;
   }
   function destroy(){selectable.forEach(m=>{const i=targets.indexOf(m);if(i>=0)targets.splice(i,1);});geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());if(avatarHologram){avatarHologram.material.map?.dispose?.();avatarHologram.material.dispose?.();}layer.removeFromParent();}
