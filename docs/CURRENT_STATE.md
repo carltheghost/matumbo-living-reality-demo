@@ -1,5 +1,20 @@
 # Current State
 
+## Packet 225 — Connected City foundation (2026-09-18)
+
+Connected City lands as the next connected-site concept after Financial
+Academy: a first-class `connected-city` feature definition, a frozen
+seven-district contract (`src/domains/connected-city.js`), and a
+`connected-city` projection contribution. Each district fixture points at an
+existing feature — Finance Row → PAYCORE, Academy Quarter → Academy, Arena
+Grounds → Arena, Contract Row → Contracts, Ledger Plaza → Ledger, Gateway
+Harbor → Gateway, Social Market → Social Explorer — and carries a retryable
+charter check with reduced-XP retries and page-session-only progress. The
+focused contract suite passes 31/31 in a local node run. The interactive
+console arrives in the next packet; this packet keeps the feature on the
+generic feature surface. No provider request, credential, advice, reward
+token, persistence, wallet, or external authority was added.
+
 ## Financial Academy restored into Living Reality (implemented 2026-09-04)
 
 Mission Control: 23 openable feature routes. The restored Financial Academy is

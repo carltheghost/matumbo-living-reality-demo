@@ -279,6 +279,15 @@ export const FEATURE_DEFINITIONS = Object.freeze([
     boundary: "Lessons, progress, and demo XP are local education state only; there is no credential, financial advice, reward token, persistence, or external authority.",
   }),
   Object.freeze({
+    id: "connected-city",
+    label: "Connected City",
+    kicker: "districts → connected sites",
+    focusOrganId: "arena",
+    sources: ["connected-city"],
+    description: "Tour the restored city district map: Finance Row, Academy Quarter, Arena Grounds, Contract Row, Ledger Plaza, Gateway Harbor, and Social Market. Visit districts and test each district charter.",
+    boundary: "District visits, charter checks, and demo XP are local rehearsal state only; there is no credential, advice, reward token, persistence, provider read, or external authority.",
+  }),
+  Object.freeze({
     id: "projections",
     label: "Phone / PC / XR",
     kicker: "one canonical view",
@@ -356,6 +365,7 @@ export const FEATURE_HANDOFF_LINKS = Object.freeze({
   "multi-sport-events": Object.freeze(["sports-events", "world-events", "arena"]),
   arena: Object.freeze(["person", "wardrobe-atelier", "academy"]),
   academy: Object.freeze(["arena", "contract-atelier", "white-paper"]),
+  "connected-city": Object.freeze(["academy", "block-world", "social-explorer"]),
   projections: Object.freeze(["reality-lens", "block-world", "white-paper"]),
 });
 
@@ -514,6 +524,11 @@ const FEATURE_SURFACE_ROUTES = Object.freeze({
     Object.freeze(["LEARNING PATH", "four connected Financial OS lessons"]),
     Object.freeze(["KNOWLEDGE CHECK", "retryable local questions"]),
     Object.freeze(["PROGRESS", "page-session demo XP · no credential"]),
+  ]),
+  "connected-city": Object.freeze([
+    Object.freeze(["DISTRICT MAP", "seven connected-site districts"]),
+    Object.freeze(["CHARTER CHECK", "retryable local questions"]),
+    Object.freeze(["TOUR PROGRESS", "page-session demo XP · no credential"]),
   ]),
   projections: Object.freeze([
     Object.freeze(["PHONE", "compact reduced-motion fallback"]),
