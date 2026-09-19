@@ -122,6 +122,30 @@ export function avatarJumpPose({ t } = {}) {
 }
 
 /**
+ * Bow pose at `t` in [0,1]: the champion dips forward from the waist, arms
+ * sweeping back, head dipping — a victory bow after a capture. Returns frozen
+ * { torsoPitch, headDip, armSweep, kneeDip } in radians/envelopes.
+ */
+export function avatarBowPose({ t } = {}) {
+  if (!Number.isFinite(t)) throw Error('avatarBowPose needs a finite t');
+  const c = Math.min(1, Math.max(0, t));
+  const env = Math.sin(Math.PI * c);
+  return Object.freeze({
+    torsoPitch: env * 0.55,
+    headDip: env * 0.28,
+    armSweep: env * 0.85,
+    kneeDip: env * 0.22,
+  });
+}
+
+/** Celebration durations in seconds, mirroring AVATAR_GREET. */
+export const AVATAR_CELEBRATE = Object.freeze({
+  bow: 1.4,
+  spin: 1.2,
+  hop: 0.9,
+});
+
+/**
  * Walk-cycle phase at `time` (seconds): opposite legs swing, arms counter
  * the same-side leg. Returns frozen { legL, legR, armL, armR } in [-1,1].
  */

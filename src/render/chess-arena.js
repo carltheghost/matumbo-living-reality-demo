@@ -15,12 +15,13 @@
  * ledger, no signing, no settlement.
  */
 import * as THREE from 'three';
-import {createChessArenaState,applyChessArenaMove} from '../domains/chess-arena.js?v=20260918-avatar-chess';
-import {chooseAiMove,CHESS_AI_DIFFICULTIES,resolveAiDifficulty} from '../domains/chess-ai.js?v=20260918-avatar-chess';
-import {avatarIdlePose,avatarGlide,AVATAR_MOTION} from '../domains/avatar-motion.js?v=20260918-avatar-chess';
-import {AVATAR_FACE_STORAGE_KEY} from '../domains/avatar-style.js?v=20260918-avatar-chess';
+import {createChessArenaState,applyChessArenaMove} from '../domains/chess-arena.js?v=20260919-chibi-champions';
+import {chooseAiMove,CHESS_AI_DIFFICULTIES,resolveAiDifficulty} from '../domains/chess-ai.js?v=20260919-chibi-champions';
+import {avatarGlide,AVATAR_MOTION} from '../domains/avatar-motion.js?v=20260919-chibi-champions';
+import {updateTumboChibiRig,CHIBI_RIG_MODES} from './tumbo-chibi-rig.js?v=20260919-chibi-champions';
+import {AVATAR_FACE_STORAGE_KEY} from '../domains/avatar-style.js?v=20260919-chibi-champions';
 import {PERSON_STUDIO_STORAGE_KEY} from '../domains/person-studio.js';
-import {buildArenaHall,createPieceBuilders,readArenaAvatarAppearance,squarePosition,CHESS_ROLE_GLYPHS} from './chess-arena-pieces.js?v=20260918-avatar-chess';
+import {buildArenaHall,createPieceBuilders,readArenaAvatarAppearance,squarePosition,CHESS_ROLE_GLYPHS} from './chess-arena-pieces.js?v=20260919-chibi-champions';
 
 const pieceName={p:'Pawn',n:'Knight',b:'Bishop',r:'Rook',q:'Queen',k:'King'};
 const sideName={w:'White',b:'Black'};
@@ -158,10 +159,15 @@ export function mountChessArena({documentRoot=document,host}){
     badge.title=appearance.approved?'Pieces wear your approved Person Studio appearance.':'Approve a Person Studio profile and the pieces will wear your look.';
   }
 
-  /** Dispose per-piece sprite resources and per-champion ring-material clones.
-   *  Shared ring geometry and the foundry's side materials survive. */
+  /** Release per-piece GPU resources: the face-decal portrait texture, the
+   *  role-badge sprite, and the per-champion ring-material clone. Shared
+   *  rig geometries and side materials survive (the foundry owns them). */
   function releasePiece(group){
     group.traverse((child)=>{
+      if(child?.userData?.part==='face-decal'){
+        try{child.material.map?.dispose?.();}catch{/* already released */}
+        try{child.material.dispose?.();}catch{/* already released */}
+      }
       if(child.isSprite){
         try{child.material.map?.dispose?.();}catch{/* already released */}
         try{child.material.dispose?.();}catch{/* already released */}
@@ -173,16 +179,28 @@ export function mountChessArena({documentRoot=document,host}){
     });
   }
 
+  /** Stamp a celebration/select mode on a champion. The motion loop plays it
+   *  for its duration, then falls back to idle. Reduced motion ignores it. */
+  function setRigMode(mesh,mode){
+    if(!mesh)return;
+    mesh.userData.rigMode=mode;
+    mesh.userData.rigModeT0=performance.now();
+  }
+
   function buildAllPieces(){
     for(const [,group] of meshes){pieces.remove(group);releasePiece(group);}
     meshes.clear();
     for(const row of state.board)for(const piece of row){
       if(!piece)continue;
-      const mesh=builders.buildPiece(piece.type,piece.color);
+      const seed=motionSeedFor(piece.square);
+      const mesh=builders.buildPiece(piece.type,piece.color,seed);
       const [x,y,z]=squarePosition(piece.square);
       mesh.position.set(x,y,z);
       mesh.userData.square=piece.square;
       mesh.userData.baseY=y;
+      mesh.userData.rigMode='idle';
+      mesh.userData.rigModeT0=performance.now();
+      mesh.userData.heading=0;
       attachMotion(mesh,piece.square);
       pieces.add(mesh);
       meshes.set(piece.square,mesh);
@@ -225,20 +243,24 @@ export function mountChessArena({documentRoot=document,host}){
   }
 
   function clearSelection(){
-    if(selected){lift(meshes.get(selected),false);selected=null;}
+    if(selected){const mesh=meshes.get(selected);lift(mesh,false);setRigMode(mesh,'idle');selected=null;}
     hall.markers.hide();
   }
 
   function select(square){
     clearSelection();
     selected=square;
-    lift(meshes.get(square),true);
+    const mesh=meshes.get(square);
+    lift(mesh,true);
+    // A selected champion waves hello — the avatar's greet language.
+    setRigMode(mesh,'wave');
     const targets=state.legalMoves.filter((m)=>m.from===square).map((m)=>m.to);
     if(targets.length)hall.markers.show(targets);else hall.markers.hide();
   }
 
   /** Glide a champion across the board in the avatar's movement language:
-   *  eased travel with a soft lift, turning into the move. Captures take the
+   *  eased travel with a soft lift, legs paddling a walk cycle (not a
+   *  slide), turning to face the travel direction. Captures take the
    *  higher arc — the drama stays, statue-hopping goes. */
   function animateGlide(mesh,fromSquare,toSquare,{arc=AVATAR_MOTION.moveArc}={},onDone){
     const [fx,,fz]=squarePosition(fromSquare);
@@ -249,17 +271,29 @@ export function mountChessArena({documentRoot=document,host}){
     const start=performance.now();
     const duration=AVATAR_MOTION.moveDurationMs;
     const seed=mesh.userData.motionSeed??0;
+    const travelHeading=Math.atan2(tx-fx,tz-fz);
+    const startHeading=mesh.userData.heading??mesh.rotation.y??0;
+    let headingDelta=travelHeading-startHeading;
+    while(headingDelta>Math.PI)headingDelta-=Math.PI*2;
+    while(headingDelta<-Math.PI)headingDelta+=Math.PI*2;
     activeGlides++;
     gliding.add(mesh);
+    setRigMode(mesh,'walk');
     const tick=(now)=>{
       if(!alive)return;
       const t=Math.min(1,(now-start)/duration);
       const p=avatarGlide({from,to,t,arc});
       mesh.position.set(p.x,p.y,p.z);
-      const pose=avatarIdlePose({time:now/1000,seed,reducedMotion});
-      mesh.rotation.y=pose.swayY+Math.sin(t*Math.PI)*0.9;
+      const pose=updateTumboChibiRig(THREE,mesh.userData.rig,{time:now/1000,seed,reducedMotion,mode:'walk'});
+      const chibi=mesh.userData.rig.group;
+      chibi.position.y=0.02+pose.bobY+pose.lift;
+      chibi.rotation.y=pose.swayY;
+      mesh.rotation.y=startHeading+headingDelta*Math.min(1,t*1.6);
       if(t<1){requestAnimationFrame(tick);return;}
       mesh.position.set(to[0],to[1],to[2]);
+      mesh.userData.heading=travelHeading;
+      mesh.rotation.y=travelHeading;
+      setRigMode(mesh,'idle');
       gliding.delete(mesh);
       activeGlides=Math.max(0,activeGlides-1);
       onDone?.();
@@ -267,12 +301,20 @@ export function mountChessArena({documentRoot=document,host}){
     requestAnimationFrame(tick);
   }
 
+  /** The defeated champion twirls as it shrinks away — a spin, not a pop. */
   function shrinkOut(group,onDone){
     const start=performance.now();
+    const rig=group.userData.rig;
+    const seed=group.userData.motionSeed??0;
     const tick=(now)=>{
       if(!alive)return;
-      const t=Math.min(1,(now-start)/260);
+      const t=Math.min(1,(now-start)/420);
       group.scale.setScalar(Math.max(0.001,1-t));
+      if(rig&&!reducedMotion){
+        const pose=updateTumboChibiRig(THREE,rig,{time:now/1000,seed,reducedMotion,mode:'spin',modeT:(now-start)/1000});
+        rig.group.rotation.y=pose.swayY+pose.turn;
+        rig.group.position.y=0.02+pose.lift;
+      }
       if(t<1){requestAnimationFrame(tick);return;}
       onDone?.();
     };
@@ -312,10 +354,13 @@ export function mountChessArena({documentRoot=document,host}){
     if(mesh&&landed&&landed.type!==moving.type){
       // Promotion: the pawn figure becomes the chosen piece.
       pieces.remove(mesh);releasePiece(mesh);
-      mesh=builders.buildPiece(landed.type,landed.color);
+      mesh=builders.buildPiece(landed.type,landed.color,motionSeedFor(to));
       const [x,y,z]=squarePosition(from);
       mesh.position.set(x,y,z);
       mesh.userData.baseY=y;
+      mesh.userData.rigMode='idle';
+      mesh.userData.rigModeT0=performance.now();
+      mesh.userData.heading=0;
       attachMotion(mesh,to);
       pieces.add(mesh);
     }
@@ -325,7 +370,14 @@ export function mountChessArena({documentRoot=document,host}){
       mesh.userData.motionSeed=motionSeedFor(to);
       meshes.set(to,mesh);
       const glideArc=wasCapture?AVATAR_MOTION.captureArc:AVATAR_MOTION.moveArc;
-      animateGlide(mesh,from,to,{arc:glideArc},afterMove);
+      animateGlide(mesh,from,to,{arc:glideArc},()=>{
+        // The victor takes a bow after a capture lands. Compared against a
+        // shared celebration for both pieces and retained: the victim's
+        // spin-away (in shrinkOut) reads as defeat while the victor's bow
+        // reads as triumph — distinct emotions beat a shared one.
+        if(wasCapture&&!reducedMotion)setRigMode(mesh,'bow');
+        afterMove();
+      });
     }
     if(isCastle){
       const rank=from[1];
@@ -509,9 +561,11 @@ export function mountChessArena({documentRoot=document,host}){
   };
   const ro=new ResizeObserver(draw);ro.observe(stage);
 
-  /** Continuous idle loop: every champion breathes the avatar motion language
-   *  — bob, sway-turn, glow-ring pulse — while the camera orbits or glides run.
-   *  Frozen when the OS asks for reduced motion. */
+  /** Continuous idle loop: every champion lives the avatar motion language
+   *  through its chibi rig — breathing, bob, sway-turn, blinks, tail wags —
+   *  plus whatever it is doing right now (waving on select, bowing after a
+   *  capture). The glow ring pulses per-champion. Frozen when the OS asks
+   *  for reduced motion. */
   let motionRaf=0;
   function startMotionLoop(){
     if(motionRaf||reducedMotion)return;
@@ -520,11 +574,20 @@ export function mountChessArena({documentRoot=document,host}){
       const time=now/1000;
       for(const [,mesh] of meshes){
         if(gliding.has(mesh))continue; // glide writes the pose itself
-        const pose=avatarIdlePose({time,seed:mesh.userData.motionSeed??0});
-        const baseY=mesh.userData.baseY??0.06;
+        const rig=mesh.userData.rig;
+        if(!rig)continue;
+        let mode=mesh.userData.rigMode||'idle';
+        const duration=CHIBI_RIG_MODES[mode]??0;
+        const modeT=(now-(mesh.userData.rigModeT0??now))/1000;
+        if(duration>0&&modeT>=duration){
+          mode='idle';
+          mesh.userData.rigMode='idle';
+        }
+        const pose=updateTumboChibiRig(THREE,rig,{time,seed:mesh.userData.motionSeed??0,reducedMotion,mode,modeT});
+        const chibi=rig.group;
         const liftY=mesh.userData.lifted?0.22:0;
-        mesh.position.y=baseY+pose.bobY+liftY;
-        mesh.rotation.y=pose.swayY;
+        chibi.position.y=0.02+pose.bobY+pose.lift+liftY;
+        chibi.rotation.y=pose.swayY+pose.turn;
         const ring=mesh.userData.motionRing;
         if(ring)ring.material.emissiveIntensity=(mesh.userData.motionRingBase??1.2)*(0.85+0.3*pose.glow);
       }

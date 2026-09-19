@@ -1,5 +1,31 @@
 # Current State
 
+## Packet 231 — animated Tumbo chess champions (2026-09-19)
+
+The chess pieces are now articulated miniature Tumbo champions instead of
+billboard portraits. Each piece is a full 3D chibi rig (big head, fluffy
+earmuffs, black hoodie with drawstrings, brown paws, locs, eyeliner/beauty
+mark/goatee, wagging tail) built from shared geometry/material caches so all
+32 share draw state. They move like Tumbo: idle breathing/bob/blink/tail-wag,
+a wave when selected, a walk cycle (legs paddling, body bobbing, turning to
+face travel) while gliding to the target square, a bow from the victor after
+a capture lands, and a spin-away while the captured piece shrinks out.
+Tap-to-move, legal-target markers, AI, promotion, and all rules are unchanged.
+The personal-portrait decal slot resolves the user's stylized photo when one
+exists (default stays geometric Tumbo). Two visual alternatives were compared
+and retained: a full torus headband (physically connects both ear cups, reads
+identically from the front, correct from all angles) beat a partial crown
+arc; and distinct capture emotions (victim spins, victor bows) beat a shared
+celebration. The focused suite passes 45/45 in local node runs (bow math,
+rig joints, all motion modes, all six roles × both colors, no sprites,
+stature/ring differences, decal wiring, squarePosition); all touched files
+pass `node --check`. A headless-Chromium note: rAF does not fire in the
+software test shell, so glide/motion-loop frames were verified by driving
+the rig poses directly plus logic-level game flow (e4/d5/exd5, AI replies,
+zero console/page errors); the parent performs live-browser verification.
+No provider request, credential, advice, reward token, persistence, wallet,
+or external authority was added.
+
 ## Packet 230 — Tumbo reference look for the Person avatar (2026-09-18)
 
 The 3D avatar now reads as the Tumbo reference character. The rig is restyled

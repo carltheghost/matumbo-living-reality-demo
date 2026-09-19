@@ -8,7 +8,7 @@ import { mountCenteredSurfaces } from './render/centered-surfaces.js?v=20260918-
 import { createImmersiveSession } from './render/immersive-session.js';
 import { createMediaPreview } from './render/media-preview.js';
 import { initMobilePanelManager } from './render/mobile-panel-manager.js';
-import { createPersonStudio } from './render/person-studio.js?v=20260918-avatar-chess';
+import { createPersonStudio } from './render/person-studio.js?v=20260919-chibi-champions';
 import { createRealityAssembly } from './render/reality-assembly.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
@@ -55,7 +55,7 @@ import { BLOCK_WORLD_SNAPSHOT_CONSOLE_SOURCE, createBlockWorldSnapshotConsole } 
 import { BLOCK_WORLD_RUNTIME_SYNC_SOURCE, createBlockWorldRuntimeSync } from './render/block-world-runtime-sync.js?v=20260828-runtime-sync171';
 import { ARENA_GAMES_SOURCE, ARENA_GAMES_CONSOLE_SOURCE } from './domains/arena-games.js?v=20260826-arena1';
 import { createArenaGamesConsole } from './render/arena-games.js?v=20260826-arena1';
-import { mountChessArena } from './render/chess-arena.js?v=20260918-avatar-chess';
+import { mountChessArena } from './render/chess-arena.js?v=20260919-chibi-champions';
 import { ACADEMY_CONSOLE_SOURCE, createAcademyConsole } from './render/academy.js?v=20260904-academy1';
 import {
   CONTRACTS_MARKETS_SOURCE,
