@@ -38,13 +38,86 @@ export const CHIBI_RIG_MODES = Object.freeze({
   spin: AVATAR_CELEBRATE.spin,
 });
 
+/** Shared geometry cache for chibi rigs: every rig built from one cache
+ *  shares draw state. Lives in the rig module so the chess foundry and the
+ *  Person Studio build from the same source instead of forking the geometry
+ *  language. Never imports 'three' itself; testable in node. */
+export function createTumboGeometryCache(THREE) {
+  if (!THREE) throw new Error('createTumboGeometryCache needs the THREE namespace');
+  const cache = new Map();
+  const get = (key, make) => {
+    let geometry = cache.get(key);
+    if (!geometry) {
+      geometry = make();
+      cache.set(key, geometry);
+    }
+    return geometry;
+  };
+  return {
+    capsule: (r, length) => get(`capsule:${r}:${length}`, () => new THREE.CapsuleGeometry(r, length, 4, 10)),
+    sphere: (r, w = 14, h = 10) => get(`sphere:${r}:${w}:${h}`, () => new THREE.SphereGeometry(r, w, h)),
+    hairCap: (r) => get(`haircap:${r}`, () => new THREE.SphereGeometry(r, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.58)),
+    box: (w, h, d) => get(`box:${w}:${h}:${d}`, () => new THREE.BoxGeometry(w, h, d)),
+    cone: (r, h, s = 8) => get(`cone:${r}:${h}:${s}`, () => new THREE.ConeGeometry(r, h, s)),
+    cylinder: (rt, rb, h, s = 12) => get(`cyl:${rt}:${rb}:${h}:${s}`, () => new THREE.CylinderGeometry(rt, rb, h, s)),
+    torus: (r, t) => get(`torus:${r}:${t}`, () => new THREE.TorusGeometry(r, t, 10, 24)),
+    circle: (r, s = 24) => get(`circle:${r}:${s}`, () => new THREE.CircleGeometry(r, s)),
+    ring: (inner, outer, s = 64) => get(`ring:${inner}:${outer}:${s}`, () => new THREE.RingGeometry(inner, outer, s)),
+    plane: (w, h) => get(`plane:${w}:${h}`, () => new THREE.PlaneGeometry(w, h)),
+    size() { return cache.size; },
+    dispose() {
+      cache.forEach((geometry) => geometry.dispose());
+      cache.clear();
+    },
+  };
+}
+
+/** Shared material set for chibi rigs. `appearance` carries skin, hair,
+ *  outfit (hoodie), outfitTrim (drawstrings/zipper), paw, muff colors —
+ *  everything the wardrobe can tint lives here as a mutable material, so
+ *  earmuff/outfit changes apply live without rebuilding the rig.
+ *  Callers add their own extras (chess adds its side ring/glow set). */
+export function createTumboMaterialSet(THREE, appearance = {}) {
+  if (!THREE) throw new Error('createTumboMaterialSet needs the THREE namespace');
+  const source = appearance && typeof appearance === 'object' ? appearance : {};
+  const std = (params) => new THREE.MeshStandardMaterial(params);
+  const trimColor = source.outfitTrim ?? source.trim ?? '#d9ae60';
+  const materials = {
+    skin: std({color: source.skin ?? '#794b36', roughness: 0.62, metalness: 0}),
+    hair: std({color: source.hair ?? '#171311', roughness: 0.48, metalness: 0.12}),
+    outfit: std({color: source.outfit ?? source.outfitColor ?? '#111620', roughness: 0.5, metalness: 0.28}),
+    trim: std({color: trimColor, emissive: trimColor, emissiveIntensity: 0.35, metalness: 0.6, roughness: 0.32}),
+    // Brown furry paws, per the reference portraits.
+    paw: std({color: source.paw ?? '#8a5a33', roughness: 1, metalness: 0.02}),
+    // Fluffy earmuff cups + band: wardrobe-tinted (white default, teal option).
+    muff: std({color: source.muff ?? source.muffColor ?? '#f5f2ea', roughness: 1, metalness: 0.02}),
+    eyeWhite: std({color: 0xc9bcab, roughness: 0.5, metalness: 0}),
+    iris: std({color: 0x6b4426, roughness: 0.25, metalness: 0.05}),
+    pupil: std({color: 0x050506, roughness: 0.25, metalness: 0}),
+    liner: std({color: 0x14100d, roughness: 0.5, metalness: 0.1}),
+    lips: std({color: 0x4e2b25, roughness: 0.7, metalness: 0}),
+  };
+  const all = Object.values(materials);
+  return Object.freeze({
+    ...materials,
+    /** Release every material in the set (geometries belong to the cache). */
+    dispose() { all.forEach((material) => material.dispose()); },
+  });
+}
+
 function qFromEuler(THREE, x, y, z) {
   return new THREE.Quaternion().setFromEuler(new THREE.Euler(x, y, z));
 }
 
 /** Build one articulated chibi. `mats` needs skin, hair, outfit, trim, paw,
- *  muff, eyeWhite, iris, pupil, liner, lips. Returns the rig record. */
-export function buildTumboChibiRig(THREE, G, M, { seed = 0, faceDecalUrl = null, decalRegistry = null } = {}) {
+ *  muff, eyeWhite, iris, pupil, liner, lips. Returns the rig record.
+ *
+ *  Options: `seed` desynchronizes idle motion; `faceDecalUrl` wears a
+ *  personal portrait on the forehead band (browser only); `decalRegistry`
+ *  collects decal materials for disposal; `chestText` prints embroidered
+ *  chest text (e.g. the gold TUMBO from the reference portraits) — opt-in,
+ *  default off, so board-scale pieces stay uncluttered. */
+export function buildTumboChibiRig(THREE, G, M, { seed = 0, faceDecalUrl = null, decalRegistry = null, chestText = null } = {}) {
   if (!THREE || !G || !M) throw new Error('buildTumboChibiRig needs THREE, a geometry cache, and materials');
   const group = new THREE.Group();
   group.userData.chibiRig = true;
@@ -81,6 +154,34 @@ export function buildTumboChibiRig(THREE, G, M, { seed = 0, faceDecalUrl = null,
   pocket.position.set(0, 0.12, 0.135);
   const zipper = mesh(G.box(0.014, 0.40, 0.012), M.trim, spine);
   zipper.position.set(0, 0.30, 0.148);
+  // Embroidered chest text (opt-in): the gold TUMBO on the wearer's left
+  // chest, per the reference portraits. A canvas texture needs DOM, so in
+  // node (focused suites) the builder stays exception-free and the decal
+  // is simply absent; the studio wears it, chess pieces do not.
+  let chestDecalMesh = null;
+  if (typeof chestText === 'string' && chestText.length > 0 && typeof document !== 'undefined'
+    && typeof document.createElement === 'function' && typeof THREE.CanvasTexture === 'function') {
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = 256; canvas.height = 64;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, 256, 64);
+        ctx.font = '600 40px Georgia,"Times New Roman",serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#d9ae60';
+        ctx.fillText(chestText, 128, 34);
+        const texture = new THREE.CanvasTexture(canvas);
+        const material = new THREE.MeshBasicMaterial({map: texture, transparent: true});
+        chestDecalMesh = new THREE.Mesh(G.plane(0.11, 0.028), material);
+        chestDecalMesh.position.set(-0.055, 0.40, 0.150);
+        chestDecalMesh.rotation.x = -0.05;
+        chestDecalMesh.userData.part = 'chest-decal';
+        spine.add(chestDecalMesh);
+        if (decalRegistry) decalRegistry.push(material);
+      }
+    } catch { /* chest text is decoration; the rig stands without it */ }
+  }
 
   // ---- head (big chibi read) ----
   const neck = joint('neck', spine, 0, 0.55, 0);
@@ -131,13 +232,26 @@ export function buildTumboChibiRig(THREE, G, M, { seed = 0, faceDecalUrl = null,
     mustache.scale.set(1, 0.32, 0.4);
     mustache.rotation.z = side > 0 ? -0.15 : 0.15;
   }
-  // Locs: tapered cones angled outward-down around the crown.
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2 + 0.4;
-    const loc = mesh(G.cone(0.028, 0.34, 7), M.hair, head);
+  // Locs: a hair cap covers the crown (no bald read), with tapered locs
+  // angled outward-down around it. Compared against the reference
+  // portraits, a bare crown with 8 sparse locs read as bald at studio
+  // scale; the cap + 12 fuller locs restores the reference's full loc
+  // crown. The cap uses the cache's hairCap geometry (a sphere top).
+  const scalp = mesh(G.hairCap(0.268), M.hair, head);
+  scalp.position.set(0, 0.035, -0.012);
+  scalp.scale.set(1, 1.02, 0.96);
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2 + 0.4;
+    const loc = mesh(G.cone(0.032, 0.40, 7), M.hair, head);
     const r = 0.20;
     loc.position.set(Math.cos(a) * r, 0.16, Math.sin(a) * r * 0.9 - 0.03);
     loc.rotation.set(Math.sin(a) * 0.5, 0, -Math.cos(a) * 0.55);
+  }
+  // Two longer locs fall in front of the shoulders, per the reference.
+  for (const side of [-1, 1]) {
+    const front = mesh(G.cone(0.030, 0.52, 7), M.hair, head);
+    front.position.set(side * 0.20, 0.02, 0.14);
+    front.rotation.set(0.12, 0, side * 0.10);
   }
   // Fluffy earmuffs: headband + two plush cups. A full torus (not a
   // partial crown arc) was compared and retained: it physically connects
@@ -220,6 +334,7 @@ export function buildTumboChibiRig(THREE, G, M, { seed = 0, faceDecalUrl = null,
     group, joints, blinkBalls, blinkLids, tail, rest, seed,
     baseHeight: CHIBI_RIG_BASE_HEIGHT,
     hasFaceDecal: decalMesh !== null,
+    hasChestText: chestDecalMesh !== null,
   });
 }
 

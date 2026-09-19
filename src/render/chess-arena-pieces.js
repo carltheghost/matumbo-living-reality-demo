@@ -18,8 +18,8 @@
  * cinematic staging does not explode draw state.
  */
 import {PERSON_STUDIO_STORAGE_KEY, STUDIO_MODEL, STUDIO_OUTFITS} from '../domains/person-studio.js';
-import {loadAvatarFace, loadAvatarFaceChoice, resolveAvatarFaceUrl} from '../domains/avatar-style.js';
-import {buildTumboChibiRig, CHIBI_RIG_BASE_HEIGHT} from './tumbo-chibi-rig.js';
+import {resolveAvatarFaceUrl, resolveFaceDecalUrl} from '../domains/avatar-style.js';
+import {buildTumboChibiRig, CHIBI_RIG_BASE_HEIGHT, createTumboGeometryCache, createTumboMaterialSet} from './tumbo-chibi-rig.js';
 
 export const CHESS_ARENA_PIECE_TYPES = Object.freeze(['p', 'n', 'b', 'r', 'q', 'k']);
 const FILES = 'abcdefgh';
@@ -51,18 +51,9 @@ function outfitById(id) {
  *  Never throws: falls back to the reference defaults when nothing valid is
  *  saved. The renderer is a projection, not a validator — person-studio owns
  *  validation; here we only borrow its colors. */
-/** The personal portrait decal for the 3D chibi rig: the user's own
- *  stylized chibi picture, and only then — the choice must be 'your-photo'
- *  AND a saved portrait must exist. Otherwise the rig's geometric Tumbo
- *  face is the whole read (default Tumbo face until a personal portrait
- *  lands). Never throws. */
-function resolveFaceDecalUrl(store) {
-  try {
-    if (!store) return null;
-    if (loadAvatarFaceChoice(store) !== 'your-photo') return null;
-    return loadAvatarFace(store)?.stylizedDataURL ?? null;
-  } catch { return null; }
-}
+/** The personal portrait decal for the 3D chibi rig now lives in the avatar
+ *  style domain (src/domains/avatar-style.js) so the chess foundry and the
+ *  Person Studio resolve the same face from one source. */
 
 export function readArenaAvatarAppearance({storage = null} = {}) {
   const fallback = () => Object.freeze({...DEFAULT_APPEARANCE, faceDecalUrl: resolveFaceDecalUrl(store)});
@@ -119,68 +110,34 @@ export function readArenaAvatarAppearance({storage = null} = {}) {
   });
 }
 
-function createGeometryCache(THREE) {
-  const cache = new Map();
-  const get = (key, make) => {
-    let geometry = cache.get(key);
-    if (!geometry) {
-      geometry = make();
-      cache.set(key, geometry);
-    }
-    return geometry;
-  };
-  return {
-    capsule: (r, length) => get(`capsule:${r}:${length}`, () => new THREE.CapsuleGeometry(r, length, 4, 10)),
-    sphere: (r, w = 14, h = 10) => get(`sphere:${r}:${w}:${h}`, () => new THREE.SphereGeometry(r, w, h)),
-    hairCap: (r) => get(`haircap:${r}`, () => new THREE.SphereGeometry(r, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.58)),
-    box: (w, h, d) => get(`box:${w}:${h}:${d}`, () => new THREE.BoxGeometry(w, h, d)),
-    cone: (r, h, s = 8) => get(`cone:${r}:${h}:${s}`, () => new THREE.ConeGeometry(r, h, s)),
-    cylinder: (rt, rb, h, s = 12) => get(`cyl:${rt}:${rb}:${h}:${s}`, () => new THREE.CylinderGeometry(rt, rb, h, s)),
-    torus: (r, t) => get(`torus:${r}:${t}`, () => new THREE.TorusGeometry(r, t, 10, 24)),
-    circle: (r, s = 24) => get(`circle:${r}:${s}`, () => new THREE.CircleGeometry(r, s)),
-    ring: (inner, outer, s = 64) => get(`ring:${inner}:${outer}:${s}`, () => new THREE.RingGeometry(inner, outer, s)),
-    dispose() {
-      cache.forEach((geometry) => geometry.dispose());
-      cache.clear();
-    },
-  };
-}
-
-function createMaterialSet(THREE, appearance) {
-  const source = appearance && typeof appearance === 'object' ? appearance : {};
+/** Geometry and base materials come from the shared chibi rig module
+ *  (./tumbo-chibi-rig.js) so the chess foundry and the Person Studio build
+ *  from one source. The arena only adds its side-colored ring/glow set —
+ *  the same materials every board piece shares. */
+function createArenaMaterialSet(THREE, appearance) {
+  const M = createTumboMaterialSet(THREE, appearance);
   const std = (params) => new THREE.MeshStandardMaterial(params);
-  const outfitColor = source.outfitColor || DEFAULT_APPEARANCE.outfitColor;
-  const muffColor = source.muffColor || '#f5f2ea';
-  return {
-    skin: std({color: source.skin || DEFAULT_APPEARANCE.skin, roughness: 0.62, metalness: 0}),
-    hair: std({color: source.hair || DEFAULT_APPEARANCE.hair, roughness: 0.48, metalness: 0.12}),
-    outfit: std({color: outfitColor, roughness: 0.5, metalness: 0.28}),
-    trim: std({
-      color: source.outfitTrim || DEFAULT_APPEARANCE.outfitTrim,
-      emissive: source.outfitTrim || DEFAULT_APPEARANCE.outfitTrim,
-      emissiveIntensity: 0.35, metalness: 0.6, roughness: 0.32,
-    }),
-    // Chibi rig materials: brown furry paws, fluffy earmuff cups, face parts.
-    paw: std({color: 0x8a5a33, roughness: 1, metalness: 0.02}),
-    muff: std({color: muffColor, roughness: 1, metalness: 0.02}),
-    eyeWhite: std({color: 0xc9bcab, roughness: 0.5, metalness: 0}),
-    iris: std({color: 0x6b4426, roughness: 0.25, metalness: 0.05}),
-    pupil: std({color: 0x050506, roughness: 0.25, metalness: 0}),
-    liner: std({color: 0x14100d, roughness: 0.5, metalness: 0.1}),
-    lips: std({color: 0x4e2b25, roughness: 0.7, metalness: 0}),
-    side: {
-      w: {
-        base: std({color: 0xe9dcc0, metalness: 0.35, roughness: 0.38}),
-        glow: std({color: 0xffc25e, emissive: 0x9a5200, emissiveIntensity: 1.6, metalness: 0.55, roughness: 0.3}),
-        ring: std({color: 0xffd98a, emissive: 0xd77a1a, emissiveIntensity: 2.4, metalness: 0.4, roughness: 0.35}),
-      },
-      b: {
-        base: std({color: 0x211829, metalness: 0.55, roughness: 0.3}),
-        glow: std({color: 0x9a5cff, emissive: 0x43119c, emissiveIntensity: 1.9, metalness: 0.45, roughness: 0.3}),
-        ring: std({color: 0xb48cff, emissive: 0x5b1ee0, emissiveIntensity: 2.6, metalness: 0.4, roughness: 0.35}),
-      },
+  const side = {
+    w: {
+      base: std({color: 0xe9dcc0, metalness: 0.35, roughness: 0.38}),
+      glow: std({color: 0xffc25e, emissive: 0x9a5200, emissiveIntensity: 1.6, metalness: 0.55, roughness: 0.3}),
+      ring: std({color: 0xffd98a, emissive: 0xd77a1a, emissiveIntensity: 2.4, metalness: 0.4, roughness: 0.35}),
+    },
+    b: {
+      base: std({color: 0x211829, metalness: 0.55, roughness: 0.3}),
+      glow: std({color: 0x9a5cff, emissive: 0x43119c, emissiveIntensity: 1.9, metalness: 0.45, roughness: 0.3}),
+      ring: std({color: 0xb48cff, emissive: 0x5b1ee0, emissiveIntensity: 2.6, metalness: 0.4, roughness: 0.35}),
     },
   };
+  const sideMats = [side.w.base, side.w.glow, side.w.ring, side.b.base, side.b.glow, side.b.ring];
+  return Object.freeze({
+    ...M,
+    side,
+    dispose() {
+      M.dispose();
+      sideMats.forEach((material) => material.dispose());
+    },
+  });
 }
 
 /** Fallback face every chess piece wears when no choice resolves: the generic
@@ -308,8 +265,8 @@ function buildKing(THREE, G, M, color, _type, ctx = null) {
 export function createPieceBuilders(THREE, appearance = null) {
   if (!THREE) throw new Error('createPieceBuilders needs the THREE namespace');
   const resolved = Object.freeze({...DEFAULT_APPEARANCE, ...(appearance ?? {})});
-  const G = createGeometryCache(THREE);
-  const M = createMaterialSet(THREE, resolved);
+  const G = createTumboGeometryCache(THREE);
+  const M = createArenaMaterialSet(THREE, resolved);
   const builders = {p: buildPawn, n: buildKnight, b: buildBishop, r: buildRook, q: buildQueen, k: buildKing};
   // Face-decal materials are per-piece (one personal portrait texture each).
   // Track them so dispose() releases the portrait texture too.
@@ -326,9 +283,7 @@ export function createPieceBuilders(THREE, appearance = null) {
   }
   function dispose() {
     G.dispose();
-    const mats = [M.skin, M.hair, M.outfit, M.trim, M.paw, M.muff, M.eyeWhite, M.iris, M.pupil, M.liner, M.lips,
-      M.side.w.base, M.side.w.glow, M.side.w.ring, M.side.b.base, M.side.b.glow, M.side.b.ring];
-    mats.forEach((mat) => mat.dispose());
+    M.dispose();
     decalMaterials.forEach((material) => {
       try { material.map?.dispose?.(); } catch { /* already released */ }
       try { material.dispose?.(); } catch { /* already released */ }

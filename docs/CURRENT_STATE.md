@@ -1,5 +1,45 @@
 # Current State
 
+## Packet 232 — Person Studio on the shared Tumbo chibi rig (2026-09-19)
+
+The Person feature's 3D avatar is now the same articulated Tumbo chibi rig
+the chess champions use, instead of the older tall mannequin. The whole
+person-studio scene was rebuilt around `src/render/tumbo-chibi-rig.js`,
+which now exports shared geometry/material factories
+(`createTumboGeometryCache`, `createTumboMaterialSet`) and a shared
+face-decal resolver (`resolveFaceDecalUrl` in `src/domains/avatar-style.js`)
+so Person Studio and the chess foundry draw from one look. The studio keeps
+its lens-space environment, city backdrop, furniture, wardrobe displays, and
+Luna companion, but the mannequin is gone: the avatar is the big-head chibi
+with fluffy white/teal earmuffs, loc crown over a full hair cap (compared
+against the reference portraits — the sparse 8-loc crown without a cap read
+as bald at studio scale, so the cap + 12 fuller locs + two shoulder-falling
+front locs won), black hoodie with gold `TUMBO` chest text, brown furry
+paws, and a curling wagging tail.
+
+Click still cycles wave → spin → jump (now driven by the rig's shared
+animation states, with greet durations matching the rig's frame counts);
+drag still walks the avatar to the target within radius 3.4 with the same
+easing, facing, and room bounds; reduced motion still freezes travel and
+converts spin/jump to a gentle wave. Profile, Wardrobe, Your room, Presence,
+and Companion tabs are preserved; wardrobe live-tints hoodie, trim, and the
+white/teal earmuffs; "Make it me" still rebuilds the avatar with the local
+photo decal. The chess foundry was refactored onto the same factories (no
+geometry/material duplication) and all 12 piece variants build from them.
+
+The focused suite passes 62/62 in local node runs (rig factories, studio
+scene structure/snapshot, greet cycle, drag clamp/ease, reduced motion,
+wardrobe tint, face refresh, decal resolution, all six chess roles × both
+colors). Headless Chromium (SwiftShader) rendered the studio with zero
+console/page errors: idle, mid-wave, drag-walk, close-up face, Cobalt/teal
+earmuffs, and mid-spin screenshots were compared against the user's reference
+portraits; the chess board view was not reachable in the headless shell
+(stage mounts at 0×0 until opened), so chess is covered by the node-level
+factory regression plus the zero-error page load — the parent performs
+live-browser verification. All touched files pass `node --check`. No
+provider request, credential, advice, reward token, persistence, wallet, or
+external authority was added.
+
 ## Packet 231 — animated Tumbo chess champions (2026-09-19)
 
 The chess pieces are now articulated miniature Tumbo champions instead of
