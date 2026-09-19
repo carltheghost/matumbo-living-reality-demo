@@ -1315,12 +1315,25 @@ export function createLeagueScoreboardQueue({
       const lastProviderStart = lastProviderStartMs.has(provider.id)
         ? lastProviderStartMs.get(provider.id)
         : Number.NEGATIVE_INFINITY;
-      const waitMs = Math.max(
-        boundedInterval - (leagueNowMs(now) - lastNetworkStartMs),
-        providerGap - (leagueNowMs(now) - lastProviderStart),
-        0,
-      );
-      if (waitMs > 0) await leagueSleep(waitMs);
+      // Deadline-based pacing. A single sleep of (interval - elapsed) can be
+      // observed as interval - 1ms by another party: ms-resolution clocks
+      // truncate their reads and setTimeout may fire ~1ms early, so the
+      // promised spacing is not actually kept. Looping until the queue's own
+      // clock reads past lastStart + interval + 1 guarantees every observer
+      // measures at least `interval` between network starts.
+      // The +1ms guard applies only to deadlines with a positive promised
+      // spacing; a zero interval promises nothing, and frozen test clocks
+      // must not spin forever waiting on a clock that never advances.
+      const globalDeadline = boundedInterval > 0
+        ? lastNetworkStartMs + boundedInterval + 1
+        : Number.NEGATIVE_INFINITY;
+      const providerDeadline = providerGap > 0
+        ? lastProviderStart + providerGap + 1
+        : Number.NEGATIVE_INFINITY;
+      const deadline = Math.max(globalDeadline, providerDeadline);
+      while (leagueNowMs(now) < deadline) {
+        await leagueSleep(deadline - leagueNowMs(now));
+      }
       const startMs = leagueNowMs(now);
       lastNetworkStartMs = startMs;
       lastProviderStartMs.set(provider.id, startMs);
