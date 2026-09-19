@@ -1,26 +1,8 @@
 import {STUDIO_MODEL,STUDIO_OUTFITS,STUDIO_ROOMS} from '../domains/person-studio.js';
-import {resolveFaceDecalUrl} from '../domains/avatar-style.js';
-import {AVATAR_GREET} from '../domains/avatar-motion.js';
-import {updateTumboChibiRig} from './tumbo-chibi-rig.js';
-import {buildTumboFluffyRig} from './tumbo-fluffy-rig.js?v=20260919-jiggle-fur';
 
-/** PERSON Ω avatar: the fluffy Tumbo mascot IS the avatar.
- *
- * The user compared the smooth-shaded chibi rig against their canonical
- * fluffy Tumbo reference and rejected it — "do they look the same? no."
- * This scene now mounts the dedicated fluffy rig
- * (src/render/tumbo-fluffy-rig.js): a plush-brown fur-shell body, cream
- * face patch, bead eyes, tiny :3 mouth, grey over-ear headphones, and
- * black locs poking out around them — the mascot from their reference,
- * not an approximation.
- *
- * The joint hierarchy and names are identical to the chibi rig, so the
- * shared updateTumboChibiRig() drives every animation unchanged. All
- * Packet 227 interactions are preserved — click cycles wave → spin →
- * jump, drag moves the avatar with a walk cycle, reduced motion freezes
- * to a gentle wave. Wardrobe tints the headphone cushions (white/teal).
- * The lens-space set (rings, glow, city, sofa, desk, wardrobe displays,
- * Luna) is unchanged; only the avatar body is replaced. */
+/** AI-built likeness: Tumbo's approved avatar bust portrait (cinematic teal/violet
+ *  rim light) drives the camera-facing hologram; the procedural rig stays as
+ *  interaction targets. */
 export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,avatarTextureUrl='assets/avatar/fluffy-body-template.webp'}) {
   const layer=new THREE.Group();layer.name='PERSON Ω / open lens space';parent.add(layer);layer.visible=false;
   const materials=new Set(),geometries=new Set(),selectable=[];
@@ -35,6 +17,7 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
   // Identity geometry is identical across device sizes. Only environmental
   // rendering quality (such as shadow resolution) may change with the viewport.
   const sphere=(mat,pos,scale,owner=layer)=>mesh(new THREE.SphereGeometry(1,24,18),mat,pos,scale,owner);
+  const tube=(points,radius,mat,owner=layer)=>mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points.map(p=>new THREE.Vector3(...p))),18,radius,6,false),mat,[0,0,0],[1,1,1],owner);
   const group=(name,pos=[0,0,0],owner=layer)=>{const g=new THREE.Group();g.name=name;g.position.set(...pos);owner.add(g);return g;};
   function target(object,action){object.userData.personStudioAction=action;targets.push(object);selectable.push(object);}
   function frame(w,h,d,mat,pos,owner=layer,thickness=.025){
@@ -118,145 +101,134 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
     box(.045,.74,.025,seam,[.105,-.05,.09],g);box(.045,.74,.025,seam,[-.105,-.05,.09],g);
     for(const side of [-1,1]){const sleeve=box(.12,.56,.13,cloth,[side*.23,.02,0],g);sleeve.rotation.z=side*.16;target(sleeve,{kind:'outfit',id:item.id});}
     target(garment,{kind:'outfit',id:item.id});garmentDisplays.push(g);
-    // Earmuff swatch: the outfit's muff tint reads on the display frame.
-    sphere(material(item.muffs??'#f5f2ea',.02,1),[.24,.62,0],[.07,.07,.07],g);
     // Each wardrobe display hangs in lens space with its own hologram ring.
     const displayRing=mesh(new THREE.TorusGeometry(.45,.016,8,56),ringBlue,[0,-.86,0],[1,1,1],g);displayRing.rotation.x=Math.PI/2;
   }
 
-  // ---- The avatar: the fluffy Tumbo mascot rig ----
-  // Fur-shell plush body built by the fluffy rig module — the mascot from
-  // the user's reference, not the smooth-shaded chibi. Wardrobe tints the
-  // headphone cushions live through the rig's material handle; the fur
-  // stays canon brown. The personal portrait decal still mounts on the
-  // forehead when one is saved locally.
-  const avatar=group('Reference-built avatar',[0,.55,0]);
-  const FLUFFY_STUDIO_SCALE=1.35;
-  const safeStorage=()=>{try{return globalThis.localStorage??null;}catch{return null;}};
-  let rig=null,rigDecalMats=[];
-  function mountRig(){
-    rigDecalMats=[];
-    const built=buildTumboFluffyRig(THREE,{
-      seed:0,
-      muffColor:STUDIO_OUTFITS[0].muffs??'#5f646c',
-      faceDecalUrl:resolveFaceDecalUrl(safeStorage()),
-      decalRegistry:rigDecalMats,
-      // Automatic LOD: small screens grow fewer fur shells.
-      furQuality:(typeof innerWidth!=='undefined'&&innerWidth<700)?.55:1,
-    });
-    built.group.scale.setScalar(FLUFFY_STUDIO_SCALE);
-    avatar.add(built.group);
-    built.group.traverse(object=>{if(object.isMesh){object.castShadow=false;object.receiveShadow=false;}});
-    return built;
+  // Articulated human. Stable facial geometry lives outside the outfit materials.
+  const avatar=group('Reference-built avatar',[0,.55,0]);avatar.scale.setScalar(1.32);
+  const skin=material(STUDIO_MODEL.skin,.02,.66),skinLight=material('#85563f',.02,.64),hair=material(STUDIO_MODEL.hair,.15,.72);
+  const jacket=material(STUDIO_OUTFITS[0].color,.07,.65),trim=material(STUDIO_OUTFITS[0].trim,.8,.32);
+  const shirt=material('#181a22',.01,.9),pants=material('#20232d',.04,.82),sole=material('#25252a',.1,.65);
+  const eyes=material('#c3b4a4',0,.5),iris=material('#2a1a11',.05,.25),pupil=material('#050506',0,.25),lips=material('#4e2b25',0,.7);
+  const joints={};
+  const bone=(name,pos,owner)=>{const g=group(name,pos,owner);joints[name]=g;return g;};
+  const hips=bone('root',[0,.94,0],avatar);
+  sphere(pants,[0,.02,0],[.245,.17,.145],hips);
+  const torso=bone('spine',[0,.12,0],hips);
+  // Lathed torso includes waist, chest, shoulder taper rather than a scaled cube.
+  const profile=[[.18,0],[.205,.1],[.22,.3],[.3,.61],[.295,.68],[.20,.75]];
+  const torsoMesh=mesh(new THREE.LatheGeometry(profile.map(([x,y])=>new THREE.Vector2(x,y)),24),jacket,[0,0,0],[1,1,.63],torso);
+  target(torsoMesh,{kind:'tab',id:'wardrobe'});
+  box(.23,.57,.032,shirt,[0,.4,.182],torso);
+  const belt=mesh(new THREE.CylinderGeometry(.213,.22,.07,24),dark,[0,.025,0],[1,1,.7],torso);
+  box(.08,.06,.025,trim,[0,.025,.164],torso);
+  for(const side of [-1,1]){
+    const lapel=box(.080,.46,.035,jacket,[side*.13,.48,.185],torso);lapel.rotation.z=-side*.27;
+    const piping=box(.009,.46,.012,trim,[side*.155,.48,.209],torso);piping.rotation.z=-side*.27;
+    box(.011,.34,.015,trim,[side*.175,.20,.16],torso);
+    const tail=box(.17,.53,.035,jacket,[side*.20,-.21,-.07],torso);tail.rotation.z=-side*.1;
+    const edging=box(.012,.53,.043,trim,[side*.281,-.21,-.07],torso);edging.rotation.z=-side*.1;
+    const pocket=box(.085,.06,.026,dark,[side*.20,.20,.165],torso);pocket.rotation.z=side*.07;
   }
-  rig=mountRig();
-  // ---- Secondary-motion simulation (Packet 236) ----
-  // The xlovecam jiggle-physics engine (vendored under vendor/jiggle-physics,
-  // BSD-3-Clause (c) 2026 xlovecam, https://github.com/xloveee/jiggle-physics)
-  // drives the tail as a 4-link spring chain, the body squash as one vertical
-  // spring, and the headphone cups as two sprung bones — all from the
-  // avatar's real acceleration via the engine's finite-difference driver.
-  // Seeded exact closed-form springs: stable at any frame rate, no fixed
-  // timestep, no Math.random anywhere. If the engine scripts failed to load,
-  // the avatar simply plays its keyframed animation with static fur.
-  let jiggle = null;
-  const _v1 = new THREE.Vector3();
-  function setupJiggle() {
-    const G = globalThis;
-    try {
-      if (typeof G.createJigglePhysics !== 'function'
-        || typeof G.createJiggleChain !== 'function'
-        || typeof G.createJiggleDriver !== 'function') return;
-      const tail = G.createJiggleChain({ links: 4, seed: 1103 });
-      tail.params.freq = 3.1; tail.params.damp = 0.32; tail.params.g = 1.1;
-      const squash = G.createJigglePhysics({ bones: 1, seed: 2207 });
-      squash.params.freq = 5.2; squash.params.damp = 0.55; squash.params.g = 0;
-      const cups = G.createJigglePhysics({ bones: 2, seed: 3301 });
-      cups.params.freq = 4.4; cups.params.damp = 0.42; cups.params.g = 1.4;
-      jiggle = {
-        driver: G.createJiggleDriver(),
-        tail, squash, cups,
-        prevPos: new THREE.Vector3(), vel: new THREE.Vector3(),
-        world: new THREE.Vector3(), sway: new THREE.Vector3(),
-        primed: false,
-      };
-    } catch { jiggle = null; }
+  tube([[-.075,.72,.12],[-.09,.61,.22],[0,.48,.225],[.09,.61,.22],[.075,.72,.12]],.006,trim,torso);
+  const emblem=mesh(new THREE.ConeGeometry(.029,.055,3),trim,[0,.45,.235],[1,1,.3],torso);emblem.rotation.z=Math.PI;
+  const neck=bone('neck',[0,.765,0],torso);mesh(new THREE.CylinderGeometry(.068,.085,.14,20),skin,[0,.02,0],[1,1,1],neck);
+  const head=bone('head',[0,.165,0],neck);
+  const headMesh=sphere(skin,[0,.025,0],[.175,.225,.16],head);target(headMesh,{kind:'tab',id:'identity'});
+  sphere(skin,[0,-.1,.025],[.145,.11,.138],head);
+  sphere(skinLight,[0,-.075,.084],[.124,.073,.095],head);
+  for(const side of [-1,1]){
+    sphere(skin,[side*.174,.005,0],[.031,.068,.026],head);
+    sphere(skinLight,[side*.110,-.013,.108],[.045,.041,.027],head);
+    const eye=sphere(eyes,[side*.073,.034,.141],[.038,.016,.016],head);
+    sphere(iris,[side*.073,.034,.153],[.015,.015,.005],head);sphere(pupil,[side*.073,.034,.158],[.007,.008,.003],head);
+    const brow=box(.074,.014,.02,hair,[side*.074,.071,.147],head);brow.rotation.z=-side*.10;
+    const lid=sphere(skin,[side*.073,.052,.138],[.040,.012,.018],head);lid.rotation.z=-side*.03;
+    sphere(hair,[side*.134,-.107,.059],[.026,.07,.055],head);
+    eye.userData.expressionPart='eye';
   }
-  setupJiggle();
-  // Secondary motion, applied after the keyframed rig update (which resets
-  // joints to rest each frame, so these offsets hold for the frame). Also
-  // drives the GPU fur uniforms: breeze + motion-reactive sway, frozen to
-  // zero amplitude under reduced motion.
-  function stepSecondaryMotion(dt, time, reducedMotion) {
-    const furAmp = reducedMotion ? 0 : 1;
-    if (!jiggle || reducedMotion) {
-      for (const sh of rig.furShaders) {
-        sh.uniforms.uFurTime.value = time;
-        sh.uniforms.uFurAmp.value = furAmp;
-        sh.uniforms.uFurSway.value.set(0, 0, 0);
-      }
-      return;
-    }
-    const j = jiggle, h = Math.max(dt, 1e-4);
-    avatar.getWorldPosition(j.world);
-    if (!j.primed) {
-      j.driver.reset([j.world.x, j.world.y, j.world.z]);
-      j.prevPos.copy(j.world); j.primed = true;
-    }
-    // Smoothed horizontal velocity: the fur trails the motion on the GPU.
-    j.vel.lerp(_v1.set((j.world.x - j.prevPos.x) / h, 0, (j.world.z - j.prevPos.z) / h), Math.min(1, dt * 5));
-    j.prevPos.copy(j.world);
-    const accel = j.driver.update(dt, [j.world.x, j.world.y, j.world.z]);
-    // Tail: cumulative chain-tip offsets bend the tail joint past its
-    // keyframed wag — whips on spins, lags on hops.
-    const tip = j.tail.update(dt, accel), T = 3;
-    rig.joints.tail.rotation.y += THREE.MathUtils.clamp(tip[T * 3] * 2.6, -0.55, 0.55);
-    rig.joints.tail.rotation.x += THREE.MathUtils.clamp(-tip[T * 3 + 1] * 2.6, -0.55, 0.55);
-    // Body squash & stretch from vertical acceleration (hop landings).
-    const sq = j.squash.update(dt, [0, accel[1], 0]);
-    const sy = THREE.MathUtils.clamp(1 + sq[1] * 0.12, 0.93, 1.07);
-    const sxz = 1 - (sy - 1) * 0.55;
-    rig.group.scale.set(FLUFFY_STUDIO_SCALE * sxz, FLUFFY_STUDIO_SCALE * sy, FLUFFY_STUDIO_SCALE * sxz);
-    // Headphone cups bounce on their springs.
-    const co = j.cups.update(dt, accel), cupMeshes = rig.headphoneCups || [];
-    for (let i = 0; i < cupMeshes.length && i < 2; i++) {
-      const cup = cupMeshes[i], base = cup.userData.basePos;
-      if (base) cup.position.set(base.x + co[i * 3] * 0.28, base.y + co[i * 3 + 1] * 0.28, base.z + co[i * 3 + 2] * 0.28);
-    }
-    // GPU fur sway: breeze always, motion-reactive bend from velocity.
-    j.sway.copy(j.vel).multiplyScalar(-0.05);
-    if (j.sway.length() > 0.06) j.sway.setLength(0.06);
-    for (const sh of rig.furShaders) {
-      sh.uniforms.uFurTime.value = time;
-      sh.uniforms.uFurAmp.value = furAmp;
-      sh.uniforms.uFurSway.value.copy(j.sway);
-    }
+  sphere(skinLight,[0,-.006,.159],[.030,.064,.028],head);
+  sphere(skin,[0,-.040,.184],[.037,.024,.033],head);
+  for(const x of [-.029,.029])sphere(skin,[x,-.041,.176],[.017,.015,.017],head);
+  sphere(lips,[0,-.094,.171],[.053,.013,.014],head);sphere(skinLight,[0,-.110,.169],[.046,.013,.013],head);
+  sphere(hair,[0,-.159,.095],[.11,.031,.066],head);
+  for(const x of [-.031,.031]){const mustache=sphere(hair,[x,-.080,.171],[.038,.009,.01],head);mustache.rotation.z=x>0?-.13:.13;}
+  const scalp=sphere(hair,[0,.125,-.025],[.181,.158,.146],head);
+  // Individual locs are tubes following permanent curves, not camera segmentation.
+  for(let i=0;i<24;i++){
+    const a=i*Math.PI*2/24,r=.146+(i%3)*.012,front=Math.sin(a)>.35;
+    const side=Math.cos(a)<0?-1:1;
+    const x=front?side*Math.max(.165,Math.abs(Math.cos(a)*r)):Math.cos(a)*r;
+    const z=front?.075:Math.sin(a)*r;
+    const length=.25+(i%5)*.045;
+    tube([[x,.20,z-.02],[x*1.18,.17,z*1.09],[x*1.28,.04,z*1.20],[x*1.35,-length*.45,z*1.24],[x*1.36+.012,-length+.14,z*1.25]],.016+(i%2)*.003,hair,head);
+    if(front&&i%2===0)tube([[side*.022,.261,.015],[side*.092,.233,.075],[side*.172,.13,.082],[side*.205,-.015,.065]],.016,hair,head);
   }
-  // Every rig mesh is clickable for greet/drag (Packet 227): the wrapper
-  // raycasts this list, so clicks and drags land on the avatar itself.
-  const avatarPickMeshes=[];
-  function collectPickMeshes(){
-    avatarPickMeshes.length=0;
-    rig.group.traverse(object=>{if(object.isMesh)avatarPickMeshes.push(object);});
+  for(const side of [-1,1]){
+    const name=side<0?'left':'right';
+    const arm=bone(name+'Arm',[side*.30,.62,0],torso);arm.rotation.z=side*.12;
+    sphere(jacket,[side*.035,-.032,0],[.115,.123,.10],arm);
+    mesh(new THREE.CapsuleGeometry(.086,.29,6,14),jacket,[side*.015,-.24,0],[1,1,.96],arm);
+    box(.012,.21,.015,trim,[side*.094,-.19,.065],arm);
+    const elbow=group(name+' elbow',[side*.026,-.45,.005],arm);elbow.rotation.x=-.09;
+    mesh(new THREE.CapsuleGeometry(.072,.22,6,14),jacket,[0,-.16,0],[1,1,.94],elbow);
+    mesh(new THREE.CylinderGeometry(.078,.077,.035,16),trim,[0,-.29,0],[1,1,1],elbow);
+    const hand=bone(name+'Hand',[0,-.36,0],elbow);
+    sphere(skin,[0,-.035,0],[.054,.082,.036],hand);
+    for(let finger=0;finger<4;finger++){
+      const digit=group(`${name} finger ${finger}`,[(finger-1.5)*.025,-.092,.004],hand);
+      const length=.047+(finger===1?.012:0);
+      mesh(new THREE.CapsuleGeometry(.010,length,3,7),skin,[0,-length*.45,0],[1,1,1],digit);
+    }
+    const thumb=mesh(new THREE.CapsuleGeometry(.016,.045,4,8),skin,[side*.052,-.03,.025],[1,1,1],hand);thumb.rotation.z=-side*.5;
+    const leg=bone(name+'Leg',[side*.129,-.075,0],hips);
+    mesh(new THREE.LatheGeometry([[.075,-.76],[.086,-.67],[.09,-.51],[.102,-.38],[.113,-.2],[.116,-.04],[.097,.07]].map(([x,y])=>new THREE.Vector2(x,y)),20),pants,[0,0,0],[1,1,.98],leg);
+    box(.035,.13,.055,jacket,[0,-.4,.097],leg);
+    box(.012,.59,.013,trim,[side*.104,-.35,.015],leg);
+    sphere(dark,[0,-.788,.054],[.114,.105,.185],leg);
+    box(.222,.035,.35,sole,[0,-.85,.055],leg);
+    box(.226,.016,.355,trim,[0,-.825,.055],leg);
+    for(let y=0;y<3;y++)box(.123,.01,.014,trim,[0,-.724-y*.026,.18-y*.013],leg);
   }
-  collectPickMeshes();
-  // A soft presence light travels with the avatar so the rig reads as the
-  // hero of the lens space against the darker set pieces.
-  const presenceLight=new THREE.PointLight('#9fd8ff',14,10,1.8);
-  presenceLight.position.set(0,3.2,1.6);avatar.add(presenceLight);
+  // Lens space has no ground to receive shadows; the glow sprite and rings
+  // carry the grounding read. Meshes neither cast nor receive.
+  avatar.traverse(object=>{if(object.isMesh){object.castShadow=false;object.receiveShadow=false;}});
+  // Reference avatar hologram (2026-09-18): Tumbo's AI-built likeness (the bust
+  // portrait from his PERSON Ω concept art) as a camera-facing hologram
+  // sprite. The procedural rig is hidden but stays registered in `targets`,
+  // and three.js raycast ignores `visible`, so identity/wardrobe tab clicks
+  // keep working through the hologram.
+  avatar.traverse(object=>{if(object.isMesh)object.visible=false;});
+  const avatarHologram=(()=>{
+    if(!THREE||typeof THREE.Sprite!=='function'||typeof THREE.SpriteMaterial!=='function')return null;
+    const material=new THREE.SpriteMaterial({transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,opacity:.96});
+    const sprite=new THREE.Sprite(material);
+    sprite.name='Reference avatar hologram';
+    // The AI bust portrait is square (1:1); the hologram frames the bust.
+    sprite.scale.set(1.7,1.7,1);
+    sprite.position.set(0,1.15,0);
+    sprite.visible=false;
+    sprite.userData.avatarHologram=true;
+    sprite.userData.avatarHologramUrl=avatarTextureUrl;
+    const canLoad=typeof THREE.TextureLoader==='function'&&typeof Image!=='undefined'&&typeof avatarTextureUrl==='string'&&avatarTextureUrl.length>0;
+    if(canLoad){
+      new THREE.TextureLoader().load(avatarTextureUrl,texture=>{
+        material.map=texture;material.needsUpdate=true;sprite.visible=true;
+      },undefined,()=>{/* keep the hologram hidden; rig targets still work */});
+    }
+    avatar.add(sprite);
+    return sprite;
+  })();
   // Everything structural floats: the avatar, the lens-ring and the set
-  // pieces bob gently in lens space (frozen under reduced motion). The
-  // avatar's own bob/sway/glow/walk follow the fluffy rig update; the
-  // set pieces keep their per-piece floaters.
-  const floaters=[{obj:lensRing,base:.46,amp:.06,speed:1.05,phase:0}];
+  // pieces bob gently in lens space (frozen under reduced motion).
+  const floaters=[{obj:avatar,base:.55,amp:.045,speed:1.15,phase:.6},{obj:lensRing,base:.46,amp:.06,speed:1.05,phase:0}];
   floaters.push({obj:sofa,base:.08,amp:.05,speed:.8,phase:1.2},{obj:desk,base:.65,amp:.045,speed:.9,phase:2.4});
   garmentDisplays.forEach((g,i)=>floaters.push({obj:g,base:1.8,amp:.05,speed:1.0,phase:2.9+i*.7}));
   // Freeze a geometry fingerprint in the bind pose, before clothes or motion
   // change. UUIDs, device quality, timestamps and transient poses are excluded.
-  // Taken once from the initial mount: a face-decal refresh adds only a
-  // portrait texture, never new identity geometry.
   const identityGeometry=[];
-  rig.group.traverse(object=>{
+  avatar.traverse(object=>{
     const entry={name:object.name,position:object.position.toArray(),quaternion:object.quaternion.toArray(),scale:object.scale.toArray()};
     if(object.geometry){entry.vertices=Array.from(object.geometry.attributes.position.array);entry.indices=object.geometry.index?Array.from(object.geometry.index.array):null;}
     identityGeometry.push(entry);
@@ -278,134 +250,73 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
     sphere(light,[side*.063,.024,.114],[.029,.042,.012],companion);
     const wing=box(.18,.08,.035,gold,[side*.24,.035,0],companion);wing.rotation.z=side*.55;wings.push(wing);
   }
-  const companionTail=mesh(new THREE.ConeGeometry(.085,.14,4),seam,[0,-.22,0],[1,1,.4],companion);companionTail.rotation.z=Math.PI;
+  const tail=mesh(new THREE.ConeGeometry(.085,.14,4),seam,[0,-.22,0],[1,1,.4],companion);tail.rotation.z=Math.PI;
   const moon=sphere(material('#1b3860',.2,.7,{emissive:'#142a4d',emissiveIntensity:.6}),[-6,4.8,-13],[2.5,2.5,2.5]);
 
   let room='city',form='drone',outfit='obsidian';
-  let muffColor=STUDIO_OUTFITS[0].muffs??'#f5f2ea';
   function apply(snapshot){
     const clothing=STUDIO_OUTFITS.find(v=>v.id===snapshot.outfitId)??STUDIO_OUTFITS[0];
     const theme=STUDIO_ROOMS.find(v=>v.id===snapshot.roomId)??STUDIO_ROOMS[0];
     outfit=clothing.id;room=theme.id;form=snapshot.companion;
-    // Wardrobe tints the fluffy rig's headphone cushions live: grey default,
-    // white/teal options. The fur stays canon brown — the mascot wears no
-    // hoodie in the reference.
-    muffColor=clothing.muffs??'#5f646c';rig.materials.cushion.color.set(muffColor);
+    jacket.color.set(clothing.color);trim.color.set(clothing.trim);
     light.color.set(theme.light);light.emissive.set(theme.light);
     skyMat.color.set(theme.sky);skyMat.emissive.set(theme.sky);rim.color.set(theme.light);
     skyline.visible=room!=='ocean';moon.visible=room==='night';
     companionBody.scale.set(form==='spark' ? .10 : .17,form==='bird' ? .18 : .15,.12);
-    rimFrame.visible=form==='drone';wings.forEach(w=>w.visible=form!=='spark');companionTail.visible=form!=='drone';
+    rimFrame.visible=form==='drone';wings.forEach(w=>w.visible=form!=='spark');tail.visible=form!=='drone';
   }
-  // Greet reactions (Packet 227): each greet() call starts the next reaction
-  // in the AVATAR_GREET cycle — wave, spin, jump. The rig plays them as its
-  // wave / spin / hop modes.
-  let greetState=null,greetIndex=0;
-  function greet(){
-    const kind=AVATAR_GREET.order[greetIndex%AVATAR_GREET.order.length];greetIndex++;
-    greetState={kind,t:0};
-    return kind;
-  }
-  function getGreetKind(){return greetState?.kind??null;}
-  // Drag-to-move (Packet 227): the wrapper sets a target offset on the lens
-  // floor plane; update() eases the avatar toward it with the rig's walk
-  // cycle and a smooth turn toward the travel direction. Clamped to the
-  // personal space.
-  const AVATAR_DRAG_RADIUS=3.4;
-  const AVATAR_BASE_Y=.55;
-  const avatarTarget={x:0,z:0},avatarCurrent={x:0,z:0};
-  let heading=0;
-  function setAvatarOffset(x,z){
-    if(!Number.isFinite(x)||!Number.isFinite(z))return {x:avatarTarget.x,z:avatarTarget.z};
-    const r=Math.hypot(x,z),k=r>AVATAR_DRAG_RADIUS?AVATAR_DRAG_RADIUS/r:1;
-    avatarTarget.x=x*k;avatarTarget.z=z*k;
-    return {x:avatarTarget.x,z:avatarTarget.z};
-  }
-  const poseQuat=(x,y,z,w)=>new THREE.Quaternion(x,y,z,w);
+  const restQuaternions=Object.fromEntries(Object.entries(joints).map(([name,j])=>[name,j.quaternion.clone()]));
   function update(dt,time,pose={joints:{}},reducedMotion=false){
     if(!layer.visible)return;
-    // Drag-to-move: ease toward the target, walk while travelling, turn to
-    // face the travel direction, drift back to facing forward at rest.
-    const dx=avatarTarget.x-avatarCurrent.x,dz=avatarTarget.z-avatarCurrent.z;
-    const travel=Math.hypot(dx,dz);
-    if(!reducedMotion&&travel>0.0005){
-      const step=Math.min(1,dt*7);
-      avatarCurrent.x+=dx*step;avatarCurrent.z+=dz*step;
-    }else{avatarCurrent.x=avatarTarget.x;avatarCurrent.z=avatarTarget.z;}
-    const moving=!reducedMotion&&travel>0.06;
-    // Choose the rig's overlay mode: greet reaction > walk > idle.
-    let mode='idle',modeT=0;
-    if(greetState){
-      // Reduced motion keeps the greeting to a gentle wave: no spin, no hop.
-      const kind=reducedMotion?'wave':greetState.kind;
-      greetState.t+=dt;
-      modeT=greetState.t;mode=kind==='jump'?'hop':kind;
-      const durations={wave:AVATAR_GREET.durations.wave,spin:AVATAR_GREET.durations.spin,jump:AVATAR_GREET.durations.jump};
-      if(greetState.t>=durations[greetState.kind])greetState=null;
-    }else if(moving){
-      mode='walk';modeT=time;
+    for(const [name,joint] of Object.entries(joints)){
+      const q=pose.joints?.[name];const targetQ=q?new THREE.Quaternion(...q):restQuaternions[name];
+      joint.quaternion.slerp(targetQ,Math.min(1,dt*12));
     }
-    const rigOut=updateTumboChibiRig(THREE,rig,{time,seed:0,reducedMotion,mode,modeT});
-    // Presence-tab pose overrides: the identity-locked motion channel drives
-    // the head yaw and the left arm raise, applied after the rig's reset.
-    const poseJoints=pose.joints??{};
-    if(poseJoints.head)rig.joints.head.quaternion.slerp(poseQuat(...poseJoints.head),Math.min(1,dt*12));
-    if(poseJoints.leftArm)rig.joints.armLeft.quaternion.slerp(poseQuat(...poseJoints.leftArm),Math.min(1,dt*12));
-    const turnTo=targetAngle=>{let d=targetAngle-heading;while(d>Math.PI)d-=Math.PI*2;while(d<-Math.PI)d+=Math.PI*2;return d;};
-    heading+=turnTo(moving?Math.atan2(dx,dz):0)*Math.min(1,dt*(moving?6:2));
-    avatar.position.set(avatarCurrent.x,AVATAR_BASE_Y+rigOut.bobY+rigOut.lift,avatarCurrent.z);
-    // The spin reaction's turn comes back from the rig (a full 2π over the
-    // mode duration), matching the old mannequin's spinAngle behavior.
-    avatar.rotation.y=rigOut.swayY+heading+rigOut.turn;
-    // Packet 236: spring-physics secondary motion (tail chain, body squash,
-    // headphone bounce) plus GPU fur sway, driven by real acceleration.
-    stepSecondaryMotion(dt,time,reducedMotion);
-    glow.material.opacity=rigOut.glow;
+    torso.position.y=.12+(reducedMotion?0:Math.sin(time*1.4)*.007);
     if(reducedMotion){for(const f of floaters)f.obj.position.y=f.base;}
     else{for(const f of floaters)f.obj.position.y=f.base+Math.sin(time*f.speed+f.phase)*f.amp;
-      lensRing.rotation.y+=dt*.22;ringInner.rotation.y-=dt*.31;}
+      lensRing.rotation.y+=dt*.22;ringInner.rotation.y-=dt*.31;glow.material.opacity=.46+Math.sin(time*1.6)*.06;}
     companion.position.y=2.78+(reducedMotion?0:Math.sin(time*1.8)*.075);
     companion.rotation.y=reducedMotion?0:Math.sin(time*.8)*.14;
     wings.forEach((wing,i)=>{wing.rotation.z=(i===0?-1:1)*(.55+(form==='bird'&&!reducedMotion?Math.sin(time*5)*.35:0));});
   }
-  function getSnapshot(){return {source:'person-studio-scene',modelId:STUDIO_MODEL.id,visible:layer.visible,outfitId:outfit,roomId:room,companionForm:form,jointNames:Object.keys(rig.joints),meshCount:avatarPickMeshes.length+geometries.size,geometryOnly:false,referenceImagesUsedAsTextures:false,rigVisible:true,referenceLook:'tumbo-fluffy-v1',earmuffColor:muffColor,tumboDecalPresent:rig.hasFaceDecal,avatarHologramPresent:false,avatarHologramUrl:avatarTextureUrl,avatarHologramTint:avatarHologramTint,greetKind:getGreetKind(),avatarOffset:{x:avatarTarget.x,z:avatarTarget.z},avatarPickMeshCount:avatarPickMeshes.length};}
-  // Face choice state: the user's chosen avatar face — default Tumbo
-  // character, Tumbo's own likeness, or their locally-styled photo. The
-  // personal portrait (choice 'your-photo' plus a saved portrait) is worn
-  // as the chibi head's forehead decal; otherwise the geometric Tumbo face
-  // is the whole read. Refreshing rebuilds the rig — the same pattern the
-  // chess arena uses on appearance refresh — so the decal lands on the
-  // shared rig without forking it. The identity fingerprint is unaffected:
-  // a decal is a portrait texture, not identity geometry.
+  function getSnapshot(){return {source:'person-studio-scene',modelId:STUDIO_MODEL.id,visible:layer.visible,outfitId:outfit,roomId:room,companionForm:form,jointNames:Object.keys(joints),meshCount:geometries.size,identityHeadGeometry:headMesh.geometry.uuid,geometryOnly:false,referenceImagesUsedAsTextures:true,avatarHologramUrl:avatarTextureUrl,avatarHologramPresent:!!avatarHologram,avatarHologramTint:avatarHologramTint};}
+  // Muse Agent dressing: re-tint the reference hologram when an avatar design
+  // is applied. Presentation only — identity geometry and outfit rig are
+  // untouched; `null` restores the neutral hologram.
+  // Swap the hologram's face at runtime: the user's chosen avatar face —
+  // default Tumbo character, Tumbo's own likeness, or their locally-styled
+  // photo. Presentation only — identity geometry and outfit rig are untouched.
+  // A failed load keeps the previous face; the hologram never goes blank.
   function setAvatarFace(url){
     if(typeof url!=='string'||!url.length)return avatarTextureUrl;
+    if(!avatarHologram)return avatarTextureUrl;
+    const canLoad=typeof THREE.TextureLoader==='function'&&typeof Image!=='undefined';
+    if(!canLoad)return avatarTextureUrl;
     avatarTextureUrl=url;
-    refreshRigFace();
+    avatarHologram.userData.avatarHologramUrl=url;
+    new THREE.TextureLoader().load(url,texture=>{
+      try{
+        avatarHologram.material.map?.dispose?.();
+        avatarHologram.material.map=texture;
+        avatarHologram.material.needsUpdate=true;
+        avatarHologram.visible=true;
+        if(avatarHologramTint&&avatarHologram.material?.color?.set)avatarHologram.material.color.set(avatarHologramTint);
+      }catch{/* keep the previous face on failure */}
+    },undefined,()=>{/* keep the previous face on failure */});
     return avatarTextureUrl;
   }
-  function refreshRigFace(){
-    const old=rig,oldDecals=rigDecalMats;
-    rig=mountRig();
-    collectPickMeshes();
-    old.group.removeFromParent();
-    try{old.dispose?.();}catch{/* noop */}
-    oldDecals.forEach(material=>{try{material.map?.dispose?.();}catch{}try{material.dispose?.();}catch{}});
-  }
   let avatarHologramTint=null;
-  // Muse Agent dressing: records the design tint for the avatar. The
-  // hologram is retired so there is no hologram to tint; the value is kept
-  // in the design record and snapshot.
   function setHologramTint(tint,opacity){
     avatarHologramTint=typeof tint==='string'&&tint?tint:null;
+    if(!avatarHologram)return avatarHologramTint;
+    try{
+      if(avatarHologramTint&&avatarHologram.material?.color?.set)avatarHologram.material.color.set(avatarHologramTint);
+      else if(avatarHologram.material?.color?.set)avatarHologram.material.color.set('#ffffff');
+      if(Number.isFinite(Number(opacity))&&avatarHologram.material)avatarHologram.material.opacity=Number(opacity);
+    }catch{/* presentation only */}
     return avatarHologramTint;
   }
-  function destroy(){
-    selectable.forEach(m=>{const i=targets.indexOf(m);if(i>=0)targets.splice(i,1);});
-    geometries.forEach(g=>{try{g.dispose?.();}catch{}});
-    materials.forEach(m=>{try{m.dispose?.();}catch{}});
-    try{rig.dispose?.();}catch{/* fluffy rig owns its geometries/materials */}
-    rigDecalMats.forEach(material=>{try{material.map?.dispose?.();}catch{}try{material.dispose?.();}catch{}});
-    layer.removeFromParent();
-  }
-  return {layer,avatar,joints:rig.joints,apply,update,getSnapshot,destroy,fingerprint,avatarHologram:null,avatarPickMeshes,greet,getGreetKind,setAvatarOffset,setAvatarFace,setHologramTint,resolve:object=>object?.userData?.personStudioAction??null};
+  function destroy(){selectable.forEach(m=>{const i=targets.indexOf(m);if(i>=0)targets.splice(i,1);});geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());if(avatarHologram){avatarHologram.material.map?.dispose?.();avatarHologram.material.dispose?.();}layer.removeFromParent();}
+  return {layer,avatar,joints,apply,update,getSnapshot,destroy,fingerprint,avatarHologram,setAvatarFace,setHologramTint,resolve:object=>object?.userData?.personStudioAction??null};
 }

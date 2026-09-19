@@ -435,20 +435,6 @@ export function resolveAvatarFaceUrl(storage) {
   return AVATAR_DEFAULT_FACE_URL;
 }
 
-/** The personal portrait decal for the 3D chibi rig: the user's own
- *  stylized chibi picture, and only then — the choice must be 'your-photo'
- *  AND a saved portrait must exist. Otherwise the rig's geometric Tumbo
- *  face is the whole read (default Tumbo face until a personal portrait
- *  lands). Worn by chess pieces and the Person Studio avatar alike.
- *  Never throws. */
-export function resolveFaceDecalUrl(store) {
-  try {
-    if (!store) return null;
-    if (loadAvatarFaceChoice(store) !== 'your-photo') return null;
-    return loadAvatarFace(store)?.stylizedDataURL ?? null;
-  } catch { return null; }
-}
-
 function validHome(value) {
   return value && typeof value === 'object'
     && [value.x, value.y, value.z].every((v) => Number.isFinite(v) && Math.abs(v) <= 100);

@@ -18,8 +18,7 @@
  * cinematic staging does not explode draw state.
  */
 import {PERSON_STUDIO_STORAGE_KEY, STUDIO_MODEL, STUDIO_OUTFITS} from '../domains/person-studio.js';
-import {resolveAvatarFaceUrl, resolveFaceDecalUrl} from '../domains/avatar-style.js';
-import {buildTumboChibiRig, CHIBI_RIG_BASE_HEIGHT, createTumboGeometryCache, createTumboMaterialSet} from './tumbo-chibi-rig.js';
+import {resolveAvatarFaceUrl} from '../domains/avatar-style.js';
 
 export const CHESS_ARENA_PIECE_TYPES = Object.freeze(['p', 'n', 'b', 'r', 'q', 'k']);
 const FILES = 'abcdefgh';
@@ -37,10 +36,8 @@ const DEFAULT_APPEARANCE = Object.freeze({
   outfitId: 'obsidian',
   outfitColor: '#111620',
   outfitTrim: '#d9ae60',
-  muffColor: '#f5f2ea',
   displayName: '',
   approved: false,
-  faceDecalUrl: null,
 });
 
 function outfitById(id) {
@@ -51,12 +48,8 @@ function outfitById(id) {
  *  Never throws: falls back to the reference defaults when nothing valid is
  *  saved. The renderer is a projection, not a validator — person-studio owns
  *  validation; here we only borrow its colors. */
-/** The personal portrait decal for the 3D chibi rig now lives in the avatar
- *  style domain (src/domains/avatar-style.js) so the chess foundry and the
- *  Person Studio resolve the same face from one source. */
-
 export function readArenaAvatarAppearance({storage = null} = {}) {
-  const fallback = () => Object.freeze({...DEFAULT_APPEARANCE, faceDecalUrl: resolveFaceDecalUrl(store)});
+  const fallback = () => Object.freeze({...DEFAULT_APPEARANCE});
   let store = storage;
   if (!store) {
     try {
@@ -98,46 +91,67 @@ export function readArenaAvatarAppearance({storage = null} = {}) {
     outfitId: outfit.id,
     outfitColor: outfit.color,
     outfitTrim: outfit.trim,
-    muffColor: outfit.muffs ?? '#f5f2ea',
     displayName: typeof saved.displayName === 'string' ? saved.displayName.slice(0, 60) : '',
     approved: true,
     // The face every champion wears: the user's chosen chibi — the
     // default character, Tumbo's own chibi, or their own chibi built
     // locally ("Become Tumbo"). Always resolves to a usable URL.
     faceUrl: resolveAvatarFaceUrl(store),
-    // Personal portrait decal for the 3D chibi rig (see resolveFaceDecalUrl).
-    faceDecalUrl: resolveFaceDecalUrl(store),
   });
 }
 
-/** Geometry and base materials come from the shared chibi rig module
- *  (./tumbo-chibi-rig.js) so the chess foundry and the Person Studio build
- *  from one source. The arena only adds its side-colored ring/glow set —
- *  the same materials every board piece shares. */
-function createArenaMaterialSet(THREE, appearance) {
-  const M = createTumboMaterialSet(THREE, appearance);
-  const std = (params) => new THREE.MeshStandardMaterial(params);
-  const side = {
-    w: {
-      base: std({color: 0xe9dcc0, metalness: 0.35, roughness: 0.38}),
-      glow: std({color: 0xffc25e, emissive: 0x9a5200, emissiveIntensity: 1.6, metalness: 0.55, roughness: 0.3}),
-      ring: std({color: 0xffd98a, emissive: 0xd77a1a, emissiveIntensity: 2.4, metalness: 0.4, roughness: 0.35}),
-    },
-    b: {
-      base: std({color: 0x211829, metalness: 0.55, roughness: 0.3}),
-      glow: std({color: 0x9a5cff, emissive: 0x43119c, emissiveIntensity: 1.9, metalness: 0.45, roughness: 0.3}),
-      ring: std({color: 0xb48cff, emissive: 0x5b1ee0, emissiveIntensity: 2.6, metalness: 0.4, roughness: 0.35}),
+function createGeometryCache(THREE) {
+  const cache = new Map();
+  const get = (key, make) => {
+    let geometry = cache.get(key);
+    if (!geometry) {
+      geometry = make();
+      cache.set(key, geometry);
+    }
+    return geometry;
+  };
+  return {
+    capsule: (r, length) => get(`capsule:${r}:${length}`, () => new THREE.CapsuleGeometry(r, length, 4, 10)),
+    sphere: (r, w = 14, h = 10) => get(`sphere:${r}:${w}:${h}`, () => new THREE.SphereGeometry(r, w, h)),
+    hairCap: (r) => get(`haircap:${r}`, () => new THREE.SphereGeometry(r, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.58)),
+    box: (w, h, d) => get(`box:${w}:${h}:${d}`, () => new THREE.BoxGeometry(w, h, d)),
+    cone: (r, h, s = 8) => get(`cone:${r}:${h}:${s}`, () => new THREE.ConeGeometry(r, h, s)),
+    cylinder: (rt, rb, h, s = 12) => get(`cyl:${rt}:${rb}:${h}:${s}`, () => new THREE.CylinderGeometry(rt, rb, h, s)),
+    torus: (r, t) => get(`torus:${r}:${t}`, () => new THREE.TorusGeometry(r, t, 10, 24)),
+    circle: (r, s = 24) => get(`circle:${r}:${s}`, () => new THREE.CircleGeometry(r, s)),
+    ring: (inner, outer, s = 64) => get(`ring:${inner}:${outer}:${s}`, () => new THREE.RingGeometry(inner, outer, s)),
+    dispose() {
+      cache.forEach((geometry) => geometry.dispose());
+      cache.clear();
     },
   };
-  const sideMats = [side.w.base, side.w.glow, side.w.ring, side.b.base, side.b.glow, side.b.ring];
-  return Object.freeze({
-    ...M,
-    side,
-    dispose() {
-      M.dispose();
-      sideMats.forEach((material) => material.dispose());
+}
+
+function createMaterialSet(THREE, appearance) {
+  const source = appearance && typeof appearance === 'object' ? appearance : {};
+  const std = (params) => new THREE.MeshStandardMaterial(params);
+  return {
+    skin: std({color: source.skin || DEFAULT_APPEARANCE.skin, roughness: 0.62, metalness: 0}),
+    hair: std({color: source.hair || DEFAULT_APPEARANCE.hair, roughness: 0.48, metalness: 0.12}),
+    outfit: std({color: source.outfitColor || DEFAULT_APPEARANCE.outfitColor, roughness: 0.5, metalness: 0.28}),
+    trim: std({
+      color: source.outfitTrim || DEFAULT_APPEARANCE.outfitTrim,
+      emissive: source.outfitTrim || DEFAULT_APPEARANCE.outfitTrim,
+      emissiveIntensity: 0.35, metalness: 0.6, roughness: 0.32,
+    }),
+    side: {
+      w: {
+        base: std({color: 0xe9dcc0, metalness: 0.35, roughness: 0.38}),
+        glow: std({color: 0xffc25e, emissive: 0x9a5200, emissiveIntensity: 1.6, metalness: 0.55, roughness: 0.3}),
+        ring: std({color: 0xffd98a, emissive: 0xd77a1a, emissiveIntensity: 2.4, metalness: 0.4, roughness: 0.35}),
+      },
+      b: {
+        base: std({color: 0x211829, metalness: 0.55, roughness: 0.3}),
+        glow: std({color: 0x9a5cff, emissive: 0x43119c, emissiveIntensity: 1.9, metalness: 0.45, roughness: 0.3}),
+        ring: std({color: 0xb48cff, emissive: 0x5b1ee0, emissiveIntensity: 2.6, metalness: 0.4, roughness: 0.35}),
+      },
     },
-  });
+  };
 }
 
 /** Fallback face every chess piece wears when no choice resolves: the generic
@@ -200,15 +214,21 @@ function buildRoleBadge(THREE, color, type, textureRegistry = null) {
   return badge;
 }
 
-/** Avatar chess piece: a miniature articulated Tumbo chibi — the same
- *  character as the Person Studio avatar — standing on the role-sized,
- *  side-colored glow ring with its role glyph badge floating at the base.
- *  Stature reads per role; role identity comes from the badge + stature,
- *  not a different face. Not a statue: the arena's motion loop drives the
- *  rig's idle / walk / celebrate language every frame. */
-function buildChibiPiece(THREE, G, M, color, type, ctx) {
+/** Avatar chess piece: the user's chosen chibi on every piece,
+ *  billboarded so it reads from every camera angle, standing on the
+ *  role-sized, side-colored glow ring with its role glyph badge at the base.
+ *  The chibi texture loads lazily from local assets; without a DOM Image
+ *  (node tests) the sprite is built untextured and every structural
+ *  assertion still holds. */
+function buildHologramPiece(THREE, G, M, color, type, hologramRegistry = null, appearance = null) {
   const side = M.side[color];
   const group = new THREE.Group();
+  // The face every champion wears: the user's chosen chibi — the
+  // default character, Tumbo's own chibi, or the player's own "Become
+  // Tumbo" chibi — resolved per device by readArenaAvatarAppearance.
+  const faceUrl = (appearance && typeof appearance.faceUrl === 'string' && appearance.faceUrl)
+    ? appearance.faceUrl
+    : AVATAR_CHIBI_FALLBACK_URL;
   const ringRadius = CHESS_PIECE_RING_RADII[type] ?? 0.34;
   const ring = new THREE.Mesh(G.torus(ringRadius, 0.05), side.ring);
   ring.rotation.x = Math.PI / 2;
@@ -217,47 +237,74 @@ function buildChibiPiece(THREE, G, M, color, type, ctx) {
   ring.userData.ringRadius = ringRadius;
   group.add(ring);
   const height = CHESS_PIECE_HEIGHTS[type] ?? 1.4;
-  const rig = buildTumboChibiRig(THREE, G, M, {
-    seed: ctx?.seed ?? 0,
-    faceDecalUrl: ctx?.appearance?.faceDecalUrl ?? null,
-    decalRegistry: ctx?.decalMaterials ?? null,
+  const crop = CHESS_BUST_CROPS[type] ?? CHESS_BUST_CROPS.p;
+  const material = new THREE.SpriteMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    color: CHESS_PIECE_TINTS[color] ?? 0xffffff,
+    opacity: 0.97,
   });
-  const chibiScale = height / CHIBI_RIG_BASE_HEIGHT;
-  rig.group.scale.setScalar(chibiScale);
-  rig.group.position.y = 0.02;
-  group.add(rig.group);
-  const badge = buildRoleBadge(THREE, color, type);
-  badge.position.set(0, 0.30, 0.52);
-  badge.scale.set(0.30, 0.30, 1);
-  group.add(badge);
-  group.userData.rig = rig;
-  group.userData.chibiScale = chibiScale;
-  group.userData.hasFaceDecal = rig.hasFaceDecal;
+  const sprite = new THREE.Sprite(material);
+  sprite.scale.set(height, height, 1);
+  sprite.position.set(0, height / 2 + 0.04, 0);
+  sprite.userData.part = 'hologram';
+  sprite.userData.pieceType = type;
+  sprite.userData.textureUrl = faceUrl;
+  sprite.userData.bustCrop = {...crop};
+  sprite.visible = false;
+  group.add(sprite);
+  group.add(buildRoleBadge(THREE, color, type, hologramRegistry));
+  if (hologramRegistry) hologramRegistry.add({material, getTexture: () => material.map ?? null});
+  const canLoad = typeof THREE.TextureLoader === 'function'
+    && typeof Image !== 'undefined'
+    && typeof faceUrl === 'string';
+  if (canLoad) {
+    new THREE.TextureLoader().load(
+      faceUrl,
+      (texture) => {
+        texture.wrapS = THREE.ClampToEdgeWrapping;
+        texture.wrapT = THREE.ClampToEdgeWrapping;
+        texture.repeat.set(crop.size, crop.size);
+        texture.offset.set(crop.cx - crop.size / 2, crop.cy - crop.size / 2);
+        texture.needsUpdate = true;
+        material.map = texture;
+        material.needsUpdate = true;
+        sprite.visible = true;
+      },
+      undefined,
+      () => { sprite.visible = false; },
+    );
+  } else {
+    // Deterministic in node: the hologram slot exists with its metadata even
+    // though no pixels load outside the browser.
+    sprite.visible = true;
+  }
   return group;
 }
 
-function buildPawn(THREE, G, M, color, _type, ctx = null) {
-  return buildChibiPiece(THREE, G, M, color, 'p', ctx);
+function buildPawn(THREE, G, M, color, _type, hologramRegistry = null) {
+  return buildHologramPiece(THREE, G, M, color, 'p', hologramRegistry);
 }
 
-function buildKnight(THREE, G, M, color, _type, ctx = null) {
-  return buildChibiPiece(THREE, G, M, color, 'n', ctx);
+function buildKnight(THREE, G, M, color, _type, hologramRegistry = null) {
+  return buildHologramPiece(THREE, G, M, color, 'n', hologramRegistry);
 }
 
-function buildBishop(THREE, G, M, color, _type, ctx = null) {
-  return buildChibiPiece(THREE, G, M, color, 'b', ctx);
+function buildBishop(THREE, G, M, color, _type, hologramRegistry = null) {
+  return buildHologramPiece(THREE, G, M, color, 'b', hologramRegistry);
 }
 
-function buildRook(THREE, G, M, color, _type, ctx = null) {
-  return buildChibiPiece(THREE, G, M, color, 'r', ctx);
+function buildRook(THREE, G, M, color, _type, hologramRegistry = null) {
+  return buildHologramPiece(THREE, G, M, color, 'r', hologramRegistry);
 }
 
-function buildQueen(THREE, G, M, color, _type, ctx = null) {
-  return buildChibiPiece(THREE, G, M, color, 'q', ctx);
+function buildQueen(THREE, G, M, color, _type, hologramRegistry = null) {
+  return buildHologramPiece(THREE, G, M, color, 'q', hologramRegistry);
 }
 
-function buildKing(THREE, G, M, color, _type, ctx = null) {
-  return buildChibiPiece(THREE, G, M, color, 'k', ctx);
+function buildKing(THREE, G, M, color, _type, hologramRegistry = null) {
+  return buildHologramPiece(THREE, G, M, color, 'k', hologramRegistry);
 }
 
 /** Piece foundry with shared geometry/material caches. Dispose when the
@@ -265,17 +312,17 @@ function buildKing(THREE, G, M, color, _type, ctx = null) {
 export function createPieceBuilders(THREE, appearance = null) {
   if (!THREE) throw new Error('createPieceBuilders needs the THREE namespace');
   const resolved = Object.freeze({...DEFAULT_APPEARANCE, ...(appearance ?? {})});
-  const G = createTumboGeometryCache(THREE);
-  const M = createArenaMaterialSet(THREE, resolved);
+  const G = createGeometryCache(THREE);
+  const M = createMaterialSet(THREE, resolved);
   const builders = {p: buildPawn, n: buildKnight, b: buildBishop, r: buildRook, q: buildQueen, k: buildKing};
-  // Face-decal materials are per-piece (one personal portrait texture each).
-  // Track them so dispose() releases the portrait texture too.
-  const decalMaterials = [];
-  function buildPiece(type, color, seed = 0) {
+  // Every hologram piece owns a SpriteMaterial (and, in the browser, a loaded
+  // texture). Track them so dispose() releases per-sprite GPU resources too.
+  const hologramRegistry = new Set();
+  function buildPiece(type, color) {
     const build = builders[type];
     if (!build) throw new Error(`Unknown chess piece type: ${type}`);
     if (color !== 'w' && color !== 'b') throw new Error(`Unknown chess side: ${color}`);
-    const group = build(THREE, G, M, color, type, {appearance: resolved, decalMaterials, seed});
+    const group = build(THREE, G, M, color, type, hologramRegistry, resolved);
     group.userData.avatarPiece = true;
     group.userData.pieceType = type;
     group.userData.color = color;
@@ -283,12 +330,13 @@ export function createPieceBuilders(THREE, appearance = null) {
   }
   function dispose() {
     G.dispose();
-    M.dispose();
-    decalMaterials.forEach((material) => {
-      try { material.map?.dispose?.(); } catch { /* already released */ }
+    const mats = [M.skin, M.hair, M.outfit, M.trim, M.side.w.base, M.side.w.glow, M.side.w.ring, M.side.b.base, M.side.b.glow, M.side.b.ring];
+    mats.forEach((mat) => mat.dispose());
+    hologramRegistry.forEach(({material, getTexture}) => {
+      try { getTexture()?.dispose?.(); } catch { /* already released */ }
       try { material.dispose?.(); } catch { /* already released */ }
     });
-    decalMaterials.length = 0;
+    hologramRegistry.clear();
   }
   return Object.freeze({appearance: resolved, buildPiece, dispose});
 }

@@ -1,5 +1,5 @@
 import {createPersonStudioOwner,STUDIO_OUTFITS,STUDIO_ROOMS,STUDIO_COMPANIONS} from '../domains/person-studio.js';
-import {buildPersonStudioScene} from './person-studio-scene.js?v=20260919-jiggle-fur';
+import {buildPersonStudioScene} from './person-studio-scene.js?v=20260918-avatar-chess';
 import {AVATAR_FACE_CHOICES,AVATAR_FACE_MAX_DIM,AVATAR_FLUFFY_BODY_TEMPLATE_URL,buildChibi,loadAvatarFaceChoice,resolveAvatarFaceUrl,saveAvatarFace,saveAvatarFaceChoice} from '../domains/avatar-style.js';
 
 export function createPersonStudio({THREE,renderer,scene,camera,controls,world,targets,documentRoot=document,onNavigate,onFrame,onIntent,reducedMotion=false}) {
@@ -34,7 +34,7 @@ export function createPersonStudio({THREE,renderer,scene,camera,controls,world,t
       <section data-panel="companion" role="tabpanel" hidden><span class="studio-kicker">Luna / one companion</span><h2>Always beside you.</h2><p>Choose its embodiment. The companion ID stays the same.</p><div class="studio-companion-options"></div><p data-companion-context></p><p class="studio-subtle">Local contextual guide. No AI model or conversation service is connected here yet.</p></section>
       <p class="studio-message" data-message role="status" aria-live="polite">Preparing your space…</p>
     </aside>
-    <div class="studio-hint"><strong>Reference-built 3D / one living space</strong><span>Click your avatar to say hi · drag it to move it · drag empty space to orbit · scroll to approach</span><button data-clear-view type="button">Hide controls · explore</button></div>
+    <div class="studio-hint"><strong>Reference-built 3D / one living space</strong><span>Drag empty space to orbit · scroll to approach · click the avatar or wardrobe</span><button data-clear-view type="button">Hide controls · explore</button></div>
     <footer class="studio-footer"><div class="studio-footer-title"><strong>One person. Connected places.</strong><small>Continue through the same Living Reality</small></div><nav class="studio-routes" aria-label="Connected features"><button data-world="block-world"><span>◇</span>Cube world</button><button data-world="rooms"><span>▣</span>Rooms</button><button data-world="contracts"><span>⌑</span>Contracts</button><button data-world="academy"><span>▤</span>Academy</button><button data-world="arena"><span>⌘</span>Arena</button><button data-world="world-events"><span>✧</span>World pulse</button></nav></footer>`;
   documentRoot.body.append(root);
   let active=false,tab='identity',savedCamera=null,message='',poseHeld=false;
@@ -73,9 +73,8 @@ export function createPersonStudio({THREE,renderer,scene,camera,controls,world,t
   for(const room of STUDIO_ROOMS){const b=documentRoot.createElement('button');b.type='button';b.dataset.room=room.id;const name=documentRoot.createElement('strong'),caption=documentRoot.createElement('small');name.textContent=room.name;caption.textContent=room.caption;b.append(name,caption);b.onclick=guard(()=>{owner.chooseRoom(room.id);announce(`${room.name} · the same avatar stays with you.`);});find('.studio-room-options').append(b);}
   for(const form of STUDIO_COMPANIONS){const b=documentRoot.createElement('button');b.type='button';b.dataset.companion=form;b.textContent=form;b.onclick=guard(()=>{owner.chooseCompanion(form);announce('Companion form changed · companion identity preserved.');});find('.studio-companion-options').append(b);}
   // Face options: the default Tumbo character, Tumbo's own likeness, or the
-  // user's own photo styled locally ("Become Tumbo"). The choice is worn by
-  // the user's chess pieces and recorded with the avatar; the studio itself
-  // shows the 3D rig. A photo never leaves the device.
+  // user's own photo styled locally ("Become Tumbo"). The choice dresses the
+  // hologram here and the user's chess pieces; a photo never leaves the device.
   function refreshFacePressed(){
     const current=loadAvatarFaceChoice(storage);
     all('[data-face]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.face===current)));
@@ -181,42 +180,20 @@ export function createPersonStudio({THREE,renderer,scene,camera,controls,world,t
     if(savedCamera){camera.position.copy(savedCamera.position);controls.target.copy(savedCamera.target);camera.fov=savedCamera.fov;controls.minDistance=savedCamera.min;controls.maxDistance=savedCamera.max;world.visible=savedCamera.worldVisible;scene.environment=savedCamera.environment;renderer.shadowMap.enabled=savedCamera.shadows;renderer.shadowMap.type=savedCamera.shadowType;camera.updateProjectionMatrix();savedCamera=null;}
   }
   const resize=()=>frameCamera();globalThis.addEventListener('resize',resize);
-  function selectObject(object){const action=spatial.resolve(object);if(!action)return false;if(action.kind==='tab')setTab(action.id);if(action.kind==='greet'){greetAvatar();}if(action.kind==='outfit'){owner.chooseOutfit(action.id);setTab('wardrobe');}return true;}
-  const greetLines={wave:'A friendly wave.',spin:'A happy spin.',jump:'A little jump for joy.'};
-  function greetAvatar(){const kind=spatial.greet?.();announce(greetLines[kind]??'Hello!');}
-  let pointerStart=null,avatarDrag=null;
+  function selectObject(object){const action=spatial.resolve(object);if(!action)return false;if(action.kind==='tab')setTab(action.id);if(action.kind==='outfit'){owner.chooseOutfit(action.id);setTab('wardrobe');}return true;}
+  let pointerStart=null;
   const selectionRay=new THREE.Raycaster(),selectionPoint=new THREE.Vector2();
-  // Drag the avatar on a horizontal plane at chest height; empty space keeps
-  // orbiting via the controls.
-  const dragPlane=new THREE.Plane(new THREE.Vector3(0,1,0),-1.6);
-  const dragHit=new THREE.Vector3();
-  const setPointer=event=>{const rect=renderer.domElement.getBoundingClientRect();selectionPoint.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);};
-  const avatarHit=event=>{setPointer(event);selectionRay.setFromCamera(selectionPoint,camera);return selectionRay.intersectObjects(spatial.avatarPickMeshes,false).length>0;};
-  const pointerDown=event=>{if(active&&event.button===0)pointerStart={id:event.pointerId,x:event.clientX,y:event.clientY,avatar:avatarHit(event)};};
-  const pointerMove=event=>{
-    if(!active||!pointerStart||event.pointerId!==pointerStart.id)return;
-    if(pointerStart.avatar&&!avatarDrag&&Math.hypot(event.clientX-pointerStart.x,event.clientY-pointerStart.y)>6){
-      avatarDrag={id:event.pointerId};controls.enabled=false;
-    }
-    if(avatarDrag&&event.pointerId===avatarDrag.id){
-      setPointer(event);selectionRay.setFromCamera(selectionPoint,camera);
-      if(selectionRay.ray.intersectPlane(dragPlane,dragHit))spatial.setAvatarOffset(dragHit.x,dragHit.z);
-    }
-  };
-  const pointerCancel=()=>{pointerStart=null;if(avatarDrag){avatarDrag=null;controls.enabled=true;}};
+  const pointerDown=event=>{if(active&&event.button===0)pointerStart={id:event.pointerId,x:event.clientX,y:event.clientY};};
+  const pointerCancel=()=>{pointerStart=null;};
   const pointerUp=event=>{
     const start=pointerStart;pointerStart=null;
-    const wasDrag=avatarDrag;avatarDrag=null;controls.enabled=true;
-    if(!active||!start||event.pointerId!==start.id)return;
-    if(wasDrag)return;
-    if(Math.hypot(event.clientX-start.x,event.clientY-start.y)>6)return;
-    if(start.avatar){greetAvatar();return;}
-    setPointer(event);
+    if(!active||!start||event.pointerId!==start.id||Math.hypot(event.clientX-start.x,event.clientY-start.y)>6)return;
+    const rect=renderer.domElement.getBoundingClientRect();selectionPoint.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);
     selectionRay.setFromCamera(selectionPoint,camera);
     const hit=selectionRay.intersectObjects(targets,false).find(item=>spatial.resolve(item.object));
     if(hit)selectObject(hit.object);
   };
-  renderer.domElement.addEventListener('pointerdown',pointerDown);renderer.domElement.addEventListener('pointermove',pointerMove);renderer.domElement.addEventListener('pointerup',pointerUp);renderer.domElement.addEventListener('pointercancel',pointerCancel);
+  renderer.domElement.addEventListener('pointerdown',pointerDown);renderer.domElement.addEventListener('pointerup',pointerUp);renderer.domElement.addEventListener('pointercancel',pointerCancel);
   return {open,close,get active(){return active;},resolve:spatial.resolve,selectObject,
     chooseOutfit:(id)=>owner.chooseOutfit(id),
     setHologramTint:(tint,opacity)=>spatial.setHologramTint?.(tint,opacity),
@@ -224,5 +201,5 @@ export function createPersonStudio({THREE,renderer,scene,camera,controls,world,t
     getSnapshot:()=>({...owner.getSnapshot(),opened:active,tab,spatial:spatial.getSnapshot()}),
     getContribution:owner.contribution,
     update(dt,time){if(!active)return;if(poseHeld)owner.moveRig(Number(find('[data-head]').value),Number(find('[data-arm]').value));spatial.update(dt,time,owner.getPose(),reducedMotion);},
-    destroy(){close();unsubscribe();spatial.destroy();environmentTarget.dispose();root.remove();stylesheet.remove();globalThis.removeEventListener('resize',resize);renderer.domElement.removeEventListener('pointerdown',pointerDown);renderer.domElement.removeEventListener('pointermove',pointerMove);renderer.domElement.removeEventListener('pointerup',pointerUp);renderer.domElement.removeEventListener('pointercancel',pointerCancel);}};
+    destroy(){close();unsubscribe();spatial.destroy();environmentTarget.dispose();root.remove();stylesheet.remove();globalThis.removeEventListener('resize',resize);renderer.domElement.removeEventListener('pointerdown',pointerDown);renderer.domElement.removeEventListener('pointerup',pointerUp);renderer.domElement.removeEventListener('pointercancel',pointerCancel);}};
 }
