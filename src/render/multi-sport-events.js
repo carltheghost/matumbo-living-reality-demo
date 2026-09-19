@@ -567,7 +567,8 @@ function createLeagueBrowser({ documentRoot, mounts, onLeagueRequest }) {
     const date = currentDateParam();
     const id = ++requestSeq;
     gamesEl.classList.add("multi-sport-events-league-games-loading");
-    setStatus(`REQUESTING… · ${selectedLabel ?? selectedSlug} · ${date ?? "DATE UNAVAILABLE"}`);
+    const requestDateLabel = date ? (leagueParamToISO(date) ?? date) : "DATE UNAVAILABLE";
+    setStatus(`REQUESTING… · ${selectedLabel ?? selectedSlug} · ${requestDateLabel}`);
     try {
       const result = await onLeagueRequest({ slug: selectedSlug, date });
       if (id !== requestSeq) return null; // stale response: a newer request already replaced it
