@@ -21,6 +21,8 @@ import {
   leagueProviderFor,
   leagueProviderLabel,
   replayLeagueScoreboard,
+  tsdbAdjacentSeason,
+  tsdbSeasonString,
 } from "../src/domains/multi-sport-events.js";
 import {
   LEAGUE_CATALOG,
@@ -134,6 +136,11 @@ test("catalog: version 2; 129 frozen entries, provider tags, no duplicate slugs,
       assert.ok(Array.isArray(entry.tsdbIds) && entry.tsdbIds.length > 0, `${entry.slug} needs tsdbIds`);
       assert.strictEqual(typeof entry.tsdbName, "string");
       assert.ok(["european", "calendar"].includes(entry.seasonType), `${entry.slug} needs a valid seasonType`);
+      if (entry.seasonStartMonth !== undefined) {
+        assert.ok(Number.isSafeInteger(entry.seasonStartMonth)
+          && entry.seasonStartMonth >= 1 && entry.seasonStartMonth <= 12,
+        `${entry.slug} seasonStartMonth must be 1-12 when present`);
+      }
     }
     if (provider === "openligadb") {
       assert.strictEqual(typeof entry.oldbLeague, "string");
@@ -238,15 +245,94 @@ test("throttle: min interval between network starts is >= 1000ms", async () => {
   assert.ok(gap >= 1000, `expected >=1000ms between network starts, got ${gap}ms`);
 });
 
-test("throttle: second request aborts the first; superseded promise resolves", async () => {
+test("throttle: second request supersedes the first at the gate; no wasted fetch", async () => {
+  // Request generations: the second request() opens a new generation
+  // synchronously, so the first turn bails before its fetch starts. Only
+  // the newest generation touches the network.
   const { fetchImpl, calls } = abortableStubFetch(() => jsonResponse(SETTLED_PAYLOAD()));
   const queue = createLeagueScoreboardQueue({ fetchImpl, minIntervalMs: 0 });
   const first = queue.request({ slug: "eng.1", date: "20260919" });
   const second = queue.request({ slug: "esp.1", date: "20260919" });
   const [firstResult, secondResult] = await Promise.all([first, second]);
+  assert.strictEqual(calls.length, 1, "stale turn must not start a fetch after losing its generation");
+  assert.strictEqual(firstResult.envelope.status, "superseded", "superseded promise resolves, never drops");
+  assert.strictEqual(firstResult.fromCache, false);
+  assert.strictEqual(secondResult.envelope.status, "ready");
+  assert.strictEqual(secondResult.envelope.league, "esp.1");
+});
+
+test("budget: charged at real network start, not at queue time", async () => {
+  // Rapid selection changes must not burn the session budget: the
+  // superseded first request never reaches the network, so only the
+  // fetching turn is charged.
+  const { fetchImpl, calls } = stubFetch(() => jsonResponse(SETTLED_PAYLOAD()));
+  const queue = createLeagueScoreboardQueue({ fetchImpl, minIntervalMs: 0, sessionBudget: 1 });
+  const first = queue.request({ slug: "eng.1", date: "20260919" });
+  const second = await queue.request({ slug: "esp.1", date: "20260919" });
+  const firstResult = await first;
+  assert.strictEqual(firstResult.envelope.status, "superseded");
+  assert.strictEqual(second.envelope.status, "ready");
+  assert.strictEqual(calls.length, 1);
+  assert.strictEqual(queue.stats().networkCalls, 1, "only the real network start charges the budget");
+  const third = await queue.request({ slug: "fra.1", date: "20260919" });
+  assert.strictEqual(third.envelope.status, "throttled", "the single real call exhausts the budget of 1");
+  assert.strictEqual(calls.length, 1, "throttled request never hits the network");
+  assert.strictEqual(queue.stats().budgetRemaining, 0);
+});
+
+test("pacing: backwards clock exits the wait instead of hanging", async () => {
+  const base = Date.parse("2026-09-19T12:00:00.000Z");
+  let phase = "stable";
+  let t = base - 60_000;
+  const now = () => {
+    if (phase === "stable") return new Date(base).toISOString();
+    // Every read is earlier than the last: the clock runs backwards
+    // continuously through the pacing wait.
+    t -= 60_000;
+    return new Date(t).toISOString();
+  };
+  const { fetchImpl, calls } = stubFetch(() => jsonResponse(SETTLED_PAYLOAD()));
+  const queue = createLeagueScoreboardQueue({ fetchImpl, minIntervalMs: 1000, now });
+  await queue.request({ slug: "eng.1", date: "20260919" });
+  phase = "backwards";
+  const start = Date.now();
+  const second = await queue.request({ slug: "esp.1", date: "20260919" });
+  const elapsed = Date.now() - start;
+  assert.strictEqual(second.envelope.status, "ready");
   assert.strictEqual(calls.length, 2);
-  assert.strictEqual(calls[0].aborted, true, "first in-flight request must be aborted");
-  assert.strictEqual(firstResult.envelope.status, "unavailable", "superseded promise resolves, never drops");
+  assert.ok(elapsed < 5000, `backwards clock must exit pacing fast, took ${elapsed}ms`);
+});
+
+test("pacing: frozen clock exits via the iteration cap, never spins", async () => {
+  // A clock that never advances must not livelock the deadline loop:
+  // pacing gives up after LEAGUE_SCOREBOARD_PACE_GUARD_MAX chunked waits.
+  const frozen = "2026-09-19T12:00:00.000Z";
+  const now = () => frozen;
+  const { fetchImpl, calls } = stubFetch(() => jsonResponse(SETTLED_PAYLOAD()));
+  const queue = createLeagueScoreboardQueue({ fetchImpl, minIntervalMs: 1000, now });
+  await queue.request({ slug: "eng.1", date: "20260919" });
+  const start = Date.now();
+  const second = await queue.request({ slug: "esp.1", date: "20260919" });
+  const elapsed = Date.now() - start;
+  assert.strictEqual(second.envelope.status, "ready", "frozen clock degrades to availability, not a hang");
+  assert.strictEqual(calls.length, 2);
+  assert.ok(elapsed < 20_000, `frozen clock must terminate pacing, took ${elapsed}ms`);
+});
+
+test("throttle: genuinely in-flight fetch is aborted when superseded mid-flight", async () => {
+  // When the older turn's fetch is already in flight, the newer request()
+  // aborts it synchronously; the older promise still resolves (superseded)
+  // and the newer turn completes normally.
+  const { fetchImpl, calls } = abortableStubFetch(() => jsonResponse(SETTLED_PAYLOAD()));
+  const queue = createLeagueScoreboardQueue({ fetchImpl, minIntervalMs: 0 });
+  const first = queue.request({ slug: "eng.1", date: "20260919" });
+  await new Promise((resolve) => setTimeout(resolve, 20)); // let the first fetch go in-flight
+  const second = queue.request({ slug: "esp.1", date: "20260919" });
+  const [firstResult, secondResult] = await Promise.all([first, second]);
+  assert.strictEqual(calls.length, 2);
+  assert.strictEqual(calls[0].aborted, true, "in-flight request must be aborted on supersede");
+  assert.strictEqual(firstResult.envelope.status, "superseded", "aborted turn resolves superseded, never drops");
+  assert.match(firstResult.envelope.reason ?? "", /[Ss]uperseded/);
   assert.strictEqual(secondResult.envelope.status, "ready");
   assert.strictEqual(secondResult.envelope.league, "esp.1");
 });
@@ -333,6 +419,22 @@ test("cache: failed or aborted fetches are never cached", async () => {
   assert.strictEqual(calls.length, 2, "unavailable envelopes must not poison the cache");
   assert.strictEqual(second.envelope.status, "ready");
   assert.strictEqual(second.fromCache, false);
+});
+
+test("cache: superseded turns never write the cache", async () => {
+  // The first request loses its generation before its fetch starts; even
+  // though nothing failed, its (non-existent) result must not be cached
+  // under its key — a retry must fetch for real.
+  const { fetchImpl, calls } = abortableStubFetch(() => jsonResponse(SETTLED_PAYLOAD()));
+  const queue = createLeagueScoreboardQueue({ fetchImpl, minIntervalMs: 0 });
+  const first = queue.request({ slug: "eng.1", date: "20260919" });
+  const second = await queue.request({ slug: "esp.1", date: "20260919" });
+  await first;
+  assert.strictEqual(second.envelope.status, "ready");
+  const retry = await queue.request({ slug: "eng.1", date: "20260919" });
+  assert.strictEqual(retry.fromCache, false, "superseded turn must not have cached eng.1");
+  assert.strictEqual(retry.envelope.status, "ready");
+  assert.strictEqual(calls.length, 2);
 });
 
 /* ------------------------------ budget --------------------------------- */
@@ -575,6 +677,103 @@ test("thesportsdb: calendar seasonType uses single-year season string", async ()
   );
 });
 
+test("tsdbSeasonString: per-league seasonStartMonth flips the season key", () => {
+  // Default european flip stays July (backwards compatible).
+  assert.strictEqual(tsdbSeasonString({ seasonType: "european" }, "20260701"), "2026-2027");
+  assert.strictEqual(tsdbSeasonString({ seasonType: "european" }, "20260630"), "2025-2026");
+  // A measured February start (e.g. J League style) flips in February.
+  assert.strictEqual(tsdbSeasonString({ seasonType: "european", seasonStartMonth: 2 }, "20260301"), "2026-2027");
+  assert.strictEqual(tsdbSeasonString({ seasonType: "european", seasonStartMonth: 2 }, "20260115"), "2025-2026");
+  assert.strictEqual(tsdbSeasonString({ seasonType: "european", seasonStartMonth: 2 }, "20260724"), "2026-2027");
+  // Calendar leagues ignore the month entirely.
+  assert.strictEqual(tsdbSeasonString({ seasonType: "calendar", seasonStartMonth: 3 }, "20260115"), "2026");
+  // Out-of-range metadata falls back to the July default, never garbage.
+  assert.strictEqual(tsdbSeasonString({ seasonType: "european", seasonStartMonth: 99 }, "20260701"), "2026-2027");
+  assert.strictEqual(tsdbSeasonString({ seasonType: "mystery" }, "20260701"), null);
+  assert.strictEqual(tsdbSeasonString({ seasonType: "european" }, "not-a-date"), null);
+});
+
+test("tsdbAdjacentSeason: steps one season back in the catalog's label style", () => {
+  assert.strictEqual(tsdbAdjacentSeason("2026-2027"), "2025-2026");
+  assert.strictEqual(tsdbAdjacentSeason("2026"), "2025");
+  assert.strictEqual(tsdbAdjacentSeason("bogus"), null, "unrecognized shapes are never guessed");
+  assert.strictEqual(tsdbAdjacentSeason("2026-2028"), null, "non-pair ranges are never guessed");
+  assert.strictEqual(tsdbAdjacentSeason(null), null);
+});
+
+test("thesportsdb: measured seasonStartMonth routes June dates to the June-start season", async () => {
+  // Moldovan Divizia Nationala starts in June (measured from TheSportsDB's
+  // own season payloads): a June dateParam must resolve 2026-2027, where a
+  // hard-coded July flip would have asked for 2025-2026.
+  const entry = findLeagueCatalogEntry("tsdb.4655");
+  assert.strictEqual(entry.seasonStartMonth, 6);
+  const { fetchImpl, calls } = tsdbStubFetch([
+    tsdbEvent({ idEvent: "ev-md", dateEvent: "2026-06-27", strHomeTeam: "A", strAwayTeam: "B", intHomeScore: "1", intAwayScore: "0", strStatus: "Match Finished" }),
+  ]);
+  const queue = createLeagueScoreboardQueue({ fetchImpl, minIntervalMs: 0 });
+  const { envelope } = await queue.request({ slug: "tsdb.4655", date: "20260627" });
+  assert.strictEqual(calls.length, 1, "correct primary key: no adjacent retry needed");
+  assert.ok(calls[0].url.includes("s=2026-2027"), `June-start league must use 2026-2027 for June dates, got: ${calls[0].url}`);
+  assert.strictEqual(envelope.records.length, 1);
+});
+
+test("thesportsdb: empty primary season retries the adjacent season key", async () => {
+  const { fetchImpl, calls } = stubFetch((call) => {
+    assert.ok(call.url.includes("eventsseason.php"), `unexpected TSDB URL: ${call.url}`);
+    // Primary 2026-2027 is reachable but empty (wrong-key signal); the
+    // adjacent 2025-2026 carries the season.
+    if (call.url.includes("s=2026-2027")) return jsonResponse({ events: [] });
+    if (call.url.includes("s=2025-2026")) {
+      return jsonResponse({
+        events: [tsdbEvent({ idEvent: "ev-adj", dateEvent: "2026-07-24", strHomeTeam: "A", strAwayTeam: "B", intHomeScore: "2", intAwayScore: "1", strStatus: "Match Finished" })],
+      });
+    }
+    throw new Error(`unexpected season in URL: ${call.url}`);
+  });
+  const queue = createLeagueScoreboardQueue({ fetchImpl, minIntervalMs: 0 });
+  const { envelope } = await queue.request({ slug: "tsdb.4617", date: "20260724" });
+  assert.strictEqual(calls.length, 2, "primary + one adjacent retry");
+  assert.ok(calls[0].url.includes("s=2026-2027"), "primary key tried first");
+  assert.ok(calls[1].url.includes("s=2025-2026"), "adjacent key retried second");
+  assert.strictEqual(envelope.status, "ready");
+  assert.strictEqual(envelope.records.length, 1);
+  assert.strictEqual(envelope.season, "2025-2026", "day envelope reports the season that served the data");
+  // Day navigation stays cache-only: the adjacent payload is cached under
+  // the primary key.
+  const second = await queue.request({ slug: "tsdb.4617", date: "20260725" });
+  assert.strictEqual(calls.length, 2);
+  assert.strictEqual(second.fromCache, true);
+  assert.strictEqual(second.envelope.empty, true);
+  assert.strictEqual(second.envelope.season, "2025-2026");
+});
+
+test("thesportsdb: primary and adjacent both empty -> honest empty day, cached", async () => {
+  const { fetchImpl, calls } = tsdbStubFetch([]);
+  const queue = createLeagueScoreboardQueue({ fetchImpl, minIntervalMs: 0 });
+  const first = await queue.request({ slug: "tsdb.4617", date: "20260724" });
+  assert.strictEqual(calls.length, 2, "primary + adjacent both fetched once");
+  assert.strictEqual(first.envelope.status, "ready");
+  assert.strictEqual(first.envelope.empty, true, "honest empty, not an error and not fabricated");
+  const second = await queue.request({ slug: "tsdb.4617", date: "20260725" });
+  assert.strictEqual(calls.length, 2, "empty season cached; day navigation costs zero network");
+  assert.strictEqual(second.fromCache, true);
+  assert.strictEqual(second.envelope.empty, true);
+});
+
+test("thesportsdb: outage on every group never retries and never caches", async () => {
+  // All groups 500 for the primary key: an outage, not a wrong-key
+  // signal — no adjacent retry, unavailable envelope, nothing cached.
+  const { fetchImpl, calls } = tsdbStubFetch([], { status: 500 });
+  const queue = createLeagueScoreboardQueue({ fetchImpl, minIntervalMs: 0 });
+  const first = await queue.request({ slug: "tsdb.4617", date: "20260724" });
+  assert.strictEqual(first.envelope.status, "unavailable");
+  assert.match(first.envelope.reason ?? "", /TheSportsDB/);
+  assert.strictEqual(calls.length, 1, "outage does not trigger the adjacent retry");
+  const second = await queue.request({ slug: "tsdb.4617", date: "20260724" });
+  assert.strictEqual(second.fromCache, false);
+  assert.strictEqual(calls.length, 2, "failed fetches are never cached");
+});
+
 test("thesportsdb: multi-id league merges groups; extra ids reserve budget", async () => {
   const entry = findLeagueCatalogEntry("tsdb.4673");
   assert.deepStrictEqual(entry.tsdbIds, [4673, 4750]);
@@ -616,14 +815,47 @@ test("thesportsdb: multi-id turn superseded during inter-group pacing wait bails
   const newer = await queue.request({ slug: "tsdb.4617", date: "20260724" });
   const olderResult = await older;
   assert.strictEqual(newer.envelope.status, "ready", "newer turn completes normally");
-  assert.strictEqual(olderResult.envelope.status, "unavailable", "superseded older turn resolves unavailable, not fabricated");
+  assert.strictEqual(olderResult.envelope.status, "superseded", "superseded older turn resolves superseded, not fabricated");
   assert.match(olderResult.envelope.reason ?? "", /[Ss]uperseded/);
   assert.ok(!calls.some((c) => c.url.includes("id=4750")), "older turn never fetched its second group after being superseded");
   assert.strictEqual(calls.length, 2, "only group 0 and the newer turn hit the network (one in-flight law holds)");
+  assert.strictEqual(queue.stats().networkCalls, 2, "the pacing-killed group never charged the budget");
+});
+
+test("thesportsdb: budget exhaustion mid-turn serves honestly-fetched groups; first-group throttle -> throttled", async () => {
+  // sessionBudget 1: a two-id league affords only its first group. The
+  // second group is never charged and never fetched; the turn serves the
+  // first group's real rows instead of fabricating or failing.
+  const { fetchImpl, calls } = stubFetch((call) => {
+    assert.ok(call.url.includes("eventsseason.php"), `unexpected TSDB URL: ${call.url}`);
+    const id = call.url.match(/id=(\d+)/)?.[1] ?? "x";
+    return jsonResponse({
+      events: [tsdbEvent({ idEvent: `ev-${id}`, dateEvent: "2026-07-24", strHomeTeam: "A", strAwayTeam: "B", intHomeScore: "1", intAwayScore: "0", strStatus: "Match Finished" })],
+    });
+  });
+  const queue = createLeagueScoreboardQueue({ fetchImpl, minIntervalMs: 0, sessionBudget: 1 });
+  const first = await queue.request({ slug: "tsdb.4673", date: "20260724" });
+  assert.strictEqual(first.envelope.status, "ready");
+  assert.strictEqual(first.envelope.records.length, 1, "only the affordable group's rows are served");
+  assert.strictEqual(calls.length, 1, "the unaffordable group never hits the network");
+  assert.strictEqual(queue.stats().networkCalls, 1);
+  // Budget now spent: the next turn is throttled before its first group
+  // starts — charged at real network start, so nothing was charged.
+  const second = await queue.request({ slug: "tsdb.4617", date: "20260724" });
+  assert.strictEqual(second.envelope.status, "throttled");
+  assert.strictEqual(calls.length, 1, "throttled turn never hits the network");
+  assert.strictEqual(queue.stats().networkCalls, 1);
 });
 
 test("thesportsdb: provider gap >= 2000ms between network starts", async () => {
-  const { fetchImpl, calls } = tsdbStubFetch([]);
+  // The stub returns events for the primary season key so no
+  // adjacent-season retry fires; the test isolates the pacing gap.
+  const { fetchImpl, calls } = stubFetch((call) => {
+    assert.ok(call.url.includes("eventsseason.php"), `unexpected TSDB URL: ${call.url}`);
+    return jsonResponse({
+      events: [tsdbEvent({ idEvent: "ev-gap", dateEvent: "2026-07-24", strHomeTeam: "A", strAwayTeam: "B", intHomeScore: "1", intAwayScore: "0", strStatus: "Match Finished" })],
+    });
+  });
   const queue = createLeagueScoreboardQueue({ fetchImpl, minIntervalMs: 0 });
   await queue.request({ slug: "tsdb.4617", date: "20260724" });
   await queue.request({ slug: "tsdb.4618", date: "20260724" });

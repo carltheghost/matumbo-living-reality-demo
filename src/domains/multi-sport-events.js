@@ -1041,19 +1041,17 @@ export default fetchMultiSportEvents;
 
 export const MULTI_SPORT_EVENTS_LEAGUE_MAX_RECORDS = 120;
 export const LEAGUE_SCOREBOARD_MIN_INTERVAL_MS = 1000;
+export const LEAGUE_SCOREBOARD_SESSION_BUDGET = 90;
+/** Maximum pacing-loop iterations before a broken clock forces an exit. */
+export const LEAGUE_SCOREBOARD_PACE_GUARD_MAX = 40;
+/** Pacing sleeps are chunked so a superseded turn bails out promptly. */
+export const LEAGUE_SCOREBOARD_PACE_CHUNK_MS = 250;
 export const LEAGUE_SCOREBOARD_CACHE_TTLS = Object.freeze({
   live: 45_000,
   settled: 600_000,
   empty: 180_000,
 });
-export const LEAGUE_SCOREBOARD_SESSION_BUDGET = 90;
 
-/**
- * Slug allowlist shape. The catalog itself is the allowlist: a slug must
- * both match this shape AND be a catalog entry before any network call.
- * (The contract's `{2,4}` first segment was widened to `{2,8}` because the
- * probe-verified catalog contains `conmebol.libertadores` / `conmebol.sudamericana`.)
- */
 export const LEAGUE_SCOREBOARD_SLUG_PATTERN = /^[a-z]{2,8}\.[a-z0-9_.]{1,40}$/;
 
 /**
@@ -1171,159 +1169,182 @@ async function leagueSleep(ms) {
   await new Promise((resolve) => globalThis.setTimeout?.(resolve, ms) ?? resolve());
 }
 
+/* ------------------------------------------------------------------ */
+/* Request-generation model.                                          */
+/*                                                                    */
+/* Every request() call opens a new network generation (networkEpoch  */
+/* += 1) and synchronously aborts the previous generation's in-flight */
+/* handle. A turn belongs to exactly one generation; it re-validates  */
+/* its generation                                                     */
+/*   - before starting network work (after waiting for its queue      */
+/*     slot),                                                         */
+/*   - after every pacing wait and every fetch/json await,             */
+/*   - atomically with installing its AbortController, and            */
+/*   - before promoting its envelope or writing to the cache.         */
+/* A stale turn resolves a "superseded" envelope and never touches    */
+/* the network again, never writes the cache, and never overwrites a  */
+/* newer result. The render layer's independent requestSeq guard stays */
+/* as the second line of defense.                                     */
+/*                                                                    */
+/* The queue slot is held until a turn fully settles — pacing,        */
+/* budget, fetch, and envelope promotion all happen inside the turn.   */
+/* There is no controller-free hole between "release the next turn"    */
+/* and "start the fetch": the next turn cannot begin until this one   */
+/* settles, and the previous turn's controller is aborted             */
+/* synchronously inside request(), before the new turn is enqueued.   */
+/*                                                                    */
+/* Budget is charged at real network start (controller acquisition),  */
+/* not at queue time, so rapid selection changes cannot burn the      */
+/* session budget without ever touching the network.                  */
+/* ------------------------------------------------------------------ */
+
+/** True for abort/timeout/supersede failures, whatever shape they take. */
+function isAbortLike(error) {
+  if (!error) return false;
+  const name = String(error?.name ?? "");
+  if (name === "AbortError" || name === "TimeoutError" || name === "SupersededError") return true;
+  return /\babort(?:ed|ing)?\b/i.test(String(error?.message ?? ""));
+}
+
+/** Honest envelope for a turn that lost its generation: never an error, never fabricated rows. */
+function leagueSupersededEnvelope({ entry, dateParam, retrievedAt }) {
+  return deepFreeze({
+    ...leagueEnvelopeBase({ status: "superseded", entry, dateParam, retrievedAt }),
+    superseded: true,
+    liveFetch: false,
+    empty: false,
+    emptyReason: null,
+    recordCount: 0,
+    records: [],
+    record: null,
+    reason: "Superseded by a newer league request; no rows were fabricated.",
+  });
+}
+
 /**
  * Bounded multi-provider league scoreboard fetcher (ESPN, TheSportsDB,
  * OpenLigaDB — fixtures/scores only; no odds, wagering, markets, or
  * predictions anywhere in this module).
  *
- * Mandatory guards (never turn UI input into a URL):
- *  - slug must match LEAGUE_SCOREBOARD_SLUG_PATTERN AND be a catalog entry;
- *    otherwise the request promise rejects with no network call.
- *  - single in-flight network request globally; a newly scheduled request
- *    aborts the previous one via AbortController. The slot is released the
- *    moment a fetch starts, so a follow-up request does not wait for the
- *    previous fetch to finish — it aborts it, waits out the min-interval,
- *    then fetches. The superseded promise still resolves (as an
- *    unavailable envelope); nothing is dropped silently.
- *  - at least minIntervalMs between network-call starts, plus any
- *    provider-specific gap (TheSportsDB: 2000ms); requests queue, never drop.
- *  - cache keys come from the provider registry, not from the slug shape:
- *    ESPN `${slug}:${YYYYMMDD}` (one day of scoreboard data), TheSportsDB
- *    `tsdb:<ids>:<season>` (whole season; day envelopes derive from it),
- *    OpenLigaDB `openligadb:<league>:<year>` (whole season; day envelopes
- *    derive from it). TTLs: 45s when any record is live, 10min when all
- *    records are final/scheduled, 3min when zero records. Only ready
- *    envelopes are cached — failed or aborted ones never are.
- *  - session network-call budget (reserved at request time, fail closed);
- *    multi-id providers reserve one unit per HTTP call; past budget,
- *    resolve a throttled envelope with no fetch.
+ * Request discipline (queue-global):
+ *  - one in-flight network call at a time (FIFO slot),
+ *  - >= minIntervalMs between network-call starts (default 1000ms),
+ *  - provider-specific extra gap (TheSportsDB: 2000ms),
+ *  - a newer request aborts the previous in-flight call; the superseded
+ *    promise still resolves (status "superseded"), never drops,
+ *  - 90-call session budget charged at real network start; past the
+ *    budget the queue resolves a "throttled" envelope,
+ *  - provider/league/season payloads cached with TTLs (live 45s, settled
+ *    10min, empty 3min); day navigation over a cached season costs zero
+ *    network calls.
  */
 export function createLeagueScoreboardQueue({
   fetchImpl = (...args) => globalThis.fetch(...args),
-  now = () => new Date().toISOString(),
   minIntervalMs = LEAGUE_SCOREBOARD_MIN_INTERVAL_MS,
   sessionBudget = LEAGUE_SCOREBOARD_SESSION_BUDGET,
+  fetchTimeoutMs = MULTI_SPORT_EVENTS_FETCH_TIMEOUT_MS,
   cacheTtls = LEAGUE_SCOREBOARD_CACHE_TTLS,
-  timeoutMs = MULTI_SPORT_EVENTS_FETCH_TIMEOUT_MS,
+  now = () => new Date().toISOString(),
 } = {}) {
-  const cache = new Map();
   const boundedInterval = Number.isFinite(Number(minIntervalMs)) && Number(minIntervalMs) >= 0
     ? Number(minIntervalMs)
     : LEAGUE_SCOREBOARD_MIN_INTERVAL_MS;
   const boundedBudget = Number.isSafeInteger(sessionBudget) && sessionBudget > 0 ? sessionBudget : LEAGUE_SCOREBOARD_SESSION_BUDGET;
-  const boundedTimeout = Number.isFinite(Number(timeoutMs)) && Number(timeoutMs) > 0
-    ? Math.min(Number(timeoutMs), 60_000)
+  const boundedTimeout = Number.isFinite(Number(fetchTimeoutMs)) && Number(fetchTimeoutMs) > 0
+    ? Number(fetchTimeoutMs)
     : MULTI_SPORT_EVENTS_FETCH_TIMEOUT_MS;
   const ttls = {
     live: Number.isFinite(Number(cacheTtls?.live)) ? Number(cacheTtls.live) : 45_000,
     settled: Number.isFinite(Number(cacheTtls?.settled)) ? Number(cacheTtls.settled) : 600_000,
     empty: Number.isFinite(Number(cacheTtls?.empty)) ? Number(cacheTtls.empty) : 180_000,
   };
-  // The slot promise resolves the moment the current holder STARTS its
-  // network call, so a follow-up request can abort the in-flight fetch and
-  // claim the slot without waiting for the previous fetch to finish.
-  let slotTail = Promise.resolve();
-  let inFlightController = null;
-  let lastNetworkStartMs = -Infinity;
-  // Per-provider last network-start timestamps for provider-specific
-  // minimum gaps (e.g. TheSportsDB's 2000ms for its 30 req/min free tier),
-  // applied on top of the queue-global minIntervalMs.
-  const lastProviderStartMs = new Map();
-  let networkCalls = 0;
-  let cacheHits = 0;
-  let throttledCount = 0;
-  let pendingCount = 0;
 
-  function ttlFor(records) {
+  // Monotonic request generation. Bumped synchronously in request(); a
+  // turn whose generation no longer matches is stale and must stop.
+  let networkEpoch = 0;
+  // The single registered network handle: { controller, epoch }. Null
+  // when nothing is in flight. Abort ownership follows the generation,
+  // not a mutable "current controller" variable.
+  let inFlight = null;
+  // FIFO slot chain. Each turn runs after the previous turn's promise
+  // fully settles; the slot is held across pacing, budget, fetch, and
+  // envelope promotion — never released before the fetch starts.
+  let slotTail = Promise.resolve();
+
+  let networkCalls = 0;
+  let throttledCount = 0;
+  let cacheHits = 0;
+  let pendingCount = 0;
+  let lastNetworkStartMs = Number.NEGATIVE_INFINITY;
+  const lastProviderStartMs = new Map();
+  const cache = new Map();
+
+  // TTL selection from the envelope's own records: 45s when any record
+  // is live, 10min when all records are final/scheduled, 3min when the
+  // envelope carries zero records.
+  function ttlForEnvelope(envelope) {
+    const records = Array.isArray(envelope?.records) ? envelope.records : [];
     if (!records.length) return ttls.empty;
     return records.some((record) => classifyScoreboardStatus(record) === "live") ? ttls.live : ttls.settled;
   }
 
-  function throttledEnvelope(entry, dateParam, retrievedAt) {
-    return deepFreeze({
-      ...leagueEnvelopeBase({ status: "throttled", entry, dateParam, retrievedAt }),
-      providerCount: 0,
-      throttled: true,
-      liveFetch: false,
-      externalNetwork: false,
-      reason: LEAGUE_SCOREBOARD_BUDGET_REASON,
-    });
+  function cacheGet(cacheKey) {
+    if (cacheKey === null || cacheKey === undefined) return null;
+    const hit = cache.get(cacheKey);
+    if (!hit) return null;
+    if (leagueNowMs(now) - leagueNowMs(hit.storedAt) > hit.ttlMs) {
+      cache.delete(cacheKey);
+      return null;
+    }
+    return hit;
   }
 
-  function request({ slug, date } = {}) {
-    const entry = typeof slug === "string"
-      && LEAGUE_SCOREBOARD_SLUG_PATTERN.test(slug)
-      ? findLeagueCatalogEntry(slug)
-      : null;
-    if (!entry) {
-      return Promise.reject(new Error(`Unknown or invalid league slug: ${String(slug ?? "").slice(0, 80)}`));
-    }
-    let provider;
-    try {
-      provider = leagueProviderFor(entry);
-    } catch (error) {
-      return Promise.reject(error);
-    }
-    const dateParam = date === undefined || date === null ? formatScoreboardDate(now()) : formatScoreboardDate(date);
-    if (!dateParam) {
-      return Promise.reject(new Error(`Invalid scoreboard date: ${String(date ?? "").slice(0, 80)}`));
-    }
-    const key = provider.cacheKey(entry, dateParam);
-    if (!key) {
-      return Promise.reject(new Error(`League provider cannot address this request: ${String(entry.slug).slice(0, 80)}`));
-    }
-    const cached = cache.get(key);
-    if (cached && leagueNowMs(now) < cached.expiresAtMs) {
-      cacheHits += 1;
-      return Promise.resolve({ envelope: provider.cachedEnvelope(entry, dateParam, cached), fromCache: true });
-    }
-    if (cached) cache.delete(key);
-    if (typeof fetchImpl !== "function") {
-      const retrievedAt = nowIso(now);
-      const envelope = deepFreeze({
-        ...leagueEnvelopeBase({ status: "unavailable", entry, dateParam, retrievedAt }),
-        reason: "Browser fetch is unavailable; no league scoreboard rows were fabricated.",
-      });
-      return Promise.resolve({ envelope, fromCache: false });
-    }
-    // Budget is reserved at request time so concurrent bursts cannot
-    // overshoot; a superseded request keeps its reservation (fail closed).
+  function cacheSet(cacheKey, envelope) {
+    cache.set(cacheKey, { envelope, storedAt: now(), ttlMs: ttlForEnvelope(envelope) });
+  }
+
+  // Generation-guarded cache write: a stale turn's envelope is dropped
+  // even when well-formed. Only the newest generation commits.
+  function cachePut(cacheKey, envelope, myEpoch) {
+    if (myEpoch !== networkEpoch) return false;
+    if (!envelope || envelope.status !== "ready") return false;
+    cacheSet(cacheKey, envelope);
+    return true;
+  }
+
+  // Budget is charged here — at real network start — and nowhere else.
+  function reserveNetworkCall() {
     if (networkCalls >= boundedBudget) {
       throttledCount += 1;
-      const envelope = throttledEnvelope(entry, dateParam, nowIso(now));
-      return Promise.resolve({ envelope, fromCache: false });
+      return false;
     }
     networkCalls += 1;
-    const myTurn = slotTail;
-    let releaseMyTurn = null;
-    slotTail = new Promise((resolve) => { releaseMyTurn = resolve; });
-    // One network-call slot shared by every provider. The abort, the
-    // min-interval wait, and the slot release all happen in the turn's
-    // first microtask in exactly this order (like the original
-    // single-league code): a follow-up turn aborts a genuinely in-flight
-    // fetch, never a controller whose fetch has not started yet.
-    // beginNetwork() must stay synchronous and run before the provider's
-    // first await for the same reason — an extra async boundary would let
-    // the next turn abort a signal before its fetch is even called.
-    //
-    // The wait covers both the queue-global minIntervalMs and the
-    // provider-specific gap (TheSportsDB: 2000ms). Multi-call turns
-    // (TheSportsDB leagues with several ids) reuse paceNextCall() before
-    // each additional call so every start is paced, not just the first.
-    async function paceNextCall() {
-      const providerGap = Number(provider?.minIntervalMs) > 0 ? Number(provider.minIntervalMs) : 0;
-      const lastProviderStart = lastProviderStartMs.has(provider.id)
-        ? lastProviderStartMs.get(provider.id)
+    return true;
+  }
+
+  /**
+   * Deadline-loop pacing. Loops until the queue's own clock reads past
+   * the global and provider deadlines plus a 1ms guard, so a ~999ms gap
+   * can never ship (ms-resolution clocks truncate; setTimeout may fire
+   * ~1ms early). Bounded: chunked sleeps re-check the generation every
+   * iteration (a stale turn bails instead of resurrecting), an iteration
+   * cap exits on a frozen clock, and a backwards clock exits immediately
+   * — pacing can never livelock. Returns false when the turn lost its
+   * generation mid-wait.
+   */
+  async function paceNextCall(providerId, providerGapMs, myEpoch) {
+    const providerGap = Number(providerGapMs) > 0 ? Number(providerGapMs) : 0;
+    let guard = 0;
+    let lastSeenMs = Number.NEGATIVE_INFINITY;
+    for (;;) {
+      if (myEpoch !== networkEpoch) return false;
+      const nowMs = leagueNowMs(now);
+      if (!Number.isFinite(nowMs)) return true; // unreadable clock: never hang the queue
+      if (nowMs < lastSeenMs) return true; // clock ran backwards: exit safely, keep availability
+      lastSeenMs = nowMs;
+      const lastProviderStart = lastProviderStartMs.has(providerId)
+        ? lastProviderStartMs.get(providerId)
         : Number.NEGATIVE_INFINITY;
-      // Deadline-based pacing. A single sleep of (interval - elapsed) can be
-      // observed as interval - 1ms by another party: ms-resolution clocks
-      // truncate their reads and setTimeout may fire ~1ms early, so the
-      // promised spacing is not actually kept. Looping until the queue's own
-      // clock reads past lastStart + interval + 1 guarantees every observer
-      // measures at least `interval` between network starts.
-      // The +1ms guard applies only to deadlines with a positive promised
-      // spacing; a zero interval promises nothing, and frozen test clocks
-      // must not spin forever waiting on a clock that never advances.
       const globalDeadline = boundedInterval > 0
         ? lastNetworkStartMs + boundedInterval + 1
         : Number.NEGATIVE_INFINITY;
@@ -1331,78 +1352,170 @@ export function createLeagueScoreboardQueue({
         ? lastProviderStart + providerGap + 1
         : Number.NEGATIVE_INFINITY;
       const deadline = Math.max(globalDeadline, providerDeadline);
-      while (leagueNowMs(now) < deadline) {
-        await leagueSleep(deadline - leagueNowMs(now));
-      }
-      const startMs = leagueNowMs(now);
-      lastNetworkStartMs = startMs;
-      lastProviderStartMs.set(provider.id, startMs);
+      if (nowMs >= deadline) break;
+      guard += 1;
+      if (guard > LEAGUE_SCOREBOARD_PACE_GUARD_MAX) return true; // frozen clock: exit, never spin
+      await leagueSleep(Math.min(Math.max(deadline - nowMs, 0), LEAGUE_SCOREBOARD_PACE_CHUNK_MS));
     }
-    function beginNetwork() {
-      const controller = typeof globalThis.AbortController === "function" ? new globalThis.AbortController() : null;
-      inFlightController = controller;
-      const timeoutHandle = controller && typeof globalThis.setTimeout === "function"
-        ? globalThis.setTimeout(() => controller.abort(), boundedTimeout)
-        : null;
-      return {
-        controller,
-        signal: controller ? controller.signal : undefined,
-        done() {
-          if (timeoutHandle !== null && timeoutHandle !== undefined) globalThis.clearTimeout?.(timeoutHandle);
-          if (inFlightController === controller) inFlightController = null;
-        },
-      };
+    const startMs = leagueNowMs(now);
+    lastNetworkStartMs = startMs;
+    lastProviderStartMs.set(providerId, startMs);
+    return true;
+  }
+
+  /**
+   * Install this turn's AbortController and watchdog, atomically with the
+   * generation check: a stale turn gets null instead of a controller, so
+   * it can never clobber the newer generation's abort handle. Returns
+   * null for a stale turn (the turn must bail, not fetch).
+   */
+  function acquireNetwork(myEpoch) {
+    if (myEpoch !== networkEpoch) return null;
+    const controller = typeof globalThis.AbortController === "function" ? new globalThis.AbortController() : null;
+    let timeoutId = null;
+    if (controller && typeof globalThis.setTimeout === "function") {
+      timeoutId = globalThis.setTimeout(() => {
+        // Timeout aborts carry a TimeoutError reason so they stay
+        // distinguishable from supersede aborts downstream.
+        try {
+          controller.abort(typeof DOMException === "function"
+            ? new DOMException("League request timed out", "TimeoutError")
+            : new Error("League request timed out"));
+        } catch { /* defensive: abort must never throw */ }
+      }, boundedTimeout);
+      if (timeoutId !== null && timeoutId !== undefined && typeof timeoutId.unref === "function") timeoutId.unref();
     }
-    const ctx = {
-      nowIso: () => nowIso(now),
-      fetchImpl,
-      boundedTimeout,
-      // Extra network calls inside one turn (a provider with several league
-      // ids) reserve their own budget; the first call uses the request-time
-      // reservation above.
-      reserveNetworkCall: () => {
-        if (networkCalls >= boundedBudget) {
-          throttledCount += 1;
-          return false;
-        }
-        networkCalls += 1;
-        return true;
-      },
-      throttled: (throttledEntry, throttledDateParam) => throttledEnvelope(throttledEntry, throttledDateParam, nowIso(now)),
-      beginNetwork,
-      paceNextCall,
-      // The currently registered in-flight controller. A multi-call turn
-      // checks this before each additional call: if a newer turn has
-      // superseded this one, it bails out instead of starting work that
-      // would clobber the newer turn's abort handle.
-      inFlight: () => inFlightController,
-      // Only ready envelopes are cached: a superseded (aborted) or failed
-      // request must never poison the cache with an "unavailable" snapshot.
-      cachePut: (cacheKey, envelope) => {
-        if (envelope?.status === "ready") {
-          cache.set(cacheKey, {
-            envelope,
-            expiresAtMs: leagueNowMs(now) + ttlFor(envelope.records),
-          });
-        }
+    const handle = { controller, epoch: myEpoch };
+    inFlight = handle;
+    return {
+      controller,
+      signal: controller ? controller.signal : undefined,
+      done() {
+        if (timeoutId !== null && timeoutId !== undefined) globalThis.clearTimeout?.(timeoutId);
+        if (inFlight === handle) inFlight = null;
       },
     };
-    return myTurn.then(async () => {
-      pendingCount += 1;
-      try {
-        // A newly scheduled network call supersedes the previous in-flight
-        // one via AbortController; the superseded promise still resolves
-        // (as an unavailable envelope), it is never dropped silently.
-        if (inFlightController && typeof inFlightController.abort === "function") {
-          try { inFlightController.abort(); } catch { /* defensive */ }
-        }
-        await paceNextCall();
-        if (releaseMyTurn) releaseMyTurn();
-        return await provider.fetchTurn({ entry, dateParam, key, ctx });
-      } finally {
-        pendingCount -= 1;
-      }
+  }
+
+  /**
+   * The single atomic network-start path used by EVERY actual HTTP request
+   * in every provider turn: generation gate -> pacing (re-checks the
+   * generation every chunk; false means superseded mid-wait) -> budget
+   * charge at real network start -> controller acquisition. There is no
+   * await between the budget charge and the controller install, so a stale
+   * turn can never burn budget for a fetch it will not make.
+   *
+   * Returns the network handle, the string "throttled" when the session
+   * budget is exhausted (the provider must not fetch), or null when the
+   * turn lost its generation (the turn must bail, not fetch).
+   */
+  async function beginNetworkCall(providerId, providerGapMs, myEpoch) {
+    if (myEpoch !== networkEpoch) return null;
+    if (!await paceNextCall(providerId, providerGapMs, myEpoch)) return null;
+    if (!reserveNetworkCall()) return "throttled";
+    return acquireNetwork(myEpoch);
+  }
+
+  function throttledEnvelope({ entry, dateParam, retrievedAt }) {
+    return deepFreeze({
+      ...leagueEnvelopeBase({ status: "throttled", entry, dateParam, retrievedAt }),
+      providerCount: 0,
+      throttled: true,
+      reason: "Slow down — session request budget reached",
+      liveFetch: false,
+      externalNetwork: false,
+      empty: false,
+      recordCount: 0,
+      records: [],
+      record: null,
     });
+  }
+
+  async function runRequestTurn({ entry, dateParam, provider, myEpoch }) {
+    pendingCount += 1;
+    try {
+      // Gate 1: a newer request() may have arrived while this turn waited
+      // for its slot. A stale turn never starts network work.
+      if (myEpoch !== networkEpoch) {
+        return { envelope: leagueSupersededEnvelope({ entry, dateParam, retrievedAt: now() }), fromCache: false };
+      }
+      const ctx = {
+        nowIso: () => nowIso(now),
+        fetchImpl,
+        turnStale: () => myEpoch !== networkEpoch,
+        // The single atomic network-start path every real HTTP request
+        // goes through: generation gate -> pacing -> budget charge at real
+        // network start -> controller install.
+        beginNetworkCall: () => beginNetworkCall(provider.id, provider.minIntervalMs, myEpoch),
+        throttledEnvelope: () => throttledEnvelope({ entry, dateParam, retrievedAt: now() }),
+        supersededEnvelope: () => leagueSupersededEnvelope({ entry, dateParam, retrievedAt: now() }),
+        cacheGet,
+        cachePut: (cacheKey, envelope) => cachePut(cacheKey, envelope, myEpoch),
+      };
+      const result = await provider.fetchTurn({ entry, dateParam, key: provider.cacheKey(entry, dateParam), ctx });
+      // Gate 2: envelope promotion is generation-guarded. A provider turn
+      // that was superseded mid-flight — or whose fetch ignored the abort
+      // signal and resolved anyway — must not overwrite the newer result.
+      if (myEpoch !== networkEpoch) {
+        return { envelope: leagueSupersededEnvelope({ entry, dateParam, retrievedAt: now() }), fromCache: false };
+      }
+      return result;
+    } finally {
+      pendingCount = Math.max(0, pendingCount - 1);
+    }
+  }
+
+  function request({ slug, date } = {}) {
+    const entry = findLeagueCatalogEntry(slug);
+    if (!entry) return Promise.reject(new Error(`Unknown or invalid league slug: ${String(slug).slice(0, 80)}`));
+    const dateParam = formatScoreboardDate(date);
+    if (!dateParam) return Promise.reject(new Error(`Invalid scoreboard date: ${String(date).slice(0, 40)}`));
+    let provider;
+    try {
+      provider = leagueProviderFor(entry);
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    if (typeof fetchImpl !== "function") {
+      const envelope = deepFreeze({
+        ...leagueEnvelopeBase({ status: "unavailable", entry, dateParam, retrievedAt: now() }),
+        reason: "Browser fetch is unavailable; no league scoreboard rows were fabricated.",
+      });
+      return Promise.resolve({ envelope, fromCache: false });
+    }
+
+    // Open a new network generation synchronously: every older uncached
+    // turn is superseded as of this line, and a genuinely in-flight fetch
+    // is aborted right here — before the new turn is even enqueued — so a
+    // stale turn can never resurrect between "slot released" and "fetch
+    // started". There is no controller-free hole.
+    networkEpoch += 1;
+    const myEpoch = networkEpoch;
+    const previousFlight = inFlight;
+    if (previousFlight?.controller && typeof previousFlight.controller.abort === "function") {
+      try {
+        previousFlight.controller.abort(typeof DOMException === "function"
+          ? new DOMException("Superseded by a newer league request", "SupersededError")
+          : new Error("Superseded by a newer league request"));
+      } catch { /* abort must never throw out of request() */ }
+    }
+
+    const key = provider.cacheKey(entry, dateParam);
+    const cached = cacheGet(key);
+    if (cached) {
+      cacheHits += 1;
+      return Promise.resolve({ envelope: provider.cachedEnvelope(entry, dateParam, cached), fromCache: true });
+    }
+
+    // FIFO: the turn runs after the previous turn's promise fully
+    // settles. The slot is held across pacing, budget, fetch, and
+    // envelope promotion — it is released only when the turn settles, so
+    // the next turn cannot install a controller "too early".
+    const runTurn = () => runRequestTurn({ entry, dateParam, provider, myEpoch });
+    const previous = slotTail;
+    let release = null;
+    slotTail = new Promise((resolve) => { release = resolve; });
+    return previous.then(runTurn, runTurn).finally(() => { release(); });
   }
 
   function stats() {
@@ -1413,7 +1526,7 @@ export function createLeagueScoreboardQueue({
       cacheSize: cache.size,
       cacheHits,
       throttledCount,
-      inFlight: inFlightController !== null,
+      inFlight: inFlight !== null,
       pending: pendingCount,
     });
   }
@@ -1424,13 +1537,17 @@ export function createLeagueScoreboardQueue({
     cacheHits = 0;
     throttledCount = 0;
     pendingCount = 0;
-    lastNetworkStartMs = -Infinity;
+    lastNetworkStartMs = Number.NEGATIVE_INFINITY;
     lastProviderStartMs.clear();
     slotTail = Promise.resolve();
-    if (inFlightController && typeof inFlightController.abort === "function") {
-      try { inFlightController.abort(); } catch { /* defensive */ }
+    // A cleared queue starts a fresh generation: late turns from before
+    // the clear resolve superseded instead of promoting stale envelopes.
+    networkEpoch += 1;
+    const previousFlight = inFlight;
+    if (previousFlight?.controller && typeof previousFlight.controller.abort === "function") {
+      try { previousFlight.controller.abort(); } catch { /* defensive */ }
     }
-    inFlightController = null;
+    inFlight = null;
   }
 
   return { request, stats, clear };
@@ -1510,10 +1627,37 @@ export function tsdbSeasonString(entry, dateParam) {
   const year = Number(digits.slice(0, 4));
   const month = Number(digits.slice(4, 6));
   if (month < 1 || month > 12) return null;
+  // Per-league season start month (1-12), measured from TheSportsDB's own
+  // season payloads — the old hard-coded July flip was wrong for
+  // calendar leagues, southern-hemisphere schedules, and split seasons.
+  // Defaults to 7 for european-style leagues without measured metadata.
+  const startMonth = Number.isSafeInteger(entry?.seasonStartMonth) && entry.seasonStartMonth >= 1 && entry.seasonStartMonth <= 12
+    ? entry.seasonStartMonth
+    : 7;
   if (entry?.seasonType === "european") {
-    return month >= 7 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
+    return month >= startMonth ? `${year}-${year + 1}` : `${year - 1}-${year}`;
   }
   if (entry?.seasonType === "calendar") return `${year}`;
+  return null;
+}
+
+/**
+ * The season key immediately before the given key, in the catalog's own
+ * label style ("2026-2027" -> "2025-2026", "2026" -> "2025"). Used for the
+ * one-step adjacent-season retry when a primary season key returns no
+ * events; null when the key shape is unrecognized so nothing is guessed.
+ */
+export function tsdbAdjacentSeason(season) {
+  const key = String(season ?? "");
+  let match = key.match(/^(\d{4})-(\d{4})$/);
+  if (match) {
+    const start = Number(match[1]);
+    const end = Number(match[2]);
+    if (end === start + 1) return `${start - 1}-${end - 1}`;
+    return null;
+  }
+  match = key.match(/^(\d{4})$/);
+  if (match) return `${Number(match[1]) - 1}`;
   return null;
 }
 
@@ -1699,6 +1843,9 @@ export function tsdbDayEnvelope({ entry, dateParam, season, seasonRecords, retri
   return deepFreeze({
     ...leagueEnvelopeBase({ status: "ready", entry, dateParam, retrievedAt }),
     records,
+    // The season key that actually served the payload (may be the
+    // adjacent key when the primary came back empty).
+    season: season ?? null,
     sources: [leagueSourceStatus(tsdbSourceLike(entry, season, requestUrl), retrievedAt, {
       available,
       recordCount: records.length,
@@ -1734,115 +1881,192 @@ function tsdbUnavailableEnvelope({ entry, dateParam, retrievedAt, reason }) {
  * budget discipline via ctx), cache the whole season, then filter by date
  * client-side. Day navigation over a cached season costs zero network.
  */
-async function thesportsdbLeagueTurn({ entry, dateParam, key, ctx }) {
-  const retrievedAt = ctx.nowIso();
-  const season = tsdbSeasonString(entry, dateParam);
-  const ids = tsdbLeagueIds(entry);
-  if (!season || !ids.length) {
-    return {
-      envelope: tsdbUnavailableEnvelope({ entry, dateParam, retrievedAt, reason: "TheSportsDB league entry has no usable season or league id; no rows were fabricated." }),
-      fromCache: false,
-    };
-  }
+/**
+ * Fetch every group id for one TheSportsDB season key. Each group start is
+ * paced and budget-reserved like a turn start. Returns { stale: true }
+ * when the turn lost its generation (a newer request arrived) — the
+ * caller must bail without touching the network or the cache again.
+ * Abort-shaped failures resolve here as { aborted: true } with the
+ * reason preserved: timeout aborts (fetch watchdog) and supersede aborts
+ * (newer request) both end the turn cleanly, never as a rejection.
+ */
+async function fetchTsdbSeasonGroups({ entry, season, ids, retrievedAt, ctx }) {
   const seasonRecords = [];
   const reasons = [];
   const requestUrls = [];
-  let lastNet = null;
-  let anyGroupSucceeded = false;
+  let anyGroupOk = false;
+  let throttled = false;
   for (let index = 0; index < ids.length; index += 1) {
+    // Stale turns never resurrect: check before every group, not just at
+    // turn start. request() bumps the generation and aborts the in-flight
+    // handle synchronously, so this observes it promptly.
+    if (ctx.turnStale()) return { stale: true };
     const requestUrl = publicSourceUrl(tsdbSeasonUrl(ids[index], season));
     if (!requestUrl) {
       reasons.push(`id ${ids[index]}: ineligible URL`);
       continue;
     }
-    // The first network call uses the request-time budget reservation; any
-    // additional league id (e.g. RFEF's two groups) reserves its own.
-    if (index > 0 && !ctx.reserveNetworkCall()) break;
-    if (index > 0) {
-      // Every group start is paced like a turn start (global + TheSportsDB
-      // 2000ms), so multi-id turns cannot burst past the rate limit.
-      await ctx.paceNextCall();
-      // Re-check AFTER the pacing wait, not before it: a newer turn may have
-      // started during the wait, aborted this turn's registered handle, and
-      // registered its own. Continuing here would install a second in-flight
-      // controller, clobber the newer turn's abort handle, and run a
-      // redundant fetch — violating the one-in-flight law. The superseded
-      // promise resolves unavailable instead.
-      const superseded = lastNet?.signal?.aborted
-        || (ctx.inFlight() !== null && ctx.inFlight() !== lastNet?.controller);
-      if (superseded) {
-        if (lastNet) lastNet.done();
-        return {
-          envelope: tsdbUnavailableEnvelope({ entry, dateParam, retrievedAt, reason: "Superseded by a newer league request before all groups loaded; no rows were fabricated." }),
-          fromCache: false,
-        };
-      }
+    // Every group — first or extra — starts through the single atomic
+    // path: pacing, budget charge at real network start, controller.
+    // "throttled" stops the group loop and serves the groups honestly
+    // fetched so far; null means this turn lost its generation mid-wait.
+    const net = await ctx.beginNetworkCall();
+    if (net === "throttled") {
+      throttled = true;
+      break;
     }
+    if (!net) return { stale: true };
     requestUrls.push(requestUrl);
-    const net = ctx.beginNetwork();
-    lastNet = net;
     try {
       const response = await ctx.fetchImpl(requestUrl, {
         method: "GET",
         headers: { accept: "application/json" },
         ...(net.signal ? { signal: net.signal } : {}),
       });
+      if (ctx.turnStale()) return { stale: true };
       if (!response?.ok || typeof response.json !== "function") throw new Error(`HTTP ${response?.status ?? "unavailable"}`);
       const payload = await response.json();
+      if (ctx.turnStale()) return { stale: true };
       const events = Array.isArray(payload?.events) ? payload.events : [];
-      anyGroupSucceeded = true;
+      anyGroupOk = true;
       if (!events.length) reasons.push(`id ${ids[index]}: season ${season} returned no events`);
-      events.forEach((event) => {
+      for (const event of events) {
+        if (ctx.turnStale()) return { stale: true };
         const record = normalizeTsdbSeasonEvent(event, { entry, season, retrievedAt, index: seasonRecords.length });
         if (record) seasonRecords.push(record);
-      });
-    } catch (error) {
-      const reason = safeError(error);
-      reasons.push(`id ${ids[index]}: ${reason}`);
-      // A supersede abort ends the turn like the ESPN path: the promise
-      // resolves unavailable and nothing is cached.
-      if (error?.name === "AbortError" || /\babort(?:ed|ing)?\b/i.test(String(error?.message ?? ""))) {
-        net.done();
-        return { envelope: tsdbUnavailableEnvelope({ entry, dateParam, retrievedAt, reason }), fromCache: false };
       }
+    } catch (error) {
+      const reason = isAbortLike(error)
+        ? (ctx.turnStale()
+          ? "Superseded by a newer league request; no rows were fabricated."
+          : "TheSportsDB request timed out before a usable response arrived.")
+        : safeError(error);
+      reasons.push(`id ${ids[index]}: ${reason}`);
+      if (isAbortLike(error)) {
+        return { stale: ctx.turnStale(), aborted: true, reason, reasons, requestUrls, seasonRecords, anyGroupOk };
+      }
+    } finally {
+      net.done();
     }
-    // Note: net.done() is intentionally deferred until the turn's network
-    // is fully finished (after the loop) so the abort handle stays
-    // registered — and supersede stays observable — between groups.
   }
-  if (lastNet) lastNet.done();
-  if (!anyGroupSucceeded) {
-    // Every group failed (HTTP/parse/abort): this is an outage, not an
-    // empty season — resolve unavailable and never cache the failure.
-    const detail = reasons[0] ?? "request failed for every group id";
+  return { stale: ctx.turnStale(), aborted: false, reason: null, reasons, requestUrls, seasonRecords, anyGroupOk, throttled };
+}
+
+/**
+ * TheSportsDB fetch turn: fetch each league id's eventsseason payload for
+ * the requested date's season (each network call keeps the shared pacing /
+ * budget discipline via ctx), cache the whole season, then filter by date
+ * client-side. Day navigation over a cached season costs zero network.
+ *
+ * Season resolution: the primary key comes from the catalog's measured
+ * seasonStartMonth/seasonType metadata. When the primary key returns no
+ * events, the turn retries once against the adjacent season key (previous
+ * year / previous year-pair, in the catalog's own label style) before
+ * reporting an honest empty — TheSportsDB's key naming is not uniform
+ * across calendar leagues, southern-hemisphere schedules, and cups. The
+ * retry is paced and budget-reserved like any other network call; an
+ * empty result for a mismatched key is never cached as valid.
+ */
+async function thesportsdbLeagueTurn({ entry, dateParam, key, ctx }) {
+  const retrievedAt = ctx.nowIso();
+  const primarySeason = tsdbSeasonString(entry, dateParam);
+  const ids = tsdbLeagueIds(entry);
+  if (!primarySeason || !ids.length) {
     return {
-      envelope: tsdbUnavailableEnvelope({ entry, dateParam, retrievedAt, reason: `TheSportsDB request failed: ${detail}` }),
+      envelope: tsdbUnavailableEnvelope({ entry, dateParam, retrievedAt, reason: "TheSportsDB league entry has no usable season or league id; no rows were fabricated." }),
       fromCache: false,
     };
   }
-  if (!requestUrls.length) {
-    return {
-      envelope: tsdbUnavailableEnvelope({ entry, dateParam, retrievedAt, reason: reasons[0] ?? "TheSportsDB request could not be addressed." }),
-      fromCache: false,
-    };
+  const seasonCandidates = [primarySeason];
+  const adjacentSeason = tsdbAdjacentSeason(primarySeason);
+  if (adjacentSeason && adjacentSeason !== primarySeason) seasonCandidates.push(adjacentSeason);
+
+  let lastReasons = [];
+  for (const season of seasonCandidates) {
+    if (ctx.turnStale()) {
+      return { envelope: leagueSupersededEnvelope({ entry, dateParam, retrievedAt }), fromCache: false };
+    }
+    const fetched = await fetchTsdbSeasonGroups({ entry, season, ids, retrievedAt, ctx });
+    if (fetched.stale) {
+      return { envelope: leagueSupersededEnvelope({ entry, dateParam, retrievedAt }), fromCache: false };
+    }
+    if (fetched.aborted) {
+      // A current-generation abort (fetch watchdog timeout, or a
+      // supersede that landed mid-flight): resolve cleanly, never cache,
+      // never fabricate. The queue's generation guard promotes a stale
+      // turn's outcome to the superseded envelope.
+      return {
+        envelope: tsdbUnavailableEnvelope({ entry, dateParam, retrievedAt, reason: `TheSportsDB request ended before all groups loaded: ${fetched.reason}` }),
+        fromCache: false,
+      };
+    }
+    lastReasons = fetched.reasons;
+    if (fetched.throttled && !fetched.anyGroupOk) {
+      // The session budget ran out before this season's first group
+      // started: throttled, not an outage — nothing was fetched, nothing
+      // is fabricated, nothing is cached.
+      return { envelope: ctx.throttledEnvelope(), fromCache: false };
+    }
+    if (!fetched.anyGroupOk) {
+      // Every group failed for this season key (HTTP/parse): this is an
+      // outage, not a wrong-key signal — resolve unavailable without
+      // retrying the adjacent key, and never cache the failure.
+      const detail = fetched.reasons[0] ?? "request failed for every group id";
+      return {
+        envelope: tsdbUnavailableEnvelope({ entry, dateParam, retrievedAt, reason: `TheSportsDB request failed: ${detail}` }),
+        fromCache: false,
+      };
+    }
+    if (fetched.seasonRecords.length > 0) {
+      const seasonEnvelope = deepFreeze({
+        ...leagueEnvelopeBase({ status: "ready", entry, dateParam: null, retrievedAt }),
+        season,
+        requestedSeason: season === primarySeason ? null : primarySeason,
+        tsdbIds: ids,
+        records: fetched.seasonRecords,
+        sources: [leagueSourceStatus(tsdbSourceLike(entry, season, fetched.requestUrls[0]), retrievedAt, {
+          available: true,
+          recordCount: fetched.seasonRecords.length,
+          requestUrl: fetched.requestUrls[0] ?? null,
+          reason: null,
+        })],
+        recordCount: fetched.seasonRecords.length,
+      });
+      // Cached under the primary key so day navigation stays cache-only
+      // even when the adjacent season served the payload.
+      if (key) ctx.cachePut(key, seasonEnvelope);
+      return {
+        envelope: tsdbDayEnvelope({ entry, dateParam, season, seasonRecords: fetched.seasonRecords, retrievedAt, requestUrl: fetched.requestUrls[0] ?? null, reasons: fetched.reasons }),
+        fromCache: false,
+      };
+    }
+    // Groups succeeded but the season key returned zero events — the
+    // wrong-key signal. Try the adjacent key next.
   }
-  // Cache the whole season payload (ready only); day envelopes are derived.
-  const seasonEnvelope = deepFreeze({
+  // Every reachable candidate season came back with zero events: honest
+  // empty day. Cached under the primary key (empty TTL) so day navigation
+  // over an off-season league costs zero network — the in-turn adjacent
+  // retry already ruled out the wrong-key case, so this empty is
+  // trustworthy.
+  const emptySeasonEnvelope = deepFreeze({
     ...leagueEnvelopeBase({ status: "ready", entry, dateParam: null, retrievedAt }),
-    season,
+    season: primarySeason,
+    requestedSeason: null,
     tsdbIds: ids,
-    records: seasonRecords,
-    sources: [leagueSourceStatus(tsdbSourceLike(entry, season, requestUrls[0]), retrievedAt, {
-      available: seasonRecords.length > 0,
-      recordCount: seasonRecords.length,
-      requestUrl: requestUrls[0],
-      reason: seasonRecords.length ? null : (reasons[0] ?? LEAGUE_SCOREBOARD_EMPTY_REASON),
+    records: [],
+    sources: [leagueSourceStatus(tsdbSourceLike(entry, primarySeason, null), retrievedAt, {
+      available: false,
+      recordCount: 0,
+      requestUrl: null,
+      reason: lastReasons[0] ?? LEAGUE_SCOREBOARD_EMPTY_REASON,
     })],
-    recordCount: seasonRecords.length,
+    recordCount: 0,
+    empty: true,
+    emptyReason: LEAGUE_SCOREBOARD_EMPTY_REASON,
   });
-  ctx.cachePut(key, seasonEnvelope);
+  if (key) ctx.cachePut(key, emptySeasonEnvelope);
   return {
-    envelope: tsdbDayEnvelope({ entry, dateParam, season, seasonRecords, retrievedAt, requestUrl: requestUrls[0], reasons }),
+    envelope: tsdbDayEnvelope({ entry, dateParam, season: primarySeason, seasonRecords: [], retrievedAt, requestUrl: null, reasons: lastReasons }),
     fromCache: false,
   };
 }
@@ -2051,15 +2275,31 @@ async function openLigaDbLeagueTurn({ entry, dateParam, key, ctx }) {
       fromCache: false,
     };
   }
-  const net = ctx.beginNetwork();
+  // Single atomic network start: generation gate, pacing, budget charge
+  // at real network start, controller install. "throttled" means the
+  // session budget is spent — no fetch. null means this turn lost its
+  // generation — bail, never fetch.
+  const net = await ctx.beginNetworkCall();
+  if (net === "throttled") {
+    return { envelope: ctx.throttledEnvelope(), fromCache: false };
+  }
+  if (!net) {
+    return { envelope: ctx.supersededEnvelope(), fromCache: false };
+  }
   try {
     const response = await ctx.fetchImpl(requestUrl, {
       method: "GET",
       headers: { accept: "application/json" },
       ...(net.signal ? { signal: net.signal } : {}),
     });
+    if (ctx.turnStale()) {
+      return { envelope: leagueSupersededEnvelope({ entry, dateParam, retrievedAt }), fromCache: false };
+    }
     if (!response?.ok || typeof response.json !== "function") throw new Error(`HTTP ${response?.status ?? "unavailable"}`);
     const payload = await response.json();
+    if (ctx.turnStale()) {
+      return { envelope: leagueSupersededEnvelope({ entry, dateParam, retrievedAt }), fromCache: false };
+    }
     const seasonRecords = normalizeOpenLigaDbMatches(payload, { entry, season, retrievedAt });
     const reasons = seasonRecords.length ? [] : ["OpenLigaDB returned no usable matches for this season"];
     const seasonEnvelope = deepFreeze({
@@ -2080,9 +2320,19 @@ async function openLigaDbLeagueTurn({ entry, dateParam, key, ctx }) {
       fromCache: false,
     };
   } catch (error) {
-    const reason = safeError(error);
+    // Abort-shaped failures (supersede or the fetch watchdog) resolve
+    // cleanly as unavailable — never an unhandled rejection, never a
+    // stuck loading state. The queue's generation guard promotes a stale
+    // turn to the superseded envelope on the way out.
+    const abortReason = isAbortLike(error)
+      ? (ctx.turnStale()
+        ? "Superseded by a newer league request; no rows were fabricated."
+        : "OpenLigaDB request timed out before a usable response arrived.")
+      : null;
+    const reason = abortReason ?? safeError(error);
+    const failureReason = abortReason ? reason : `OpenLigaDB request failed: ${reason}`;
     return {
-      envelope: openLigaDbUnavailableEnvelope({ entry, dateParam, retrievedAt, reason: `OpenLigaDB request failed: ${reason}` }),
+      envelope: openLigaDbUnavailableEnvelope({ entry, dateParam, retrievedAt, reason: failureReason }),
       fromCache: false,
     };
   } finally {
@@ -2117,15 +2367,31 @@ async function espnLeagueTurn({ entry, dateParam, key, ctx }) {
       fromCache: false,
     };
   }
-  const net = ctx.beginNetwork();
+  // Single atomic network start: generation gate, pacing, budget charge
+  // at real network start, controller install. "throttled" means the
+  // session budget is spent — no fetch. null means this turn lost its
+  // generation — bail, never fetch.
+  const net = await ctx.beginNetworkCall();
+  if (net === "throttled") {
+    return { envelope: ctx.throttledEnvelope(), fromCache: false };
+  }
+  if (!net) {
+    return { envelope: ctx.supersededEnvelope(), fromCache: false };
+  }
   try {
     const response = await ctx.fetchImpl(requestUrl, {
       method: "GET",
       headers: { accept: "application/json" },
       ...(net.signal ? { signal: net.signal } : {}),
     });
+    if (ctx.turnStale()) {
+      return { envelope: leagueSupersededEnvelope({ entry, dateParam, retrievedAt }), fromCache: false };
+    }
     if (!response?.ok || typeof response.json !== "function") throw new Error(`HTTP ${response?.status ?? "unavailable"}`);
     const payload = await response.json();
+    if (ctx.turnStale()) {
+      return { envelope: leagueSupersededEnvelope({ entry, dateParam, retrievedAt }), fromCache: false };
+    }
     const records = normalizeMultiSportScoreboard(payload, endpointLike, retrievedAt, MULTI_SPORT_EVENTS_LEAGUE_MAX_RECORDS);
     const empty = records.length === 0;
     const available = !empty;
@@ -2149,10 +2415,21 @@ async function espnLeagueTurn({ entry, dateParam, key, ctx }) {
     });
     // Only cache ready envelopes: a superseded (aborted) or failed
     // request must never poison the cache with an "unavailable" snapshot.
+    // (cachePut is also generation-guarded: a stale turn never writes.)
     if (envelope.status === "ready") ctx.cachePut(key, envelope);
     return { envelope, fromCache: false };
   } catch (error) {
-    const reason = safeError(error);
+    // Abort-shaped failures (supersede or the fetch watchdog) resolve
+    // cleanly as unavailable — never an unhandled rejection, never a
+    // stuck loading state. The queue's generation guard promotes a stale
+    // turn to the superseded envelope on the way out.
+    const abortReason = isAbortLike(error)
+      ? (ctx.turnStale()
+        ? "Superseded by a newer league request; no rows were fabricated."
+        : "ESPN request timed out before a usable response arrived.")
+      : null;
+    // Non-abort failures keep the historical bare-reason shape.
+    const failureReason = abortReason ?? safeError(error);
     return {
       envelope: deepFreeze({
         ...base(),
@@ -2160,9 +2437,9 @@ async function espnLeagueTurn({ entry, dateParam, key, ctx }) {
           available: false,
           recordCount: 0,
           requestUrl,
-          reason,
+          reason: failureReason,
         })],
-        reason,
+        reason: failureReason,
       }),
       fromCache: false,
     };
