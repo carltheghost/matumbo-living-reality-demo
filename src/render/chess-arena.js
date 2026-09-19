@@ -18,10 +18,10 @@ import * as THREE from 'three';
 import {createChessArenaState,applyChessArenaMove} from '../domains/chess-arena.js?v=20260919-chibi-champions';
 import {chooseAiMove,CHESS_AI_DIFFICULTIES,resolveAiDifficulty} from '../domains/chess-ai.js?v=20260919-chibi-champions';
 import {avatarGlide,AVATAR_MOTION} from '../domains/avatar-motion.js?v=20260919-chibi-champions';
-import {updateTumboChibiRig,CHIBI_RIG_MODES} from './tumbo-chibi-rig.js?v=20260919-chibi-champions';
-import {AVATAR_FACE_STORAGE_KEY} from '../domains/avatar-style.js?v=20260919-chibi-champions';
+import {updateTumboChibiRig,CHIBI_RIG_MODES} from './tumbo-chibi-rig.js?v=20260919-chibi-studio';
+import {AVATAR_FACE_STORAGE_KEY} from '../domains/avatar-style.js?v=20260919-chibi-studio';
 import {PERSON_STUDIO_STORAGE_KEY} from '../domains/person-studio.js';
-import {buildArenaHall,createPieceBuilders,readArenaAvatarAppearance,squarePosition,CHESS_ROLE_GLYPHS} from './chess-arena-pieces.js?v=20260919-chibi-champions';
+import {buildArenaHall,createPieceBuilders,readArenaAvatarAppearance,squarePosition,CHESS_ROLE_GLYPHS} from './chess-arena-pieces.js?v=20260919-chibi-studio';
 
 const pieceName={p:'Pawn',n:'Knight',b:'Bishop',r:'Rook',q:'Queen',k:'King'};
 const sideName={w:'White',b:'Black'};
