@@ -2,6 +2,7 @@ import {
   MULTI_SPORT_EVENTS_BOUNDARY,
   classifyScoreboardStatus,
   createUnavailableMultiSportEvents,
+  leagueProviderLabel,
   replayMultiSportEvents,
   summarizeMultiSportEvents,
 } from "../domains/multi-sport-events.js";
@@ -232,6 +233,17 @@ function createLeagueBrowser({ documentRoot, mounts, onLeagueRequest }) {
     }
   }
 
+  // Per-league source attribution for the games panel header ("via
+  // TheSportsDB" etc.), read from the catalog entry's provider tag.
+  function selectedProviderAttribution() {
+    try {
+      const entry = catalogEntryFor(selectedSlug ?? lastEnvelope?.league ?? null);
+      return leagueProviderLabel(entry?.provider) ?? "ESPN";
+    } catch {
+      return "ESPN";
+    }
+  }
+
   // Region display order comes from the catalog (Popular first, then
   // alphabetical, International last); unknown regions sort after.
   function orderedLeagueRegions() {
@@ -279,7 +291,7 @@ function createLeagueBrowser({ documentRoot, mounts, onLeagueRequest }) {
 
   function leagueMatches(entry, query) {
     if (!query) return true;
-    const haystack = `${entry.label ?? ""} ${entry.slug ?? ""} ${entry.espnName ?? ""}`.toLowerCase();
+    const haystack = `${entry.label ?? ""} ${entry.slug ?? ""} ${entry.espnName ?? ""} ${entry.tsdbName ?? ""}`.toLowerCase();
     return haystack.includes(query);
   }
 
@@ -291,7 +303,11 @@ function createLeagueBrowser({ documentRoot, mounts, onLeagueRequest }) {
     button.className = "multi-sport-events-league-name";
     button.dataset.leagueSlug = entry.slug;
     button.setAttribute("aria-pressed", String(entry.slug === selectedSlug));
-    button.title = entry.espnName ? `${entry.label} · ESPN ${entry.espnName}` : entry.label;
+    button.title = entry.provider === "thesportsdb" && entry.tsdbName
+      ? `${entry.label} · TheSportsDB ${entry.tsdbName}`
+      : entry.provider === "openligadb"
+        ? `${entry.label} · OpenLigaDB`
+        : entry.espnName ? `${entry.label} · ESPN ${entry.espnName}` : entry.label;
     const label = documentRoot.createElement("span");
     label.className = "multi-sport-events-league-name-label";
     label.textContent = entry.label;
@@ -341,20 +357,20 @@ function createLeagueBrowser({ documentRoot, mounts, onLeagueRequest }) {
       details.className = "multi-sport-events-league-region multi-sport-events-league-region-missing";
       const summary = documentRoot.createElement("summary");
       summary.className = "multi-sport-events-league-region-title";
-      summary.textContent = `NOT ON ESPN · ${unavailableEntries.length}`;
+      summary.textContent = `UNAVAILABLE · ${unavailableEntries.length}`;
       details.appendChild(summary);
       const list = documentRoot.createElement("div");
       list.className = "multi-sport-events-league-list";
       unavailableEntries.forEach((entry) => {
         const row = documentRoot.createElement("div");
         row.className = "multi-sport-events-league-row multi-sport-events-league-row-unavailable";
-        row.title = entry.reason ?? "Not available on ESPN";
+        row.title = entry.reason ?? "Not available";
         const name = documentRoot.createElement("span");
         name.className = "multi-sport-events-league-name-label";
         name.textContent = `${entry.label}${entry.region ? ` · ${entry.region}` : ""}`;
         const tag = documentRoot.createElement("span");
         tag.className = "multi-sport-events-league-notespn";
-        tag.textContent = "NOT ON ESPN";
+        tag.textContent = "UNAVAILABLE";
         row.append(name, tag);
         list.appendChild(row);
       });
@@ -456,7 +472,7 @@ function createLeagueBrowser({ documentRoot, mounts, onLeagueRequest }) {
         `DATA COMPLETENESS · ${record?.dataCompletenessGrade ?? "D"} · ${record?.dataCompletenessPercent ?? 0}% · FIELD PRESENCE ONLY`,
       ));
     }
-    const link = publicLink(documentRoot, "multi-sport-events-league-game-source", record?.sourceUrl, "OPEN PUBLIC ESPN SOURCE");
+    const link = publicLink(documentRoot, "multi-sport-events-league-game-source", record?.sourceUrl, `OPEN PUBLIC ${selectedProviderAttribution().toUpperCase()} SOURCE`);
     row.appendChild(link ?? createText(
       documentRoot,
       "span",
@@ -527,12 +543,13 @@ function createLeagueBrowser({ documentRoot, mounts, onLeagueRequest }) {
     shownCount = LEAGUE_PAGE_SIZE;
     const dateLabel = envelope.dateParam ? (leagueParamToISO(envelope.dateParam) ?? envelope.dateParam) : currentDateISO();
     const leagueLabel = envelope.leagueLabel ?? selectedLabel ?? "LEAGUE";
+    const via = `via ${selectedProviderAttribution()}`;
     if (envelope.status === "unavailable" || envelope.empty === true) {
       const why = text(envelope.emptyReason ?? envelope.reason, "NO DATA RETURNED");
-      setStatus(`${String(envelope.status ?? "unavailable").toUpperCase()} · ${leagueLabel} · ${dateLabel} · ${why}${fromCache ? " · CACHED" : ""}`);
+      setStatus(`${String(envelope.status ?? "unavailable").toUpperCase()} · ${leagueLabel} · ${dateLabel} · ${via} · ${why}${fromCache ? " · CACHED" : ""}`);
     } else {
       const count = Array.isArray(envelope.records) ? envelope.records.length : 0;
-      setStatus(`${String(envelope.status ?? "ready").toUpperCase()} · ${leagueLabel} · ${dateLabel} · ${count} GAME${count === 1 ? "" : "S"}${fromCache ? " · CACHED" : ""}`);
+      setStatus(`${String(envelope.status ?? "ready").toUpperCase()} · ${leagueLabel} · ${dateLabel} · ${via} · ${count} GAME${count === 1 ? "" : "S"}${fromCache ? " · CACHED" : ""}`);
     }
     renderGames();
   }

@@ -1808,7 +1808,13 @@
       #multi-sport-events-boundary{padding:8px 9px;border-left:2px solid rgba(255,194,139,.72);border-radius:0 8px 8px 0;background:rgba(121,75,40,.16);color:#dbc6af;font-size:9px;line-height:1.4}
       #multi-sport-events-league-browse{appearance:none;border:1px solid rgba(143,201,255,.34);border-radius:9px;padding:8px 10px;background:rgba(54,112,175,.2);color:#e1f1ff;font-size:8px;font-weight:750;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;transition:.18s ease}
       #multi-sport-events-league-browse:hover,#multi-sport-events-league-browse:focus-visible{border-color:rgba(232,246,255,.86);background:rgba(64,133,205,.34);outline:none;transform:translateY(-1px)}
-      #multi-sport-events-league-modal{position:fixed;inset:0;z-index:80;display:flex;align-items:flex-start;justify-content:center;padding:18px 14px;background:rgba(3,8,16,.72);backdrop-filter:blur(8px);overflow-y:auto}
+      #multi-sport-events-league-modal{position:fixed;inset:0;z-index:9500;display:flex;align-items:flex-start;justify-content:center;padding:18px 14px;background:rgba(3,8,16,.72);backdrop-filter:blur(8px);overflow-y:auto;pointer-events:auto}
+      /* The modal is a direct child of <body> (not inside #hud): #hud traps
+         fixed descendants below body-level HUD elements regardless of
+         z-index, so the modal must live at the top level. z-index 9500 keeps
+         it above every HUD panel, including runtime panels with their own
+         high z-index (e.g. city-journey at 9000). pointer-events:auto keeps
+         hit-testing enabled on the modal itself. */
       #multi-sport-events-league-modal[hidden]{display:none}
       .multi-sport-events-league-panel{width:min(600px,100%);max-height:calc(100dvh - 56px);display:flex;flex-direction:column;gap:8px;padding:14px;border:1px solid rgba(157,210,255,.42);border-radius:18px;background:linear-gradient(165deg,rgba(12,29,53,.98),rgba(5,8,17,.97));box-shadow:0 24px 80px rgba(0,0,0,.66),inset 0 0 42px rgba(64,141,255,.08);overflow-y:auto;overflow-x:hidden}
       .multi-sport-events-league-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
@@ -2065,6 +2071,42 @@
     <a id="runtime-status-retry" href="./index.html" hidden>Reload local demo</a>
     <a id="runtime-status-paper" href="./paper-live.html" hidden>Read the live white paper</a>
   </section>
+    <div id="multi-sport-events-league-modal" hidden role="dialog" aria-modal="true" aria-labelledby="multi-sport-events-league-title">
+      <div class="multi-sport-events-league-panel">
+        <div class="multi-sport-events-league-head">
+          <div>
+            <div class="eyebrow">Public read · all leagues</div>
+            <h2 id="multi-sport-events-league-title">Browse all leagues</h2>
+          </div>
+          <button id="multi-sport-events-league-close" type="button" aria-label="Close league browser">×</button>
+        </div>
+        <input id="multi-sport-events-league-search" type="search" placeholder="Search leagues…" aria-label="Search leagues" autocomplete="off">
+        <div id="multi-sport-events-league-favorites" aria-label="Favorite leagues" hidden></div>
+        <div id="multi-sport-events-league-groups" aria-label="League regions"></div>
+        <div class="multi-sport-events-league-daybar">
+          <button id="multi-sport-events-league-prev" type="button" aria-label="Previous day">‹ Prev</button>
+          <button id="multi-sport-events-league-today" type="button">Today</button>
+          <button id="multi-sport-events-league-next" type="button" aria-label="Next day">Next ›</button>
+          <input id="multi-sport-events-league-date" type="date" aria-label="League date">
+          <div id="multi-sport-events-league-chips" class="multi-sport-events-league-chips" role="group" aria-label="Filter games by status">
+            <button type="button" data-league-filter="all" aria-pressed="true">All</button>
+            <button type="button" data-league-filter="live" aria-pressed="false">Live</button>
+            <button type="button" data-league-filter="final" aria-pressed="false">Final</button>
+            <button type="button" data-league-filter="scheduled" aria-pressed="false">Scheduled</button>
+          </div>
+          <button id="multi-sport-events-league-refresh" type="button">Refresh league</button>
+          <button id="multi-sport-events-league-view" type="button" aria-pressed="false">Detailed view</button>
+          <select id="multi-sport-events-league-sort" aria-label="Sort games">
+            <option value="kickoff">Sort · kickoff</option>
+            <option value="live-first">Sort · live first</option>
+          </select>
+        </div>
+        <div id="multi-sport-events-league-status" role="status" aria-live="polite">SELECT A LEAGUE TO BROWSE PUBLIC SCOREBOARDS</div>
+        <div id="multi-sport-events-league-games" role="list" aria-label="League games"></div>
+        <button id="multi-sport-events-league-more" type="button" hidden>Show more</button>
+        <div class="multi-sport-events-league-boundary">Public read only · ESPN, TheSportsDB, OpenLigaDB. Participant, score, status, time, and venue fields are unverified research observations; completeness is field presence only. No odds, picks, wagering, or predictions.</div>
+      </div>
+    </div>
   <div id="hud">
     <div id="brand"><b>maTumbo Ω</b><span id="sub">Living Reality / cube field + local feature lab</span></div>
     <div id="legend"><strong>Cube field.</strong><br>Select a block, double-click or double-tap a container to open it, inspect its nested cubes, or drag it one local grid step. <strong>Empty-field drag orbits the camera; wheel/trackpad travels.</strong> Press <strong>F</strong> to open the feature directory, including Reality Lens Ω.</div>
@@ -2539,43 +2581,6 @@
       </section>
       <div id="multi-sport-events-boundary">Provider rows are unverified research observations. Source URL, retrieval time, participant fields, score status, event time, and completeness stay visible. The route is read-only and has no outcome, performance, persistence, or external action authority.</div>
     </aside>
-    <div id="multi-sport-events-league-modal" hidden role="dialog" aria-modal="true" aria-labelledby="multi-sport-events-league-title">
-      <div class="multi-sport-events-league-panel">
-        <div class="multi-sport-events-league-head">
-          <div>
-            <div class="eyebrow">Public read · all ESPN leagues</div>
-            <h2 id="multi-sport-events-league-title">Browse all leagues</h2>
-          </div>
-          <button id="multi-sport-events-league-close" type="button" aria-label="Close league browser">×</button>
-        </div>
-        <input id="multi-sport-events-league-search" type="search" placeholder="Search leagues…" aria-label="Search leagues" autocomplete="off">
-        <div id="multi-sport-events-league-favorites" aria-label="Favorite leagues" hidden></div>
-        <div id="multi-sport-events-league-groups" aria-label="League regions"></div>
-        <div class="multi-sport-events-league-daybar">
-          <button id="multi-sport-events-league-prev" type="button" aria-label="Previous day">‹ Prev</button>
-          <button id="multi-sport-events-league-today" type="button">Today</button>
-          <button id="multi-sport-events-league-next" type="button" aria-label="Next day">Next ›</button>
-          <input id="multi-sport-events-league-date" type="date" aria-label="League date">
-          <div id="multi-sport-events-league-chips" class="multi-sport-events-league-chips" role="group" aria-label="Filter games by status">
-            <button type="button" data-league-filter="all" aria-pressed="true">All</button>
-            <button type="button" data-league-filter="live" aria-pressed="false">Live</button>
-            <button type="button" data-league-filter="final" aria-pressed="false">Final</button>
-            <button type="button" data-league-filter="scheduled" aria-pressed="false">Scheduled</button>
-          </div>
-          <button id="multi-sport-events-league-refresh" type="button">Refresh league</button>
-          <button id="multi-sport-events-league-view" type="button" aria-pressed="false">Detailed view</button>
-          <select id="multi-sport-events-league-sort" aria-label="Sort games">
-            <option value="kickoff">Sort · kickoff</option>
-            <option value="live-first">Sort · live first</option>
-          </select>
-        </div>
-        <div id="multi-sport-events-league-status" role="status" aria-live="polite">SELECT A LEAGUE TO BROWSE PUBLIC SCOREBOARDS</div>
-        <div id="multi-sport-events-league-games" role="list" aria-label="League games"></div>
-        <button id="multi-sport-events-league-more" type="button" hidden>Show more</button>
-        <div class="multi-sport-events-league-boundary">Public ESPN read only. Participant, score, status, time, and venue fields are unverified research observations; completeness is field presence only. No odds, picks, wagering, or predictions.</div>
-      </div>
-    </div>
-
     <aside id="asset-market-console" hidden aria-hidden="true" aria-labelledby="asset-market-title">
       <div id="asset-market-head">
         <div>
@@ -3893,6 +3898,6 @@
          module below runs. The avatar degrades gracefully without them. -->
     <script src="./vendor/jiggle-physics/jiggle-physics.js?v=20260919-jiggle"></script>
     <script src="./vendor/jiggle-physics/jiggle-chain.js?v=20260919-jiggle"></script>
-    <script type="module" src="./src/main.js?v=20260919-leagues1" onerror="globalThis.__MATUMBO_RUNTIME__?.markFailed?.(event, 'module load')"></script>
+    <script type="module" src="./src/main.js?v=20260919-leagues2" onerror="globalThis.__MATUMBO_RUNTIME__?.markFailed?.(event, 'module load')"></script>
 </body>
 </html>

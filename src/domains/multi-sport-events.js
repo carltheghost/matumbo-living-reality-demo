@@ -408,7 +408,7 @@ export function createUnavailableMultiSportEvents({
 
 /** Fetch the three fixed scoreboards after an explicit caller request. */
 export async function fetchMultiSportEvents({
-  fetchImpl = globalThis.fetch,
+  fetchImpl = (...args) => globalThis.fetch(...args),
   now = () => new Date().toISOString(),
   maxRecordsPerProvider = MULTI_SPORT_EVENTS_MAX_RECORDS_PER_PROVIDER,
   maxProviders = MULTI_SPORT_EVENTS_MAX_PROVIDERS,
@@ -880,7 +880,7 @@ async function requestMultiSportDetail(fetchImpl, url, timeoutMs) {
  */
 export async function fetchMultiSportEventDetail({
   record = null,
-  fetchImpl = globalThis.fetch,
+  fetchImpl = (...args) => globalThis.fetch(...args),
   now = () => new Date().toISOString(),
   timeoutMs = MULTI_SPORT_EVENTS_FETCH_TIMEOUT_MS,
   maxRequests = MULTI_SPORT_EVENTS_MAX_DETAIL_REQUESTS,
@@ -1172,7 +1172,9 @@ async function leagueSleep(ms) {
 }
 
 /**
- * Bounded single-league ESPN scoreboard fetcher.
+ * Bounded multi-provider league scoreboard fetcher (ESPN, TheSportsDB,
+ * OpenLigaDB — fixtures/scores only; no odds, wagering, markets, or
+ * predictions anywhere in this module).
  *
  * Mandatory guards (never turn UI input into a URL):
  *  - slug must match LEAGUE_SCOREBOARD_SLUG_PATTERN AND be a catalog entry;
@@ -1183,15 +1185,21 @@ async function leagueSleep(ms) {
  *    previous fetch to finish — it aborts it, waits out the min-interval,
  *    then fetches. The superseded promise still resolves (as an
  *    unavailable envelope); nothing is dropped silently.
- *  - at least minIntervalMs between network-call starts; requests queue,
- *    never drop.
- *  - cache key `${slug}:${YYYYMMDD}` with TTLs: 45s when any record is live,
- *    10min when all records are final/scheduled, 3min when zero records.
+ *  - at least minIntervalMs between network-call starts, plus any
+ *    provider-specific gap (TheSportsDB: 2000ms); requests queue, never drop.
+ *  - cache keys come from the provider registry, not from the slug shape:
+ *    ESPN `${slug}:${YYYYMMDD}` (one day of scoreboard data), TheSportsDB
+ *    `tsdb:<ids>:<season>` (whole season; day envelopes derive from it),
+ *    OpenLigaDB `openligadb:<league>:<year>` (whole season; day envelopes
+ *    derive from it). TTLs: 45s when any record is live, 10min when all
+ *    records are final/scheduled, 3min when zero records. Only ready
+ *    envelopes are cached — failed or aborted ones never are.
  *  - session network-call budget (reserved at request time, fail closed);
- *    past it, resolve a throttled envelope with no fetch.
+ *    multi-id providers reserve one unit per HTTP call; past budget,
+ *    resolve a throttled envelope with no fetch.
  */
 export function createLeagueScoreboardQueue({
-  fetchImpl = globalThis.fetch,
+  fetchImpl = (...args) => globalThis.fetch(...args),
   now = () => new Date().toISOString(),
   minIntervalMs = LEAGUE_SCOREBOARD_MIN_INTERVAL_MS,
   sessionBudget = LEAGUE_SCOREBOARD_SESSION_BUDGET,
@@ -1217,6 +1225,10 @@ export function createLeagueScoreboardQueue({
   let slotTail = Promise.resolve();
   let inFlightController = null;
   let lastNetworkStartMs = -Infinity;
+  // Per-provider last network-start timestamps for provider-specific
+  // minimum gaps (e.g. TheSportsDB's 2000ms for its 30 req/min free tier),
+  // applied on top of the queue-global minIntervalMs.
+  const lastProviderStartMs = new Map();
   let networkCalls = 0;
   let cacheHits = 0;
   let throttledCount = 0;
@@ -1238,74 +1250,6 @@ export function createLeagueScoreboardQueue({
     });
   }
 
-  async function fetchLeague(entry, dateParam) {
-    const retrievedAt = nowIso(now);
-    const endpointLike = leagueEndpointLike(entry, dateParam);
-    const requestUrl = publicSourceUrl(endpointLike.endpoint);
-    const base = () => leagueEnvelopeBase({ status: "unavailable", entry, dateParam, retrievedAt });
-    if (!requestUrl) {
-      return deepFreeze({
-        ...base(),
-        sources: [leagueSourceStatus(endpointLike, retrievedAt, {
-          available: false,
-          recordCount: 0,
-          requestUrl: null,
-          reason: "Only documented HTTPS public endpoints are eligible.",
-        })],
-        reason: "Only documented HTTPS public endpoints are eligible.",
-      });
-    }
-    let timeoutHandle = null;
-    const controller = typeof globalThis.AbortController === "function" ? new globalThis.AbortController() : null;
-    inFlightController = controller;
-    try {
-      if (controller) timeoutHandle = globalThis.setTimeout?.(() => controller.abort(), boundedTimeout) ?? null;
-      const response = await fetchImpl(requestUrl, {
-        method: "GET",
-        headers: { accept: "application/json" },
-        ...(controller ? { signal: controller.signal } : {}),
-      });
-      if (!response?.ok || typeof response.json !== "function") throw new Error(`HTTP ${response?.status ?? "unavailable"}`);
-      const payload = await response.json();
-      const records = normalizeMultiSportScoreboard(payload, endpointLike, retrievedAt, MULTI_SPORT_EVENTS_LEAGUE_MAX_RECORDS);
-      const empty = records.length === 0;
-      const available = !empty;
-      return deepFreeze({
-        ...base(),
-        status: "ready",
-        records,
-        sources: [leagueSourceStatus(endpointLike, retrievedAt, {
-          available,
-          recordCount: records.length,
-          requestUrl,
-          reason: empty ? LEAGUE_SCOREBOARD_EMPTY_REASON : null,
-        })],
-        recordCount: records.length,
-        availableProviderCount: available ? 1 : 0,
-        providerAvailable: available,
-        providerUnavailable: !available,
-        empty,
-        emptyReason: empty ? LEAGUE_SCOREBOARD_EMPTY_REASON : null,
-        reason: empty ? LEAGUE_SCOREBOARD_EMPTY_REASON : null,
-      });
-    } catch (error) {
-      const reason = safeError(error);
-      return deepFreeze({
-        ...base(),
-        sources: [leagueSourceStatus(endpointLike, retrievedAt, {
-          available: false,
-          recordCount: 0,
-          requestUrl,
-          reason,
-        })],
-        reason,
-      });
-    } finally {
-      if (timeoutHandle !== null) globalThis.clearTimeout?.(timeoutHandle);
-      if (inFlightController === controller) inFlightController = null;
-    }
-  }
-
   function request({ slug, date } = {}) {
     const entry = typeof slug === "string"
       && LEAGUE_SCOREBOARD_SLUG_PATTERN.test(slug)
@@ -1314,15 +1258,24 @@ export function createLeagueScoreboardQueue({
     if (!entry) {
       return Promise.reject(new Error(`Unknown or invalid league slug: ${String(slug ?? "").slice(0, 80)}`));
     }
+    let provider;
+    try {
+      provider = leagueProviderFor(entry);
+    } catch (error) {
+      return Promise.reject(error);
+    }
     const dateParam = date === undefined || date === null ? formatScoreboardDate(now()) : formatScoreboardDate(date);
     if (!dateParam) {
       return Promise.reject(new Error(`Invalid scoreboard date: ${String(date ?? "").slice(0, 80)}`));
     }
-    const key = `${entry.slug}:${dateParam}`;
+    const key = provider.cacheKey(entry, dateParam);
+    if (!key) {
+      return Promise.reject(new Error(`League provider cannot address this request: ${String(entry.slug).slice(0, 80)}`));
+    }
     const cached = cache.get(key);
     if (cached && leagueNowMs(now) < cached.expiresAtMs) {
       cacheHits += 1;
-      return Promise.resolve({ envelope: cached.envelope, fromCache: true });
+      return Promise.resolve({ envelope: provider.cachedEnvelope(entry, dateParam, cached), fromCache: true });
     }
     if (cached) cache.delete(key);
     if (typeof fetchImpl !== "function") {
@@ -1344,6 +1297,83 @@ export function createLeagueScoreboardQueue({
     const myTurn = slotTail;
     let releaseMyTurn = null;
     slotTail = new Promise((resolve) => { releaseMyTurn = resolve; });
+    // One network-call slot shared by every provider. The abort, the
+    // min-interval wait, and the slot release all happen in the turn's
+    // first microtask in exactly this order (like the original
+    // single-league code): a follow-up turn aborts a genuinely in-flight
+    // fetch, never a controller whose fetch has not started yet.
+    // beginNetwork() must stay synchronous and run before the provider's
+    // first await for the same reason — an extra async boundary would let
+    // the next turn abort a signal before its fetch is even called.
+    //
+    // The wait covers both the queue-global minIntervalMs and the
+    // provider-specific gap (TheSportsDB: 2000ms). Multi-call turns
+    // (TheSportsDB leagues with several ids) reuse paceNextCall() before
+    // each additional call so every start is paced, not just the first.
+    async function paceNextCall() {
+      const providerGap = Number(provider?.minIntervalMs) > 0 ? Number(provider.minIntervalMs) : 0;
+      const lastProviderStart = lastProviderStartMs.has(provider.id)
+        ? lastProviderStartMs.get(provider.id)
+        : Number.NEGATIVE_INFINITY;
+      const waitMs = Math.max(
+        boundedInterval - (leagueNowMs(now) - lastNetworkStartMs),
+        providerGap - (leagueNowMs(now) - lastProviderStart),
+        0,
+      );
+      if (waitMs > 0) await leagueSleep(waitMs);
+      const startMs = leagueNowMs(now);
+      lastNetworkStartMs = startMs;
+      lastProviderStartMs.set(provider.id, startMs);
+    }
+    function beginNetwork() {
+      const controller = typeof globalThis.AbortController === "function" ? new globalThis.AbortController() : null;
+      inFlightController = controller;
+      const timeoutHandle = controller && typeof globalThis.setTimeout === "function"
+        ? globalThis.setTimeout(() => controller.abort(), boundedTimeout)
+        : null;
+      return {
+        controller,
+        signal: controller ? controller.signal : undefined,
+        done() {
+          if (timeoutHandle !== null && timeoutHandle !== undefined) globalThis.clearTimeout?.(timeoutHandle);
+          if (inFlightController === controller) inFlightController = null;
+        },
+      };
+    }
+    const ctx = {
+      nowIso: () => nowIso(now),
+      fetchImpl,
+      boundedTimeout,
+      // Extra network calls inside one turn (a provider with several league
+      // ids) reserve their own budget; the first call uses the request-time
+      // reservation above.
+      reserveNetworkCall: () => {
+        if (networkCalls >= boundedBudget) {
+          throttledCount += 1;
+          return false;
+        }
+        networkCalls += 1;
+        return true;
+      },
+      throttled: (throttledEntry, throttledDateParam) => throttledEnvelope(throttledEntry, throttledDateParam, nowIso(now)),
+      beginNetwork,
+      paceNextCall,
+      // The currently registered in-flight controller. A multi-call turn
+      // checks this before each additional call: if a newer turn has
+      // superseded this one, it bails out instead of starting work that
+      // would clobber the newer turn's abort handle.
+      inFlight: () => inFlightController,
+      // Only ready envelopes are cached: a superseded (aborted) or failed
+      // request must never poison the cache with an "unavailable" snapshot.
+      cachePut: (cacheKey, envelope) => {
+        if (envelope?.status === "ready") {
+          cache.set(cacheKey, {
+            envelope,
+            expiresAtMs: leagueNowMs(now) + ttlFor(envelope.records),
+          });
+        }
+      },
+    };
     return myTurn.then(async () => {
       pendingCount += 1;
       try {
@@ -1353,20 +1383,9 @@ export function createLeagueScoreboardQueue({
         if (inFlightController && typeof inFlightController.abort === "function") {
           try { inFlightController.abort(); } catch { /* defensive */ }
         }
-        const waitMs = boundedInterval - (leagueNowMs(now) - lastNetworkStartMs);
-        if (waitMs > 0) await leagueSleep(waitMs);
-        lastNetworkStartMs = leagueNowMs(now);
+        await paceNextCall();
         if (releaseMyTurn) releaseMyTurn();
-        const envelope = await fetchLeague(entry, dateParam);
-        // Only cache ready envelopes: a superseded (aborted) or failed
-        // request must never poison the cache with an "unavailable" snapshot.
-        if (envelope.status === "ready") {
-          cache.set(key, {
-            envelope,
-            expiresAtMs: leagueNowMs(now) + ttlFor(envelope.records),
-          });
-        }
-        return { envelope, fromCache: false };
+        return await provider.fetchTurn({ entry, dateParam, key, ctx });
       } finally {
         pendingCount -= 1;
       }
@@ -1393,6 +1412,7 @@ export function createLeagueScoreboardQueue({
     throttledCount = 0;
     pendingCount = 0;
     lastNetworkStartMs = -Infinity;
+    lastProviderStartMs.clear();
     slotTail = Promise.resolve();
     if (inFlightController && typeof inFlightController.abort === "function") {
       try { inFlightController.abort(); } catch { /* defensive */ }
@@ -1434,3 +1454,762 @@ export function replayLeagueScoreboard(snapshot, recordId = null, method = "loca
   });
 }
 
+
+/* ------------------------------------------------------------------ */
+/* Multi-provider league scoreboard registry (Phase 2 extension).      */
+/*                                                                    */
+/* The catalog tags every entry with provider "espn" | "thesportsdb"  */
+/* | "openligadb" | "sportscore". createLeagueScoreboardQueue's       */
+/* request() dispatches to the entry's provider fetcher; all pacing,  */
+/* budget, abort, and cache discipline stays global and shared.        */
+/* Project law: fixtures/scores only — no odds, wagering, markets,    */
+/* predictions, or real-money content from any source.                */
+/* ------------------------------------------------------------------ */
+
+/** Provider ids the catalog may tag entries with. */
+export const LEAGUE_PROVIDER_IDS = Object.freeze(["espn", "thesportsdb", "openligadb", "sportscore"]);
+
+const LEAGUE_PROVIDER_DISPLAY = Object.freeze({
+  espn: "ESPN",
+  thesportsdb: "TheSportsDB",
+  openligadb: "OpenLigaDB",
+  sportscore: "SportScore",
+});
+
+/** Display name for a provider id ("thesportsdb" -> "TheSportsDB"); null when unknown. */
+export function leagueProviderLabel(providerId) {
+  return typeof providerId === "string" ? (LEAGUE_PROVIDER_DISPLAY[providerId] ?? null) : null;
+}
+
+const THESPORTSDB_BASE = "https://www.thesportsdb.com/api/v1/json/3";
+export const THESPORTSDB_ATTRIBUTION = "TheSportsDB public API";
+const OPENLIGADB_BASE = "https://api.openligadb.de";
+export const OPENLIGADB_ATTRIBUTION = "OpenLigaDB";
+
+/**
+ * Compute the TheSportsDB season string for a YYYYMMDD date.
+ * european: month >= 7 -> "y-y+1", else "y-1-y". calendar: "y".
+ * Returns null when the date or season type is unusable.
+ */
+export function tsdbSeasonString(entry, dateParam) {
+  const digits = /^\d{8}$/.test(String(dateParam ?? "")) ? String(dateParam) : null;
+  if (!digits) return null;
+  const year = Number(digits.slice(0, 4));
+  const month = Number(digits.slice(4, 6));
+  if (month < 1 || month > 12) return null;
+  if (entry?.seasonType === "european") {
+    return month >= 7 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
+  }
+  if (entry?.seasonType === "calendar") return `${year}`;
+  return null;
+}
+
+function tsdbLeagueIds(entry) {
+  const ids = Array.isArray(entry?.tsdbIds) ? entry.tsdbIds : [];
+  return ids.filter((id) => Number.isSafeInteger(id) && id > 0);
+}
+
+/** Cache key for a whole TheSportsDB season payload: `tsdb:{ids}:{season}`. */
+export function tsdbSeasonCacheKey(entry, dateParam) {
+  const season = tsdbSeasonString(entry, dateParam);
+  const ids = tsdbLeagueIds(entry);
+  if (!season || !ids.length) return null;
+  return `tsdb:${ids.join(",")}:${season}`;
+}
+
+/** eventsseason URL for one league id + season; null when inputs are unsafe. */
+export function tsdbSeasonUrl(tsdbId, season) {
+  if (!Number.isSafeInteger(tsdbId) || tsdbId <= 0) return null;
+  if (!/^\d{4}(-\d{4})?$/.test(String(season ?? ""))) return null;
+  return `${THESPORTSDB_BASE}/eventsseason.php?id=${tsdbId}&s=${season}`;
+}
+
+function tsdbParticipant(name, homeAway, scoreRaw, otherScoreRaw) {
+  const clean = text(name);
+  if (!clean) return null;
+  const score = integer(scoreRaw, null);
+  const other = integer(otherScoreRaw, null);
+  return {
+    id: null,
+    name: clean,
+    shortName: null,
+    abbreviation: null,
+    kind: "team",
+    homeAway,
+    winner: score !== null && other !== null ? score > other : null,
+    score: score === null ? null : String(score),
+    scoreValue: score,
+    scoreStatus: score === null ? "unavailable" : "provider-reported",
+    rank: null,
+    rankStatus: "unavailable",
+    country: null,
+    records: [],
+  };
+}
+
+/**
+ * Normalize one TheSportsDB season event into the shared record shape.
+ * Status rule: scores present -> final; no scores and date >= today ->
+ * scheduled; no scores and date < today -> unknown. Never "live": the
+ * free tier has no live scores, so live is never claimed.
+ */
+export function normalizeTsdbSeasonEvent(event, {
+  entry,
+  season,
+  retrievedAt,
+  index = 0,
+  todayIso = new Date().toISOString().slice(0, 10),
+} = {}) {
+  if (!isRecord(event) || !isRecord(entry)) return null;
+  const idEvent = text(event.idEvent);
+  const homeName = text(event.strHomeTeam);
+  const awayName = text(event.strAwayTeam);
+  if (!idEvent || !homeName || !awayName) return null;
+  const homeScore = integer(event.intHomeScore, null);
+  const awayScore = integer(event.intAwayScore, null);
+  const scored = homeScore !== null && awayScore !== null;
+  const dateEvent = /^\d{4}-\d{2}-\d{2}$/.test(String(event.dateEvent ?? "")) ? String(event.dateEvent) : null;
+  const statusDetail = scored
+    ? { label: "Final", state: "post", completed: true, final: true, clock: null, period: null, source: "provider-reported" }
+    : dateEvent && dateEvent >= todayIso
+      ? { label: "Scheduled", state: "pre", completed: false, final: false, clock: null, period: null, source: "provider-reported" }
+      : { label: "status unavailable", state: null, completed: null, final: null, clock: null, period: null, source: "unavailable" };
+  const participants = [
+    tsdbParticipant(homeName, "home", event.intHomeScore, event.intAwayScore),
+    tsdbParticipant(awayName, "away", event.intAwayScore, event.intHomeScore),
+  ].filter(Boolean);
+  if (participants.length !== 2) return null;
+  const eventTime = timestamp(event.strTimestamp)
+    ?? timestamp(dateEvent && text(event.strTime) ? `${dateEvent}T${text(event.strTime)}` : null);
+  const venue = {
+    id: null,
+    name: text(event.strVenue),
+    city: null,
+    state: null,
+    country: null,
+  };
+  const title = text(event.strEvent) ?? `${homeName} vs ${awayName}`;
+  const checks = {
+    sourceUrl: false, // TheSportsDB exposes no safe per-event page; null by design.
+    competition: true,
+    participants: participants.length >= 2,
+    status: statusDetail.source === "provider-reported",
+    eventTime: Boolean(eventTime),
+    scores: participants.some((participant) => participant.scoreStatus === "provider-reported"),
+    venue: Boolean(venue.name),
+  };
+  const dataCompletenessScore = Object.values(checks).filter(Boolean).length / Object.keys(checks).length;
+  const dataCompletenessGrade = dataCompletenessScore >= 0.875 ? "A"
+    : dataCompletenessScore >= 0.75 ? "B"
+      : dataCompletenessScore >= 0.625 ? "C" : "D";
+  return {
+    id: `thesportsdb:${entry.slug}:${idEvent}`,
+    providerId: `thesportsdb-league:${entry.slug}`,
+    provider: `${THESPORTSDB_ATTRIBUTION} · ${entry.label} season`,
+    sport: "soccer",
+    league: entry.slug,
+    eventId: idEvent,
+    leagueLabel: entry.label,
+    title,
+    competition: {
+      id: idEvent,
+      name: text(event.strEvent),
+      round: text(event.strRound),
+      type: null,
+      season: text(season),
+      seasonYear: integer(String(season ?? "").slice(0, 4)),
+      week: null,
+    },
+    participants,
+    teams: participants,
+    players: [],
+    status: statusDetail.label,
+    statusDetail,
+    eventTime,
+    eventTimeStatus: eventTime ? "provider-reported" : "unavailable",
+    scoreStatus: scored ? "provider-reported" : "unavailable",
+    scoreCount: participants.filter((participant) => participant.scoreStatus === "provider-reported").length,
+    venue,
+    leaders: [],
+    // No safe per-event URL on TheSportsDB; the season endpoint is recorded
+    // on the envelope source instead.
+    sourceUrl: null,
+    sourceObservedAt: retrievedAt,
+    retrievedAt,
+    // Provider-local calendar date for client-side day filtering.
+    dayParam: dateEvent ? dateEvent.replaceAll("-", "") : null,
+    dataCompletenessGrade,
+    dataCompletenessScore: Number(dataCompletenessScore.toFixed(2)),
+    dataCompletenessPercent: Math.round(dataCompletenessScore * 100),
+    gradeKind: "data-completeness",
+    completenessChecks: checks,
+    sourceAttribution: THESPORTSDB_ATTRIBUTION,
+    providerAvailable: true,
+    liveFetch: true,
+    externalNetwork: true,
+    externalSource: true,
+    localOnly: true,
+    simulation: true,
+    complete: false,
+    truthClaim: false,
+    confidence: 0,
+    uncertainty: 1,
+    executable: false,
+  };
+}
+
+/** Normalize a whole eventsseason payload; provider rows only, no placeholders. */
+export function normalizeTsdbSeasonEvents(payload, { entry, season, retrievedAt } = {}) {
+  if (!isRecord(payload) || !isRecord(entry)) return [];
+  const events = Array.isArray(payload.events) ? payload.events : [];
+  return events
+    .map((event, index) => normalizeTsdbSeasonEvent(event, { entry, season, retrievedAt, index }))
+    .filter(Boolean);
+}
+
+function tsdbSourceLike(entry, season, requestUrl) {
+  return Object.freeze({
+    id: `thesportsdb:${entry.slug}`,
+    provider: `${THESPORTSDB_ATTRIBUTION} · ${entry.label} season ${season ?? "unknown"}`,
+    sport: "soccer",
+    league: entry.slug,
+    leagueLabel: entry.label,
+    endpoint: requestUrl ?? `${THESPORTSDB_BASE}/eventsseason.php`,
+  });
+}
+
+/** Day envelope derived from a cached (or fresh) whole-season record list. */
+export function tsdbDayEnvelope({ entry, dateParam, season, seasonRecords, retrievedAt, requestUrl = null, reasons = [] }) {
+  const records = (Array.isArray(seasonRecords) ? seasonRecords : []).filter((record) => record?.dayParam === dateParam);
+  const empty = records.length === 0;
+  const available = !empty;
+  return deepFreeze({
+    ...leagueEnvelopeBase({ status: "ready", entry, dateParam, retrievedAt }),
+    records,
+    sources: [leagueSourceStatus(tsdbSourceLike(entry, season, requestUrl), retrievedAt, {
+      available,
+      recordCount: records.length,
+      requestUrl,
+      reason: empty ? (reasons[0] ?? LEAGUE_SCOREBOARD_EMPTY_REASON) : null,
+    })],
+    recordCount: records.length,
+    availableProviderCount: available ? 1 : 0,
+    providerAvailable: available,
+    providerUnavailable: !available,
+    empty,
+    emptyReason: empty ? LEAGUE_SCOREBOARD_EMPTY_REASON : null,
+    reason: empty ? LEAGUE_SCOREBOARD_EMPTY_REASON : null,
+  });
+}
+
+function tsdbUnavailableEnvelope({ entry, dateParam, retrievedAt, reason }) {
+  return deepFreeze({
+    ...leagueEnvelopeBase({ status: "unavailable", entry, dateParam, retrievedAt }),
+    sources: [leagueSourceStatus(tsdbSourceLike(entry, tsdbSeasonString(entry, dateParam), null), retrievedAt, {
+      available: false,
+      recordCount: 0,
+      requestUrl: null,
+      reason,
+    })],
+    reason,
+  });
+}
+
+/**
+ * TheSportsDB fetch turn: fetch each league id's eventsseason payload for
+ * the requested date's season (each network call keeps the shared pacing /
+ * budget discipline via ctx), cache the whole season, then filter by date
+ * client-side. Day navigation over a cached season costs zero network.
+ */
+async function thesportsdbLeagueTurn({ entry, dateParam, key, ctx }) {
+  const retrievedAt = ctx.nowIso();
+  const season = tsdbSeasonString(entry, dateParam);
+  const ids = tsdbLeagueIds(entry);
+  if (!season || !ids.length) {
+    return {
+      envelope: tsdbUnavailableEnvelope({ entry, dateParam, retrievedAt, reason: "TheSportsDB league entry has no usable season or league id; no rows were fabricated." }),
+      fromCache: false,
+    };
+  }
+  const seasonRecords = [];
+  const reasons = [];
+  const requestUrls = [];
+  let lastNet = null;
+  let anyGroupSucceeded = false;
+  for (let index = 0; index < ids.length; index += 1) {
+    const requestUrl = publicSourceUrl(tsdbSeasonUrl(ids[index], season));
+    if (!requestUrl) {
+      reasons.push(`id ${ids[index]}: ineligible URL`);
+      continue;
+    }
+    // The first network call uses the request-time budget reservation; any
+    // additional league id (e.g. RFEF's two groups) reserves its own.
+    if (index > 0 && !ctx.reserveNetworkCall()) break;
+    if (index > 0) {
+      // Every group start is paced like a turn start (global + TheSportsDB
+      // 2000ms), so multi-id turns cannot burst past the rate limit.
+      await ctx.paceNextCall();
+      // Re-check AFTER the pacing wait, not before it: a newer turn may have
+      // started during the wait, aborted this turn's registered handle, and
+      // registered its own. Continuing here would install a second in-flight
+      // controller, clobber the newer turn's abort handle, and run a
+      // redundant fetch — violating the one-in-flight law. The superseded
+      // promise resolves unavailable instead.
+      const superseded = lastNet?.signal?.aborted
+        || (ctx.inFlight() !== null && ctx.inFlight() !== lastNet?.controller);
+      if (superseded) {
+        if (lastNet) lastNet.done();
+        return {
+          envelope: tsdbUnavailableEnvelope({ entry, dateParam, retrievedAt, reason: "Superseded by a newer league request before all groups loaded; no rows were fabricated." }),
+          fromCache: false,
+        };
+      }
+    }
+    requestUrls.push(requestUrl);
+    const net = ctx.beginNetwork();
+    lastNet = net;
+    try {
+      const response = await ctx.fetchImpl(requestUrl, {
+        method: "GET",
+        headers: { accept: "application/json" },
+        ...(net.signal ? { signal: net.signal } : {}),
+      });
+      if (!response?.ok || typeof response.json !== "function") throw new Error(`HTTP ${response?.status ?? "unavailable"}`);
+      const payload = await response.json();
+      const events = Array.isArray(payload?.events) ? payload.events : [];
+      anyGroupSucceeded = true;
+      if (!events.length) reasons.push(`id ${ids[index]}: season ${season} returned no events`);
+      events.forEach((event) => {
+        const record = normalizeTsdbSeasonEvent(event, { entry, season, retrievedAt, index: seasonRecords.length });
+        if (record) seasonRecords.push(record);
+      });
+    } catch (error) {
+      const reason = safeError(error);
+      reasons.push(`id ${ids[index]}: ${reason}`);
+      // A supersede abort ends the turn like the ESPN path: the promise
+      // resolves unavailable and nothing is cached.
+      if (error?.name === "AbortError" || /\babort(?:ed|ing)?\b/i.test(String(error?.message ?? ""))) {
+        net.done();
+        return { envelope: tsdbUnavailableEnvelope({ entry, dateParam, retrievedAt, reason }), fromCache: false };
+      }
+    }
+    // Note: net.done() is intentionally deferred until the turn's network
+    // is fully finished (after the loop) so the abort handle stays
+    // registered — and supersede stays observable — between groups.
+  }
+  if (lastNet) lastNet.done();
+  if (!anyGroupSucceeded) {
+    // Every group failed (HTTP/parse/abort): this is an outage, not an
+    // empty season — resolve unavailable and never cache the failure.
+    const detail = reasons[0] ?? "request failed for every group id";
+    return {
+      envelope: tsdbUnavailableEnvelope({ entry, dateParam, retrievedAt, reason: `TheSportsDB request failed: ${detail}` }),
+      fromCache: false,
+    };
+  }
+  if (!requestUrls.length) {
+    return {
+      envelope: tsdbUnavailableEnvelope({ entry, dateParam, retrievedAt, reason: reasons[0] ?? "TheSportsDB request could not be addressed." }),
+      fromCache: false,
+    };
+  }
+  // Cache the whole season payload (ready only); day envelopes are derived.
+  const seasonEnvelope = deepFreeze({
+    ...leagueEnvelopeBase({ status: "ready", entry, dateParam: null, retrievedAt }),
+    season,
+    tsdbIds: ids,
+    records: seasonRecords,
+    sources: [leagueSourceStatus(tsdbSourceLike(entry, season, requestUrls[0]), retrievedAt, {
+      available: seasonRecords.length > 0,
+      recordCount: seasonRecords.length,
+      requestUrl: requestUrls[0],
+      reason: seasonRecords.length ? null : (reasons[0] ?? LEAGUE_SCOREBOARD_EMPTY_REASON),
+    })],
+    recordCount: seasonRecords.length,
+  });
+  ctx.cachePut(key, seasonEnvelope);
+  return {
+    envelope: tsdbDayEnvelope({ entry, dateParam, season, seasonRecords, retrievedAt, requestUrl: requestUrls[0], reasons }),
+    fromCache: false,
+  };
+}
+
+/* ------------------------------ OpenLigaDB ------------------------------ */
+
+/** Season for OpenLigaDB is the year of the requested date. */
+export function openLigaDbSeasonString(entry, dateParam) {
+  const year = String(dateParam ?? "").slice(0, 4);
+  return /^\d{4}$/.test(year) ? year : null;
+}
+
+/** Cache key for a whole OpenLigaDB season payload. */
+export function openLigaDbSeasonCacheKey(entry, dateParam) {
+  const season = openLigaDbSeasonString(entry, dateParam);
+  const league = text(entry?.oldbLeague)?.toLowerCase() ?? null;
+  if (!season || !league || !/^[a-z0-9]{1,24}$/.test(league)) return null;
+  return `openligadb:${league}:${season}`;
+}
+
+/** getmatchdata URL; null when inputs are unsafe. */
+export function openLigaDbSeasonUrl(oldbLeague, season) {
+  const league = text(oldbLeague)?.toLowerCase() ?? null;
+  if (!league || !/^[a-z0-9]{1,24}$/.test(league)) return null;
+  if (!/^\d{4}$/.test(String(season ?? ""))) return null;
+  return `${OPENLIGADB_BASE}/getmatchdata/${league}/${season}`;
+}
+
+/**
+ * Normalize one OpenLigaDB match into the shared record shape.
+ * matchIsFinished -> final; otherwise scheduled when the date is today or
+ * later, unknown when past without a result. Scores come from the
+ * "Endergebnis" result row when present.
+ */
+export function normalizeOpenLigaDbMatch(match, {
+  entry,
+  season,
+  retrievedAt,
+  index = 0,
+  todayIso = new Date().toISOString().slice(0, 10),
+} = {}) {
+  if (!isRecord(match) || !isRecord(entry)) return null;
+  const homeName = text(match.team1?.teamName);
+  const awayName = text(match.team2?.teamName);
+  if (!homeName || !awayName) return null;
+  const matchId = text(match.matchID ?? match.id, `match-${index + 1}`);
+  const results = Array.isArray(match.matchResults) ? match.matchResults : [];
+  const finalResult = results.find((row) => /endergebnis/i.test(String(row?.resultName ?? "")))
+    ?? results[results.length - 1] ?? null;
+  const homeScore = integer(finalResult?.pointsTeam1, null);
+  const awayScore = integer(finalResult?.pointsTeam2, null);
+  const finished = match.matchIsFinished === true;
+  const matchDateTime = text(match.matchDateTime);
+  const datePart = /^\d{4}-\d{2}-\d{2}/.test(matchDateTime ?? "") ? matchDateTime.slice(0, 10) : null;
+  const statusDetail = finished
+    ? { label: "Final", state: "post", completed: true, final: true, clock: null, period: null, source: "provider-reported" }
+    : datePart && datePart >= todayIso
+      ? { label: "Scheduled", state: "pre", completed: false, final: false, clock: null, period: null, source: "provider-reported" }
+      : { label: "status unavailable", state: null, completed: null, final: null, clock: null, period: null, source: "unavailable" };
+  const participants = [
+    tsdbParticipant(homeName, "home", homeScore, awayScore),
+    tsdbParticipant(awayName, "away", awayScore, homeScore),
+  ].filter(Boolean);
+  if (participants.length !== 2) return null;
+  const eventTime = timestamp(match.matchDateTimeUTC) ?? timestamp(matchDateTime);
+  const location = isRecord(match.location) ? match.location : {};
+  const venue = {
+    id: null,
+    name: text(location.locationName),
+    city: text(location.locationCity),
+    state: null,
+    country: null,
+  };
+  const checks = {
+    sourceUrl: false,
+    competition: true,
+    participants: participants.length >= 2,
+    status: statusDetail.source === "provider-reported",
+    eventTime: Boolean(eventTime),
+    scores: participants.some((participant) => participant.scoreStatus === "provider-reported"),
+    venue: Boolean(venue.name),
+  };
+  const dataCompletenessScore = Object.values(checks).filter(Boolean).length / Object.keys(checks).length;
+  const dataCompletenessGrade = dataCompletenessScore >= 0.875 ? "A"
+    : dataCompletenessScore >= 0.75 ? "B"
+      : dataCompletenessScore >= 0.625 ? "C" : "D";
+  return {
+    id: `openligadb:${entry.slug}:${matchId}`,
+    providerId: `openligadb-league:${entry.slug}`,
+    provider: `${OPENLIGADB_ATTRIBUTION} · ${entry.label} season`,
+    sport: "soccer",
+    league: entry.slug,
+    eventId: matchId,
+    leagueLabel: entry.label,
+    title: `${homeName} vs ${awayName}`,
+    competition: {
+      id: matchId,
+      name: text(match.group?.groupName),
+      round: text(match.group?.groupName),
+      type: null,
+      season: text(season),
+      seasonYear: integer(season),
+      week: integer(match.group?.groupOrderID),
+    },
+    participants,
+    teams: participants,
+    players: [],
+    status: statusDetail.label,
+    statusDetail,
+    eventTime,
+    eventTimeStatus: eventTime ? "provider-reported" : "unavailable",
+    scoreStatus: participants.some((p) => p.scoreStatus === "provider-reported") ? "provider-reported" : "unavailable",
+    scoreCount: participants.filter((p) => p.scoreStatus === "provider-reported").length,
+    venue,
+    leaders: [],
+    sourceUrl: null,
+    sourceObservedAt: retrievedAt,
+    retrievedAt,
+    // Provider-local calendar date for client-side day filtering.
+    dayParam: datePart ? datePart.replaceAll("-", "") : null,
+    dataCompletenessGrade,
+    dataCompletenessScore: Number(dataCompletenessScore.toFixed(2)),
+    dataCompletenessPercent: Math.round(dataCompletenessScore * 100),
+    gradeKind: "data-completeness",
+    completenessChecks: checks,
+    sourceAttribution: OPENLIGADB_ATTRIBUTION,
+    providerAvailable: true,
+    liveFetch: true,
+    externalNetwork: true,
+    externalSource: true,
+    localOnly: true,
+    simulation: true,
+    complete: false,
+    truthClaim: false,
+    confidence: 0,
+    uncertainty: 1,
+    executable: false,
+  };
+}
+
+/** Normalize a whole getmatchdata payload; provider rows only, no placeholders. */
+export function normalizeOpenLigaDbMatches(payload, { entry, season, retrievedAt } = {}) {
+  if (!isRecord(entry)) return [];
+  const matches = Array.isArray(payload) ? payload : [];
+  return matches
+    .map((match, index) => normalizeOpenLigaDbMatch(match, { entry, season, retrievedAt, index }))
+    .filter(Boolean);
+}
+
+function openLigaDbSourceLike(entry, season, requestUrl) {
+  return Object.freeze({
+    id: `openligadb:${entry.slug}`,
+    provider: `${OPENLIGADB_ATTRIBUTION} · ${entry.label} season ${season ?? "unknown"}`,
+    sport: "soccer",
+    league: entry.slug,
+    leagueLabel: entry.label,
+    endpoint: requestUrl ?? `${OPENLIGADB_BASE}/getmatchdata`,
+  });
+}
+
+/** Day envelope derived from a cached (or fresh) whole-season match list. */
+export function openLigaDbDayEnvelope({ entry, dateParam, season, seasonRecords, retrievedAt, requestUrl = null, reasons = [] }) {
+  const records = (Array.isArray(seasonRecords) ? seasonRecords : []).filter((record) => record?.dayParam === dateParam);
+  const empty = records.length === 0;
+  const available = !empty;
+  return deepFreeze({
+    ...leagueEnvelopeBase({ status: "ready", entry, dateParam, retrievedAt }),
+    records,
+    sources: [leagueSourceStatus(openLigaDbSourceLike(entry, season, requestUrl), retrievedAt, {
+      available,
+      recordCount: records.length,
+      requestUrl,
+      reason: empty ? (reasons[0] ?? LEAGUE_SCOREBOARD_EMPTY_REASON) : null,
+    })],
+    recordCount: records.length,
+    availableProviderCount: available ? 1 : 0,
+    providerAvailable: available,
+    providerUnavailable: !available,
+    empty,
+    emptyReason: empty ? LEAGUE_SCOREBOARD_EMPTY_REASON : null,
+    reason: empty ? LEAGUE_SCOREBOARD_EMPTY_REASON : null,
+  });
+}
+
+function openLigaDbUnavailableEnvelope({ entry, dateParam, retrievedAt, reason }) {
+  return deepFreeze({
+    ...leagueEnvelopeBase({ status: "unavailable", entry, dateParam, retrievedAt }),
+    sources: [leagueSourceStatus(openLigaDbSourceLike(entry, openLigaDbSeasonString(entry, dateParam), null), retrievedAt, {
+      available: false,
+      recordCount: 0,
+      requestUrl: null,
+      reason,
+    })],
+    reason,
+  });
+}
+
+/** OpenLigaDB fetch turn: one getmatchdata call per season, cached whole. */
+async function openLigaDbLeagueTurn({ entry, dateParam, key, ctx }) {
+  const retrievedAt = ctx.nowIso();
+  const season = openLigaDbSeasonString(entry, dateParam);
+  const requestUrl = publicSourceUrl(openLigaDbSeasonUrl(entry?.oldbLeague, season));
+  if (!requestUrl) {
+    return {
+      envelope: openLigaDbUnavailableEnvelope({ entry, dateParam, retrievedAt, reason: "OpenLigaDB league entry has no usable season; no rows were fabricated." }),
+      fromCache: false,
+    };
+  }
+  const net = ctx.beginNetwork();
+  try {
+    const response = await ctx.fetchImpl(requestUrl, {
+      method: "GET",
+      headers: { accept: "application/json" },
+      ...(net.signal ? { signal: net.signal } : {}),
+    });
+    if (!response?.ok || typeof response.json !== "function") throw new Error(`HTTP ${response?.status ?? "unavailable"}`);
+    const payload = await response.json();
+    const seasonRecords = normalizeOpenLigaDbMatches(payload, { entry, season, retrievedAt });
+    const reasons = seasonRecords.length ? [] : ["OpenLigaDB returned no usable matches for this season"];
+    const seasonEnvelope = deepFreeze({
+      ...leagueEnvelopeBase({ status: "ready", entry, dateParam: null, retrievedAt }),
+      season,
+      records: seasonRecords,
+      sources: [leagueSourceStatus(openLigaDbSourceLike(entry, season, requestUrl), retrievedAt, {
+        available: seasonRecords.length > 0,
+        recordCount: seasonRecords.length,
+        requestUrl,
+        reason: seasonRecords.length ? null : reasons[0],
+      })],
+      recordCount: seasonRecords.length,
+    });
+    ctx.cachePut(key, seasonEnvelope);
+    return {
+      envelope: openLigaDbDayEnvelope({ entry, dateParam, season, seasonRecords, retrievedAt, requestUrl, reasons }),
+      fromCache: false,
+    };
+  } catch (error) {
+    const reason = safeError(error);
+    return {
+      envelope: openLigaDbUnavailableEnvelope({ entry, dateParam, retrievedAt, reason: `OpenLigaDB request failed: ${reason}` }),
+      fromCache: false,
+    };
+  } finally {
+    net.done();
+  }
+}
+
+/* ------------------------------ ESPN turn --------------------------------- */
+
+/**
+ * ESPN fetch turn: the original single-league scoreboard fetch, now behind
+ * the provider registry. Uses the request-time budget reservation; the
+ * shared pacing/abort/timeout discipline arrives via ctx.
+ */
+async function espnLeagueTurn({ entry, dateParam, key, ctx }) {
+  const retrievedAt = ctx.nowIso();
+  const endpointLike = leagueEndpointLike(entry, dateParam);
+  const requestUrl = publicSourceUrl(endpointLike.endpoint);
+  const base = () => leagueEnvelopeBase({ status: "unavailable", entry, dateParam, retrievedAt });
+  if (!requestUrl) {
+    return {
+      envelope: deepFreeze({
+        ...base(),
+        sources: [leagueSourceStatus(endpointLike, retrievedAt, {
+          available: false,
+          recordCount: 0,
+          requestUrl: null,
+          reason: "Only documented HTTPS public endpoints are eligible.",
+        })],
+        reason: "Only documented HTTPS public endpoints are eligible.",
+      }),
+      fromCache: false,
+    };
+  }
+  const net = ctx.beginNetwork();
+  try {
+    const response = await ctx.fetchImpl(requestUrl, {
+      method: "GET",
+      headers: { accept: "application/json" },
+      ...(net.signal ? { signal: net.signal } : {}),
+    });
+    if (!response?.ok || typeof response.json !== "function") throw new Error(`HTTP ${response?.status ?? "unavailable"}`);
+    const payload = await response.json();
+    const records = normalizeMultiSportScoreboard(payload, endpointLike, retrievedAt, MULTI_SPORT_EVENTS_LEAGUE_MAX_RECORDS);
+    const empty = records.length === 0;
+    const available = !empty;
+    const envelope = deepFreeze({
+      ...base(),
+      status: "ready",
+      records,
+      sources: [leagueSourceStatus(endpointLike, retrievedAt, {
+        available,
+        recordCount: records.length,
+        requestUrl,
+        reason: empty ? LEAGUE_SCOREBOARD_EMPTY_REASON : null,
+      })],
+      recordCount: records.length,
+      availableProviderCount: available ? 1 : 0,
+      providerAvailable: available,
+      providerUnavailable: !available,
+      empty,
+      emptyReason: empty ? LEAGUE_SCOREBOARD_EMPTY_REASON : null,
+      reason: empty ? LEAGUE_SCOREBOARD_EMPTY_REASON : null,
+    });
+    // Only cache ready envelopes: a superseded (aborted) or failed
+    // request must never poison the cache with an "unavailable" snapshot.
+    if (envelope.status === "ready") ctx.cachePut(key, envelope);
+    return { envelope, fromCache: false };
+  } catch (error) {
+    const reason = safeError(error);
+    return {
+      envelope: deepFreeze({
+        ...base(),
+        sources: [leagueSourceStatus(endpointLike, retrievedAt, {
+          available: false,
+          recordCount: 0,
+          requestUrl,
+          reason,
+        })],
+        reason,
+      }),
+      fromCache: false,
+    };
+  } finally {
+    net.done();
+  }
+}
+
+/* --------------------------- provider registry ---------------------------- */
+
+const LEAGUE_PROVIDERS = Object.freeze({
+  espn: Object.freeze({
+    id: "espn",
+    // Extra minimum gap between this provider's own network-call starts,
+    // on top of the queue-global minIntervalMs. TheSportsDB's free tier
+    // allows ~30 requests/minute, hence 2000ms.
+    minIntervalMs: 0,
+    cacheKey: (entry, dateParam) => `${entry.slug}:${dateParam}`,
+    cachedEnvelope: (entry, dateParam, cached) => cached.envelope,
+    fetchTurn: espnLeagueTurn,
+  }),
+  thesportsdb: Object.freeze({
+    id: "thesportsdb",
+    minIntervalMs: 2000,
+    cacheKey: (entry, dateParam) => tsdbSeasonCacheKey(entry, dateParam),
+    cachedEnvelope: (entry, dateParam, cached) => tsdbDayEnvelope({
+      entry,
+      dateParam,
+      season: cached.envelope.season,
+      seasonRecords: cached.envelope.records,
+      retrievedAt: cached.envelope.retrievedAt,
+      requestUrl: cached.envelope.sources?.[0]?.requestUrl ?? null,
+    }),
+    fetchTurn: thesportsdbLeagueTurn,
+  }),
+  openligadb: Object.freeze({
+    id: "openligadb",
+    minIntervalMs: 0,
+    cacheKey: (entry, dateParam) => openLigaDbSeasonCacheKey(entry, dateParam),
+    cachedEnvelope: (entry, dateParam, cached) => openLigaDbDayEnvelope({
+      entry,
+      dateParam,
+      season: cached.envelope.season,
+      seasonRecords: cached.envelope.records,
+      retrievedAt: cached.envelope.retrievedAt,
+      requestUrl: cached.envelope.sources?.[0]?.requestUrl ?? null,
+    }),
+    fetchTurn: openLigaDbLeagueTurn,
+  }),
+});
+
+/**
+ * Resolve the provider fetcher for a catalog entry. Catalog entries
+ * without a provider tag default to ESPN (the original single-provider
+ * behavior). Throws for unknown provider ids — request() turns that
+ * into a rejected promise with zero network calls.
+ */
+export function leagueProviderFor(entry) {
+  const providerId = typeof entry?.provider === "string" && entry.provider ? entry.provider : "espn";
+  const provider = LEAGUE_PROVIDERS[providerId];
+  if (!provider) throw new Error(`Unknown league provider: ${String(providerId).slice(0, 40)}`);
+  return provider;
+}

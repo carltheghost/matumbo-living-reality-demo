@@ -144,3 +144,174 @@ without closing the parent console; focus returns to the browse button.
   `/tmp/league-verify/desktop-modal.png`,
   `/tmp/league-verify/mobile-modal.png`; full JSON report:
   `/tmp/league-verify/verify-report.json`.
+
+## Multi-provider extension (Agent D, 2026-09-19)
+
+The league browser now serves three providers through one shared queue.
+Project law: fixtures/scores only — no odds, wagering, markets, or
+predictions from any source.
+
+### Catalog v2 — 129 entries
+
+`src/data/league-catalog.js` (`LEAGUE_CATALOG_VERSION = 2`, frozen):
+
+- 85 ESPN (`provider: "espn"`), 43 TheSportsDB (`provider: "thesportsdb"`
+  with `tsdbIds`, `tsdbName`, `seasonType: "european" | "calendar"`),
+  1 OpenLigaDB (`provider: "openligadb"`, `ger.w.ffb1` Frauen-Bundesliga).
+- New ESPN entries: `por.taca.portugal` (Portuguese Cup), `usa.usl.1`
+  (USL Championship).
+- `LEAGUE_UNAVAILABLE` is down to one entry: Czech Cup — not on the ESPN
+  public API, not on TheSportsDB, and SportScore's free tier too flaky
+  (3/3 build probes timed out).
+
+### Provider contracts
+
+- **TheSportsDB** (`https://www.thesportsdb.com/api/v1/json/3/eventsseason.php?id=<id>&s=<season>`):
+  european leagues use `YYYY-YYYY`, calendar leagues `YYYY`. Whole-season
+  payloads are cached under `tsdb:<ids>:<season>`; day envelopes derive
+  from the cache, so day-stepping costs zero network. Scored rows →
+  `final`, future unscored rows → `scheduled`; TheSportsDB never reports
+  `live`. Multi-id leagues (Spanish Primera División RFEF: ids 4673, 4750)
+  merge groups and reserve one budget unit per HTTP call. Provider pacing
+  ≥2000ms between TheSportsDB network starts, on top of the global
+  ≥1000ms. All-failed groups resolve `unavailable` with the real provider
+  reason (never a cached empty season).
+- **OpenLigaDB** (`https://api.openligadb.de/getmatchdata/<league>/<year>`):
+  whole-season cache under `openligadb:<league>:<year>`; day envelopes
+  derive from it. Verified 2026-09-19: `getmatchdata/ffb1/2026` returned
+  182 events with CORS `*` (later curl attempts through the VM egress
+  path timed out; the contract is implemented from the recorded payload
+  shape).
+- **SportScore: excluded.** Free-tier API key issued, but 3/3 build probes
+  timed out and earlier research showed Cloudflare challenges on 2/3
+  attempts (the one success returned empty). The registry still accepts
+  the `"sportscore"` provider tag for future work, but no catalog entry
+  uses it and no SportScore link was added to the UI.
+
+### TheSportsDB per-league probe (2026-09-19, live API)
+
+All 43 catalog entries (44 ids) probed with 2.2s spacing; raw results in
+`~/workspace/league-catalog/tsdb-season-probe-2026-09-19.json`. 42/44 ids
+returned events (sparse community data: 5 events/season typical; Polish
+Ekstraklasa and Romanian Liga II returned 15):
+
+| id | league | season | events |
+|----|--------|--------|--------|
+| 4617 | Albanian Superliga | `2026-2027` | 5 |
+| 4618 | Andorran Primera Divisio | `2026-2027` | 5 |
+| 4619 | Armenian Premier League | `2026-2027` | 5 |
+| 4693 | Azerbaijan Premier League | `2026-2027` | 5 |
+| 4623 | Belgian Challenger Pro League | `2026-2027` | 5 |
+| 4624 | Bosnian Premier League | `2026-2027` | 5 |
+| 4626 | Bulgarian A League | `2026-2027` | 5 |
+| 4913 | Bulgarian B League | `2026-2027` | 5 |
+| 4820 | Canadian PL | `2026` | 5 |
+| 5210 | Chinese Taipei - Premier League | `2026-2027` | 5 |
+| 4629 | Croatian 1 HNL | `2026-2027` | 5 |
+| 4952 | Croatian 2 HNL | `2026-2027` | 5 |
+| 4954 | Czech 2 Liga | `2026-2027` | 5 |
+| 4958 | Estonian Esiliiga | `2026` | 5 |
+| 4634 | Estonian PL | `2026` | 5 |
+| 4635 | Faroe Premier League | `2026` | 5 |
+| 4973 | Georgian Erovnuli Liga 2 | `2026` | 5 |
+| 4638 | Georgian Umaglesi Liga | `2026` | 5 |
+| 4825 | Hong Kong Premier League | `2026-2027` | 5 |
+| 4690 | Hungarian NB I | `2026-2027` | 5 |
+| 4965 | Hungarian NB II | `2026-2027` | 5 |
+| 4642 | Icelandic Urvalsdeild | `2026` | 5 |
+| 4757 | Irish Division 1 | `2026` | 5 |
+| 5638 | Irish FAI Cup | `2026` | 5 |
+| 4824 | Japanese J League 2 | `2026-2027` | 5 |
+| 5656 | Lithuanian 1 Lyga | `2026` | 5 |
+| 4651 | Lithuanian A Lyga | `2026` | 5 |
+| 4655 | Moldovan Divizia Nationala | `2026-2027` | 5 |
+| 4656 | Montenegrin 1st League | `2026-2027` | 5 |
+| 5208 | Norwegian Toppserien Ladies | `2026` | 5 |
+| 4422 | Polish Ekstraklasa | `2026-2027` | 15 |
+| 4661 | Polish I Liga | `2026-2027` | 5 |
+| 4665 | Romanian Liga II | `2026-2027` | 15 |
+| 4671 | Serbian Super League | `2026-2027` | 5 |
+| 5314 | Slovakian 2 Liga | `2026-2027` | 5 |
+| 4672 | Slovakian Super League | `2026-2027` | 5 |
+| 4692 | Slovenian Premier League | `2026-2027` | 5 |
+| 4689 | South Korean K League 1 | `2026` | 5 |
+| 4822 | South Korean K League 2 | `2026` | 5 |
+| 4673 | Spanish Primera División RFEF | `2026-2027` | **0** |
+| 4750 | Spanish Primera División RFEF | `2026-2027` | **0** |
+| 5209 | Swedish Damallsvenskan | `2026` | 5 |
+| 4354 | Ukrainian Premier League | `2026-2027` | 5 |
+| 5200 | Vietnamese National Cup | `2026-2027` | 5 |
+
+Caveats (do not over-claim):
+
+- TheSportsDB responses are sparse community data (5 events/season is
+  typical) — the UI presents them as-is with honest empty states, never
+  as complete season coverage.
+- Spanish Primera División RFEF: both ids return **zero** events for the
+  current season `2026-2027`; the entry resolves to an honest empty state
+  (stale/sparse on TheSportsDB). Older seasons returned a handful of
+  events, but the client always requests the current season.
+- Two ESPN-overlapping TSDB ids were also verified live: USL
+  Championship id 4684 (current season `2026`, 5 events each in 2024,
+  2025, 2026) and Portuguese Cup id 4510 (probed earlier the same day).
+
+### Queue fixes (browser-found)
+
+- **Fetch binding:** `createLeagueScoreboardQueue({})` (and the two older
+  multi-sport fetch helpers) defaulted to the unbound `globalThis.fetch`,
+  which throws `Failed to execute 'fetch' on 'Window': Illegal invocation`
+  in Chromium — league selection could never load games in a real
+  browser. Defaults are now `(...args) => globalThis.fetch(...args)`.
+  Regression test included.
+- **Supersede re-check after inter-group pacing:** a multi-id turn checked
+  for supersede *before* its ~2000ms inter-group pacing wait; a newer turn
+  starting during the wait had its abort handle clobbered and its fetch
+  run concurrently (two in-flight requests). The check now runs *after*
+  the wait, before `beginNetwork()`. Regression test included (fails on
+  the old order, passes on the new).
+
+### Unit tests
+
+`node --test tests/league-scoreboard.test.mjs` — **31/31 pass** (catalog
+v2 shape/counts/provider tags, ESPN regressions, pacing/supersede/TTL/
+budget, unknown-provider rejection, TSDB URL/season shapes, scored→final
+/ future→scheduled, attribution, whole-season caching, multi-id merge +
+budget, TSDB ≥2000ms pacing, failure cache protection, OpenLigaDB
+contract + season caching, fetch-binding regression, inter-group
+supersede regression, 3-provider regression).
+
+### Browser verification (Agent D, 2026-09-19)
+
+Same CDP method as Agent C (one headless Chromium, `Page.setDocumentContent`
++ `<base href>`, Fetch interception, real curl-captured payloads; raw CDP
+over a hand-rolled WebSocket client — no Playwright/ws packages installed).
+TheSportsDB `eventsseason.php?id=4422&s=2026-2027` was fulfilled with the
+real captured payload (15 events, 2026-07-24 → 2026-08-02). The app's
+`createLeagueScoreboardQueue({})` is constructed with NO injected fetch —
+games load through the default fetch path, exercising the binding fix:
+
+- Desktop 1280×800: modal opens; search narrows to Polish Ekstraklasa;
+  selecting it and jumping to 2026-07-24 renders the 2 real games
+  (Pogoń Szczecin 0–1 Legia Warsaw, Radomiak Radom 2–1 Wieczysta Kraków)
+  with status `READY · POLISH EKSTRAKLASA · 2026-07-24 · via TheSportsDB ·
+  2 GAMES`; day-stepping to 2026-07-25 derives 3 games from the cached
+  season with zero new network; 2026-07-28 shows the honest no-matches
+  state; Escape closes the modal.
+- Mobile 390×844: no horizontal overflow, modal usable.
+- Modal stacking: the modal is now a direct child of `<body>` (moved out of
+  `#hud`), with `z-index: 9500` and `pointer-events: auto`. Raising z-index
+  alone was NOT enough: empirically, `#hud` (despite having no
+  stacking-context trigger in computed style) traps fixed descendants below
+  body-level HUD elements — the `#runtime-status` banner (z-index 90) painted
+  above the modal (z-index 9500, even 100000) and won `elementFromPoint`
+  hit-testing. Moving the modal out of `#hud` (or giving `#hud` its own
+  z-index) fixed it; the DOM move was chosen for minimal blast radius.
+  Verified geometrically: `elementFromPoint` at the modal header's center now
+  resolves inside the modal, and real CDP pointer clicks open the modal, pick
+  a league, and hit the × close button. The `pointer-events: auto` was also
+  required — `#hud` sets `pointer-events: none` and the modal never
+  re-enabled it, so real clicks fell through the modal before this fix.
+- Zero league-feature console errors.
+- Screenshots: `/tmp/league-verify-d/desktop-games.png`,
+  `/tmp/league-verify-d/mobile-modal.png`; full JSON report:
+  `/tmp/league-verify-d/verify-report.json`.

@@ -103,8 +103,8 @@ import { createUnavailableWorldEvents, fetchWorldEvents } from './domains/world-
 import { createWorldEventsConsole } from './render/world-events.js?v=20260901-reality-lens';
 import { SPORTS_EVENTS_CONSOLE_SOURCE, createSportsEventsConsole } from './render/sports-events.js?v=20260829-sports-return184';
 import { createUnavailableSportsEvents, fetchSportsEventDetail, fetchSportsEvents } from './domains/sports-events.js?v=20260829-sports-return184';
-import { MULTI_SPORT_EVENTS_CONSOLE_SOURCE, createMultiSportEventsConsole } from './render/multi-sport-events.js?v=20260919-leagues1';
-import { createLeagueScoreboardQueue, createUnavailableMultiSportEvents, fetchMultiSportEventDetail, fetchMultiSportEvents } from './domains/multi-sport-events.js?v=20260919-leagues1';
+import { MULTI_SPORT_EVENTS_CONSOLE_SOURCE, createMultiSportEventsConsole } from './render/multi-sport-events.js?v=20260919-leagues2';
+import { createLeagueScoreboardQueue, createUnavailableMultiSportEvents, fetchMultiSportEventDetail, fetchMultiSportEvents } from './domains/multi-sport-events.js?v=20260919-leagues2';
 import { DEVICE_PROJECTION_CONSOLE_SOURCE, createDeviceProjectionConsole } from './render/device-projection.js?v=20260827-device1';
 import { ASSET_MARKET_CONSOLE_SOURCE, createAssetMarketConsole } from './render/asset-market.js?v=20260828-asset-market1';
 import { createUnavailableAssetMarketEvidence, fetchAssetMarketEvidence } from './domains/asset-market.js?v=20260828-asset-market1';
