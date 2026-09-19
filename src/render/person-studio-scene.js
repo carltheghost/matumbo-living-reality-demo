@@ -2,7 +2,7 @@ import {STUDIO_MODEL,STUDIO_OUTFITS,STUDIO_ROOMS} from '../domains/person-studio
 import {resolveFaceDecalUrl} from '../domains/avatar-style.js';
 import {AVATAR_GREET} from '../domains/avatar-motion.js';
 import {updateTumboChibiRig} from './tumbo-chibi-rig.js';
-import {buildTumboFluffyRig} from './tumbo-fluffy-rig.js?v=20260919-fluffy-tumbo';
+import {buildTumboFluffyRig} from './tumbo-fluffy-rig.js?v=20260919-jiggle-fur';
 
 /** PERSON Ω avatar: the fluffy Tumbo mascot IS the avatar.
  *
@@ -141,6 +141,8 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
       muffColor:STUDIO_OUTFITS[0].muffs??'#5f646c',
       faceDecalUrl:resolveFaceDecalUrl(safeStorage()),
       decalRegistry:rigDecalMats,
+      // Automatic LOD: small screens grow fewer fur shells.
+      furQuality:(typeof innerWidth!=='undefined'&&innerWidth<700)?.55:1,
     });
     built.group.scale.setScalar(FLUFFY_STUDIO_SCALE);
     avatar.add(built.group);
@@ -148,6 +150,88 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
     return built;
   }
   rig=mountRig();
+  // ---- Secondary-motion simulation (Packet 236) ----
+  // The xlovecam jiggle-physics engine (vendored under vendor/jiggle-physics,
+  // BSD-3-Clause (c) 2026 xlovecam, https://github.com/xloveee/jiggle-physics)
+  // drives the tail as a 4-link spring chain, the body squash as one vertical
+  // spring, and the headphone cups as two sprung bones — all from the
+  // avatar's real acceleration via the engine's finite-difference driver.
+  // Seeded exact closed-form springs: stable at any frame rate, no fixed
+  // timestep, no Math.random anywhere. If the engine scripts failed to load,
+  // the avatar simply plays its keyframed animation with static fur.
+  let jiggle = null;
+  const _v1 = new THREE.Vector3();
+  function setupJiggle() {
+    const G = globalThis;
+    try {
+      if (typeof G.createJigglePhysics !== 'function'
+        || typeof G.createJiggleChain !== 'function'
+        || typeof G.createJiggleDriver !== 'function') return;
+      const tail = G.createJiggleChain({ links: 4, seed: 1103 });
+      tail.params.freq = 3.1; tail.params.damp = 0.32; tail.params.g = 1.1;
+      const squash = G.createJigglePhysics({ bones: 1, seed: 2207 });
+      squash.params.freq = 5.2; squash.params.damp = 0.55; squash.params.g = 0;
+      const cups = G.createJigglePhysics({ bones: 2, seed: 3301 });
+      cups.params.freq = 4.4; cups.params.damp = 0.42; cups.params.g = 1.4;
+      jiggle = {
+        driver: G.createJiggleDriver(),
+        tail, squash, cups,
+        prevPos: new THREE.Vector3(), vel: new THREE.Vector3(),
+        world: new THREE.Vector3(), sway: new THREE.Vector3(),
+        primed: false,
+      };
+    } catch { jiggle = null; }
+  }
+  setupJiggle();
+  // Secondary motion, applied after the keyframed rig update (which resets
+  // joints to rest each frame, so these offsets hold for the frame). Also
+  // drives the GPU fur uniforms: breeze + motion-reactive sway, frozen to
+  // zero amplitude under reduced motion.
+  function stepSecondaryMotion(dt, time, reducedMotion) {
+    const furAmp = reducedMotion ? 0 : 1;
+    if (!jiggle || reducedMotion) {
+      for (const sh of rig.furShaders) {
+        sh.uniforms.uFurTime.value = time;
+        sh.uniforms.uFurAmp.value = furAmp;
+        sh.uniforms.uFurSway.value.set(0, 0, 0);
+      }
+      return;
+    }
+    const j = jiggle, h = Math.max(dt, 1e-4);
+    avatar.getWorldPosition(j.world);
+    if (!j.primed) {
+      j.driver.reset([j.world.x, j.world.y, j.world.z]);
+      j.prevPos.copy(j.world); j.primed = true;
+    }
+    // Smoothed horizontal velocity: the fur trails the motion on the GPU.
+    j.vel.lerp(_v1.set((j.world.x - j.prevPos.x) / h, 0, (j.world.z - j.prevPos.z) / h), Math.min(1, dt * 5));
+    j.prevPos.copy(j.world);
+    const accel = j.driver.update(dt, [j.world.x, j.world.y, j.world.z]);
+    // Tail: cumulative chain-tip offsets bend the tail joint past its
+    // keyframed wag — whips on spins, lags on hops.
+    const tip = j.tail.update(dt, accel), T = 3;
+    rig.joints.tail.rotation.y += THREE.MathUtils.clamp(tip[T * 3] * 2.6, -0.55, 0.55);
+    rig.joints.tail.rotation.x += THREE.MathUtils.clamp(-tip[T * 3 + 1] * 2.6, -0.55, 0.55);
+    // Body squash & stretch from vertical acceleration (hop landings).
+    const sq = j.squash.update(dt, [0, accel[1], 0]);
+    const sy = THREE.MathUtils.clamp(1 + sq[1] * 0.12, 0.93, 1.07);
+    const sxz = 1 - (sy - 1) * 0.55;
+    rig.group.scale.set(FLUFFY_STUDIO_SCALE * sxz, FLUFFY_STUDIO_SCALE * sy, FLUFFY_STUDIO_SCALE * sxz);
+    // Headphone cups bounce on their springs.
+    const co = j.cups.update(dt, accel), cupMeshes = rig.headphoneCups || [];
+    for (let i = 0; i < cupMeshes.length && i < 2; i++) {
+      const cup = cupMeshes[i], base = cup.userData.basePos;
+      if (base) cup.position.set(base.x + co[i * 3] * 0.28, base.y + co[i * 3 + 1] * 0.28, base.z + co[i * 3 + 2] * 0.28);
+    }
+    // GPU fur sway: breeze always, motion-reactive bend from velocity.
+    j.sway.copy(j.vel).multiplyScalar(-0.05);
+    if (j.sway.length() > 0.06) j.sway.setLength(0.06);
+    for (const sh of rig.furShaders) {
+      sh.uniforms.uFurTime.value = time;
+      sh.uniforms.uFurAmp.value = furAmp;
+      sh.uniforms.uFurSway.value.copy(j.sway);
+    }
+  }
   // Every rig mesh is clickable for greet/drag (Packet 227): the wrapper
   // raycasts this list, so clicks and drags land on the avatar itself.
   const avatarPickMeshes=[];
@@ -273,6 +357,9 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
     // The spin reaction's turn comes back from the rig (a full 2π over the
     // mode duration), matching the old mannequin's spinAngle behavior.
     avatar.rotation.y=rigOut.swayY+heading+rigOut.turn;
+    // Packet 236: spring-physics secondary motion (tail chain, body squash,
+    // headphone bounce) plus GPU fur sway, driven by real acceleration.
+    stepSecondaryMotion(dt,time,reducedMotion);
     glow.material.opacity=rigOut.glow;
     if(reducedMotion){for(const f of floaters)f.obj.position.y=f.base;}
     else{for(const f of floaters)f.obj.position.y=f.base+Math.sin(time*f.speed+f.phase)*f.amp;

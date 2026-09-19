@@ -30,7 +30,20 @@ const CUSHION_GREY = '#5f646c';
 const LOC_COLOR = '#191008';
 const EYE_COLOR = '#14100c';
 
-function makeStrandTexture() {
+// Deterministic PRNG (mulberry32): every random choice in the build flows
+// from the rig seed, so the same seed always grows the same Tumbo — the
+// identity fingerprint stays stable across reloads and devices.
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function makeStrandTexture(rng) {
   if (typeof document === 'undefined' || typeof document.createElement !== 'function') return null;
   try {
     const canvas = document.createElement('canvas');
@@ -40,15 +53,16 @@ function makeStrandTexture() {
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, 128, 128);
     // Short random strands, denser toward the bottom of each tile so the
-    // shell reads as tapered fur rather than noise.
+    // shell reads as tapered fur rather than noise. All draws come from the
+    // build rng: the texture is identical for a given seed.
     for (let i = 0; i < 900; i++) {
-      const x = Math.random() * 128;
-      const y = Math.random() * 128;
-      const len = 3 + Math.random() * 7;
-      const lean = (Math.random() - 0.5) * 4;
-      const a = 0.25 + Math.random() * 0.75;
+      const x = rng() * 128;
+      const y = rng() * 128;
+      const len = 3 + rng() * 7;
+      const lean = (rng() - 0.5) * 4;
+      const a = 0.25 + rng() * 0.75;
       ctx.strokeStyle = `rgba(255,255,255,${a.toFixed(2)})`;
-      ctx.lineWidth = 1 + Math.random();
+      ctx.lineWidth = 1 + rng();
       ctx.beginPath();
       ctx.moveTo(x, y);
       ctx.lineTo(x + lean, y + len);
@@ -62,9 +76,13 @@ function makeStrandTexture() {
 
 /**
  * Wrap a geometry in fur: opaque root mesh + shells displaced along normals.
+ * Shells carry a GPU sway shader (uFurTime / uFurSway / uFurAmp): a breeze
+ * term plus a motion-reactive bend so the fur trails the avatar's movement
+ * and breathes in the wind without any per-frame CPU work. Shader uniform
+ * handles are collected into shaderSink for the host to drive.
  * Returns { group, materials } — materials[0] is the root material.
  */
-function furPart(THREE, geometry, { root = FUR_ROOT, tip = FUR_TIP, shells = 9, length = 0.045, strandCanvas = null, disposables = null } = {}) {
+function furPart(THREE, geometry, { root = FUR_ROOT, tip = FUR_TIP, shells = 9, length = 0.045, strandCanvas = null, disposables = null, rng = Math.random, shaderSink = null } = {}) {
   const group = new THREE.Group();
   const materials = [];
   const track = (m) => { materials.push(m); if (disposables) disposables.push(m); return m; };
@@ -97,12 +115,34 @@ function furPart(THREE, geometry, { root = FUR_ROOT, tip = FUR_TIP, shells = 9, 
       opacity: 0.6 * (1 - t * 0.55),
       depthWrite: false,
     });
+    // GPU fur simulation: outer shells sway with breeze + host-driven motion.
+    // uShellT^2 keeps roots planted while tips move; uFurAmp freezes the sim
+    // under reduced motion. One shared program via customProgramCacheKey.
+    const shellT = t;
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.uFurTime = { value: 0 };
+      shader.uniforms.uFurSway = { value: new THREE.Vector3() };
+      shader.uniforms.uFurAmp = { value: 1 };
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nuniform float uFurTime;\nuniform vec3 uFurSway;\nuniform float uFurAmp;')
+        .replace('#include <begin_vertex>', `#include <begin_vertex>
+        {
+          float furBand = ${shellT.toFixed(4)} * ${shellT.toFixed(4)} * uFurAmp;
+          float breeze = sin(uFurTime * 2.3 + position.y * 14.0 + position.x * 9.0)
+                       + 0.5 * sin(uFurTime * 3.7 + position.z * 17.0);
+          transformed += uFurSway * furBand * (0.55 + 0.15 * breeze);
+          transformed.x += furBand * 0.008 * breeze;
+          transformed.z += furBand * 0.006 * breeze;
+        }`);
+      if (shaderSink) shaderSink.push(shader);
+    };
+    mat.customProgramCacheKey = () => 'tumbo-fur-sway-v1';
     if (strandCanvas && typeof THREE.CanvasTexture === 'function') {
       try {
         const tex = new THREE.CanvasTexture(strandCanvas);
         tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
         tex.repeat.set(3, 3);
-        tex.offset.set(Math.random(), Math.random());
+        tex.offset.set(rng(), rng());
         mat.alphaMap = tex;
         if (disposables) disposables.push(tex);
       } catch { /* strand texture is decoration; fur stands without it */ }
@@ -116,10 +156,18 @@ function furPart(THREE, geometry, { root = FUR_ROOT, tip = FUR_TIP, shells = 9, 
   return { group, materials };
 }
 
-export function buildTumboFluffyRig(THREE, { seed = 0, muffColor = CUSHION_GREY, faceDecalUrl = null, decalRegistry = null } = {}) {
+export function buildTumboFluffyRig(THREE, { seed = 0, muffColor = CUSHION_GREY, faceDecalUrl = null, decalRegistry = null, furQuality = 1 } = {}) {
   if (!THREE) throw new Error('buildTumboFluffyRig needs THREE');
   const disposables = [];
-  const strandCanvas = makeStrandTexture();
+  // Seeded automatic generation: the whole build (strand texture, shell
+  // offsets, locs) is a pure function of `seed` — the same seed always
+  // grows the same Tumbo, so the identity fingerprint is stable.
+  const rng = mulberry32(seed >>> 0);
+  const furShaders = [];
+  const strandCanvas = makeStrandTexture(rng);
+  // Shell-count LOD: small screens grow fewer shells automatically.
+  const q = Math.max(0.45, Math.min(1, furQuality));
+  const shellsFor = (n) => Math.max(4, Math.round(n * q));
 
   const group = new THREE.Group();
   group.userData.fluffyRig = true;
@@ -139,7 +187,7 @@ export function buildTumboFluffyRig(THREE, { seed = 0, muffColor = CUSHION_GREY,
     return m;
   };
   const fur = (geometry, parent, opts = {}) => {
-    const part = furPart(THREE, geometry, { strandCanvas, disposables, ...opts });
+    const part = furPart(THREE, geometry, { strandCanvas, disposables, rng, shaderSink: furShaders, ...opts });
     parent.add(part.group);
     return part;
   };
@@ -159,7 +207,7 @@ export function buildTumboFluffyRig(THREE, { seed = 0, muffColor = CUSHION_GREY,
   {
     const egg = new THREE.SphereGeometry(0.34, 28, 20);
     egg.scale(1.06, 1.02, 0.92);
-    const body = fur(egg, hips, { shells: 10, length: 0.05 });
+    const body = fur(egg, hips, { shells: shellsFor(10), length: 0.05 });
     body.group.position.set(0, 0.10, 0);
     disposables.push(egg);
   }
@@ -171,7 +219,7 @@ export function buildTumboFluffyRig(THREE, { seed = 0, muffColor = CUSHION_GREY,
   {
     const skull = new THREE.SphereGeometry(0.40, 32, 24);
     skull.scale(1, 1.04, 0.94);
-    const h = fur(skull, head, { shells: 11, length: 0.055 });
+    const h = fur(skull, head, { shells: shellsFor(11), length: 0.055 });
     h.group.position.set(0, 0.10, 0);
     disposables.push(skull);
   }
@@ -180,7 +228,7 @@ export function buildTumboFluffyRig(THREE, { seed = 0, muffColor = CUSHION_GREY,
   {
     const patch = new THREE.SphereGeometry(0.30, 28, 20);
     patch.scale(1.02, 0.88, 0.62);
-    const p = fur(patch, head, { root: CREAM, tip: CREAM_TIP, shells: 6, length: 0.03 });
+    const p = fur(patch, head, { root: CREAM, tip: CREAM_TIP, shells: shellsFor(6), length: 0.03 });
     p.group.position.set(0, 0.06, 0.235);
     // Swap the brown root material for cream on the base mesh.
     p.group.children[0].material = creamMat;
@@ -212,6 +260,9 @@ export function buildTumboFluffyRig(THREE, { seed = 0, muffColor = CUSHION_GREY,
   }
 
   // ---- headphones: grey band over the crown, plush cups on the ears ----
+  // Cup meshes are exposed (with their rest positions) so the jiggle engine
+  // can bounce them as sprung secondary motion.
+  const headphoneCups = [];
   {
     const band = mesh(new THREE.TorusGeometry(0.40, 0.034, 10, 40, Math.PI), bandMat, head);
     band.position.set(0, 0.16, 0);
@@ -223,6 +274,8 @@ export function buildTumboFluffyRig(THREE, { seed = 0, muffColor = CUSHION_GREY,
       const cup = mesh(new THREE.SphereGeometry(0.125, 18, 14), bandMat, head);
       cup.position.set(side * 0.40, 0.10, 0);
       cup.scale.set(0.62, 1.05, 0.95);
+      cup.userData.basePos = cup.position.clone();
+      headphoneCups.push(cup);
       const cushion = mesh(new THREE.TorusGeometry(0.085, 0.032, 10, 24), cushionMat, head);
       cushion.position.set(side * 0.345, 0.10, 0);
       cushion.rotation.y = Math.PI / 2;
@@ -243,7 +296,7 @@ export function buildTumboFluffyRig(THREE, { seed = 0, muffColor = CUSHION_GREY,
       const r = 0.36;
       const sx = Math.cos(a) * r, sz = Math.sin(a) * r * 0.9;
       const len = 0.14 + ((a * 7) % 1) * 0.08;
-      const out = 1 + 0.35 * Math.random();
+      const out = 1 + 0.35 * rng();
       // Locs curl outward and slightly down around the headphones, not
       // straight up — the reference shows them escaping sideways.
       const curve = new THREE.CatmullRomCurve3([
@@ -264,7 +317,7 @@ export function buildTumboFluffyRig(THREE, { seed = 0, muffColor = CUSHION_GREY,
     arm.rotation.z = side * 0.18;
     {
       const upper = new THREE.CapsuleGeometry(0.070, 0.10, 6, 12);
-      const u = fur(upper, arm, { shells: 7, length: 0.035 });
+      const u = fur(upper, arm, { shells: shellsFor(7), length: 0.035 });
       u.group.position.y = -0.10;
       disposables.push(upper);
     }
@@ -273,7 +326,7 @@ export function buildTumboFluffyRig(THREE, { seed = 0, muffColor = CUSHION_GREY,
     {
       const paw = new THREE.SphereGeometry(0.075, 14, 10);
       paw.scale(0.95, 1.1, 0.9);
-      const p = fur(paw, hand, { shells: 7, length: 0.035 });
+      const p = fur(paw, hand, { shells: shellsFor(7), length: 0.035 });
       p.group.position.y = -0.05;
       disposables.push(paw);
     }
@@ -286,7 +339,7 @@ export function buildTumboFluffyRig(THREE, { seed = 0, muffColor = CUSHION_GREY,
     {
       const foot = new THREE.SphereGeometry(0.105, 14, 10);
       foot.scale(1, 0.72, 1.35);
-      const f = fur(foot, leg, { shells: 7, length: 0.035 });
+      const f = fur(foot, leg, { shells: shellsFor(7), length: 0.035 });
       f.group.position.set(0, -0.30, 0.05);
       disposables.push(foot);
     }
@@ -296,7 +349,7 @@ export function buildTumboFluffyRig(THREE, { seed = 0, muffColor = CUSHION_GREY,
   const tail = joint('tail', hips, 0, 0.06, -0.30);
   {
     const nub = new THREE.SphereGeometry(0.10, 12, 10);
-    const t = fur(nub, tail, { shells: 7, length: 0.04 });
+    const t = fur(nub, tail, { shells: shellsFor(7), length: 0.04 });
     disposables.push(nub);
   }
 
@@ -336,6 +389,10 @@ export function buildTumboFluffyRig(THREE, { seed = 0, muffColor = CUSHION_GREY,
     fluffy: true,
     hasFaceDecal: decalMesh !== null,
     hasChestText: false,
+    // Packet 236: live handles for the simulation layer — GPU fur shader
+    // uniforms (uFurTime/uFurSway/uFurAmp) and the sprung headphone cups.
+    furShaders,
+    headphoneCups,
     dispose() { for (const d of disposables) { try { d.dispose?.(); } catch { /* noop */ } } },
   });
 }
