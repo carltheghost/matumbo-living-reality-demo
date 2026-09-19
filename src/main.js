@@ -103,8 +103,8 @@ import { createUnavailableWorldEvents, fetchWorldEvents } from './domains/world-
 import { createWorldEventsConsole } from './render/world-events.js?v=20260901-reality-lens';
 import { SPORTS_EVENTS_CONSOLE_SOURCE, createSportsEventsConsole } from './render/sports-events.js?v=20260829-sports-return184';
 import { createUnavailableSportsEvents, fetchSportsEventDetail, fetchSportsEvents } from './domains/sports-events.js?v=20260829-sports-return184';
-import { MULTI_SPORT_EVENTS_CONSOLE_SOURCE, createMultiSportEventsConsole } from './render/multi-sport-events.js?v=20260828-multisport162';
-import { createUnavailableMultiSportEvents, fetchMultiSportEventDetail, fetchMultiSportEvents } from './domains/multi-sport-events.js?v=20260828-multisport162';
+import { MULTI_SPORT_EVENTS_CONSOLE_SOURCE, createMultiSportEventsConsole } from './render/multi-sport-events.js?v=20260919-leagues1';
+import { createLeagueScoreboardQueue, createUnavailableMultiSportEvents, fetchMultiSportEventDetail, fetchMultiSportEvents } from './domains/multi-sport-events.js?v=20260919-leagues1';
 import { DEVICE_PROJECTION_CONSOLE_SOURCE, createDeviceProjectionConsole } from './render/device-projection.js?v=20260827-device1';
 import { ASSET_MARKET_CONSOLE_SOURCE, createAssetMarketConsole } from './render/asset-market.js?v=20260828-asset-market1';
 import { createUnavailableAssetMarketEvidence, fetchAssetMarketEvidence } from './domains/asset-market.js?v=20260828-asset-market1';
@@ -5187,6 +5187,9 @@ sportsEventsConsole = createSportsEventsConsole({
 });
 window.__TUMBO_SPORTS_EVENTS__ = sportsEventsConsole;
 document.getElementById('sports-events-open')?.addEventListener('click', () => openSportsEvents('launch-kit-tennis'));
+// All-leagues scoreboard queue (Phase 2 domain layer): one shared queue for
+// the multi-sport console's league browser.
+const leagueScoreboardQueue = createLeagueScoreboardQueue({});
 multiSportEventsConsole = createMultiSportEventsConsole({
   documentRoot: document,
   data: createUnavailableMultiSportEvents({
@@ -5197,6 +5200,7 @@ multiSportEventsConsole = createMultiSportEventsConsole({
     liveGatewayConsole?.syncPublicSourceStatus?.('multi-sport-events', result, { method: 'multi-sport-refresh' });
     return result;
   },
+  onLeagueRequest: async ({ slug, date }) => leagueScoreboardQueue.request({ slug, date }),
   onInspect: async ({ record, method }) => {
     const result = await fetchMultiSportEventDetail({ record });
     if (result?.record) {

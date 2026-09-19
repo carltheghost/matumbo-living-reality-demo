@@ -1806,6 +1806,66 @@
       .multi-sport-events-trace-row{padding:5px 7px;border:1px solid rgba(143,201,255,.11);border-radius:7px;background:rgba(17,44,80,.58);color:#b4cee8;font-size:8px;letter-spacing:.03em;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
       .multi-sport-events-empty{padding:10px;color:#92adca;font-size:9px;line-height:1.4}
       #multi-sport-events-boundary{padding:8px 9px;border-left:2px solid rgba(255,194,139,.72);border-radius:0 8px 8px 0;background:rgba(121,75,40,.16);color:#dbc6af;font-size:9px;line-height:1.4}
+      #multi-sport-events-league-browse{appearance:none;border:1px solid rgba(143,201,255,.34);border-radius:9px;padding:8px 10px;background:rgba(54,112,175,.2);color:#e1f1ff;font-size:8px;font-weight:750;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;transition:.18s ease}
+      #multi-sport-events-league-browse:hover,#multi-sport-events-league-browse:focus-visible{border-color:rgba(232,246,255,.86);background:rgba(64,133,205,.34);outline:none;transform:translateY(-1px)}
+      #multi-sport-events-league-modal{position:fixed;inset:0;z-index:80;display:flex;align-items:flex-start;justify-content:center;padding:18px 14px;background:rgba(3,8,16,.72);backdrop-filter:blur(8px);overflow-y:auto}
+      #multi-sport-events-league-modal[hidden]{display:none}
+      .multi-sport-events-league-panel{width:min(600px,100%);max-height:calc(100dvh - 56px);display:flex;flex-direction:column;gap:8px;padding:14px;border:1px solid rgba(157,210,255,.42);border-radius:18px;background:linear-gradient(165deg,rgba(12,29,53,.98),rgba(5,8,17,.97));box-shadow:0 24px 80px rgba(0,0,0,.66),inset 0 0 42px rgba(64,141,255,.08);overflow-y:auto;overflow-x:hidden}
+      .multi-sport-events-league-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+      .multi-sport-events-league-head .eyebrow{font-size:9px;letter-spacing:.2em;color:#a4d5ff;text-transform:uppercase}
+      .multi-sport-events-league-head h2{margin:4px 0 0;font-size:18px;color:#edf6ff;letter-spacing:.01em}
+      #multi-sport-events-league-close{appearance:none;border:1px solid rgba(160,210,255,.3);border-radius:8px;background:rgba(54,112,175,.18);color:#d5eaff;padding:5px 8px;font-size:16px;line-height:1;cursor:pointer}
+      #multi-sport-events-league-close:hover,#multi-sport-events-league-close:focus-visible{border-color:rgba(231,245,255,.84);color:#fff;outline:none}
+      #multi-sport-events-league-search{width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid rgba(143,201,255,.3);border-radius:9px;background:rgba(8,18,37,.72);color:#e6f3ff;font-size:10px}
+      #multi-sport-events-league-search::placeholder{color:#7d9cbd}
+      #multi-sport-events-league-search:focus-visible{outline:none;border-color:rgba(231,245,255,.84)}
+      #multi-sport-events-league-favorites{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+      #multi-sport-events-league-favorites[hidden]{display:none}
+      .multi-sport-events-league-favorites-label{color:#9cb9d7;font-size:7px;letter-spacing:.12em;text-transform:uppercase}
+      .multi-sport-events-league-favorite-wrap{display:inline-flex;align-items:center;border:1px solid rgba(255,214,140,.4);border-radius:999px;background:rgba(121,75,40,.18);overflow:hidden}
+      .multi-sport-events-league-favorite{appearance:none;border:0;background:transparent;color:#ffe6b8;font-size:8px;font-weight:700;letter-spacing:.04em;padding:5px 4px 5px 9px;cursor:pointer;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .multi-sport-events-league-favorite[aria-pressed="true"]{color:#fff;text-decoration:underline}
+      .multi-sport-events-league-favorite-remove{appearance:none;border:0;background:transparent;color:#c9a06a;font-size:10px;padding:5px 8px 5px 4px;cursor:pointer}
+      #multi-sport-events-league-groups{display:grid;gap:5px;max-height:24vh;overflow-y:auto;padding:7px 3px 7px 0;border-top:1px solid rgba(143,201,255,.12);border-bottom:1px solid rgba(143,201,255,.12)}
+      .multi-sport-events-league-region{border:1px solid rgba(143,201,255,.13);border-radius:9px;background:rgba(17,44,80,.68);overflow:hidden}
+      .multi-sport-events-league-region-title{cursor:pointer;padding:7px 9px;color:#cfe6ff;font-size:8px;font-weight:750;letter-spacing:.1em;text-transform:uppercase;list-style:none}
+      .multi-sport-events-league-region-title::-webkit-details-marker{display:none}
+      .multi-sport-events-league-region-title::before{content:"▸ ";color:#7fb6e8}
+      .multi-sport-events-league-region[open] .multi-sport-events-league-region-title::before{content:"▾ "}
+      .multi-sport-events-league-region-missing{opacity:.85}
+      .multi-sport-events-league-list{display:grid;gap:3px;padding:0 6px 7px}
+      .multi-sport-events-league-row{display:flex;gap:5px;align-items:stretch}
+      .multi-sport-events-league-name{flex:1;min-width:0;display:flex;align-items:center;gap:6px;appearance:none;border:1px solid transparent;border-radius:7px;background:transparent;color:#d8eaff;font-size:9px;text-align:left;padding:6px 8px;cursor:pointer;overflow:hidden}
+      .multi-sport-events-league-name-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .multi-sport-events-league-name:hover,.multi-sport-events-league-name:focus-visible,.multi-sport-events-league-name[aria-pressed="true"]{border-color:rgba(194,226,255,.78);background:rgba(54,112,175,.34);color:#fff;outline:none}
+      .multi-sport-events-league-name[aria-pressed="true"]{box-shadow:inset 3px 0 0 rgba(128,201,255,.92)}
+      .multi-sport-events-league-popular{flex:none;color:#ffd98a;font-size:6px;letter-spacing:.1em;border:1px solid rgba(255,214,140,.4);border-radius:5px;padding:2px 4px}
+      .multi-sport-events-league-star{flex:none;appearance:none;border:1px solid rgba(143,201,255,.2);border-radius:7px;background:rgba(8,18,37,.5);color:#8fb6dd;font-size:12px;line-height:1;padding:4px 8px;cursor:pointer}
+      .multi-sport-events-league-star[aria-pressed="true"]{color:#ffd98a;border-color:rgba(255,214,140,.5)}
+      .multi-sport-events-league-row-unavailable{opacity:.45}
+      .multi-sport-events-league-row-unavailable .multi-sport-events-league-name-label{cursor:not-allowed}
+      .multi-sport-events-league-notespn{flex:none;align-self:center;color:#93a9c2;font-size:6px;letter-spacing:.1em;border:1px dashed rgba(147,169,194,.5);border-radius:5px;padding:2px 5px}
+      .multi-sport-events-league-daybar{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+      #multi-sport-events-league-prev,#multi-sport-events-league-next,#multi-sport-events-league-today,#multi-sport-events-league-refresh,#multi-sport-events-league-view{appearance:none;border:1px solid rgba(143,201,255,.34);border-radius:9px;padding:7px 9px;background:rgba(54,112,175,.2);color:#e1f1ff;font-size:8px;font-weight:750;letter-spacing:.06em;text-transform:uppercase;cursor:pointer}
+      #multi-sport-events-league-prev:hover,#multi-sport-events-league-next:hover,#multi-sport-events-league-today:hover,#multi-sport-events-league-refresh:hover,#multi-sport-events-league-view:hover,#multi-sport-events-league-prev:focus-visible,#multi-sport-events-league-next:focus-visible,#multi-sport-events-league-today:focus-visible,#multi-sport-events-league-refresh:focus-visible,#multi-sport-events-league-view:focus-visible{border-color:rgba(232,246,255,.86);background:rgba(64,133,205,.34);outline:none}
+      #multi-sport-events-league-view[aria-pressed="true"]{border-color:rgba(130,235,186,.5);color:#c9f5dd}
+      #multi-sport-events-league-date{padding:6px 8px;border:1px solid rgba(143,201,255,.3);border-radius:9px;background:rgba(8,18,37,.72);color:#e6f3ff;font-size:9px;color-scheme:dark}
+      #multi-sport-events-league-sort{padding:6px 8px;border:1px solid rgba(143,201,255,.3);border-radius:9px;background:rgba(8,18,37,.72);color:#e6f3ff;font-size:8px;text-transform:uppercase;letter-spacing:.04em}
+      .multi-sport-events-league-chips{display:flex;gap:4px;flex-wrap:wrap}
+      .multi-sport-events-league-chips button{appearance:none;border:1px solid rgba(143,201,255,.24);border-radius:999px;padding:5px 9px;background:rgba(8,18,37,.5);color:#a9ccf3;font-size:7px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;cursor:pointer}
+      .multi-sport-events-league-chips button[aria-pressed="true"]{border-color:rgba(194,226,255,.85);background:rgba(54,112,175,.5);color:#fff}
+      #multi-sport-events-league-status{color:#a9d4ff;font-size:8px;letter-spacing:.08em;text-transform:uppercase;line-height:1.5;overflow-wrap:anywhere}
+      #multi-sport-events-league-games{display:grid;gap:6px;min-height:0;max-height:34vh;overflow-y:auto;padding:8px 3px 8px 0;border-top:1px solid rgba(143,201,255,.12);border-bottom:1px solid rgba(143,201,255,.12);transition:opacity .2s ease}
+      #multi-sport-events-league-games.multi-sport-events-league-games-loading{opacity:.45}
+      .multi-sport-events-league-game{display:grid;gap:3px;padding:8px;border:1px solid rgba(143,201,255,.13);border-radius:9px;background:rgba(17,44,80,.76)}
+      .multi-sport-events-league-game-title{color:#eaf5ff;font-size:10px;font-weight:700;overflow-wrap:anywhere}
+      .multi-sport-events-league-game-meta,.multi-sport-events-league-game-venue,.multi-sport-events-league-game-grade{color:#abc5e3;font-size:7px;letter-spacing:.04em;text-transform:uppercase;overflow-wrap:anywhere}
+      .multi-sport-events-league-game-score{color:#d1e8ff;font-size:8px;line-height:1.3}
+      .multi-sport-events-league-game-source{color:#9ec8ed;font-size:7px;letter-spacing:.06em;text-transform:uppercase}
+      .multi-sport-events-league-game-source-unavailable{color:#8daac8;font-size:7px;text-transform:uppercase}
+      #multi-sport-events-league-more{appearance:none;border:1px solid rgba(143,201,255,.34);border-radius:9px;padding:8px;background:rgba(54,112,175,.2);color:#e1f1ff;font-size:8px;font-weight:750;letter-spacing:.08em;text-transform:uppercase;cursor:pointer}
+      #multi-sport-events-league-more[hidden]{display:none}
+      .multi-sport-events-league-boundary{color:#92adca;font-size:8px;line-height:1.4}
       #asset-market-console{position:absolute;right:20px;top:145px;z-index:36;width:min(600px,calc(100vw - 40px));max-height:calc(100vh - 190px);display:flex;flex-direction:column;gap:9px;padding:15px;border:1px solid rgba(145,232,255,.38);border-radius:18px;background:linear-gradient(165deg,rgba(7,30,42,.98),rgba(4,9,17,.97));box-shadow:0 24px 80px rgba(0,0,0,.66),inset 0 0 42px rgba(76,203,255,.08);backdrop-filter:blur(20px);pointer-events:auto;overflow-y:auto;overflow-x:hidden;scrollbar-color:rgba(139,225,255,.52) rgba(7,24,35,.72);scrollbar-width:thin}
       #asset-market-console[hidden]{display:none}
       #asset-market-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
@@ -2459,6 +2519,7 @@
       <div id="multi-sport-events-toolbar">
         <button id="multi-sport-events-refresh" type="button">Refresh Soccer · NBA · NFL</button>
         <button id="multi-sport-events-reset" type="button">Reset view</button>
+        <button id="multi-sport-events-league-browse" type="button">Browse all leagues</button>
         <span id="multi-sport-events-status" role="status" aria-live="polite">UNAVAILABLE · NO PUBLIC SCOREBOARD DATA LOADED</span>
       </div>
       <div id="multi-sport-events-summary" aria-label="Multi-sport scoreboard summary"></div>
@@ -2478,6 +2539,43 @@
       </section>
       <div id="multi-sport-events-boundary">Provider rows are unverified research observations. Source URL, retrieval time, participant fields, score status, event time, and completeness stay visible. The route is read-only and has no outcome, performance, persistence, or external action authority.</div>
     </aside>
+    <div id="multi-sport-events-league-modal" hidden role="dialog" aria-modal="true" aria-labelledby="multi-sport-events-league-title">
+      <div class="multi-sport-events-league-panel">
+        <div class="multi-sport-events-league-head">
+          <div>
+            <div class="eyebrow">Public read · all ESPN leagues</div>
+            <h2 id="multi-sport-events-league-title">Browse all leagues</h2>
+          </div>
+          <button id="multi-sport-events-league-close" type="button" aria-label="Close league browser">×</button>
+        </div>
+        <input id="multi-sport-events-league-search" type="search" placeholder="Search leagues…" aria-label="Search leagues" autocomplete="off">
+        <div id="multi-sport-events-league-favorites" aria-label="Favorite leagues" hidden></div>
+        <div id="multi-sport-events-league-groups" aria-label="League regions"></div>
+        <div class="multi-sport-events-league-daybar">
+          <button id="multi-sport-events-league-prev" type="button" aria-label="Previous day">‹ Prev</button>
+          <button id="multi-sport-events-league-today" type="button">Today</button>
+          <button id="multi-sport-events-league-next" type="button" aria-label="Next day">Next ›</button>
+          <input id="multi-sport-events-league-date" type="date" aria-label="League date">
+          <div id="multi-sport-events-league-chips" class="multi-sport-events-league-chips" role="group" aria-label="Filter games by status">
+            <button type="button" data-league-filter="all" aria-pressed="true">All</button>
+            <button type="button" data-league-filter="live" aria-pressed="false">Live</button>
+            <button type="button" data-league-filter="final" aria-pressed="false">Final</button>
+            <button type="button" data-league-filter="scheduled" aria-pressed="false">Scheduled</button>
+          </div>
+          <button id="multi-sport-events-league-refresh" type="button">Refresh league</button>
+          <button id="multi-sport-events-league-view" type="button" aria-pressed="false">Detailed view</button>
+          <select id="multi-sport-events-league-sort" aria-label="Sort games">
+            <option value="kickoff">Sort · kickoff</option>
+            <option value="live-first">Sort · live first</option>
+          </select>
+        </div>
+        <div id="multi-sport-events-league-status" role="status" aria-live="polite">SELECT A LEAGUE TO BROWSE PUBLIC SCOREBOARDS</div>
+        <div id="multi-sport-events-league-games" role="list" aria-label="League games"></div>
+        <button id="multi-sport-events-league-more" type="button" hidden>Show more</button>
+        <div class="multi-sport-events-league-boundary">Public ESPN read only. Participant, score, status, time, and venue fields are unverified research observations; completeness is field presence only. No odds, picks, wagering, or predictions.</div>
+      </div>
+    </div>
+
     <aside id="asset-market-console" hidden aria-hidden="true" aria-labelledby="asset-market-title">
       <div id="asset-market-head">
         <div>
@@ -3795,6 +3893,6 @@
          module below runs. The avatar degrades gracefully without them. -->
     <script src="./vendor/jiggle-physics/jiggle-physics.js?v=20260919-jiggle"></script>
     <script src="./vendor/jiggle-physics/jiggle-chain.js?v=20260919-jiggle"></script>
-    <script type="module" src="./src/main.js?v=20260919-jiggle-fur" onerror="globalThis.__MATUMBO_RUNTIME__?.markFailed?.(event, 'module load')"></script>
+    <script type="module" src="./src/main.js?v=20260919-leagues1" onerror="globalThis.__MATUMBO_RUNTIME__?.markFailed?.(event, 'module load')"></script>
 </body>
 </html>

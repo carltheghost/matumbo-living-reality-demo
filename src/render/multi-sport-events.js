@@ -1,9 +1,16 @@
 import {
   MULTI_SPORT_EVENTS_BOUNDARY,
+  classifyScoreboardStatus,
   createUnavailableMultiSportEvents,
   replayMultiSportEvents,
   summarizeMultiSportEvents,
 } from "../domains/multi-sport-events.js";
+import {
+  LEAGUE_CATALOG,
+  LEAGUE_UNAVAILABLE,
+  findLeagueCatalogEntry,
+  leagueCatalogRegions,
+} from "../data/league-catalog.js";
 
 export const MULTI_SPORT_EVENTS_CONSOLE_SOURCE = "multi-sport-events-evidence-console";
 const SOURCE_RETURN_RECORD_ID_PATTERN = /^[a-z0-9:_.-]{1,160}$/i;
@@ -109,6 +116,569 @@ function detailPlayLine(play) {
   return `${play?.index ?? "—"} · ${(play?.kind ?? "play").toUpperCase()}${location ? ` · ${location}` : ""} · ${body}`;
 }
 
+/* ------------------------------------------------------------------ */
+/* All-leagues modal browser. Presentation owns only DOM state; the    */
+/* host supplies onLeagueRequest({slug, date}) which performs the      */
+/* queued provider read. The domain layer (league catalog + scoreboard  */
+/* queue) is loaded lazily so this console keeps working when the      */
+/* league domain files are not present yet.                            */
+/* ------------------------------------------------------------------ */
+const LEAGUE_FAVORITES_KEY = "matumbo:league-favorites:v1";
+const LEAGUE_FAVORITES_MAX = 6;
+const LEAGUE_PAGE_SIZE = 20;
+const LEAGUE_ISO_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+// Catalog + unavailable rows come from Agent A's domain layer (static).
+// classifyScoreboardStatus is the domain classifier: "live" | "final" |
+// "scheduled" | "unknown" (defensive: null/absent statusDetail → "unknown").
+function leagueTodayISO() {
+  const now = new Date();
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
+function leagueISOToParam(iso) {
+  const match = LEAGUE_ISO_RE.exec(String(iso ?? ""));
+  return match ? `${match[1]}${match[2]}${match[3]}` : null;
+}
+
+function leagueParamToISO(param) {
+  const match = /^(\d{4})(\d{2})(\d{2})$/.exec(String(param ?? ""));
+  return match ? `${match[1]}-${match[2]}-${match[3]}` : null;
+}
+
+function leagueShiftISO(iso, deltaDays) {
+  const match = LEAGUE_ISO_RE.exec(String(iso ?? ""));
+  if (!match) return leagueTodayISO();
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  date.setDate(date.getDate() + deltaDays);
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function leagueGameTime(value) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "TIME UNAVAILABLE";
+  return parsed.toLocaleString(undefined, {
+    weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+  });
+}
+
+function leagueGameStatusLine(record) {
+  const detail = record && typeof record.statusDetail === "object" ? record.statusDetail : {};
+  const clock = detail.clock ? ` · CLOCK ${detail.clock}` : "";
+  const period = detail.period !== null && detail.period !== undefined && detail.period !== "" ? ` · PERIOD ${detail.period}` : "";
+  return `STATUS · ${text(record?.status, "status unavailable")}${clock}${period}`;
+}
+
+function loadLeagueFavorites() {
+  try {
+    const raw = globalThis.localStorage?.getItem(LEAGUE_FAVORITES_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((slug) => typeof slug === "string" && slug).slice(0, LEAGUE_FAVORITES_MAX)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveLeagueFavorites(list) {
+  try {
+    globalThis.localStorage?.setItem(LEAGUE_FAVORITES_KEY, JSON.stringify(list));
+  } catch {
+    // Private mode: favorites stay in memory for this session only.
+  }
+}
+
+function createLeagueBrowser({ documentRoot, mounts, onLeagueRequest }) {
+  const {
+    browseButton, modal, closeButton, searchInput, favoritesEl, groupsEl,
+    prevButton, todayButton, nextButton, dateInput, chipsEl, refreshButton,
+    viewButton, sortSelect, statusEl, gamesEl, moreButton,
+  } = mounts;
+
+  const catalogEntries = Array.isArray(LEAGUE_CATALOG)
+    ? LEAGUE_CATALOG.filter((entry) => entry && typeof entry.slug === "string")
+    : [];
+  const unavailableEntries = Array.isArray(LEAGUE_UNAVAILABLE)
+    ? LEAGUE_UNAVAILABLE.filter((entry) => entry && typeof entry.label === "string")
+    : [];
+  const classifyStatus = classifyScoreboardStatus;
+  let favorites = loadLeagueFavorites();
+  let selectedSlug = null;
+  let selectedLabel = null;
+  let statusFilter = "all";
+  let sortMode = "kickoff";
+  let detailedView = false;
+  let shownCount = LEAGUE_PAGE_SIZE;
+  let requestSeq = 0;
+  let lastEnvelope = null;
+  let modalOpen = false;
+
+  function setStatus(message) {
+    statusEl.textContent = message;
+  }
+
+  function hostAvailable() {
+    return typeof onLeagueRequest === "function";
+  }
+
+  function catalogEntryFor(slug) {
+    try {
+      return findLeagueCatalogEntry(slug) ?? null;
+    } catch {
+      return catalogEntries.find((entry) => entry?.slug === slug) ?? null;
+    }
+  }
+
+  // Region display order comes from the catalog (Popular first, then
+  // alphabetical, International last); unknown regions sort after.
+  function orderedLeagueRegions() {
+    const grouped = new Map();
+    catalogEntries.forEach((entry) => {
+      const region = entry.region || "OTHER";
+      if (!grouped.has(region)) grouped.set(region, []);
+      grouped.get(region).push(entry);
+    });
+    let displayOrder = [];
+    try {
+      displayOrder = leagueCatalogRegions() ?? [];
+    } catch {
+      displayOrder = [];
+    }
+    const ordered = [];
+    displayOrder.forEach((name) => {
+      if (grouped.has(name)) {
+        ordered.push([name, grouped.get(name)]);
+        grouped.delete(name);
+      }
+    });
+    [...grouped.entries()]
+      .sort(([a], [b]) => String(a).localeCompare(String(b)))
+      .forEach((entry) => ordered.push(entry));
+    return ordered;
+  }
+
+  function currentDateISO() {
+    const raw = dateInput.value;
+    return LEAGUE_ISO_RE.test(String(raw)) ? raw : leagueTodayISO();
+  }
+
+  function currentDateParam() {
+    return leagueISOToParam(currentDateISO());
+  }
+
+  function markLeaguePressed() {
+    const sync = (root) => root.querySelectorAll?.("[data-league-slug]").forEach((button) => {
+      button.setAttribute("aria-pressed", String(button.dataset.leagueSlug === selectedSlug));
+    });
+    sync(groupsEl);
+    sync(favoritesEl);
+  }
+
+  function leagueMatches(entry, query) {
+    if (!query) return true;
+    const haystack = `${entry.label ?? ""} ${entry.slug ?? ""} ${entry.espnName ?? ""}`.toLowerCase();
+    return haystack.includes(query);
+  }
+
+  function leagueRow(entry) {
+    const row = documentRoot.createElement("div");
+    row.className = "multi-sport-events-league-row";
+    const button = documentRoot.createElement("button");
+    button.type = "button";
+    button.className = "multi-sport-events-league-name";
+    button.dataset.leagueSlug = entry.slug;
+    button.setAttribute("aria-pressed", String(entry.slug === selectedSlug));
+    button.title = entry.espnName ? `${entry.label} · ESPN ${entry.espnName}` : entry.label;
+    const label = documentRoot.createElement("span");
+    label.className = "multi-sport-events-league-name-label";
+    label.textContent = entry.label;
+    button.appendChild(label);
+    if (entry.popular === true) {
+      const popular = documentRoot.createElement("span");
+      popular.className = "multi-sport-events-league-popular";
+      popular.textContent = "POPULAR";
+      button.appendChild(popular);
+    }
+    button.addEventListener("click", () => selectLeague(entry.slug, "button"));
+    const star = documentRoot.createElement("button");
+    star.type = "button";
+    star.className = "multi-sport-events-league-star";
+    star.dataset.leagueSlug = entry.slug;
+    const isFavorite = favorites.includes(entry.slug);
+    star.setAttribute("aria-pressed", String(isFavorite));
+    star.setAttribute("aria-label", isFavorite ? `Remove ${entry.label} from favorites` : `Add ${entry.label} to favorites`);
+    star.textContent = isFavorite ? "★" : "☆";
+    star.addEventListener("click", () => toggleFavorite(entry.slug, "button"));
+    row.append(button, star);
+    return row;
+  }
+
+  function renderGroups() {
+    groupsEl.replaceChildren();
+    const query = searchInput.value.trim().toLowerCase();
+    orderedLeagueRegions()
+      .forEach(([region, entries]) => {
+        const visible = entries.filter((entry) => leagueMatches(entry, query));
+        if (!visible.length) return;
+        const details = documentRoot.createElement("details");
+        details.className = "multi-sport-events-league-region";
+        details.open = query !== "" || visible.some((entry) => entry.popular === true || favorites.includes(entry.slug));
+        const summary = documentRoot.createElement("summary");
+        summary.className = "multi-sport-events-league-region-title";
+        summary.textContent = `${region} · ${visible.length}`;
+        details.appendChild(summary);
+        const list = documentRoot.createElement("div");
+        list.className = "multi-sport-events-league-list";
+        visible.forEach((entry) => list.appendChild(leagueRow(entry)));
+        details.appendChild(list);
+        groupsEl.appendChild(details);
+      });
+    if (unavailableEntries.length) {
+      const details = documentRoot.createElement("details");
+      details.className = "multi-sport-events-league-region multi-sport-events-league-region-missing";
+      const summary = documentRoot.createElement("summary");
+      summary.className = "multi-sport-events-league-region-title";
+      summary.textContent = `NOT ON ESPN · ${unavailableEntries.length}`;
+      details.appendChild(summary);
+      const list = documentRoot.createElement("div");
+      list.className = "multi-sport-events-league-list";
+      unavailableEntries.forEach((entry) => {
+        const row = documentRoot.createElement("div");
+        row.className = "multi-sport-events-league-row multi-sport-events-league-row-unavailable";
+        row.title = entry.reason ?? "Not available on ESPN";
+        const name = documentRoot.createElement("span");
+        name.className = "multi-sport-events-league-name-label";
+        name.textContent = `${entry.label}${entry.region ? ` · ${entry.region}` : ""}`;
+        const tag = documentRoot.createElement("span");
+        tag.className = "multi-sport-events-league-notespn";
+        tag.textContent = "NOT ON ESPN";
+        row.append(name, tag);
+        list.appendChild(row);
+      });
+      details.appendChild(list);
+      groupsEl.appendChild(details);
+    }
+    if (!groupsEl.children.length) {
+      groupsEl.appendChild(createText(
+        documentRoot,
+        "div",
+        "multi-sport-events-empty",
+        query
+          ? `NO LEAGUES MATCH "${searchInput.value.trim()}" · NO DATA FABRICATED`
+          : "NO LEAGUE CATALOG LOADED · DOMAIN LAYER NOT READY · NO DATA FABRICATED",
+      ));
+    }
+    markLeaguePressed();
+  }
+
+  function renderFavorites() {
+    favoritesEl.replaceChildren();
+    if (!favorites.length) {
+      favoritesEl.hidden = true;
+      return;
+    }
+    favoritesEl.hidden = false;
+    const label = documentRoot.createElement("span");
+    label.className = "multi-sport-events-league-favorites-label";
+    label.textContent = "FAVORITES";
+    favoritesEl.appendChild(label);
+    favorites.forEach((slug) => {
+      const entry = catalogEntryFor(slug);
+      const wrap = documentRoot.createElement("span");
+      wrap.className = "multi-sport-events-league-favorite-wrap";
+      const chip = documentRoot.createElement("button");
+      chip.type = "button";
+      chip.className = "multi-sport-events-league-favorite";
+      chip.dataset.leagueSlug = slug;
+      chip.setAttribute("aria-pressed", String(slug === selectedSlug));
+      chip.textContent = entry?.label ?? slug;
+      chip.addEventListener("click", () => selectLeague(slug, "favorite"));
+      const remove = documentRoot.createElement("button");
+      remove.type = "button";
+      remove.className = "multi-sport-events-league-favorite-remove";
+      remove.setAttribute("aria-label", `Remove ${entry?.label ?? slug} from favorites`);
+      remove.textContent = "×";
+      remove.addEventListener("click", (event) => {
+        event.stopPropagation();
+        toggleFavorite(slug, "favorite-remove");
+      });
+      wrap.append(chip, remove);
+      favoritesEl.appendChild(wrap);
+    });
+  }
+
+  function toggleFavorite(slug, method = "button") {
+    void method;
+    if (favorites.includes(slug)) {
+      favorites = favorites.filter((candidate) => candidate !== slug);
+      saveLeagueFavorites(favorites);
+      renderFavorites();
+      renderGroups();
+      return;
+    }
+    if (favorites.length >= LEAGUE_FAVORITES_MAX) {
+      setStatus(`FAVORITES FULL · ${LEAGUE_FAVORITES_MAX} MAX · REMOVE ONE FIRST`);
+      return;
+    }
+    favorites = [...favorites, slug];
+    saveLeagueFavorites(favorites);
+    renderFavorites();
+    renderGroups();
+  }
+
+  function leagueGameRow(record) {
+    const row = documentRoot.createElement("div");
+    row.className = "multi-sport-events-league-game";
+    row.setAttribute("role", "listitem");
+    row.dataset.leagueStatus = classifyStatus(record);
+    row.append(
+      createText(documentRoot, "strong", "multi-sport-events-league-game-title", recordTitle(record)),
+      createText(documentRoot, "span", "multi-sport-events-league-game-meta", `${leagueGameTime(record?.eventTime)} · ${leagueGameStatusLine(record)}`),
+    );
+    recordParticipants(record).forEach((participant) => row.appendChild(createText(
+      documentRoot, "span", "multi-sport-events-league-game-score", participantLine(participant),
+    )));
+    if (detailedView) {
+      const venue = (record && typeof record.venue === "object") ? record.venue : {};
+      row.appendChild(createText(
+        documentRoot,
+        "span",
+        "multi-sport-events-league-game-venue",
+        `VENUE · ${text(venue.name, "UNAVAILABLE")}${venue.city ? ` · ${venue.city}` : ""}${venue.state ? ` · ${venue.state}` : ""}${venue.country ? ` · ${venue.country}` : ""}`,
+      ));
+      row.appendChild(createText(
+        documentRoot,
+        "span",
+        "multi-sport-events-league-game-grade",
+        `DATA COMPLETENESS · ${record?.dataCompletenessGrade ?? "D"} · ${record?.dataCompletenessPercent ?? 0}% · FIELD PRESENCE ONLY`,
+      ));
+    }
+    const link = publicLink(documentRoot, "multi-sport-events-league-game-source", record?.sourceUrl, "OPEN PUBLIC ESPN SOURCE");
+    row.appendChild(link ?? createText(
+      documentRoot,
+      "span",
+      "multi-sport-events-league-game-source-unavailable",
+      "PUBLIC SOURCE UNAVAILABLE · NO SAFE HTTPS SOURCE",
+    ));
+    return row;
+  }
+
+  function renderGames() {
+    gamesEl.replaceChildren();
+    moreButton.hidden = true;
+    if (!selectedSlug) {
+      gamesEl.appendChild(createText(documentRoot, "div", "multi-sport-events-empty", "SELECT A LEAGUE TO BROWSE PUBLIC SCOREBOARDS · NO DATA FABRICATED"));
+      return;
+    }
+    const envelope = lastEnvelope;
+    const records = Array.isArray(envelope?.records) ? envelope.records : [];
+    if (!records.length || envelope?.empty === true) {
+      gamesEl.appendChild(createText(
+        documentRoot,
+        "div",
+        "multi-sport-events-empty",
+        text(envelope?.emptyReason ?? envelope?.reason, `NO GAMES RETURNED FOR ${envelope?.leagueLabel ?? selectedLabel ?? "THIS LEAGUE"} ON ${currentDateISO()} · NO DATA FABRICATED`),
+      ));
+      return;
+    }
+    const filtered = records
+      .filter((record) => statusFilter === "all" || classifyStatus(record) === statusFilter)
+      .slice()
+      .sort((a, b) => {
+        if (sortMode === "live-first") {
+          const rank = (record) => (classifyStatus(record) === "live" ? 0 : 1);
+          const diff = rank(a) - rank(b);
+          if (diff) return diff;
+        }
+        const timeA = new Date(a?.eventTime).getTime();
+        const timeB = new Date(b?.eventTime).getTime();
+        const safeA = Number.isNaN(timeA) ? Number.MAX_SAFE_INTEGER : timeA;
+        const safeB = Number.isNaN(timeB) ? Number.MAX_SAFE_INTEGER : timeB;
+        return safeA - safeB;
+      });
+    if (!filtered.length) {
+      gamesEl.appendChild(createText(documentRoot, "div", "multi-sport-events-empty", `NO ${statusFilter.toUpperCase()} GAMES IN THIS RESPONSE · TRY ANOTHER FILTER · NO DATA FABRICATED`));
+      return;
+    }
+    filtered.slice(0, shownCount).forEach((record) => gamesEl.appendChild(leagueGameRow(record)));
+    const remaining = filtered.length - shownCount;
+    if (remaining > 0) {
+      moreButton.hidden = false;
+      moreButton.textContent = `SHOW MORE · ${remaining} MORE`;
+    }
+  }
+
+  function handleEnvelope(envelope, fromCache = false) {
+    if (!envelope || typeof envelope !== "object") {
+      setStatus("LEAGUE RESPONSE UNAVAILABLE · NO DATA FABRICATED");
+      renderGames();
+      return;
+    }
+    if (envelope.throttled === true || envelope.status === "throttled") {
+      // Throttle is polite: keep the prior rows on screen, never blank the panel.
+      gamesEl.classList.remove("multi-sport-events-league-games-loading");
+      setStatus("SLOW DOWN · TOO MANY LEAGUE REQUESTS · WAIT A FEW SECONDS, THEN REFRESH");
+      return;
+    }
+    lastEnvelope = envelope;
+    shownCount = LEAGUE_PAGE_SIZE;
+    const dateLabel = envelope.dateParam ? (leagueParamToISO(envelope.dateParam) ?? envelope.dateParam) : currentDateISO();
+    const leagueLabel = envelope.leagueLabel ?? selectedLabel ?? "LEAGUE";
+    if (envelope.status === "unavailable" || envelope.empty === true) {
+      const why = text(envelope.emptyReason ?? envelope.reason, "NO DATA RETURNED");
+      setStatus(`${String(envelope.status ?? "unavailable").toUpperCase()} · ${leagueLabel} · ${dateLabel} · ${why}${fromCache ? " · CACHED" : ""}`);
+    } else {
+      const count = Array.isArray(envelope.records) ? envelope.records.length : 0;
+      setStatus(`${String(envelope.status ?? "ready").toUpperCase()} · ${leagueLabel} · ${dateLabel} · ${count} GAME${count === 1 ? "" : "S"}${fromCache ? " · CACHED" : ""}`);
+    }
+    renderGames();
+  }
+
+  async function requestLeague(method = "button") {
+    void method;
+    if (!hostAvailable()) {
+      setStatus("LEAGUE BROWSING UNAVAILABLE IN THIS HOST");
+      return null;
+    }
+    if (!selectedSlug) {
+      setStatus("SELECT A LEAGUE TO BROWSE PUBLIC SCOREBOARDS");
+      return null;
+    }
+    const date = currentDateParam();
+    const id = ++requestSeq;
+    gamesEl.classList.add("multi-sport-events-league-games-loading");
+    setStatus(`REQUESTING… · ${selectedLabel ?? selectedSlug} · ${date ?? "DATE UNAVAILABLE"}`);
+    try {
+      const result = await onLeagueRequest({ slug: selectedSlug, date });
+      if (id !== requestSeq) return null; // stale response: a newer request already replaced it
+      gamesEl.classList.remove("multi-sport-events-league-games-loading");
+      handleEnvelope(result?.envelope ?? null, result?.fromCache === true);
+      return result;
+    } catch (error) {
+      if (id !== requestSeq) return null; // stale response
+      gamesEl.classList.remove("multi-sport-events-league-games-loading");
+      setStatus(`LEAGUE REQUEST FAILED · ${text(error?.message ?? error, "unknown error")} · NO DATA FABRICATED`);
+      return null;
+    }
+  }
+
+  function selectLeague(slug, method = "button") {
+    if (!hostAvailable()) {
+      setStatus("LEAGUE BROWSING UNAVAILABLE IN THIS HOST");
+      return;
+    }
+    const entry = catalogEntryFor(slug);
+    if (!entry) return;
+    selectedSlug = entry.slug;
+    selectedLabel = entry.label;
+    shownCount = LEAGUE_PAGE_SIZE;
+    markLeaguePressed();
+    void requestLeague(method);
+  }
+
+  // Catalog is statically imported; this just (re)renders and reports readiness.
+  function ensureCatalog() {
+    if (catalogEntries.length) {
+      renderGroups();
+      renderFavorites();
+      return true;
+    }
+    renderGroups();
+    return false;
+  }
+
+  function open() {
+    modalOpen = true;
+    modal.hidden = false;
+    // A close-during-load can strand the loading state; clear it on open.
+    gamesEl.classList.remove("multi-sport-events-league-games-loading");
+    if (!hostAvailable()) {
+      setStatus("LEAGUE BROWSING UNAVAILABLE IN THIS HOST");
+    } else if (!selectedSlug) {
+      setStatus("SELECT A LEAGUE TO BROWSE PUBLIC SCOREBOARDS");
+    }
+    const catalogReady = ensureCatalog();
+    if (!catalogReady && hostAvailable()) {
+      setStatus("LEAGUE CATALOG UNAVAILABLE · DOMAIN LAYER NOT LOADED · NO DATA FABRICATED");
+    }
+    searchInput.focus?.();
+  }
+
+  function close() {
+    modalOpen = false;
+    modal.hidden = true;
+    // Invalidate in-flight requests so a late response cannot repaint a closed modal.
+    requestSeq += 1;
+    browseButton.focus?.();
+  }
+
+  browseButton.addEventListener("click", open);
+  closeButton.addEventListener("click", close);
+  modal.addEventListener("click", (event) => {
+    if (event.target === modal) close();
+  });
+  modal.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.stopPropagation(); // do not also close the parent console
+      close();
+    }
+  });
+  searchInput.addEventListener("input", () => renderGroups());
+  prevButton.addEventListener("click", () => {
+    dateInput.value = leagueShiftISO(currentDateISO(), -1);
+    if (selectedSlug) void requestLeague("day-prev");
+  });
+  nextButton.addEventListener("click", () => {
+    dateInput.value = leagueShiftISO(currentDateISO(), 1);
+    if (selectedSlug) void requestLeague("day-next");
+  });
+  todayButton.addEventListener("click", () => {
+    dateInput.value = leagueTodayISO();
+    if (selectedSlug) void requestLeague("day-today");
+  });
+  dateInput.addEventListener("change", () => {
+    if (!LEAGUE_ISO_RE.test(String(dateInput.value))) {
+      dateInput.value = currentDateISO();
+      return;
+    }
+    if (selectedSlug) void requestLeague("day-input");
+  });
+  chipsEl.addEventListener("click", (event) => {
+    const chip = event.target?.closest?.("[data-league-filter]");
+    if (!chip) return;
+    statusFilter = chip.dataset.leagueFilter;
+    chipsEl.querySelectorAll("[data-league-filter]").forEach((candidate) => candidate.setAttribute("aria-pressed", String(candidate === chip)));
+    renderGames();
+  });
+  refreshButton.addEventListener("click", () => {
+    void requestLeague("refresh");
+  });
+  viewButton.addEventListener("click", () => {
+    detailedView = !detailedView;
+    viewButton.setAttribute("aria-pressed", String(detailedView));
+    viewButton.textContent = detailedView ? "COMPACT VIEW" : "DETAILED VIEW";
+    renderGames();
+  });
+  sortSelect.addEventListener("change", () => {
+    sortMode = sortSelect.value === "live-first" ? "live-first" : "kickoff";
+    renderGames();
+  });
+  moreButton.addEventListener("click", () => {
+    shownCount += LEAGUE_PAGE_SIZE;
+    renderGames();
+  });
+
+  dateInput.value = leagueTodayISO();
+  renderGames(); // initial placeholder: the panel is never blank
+  if (!hostAvailable()) setStatus("LEAGUE BROWSING UNAVAILABLE IN THIS HOST");
+
+  return Object.freeze({ open, close });
+}
+
+
 /**
  * Mount the public multi-sport scoreboard console. Presentation owns only
  * DOM state; the host supplies the explicit refresh callback that performs
@@ -123,6 +693,7 @@ export function createMultiSportEventsConsole({
   onOpenContractDraft = null,
   onReplay = null,
   onReset = null,
+  onLeagueRequest = null,
 } = {}) {
   if (!documentRoot?.getElementById) throw new Error("Multi-sport console needs a document-like owner");
   const panel = documentRoot.getElementById("multi-sport-events-console");
@@ -137,9 +708,55 @@ export function createMultiSportEventsConsole({
   const recordsEl = documentRoot.getElementById("multi-sport-events-records");
   const traceEl = documentRoot.getElementById("multi-sport-events-trace");
   const boundaryEl = documentRoot.getElementById("multi-sport-events-boundary");
-  if (!panel || !closeButton || !refreshButton || !resetButton || !statusEl || !summaryEl || !queryEl || !currentEl || !sourcesEl || !recordsEl || !traceEl) {
+  const leagueBrowseButton = documentRoot.getElementById("multi-sport-events-league-browse");
+  const leagueModal = documentRoot.getElementById("multi-sport-events-league-modal");
+  const leagueCloseButton = documentRoot.getElementById("multi-sport-events-league-close");
+  const leagueSearchInput = documentRoot.getElementById("multi-sport-events-league-search");
+  const leagueFavoritesEl = documentRoot.getElementById("multi-sport-events-league-favorites");
+  const leagueGroupsEl = documentRoot.getElementById("multi-sport-events-league-groups");
+  const leaguePrevButton = documentRoot.getElementById("multi-sport-events-league-prev");
+  const leagueTodayButton = documentRoot.getElementById("multi-sport-events-league-today");
+  const leagueNextButton = documentRoot.getElementById("multi-sport-events-league-next");
+  const leagueDateInput = documentRoot.getElementById("multi-sport-events-league-date");
+  const leagueChipsEl = documentRoot.getElementById("multi-sport-events-league-chips");
+  const leagueRefreshButton = documentRoot.getElementById("multi-sport-events-league-refresh");
+  const leagueViewButton = documentRoot.getElementById("multi-sport-events-league-view");
+  const leagueSortSelect = documentRoot.getElementById("multi-sport-events-league-sort");
+  const leagueStatusEl = documentRoot.getElementById("multi-sport-events-league-status");
+  const leagueGamesEl = documentRoot.getElementById("multi-sport-events-league-games");
+  const leagueMoreButton = documentRoot.getElementById("multi-sport-events-league-more");
+  if (!panel || !closeButton || !refreshButton || !resetButton || !statusEl || !summaryEl || !queryEl || !currentEl || !sourcesEl || !recordsEl || !traceEl
+    || !leagueBrowseButton || !leagueModal || !leagueCloseButton || !leagueSearchInput || !leagueFavoritesEl || !leagueGroupsEl
+    || !leaguePrevButton || !leagueTodayButton || !leagueNextButton || !leagueDateInput || !leagueChipsEl || !leagueRefreshButton
+    || !leagueViewButton || !leagueSortSelect || !leagueStatusEl || !leagueGamesEl || !leagueMoreButton) {
     throw new Error("Multi-sport console mount points are missing");
   }
+
+  let closeLeagueBrowser = () => {};
+  const leagueBrowser = createLeagueBrowser({
+    documentRoot,
+    mounts: {
+      browseButton: leagueBrowseButton,
+      modal: leagueModal,
+      closeButton: leagueCloseButton,
+      searchInput: leagueSearchInput,
+      favoritesEl: leagueFavoritesEl,
+      groupsEl: leagueGroupsEl,
+      prevButton: leaguePrevButton,
+      todayButton: leagueTodayButton,
+      nextButton: leagueNextButton,
+      dateInput: leagueDateInput,
+      chipsEl: leagueChipsEl,
+      refreshButton: leagueRefreshButton,
+      viewButton: leagueViewButton,
+      sortSelect: leagueSortSelect,
+      statusEl: leagueStatusEl,
+      gamesEl: leagueGamesEl,
+      moreButton: leagueMoreButton,
+    },
+    onLeagueRequest,
+  });
+  closeLeagueBrowser = () => leagueBrowser.close();
 
   let summary = summarizeMultiSportEvents(data ?? createUnavailableMultiSportEvents());
   let selectedId = summary.records[0]?.id ?? null;
@@ -163,6 +780,7 @@ export function createMultiSportEventsConsole({
     panel.hidden = !opened;
     panel.classList?.toggle?.("visible", opened);
     panel.setAttribute?.("aria-hidden", String(!opened));
+    if (!opened) closeLeagueBrowser();
   }
 
   function pushTrace(entry) {

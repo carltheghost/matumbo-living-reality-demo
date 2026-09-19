@@ -1,3 +1,5 @@
+import { findLeagueCatalogEntry } from "../data/league-catalog.js";
+
 /**
  * Bounded public multi-sport scoreboard evidence.
  *
@@ -1029,3 +1031,406 @@ export function summarizeMultiSportEvents(input = null) {
 }
 
 export default fetchMultiSportEvents;
+
+/* ------------------------------------------------------------------ */
+/* "All leagues" single-league scoreboard queue (Phase 2).            */
+/*                                                                    */
+/* Additive-only: nothing above this line was changed. The 3-provider */
+/* refresh path keeps working byte-identically.                       */
+/* ------------------------------------------------------------------ */
+
+export const MULTI_SPORT_EVENTS_LEAGUE_MAX_RECORDS = 120;
+export const LEAGUE_SCOREBOARD_MIN_INTERVAL_MS = 1000;
+export const LEAGUE_SCOREBOARD_CACHE_TTLS = Object.freeze({
+  live: 45_000,
+  settled: 600_000,
+  empty: 180_000,
+});
+export const LEAGUE_SCOREBOARD_SESSION_BUDGET = 90;
+
+/**
+ * Slug allowlist shape. The catalog itself is the allowlist: a slug must
+ * both match this shape AND be a catalog entry before any network call.
+ * (The contract's `{2,4}` first segment was widened to `{2,8}` because the
+ * probe-verified catalog contains `conmebol.libertadores` / `conmebol.sudamericana`.)
+ */
+export const LEAGUE_SCOREBOARD_SLUG_PATTERN = /^[a-z]{2,8}\.[a-z0-9_.]{1,40}$/;
+
+/**
+ * Normalize a scoreboard date to "YYYYMMDD" in UTC, or null when invalid.
+ * Accepts a Date, an ISO-8601-ish string (any offset), or a bare YYYYMMDD
+ * string (validated as a real calendar date).
+ */
+export function formatScoreboardDate(value) {
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null;
+    const y = value.getUTCFullYear();
+    const m = value.getUTCMonth() + 1;
+    const d = value.getUTCDate();
+    return `${String(y).padStart(4, "0")}${String(m).padStart(2, "0")}${String(d).padStart(2, "0")}`;
+  }
+  const candidate = text(value);
+  if (!candidate) return null;
+  if (/^\d{8}$/.test(candidate)) {
+    const y = Number(candidate.slice(0, 4));
+    const m = Number(candidate.slice(4, 6));
+    const d = Number(candidate.slice(6, 8));
+    if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+    const probe = new Date(Date.UTC(y, m - 1, d));
+    if (probe.getUTCFullYear() !== y || probe.getUTCMonth() !== m - 1 || probe.getUTCDate() !== d) return null;
+    return candidate;
+  }
+  const parsed = new Date(candidate);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return formatScoreboardDate(parsed);
+}
+
+/**
+ * Classify a normalized scoreboard record as live / final / scheduled /
+ * unknown from record.statusDetail. Defensive: unknown or partial status
+ * shapes degrade to "unknown", never to a fabricated state.
+ */
+export function classifyScoreboardStatus(record) {
+  const detail = isRecord(record) ? (isRecord(record.statusDetail) ? record.statusDetail : null) : null;
+  const state = detail ? text(detail.state) : null;
+  const completed = detail ? detail.completed : undefined;
+  if (completed === true || state === "post") return "final";
+  if (state === "in") return "live";
+  if (state === "pre" || completed === false) return "scheduled";
+  return "unknown";
+}
+
+const LEAGUE_SCOREBOARD_EMPTY_REASON = "No matches on this date · the season may be off";
+const LEAGUE_SCOREBOARD_BUDGET_REASON = "Slow down — session request budget reached";
+
+function leagueNowMs(now) {
+  try {
+    const value = typeof now === "function" ? now() : now;
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    const parsed = Date.parse(String(value));
+    return Number.isFinite(parsed) ? parsed : Date.now();
+  } catch {
+    return Date.now();
+  }
+}
+
+function leagueSourceStatus(endpointLike, retrievedAt, values) {
+  return sourceStatus(endpointLike, retrievedAt, values);
+}
+
+function leagueEndpointLike(entry, dateParam) {
+  return Object.freeze({
+    id: `espn-league:${entry.slug}`,
+    provider: `ESPN public web API · ${entry.espnName} scoreboard`,
+    sport: "soccer",
+    league: entry.slug,
+    leagueLabel: entry.label,
+    endpoint: `${ESPN_SCOREBOARD_BASE}/soccer/${entry.slug}/scoreboard?dates=${dateParam}`,
+  });
+}
+
+function leagueEnvelopeBase({ status, entry, dateParam, retrievedAt }) {
+  return {
+    schemaVersion: MULTI_SPORT_EVENTS_SCHEMA_VERSION,
+    source: MULTI_SPORT_EVENTS_SOURCE,
+    status,
+    sports: ["soccer"],
+    leagues: [entry.slug],
+    league: entry.slug,
+    leagueLabel: entry.label,
+    dateParam,
+    retrievedAt,
+    records: [],
+    sources: [],
+    recordCount: 0,
+    providerCount: 1,
+    availableProviderCount: 0,
+    providerAvailable: false,
+    providerUnavailable: true,
+    empty: false,
+    emptyReason: null,
+    throttled: false,
+    fromCache: false,
+    liveFetch: true,
+    externalNetwork: true,
+    externalSource: true,
+    localOnly: true,
+    simulation: true,
+    complete: false,
+    truthClaim: false,
+    confidence: 0,
+    uncertainty: 1,
+    executable: false,
+    boundary: MULTI_SPORT_EVENTS_BOUNDARY,
+    reason: null,
+  };
+}
+
+async function leagueSleep(ms) {
+  if (ms <= 0) return;
+  await new Promise((resolve) => globalThis.setTimeout?.(resolve, ms) ?? resolve());
+}
+
+/**
+ * Bounded single-league ESPN scoreboard fetcher.
+ *
+ * Mandatory guards (never turn UI input into a URL):
+ *  - slug must match LEAGUE_SCOREBOARD_SLUG_PATTERN AND be a catalog entry;
+ *    otherwise the request promise rejects with no network call.
+ *  - single in-flight network request globally; a newly scheduled request
+ *    aborts the previous one via AbortController. The slot is released the
+ *    moment a fetch starts, so a follow-up request does not wait for the
+ *    previous fetch to finish — it aborts it, waits out the min-interval,
+ *    then fetches. The superseded promise still resolves (as an
+ *    unavailable envelope); nothing is dropped silently.
+ *  - at least minIntervalMs between network-call starts; requests queue,
+ *    never drop.
+ *  - cache key `${slug}:${YYYYMMDD}` with TTLs: 45s when any record is live,
+ *    10min when all records are final/scheduled, 3min when zero records.
+ *  - session network-call budget (reserved at request time, fail closed);
+ *    past it, resolve a throttled envelope with no fetch.
+ */
+export function createLeagueScoreboardQueue({
+  fetchImpl = globalThis.fetch,
+  now = () => new Date().toISOString(),
+  minIntervalMs = LEAGUE_SCOREBOARD_MIN_INTERVAL_MS,
+  sessionBudget = LEAGUE_SCOREBOARD_SESSION_BUDGET,
+  cacheTtls = LEAGUE_SCOREBOARD_CACHE_TTLS,
+  timeoutMs = MULTI_SPORT_EVENTS_FETCH_TIMEOUT_MS,
+} = {}) {
+  const cache = new Map();
+  const boundedInterval = Number.isFinite(Number(minIntervalMs)) && Number(minIntervalMs) >= 0
+    ? Number(minIntervalMs)
+    : LEAGUE_SCOREBOARD_MIN_INTERVAL_MS;
+  const boundedBudget = Number.isSafeInteger(sessionBudget) && sessionBudget > 0 ? sessionBudget : LEAGUE_SCOREBOARD_SESSION_BUDGET;
+  const boundedTimeout = Number.isFinite(Number(timeoutMs)) && Number(timeoutMs) > 0
+    ? Math.min(Number(timeoutMs), 60_000)
+    : MULTI_SPORT_EVENTS_FETCH_TIMEOUT_MS;
+  const ttls = {
+    live: Number.isFinite(Number(cacheTtls?.live)) ? Number(cacheTtls.live) : 45_000,
+    settled: Number.isFinite(Number(cacheTtls?.settled)) ? Number(cacheTtls.settled) : 600_000,
+    empty: Number.isFinite(Number(cacheTtls?.empty)) ? Number(cacheTtls.empty) : 180_000,
+  };
+  // The slot promise resolves the moment the current holder STARTS its
+  // network call, so a follow-up request can abort the in-flight fetch and
+  // claim the slot without waiting for the previous fetch to finish.
+  let slotTail = Promise.resolve();
+  let inFlightController = null;
+  let lastNetworkStartMs = -Infinity;
+  let networkCalls = 0;
+  let cacheHits = 0;
+  let throttledCount = 0;
+  let pendingCount = 0;
+
+  function ttlFor(records) {
+    if (!records.length) return ttls.empty;
+    return records.some((record) => classifyScoreboardStatus(record) === "live") ? ttls.live : ttls.settled;
+  }
+
+  function throttledEnvelope(entry, dateParam, retrievedAt) {
+    return deepFreeze({
+      ...leagueEnvelopeBase({ status: "throttled", entry, dateParam, retrievedAt }),
+      providerCount: 0,
+      throttled: true,
+      liveFetch: false,
+      externalNetwork: false,
+      reason: LEAGUE_SCOREBOARD_BUDGET_REASON,
+    });
+  }
+
+  async function fetchLeague(entry, dateParam) {
+    const retrievedAt = nowIso(now);
+    const endpointLike = leagueEndpointLike(entry, dateParam);
+    const requestUrl = publicSourceUrl(endpointLike.endpoint);
+    const base = () => leagueEnvelopeBase({ status: "unavailable", entry, dateParam, retrievedAt });
+    if (!requestUrl) {
+      return deepFreeze({
+        ...base(),
+        sources: [leagueSourceStatus(endpointLike, retrievedAt, {
+          available: false,
+          recordCount: 0,
+          requestUrl: null,
+          reason: "Only documented HTTPS public endpoints are eligible.",
+        })],
+        reason: "Only documented HTTPS public endpoints are eligible.",
+      });
+    }
+    let timeoutHandle = null;
+    const controller = typeof globalThis.AbortController === "function" ? new globalThis.AbortController() : null;
+    inFlightController = controller;
+    try {
+      if (controller) timeoutHandle = globalThis.setTimeout?.(() => controller.abort(), boundedTimeout) ?? null;
+      const response = await fetchImpl(requestUrl, {
+        method: "GET",
+        headers: { accept: "application/json" },
+        ...(controller ? { signal: controller.signal } : {}),
+      });
+      if (!response?.ok || typeof response.json !== "function") throw new Error(`HTTP ${response?.status ?? "unavailable"}`);
+      const payload = await response.json();
+      const records = normalizeMultiSportScoreboard(payload, endpointLike, retrievedAt, MULTI_SPORT_EVENTS_LEAGUE_MAX_RECORDS);
+      const empty = records.length === 0;
+      const available = !empty;
+      return deepFreeze({
+        ...base(),
+        status: "ready",
+        records,
+        sources: [leagueSourceStatus(endpointLike, retrievedAt, {
+          available,
+          recordCount: records.length,
+          requestUrl,
+          reason: empty ? LEAGUE_SCOREBOARD_EMPTY_REASON : null,
+        })],
+        recordCount: records.length,
+        availableProviderCount: available ? 1 : 0,
+        providerAvailable: available,
+        providerUnavailable: !available,
+        empty,
+        emptyReason: empty ? LEAGUE_SCOREBOARD_EMPTY_REASON : null,
+        reason: empty ? LEAGUE_SCOREBOARD_EMPTY_REASON : null,
+      });
+    } catch (error) {
+      const reason = safeError(error);
+      return deepFreeze({
+        ...base(),
+        sources: [leagueSourceStatus(endpointLike, retrievedAt, {
+          available: false,
+          recordCount: 0,
+          requestUrl,
+          reason,
+        })],
+        reason,
+      });
+    } finally {
+      if (timeoutHandle !== null) globalThis.clearTimeout?.(timeoutHandle);
+      if (inFlightController === controller) inFlightController = null;
+    }
+  }
+
+  function request({ slug, date } = {}) {
+    const entry = typeof slug === "string"
+      && LEAGUE_SCOREBOARD_SLUG_PATTERN.test(slug)
+      ? findLeagueCatalogEntry(slug)
+      : null;
+    if (!entry) {
+      return Promise.reject(new Error(`Unknown or invalid league slug: ${String(slug ?? "").slice(0, 80)}`));
+    }
+    const dateParam = date === undefined || date === null ? formatScoreboardDate(now()) : formatScoreboardDate(date);
+    if (!dateParam) {
+      return Promise.reject(new Error(`Invalid scoreboard date: ${String(date ?? "").slice(0, 80)}`));
+    }
+    const key = `${entry.slug}:${dateParam}`;
+    const cached = cache.get(key);
+    if (cached && leagueNowMs(now) < cached.expiresAtMs) {
+      cacheHits += 1;
+      return Promise.resolve({ envelope: cached.envelope, fromCache: true });
+    }
+    if (cached) cache.delete(key);
+    if (typeof fetchImpl !== "function") {
+      const retrievedAt = nowIso(now);
+      const envelope = deepFreeze({
+        ...leagueEnvelopeBase({ status: "unavailable", entry, dateParam, retrievedAt }),
+        reason: "Browser fetch is unavailable; no league scoreboard rows were fabricated.",
+      });
+      return Promise.resolve({ envelope, fromCache: false });
+    }
+    // Budget is reserved at request time so concurrent bursts cannot
+    // overshoot; a superseded request keeps its reservation (fail closed).
+    if (networkCalls >= boundedBudget) {
+      throttledCount += 1;
+      const envelope = throttledEnvelope(entry, dateParam, nowIso(now));
+      return Promise.resolve({ envelope, fromCache: false });
+    }
+    networkCalls += 1;
+    const myTurn = slotTail;
+    let releaseMyTurn = null;
+    slotTail = new Promise((resolve) => { releaseMyTurn = resolve; });
+    return myTurn.then(async () => {
+      pendingCount += 1;
+      try {
+        // A newly scheduled network call supersedes the previous in-flight
+        // one via AbortController; the superseded promise still resolves
+        // (as an unavailable envelope), it is never dropped silently.
+        if (inFlightController && typeof inFlightController.abort === "function") {
+          try { inFlightController.abort(); } catch { /* defensive */ }
+        }
+        const waitMs = boundedInterval - (leagueNowMs(now) - lastNetworkStartMs);
+        if (waitMs > 0) await leagueSleep(waitMs);
+        lastNetworkStartMs = leagueNowMs(now);
+        if (releaseMyTurn) releaseMyTurn();
+        const envelope = await fetchLeague(entry, dateParam);
+        // Only cache ready envelopes: a superseded (aborted) or failed
+        // request must never poison the cache with an "unavailable" snapshot.
+        if (envelope.status === "ready") {
+          cache.set(key, {
+            envelope,
+            expiresAtMs: leagueNowMs(now) + ttlFor(envelope.records),
+          });
+        }
+        return { envelope, fromCache: false };
+      } finally {
+        pendingCount -= 1;
+      }
+    });
+  }
+
+  function stats() {
+    return deepFreeze({
+      networkCalls,
+      budget: boundedBudget,
+      budgetRemaining: Math.max(0, boundedBudget - networkCalls),
+      cacheSize: cache.size,
+      cacheHits,
+      throttledCount,
+      inFlight: inFlightController !== null,
+      pending: pendingCount,
+    });
+  }
+
+  function clear() {
+    cache.clear();
+    networkCalls = 0;
+    cacheHits = 0;
+    throttledCount = 0;
+    pendingCount = 0;
+    lastNetworkStartMs = -Infinity;
+    slotTail = Promise.resolve();
+    if (inFlightController && typeof inFlightController.abort === "function") {
+      try { inFlightController.abort(); } catch { /* defensive */ }
+    }
+    inFlightController = null;
+  }
+
+  return { request, stats, clear };
+}
+
+/** Deterministic local replay of a league scoreboard snapshot. No network. */
+export function replayLeagueScoreboard(snapshot, recordId = null, method = "local-replay") {
+  const records = Array.isArray(snapshot?.records) ? snapshot.records : [];
+  const record = records.find((candidate) => candidate?.id === recordId) ?? records[0] ?? null;
+  return deepFreeze({
+    schemaVersion: MULTI_SPORT_EVENTS_SCHEMA_VERSION,
+    source: MULTI_SPORT_EVENTS_REPLAY_SOURCE,
+    action: "replay",
+    method: text(method, "local-replay"),
+    league: text(snapshot?.league),
+    leagueLabel: text(snapshot?.leagueLabel),
+    dateParam: text(snapshot?.dateParam),
+    empty: snapshot?.empty === true,
+    recordId: record?.id ?? null,
+    record,
+    recordCount: records.length,
+    retrievedAt: timestamp(snapshot?.retrievedAt),
+    localOnly: true,
+    simulation: true,
+    deterministic: true,
+    providerAvailable: snapshot?.providerAvailable === true,
+    providerUnavailable: snapshot?.providerAvailable !== true,
+    liveFetch: false,
+    externalNetwork: false,
+    externalSource: Boolean(record),
+    truthClaim: false,
+    executable: false,
+    boundary: MULTI_SPORT_EVENTS_BOUNDARY,
+  });
+}
+
