@@ -21,7 +21,9 @@ import { createDeviceProjection, readBrowserProjectionPreferences } from './proj
 import { createDistributionExplorer } from './render/distribution-explorer.js';
 import { createLaunchDistributionRehearsal } from './domains/distribution-registry.js?v=20260828-distribution163';
 import { createPersonOrganisms } from './render/person-organisms.js';
-import { FEATURE_DEFINITIONS, createFeatureNavigator } from './render/feature-navigator.js?v=20260918-muse2';
+import { FEATURE_DEFINITIONS, FEATURE_HANDOFF_LINKS, createFeatureNavigator } from './render/feature-navigator.js?v=20260918-muse2';
+import { createCubeDive } from './render/cube-dive.js?v=20260919-dive';
+import { resolveHandoffHop, resolveHopVessel, resolveNestedDiveTargets } from './domains/cube-dive.js?v=20260919-dive';
 import { createLaunchConsole, validateLaunchCohortRoute, validateLaunchCohortCompareRoute } from './render/launch-console.js';
 import { LAUNCH_RECEIPT_CONSOLE_SOURCE, createLaunchReceiptConsole } from './render/launch-receipt.js?v=20260827-receipt2';
 import { createSocialExplorerConsole } from './render/social-explorer.js?v=20260828-social-pulse1';
@@ -397,6 +399,12 @@ blockWorld = createBlockWorldLayer({
   camera,
   domElement: renderer.domElement,
   onManipulatorDraggingChange: (dragging) => { controls.enabled = !dragging; },
+  // Cube Dive Transport (2026-09-19): a portal cube's double activation dives
+  // the camera inside the cube instead of toggling it open; a nested
+  // content cube's double-tap dives one level deeper. The host owns the
+  // camera flight via the cubeDive renderer below.
+  onDiveRequest: (request) => startCubeDive(request),
+  onContentDoubleTap: (tap) => diveDeeperIntoContent(tap),
   onSelect: (block, method) => {
     const target = blockWorld.getFocusTarget(block);
     if (target) {
@@ -745,6 +753,132 @@ blockWorld = createBlockWorldLayer({
     projectionBridge.emitIntent('projection.edit-block-draft', edit.block ?? 'block-world:draft', edit);
   },
   onReplay: (replay) => projectionBridge.emitIntent('projection.replay-block-world', replay.worldId, replay),
+});
+// Cube Dive Transport (2026-09-19). A quick second tap on the same portal
+// cube transports the camera INSIDE it (field -> diving -> inside) instead
+// of toggling a panel: the flight approaches the nearest face, passes
+// through with a lightweight flash, and settles inside an inverted
+// cube-shell world. The inside HUD offers Dive deeper (nested cubes),
+// Next cube -> (resolved through FEATURE_HANDOFF_LINKS, no return to the
+// field), and <- Field (restores the saved field pose). Local projection
+// only: no network, no storage, no wallet, no custody, no mainnet.
+const CUBE_DIVE_ACCENTS = [0x37d9d0, 0x7a5cff, 0xff9d5c, 0x5cb8ff, 0xb8ff5c, 0xff5c8a];
+function cubeDiveAccentFor(featureId) {
+  const s = String(featureId ?? '');
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return CUBE_DIVE_ACCENTS[h % CUBE_DIVE_ACCENTS.length];
+}
+function cubeDiveLabelFor(featureId) {
+  return FEATURE_DEFINITIONS.find((f) => f?.id === featureId)?.label ?? String(featureId ?? 'cube');
+}
+function diveStatusNote(message) {
+  try {
+    const el = document.getElementById('runtime-status-message');
+    if (el) el.textContent = message;
+  } catch {}
+}
+let cubeDive = null;
+
+function startCubeDive(request) {
+  if (!request || !cubeDive || renderer.xr.isPresenting) return;
+  // The tap's drag lifecycle is over; the dive locks input from here.
+  controls.enabled = true;
+  cameraTween = 0;
+  cameraPositionTween = 0;
+  const res = cubeDive.beginDive({
+    blockId: request.blockId,
+    featureId: request.featureId,
+    label: request.label ?? cubeDiveLabelFor(request.featureId),
+  });
+  if (res.ok) blockWorld?.clearFieldTap?.();
+}
+
+function cubeDiveVesselBlocks() {
+  return blockWorld?.getSnapshot?.().draft?.blocks ?? [];
+}
+
+function diveDeeperIntoContent(tap = null) {
+  const snap = cubeDive?.getSnapshot();
+  const current = snap?.active;
+  if (!cubeDive || snap?.state !== 'inside' || !current) return;
+  if (tap?.parentBlockId && tap.parentBlockId !== current.blockId) return;
+  const vessel = cubeDiveVesselBlocks().find((b) => b?.id === current.blockId);
+  const targets = resolveNestedDiveTargets(vessel);
+  if (!targets.length) {
+    diveStatusNote('NO NESTED CUBES IN THIS CUBE · LOCAL ONLY');
+    return;
+  }
+  const target = (tap?.contentId && targets.find((t) => t.contentId === tap.contentId)) || targets[0];
+  // Spring the vessel open so the nested cubes are visible for the descent.
+  // Only when the vessel is already selected: selecting it here would fire
+  // the onSelect camera tween + readout and fight the dive flight.
+  try {
+    if (blockWorld?.getSnapshot?.().selectedId === current.blockId) blockWorld?.openBlock?.(true);
+  } catch {}
+  const worldPos = blockWorld?.getContentWorldPosition?.(current.blockId, target.contentIndex);
+  cameraTween = 0;
+  cameraPositionTween = 0;
+  cubeDive.beginDeeper({
+    blockId: current.blockId,
+    featureId: current.featureId,
+    label: `${current.label} · ${target.label}`,
+    contentId: target.contentId,
+    contentWorldPos: worldPos ? new THREE.Vector3(worldPos.x, worldPos.y, worldPos.z) : null,
+  });
+}
+
+function hopToNextCube() {
+  const snap = cubeDive?.getSnapshot();
+  const current = snap?.active;
+  if (!cubeDive || snap?.state !== 'inside' || !current) return;
+  const blocks = cubeDiveVesselBlocks();
+  const nextFeatureId = resolveHandoffHop({ featureId: current.featureId, handoffLinks: FEATURE_HANDOFF_LINKS });
+  if (!nextFeatureId) {
+    // Dead end in the handoff graph: resolve back to the field.
+    diveStatusNote('NO ONWARD CUBE · RETURNING TO FIELD · LOCAL ONLY');
+    cubeDive.beginExit();
+    return;
+  }
+  const vesselId = resolveHopVessel({ blocks, featureId: nextFeatureId, currentBlockId: current.blockId });
+  if (!vesselId) {
+    cubeDive.beginExit();
+    return;
+  }
+  cameraTween = 0;
+  cameraPositionTween = 0;
+  cubeDive.beginHop({
+    fromBlockId: current.blockId,
+    blockId: vesselId,
+    featureId: nextFeatureId,
+    label: cubeDiveLabelFor(nextFeatureId),
+  });
+}
+
+function handleCubeDiveEvent(type) {
+  if (type === 'dive-deeper-request') diveDeeperIntoContent();
+  else if (type === 'hop-next-request') hopToNextCube();
+  else if (type === 'exit-field-request') {
+    cameraTween = 0;
+    cameraPositionTween = 0;
+    cubeDive?.beginExit();
+  }
+}
+
+cubeDive = createCubeDive({
+  three: THREE,
+  scene,
+  camera,
+  controls,
+  documentRoot: document,
+  reducedMotion,
+  getBlockCenter: (blockId) => {
+    const v = blockWorld?.getFocusTarget?.(blockId);
+    return v ? { x: v.x, y: v.y, z: v.z } : null;
+  },
+  getBlockHalfSize: () => 0.45,
+  getFeatureAccent: cubeDiveAccentFor,
+  onEvent: handleCubeDiveEvent,
 });
 // Normal feature panels share the same cube field, so keep a compact action
 // rail available without duplicating Block World state or hiding the full
@@ -4058,7 +4192,7 @@ function showBlockReadout(block,action='select',contentFocus=null){
     ? block.container
       ? ` HOVER PREVIEW: ${block.contentCount??block.contents?.length??0} nested cube${(block.contentCount??block.contents?.length??0)===1?'':'s'} are revealed immediately; click selects, double-activation opens.`
       : ' HOVER PREVIEW: this solid cube has no nested contents; click selects it.'
-    : action==='inspect'?' Contents are shown in the Block World console.':action==='open'?' Lid lifted; nested cubes are visible.':action==='close'?' Lid closed; nested cubes remain inspectable locally.':action==='move'?' Cube moved one bounded grid step.':action==='grab'?' Cube detached into carry mode; use HOLD steps or Place cube.':action==='hold'?' Cube carried one bounded grid step.':action==='place'?' Cube placed back into the local grid.':action==='portal'?' Portal route selected; choose a local feature surface in the cube console.':' Click it to select.';
+    : action==='inspect'?' Contents are shown in the Block World console.':action==='open'?' Lid lifted; nested cubes are visible.':action==='close'?' Lid closed; nested cubes remain inspectable locally.':action==='move'?' Cube moved one bounded grid step.':action==='grab'?' Cube detached into carry mode; use HOLD steps or Place cube.':action==='hold'?' Cube carried one bounded grid step.':action==='place'?' Cube placed back into the local grid.':action==='portal'?' Double-tap this portal cube to dive inside its feature world; choose a local feature surface in the cube console.':' Click it to select.';
   const contentCopy = contentFocus?.contentId
     ? ` Focused nested cube: ${contentFocus.contentLabel ?? 'Nested cube'} · ${contentFocus.contentType ?? 'block-content'} · ID ${contentFocus.contentId} · parent ${contentFocus.parentBlockId ?? block.id}.`
     : '';
@@ -8016,8 +8150,9 @@ function finishDirectPointer(event, cancelled = false) {
     : cancelled
       ? blockWorld?.cancelDirectManipulation('pointer-cancel')
       : blockWorld?.completeDirectManipulation(input);
-  // A below-threshold pointer-up is a tap candidate. The second tap on the
-  // same cube toggles a container through the normal local open/close
+  // A below-threshold pointer-up is a tap candidate. A quick second tap on
+  // the same portal cube dives the camera inside it (Cube Dive Transport);
+  // on another container it toggles open/close through the normal local
   // contract; a completed/rejected drag clears any pending candidate. There
   // is intentionally no native `dblclick` listener, so one gesture cannot
   // fire both a browser and renderer path.
@@ -8029,7 +8164,8 @@ function finishDirectPointer(event, cancelled = false) {
   directPointerActive = false;
   directPointerId = null;
   directPointerKind = null;
-  controls.enabled = true;
+  // A dive locks OrbitControls from its own start; don't clobber the lock.
+  if (!cubeDive?.isActive()) controls.enabled = true;
   try {
     if (Number.isInteger(pointerId)) renderer.domElement.releasePointerCapture?.(pointerId);
   } catch {
@@ -8044,6 +8180,8 @@ function finishDirectPointer(event, cancelled = false) {
 // gesture; empty-canvas motion continues to orbit the camera normally.
 renderer.domElement.addEventListener('pointerdown',event=>{
   if (personStudio?.active || realityAssembly?.active) return;
+  // Cube Dive Transport owns the pointer while a dive/exit flight runs.
+  if (cubeDive?.isActive()) return;
   // While a manipulate mode is armed the gizmo owns pointer drags; the
   // grid-based direct drag stays out of the way (additive, 2026-09-18).
   if (blockWorld?.getManipulateMode?.()) return;
@@ -8085,7 +8223,12 @@ renderer.domElement.addEventListener('pointerdown',event=>{
   }
   const contentTarget = blockWorld?.resolveContentTarget?.(hitObject);
   if (contentTarget) {
-    blockWorld.selectContent?.(contentTarget.parentBlockId, contentTarget.contentId, event?.detail === 0 ? 'keyboard' : 'canvas');
+    blockWorld.selectContent?.(contentTarget.parentBlockId, contentTarget.contentId, event?.detail === 0 ? 'keyboard' : 'canvas', {
+      pointerType: event.pointerType,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      timeStamp: event.timeStamp,
+    });
     event.preventDefault?.();
     event.stopPropagation?.();
     return;
@@ -8163,7 +8306,12 @@ addEventListener('pointerdown',event=>{
   }
   const contentTarget = blockWorld?.resolveContentTarget?.(hitObject);
   if (contentTarget) {
-    blockWorld.selectContent?.(contentTarget.parentBlockId, contentTarget.contentId, 'canvas');
+    blockWorld.selectContent?.(contentTarget.parentBlockId, contentTarget.contentId, 'canvas', {
+      pointerType: event.pointerType,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      timeStamp: event.timeStamp,
+    });
     return;
   }
   const block = blockWorld?.resolveTarget(hitObject);
@@ -8320,6 +8468,10 @@ function animate(){
     reducedMotion,
   });
   if(prox && !hovered && !selectedPulse && !hoveredSemantic&&!hoveredPerson&&!hoveredDistribution&&!hoveredRoom)showReadout(prox);
+  // Cube Dive Transport drives the camera itself while a flight is active.
+  // The generic tweens below are zeroed when a dive starts, so they never
+  // fight the flight.
+  cubeDive?.update(dt);
   if(!renderer.xr.isPresenting && cameraTween>0){cameraTween=Math.max(0,cameraTween-dt*1.5);controls.target.lerp(desiredTarget,1-Math.pow(.001,dt));}
   if(!renderer.xr.isPresenting && cameraPositionTween>0){cameraPositionTween=Math.max(0,cameraPositionTween-dt*1.5);camera.position.lerp(desiredCameraPosition,1-Math.pow(.001,dt));}
   if(!renderer.xr.isPresenting && (cameraInput?.getSnapshot().active || gestureInput?.getSnapshot?.().active) && cameraMotion.magnitude>0.001){

@@ -91,6 +91,14 @@ cube. Solid cubes report a local boundary message and remain unchanged. There
 is no native `dblclick` execution path, so a browser click cannot duplicate the
 single renderer action; reduced-motion mode changes no state semantics.
 
+Portal cubes reserve double activation for **Cube Dive Transport**: a quick
+second tap on the same portal cube within 350 ms / 28 px flies the camera
+through the cube's face into an inverted-shell interior world instead of
+toggling it open. Portal open/close stays on the **Open cube** button, the F
+key, and the explicit API. A nested content cube double-tapped from the canvas
+dives one level deeper into the current interior. All dive motion is local
+projection only: no network, no storage, no wallet, no custody, no mainnet.
+
 ### Selected-container affordance
 
 Openable cubes now carry a stronger cube-only visual cue in the focused field:

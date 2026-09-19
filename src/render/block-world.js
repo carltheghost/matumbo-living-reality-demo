@@ -15,6 +15,11 @@ import {
 } from "../domains/block-world.js";
 import { previewBlockMigrationSnapshot } from "../domains/block-migration.js";
 import {
+  CUBE_DIVE_DOUBLE_TAP_DISTANCE_PX,
+  CUBE_DIVE_DOUBLE_TAP_WINDOW_MS,
+  resolveDiveBinding,
+} from "../domains/cube-dive.js";
+import {
   MANIPULATE_MODE_LABELS,
   MANIPULATE_MODES,
   createManipulateControls,
@@ -666,6 +671,13 @@ export function createBlockWorldLayer({
   onFeatureNavigate = null,
   onDistributionNavigate = null,
   onMigrationOpen = null,
+  // Cube Dive Transport (2026-09-19): a recognized portal-cube double
+  // activation routes here instead of toggling the cube open. The host owns
+  // the camera flight; this module only reports the binding.
+  onDiveRequest = null,
+  // A quick second tap on the same nested content cube dives one level
+  // deeper into the current interior.
+  onContentDoubleTap = null,
   // Free 3D gizmo manipulation (additive, 2026-09-18). The TransformControls
   // class is injected by the host so this module stays Node-testable; when it
   // is absent the manipulator degrades to blocked no-op snapshots.
@@ -805,6 +817,8 @@ export function createBlockWorldLayer({
   // double activation. The candidate is discarded for drags, pointer
   // cancellation, different cubes, different pointer types, and stale taps.
   let lastFieldTap = null;
+  // Nested-content double-tap candidate (drives dive-deeper, not toggling).
+  let lastContentTap = null;
   let blockMeshes = new Map();
   let selectionCues = new Map();
   let gazeLockCues = new Map();
@@ -1376,7 +1390,7 @@ export function createBlockWorldLayer({
     return parent ? resolveBlockWorldContent(parent, hoveredContent.contentId) : null;
   }
 
-  function selectContent(parentBlockId, contentIdOrIndex, method = "content-row") {
+  function selectContent(parentBlockId, contentIdOrIndex, method = "content-row", input = {}) {
     const parent = contentParent(parentBlockId);
     const record = resolveBlockWorldContent(parent, contentIdOrIndex);
     if (!parent || !record) {
@@ -1393,6 +1407,39 @@ export function createBlockWorldLayer({
     contentFocus = contentFocusSnapshot(record, method);
     render();
     const snapshot = contentFocusSnapshot(record, method);
+    // Canvas double-tap on a nested content cube dives one level deeper into
+    // the current interior instead of toggling anything. Button/keyboard
+    // content navigation never triggers this path.
+    if (method === "canvas") {
+      const pointerType = typeof input.pointerType === "string" && input.pointerType.trim() !== ""
+        ? input.pointerType
+        : "pointer";
+      const timestamp = tapTimestamp(input);
+      const point = directInputPoint(input);
+      const previous = lastContentTap;
+      const elapsed = previous ? timestamp - previous.timestamp : Infinity;
+      const sameContent = previous?.parentBlockId === parent.id
+        && previous?.contentId === record.contentId
+        && previous.pointerType === pointerType
+        && elapsed >= 0
+        && elapsed <= CUBE_DIVE_DOUBLE_TAP_WINDOW_MS
+        && tapDistance(previous.point, point) <= CUBE_DIVE_DOUBLE_TAP_DISTANCE_PX;
+      if (sameContent) {
+        lastContentTap = null;
+        onContentDoubleTap?.(cloneSnapshot({
+          parentBlockId: parent.id,
+          contentId: record.contentId,
+          contentIndex: record.index ?? 0,
+          label: record.content?.label ?? record.content?.contentType ?? "nested cube",
+          contentType: record.content?.contentType ?? null,
+          method: pointerType === "touch" ? "double-tap" : "double-click",
+          simulation: true,
+          externalTransfer: false,
+        }));
+      } else {
+        lastContentTap = { parentBlockId: parent.id, contentId: record.contentId, pointerType, timestamp, point };
+      }
+    }
     onContentSelect?.(snapshot);
     return snapshot;
   }
@@ -3352,7 +3399,11 @@ export function createBlockWorldLayer({
    * Record one pointer-up tap and recognize a same-cube, same-pointer-type
    * second tap inside the deterministic time and distance bounds. The first
    * tap only selects (the pointer-down seam owns that selection); it never
-   * opens a cube. This method is intentionally renderer-local and contains no
+   * opens a cube. Portal cubes reserve the double activation for Cube Dive
+   * Transport: a quick second tap dives the camera inside the cube instead
+   * of toggling it open (their open/close stays on the console OPEN control,
+   * the F key, and the explicit API). Other containers keep the toggle
+   * contract. This method is intentionally renderer-local and contains no
    * native `dblclick` listener, avoiding duplicate mouse click paths.
    */
   function registerFieldTap(target, input = {}) {
@@ -3373,11 +3424,39 @@ export function createBlockWorldLayer({
     const previous = lastFieldTap;
     const elapsed = previous ? timestamp - previous.timestamp : Infinity;
     const sameTarget = previous?.blockId === block.id && previous.pointerType === pointerType;
+    const diveBinding = resolveDiveBinding({ blocks: currentProjection.blocks, blockId: block.id });
+    const diveGesture = sameTarget
+      && elapsed >= 0
+      && elapsed <= CUBE_DIVE_DOUBLE_TAP_WINDOW_MS
+      && tapDistance(previous.point, point) <= CUBE_DIVE_DOUBLE_TAP_DISTANCE_PX;
+    if (diveGesture) {
+      lastFieldTap = null;
+      if (diveBinding.ok) {
+        const method = pointerType === "touch" ? "double-tap" : "double-click";
+        onDiveRequest?.(cloneSnapshot({
+          blockId: diveBinding.blockId,
+          featureId: diveBinding.featureId,
+          routeId: diveBinding.routeId,
+          label: diveBinding.label,
+          portalIndex: diveBinding.portalIndex,
+          method,
+          gesture: method,
+          simulation: true,
+          externalTransfer: false,
+        }));
+        return null;
+      }
+      // Not a portal cube: the container toggle window below applies.
+    }
     const sameGesture = sameTarget
       && elapsed >= 0
       && elapsed <= BLOCK_WORLD_DOUBLE_ACTIVATION_WINDOW_MS
       && tapDistance(previous.point, point) <= BLOCK_WORLD_DOUBLE_ACTIVATION_DISTANCE_PX;
-    if (sameGesture) {
+    if (sameGesture && !diveBinding.ok) {
+      // Portal cubes reserve double activation for the dive: a second tap
+      // past the 350ms dive window simply starts a new tap sequence instead
+      // of toggling. Their open/close stays on the console OPEN control,
+      // the F key, and the explicit openBlock/toggleBlock API.
       lastFieldTap = null;
       return activateFieldDouble(block.id, pointerType === "touch" ? "double-tap" : "double-click");
     }
@@ -3385,8 +3464,43 @@ export function createBlockWorldLayer({
     return null;
   }
 
+  /**
+   * World-space position of a nested content cube (parent center + the
+   * deterministic container peek offset). Renderer-local presentation math;
+   * canonical projection data is never mutated.
+   */
+  function getContentWorldPosition(parentBlockId, contentIndex = 0) {
+    const parent = contentParent(parentBlockId)
+      ?? resolveBlockFromProjection(currentProjection, parentBlockId);
+    if (!parent) return null;
+    const contents = asArray(parent.contents);
+    const safeIndex = Number.isFinite(Number(contentIndex)) ? Math.max(0, Number(contentIndex)) : 0;
+    const content = contents[safeIndex] ?? contents[0];
+    if (!content) return null;
+    const width = currentProjection.dimensions.width;
+    const depth = currentProjection.dimensions.depth;
+    const base = {
+      x: (parent.x ?? (width - 1) / 2) - (width - 1) / 2 - 3.8,
+      y: (parent.y ?? 1) * 0.82 - 0.75,
+      z: (parent.z ?? (depth - 1) / 2) - (depth - 1) / 2 - 3.2,
+    };
+    const peek = getBlockWorldContainerPeekOffset(content, safeIndex, contents.length);
+    return {
+      x: base.x + peek.x,
+      y: base.y + peek.y,
+      z: base.z + peek.z,
+      parentBlockId: parent.id,
+      contentId: content.id ?? null,
+      contentIndex: safeIndex,
+    };
+  }
+
   function clearFieldTap() {
     lastFieldTap = null;
+  }
+
+  function clearContentTap() {
+    lastContentTap = null;
   }
 
   function moveSelected(delta) {
@@ -4093,6 +4207,8 @@ export function createBlockWorldLayer({
     doubleActivateField: activateFieldDouble,
     registerFieldTap,
     noteFieldTap: registerFieldTap,
+    clearContentTap,
+    getContentWorldPosition,
     clearFieldTap,
     moveSelected,
     inspectBlock: inspectSelected,

@@ -1,17 +1,24 @@
 /** Mobile panel manager — 2D UI chrome/layout only.
  *
  * On narrow viewports (<=700px) only one floating panel may be visible at a
- * time. When a panel opens, every other panel collapses, the floating
- * "Camera + audio" device preview and the City districts dropdown close, and
- * the bottom cube-field hint bar hides until the panel closes. Desktop layout
- * is untouched.
+ * time. When a panel opens, every other panel collapses (including the
+ * Mission Control feature-shell, the block readout sheet, the floating
+ * "Camera + audio" device preview, and the City districts dropdown), and the
+ * bottom cube-field hint bar hides until the panel closes. Desktop layout is
+ * untouched.
  *
  * This changes no projection, ledger, identity, signing, settlement, wallet,
- * or authority state. It only toggles `hidden` / `open` presentation flags on
- * 2D overlay elements.
+ * or authority state. It only toggles `hidden` / `open` / visibility-class
+ * presentation flags on 2D overlay elements.
  */
 const NARROW_QUERY = '(max-width:700px)';
 const BODY_OPEN_CLASS = 'mobile-panel-open';
+
+// Panels that never participate in the single-panel rule: the portal return
+// affordance is persistent chrome, and the cube-dive inside-HUD is a compact
+// bottom-docked bar that must stay available while the camera is inside a
+// cube (it is the only way back to the field).
+const EXCLUDED_IDS = new Set(['portal-return-console', 'cube-dive-hud']);
 
 /** Panel descriptors collected from the live DOM. */
 function collectPanels(documentRoot) {
@@ -20,30 +27,85 @@ function collectPanels(documentRoot) {
     ? Array.from(documentRoot.querySelectorAll('aside'))
     : [];
   for (const el of asides) {
-    if (!el || el.id === 'feature-shell' || el.id === 'portal-return-console') continue;
-    panels.push({ id: el.id || '(aside)', kind: 'hidden', el });
+    if (!el || EXCLUDED_IDS.has(el.id)) continue;
+    // Mission Control's shell is class-driven (#feature-shell.open); every
+    // other aside uses the `hidden` attribute.
+    panels.push({ id: el.id || '(aside)', kind: el.id === 'feature-shell' ? 'class-open' : 'hidden', el });
   }
   const gesture = documentRoot.getElementById ? documentRoot.getElementById('gesture-input-panel') : null;
   if (gesture && gesture.tagName !== 'ASIDE') panels.push({ id: 'gesture-input-panel', kind: 'hidden', el: gesture });
   const media = documentRoot.getElementById ? documentRoot.getElementById('media-preview') : null;
   if (media) panels.push({ id: 'media-preview', kind: 'details', el: media });
+  // The block readout (#readout) is a div whose visibility is class-driven
+  // (#readout.visible). It used to stack on top of consoles on phones.
+  const readout = documentRoot.getElementById ? documentRoot.getElementById('readout') : null;
+  if (readout && !EXCLUDED_IDS.has(readout.id)) panels.push({ id: readout.id || 'readout', kind: 'class-visible', el: readout });
   return panels;
 }
 
-function isPanelVisible(panel) {
-  if (!panel || !panel.el) return false;
-  if (panel.kind === 'details') return panel.el.open === true;
-  return panel.el.hidden !== true;
+function classSaysVisible(el, names) {
+  const classList = el && el.classList;
+  if (!classList || typeof classList.contains !== 'function') return false;
+  return names.some((name) => classList.contains(name));
 }
 
-function hidePanel(panel) {
+function computedHidden(el, windowRoot) {
+  if (typeof windowRoot?.getComputedStyle !== 'function') return null;
+  try {
+    const style = windowRoot.getComputedStyle(el);
+    if (!style) return null;
+    if (style.display === 'none') return true;
+    if (style.visibility === 'hidden' || style.visibility === 'collapse') return true;
+    return false;
+  } catch {
+    return null;
+  }
+}
+
+function isPanelVisible(panel, windowRoot) {
+  if (!panel || !panel.el) return false;
+  const el = panel.el;
+  if (panel.kind === 'details') return el.open === true;
+  if (panel.kind === 'class-open') return classSaysVisible(el, ['open']);
+  if (panel.kind === 'class-visible') return classSaysVisible(el, ['visible']);
+  if (el.hidden === true) return false;
+  // Class-less panels (e.g. #asset-launch) can be suppressed purely by
+  // stylesheet rules while carrying no `hidden` attribute. A display:none
+  // panel must not win the keeper election or mark the viewport occupied.
+  const hiddenByCss = computedHidden(el, windowRoot);
+  if (hiddenByCss !== null) return !hiddenByCss;
+  return true;
+}
+
+function hidePanel(panel, documentRoot) {
   if (!panel || !panel.el) return;
+  const el = panel.el;
   if (panel.kind === 'details') {
-    if (panel.el.open) panel.el.open = false;
+    if (el.open) el.open = false;
     return;
   }
-  panel.el.hidden = true;
-  if (typeof panel.el.setAttribute === 'function') panel.el.setAttribute('aria-hidden', 'true');
+  if (panel.kind === 'class-open' || panel.kind === 'class-visible') {
+    // Route the Mission Control shell through its own close control so the
+    // feature navigator's internal open state (and toggle label) stay in
+    // sync; other class-driven overlays hide by class.
+    if (panel.id === 'feature-shell') {
+      const close = documentRoot && documentRoot.getElementById
+        ? documentRoot.getElementById('feature-close')
+        : null;
+      if (close && typeof close.click === 'function') {
+        close.click();
+        return;
+      }
+    }
+    if (el.classList && typeof el.classList.remove === 'function') {
+      el.classList.remove('open');
+      el.classList.remove('visible');
+    }
+    if (typeof el.setAttribute === 'function') el.setAttribute('aria-hidden', 'true');
+    return;
+  }
+  el.hidden = true;
+  if (typeof el.setAttribute === 'function') el.setAttribute('aria-hidden', 'true');
 }
 
 /**
@@ -63,6 +125,11 @@ function closeCityDistricts(documentRoot) {
   const root = documentRoot.getElementById ? documentRoot.getElementById('city-journey') : null;
   const details = root && root.querySelector ? root.querySelector('details') : null;
   if (details && details.open) details.open = false;
+}
+
+function setHintHidden(documentRoot, hidden) {
+  const hint = documentRoot && documentRoot.getElementById ? documentRoot.getElementById('hint') : null;
+  if (hint && 'hidden' in hint) hint.hidden = Boolean(hidden);
 }
 
 export function initMobilePanelManager({
@@ -86,17 +153,18 @@ export function initMobilePanelManager({
     if (applying) return;
     const narrow = isNarrow();
     const panels = collectPanels(documentRoot);
-    const visibleNow = panels.some(isPanelVisible);
+    const visibleNow = panels.some((p) => isPanelVisible(p, windowRoot));
     body.classList.toggle(BODY_OPEN_CLASS, narrow && visibleNow);
     if (!narrow) return;
     applying = true;
     try {
-      const state = panels.map((p) => ({ id: p.id, visible: isPanelVisible(p) }));
-      const { hideIds } = applyMobilePanelPolicy({ panels: state, openedId });
+      const state = panels.map((p) => ({ id: p.id, visible: isPanelVisible(p, windowRoot) }));
+      const { hideIds, hintHidden } = applyMobilePanelPolicy({ panels: state, openedId });
       for (const panel of panels) {
-        if (hideIds.includes(panel.id)) hidePanel(panel);
+        if (hideIds.includes(panel.id)) hidePanel(panel, documentRoot);
       }
       if (visibleNow) closeCityDistricts(documentRoot);
+      setHintHidden(documentRoot, hintHidden);
     } finally {
       applying = false;
     }
@@ -110,7 +178,7 @@ export function initMobilePanelManager({
       if (!target) continue;
       const panels = collectPanels(documentRoot);
       const panel = panels.find((p) => p.el === target);
-      if (panel && isPanelVisible(panel)) openedId = panel.id;
+      if (panel && isPanelVisible(panel, windowRoot)) openedId = panel.id;
     }
     sync(openedId);
   }

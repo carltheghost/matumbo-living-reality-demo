@@ -1966,6 +1966,36 @@
       #block-world-quick-actions { left: 10px; right: 10px; bottom: 56px; width: auto; max-height: 34vh; }
     }
     @media(max-width:700px){#academy-console{left:12px;right:12px;top:86px;width:auto;max-height:calc(100vh - 112px);padding:11px}#academy-head h2{font-size:17px}#academy-lessons{grid-template-columns:1fr}}
+    /* Cube Dive Transport HUD (2026-09-19): compact inside-world bar. Bottom
+       docked on narrow screens with 44px touch targets; layout-only. */
+    #cube-dive-hud {
+      position: fixed; z-index: 1100; left: 50%; transform: translateX(-50%);
+      bottom: 18px; display: flex; flex-direction: column; gap: 8px;
+      align-items: center; padding: 10px 14px; border-radius: 14px;
+      background: rgba(6, 12, 18, 0.82); border: 1px solid rgba(120, 220, 255, 0.28);
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+      max-width: calc(100vw - 24px);
+    }
+    #cube-dive-hud[hidden] { display: none; }
+    .cube-dive-hud-title {
+      font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase;
+      color: #bfe9ff; white-space: nowrap; overflow: hidden;
+      text-overflow: ellipsis; max-width: calc(100vw - 60px);
+    }
+    .cube-dive-hud-row { display: flex; gap: 8px; }
+    .cube-dive-hud-row button {
+      min-height: 44px; padding: 0 16px; border-radius: 10px;
+      border: 1px solid rgba(120, 220, 255, 0.35);
+      background: rgba(20, 40, 60, 0.6); color: #eaf7ff;
+      font-size: 14px; cursor: pointer; white-space: nowrap;
+    }
+    .cube-dive-hud-row button:active { background: rgba(40, 80, 120, 0.7); }
+    @media (max-width: 700px) {
+      #cube-dive-hud { left: 12px; right: 12px; transform: none; bottom: 12px; }
+      .cube-dive-hud-row { width: 100%; }
+      .cube-dive-hud-row button { flex: 1; padding: 0 8px; }
+    }
     /* Mobile panel manager (2026-09-18): one floating panel at a time on
        narrow screens. While any console is up, the bottom cube-field hint bar
        hides so it cannot collide with panels; every panel is boxed inside the
@@ -2007,7 +2037,7 @@
   </section>
   <div id="hud">
     <div id="brand"><b>maTumbo Ω</b><span id="sub">Living Reality / cube field + local feature lab</span></div>
-    <div id="legend"><strong>Cube field.</strong><br>Select a block, double-click or double-tap a container to open it, inspect its nested cubes, or drag it one local grid step. <strong>Empty-field drag orbits the camera; wheel/trackpad travels.</strong> Press <strong>F</strong> to open the feature directory, including Reality Lens Ω.</div>
+    <div id="legend"><strong>Cube field.</strong><br>Select a block, double-click or double-tap a portal cube to dive inside it, double-click or double-tap a container to open it, inspect its nested cubes, or drag it one local grid step. <strong>Empty-field drag orbits the camera; wheel/trackpad travels.</strong> Press <strong>F</strong> to open the feature directory, including Reality Lens Ω.</div>
     <button id="feature-toggle" type="button" aria-controls="feature-shell" aria-expanded="true">OPEN FEATURES · F</button>
     <details id="explain-white-paper" class="local-panel">
       <summary id="explain-white-paper-open">EXPLAIN · WHITE PAPER</summary>
@@ -3647,7 +3677,7 @@
       <button type="button" data-lens-mode="population" aria-pressed="false">PEOPLE</button>
       <button type="button" data-lens-mode="detail" aria-pressed="false">DETAIL</button>
     </div>
-    <div id="hint">cube field: click select · double-click / double-tap open · cube drag move · empty-field drag orbit · F features</div>
+    <div id="hint">cube field: tap select · double-tap a portal cube to dive inside · double-tap a container to open · cube drag move · empty-field drag orbit · F features</div>
   </div>
 
   <script type="importmap">
