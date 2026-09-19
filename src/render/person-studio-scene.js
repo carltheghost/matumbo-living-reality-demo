@@ -1,25 +1,26 @@
 import {STUDIO_MODEL,STUDIO_OUTFITS,STUDIO_ROOMS} from '../domains/person-studio.js';
 import {resolveFaceDecalUrl} from '../domains/avatar-style.js';
 import {AVATAR_GREET} from '../domains/avatar-motion.js';
-import {buildTumboChibiRig,createTumboGeometryCache,createTumboMaterialSet,updateTumboChibiRig} from './tumbo-chibi-rig.js';
+import {updateTumboChibiRig} from './tumbo-chibi-rig.js';
+import {buildTumboFluffyRig} from './tumbo-fluffy-rig.js?v=20260919-fluffy-tumbo';
 
-/** PERSON Ω avatar: the shared articulated Tumbo chibi rig IS the avatar.
+/** PERSON Ω avatar: the fluffy Tumbo mascot IS the avatar.
  *
- * Packet 226/227 built a tall articulated mannequin here and Packet 230
- * painted the Tumbo look onto it; the user rejected that read — it moved
- * like a mannequin, not the chibi from their reference portraits. Packet 232
- * mounts the same articulated chibi rig the chess champions use
- * (src/render/tumbo-chibi-rig.js), scaled up for the studio: big chibi head,
- * fluffy earmuffs, black hoodie with drawstrings and the gold TUMBO chest
- * text, brown furry paws, locs, eyeliner, beauty mark, goatee, wagging tail.
+ * The user compared the smooth-shaded chibi rig against their canonical
+ * fluffy Tumbo reference and rejected it — "do they look the same? no."
+ * This scene now mounts the dedicated fluffy rig
+ * (src/render/tumbo-fluffy-rig.js): a plush-brown fur-shell body, cream
+ * face patch, bead eyes, tiny :3 mouth, grey over-ear headphones, and
+ * black locs poking out around them — the mascot from their reference,
+ * not an approximation.
  *
- * One rig source, no fork: the studio builds it with the rig module's
- * shared geometry/material factories, tints the wardrobe through the
- * material set, and drives it with updateTumboChibiRig(). All Packet 227
- * interactions are preserved — click cycles wave → spin → jump, drag moves
- * the avatar with a walk cycle, reduced motion freezes to a gentle wave.
+ * The joint hierarchy and names are identical to the chibi rig, so the
+ * shared updateTumboChibiRig() drives every animation unchanged. All
+ * Packet 227 interactions are preserved — click cycles wave → spin →
+ * jump, drag moves the avatar with a walk cycle, reduced motion freezes
+ * to a gentle wave. Wardrobe tints the headphone cushions (white/teal).
  * The lens-space set (rings, glow, city, sofa, desk, wardrobe displays,
- * Luna) is unchanged; only the mannequin is retired. */
+ * Luna) is unchanged; only the avatar body is replaced. */
 export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,avatarTextureUrl='assets/avatar/fluffy-body-template.webp'}) {
   const layer=new THREE.Group();layer.name='PERSON Ω / open lens space';parent.add(layer);layer.visible=false;
   const materials=new Set(),geometries=new Set(),selectable=[];
@@ -123,36 +124,26 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
     const displayRing=mesh(new THREE.TorusGeometry(.45,.016,8,56),ringBlue,[0,-.86,0],[1,1,1],g);displayRing.rotation.x=Math.PI/2;
   }
 
-  // ---- The avatar: the shared chibi Tumbo rig (Packet 232) ----
-  // Geometry and materials come from the rig module's factories — the same
-  // source the chess pieces build from. Wardrobe tints (outfit/trim/earmuff
-  // colors) apply live through the shared material set; the gold TUMBO
-  // chest text is the rig's opt-in chestText decal.
-  const rigG=createTumboGeometryCache(THREE);
-  const rigM=createTumboMaterialSet(THREE,{
-    skin:STUDIO_MODEL.skin,hair:STUDIO_MODEL.hair,
-    outfit:STUDIO_OUTFITS[0].color,outfitTrim:STUDIO_OUTFITS[0].trim,
-    muff:STUDIO_OUTFITS[0].muffs,
-  });
+  // ---- The avatar: the fluffy Tumbo mascot rig ----
+  // Fur-shell plush body built by the fluffy rig module — the mascot from
+  // the user's reference, not the smooth-shaded chibi. Wardrobe tints the
+  // headphone cushions live through the rig's material handle; the fur
+  // stays canon brown. The personal portrait decal still mounts on the
+  // forehead when one is saved locally.
   const avatar=group('Reference-built avatar',[0,.55,0]);
-  const CHIBI_STUDIO_SCALE=1.35;
+  const FLUFFY_STUDIO_SCALE=1.35;
   const safeStorage=()=>{try{return globalThis.localStorage??null;}catch{return null;}};
   let rig=null,rigDecalMats=[];
   function mountRig(){
     rigDecalMats=[];
-    const built=buildTumboChibiRig(THREE,rigG,rigM,{
+    const built=buildTumboFluffyRig(THREE,{
       seed:0,
+      muffColor:STUDIO_OUTFITS[0].muffs??'#5f646c',
       faceDecalUrl:resolveFaceDecalUrl(safeStorage()),
       decalRegistry:rigDecalMats,
-      chestText:'TUMBO',
     });
-    built.group.scale.setScalar(CHIBI_STUDIO_SCALE);
+    built.group.scale.setScalar(FLUFFY_STUDIO_SCALE);
     avatar.add(built.group);
-    // Studio-scale tail: the reference portraits show a large fluffy tail
-    // curling up beside the body. Compared side-by-side, the board-scale
-    // tail reads as a tuft at studio size; scaling the tail joint 1.7x
-    // restores the reference curl without touching the shared rig geometry.
-    built.tail.scale.setScalar(1.7);
     built.group.traverse(object=>{if(object.isMesh){object.castShadow=false;object.receiveShadow=false;}});
     return built;
   }
@@ -171,7 +162,7 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
   presenceLight.position.set(0,3.2,1.6);avatar.add(presenceLight);
   // Everything structural floats: the avatar, the lens-ring and the set
   // pieces bob gently in lens space (frozen under reduced motion). The
-  // avatar's own bob/sway/glow/walk follow the shared chibi rig update; the
+  // avatar's own bob/sway/glow/walk follow the fluffy rig update; the
   // set pieces keep their per-piece floaters.
   const floaters=[{obj:lensRing,base:.46,amp:.06,speed:1.05,phase:0}];
   floaters.push({obj:sofa,base:.08,amp:.05,speed:.8,phase:1.2},{obj:desk,base:.65,amp:.045,speed:.9,phase:2.4});
@@ -212,11 +203,10 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
     const clothing=STUDIO_OUTFITS.find(v=>v.id===snapshot.outfitId)??STUDIO_OUTFITS[0];
     const theme=STUDIO_ROOMS.find(v=>v.id===snapshot.roomId)??STUDIO_ROOMS[0];
     outfit=clothing.id;room=theme.id;form=snapshot.companion;
-    // Wardrobe tints the shared rig materials live: hoodie, trim, earmuffs.
-    rigM.outfit.color.set(clothing.color);
-    rigM.trim.color.set(clothing.trim);rigM.trim.emissive.set(clothing.trim);
-    // Earmuff tint follows the wardrobe: white default, teal option.
-    muffColor=clothing.muffs??'#f5f2ea';rigM.muff.color.set(muffColor);
+    // Wardrobe tints the fluffy rig's headphone cushions live: grey default,
+    // white/teal options. The fur stays canon brown — the mascot wears no
+    // hoodie in the reference.
+    muffColor=clothing.muffs??'#5f646c';rig.materials.cushion.color.set(muffColor);
     light.color.set(theme.light);light.emissive.set(theme.light);
     skyMat.color.set(theme.sky);skyMat.emissive.set(theme.sky);rim.color.set(theme.light);
     skyline.visible=room!=='ocean';moon.visible=room==='night';
@@ -291,7 +281,7 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
     companion.rotation.y=reducedMotion?0:Math.sin(time*.8)*.14;
     wings.forEach((wing,i)=>{wing.rotation.z=(i===0?-1:1)*(.55+(form==='bird'&&!reducedMotion?Math.sin(time*5)*.35:0));});
   }
-  function getSnapshot(){return {source:'person-studio-scene',modelId:STUDIO_MODEL.id,visible:layer.visible,outfitId:outfit,roomId:room,companionForm:form,jointNames:Object.keys(rig.joints),meshCount:rigG.size()+geometries.size,identityHeadGeometry:rigG.sphere(0.26,18,14).uuid,geometryOnly:false,referenceImagesUsedAsTextures:false,rigVisible:true,referenceLook:'tumbo-chibi-v2',earmuffColor:muffColor,tumboDecalPresent:rig.hasChestText,avatarHologramPresent:false,avatarHologramUrl:avatarTextureUrl,avatarHologramTint:avatarHologramTint,greetKind:getGreetKind(),avatarOffset:{x:avatarTarget.x,z:avatarTarget.z},avatarPickMeshCount:avatarPickMeshes.length};}
+  function getSnapshot(){return {source:'person-studio-scene',modelId:STUDIO_MODEL.id,visible:layer.visible,outfitId:outfit,roomId:room,companionForm:form,jointNames:Object.keys(rig.joints),meshCount:avatarPickMeshes.length+geometries.size,geometryOnly:false,referenceImagesUsedAsTextures:false,rigVisible:true,referenceLook:'tumbo-fluffy-v1',earmuffColor:muffColor,tumboDecalPresent:rig.hasFaceDecal,avatarHologramPresent:false,avatarHologramUrl:avatarTextureUrl,avatarHologramTint:avatarHologramTint,greetKind:getGreetKind(),avatarOffset:{x:avatarTarget.x,z:avatarTarget.z},avatarPickMeshCount:avatarPickMeshes.length};}
   // Face choice state: the user's chosen avatar face — default Tumbo
   // character, Tumbo's own likeness, or their locally-styled photo. The
   // personal portrait (choice 'your-photo' plus a saved portrait) is worn
@@ -311,6 +301,7 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
     rig=mountRig();
     collectPickMeshes();
     old.group.removeFromParent();
+    try{old.dispose?.();}catch{/* noop */}
     oldDecals.forEach(material=>{try{material.map?.dispose?.();}catch{}try{material.dispose?.();}catch{}});
   }
   let avatarHologramTint=null;
@@ -325,7 +316,7 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
     selectable.forEach(m=>{const i=targets.indexOf(m);if(i>=0)targets.splice(i,1);});
     geometries.forEach(g=>{try{g.dispose?.();}catch{}});
     materials.forEach(m=>{try{m.dispose?.();}catch{}});
-    rigG.dispose();rigM.dispose();
+    try{rig.dispose?.();}catch{/* fluffy rig owns its geometries/materials */}
     rigDecalMats.forEach(material=>{try{material.map?.dispose?.();}catch{}try{material.dispose?.();}catch{}});
     layer.removeFromParent();
   }
