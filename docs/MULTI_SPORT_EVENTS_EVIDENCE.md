@@ -247,6 +247,13 @@ Caveats (do not over-claim):
 - TheSportsDB responses are sparse community data (5 events/season is
   typical) — the UI presents them as-is with honest empty states, never
   as complete season coverage.
+- Re-verified 2026-09-19 (same 42/44, same 2 empty ids): the returned
+  payloads are the *opening rounds* of each season (e.g. Ekstraklasa
+  `2026-2027` covers 2026-07-24..08-01). Only 2/44 ids contain any event
+  date >= 2026-09-19 (Chinese Taipei Premier League `5210`, Vietnamese
+  National Cup `5200`). So "today" views for TSDB leagues will mostly
+  resolve to honest empty states — expected data sparsity, not a client
+  bug.
 - Spanish Primera División RFEF: both ids return **zero** events for the
   current season `2026-2027`; the entry resolves to an honest empty state
   (stale/sparse on TheSportsDB). Older seasons returned a handful of
@@ -315,3 +322,16 @@ games load through the default fetch path, exercising the binding fix:
 - Screenshots: `/tmp/league-verify-d/desktop-games.png`,
   `/tmp/league-verify-d/mobile-modal.png`; full JSON report:
   `/tmp/league-verify-d/verify-report.json`.
+- Verification v2 (2026-09-19, `/tmp/lv2/verify2.mjs`, **12/12 passed**,
+  screenshots `/tmp/lv2/desktop-games.png`, `/tmp/lv2/mobile-modal.png`):
+  explicit 1280×800 desktop viewport; modal header occlusion sampled at 3
+  header points (left edge, center, right edge) — every `elementFromPoint`
+  resolves inside the modal; default fetch path (no
+  injected `fetchImpl`) loads Polish Ekstraklasa with 2 real TSDB games on
+  2026-07-24; real CDP pointer clicks open the modal, select the league,
+  and close via ×; mobile 390px: `documentElement.scrollWidth === innerWidth
+  === 390` (no page-level horizontal scroll; `body.scrollWidth=1280` after the
+  desktop→mobile emulation switch is the clipped game stage, html/body are
+  `overflow-x:hidden`) and the modal has zero internal horizontal overflow
+  (`modal.scrollWidth === modal.clientWidth === 390`); zero league-feature
+  console errors.
