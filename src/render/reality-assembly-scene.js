@@ -1,6 +1,9 @@
 /** Unified glass-cube world. One Three.js design language: chunky volumetric
  * glass cubes — no flat label-constellation path.
- * - Far zoom merges the world into ONE giant glass block (the start view).
+ * - EXTREME far zoom merges the world into ONE giant CLEAN glass block: inner
+ *   detail fades out across the merge until only the empty pulsing cube
+ *   remains. The constellation stays distinct through the whole normal
+ *   zoom-out range.
  * - Approaching springs cubes open; nested cubes inside spring open in turn.
  * - Per-cube traits are deterministic and local (visual uniqueness only).
  *   No chain, no wallet, no minting — projection only, never an authority. */
@@ -17,6 +20,11 @@ export function featureTraits(id){
   };
 }
 const BEACON_COLORS=['#ae2848','#d0a03c','#3fa9e0'];
+/** The constellation stays distinct through the whole normal zoom-out range;
+ * only EXTREME far zoom (beyond this camera distance) merges the world into
+ * ONE giant clean pulsing glass block. The merged cube's inner mini-cubes
+ * fade out across the transition and are gone at full merge. */
+export const LOD_FAR=160;
 export function buildRealityAssemblyScene({THREE,parent,features,targets=[]}){
   const layer=new THREE.Group();layer.name='Reality Assembly / shared feature projection';layer.visible=false;parent.add(layer);
   const geometry=new Set(),materials=new Set(),selectable=[],nodes=new Map();
@@ -56,7 +64,7 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[]}){
   layer.add(new THREE.HemisphereLight('#a8cfff','#08101a',1.1));
   const warm=new THREE.DirectionalLight('#fce2b6',2.4);warm.position.set(-7,14,10);layer.add(warm);
 
-  // ONE giant block: the far-zoom / start view of the whole world.
+  // ONE giant block: the extreme far-zoom view of the whole world.
   const worldBlock=group('world-block');worldBlock.visible=false;
   const wbGlass=makeMaterial('#1b4d6e',{transparent:true,opacity:0,depthWrite:false,roughness:.12,metalness:.15,emissive:'#0e5a8a',emissiveIntensity:.25});
   const wbEdgeMat=new THREE.LineBasicMaterial({color:'#7fd4ff',transparent:true,opacity:0});materials.add(wbEdgeMat);
@@ -65,10 +73,11 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[]}){
   worldBlock.add(new THREE.LineSegments(wbEdgeGeo,wbEdgeMat));
   const wbRand=traitRandom(hashString('matumbo:world-block'));
   const wbCellMat=makeMaterial('#2a6d96',{transparent:true,opacity:0,depthWrite:false,roughness:.2});
+  const wbCells=[];
   for(let i=0;i<8;i++){
     const s=2+wbRand()*3;
     const cell=box([s,s,s],[(wbRand()-.5)*22,2+(wbRand()-.5)*10,(wbRand()-.5)*22],wbCellMat,worldBlock);
-    cell.name=`world-block/cell-${i}`;
+    cell.name=`world-block/cell-${i}`;wbCells.push(cell);
   }
 
   const CORE=2.0,FACE=2.14,REST=CORE/2+.09;
@@ -139,7 +148,6 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[]}){
   const connectionMaterial=new THREE.LineBasicMaterial({color:'#36a6d3',transparent:true,opacity:.34});materials.add(connectionMaterial);
   const connections=new THREE.LineSegments(connectionGeometry,connectionMaterial);connections.frustumCulled=false;layer.add(connections);
   let selected=null,hovered=null,mode='3d',viewState=null,focusId=null,lodBlend=0;
-  const LOD_FAR=40;
   const projectedPosition=new THREE.Vector3(),scatterDirection=new THREE.Vector3();
   function apply(snapshot,{viewMode='3d',hoveredId=null}={}){
     viewState=snapshot;selected=snapshot.selectedId;hovered=hoveredId;mode=viewMode;
@@ -154,7 +162,12 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[]}){
     lodBlend+=((cameraDistance>LOD_FAR?1:0)-lodBlend)*blend;
     const showWorld=lodBlend>.5;
     worldBlock.visible=lodBlend>.02;
-    wbGlass.opacity=lodBlend*.5;wbEdgeMat.opacity=lodBlend*.85;wbCellMat.opacity=lodBlend*.4;
+    wbGlass.opacity=lodBlend*.5;wbEdgeMat.opacity=lodBlend*.85;
+    // The merged far-zoom cube is CLEAN: inner mini-cubes fade out across the
+    // transition and are fully hidden once the merge completes, leaving only
+    // the empty pulsing glass cube (wbCore) and its edge frame (wbEdgeMat).
+    wbCellMat.opacity=(1-lodBlend)*.4;
+    for(const wbCell of wbCells)wbCell.visible=lodBlend<=.5;
     wbGlass.emissiveIntensity=.22+.14*Math.sin(time*.8);
     connections.visible=!showWorld;
     const buffer=connectionGeometry.attributes.position;

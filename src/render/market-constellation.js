@@ -1,8 +1,14 @@
 import * as THREE from 'three';
+import {isCompactViewport,resolvePixelRatioCap} from './render-perf.js';
 
 /** Geometry is a view, never the authority for contract records. */
 export function mountMarketConstellation({host,onSelect}) {
-  const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));host.append(renderer.domElement);
+  // Mobile perf: compact viewports get no MSAA and a pixelRatio of 1 (desktop
+  // keeps antialias + the 1.5 cap). Rendering is already on-demand; draw()
+  // also skips background tabs.
+  const viewWidth=host.ownerDocument?.defaultView?.innerWidth??globalThis.innerWidth??0;
+  const renderer=new THREE.WebGLRenderer({antialias:!isCompactViewport(viewWidth),alpha:true});
+  renderer.setPixelRatio(resolvePixelRatioCap(typeof devicePixelRatio==='number'?devicePixelRatio:1,viewWidth));host.append(renderer.domElement);
   renderer.domElement.style.cssText='width:100%;height:100%;touch-action:none';
   renderer.domElement.setAttribute('aria-label','Contract cubes. Drag to orbit, wheel to zoom. Normal-view buttons provide keyboard selection.');
   const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(45,1,.1,300),group=new THREE.Group();scene.add(group);
@@ -26,7 +32,7 @@ export function mountMarketConstellation({host,onSelect}) {
     }
     host.dataset.objectIds=JSON.stringify(records.map(r=>r.id));host.dataset.selectedId=selected||'';draw();
   }
-  function draw(){if(!visible||host.hidden)return;const width=host.clientWidth,height=host.clientHeight;if(!width||!height)return;renderer.setSize(width,height,false);camera.aspect=width/height;camera.position.set(distance*Math.sin(yaw)*Math.cos(pitch),distance*Math.sin(pitch),distance*Math.cos(yaw)*Math.cos(pitch));camera.lookAt(0,0,0);camera.updateProjectionMatrix();renderer.render(scene,camera);}
+  function draw(){if(!visible||host.hidden||host.ownerDocument?.hidden)return;const width=host.clientWidth,height=host.clientHeight;if(!width||!height)return;renderer.setSize(width,height,false);camera.aspect=width/height;camera.position.set(distance*Math.sin(yaw)*Math.cos(pitch),distance*Math.sin(pitch),distance*Math.cos(yaw)*Math.cos(pitch));camera.lookAt(0,0,0);camera.updateProjectionMatrix();renderer.render(scene,camera);}
   renderer.domElement.addEventListener('pointerdown',e=>{pointer={x:e.clientX,y:e.clientY,lastX:e.clientX,lastY:e.clientY};renderer.domElement.setPointerCapture(e.pointerId);});
   renderer.domElement.addEventListener('pointermove',e=>{if(!pointer)return;yaw-=(e.clientX-pointer.lastX)*.008;pitch=Math.max(-1.3,Math.min(1.3,pitch+(e.clientY-pointer.lastY)*.008));pointer.lastX=e.clientX;pointer.lastY=e.clientY;draw();});
   renderer.domElement.addEventListener('pointerup',e=>{if(!pointer)return;const moved=Math.hypot(e.clientX-pointer.x,e.clientY-pointer.y);pointer=null;if(moved>5)return;const rect=renderer.domElement.getBoundingClientRect();raycaster.setFromCamera(new THREE.Vector2((e.clientX-rect.left)/rect.width*2-1,1-(e.clientY-rect.top)/rect.height*2),camera);const hit=raycaster.intersectObjects(meshes,false)[0];if(hit)onSelect(hit.object.userData.id);});

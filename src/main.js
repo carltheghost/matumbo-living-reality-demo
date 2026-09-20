@@ -17,6 +17,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { createLivingRealityProjection } from './core/demo-projection.js?v=20260918-muse2';
+import { resolveDefaultFeature } from './core/default-landing.js';
 import { createDeviceProjection, readBrowserProjectionPreferences } from './projections/device-projection.js';
 import { createDistributionExplorer } from './render/distribution-explorer.js';
 import { createLaunchDistributionRehearsal } from './domains/distribution-registry.js?v=20260828-distribution163';
@@ -7433,13 +7434,17 @@ if (requestedSocialPanel) {
     void socialExplorer?.refreshPublicPulse?.('url');
   }
 }
-// The no-query landing view is deliberately cube-first.  The focused Block
-// World is the interaction surface users can open, inspect, move, carry, and
-// route from; Reality Lens remains available as an explicit semantic view.
+// The no-query landing view opens the clean constellation world overview
+// (Reality Lens: labeled glass feature cubes, all consoles closed, the
+// directory closed). The cube-field interior only appears on deliberate
+// entry: ?feature=block-world / ?panel=block-world URLs, an explicit Block
+// World selection, or a cube-dive double-tap. resolveDefaultFeature is pure
+// and unit-tested; explicit routes below are never rewritten.
 const initialLandingQuery = new URLSearchParams(globalThis.location?.search ?? '');
 const initialLandingHash = String(globalThis.location?.hash ?? '');
-if (!initialLandingQuery.get('feature') && !initialLandingQuery.get('panel') && !initialLandingHash) {
-  featureNavigator.select('block-world', 'default', { updateLocation: false });
+const defaultLandingFeature = resolveDefaultFeature(initialLandingQuery, initialLandingHash);
+if (defaultLandingFeature) {
+  featureNavigator.select(defaultLandingFeature, 'default', { updateLocation: false });
   featureNavigator.close();
 } else if (initialLandingQuery.get('feature') === 'block-world' && !initialLandingQuery.get('panel')) {
   // URL-driven cube links should open directly into the field as well. The
@@ -8424,6 +8429,10 @@ const mediaPreview = createMediaPreview();
 // bar while a console is up. Desktop layout is untouched.
 initMobilePanelManager();
 function animate(){
+  // A background tab does no GPU work at all. Return before the clock delta
+  // is consumed; getDelta is clamped on resume, so no time jump leaks into
+  // the next visible frame.
+  if(document.hidden)return;
   const rawDt=Math.min(clock.getDelta(),.035),dt=rawDt*(reducedMotion?.22:1),t=clock.elapsedTime;
   if(realityAssembly?.active){
     realityAssembly.update(dt,t);

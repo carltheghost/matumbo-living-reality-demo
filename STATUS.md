@@ -15,8 +15,20 @@ Build: f2c069a3 — ledger-core (+ 36 tests)
 
 The demo has:
 - 31 connected features
-- 1020 out of 1020 tests passing
+- 1031 out of 1031 tests passing
 - 9 out of 9 release boundaries green
+
+New since the last STATUS update: default landing is the clean
+constellation world overview (Reality Lens — `resolveDefaultFeature` in
+`src/core/default-landing.js`; the cube-field interior only appears on
+deliberate entry), the far-zoom single-cube merge now waits for EXTREME
+zoom-out (`LOD_FAR` 40 → 160, exported from
+`src/render/reality-assembly-scene.js`; the merged cube is a clean empty
+pulsing glass block — inner mini-cubes fade out across the merge),
+assembly panels start closed (`assembly-clean` on open), and mobile
+rendering perf fixes (secondary renderers cap pixelRatio to 1 + no MSAA
+on ≤700px viewports, visibility-paused loops in `chess-arena.js`, and a
+`document.hidden` skip in the main animation loop — `src/render/render-perf.js`).
 
 New since the last STATUS update: TypeSafe judgment integration
 (`src/ai/judgments.js`, `docs/AI_JUDGMENTS.md`) — deterministic local

@@ -143,9 +143,15 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   const canvas=renderer.domElement;canvas.addEventListener('pointerdown',down,true);canvas.addEventListener('pointermove',move);canvas.addEventListener('pointerup',release);canvas.addEventListener('pointercancel',release);canvas.addEventListener('dblclick',double);document.addEventListener('keydown',keys);
   function open(){
     if(active)return;active=true;saved={position:camera.position.clone(),target:controls.target.clone(),fov:camera.fov,min:controls.minDistance,max:controls.maxDistance,worldVisible:world.visible,fog:scene.fog,environment:scene.environment};
-    root.hidden=false;spatial.layer.visible=true;world.visible=false;scene.fog=new THREE.FogExp2('#030911',.009);document.body.classList.add('assembly-mode');
+    root.hidden=false;
+    // Panels start CLOSED: the default view is the clean constellation of
+    // cubes. The user materializes the directory / inspector with the header
+    // toggles ("Show panels", "Find a world", inspector fold); nothing
+    // auto-opens large over the 3D view.
+    root.classList.add('assembly-clean');find('[data-clean]').textContent='Show panels';
+    spatial.layer.visible=true;world.visible=false;scene.fog=new THREE.FogExp2('#030911',.009);document.body.classList.add('assembly-mode');
     scene.environment=environmentTexture;
-    camera.fov=48;camera.updateProjectionMatrix();controls.minDistance=3;controls.maxDistance=80;overview();camera.position.copy(focusPosition);controls.target.copy(focusTarget);focusPosition=null;focusTarget=null;controls.update();render();
+    camera.fov=48;camera.updateProjectionMatrix();controls.minDistance=3;controls.maxDistance=220;overview();camera.position.copy(focusPosition);controls.target.copy(focusTarget);focusPosition=null;focusTarget=null;controls.update();render();
   }
   function close(){
     if(!active)return;setDirectory(false);active=false;pointer=null;controls.enabled=true;root.hidden=true;spatial.layer.visible=false;document.body.classList.remove('assembly-mode');

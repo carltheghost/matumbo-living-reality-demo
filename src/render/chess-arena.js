@@ -21,6 +21,7 @@ import {avatarIdlePose,avatarGlide,AVATAR_MOTION} from '../domains/avatar-motion
 import {AVATAR_FACE_STORAGE_KEY} from '../domains/avatar-style.js?v=20260918-avatar-chess';
 import {PERSON_STUDIO_STORAGE_KEY} from '../domains/person-studio.js';
 import {buildArenaHall,createPieceBuilders,readArenaAvatarAppearance,squarePosition,CHESS_ROLE_GLYPHS} from './chess-arena-pieces.js?v=20260918-avatar-chess';
+import {isCompactViewport,resolvePixelRatioCap,shouldRunSecondaryLoop} from './render-perf.js';
 
 const pieceName={p:'Pawn',n:'Knight',b:'Bishop',r:'Rook',q:'Queen',k:'King'};
 const sideName={w:'White',b:'Black'};
@@ -140,7 +141,13 @@ export function mountChessArena({documentRoot=document,host}){
   // ---- three.js scene ----
   let appearance=readArenaAvatarAppearance();
   let builders=createPieceBuilders(THREE,appearance);
-  const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));renderer.domElement.className='chess-arena-canvas';stage.append(renderer.domElement);
+  // Mobile perf: compact viewports get no MSAA and a pixelRatio of 1, which
+  // cuts the fill-rate/transparent-overdraw cost on phone GPUs. Desktop is
+  // untouched (antialias on, cap 1.5).
+  const viewportWidth=documentRoot.defaultView?.innerWidth??globalThis.innerWidth??0;
+  const dpr=typeof devicePixelRatio==='number'?devicePixelRatio:1;
+  const renderer=new THREE.WebGLRenderer({antialias:!isCompactViewport(viewportWidth),alpha:true});
+  renderer.setPixelRatio(resolvePixelRatioCap(dpr,viewportWidth));renderer.domElement.className='chess-arena-canvas';stage.append(renderer.domElement);
   const scene=new THREE.Scene();scene.fog=new THREE.Fog(0x05070c,20,46);
   scene.add(new THREE.HemisphereLight(0x8fa8ff,0x140a20,1.15));
   const key=new THREE.DirectionalLight(0xffd9a0,2.6);key.position.set(5,9,6);scene.add(key);
@@ -511,12 +518,24 @@ export function mountChessArena({documentRoot=document,host}){
 
   /** Continuous idle loop: every champion breathes the avatar motion language
    *  — bob, sway-turn, glow-ring pulse — while the camera orbits or glides run.
-   *  Frozen when the OS asks for reduced motion. */
+   *  Frozen when the OS asks for reduced motion. Paused while the stage is
+   *  hidden/detached or the tab is in the background (mobile perf): the
+   *  IntersectionObserver + visibilitychange handlers below restart it. */
   let motionRaf=0;
+  function motionHostVisible(){
+    return shouldRunSecondaryLoop({
+      alive,
+      connected:stage.isConnected===true,
+      offsetVisible:stage.offsetParent!==null,
+      documentHidden:!!view?.document?.hidden,
+    });
+  }
   function startMotionLoop(){
     if(motionRaf||reducedMotion)return;
     const tick=(now)=>{
-      if(!alive)return;
+      // A hidden/detached host or background tab stops the loop entirely;
+      // resumeMotionLoop() restarts it when the stage is visible again.
+      if(!alive||!motionHostVisible()){motionRaf=0;return;}
       const time=now/1000;
       for(const [,mesh] of meshes){
         if(gliding.has(mesh))continue; // glide writes the pose itself
@@ -536,6 +555,20 @@ export function mountChessArena({documentRoot=document,host}){
   function stopMotionLoop(){
     if(motionRaf){cancelAnimationFrame(motionRaf);motionRaf=0;}
   }
+  function resumeMotionLoop(){
+    if(!reducedMotion&&alive&&!motionRaf&&motionHostVisible())startMotionLoop();
+  }
+  const onMotionVisibilityChange=()=>{if(view?.document?.hidden)stopMotionLoop();else resumeMotionLoop();};
+  view?.addEventListener?.('visibilitychange',onMotionVisibilityChange);
+  let motionVisibilityObserver=null;
+  if(typeof IntersectionObserver!=='undefined'){
+    try{
+      motionVisibilityObserver=new IntersectionObserver((entries)=>{
+        for(const entry of entries){if(entry.isIntersecting)resumeMotionLoop();else stopMotionLoop();}
+      });
+      motionVisibilityObserver.observe(stage);
+    }catch{motionVisibilityObserver=null;}
+  }
 
   buildAllPieces();
   refreshStatus();
@@ -551,6 +584,8 @@ export function mountChessArena({documentRoot=document,host}){
       stopMotionLoop();
       ro.disconnect();
       view?.removeEventListener?.('storage',onStorage);
+      view?.removeEventListener?.('visibilitychange',onMotionVisibilityChange);
+      motionVisibilityObserver?.disconnect?.();motionVisibilityObserver=null;
       documentRoot.removeEventListener?.('person-studio:avatar-changed',onAvatarFaceChanged);
       hall.dispose();
       for(const [,group] of meshes){pieces.remove(group);releasePiece(group);}
