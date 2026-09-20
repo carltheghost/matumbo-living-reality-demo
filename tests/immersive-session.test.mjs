@@ -185,11 +185,9 @@ test("shared immersive session starts AR on the canonical renderer and restores 
   harness.controllers[0].dispatchEvent?.({ type: "select" });
   assert.equal(selected.length, 0);
 
-  session.reset();
+  await session.destroy();
+  assert.equal(harness.ended, true);
   assert.equal(session.active, false);
   assert.notEqual(harness.scene.background, null);
   assert.equal(harness.renderer.getClearAlpha(), 1);
-
-  await session.destroy();
-  assert.equal(harness.ended, false);
 });
