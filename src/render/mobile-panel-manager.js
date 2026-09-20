@@ -1,3 +1,4 @@
+import "./token-trade-mount.js";
 /** Mobile panel manager — 2D UI chrome/layout only.
  *
  * On narrow viewports (<=700px) only one floating panel may be visible at a
