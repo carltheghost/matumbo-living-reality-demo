@@ -1,269 +1,1361 @@
 /**
- * STUB WIRING — src/domains/token.js did not exist on main.
- * This module is a clearly-marked simulation-only facade for workstream 8
- * (token buy/sell panels). It is NOT an issuer, wallet, custody service,
- * signer, settlement engine, exchange, or financial instrument.
+ * TumboToken — TUMBO / sMIMAS token core with a hardened quote engine.
  *
- * Contract:
- *   - Integer fluff units (1 TUMBO-SIM = 1000 fluff; display divides by 1000)
- *   - Assets: TUMBO, sMIMAS — supply from ONE config constant only
- *   - Facade: window.TumboToken = { ledger, balance, fmt, on }
- *   - Events: document CustomEvent('tumbo:token', { detail: { type, tx, ... } })
- *   - Quote shape: { id, action, from, to, amountIn, amountOut, expiresAt, hash }
- *   - 10 bps Void tithe on settle, reported on receipts
- *   - Every surface is SIMULATED — not real money
+ * SIMULATED POINTS ONLY. Every balance in this module is a simulated
+ * TUMBO-SIM point. There is no real money, no wagering, no wallet custody,
+ * no chain, and no settlement. Any surface built on this module must be
+ * labelled "simulated".
+ *
+ * Shared contract (token workstream):
+ * - Units: integer fluff. 1 TUMBO-SIM = 1000 fluff. Safe integers, >= 0.
+ * - Assets: TUMBO, sMIMAS. Supply originates from the single CONFIG
+ *   constant below — never hardcoded or quoted anywhere else.
+ * - Accounts: u:<name>, b:<name>, sys:treasury, sys:faucet, sys:escrow,
+ *   sys:vault, sys:vault, sys:market. sys:void is credited only by
+ *   burns/tithes and is never debited.
+ * - Actions: send|receive|exchange|buy|sell|deliver|tip|stake|save|deposit|
+ *   lock|reverse|cancel|unstake|withdraw.
+ * - Every mutation takes a client idempotency key; replays return the
+ *   original receipt. Journals sum to 0 per asset; balances never negative.
+ * - Quote engine: quote() returns {id, action, from, to, amountIn, amountOut,
+ *   expiresAt, hash}; execute() recomputes the hash and rejects expired or
+ *   tampered quotes. Market ops (exchange|buy|sell) settle against the
+ *   sys:market market maker and pay a 10 bps Void tithe (10 per 10,000)
+ *   to sys:void.
+ * - Facade: window.TumboToken = { ledger, balance(acct, asset), fmt(fluff),
+ *   on(evt, cb) }; settling emits document CustomEvent("tumbo:token",
+ *   { detail: { type: "balance-changed" | "receipt", ... } }).
+ *
+ * This module adds no 3D and no UI: it is pure ledger logic plus DOM events.
+ * It is dependency-free and runs in browsers and in Node.js.
  */
 
-export const TOKEN_STUB_BOUNDARY =
-  "SIMULATED — not real money. Local projection only. No wallet, custody, signing, settlement, or external transfer authority.";
+// ---------------------------------------------------------------------------
+// 1. The ONE config constant: supply, market float, tithe, TTL, price.
+// ---------------------------------------------------------------------------
 
-/** Single supply config. Never hardcode or publicly quote a supply number elsewhere. */
-export const TOKEN_SUPPLY_CONFIG = Object.freeze({
-  TUMBO_FLUFF: 1_000_000_000_000, // internal fluff; display via fmt()
-  SMIMAS_FLUFF: 500_000_000_000,
-  FLUFF_PER_UNIT: 1000, // 1 TUMBO-SIM display unit = 1000 fluff
-  VOID_TITHE_BPS: 10, // 10 basis points on settle
-  QUOTE_TTL_MS: 15_000,
-  SIMULATION: true,
+export const CONFIG = Object.freeze({
+  /** Total issued supply, in integer fluff (1 TUMBO-SIM = 1000 fluff). */
+  supply: Object.freeze({ TUMBO: 10_000_000_000, sMIMAS: 100_000_000_000 }),
+  /** TUMBO float seeded from the treasury into the market maker. */
+  marketFloatTumbo: 1_000_000_000,
+  /** TUMBO handed to the faucet for demo funding. */
+  faucetTumbo: 500_000_000,
+  /** Void tithe on market ops, in basis points (10 bps = 10 per 10,000). */
+  titheBps: 10,
+  titheDenominator: 10_000,
+  /** How long a quote stays executable, in milliseconds. */
+  quoteTtlMs: 60_000,
+  /** Market price as an exact rational: 1 TUMBO buys num/den sMIMAS. */
+  price: Object.freeze({ num: 10, den: 1 }),
 });
 
-export const TOKEN_ASSETS = Object.freeze(["TUMBO", "sMIMAS"]);
-export const TOKEN_EVENT = "tumbo:token";
-export const TOKEN_SOURCE = "tumbo-token-stub";
+// ---------------------------------------------------------------------------
+// 2. Exact integer math — never float on funds.
+// ---------------------------------------------------------------------------
 
-const freeze = (v) => Object.freeze(v);
-
-function requireAsset(asset) {
-  if (!TOKEN_ASSETS.includes(asset)) throw new TypeError(`Unknown asset: ${asset}`);
-  return asset;
-}
-
-function requireAcct(acct) {
-  if (typeof acct !== "string" || !acct.trim()) throw new TypeError("acct must be a non-empty string");
-  return acct.trim();
-}
-
-function requirePositiveInt(n, field) {
-  if (!Number.isSafeInteger(n) || n < 0) throw new TypeError(`${field} must be a safe non-negative integer fluff amount`);
+/** Require a non-negative safe integer amount of fluff. */
+export function assertFluff(n, name = "amount") {
+  if (typeof n !== "number" || !Number.isSafeInteger(n) || n < 0) {
+    throw new TypeError(`${name} must be a non-negative safe integer (fluff); got ${String(n)}`);
+  }
   return n;
 }
 
-/** Format fluff integer → display string (divide by 1000). */
-export function fmt(fluff) {
-  const n = Number(fluff);
-  if (!Number.isFinite(n)) return "—";
-  const units = n / TOKEN_SUPPLY_CONFIG.FLUFF_PER_UNIT;
-  return units.toLocaleString(undefined, { maximumFractionDigits: 3, minimumFractionDigits: 0 });
+/** Require a signed safe integer (journal postings may be debits). */
+export function assertSignedFluff(n, name = "amount") {
+  if (typeof n !== "number" || !Number.isSafeInteger(n)) {
+    throw new TypeError(`${name} must be a signed safe integer; got ${String(n)}`);
+  }
+  return n;
 }
 
-/** Simple deterministic hash for quote ids (simulation only). */
-function simHash(parts) {
-  const text = parts.map(String).join("|");
-  let h = 2166136261;
-  for (let i = 0; i < text.length; i++) {
-    h ^= text.charCodeAt(i);
-    h = Math.imul(h, 16777619);
+/**
+ * Exact floor(a * b / c) for non-negative safe integers. The product is
+ * computed with BigInt so large intermediate values stay exact —
+ * floating-point math is never used on funds.
+ */
+export function mulDivFloor(a, b, c) {
+  assertFluff(a, "a");
+  assertFluff(b, "b");
+  if (typeof c !== "number" || !Number.isSafeInteger(c) || c <= 0) {
+    throw new TypeError(`divisor must be a positive safe integer; got ${String(c)}`);
   }
-  return `qh_${(h >>> 0).toString(16).padStart(8, "0")}`;
+  const q = (BigInt(a) * BigInt(b)) / BigInt(c);
+  if (q > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new RangeError("mulDivFloor result exceeds the safe integer range");
+  }
+  return Number(q);
 }
 
-function emit(type, detail = {}) {
-  const payload = freeze({
-    type,
-    simulation: true,
-    localOnly: true,
-    executable: false,
-    externalNetwork: false,
-    externalTransfer: false,
-    boundary: TOKEN_STUB_BOUNDARY,
-    ...detail,
-  });
-  if (typeof document !== "undefined" && typeof document.dispatchEvent === "function") {
-    try {
-      document.dispatchEvent(new CustomEvent(TOKEN_EVENT, { detail: payload }));
-    } catch {
-      /* non-DOM test environments */
-    }
+// FNV-1a 64-bit: deterministic, synchronous, dependency-free hashing for
+// quote tamper-evidence. Works identically in browsers and in Node.js.
+const FNV64_OFFSET = 0xcbf29ce484222325n;
+const FNV64_PRIME = 0x100000001b3n;
+const FNV64_MASK = 0xffffffffffffffffn;
+
+export function fnv1a64Hex(input) {
+  const s = String(input);
+  let h = FNV64_OFFSET;
+  for (let i = 0; i < s.length; i++) {
+    h ^= BigInt(s.charCodeAt(i));
+    h = (h * FNV64_PRIME) & FNV64_MASK;
   }
-  for (const cb of listeners.get(type) || []) {
-    try {
-      cb(payload);
-    } catch {
-      /* ignore listener errors */
-    }
-  }
-  for (const cb of listeners.get("*") || []) {
-    try {
-      cb(payload);
-    } catch {
-      /* ignore */
-    }
-  }
-  return payload;
+  return h.toString(16).padStart(16, "0");
 }
 
-const listeners = new Map();
+let _idSeq = 0;
+/** Unique id without any node:crypto dependency (browser-safe). */
+export function newId(prefix = "id") {
+  _idSeq += 1;
+  const rand = Math.floor(Math.random() * 0xffffffff).toString(16).padStart(8, "0");
+  return `${prefix}_${Date.now().toString(36)}_${_idSeq.toString(36)}_${rand}`;
+}
 
-/** In-memory ledger: acct → { TUMBO: fluff, sMIMAS: fluff } */
-const ledger = new Map();
+// ---------------------------------------------------------------------------
+// 3. Accounts and assets.
+// ---------------------------------------------------------------------------
 
-function ensureAcct(acct) {
-  const key = requireAcct(acct);
-  if (!ledger.has(key)) {
-    ledger.set(
-      key,
-      freeze({
-        TUMBO: Math.floor(TOKEN_SUPPLY_CONFIG.TUMBO_FLUFF / 100),
-        sMIMAS: Math.floor(TOKEN_SUPPLY_CONFIG.SMIMAS_FLUFF / 50),
-      }),
+export const ASSETS = Object.freeze(["TUMBO", "sMIMAS"]);
+
+const SYS_ACCOUNTS = new Set([
+  "sys:treasury",
+  "sys:faucet",
+  "sys:escrow",
+  "sys:vault",
+  "sys:vault",
+  "sys:market",
+  "sys:void",
+  // Internal negative mirror so every journal sums to zero per asset.
+  "sys:issuance",
+]);
+
+const USER_ACCOUNT_RE = /^(u|b):[a-z0-9][a-z0-9_-]{0,63}$/i;
+
+export function assertAsset(asset) {
+  if (!ASSETS.includes(asset)) {
+    throw new TypeError(`unknown asset ${String(asset)}; expected one of ${ASSETS.join(", ")}`);
+  }
+  return asset;
+}
+
+export function assertAccount(account) {
+  if (typeof account !== "string" || !(SYS_ACCOUNTS.has(account) || USER_ACCOUNT_RE.test(account))) {
+    throw new TypeError(`invalid account ${String(account)}; expected u:<name>, b:<name>, or a known sys: account`);
+  }
+  return account;
+}
+
+export function isUserAccount(account) {
+  return typeof account === "string" && USER_ACCOUNT_RE.test(account);
+}
+
+// ---------------------------------------------------------------------------
+// 4. TokenLedger — double-entry journal with hard invariants.
+// ---------------------------------------------------------------------------
+
+// Part C — lifecycle: canonical receipt chain hashing (defined here so the
+// ledger methods below can use it; see section 5c for the lifecycle API).
+export function receiptChainHash(r) {
+  const legs = r.postings.map((p) => `${p.account}|${p.asset}|${p.amount}`).join(";");
+  const body = [
+    "tumbo:receipt:v1",
+    r.id,
+    r.action,
+    r.idempotencyKey,
+    String(r.tick),
+    r.prevHash,
+    legs,
+    r.memo ?? "",
+  ].join("|");
+  return fnv1a64Hex(body);
+}
+
+export class TokenLedger {
+  constructor() {
+    this._balances = new Map();
+    this._opened = [];
+    this._negativeOk = new Set();
+    this._receipts = new Map(); // idempotencyKey -> receipt
+    this._journals = [];
+    // Part C — lifecycle: one tick per committed journal; receipts are
+    // hash-chained (EchoProof-style) from the "genesis" anchor.
+    this.tick = 0;
+    this._lastReceiptHash = "genesis";
+  }
+
+  _key(account, asset) {
+    return `${account}|${asset}`;
+  }
+
+  openAccount(account, asset, { allowNegative = false } = {}) {
+    assertAccount(account);
+    assertAsset(asset);
+    const k = this._key(account, asset);
+    if (!this._balances.has(k)) {
+      this._balances.set(k, 0);
+      this._opened.push({ account, asset });
+    }
+    if (allowNegative) this._negativeOk.add(k);
+    return this;
+  }
+
+  /** Balance in integer fluff; 0 for a valid account never touched. */
+  balance(account, asset) {
+    assertAccount(account);
+    assertAsset(asset);
+    return this._balances.get(this._key(account, asset)) ?? 0;
+  }
+
+  accounts() {
+    return this._opened.map((e) => ({ ...e }));
+  }
+
+  journalCount() {
+    return this._journals.length;
+  }
+
+  /**
+   * Post a double-entry journal. Each posting is { account, asset, amount }
+   * with a SIGNED safe integer amount (negative = debit).
+   *
+   * Invariants enforced:
+   * - idempotencyKey is required; replays return the original receipt.
+   * - every asset's postings sum to exactly zero;
+   * - no account goes negative (except allowNegative accounts);
+   * - sys:void is never debited, and is credited only when
+   *   voidCreditReason is "tithe" or "burn".
+   */
+  post(postings, { idempotencyKey, action = "post", memo = "", voidCreditReason = null, links = null, authority = null } = {}) {
+    if (typeof idempotencyKey !== "string" || idempotencyKey.length === 0) {
+      throw new TypeError("post() requires a client idempotencyKey");
+    }
+    const replay = this._receipts.get(idempotencyKey);
+    if (replay) return replay;
+    if (!Array.isArray(postings) || postings.length === 0) {
+      throw new TypeError("post() requires a non-empty postings array");
+    }
+
+    const sums = new Map();
+    for (const p of postings) {
+      assertAccount(p.account);
+      assertAsset(p.asset);
+      assertSignedFluff(p.amount, "posting.amount");
+      if (p.account === "sys:void" && p.amount < 0) {
+        throw new Error("sys:void is never debited");
+      }
+      // System-account firewall: only internal engine paths may debit a
+      // sys:* account. Direct ledger.post() callers cannot move funds out of
+      // treasury, escrow, vault, market, or the faucet.
+      if (p.account.startsWith("sys:") && p.amount < 0 && authority !== "internal") {
+        throw new Error(`system account ${p.account} requires internal authority to debit`);
+      }
+      if (p.account === "sys:void" && p.amount > 0 && voidCreditReason !== "tithe" && voidCreditReason !== "burn") {
+        throw new Error("sys:void is credited only by tithes or burns");
+      }
+      const next = (sums.get(p.asset) ?? 0) + p.amount;
+      if (!Number.isSafeInteger(next)) throw new RangeError("journal sum exceeds the safe integer range");
+      sums.set(p.asset, next);
+    }
+    for (const [asset, sum] of sums) {
+      if (sum !== 0) throw new Error(`journal does not sum to zero for ${asset} (sum ${sum})`);
+    }
+
+    const applied = new Map();
+    for (const p of postings) {
+      this.openAccount(p.account, p.asset);
+      const k = this._key(p.account, p.asset);
+      const next = (applied.has(k) ? applied.get(k) : this._balances.get(k)) + p.amount;
+      if (!Number.isSafeInteger(next)) throw new RangeError("balance exceeds the safe integer range");
+      if (next < 0 && !this._negativeOk.has(k)) {
+        throw new Error(`insufficient funds: ${p.account} holds ${this._balances.get(k)} ${p.asset}`);
+      }
+      applied.set(k, next);
+    }
+    for (const [k, v] of applied) this._balances.set(k, v);
+
+    // Part C — one tick per committed journal; each receipt carries its tick
+    // and a hash chained to the previous receipt (tamper-evident chain).
+    this.tick += 1;
+    const prevHash = this._lastReceiptHash;
+    const frozenPostings = Object.freeze(postings.map((p) => Object.freeze({ ...p })));
+    const unsigned = {
+      id: newId("rcpt"),
+      kind: "receipt",
+      action,
+      idempotencyKey,
+      memo,
+      tick: this.tick,
+      prevHash,
+      postings: frozenPostings,
+      ts: Date.now(),
+    };
+    const hash = receiptChainHash(unsigned);
+    const receiptFields = { ...unsigned, hash };
+    if (links !== null && links !== undefined) {
+      receiptFields.links = Object.freeze({ ...links });
+    }
+    const receipt = Object.freeze(receiptFields);
+    this._lastReceiptHash = hash;
+    this._receipts.set(idempotencyKey, receipt);
+    this._journals.push(receipt);
+    return receipt;
+  }
+
+  /**
+   * Recompute one receipt's chain hash and check its linkage to the
+   * previous journal. Returns { ok, receipt, checks }.
+   */
+  verifyReceipt(idOrKey) {
+    const r =
+      this._receipts.get(idOrKey) ??
+      this._journals.find((j) => j.id === idOrKey) ??
+      null;
+    if (!r) return { ok: false, reason: "unknown-receipt" };
+    const idx = this._journals.indexOf(r);
+    const expectedPrev = idx <= 0 ? "genesis" : this._journals[idx - 1].hash;
+    const checks = [
+      { name: "hash", ok: r.hash === receiptChainHash(r) },
+      { name: "prevHash-link", ok: r.prevHash === expectedPrev },
+      { name: "tick-order", ok: idx <= 0 || r.tick > this._journals[idx - 1].tick },
+    ];
+    return { ok: checks.every((c) => c.ok), receipt: r.id, checks: Object.freeze(checks) };
+  }
+
+  /**
+   * Walk the whole journal chain, recomputing hashes and checking linkage.
+   * Any tampering with a stored journal (postings, tick, prevHash) fails.
+   */
+  verifyChain() {
+    let prev = "genesis";
+    for (let i = 0; i < this._journals.length; i++) {
+      const r = this._journals[i];
+      if (r.prevHash !== prev) return { ok: false, at: r.id, reason: "broken-link" };
+      if (r.hash !== receiptChainHash(r)) return { ok: false, at: r.id, reason: "hash-mismatch" };
+      prev = r.hash;
+    }
+    return { ok: true, count: this._journals.length, tip: prev };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 5. Quote engine.
+// ---------------------------------------------------------------------------
+
+export class QuoteError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "QuoteError";
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 5b. Lifecycle errors + constants (Part C — ported from the token-lifecycle
+// workstream; semantics: reverse posts compensating journals and never
+// edits history; settled cancel fails closed).
+// ---------------------------------------------------------------------------
+
+/** Bounded reverse window, in ledger ticks (one tick per committed journal). */
+export const REVERSE_WINDOW_TICKS = 1000;
+
+export class AlreadyReversedError extends QuoteError {
+  constructor(message) {
+    super(message);
+    this.name = "AlreadyReversedError";
+  }
+}
+
+export class ReverseWindowExpiredError extends QuoteError {
+  constructor(message) {
+    super(message);
+    this.name = "ReverseWindowExpiredError";
+  }
+}
+
+export class CancelRejectedError extends QuoteError {
+  constructor(message) {
+    super(message);
+    this.name = "CancelRejectedError";
+  }
+}
+
+export class JournalNotFoundError extends QuoteError {
+  constructor(message) {
+    super(message);
+    this.name = "JournalNotFoundError";
+  }
+}
+
+export const MARKET_ACTIONS = Object.freeze(["exchange", "buy", "sell"]);
+export const MARKET_MAKER = "sys:market";
+export const VOID_ACCOUNT = "sys:void";
+
+/**
+ * Tamper-evident quote hash. The hash binds every quote field; execute()
+ * recomputes it and rejects any mismatch.
+ */
+export function quoteHash(q) {
+  const body = [
+    "tumbo:quote:v1",
+    q.id,
+    q.action,
+    q.from,
+    q.to,
+    q.fromAsset,
+    q.toAsset,
+    q.amountIn,
+    q.amountOut,
+    q.expiresAt,
+  ].join("|");
+  return fnv1a64Hex(body);
+}
+
+export class QuoteEngine {
+  constructor(config = CONFIG) {
+    this.config = config;
+    this.ledger = new TokenLedger();
+    this._receipts = new Map(); // idempotencyKey -> receipt
+    this._executedQuoteIds = new Set(); // consumed quote ids
+    this._issuedQuoteIds = new Set(); // quote ids ever issued (Part C)
+    this._cancelledQuoteIds = new Set(); // cancelled quote ids (Part C)
+    this._reversedJournalKeys = new Set(); // idempotency keys already reversed (Part C)
+    this._listeners = new Map();
+    this._genesis();
+  }
+
+  /** Issue supply once, from the single CONFIG constant. */
+  _genesis() {
+    const cfg = this.config;
+    const supplyTumbo = assertFluff(cfg?.supply?.TUMBO, "config.supply.TUMBO");
+    const supplySmimas = assertFluff(cfg?.supply?.sMIMAS, "config.supply.sMIMAS");
+    const floatTumbo = assertFluff(cfg?.marketFloatTumbo, "config.marketFloatTumbo");
+    const faucetTumbo = assertFluff(cfg?.faucetTumbo, "config.faucetTumbo");
+    if (floatTumbo + faucetTumbo > supplyTumbo) {
+      throw new RangeError("market float + faucet funding exceeds the TUMBO supply");
+    }
+    this.ledger.openAccount("sys:issuance", "TUMBO", { allowNegative: true });
+    this.ledger.openAccount("sys:issuance", "sMIMAS", { allowNegative: true });
+    this.ledger.post(
+      [
+        { account: "sys:issuance", asset: "TUMBO", amount: -supplyTumbo },
+        { account: "sys:treasury", asset: "TUMBO", amount: supplyTumbo },
+      ],
+      { idempotencyKey: "genesis:tumbo-supply", action: "genesis", authority: "internal" }
+    );
+    this.ledger.post(
+      [
+        { account: "sys:issuance", asset: "sMIMAS", amount: -supplySmimas },
+        { account: MARKET_MAKER, asset: "sMIMAS", amount: supplySmimas },
+      ],
+      { idempotencyKey: "genesis:smimas-supply", action: "genesis", authority: "internal" }
+    );
+    this.ledger.post(
+      [
+        { account: "sys:treasury", asset: "TUMBO", amount: -floatTumbo },
+        { account: MARKET_MAKER, asset: "TUMBO", amount: floatTumbo },
+      ],
+      { idempotencyKey: "genesis:market-float", action: "genesis", authority: "internal" }
+    );
+    this.ledger.post(
+      [
+        { account: "sys:treasury", asset: "TUMBO", amount: -faucetTumbo },
+        { account: "sys:faucet", asset: "TUMBO", amount: faucetTumbo },
+      ],
+      { idempotencyKey: "genesis:faucet", action: "genesis", authority: "internal" }
     );
   }
-  return ledger.get(key);
-}
 
-export function balance(acct, asset) {
-  const a = requireAsset(asset);
-  const row = ensureAcct(acct);
-  return row[a] ?? 0;
-}
-
-export function on(evt, cb) {
-  if (typeof cb !== "function") throw new TypeError("cb must be a function");
-  const key = evt || "*";
-  if (!listeners.has(key)) listeners.set(key, new Set());
-  listeners.get(key).add(cb);
-  return () => listeners.get(key)?.delete(cb);
-}
-
-/**
- * Simulated quote provider.
- * Buy  = sMIMAS → TUMBO  (from=sMIMAS, to=TUMBO)
- * Sell = TUMBO  → sMIMAS (from=TUMBO,  to=sMIMAS)
- * Returns quote object or null when no market (never throws an error wall).
- */
-export function getQuote({ action, amountIn, now = Date.now() } = {}) {
-  if (action !== "buy" && action !== "sell") return null;
-  const amt = Number(amountIn);
-  if (!Number.isSafeInteger(amt) || amt <= 0) return null;
-
-  if (amt % 7777 === 0) return null;
-
-  const from = action === "buy" ? "sMIMAS" : "TUMBO";
-  const to = action === "buy" ? "TUMBO" : "sMIMAS";
-  const amountOut = amt;
-  const expiresAt = now + TOKEN_SUPPLY_CONFIG.QUOTE_TTL_MS;
-  const id = `q_${action}_${now}_${amt}`;
-  const hash = simHash([id, action, from, to, amt, amountOut, expiresAt]);
-
-  return freeze({
-    id,
-    action,
-    from,
-    to,
-    amountIn: amt,
-    amountOut,
-    expiresAt,
-    hash,
-    simulation: true,
-    localOnly: true,
-    boundary: TOKEN_STUB_BOUNDARY,
-  });
-}
-
-export function isQuoteFresh(quote, now = Date.now()) {
-  return Boolean(quote && Number.isFinite(quote.expiresAt) && quote.expiresAt > now);
-}
-
-/**
- * Settle a quote. Applies 10 bps Void tithe on the outbound amount.
- * Rejects expired quotes. Emits balance-changed + receipt events.
- */
-export function settle(acct, quote, { now = Date.now() } = {}) {
-  if (!quote || !isQuoteFresh(quote, now)) {
-    return freeze({
-      ok: false,
-      reason: "quote-expired",
-      simulation: true,
-      boundary: TOKEN_STUB_BOUNDARY,
-    });
+  /** Exact rational price for a direction; sell uses the reciprocal. */
+  _priceFor(fromAsset, toAsset) {
+    const { num, den } = this.config.price;
+    if (fromAsset === "TUMBO" && toAsset === "sMIMAS") return { num, den };
+    if (fromAsset === "sMIMAS" && toAsset === "TUMBO") return { num: den, den: num };
+    throw new QuoteError(`unsupported market pair ${fromAsset} -> ${toAsset}`);
   }
 
-  const key = requireAcct(acct);
-  const from = requireAsset(quote.from);
-  const to = requireAsset(quote.to);
-  const amountIn = requirePositiveInt(quote.amountIn, "amountIn");
-  const amountOut = requirePositiveInt(quote.amountOut, "amountOut");
-
-  const row = { ...ensureAcct(key) };
-  if ((row[from] ?? 0) < amountIn) {
-    return freeze({
-      ok: false,
-      reason: "insufficient-balance",
-      simulation: true,
-      boundary: TOKEN_STUB_BOUNDARY,
-    });
+  _checkDirection(action, fromAsset, toAsset) {
+    if (action === "buy" && !(fromAsset === "TUMBO" && toAsset === "sMIMAS")) {
+      throw new QuoteError("buy quotes are TUMBO -> sMIMAS only");
+    }
+    if (action === "sell" && !(fromAsset === "sMIMAS" && toAsset === "TUMBO")) {
+      throw new QuoteError("sell quotes are sMIMAS -> TUMBO only");
+    }
   }
 
-  const titheBps = TOKEN_SUPPLY_CONFIG.VOID_TITHE_BPS;
-  const voidTithe = Math.floor((amountOut * titheBps) / 10_000);
-  const netOut = amountOut - voidTithe;
+  /**
+   * Build a firm, tamper-evident quote against the market maker.
+   * amountOut is computed with exact integer mulDivFloor math.
+   */
+  quote({ action, from, fromAsset, toAsset, amountIn, ttlMs } = {}) {
+    if (!MARKET_ACTIONS.includes(action)) {
+      throw new QuoteError(`action must be one of ${MARKET_ACTIONS.join("|")}; got ${String(action)}`);
+    }
+    assertAccount(from);
+    if (!isUserAccount(from)) {
+      throw new QuoteError("market quotes are issued to user accounts (u:<name> or b:<name>) only");
+    }
+    assertAsset(fromAsset);
+    assertAsset(toAsset);
+    if (fromAsset === toAsset) throw new QuoteError("fromAsset and toAsset must differ");
+    this._checkDirection(action, fromAsset, toAsset);
+    assertFluff(amountIn, "amountIn");
+    if (amountIn <= 0) throw new QuoteError("amountIn must be positive");
+    const { num, den } = this._priceFor(fromAsset, toAsset);
+    const amountOut = mulDivFloor(amountIn, num, den);
+    if (amountOut <= 0) throw new QuoteError("amountIn too small: quoted output rounds to zero fluff");
+    const ttl = ttlMs === undefined ? this.config.quoteTtlMs : ttlMs;
+    if (typeof ttl !== "number" || !Number.isFinite(ttl)) {
+      throw new TypeError("ttlMs must be a finite number of milliseconds");
+    }
+    const q = {
+      id: newId("q"),
+      action,
+      from,
+      to: MARKET_MAKER,
+      fromAsset,
+      toAsset,
+      amountIn,
+      amountOut,
+      expiresAt: Date.now() + ttl,
+    };
+    q.hash = quoteHash(q);
+    this._issuedQuoteIds.add(q.id); // Part C: track issued quotes for cancel()
+    return Object.freeze(q);
+  }
 
-  row[from] = (row[from] ?? 0) - amountIn;
-  row[to] = (row[to] ?? 0) + netOut;
-  ledger.set(key, freeze(row));
+  _validateQuoteShape(q) {
+    if (!q || typeof q !== "object") throw new QuoteError("quote is required");
+    if (typeof q.id !== "string" || q.id.length === 0) throw new QuoteError("quote.id is malformed");
+    if (!MARKET_ACTIONS.includes(q.action)) throw new QuoteError("quote.action is malformed");
+    assertAccount(q.from);
+    if (!isUserAccount(q.from)) throw new QuoteError("quotes settle from user accounts only");
+    if (q.to !== MARKET_MAKER) throw new QuoteError("quotes settle against sys:market only");
+    assertAsset(q.fromAsset);
+    assertAsset(q.toAsset);
+    if (q.fromAsset === q.toAsset) throw new QuoteError("quote assets must differ");
+    this._checkDirection(q.action, q.fromAsset, q.toAsset);
+    assertFluff(q.amountIn, "quote.amountIn");
+    assertFluff(q.amountOut, "quote.amountOut");
+    if (q.amountIn <= 0 || q.amountOut <= 0) throw new QuoteError("quote amounts must be positive");
+    if (typeof q.expiresAt !== "number" || !Number.isFinite(q.expiresAt)) {
+      throw new QuoteError("quote.expiresAt is malformed");
+    }
+    if (typeof q.hash !== "string" || !/^[0-9a-f]{16}$/.test(q.hash)) {
+      throw new QuoteError("quote.hash is malformed");
+    }
+  }
 
-  const tx = freeze({
-    id: `tx_${quote.id}_${now}`,
-    quoteId: quote.id,
-    quoteHash: quote.hash,
-    action: quote.action,
-    from,
-    to,
-    amountIn,
-    amountOut,
-    voidTithe,
-    voidTitheBps: titheBps,
-    netOut,
-    acct: key,
-    settledAt: now,
-    simulation: true,
-    localOnly: true,
-    executable: false,
-    boundary: TOKEN_STUB_BOUNDARY,
-  });
+  /**
+   * Execute a quote. Rejects expired or tampered quotes (the hash is
+   * recomputed from the presented fields and compared; any mismatch
+   * rejects). A repeated idempotency key returns the original receipt
+   * without moving funds; re-executing a consumed quote id under a new
+   * key is rejected.
+   *
+   * Settlement: the taker pays amountIn; 10 bps of it goes to sys:void
+   * (the Void tithe) and the rest to sys:market; the taker receives
+   * amountOut from the market maker's inventory. Emits "tumbo:token"
+   * receipt and balance-changed events on settle.
+   */
+  execute(quote, { idempotencyKey } = {}) {
+    const key = idempotencyKey ?? `quote:${quote?.id}`;
+    if (typeof key !== "string" || key.length === 0) {
+      throw new TypeError("idempotencyKey must be a non-empty string");
+    }
+    const replay = this._receipts.get(key);
+    if (replay) return replay;
+    if (quote && this._executedQuoteIds.has(quote.id)) {
+      throw new QuoteError(`quote ${quote.id} has already been executed`);
+    }
+    // Part C: a cancelled quote can never be executed (pending-state cancel).
+    if (quote && this._cancelledQuoteIds.has(quote.id)) {
+      throw new CancelRejectedError(`quote ${quote.id} was cancelled and cannot be executed`);
+    }
 
-  emit("balance-changed", { acct: key, balances: ledger.get(key), tx });
-  emit("receipt", { tx });
+    this._validateQuoteShape(quote);
+    if (quoteHash(quote) !== quote.hash) {
+      throw new QuoteError("quote rejected: hash mismatch — the quote was tampered with");
+    }
+    if (Date.now() > quote.expiresAt) {
+      throw new QuoteError("quote rejected: the quote has expired");
+    }
+    if (this.ledger.balance(quote.from, quote.fromAsset) < quote.amountIn) {
+      throw new QuoteError(`insufficient funds: ${quote.from} cannot cover ${quote.amountIn} ${quote.fromAsset}`);
+    }
+    if (this.ledger.balance(MARKET_MAKER, quote.toAsset) < quote.amountOut) {
+      throw new QuoteError("market inventory insufficient for this quote");
+    }
 
-  return freeze({ ok: true, tx, simulation: true, boundary: TOKEN_STUB_BOUNDARY });
+    // 10 bps Void tithe on the inbound leg: 10 per 10,000 goes to sys:void.
+    const tithe = mulDivFloor(quote.amountIn, this.config.titheBps, this.config.titheDenominator);
+    const marketNet = quote.amountIn - tithe;
+    const postings = [
+      { account: quote.from, asset: quote.fromAsset, amount: -quote.amountIn },
+      { account: MARKET_MAKER, asset: quote.fromAsset, amount: marketNet },
+    ];
+    if (tithe > 0) {
+      postings.push({ account: VOID_ACCOUNT, asset: quote.fromAsset, amount: tithe });
+    }
+    postings.push(
+      { account: MARKET_MAKER, asset: quote.toAsset, amount: -quote.amountOut },
+      { account: quote.from, asset: quote.toAsset, amount: quote.amountOut }
+    );
+
+    const journal = this.ledger.post(postings, {
+      idempotencyKey: key,
+      action: quote.action,
+      memo: `quote ${quote.id}`,
+      voidCreditReason: "tithe",
+      authority: "internal",
+    });
+
+    const receipt = Object.freeze({
+      id: journal.id,
+      kind: "receipt",
+      action: quote.action,
+      quoteId: quote.id,
+      idempotencyKey: key,
+      from: quote.from,
+      to: MARKET_MAKER,
+      fromAsset: quote.fromAsset,
+      toAsset: quote.toAsset,
+      amountIn: quote.amountIn,
+      amountOut: quote.amountOut,
+      tithe,
+      postings: journal.postings,
+      tick: journal.tick,
+      prevHash: journal.prevHash,
+      hash: journal.hash,
+      ts: journal.ts,
+    });
+    this._receipts.set(key, receipt);
+    this._executedQuoteIds.add(quote.id);
+
+    this._emit("receipt", { receipt });
+    for (const p of postings) {
+      this._emit("balance-changed", {
+        account: p.account,
+        asset: p.asset,
+        balance: this.ledger.balance(p.account, p.asset),
+      });
+    }
+    return receipt;
+  }
+
+  /**
+   * Demo funding: move TUMBO from sys:faucet to a user account.
+   * Simulation-only, like everything else here.
+   */
+  faucet(to, asset, amount, { idempotencyKey } = {}) {
+    assertAccount(to);
+    if (!isUserAccount(to)) throw new Error("faucet pays user accounts (u:<name> or b:<name>) only");
+    assertAsset(asset);
+    assertFluff(amount, "amount");
+    if (amount <= 0) throw new RangeError("faucet amount must be positive");
+    const key = idempotencyKey ?? newId("faucet");
+    const journal = this.ledger.post(
+      [
+        { account: "sys:faucet", asset, amount: -amount },
+        { account: to, asset, amount },
+      ],
+      { idempotencyKey: key, action: "faucet", memo: `demo faucet -> ${to}`, authority: "internal" }
+    );
+    const receipt = Object.freeze({ ...journal, quoteId: null, tithe: 0 });
+    this._receipts.set(key, receipt);
+    this._emit("receipt", { receipt });
+    this._emit("balance-changed", { account: to, asset, balance: this.ledger.balance(to, asset) });
+    return receipt;
+  }
+
+  // -------------------------------------------------------------------------
+  // 5c. Lifecycle: cancel (pending quotes) + reverse (settled journals).
+  // Ported from the token-lifecycle workstream. Reverse posts a compensating
+  // journal and never edits history; the Void tithe is never debited — on
+  // reversal of a market settlement the market maker absorbs the tithe.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Cancel a pending (issued, unexecuted) quote. Deterministic
+   * `cancel:<quoteId>` idempotency: repeats return the original record.
+   * Cancelling a settled quote fails closed — reverse the settlement instead.
+   */
+  cancelQuote(quoteId, { idempotencyKey } = {}) {
+    if (typeof quoteId !== "string" || quoteId.length === 0) {
+      throw new TypeError("quoteId must be a non-empty string");
+    }
+    const key = idempotencyKey ?? `cancel:${quoteId}`;
+    if (typeof key !== "string" || key.length === 0) {
+      throw new TypeError("idempotencyKey must be a non-empty string");
+    }
+    const replay = this._receipts.get(key);
+    if (replay) return replay;
+    if (this._executedQuoteIds.has(quoteId)) {
+      throw new CancelRejectedError(
+        `cannot cancel settled quote ${quoteId}; reverse the settlement within ${REVERSE_WINDOW_TICKS} ticks instead`
+      );
+    }
+    if (!this._issuedQuoteIds.has(quoteId)) {
+      throw new QuoteError(`unknown quote ${quoteId}`);
+    }
+    const record = Object.freeze({
+      id: newId("cancel"),
+      kind: "cancellation",
+      quoteId,
+      idempotencyKey: key,
+      cancelled: true,
+      tick: this.ledger.tick,
+      ts: Date.now(),
+    });
+    this._receipts.set(key, record);
+    this._cancelledQuoteIds.add(quoteId);
+    this._emit("receipt", { receipt: record });
+    return record;
+  }
+
+  /**
+   * Reverse a settled journal by posting a compensating journal with negated
+   * legs. Deterministic `reverse:<originalKey>` idempotency: a second reverse
+   * of the same journal returns the original reversal receipt (double-reverse
+   * is impossible). Reversals, cancellations, and genesis journals cannot be
+   * reversed; journals older than REVERSE_WINDOW_TICKS fail closed.
+   */
+  reverse({ idempotencyKey, journalId = null, actor = "sim", memo = null } = {}) {
+    let original = null;
+    if (typeof idempotencyKey === "string" && idempotencyKey.length > 0) {
+      original = this.ledger._receipts.get(idempotencyKey) ?? null;
+    }
+    if (!original && typeof journalId === "string" && journalId.length > 0) {
+      original = this.ledger._journals.find((j) => j.id === journalId) ?? null;
+    }
+    if (!original) {
+      throw new JournalNotFoundError(
+        `unknown journal (idempotencyKey=${String(idempotencyKey)} journalId=${String(journalId)})`
+      );
+    }
+    if (original.action === "genesis") {
+      throw new QuoteError(`genesis journal ${original.id} cannot be reversed`);
+    }
+    if (original.action === "reverse" || original.action === "cancel") {
+      throw new QuoteError(
+        `lifecycle journals cannot be reversed (journal ${original.id} is a ${original.action})`
+      );
+    }
+    const rkey = `reverse:${original.idempotencyKey}`;
+    const replayed = this.ledger._receipts.get(rkey);
+    if (replayed) return replayed;
+    if (this._reversedJournalKeys.has(original.idempotencyKey)) {
+      throw new AlreadyReversedError(`journal ${original.id} was already reversed`);
+    }
+    const age = this.ledger.tick - original.tick;
+    if (age > REVERSE_WINDOW_TICKS) {
+      throw new ReverseWindowExpiredError(
+        `reverse window expired: journal ${original.id} is ${age} ticks old (window is ${REVERSE_WINDOW_TICKS} ticks)`
+      );
+    }
+    // Negate every leg. The Void tithe leg (sys:void credit) is never
+    // debited — the market maker absorbs it on reversal instead.
+    const legs = original.postings.map((p) =>
+      p.account === VOID_ACCOUNT && p.amount > 0
+        ? { account: MARKET_MAKER, asset: p.asset, amount: -p.amount }
+        : { account: p.account, asset: p.asset, amount: -p.amount }
+    );
+    const journal = this.ledger.post(legs, {
+      idempotencyKey: rkey,
+      action: "reverse",
+      memo: memo ?? `reversal of ${original.id} (${original.action})`,
+      voidCreditReason: null,
+      authority: "internal",
+      links: { reverses: original.id, reversesKey: original.idempotencyKey, actor },
+    });
+    this._reversedJournalKeys.add(original.idempotencyKey);
+    this._emit("receipt", { receipt: journal });
+    for (const p of legs) {
+      this._emit("balance-changed", {
+        account: p.account,
+        asset: p.asset,
+        balance: this.ledger.balance(p.account, p.asset),
+      });
+    }
+    return journal;
+  }
+
+  /**
+   * Newest-first journal listing with action/account/asset filters.
+   * Unlike the first lifecycle draft, there is no genesis bypass: genesis
+   * journals only match when their own postings match the filter.
+   */
+  journalHistory({ action = null, account = null, asset = null, limit = 100, offset = 0 } = {}) {
+    let rows = [...this.ledger._journals].reverse();
+    if (action !== null && action !== undefined) {
+      rows = rows.filter((r) => r.action === action);
+    }
+    if (account !== null && account !== undefined) {
+      assertAccount(account);
+      rows = rows.filter((r) => r.postings.some((p) => p.account === account));
+    }
+    if (asset !== null && asset !== undefined) {
+      assertAsset(asset);
+      rows = rows.filter((r) => r.postings.some((p) => p.asset === asset));
+    }
+    const total = rows.length;
+    const bounded = Math.max(0, Math.min(1000, Math.floor(Number(limit) || 0)));
+    const start = Math.max(0, Math.floor(Number(offset) || 0));
+    return Object.freeze({ total, rows: Object.freeze(rows.slice(start, start + bounded)) });
+  }
+
+  balance(account, asset) {
+    return this.ledger.balance(account, asset);
+  }
+
+  /**
+   * Subscribe to "balance-changed" or "receipt". Returns an unsubscribe
+   * function. In DOM environments, settling also dispatches a document
+   * CustomEvent("tumbo:token", { detail: { type, ... } }).
+   */
+  on(evt, cb) {
+    if (evt !== "balance-changed" && evt !== "receipt") {
+      throw new TypeError(`unknown event ${String(evt)}; expected "balance-changed" or "receipt"`);
+    }
+    if (typeof cb !== "function") throw new TypeError("listener must be a function");
+    if (!this._listeners.has(evt)) this._listeners.set(evt, new Set());
+    this._listeners.get(evt).add(cb);
+    return () => {
+      const set = this._listeners.get(evt);
+      if (set) set.delete(cb);
+    };
+  }
+
+  _emit(type, detail) {
+    const set = this._listeners.get(type);
+    if (set) {
+      for (const cb of [...set]) {
+        try {
+          cb(detail);
+        } catch {
+          // Listener errors never break settlement.
+        }
+      }
+    }
+    if (typeof document !== "undefined" && typeof CustomEvent === "function") {
+      document.dispatchEvent(new CustomEvent("tumbo:token", { detail: { type, ...detail } }));
+    }
+  }
 }
 
-/** Reset ledger (tests only). */
-export function __resetLedgerForTests() {
-  ledger.clear();
-  listeners.clear();
+// ---------------------------------------------------------------------------
+// 6. Formatting.
+// ---------------------------------------------------------------------------
+
+/** Format integer fluff as a TUMBO-SIM string, e.g. fmt(1500) -> "1.500 TUMBO-SIM". */
+export function fmt(fluff) {
+  if (typeof fluff !== "number" || !Number.isSafeInteger(fluff)) {
+    throw new TypeError("fmt() expects a safe integer number of fluff");
+  }
+  const neg = fluff < 0;
+  const abs = Math.abs(fluff);
+  const whole = Math.floor(abs / 1000);
+  const frac = String(abs % 1000).padStart(3, "0");
+  return `${neg ? "-" : ""}${whole.toLocaleString("en-US")}.${frac} TUMBO-SIM`;
 }
 
-export const TumboToken = freeze({
-  ledger,
-  balance,
-  fmt,
-  on,
-  getQuote,
-  isQuoteFresh,
-  settle,
-  TOKEN_SUPPLY_CONFIG,
-  TOKEN_ASSETS,
-  TOKEN_STUB_BOUNDARY,
-  TOKEN_EVENT,
-  TOKEN_SOURCE,
+// ---------------------------------------------------------------------------
+// 7. Engine factory, default engine, and the window.TumboToken facade.
+// ---------------------------------------------------------------------------
+
+export function createTokenEngine(config) {
+  return new QuoteEngine(config ?? CONFIG);
+}
+
+/** Default shared engine (genesis runs once at import). */
+export const engine = new QuoteEngine();
+
+/**
+ * token.js — PART B: wallet-UI compatibility layer (unified branch).
+ *
+ * Sits on top of the hardened Part-A core (CONFIG, TokenLedger, QuoteEngine).
+ * Gives the glass-block wallet the friendly vocabulary it was built against:
+ *
+ *   display account "you"        <-> core account "u:you"
+ *   display asset  "TUMBO-SIM"   <-> core asset  "TUMBO"
+ *   other u:/b:/sys: accounts and TUMBO/sMIMAS assets pass through unchanged.
+ *
+ * Exposes the ledger API the UI imports:
+ *   send / lock / unlock / vault / history / accounts / balance / fmt / on
+ * plus the named exports token-block.js imports:
+ *   TUMBO_TOKEN_EVENT, TUMBO_TOKEN_ASSET, TUMBO_TOKEN_DEFAULT_ACCOUNT,
+ *   TUMBO_TOKEN_SOURCE, formatSimAmount, tumboSimToFluff,
+ *   newIdempotencyKey, getTumboTokenFacade, ensureTumboTokenFacade
+ *
+ * Simulation-only. Every record carries simulation:true. No custody,
+ * signing, settlement, wallets, or real-money path.
+ */
+
+// ---------------------------------------------------------------------------
+// B1. Display <-> core mapping.
+// ---------------------------------------------------------------------------
+
+export const TUMBO_TOKEN_EVENT = "tumbo:token";
+export const TUMBO_TOKEN_ASSET = "TUMBO-SIM";
+export const TUMBO_TOKEN_DEFAULT_ACCOUNT = "you";
+export const TUMBO_TOKEN_SOURCE = "tumbo-token";
+export const FLUFF_PER_TUMBO_SIM = 1000;
+export const TUMBO_TOKEN_MAX_MEMO_LENGTH = 140;
+
+const DISPLAY_ACCOUNT_RE = /^[a-z0-9][a-z0-9 _.\-]{0,62}[a-z0-9]?$/i;
+
+function slugDisplayAccount(display) {
+  const s = String(display ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  if (!s) throw new TypeError("account must be a non-empty string");
+  return s.slice(0, 64);
+}
+
+/** Display account ("you", "alice", "u:bob") -> core account ("u:you", ...). */
+export function toCoreAccount(display) {
+  if (typeof display !== "string" || !display.trim()) {
+    throw new TypeError("account must be a non-empty string");
+  }
+  const d = display.trim();
+  if (/^(u|b|sys):/i.test(d)) return assertAccount(d);
+  return assertAccount(`u:${slugDisplayAccount(d)}`);
+}
+
+/** Core account ("u:you") -> display account ("you"). */
+export function toDisplayAccount(core) {
+  assertAccount(core);
+  if (core === "u:you") return "you";
+  const m = /^(u|b):(.+)$/.exec(core);
+  return m ? m[2] : core;
+}
+
+/** Display asset ("TUMBO-SIM") -> core asset ("TUMBO"). */
+export function toCoreAsset(display) {
+  if (typeof display !== "string") throw new TypeError("asset must be a string");
+  const d = display.trim().toUpperCase();
+  if (d === "TUMBO-SIM" || d === "TUMBO") return "TUMBO";
+  if (d === "SMIMAS") return "sMIMAS";
+  return assertAsset(d);
+}
+
+/** Core asset ("TUMBO") -> display asset ("TUMBO-SIM"). */
+export function toDisplayAsset(core) {
+  assertAsset(core);
+  return core === "TUMBO" ? "TUMBO-SIM" : core;
+}
+
+// ---------------------------------------------------------------------------
+// B2. Pure amount helpers (the UI's vocabulary).
+// ---------------------------------------------------------------------------
+
+/** Parse a TUMBO-SIM decimal amount into integer fluff. Pure. */
+export function tumboSimToFluff(sim) {
+  const numeric = typeof sim === "string" ? Number(sim.trim().replace(/,/g, "")) : Number(sim);
+  if (!Number.isFinite(numeric) || numeric < 0) {
+    throw new TypeError("amount must be a finite non-negative number of TUMBO-SIM");
+  }
+  const fluff = Math.round(numeric * FLUFF_PER_TUMBO_SIM);
+  if (!Number.isSafeInteger(fluff)) throw new TypeError("amount is out of range for integer fluff");
+  return fluff;
+}
+
+const simFormatter = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 3,
+  maximumFractionDigits: 3,
 });
 
-/** Attach facade when a window exists (browser). */
-export function attachWindowFacade(win = typeof window !== "undefined" ? window : null) {
-  if (!win) return TumboToken;
-  win.TumboToken = TumboToken;
-  return TumboToken;
+/** Format integer fluff as a TUMBO-SIM decimal string (no asset suffix). Pure. */
+export function formatSimAmount(fluff) {
+  assertFluff(fluff, "fluff");
+  return simFormatter.format(fluff / FLUFF_PER_TUMBO_SIM);
 }
 
-export default TumboToken;
+/** Generate an idempotency key. */
+export function newIdempotencyKey(prefix = "tumbo-send") {
+  return `${prefix}-${newId("k").slice(2)}`;
+}
+
+// ---------------------------------------------------------------------------
+// B3. TumboUserLedger — friendly ledger over a QuoteEngine.
+// ---------------------------------------------------------------------------
+
+const ESCROW_ACCOUNT = "sys:escrow";
+
+function utcNowIso() {
+  return new Date().toISOString();
+}
+
+function requireMemo(value) {
+  if (value === undefined || value === null) return "";
+  if (typeof value !== "string") throw new TypeError("memo must be a string");
+  if (value.length > TUMBO_TOKEN_MAX_MEMO_LENGTH) {
+    throw new TypeError(`memo must be at most ${TUMBO_TOKEN_MAX_MEMO_LENGTH} characters`);
+  }
+  return value;
+}
+
+export class TumboUserLedger {
+  constructor(quoteEngine) {
+    if (!quoteEngine || typeof quoteEngine.balance !== "function") {
+      throw new TypeError("TumboUserLedger requires a QuoteEngine");
+    }
+    this._engine = quoteEngine;
+    this._history = [];
+    this._locks = new Map();
+    this._sendKeys = new Map(); // idempotencyKey -> display receipt
+  }
+
+  _emitBoth(type, detail) {
+    // The engine emitter already notifies engine listeners AND dispatches
+    // the document "tumbo:token" CustomEvent, so a single call covers both.
+    this._engine._emit(type, detail);
+  }
+
+  _pushHistory(entry) {
+    const row = Object.freeze({
+      id: entry.id,
+      kind: entry.kind,
+      status: "simulated",
+      simulation: true,
+      source: TUMBO_TOKEN_SOURCE,
+      at: entry.at || utcNowIso(),
+      from: entry.from,
+      to: entry.to ?? null,
+      asset: entry.asset,
+      amountFluff: entry.amountFluff,
+      memo: entry.memo || "",
+      idempotencyKey: entry.idempotencyKey || null,
+      duplicate: entry.duplicate === true,
+    });
+    this._history.push(row);
+    if (this._history.length > 500) this._history.splice(0, this._history.length - 500);
+    return row;
+  }
+
+  balance(displayAcct = TUMBO_TOKEN_DEFAULT_ACCOUNT, displayAsset = TUMBO_TOKEN_ASSET) {
+    return this._engine.balance(toCoreAccount(displayAcct), toCoreAsset(displayAsset));
+  }
+
+  fmt(fluff) {
+    return fmt(fluff);
+  }
+
+  on(evt, cb) {
+    return this._engine.on(evt, cb);
+  }
+
+  accounts() {
+    const rows = [];
+    for (const { account, asset } of this._engine.ledger.accounts()) {
+      if (!/^(u|b):/i.test(account)) continue; // user accounts only in the wallet view
+      rows.push(Object.freeze({
+        acct: toDisplayAccount(account),
+        asset: toDisplayAsset(asset),
+        balanceFluff: this._engine.balance(account, asset),
+        simulation: true,
+      }));
+    }
+    rows.sort((a, b) => a.acct.localeCompare(b.acct) || a.asset.localeCompare(b.asset));
+    return Object.freeze(rows);
+  }
+
+  totals() {
+    const perAsset = {};
+    let grandFluff = 0;
+    for (const row of this.accounts()) {
+      perAsset[row.asset] = (perAsset[row.asset] ?? 0) + row.balanceFluff;
+      grandFluff += row.balanceFluff;
+    }
+    return Object.freeze({ perAsset: Object.freeze({ ...perAsset }), grandFluff, simulation: true });
+  }
+
+  /**
+   * Idempotency-keyed simulated send. Replays return the original receipt
+   * with duplicate:true and move no funds.
+   */
+  send({
+    from = TUMBO_TOKEN_DEFAULT_ACCOUNT,
+    to,
+    asset = TUMBO_TOKEN_ASSET,
+    amountFluff,
+    memo = "",
+    idempotencyKey = newIdempotencyKey(),
+  } = {}) {
+    const displayFrom = String(from ?? TUMBO_TOKEN_DEFAULT_ACCOUNT).trim() || TUMBO_TOKEN_DEFAULT_ACCOUNT;
+    const displayTo = String(to ?? "").trim();
+    if (!displayTo) throw new TypeError("to must be a non-empty account");
+    const coreFrom = toCoreAccount(displayFrom);
+    const coreTo = toCoreAccount(displayTo);
+    // Wallet sends move funds between user accounts only; system accounts
+    // (sys:*) can never be debited or credited through send().
+    if (!isUserAccount(coreFrom)) throw new Error("send() debits user accounts (u:<name> or b:<name>) only");
+    if (!isUserAccount(coreTo)) throw new Error("send() credits user accounts (u:<name> or b:<name>) only");
+    const coreAsset = toCoreAsset(asset);
+    const fluff = assertFluff(amountFluff, "amountFluff");
+    if (fluff <= 0) throw new TypeError("amountFluff must be greater than 0");
+    if (typeof idempotencyKey !== "string" || !idempotencyKey.trim()) {
+      throw new TypeError("idempotencyKey must be a non-empty string");
+    }
+    const key = idempotencyKey.trim();
+    const note = requireMemo(memo);
+
+    const cached = this._sendKeys.get(key);
+    if (cached) {
+      const replay = Object.freeze({ ...cached, duplicate: true });
+      this._emitBoth("receipt", { receipt: replay, tx: replay, duplicate: true });
+      return replay;
+    }
+
+    let journal;
+    try {
+      journal = this._engine.ledger.post(
+        [
+          { account: coreFrom, asset: coreAsset, amount: -fluff },
+          { account: coreTo, asset: coreAsset, amount: fluff },
+        ],
+        { idempotencyKey: key, action: "send", memo: note }
+      );
+    } catch (err) {
+      if (/insufficient funds/.test(err?.message || "")) {
+        const error = new Error("insufficient-simulated-funds");
+        error.code = "insufficient-simulated-funds";
+        error.simulation = true;
+        throw error;
+      }
+      throw err;
+    }
+
+    const receipt = this._pushHistory({
+      id: journal.id,
+      kind: "send",
+      at: utcNowIso(),
+      from: displayFrom === TUMBO_TOKEN_DEFAULT_ACCOUNT ? TUMBO_TOKEN_DEFAULT_ACCOUNT : toDisplayAccount(coreFrom),
+      to: toDisplayAccount(coreTo),
+      asset: toDisplayAsset(coreAsset),
+      amountFluff: fluff,
+      memo: note,
+      idempotencyKey: key,
+      duplicate: false,
+    });
+    this._sendKeys.set(key, receipt);
+    this._emitBoth("balance-changed", {
+      receipt, tx: receipt, duplicate: false,
+      accounts: Object.freeze([coreFrom, coreTo]),
+      asset: coreAsset, amountFluff: fluff,
+    });
+    this._emitBoth("receipt", { receipt, tx: receipt, duplicate: false });
+    return receipt;
+  }
+
+  /** Move funds into a simulated vault lock (escrowed, spendable decreases). */
+  lock({
+    acct = TUMBO_TOKEN_DEFAULT_ACCOUNT,
+    asset = TUMBO_TOKEN_ASSET,
+    amountFluff,
+    label = "Vault lock",
+    unlocksAt = null,
+  } = {}) {
+    const coreAcct = toCoreAccount(acct);
+    const coreAsset = toCoreAsset(asset);
+    const fluff = assertFluff(amountFluff, "amountFluff");
+    if (fluff <= 0) throw new TypeError("amountFluff must be greater than 0");
+    if (typeof label !== "string" || !label.trim()) throw new TypeError("label must be a non-empty string");
+    let unlockIso = null;
+    if (unlocksAt !== null && unlocksAt !== undefined) {
+      const parsed = new Date(unlocksAt);
+      if (Number.isNaN(parsed.getTime())) throw new TypeError("unlocksAt must be a valid date");
+      unlockIso = parsed.toISOString();
+    }
+    const key = newIdempotencyKey("tumbo-lock");
+    let journal;
+    try {
+      journal = this._engine.ledger.post(
+        [
+          { account: coreAcct, asset: coreAsset, amount: -fluff },
+          { account: ESCROW_ACCOUNT, asset: coreAsset, amount: fluff },
+        ],
+        { idempotencyKey: key, action: "lock", memo: label.trim().slice(0, 80), authority: "internal" }
+      );
+    } catch (err) {
+      if (/insufficient funds/.test(err?.message || "")) {
+        const error = new Error("insufficient-simulated-funds");
+        error.code = "insufficient-simulated-funds";
+        error.simulation = true;
+        throw error;
+      }
+      throw err;
+    }
+    const entry = Object.freeze({
+      id: journal.id,
+      acct: toDisplayAccount(coreAcct),
+      asset: toDisplayAsset(coreAsset),
+      amountFluff: fluff,
+      label: label.trim().slice(0, 80),
+      lockedAt: utcNowIso(),
+      unlocksAt: unlockIso,
+      status: "locked",
+      simulation: true,
+      source: TUMBO_TOKEN_SOURCE,
+    });
+    this._locks.set(entry.id, entry);
+    this._pushHistory({
+      id: journal.id, kind: "lock", from: toDisplayAccount(coreAcct), to: "vault",
+      asset: toDisplayAsset(coreAsset), amountFluff: fluff, memo: entry.label,
+      idempotencyKey: key,
+    });
+    this._emitBoth("balance-changed", {
+      vault: true, lock: entry, accounts: Object.freeze([coreAcct]),
+      asset: coreAsset, amountFluff: fluff,
+    });
+    return entry;
+  }
+
+  /** Release a matured lock back to the spendable balance. */
+  unlock(lockId) {
+    if (typeof lockId !== "string" || !lockId) throw new TypeError("lockId must be a non-empty string");
+    const entry = this._locks.get(lockId);
+    if (!entry) throw new Error("unknown-lock");
+    if (entry.status !== "locked") throw new Error("lock-not-active");
+    if (entry.unlocksAt && Date.now() < Date.parse(entry.unlocksAt)) {
+      const error = new Error("lock-not-matured");
+      error.code = "lock-not-matured";
+      throw error;
+    }
+    const coreAcct = toCoreAccount(entry.acct);
+    const coreAsset = toCoreAsset(entry.asset);
+    this._engine.ledger.post(
+      [
+        { account: ESCROW_ACCOUNT, asset: coreAsset, amount: -entry.amountFluff },
+        { account: coreAcct, asset: coreAsset, amount: entry.amountFluff },
+      ],
+      { idempotencyKey: newIdempotencyKey("tumbo-unlock"), action: "unlock", memo: `release ${lockId}`, authority: "internal" }
+    );
+    const released = Object.freeze({ ...entry, status: "released", releasedAt: utcNowIso() });
+    this._locks.set(lockId, released);
+    this._pushHistory({
+      id: released.id, kind: "unlock", from: "vault", to: entry.acct,
+      asset: entry.asset, amountFluff: entry.amountFluff, memo: entry.label,
+    });
+    this._emitBoth("balance-changed", {
+      vault: true, lock: released, accounts: Object.freeze([coreAcct]),
+      asset: coreAsset, amountFluff: entry.amountFluff,
+    });
+    return released;
+  }
+
+  /**
+   * Part C — reverse a settled journal by idempotency key. Posts a
+   * compensating journal on the engine (history is never edited) and records
+   * a wallet history row.
+   */
+  reverse(idempotencyKey, opts = {}) {
+    if (typeof idempotencyKey !== "string" || !idempotencyKey.trim()) {
+      throw new TypeError("idempotencyKey must be a non-empty string");
+    }
+    const journal = this._engine.reverse({ idempotencyKey: idempotencyKey.trim(), ...opts });
+    this._pushHistory({
+      id: journal.id, kind: "reverse", from: "ledger", to: "ledger",
+      asset: TUMBO_TOKEN_ASSET, amountFluff: 0, memo: journal.memo,
+      idempotencyKey: journal.idempotencyKey,
+    });
+    return journal;
+  }
+
+  vault(acct = TUMBO_TOKEN_DEFAULT_ACCOUNT, asset = TUMBO_TOKEN_ASSET) {
+    const displayAcct = String(acct ?? TUMBO_TOKEN_DEFAULT_ACCOUNT).trim() || TUMBO_TOKEN_DEFAULT_ACCOUNT;
+    const displayAsset = String(asset ?? TUMBO_TOKEN_ASSET).trim() || TUMBO_TOKEN_ASSET;
+    const entries = [...this._locks.values()]
+      .filter((e) => e.acct === toDisplayAccount(toCoreAccount(displayAcct)) && e.asset === toDisplayAsset(toCoreAsset(displayAsset)))
+      .sort((a, b) => a.lockedAt.localeCompare(b.lockedAt));
+    const totalLockedFluff = entries
+      .filter((e) => e.status === "locked")
+      .reduce((t, e) => t + e.amountFluff, 0);
+    return Object.freeze({ acct: displayAcct, asset: displayAsset, locks: Object.freeze(entries), totalLockedFluff, simulation: true });
+  }
+
+  history({ acct = null, asset = null, limit = 50 } = {}) {
+    const displayAcct = acct === null || acct === undefined ? null : (String(acct).trim() || null);
+    const displayAsset = asset === null || asset === undefined ? null : toDisplayAsset(toCoreAsset(asset));
+    const bounded = Math.max(1, Math.min(200, Math.floor(Number(limit) || 50)));
+    const filtered = this._history.filter((r) => {
+      if (displayAcct && r.from !== displayAcct && r.to !== displayAcct) return false;
+      if (displayAsset && r.asset !== displayAsset) return false;
+      return true;
+    });
+    return Object.freeze(filtered.slice(-bounded).reverse());
+  }
+}
+
+// ---------------------------------------------------------------------------
+// B4. Demo seed + facade.
+// ---------------------------------------------------------------------------
+
+/** Deterministic demo seed: faucet credit to "you" + one vault lock. */
+export function seedDemoWallet(userLedger, { creditFluff = 120500, lockFluff = 25000 } = {}) {
+  const eng = userLedger._engine;
+  const journal = eng.faucet("u:you", "TUMBO", creditFluff, { idempotencyKey: "seed:faucet-credit:v1" });
+  userLedger._pushHistory({
+    id: journal.id, kind: "faucet-credit", from: "tumbo-faucet", to: "you",
+    asset: "TUMBO-SIM", amountFluff: creditFluff,
+    memo: "Simulated starter credit for the demo wallet",
+    idempotencyKey: "seed:faucet-credit:v1",
+  });
+  userLedger.lock({
+    acct: "you", asset: "TUMBO-SIM", amountFluff: lockFluff,
+    label: "Demo vault reserve", unlocksAt: "2027-01-01T00:00:00.000Z",
+  });
+  return userLedger;
+}
+
+let facadeSingleton = null;
+
+/**
+ * Create (or reuse) the shared window.TumboToken facade:
+ * { ledger, balance(acct, asset), fmt(fluff), on(evt, cb),
+ *   quote, execute, faucet, reverse, cancel, verifyReceipt, verifyChain,
+ *   journalHistory, tick, engine }.
+ */
+export function ensureTumboTokenFacade({ seed = true } = {}) {
+  if (facadeSingleton) return facadeSingleton;
+  const userLedger = new TumboUserLedger(engine);
+  if (seed) seedDemoWallet(userLedger);
+  const facade = Object.freeze({
+    ledger: userLedger,
+    balance: (acct, asset) => userLedger.balance(acct, asset),
+    fmt: (fluff) => userLedger.fmt(fluff),
+    on: (evt, cb) => userLedger.on(evt, cb),
+    quote: (input) => engine.quote(input),
+    execute: (q, opts) => engine.execute(q, opts),
+    faucet: (to, asset, amount, opts) => engine.faucet(to, asset, amount, opts),
+    // Part C — lifecycle surface.
+    reverse: (input) => engine.reverse(input),
+    cancel: (quoteId, opts) => engine.cancelQuote(quoteId, opts),
+    verifyReceipt: (idOrKey) => engine.ledger.verifyReceipt(idOrKey),
+    verifyChain: () => engine.ledger.verifyChain(),
+    journalHistory: (filters) => engine.journalHistory(filters),
+    tick: () => engine.ledger.tick,
+    engine,
+  });
+  facadeSingleton = facade;
+  try {
+    if (typeof window !== "undefined") window.TumboToken = facade;
+  } catch {}
+  return facade;
+}
+
+/** Return the existing facade (window.TumboToken) without creating one. */
+export function getTumboTokenFacade() {
+  if (facadeSingleton) return facadeSingleton;
+  try {
+    if (typeof window !== "undefined" && window.TumboToken) return window.TumboToken;
+  } catch {}
+  return null;
+}
+
+/** Back-compat: install the unified facade on a target (default globalThis). */
+export function installFacade(target, { force = false } = {}) {
+  const t = target ?? (typeof globalThis !== "undefined" ? globalThis : undefined);
+  if (!t) return undefined;
+  if (t.TumboToken !== undefined && !force) return t.TumboToken;
+  const facade = ensureTumboTokenFacade({ seed: true });
+  t.TumboToken = facade;
+  return facade;
+}
