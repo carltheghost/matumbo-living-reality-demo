@@ -1,4 +1,10 @@
-import "./token-trade-mount.js";
+// The optional legacy token panel must not prevent the world renderer from
+// loading when its independently-evolving facade is unavailable. Its owner
+// can still import the mount directly; this presentation manager remains
+// usable while that compatibility contract is reconciled.
+import("./token-trade-mount.js").catch((error) => {
+  console.warn("[token-trade-mount] optional panel unavailable", error);
+});
 /** Mobile panel manager — 2D UI chrome/layout only.
  *
  * On narrow viewports (<=700px) only one floating panel may be visible at a
