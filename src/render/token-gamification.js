@@ -89,7 +89,7 @@ const CSS = `
 .tg-act-row .tg-tick{flex:0 0 auto;color:#6f9aa6;font-size:8px;font-variant-numeric:tabular-nums}
 .tg-empty{padding:8px;color:#8fb0ba;font-size:9px}
 #${CHIP_ID}{position:fixed;right:20px;bottom:76px;z-index:45;appearance:none;min-height:44px;padding:10px 14px;border:1px solid rgba(105,231,255,.4);border-radius:999px;background:linear-gradient(180deg,rgba(4,11,17,.85),rgba(2,6,10,.6));color:#c8f7ff;font-size:10px;letter-spacing:.14em;font-weight:700;cursor:pointer;backdrop-filter:blur(12px);box-shadow:0 10px 30px rgba(0,0,0,.35);touch-action:manipulation}
-#${CHIP_ID}[hidden]{display:none}
+#${CHIP_ID}[hidden]{display:none} #${CHIP_ID} .tg-chip-title{display:block;font-size:10px;letter-spacing:.14em;font-weight:700} #${CHIP_ID} .tg-chip-note{display:block;max-width:230px;margin:2px auto 0;font-size:8px;letter-spacing:.02em;font-weight:400;line-height:1.35;color:#dbc6af;white-space:normal}
 #${CHIP_ID}:hover,#${CHIP_ID}:focus-visible{border-color:rgba(177,247,255,.75);color:#fff;outline:none}
 #${PEEK_ID}{position:fixed;z-index:60;max-width:min(260px,calc(100vw - 40px));padding:9px 10px;border:1px solid rgba(122,230,255,.3);border-radius:12px;background:linear-gradient(165deg,rgba(4,17,25,.94),rgba(3,7,12,.92));box-shadow:0 14px 40px rgba(0,0,0,.5);backdrop-filter:blur(14px);pointer-events:none}
 #${PEEK_ID}[hidden]{display:none}
@@ -353,7 +353,7 @@ export function mountTokenGamification({
   );
   doc.body.appendChild(panel);
 
-  const chip = makeEl(doc, "button", null, "Burrow");
+  const chip = makeEl(doc, "button"); chip.append(makeEl(doc, "span", "tg-chip-title", "Burrow"), makeEl(doc, "span", "tg-chip-note", SIM_BOUNDARY_NOTE));
   chip.id = CHIP_ID;
   chip.type = "button";
   chip.hidden = true;
@@ -410,7 +410,7 @@ export function mountTokenGamification({
   inner.add(cubeMesh, edges, core);
   const startPos = clampPosition(loadPosition() ?? { ...DEFAULT_POSITION });
   group.position.set(startPos.x, startPos.y, startPos.z);
-  (world ?? scene)?.add(group);
+  const cubeParent = world ?? scene; cubeParent?.add(group); const tetherGeo = new T.BufferGeometry(); tetherGeo.setAttribute("position", new T.BufferAttribute(new Float32Array(6), 3)); const tether = new T.Line(tetherGeo, new T.LineBasicMaterial({ color: 0x69e7ff, transparent: true, opacity: 0.45 })); tether.frustumCulled = false; cubeParent?.add(tether); function updateTether() { const p = tetherGeo.attributes.position; p.setXYZ(0, group.position.x, group.position.y - CUBE_SIZE / 2, group.position.z); p.setXYZ(1, group.position.x, 0, group.position.z); p.needsUpdate = true; } updateTether();
 
   const pickTargets = [cubeMesh, core];
   const raycaster = new T.Raycaster();
@@ -675,7 +675,7 @@ export function mountTokenGamification({
       setNdc(event);
       raycaster.setFromCamera(ndc, camera);
       if (raycaster.ray.intersectPlane(dragPlane, hitPoint)) {
-        group.position.copy(clampPosition(hitPoint));
+        group.position.copy(clampPosition(hitPoint)); updateTether();
       }
       return;
     }
@@ -766,7 +766,7 @@ export function mountTokenGamification({
     lastFrame = now;
     core.rotation.y += dt * 0.9;
     core.rotation.x += dt * 0.35;
-    inner.position.y = Math.sin(now / 1400) * 0.05;
+    inner.position.y = Math.sin(now / 1400) * 0.05; updateTether();
   }
   if (!reducedMotion) rafId = requestAnimationFrame(frame);
 
@@ -812,7 +812,7 @@ export function mountTokenGamification({
       /* ignore */
     }
     try {
-      group.parent?.remove(group);
+      group.parent?.remove(group); tether.parent?.remove(tether);
     } catch {
       /* ignore */
     }
@@ -821,7 +821,7 @@ export function mountTokenGamification({
     glass.dispose();
     edges.material.dispose();
     core.geometry.dispose();
-    core.material.dispose();
+    core.material.dispose(); tetherGeo.dispose(); tether.material.dispose();
     panel.remove();
     chip.remove();
     peek.remove();
