@@ -240,7 +240,16 @@ export const FEATURE_DEFINITIONS = Object.freeze([
   Object.freeze({
     id: "arena",
     label: "ARENA / Game Lab",
-    kicker: "playable rehearsal",
+    kicker: "playable rehearsal",boundary: "VR/AR/WebXR support is not established by this local projection; the fallback remains the source of truth.",
+  }),
+  Object.freeze({
+    id: "web-ai",
+    label: "Web + AI",
+    kicker: "browse + ask",
+    focusOrganId: "arena",
+    sources: [],
+    description: "Browse the open web in a sandboxed frame, or hand your task note to Meta AI, ChatGPT, or Grok in a new tab.",
+    boundary: "Framing-friendly sites embed; framing-blocked sites open in a new tab. AI assistants are links only — no credentials, keys, tokens, or secrets are accepted or stored.",
     focusOrganId: "arena",
     sources: ["arena-games"],
     description: "Open the local Game Lab: choose Nebula Rally, Chrono Grid, or Orbital Duel, take legal turns, inspect the event chain, and replay the result.",
@@ -314,6 +323,7 @@ export const FEATURE_HANDOFF_LINKS = Object.freeze({
   "launch-distribution": Object.freeze(["asset-token", "asset-market", "white-paper"]),
   "social-explorer": Object.freeze(["rooms", "agent", "social-mirror"]),
   "social-mirror": Object.freeze(["social-explorer", "rooms", "agent"]),
+  "web-ai": Object.freeze(["gateway", "world-events", "agent"]),
   paycore: Object.freeze(["ledger", "t402", "contracts"]),
   contracts: Object.freeze(["contract-atelier", "paycore", "ledger"]),
   "contract-atelier": Object.freeze(["contracts", "paycore", "academy"]),
@@ -322,13 +332,10 @@ export const FEATURE_HANDOFF_LINKS = Object.freeze({
   "agent": Object.freeze(["rooms", "social-explorer"]),
   "picture-matter": Object.freeze(["nft-atelier", "white-paper", "reality-lens"]),
   "nft-atelier": Object.freeze(["picture-matter", "agent", "asset-market"]),
-  
-  
-  
   "wardrobe-atelier": Object.freeze(["person", "agent", "arena"]),
   "white-paper": Object.freeze(["projections", "reality-lens", "academy"]),
   "gesture-lens": Object.freeze(["block-world", "person", "agent"]),
-  gateway: Object.freeze(["t402", "world-events", "runtime-sync"]),
+  gateway: Object.freeze(["t402", "world-events", "runtime-sync", "web-ai"]),
   "world-events": Object.freeze(["sports-events", "multi-sport-events", "gateway"]),
   "sports-events": Object.freeze(["world-events", "multi-sport-events", "arena"]),
   "multi-sport-events": Object.freeze(["sports-events", "world-events", "arena"]),
@@ -464,7 +471,12 @@ const FEATURE_SURFACE_ROUTES = Object.freeze({
     Object.freeze(["UNAVAILABLE SAFE", "no-data state when offline"]),
   ]),
   "sports-events": Object.freeze([
-    Object.freeze(["PUBLIC SCOREBOARD", "ATP + WTA read endpoints"]),
+    Object.freeze(["PUBLIC SCOREBOARD", "ATP + WTA read endpoints"]),Object.freeze(["XR", "status is not-tested in this preview"]),
+  ]),
+  "web-ai": Object.freeze([
+    Object.freeze(["WEB TAB", "sandboxed frame for framing-friendly sites · new-tab handoff otherwise"]),
+    Object.freeze(["AI TAB", "Meta AI · ChatGPT · Grok links only · copy-paste prompt"]),
+    Object.freeze(["TASK NOTE", "your note travels with every handoff · stored locally"]),
     Object.freeze(["PLAYER + SETS", "ranking and linescore refs when returned"]),
     Object.freeze(["DATA GRADE", "completeness only · play-by-play may be absent"]),
   ]),

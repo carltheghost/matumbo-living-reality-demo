@@ -151,6 +151,13 @@ const PORTAL_ROUTE_DEFINITIONS = [
     description: "Refresh documented public event sources and inspect returned evidence.",
   },
   {
+    id: "web-ai",
+    featureId: "web-ai",
+    label: "Web + AI",
+    surface: "web-ai-console",
+    description: "Browse the open web in a sandboxed frame and hand tasks to AI assistants.",
+  },
+  {
     id: "projections",
     featureId: "projections",
     label: "Phone / PC / XR",

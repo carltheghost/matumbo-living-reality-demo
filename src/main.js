@@ -124,6 +124,7 @@ import { DEVICE_PROJECTION_CONSOLE_SOURCE, createDeviceProjectionConsole } from 
 import { ASSET_MARKET_CONSOLE_SOURCE, createAssetMarketConsole } from './render/asset-market.js?v=20260828-asset-market1';
 import { createUnavailableAssetMarketEvidence, fetchAssetMarketEvidence } from './domains/asset-market.js?v=20260828-asset-market1';
 import { POPULATION_CONTEXT_SOURCE, createUnavailablePopulationContext, fetchPopulationContext } from './domains/population-context.js?v=20260828-population-context1'; import './domains/token-transfers-ui.js?v=20260920-token-transfers1';
+import { WEB_AI_CONSOLE_SOURCE, createWebAiConsole } from './render/web-ai.js';
 
 const runtimeStatus = globalThis.__MATUMBO_RUNTIME__;
 runtimeStatus?.setStage?.('projection', 'Preparing the canonical local world envelope…');
@@ -200,7 +201,7 @@ let worldEventsConsole = null;
 let sportsEventsConsole = null;
 let multiSportEventsConsole = null;
 let assetMarketConsole = null;
-let deviceProjectionConsole = null;
+let deviceProjectionConsole = null; let webAiConsole = null;
 let gestureInput = null;
 // Sensor coupling state is initialized before the gesture panel mounts. The
 // bridge publishes an initial OFF status during construction, so callbacks
@@ -240,7 +241,7 @@ const PORTAL_CUBE_SUBSTRATE_FEATURES = new Set([
   'sports-events',
   'multi-sport-events',
   'projections',
-  'reality-lens',
+  'reality-lens', 'web-ai',
 ]);
 
 const scene = new THREE.Scene();
@@ -714,6 +715,7 @@ blockWorld = createBlockWorldLayer({
       'world-events': () => openWorldEvents('block-portal:world-events', false),
       projections: () => deviceProjectionConsole?.open(),
       'reality-lens': () => setRealityLens?.('world', 'block-portal'),
+      'web-ai': () => webAiConsole?.open(),
     };
     portalSurfaceOpeners[targetFeature]?.();
     // Keep the originating cube route visible as a reversible handoff while
