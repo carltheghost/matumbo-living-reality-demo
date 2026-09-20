@@ -100,7 +100,6 @@ function injectStyles() {
   .tv-title{font-weight:700;font-size:12px;letter-spacing:.1em}
   .tv-sim{font-weight:400;font-size:10px;opacity:.7;letter-spacing:.06em;border:1px solid rgba(140,200,255,.4);
     border-radius:20px;padding:1px 8px;margin-left:6px}
-  .tv-head-btns{display:flex;gap:6px}
   .tv-btn{background:rgba(90,160,255,.16);border:1px solid rgba(140,200,255,.4);color:#dff1ff;
     border-radius:8px;padding:4px 10px;font:600 11px system-ui,sans-serif;cursor:pointer}
   .tv-btn:hover{background:rgba(90,160,255,.32)}
@@ -170,17 +169,21 @@ function showError(msg) {
 // Chip
 // ---------------------------------------------------------------------------
 
-function makeDraggable(node, handle, storeSlot, defPos) {
-  const store = loadStore();
-  const pos = store[storeSlot] || defPos;
-  Object.assign(node.style, { left: pos.left, top: pos.top, right: 'auto', bottom: 'auto' });
+function makeDraggable(node, handle, storeSlot) {
+  const pos = loadStore()[storeSlot];
+  if (pos && typeof pos.left === 'string' && pos.left.endsWith('px')) {
+    node.style.left = pos.left;
+    node.style.top = pos.top;
+    node.style.right = 'auto';
+    node.style.bottom = 'auto';
+  }
   let sx = 0, sy = 0, ox = 0, oy = 0, dragging = false, moved = 0;
   const target = handle || node;
   target.addEventListener('pointerdown', (e) => {
     dragging = true; moved = 0;
     const r = node.getBoundingClientRect();
     sx = e.clientX; sy = e.clientY; ox = r.left; oy = r.top;
-    target.setPointerCapture(e.pointerId);
+    try { target.setPointerCapture(e.pointerId); } catch { /* never */ }
   });
   target.addEventListener('pointermove', (e) => {
     if (!dragging) return;
@@ -189,6 +192,8 @@ function makeDraggable(node, handle, storeSlot, defPos) {
     if (moved > 4) {
       node.style.left = `${Math.min(Math.max(0, ox + dx), window.innerWidth - 60)}px`;
       node.style.top = `${Math.min(Math.max(0, oy + dy), window.innerHeight - 40)}px`;
+      node.style.right = 'auto';
+      node.style.bottom = 'auto';
     }
   });
   target.addEventListener('pointerup', () => {
@@ -196,7 +201,6 @@ function makeDraggable(node, handle, storeSlot, defPos) {
     dragging = false;
     if (moved > 4) saveStore({ [storeSlot]: { left: node.style.left, top: node.style.top } });
   });
-  return { wasDrag: () => moved > 4 };
 }
 
 function buildChip(eng) {
@@ -208,13 +212,10 @@ function buildChip(eng) {
   const label = el('div', null, 'VAULT');
   const tick = el('div', 'tv-chip-tick', 'tick 0');
   chip.append(cv, label, tick);
-  const store = loadStore();
-  const cpos = store.chip || { left: 'auto', top: 'auto', right: '18px', bottom: '18px' };
-  Object.assign(chip.style, cpos.bottom !== undefined && !cpos.left
-    ? { right: cpos.right || '18px', bottom: cpos.bottom || '18px' }
-    : { left: cpos.left, top: cpos.top });
+  chip.style.right = '18px';
+  chip.style.bottom = '18px';
   document.body.appendChild(chip);
-  makeDraggable(chip, null, 'chip', { left: 'auto', top: 'auto' });
+  makeDraggable(chip, null, 'chip');
 
   // mini glass cube
   try {
@@ -310,10 +311,9 @@ function buildPanel(eng) {
   ui.pockets = q('.tv-pockets');
   ui.tickrow = q('.tv-tickrow');
   ui.log = q('.tv-log');
-  const store = loadStore();
-  const pp = store.panel || { right: '18px', bottom: '18px' };
-  Object.assign(panel.style, pp.left ? { left: pp.left, top: pp.top } : { right: pp.right || '18px', bottom: pp.bottom || '18px' });
-  makeDraggable(panel, q('.tv-head'), 'panel', { right: '18px', bottom: '18px' });
+  panel.style.right = '18px';
+  panel.style.bottom = '18px';
+  makeDraggable(panel, q('.tv-head'), 'panel');
 
   q('[data-act="min"]').addEventListener('click', () => { panel.hidden = true; });
   q('[data-act="3d"]').addEventListener('click', () => { panel.hidden = true; open3D(); });
@@ -398,14 +398,12 @@ function refreshUI() {
     <div class="tv-kv"><span>rewards reserve · TUMBO</span><b>${esc(fmtTokenFluff(eng.rewardsReserveOf('TUMBO')))}</b></div>`;
   // positions
   const open = eng.openPositions({ owner: VAULT_USER });
-  ui.positions.innerHTML = open.length ? '' : '<div class="tv-sub" style="opacity:.6">no open positions yet</div>';
+  ui.positions.innerHTML = open.length ? '' : '<div style="opacity:.6">no open positions yet</div>';
   for (const p of open) {
     const row = el('div', 'tv-row');
     let actionHtml = '';
     if (p.kind === 'stake') {
-      const est = eng.estimateRewards(p.id);
-      actionHtml = `<button class="tv-btn" title="est. reward ${esc(fmtTokenFluff(est))}">Unstake</button>`;
-      row.querySelector && null;
+      actionHtml = '<button class="tv-btn">Unstake</button>';
     } else if (p.kind === 'lock') {
       actionHtml = eng.tick() >= p.unlockTick
         ? '<button class="tv-btn">Withdraw</button>'
@@ -446,9 +444,9 @@ function refreshUI() {
     ui.pockets.appendChild(row);
   }
   // log
-  const rs = eng.receipts().slice(-12).reverse();
-  ui.log.innerHTML = rs.map((r) =>
-    `<div>#${r.proof ? '' : ''}${esc(String(eng.receipts().indexOf(r) + 1))} ${esc(r.action)} · tick ${r.tick} · ${esc(r.key.slice(0, 13))}</div>`
+  const all = eng.receipts();
+  ui.log.innerHTML = all.slice(-12).reverse().map((r) =>
+    `<div>#${all.indexOf(r) + 1} ${esc(r.action)} · tick ${r.tick} · ${esc(String(r.key).slice(0, 13))}</div>`
   ).join('');
 }
 
@@ -522,7 +520,7 @@ function open3D() {
   const ptr = new THREE.Vector2();
   const dragPlane = new THREE.Plane();
   const hitPoint = new THREE.Vector3();
-  let dragCube = null, downAt = 0, movedPx = 0, lastX = 0, lastY = 0;
+  let dragCube = null, movedPx = 0, lastX = 0, lastY = 0;
   const setPtr = (e) => {
     const r = renderer.domElement.getBoundingClientRect();
     ptr.x = ((e.clientX - r.left) / r.width) * 2 - 1;
@@ -531,13 +529,13 @@ function open3D() {
   const onDown = (e) => {
     setPtr(e); ray.setFromCamera(ptr, camera);
     const hits = ray.intersectObjects(draggables, false);
-    downAt = performance.now(); movedPx = 0; lastX = e.clientX; lastY = e.clientY;
+    movedPx = 0; lastX = e.clientX; lastY = e.clientY;
     if (hits.length) {
       dragCube = hits[0].object;
       const n = camera.getWorldDirection(new THREE.Vector3()).negate();
       dragPlane.setFromNormalAndCoplanarPoint(n, dragCube.position);
       hitPoint.copy(hits[0].point).sub(dragCube.position);
-      renderer.domElement.setPointerCapture(e.pointerId);
+      try { renderer.domElement.setPointerCapture(e.pointerId); } catch { /* never */ }
     }
   };
   const onMove = (e) => {
@@ -555,6 +553,7 @@ function open3D() {
       for (const child of world.children) {
         if (child.userData.linkFor === dragCube.userData.position.id) {
           world.remove(child);
+          if (child.geometry) { try { child.geometry.dispose(); } catch { /* never */ } }
           const line = makeConnectionLines(THREE, [vaultCube.position.clone(), dragCube.position.clone()], LINE_COLOR);
           line.userData.linkFor = dragCube.userData.position.id;
           world.add(line);
@@ -563,7 +562,7 @@ function open3D() {
       }
     }
   };
-  const onUp = (e) => {
+  const onUp = () => {
     const wasDragCube = dragCube;
     dragCube = null;
     if (wasDragCube && movedPx > 5) {
