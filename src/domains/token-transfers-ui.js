@@ -99,11 +99,6 @@ const CSS = `
 }
 `;
 
-// ---------------------------------------------------------------------------
-// Small DOM helpers. Every helper degrades silently; nothing here may throw
-// to the console.
-// ---------------------------------------------------------------------------
-
 function readStoredPos(storage) {
   try {
     if (!storage || typeof storage.getItem !== "function") return null;
@@ -111,39 +106,52 @@ function readStoredPos(storage) {
     if (!raw) return null;
     const pos = JSON.parse(raw);
     if (pos && Number.isFinite(pos.left) && Number.isFinite(pos.top)) return pos;
-  } catch (_) {
-    /* corrupted or unavailable storage: fall back to the default spot */
-  }
+  } catch (_) {}
   return null;
 }
 
 function writeStoredPos(storage, pos) {
   try {
-    if (storage && typeof storage.setItem === "function") {
-      storage.setItem(CHIP_STORAGE_KEY, JSON.stringify(pos));
-    }
-  } catch (_) {
-    /* private mode / quota: the chip simply stays where it is */
-  }
+    if (storage && typeof storage.setItem === "function") storage.setItem(CHIP_STORAGE_KEY, JSON.stringify(pos));
+  } catch (_) {}
 }
 
 function injectStyles(doc) {
   try {
     if (!doc || doc.getElementById("token-transfer-styles")) return;
-// ---------------------------------------------------------------------------
-// DOM builders: chip + panel. HTML is assembled from quoted string arrays so
-// the markup stays readable without nested template literals.
-// ---------------------------------------------------------------------------
+    const style = doc.createElement("style");
+    style.id = "token-transfer-styles";
+    style.textContent = CSS;
+    (doc.head || doc.documentElement).appendChild(style);
+  } catch (_) {}
+}
+
+function makeKey() {
+  let rand = "";
+  try {
+    const bytes = new Uint8Array(6);
+    if (window.crypto && typeof window.crypto.getRandomValues === "function") {
+      window.crypto.getRandomValues(bytes);
+      rand = Array.from(bytes, function (b) { return b.toString(16).padStart(2, "0"); }).join("");
+    }
+  } catch (_) {}
+  if (!rand) rand = Math.random().toString(16).slice(2, 14);
+  return "tt-" + Date.now().toString(36) + "-" + rand;
+}
+
+function safeStorage() {
+  try {
+    if (typeof window !== "undefined" && window.localStorage) return window.localStorage;
+  } catch (_) {}
+  return null;
+}
 
 function buildChip(doc) {
   const chip = doc.createElement("button");
   chip.id = "token-transfer-chip";
   chip.type = "button";
   chip.setAttribute("data-selected", "false");
-  chip.setAttribute(
-    "aria-label",
-    "TUMBO-SIM token transfers (simulated). Activate to open the transfer panel."
-  );
+  chip.setAttribute("aria-label", "TUMBO-SIM token transfers (simulated). Activate to open the transfer panel.");
   chip.innerHTML = [
     "<canvas id='token-transfer-cube' width='104' height='104' aria-hidden='true'></canvas>",
     "<span class='tt-chip-label'>TUMBO-SIM<br>TRANSFERS</span>",
@@ -205,40 +213,28 @@ function buildPanel(doc) {
   return panel;
 }
 
-// ---------------------------------------------------------------------------
-// Mount: builds the chip + panel, wires the facade, starts the 3-D cube.
-// ---------------------------------------------------------------------------
-
 export function mountTokenTransferConsole(options) {
   const opts = options || {};
   const doc = opts.documentRoot || (typeof document !== "undefined" ? document : null);
   if (!doc || !doc.createElement || !doc.body || !doc.getElementById) return null;
   if (doc.getElementById("token-transfer-chip")) return { alreadyMounted: true };
   injectStyles(doc);
-
   let facade = null;
   let engine = null;
   try {
-    facade = attachTokenTransfers(
-      typeof window !== "undefined" ? window.TumboToken : undefined,
-      { ledgerOptions: opts.engineOptions || {} }
-    );
+    facade = attachTokenTransfers(typeof window !== "undefined" ? window.TumboToken : undefined, { ledgerOptions: opts.engineOptions || {} });
     engine = facade.tokenTransfers;
   } catch (_) {
     return null;
   }
   try {
     if (typeof window !== "undefined") window.__TUMBO_TOKEN_TRANSFERS__ = engine;
-  } catch (_) {
-    /* host page is locked down: the facade still works */
-  }
-
+  } catch (_) {}
   const storage = opts.storage === undefined ? safeStorage() : opts.storage;
   const chip = buildChip(doc);
   const panel = buildPanel(doc);
   doc.body.appendChild(chip);
   doc.body.appendChild(panel);
-
   try {
     const pos = readStoredPos(storage);
     if (pos) {
@@ -247,20 +243,17 @@ export function mountTokenTransferConsole(options) {
       chip.style.right = "auto";
       chip.style.bottom = "auto";
     }
-  } catch (_) {
-    /* default docked position */
-  }
-
+  } catch (_) {}
   const ctx = {
-    doc,
-    storage,
-    chip,
-    panel,
-    facade,
-    engine,
+    doc: doc,
+    storage: storage,
+    chip: chip,
+    panel: panel,
+    facade: facade,
+    engine: engine,
     scene: null,
     expanded: false,
-    byId(id) {
+    byId: function (id) {
       try {
         return doc.getElementById(id);
       } catch (_) {
@@ -268,58 +261,48 @@ export function mountTokenTransferConsole(options) {
       }
     },
   };
-
   try {
     const keyInput = ctx.byId("tt-key");
     if (keyInput) keyInput.value = makeKey();
-  } catch (_) {
-    /* key can be typed by hand */
-  }
-
+  } catch (_) {}
   wireChipInteractions(ctx);
   try {
     ctx.scene = startChipScene(ctx.byId("token-transfer-cube"));
-  } catch (_) {
-// ---------------------------------------------------------------------------
-// Panel open/close + chip interactions: click selects/opens, hover peeks,
-// double-click expands, drag moves (position remembered).
-// ---------------------------------------------------------------------------
+  } catch (_) {}
+  wirePanel(ctx);
+  refreshAll(ctx);
+  return {
+    chip: chip,
+    panel: panel,
+    facade: facade,
+    engine: engine,
+    open: function () { openPanel(ctx); },
+    close: function () { closePanel(ctx); },
+    dispose: function () { disposeConsole(ctx); },
+  };
+}
 
 function openPanel(ctx) {
   try {
     ctx.panel.hidden = false;
     ctx.chip.setAttribute("data-selected", "true");
     refreshAll(ctx);
-  } catch (_) {
-    /* panel stays as-is */
-  }
+  } catch (_) {}
 }
 
 function closePanel(ctx) {
   try {
     ctx.panel.hidden = true;
     ctx.chip.setAttribute("data-selected", "false");
-  } catch (_) {
-    /* panel stays as-is */
-  }
+  } catch (_) {}
 }
 
 function disposeConsole(ctx) {
   try {
     if (ctx.scene && typeof ctx.scene.dispose === "function") ctx.scene.dispose();
-  } catch (_) {
-    /* already gone */
-  }
-  try {
-    ctx.chip.remove();
-  } catch (_) {
-    /* already gone */
-  }
-  try {
-    ctx.panel.remove();
-  } catch (_) {
-    /* already gone */
-  }
+  } catch (_) {}
+  try { ctx.chip.remove(); } catch (_) {}
+  try { ctx.panel.remove(); } catch (_) {}
 }
 
 function clampToViewport(left, top, width, height) {
@@ -340,7 +323,6 @@ function wireChipInteractions(ctx) {
   const peek = ctx.byId("token-transfer-peek");
   let dragState = null;
   let lastPointerToggle = 0;
-
   function peekText() {
     const lines = ["TUMBO-SIM balances (simulated)"];
     try {
@@ -353,47 +335,29 @@ function wireChipInteractions(ctx) {
     }
     return lines.join("\n");
   }
-
   function showPeek() {
     try {
       if (!peek || !ctx.panel.hidden) return;
       peek.textContent = peekText();
       peek.hidden = false;
-    } catch (_) {
-      /* no peek */
-    }
+    } catch (_) {}
   }
-
   function hidePeek() {
-    try {
-      if (peek) peek.hidden = true;
-    } catch (_) {
-      /* no peek */
-    }
+    try { if (peek) peek.hidden = true; } catch (_) {}
   }
-
   function togglePanel() {
     if (ctx.panel.hidden) openPanel(ctx);
     else closePanel(ctx);
   }
-
   chip.addEventListener("pointerdown", function (event) {
     try {
       chip.setPointerCapture(event.pointerId);
       const rect = chip.getBoundingClientRect();
-      dragState = {
-        pointerId: event.pointerId,
-        startX: event.clientX,
-        startY: event.clientY,
-        origLeft: rect.left,
-        origTop: rect.top,
-        moved: false,
-      };
+      dragState = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, origLeft: rect.left, origTop: rect.top, moved: false };
     } catch (_) {
       dragState = null;
     }
   });
-
   chip.addEventListener("pointermove", function (event) {
     try {
       if (!dragState || event.pointerId !== dragState.pointerId) return;
@@ -403,21 +367,13 @@ function wireChipInteractions(ctx) {
       dragState.moved = true;
       hidePeek();
       const rect = chip.getBoundingClientRect();
-      const next = clampToViewport(
-        dragState.origLeft + dx,
-        dragState.origTop + dy,
-        rect.width,
-        rect.height
-      );
+      const next = clampToViewport(dragState.origLeft + dx, dragState.origTop + dy, rect.width, rect.height);
       chip.style.left = next.left + "px";
       chip.style.top = next.top + "px";
       chip.style.right = "auto";
       chip.style.bottom = "auto";
-    } catch (_) {
-      /* keep the chip where it is */
-    }
+    } catch (_) {}
   });
-
   function endDrag(event) {
     try {
       if (!dragState || (event && event.pointerId !== dragState.pointerId)) return;
@@ -436,47 +392,46 @@ function wireChipInteractions(ctx) {
   }
   chip.addEventListener("pointerup", endDrag);
   chip.addEventListener("pointercancel", endDrag);
-
   chip.addEventListener("click", function () {
     try {
       if (Date.now() - lastPointerToggle < 600) return;
       togglePanel();
-    } catch (_) {
-      /* ignore */
-    }
+    } catch (_) {}
   });
-
   chip.addEventListener("dblclick", function (event) {
     try {
       event.preventDefault();
       openPanel(ctx);
       ctx.expanded = !ctx.expanded;
       ctx.panel.classList.toggle("tt-expanded", ctx.expanded);
-    } catch (_) {
-      /* ignore */
-    }
+    } catch (_) {}
   });
-
   chip.addEventListener("mouseenter", showPeek);
   chip.addEventListener("mouseleave", hidePeek);
   chip.addEventListener("focus", showPeek);
   chip.addEventListener("blur", hidePeek);
-
   try {
     window.addEventListener("resize", function () {
       try {
         const rect = chip.getBoundingClientRect();
         const next = clampToViewport(rect.left, rect.top, rect.width, rect.height);
-// ---------------------------------------------------------------------------
-// 3-D chip scene: canonical glass cube + two satellites + connection lines.
-// three.js r179.1 only, built with the repo's glass-style helpers.
-// ---------------------------------------------------------------------------
+        chip.style.left = next.left + "px";
+        chip.style.top = next.top + "px";
+        chip.style.right = "auto";
+        chip.style.bottom = "auto";
+      } catch (_) {}
+    });
+  } catch (_) {}
+  try {
+    const minimize = ctx.byId("tt-minimize");
+    if (minimize) minimize.addEventListener("click", function () { closePanel(ctx); });
+    const close = ctx.byId("tt-close");
+    if (close) close.addEventListener("click", function () { closePanel(ctx); });
+  } catch (_) {}
+}
 
 function startChipScene(canvas) {
-  const api = {
-    pulse: function () {},
-    dispose: function () {},
-  };
+  const api = { pulse: function () {}, dispose: function () {} };
   try {
     if (!canvas || typeof canvas.getContext !== "function") return api;
     const renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true });
@@ -485,7 +440,6 @@ function startChipScene(canvas) {
     camera.position.set(0, 0.35, 4.8);
     camera.lookAt(0, 0, 0);
     addGlassLighting(THREE, scene);
-
     const cube = makeGlassCube(THREE, { size: 1.45, tint: TRANSFER_CUBE_TINT });
     scene.add(cube);
     const satA = makeGlassCube(THREE, { size: 0.5, tint: glassTintFor("#7fd4ff", 0.3) });
@@ -499,41 +453,24 @@ function startChipScene(canvas) {
       [new THREE.Vector3(0, 0, 0), new THREE.Vector3(-1.3, -0.62, -0.2)],
     ]);
     scene.add(lines);
-
     function resize() {
       try {
         const w = canvas.clientWidth || 104;
         const h = canvas.clientHeight || 104;
         renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
         renderer.setSize(Math.round(w), Math.round(h), false);
-      } catch (_) {
-        /* keep the default size */
-      }
+      } catch (_) {}
     }
     resize();
-    try {
-      window.addEventListener("resize", resize);
-    } catch (_) {
-      /* ignore */
-    }
-
+    try { window.addEventListener("resize", resize); } catch (_) {}
     let pulseUntil = 0;
     api.pulse = function () {
-      try {
-        pulseUntil = performance.now() + 900;
-      } catch (_) {
-        /* no pulse */
-      }
+      try { pulseUntil = performance.now() + 900; } catch (_) {}
     };
-
     let raf = 0;
     let disposed = false;
     let clock = null;
-    try {
-      clock = new THREE.Clock();
-    } catch (_) {
-      return api;
-    }
+    try { clock = new THREE.Clock(); } catch (_) { return api; }
     function frame() {
       if (disposed) return;
       raf = requestAnimationFrame(frame);
@@ -548,21 +485,26 @@ function startChipScene(canvas) {
         satB.position.y = -0.62 + Math.cos(t * 0.8) * 0.08;
         let s = 1;
         const now = performance.now();
-        if (now < pulseUntil) {
-          s = 1 + 0.14 * Math.sin(((pulseUntil - now) / 900) * Math.PI);
-        }
+        if (now < pulseUntil) s = 1 + 0.14 * Math.sin(((pulseUntil - now) / 900) * Math.PI);
         cube.scale.set(s, s, s);
         renderer.render(scene, camera);
-      } catch (_) {
-        /* one bad frame must not kill the loop */
-      }
+      } catch (_) {}
     }
-// ---------------------------------------------------------------------------
-// Panel: balances, transfer form, deliver intents, receipt viewer.
-// ---------------------------------------------------------------------------
+    frame();
+    api.dispose = function () {
+      try {
+        disposed = true;
+        cancelAnimationFrame(raf);
+        try { window.removeEventListener("resize", resize); } catch (_) {}
+        renderer.dispose();
+      } catch (_) {}
+    };
+  } catch (_) {}
+  return api;
+}
 
 function escapeHtml(value) {
-  return String(value == null ? "" : value).replace(/[&<>\"']/g, function (c) {
+  return String(value == null ? "" : value).replace(/[&<>"']/g, function (c) {
     return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
   });
 }
@@ -571,32 +513,19 @@ function setStatus(ctx, message, tone) {
   try {
     const el = ctx.byId("tt-status");
     if (!el) return;
-    if (!message) {
-      el.hidden = true;
-      return;
-    }
+    if (!message) { el.hidden = true; return; }
     el.hidden = false;
     el.setAttribute("data-tone", tone || "info");
     el.textContent = String(message);
-  } catch (_) {
-    /* status is best-effort */
-  }
+  } catch (_) {}
 }
 
 function fmtAmount(ctx, fluff) {
-  try {
-    return ctx.facade.fmt(fluff);
-  } catch (_) {
-    return String(fluff) + " fluff";
-  }
+  try { return ctx.facade.fmt(fluff); } catch (_) { return String(fluff) + " fluff"; }
 }
 
 function pulse(ctx) {
-  try {
-    if (ctx.scene && typeof ctx.scene.pulse === "function") ctx.scene.pulse();
-  } catch (_) {
-    /* no pulse */
-  }
+  try { if (ctx.scene && typeof ctx.scene.pulse === "function") ctx.scene.pulse(); } catch (_) {}
 }
 
 function refreshBalances(ctx) {
@@ -609,21 +538,12 @@ function refreshBalances(ctx) {
     for (let i = 0; i < accounts.length; i++) {
       for (let j = 0; j < assets.length; j++) {
         let bal = 0;
-        try {
-          bal = ctx.engine.balance(accounts[i], assets[j]);
-        } catch (_) {
-          bal = 0;
-        }
-        rows.push(
-          "<div class='tt-balance'><b>" + escapeHtml(fmtAmount(ctx, bal)) + "</b>" +
-          "<span>" + escapeHtml(accounts[i] + " \u00b7 " + assets[j]) + "</span></div>"
-        );
+        try { bal = ctx.engine.balance(accounts[i], assets[j]); } catch (_) { bal = 0; }
+        rows.push("<div class='tt-balance'><b>" + escapeHtml(fmtAmount(ctx, bal)) + "</b><span>" + escapeHtml(accounts[i] + " \u00b7 " + assets[j]) + "</span></div>");
       }
     }
     box.innerHTML = rows.join("");
-  } catch (_) {
-    /* balances stay as-is */
-  }
+  } catch (_) {}
 }
 
 function settleIntent(ctx, intentId, btn) {
@@ -659,26 +579,14 @@ function refreshIntents(ctx) {
   if (!box) return;
   try {
     let intents = [];
-    try {
-      intents = ctx.engine.intents().filter(function (i) { return i && i.status === "held"; });
-    } catch (_) {
-      intents = [];
-    }
+    try { intents = ctx.engine.intents().filter(function (i) { return i && i.status === "held"; }); } catch (_) { intents = []; }
     if (!intents.length) {
       box.innerHTML = "<div class='tt-empty'>No held deliveries. A deliver hold parks funds in sys:escrow until settled or cancelled.</div>";
       return;
     }
     const rows = intents.slice().reverse().map(function (intent) {
       const id = escapeHtml(intent.intentId);
-      return [
-        "<div class='tt-intent'>",
-        "<div class='tt-intent-title'>" + escapeHtml(fmtAmount(ctx, intent.amountFluff) + " " + intent.asset) + " \u2192 " + escapeHtml(intent.to) + "</div>",
-        "<div class='tt-intent-meta'>held \u00b7 from " + escapeHtml(intent.from) + " \u00b7 " + id + "</div>",
-        "<div class='tt-intent-actions'>",
-        "<button type='button' class='tt-btn' data-settle='" + id + "'>Settle</button>",
-        "<button type='button' class='tt-btn tt-btn-secondary' data-cancel='" + id + "'>Cancel</button>",
-        "</div></div>",
-      ].join("");
+      return "<div class='tt-intent'><div class='tt-intent-title'>" + escapeHtml(fmtAmount(ctx, intent.amountFluff) + " " + intent.asset) + " \u2192 " + escapeHtml(intent.to) + "</div><div class='tt-intent-meta'>held \u00b7 from " + escapeHtml(intent.from) + " \u00b7 " + id + "</div><div class='tt-intent-actions'><button type='button' class='tt-btn' data-settle='" + id + "'>Settle</button><button type='button' class='tt-btn tt-btn-secondary' data-cancel='" + id + "'>Cancel</button></div></div>";
     });
     box.innerHTML = rows.join("");
     box.querySelectorAll("[data-settle]").forEach(function (btn) {
@@ -687,9 +595,7 @@ function refreshIntents(ctx) {
     box.querySelectorAll("[data-cancel]").forEach(function (btn) {
       btn.addEventListener("click", function () { cancelIntent(ctx, btn.getAttribute("data-cancel"), btn); });
     });
-  } catch (_) {
-    /* intents stay as-is */
-  }
+  } catch (_) {}
 }
 
 function refreshReceipts(ctx) {
@@ -697,11 +603,7 @@ function refreshReceipts(ctx) {
   if (!box) return;
   try {
     let receipts = [];
-    try {
-      receipts = ctx.engine.receipts();
-    } catch (_) {
-      receipts = [];
-    }
+    try { receipts = ctx.engine.receipts(); } catch (_) { receipts = []; }
     if (!receipts.length) {
       box.innerHTML = "<div class='tt-empty'>No receipts yet. Submit a transfer to create the first one.</div>";
       return;
@@ -709,26 +611,14 @@ function refreshReceipts(ctx) {
     const latest = receipts.slice(-12).reverse();
     box.innerHTML = latest.map(function (r) {
       let badge = "unverified";
-      try {
-        badge = ctx.engine.verifyReceipt(r.receiptId).ok ? "verified" : "CHECK FAILED";
-      } catch (_) {
-        badge = "unverified";
-      }
+      try { badge = ctx.engine.verifyReceipt(r.receiptId).ok ? "verified" : "CHECK FAILED"; } catch (_) { badge = "unverified"; }
       const kind = r.phase ? r.action + ":" + r.phase : r.action;
-      return [
-        "<button type='button' class='tt-receipt' data-receipt='" + escapeHtml(r.receiptId) + "' aria-pressed='false'>",
-        "<span><span class='tt-receipt-title'>" + escapeHtml(r.summary) + "</span>",
-        "<span class='tt-receipt-meta'>" + escapeHtml(r.receiptId + " \u00b7 " + kind + " \u00b7 " + r.asset) + "</span></span>",
-        "<span class='tt-receipt-verify'>" + escapeHtml(badge) + "</span>",
-        "</button>",
-      ].join("");
+      return "<button type='button' class='tt-receipt' data-receipt='" + escapeHtml(r.receiptId) + "' aria-pressed='false'><span><span class='tt-receipt-title'>" + escapeHtml(r.summary) + "</span><span class='tt-receipt-meta'>" + escapeHtml(r.receiptId + " \u00b7 " + kind + " \u00b7 " + r.asset) + "</span></span><span class='tt-receipt-verify'>" + escapeHtml(badge) + "</span></button>";
     }).join("");
     box.querySelectorAll("[data-receipt]").forEach(function (btn) {
       btn.addEventListener("click", function () { showReceiptDetail(ctx, btn.getAttribute("data-receipt"), btn); });
     });
-  } catch (_) {
-    /* receipts stay as-is */
-  }
+  } catch (_) {}
 }
 
 function showReceiptDetail(ctx, receiptId, btn) {
@@ -738,11 +628,7 @@ function showReceiptDetail(ctx, receiptId, btn) {
     if (detail.getAttribute("data-open") === receiptId && !detail.hidden) {
       detail.hidden = true;
       detail.removeAttribute("data-open");
-      try {
-        ctx.panel.querySelectorAll(".tt-receipt").forEach(function (b) { b.setAttribute("aria-pressed", "false"); });
-      } catch (_) {
-        /* ignore */
-      }
+      try { ctx.panel.querySelectorAll(".tt-receipt").forEach(function (b) { b.setAttribute("aria-pressed", "false"); }); } catch (_) {}
       return;
     }
     const receipt = ctx.engine.getReceipt(receiptId);
@@ -752,30 +638,20 @@ function showReceiptDetail(ctx, receiptId, btn) {
       const ok = !!verification.checks[name];
       return "<div class='tt-check' data-ok='" + (ok ? "true" : "false") + "'><span>" + escapeHtml(name) + "</span><b>" + (ok ? "pass" : "FAIL") + "</b></div>";
     }).join("");
-    detail.innerHTML = [
-      "<div class='tt-checks'>" + checkRows + "</div>",
-      "<pre>" + escapeHtml(JSON.stringify(receipt, null, 2)) + "</pre>",
-      "<button type='button' class='tt-btn tt-btn-secondary' id='tt-reverify'>Recompute hashes</button>",
-    ].join("");
+    detail.innerHTML = "<div class='tt-checks'>" + checkRows + "</div><pre>" + escapeHtml(JSON.stringify(receipt, null, 2)) + "</pre><button type='button' class='tt-btn tt-btn-secondary' id='tt-reverify'>Recompute hashes</button>";
     detail.hidden = false;
     detail.setAttribute("data-open", receiptId);
     try {
       ctx.panel.querySelectorAll(".tt-receipt").forEach(function (b) { b.setAttribute("aria-pressed", "false"); });
       if (btn) btn.setAttribute("aria-pressed", "true");
-    } catch (_) {
-      /* ignore */
-    }
+    } catch (_) {}
     const reverify = detail.querySelector("#tt-reverify");
     if (reverify) {
       reverify.addEventListener("click", function () {
         detail.removeAttribute("data-open");
         showReceiptDetail(ctx, receiptId, btn);
         let ok = false;
-        try {
-          ok = ctx.engine.verifyReceipt(receiptId).ok;
-        } catch (_) {
-          ok = false;
-        }
+        try { ok = ctx.engine.verifyReceipt(receiptId).ok; } catch (_) { ok = false; }
         setStatus(ctx, "Receipt hashes recomputed: " + (ok ? "all 5 checks pass" : "CHECKS FAILED"), ok ? "ok" : "error");
       });
     }
@@ -785,21 +661,9 @@ function showReceiptDetail(ctx, receiptId, btn) {
 }
 
 function refreshAll(ctx) {
-  try {
-    refreshBalances(ctx);
-  } catch (_) {
-    /* ignore */
-  }
-  try {
-    refreshIntents(ctx);
-  } catch (_) {
-    /* ignore */
-  }
-  try {
-    refreshReceipts(ctx);
-  } catch (_) {
-    /* ignore */
-  }
+  try { refreshBalances(ctx); } catch (_) {}
+  try { refreshIntents(ctx); } catch (_) {}
+  try { refreshReceipts(ctx); } catch (_) {}
 }
 
 function submitTransfer(ctx, isReplay) {
@@ -824,7 +688,6 @@ function submitTransfer(ctx, isReplay) {
     setStatus(ctx, "Could not read the form.", "error");
     return;
   }
-
   let amountFluff = 0;
   try {
     amountFluff = ctx.engine.parseSimToFluff(amountText);
@@ -832,7 +695,6 @@ function submitTransfer(ctx, isReplay) {
     setStatus(ctx, "Amount problem: " + (err && err.message ? err.message : String(err)), "error");
     return;
   }
-
   setStatus(ctx, "Submitting " + action + " (simulated)\u2026", "info");
   try {
     const journalsBefore = ctx.engine.journalCount();
@@ -846,21 +708,15 @@ function submitTransfer(ctx, isReplay) {
     const replayed = ctx.engine.journalCount() === journalsBefore;
     if (replayed) {
       setStatus(ctx, "Replay: that idempotency key was already used \u2014 returned the original receipt " + receipt.receiptId + " (no new journal).", "info");
+    } else if (action === "deliver") {
+      setStatus(ctx, "Deliver hold placed in sys:escrow (simulated). Receipt " + receipt.receiptId + " \u2014 " + receipt.summary, "ok");
     } else {
-      if (action === "deliver") {
-        setStatus(ctx, "Deliver hold placed in sys:escrow (simulated). Receipt " + receipt.receiptId + " \u2014 " + receipt.summary, "ok");
-      } else {
-        setStatus(ctx, "Done (simulated). Receipt " + receipt.receiptId + " \u2014 " + receipt.summary, "ok");
-      }
-      if (!isReplay) {
-        try {
-          ctx.byId("tt-key").value = makeKey();
-        } catch (_) {
-          /* key stays */
-        }
-      }
-      pulse(ctx);
+      setStatus(ctx, "Done (simulated). Receipt " + receipt.receiptId + " \u2014 " + receipt.summary, "ok");
     }
+    if (!replayed && !isReplay) {
+      try { ctx.byId("tt-key").value = makeKey(); } catch (_) {}
+    }
+    if (!replayed) pulse(ctx);
   } catch (err) {
     setStatus(ctx, "Transfer failed: " + (err && err.message ? err.message : String(err)), "error");
   }
@@ -872,56 +728,17 @@ function wirePanel(ctx) {
     const form = ctx.byId("tt-form");
     if (form) {
       form.addEventListener("submit", function (event) {
-        try {
-          event.preventDefault();
-        } catch (_) {
-          /* ignore */
-        }
+        try { event.preventDefault(); } catch (_) {}
         submitTransfer(ctx, false);
       });
     }
     const replay = ctx.byId("tt-replay");
-    if (replay) {
-      replay.addEventListener("click", function () { submitTransfer(ctx, true); });
-    }
+    if (replay) replay.addEventListener("click", function () { submitTransfer(ctx, true); });
     const faucet = ctx.byId("tt-faucet");
     if (faucet) {
       faucet.addEventListener("click", function () {
         try {
-          ctx.engine.send({ from: "sys:faucet", to: DEMO_USER, asset: "TUMBO", amountFluff: 100 * FLUFF
-// ---------------------------------------------------------------------------
-// Self-mount: the console appears as a minimized chip on import.
-// ?token-transfers-ui=off disables the auto-mount (manual mounting through
-// mountTokenTransferConsole still works).
-// ---------------------------------------------------------------------------
-
-function autoMountTokenTransferConsole() {
-  try {
-    if (typeof document === "undefined" || typeof window === "undefined") return;
-    let params = null;
-    try {
-      const search = window.location && window.location.search ? window.location.search : "";
-      params = new URLSearchParams(search);
-    } catch (_) {
-      params = null;
-    }
-    if (params && params.get("token-transfers-ui") === "off") return;
-    mountTokenTransferConsole();
-  } catch (_) {
-    /* never break the host app */
-  }
-}
-
-try {
-  if (typeof document !== "undefined" && document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", autoMountTokenTransferConsole, { once: true });
-  } else {
-    autoMountTokenTransferConsole();
-  }
-} catch (_) {
-  /* never break the host app */
-}
-_PER_TUMBO_SIM, idempotencyKey: makeKey(), memo: "simulated demo funds" });
+          ctx.engine.send({ from: "sys:faucet", to: DEMO_USER, asset: "TUMBO", amountFluff: 100 * FLUFF_PER_TUMBO_SIM, idempotencyKey: makeKey(), memo: "simulated demo funds" });
           ctx.engine.send({ from: "sys:faucet", to: DEMO_USER, asset: "sMIMAS", amountFluff: 50 * FLUFF_PER_TUMBO_SIM, idempotencyKey: makeKey(), memo: "simulated demo funds" });
           setStatus(ctx, "Demo funds added (simulated): " + fmtAmount(ctx, 100 * FLUFF_PER_TUMBO_SIM) + " TUMBO + " + fmtAmount(ctx, 50 * FLUFF_PER_TUMBO_SIM) + " sMIMAS.", "ok");
           pulse(ctx);
@@ -936,100 +753,29 @@ _PER_TUMBO_SIM, idempotencyKey: makeKey(), memo: "simulated demo funds" });
         ctx.facade.on("receipt", function () { refreshAll(ctx); pulse(ctx); });
         ctx.facade.on("balance-changed", function () { refreshBalances(ctx); });
       }
+    } catch (_) {}
+  } catch (_) {}
+}
+
+function autoMountTokenTransferConsole() {
+  try {
+    if (typeof document === "undefined" || typeof window === "undefined") return;
+    let params = null;
+    try {
+      const search = window.location && window.location.search ? window.location.search : "";
+      params = new URLSearchParams(search);
     } catch (_) {
-      /* live updates unavailable; the form still refreshes on submit */
+      params = null;
     }
-  } catch (_) {
-    /* panel stays inert */
-  }
+    if (params && params.get("token-transfers-ui") === "off") return;
+    mountTokenTransferConsole();
+  } catch (_) {}
 }
 
-    frame();
-
-    api.dispose = function () {
-      try {
-        disposed = true;
-        cancelAnimationFrame(raf);
-        try {
-          window.removeEventListener("resize", resize);
-        } catch (_) {
-          /* ignore */
-        }
-        renderer.dispose();
-      } catch (_) {
-        /* already gone */
-      }
-    };
-  } catch (_) {
-    /* WebGL unavailable: the chip still works as a plain button */
+try {
+  if (typeof document !== "undefined" && document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", autoMountTokenTransferConsole, { once: true });
+  } else {
+    autoMountTokenTransferConsole();
   }
-  return api;
-}
-
-        chip.style.left = next.left + "px";
-        chip.style.top = next.top + "px";
-        chip.style.right = "auto";
-        chip.style.bottom = "auto";
-      } catch (_) {
-        /* ignore */
-      }
-    });
-  } catch (_) {
-    /* ignore */
-  }
-
-  try {
-    const minimize = ctx.byId("tt-minimize");
-    if (minimize) minimize.addEventListener("click", function () { closePanel(ctx); });
-    const close = ctx.byId("tt-close");
-    if (close) close.addEventListener("click", function () { closePanel(ctx); });
-  } catch (_) {
-    /* buttons stay inert */
-  }
-}
-
-    /* the DOM panel works without WebGL */
-  }
-  wirePanel(ctx);
-  refreshAll(ctx);
-
-  return {
-    chip,
-    panel,
-    facade,
-    engine,
-    open() {
-      openPanel(ctx);
-    },
-    close() {
-      closePanel(ctx);
-    },
-    dispose() {
-      disposeConsole(ctx);
-    },
-  };
-}
-
-    const style = doc.createElement("style");
-    style.id = "token-transfer-styles";
-    style.textContent = CSS;
-    (doc.head || doc.documentElement).appendChild(style);
-  } catch (_) {
-    /* unstyled but functional */
-  }
-}
-
-function makeKey() {
-  let rand = "";
-  try {
-    const bytes = new Uint8Array(6);
-    if (window.crypto && typeof window.crypto.getRandomValues === "function") {
-      window.crypto.getRandomValues(bytes);
-      rand = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
-    }
-  } catch (_) {
-    /* fall through to Math.random */
-  }
-  if (!rand) rand = Math.random().toString(16).slice(2, 14);
-  return "tt-" + Date.now().toString(36) + "-" + rand;
-}
+} catch (_) {}
