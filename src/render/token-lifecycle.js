@@ -143,6 +143,10 @@ export function mountTokenLifecycleAudit(root, opts = {}) {
   let three = null;
   const cubeMeshes = new Map();
   let hoverId = null;
+  /* Bulk-advance guard: while advancing many ticks, receipt events are
+   * suppressed and a single refresh runs at the end. Without this,
+   * "+1005 ticks" would rebuild the whole scene 1005 times. */
+  let suppressRefresh = 0;
 
   const stateColor = (j) => (j.journalId === "genesis" ? STATE_COLORS.genesis : (STATE_COLORS[j.state] ?? STATE_COLORS.settled));
 
@@ -551,12 +555,16 @@ export function mountTokenLifecycleAudit(root, opts = {}) {
       : "Chain FAILED at " + bad.map((r) => r.journalId).join(", ") + " (" + bad[0].failures.join(", ") + ").");
   });
   $("advance").addEventListener("click", () => {
+    suppressRefresh += 1;
+    let failed = null;
     try {
       for (let i = 0; i < 1005; i += 1) {
         core.execute({ action: "send", from: "sys:treasury", to: "sys:faucet", amountFluff: 1, idempotencyKey: "audit-tick-" + core.tick + "-" + i });
       }
-      refreshAll("Advanced 1005 ticks (now tick " + core.tick + "). Journals older than " + TOKEN_CONFIG.REVERSE_WINDOW_TICKS + " ticks can no longer be reversed \u2014 try reversing one.");
-    } catch (err) { setStatus("Advance failed: " + (err && err.message)); }
+    } catch (err) { failed = err; }
+    suppressRefresh -= 1;
+    if (failed) { setStatus("Advance failed: " + (failed && failed.message)); return; }
+    refreshAll("Advanced 1005 ticks (now tick " + core.tick + "). Journals older than " + TOKEN_CONFIG.REVERSE_WINDOW_TICKS + " ticks can no longer be reversed \u2014 try reversing one.");
   });
   $("minimize").addEventListener("click", () => { $("panel").hidden = true; $("chip").hidden = false; });
   $("chip").addEventListener("click", () => { $("panel").hidden = false; $("chip").hidden = true; });
@@ -576,7 +584,7 @@ export function mountTokenLifecycleAudit(root, opts = {}) {
   initThree();
   refreshAll();
   setStatus("Ready. Simulated ledger \u2014 no real value moves here.");
-  const offReceipt = facade.on("receipt", () => refreshAll());
+  const offReceipt = facade.on("receipt", () => { if (suppressRefresh === 0) refreshAll(); });
 
   try {
     if (new URLSearchParams(window.location.search).get("selftest") === "1") {
