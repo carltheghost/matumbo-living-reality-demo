@@ -38,7 +38,7 @@ export const BLOCK_TYPES = Object.freeze({
 });
 
 /**
- * The only destinations a portal cube may open are these nineteen local feature
+ * The only destinations a portal cube may open are these twenty local feature
  * surfaces.  Keep this registry finite and explicit: a portal route is a
  * renderer hand-off, not a URL, provider endpoint, command, or persisted
  * navigation state.  Each entry is deeply frozen so callers cannot add a
@@ -150,7 +150,14 @@ const PORTAL_ROUTE_DEFINITIONS = [
     surface: "world-events-console",
     description: "Refresh documented public event sources and inspect returned evidence.",
   },
+  {id: "web-ai",
+    featureId: "web-ai",
+    label: "Web + AI",
+    surface: "web-ai-console",
+    description: "Browse the open web in a sandboxed frame and hand tasks to AI assistants.",
+  },
   {
+    id: "reality-lens",
     id: "projections",
     featureId: "projections",
     label: "Phone / PC / XR",
