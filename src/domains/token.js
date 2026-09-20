@@ -338,7 +338,7 @@ export class TumboLedger {
       const next = current + entry.delta;
       if (next < 0) {
         throw new TokenError(
-          `${entry.account} has insufficient ${entry.asset} (needs ${fmtFluff(-entry.delta)} TUMBO-SIM)`,
+          `${entry.account} has insufficient ${entry.asset}`,
           "INSUFFICIENT_FUNDS",
         );
       }
@@ -447,20 +447,8 @@ export class TumboLedger {
         ? (existingLock?.unlockTick ?? this.tick + 100)
         : assertFluff(unlockTick, "unlockTick");
     this.ensureAccount(acct);
-    if (!existingLock) {
-      this._locks.push({
-        id: lockId,
-        account: acct,
-        asset,
-        amount,
-        unlockTick: finalUnlockTick,
-        state: "OPEN",
-        createdTick: this.tick + 1,
-      });
-      const posKey = this._balanceKey(acct, asset);
-      this._vaultPositions.set(posKey, (this._vaultPositions.get(posKey) ?? 0) + amount);
-    }
-    return this._commit({
+    const wasReplay = this._byIdem.has(idemKey);
+    const receipt = this._commit({
       action: "lock",
       actor: acct,
       idem: idemKey,
@@ -471,6 +459,21 @@ export class TumboLedger {
       refs: { account: acct, asset, amount, lockId, unlockTick: finalUnlockTick },
       meta: { lockId, unlockTick: finalUnlockTick },
     });
+    // Auxiliary lock state follows the sealed journal, never precedes it.
+    if (!wasReplay && !existingLock) {
+      this._locks.push({
+        id: lockId,
+        account: acct,
+        asset,
+        amount,
+        unlockTick: finalUnlockTick,
+        state: "OPEN",
+        createdTick: receipt.tick,
+      });
+      const posKey = this._balanceKey(acct, asset);
+      this._vaultPositions.set(posKey, (this._vaultPositions.get(posKey) ?? 0) + amount);
+    }
+    return receipt;
   }
 
   _vaultIn(action, { account, asset = "TUMBO", amount }, idem) {
@@ -479,11 +482,8 @@ export class TumboLedger {
     assertPositiveFluff(amount, "amount");
     const idemKey = requireNonEmptyString(idem, "idempotency key");
     this.ensureAccount(acct);
-    if (!this._byIdem.has(idemKey)) {
-      const posKey = this._balanceKey(acct, asset);
-      this._vaultPositions.set(posKey, (this._vaultPositions.get(posKey) ?? 0) + amount);
-    }
-    return this._commit({
+    const wasReplay = this._byIdem.has(idemKey);
+    const receipt = this._commit({
       action,
       actor: acct,
       idem: idemKey,
@@ -494,6 +494,11 @@ export class TumboLedger {
       refs: { account: acct, asset, amount },
       meta: {},
     });
+    if (!wasReplay) {
+      const posKey = this._balanceKey(acct, asset);
+      this._vaultPositions.set(posKey, (this._vaultPositions.get(posKey) ?? 0) + amount);
+    }
+    return receipt;
   }
 
   _openLockedAmount(account, asset) {
@@ -526,10 +531,8 @@ export class TumboLedger {
         "LOCK_REFUSED",
       );
     }
-    if (!this._byIdem.has(idemKey)) {
-      this._vaultPositions.set(posKey, position - amount);
-    }
-    return this._commit({
+    const wasReplay = this._byIdem.has(idemKey);
+    const receipt = this._commit({
       action,
       actor: acct,
       idem: idemKey,
@@ -540,6 +543,10 @@ export class TumboLedger {
       refs: { account: acct, asset, amount },
       meta: {},
     });
+    if (!wasReplay) {
+      this._vaultPositions.set(posKey, position - amount);
+    }
+    return receipt;
   }
 
   _save({ account, goal, asset = "TUMBO", amount }, idem) {
@@ -573,17 +580,7 @@ export class TumboLedger {
     const intentId = `intent-${djb2Hex(`deliver:${idemKey}`)}`;
     this.ensureAccount(src);
     this.ensureAccount(dst);
-    if (!this._byIdem.has(idemKey) && !this._intents.has(intentId)) {
-      this._intents.set(intentId, {
-        id: intentId,
-        from: src,
-        to: dst,
-        asset,
-        amount,
-        state: "PENDING",
-        createdTick: this.tick + 1,
-      });
-    }
+    const wasReplay = this._byIdem.has(idemKey);
     const receipt = this._commit({
       action: "deliver",
       actor: src,
@@ -595,23 +592,36 @@ export class TumboLedger {
       refs: { from: src, to: dst, asset, amount, intentId },
       meta: { intentId, phase: "held" },
     });
-    const intent = this._intents.get(intentId);
-    if (intent && !intent.receiptId) intent.receiptId = receipt.id;
+    if (!wasReplay && !this._intents.has(intentId)) {
+      this._intents.set(intentId, {
+        id: intentId,
+        from: src,
+        to: dst,
+        asset,
+        amount,
+        state: "PENDING",
+        createdTick: receipt.tick,
+        receiptId: receipt.id,
+      });
+    }
     return receipt;
   }
 
   /** Receiver confirms a PENDING deliver intent; sender cancels via cancel(). */
   confirmDeliver(intentId, idemKey) {
     const id = requireNonEmptyString(intentId, "intentId");
+    const key = requireNonEmptyString(idemKey, "idempotency key");
     const intent = this._intents.get(id);
     if (!intent) throw new TokenError(`unknown intent: ${id}`, "INTENT_UNKNOWN");
-    if (intent.state !== "PENDING") {
+    // Replays return the original receipt before any state checks.
+    const wasReplay = this._byIdem.has(key);
+    if (!wasReplay && intent.state !== "PENDING") {
       throw new TokenError(`intent ${id} is ${intent.state}`, "INTENT_NOT_PENDING");
     }
     const receipt = this._commit({
       action: "deliver",
       actor: intent.to,
-      idem: idemKey,
+      idem: key,
       entries: [
         { account: "sys:escrow", asset: intent.asset, delta: -intent.amount },
         { account: intent.to, asset: intent.asset, delta: intent.amount },
@@ -619,27 +629,26 @@ export class TumboLedger {
       refs: { intentId: id, from: intent.from, to: intent.to, asset: intent.asset, amount: intent.amount },
       meta: { intentId: id, phase: "confirmed" },
     });
-    if (!this._byIdem.has(requireNonEmptyString(idemKey, "idempotency key")) || intent.state === "PENDING") {
-      // Only flip state on first settlement; replays leave history untouched.
-      if (receipt.meta.phase === "confirmed" && this._intents.get(id).state === "PENDING") {
-        this._intents.get(id).state = "CONFIRMED";
-      }
+    if (!wasReplay) {
+      this._intents.get(id).state = "CONFIRMED";
     }
     return receipt;
   }
 
   _cancel({ intentId }, idem) {
     const id = requireNonEmptyString(intentId, "intentId");
+    const key = requireNonEmptyString(idem, "idempotency key");
     const intent = this._intents.get(id);
     if (!intent) throw new TokenError(`unknown intent: ${id}`, "INTENT_UNKNOWN");
-    if (intent.state !== "PENDING") {
+    // Replays return the original receipt before any state checks.
+    const wasReplay = this._byIdem.has(key);
+    if (!wasReplay && intent.state !== "PENDING") {
       throw new TokenError(`intent ${id} is ${intent.state}; only PENDING intents can cancel`, "INTENT_NOT_PENDING");
     }
-    const idemKey = requireNonEmptyString(idem, "idempotency key");
     const receipt = this._commit({
       action: "cancel",
       actor: intent.from,
-      idem: idemKey,
+      idem: key,
       entries: [
         { account: "sys:escrow", asset: intent.asset, delta: -intent.amount },
         { account: intent.from, asset: intent.asset, delta: intent.amount },
@@ -647,7 +656,7 @@ export class TumboLedger {
       refs: { intentId: id, from: intent.from, to: intent.to, asset: intent.asset, amount: intent.amount },
       meta: { intentId: id, phase: "cancelled" },
     });
-    if (this._intents.get(id).state === "PENDING") {
+    if (!wasReplay) {
       this._intents.get(id).state = "CANCELLED";
     }
     return receipt;
@@ -667,6 +676,7 @@ export class TumboLedger {
       throw new TokenError(`reverse window closed for ${id}`, "REVERSE_EXPIRED");
     }
     const idemKey = requireNonEmptyString(idem, "idempotency key");
+    const wasReplay = this._byIdem.has(idemKey);
     const entries = original.entries.map((entry) => ({
       account: entry.account,
       asset: entry.asset,
@@ -681,8 +691,8 @@ export class TumboLedger {
       meta: { reverses: id },
     });
     // History is never edited; the compensating journal is the reversal.
-    // Keep auxiliary vault/lock state consistent with the money movement.
-    if (!this._byIdem.has(idemKey) || true) {
+    // Auxiliary vault/lock state follows the sealed journal, never precedes it.
+    if (!wasReplay) {
       this._reversed.add(id);
       const lockId = original.refs?.lockId;
       if (lockId) {
@@ -783,8 +793,7 @@ export class TumboLedger {
     if (!stored) throw new TokenError(`unknown quote: ${id}`, "QUOTE_UNKNOWN");
     if (stored.executed) throw new TokenError(`quote already executed: ${id}`, "QUOTE_EXECUTED");
     if (this.tick > stored.expiresAt) throw new TokenError(`quote expired: ${id}`, "QUOTE_EXPIRED");
-    if (djb2Hex(canonical({ ...stored, hash: undefined, executed: undefined })) !== stored.hash) {
-      // Recompute over the sealed body shape to detect tampering.
+    {
       const { hash, executed, ...body } = stored;
       if (djb2Hex(canonical(body)) !== hash) {
         throw new TokenError(`quote failed integrity check: ${id}`, "QUOTE_TAMPERED");
@@ -819,8 +828,9 @@ export class TumboLedger {
     if (d < 1) throw new TokenError("day must be >= 1", "INVALID_PARAM");
     const idemKey = requireNonEmptyString(idem, "idempotency key");
     this.ensureAccount(acct);
-    if (!this._byIdem.has(idemKey)) {
-      let days = this._presenceDays.get(acct);
+    const wasReplay = this._byIdem.has(idemKey);
+    let days = this._presenceDays.get(acct);
+    if (!wasReplay) {
       if (!days) {
         days = new Set();
         this._presenceDays.set(acct, days);
@@ -831,9 +841,8 @@ export class TumboLedger {
           "PRESENCE_ALREADY_RECORDED",
         );
       }
-      days.add(d);
     }
-    return this._commit({
+    const receipt = this._commit({
       action: "presence",
       actor: acct,
       idem: idemKey,
@@ -841,6 +850,15 @@ export class TumboLedger {
       refs: { account: acct },
       meta: { day: d, kind: "daily-check-in", simulation: true },
     });
+    if (!wasReplay) {
+      let set = this._presenceDays.get(acct);
+      if (!set) {
+        set = new Set();
+        this._presenceDays.set(acct, set);
+      }
+      set.add(d);
+    }
+    return receipt;
   }
 
   _ribbonClaim({ account }, idem) {
@@ -903,15 +921,15 @@ export class TumboLedger {
     if (!ASSETS[asset]) throw new TokenError(`unknown asset: ${asset}`, "INVALID_ASSET");
     const idemKey = requireNonEmptyString(idem, "idempotency key");
     this.ensureAccount(acct);
-    if (!this._byIdem.has(idemKey)) {
-      const key = `${acct}${BALANCE_SEP}${asset}${BALANCE_SEP}day-${this.day}`;
+    const wasReplay = this._byIdem.has(idemKey);
+    const key = `${acct}${BALANCE_SEP}${asset}${BALANCE_SEP}day-${this.day}`;
+    if (!wasReplay) {
       const used = this._drips.get(key) ?? 0;
       if (used >= FAUCET_DRIPS_PER_DAY) {
         throw new TokenError(`faucet drip already claimed by ${acct} today`, "DRIP_LIMIT");
       }
-      this._drips.set(key, used + 1);
     }
-    return this._commit({
+    const receipt = this._commit({
       action: "receive",
       actor: acct,
       idem: idemKey,
@@ -922,6 +940,10 @@ export class TumboLedger {
       refs: { from: "sys:faucet", to: acct, asset, amount: FAUCET_DRIP_FLUFF, drip: true },
       meta: { drip: true, simulation: true },
     });
+    if (!wasReplay) {
+      this._drips.set(key, (this._drips.get(key) ?? 0) + 1);
+    }
+    return receipt;
   }
 
   /* ----- time ----- */
