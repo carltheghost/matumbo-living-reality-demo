@@ -1,4 +1,7 @@
-import "./token-trade-mount.js";
+// Guarded: token-trade-mount's module graph is mid-flight (its imports don't
+// match token.js yet); a static import would fail the whole module graph and
+// red-banner the boot. Boots automatically once the lane lands a consistent graph.
+import("./token-trade-mount.js").catch(() => {});
 /** Mobile panel manager — 2D UI chrome/layout only.
  *
  * On narrow viewports (<=700px) only one floating panel may be visible at a

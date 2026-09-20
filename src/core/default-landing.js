@@ -1,6 +1,9 @@
 // TUMBO-SIM ledger core boot: exposes window.TumboToken and funds demo accounts.
-// Side-effect import only; resolveDefaultFeature below stays pure and DOM-free.
-import '../domains/token-boot.js';
+// Guarded dynamic import: the token lane's module graph is mid-flight (its
+// imports don't match token.js yet), so a static import would fail the whole
+// module graph and red-banner the boot. This boots the ledger automatically
+// once the lane lands a consistent graph; until then boot continues cleanly.
+import('../domains/token-boot.js').catch(() => {});
 
 /** Default-landing routing: which feature view opens when the page loads.
  *
