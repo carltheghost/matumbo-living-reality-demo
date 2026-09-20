@@ -1,4 +1,5 @@
-// BotPay — simulated x402-style pay-per-action for bots/agents.
+// token-botpay.js — BotPay: simulated x402-style pay-per-action for bots/agents.
+// Part of the TUMBO-SIM ledger core (src/domains).
 //
 // Models the x402 pattern (request → 402 challenge → pay → 200) as LOCAL calls.
 // No HTTP, no stablecoins, no signing, no network. Every payment is a normal
@@ -6,9 +7,9 @@
 //
 // Flow:
 //   const ch  = pay.request({ fromBot, service, resource });   // may throw Pay402
-//   const r   = pay.pay({ challengeId: ch.challengeId, authToken });
-//   const res = pay.fulfill({ challengeId: ch.challengeId, receiptHash: r.hash });
-import { LedgerError, SYS, GATE_SYSTEM, assertSafeInt } from "./ledger.js";
+//   const r   = pay.pay({ challengeId: ch.challengeId, authToken });        // ledger tip fromBot→payTo, memo=nonce
+//   const res = pay.fulfill({ challengeId: ch.challengeId, receiptHash: r.hash }); // 200 {result} | 402 {error}
+import { LedgerError, SYS, GATE_SYSTEM, assertSafeInt } from "./token.js";
 
 export const DEFAULT_PRICING = Object.freeze({
   "cube.spawn":   50,
