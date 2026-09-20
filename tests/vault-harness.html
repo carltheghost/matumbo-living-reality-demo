@@ -7,8 +7,8 @@
 <script type="importmap">
 {
   "imports": {
-    "three": "https://cdn.statically.io/gh/carltheghost/matumbo-living-reality-demo/gpt/token-vault/vendor/three-r179.1/build/three.module.js",
-    "three/addons/": "https://cdn.statically.io/gh/carltheghost/matumbo-living-reality-demo/gpt/token-vault/vendor/three-r179.1/examples/jsm/"
+    "three": "https://cdn.jsdelivr.net/gh/carltheghost/matumbo-living-reality-demo@gpt/token-vault/vendor/three-r179.1/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/gh/carltheghost/matumbo-living-reality-demo@gpt/token-vault/vendor/three-r179.1/examples/jsm/"
   }
 }
 </script>
@@ -38,8 +38,8 @@ window.__harnessBoot = setTimeout(() => {
 }, 25000);
 </script>
 <script type="module">
-const BASE = 'https://cdn.statically.io/gh/carltheghost/matumbo-living-reality-demo/gpt/token-vault';
-const V = 'v=1';
+const BASE = 'https://cdn.jsdelivr.net/gh/carltheghost/matumbo-living-reality-demo@gpt/token-vault';
+const V = 'v=2';
 const errors = [];
 window.addEventListener('error', (e) => errors.push('window.onerror: ' + (e.message || e.type)));
 window.addEventListener('unhandledrejection', (e) => errors.push('unhandledrejection: ' + String((e.reason && e.reason.message) || e.reason)));
