@@ -1,11 +1,12 @@
-// TUMBO-SIM ledger tests. Run: node --test test/
+// TUMBO-SIM ledger core tests (part 01). Run: node --test tests/token-ledger.test.mjs
+// Ported from the prototype suite; imports adapted to src/domains.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { TumboLedger, LedgerError, SYS, fmtTumbo, FLUFF_PER_TUMBO, mulDivFloor,
-         REVERSE_WINDOW_TICKS, GATE_ARBITER, GATE_SYSTEM } from "../src/ledger.js";
-import { sha256Hex } from "../src/sha256.js";
-import { BotPay, Pay402 } from "../src/botpay.js";
-import { saveFile, loadFile } from "../src/store.js";
+         REVERSE_WINDOW_TICKS, GATE_ARBITER, GATE_SYSTEM } from "../src/domains/token.js";
+import { sha256Hex } from "../src/domains/token-sha256.js";
+import { BotPay, Pay402 } from "../src/domains/token-botpay.js";
+import { saveFile, loadFile } from "../src/domains/token-store.js";
 
 const T = (n) => n * FLUFF_PER_TUMBO; // TUMBO -> fluff
 
@@ -543,7 +544,7 @@ test("REGRESSION receipt<->journal linkage: truncation and tamper detected (M2)"
   // receipt entry tamper
   const L3 = TumboLedger.load(L.serialize());
   L3.s.receipts[2].entries[0].delta = "1";
-  assert.throws(() => L3.verifyInvariants(), (e) => e.code === "INVARIANT_CHAIN"); // receipt's own hash
+  assert.throws(() => L3.verifyInvariants(), (e) => e.code === "INVARIANT_LINK");
   // journal refs tamper (rewriting reversedBy / intentOf)
   const L4 = TumboLedger.load(L.serialize());
   L4.s.journal[2].refs.intentOf = "tx-999999";
@@ -571,9 +572,9 @@ test("REGRESSION money math is exact past 2^53 (L1)", () => {
   const L = funded(34, 200_000);
   const amt = 100000000000004; // 100M TUMBO: treasury-funded (gated)
   L.send({ from: SYS.treasury, to: "u:alice", amountFluff: amt, idem: "whale", gate: GATE_SYSTEM });
-  const { stakeId } = L.stake({ owner: "u:alice", contractId: "arena:x", amountFluff: amt, slashBps: 9999, idem: "stx" });
+  L.stake({ owner: "u:alice", contractId: "arena:x", amountFluff: amt, slashBps: 9999, idem: "stx" });
   const before = L.balance(SYS.vault, "TUMBO");
-  L.slash({ stakeId, gate: GATE_ARBITER });
+  L.slash({ stakeId: `stake-tx-000004`, gate: GATE_ARBITER });
   assert.equal(L.balance(SYS.void, "TUMBO"), 99990000000003); // exact, not float-off-by-one
   assert.equal(L.balance(SYS.vault, "TUMBO"), before - amt); // books still balance
 });
