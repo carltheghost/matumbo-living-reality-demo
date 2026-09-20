@@ -6,7 +6,7 @@ A 3D "living reality" demo: a world of translucent glass cubes you can drag anyw
 
 **Live demo:** https://carltheghost.github.io/matumbo-living-reality-demo/
 
-Works on desktop and phone. Verified: zero console errors, zero mobile overflow.
+Works on desktop and phone. Tested in browser viewports (desktop + 390×844 phone emulation): zero console errors, zero document overflow. Physical-device and XR-headset validation remain open work.
 
 ## What's inside
 
@@ -38,3 +38,4 @@ three.js (pinned), vanilla JavaScript, no frameworks, GitHub Pages
 ## Packets / changelog
 
 See docs/ for the packet log (fur rig — Packet 235, simulation engine — Packet 236, …).
+
