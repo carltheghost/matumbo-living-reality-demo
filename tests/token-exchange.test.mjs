@@ -281,10 +281,11 @@ describe("token exchange: conservation and ledger invariants", () => {
 
 describe("token exchange: exact integer math", () => {
   it("mulDivFloor is exact where float math loses funds", () => {
-    const a = 9_007_199_254_740_991; // 2^53 - 1
-    assert.equal(mulDivFloor(a, 7, 7), a);
-    // Naive float math rounds the intermediate product and loses 1 fluff:
-    assert.notEqual(Math.floor((a * 7) / 7), a);
+    // 134217727 * 134217729 = 2^54 - 1 exactly, but float64 rounds the
+    // intermediate product up to 2^54, so naive float math overpays by 1.
+    assert.equal(mulDivFloor(134217727, 134217729, 4), 4_503_599_627_370_495);
+    assert.equal(Number((134217727n * 134217729n) / 4n), 4_503_599_627_370_495);
+    assert.notEqual(Math.floor((134217727 * 134217729) / 4), 4_503_599_627_370_495);
     assert.equal(mulDivFloor(10, 3, 4), 7); // floor(7.5)
     assert.equal(mulDivFloor(0, 123, 456), 0);
     assert.throws(() => mulDivFloor(1.5, 2, 3), TypeError);
