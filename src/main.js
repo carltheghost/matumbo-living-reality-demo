@@ -8,8 +8,8 @@ import { mountCenteredSurfaces } from './render/centered-surfaces.js?v=20260918-
 import { createImmersiveSession } from './render/immersive-session.js';
 import { createMediaPreview } from './render/media-preview.js';
 import { initMobilePanelManager } from './render/mobile-panel-manager.js';
-import { createPersonStudio } from './render/person-studio.js?v=20260920-p238';
-import { createRealityAssembly } from './render/reality-assembly.js?v=20260920-p240';
+import { createPersonStudio } from './render/person-studio.js?v=20260918-avatar-chess';
+import { createRealityAssembly } from './render/reality-assembly.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { MANIPULATE_MODES } from './render/manipulate-controls.js';
@@ -45,7 +45,7 @@ import {
 } from './render/gaze-hand-coupling.js?v=20260829-gaze-hand185';
 import { createProjectionBridge } from './render/projection-bridge.js';
 import { createIntentTimeline } from './render/intent-timeline.js';
-import { createBlockWorldLayer } from './render/block-world.js?v=20260920-p239';
+import { createBlockWorldLayer } from './render/block-world.js?v=20260918-glass-open';
 import { createProjectionSession } from './render/projection-session.js?v=20260830-session218';
 import { applyBlockWorldFocusMode } from './render/block-world-focus.js?v=20260827-block-focus1';
 import { createBlockWorldQuickActions } from './render/cube-quick-actions.js?v=20260828-cube-actions155';
@@ -58,7 +58,6 @@ import { BLOCK_WORLD_RUNTIME_SYNC_SOURCE, createBlockWorldRuntimeSync } from './
 import { ARENA_GAMES_SOURCE, ARENA_GAMES_CONSOLE_SOURCE } from './domains/arena-games.js?v=20260826-arena1';
 import { createArenaGamesConsole } from './render/arena-games.js?v=20260826-arena1';
 import { mountChessArena } from './render/chess-arena.js?v=20260918-avatar-chess';
-import { makeGlassCube } from './render/glass-style.js?v=20260920-p239';
 import { ACADEMY_CONSOLE_SOURCE, createAcademyConsole } from './render/academy.js?v=20260904-academy1';
 import {
   CONTRACTS_MARKETS_SOURCE,
@@ -984,33 +983,6 @@ worldEvidenceLayer.visible = false;
 blockWorld.layer?.add(worldEvidenceLayer);
 window.__TUMBO_WORLD_EVENTS_LAYER__ = worldEvidenceLayer;
 
-// One glass-block language for the world-events evidence field: every
-// evidence marker is a translucent blue glass cube with edge glow, never a
-// solid multicolor block. makeGlassCube returns a Group (body mesh + edge
-// glow); the body mesh is the raycast target because the scene picker is
-// non-recursive, and resolveWorldEvidenceTarget walks up to the group's
-// userData.
-function makeWorldEvidenceGlassCube(size, name) {
-  return makeGlassCube(THREE, {size, name: name || 'world-events/evidence'});
-}
-function worldEvidenceBodyOf(cube) {
-  let body = null;
-  cube?.traverse?.((child) => {
-    if (!body && child.isMesh && typeof child.name === 'string' && child.name.endsWith('/body')) body = child;
-  });
-  return body ?? cube;
-}
-function disposeWorldEvidenceCube(cube) {
-  cube?.traverse?.((child) => {
-    if (child.isMesh || child.isLineSegments || child.isLine) {
-      child.geometry?.dispose?.();
-      const material = child.material;
-      if (Array.isArray(material)) material.forEach((m) => m?.dispose?.());
-      else material?.dispose?.();
-    }
-  });
-}
-
 function stableWorldEvidenceHash(value) {
   let hash = 2166136261;
   for (const character of String(value ?? '')) {
@@ -1027,22 +999,16 @@ function clearWorldEvidenceCubes() {
   for (const mesh of worldEvidenceInnerMeshes) {
     mesh.parent?.remove?.(mesh);
     worldEvidenceLayer?.remove(mesh);
-    const innerBody = mesh.userData?.evidenceBody;
-    if (innerBody) {
-      const index = raycastTargets.indexOf(innerBody);
-      if (index >= 0) raycastTargets.splice(index, 1);
-    }
-    disposeWorldEvidenceCube(mesh);
+    mesh.geometry?.dispose?.();
+    mesh.material?.dispose?.();
   }
   worldEvidenceInnerMeshes.clear();
   for (const mesh of worldEvidenceMeshes) {
     worldEvidenceLayer?.remove(mesh);
-    const body = mesh.userData?.evidenceBody;
-    if (body) {
-      const index = raycastTargets.indexOf(body);
-      if (index >= 0) raycastTargets.splice(index, 1);
-    }
-    disposeWorldEvidenceCube(mesh);
+    const index = raycastTargets.indexOf(mesh);
+    if (index >= 0) raycastTargets.splice(index, 1);
+    mesh.geometry?.dispose?.();
+    mesh.material?.dispose?.();
   }
   worldEvidenceMeshes.clear();
 }
@@ -1176,10 +1142,10 @@ function removeWorldEvidenceInnerMeshes(recordId) {
     if (mesh.userData?.worldEvidenceRecordId !== recordId) continue;
     mesh.parent?.remove?.(mesh);
     worldEvidenceLayer?.remove(mesh);
-    const body = mesh.userData?.evidenceBody ?? mesh;
-    const index = raycastTargets.indexOf(body);
+    const index = raycastTargets.indexOf(mesh);
     if (index >= 0) raycastTargets.splice(index, 1);
-    disposeWorldEvidenceCube(mesh);
+    mesh.geometry?.dispose?.();
+    mesh.material?.dispose?.();
     worldEvidenceInnerMeshes.delete(mesh);
   }
 }
@@ -1187,24 +1153,28 @@ function removeWorldEvidenceInnerMeshes(recordId) {
 function addWorldEvidenceInnerCube(record, label, offset, color, kind) {
   const outer = worldEvidenceMeshFor(record.id);
   if (!outer) return null;
-  // Glass inner cube: the color kind-signal lives in userData and the
-  // readout label; the cube itself stays the one blue-glass style.
-  const cube = makeWorldEvidenceGlassCube(.24, 'world-events/evidence-inner');
-  cube.userData.worldEvidenceColorKind = color;
+  const cube = new THREE.Mesh(
+    new THREE.BoxGeometry(.24, .24, .24),
+    new THREE.MeshStandardMaterial({
+      color,
+      emissive: color,
+      emissiveIntensity: 1.35,
+      metalness: .2,
+      roughness: .38,
+    }),
+  );
   cube.position.set(offset.x, offset.y, offset.z);
   cube.userData.worldEvidenceRecordId = record.id;
   cube.userData.worldEvidenceInnerKind = kind;
   cube.userData.worldEvidenceInnerLabel = label;
-  // The inner cubes remain ordinary cubes, but are parented to the evidence
+  // The inner cubes remain ordinary boxes, but are parented to the evidence
   // block so moving the block carries its source/time/place/signal contents
   // with it.
   outer.add(cube);
   worldEvidenceInnerMeshes.add(cube);
   // Nested cubes are valid interaction targets too. Resolving through their
   // parent keeps selection and movement attached to the live evidence block.
-  const body = worldEvidenceBodyOf(cube);
-  cube.userData.evidenceBody = body;
-  raycastTargets.push(body);
+  raycastTargets.push(cube);
   return cube;
 }
 
@@ -1298,9 +1268,20 @@ function renderWorldEvidenceCubes(input) {
   records.slice(0, 12).forEach((record, index) => {
     if (!record?.id || !record?.sourceUrl || !record?.title) return;
     const brutalityLevel = Math.max(0, Math.min(3, Number(record.brutalityLanguageSignal?.level) || 0));
-    // One glass-block language: the brutality level keeps its readable size
-    // language but the cube itself is blue glass, not a multicolor solid.
-    const cube = makeWorldEvidenceGlassCube(.58 + brutalityLevel * .07, 'world-events/evidence');
+    const color = [0xffbd68, 0xffa85f, 0xff6f85, 0xffd2dc][brutalityLevel];
+    const emissive = [0x7a3e12, 0x8c3c16, 0x8f1735, 0xc42f68][brutalityLevel];
+    const cube = new THREE.Mesh(
+      new THREE.BoxGeometry(.58 + brutalityLevel * .07, .58 + brutalityLevel * .07, .58 + brutalityLevel * .07),
+      new THREE.MeshStandardMaterial({
+        color,
+        emissive,
+        emissiveIntensity: 1.05 + brutalityLevel * .28,
+        metalness: .35,
+        roughness: .24,
+        transparent: true,
+        opacity: .94,
+      }),
+    );
     const hash = stableWorldEvidenceHash(record.id);
     const column = index % 6;
     const row = Math.floor(index / 6);
@@ -1336,10 +1317,9 @@ function renderWorldEvidenceCubes(input) {
     cube.userData.worldEvidenceBrutalityBand = record.brutalityLanguageSignal?.band ?? 'none';
     cube.userData.worldEvidenceBrutalityTerms = record.brutalityLanguageSignal?.matchedTerms ?? [];
     cube.userData.worldEvidenceOpen = worldEvidenceOpenIds.has(record.id);
-    cube.userData.evidenceBody = worldEvidenceBodyOf(cube);
     worldEvidenceLayer.add(cube);
     worldEvidenceMeshes.add(cube);
-    raycastTargets.push(cube.userData.evidenceBody);
+    raycastTargets.push(cube);
     if (worldEvidenceOpenIds.has(record.id)) rebuildWorldEvidenceInnerCubes(record);
   });
   const humanitarianRecords = Array.isArray(summary?.humanitarian?.records)
@@ -1364,7 +1344,18 @@ function renderWorldEvidenceCubes(input) {
     const x = Number.isFinite(localPosition?.x) ? localPosition.x : baseX;
     const z = Number.isFinite(localPosition?.z) ? localPosition.z : baseZ;
     if (!localPosition) worldEvidenceLocalPositions.set(record.id, { x, z });
-    const cube = makeWorldEvidenceGlassCube(.72, 'world-events/evidence-humanitarian');
+    const cube = new THREE.Mesh(
+      new THREE.BoxGeometry(.72, .72, .72),
+      new THREE.MeshStandardMaterial({
+        color: 0x65d6c7,
+        emissive: 0x166b73,
+        emissiveIntensity: 1.25,
+        metalness: .28,
+        roughness: .3,
+        transparent: true,
+        opacity: .95,
+      }),
+    );
     cube.position.set(x, 3.0 + row * 1.05, z);
     cube.userData.worldEvidenceRecordId = record.id;
     cube.userData.worldEvidenceKind = 'humanitarian';
@@ -1379,10 +1370,9 @@ function renderWorldEvidenceCubes(input) {
     cube.userData.worldEvidenceSeverityStatus = record.severityStatus ?? 'unknown';
     cube.userData.worldEvidenceIntensityStatus = record.intensityStatus ?? 'unknown';
     cube.userData.worldEvidenceOpen = worldEvidenceOpenIds.has(record.id);
-    cube.userData.evidenceBody = worldEvidenceBodyOf(cube);
     worldEvidenceLayer.add(cube);
     worldEvidenceMeshes.add(cube);
-    raycastTargets.push(cube.userData.evidenceBody);
+    raycastTargets.push(cube);
     if (worldEvidenceOpenIds.has(record.id)) rebuildWorldEvidenceInnerCubes(record);
   });
   worldEvidenceLayer.visible = records.length > 0 || humanitarianRecords.length > 0;

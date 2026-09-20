@@ -1,0 +1,11 @@
+{
+  "name": "matumbo-living-reality",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "test:release": "node --test tests/release-boundaries.test.mjs",
+    "check": "node --check src/main.js"
+  }
+}

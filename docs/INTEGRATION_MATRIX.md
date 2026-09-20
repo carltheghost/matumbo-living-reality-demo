@@ -1,11 +1,11 @@
 # 15-Agent Integration Matrix
 
-Current runtime note (2026-09-20): the normal localhost shell and packaged
+Current runtime note (2026-09-04): the normal localhost shell and packaged
 artifact both resolve Three.js 0.179.1 from the checksum-verified local vendor
 closure. External requests are reserved for explicit provider refresh actions;
 the historical CDN counts preserved in older receipts remain accurate for the
 runs that produced them. Financial Academy is now the 23rd openable feature and
-the current full suite is 903/903.
+the current full suite is 442/442.
 
 Packet 218 adds the one composed projection-session seam: the cube substrate,
 feature navigator, Sports Evidence, and Contracts + Pools remain bounded
@@ -103,4 +103,3 @@ local presentation-only seam.
 ## Verification rule
 
 `CONNECTED` means the owning module is imported into the canonical composition layer, the composition tests pass, and the browser runtime loads. `PARTIAL` means code and tests exist but a runtime adapter still needs wiring. Public-read rows are evidence of bounded provider responses only; no row claims provider truth, real settlement, custody, public deployment, or production XR. The visible 3-D substrate remains cube-only even when legacy/organic projection code is retained as a hidden compatibility source.
-

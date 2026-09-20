@@ -18,6 +18,15 @@
  */
 
 import { createMuseAgent, designFromPrompt } from "./muse-agent.js";
+import {
+  askJudgments,
+  belowThreshold,
+  botIntentQuestion,
+  CLARIFY_THRESHOLD,
+  intentLabel,
+  scoreProposalHeuristic,
+  slotBotQuestion,
+} from "../ai/judgments.js";
 
 export const BOT_PLAZA_SCHEMA_VERSION = 1;
 export const BOT_PLAZA_SOURCE = "bot-plaza";
@@ -1312,3 +1321,158 @@ export function createBotPlazaContribution({ registry = null, updatedAt = BOT_PL
 }
 
 export default createBotRegistry;
+
+// ---------------------------------------------------------------------------
+// TypeSafe judgment integration (additive; existing behavior untouched).
+//
+// Code owns the workflow; judgments supply narrow, typed semantic calls.
+// These two exports never execute anything — they return routing decisions
+// and display-order rankings that the host applies.
+// ---------------------------------------------------------------------------
+
+/**
+ * rankProposalsForReview(queueOrProposals, { now }) — scores pending
+ * proposals with the proposal-readiness judgment and returns a frozen array
+ * of { proposal, readiness, reasons } sorted by readiness, highest first.
+ * Display order ONLY: the queue internals are never touched.
+ *
+ * Accepts either a proposal queue (with getProposals) or a plain array of
+ * proposals (already filtered to pending).
+ */
+export function rankProposalsForReview(queueOrProposals, { now = null } = {}) {
+  let proposals;
+  if (Array.isArray(queueOrProposals)) {
+    proposals = queueOrProposals;
+  } else if (queueOrProposals && typeof queueOrProposals.getProposals === "function") {
+    proposals = queueOrProposals.getProposals({ status: "pending" });
+  } else {
+    throw new TypeError("rankProposalsForReview needs a proposal queue or an array of proposals");
+  }
+  const scored = proposals.map((proposal) => {
+    const judged = scoreProposalHeuristic(proposal, { now });
+    return freeze({
+      proposal,
+      readiness: judged.score,
+      confidence: judged.confidence,
+      reasons: freeze([...judged.reasons]),
+    });
+  });
+  scored.sort((a, b) => b.readiness - a.readiness); // stable: ties keep queue order
+  return freeze(scored);
+}
+
+const BOT_NAME_STOPWORDS = new Set([
+  "the", "a", "an", "bot", "agent", "my", "our", "your", "please", "hey", "hi", "hello",
+]);
+
+function botNameTokens(name) {
+  return safeText(name)
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((token) => token && !BOT_NAME_STOPWORDS.has(token));
+}
+
+/**
+ * Code-owned candidate finding: matches the message against enabled bot
+ * names. matchScore 3 = full bot name present, 2 = a name token matched,
+ * 1 = weak overlap. (Select, don't generate — never a judgment.)
+ */
+function findCandidateBots(registry, text) {
+  const normalized = ` ${safeText(text).toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim()} `;
+  const messageTokens = new Set(normalized.split(" ").filter(Boolean));
+  const candidates = [];
+  for (const bot of registry.listEnabled()) {
+    const name = safeText(bot?.name).trim();
+    const id = safeText(bot?.id).trim();
+    if (!name || !id) continue;
+    const tokens = botNameTokens(name);
+    if (!tokens.length) continue;
+    const fullHit = normalized.includes(` ${name.toLowerCase()} `);
+    const hits = tokens.filter((token) => messageTokens.has(token));
+    let matchScore = 0;
+    if (fullHit) matchScore = 3;
+    else if (hits.length > 0 && hits.some((token) => token.length >= 4)) matchScore = 2;
+    else if (hits.length > 0) matchScore = 1;
+    if (matchScore > 0) candidates.push({ id, label: name, matchScore });
+  }
+  return candidates;
+}
+
+function topIntentOptions(probabilities, count = 2) {
+  return Object.entries(probabilities)
+    .filter(([intent]) => intent !== "no_match")
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, count)
+    .map(([intent]) => intent);
+}
+
+/**
+ * createIntentRouter({ registry, now }) — routes a user message to a Bot
+ * Plaza intent + bot via one parallel judgment batch (bot-intent + bot-slot).
+ *
+ * route(text) resolves to a frozen
+ * { intent, confidence, botId|null, clarify, clarificationText }.
+ *
+ * Confidence gates:
+ *   intent confidence < CLARIFY_THRESHOLD → clarify, naming the top-2 intents;
+ *   slot "none" while candidates exist, or low slot confidence with
+ *   candidates → confirmation text naming the candidates;
+ *   otherwise the resolved botId (possibly null when no bot was named).
+ *
+ * Routing decision ONLY — this never messages, announces, drafts, journals,
+ * or executes anything.
+ */
+export function createIntentRouter({ registry, now = null } = {}) {
+  if (!registry || typeof registry.listEnabled !== "function") {
+    throw new TypeError("intent router needs a bot registry");
+  }
+
+  async function route(text) {
+    const message = safeText(text);
+    const candidates = findCandidateBots(registry, message);
+    const batch = await askJudgments(
+      {
+        message,
+        candidates,
+        now,
+      },
+      [botIntentQuestion(), slotBotQuestion(candidates)]
+    );
+    const intentAnswer = batch.answers["bot-intent"]?.answer ?? { choice: "no_match", confidence: 0 };
+    const slotAnswer = batch.answers["bot-slot"]?.answer ?? { choice: "none", confidence: 0 };
+    const intent = safeText(intentAnswer.choice) || "no_match";
+    const confidence = Number(intentAnswer.confidence) || 0;
+
+    const clarifyResult = (clarificationText) =>
+      freeze({ intent, confidence, botId: null, clarify: true, clarificationText });
+
+    if (belowThreshold(intentAnswer, CLARIFY_THRESHOLD)) {
+      const options = topIntentOptions(intentAnswer.probabilities ?? {}, 2);
+      const naming =
+        options.length >= 2
+          ? `${intentLabel(options[0])} or ${intentLabel(options[1])}`
+          : options.length === 1
+            ? intentLabel(options[0])
+            : "a chat or a world action";
+      return clarifyResult(
+        `I wasn't sure — did you mean ${naming}? Say it once more and I'll route it.`
+      );
+    }
+
+    const hasCandidates = candidates.length > 0;
+    const slotChoice = safeText(slotAnswer.choice) || "none";
+    const slotUncertain =
+      (slotChoice === "none" && hasCandidates) ||
+      (hasCandidates && belowThreshold(slotAnswer, CLARIFY_THRESHOLD));
+    if (slotUncertain) {
+      const names = candidates.map((candidate) => candidate.label).join(" and ");
+      return clarifyResult(`I found ${names} — which bot did you mean?`);
+    }
+
+    const botId = slotChoice === "none" ? null : slotChoice;
+    return freeze({ intent, confidence, botId, clarify: false, clarificationText: null });
+  }
+
+  return freeze({ route });
+}

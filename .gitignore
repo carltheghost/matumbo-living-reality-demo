@@ -1,0 +1,7 @@
+*.log
+__pycache__/
+.DS_Store
+.tumbo/control/runtime/
+# Historical dashboard stub is intentionally outside the canonical runtime.
+dashboard/
+runtime/merge4/node_modules/

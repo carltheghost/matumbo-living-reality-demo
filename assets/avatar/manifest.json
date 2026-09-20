@@ -1,4 +1,9 @@
 {
+  "avatar-bust.webp": {
+    "aspect": 1.0,
+    "height": 1600,
+    "width": 1600
+  },
   "avatar.webp": {
     "aspect": 0.6835,
     "height": 1896,

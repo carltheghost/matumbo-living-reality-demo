@@ -13,6 +13,11 @@ import {
   OUTCOME_STAKE_UNIT,
   createOutcomeContracts,
 } from "../domains/outcome-contracts.js";
+// Display order for "Contracts for your review": readiness-ranked by the
+// TypeSafe judgment integration. Order only — approve/edit/dismiss behavior
+// is untouched. Import is additive; bot-plaza.js has no renderer imports,
+// so there is no cycle.
+import { rankProposalsForReview } from "../domains/bot-plaza.js";
 
 export { CONTRACT_ATELIER_CONSOLE_SOURCE };
 export const CONTRACT_ATELIER_RENDER_SOURCE = CONTRACT_ATELIER_CONSOLE_SOURCE;
@@ -625,8 +630,18 @@ export function createContractAtelierConsole({
     if (!proposalQueue) return { pending: [], decided: [] };
     const nowMs = Date.now();
     const all = proposalQueue.getProposals();
+    const pending = all.filter((proposal) => proposal.status === "pending" && !isEffectivelyExpired(proposal, nowMs));
+    // Readiness-ranked display order only (deterministic heuristic; nothing
+    // reordered in the queue itself). Falls back to submission order if the
+    // ranking ever throws, so the review queue can never go blank.
+    let ordered = pending;
+    try {
+      ordered = rankProposalsForReview(pending, { now: nowMs }).map((entry) => entry.proposal);
+    } catch {
+      // keep submission order
+    }
     return {
-      pending: all.filter((proposal) => proposal.status === "pending" && !isEffectivelyExpired(proposal, nowMs)),
+      pending: ordered,
       decided: all.filter((proposal) => proposal.status !== "pending" || isEffectivelyExpired(proposal, nowMs)),
     };
   }
