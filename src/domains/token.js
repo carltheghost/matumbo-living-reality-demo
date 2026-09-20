@@ -31,10 +31,7 @@
  * and cannot run in the browser).
  */
 
-/* ------------------------------------------------------------------ */
 /* Config — the ONE place supply and lifecycle constants live.        */
-/* ------------------------------------------------------------------ */
-
 export const TOKEN_CONFIG = Object.freeze({
   /** Integer fluff per simulated token unit. */
   FLUFF_PER_UNIT: 1000,
@@ -73,986 +70,694 @@ export const TOKEN_CONFIG = Object.freeze({
     "unstake",
     "withdraw",
   ]),
-  /** Bounded reverse window, in ledger ticks (one tick per journal). */
+  /** Journal states. */
+  STATES: Object.freeze(["pending", "settled", "reversed", "cancelled"]),
+  /**
+   * Reverse window in ledger ticks. A settled journal can only be
+   * reversed while `currentTick - journal.tick <= REVERSE_WINDOW_TICKS`.
+   */
   REVERSE_WINDOW_TICKS: 1000,
-  REALM: "tumbo-sim",
-  STAMP: "Simulated Proof \u2014 TUMBO-SIM",
-  SIMULATION: true,
 });
 
-const {
-  ASSETS,
-  SYSTEM_ACCOUNTS,
-  ACTIONS,
-  REVERSE_WINDOW_TICKS,
-  FLUFF_PER_UNIT,
-  SUPPLY_FLUFF,
-  REALM,
-  STAMP,
-} = TOKEN_CONFIG;
-
-const ACCOUNT_RE = /^(?:u|b):[a-z0-9](?:[a-z0-9._-]{0,62})?$/i;
-const GENESIS_TICK = 0;
-
-/* ------------------------------------------------------------------ */
-/* Deterministic hashing: canonical JSON + self-contained SHA-256.    */
-/* ------------------------------------------------------------------ */
-
-function sortValue(value) {
-  if (value === null || value === undefined) return null;
-  if (typeof value === "bigint") return value.toString();
-  if (Array.isArray(value)) return value.map(sortValue);
-  if (typeof value === "object") {
-    const out = {};
-    for (const key of Object.keys(value).sort()) {
-      const v = sortValue(value[key]);
-      if (v !== undefined) out[key] = v;
-    }
-    return out;
-  }
-  return value;
-}
-
-/** Deterministic JSON: sorted keys, no incidental whitespace. */
-export function canonicalJson(obj) {
-  return JSON.stringify(sortValue(obj));
-}
-
-const SHA256_K = [
-  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1,
-  0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
-  0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786,
-  0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
-  0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147,
-  0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
-  0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b,
-  0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
-  0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a,
-  0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
-  0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
-];
-
-const rotr = (x, n) => (x >>> n) | (x << (32 - n));
-
-/** SHA-256 hex digest of a UTF-8 string (sync, no node:crypto). */
-export function sha256Hex(message) {
-  const bytes = new TextEncoder().encode(String(message));
-  const bitLen = bytes.length * 8;
-  let paddedLen = bytes.length + 1;
-  while (paddedLen % 64 !== 56) paddedLen += 1;
-  const padded = new Uint8Array(paddedLen + 8);
-  padded.set(bytes);
-  padded[bytes.length] = 0x80;
-  const view = new DataView(padded.buffer);
-  view.setUint32(paddedLen, Math.floor(bitLen / 0x100000000));
-  view.setUint32(paddedLen + 4, bitLen >>> 0);
-
-  let h0 = 0x6a09e667;
-  let h1 = 0xbb67ae85;
-  let h2 = 0x3c6ef372;
-  let h3 = 0xa54ff53a;
-  let h4 = 0x510e527f;
-  let h5 = 0x9b05688c;
-  let h6 = 0x1f83d9ab;
-  let h7 = 0x5be0cd19;
-  const w = new Uint32Array(64);
-
-  for (let off = 0; off < padded.length; off += 64) {
-    for (let i = 0; i < 16; i += 1) w[i] = view.getUint32(off + i * 4);
-    for (let i = 16; i < 64; i += 1) {
-      const s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >>> 3);
-      const s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >>> 10);
-      w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0;
-    }
-    let a = h0;
-    let b = h1;
-    let c = h2;
-    let d = h3;
-    let e = h4;
-    let f = h5;
-    let g = h6;
-    let h = h7;
-    for (let i = 0; i < 64; i += 1) {
-      const S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
-      const ch = (e & f) ^ (~e & g);
-      const t1 = (h + S1 + ch + SHA256_K[i] + w[i]) | 0;
-      const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
-      const maj = (a & b) ^ (a & c) ^ (b & c);
-      const t2 = (S0 + maj) | 0;
-      h = g;
-      g = f;
-      f = e;
-      e = (d + t1) | 0;
-      d = c;
-      c = b;
-      b = a;
-      a = (t1 + t2) | 0;
-    }
-    h0 = (h0 + a) | 0;
-    h1 = (h1 + b) | 0;
-    h2 = (h2 + c) | 0;
-    h3 = (h3 + d) | 0;
-    h4 = (h4 + e) | 0;
-    h5 = (h5 + f) | 0;
-    h6 = (h6 + g) | 0;
-    h7 = (h7 + h) | 0;
-  }
-  return [h0, h1, h2, h3, h4, h5, h6, h7]
-    .map((x) => (x >>> 0).toString(16).padStart(8, "0"))
-    .join("");
-}
-
-/** SHA-256 hex digest of the canonical JSON of `obj`. */
-export function contentHash(obj) {
-  return sha256Hex(canonicalJson(obj));
-}
-
-/* ------------------------------------------------------------------ */
-/* Errors                                                              */
-/* ------------------------------------------------------------------ */
+/* Small errors with machine-readable codes.                          */
 
 export class TokenError extends Error {
-  constructor(message, code = "token-error") {
+  constructor(code, message) {
     super(message);
-    this.name = this.constructor.name;
+    this.name = "TokenError";
     this.code = code;
   }
 }
-export class InsufficientFundsError extends TokenError {
-  constructor(message) {
-    super(message, "insufficient-funds");
+
+const tokenErr = (code, message) => new TokenError(code, message);
+
+/* Integer fluff helpers — exact math only.                          */
+
+/**
+ * Normalize a public amount to a nonnegative safe integer of fluff.
+ * Accepts numbers, numeric strings, or bigints; rejects negatives,
+ * fractions, booleans, null/undefined, and unsafe integers.
+ */
+export function toFluff(value, label = "amount") {
+  if (typeof value === "boolean" || value === null || value === undefined) {
+    throw tokenErr("bad-amount", `${label} must be an integer fluff amount`);
   }
-}
-export class UnbalancedJournalError extends TokenError {
-  constructor(message) {
-    super(message, "unbalanced-journal");
+  if (typeof value === "bigint") {
+    if (value < 0n) throw tokenErr("negative-amount", `${label} must be >= 0 fluff`);
+    if (value > BigInt(Number.MAX_SAFE_INTEGER)) {
+      throw tokenErr("amount-unsafe", `${label} is outside the safe integer range`);
+    }
+    return Number(value);
   }
-}
-export class UnknownAccountError extends TokenError {
-  constructor(message) {
-    super(message, "unknown-account");
+  if (typeof value === "string" && /^[0-9]+$/.test(value)) return toFluff(BigInt(value), label);
+  if (typeof value !== "number" || !Number.isInteger(value) || !Number.isSafeInteger(value)) {
+    throw tokenErr("bad-amount", `${label} must be an integer fluff amount`);
   }
-}
-export class JournalNotFoundError extends TokenError {
-  constructor(message) {
-    super(message, "journal-not-found");
-  }
-}
-export class ReverseWindowExpiredError extends TokenError {
-  constructor(message) {
-    super(message, "reverse-window-expired");
-  }
-}
-export class AlreadyReversedError extends TokenError {
-  constructor(message) {
-    super(message, "already-reversed");
-  }
-}
-export class CancelRejectedError extends TokenError {
-  constructor(message) {
-    super(message, "cancel-rejected");
-  }
+  if (value < 0) throw tokenErr("negative-amount", `${label} must be >= 0 fluff`);
+  return value;
 }
 
-/* ------------------------------------------------------------------ */
-/* Validation helpers                                                  */
-/* ------------------------------------------------------------------ */
-
-function requireNonEmptyString(value, field) {
-  if (typeof value !== "string" || value.trim() === "") {
-    throw new TypeError(`${field} must be a non-empty string`);
+/**
+ * Signed counterpart for internal postings. Debit legs are negative and
+ * credit legs positive; same strictness as toFluff, but sign is allowed.
+ * Public amounts must still go through toFluff.
+ */
+export function toSignedFluff(value, label = "posting") {
+  if (typeof value === "boolean" || value === null || value === undefined) {
+    throw tokenErr("bad-amount", `${label} must be an integer fluff amount`);
+  }
+  if (typeof value === "bigint") {
+    if (value > BigInt(Number.MAX_SAFE_INTEGER) || value < BigInt(-Number.MAX_SAFE_INTEGER)) {
+      throw tokenErr("amount-unsafe", `${label} is outside the safe integer range`);
+    }
+    return Number(value);
+  }
+  if (typeof value === "string" && /^-?[0-9]+$/.test(value)) return toSignedFluff(BigInt(value), label);
+  if (typeof value !== "number" || !Number.isInteger(value) || !Number.isSafeInteger(value)) {
+    throw tokenErr("bad-amount", `${label} must be an integer fluff amount`);
   }
   return value;
 }
 
-function assertAccount(account) {
-  requireNonEmptyString(account, "account");
-  if (SYSTEM_ACCOUNTS.includes(account)) return account;
-  if (ACCOUNT_RE.test(account)) return account;
-  throw new UnknownAccountError(
-    `unknown account "${account}": expected u:<name>, b:<name>, or a sys:* account`
-  );
+/** Exact fluff formatting: `1.500 TUMBO-SIM`, never floats. */
+export function fmtFluff(fluff, asset = "TUMBO") {
+  const v = toFluff(fluff, "fluff");
+  const per = TOKEN_CONFIG.FLUFF_PER_UNIT;
+  const whole = Math.floor(v / per);
+  const frac = String(v % per).padStart(3, "0");
+  return `${whole}.${frac} ${asset}-SIM`;
 }
 
-function assertAsset(asset) {
-  if (!ASSETS.includes(asset)) {
-    throw new TokenError(`unknown asset "${asset}": expected ${ASSETS.join("|")}`, "unknown-asset");
+/* Canonical JSON + self-contained SHA-256 (browser & Node).         */
+
+/** Canonical JSON: sorted keys, no whitespace, BigInt -> string. */
+export function canonicalJson(value) {
+  const seen = new Set();
+  const encode = (v) => {
+    if (v === null || v === undefined) return "null";
+    if (typeof v === "bigint") return JSON.stringify(v.toString());
+    if (typeof v === "number" || typeof v === "boolean" || typeof v === "string") {
+      const s = JSON.stringify(v);
+      if (s === undefined) throw tokenErr("bad-payload", "value is not JSON-encodable");
+      return s;
+    }
+    if (typeof v !== "object") throw tokenErr("bad-payload", "value is not JSON-encodable");
+    if (seen.has(v)) throw tokenErr("bad-payload", "circular value is not encodable");
+    seen.add(v);
+    let out;
+    if (Array.isArray(v)) {
+      out = `[${v.map((item) => encode(item)).join(",")}]`;
+    } else {
+      out =
+        "{" +
+        Object.keys(v)
+          .sort()
+          .map((k) => `${JSON.stringify(k)}:${encode(v[k])}`)
+          .join(",") +
+        "}";
+    }
+    seen.delete(v);
+    return out;
+  };
+  return encode(value);
+}
+
+/* SHA-256 over UTF-8 bytes. Self-contained so the module stays
+ * dependency-free in the browser (ledger-core/events.js needs
+ * node:crypto and cannot run client-side). */
+const SHA256_K = Object.freeze([
+  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+  0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+  0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+  0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+  0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+  0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+  0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+  0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+]);
+
+function sha256Bytes(message) {
+  const bytes = new TextEncoder().encode(message);
+  const bitLen = bytes.length * 8;
+  // Pad to a multiple of 512 bits, reserving 64 bits for the length.
+  const paddedLen = (((bytes.length + 8) >> 6) + 1) << 6;
+  const padded = new Uint8Array(paddedLen);
+  padded.set(bytes);
+  padded[bytes.length] = 0x80;
+  const view = new DataView(padded.buffer);
+  view.setUint32(paddedLen - 4, bitLen >>> 0, false);
+  view.setUint32(paddedLen - 8, Math.floor(bitLen / 2 ** 32), false);
+
+  let h0 = 0x6a09e667, h1 = 0xbb67ae85, h2 = 0x3c6ef372, h3 = 0xa54ff53a;
+  let h4 = 0x510e527f, h5 = 0x9b05688c, h6 = 0x1f83d9ab, h7 = 0x5be0cd19;
+  const w = new Uint32Array(64);
+
+  const rotr = (x, n) => (x >>> n) | (x << (32 - n));
+
+  for (let off = 0; off < paddedLen; off += 64) {
+    for (let i = 0; i < 16; i += 1) w[i] = view.getUint32(off + i * 4, false);
+    for (let i = 16; i < 64; i += 1) {
+      const s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >>> 3);
+      const s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >>> 10);
+      w[i] = (w[i - 16] + s0 + w[i - 7] + s1) >>> 0;
+    }
+    let a = h0, b = h1, c = h2, d = h3, e = h4, f = h5, g = h6, h = h7;
+    for (let i = 0; i < 64; i += 1) {
+      const s1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+      const ch = (e & f) ^ (~e & g);
+      const t1 = (h + s1 + ch + SHA256_K[i] + w[i]) >>> 0;
+      const s0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+      const maj = (a & b) ^ (a & c) ^ (b & c);
+      const t2 = (s0 + maj) >>> 0;
+      h = g; g = f; f = e; e = (d + t1) >>> 0;
+      d = c; c = b; b = a; a = (t1 + t2) >>> 0;
+    }
+    h0 = (h0 + a) >>> 0; h1 = (h1 + b) >>> 0; h2 = (h2 + c) >>> 0; h3 = (h3 + d) >>> 0;
+    h4 = (h4 + e) >>> 0; h5 = (h5 + f) >>> 0; h6 = (h6 + g) >>> 0; h7 = (h7 + h) >>> 0;
   }
+
+  const out = new Uint8Array(32);
+  const ov = new DataView(out.buffer);
+  [h0, h1, h2, h3, h4, h5, h6, h7].forEach((h, i) => ov.setUint32(i * 4, h, false));
+  return out;
+}
+
+/** Lowercase hex SHA-256 digest of a string. */
+export function sha256Hex(message) {
+  return Array.from(sha256Bytes(String(message)), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** Hash a canonical-JSON payload. */
+export function hashPayload(payload) {
+  return sha256Hex(canonicalJson(payload));
+}
+
+/* Account / asset validation.                                   */
+
+function validateAccount(acct) {
+  if (typeof acct !== "string") throw tokenErr("bad-account", "account must be a string");
+  if (TOKEN_CONFIG.SYSTEM_ACCOUNTS.includes(acct)) return acct;
+  if (/^[ub]:[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(acct)) return acct;
+  throw tokenErr("bad-account", `unknown account "${acct}"`);
+}
+
+function validateAsset(asset) {
+  if (!TOKEN_CONFIG.ASSETS.includes(asset)) throw tokenErr("bad-asset", `unknown asset "${asset}"`);
   return asset;
 }
 
-/** Integer fluff as BigInt. Accepts safe-integer numbers or bigints >= 0. */
-function toFluff(value, field = "amountFluff") {
-  if (typeof value === "bigint") {
-    if (value < 0n) throw new TypeError(`${field} must be >= 0`);
-    return value;
-  }
-  if (!Number.isSafeInteger(value) || value < 0) {
-    throw new TypeError(`${field} must be a safe non-negative integer (fluff)`);
-  }
-  return BigInt(value);
+function validateAction(action) {
+  if (!TOKEN_CONFIG.ACTIONS.includes(action)) throw tokenErr("bad-action", `unknown action "${action}"`);
+  return action;
 }
 
-/** Human-readable fluff: "1.500 TUMBO-SIM". Exact decimal, no floats. */
-export function fmtFluff(fluff, asset = "TUMBO") {
-  assertAsset(asset);
-  const v = toFluff(fluff, "fluff");
-  const units = v / BigInt(FLUFF_PER_UNIT);
-  const rem = v % BigInt(FLUFF_PER_UNIT);
-  return `${units.toString()}.${rem.toString().padStart(3, "0")} ${asset}-SIM`;
-}
+/* The ledger.                                                   */
 
-function freezePosting(p) {
-  return Object.freeze({
-    account: p.account,
-    asset: p.asset,
-    amountFluff: p.amount.toString(),
-  });
-}
+/**
+ * createTumboToken() — builds one independent simulated ledger.
+ *
+ * Journals (double-entry, signed integer fluff postings):
+ *   { journalId, tick, action, asset, memo, state,
+ *     linkedJournalId, postings:[{account, asset, amountFluff}],
+ *     balanced:true, prevHash, hash, idempotencyKey }
+ * Receipts: { journalId, tick, state, afterHash, prevHash, hash } — an
+ * unbroken chain anchored at genesis; `hash` signs (journalId, tick,
+ * state, afterHash, prevHash).
+ */
+export function createTumboToken() {
+  const listeners = new Map();
+  const ledger = {
+    tick: 0,
+    seq: 0,
+    balances: new Map(),
+    journals: [],
+    _byId: new Map(),
+    _byKey: new Map(),
+    _receipts: [],
+    get journalCount() {
+      return this.journals.length;
+    },
+  };
 
-/* ------------------------------------------------------------------ */
-/* TumboToken — the ledger core with reverse / cancel / history.       */
-/* ------------------------------------------------------------------ */
-
-export class TumboToken {
-  constructor() {
-    this._balances = new Map(); // `${account}::${asset}` -> bigint
-    this._journals = []; // append-only; index = seq - 1
-    this._byKey = new Map(); // idempotencyKey -> journal
-    this._byJournalId = new Map(); // journalId -> journal
-    this._receiptByJournal = new Map(); // journalId -> receipt
-    this._receipts = []; // receipt chain, index 0 = genesis
-    this._receiptStates = []; // retained {beforeState, afterState, payload}
-    this._tick = GENESIS_TICK;
-    this._listeners = new Map();
-    this._genesisAt = Date.now();
-    this._issueGenesis();
-  }
-
-  /* -- balances --------------------------------------------------- */
-
-  _bkey(account, asset) {
-    return `${account}::${asset}`;
-  }
-
-  _getb(account, asset) {
-    return this._balances.get(this._bkey(account, asset)) ?? 0n;
-  }
-
-  /** Balance in integer fluff (Number, safe). */
-  balance(account, asset = "TUMBO") {
-    assertAccount(account);
-    assertAsset(asset);
-    const v = this._getb(account, asset);
-    if (v > BigInt(Number.MAX_SAFE_INTEGER)) {
-      throw new TokenError("balance exceeds safe integer range", "unsafe-integer");
-    }
-    return Number(v);
-  }
-
-  /** Current ledger tick (one tick per committed journal). */
-  get tick() {
-    return this._tick;
-  }
-
-  get journalCount() {
-    return this._journals.length;
-  }
-
-  /* -- events ----------------------------------------------------- */
-
-  /**
-   * Subscribe to 'balance-changed' | 'receipt' | 'journal'.
-   * Also mirrored as document CustomEvent('tumbo:token', {detail:{type,...}}).
-   */
-  on(evt, cb) {
-    if (!["balance-changed", "receipt", "journal"].includes(evt)) {
-      throw new TokenError(`unknown event "${evt}"`, "unknown-event");
-    }
-    if (typeof cb !== "function") throw new TypeError("callback must be a function");
-    if (!this._listeners.has(evt)) this._listeners.set(evt, new Set());
-    this._listeners.get(evt).add(cb);
-    return () => this._listeners.get(evt)?.delete(cb);
-  }
-
-  _emit(type, detail) {
-    const subs = this._listeners.get(type);
-    if (subs) {
-      for (const cb of [...subs]) {
-        try {
-          cb({ type, ...detail });
-        } catch {
-          /* listener errors never break the ledger */
-        }
+  const emit = (event, payload) => {
+    const set = listeners.get(event);
+    if (!set) return;
+    set.forEach((cb) => {
+      try {
+        cb(payload);
+      } catch (err) {
+        if (typeof console !== "undefined" && console.error) console.error("[TumboToken]", err);
       }
-    }
-    try {
-      if (typeof document !== "undefined" && typeof CustomEvent !== "undefined") {
-        document.dispatchEvent(
-          new CustomEvent("tumbo:token", {
-            detail: { type, simulation: true, ...detail },
-          })
-        );
-      }
-    } catch {
-      /* DOM mirroring is best-effort */
-    }
-  }
-
-  /* -- genesis ---------------------------------------------------- */
-
-  _snapshot(accounts) {
-    const snap = {};
-    for (const account of accounts) {
-      const perAsset = {};
-      for (const asset of ASSETS) {
-        perAsset[asset] = this._getb(account, asset).toString();
-      }
-      snap[account] = perAsset;
-    }
-    return snap;
-  }
-
-  _issueGenesis() {
-    for (const asset of ASSETS) {
-      this._balances.set(this._bkey("sys:treasury", asset), BigInt(SUPPLY_FLUFF));
-    }
-    const afterState = this._snapshot(["sys:treasury"]);
-    const payload = {
-      genesis: true,
-      assets: [...ASSETS],
-      allocation: { "sys:treasury": "SUPPLY_FLUFF (see TOKEN_CONFIG)" },
-      note: "Simulated genesis allocation. TUMBO-SIM are simulated points; no real value.",
-    };
-    const receipt = this._issueReceipt({
-      actorId: "tumbo-sim-node",
-      reference: "genesis",
-      action: "genesis",
-      summary: "genesis \u2014 simulated supply allocation to sys:treasury",
-      beforeState: null,
-      afterState,
-      payload,
     });
-    this._receiptByJournal.set("genesis", receipt);
-  }
+  };
 
-  _issueReceipt({ actorId, reference, action, summary, beforeState, afterState, payload }) {
-    const seq = this._receipts.length;
-    const prevHash = seq === 0 ? "genesis" : this._receipts[seq - 1].afterHash;
-    const receipt = Object.freeze({
-      sequence: seq,
-      actorId,
-      realm: REALM,
-      reference,
-      action,
-      summary,
-      beforeHash: contentHash({ prev: prevHash, state: beforeState }),
-      afterHash: contentHash({ prev: prevHash, state: afterState }),
-      payloadHash: contentHash(payload),
-      verificationState: "verified-simulated",
-      signer: "tumbo-sim-node",
-      issuedAt: Date.now(),
-      stamp: STAMP,
-      simulation: true,
-    });
-    this._receipts.push(receipt);
-    this._receiptStates.push({ beforeState, afterState, payload });
-    return receipt;
-  }
+  const balanceKey = (acct, asset) => `${acct}\u0000${asset}`;
 
-  /* -- journal plumbing ------------------------------------------- */
+  const getBalance = (acct, asset) => {
+    validateAccount(acct);
+    validateAsset(asset);
+    return ledger.balances.get(balanceKey(acct, asset)) ?? 0;
+  };
 
-  _lookup(id) {
-    if (id === "genesis") return null; // genesis is not a journal
-    return (
-      this._byJournalId.get(id) ??
-      this._byKey.get(id) ??
-      (typeof id === "number" ? this._journals[id - 1] : undefined) ??
-      null
-    );
-  }
-
-  _requireJournal(id) {
-    const j = this._lookup(id);
-    if (!j) throw new JournalNotFoundError(`no journal for "${id}"`);
-    return j;
-  }
-
-  /** Frozen public copy of a journal. */
-  journalOf(id) {
-    if (id === "genesis") return this._genesisRow();
-    const j = this._lookup(id);
-    return j ? this._copyJournal(j) : null;
-  }
-
-  _copyJournal(j) {
-    return Object.freeze({
-      journalId: j.journalId,
-      seq: j.seq,
-      tick: j.tick,
-      action: j.action,
-      state: j.state,
-      actor: j.actor,
-      memo: j.memo,
-      idempotencyKey: j.idempotencyKey,
-      linkedJournalId: j.linkedJournalId,
-      reversedBy: j.reversedBy,
-      settledTick: j.settledTick,
-      createdAt: j.createdAt,
-      summary: j.summary,
-      postings: Object.freeze(j.postings.map((p) => Object.freeze({ ...p }))),
-    });
-  }
-
-  _genesisRow() {
-    return Object.freeze({
-      journalId: "genesis",
-      seq: 0,
-      tick: GENESIS_TICK,
-      action: "genesis",
-      state: "settled",
-      actor: "tumbo-sim-node",
-      memo: "Simulated genesis allocation.",
-      idempotencyKey: "genesis",
-      linkedJournalId: null,
-      reversedBy: null,
-      settledTick: GENESIS_TICK,
-      createdAt: this._genesisAt,
-      summary: "genesis \u2014 simulated supply allocation to sys:treasury",
-      postings: Object.freeze([]),
-    });
-  }
-
-  /**
-   * The ONE write path. Validates, applies atomically, appends the
-   * journal, issues the chained receipt, emits events.
-   * Idempotent: a repeated key returns the original {journal, receipt}.
-   */
-  _commit({ action, legs, idempotencyKey, actor = "sim", memo = null, linkedJournalId = null, settle = false }) {
-    requireNonEmptyString(idempotencyKey, "idempotencyKey");
-    if (!ACTIONS.includes(action)) {
-      throw new TokenError(`unknown action "${action}"`, "unknown-action");
-    }
-
-    const replayed = this._byKey.get(idempotencyKey);
-    if (replayed) {
-      return {
-        journal: this._copyJournal(replayed),
-        receipt: this._receiptByJournal.get(replayed.journalId),
-        replayed: true,
-      };
-    }
-
-    if (!Array.isArray(legs) || legs.length === 0) {
-      throw new UnbalancedJournalError("a journal needs at least one posting leg");
-    }
-    const normLegs = legs.map((leg, i) => {
-      if (!leg || typeof leg !== "object") throw new TypeError(`legs[${i}] must be an object`);
-      return {
-        account: assertAccount(leg.account),
-        asset: assertAsset(leg.asset),
-        amount: toFluff(leg.amount, `legs[${i}].amount`),
-      };
-    });
-    // sys:void is credited only by burns, never debited.
-    for (const leg of normLegs) {
-      if (leg.account === "sys:void" && leg.amount < 0n) {
-        throw new TokenError("sys:void can never be debited", "void-debit");
-      }
-    }
-    if (normLegs.every((leg) => leg.amount === 0n)) {
-      throw new UnbalancedJournalError("journal postings are all zero");
-    }
-    // Journals sum to exactly 0 per asset (exact integer math).
+  const checkBalanced = (postings) => {
     const totals = new Map();
-    for (const leg of normLegs) {
-      totals.set(leg.asset, (totals.get(leg.asset) ?? 0n) + leg.amount);
+    for (const p of postings) {
+      const k = validateAsset(p.asset);
+      totals.set(k, (totals.get(k) ?? 0n) + BigInt(toSignedFluff(p.amountFluff, "postings[].amountFluff")));
     }
     for (const [asset, total] of totals) {
-      if (total !== 0n) {
-        throw new UnbalancedJournalError(
-          `postings for ${asset} sum to ${total} fluff, must be exactly 0`
-        );
-      }
+      if (total !== 0n) throw tokenErr("unbalanced", `journal does not balance for asset ${asset}`);
     }
-
-    // Stage on copies: atomic — never half-apply. Balances never negative.
-    const touched = new Set(normLegs.map((leg) => leg.account));
-    const beforeSnap = this._snapshot(touched);
-    const staged = new Map();
-    for (const leg of normLegs) {
-      const key = this._bkey(leg.account, leg.asset);
-      const current = staged.has(key) ? staged.get(key) : this._getb(leg.account, leg.asset);
-      const next = current + leg.amount;
-      if (next < 0n) {
-        throw new InsufficientFundsError(
-          `${leg.account} would go negative in ${leg.asset} (needs ${fmtFluff(-leg.amount > current ? -leg.amount : 0n, leg.asset)})`
-        );
-      }
-      staged.set(key, next);
-    }
-    for (const [key, next] of staged) this._balances.set(key, next);
-    const afterSnap = this._snapshot(touched);
-
-    const seq = this._journals.length + 1;
-    this._tick += 1;
-    const journalId = `tx-${String(seq).padStart(6, "0")}`;
-    const summary = summarize(action, normLegs);
-    const journal = {
-      journalId,
-      seq,
-      tick: this._tick,
-      action,
-      state: settle ? "settled" : "pending",
-      actor,
-      memo,
-      idempotencyKey,
-      linkedJournalId,
-      reversedBy: null,
-      settledTick: settle ? this._tick : null,
-      createdAt: Date.now(),
-      summary,
-      postings: normLegs.map((leg) => freezePosting(leg)),
-    };
-    this._journals.push(journal);
-    this._byKey.set(idempotencyKey, journal);
-    this._byJournalId.set(journalId, journal);
-
-    const receipt = this._issueReceipt({
-      actorId: actor,
-      reference: journalId,
-      action,
-      summary,
-      beforeState: beforeSnap,
-      afterState: afterSnap,
-      payload: {
-        journalId,
-        seq,
-        tick: journal.tick,
-        action,
-        postings: journal.postings,
-        linkedJournalId,
-        memo,
-      },
-    });
-    this._receiptByJournal.set(journalId, receipt);
-
-    this._emit("journal", { journal: this._copyJournal(journal) });
-    this._emit("receipt", { receipt });
-    for (const account of touched) {
-      for (const asset of ASSETS) {
-        const k = this._bkey(account, asset);
-        if (staged.has(k)) {
-          this._emit("balance-changed", {
-            account,
-            asset,
-            balance: this.balance(account, asset),
-            journalId,
-          });
-        }
-      }
-    }
-    return { journal: this._copyJournal(journal), receipt, replayed: false };
-  }
-
-  /* -- action legs ------------------------------------------------- */
-
-  _legsFor(action, { asset, from, to, amount, assetB, amountB }) {
-    const A = assertAsset(asset);
-    const amt = toFluff(amount, "amountFluff");
-    const debit = (account, a, v) => ({ account, asset: a, amount: -v });
-    const credit = (account, a, v) => ({ account, asset: a, amount: v });
-    const req = (v, name) => {
-      if (v === undefined || v === null) throw new TypeError(`${name} is required for ${action}`);
-      return v;
-    };
-    switch (action) {
-      case "send":
-      case "receive":
-      case "tip":
-        return [debit(assertAccount(req(from, "from")), A, amt), credit(assertAccount(req(to, "to")), A, amt)];
-      case "deposit":
-        return [
-          debit(assertAccount(from ?? "sys:faucet"), A, amt),
-          credit(assertAccount(req(to, "to")), A, amt),
-        ];
-      case "stake":
-      case "save":
-        return [
-          debit(assertAccount(req(from, "from")), A, amt),
-          credit("sys:vault", A, amt),
-        ];
-      case "lock":
-        return [
-          debit(assertAccount(req(from, "from")), A, amt),
-          credit("sys:escrow", A, amt),
-        ];
-      case "deliver":
-        return [
-          debit(assertAccount(from ?? "sys:escrow"), A, amt),
-          credit(assertAccount(req(to, "to")), A, amt),
-        ];
-      case "unstake":
-      case "withdraw":
-        return [
-          debit(assertAccount(from ?? "sys:vault"), A, amt),
-          credit(assertAccount(req(to, "to")), A, amt),
-        ];
-      case "exchange":
-      case "buy":
-      case "sell": {
-        const B = assertAsset(req(assetB, "assetB"));
-        const amtB = toFluff(req(amountB, "amountBFluff"), "amountBFluff");
-        const f = assertAccount(req(from, "from"));
-        const t = assertAccount(req(to, "to"));
-        return [
-          debit(f, A, amt),
-          credit(t, A, amt),
-          debit(t, B, amtB),
-          credit(f, B, amtB),
-        ];
-      }
-      default:
-        throw new TokenError(
-          `action "${action}" cannot be executed directly (use reverse()/cancel())`,
-          "lifecycle-action"
-        );
-    }
-  }
-
-  /**
-   * Execute a token action. Every mutation takes a client idempotency
-   * key; replays return the original receipt.
-   */
-  execute(params = {}) {
-    const {
-      action,
-      asset = "TUMBO",
-      from,
-      to,
-      amountFluff,
-      assetB,
-      amountBFluff,
-      idempotencyKey,
-      actor = "sim",
-      memo = null,
-      settle = true,
-    } = params;
-    requireNonEmptyString(action, "action");
-    if (action === "reverse" || action === "cancel") {
-      throw new TokenError(`use ${action}() for lifecycle actions`, "lifecycle-action");
-    }
-    const legs = this._legsFor(action, {
-      asset,
-      from,
-      to,
-      amount: amountFluff,
-      assetB,
-      amountB: amountBFluff,
-    });
-    return this._commit({ action, legs, idempotencyKey, actor, memo, settle });
-  }
-
-  /** pending -> settled. */
-  settle(id, { actor = "sim" } = {}) {
-    const j = this._requireJournal(id);
-    if (j.state !== "pending") {
-      throw new TokenError(
-        `only pending journals can settle (tx ${j.journalId} is ${j.state})`,
-        "invalid-state"
-      );
-    }
-    j.state = "settled";
-    j.settledTick = this._tick;
-    this._emit("journal", { journal: this._copyJournal(j), transition: "settled", actor });
-    return this._copyJournal(j);
-  }
-
-  /**
-   * Reverse a journal by posting a compensating journal. History is
-   * never edited: the original journal stays, linked to its reversal.
-   * Bounded by REVERSE_WINDOW_TICKS — afterwards it fails closed.
-   * Double-reverse is impossible: the deterministic key
-   * `reverse:<original-key>` replays the original reversal, and any
-   * fresh key against an already-reversed journal throws.
-   */
-  reverse(id, { idempotencyKey, actor = "sim", memo = null } = {}) {
-    const j = this._requireJournal(id);
-    const rkey = idempotencyKey ?? `reverse:${j.idempotencyKey}`;
-    const replayed = this._byKey.get(rkey);
-    if (replayed) {
-      return {
-        journal: this._copyJournal(replayed),
-        receipt: this._receiptByJournal.get(replayed.journalId),
-        replayed: true,
-      };
-    }
-    if (j.state === "reversed") {
-      throw new AlreadyReversedError(`tx ${j.journalId} was already reversed by ${j.reversedBy}`);
-    }
-    if (j.state !== "settled" && j.state !== "pending") {
-      throw new TokenError(`tx ${j.journalId} cannot be reversed from state "${j.state}"`, "invalid-state");
-    }
-    if (j.action === "reverse" || j.action === "cancel") {
-      throw new TokenError(
-        `lifecycle journals cannot be reversed (tx ${j.journalId} is a ${j.action})`,
-        "lifecycle-action"
-      );
-    }
-    const age = this._tick - j.tick;
-    if (age > REVERSE_WINDOW_TICKS) {
-      throw new ReverseWindowExpiredError(
-        `reverse window expired: tx ${j.journalId} is ${age} ticks old (window is ${REVERSE_WINDOW_TICKS} ticks)`
-      );
-    }
-    const legs = j.postings.map((p) => ({
-      account: p.account,
-      asset: p.asset,
-      amount: -BigInt(p.amountFluff),
-    }));
-    const res = this._commit({
-      action: "reverse",
-      legs,
-      idempotencyKey: rkey,
-      actor,
-      memo: memo ?? `reversal of ${j.journalId} (${j.action})`,
-      linkedJournalId: j.journalId,
-      settle: true,
-    });
-    j.state = "reversed";
-    j.reversedBy = res.journal.journalId;
-    this._emit("journal", {
-      journal: this._copyJournal(j),
-      transition: "reversed",
-      reversalId: res.journal.journalId,
-    });
-    return res;
-  }
-
-  /**
-   * Cancel a PENDING journal by posting a compensating journal.
-   * Cancelling a settled journal fails closed — reverse it instead.
-   */
-  cancel(id, { idempotencyKey, actor = "sim", memo = null } = {}) {
-    const j = this._requireJournal(id);
-    const ckey = idempotencyKey ?? `cancel:${j.idempotencyKey}`;
-    const replayed = this._byKey.get(ckey);
-    if (replayed) {
-      return {
-        journal: this._copyJournal(replayed),
-        receipt: this._receiptByJournal.get(replayed.journalId),
-        replayed: true,
-      };
-    }
-    if (j.state === "settled") {
-      throw new CancelRejectedError(
-        `cannot cancel settled tx ${j.journalId}; reverse it within ${REVERSE_WINDOW_TICKS} ticks instead`
-      );
-    }
-    if (j.state !== "pending") {
-      throw new TokenError(`tx ${j.journalId} cannot be cancelled from state "${j.state}"`, "invalid-state");
-    }
-    if (j.action === "reverse" || j.action === "cancel") {
-      throw new TokenError(
-        `lifecycle journals cannot be cancelled (tx ${j.journalId} is a ${j.action})`,
-        "lifecycle-action"
-      );
-    }
-    const legs = j.postings.map((p) => ({
-      account: p.account,
-      asset: p.asset,
-      amount: -BigInt(p.amountFluff),
-    }));
-    const res = this._commit({
-      action: "cancel",
-      legs,
-      idempotencyKey: ckey,
-      actor,
-      memo: memo ?? `cancellation of pending ${j.journalId} (${j.action})`,
-      linkedJournalId: j.journalId,
-      settle: true,
-    });
-    j.state = "cancelled";
-    this._emit("journal", {
-      journal: this._copyJournal(j),
-      transition: "cancelled",
-      cancellationId: res.journal.journalId,
-    });
-    return res;
-  }
-
-  /* -- history / audit -------------------------------------------- */
-
-  /**
-   * List journals (newest first) with filters: action, account, asset,
-   * state. Includes the synthetic genesis row.
-   */
-  history({ action, account, asset, state, limit = 100, offset = 0 } = {}) {
-    let rows = [this._genesisRow()];
-    for (let i = this._journals.length - 1; i >= 0; i -= 1) {
-      rows.push(this._copyJournal(this._journals[i]));
-    }
-    if (action) rows = rows.filter((r) => r.action === action);
-    if (state) rows = rows.filter((r) => r.state === state);
-    if (asset) {
-      assertAsset(asset);
-      rows = rows.filter(
-        (r) => r.journalId === "genesis" || r.postings.some((p) => p.asset === asset)
-      );
-    }
-    if (account) {
-      assertAccount(account);
-      rows = rows.filter(
-        (r) => r.journalId === "genesis" || r.postings.some((p) => p.account === account)
-      );
-    }
-    const total = rows.length;
-    rows = rows.slice(offset, offset + Math.max(0, limit));
-    return { total, rows: Object.freeze(rows) };
-  }
-
-  /** EchoProof-style receipt for a journal (frozen copy). */
-  receiptFor(id) {
-    if (id === "genesis") return this._receiptByJournal.get("genesis");
-    const j = this._lookup(id);
-    return j ? this._receiptByJournal.get(j.journalId) : null;
-  }
-
-  /**
-   * Recompute a receipt's hashes from the retained states and check the
-   * prevHash linkage. This is the per-tx check the audit view runs.
-   */
-  verifyJournal(id) {
-    const jid = id === "genesis" ? "genesis" : this._requireJournal(id).journalId;
-    const seq = jid === "genesis" ? 0 : this._requireJournal(jid).seq;
-    const receipt = this._receipts[seq];
-    const { beforeState, afterState, payload } = this._receiptStates[seq];
-    const prevHash = seq === 0 ? "genesis" : this._receipts[seq - 1].afterHash;
-    const checks = [
-      {
-        name: "sequence",
-        ok: receipt.sequence === seq,
-        detail: `receipt.sequence=${receipt.sequence}, expected=${seq}`,
-      },
-      {
-        name: "reference",
-        ok: receipt.reference === jid,
-        detail: `receipt.reference=${receipt.reference}`,
-      },
-      {
-        name: "beforeHash recomputed",
-        ok: receipt.beforeHash === contentHash({ prev: prevHash, state: beforeState }),
-        detail: receipt.beforeHash.slice(0, 16),
-      },
-      {
-        name: "afterHash recomputed",
-        ok: receipt.afterHash === contentHash({ prev: prevHash, state: afterState }),
-        detail: receipt.afterHash.slice(0, 16),
-      },
-      {
-        name: "payloadHash recomputed",
-        ok: receipt.payloadHash === contentHash(payload),
-        detail: receipt.payloadHash.slice(0, 16),
-      },
-      {
-        name: "prevHash chain link",
-        ok:
-          seq === 0 ||
-          receipt.beforeHash ===
-            contentHash({ prev: this._receipts[seq - 1].afterHash, state: beforeState }),
-        detail: seq === 0 ? "genesis anchor" : `prev=${String(prevHash).slice(0, 16)}\u2026`,
-      },
-    ];
-    return { journalId: jid, ok: checks.every((c) => c.ok), checks: Object.freeze(checks) };
-  }
-
-  /** Full chain integrity report, one entry per receipt. */
-  verifyChainReport() {
-    const report = [];
-    for (let seq = 0; seq < this._receipts.length; seq += 1) {
-      const jid = seq === 0 ? "genesis" : this._journals[seq - 1].journalId;
-      const v = this.verifyJournal(jid);
-      report.push({
-        seq,
-        journalId: jid,
-        ok: v.ok,
-        failures: v.checks.filter((c) => !c.ok).map((c) => c.name),
-      });
-    }
-    return Object.freeze(report);
-  }
-
-  /** Recompute the whole chain: every hash and every prevHash link. */
-  verifyChain() {
-    return this.verifyChainReport().every((r) => r.ok);
-  }
-}
-
-/* ------------------------------------------------------------------ */
-/* Summaries                                                           */
-/* ------------------------------------------------------------------ */
-
-function summarize(action, legs) {
-  const byAsset = new Map();
-  for (const leg of legs) {
-    if (!byAsset.has(leg.asset)) byAsset.set(leg.asset, []);
-    byAsset.get(leg.asset).push(leg);
-  }
-  const parts = [];
-  for (const [asset, ls] of byAsset) {
-    const outs = ls.filter((l) => l.amount < 0n);
-    const ins = ls.filter((l) => l.amount > 0n);
-    if (outs.length === 1 && ins.length === 1) {
-      parts.push(`${fmtFluff(-outs[0].amount, asset)} ${outs[0].account} \u2192 ${ins[0].account}`);
-    } else {
-      parts.push(`${fmtFluff(ls.reduce((t, l) => t + (l.amount > 0n ? l.amount : 0n), 0n), asset)} across ${ls.length} legs`);
-    }
-  }
-  return `${action} ${parts.join(" + ")}`;
-}
-
-/* ------------------------------------------------------------------ */
-/* Facade: window.TumboToken                                           */
-/* ------------------------------------------------------------------ */
-
-/** Build the facade object over a fresh ledger core. */
-export function createTumboToken() {
-  const core = new TumboToken();
-  const facade = {
-    /** The ledger core (journals, reverse/cancel, history, receipts). */
-    ledger: core,
-    core,
-    config: TOKEN_CONFIG,
-    /** Balance in integer fluff. */
-    balance: (account, asset = "TUMBO") => core.balance(account, asset),
-    /** Format integer fluff, e.g. "1.500 TUMBO-SIM". */
-    fmt: (fluff, asset = "TUMBO") => fmtFluff(fluff, asset),
-    /** Subscribe to 'balance-changed' | 'receipt' | 'journal'. */
-    on: (evt, cb) => core.on(evt, cb),
-    execute: (params) => core.execute(params),
-    settle: (id, opts) => core.settle(id, opts),
-    reverse: (id, opts) => core.reverse(id, opts),
-    cancel: (id, opts) => core.cancel(id, opts),
-    history: (filters) => core.history(filters),
-    journalOf: (id) => core.journalOf(id),
-    receiptFor: (id) => core.receiptFor(id),
-    verifyJournal: (id) => core.verifyJournal(id),
-    verifyChain: () => core.verifyChain(),
-    verifyChainReport: () => core.verifyChainReport(),
-    tick: () => core.tick,
-    simulation: true,
+    return true;
   };
-  return Object.freeze(facade);
+
+  const canonicalizeJournal = (journal) => {
+    checkBalanced(journal.postings);
+    return {
+      journalId: String(journal.journalId),
+      tick: journal.tick,
+      action: journal.action,
+      asset: journal.asset,
+      memo: journal.memo == null ? "" : String(journal.memo),
+      state: journal.state,
+      linkedJournalId: journal.linkedJournalId == null ? null : String(journal.linkedJournalId),
+      postings: journal.postings.map((p) => ({
+        account: validateAccount(p.account),
+        asset: validateAsset(p.asset),
+        amountFluff: toSignedFluff(p.amountFluff, "postings[].amountFluff"),
+      })),
+      balanced: true,
+      prevHash: journal.prevHash,
+      idempotencyKey: journal.idempotencyKey,
+    };
+  };
+
+  /* Genesis — mints the configured supply per asset into sys:treasury. */
+  const genesis = (() => {
+    const postings = [];
+    for (const asset of TOKEN_CONFIG.ASSETS) {
+      postings.push({ account: "sys:treasury", asset, amountFluff: TOKEN_CONFIG.SUPPLY_FLUFF });
+    }
+    // Genesis carries no offsetting debit: it is the supply root, marked
+    // explicitly so balance checks never see a fake counterparty.
+    const body = canonicalizeGenesis(postings);
+    const hash = hashPayload(body);
+    const journal = { ...body, journalId: "genesis", tick: 0, action: "genesis", hash };
+    for (const p of postings) {
+      ledger.balances.set(balanceKey(p.account, p.asset), p.amountFluff);
+    }
+    ledger.journals.push(journal);
+    ledger._byId.set("genesis", journal);
+    ledger._receipts.push({
+      journalId: "genesis",
+      tick: 0,
+      state: "settled",
+      afterHash: hash,
+      prevHash: "GENESIS",
+      hash: hashPayload({ journalId: "genesis", tick: 0, state: "settled", afterHash: hash, prevHash: "GENESIS" }),
+    });
+    return journal;
+  })();
+
+  function canonicalizeGenesis(postings) {
+    return {
+      tick: 0,
+      action: "genesis",
+      asset: "*",
+      memo: "simulated supply root (no real value)",
+      state: "settled",
+      linkedJournalId: null,
+      postings: postings.map((p) => ({
+        account: validateAccount(p.account),
+        asset: validateAsset(p.asset),
+        amountFluff: toFluff(p.amountFluff, "genesis"),
+      })),
+      balanced: true,
+      prevHash: "GENESIS",
+      idempotencyKey: "genesis",
+    };
+  }
+
+  /* Core commit path — validates, applies, chains, receipts, emits. */
+  const _commit = ({ action, asset, postings, memo, state, linkedJournalId, idempotencyKey }) => {
+    validateAction(action);
+    const journal = {
+      journalId: `j${++ledger.seq}`,
+      tick: ++ledger.tick,
+      action,
+      asset: asset == null ? "*" : validateAsset(asset),
+      memo: memo == null ? "" : String(memo),
+      state,
+      linkedJournalId: linkedJournalId == null ? null : linkedJournalId,
+      postings: postings.map((leg) => ({
+        account: validateAccount(leg.account),
+        asset: validateAsset(leg.asset),
+        amountFluff: toSignedFluff(leg.amount, "postings[].amountFluff"),
+      })),
+      balanced: true,
+      prevHash: ledger._receipts[ledger._receipts.length - 1].hash,
+      idempotencyKey,
+    };
+    checkBalanced(journal.postings);
+
+    // Balance guard: apply to a scratch copy first so failed commits
+    // never leave partial state.
+    const deltas = new Map();
+    for (const p of journal.postings) {
+      if (p.account === "sys:void" && p.amountFluff < 0) {
+        throw tokenErr("void-debit", "sys:void can be credited by burns but never debited");
+      }
+      const k = balanceKey(p.account, p.asset);
+      deltas.set(k, (deltas.get(k) ?? 0n) + BigInt(p.amountFluff));
+    }
+    for (const [k, delta] of deltas) {
+      const next = BigInt(ledger.balances.get(k) ?? 0) + delta;
+      if (next < 0n) throw tokenErr("insufficient-funds", "balance would go negative");
+      deltas.set(k, next);
+    }
+    for (const [k, next] of deltas) ledger.balances.set(k, Number(next));
+
+    const body = canonicalizeJournal({ ...journal });
+    journal.hash = hashPayload(body);
+    ledger.journals.push(journal);
+    ledger._byId.set(journal.journalId, journal);
+    ledger._byKey.set(idempotencyKey, journal.journalId);
+
+    const receipt = {
+      journalId: journal.journalId,
+      tick: journal.tick,
+      state: journal.state,
+      afterHash: journal.hash,
+      prevHash: journal.prevHash,
+      hash: hashPayload({
+        journalId: journal.journalId,
+        tick: journal.tick,
+        state: journal.state,
+        afterHash: journal.hash,
+        prevHash: journal.prevHash,
+      }),
+    };
+    ledger._receipts.push(receipt);
+    emit("journal", { journal: freezeJournal(journal), receipt: { ...receipt } });
+    emit("receipt", { journal: freezeJournal(journal), receipt: { ...receipt } });
+    return { journal: freezeJournal(journal), receipt: { ...receipt } };
+  };
+
+  const freezeJournal = (j) =>
+    Object.freeze({
+      ...j,
+      postings: Object.freeze(j.postings.map((p) => Object.freeze({ ...p }))),
+    });
+
+  /* Posting templates.                                             */
+  const _legsFor = ({ asset, from, to, amountFluff }) => {
+    const v = toFluff(amountFluff, "amountFluff");
+    return [
+      { account: from, asset, amount: -v },
+      { account: to, asset, amount: v },
+    ];
+  };
+
+  const _execute = (spec, { settle }) => {
+    const action = validateAction(spec.action);
+    const asset = validateAsset(spec.asset ?? "TUMBO");
+    const from = validateAccount(spec.from);
+    const to = validateAccount(spec.to);
+    const key = spec.idempotencyKey == null ? null : String(spec.idempotencyKey);
+    if (!key) throw tokenErr("missing-idempotency-key", "every mutation needs a client idempotency key");
+    const replayId = ledger._byKey.get(key);
+    if (replayId) {
+      const j = ledger._byId.get(replayId);
+      return { journal: freezeJournal(j), receipt: null, replayed: true };
+    }
+    if (from === to) throw tokenErr("self-transfer", "from and to must differ");
+
+    let postings;
+    if (action === "exchange") {
+      const giveAsset = validateAsset(spec.giveAsset ?? asset);
+      const wantAsset = validateAsset(spec.wantAsset);
+      if (giveAsset === wantAsset) throw tokenErr("bad-exchange", "exchange needs two different assets");
+      const give = toFluff(spec.amountFluff, "amountFluff");
+      const want = toFluff(spec.wantAmountFluff ?? spec.amountFluff, "wantAmountFluff");
+      const market = "sys:market";
+      postings = [
+        { account: from, asset: giveAsset, amount: -give },
+        { account: market, asset: giveAsset, amount: give },
+        { account: market, asset: wantAsset, amount: -want },
+        { account: to, asset: wantAsset, amount: want },
+      ];
+    } else {
+      postings = _legsFor({ asset, from, to, amountFluff: spec.amountFluff });
+    }
+
+    return {
+      ..._commit({
+        action,
+        asset,
+        postings,
+        memo: spec.memo,
+        state: settle ? "settled" : "pending",
+        linkedJournalId: spec.linkedJournalId,
+        idempotencyKey: key,
+      }),
+      replayed: false,
+    };
+  };
+
+  /* Public API.                                                    */
+  const api = {
+    config: TOKEN_CONFIG,
+    ledger,
+    genesis: () => freezeJournal(genesis),
+
+    on(event, cb) {
+      if (typeof cb !== "function") throw tokenErr("bad-listener", "listener must be a function");
+      if (!listeners.has(event)) listeners.set(event, new Set());
+      listeners.get(event).add(cb);
+      return () => listeners.get(event)?.delete(cb);
+    },
+
+    tick: () => ledger.tick,
+    balance: (acct, asset = "TUMBO") => getBalance(acct, asset),
+    balances: (acct) => {
+      validateAccount(acct);
+      const out = {};
+      for (const asset of TOKEN_CONFIG.ASSETS) out[asset] = getBalance(acct, asset);
+      return out;
+    },
+    fmt: (fluff, asset = "TUMBO") => fmtFluff(fluff, asset),
+
+    journalOf: (journalId) => {
+      const j = ledger._byId.get(journalId);
+      if (!j) throw tokenErr("unknown-journal", `no journal ${journalId}`);
+      return freezeJournal(j);
+    },
+
+    receiptOf: (journalId) => {
+      const r = ledger._receipts.find((x) => x.journalId === journalId);
+      if (!r) throw tokenErr("unknown-receipt", `no receipt for ${journalId}`);
+      return { ...r };
+    },
+
+    execute(spec) {
+      return _execute(spec, { settle: spec.settle !== false });
+    },
+
+    /** Mark a pending journal settled (idempotent no-op when settled). */
+    settle(journalId) {
+      const j = ledger._byId.get(journalId);
+      if (!j) throw tokenErr("unknown-journal", `no journal ${journalId}`);
+      if (j.state === "settled") return { journal: freezeJournal(j), unchanged: true };
+      if (j.state !== "pending") throw tokenErr("settle-rejected", `cannot settle a ${j.state} journal`);
+      j.state = "settled";
+      emit("journal", { journal: freezeJournal(j), receipt: null });
+      return { journal: freezeJournal(j), unchanged: false };
+    },
+
+    /**
+     * Reverse a settled journal by posting a compensating journal that
+     * mirrors the original legs. History is never edited.
+     * Idempotent via the deterministic key `reverse:<original-key>`:
+     * replays return the original compensating receipt; a *different*
+     * key against an already-reversed journal throws `already-reversed`.
+     */
+    reverse(journalId, { idempotencyKey = null } = {}) {
+      const j = ledger._byId.get(journalId);
+      if (!j) throw tokenErr("unknown-journal", `no journal ${journalId}`);
+      if (j.journalId === "genesis") throw tokenErr("reverse-rejected", "genesis cannot be reversed");
+      if (j.state !== "settled") throw tokenErr("reverse-rejected", `only settled journals can be reversed (state: ${j.state})`);
+      const age = ledger.tick - j.tick;
+      if (age > TOKEN_CONFIG.REVERSE_WINDOW_TICKS) {
+        throw tokenErr("reverse-window-expired", `reverse window of ${TOKEN_CONFIG.REVERSE_WINDOW_TICKS} ticks expired (age ${age})`);
+      }
+      const deterministicKey = `reverse:${j.idempotencyKey}`;
+      const priorId = ledger._byKey.get(deterministicKey);
+      if (priorId) {
+        const prior = ledger._byId.get(priorId);
+        return { journal: freezeJournal(prior), receipt: null, replayed: true };
+      }
+      if (idempotencyKey != null && ledger._byKey.has(String(idempotencyKey))) {
+        const prior = ledger._byId.get(ledger._byKey.get(String(idempotencyKey)));
+        return { journal: freezeJournal(prior), receipt: null, replayed: true };
+      }
+      // A different key against an already-reversed journal must fail
+      // closed: the deterministic key above is the only legal replay path.
+      const alreadyReversed = ledger.journals.some(
+        (x) => x.action === "reverse" && x.linkedJournalId === j.journalId
+      );
+      if (alreadyReversed) throw tokenErr("already-reversed", `journal ${journalId} was already reversed`);
+      const mirror = j.postings.map((leg) => ({
+        account: leg.account,
+        asset: leg.asset,
+        amount: toSignedFluff(-leg.amountFluff, "reverse.postings[].amountFluff"),
+      }));
+      const res = _commit({
+        action: "reverse",
+        asset: j.asset,
+        postings: mirror,
+        memo: `reversal of ${j.journalId}`,
+        state: "settled",
+        linkedJournalId: j.journalId,
+        idempotencyKey: idempotencyKey == null ? deterministicKey : String(idempotencyKey),
+      });
+      j.state = "reversed";
+      emit("journal", { journal: freezeJournal(j), receipt: null });
+      return { ...res, replayed: false };
+    },
+
+    /** Cancel a pending journal (voids it; settled journals fail closed). */
+    cancel(journalId, { idempotencyKey = null } = {}) {
+      const j = ledger._byId.get(journalId);
+      if (!j) throw tokenErr("unknown-journal", `no journal ${journalId}`);
+      if (j.journalId === "genesis") throw tokenErr("cancel-rejected", "genesis cannot be cancelled");
+      if (j.state !== "pending") throw tokenErr("cancel-rejected", `only pending journals can be cancelled (state: ${j.state})`);
+      const deterministicKey = `cancel:${j.idempotencyKey}`;
+      const priorId = ledger._byKey.get(deterministicKey);
+      if (priorId) {
+        const prior = ledger._byId.get(priorId);
+        return { journal: freezeJournal(prior), receipt: null, replayed: true };
+      }
+      // Cancelling unwinds the pending hold: post the mirror legs so the
+      // net effect is zero while the cancel itself stays in history.
+      const mirror = j.postings.map((leg) => ({
+        account: leg.account,
+        asset: leg.asset,
+        amount: toSignedFluff(-leg.amountFluff, "cancel.postings[].amountFluff"),
+      }));
+      const res = _commit({
+        action: "cancel",
+        asset: j.asset,
+        postings: mirror,
+        memo: `cancellation of ${j.journalId}`,
+        state: "settled",
+        linkedJournalId: j.journalId,
+        idempotencyKey: idempotencyKey == null ? deterministicKey : String(idempotencyKey),
+      });
+      j.state = "cancelled";
+      emit("journal", { journal: freezeJournal(j), receipt: null });
+      return { ...res, replayed: false };
+    },
+
+    /** Filtered journal history (newest first), with pagination. */
+    history({ action = null, account = null, asset = null, state = null, limit = 50, offset = 0 } = {}) {
+      let rows = ledger.journals.slice().reverse();
+      if (action) rows = rows.filter((r) => r.action === action);
+      if (state) rows = rows.filter((r) => r.state === state);
+      // Genesis carries the supply root for every asset held by
+      // sys:treasury, so it genuinely matches account/asset filters.
+      if (account) rows = rows.filter((r) => r.postings.some((p) => p.account === account));
+      if (asset) rows = rows.filter((r) => r.postings.some((p) => p.asset === asset));
+      const total = rows.length;
+      const page = rows.slice(offset, offset + limit).map(freezeJournal);
+      return { total, limit, offset, rows: page };
+    },
+
+    /** Recompute a journal's hashes and re-walk its chain links. */
+    verifyJournal(journalId) {
+      const j = ledger._byId.get(journalId);
+      if (!j) throw tokenErr("unknown-journal", `no journal ${journalId}`);
+      const checks = [];
+      const push = (name, ok, detail = "") => checks.push({ name, ok, detail });
+
+      const balanced = (() => {
+        try {
+          checkBalanced(j.postings);
+          return true;
+        } catch {
+          return false;
+        }
+      })();
+      push("balanced", balanced);
+
+      const body = j.journalId === "genesis" ? canonicalizeGenesis(j.postings) : canonicalizeJournal({ ...j, hash: undefined });
+      const recomputed = hashPayload(body);
+      push("journal-hash", recomputed === j.hash, `${recomputed.slice(0, 12)}…`);
+
+      const idx = ledger.journals.findIndex((x) => x.journalId === journalId);
+      const expectedPrev = idx === 0 ? "GENESIS" : ledger.journals[idx - 1].hash;
+      push("prevHash-link", j.prevHash === expectedPrev);
+
+      const receipt = ledger._receipts.find((x) => x.journalId === journalId);
+      push("receipt-exists", !!receipt);
+      if (receipt) {
+        const rbody = {
+          journalId: receipt.journalId,
+          tick: receipt.tick,
+          state: receipt.state,
+          afterHash: j.hash,
+          prevHash: receipt.prevHash,
+        };
+        push("receipt-recompute", hashPayload(rbody) === receipt.hash);
+        push("receipt-afterHash", receipt.afterHash === j.hash);
+      }
+      return { journalId, ok: checks.every((c) => c.ok), checks };
+    },
+
+    /** Walk the whole receipt chain; returns false at the first break. */
+    verifyChain() {
+      let prev = "GENESIS";
+      for (const r of ledger._receipts) {
+        const j = ledger._byId.get(r.journalId);
+        if (!j) return false;
+        if (r.afterHash !== j.hash) return false;
+        const recomputed = hashPayload({
+          journalId: r.journalId,
+          tick: r.tick,
+          state: r.state,
+          afterHash: r.afterHash,
+          prevHash: r.prevHash,
+        });
+        if (recomputed !== r.hash) return false;
+        if (r.prevHash !== prev) return false;
+        prev = r.hash;
+      }
+      // Journal-to-journal prevHash continuity.
+      for (let i = 1; i < ledger.journals.length; i += 1) {
+        if (ledger.journals[i].prevHash !== ledger.journals[i - 1].hash) return false;
+      }
+      return true;
+    },
+  };
+
+  return api;
 }
 
-/** Install the facade as `scope.TumboToken`. Returns the facade. */
-export function installTumboToken(scope) {
-  const facade = createTumboToken();
-  scope.TumboToken = facade;
-  return facade;
-}
+/* window.TumboToken facade — installed automatically in browsers.   */
 
-// Auto-install in browsers so `window.TumboToken` exists on import.
+const __facade = (() => {
+  const shared = createTumboToken();
+  return {
+    ledger: shared.ledger,
+    balance: (acct, asset) => shared.balance(acct, asset),
+    fmt: (fluff, asset) => shared.fmt(fluff, asset),
+    on: (evt, cb) => shared.on(evt, cb),
+  };
+})();
+
+export const TumboToken = __facade;
+
 if (typeof window !== "undefined") {
-  installTumboToken(window);
+  window.TumboToken = window.TumboToken || __facade;
 }
+
+export default TumboToken;
