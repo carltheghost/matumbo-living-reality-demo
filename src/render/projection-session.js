@@ -794,22 +794,16 @@ function t402Slice(snapshot) {
   };
 }
 
-function neuralMeshSlice(snapshot) {
-  const summary = isRecord(snapshot?.summary) ? snapshot.summary : {};
+function agentBlockSlice(snapshot) {
+  const sections = Array.isArray(snapshot?.sections) ? snapshot.sections : [];
   return {
     source: snapshot?.source ?? null, opened: snapshot?.opened === true,
-    selectedType: typeof snapshot?.selectedType === "string" ? snapshot.selectedType : null,
-    selectedId: typeof snapshot?.selectedId === "string" ? snapshot.selectedId : null,
-    recordCount: Number.isInteger(summary.recordCount) ? summary.recordCount : 0,
-    agentCount: Array.isArray(summary.agents) ? summary.agents.length : 0,
-    intentCount: Array.isArray(summary.intents) ? summary.intents.length : 0,
-    proposalCount: Array.isArray(summary.proposals) ? summary.proposals.length : 0,
-    relationshipCount: Array.isArray(summary.relationships) ? summary.relationships.length : 0,
-    evidenceCount: Number.isInteger(summary.evidenceCount) ? summary.evidenceCount : 0,
-    traceCount: Array.isArray(snapshot?.trace) ? snapshot.trace.length : 0,
+    selectedSection: typeof snapshot?.selectedSection === "string" ? snapshot.selectedSection : null,
+    sections,
+    botCount: Number.isInteger(snapshot?.botCount) ? snapshot.botCount : 0,
     localOnly: snapshot?.localOnly === true, simulation: snapshot?.simulation === true,
     advisoryOnly: true, identityAuthority: "none", biometric: false, rawTrace: false,
-    externalExecution: false, noFabrication: typeof snapshot?.selectedId !== "string",
+    externalExecution: false, noFabrication: typeof snapshot?.selectedSection !== "string",
   };
 }
 
@@ -1033,7 +1027,7 @@ function mountedSurfaceSummary(surfaces, activeFeatureId = null) {
   };
 }
 
-function surfaceIsOpen(activeId, cube, sports, contracts, person, worldEvents, rooms, deviceProjection, gesture, assetMarket, launchDistribution, launchKit, liveGateway, protocolEvidence, socialExplorer, blockMigration, migrationSnapshot, arenaGames, assetToken, t402, neuralMesh, pictureMatter, ledgerProof, multiSportEvents, navigatorOpen) {
+function surfaceIsOpen(activeId, cube, sports, contracts, person, worldEvents, rooms, deviceProjection, gesture, assetMarket, launchDistribution, launchKit, liveGateway, protocolEvidence, socialExplorer, blockMigration, migrationSnapshot, arenaGames, assetToken, t402, agentBlock, pictureMatter, ledgerProof, multiSportEvents, navigatorOpen) {
   if (activeId === "block-world" || activeId === "runtime-sync") return cube.fieldOpen;
   if (activeId === "sports-events") return sports.opened;
   if (activeId === "contracts") return contracts.opened;
@@ -1053,7 +1047,7 @@ function surfaceIsOpen(activeId, cube, sports, contracts, person, worldEvents, r
   if (activeId === "arena") return arenaGames.opened;
   if (activeId === "paycore" || activeId === "asset-token") return assetToken.opened;
   if (activeId === "t402") return t402.opened;
-  if (activeId === "neural-mesh") return neuralMesh.opened;
+  if (activeId === "agent") return agentBlock.opened;
   if (activeId === "picture-matter") return pictureMatter.opened;
   if (activeId === "ledger") return ledgerProof.opened;
   if (activeId === "multi-sport-events") return multiSportEvents.opened;
@@ -1118,7 +1112,7 @@ export function createProjectionSession({
   getArenaGamesSnapshot = () => null,
   getAssetTokenSnapshot = () => null,
   getT402Snapshot = () => null,
-  getNeuralMeshSnapshot = () => null,
+  getAgentBlockSnapshot = () => null,
   getPictureMatterSnapshot = () => null,
   getLedgerProofSnapshot = () => null,
   getMultiSportEventsSnapshot = () => null,
@@ -1161,7 +1155,7 @@ export function createProjectionSession({
     const arenaGamesSnapshot = read(getArenaGamesSnapshot);
     const assetTokenSnapshot = read(getAssetTokenSnapshot);
     const t402Snapshot = read(getT402Snapshot);
-    const neuralMeshSnapshot = read(getNeuralMeshSnapshot);
+    const agentBlockSnapshot = read(getAgentBlockSnapshot);
     const pictureMatterSnapshot = read(getPictureMatterSnapshot);
     const ledgerProofSnapshot = read(getLedgerProofSnapshot);
     const multiSportEventsSnapshot = read(getMultiSportEventsSnapshot);
@@ -1191,7 +1185,7 @@ export function createProjectionSession({
     const arenaGames = arenaGamesSlice(arenaGamesSnapshot);
     const assetToken = assetTokenSlice(assetTokenSnapshot);
     const t402 = t402Slice(t402Snapshot);
-    const neuralMesh = neuralMeshSlice(neuralMeshSnapshot);
+    const agentBlock = agentBlockSlice(agentBlockSnapshot);
     const pictureMatter = pictureMatterSlice(pictureMatterSnapshot);
     const ledgerProof = ledgerProofSlice(ledgerProofSnapshot);
     const multiSportEvents = multiSportEventsSlice(multiSportEventsSnapshot);
@@ -1224,7 +1218,7 @@ export function createProjectionSession({
       arenaGames,
       assetToken,
       t402,
-      neuralMesh,
+      agentBlock,
       pictureMatter,
       ledgerProof,
       multiSportEvents,
@@ -1261,7 +1255,7 @@ export function createProjectionSession({
       arenaGames,
       assetToken,
       t402,
-      neuralMesh,
+      agentBlock,
       pictureMatter,
       ledgerProof,
       multiSportEvents,
@@ -1298,7 +1292,7 @@ export function createProjectionSession({
       selectedArenaModeId: arenaGames.selectedModeId,
       selectedAssetTokenId: assetToken.selectedId,
       selectedT402RecordId: t402.selectedId,
-      selectedNeuralMeshId: neuralMesh.selectedId,
+      selectedAgentSectionId: agentBlock.selectedSection,
       selectedPictureMatterId: pictureMatter.selectedId,
       selectedLedgerProofId: ledgerProof.selectedId,
       selectedMultiSportEventId: multiSportEvents.selectedId,

@@ -72,7 +72,7 @@ const CURATED_ALIASES = {
   "contract-atelier": ["contracts", "contract studio", "atelier contracts"],
   "nft-atelier": ["nft", "nfts", "nft studio"],
   "wardrobe-atelier": ["wardrobe", "outfits", "clothing", "clothes"],
-  "luna-companion": ["luna", "assistant", "guide"],
+  "agent": ["luna", "assistant", "guide", "agent", "agents"],
   "person": ["person studio", "avatar", "identity", "me", "myself"],
   "person-studio": ["person", "avatar", "identity"],
   "ledger": ["prime ledger", "echoproof", "echo proof"],

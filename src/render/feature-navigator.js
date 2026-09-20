@@ -143,15 +143,7 @@ export const FEATURE_DEFINITIONS = Object.freeze([
     description: "Walk a fictional offer, route, and escrow rehearsal through a visible local sequence.",
     boundary: "Live value movement, custody, signing, release, and settlement are explicitly denied.",
   }),
-  Object.freeze({
-    id: "neural-mesh",
-    label: "Neural Mesh / Agents",
-    kicker: "advisory network",
-    focusOrganId: "bots",
-    sources: ["skynet-neural-mesh"],
-    description: "Open the Control Tower and Oracle relationship, intent, proposal, and ancestry records.",
-    boundary: "Agents are advisory fixtures. They have no autonomous execution, provider, or tool authority.",
-  }),
+  Object.freeze({     id: "agent",     label: "Agent",     kicker: "guide · design · bots · mesh",     focusOrganId: "bots",     sources: ["skynet-neural-mesh", "agent"],     description: "Open the consolidated agent block: Luna guide, Muse design companion, Bot Plaza registry, and Neural Mesh advisory graph.",     boundary: "Agents are advisory fixtures. They have no autonomous execution, provider, or tool authority. Bot Plaza contracts are fictional local rehearsals; no wallet, chain, custody, settlement, or wagering is available.",   }),
   Object.freeze({
     id: "picture-matter",
     label: "Picture Matter",
@@ -170,33 +162,9 @@ export const FEATURE_DEFINITIONS = Object.freeze([
     description: "Mint fictional collectibles, inspect their simulated provenance, or burn them — a standalone local rehearsal with no wallet or chain.",
     boundary: "Minted pieces are simulated collectibles. No wallet, chain, transfer, sale, custody, royalty, or external publication exists.",
   }),
-  Object.freeze({
-    id: "muse-agent",
-    label: "Muse Agent",
-    kicker: "design · avatar · image",
-    focusOrganId: "person",
-    sources: ["muse-agent"],
-    description: "Meet the in-world design companion: add a local profile, then compose deterministic image and avatar designs. Avatar designs dress the Person Studio hologram.",
-    boundary: "Profiles are local display names only — no login, no external account linking. Designs are deterministic and local; no AI service or network is used.",
-  }),
-  Object.freeze({
-    id: "bot-plaza",
-    label: "Bot Plaza",
-    kicker: "plug in · chat · act",
-    focusOrganId: "bots",
-    sources: ["bot-plaza"],
-    description: "Plug in any bot — yours, a friend's design, or the built-in Muse Agent. Bots chat with you, talk to each other, react to world events, and do things in the world inside capabilities you approve.",
-    boundary: "Bots are local scripted plugins. No network, no tokens, no OAuth, no external bot APIs, no identity authority. World actions are renderer-local presentation only.",
-  }),
-  Object.freeze({
-    id: "luna-companion",
-    label: "Luna Companion",
-    kicker: "talk · navigate · ask",
-    focusOrganId: "person",
-    sources: ["luna-companion"],
-    description: "Talk to Luna in plain words: she opens any feature by name, explains what each place does, and narrates where you are. A scripted local guide — no AI service, no network.",
-    boundary: "Luna navigates and explains only. No AI model, no conversation service, no network, no memory past this session.",
-  }),
+  
+  
+  
   Object.freeze({
     id: "wardrobe-atelier",
     label: "Wardrobe Atelier",
@@ -327,29 +295,29 @@ const FEATURE_BY_ID = new Map(FEATURE_DEFINITIONS.map((feature) => [feature.id, 
 // as the KEEP GOING strip in the feature detail; every id must resolve.
 export const FEATURE_HANDOFF_LINKS = Object.freeze({
   "reality-lens": Object.freeze(["person", "block-world", "projections"]),
-  person: Object.freeze(["wardrobe-atelier", "muse-agent", "arena"]),
-  rooms: Object.freeze(["social-explorer", "neural-mesh", "block-world"]),
+  person: Object.freeze(["wardrobe-atelier", "agent", "arena"]),
+  rooms: Object.freeze(["social-explorer", "agent", "block-world"]),
   "block-world": Object.freeze(["reality-lens", "projections", "migration"]),
   "runtime-sync": Object.freeze(["block-world", "projections", "gateway"]),
   migration: Object.freeze(["block-world", "runtime-sync", "reality-lens"]),
   "asset-token": Object.freeze(["asset-market", "launch-distribution", "ledger"]),
   "asset-market": Object.freeze(["asset-token", "contracts", "ledger"]),
   "launch-distribution": Object.freeze(["asset-token", "asset-market", "white-paper"]),
-  "social-explorer": Object.freeze(["rooms", "neural-mesh", "luna-companion"]),
+  "social-explorer": Object.freeze(["rooms", "agent"]),
   paycore: Object.freeze(["ledger", "t402", "contracts"]),
   contracts: Object.freeze(["contract-atelier", "paycore", "ledger"]),
   "contract-atelier": Object.freeze(["contracts", "paycore", "academy"]),
   ledger: Object.freeze(["paycore", "t402", "contracts"]),
   t402: Object.freeze(["paycore", "ledger", "gateway"]),
-  "neural-mesh": Object.freeze(["luna-companion", "rooms", "social-explorer"]),
+  "agent": Object.freeze(["rooms", "social-explorer"]),
   "picture-matter": Object.freeze(["nft-atelier", "white-paper", "reality-lens"]),
-  "nft-atelier": Object.freeze(["picture-matter", "muse-agent", "asset-market"]),
-  "muse-agent": Object.freeze(["person", "wardrobe-atelier", "nft-atelier", "bot-plaza"]),
-  "bot-plaza": Object.freeze(["muse-agent", "luna-companion", "person"]),
-  "luna-companion": Object.freeze(["neural-mesh", "rooms", "academy"]),
-  "wardrobe-atelier": Object.freeze(["person", "muse-agent", "arena"]),
+  "nft-atelier": Object.freeze(["picture-matter", "agent", "asset-market"]),
+  
+  
+  
+  "wardrobe-atelier": Object.freeze(["person", "agent", "arena"]),
   "white-paper": Object.freeze(["projections", "reality-lens", "academy"]),
-  "gesture-lens": Object.freeze(["block-world", "person", "neural-mesh"]),
+  "gesture-lens": Object.freeze(["block-world", "person", "agent"]),
   gateway: Object.freeze(["t402", "world-events", "runtime-sync"]),
   "world-events": Object.freeze(["sports-events", "multi-sport-events", "gateway"]),
   "sports-events": Object.freeze(["world-events", "multi-sport-events", "arena"]),
@@ -440,7 +408,7 @@ const FEATURE_SURFACE_ROUTES = Object.freeze({
     Object.freeze(["ROUTE", "profile → room projection"]),
     Object.freeze(["HOLD", "simulated escrow state"]),
   ]),
-  "neural-mesh": Object.freeze([
+  "agent": Object.freeze([
     Object.freeze(["CONTROL TOWER", "advisory coordination role"]),
     Object.freeze(["ORACLE", "mock evidence relationship"]),
     Object.freeze(["INTENT → PROPOSAL", "no autonomous execution"]),
@@ -455,25 +423,10 @@ const FEATURE_SURFACE_ROUTES = Object.freeze({
     Object.freeze(["PROVENANCE", "designed → minted → burned trail"]),
     Object.freeze(["NO CHAIN", "no wallet · no transfer · no sale"]),
   ]),
-  "muse-agent": Object.freeze([
-    Object.freeze(["ADD ACCOUNT", "local profile · Muse or other tag · no login"]),
-    Object.freeze(["DESIGN", "prompt → deterministic avatar / image spec"]),
-    Object.freeze(["APPLY", "dress the Person Studio hologram"]),
-  ]),
-  "bot-plaza": Object.freeze([
-    Object.freeze(["PLUG IN", "any bot · no code · no network · no tokens"]),
-    Object.freeze(["CHAT", "you ↔ bot · bot ↔ bot, all visible"]),
-    Object.freeze(["DO STUFF", "cubes · camera · features · drafts — your approved powers only"]),
-  ]),
-  "luna-companion": Object.freeze([
-    Object.freeze(["SAY IT", "plain words · quick chips"]),
-    Object.freeze(["NAVIGATE", "opens any feature by name"]),
-    Object.freeze(["LOCAL ONLY", "scripted · no AI service · no network"]),
-  ]),
   "wardrobe-atelier": Object.freeze([
     Object.freeze(["BROWSE", "four starter looks · design your own"]),
     Object.freeze(["EQUIP", "wear it · studio looks dress the 3D person"]),
-    Object.freeze(["LOCAL ONLY", "no marketplace · no ownership"]),
+    
   ]),
   "white-paper": Object.freeze([
     Object.freeze(["READ", "vision · live registry · mesh · ledger"]),

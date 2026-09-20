@@ -90,7 +90,7 @@ export const LAUNCH_KIT_FEATURES = freeze([
   ["contracts", "Contracts + Pools", "covenant rehearsal"],
   ["ledger", "Prime Ledger + EchoProof", "journal + ancestry"],
   ["t402", "T402 Value Routing", "offer → route → hold"],
-  ["neural-mesh", "Neural Mesh / Agents", "advisory network"],
+  ["agent", "Agent", "guide · design · bots · mesh"],
   ["picture-matter", "Picture Matter", "word → statement"],
   ["gateway", "World Gateway / Evidence", "public-source boundary"],
   ["world-events", "World Events / Evidence", "public-source pulse"],
