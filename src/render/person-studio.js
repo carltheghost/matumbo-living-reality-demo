@@ -1,7 +1,6 @@
 import {createPersonStudioOwner,STUDIO_OUTFITS,STUDIO_ROOMS,STUDIO_COMPANIONS} from '../domains/person-studio.js';
 import {buildPersonStudioScene} from './person-studio-scene.js?v=20260918-avatar-chess';
-import {AVATAR_FACE_CHOICES,AVATAR_FACE_MAX_DIM,AVATAR_FLUFFY_BODY_TEMPLATE_URL,avatarFaceChoiceToMascotLook,buildChibi,loadAvatarFaceChoice,resolveAvatarFaceUrl,saveAvatarFace,saveAvatarFaceChoice} from '../domains/avatar-style.js';
-import {setMascotLook} from './photo-mascot-set.js';
+import {AVATAR_FACE_CHOICES,AVATAR_FACE_MAX_DIM,AVATAR_FLUFFY_BODY_TEMPLATE_URL,buildChibi,loadAvatarFaceChoice,resolveAvatarFaceUrl,saveAvatarFace,saveAvatarFaceChoice} from '../domains/avatar-style.js';
 
 export function createPersonStudio({THREE,renderer,scene,camera,controls,world,targets,documentRoot=document,onNavigate,onFrame,onIntent,reducedMotion=false}) {
   let storage=null;try{storage=globalThis.localStorage;}catch{}
@@ -28,14 +27,14 @@ export function createPersonStudio({THREE,renderer,scene,camera,controls,world,t
     <div class="studio-title"><span class="studio-kicker">01 / Person Ω</span><h1>The same you.<br><i>Everywhere.</i></h1><p>Your identity stays yours.<br>Dress it. Move it. Make this space your own.</p></div>
     <aside class="studio-identity"><span class="studio-kicker">Your persistent identity</span><h2 data-display-name>Your digital self</h2><p class="studio-lock" data-identity-lock>Awaiting your approval</p><p>Camera input controls motion.<br>Only you change the appearance.</p><dl><dt>Appearance</dt><dd data-version>Preview</dd><dt>Identity</dt><dd data-short-id>Not created</dd><dt>Storage</dt><dd data-storage>Not saved</dd></dl></aside>
     <aside class="studio-inspector" aria-label="Personal space controls">
-      <section data-panel="identity" role="tabpanel"><span class="studio-kicker">Identity / by choice</span><h2>Make it yours.</h2><p>An original, stylized 3D avatar built from your design references. Approve this model to lock its identity; outfits remain yours to change.</p><form data-approve-form><label>Your display name<input name="displayName" type="text" maxlength="60" autocomplete="nickname" placeholder="Your name" required></label><button class="studio-primary" type="submit">Approve this avatar</button></form><div data-approved-actions hidden><button class="studio-primary" type="button" data-save>Save profile & look</button><button class="studio-secondary" type="button" data-export>Export profile</button><div class="studio-projection-record" data-identity-hash></div></div><div class="studio-face" data-face-block><span class="studio-kicker">Face / your look</span><h2>Whose face?</h2><p>Choose the face your avatar wears — here and on your chess pieces.</p><div class="studio-face-options" data-face-options></div><label class="studio-photo-upload">Use my photo<input type="file" accept="image/*" data-photo-input hidden></label><p class="studio-subtle">Your photo becomes your chibi — your likeness, simplified — on this device only. A look, not identity verification. Nothing is uploaded.</p></div><p class="studio-subtle">Local approval is not account verification or biometric enrollment. Nothing is uploaded.</p></section>
+      <section data-panel="identity" role="tabpanel"><span class="studio-kicker">Identity / by choice</span><h2>Make it yours.</h2><p>An original, stylized 3D avatar built from your design references. Approve this model to lock its identity; outfits remain yours to change.</p><form data-approve-form><label>Your display name<input name="displayName" type="text" maxlength="60" autocomplete="nickname" placeholder="Your name" required></label><button class="studio-primary" type="submit">Approve this avatar</button></form><div data-approved-actions hidden><button class="studio-primary" type="button" data-save>Save profile & look</button><button class="studio-secondary" type="button" data-export>Export profile</button><div class="studio-projection-record" data-identity-hash></div></div><div class="studio-face" data-face-block><span class="studio-kicker">Face / your look</span><h2>Whose face?</h2><p>Choose the face your chess pieces wear — Agent Smith keeps his own look.</p><div class="studio-face-options" data-face-options></div><label class="studio-photo-upload">Use my photo<input type="file" accept="image/*" data-photo-input hidden></label><p class="studio-subtle">Your photo becomes your chibi — your likeness, simplified — on this device only. A look, not identity verification. Nothing is uploaded.</p></div><p class="studio-subtle">Local approval is not account verification or biometric enrollment. Nothing is uploaded.</p></section>
       <section data-panel="wardrobe" role="tabpanel" hidden><span class="studio-kicker">Wear your world</span><h2>A look of your own.</h2><p>Change the clothing. Keep the person.</p><div class="studio-outfits"></div><button class="studio-primary studio-secondary" type="button" data-save>Save this look</button><p class="studio-subtle">These are selectable 3D outfits, not owned marketplace products.</p></section>
       <section data-panel="room" role="tabpanel" hidden><span class="studio-kicker">Your space / your atmosphere</span><h2>Somewhere to belong.</h2><p>Same avatar. A different light, horizon and mood.</p><div class="studio-room-options"></div><button class="studio-secondary" type="button" data-center>Recenter the room</button></section>
       <section data-panel="presence" role="tabpanel" hidden><span class="studio-kicker">Identity persists / motion flows</span><h2>Move. Stay you.</h2><p>Test the articulated rig. These controls supply pose only—they cannot change the face, hair or clothing.</p><label>Head rotation<input data-head type="range" min="-0.75" max="0.75" step="0.01" value="0"></label><label>Raise left arm<input data-arm type="range" min="0" max="1.4" step="0.01" value="0"></label><button class="studio-secondary" data-rest type="button">Release to rest</button><button class="studio-secondary" data-xr type="button">Enter this room in VR</button><p class="studio-subtle">Camera-to-skeleton tracking and hardware XR validation remain pending. Manual pose requires an approved avatar.</p></section>
       <section data-panel="companion" role="tabpanel" hidden><span class="studio-kicker">Luna / one companion</span><h2>Always beside you.</h2><p>Choose its embodiment. The companion ID stays the same.</p><div class="studio-companion-options"></div><p data-companion-context></p><p class="studio-subtle">Local contextual guide. No AI model or conversation service is connected here yet.</p></section>
       <p class="studio-message" data-message role="status" aria-live="polite">Preparing your space…</p>
     </aside>
-    <div class="studio-hint"><strong>Reference-built 3D / one living space</strong><span>Drag empty space to orbit · scroll to approach · click the avatar or wardrobe</span><button data-clear-view type="button">Hide controls · explore</button></div>
+    <div class="studio-hint"><strong>Agent Smith · your living space</strong><span>Drag empty space to orbit · scroll to approach · click Agent Smith to say hi · click the wardrobe to dress him</span><button data-clear-view type="button">Hide controls · explore</button></div>
     <footer class="studio-footer"><div class="studio-footer-title"><strong>One person. Connected places.</strong><small>Continue through the same Living Reality</small></div><nav class="studio-routes" aria-label="Connected features"><button data-world="block-world"><span>◇</span>Cube world</button><button data-world="rooms"><span>▣</span>Rooms</button><button data-world="contracts"><span>⌑</span>Contracts</button><button data-world="academy"><span>▤</span>Academy</button><button data-world="arena"><span>⌘</span>Arena</button><button data-world="world-events"><span>✧</span>World pulse</button></nav></footer>`;
   documentRoot.body.append(root);
   let active=false,tab='identity',savedCamera=null,message='',poseHeld=false;
@@ -73,10 +72,9 @@ export function createPersonStudio({THREE,renderer,scene,camera,controls,world,t
   }
   for(const room of STUDIO_ROOMS){const b=documentRoot.createElement('button');b.type='button';b.dataset.room=room.id;const name=documentRoot.createElement('strong'),caption=documentRoot.createElement('small');name.textContent=room.name;caption.textContent=room.caption;b.append(name,caption);b.onclick=guard(()=>{owner.chooseRoom(room.id);announce(`${room.name} · the same avatar stays with you.`);});find('.studio-room-options').append(b);}
   for(const form of STUDIO_COMPANIONS){const b=documentRoot.createElement('button');b.type='button';b.dataset.companion=form;b.textContent=form;b.onclick=guard(()=>{owner.chooseCompanion(form);announce('Companion form changed · companion identity preserved.');});find('.studio-companion-options').append(b);}
-  // Face options: the photo mascot ("You", comic-style, first), the default
-  // Tumbo character, Tumbo's own likeness, or the user's own photo styled
-  // locally ("Become Tumbo"). The choice dresses the hologram here and the
-  // user's chess pieces; a photo never leaves the device.
+  // Face options: the default Tumbo character, Tumbo's own likeness, or the
+  // user's own photo styled locally ("Become Tumbo"). The choice dresses the
+  // hologram here and the user's chess pieces; a photo never leaves the device.
   function refreshFacePressed(){
     const current=loadAvatarFaceChoice(storage);
     all('[data-face]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.face===current)));
@@ -84,18 +82,6 @@ export function createPersonStudio({THREE,renderer,scene,camera,controls,world,t
   function chooseFace(id){
     if(!saveAvatarFaceChoice(storage,id)){announce('Could not save the face choice on this browser.');return;}
     spatial.setAvatarFace(resolveAvatarFaceUrl(storage));
-    // A photo-mascot look also becomes the 3D mascot's look: persist it and
-    // notify a live mascot presence so it swaps without reopening.
-    const mascotLook=avatarFaceChoiceToMascotLook(id);
-    if(mascotLook){
-      try{setMascotLook(mascotLook);}catch{/* non-fatal: the mascot falls back to its own default */}
-      try{
-        const root=typeof window!=='undefined'?window:(typeof globalThis!=='undefined'?globalThis:null);
-        if(root&&typeof root.dispatchEvent==='function'&&typeof CustomEvent==='function'){
-          root.dispatchEvent(new CustomEvent('tumbo:mascot-look',{detail:{look:mascotLook}}));
-        }
-      }catch{/* non-fatal */}
-    }
     refreshFacePressed();
     const choice=AVATAR_FACE_CHOICES.find(c=>c.id===id);
     announce(`${choice?choice.label:'Face'} selected · your avatar and chess pieces wear it now.`);
@@ -194,7 +180,11 @@ export function createPersonStudio({THREE,renderer,scene,camera,controls,world,t
     if(savedCamera){camera.position.copy(savedCamera.position);controls.target.copy(savedCamera.target);camera.fov=savedCamera.fov;controls.minDistance=savedCamera.min;controls.maxDistance=savedCamera.max;world.visible=savedCamera.worldVisible;scene.environment=savedCamera.environment;renderer.shadowMap.enabled=savedCamera.shadows;renderer.shadowMap.type=savedCamera.shadowType;camera.updateProjectionMatrix();savedCamera=null;}
   }
   const resize=()=>frameCamera();globalThis.addEventListener('resize',resize);
-  function selectObject(object){const action=spatial.resolve(object);if(!action)return false;if(action.kind==='tab')setTab(action.id);if(action.kind==='outfit'){owner.chooseOutfit(action.id);setTab('wardrobe');}return true;}
+  // Clicking Agent Smith (head: identity tab, jacket: wardrobe, anywhere else:
+  // greet) plays his next greet reaction — wave, spin, jump.
+  const greetLines={wave:'Agent Smith waves hello.',spin:'Agent Smith does a happy spin.',jump:'Agent Smith jumps for joy.'};
+  function greetAvatar(){const kind=spatial?.greet?.();announce(kind?greetLines[kind]||'Agent Smith says hello.':'Agent Smith says hello.');}
+  function selectObject(object){const action=spatial.resolve(object);if(!action)return false;if(action.kind==='tab')setTab(action.id);if(action.kind==='greet')greetAvatar();if(action.kind==='outfit'){owner.chooseOutfit(action.id);setTab('wardrobe');}return true;}
   let pointerStart=null;
   const selectionRay=new THREE.Raycaster(),selectionPoint=new THREE.Vector2();
   const pointerDown=event=>{if(active&&event.button===0)pointerStart={id:event.pointerId,x:event.clientX,y:event.clientY};};
