@@ -1,3 +1,5 @@
+import { inspectXrSession, XR_OPTIONAL_FEATURES } from "./xr-capabilities.js";
+
 /** A single renderer/scene and the existing domain actions across desktop, VR and AR. */
 export function createImmersiveSession({THREE,renderer,scene,camera,controls,targets,onSelect,documentRoot=document,navigatorRoot=navigator}) {
   let session=null,starting=false,restore=null;
