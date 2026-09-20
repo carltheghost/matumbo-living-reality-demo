@@ -40,12 +40,14 @@ This receipt does NOT check external network activity, source-revision stability
 
 ## Required next implementation work, not claimed complete
 
-1. Add accessible mobile catalog/search access, preserving existing feature IDs and domain routing.
-2. Avoid placing scene labels over UI panels and resolve label collisions; preserve an accessible complete directory when labels are suppressed.
-3. Provide a compact/collapsible phone inspector that leaves a usable interaction region, with touch and keyboard evidence.
-4. Improve architectural detail, lighting, depth and selected-object framing, then assess actual screenshots against the references.
-5. Separately verify pointer hover/open/drag, reduced-motion behavior, touch input, phone performance and real XR hardware.
+The 2026-09-08 sections above (accessible mobile catalog/search, label-over-panel stacking, compact phone inspector) are the completed entries and stand as historical receipts.
+
+1. Prove label stability at all camera angles — the 2026-09-08 fix covers the sampled desktop overview and compact phone poses; focused-label stability at every angle and per-frame DOM measurement cost remain open.
+2. Improve architectural detail, lighting, depth and selected-object framing, then assess actual screenshots against the references.
+3. Verify pointer hover/open/drag, reduced-motion behavior, touch input, and phone performance across viewports — with evidence beyond the tested poses.
+4. Validate on physical devices and real XR hardware; browser-viewport evidence does not transfer to device claims.
 
 The existing 4D control is observed local view-state history plus explicitly proposed branches, not live worldwide historical data, physical four-dimensional rendering, predictive certainty or financial settlement history. The scene is designed architecture, not a live city model. Complete accounts, providers, collaboration, media, administration and token execution remain separate unfinished requirements of the full objective.
 
 This continuation audited existing work only. It did not open a new feature packet, deploy, commit, push or enable external execution.
+
