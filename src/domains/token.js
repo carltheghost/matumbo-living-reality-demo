@@ -1,9 +1,17 @@
-// TUMBO-SIM Ledger — simulation-first double-entry ledger with EchoProof receipts.
+// TUMBO-SIM Ledger Core — the demo's canonical token ledger (part 01: token ledger core).
+// Ported from the TUMBO-SIM ledger prototype into src/domains.
 //
 // SIMULATION ONLY. No real money, custody, signing, wallets, or chains.
 // All value is local demo points. Deterministic: seeded PRNG + logical clock.
-import { createPrng } from "./prng.js";
-import { sha256Hex, canonical } from "./sha256.js";
+//
+// Shared contract: integer fluff (1 TUMBO-SIM = 1000 fluff); assets TUMBO (native)
+// and sMIMAS (synthetic) with supply from the single ASSETS config below — never
+// quoted in UI text; accounts u:<name>, b:<name>, sys:*; every mutation carries a
+// client-supplied idempotency key; replays return the original EchoProof receipt;
+// every committed journal balances to exactly 0 per asset; verifyInvariants()
+// runs on load.
+import { createPrng } from "./token-prng.js";
+import { sha256Hex, canonical } from "./token-sha256.js";
 
 export const FLUFF_PER_TUMBO = 1000;
 export const ASSETS = Object.freeze({
@@ -85,6 +93,7 @@ export class TumboLedger {
     };
     this._prng = createPrng(seed);
     this.s.prngState = this._prng.getState();
+    this._commitListeners = []; // onCommit subscribers (event mirror; never hashed)
     this._genesis();
   }
 
@@ -189,6 +198,22 @@ export class TumboLedger {
   // invariant checks), all state is restored from the snapshot — a failed commit
   // never moves money and never wedges the ledger.
   _commitRaw(spec, opts = {}) { return this._commitInner(spec, opts).receipt; }
+  // Commit listeners (demo event mirror; not part of hashed state). The token
+  // boot subscribes so every settled action also emits a document
+  // CustomEvent('tumbo:token'). Listener errors never break the commit path.
+  onCommit(cb) {
+    if (typeof cb !== "function") throw new LedgerError("BAD_LISTENER", "onCommit needs a function");
+    this._commitListeners.push(cb);
+    return () => {
+      const i = this._commitListeners.indexOf(cb);
+      if (i >= 0) this._commitListeners.splice(i, 1);
+    };
+  }
+  _emitCommit(receipt) {
+    for (const cb of this._commitListeners.slice()) {
+      try { cb(receipt); } catch {}
+    }
+  }
   // Inner commit returns { receipt, replayed }. Callers with post-commit side
   // effects (intent records, state flips) MUST use _commitInner and skip those
   // effects when replayed — otherwise a replayed idem would mutate the WRONG
@@ -234,6 +259,7 @@ export class TumboLedger {
       this.s.receipts.push(receipt);
       this.s.receiptTip = receipt.hash;
       if (this.strict) this.verifyInvariants({ skipHolds: !!opts.deferHolds });
+      this._emitCommit(receipt); // settled (replays return before any mutation)
       return { receipt, replayed: false };
     } catch (e) {
       this._restore(snap); // failed commit => zero state change
