@@ -12,7 +12,7 @@
 //   - boot funds u:visitor + b:guide (b:guide has kind "bot")
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { TumboLedger, LedgerError, SYS, GATE_SYSTEM, GATE_ARBITER } from "../src/domains/token.js";
+import { TumboLedger, SYS, GATE_SYSTEM, GATE_ARBITER } from "../src/domains/token.js";
 import { createTokenFacade } from "../src/domains/token-facade.js";
 import { bootToken } from "../src/domains/token-boot.js";
 
