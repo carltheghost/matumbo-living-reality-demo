@@ -17,7 +17,6 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { createLivingRealityProjection } from './core/demo-projection.js?v=20260918-muse2';
-import { resolveDefaultFeature } from './core/default-landing.js';
 import { createDeviceProjection, readBrowserProjectionPreferences } from './projections/device-projection.js';
 import { createDistributionExplorer } from './render/distribution-explorer.js';
 import { createLaunchDistributionRehearsal } from './domains/distribution-registry.js?v=20260828-distribution163';
@@ -97,6 +96,7 @@ import { LUNA_CONSOLE_SOURCE, createLunaCompanionConsole } from './render/luna-c
 import { WARDROBE_ATELIER_CONSOLE_SOURCE, createWardrobeAtelierConsole } from './render/wardrobe-atelier.js?v=20260918-wdr1';
 import { WHITE_PAPER_CONSOLE_SOURCE, createWhitePaperConsole } from './render/white-paper.js?v=20260918-wp1';
 import { GESTURE_LENS_CONSOLE_SOURCE, createGestureLensConsole } from './render/gesture-lens.js?v=20260918-gl1';
+import { createHandLensSession } from './render/hand-session.js?v=20260920-hand-lens';
 import { createStoryModeConsole } from './render/story-mode.js?v=20260920-story1';
 import { LEDGER_PROOF_SOURCE } from './domains/ledger-proof.js?v=20260827-ledger1';
 import { LEDGER_PROOF_CONSOLE_SOURCE, createLedgerProofConsole } from './render/ledger-proof.js?v=20260827-ledger1';
@@ -3490,6 +3490,25 @@ gestureLensConsole = createGestureLensConsole({
   })),
 });
 window.__TUMBO_GESTURE_LENS__ = gestureLensConsole;
+// Hand Lens session pipeline (2026-09-20): hand-camera → hand-lens →
+// hand-gestures → hand-grab → block-world authorities (+ hand presence,
+// air keyboard, perf governor, AR-glasses orchestration). The session never
+// enables the camera itself — frames stay on-device and the camera starts
+// only when the user presses Enable in the hand-lens panel. A session
+// failure must never break boot, so creation + mount are guarded.
+try {
+  const handLensSession = createHandLensSession({
+    blockWorld,
+    scene,
+    camera,
+    documentRoot: document,
+    onError: (error) => console.warn('[Hand Lens]', error),
+  });
+  handLensSession.mount();
+  window.__TUMBO_HAND_LENS__ = handLensSession;
+} catch (error) {
+  console.warn('[Hand Lens] session failed to start', error);
+}
 // Prime Ledger + EchoProof is an inspectable summary surface: balanced
 // journal records and declared proof ancestry are linked in-memory only.
 ledgerProofConsole = createLedgerProofConsole({
@@ -7434,17 +7453,13 @@ if (requestedSocialPanel) {
     void socialExplorer?.refreshPublicPulse?.('url');
   }
 }
-// The no-query landing view opens the clean constellation world overview
-// (Reality Lens: labeled glass feature cubes, all consoles closed, the
-// directory closed). The cube-field interior only appears on deliberate
-// entry: ?feature=block-world / ?panel=block-world URLs, an explicit Block
-// World selection, or a cube-dive double-tap. resolveDefaultFeature is pure
-// and unit-tested; explicit routes below are never rewritten.
+// The no-query landing view is deliberately cube-first.  The focused Block
+// World is the interaction surface users can open, inspect, move, carry, and
+// route from; Reality Lens remains available as an explicit semantic view.
 const initialLandingQuery = new URLSearchParams(globalThis.location?.search ?? '');
 const initialLandingHash = String(globalThis.location?.hash ?? '');
-const defaultLandingFeature = resolveDefaultFeature(initialLandingQuery, initialLandingHash);
-if (defaultLandingFeature) {
-  featureNavigator.select(defaultLandingFeature, 'default', { updateLocation: false });
+if (!initialLandingQuery.get('feature') && !initialLandingQuery.get('panel') && !initialLandingHash) {
+  featureNavigator.select('block-world', 'default', { updateLocation: false });
   featureNavigator.close();
 } else if (initialLandingQuery.get('feature') === 'block-world' && !initialLandingQuery.get('panel')) {
   // URL-driven cube links should open directly into the field as well. The
@@ -8429,10 +8444,6 @@ const mediaPreview = createMediaPreview();
 // bar while a console is up. Desktop layout is untouched.
 initMobilePanelManager();
 function animate(){
-  // A background tab does no GPU work at all. Return before the clock delta
-  // is consumed; getDelta is clamped on resume, so no time jump leaks into
-  // the next visible frame.
-  if(document.hidden)return;
   const rawDt=Math.min(clock.getDelta(),.035),dt=rawDt*(reducedMotion?.22:1),t=clock.elapsedTime;
   if(realityAssembly?.active){
     realityAssembly.update(dt,t);

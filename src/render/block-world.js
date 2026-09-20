@@ -3432,7 +3432,7 @@ export function createBlockWorldLayer({
     if (diveGesture) {
       lastFieldTap = null;
       if (diveBinding.ok) {
-        const method = pointerType === "touch" ? "double-tap" : "double-click";
+        const method = pointerType === "touch" ? "double-tap" : pointerType === "hand" ? "double-pinch" : "double-click";
         onDiveRequest?.(cloneSnapshot({
           blockId: diveBinding.blockId,
           featureId: diveBinding.featureId,
@@ -3462,6 +3462,28 @@ export function createBlockWorldLayer({
     }
     lastFieldTap = { blockId: block.id, pointerType, timestamp, point };
     return null;
+  }
+
+  /**
+   * Hand-lens field tap entry point (additive, 2026-09-20).
+   *
+   * Raycasts the ACTUAL cube at the normalized gesture pose through the
+   * existing block-world authority pickBlockAtGesturePose — never a second
+   * raycaster. If the raycast hits nothing, this returns null with NO
+   * selection change and NO fallback to the currently selected block; a
+   * hand tap at empty space must never act on a stale selection.
+   *
+   * On a hit, it delegates to registerFieldTap with pointerType "hand",
+   * which keeps resolveDiveBinding as the final dive authorization and the
+   * field's own double-pinch window (350 ms) as the final timing authority.
+   */
+  function registerGestureFieldTap(pose = {}, input = {}) {
+    const hit = pickBlockAtGesturePose(pose);
+    if (!hit || hit.blockId == null || hit.blockId === "") return null;
+    return registerFieldTap(hit.blockId, {
+      ...input,
+      pointerType: input.pointerType || "hand",
+    });
   }
 
   /**
@@ -4207,6 +4229,7 @@ export function createBlockWorldLayer({
     doubleActivateField: activateFieldDouble,
     registerFieldTap,
     noteFieldTap: registerFieldTap,
+    registerGestureFieldTap,
     clearContentTap,
     getContentWorldPosition,
     clearFieldTap,

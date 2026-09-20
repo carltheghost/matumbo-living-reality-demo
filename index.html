@@ -16,6 +16,7 @@
     html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#020407;color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
     canvas{display:block}
     #hud{position:fixed;inset:0;pointer-events:none}
+    #explain-white-paper{pointer-events:auto}
     #brand{position:absolute;left:22px;top:18px;letter-spacing:.16em;text-transform:uppercase;font-size:13px;color:#c8f7ff;text-shadow:0 0 22px rgba(109,231,255,.65)}
     #brand b{font-size:18px;letter-spacing:.08em}
     #sub{display:block;margin-top:5px;color:#6d8d99;letter-spacing:.09em;font-size:10px}
@@ -73,6 +74,7 @@
     #feature-nav-fallback-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;margin:0;padding:0;list-style:none}
     #static-cube-readout{display:none;padding:8px 9px;border-left:2px solid rgba(255,153,126,.75);border-radius:0 8px 8px 0;background:rgba(88,42,28,.18);color:#f0c1af;font-size:8px;line-height:1.4}
     #feature-shell[data-static-fallback="active"] #static-cube-readout{display:block}
+    #feature-shell[data-static-fallback="active"] #feature-detail{display:none}
     .feature-nav-fallback-item{position:relative;display:grid;gap:2px;min-height:48px;padding:8px 8px;border:1px solid rgba(118,219,240,.18);border-radius:2px;background:linear-gradient(135deg,rgba(15,54,68,.82),rgba(7,19,27,.92));box-shadow:5px 5px 0 rgba(1,6,10,.62),inset 0 0 0 1px rgba(188,244,255,.04);color:inherit;text-decoration:none;cursor:pointer;transition:transform .16s ease,border-color .16s ease,background .16s ease}
     .feature-nav-fallback-item:hover,.feature-nav-fallback-item:focus-visible,.feature-nav-fallback-item[data-static-cube-focus="true"]{border-color:rgba(255,153,126,.8);background:linear-gradient(135deg,rgba(93,45,34,.92),rgba(17,27,31,.94));outline:none;transform:translate(-2px,-2px);box-shadow:7px 7px 0 rgba(1,6,10,.72),0 0 22px rgba(255,107,78,.15)}
     .feature-nav-fallback-item strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#cbe7ed;font-size:8px;font-weight:650}
@@ -2099,7 +2101,7 @@
         </div>
         <button id="feature-close" type="button" aria-label="Close feature navigator">×</button>
       </div>
-    <div id="feature-count" role="status" aria-live="polite">22 openable local features</div>
+    <div id="feature-count" role="status" aria-live="polite">32 openable local features</div>
       <div id="camera-actions"><button id="camera-reset" type="button">RESET CAMERA · R</button><button id="camera-input-open" type="button" aria-controls="camera-input-panel" aria-expanded="false">CAMERA MOTION</button><button id="story-mode-open" type="button" aria-controls="story-mode-console">STORIES</button><span id="camera-gesture-hint" title="Drag the empty field to orbit the camera; use the wheel or trackpad to travel.">CAMERA ORBIT: EMPTY-FIELD DRAG · WHEEL: TRAVEL</span></div>
       <nav id="feature-nav" aria-label="Openable maTumbo features">
         <div id="feature-nav-fallback" aria-label="Static local feature directory">
@@ -3750,6 +3752,10 @@
       let state = root?.dataset.runtimeState || 'loading';
       let ready = false;
       let timeoutId = null;
+      // Once the user deliberately closes the static feature directory,
+      // boot failures must not auto-reopen it. The error banner still
+      // renders; only the auto-open is suppressed.
+      let staticDirectoryDismissed = false;
 
       const clean = (value, fallback = '') => {
         if (value === null || value === undefined) return fallback;
@@ -3777,11 +3783,17 @@
         featureToggle.setAttribute('aria-expanded', String(open));
       };
       const activateStaticDirectory = () => {
-        if (!featureShell) return;
+        if (!featureShell || staticDirectoryDismissed) return;
         featureShell.dataset.staticFallback = 'active';
         setStaticDirectoryOpen(true);
       };
       const staticCubes = () => [...staticDirectory?.querySelectorAll('.feature-nav-fallback-item') ?? []];
+      // Correct the static feature-count label from the actual pre-rendered
+      // card count. This runs pre-boot; main.js owns the label after boot.
+      const featureCountEl = document.getElementById('feature-count');
+      if (featureCountEl) {
+        featureCountEl.textContent = `${staticCubes().length} openable local features`;
+      }
       const focusStaticCube = (cube, { moveFocus = false } = {}) => {
         if (!cube || state !== 'error') return;
         staticCubes().forEach((item) => item.dataset.staticCubeFocus = String(item === cube));
@@ -3807,10 +3819,13 @@
       });
       featureToggle?.addEventListener('click', () => {
         if (state !== 'error') return;
-        setStaticDirectoryOpen(!featureShell?.classList.contains('open'));
+        const willOpen = !featureShell?.classList.contains('open');
+        if (!willOpen) staticDirectoryDismissed = true;
+        setStaticDirectoryOpen(willOpen);
       });
       featureClose?.addEventListener('click', () => {
         if (state !== 'error') return;
+        staticDirectoryDismissed = true;
         setStaticDirectoryOpen(false);
       });
       globalThis.addEventListener?.('keydown', (event) => {
@@ -3818,7 +3833,9 @@
         const tagName = event.target?.tagName?.toLowerCase();
         if (tagName === 'input' || tagName === 'textarea' || tagName === 'select' || event.target?.isContentEditable) return;
         event.preventDefault();
-        setStaticDirectoryOpen(!featureShell?.classList.contains('open'));
+        const willOpen = !featureShell?.classList.contains('open');
+        if (!willOpen) staticDirectoryDismissed = true;
+        setStaticDirectoryOpen(willOpen);
       });
 
       const runtime = {
@@ -3841,11 +3858,14 @@
           const safePhase = clean(phase, 'runtime').toUpperCase();
           const moduleLoadFailed = /module load|cdn/i.test(safePhase)
             || /failed to fetch dynamically imported module|importmap|cdn/i.test(clean(error?.message));
+          const stillLoading = /still loading/i.test(safePhase);
           const hint = error?.name === 'WebGLRenderingContext' || /webgl/i.test(clean(error?.message))
             ? 'Enable WebGL or try a modern browser.'
             : moduleLoadFailed
               ? 'The Three.js renderer module did not load. Check that ./vendor/three-r179.1/ exists next to index.html — or read the live white paper, which renders the same local projection as a document with zero WebGL.'
-              : 'Reload the local demo; the static feature directory remains readable.';
+              : stillLoading
+                ? 'The renderer is still loading after 30 seconds — this can happen on a slow connection. The files may still arrive; you can wait, or reload the local demo.'
+                : 'Reload the local demo; the static feature directory remains readable.';
           if (paperLink) paperLink.hidden = !moduleLoadFailed;
           render('error', `Local 3-D surface unavailable · ${safePhase}`, `${hint} The static local feature directory and its local route links remain available; it does not replace the 3-D surface. No wallet, provider, persistence, or external execution was attempted.`);
           return state;
@@ -3861,7 +3881,7 @@
       globalThis.addEventListener?.('error', handleError, true);
       globalThis.addEventListener?.('unhandledrejection', handleError);
       timeoutId = globalThis.setTimeout?.(() => {
-        if (!ready) runtime.markFailed(null, 'module load timeout');
+        if (!ready) runtime.markFailed(null, 'module still loading');
       }, 30000) ?? null;
     })();
   </script>
