@@ -92,6 +92,8 @@ import { BOT_PLAZA_CONSOLE_SOURCE, createBotPlazaConsole } from './render/bot-pl
 import { createBotRegistry, createBotRuntime } from './domains/bot-plaza.js?v=20260918-botplaza1';
 import { createProposalQueue } from './domains/bot-plaza.js?v=20260918-ctr2';
 import { createOutcomeContracts } from './domains/outcome-contracts.js?v=20260918-ctr2';
+import { createContractLedger } from './domains/contract-ledger.js?v=20260920-cflow1';
+import { createContractFlow } from './domains/contract-flow.js?v=20260920-cflow1';
 import { mountBotPresence } from './render/bot-presence.js?v=20260918-botpresence1';
 import { CONTRACT_ATELIER_CONSOLE_SOURCE, createContractAtelierConsole } from './render/contract-atelier.js?v=20260918-ctr1';
 import { LUNA_CONSOLE_SOURCE, createLunaCompanionConsole } from './render/luna-companion.js?v=20260918-luna1';
@@ -3296,6 +3298,34 @@ botPlazaRuntime.getBus().subscribe((entry) => {
 // player, stake rehearsal credits, and resolve it with TRUE/FALSE, AND, OR,
 // or IF/ELSE logic. No wallet, chain, custody, settlement, wagering, or real
 // money exists.
+// Contract mission part 4: the Reality Lens Ω contract flow. ESPN scoreboard
+// (read-only) → auto-drafts → optional read-only Kalshi/Polymarket odds →
+// the existing Contract Atelier review queue → approval (freezes the odds
+// quote) → the shared outcome desk → lifecycle ledger → deterministic
+// grading → claimable forever. Simulated TUMBO points only: no wallet,
+// signing, custody, orders, settlement, or mainnet anywhere in the flow.
+// Feed failures never damage manual Contract Atelier operation: a failed
+// feed yields zero drafts and the queue stays exactly as it was.
+const contractLifecycleLedger = createContractLedger();
+const contractFlow = createContractFlow({
+  fetchEspnRecords: async () => {
+    try {
+      const payload = await fetchMultiSportEvents();
+      return Array.isArray(payload?.records) ? payload.records : [];
+    } catch {
+      return [];
+    }
+  },
+  outcomeDesk: sharedOutcomeDesk,
+  proposalQueue: contractProposalQueue,
+  ledger: contractLifecycleLedger,
+  // No network handle is passed on purpose: the release boundary keeps
+  // src/main.js network-free, so the flow resolves the read-only odds
+  // retrieval lazily inside its own domain module (read-only public GETs,
+  // no keys).
+});
+window.__TUMBO_CONTRACT_LEDGER__ = contractLifecycleLedger;
+window.__TUMBO_CONTRACT_FLOW__ = contractFlow;
 contractAtelierConsole = createContractAtelierConsole({
   documentRoot: document,
   // Award NFTs from outcome contracts are minted as Frozen Relics from the
@@ -3304,6 +3334,11 @@ contractAtelierConsole = createContractAtelierConsole({
   // Part 3b: the shared bot-proposal queue and the shared outcome desk.
   proposalQueue: contractProposalQueue,
   outcomeDesk: sharedOutcomeDesk,
+  // Part 4: the contract flow seam. Approval freezes the attached odds quote
+  // into the lifecycle ledger; the scan button drafts upcoming ESPN games
+  // into the same review queue Tumbo already approves from.
+  onContractApproved: ({ contract, proposal }) => contractFlow.handleContractApproved({ contract, proposal }),
+  onScanRequested: () => contractFlow.scanAndQueue(),
   onSelect: (snapshot) => {
     const organ = organs.find((candidate) => candidate.id === 'contract');
     if (organ) focusOrgan(organ, `contract-atelier-select:${snapshot.selectedId}`);

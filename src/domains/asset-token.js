@@ -6,30 +6,19 @@
  * It is deliberately not an issuer, wallet, custody service, signer,
  * settlement engine, exchange, or financial instrument. Every record emitted
  * here is local projection data and carries a simulation boundary.
- *
- * Supply numbers come from token-config.js (single source of truth).
- * TUMBO_MAX_SUPPLY is undecided and must never be rendered in UI.
  */
-
-import {
-  DEMO_REHEARSAL_SUPPLY_UNITS,
-  TUMBO_TOTAL_BASIS_POINTS,
-  TUMBO_UNIT,
-  TUMBO_SYMBOL,
-} from "./token-config.js";
 
 export const ASSET_TOKEN_SCHEMA_VERSION = 1;
 export const ASSET_TOKEN_SOURCE = "tumbo-asset-token";
-export const ASSET_TOKEN_SYMBOL = TUMBO_SYMBOL;
-export const ASSET_TOKEN_UNIT = TUMBO_UNIT;
+export const ASSET_TOKEN_SYMBOL = "TUMBO";
+export const ASSET_TOKEN_UNIT = "TUMBO-SIM";
 export const ASSET_TOKEN_KIND = "asset-token";
-export const ASSET_TOKEN_TOTAL_BASIS_POINTS = TUMBO_TOTAL_BASIS_POINTS;
-/** @deprecated Use DEMO_REHEARSAL_SUPPLY_UNITS from token-config; not a public figure. */
-export const ASSET_TOKEN_TOTAL_SUPPLY = DEMO_REHEARSAL_SUPPLY_UNITS;
+export const ASSET_TOKEN_TOTAL_BASIS_POINTS = 10_000;
+export const ASSET_TOKEN_TOTAL_SUPPLY = 1_000_000_000;
 export const ASSET_TOKEN_UPDATED_AT = "2026-09-03T00:00:00.000Z";
 
-const FIXED_SUPPLY = DEMO_REHEARSAL_SUPPLY_UNITS;
-const TOTAL_BASIS_POINTS = TUMBO_TOTAL_BASIS_POINTS;
+const FIXED_SUPPLY = ASSET_TOKEN_TOTAL_SUPPLY;
+const TOTAL_BASIS_POINTS = ASSET_TOKEN_TOTAL_BASIS_POINTS;
 
 const freeze = (value) => Object.freeze(value);
 

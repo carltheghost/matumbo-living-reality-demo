@@ -82,6 +82,14 @@ export function createContractAtelierConsole({
   onReset = null,
   proposalQueue = null,
   outcomeDesk = null,
+  // Integration seam (Reality Lens Ω contract flow): called with
+  // { contract, proposal } right after a review approval opens the book.
+  // Never allowed to break approval — failures are swallowed with a warning.
+  onContractApproved = null,
+  // Integration seam: async () => { proposals, drafts, errors } that scans
+  // ESPN for upcoming games and queues auto-drafts for review. When wired,
+  // a "scan upcoming games" control appears in the review section.
+  onScanRequested = null,
 } = {}) {
   const panel = documentRoot?.getElementById?.("contract-atelier-console");
   const closeButton = documentRoot?.getElementById?.("contract-atelier-close");
@@ -648,7 +656,7 @@ export function createContractAtelierConsole({
 
   function approveProposal(proposal) {
     try {
-      outcomesStudio.createContract({
+      const contract = outcomesStudio.createContract({
         eventId: proposal.eventId ?? proposal.id,
         eventLabel: proposal.eventLabel,
         outcomes: [...(proposal.outcomes ?? [])],
@@ -656,6 +664,15 @@ export function createContractAtelierConsole({
         status: "open",
       });
       proposalQueue.setProposalStatus(proposal.id, "approved", { by: "user" });
+      // Integration seam: freeze the odds quote (if any) at approval and
+      // audit the lifecycle. A hook failure must never unwind the approval.
+      if (typeof onContractApproved === "function") {
+        try {
+          onContractApproved({ contract, proposal });
+        } catch (hookError) {
+          console.warn("[contract-atelier] onContractApproved hook failed", hookError);
+        }
+      }
       statusEl.textContent = `APPROVED · BOOK OPENED · "${String(proposal.eventLabel).toUpperCase().slice(0, 44)}" · SIMULATED ONLY`;
     } catch (error) {
       // The draft stays pending so Tumbo can fix it and approve again.
@@ -784,6 +801,28 @@ export function createContractAtelierConsole({
     }
     reviewEl.append(element(documentRoot, "div", "contract-atelier-hint",
       `Bots bring outcome contracts here for your call. Nothing executes until you approve — all stakes are ${OUTCOME_STAKE_UNIT} with zero real value.`));
+    if (typeof onScanRequested === "function") {
+      const scanButton = element(documentRoot, "button", "contract-atelier-scan-button", "SCAN UPCOMING GAMES");
+      scanButton.type = "button";
+      scanButton.setAttribute("aria-label", "Scan ESPN for upcoming games and draft contracts for review");
+      scanButton.addEventListener("click", async () => {
+        scanButton.disabled = true;
+        statusEl.textContent = "SCANNING ESPN FOR UPCOMING GAMES…";
+        try {
+          const result = await onScanRequested();
+          const count = Array.isArray(result?.proposals) ? result.proposals.length : 0;
+          const errors = Array.isArray(result?.errors) ? result.errors.filter(Boolean) : [];
+          statusEl.textContent = errors.length
+            ? `SCAN PARTIAL · ${count} DRAFT${count === 1 ? "" : "S"} QUEUED · ${errors.length} FEED ISSUE${errors.length === 1 ? "" : "S"} (QUEUE UNAFFECTED)`
+            : `SCAN DONE · ${count} DRAFT${count === 1 ? "" : "S"} QUEUED FOR REVIEW`;
+        } catch (error) {
+          statusEl.textContent = `SCAN FAILED · ${String(error?.message ?? error).toUpperCase().slice(0, 80)} · QUEUE UNAFFECTED`;
+        } finally {
+          scanButton.disabled = false;
+        }
+      });
+      reviewEl.append(scanButton);
+    }
     const { pending, decided } = readReviewQueue();
     if (!pending.length) {
       reviewEl.append(element(documentRoot, "div", "contract-atelier-empty",

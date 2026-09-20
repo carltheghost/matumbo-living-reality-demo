@@ -13,17 +13,9 @@
  * is retained. The optional Download JSON action is a user-triggered browser
  * export of that validated text; it does not import files, persist app state,
  * or share anything externally.
- *
- * Tunables (supply fixture, basis points) come from token-config.js.
- * Public commitment is always shown on the boundary surface.
  */
 import { DEFAULT_LAUNCH_DISTRIBUTION_PREVIEW } from "../domains/distribution-registry.js";
 import { summarizeLaunchDistribution } from "./launch-console.js";
-import {
-  DEMO_REHEARSAL_SUPPLY_UNITS,
-  TUMBO_TOTAL_BASIS_POINTS,
-  TUMBO_PUBLIC_COMMITMENT,
-} from "../domains/token-config.js";
 
 export const LAUNCH_RECEIPT_CONSOLE_SOURCE = "launch-rehearsal-receipt-console";
 export const LAUNCH_RECEIPT_SOURCE = "launch-rehearsal-receipt";
@@ -37,7 +29,7 @@ export const LAUNCH_RECEIPT_SEQUENCE = Object.freeze([
   "local-boundary",
 ]);
 export const LAUNCH_RECEIPT_BOUNDARY =
-  "Launch Rehearsal Receipt is a deterministic TUMBO-SIM projection only; it does not issue or distribute a real asset, custody value, connect a wallet, sign, transfer, exchange, persist app state, contact a network, or execute code. Download JSON is an optional user-triggered local browser export only; it does not import files or share externally. Simulated points only — never real money or wagering.";
+  "Launch Rehearsal Receipt is a deterministic TUMBO-SIM projection only; it does not issue or distribute a real asset, custody value, connect a wallet, sign, transfer, exchange, persist app state, contact a network, or execute code. Download JSON is an optional user-triggered local browser export only; it does not import files or share externally.";
 
 /** Stable mount ids for a host page that wants to wire the optional console. */
 export const LAUNCH_RECEIPT_DOM_IDS = Object.freeze({
@@ -56,8 +48,8 @@ export const LAUNCH_RECEIPT_DOM_IDS = Object.freeze({
   boundary: "launch-receipt-boundary",
 });
 
-const TOTAL_BASIS_POINTS = TUMBO_TOTAL_BASIS_POINTS;
-const DEFAULT_TOTAL_SUPPLY = DEMO_REHEARSAL_SUPPLY_UNITS;
+const TOTAL_BASIS_POINTS = 10_000;
+const DEFAULT_TOTAL_SUPPLY = 1_000_000_000;
 const MAX_RECEIPT_TEXT_LENGTH = 256_000;
 const MAX_COHORTS = 64;
 const integerFormatter = new Intl.NumberFormat("en-US");
@@ -133,7 +125,7 @@ function canonicalSummary(projection) {
 }
 
 function flagsWithBoundary() {
-  return { ...RECEIPT_FLAGS, authority: "none", boundary: LAUNCH_RECEIPT_BOUNDARY, publicCommitment: TUMBO_PUBLIC_COMMITMENT };
+  return { ...RECEIPT_FLAGS, authority: "none", boundary: LAUNCH_RECEIPT_BOUNDARY };
 }
 
 function normalizeCohort(row, index) {
@@ -201,6 +193,8 @@ function reconciliationFor(summary, cohorts) {
 
 /**
  * Build one deterministic receipt from the canonical registry projection.
+ * The optional projection is read only; allocation rows are copied into a
+ * receipt-owned frozen value and no canonical object is mutated.
  */
 export function createLaunchRehearsalReceipt(projection = null) {
   const summary = canonicalSummary(projection);
@@ -222,6 +216,8 @@ export function createLaunchRehearsalReceipt(projection = null) {
     totalSupply: reconciliation.totalSupply,
     cohortCount: cohorts.length,
     cohorts,
+    // `allocationTotals` is intentionally an explicit name: consumers can
+    // inspect the allocation map without treating this receipt as a ledger.
     allocationTotals: {
       cohortCount: cohorts.length,
       totalBasisPoints: reconciliation.totalBasisPoints,
@@ -240,7 +236,6 @@ export function createLaunchRehearsalReceipt(projection = null) {
     ...RECEIPT_FLAGS,
     authority: "none",
     boundary: LAUNCH_RECEIPT_BOUNDARY,
-    publicCommitment: TUMBO_PUBLIC_COMMITMENT,
   };
   return deepFreeze(receipt);
 }
@@ -250,6 +245,7 @@ export const createLaunchRehearsalReceiptSnapshot = createLaunchRehearsalReceipt
 
 export const DEFAULT_LAUNCH_REHEARSAL_RECEIPT = createLaunchRehearsalReceipt();
 
+/** Pure summary alias for hosts that prefer a summarize-shaped API. */
 export function summarizeLaunchRehearsalReceipt(projection = null) {
   return createLaunchRehearsalReceipt(projection);
 }
@@ -262,7 +258,12 @@ export function serializeLaunchRehearsalReceipt(receipt = DEFAULT_LAUNCH_REHEARS
 export const serializeLaunchReceipt = serializeLaunchRehearsalReceipt;
 
 function errorRecord(code, path, message) { return { code, path, message }; }
+function warningRecord(code, path, message) { return { code, path, message }; }
 
+/**
+ * Copy JSON data without invoking getters or retaining executable values.
+ * A rejected value never reaches the canonical comparison or the console.
+ */
 function copyJsonValue(value, path, errors, seen, warnings) {
   if (value === null || typeof value === "string" || typeof value === "boolean") return value;
   if (typeof value === "number") {
@@ -373,6 +374,7 @@ function validateTotals(snapshot, canonical, errors) {
   });
 }
 
+/** Validate a receipt against the canonical fixed registry without mutation. */
 export function validateLaunchRehearsalReceipt(input = DEFAULT_LAUNCH_REHEARSAL_RECEIPT, projection = null) {
   const parsed = parseInput(input);
   const errors = [...parsed.errors];
@@ -386,46 +388,57 @@ export function validateLaunchRehearsalReceipt(input = DEFAULT_LAUNCH_REHEARSAL_
     compare(snapshot.source, LAUNCH_RECEIPT_SOURCE, "source", errors);
     compare(snapshot.kind, canonical.kind, "kind", errors);
     compare(snapshot.receiptId, canonical.receiptId, "receiptId", errors);
+    compare(snapshot.distributionSource, canonical.distributionSource, "distributionSource", errors);
+    compare(snapshot.launchId, canonical.launchId, "launchId", errors);
+    compare(snapshot.eventId, canonical.eventId, "eventId", errors);
+    compare(snapshot.eventStatus, canonical.eventStatus, "eventStatus", errors);
     compare(snapshot.unit, canonical.unit, "unit", errors);
     compare(snapshot.fixedSupply, true, "fixedSupply", errors);
-    validateFlags(snapshot, errors);
+    compare(snapshot.totalSupply, canonical.totalSupply, "totalSupply", errors);
+    if (typeof snapshot.updatedAt !== "string" || !snapshot.updatedAt) errors.push(errorRecord("updated-at", "updatedAt", "updatedAt must be a non-empty string."));
     validateCohorts(snapshot, canonical, errors);
     validateTotals(snapshot, canonical, errors);
+    validateFlags(snapshot, errors);
+    ["label", "description", "notes"].forEach((key) => { if (key in snapshot) warnings.push(warningRecord("ignored-metadata", key, `${key} is display metadata and is ignored.`)); });
   }
-  return deepFreeze({
+  const result = {
+    source: LAUNCH_RECEIPT_CONSOLE_SOURCE,
+    schemaVersion: LAUNCH_RECEIPT_SCHEMA_VERSION,
     valid: errors.length === 0,
+    receipt: errors.length === 0 ? deepFreeze(snapshot) : null,
+    canonical,
     errors,
     warnings,
-    snapshot: errors.length === 0 ? deepFreeze(snapshot) : null,
-    canonical,
+    cohortCount: errors.length === 0 ? asArray(snapshot.cohorts).length : 0,
+    totalBasisPoints: errors.length === 0 ? snapshot.allocationTotals?.totalBasisPoints ?? 0 : 0,
+    totalTokenUnits: errors.length === 0 ? snapshot.allocationTotals?.totalTokenUnits ?? 0 : 0,
+    exact: errors.length === 0 && snapshot.allocationTotals?.exact === true,
+    ...RECEIPT_FLAGS,
+    authority: "none",
     boundary: LAUNCH_RECEIPT_BOUNDARY,
-    publicCommitment: TUMBO_PUBLIC_COMMITMENT,
-  });
+  };
+  return deepFreeze(result);
 }
+
+export const parseLaunchRehearsalReceipt = validateLaunchRehearsalReceipt;
 export const validateLaunchReceipt = validateLaunchRehearsalReceipt;
 
 /**
- * Optional console host for the launch rehearsal receipt.
- * Boundary element always shows the public commitment.
+ * Optional DOM adapter for the host page. It keeps receipt state in memory,
+ * exposes selection/replay/reset, and renders the serialized receipt as text.
  */
 export function createLaunchReceiptConsole({
-  documentRoot = typeof document !== "undefined" ? document : null,
+  documentRoot = globalThis.document,
   projection = null,
-  opened = false,
-  onSelect,
-  onReplay,
-  onReset,
-  onDownload,
+  receipt = null,
+  onSelect = null,
+  onReplay = null,
+  onReset = null,
+  onDownload = null,
+  onValidate = null,
+  windowLike = null,
 } = {}) {
-  if (!documentRoot) throw new TypeError("documentRoot is required for the receipt console");
-  let currentProjection = canonicalProjection(projection);
-  let receiptState = createLaunchRehearsalReceipt(currentProjection);
-  let selectedId = receiptState.cohorts[0]?.id ?? null;
-  let replayCount = 0;
-  let lastReplay = null;
-  let lastDownload = null;
-  let trace = [];
-
+  if (!documentRoot?.getElementById) throw new Error("Launch receipt console needs a document-like owner");
   const panel = documentRoot.getElementById(LAUNCH_RECEIPT_DOM_IDS.panel);
   const closeButton = documentRoot.getElementById(LAUNCH_RECEIPT_DOM_IDS.close);
   const replayButton = documentRoot.getElementById(LAUNCH_RECEIPT_DOM_IDS.replay);
@@ -439,154 +452,109 @@ export function createLaunchReceiptConsole({
   const jsonEl = documentRoot.getElementById(LAUNCH_RECEIPT_DOM_IDS.json);
   const traceEl = documentRoot.getElementById(LAUNCH_RECEIPT_DOM_IDS.trace);
   const boundaryEl = documentRoot.getElementById(LAUNCH_RECEIPT_DOM_IDS.boundary);
+  if (!panel || !closeButton || !replayButton || !resetButton || !downloadButton || !statusEl || !summaryEl || !currentEl || !cohortsEl || !reconciliationEl || !jsonEl || !traceEl) throw new Error("Launch receipt console mount points are missing");
 
-  function selectedCohort() {
-    return receiptState.cohorts.find((c) => c.id === selectedId) ?? null;
+  let currentProjection = canonicalProjection(projection);
+  let receiptState = receipt ? validateLaunchRehearsalReceipt(receipt, currentProjection).receipt : null;
+  if (!receiptState) receiptState = createLaunchRehearsalReceipt(currentProjection);
+  let selectedId = receiptState.cohorts[0]?.id ?? null;
+  let opened = panel.hidden !== true;
+  let trace = [];
+  let replayCount = 0;
+  let lastReplay = null;
+  let lastDownload = null;
+
+  function setOpen(next) { opened = Boolean(next); panel.hidden = !opened; panel.classList?.toggle?.("visible", opened); panel.setAttribute?.("aria-hidden", String(!opened)); }
+  function selectedCohort() { return receiptState.cohorts.find((cohort) => cohort.id === selectedId) ?? receiptState.cohorts[0] ?? null; }
+  function pushTrace(entry) { trace = [deepFreeze({ ...entry, localOnly: true, simulation: true, externalNetwork: false, externalDistribution: false, custody: false, signing: false, transfer: false, exchange: false, persistence: false, executable: false }), ...trace].slice(0, 12); }
+  function renderSummary() {
+    summaryEl.replaceChildren();
+    [[receiptState.cohortCount, "cohorts"], [receiptState.allocationTotals.totalBasisPoints, "basis points"], [receiptState.allocationTotals.totalTokenUnits, receiptState.unit], [receiptState.allocationTotals.exact ? "EXACT" : "REVIEW", "reconciliation"]].forEach(([value, label]) => {
+      const metric = documentRoot.createElement("div"); metric.className = "launch-receipt-metric"; metric.append(createText(documentRoot, "b", "launch-receipt-metric-value", typeof value === "number" ? formatInteger(value) : value), createText(documentRoot, "span", "launch-receipt-metric-label", label)); summaryEl.appendChild(metric);
+    });
   }
-
-  function pushTrace(entry) {
-    trace = [...trace, deepFreeze({ ...entry, at: Date.now() })].slice(-32);
+  function renderCohorts() {
+    cohortsEl.replaceChildren();
+    receiptState.cohorts.forEach((cohort) => {
+      const button = documentRoot.createElement("button"); button.type = "button"; button.className = "launch-receipt-cohort"; button.dataset.cohortId = cohort.id; button.setAttribute?.("aria-pressed", String(cohort.id === selectedId));
+      button.append(createText(documentRoot, "strong", "launch-receipt-cohort-title", cohort.label), createText(documentRoot, "span", "launch-receipt-cohort-meta", `${cohort.recipientClass} · ${cohort.basisPoints} bp · ${formatInteger(cohort.tokenUnits)} ${receiptState.unit}`)); button.addEventListener("click", () => selectCohort(cohort.id, "button")); cohortsEl.appendChild(button);
+    });
   }
-
-  function setOpen(next) {
-    opened = Boolean(next);
-    if (panel) panel.hidden = !opened;
+  function renderTrace() {
+    traceEl.replaceChildren();
+    if (!trace.length) { traceEl.appendChild(createText(documentRoot, "div", "launch-receipt-empty", "No local receipt action yet.")); return; }
+    trace.forEach((entry, index) => traceEl.appendChild(createText(documentRoot, "div", "launch-receipt-trace-row", `${index + 1} · ${String(entry.action).toUpperCase()} · ${entry.cohortId ?? "all cohorts"} · LOCAL ONLY`)));
   }
-
   function render() {
-    if (statusEl) statusEl.textContent = receiptState.allocationTotals.exact ? "verified" : "review";
-    if (summaryEl) {
-      summaryEl.textContent = `${receiptState.cohortCount} cohorts · ${formatInteger(receiptState.allocationTotals.totalBasisPoints)} bps · ${receiptState.unit}`;
-    }
-    if (currentEl) {
-      const selected = selectedCohort();
-      currentEl.textContent = selected ? `${selected.label} (${selected.basisPoints} bps)` : "—";
-    }
-    if (cohortsEl) {
-      cohortsEl.textContent = "";
-      receiptState.cohorts.forEach((cohort) => {
-        const row = createText(documentRoot, "button", "launch-receipt-cohort", `${cohort.label} · ${cohort.basisPoints} bps`);
-        row.type = "button";
-        row.dataset.cohortId = cohort.id;
-        if (cohort.id === selectedId) row.setAttribute("aria-current", "true");
-        row.addEventListener("click", () => selectCohort(cohort.id, "button"));
-        cohortsEl.appendChild(row);
-      });
-    }
-    if (reconciliationEl) {
-      const r = receiptState.reconciliation;
-      reconciliationEl.textContent = `bps ${r.basisPoints.actual}/${r.basisPoints.expected} · units ${formatInteger(r.tokenUnits.actual)}/${formatInteger(r.tokenUnits.expected)} · ${r.status}`;
-    }
-    if (jsonEl) jsonEl.textContent = serializeLaunchRehearsalReceipt(receiptState);
-    if (traceEl) traceEl.textContent = trace.map((t) => t.action).join(" → ") || "—";
-    if (boundaryEl) {
-      boundaryEl.textContent = LAUNCH_RECEIPT_BOUNDARY;
-      boundaryEl.setAttribute("data-public-commitment", TUMBO_PUBLIC_COMMITMENT);
-      boundaryEl.setAttribute("role", "note");
-    }
-  }
-
-  function selectCohort(id, method = "api") {
-    const cohort = receiptState.cohorts.find((candidate) => candidate.id === id);
-    if (!cohort) return null;
-    selectedId = cohort.id;
-    lastDownload = null;
-    const snapshot = deepFreeze({
-      source: LAUNCH_RECEIPT_CONSOLE_SOURCE,
-      action: "select",
-      method,
-      cohortId: cohort.id,
-      cohort,
-      receipt: receiptState,
-      ...RECEIPT_FLAGS,
-      authority: "none",
-      boundary: LAUNCH_RECEIPT_BOUNDARY,
-      publicCommitment: TUMBO_PUBLIC_COMMITMENT,
-    });
-    pushTrace({ action: "select", cohortId: cohort.id });
-    render();
-    onSelect?.(snapshot);
-    return snapshot;
-  }
-
-  function replay(method = "api") {
-    replayCount += 1;
-    lastDownload = null;
     const selected = selectedCohort();
-    lastReplay = deepFreeze({
-      source: LAUNCH_RECEIPT_CONSOLE_SOURCE,
-      action: "replay",
-      method,
-      receiptId: receiptState.receiptId,
-      cohortId: selected?.id ?? null,
-      sequence: LAUNCH_RECEIPT_SEQUENCE,
-      replayCount,
-      exact: receiptState.allocationTotals.exact,
-      receipt: receiptState,
-      ...RECEIPT_FLAGS,
-      authority: "none",
-      boundary: LAUNCH_RECEIPT_BOUNDARY,
-      publicCommitment: TUMBO_PUBLIC_COMMITMENT,
-    });
-    pushTrace({ action: "replay", cohortId: selected?.id ?? null, replayCount });
-    render();
-    onReplay?.(lastReplay);
-    return lastReplay;
+    renderSummary(); renderCohorts(); renderTrace();
+    const exact = receiptState.allocationTotals.exact;
+    statusEl.textContent = lastDownload?.status === "downloaded"
+      ? "DOWNLOADED · LOCAL JSON · NO DISTRIBUTION"
+      : lastDownload?.status === "unavailable"
+        ? "DOWNLOAD UNAVAILABLE · SAVE JSON MANUALLY"
+        : lastDownload?.status === "rejected"
+          ? "DOWNLOAD BLOCKED · RECEIPT VALIDATION FAILED"
+          : lastReplay
+            ? `REPLAYED · LOCAL RECEIPT #${replayCount} · NO DISTRIBUTION`
+            : `READY · ${receiptState.cohortCount} COHORTS · LOCAL ONLY`;
+    currentEl.textContent = selected ? `${selected.label} · ${selected.basisPoints} BP · ${formatInteger(selected.tokenUnits)} ${receiptState.unit} · SIMULATED` : "NO COHORT SELECTED";
+    reconciliationEl.textContent = exact ? `EXACT RECONCILIATION · ${formatInteger(receiptState.allocationTotals.totalBasisPoints)} BP · ${formatInteger(receiptState.totalSupply)} ${receiptState.unit}` : "RECONCILIATION REQUIRES REVIEW";
+    reconciliationEl.dataset.status = exact ? "verified" : "review";
+    jsonEl.textContent = serializeLaunchRehearsalReceipt(receiptState);
+    if (boundaryEl) boundaryEl.textContent = LAUNCH_RECEIPT_BOUNDARY;
+    replayButton.disabled = receiptState.cohortCount === 0;
+    downloadButton.disabled = receiptState.cohortCount === 0;
+    resetButton.disabled = trace.length === 0 && replayCount === 0 && selectedId === receiptState.cohorts[0]?.id;
   }
-
-  function reset(method = "api") {
-    receiptState = createLaunchRehearsalReceipt(currentProjection);
-    selectedId = receiptState.cohorts[0]?.id ?? null;
-    replayCount = 0;
-    lastReplay = null;
-    lastDownload = null;
-    trace = [];
-    const snapshot = deepFreeze({
-      source: LAUNCH_RECEIPT_CONSOLE_SOURCE,
-      action: "reset",
-      method,
-      receipt: receiptState,
-      ...RECEIPT_FLAGS,
-      authority: "none",
-      boundary: LAUNCH_RECEIPT_BOUNDARY,
-      publicCommitment: TUMBO_PUBLIC_COMMITMENT,
-    });
-    render();
-    onReset?.(snapshot);
-    return snapshot;
+  function selectCohort(id, method = "button") {
+    const cohort = receiptState.cohorts.find((candidate) => candidate.id === id); if (!cohort) return null; selectedId = cohort.id; lastDownload = null; const snapshot = deepFreeze({ source: LAUNCH_RECEIPT_CONSOLE_SOURCE, action: "select", method, cohortId: cohort.id, cohort, receipt: receiptState, ...RECEIPT_FLAGS, authority: "none", boundary: LAUNCH_RECEIPT_BOUNDARY }); pushTrace({ action: "select", cohortId: cohort.id }); render(); onSelect?.(snapshot); return snapshot;
   }
-
-  function validate() {
-    return validateLaunchRehearsalReceipt(receiptState, currentProjection);
+  function replay(method = "button") {
+    replayCount += 1; lastDownload = null; const selected = selectedCohort(); lastReplay = deepFreeze({ source: LAUNCH_RECEIPT_CONSOLE_SOURCE, action: "replay", method, receiptId: receiptState.receiptId, cohortId: selected?.id ?? null, sequence: LAUNCH_RECEIPT_SEQUENCE, replayCount, exact: receiptState.allocationTotals.exact, receipt: receiptState, ...RECEIPT_FLAGS, authority: "none", boundary: LAUNCH_RECEIPT_BOUNDARY }); pushTrace({ action: "replay", cohortId: selected?.id ?? null, replayCount }); render(); onReplay?.(lastReplay); return lastReplay;
   }
-
-  function download(method = "api") {
-    const payload = serializeLaunchRehearsalReceipt(receiptState);
-    const base = {
-      source: LAUNCH_RECEIPT_CONSOLE_SOURCE,
-      action: "download",
-      method,
-      receiptId: receiptState.receiptId,
-      filename: LAUNCH_RECEIPT_DOWNLOAD_FILENAME,
-      ...RECEIPT_FLAGS,
-      authority: "none",
-      boundary: LAUNCH_RECEIPT_BOUNDARY,
-      publicCommitment: TUMBO_PUBLIC_COMMITMENT,
+  function reset(method = "button") {
+    receiptState = createLaunchRehearsalReceipt(currentProjection); selectedId = receiptState.cohorts[0]?.id ?? null; replayCount = 0; lastReplay = null; lastDownload = null; trace = []; const snapshot = deepFreeze({ source: LAUNCH_RECEIPT_CONSOLE_SOURCE, action: "reset", method, receipt: receiptState, ...RECEIPT_FLAGS, authority: "none", boundary: LAUNCH_RECEIPT_BOUNDARY }); render(); onReset?.(snapshot); return snapshot;
+  }
+  function validate(input) { const result = validateLaunchRehearsalReceipt(input, currentProjection); onValidate?.(result); return result; }
+  function download(method = "button") {
+    const serialized = serializeLaunchRehearsalReceipt(receiptState);
+    const validation = validate(serialized);
+    const base = { source: LAUNCH_RECEIPT_CONSOLE_SOURCE, action: "download", method, receiptId: receiptState.receiptId, filename: LAUNCH_RECEIPT_DOWNLOAD_FILENAME, ...RECEIPT_FLAGS, authority: "none", boundary: LAUNCH_RECEIPT_BOUNDARY };
+    if (!validation.valid || !validation.receipt) {
+      lastDownload = deepFreeze({ ...base, status: "rejected", reason: "validation-failed", validated: false, bytes: 0 });
+      pushTrace({ action: "download", status: "rejected" });
+      render();
+      onDownload?.(lastDownload);
+      return lastDownload;
+    }
+    const payload = serializeLaunchRehearsalReceipt(validation.receipt);
+    const runtime = windowLike ?? documentRoot.defaultView ?? globalThis;
+    const BlobCtor = runtime?.Blob;
+    const URLApi = runtime?.URL;
+    let objectUrl = null;
+    let revoked = false;
+    const revoke = () => {
+      if (revoked || !objectUrl || typeof URLApi?.revokeObjectURL !== "function") return;
+      revoked = true;
+      try { URLApi.revokeObjectURL(objectUrl); } catch { /* cleanup is best effort */ }
     };
-    let revoke = () => {};
     try {
-      const blob = new Blob([payload], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      revoke = () => URL.revokeObjectURL(url);
-      const anchor = documentRoot.createElement("a");
-      anchor.href = url;
+      if (typeof BlobCtor !== "function" || !URLApi || typeof URLApi.createObjectURL !== "function") throw new Error("download APIs unavailable");
+      const anchor = documentRoot.createElement?.("a");
+      if (!anchor || typeof anchor.click !== "function") throw new Error("download anchor unavailable");
+      const blob = new BlobCtor([payload], { type: "application/json;charset=utf-8" });
+      objectUrl = URLApi.createObjectURL(blob);
+      if (typeof objectUrl !== "string" || !objectUrl) throw new Error("download URL unavailable");
+      anchor.href = objectUrl;
       anchor.download = LAUNCH_RECEIPT_DOWNLOAD_FILENAME;
       anchor.rel = "noopener";
-      documentRoot.body.appendChild(anchor);
+      anchor.setAttribute?.("download", LAUNCH_RECEIPT_DOWNLOAD_FILENAME);
+      anchor.setAttribute?.("aria-label", "Download local launch rehearsal receipt JSON");
       anchor.click();
-      anchor.remove();
-      lastDownload = deepFreeze({ ...base, status: "downloaded", validated: true, bytes: payload.length });
-      revoke();
+      if (typeof runtime?.setTimeout === "function") runtime.setTimeout(revoke, 0);
+      else revoke();
+      lastDownload = deepFreeze({ ...base, status: "downloaded", reason: "user-triggered-local-json", validated: true, bytes: payload.length });
     } catch {
       revoke();
       lastDownload = deepFreeze({ ...base, status: "unavailable", reason: "browser-download-unavailable", validated: true, bytes: 0 });
@@ -596,62 +564,11 @@ export function createLaunchReceiptConsole({
     onDownload?.(lastDownload);
     return lastDownload;
   }
+  function syncProjection(nextProjection) { currentProjection = canonicalProjection(nextProjection); receiptState = createLaunchRehearsalReceipt(currentProjection); selectedId = receiptState.cohorts[0]?.id ?? null; replayCount = 0; lastReplay = null; lastDownload = null; trace = []; render(); return getSnapshot(); }
+  function getSnapshot() { return deepFreeze({ source: LAUNCH_RECEIPT_CONSOLE_SOURCE, receipt: receiptState, selectedId, selectedCohort: selectedCohort(), opened, trace, replayCount, lastReplay, lastDownload, ...RECEIPT_FLAGS, authority: "none", boundary: LAUNCH_RECEIPT_BOUNDARY }); }
 
-  function syncProjection(nextProjection) {
-    currentProjection = canonicalProjection(nextProjection);
-    receiptState = createLaunchRehearsalReceipt(currentProjection);
-    selectedId = receiptState.cohorts[0]?.id ?? null;
-    replayCount = 0;
-    lastReplay = null;
-    lastDownload = null;
-    trace = [];
-    render();
-    return getSnapshot();
-  }
-
-  function getSnapshot() {
-    return deepFreeze({
-      source: LAUNCH_RECEIPT_CONSOLE_SOURCE,
-      receipt: receiptState,
-      selectedId,
-      selectedCohort: selectedCohort(),
-      opened,
-      trace,
-      replayCount,
-      lastReplay,
-      lastDownload,
-      ...RECEIPT_FLAGS,
-      authority: "none",
-      boundary: LAUNCH_RECEIPT_BOUNDARY,
-      publicCommitment: TUMBO_PUBLIC_COMMITMENT,
-    });
-  }
-
-  closeButton?.addEventListener("click", () => setOpen(false));
-  replayButton?.addEventListener("click", () => replay("button"));
-  resetButton?.addEventListener("click", () => reset("button"));
-  downloadButton?.addEventListener("click", () => download("button"));
-  documentRoot.addEventListener?.("keydown", (event) => {
-    if (event.key === "Escape" && opened) setOpen(false);
-  });
-  render();
-  setOpen(opened);
-  return Object.freeze({
-    open: () => setOpen(true),
-    close: () => setOpen(false),
-    toggle: () => setOpen(!opened),
-    selectCohort,
-    select: selectCohort,
-    replay,
-    reset,
-    download,
-    validate,
-    syncProjection,
-    setProjection: syncProjection,
-    getSnapshot,
-    serialize: () => serializeLaunchRehearsalReceipt(receiptState),
-    destroy: () => {},
-  });
+  closeButton.addEventListener("click", () => setOpen(false)); replayButton.addEventListener("click", () => replay("button")); resetButton.addEventListener("click", () => reset("button")); downloadButton.addEventListener("click", () => download("button")); documentRoot.addEventListener?.("keydown", (event) => { if (event.key === "Escape" && opened) setOpen(false); }); render(); setOpen(opened);
+  return Object.freeze({ open: () => setOpen(true), close: () => setOpen(false), toggle: () => setOpen(!opened), selectCohort, select: selectCohort, replay, reset, download, validate, syncProjection, setProjection: syncProjection, getSnapshot, serialize: () => serializeLaunchRehearsalReceipt(receiptState), destroy: () => {} });
 }
 
 export const createLaunchRehearsalReceiptConsole = createLaunchReceiptConsole;
