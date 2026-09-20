@@ -570,15 +570,11 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
       return;
     }
 
-    // Hidden -> visible: never force a new location, size, depth or compact
-    // state. Only bring it into the saved local field.
+    // Hidden -> visible: the live record is authoritative. Do not re-read
+    // localStorage here: the user may have moved/resized this panel moments
+    // before hiding it and the persistence debounce may still be pending.
+    // This is the core no-jump rule.
     if (!was) {
-      const saved = ctx.store[rec.id];
-      if (rec.compactible && !saved && !rec.userInteracted) {
-        setCompact(rec, true, ctx, { animate: true });
-      } else if (rec.compactible && saved) {
-        setCompact(rec, saved.compact === true, ctx, { animate: true });
-      }
       clampRecordIntoViewport(rec, ctx);
     }
   }
