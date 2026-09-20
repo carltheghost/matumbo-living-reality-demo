@@ -1,5 +1,25 @@
 # Phone / PC / XR device projection
 
+## XR implementation status — 2026-09-20
+
+The canonical renderer now owns one shared WebXR controller in
+src/render/immersive-session.js. It exposes explicit Enter VR and Enter AR
+actions and sends both modes through the existing scene, camera, raycast target
+set, Block World authority, Sports selection, Rooms selection, Person Studio,
+and Reality Assembly selection callbacks.
+
+The session requests optional local-floor, bounded-floor, hand-tracking, and
+DOM-overlay capabilities. It checks navigator.xr.isSessionSupported() before
+requesting a session, restores the desktop background/clear state on exit, and
+fails closed when WebXR is unavailable. XR controller selection is translated
+into the same bounded local selection callback used by the canonical world.
+
+This is an implementation claim, not a hardware certification. The repository
+does not contain physical-headset measurements or a cross-device compatibility
+matrix. A real headset/phone/browser run is still required to validate each
+target combination.
+
+
 The device projection is the presentation seam for one canonical Living Reality
 world. It deliberately does not create a second state store: the browser keeps
 the same `SIMFABRIC` envelope and pairs it with local viewport, input,

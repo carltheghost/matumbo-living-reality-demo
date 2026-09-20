@@ -10,39 +10,38 @@ This is a working vision demo, not a public financial system.
 
 ## Current state
 
-Branch: work/reality-lens-person
-Build: f2c069a3 — ledger-core (+ 36 tests)
+Primary branch: `main`
 
-The demo has:
-- 31 connected features
-- 1031 out of 1031 tests passing
-- 9 out of 9 release boundaries green
+Current `main` tip: `67d5b3083b639a677c6f1f2f4360561cf5821b89` —
+merge of pull request #17 (`gpt/token-ledger-core`) on 2026-09-20.
 
-New since the last STATUS update: default landing is the clean
-constellation world overview (Reality Lens — `resolveDefaultFeature` in
-`src/core/default-landing.js`; the cube-field interior only appears on
-deliberate entry), the far-zoom single-cube merge now waits for EXTREME
-zoom-out (`LOD_FAR` 40 → 160, exported from
-`src/render/reality-assembly-scene.js`; the merged cube is a clean empty
-pulsing glass block — inner mini-cubes fade out across the merge),
-assembly panels start closed (`assembly-clean` on open), and mobile
-rendering perf fixes (secondary renderers cap pixelRatio to 1 + no MSAA
-on ≤700px viewports, visibility-paused loops in `chess-arena.js`, and a
-`document.hidden` skip in the main animation loop — `src/render/render-perf.js`).
+The current repository also contains subsequent integrated work around:
+- the canonical TUMBO-SIM token contract (`docs/TOKEN-CONTRACT.md`)
+- the local token-ledger core
+- consolidated Agent / Bot Plaza routing
+- Hand Lens camera-hand interaction
+- the comic photo mascot
+- constellation-first Reality Lens presentation and mobile-performance work
 
-New since the last STATUS update: TypeSafe judgment integration
-(`src/ai/judgments.js`, `docs/AI_JUDGMENTS.md`) — deterministic local
-intent routing for Bot Plaza (`createIntentRouter`) and readiness-ranked
-display order for "Contracts for your review" (`rankProposalsForReview`);
-default provider is the local deterministic heuristic, live Jev is never
-active in the demo.
+### Verification state
+
+The most recent explicitly recorded full-suite result in commit history is
+1235/1235 at commit `2e514446c8911ce0404bde7f94d297683385f1ce`.
+
+That result predates the later merge and documentation/integration changes.
+A fresh full-suite run against the current `main` tip should be treated as
+required before this file is used as release verification evidence.
+
+Historical browser receipts in `work/` and the detailed implementation history
+in `docs/` remain evidence for the specific revisions and checks that produced
+them; they are not automatically evidence for every later revision.
 
 ## What is live
 
 The demo includes:
 - Reality Lens Ω
-- Floating Person Studio Profile (no floor, hologram rings, glass lens interface)
-- Cinematic Avatar Chess Arena using your saved Person appearance
+- Floating Person Studio Profile
+- Cinematic Avatar Chess Arena
 - Luna Companion
 - Wardrobe Atelier
 - NFT Atelier
@@ -53,8 +52,10 @@ The demo includes:
 - t402
 - Academy
 - Sports events
-- Neural Mesh
+- Agent / Bot Plaza
 - Picture Matter
+- Hand Lens
+- comic photo mascot
 
 In Avatar Chess:
 - Pawn = foot soldier
@@ -73,8 +74,10 @@ There is:
 - No custody of assets
 - No mainnet
 - No real money
+- No external financial execution
 
-These boundaries are permanent.
+These boundaries are permanent unless a separately authorized backend and
+security review explicitly change the architecture.
 
 ## How to run
 
