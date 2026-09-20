@@ -321,7 +321,7 @@ describe("gamification service integration", () => {
     ledger.advanceTicks(60);
     assert.equal(gam.hungerOf("u:z"), 40);
     ledger.drip("u:z", "TUMBO", "drip-z");
-    assert.equal(gam.hungerOf("u:z"), 40 + feedForAction("receive"));
+    assert.equal(gam.hungerOf("u:z"), hungerAfterDecay(100, 61) + feedForAction("receive"));
   });
 
   it("settles exact hunger-tick receipts", () => {
@@ -335,8 +335,8 @@ describe("gamification service integration", () => {
       { from: 100, to: 93 },
     );
     assert.equal(gam.hungerOf("u:z"), 93);
-    const replay = gam.applyDecay("u:z", "decay-1");
-    assert.equal(replay.id, receipt.id);
+    throwsCode(() => gam.applyDecay("u:z", "decay-1"), "IDEM_MISMATCH");
+    ledger.advanceTicks(5); const second = gam.applyDecay("u:z", "decay-2"); assert.deepEqual({ from: second.meta.from, to: second.meta.to }, { from: 93, to: 88 }); assert.equal(gam.hungerOf("u:z"), 88);
   });
 
   it("detects starvation", () => {
