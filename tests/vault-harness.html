@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Token Vault live harness (simulated)</title>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/gh/carltheghost/matumbo-living-reality-demo@gpt/token-vault/vendor/three-r179.1/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/gh/carltheghost/matumbo-living-reality-demo@gpt/token-vault/vendor/three-r179.1/examples/jsm/"
+  }
+}
+</script>
+<style>
+  body{font-family:system-ui,sans-serif;background:#0a1428;color:#dff1ff;margin:0;padding:24px}
+  h1{font-size:18px;margin:0 0 4px}
+  .sim{font-size:11px;border:1px solid rgba(140,200,255,.4);border-radius:20px;padding:1px 10px;opacity:.75}
+  #summary{font-size:14px;font-weight:700;margin:12px 0;padding:10px 14px;border-radius:10px;background:rgba(40,90,170,.2)}
+  ol{font-size:13px;line-height:1.7}
+  .pass{color:#8df0b3}.fail{color:#ff9aa8}
+  .note{font-size:11px;opacity:.6;margin-top:16px}
+</style>
+</head>
+<body>
+<h1>Token Vault — live harness <span class="sim">simulated</span></h1>
+<div id="summary">running…</div>
+<ol id="results"></ol>
+<div class="note">Loads src/domains/token.js + token-vault-ui.js from this branch via CDN, runs engine assertions,
+  mounts the vault UI, and reports console errors. Simulated TUMBO-SIM points only.</div>
+<script>
+window.__harnessBoot = setTimeout(() => {
+  const s = document.getElementById('summary');
+  if (s && s.textContent === 'running…') {
+    s.textContent = 'STALLED — module import failed (CDN unreachable or JS error before first check)';
+    document.title = 'VAULT HARNESS: STALLED';
+  }
+}, 25000);
+</script>
+<script type="module">
+const BASE = 'https://raw.githack.com/carltheghost/matumbo-living-reality-demo/gpt/token-vault';
+const V = 'v=5';
+const errors = [];
+window.addEventListener('error', (e) => errors.push('window.onerror: ' + (e.message || e.type)));
+window.addEventListener('unhandledrejection', (e) => errors.push('unhandledrejection: ' + String((e.reason && e.reason.message) || e.reason)));
+const results = [];
+function check(name, fn) {
+  try { fn(); results.push({ ok: true, name }); }
+  catch (err) { results.push({ ok: false, name: name + ' — ' + (err && err.message ? err.message : String(err)) }); }
+}
+function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
+function assertThrows(fn, re) {
+  try { fn(); }
+  catch (err) {
+    if (re && !re.test(err.name + ' ' + err.message)) throw new Error('wrong error: ' + err.name + ': ' + err.message);
+    return;
+  }
+  throw new Error('did not throw');
+}
+
+const T = await import(`${BASE}/src/domains/token.js?${V}`);
+let n = 0;
+const key = () => `harness-${++n}`;
+const grants = [
+  { to: 'u:alice', asset: 'TUMBO', amountFluff: 5_000_000 },
+  { to: 'u:alice', asset: 'sMIMAS', amountFluff: 2_000_000 },
+  { to: 'u:mallory', asset: 'TUMBO', amountFluff: 2_000_000 },
+];
+const fresh = () => T.createTokenVaultLedger({ initialGrants: grants });
+
+check('sha256 FIPS-180 vector', () => {
+  assert(T.sha256HexAscii('abc') === 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad', 'hash mismatch');
+});
+check('boot: conservation + empty vault + integrity', () => {
+  const v = fresh();
+  assert(v.assertConservation() === true, 'conservation');
+  assert(v.assertVaultIntegrity() === true, 'integrity');
+  assert(v.vaultBalance('TUMBO') === 0, 'vault empty');
+  assert(v.conservationTotals().TUMBO === T.TOKEN_VAULT_SUPPLY_FLUFF, 'supply');
+});
+check('stake/deposit/lock fund sys:vault', () => {
+  const v = fresh();
+  v.stake({ from: 'u:alice', asset: 'TUMBO', amountFluff: 1_000_000, idempotencyKey: key() });
+  v.deposit({ from: 'u:alice', asset: 'TUMBO', amountFluff: 500_000, idempotencyKey: key() });
+  v.lock({ from: 'u:alice', asset: 'sMIMAS', amountFluff: 250_000, unlockTick: 100, idempotencyKey: key() });
+  assert(v.vaultBalance('TUMBO') === 1_500_000, 'vault tumbo');
+  assert(v.vaultBalance('sMIMAS') === 250_000, 'vault smimas');
+  assert(v.assertVaultIntegrity() === true, 'integrity');
+});
+check('exact integer rewards on unstake', () => {
+  const v = fresh();
+  const s = v.stake({ from: 'u:alice', asset: 'TUMBO', amountFluff: 1_000_000, idempotencyKey: key() });
+  v.advanceTick({ ticks: 200, idempotencyKey: key() });
+  const done = v.unstake({ positionId: s.position.id, idempotencyKey: key() });
+  const bal = v.balance('u:alice', 'TUMBO');
+  assert(done.extra.rewardPaidFluff === 100_000, 'reward=' + done.extra.rewardPaidFluff);
+  assert(bal === 5_100_000, 'payout got=' + bal);
+  assert(v.assertConservation() === true, 'conservation');
+});
+check('early withdrawal refused; matured withdrawal succeeds', () => {
+  const v = fresh();
+  const l = v.lock({ from: 'u:alice', asset: 'TUMBO', amountFluff: 500_000, unlockTick: 50, idempotencyKey: key() });
+  assertThrows(() => v.withdraw({ positionId: l.position.id, idempotencyKey: key() }), /LockNotMatured/);
+  v.advanceTick({ ticks: 49, idempotencyKey: key() });
+  assertThrows(() => v.withdraw({ positionId: l.position.id, idempotencyKey: key() }), /LockNotMatured/);
+  v.advanceTick({ ticks: 1, idempotencyKey: key() });
+  const done = v.withdraw({ positionId: l.position.id, idempotencyKey: key() });
+  assert(done.position.status === 'closed', 'closed');
+  assert(v.balance('u:alice', 'TUMBO') === 5_000_000, 'principal back');
+});
+check('double release rejected; replay safe', () => {
+  const v = fresh();
+  const d = v.deposit({ from: 'u:alice', asset: 'TUMBO', amountFluff: 100_000, idempotencyKey: key() });
+  const k1 = key();
+  const r1 = v.withdraw({ positionId: d.position.id, idempotencyKey: k1 });
+  assertThrows(() => v.withdraw({ positionId: d.position.id, idempotencyKey: key() }), /PositionState/);
+  assert(v.withdraw({ positionId: d.position.id, idempotencyKey: k1 }) === r1, 'replay identical');
+  assert(v.vaultBalance('TUMBO') === 0, 'vault empty');
+});
+check('pocket ownership', () => {
+  const v = fresh();
+  v.save({ from: 'u:alice', goal: 'bike', asset: 'TUMBO', amountFluff: 300_000, idempotencyKey: key() });
+  assert(T.pocketOwner('u:alice:save:bike') === 'u:alice', 'owner');
+  assertThrows(() => v.withdraw({ owner: 'u:mallory', goal: 'bike', asset: 'TUMBO', amountFluff: 300_000, idempotencyKey: key() }), /InsufficientFunds/);
+  v.withdraw({ owner: 'u:alice', goal: 'bike', asset: 'TUMBO', amountFluff: 100_000, idempotencyKey: key() });
+  assert(v.balance('u:alice:save:bike', 'TUMBO') === 200_000, 'pocket balance');
+  assert(v.assertVaultIntegrity() === true, 'pockets never touch vault');
+});
+check('receipt chain verifies', () => {
+  const v = fresh();
+  v.stake({ from: 'u:alice', asset: 'TUMBO', amountFluff: 10_000, idempotencyKey: key() });
+  v.advanceTick({ ticks: 2, idempotencyKey: key() });
+  assert(v.verifyReceiptChain() === true, 'chain');
+});
+check('facade adapter + CustomEvent', () => {
+  const seen = [];
+  document.addEventListener('tumbo:token', (e) => seen.push(e.detail.type));
+  const facade = T.attachTokenVault(undefined, { initialGrants: [{ to: 'u:you', asset: 'TUMBO', amountFluff: 1000 }] });
+  assert(typeof facade.balance === 'function' && typeof facade.fmt === 'function' && typeof facade.on === 'function', 'facade shape');
+  assert(facade.fmt(1234567) === '1,234.567 TUMBO-SIM', 'fmt');
+  facade.tokenVault.stake({ from: 'u:you', asset: 'TUMBO', amountFluff: 500, idempotencyKey: key() });
+  assert(seen.includes('balance-changed') && seen.includes('receipt'), 'events dispatched: ' + seen.join(','));
+});
+
+await import(`${BASE}/src/domains/token-vault-ui.js?${V}`);
+await new Promise((r) => setTimeout(r, 2500));
+check('vault UI chip mounted', () => {
+  assert(document.querySelector('[data-vault-chip]'), 'no chip element');
+});
+check('vault UI chip renders a WebGL canvas', () => {
+  assert(document.querySelector('[data-vault-chip] canvas'), 'no chip canvas');
+});
+check('zero console errors / unhandled rejections', () => {
+  assert(errors.length === 0, errors.join(' | '));
+});
+
+const passed = results.filter((r) => r.ok).length;
+const list = document.getElementById('results');
+for (const r of results) {
+  const li = document.createElement('li');
+  li.className = r.ok ? 'pass' : 'fail';
+  li.textContent = (r.ok ? 'PASS — ' : 'FAIL — ') + r.name;
+  list.appendChild(li);
+}
+const summary = `${passed}/${results.length} checks passed`;
+document.getElementById('summary').textContent = summary;
+document.title = `VAULT HARNESS: ${summary}`;
+clearTimeout(window.__harnessBoot);
+</script>
+</body>
+</html>
