@@ -16,6 +16,7 @@ import { createBlockWorldContribution } from "../domains/block-world.js";
 import { createBlockMigrationManifest } from "../domains/block-migration.js";
 import { createArenaGamesContribution } from "../domains/arena-games.js";
 import { createAcademyContribution } from "../domains/academy.js";
+import { createConnectedCityContribution } from "../domains/connected-city.js?v=20260920-p240";
 import { createNftAtelierContribution } from "../domains/nft-atelier.js";
 import { createFrozenRelicsContribution } from "../domains/frozen-relics.js";
 import { createMuseAgentContribution } from "../domains/muse-agent.js";
@@ -123,6 +124,11 @@ export function createLivingRealityProjection({ projectedAt = LIVING_REALITY_SAM
   // first-class projection contribution. Answers and demo XP remain owned by
   // the page-session console; the canonical contribution is the fixed path.
   const academy = createAcademyContribution({ updatedAt: projectedAt });
+  // Connected City restores the next connected-site concept: a district map
+  // whose charters keep every connected surface inside the local rehearsal
+  // boundary. The canonical contribution is the fixed district fixture; visit
+  // state remains owned by the page-session console.
+  const connectedCity = createConnectedCityContribution({ updatedAt: projectedAt });
   const nftAtelier = createNftAtelierContribution({ updatedAt: projectedAt });
   // Frozen Relics: the living glass-cube collection — immutable frozen core,
   // append-only evolving life. Projection carries one sealed sample relic.
@@ -232,6 +238,7 @@ export function createLivingRealityProjection({ projectedAt = LIVING_REALITY_SAM
       blockMigration,
       arenaGames,
       academy,
+      connectedCity,
       nftAtelier,
       frozenRelics,
       museAgent,

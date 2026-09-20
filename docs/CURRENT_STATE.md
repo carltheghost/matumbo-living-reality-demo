@@ -1,5 +1,100 @@
 # Current State
 
+## Packet 240 — 233b travel (FIDELITY RESTORATION, browser-verified 2026-09-20 — desktop; mobile 390×844 blocked by the same pre-existing headless-env hang seen in Packets 238/239, reproduced identically on the Packet 239 base)
+
+Double-click / double-tap travel from the Reality Lens assembly into each
+feature's own glass block world, with breadcrumb; the `connected-city` domain
+is restored together with its consumer so no live window dangles. Labeled
+fidelity restoration, not full law compliance.
+
+- NEW `src/domains/connected-city.js` (`26781b5` verbatim, 199 lines, zero
+  imports): 7 districts (Finance Row, Academy Quarter, Arena Grounds,
+  Contract Row, Ledger Plaza, Gateway Harbor, Social Market),
+  `createConnectedCityContribution`, charter-check state helpers.
+- `src/render/feature-navigator.js`: `connected-city` entries restored as the
+  exact inverse of the `ceb1411` removal — `FEATURE_DEFINITIONS` (id
+  `connected-city`, label "Connected City", kicker "districts → connected
+  sites", seven-district description, local-rehearsal boundary),
+  `FEATURE_HANDOFF_LINKS` (`connected-city → [academy, block-world,
+  social-explorer]`), `FEATURE_SURFACE_ROUTES` (DISTRICT MAP / CHARTER CHECK /
+  TOUR PROGRESS). The removal held no rail labels, so none were restored.
+- `src/core/demo-projection.js` (note: the `ceb1411` removal touched
+  `src/core/`, not `src/render/` — the packet brief mislabeled the path; the
+  edit follows the removal): import + 4-line comment + contribution +
+  registry entry restored (7 lines); import carries `?v=20260920-p240`.
+- NEW `src/render/feature-worlds.js` (`5405437`, 466 lines, with port-time
+  adaptations): static `CONNECTED_CITY_DISTRICTS` import (domain restored in
+  the same packet — no async restructuring); **named deliberate deviation**:
+  the 233-local `glass()`/`edgeMaterial()` are replaced by the canon
+  `glass-style.js` builders — node-verified param-identical for all three
+  `glass()` call shapes; `edgeMaterial()` is identical except the canon
+  `depthWrite:false` (the 233 local omitted it; the canon recipe is the
+  standard — kills recipe drift). The shared 350ms/28px double-tap detector
+  disambiguates on the feature-world canvas (all pointer types, no native
+  `dblclick` — dive-path parity, mouse and touch share one click path) and on
+  the projected-label buttons (plain HTML buttons need the manual counter —
+  `ondblclick` doesn't fire on mobile). Semantics mirror the dive path:
+  single-tap selects immediately, double-tap selects + performs (enters/uses).
+  `destroy()` removes BOTH `root` and `styleEl` (verified, no leak). The arena
+  World Chess cube + `'world-chess:open'` dispatch port verbatim — the
+  listener lands in 242; the event contract is the seam.
+- NEW `src/render/double-tap.js`: shared `createDoubleTapDetector({windowMs:
+  350, distancePx:28, onDoubleTap, onSingleTap})` — no timers, synchronous
+  last-tap comparison exactly like the dive path: same target + same pointer
+  type within the bounds = double, otherwise a fresh single. `block-world.js`'s
+  dive constants stay as-is (convergence is a follow-up, not Phase A).
+- `src/render/reality-assembly.js` (`5405437` hunks, verified context):
+  `createFeatureWorlds` with `onEnter`/`onExit` hiding `spatial.layer`;
+  native `dblclick` on the assembly canvas KEPT as the deliberate mouse path
+  (the law names double-click; the no-`dblclick` policy is
+  block-world-canvas-specific) PLUS the shared detector for touch/pen parity
+  (mouse taps are not fed to the detector — no double-fire); Escape exits the
+  world first; `open()`: `maxDistance` 80→240, fog `.009`→`.004`, overview
+  camera `(8,18,64)` desktop / `(10,22,84)` mobile; field radius `7.2/14`→
+  `4.2/8`; focus `9/11`→`5.5/6.5`; `update()` delegates to `worlds` while
+  inside; `featureWorlds` in the API; `window.__TUMBO_FEATURE_WORLDS__`
+  exposed by the worlds module.
+- **studio↔world visibility invariant (both directions, implemented):**
+  `worlds.enter()` closes the studio if open (in `feature-worlds.js`'s
+  `enter()`, before the travel tween captures the camera); `studio.open()`
+  exits any active feature world first (idempotent wrap installed at the
+  reality-assembly integration seam — `person-studio.js` is another packet's
+  file; `worlds.exit()` is a no-op when no world is active). Declared
+  INTENDED: panels and chips stay usable inside feature worlds (world
+  overlay root z-200 — above the assembly UI's z-105 stacking context so
+  the back button/title/labels are never occluded or unclickable, below
+  the story drawer z-900 and dive chips z-1200; the world overlay root is
+  `pointer-events:none` except back button/labels, so assembly controls
+  still receive clicks through it).
++- **Audit fixes (2026-09-20, pre-push):** (1) the world overlay was z-30,
++  below the assembly UI (z-105) — the assembly header covered the world's
++  back button, making it unclickable by mouse (found by the travel probe:
++  `elementFromPoint` at the back button hit the header). Raised to z-200.
++  (2) the assembly's HTML node labels kept projecting over the world
++  (the 3D layer hides but `update()` early-returns in-world, freezing
++  labels visible) — `onEnter` now hides them; the resumed update loop
++  re-projects them on exit. (3) with the overlay at z-200 the back button
++  (top:14px) was still covered by the fixed `city-journey` panel (z-9000,
++  travel probe: `elementFromPoint` at the button hit
++  `SPAN.surface-grip-label`) — the button moved to top:112px, verified
++  hit-testable and clickable (real `mouse.click` at its rect exits to
++  `lens`; Playwright's `page.click` hangs in its scroll-into-view step for
++  this button — a headless-shell quirk on a non-scrolling page, not an app
++  bug).
+- **Gesture semantics (written down once):** assembly double-click →
+  feature glass world; block-world double-tap → dive interior; same law
+  gesture, view-scoped destinations.
+- Cache-bust token `?v=20260920-p240` on: reality-assembly.js's
+  feature-worlds/double-tap imports, feature-worlds.js's double-tap and
+  connected-city imports, demo-projection.js's connected-city import,
+  main.js's reality-assembly import. `glass-style.js` keeps its single
+  `?v=20260920-p239` form in the new feature-worlds.js importer (the module
+  is unchanged in this packet — a second form would split module state).
+  market-builder.js untouched.
+
+Out of scope (per plan): async restructuring; stubbing (never); world-chess
+mount (242); dive-constant convergence (follow-up).
+
 ## Packet 239 — 233c glass language (FIDELITY RESTORATION, browser-verified 2026-09-20 — desktop; mobile 390×844 blocked by a pre-existing headless-env hang, reproduced identically on the Packet 238 base)
 
 One translucent-blue glass cube style everywhere, ported verbatim from the
@@ -215,7 +310,7 @@ record of the republish — the 225–232 summaries are intentionally not backfi
 
 ## Financial Academy restored into Living Reality (implemented 2026-09-04)
 
-Mission Control: 34 openable feature routes. The restored Financial Academy is
+Mission Control: 35 openable feature routes. The restored Financial Academy is
 a first-class `financial-academy` contribution, Block World feature cube, direct
 `?feature=academy` route, and interactive console. Its four connected lessons
 cover Financial OS authority, HTTP 402/x402, T402, and PAYCORE/evidence. Answers
