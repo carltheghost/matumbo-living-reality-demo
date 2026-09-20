@@ -96,6 +96,7 @@ import { LUNA_CONSOLE_SOURCE, createLunaCompanionConsole } from './render/luna-c
 import { WARDROBE_ATELIER_CONSOLE_SOURCE, createWardrobeAtelierConsole } from './render/wardrobe-atelier.js?v=20260918-wdr1';
 import { WHITE_PAPER_CONSOLE_SOURCE, createWhitePaperConsole } from './render/white-paper.js?v=20260918-wp1';
 import { GESTURE_LENS_CONSOLE_SOURCE, createGestureLensConsole } from './render/gesture-lens.js?v=20260918-gl1';
+import { createStoryModeConsole } from './render/story-mode.js?v=20260920-story1';
 import { LEDGER_PROOF_SOURCE } from './domains/ledger-proof.js?v=20260827-ledger1';
 import { LEDGER_PROOF_CONSOLE_SOURCE, createLedgerProofConsole } from './render/ledger-proof.js?v=20260827-ledger1';
 import { LIVE_GATEWAY_SOURCE } from './domains/live-gateway.js?v=20260827-gateway1';
@@ -171,6 +172,7 @@ let museAgentConsole = null;
 let botPlazaRegistry = null;
 let botPlazaRuntime = null;
 let botPlazaConsole = null;
+let storyModeConsole = null;
 let botPresence = null;
 let contractProposalQueue = null;
 let sharedOutcomeDesk = null;
@@ -3198,6 +3200,66 @@ botPlazaConsole = createBotPlazaConsole({
   })),
 });
 window.__TUMBO_BOT_PLAZA__ = { registry: botPlazaRegistry, runtime: botPlazaRuntime, console: botPlazaConsole };
+// Story Mode — guided storylines through the world. The planner/player UI is
+// the story-mode console; beat navigation resolves here through the feature
+// navigator (camera focus + local console) or direct camera flights for
+// world-view beats. Local projection only: no network, wallet, custody,
+// mainnet, or external execution.
+function navigateStoryBeat(beat) {
+  if (!beat || typeof beat !== 'object') return;
+  const refId = String(beat.refId ?? '');
+  try {
+    if (beat.kind === 'feature') {
+      featureNavigator?.select?.(refId, 'story-mode');
+      return;
+    }
+    if (beat.kind === 'world-view') {
+      if (refId === 'giant-block') {
+        // Far view: the world merges into one giant pulsing glass block.
+        desiredCameraPosition.set(0, 30, 55);
+        cameraPositionTween = reducedMotion ? 0.16 : 1;
+        return;
+      }
+      if (refId === 'constellation') {
+        featureNavigator?.select?.('block-world', 'story-mode');
+        return;
+      }
+      if (refId === 'tentacles') {
+        featureNavigator?.select?.('gateway', 'story-mode');
+        return;
+      }
+      return;
+    }
+    if (beat.kind === 'contract') {
+      featureNavigator?.select?.('contracts', 'story-mode');
+      return;
+    }
+    if (beat.kind === 'relic') {
+      // Frozen Relics live as a section inside the NFT Atelier console.
+      featureNavigator?.select?.('nft-atelier', 'story-mode');
+      return;
+    }
+    if (beat.kind === 'bot') {
+      if (refId && typeof botPlazaConsole?.openWithBot === 'function') {
+        botPlazaConsole.openWithBot(refId);
+      } else {
+        featureNavigator?.select?.('bot-plaza', 'story-mode');
+      }
+    }
+  } catch {
+    // Navigation is best-effort; the story HUD always advances regardless.
+  }
+}
+storyModeConsole = createStoryModeConsole({
+  documentRoot: document,
+  onNavigateBeat: (beat) => navigateStoryBeat(beat),
+  onEvent: (type, detail) => {
+    void type;
+    void detail;
+  },
+});
+window.__TUMBO_STORY_MODE__ = storyModeConsole;
+document.getElementById('story-mode-open')?.addEventListener('click', () => storyModeConsole?.open());
 // Bot presences live in the 3D world as glass orbs; bot chatter shows as
 // speech bubbles above them, and clicking one opens the chat.
 botPresence = mountBotPresence({
