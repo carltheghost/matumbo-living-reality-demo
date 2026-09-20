@@ -1,8 +1,86 @@
 # Current State
 
+## Packet 237 — Avatar-A: fidelity restoration, mechanical restore (verified 2026-09-20)
+
+Restored the Packet 235/236 avatar files that `ceb1411` removed, as pure
+additions — zero behavior change, nothing visible changes, no live code imports
+the restored modules yet (the only new references are the two classic script
+tags in `index.html`). Verbatim from `c1d5a07`:
+`vendor/jiggle-physics/jiggle-physics.js`, `vendor/jiggle-physics/jiggle-chain.js`,
+`vendor/jiggle-physics/LICENSE` (BSD-3-Clause, © 2026 xlovecam — attribution
+kept), `src/render/tumbo-chibi-rig.js`, `src/render/tumbo-fluffy-rig.js`.
+`index.html` loads both vendored engine scripts (cache-busted
+`?v=20260920-p237`) immediately before the `./src/main.js` module tag; they
+publish `window.createJigglePhysics` / `window.createJiggleChain` /
+`window.createJiggleDriver`, and the app degrades gracefully without them.
+Domain data restored additively: `AVATAR_BLINK`/`avatarBlink`, `AVATAR_GREET` +
+`avatarWavePose`/`avatarSpinPose`/`avatarJumpPose`, `avatarBowPose`,
+`AVATAR_CELEBRATE`, `avatarWalkPhase` (`src/domains/avatar-motion.js`);
+`resolveFaceDecalUrl` (`src/domains/avatar-style.js`); `muffs` on all four
+`STUDIO_OUTFITS` (`src/domains/person-studio.js`). Deleted the orphaned
+`assets/avatar/avatar-bust.webp` (no JS/HTML references; its one JSON manifest
+entry was stale metadata in an unread file and was removed with it).
+Verification: `node --check` on all five restored files plus the three edited
+domain files; vendored engine loads under a `window` shim with all three
+factory functions present; headless-Chromium cold load — desktop 1440×900 and
+mobile 390×844 both with zero console errors, zero page errors, zero failed
+requests; Person Studio opens exactly as before (flat hologram still present —
+unchanged by this packet). Texture baseline: `renderer.info.memory.textures`
+is not reachable from page context (gap for the ≤32 MB audit); the
+default-framebuffer estimate at 1440×900 is 1440×900×4×1.33 ≈ 6.6 MB. Mobile
+note: the 390×844 main thread goes unresponsive under headless SwiftShader
+(evaluate/screenshot time out) — reproduced identically on pristine `e8ebc51`,
+so pre-existing and not caused by this packet. This packet is labeled fidelity
+restoration, never full law compliance.
+
+## `e8ebc51` — raycast taps no longer swallowed by invisible assembly meshes (2026-09-20)
+
+Three.js Raycaster does not skip meshes whose ancestor layer is hidden. Reality
+Assembly nodes (visible=true on the mesh, hidden layer root when the assembly
+UI is inactive) won the raycast over block-world cubes, failed `resolveTarget`,
+and taps were dropped — canvas taps could not select cubes, making Cube Dive
+Transport unreachable by touch/mouse. `src/main.js` now filters to the first
+world-visible hit via `isWorldVisible()`/`raycastVisibleTargets()` at all five
+`raycastTargets` call sites. Verified: canvas clicks select blocks, double-tap
+dive reaches the 'Inside Rooms + Messaging' HUD. 903/903 tests, 9/9 release
+boundaries, local-only/simulated.
+
+## `456479b` — cube dive transport: double-tap flies inside the cube (2026-09-19)
+
+Double-tap/double-click on a portal cube now transports the camera through its
+face into an inverted interior world tinted by the feature's accent, instead of
+just toggling a panel. Inside HUD: Dive deeper (nested cubes), Next cube (flies
+straight on via `FEATURE_HANDOFF_LINKS`, no return to field), Field (restore
+overview pose). Single tap still selects, drag still moves; 350ms/28px
+disambiguation, no native dblclick path. Mobile: bottom-docked HUD with 44px
+targets; panel manager rewritten so only one floating panel shows at a time on
+<=700px viewports. 903/903 tests, 9/9 release boundaries, local-only/simulated.
+
+## `ceb1411` — "Republish demo from canonical work/reality-lens-person": clobbering republish, not a design decision (2026-09-19)
+
+`ceb1411` ("Republish demo from canonical work/reality-lens-person @ b28a03f5")
+re-published the demo from the older `work/reality-lens-person` branch and, in
+doing so, clobbered the Packet 235/236 avatar work. This was a republish
+accident, **not a design decision**: nothing about the articulated-3D Tumbo
+avatar was deliberately removed. What it did: (1) deleted 6 files —
+`src/render/tumbo-chibi-rig.js`, `src/render/tumbo-fluffy-rig.js`,
+`vendor/jiggle-physics/jiggle-physics.js`, `vendor/jiggle-physics/jiggle-chain.js`,
+`vendor/jiggle-physics/LICENSE`, and `src/domains/connected-city.js`;
+(2) dropped the motion-pose exports (`AVATAR_BLINK`/`avatarBlink`,
+`AVATAR_GREET` + wave/spin/jump poses, `avatarBowPose`, `AVATAR_CELEBRATE`,
+`avatarWalkPhase`) from `src/domains/avatar-motion.js`; (3) dropped
+`resolveFaceDecalUrl` from `src/domains/avatar-style.js`; (4) dropped `muffs`
+from the four `STUDIO_OUTFITS` in `src/domains/person-studio.js`; (5) truncated
+this log by deleting the six newest packet entries (227–232), leaving it at the
+early-September Financial Academy entry. The canon-divergence consequence: the
+Person Studio avatar regressed to a flat hologram sprite, violating the
+articulated-3D avatar law. Packets 225–236 are superseded **as tree state**
+(their commits remain in the history for reference); this entry is the single
+record of the republish — the 225–232 summaries are intentionally not backfilled.
+
 ## Financial Academy restored into Living Reality (implemented 2026-09-04)
 
-Mission Control: 23 openable feature routes. The restored Financial Academy is
+Mission Control: 34 openable feature routes. The restored Financial Academy is
 a first-class `financial-academy` contribution, Block World feature cube, direct
 `?feature=academy` route, and interactive console. Its four connected lessons
 cover Financial OS authority, HTTP 402/x402, T402, and PAYCORE/evidence. Answers

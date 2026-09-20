@@ -1996,53 +1996,6 @@
       .cube-dive-hud-row { width: 100%; }
       .cube-dive-hud-row button { flex: 1; padding: 0 8px; }
     }
-    /* Story Mode console + player HUD (2026-09-20): closed by default,
-       materialized only on user interaction. Both are <aside> panels so the
-       mobile panel manager collapses them to one visible panel on <=700px. */
-    #story-mode-root { position: absolute; inset: 0; pointer-events: none; z-index: 32; }
-    #story-mode-console {
-      position: absolute; right: 20px; top: 145px; width: min(560px, calc(100vw - 40px));
-      max-height: calc(100vh - 190px); display: flex; flex-direction: column; gap: 10px;
-      padding: 15px; border: 1px solid rgba(120,180,255,.42); border-radius: 14px;
-      background: linear-gradient(160deg, rgba(8,22,44,.98), rgba(4,10,16,.98));
-      box-shadow: 0 24px 80px rgba(0,0,0,.64); pointer-events: auto; overflow: auto;
-      color: #eaf7ff; font-size: 13px;
-    }
-    #story-mode-console[hidden] { display: none; }
-    #story-mode-console strong { color: #f2fbff; }
-    #story-mode-console button {
-      background: rgba(30,60,110,.6); color: #eaf7ff; border: 1px solid rgba(120,180,255,.35);
-      border-radius: 8px; font-size: 12px; padding: 6px 10px; cursor: pointer; margin: 2px;
-    }
-    #story-mode-console button:active { background: rgba(50,90,150,.7); }
-    #story-mode-console input, #story-mode-console select, #story-mode-console textarea {
-      background: rgba(10,25,45,.9); color: #eaf7ff; border: 1px solid rgba(120,180,255,.3);
-      border-radius: 8px; font-size: 12px; padding: 6px 8px; margin: 2px; max-width: 100%;
-    }
-    #story-mode-boundary { font-size: 10px; letter-spacing: .04em; color: #9db8d8; opacity: .85; }
-    #story-mode-new-error, #story-mode-beat-error { color: #ff9d9d; font-size: 12px; min-height: 1em; }
-    #story-mode-hud {
-      position: absolute; left: 50%; transform: translateX(-50%); bottom: 18px;
-      width: min(520px, calc(100vw - 32px)); padding: 12px 14px;
-      border: 1px solid rgba(120,180,255,.42); border-radius: 12px;
-      background: rgba(5,16,30,.96); box-shadow: 0 16px 48px rgba(0,0,0,.6);
-      pointer-events: auto; color: #eaf7ff;
-    }
-    #story-mode-hud[hidden] { display: none; }
-    #story-mode-hud-title { font-size: 16px; font-weight: 700; color: #f2fbff; margin: 2px 0; }
-    #story-mode-hud-count { font-size: 10px; letter-spacing: .18em; color: #9db8d8; text-transform: uppercase; }
-    #story-mode-hud-caption { font-size: 12px; color: #c8dcee; margin: 4px 0 8px; }
-    #story-mode-hud button {
-      background: rgba(30,60,110,.6); color: #eaf7ff; border: 1px solid rgba(120,180,255,.35);
-      border-radius: 8px; font-size: 13px; padding: 8px 14px; cursor: pointer; margin-right: 6px;
-      min-height: 44px; min-width: 44px;
-    }
-    #story-mode-hud-progress { height: 4px; border-radius: 2px; background: rgba(120,180,255,.18); margin-top: 8px; }
-    #story-mode-hud-progress-fill { height: 100%; border-radius: 2px; background: #78b4ff; width: 0; }
-    @media (max-width: 700px) {
-      #story-mode-console { right: 12px; left: 12px; width: auto; top: 120px; }
-      #story-mode-hud { left: 12px; right: 12px; transform: none; bottom: 12px; width: auto; }
-    }
     /* Mobile panel manager (2026-09-18): one floating panel at a time on
        narrow screens. While any console is up, the bottom cube-field hint bar
        hides so it cannot collide with panels; every panel is boxed inside the
@@ -2100,7 +2053,7 @@
         <button id="feature-close" type="button" aria-label="Close feature navigator">×</button>
       </div>
     <div id="feature-count" role="status" aria-live="polite">22 openable local features</div>
-      <div id="camera-actions"><button id="camera-reset" type="button">RESET CAMERA · R</button><button id="camera-input-open" type="button" aria-controls="camera-input-panel" aria-expanded="false">CAMERA MOTION</button><button id="story-mode-open" type="button" aria-controls="story-mode-console">STORIES</button><span id="camera-gesture-hint" title="Drag the empty field to orbit the camera; use the wheel or trackpad to travel.">CAMERA ORBIT: EMPTY-FIELD DRAG · WHEEL: TRAVEL</span></div>
+      <div id="camera-actions"><button id="camera-reset" type="button">RESET CAMERA · R</button><button id="camera-input-open" type="button" aria-controls="camera-input-panel" aria-expanded="false">CAMERA MOTION</button><span id="camera-gesture-hint" title="Drag the empty field to orbit the camera; use the wheel or trackpad to travel.">CAMERA ORBIT: EMPTY-FIELD DRAG · WHEEL: TRAVEL</span></div>
       <nav id="feature-nav" aria-label="Openable maTumbo features">
         <div id="feature-nav-fallback" aria-label="Static local feature directory">
           <div id="feature-nav-fallback-copy">The local directory is available while the 3-D surface starts. If WebGL or the renderer module cannot start, these names and local route links remain readable; no external service is contacted.</div>
@@ -3865,6 +3818,14 @@
       }, 30000) ?? null;
     })();
   </script>
+    <!-- Packet 237 (fidelity restoration): jiggle-physics secondary-motion
+         engine (vendored, BSD-3-Clause, (c) 2026 xlovecam —
+         see vendor/jiggle-physics/LICENSE). Classic scripts: they publish
+         window.createJigglePhysics / window.createJiggleChain /
+         window.createJiggleDriver before the module below runs.
+         The avatar degrades gracefully without them. -->
+    <script src="./vendor/jiggle-physics/jiggle-physics.js?v=20260920-p237"></script>
+    <script src="./vendor/jiggle-physics/jiggle-chain.js?v=20260920-p237"></script>
     <script type="module" src="./src/main.js?v=20260918-avatar-chess" onerror="globalThis.__MATUMBO_RUNTIME__?.markFailed?.(event, 'module load')"></script>
 </body>
 </html>
