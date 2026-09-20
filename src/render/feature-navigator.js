@@ -856,7 +856,7 @@ export function createFeatureNavigator({
       title.textContent = feature.label;
       const meta = documentRoot.createElement("span");
       meta.className = "feature-button-meta";
-      const records = feature.sources.reduce((total, source) => total + asArray(sourceIndex.get(source)?.entities).length, 0)
+      const records = (feature.sources ?? []).reduce((total, source) => total + asArray(sourceIndex.get(source)?.entities).length, 0)
         || surfaceRouteFor(feature).length;
       meta.textContent = `${FEATURE_DEFINITIONS.indexOf(feature) + 1}/${FEATURE_DEFINITIONS.length} · ${records} records · ${feature.kicker}`;
       button.append(title, meta);
