@@ -19,8 +19,11 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { createLivingRealityProjection } from './core/demo-projection.js?v=20260918-muse2';
-// Hibernation vault console — side-effect import; mounts the vault glass-cube chip.
-import './domains/token-vault-ui.js';
+// Hibernation vault console — mounts the vault glass-cube chip.
+// Guarded dynamic import: token-vault-ui.js is mid-flight (its imports don't
+// match token.js yet); a static import would fail the whole module graph and
+// red-banner the boot. Mounts automatically once the lane lands a consistent graph.
+import('./domains/token-vault-ui.js').catch(() => {});
 // Token transfers console — side-effect import; mounts the transfers glass-cube chip.
 import './domains/token-transfers-ui.js?v=20260920-token-transfers1';
 import { resolveDefaultFeature } from './core/default-landing.js';
