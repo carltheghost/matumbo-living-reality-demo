@@ -361,6 +361,7 @@ export function createPersistentUserBlocks({
     const block = documentRoot.createElement("aside");
     block.id = `persistent-block-${rec.id}`;
     block.dataset.persistentBlock = rec.id;
+    block.dataset.panelSpaceIgnore = "true";
     block.setAttribute("aria-label", rec.title);
     block.style.cssText =
       "position:fixed;left:0;top:0;width:min(300px,calc(100vw - 24px));min-height:150px;max-height:min(72vh,560px);overflow:hidden;box-sizing:border-box;background:rgba(7,17,27,.91);backdrop-filter:blur(13px);border:1px solid rgba(137,207,236,.52);border-radius:14px;box-shadow:0 18px 46px rgba(0,0,0,.35);color:#e8f7ff;font:12px system-ui,sans-serif;transform-origin:0 0;will-change:transform;";
