@@ -38,7 +38,7 @@ export const BLOCK_TYPES = Object.freeze({
 });
 
 /**
- * The only destinations a portal cube may open are these nineteen local feature
+ * The only destinations a portal cube may open are these twenty local feature
  * surfaces.  Keep this registry finite and explicit: a portal route is a
  * renderer hand-off, not a URL, provider endpoint, command, or persisted
  * navigation state.  Each entry is deeply frozen so callers cannot add a
@@ -177,6 +177,13 @@ const PORTAL_ROUTE_DEFINITIONS = [
     label: "Reality Lens Ω",
     surface: "reality-lens",
     description: "Return to the whole Living Reality projection.",
+  },
+  {
+    id: "social-mirror",
+    featureId: "social-mirror",
+    label: "Social Mirror / Feed Ticker",
+    surface: "social-mirror-console",
+    description: "Open the ambient social-feed pass-through: a slim ticker plus the full feed mirror.",
   },
 ];
 
@@ -934,6 +941,7 @@ export function createBlockWorldGrabDraft(base, target) {
     blockId: block.id,
     from: origin,
     coordinate: origin,
+    holding: true,
   });
 }
 

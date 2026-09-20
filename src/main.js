@@ -22,6 +22,7 @@ import { ensureTumboTokenFacade } from './domains/token.js';
 import { TOKEN_BLOCK_CONSOLE_SOURCE, createTokenBlock } from './render/token-block.js';
 import { createLivingRealityProjection } from './core/demo-projection.js?v=20260918-muse2';
 import { resolveDefaultFeature } from './core/default-landing.js';
+import './render/social-mirror-bootstrap.js';
 import { createDeviceProjection, readBrowserProjectionPreferences } from './projections/device-projection.js';
 import { createDistributionExplorer } from './render/distribution-explorer.js';
 import { createLaunchDistributionRehearsal } from './domains/distribution-registry.js?v=20260828-distribution163';

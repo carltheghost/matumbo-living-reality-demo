@@ -99,6 +99,15 @@ export const FEATURE_DEFINITIONS = Object.freeze([
     boundary: "Re-market is a local discovery rehearsal only; there is no network, provider, recipient, price, market, wallet, transfer, settlement, or money authority.",
   }),
   Object.freeze({
+    id: "social-mirror",
+    label: "Social Mirror / Feed Ticker",
+    kicker: "ambient feed pass-through",
+    focusOrganId: "market",
+    sources: ["social-mirror-feed"],
+    description: "Open the ambient social-feed pass-through: a slim always-visible ticker mirrors the owner's X, YouTube, Snapchat, and Meta feeds; double-click the glass cube to travel into the full feed world.",
+    boundary: "Official embeds only: the X timeline widget and YouTube iframe render provider content in their own frames; Snapchat and Meta stay connect placeholders. No credentials, API keys, tokens, or secrets are requested, accepted, or stored. Simulated points only — no money, no wagering, no wallets.",
+  }),
+  Object.freeze({
     id: "paycore",
     label: "PAYCORE Asset-token Balances",
     kicker: "value preview",
@@ -303,7 +312,8 @@ export const FEATURE_HANDOFF_LINKS = Object.freeze({
   "asset-token": Object.freeze(["asset-market", "launch-distribution", "ledger"]),
   "asset-market": Object.freeze(["asset-token", "contracts", "ledger"]),
   "launch-distribution": Object.freeze(["asset-token", "asset-market", "white-paper"]),
-  "social-explorer": Object.freeze(["rooms", "agent"]),
+  "social-explorer": Object.freeze(["rooms", "agent", "social-mirror"]),
+  "social-mirror": Object.freeze(["social-explorer", "rooms", "agent"]),
   paycore: Object.freeze(["ledger", "t402", "contracts"]),
   contracts: Object.freeze(["contract-atelier", "paycore", "ledger"]),
   "contract-atelier": Object.freeze(["contracts", "paycore", "academy"]),
@@ -382,6 +392,11 @@ const FEATURE_SURFACE_ROUTES = Object.freeze({
     Object.freeze(["DISCOVER", "browse six fictional community cards"]),
     Object.freeze(["RE-MARKET", "four local rehearsal actions"]),
     Object.freeze(["RETURN TO MAP", "allocate-preview reopens registry"]),
+  ]),
+  "social-mirror": Object.freeze([
+    Object.freeze(["AMBIENT TICKER", "slim strip mirrors feed states while the block is closed"]),
+    Object.freeze(["FULL FEED WORLD", "double-click the glass cube to enter"]),
+    Object.freeze(["OFFICIAL EMBEDS ONLY", "X timeline widget · YouTube iframe · quiet placeholders"]),
   ]),
   paycore: Object.freeze([
     Object.freeze(["ASSET-TOKEN BALANCES", "participant + simulation pool"]),
@@ -616,6 +631,7 @@ export function createFeatureNavigator({
     url.searchParams.delete("city");
     url.searchParams.set("feature", id);
     globalThis.history.replaceState(null, "", url);
+    return;
   }
 
   function renderDetail(feature) {
