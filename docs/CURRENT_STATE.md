@@ -1,5 +1,84 @@
 # Current State
 
+## Packet 238 — Avatar-B: surgical canon repair (browser-verified 2026-09-20)
+
+The Person Studio avatar is the articulated fluffy Tumbo rig again; the flat
+hologram code path is **deleted** (locked 3). `src/render/person-studio-scene.js`:
+avatar region replaced with the staged `mountRig()` block from the 235/236
+build — `buildTumboFluffyRig(THREE,{seed:0, muffColor, faceDecalUrl:
+resolveFaceDecalUrl(storage), furQuality:(innerWidth<700)?.55:1})`,
+`FLUFFY_STUDIO_SCALE=1.35`, presence light `#9fd8ff`, `avatarPickMeshes`,
+`setupJiggle()` + `stepSecondaryMotion()` (Packet 236 spring-physics secondary
+motion — tail chain, body squash, headphone cups — plus GPU fur sway).
+**Both** rig modules import with `?v=20260920-p238` (the staged scene's
+asymmetric un-tokenized chibi import was not inherited). Deleted: the
+mesh-hiding `visible=false` traverse, the hologram sprite builder, and the
+eager `TextureLoader.load` (~246 KB / ~13 MB GPU win). Set dressing kept
+verbatim; wardrobe displays regained the earmuff swatch sphere. `update()` is
+the staged version: drag-ease + `setAvatarOffset` (clamp radius 3.4), greet
+mode select (`jump→'hop'`; reduced-motion forces `'wave'`),
+`updateTumboChibiRig`, pose slerp (`pose.joints.head→rig.joints.head`,
+`pose.joints.leftArm→rig.joints.armLeft` — verified present in the owner's
+`getPose()`/`moveRig` shape; the 2s neutral-decay in `samplePose()` means the
+`poseHeld` manual channel eases back to rest on its own, no fighting), floaters
+**without** the avatar entry (the rig bobs itself via `rigOut.bobY` — no
+double-bob). `apply()` tints `rig.materials.cushion` per outfit (white
+`#f5f2ea` on obsidian/ivory, teal `#4fd8cc` on cobalt/oxblood). Boot-path
+hardening (locked 5): the rig build is **deferred to first Person Studio
+open** (boot never builds 76–104 fur shells) and wrapped in try/catch — a
+throw logs a warning and leaves a rig-less studio, `getSnapshot().rigBuildFailed=true`,
+and the fingerprint promise resolves null so the owner falls back to the
+`STUDIO_MODEL` hash. `src/render/person-studio.js`: staged pointer block
+restored (`dragPlane`, `avatarHit()` over `spatial.avatarPickMeshes`,
+click→`greetAvatar()` with the verbatim lines "A friendly wave." / "A happy
+spin." / "A little jump for joy.", symmetric `pointermove` add/remove in
+`destroy()`), hint text "Click your avatar to say hi · drag it to move it",
+`kind==='greet'` branch in `selectObject`; dispatches
+`person-studio:avatar-changed` from `chooseFace` (the existing
+`chess-arena.js` subscriber is now live). `src/main.js`: one-line
+`?v=20260920-p238` bump on the person-studio import (the wrapper's scene
+import bumped to match, so the new scene is actually served).
+
+**Fingerprint-migration note:** the geometry fingerprint now hashes the fluffy
+rig instead of the mannequin, so `assetSha256` changes for anyone who approved
+the old model — the owner fail-closes with "Model geometry has changed since
+approval; review and approve the new model." (zero data loss; the saved profile
+is untouched). This is correct behavior, not a regression.
+
+**P1-preservation note:** the Packet 236 fur-sway program-cache behavior was
+restored bugs-included from the staged build and was deliberately **not**
+fixed here — the cache-key fix stays a sign-off-gated follow-up.
+
+**Browser verification (2026-09-20, headless Chromium + SwiftShader, desktop
+1440×900):** zero console errors, zero page errors, zero failed requests
+across every run (greet cycle, drag, wardrobe, reduced motion, photo face).
+Greet order exact: "A friendly wave." → "A happy spin." → "A little jump for
+joy." — each fired via click-to-greet on the avatar, wave pose visible
+mid-greet in `~/workspace/swarm-a/evidence/p238/probe3-greet.png`.
+Drag-to-move: avatar walks toward the drag point with a heading turn toward
+travel direction (`probe4-before.png` / `probe4-after.png`). Wardrobe:
+"Cobalt applied · identity unchanged. Save to keep this look." and back to
+"Obsidian applied · identity unchanged."; `apply()` sets
+`rig.materials.cushion` from `STUDIO_OUTFITS[].muffs` (cobalt→`#4fd8cc`,
+obsidian→`#f5f2ea`) with no errors — restored verbatim from the 226
+reference; note the cushion torus sits inside the headphone cup sphere in the
+226 geometry, so the tinted cushion itself is occluded from the front camera
+(reference-canon, not a 238 defect). Reduced motion: greeting stays
+"A friendly wave.", no animation-only console/page errors.
+Photo-face: seeded `your-photo` choice renders without errors. Mobile 390×844:
+studio opens with zero errors and no `document.scrollingElement` overflow.
+Screenshots: `~/workspace/swarm-a/evidence/p238/desktop.png`,
+`desktop-studio.png`, `desktop-studio-greet.png`, `probe3-greet.png`,
+`probe4-before.png`, `probe4-after.png`, `probe5-obsidian.png`,
+`probe5-cobalt.png`, `desktop-studio-reduced-motion.png`,
+`desktop-studio-photo-face.png`, `mobile-studio.png`.
+
+**Test-environment caveat:** under SwiftShader the full fluffy rig (76–104
+fur shells) renders at a few frames per minute, so CDP round-trips stretch to
+tens of seconds and a click can land before the deferred mount completes (the
+probes poll-click until the first greet fires before interacting). The
+`?v=20260920-p238`-busted jiggle vendor request returns 200.
+
 ## Packet 237 — Avatar-A: fidelity restoration, mechanical restore (verified 2026-09-20)
 
 Restored the Packet 235/236 avatar files that `ceb1411` removed, as pure

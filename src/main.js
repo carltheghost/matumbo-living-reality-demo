@@ -8,7 +8,7 @@ import { mountCenteredSurfaces } from './render/centered-surfaces.js?v=20260918-
 import { createImmersiveSession } from './render/immersive-session.js';
 import { createMediaPreview } from './render/media-preview.js';
 import { initMobilePanelManager } from './render/mobile-panel-manager.js';
-import { createPersonStudio } from './render/person-studio.js?v=20260918-avatar-chess';
+import { createPersonStudio } from './render/person-studio.js?v=20260920-p238';
 import { createRealityAssembly } from './render/reality-assembly.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
