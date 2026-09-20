@@ -154,6 +154,23 @@ export function isUserAccount(account) {
 // 4. TokenLedger — double-entry journal with hard invariants.
 // ---------------------------------------------------------------------------
 
+// Part C — lifecycle: canonical receipt chain hashing (defined here so the
+// ledger methods below can use it; see section 5c for the lifecycle API).
+export function receiptChainHash(r) {
+  const legs = r.postings.map((p) => `${p.account}|${p.asset}|${p.amount}`).join(";");
+  const body = [
+    "tumbo:receipt:v1",
+    r.id,
+    r.action,
+    r.idempotencyKey,
+    String(r.tick),
+    r.prevHash,
+    legs,
+    r.memo ?? "",
+  ].join("|");
+  return fnv1a64Hex(body);
+}
+
 export class TokenLedger {
   constructor() {
     this._balances = new Map();
@@ -161,6 +178,10 @@ export class TokenLedger {
     this._negativeOk = new Set();
     this._receipts = new Map(); // idempotencyKey -> receipt
     this._journals = [];
+    // Part C — lifecycle: one tick per committed journal; receipts are
+    // hash-chained (EchoProof-style) from the "genesis" anchor.
+    this.tick = 0;
+    this._lastReceiptHash = "genesis";
   }
 
   _key(account, asset) {
@@ -205,7 +226,7 @@ export class TokenLedger {
    * - sys:void is never debited, and is credited only when
    *   voidCreditReason is "tithe" or "burn".
    */
-  post(postings, { idempotencyKey, action = "post", memo = "", voidCreditReason = null } = {}) {
+  post(postings, { idempotencyKey, action = "post", memo = "", voidCreditReason = null, links = null } = {}) {
     if (typeof idempotencyKey !== "string" || idempotencyKey.length === 0) {
       throw new TypeError("post() requires a client idempotencyKey");
     }
@@ -247,18 +268,67 @@ export class TokenLedger {
     }
     for (const [k, v] of applied) this._balances.set(k, v);
 
-    const receipt = Object.freeze({
+    // Part C — one tick per committed journal; each receipt carries its tick
+    // and a hash chained to the previous receipt (tamper-evident chain).
+    this.tick += 1;
+    const prevHash = this._lastReceiptHash;
+    const frozenPostings = Object.freeze(postings.map((p) => Object.freeze({ ...p })));
+    const unsigned = {
       id: newId("rcpt"),
       kind: "receipt",
       action,
       idempotencyKey,
       memo,
-      postings: Object.freeze(postings.map((p) => Object.freeze({ ...p }))),
+      tick: this.tick,
+      prevHash,
+      postings: frozenPostings,
       ts: Date.now(),
-    });
+    };
+    const hash = receiptChainHash(unsigned);
+    const receiptFields = { ...unsigned, hash };
+    if (links !== null && links !== undefined) {
+      receiptFields.links = Object.freeze({ ...links });
+    }
+    const receipt = Object.freeze(receiptFields);
+    this._lastReceiptHash = hash;
     this._receipts.set(idempotencyKey, receipt);
     this._journals.push(receipt);
     return receipt;
+  }
+
+  /**
+   * Recompute one receipt's chain hash and check its linkage to the
+   * previous journal. Returns { ok, receipt, checks }.
+   */
+  verifyReceipt(idOrKey) {
+    const r =
+      this._receipts.get(idOrKey) ??
+      this._journals.find((j) => j.id === idOrKey) ??
+      null;
+    if (!r) return { ok: false, reason: "unknown-receipt" };
+    const idx = this._journals.indexOf(r);
+    const expectedPrev = idx <= 0 ? "genesis" : this._journals[idx - 1].hash;
+    const checks = [
+      { name: "hash", ok: r.hash === receiptChainHash(r) },
+      { name: "prevHash-link", ok: r.prevHash === expectedPrev },
+      { name: "tick-order", ok: idx <= 0 || r.tick > this._journals[idx - 1].tick },
+    ];
+    return { ok: checks.every((c) => c.ok), receipt: r.id, checks: Object.freeze(checks) };
+  }
+
+  /**
+   * Walk the whole journal chain, recomputing hashes and checking linkage.
+   * Any tampering with a stored journal (postings, tick, prevHash) fails.
+   */
+  verifyChain() {
+    let prev = "genesis";
+    for (let i = 0; i < this._journals.length; i++) {
+      const r = this._journals[i];
+      if (r.prevHash !== prev) return { ok: false, at: r.id, reason: "broken-link" };
+      if (r.hash !== receiptChainHash(r)) return { ok: false, at: r.id, reason: "hash-mismatch" };
+      prev = r.hash;
+    }
+    return { ok: true, count: this._journals.length, tip: prev };
   }
 }
 
@@ -270,6 +340,43 @@ export class QuoteError extends Error {
   constructor(message) {
     super(message);
     this.name = "QuoteError";
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 5b. Lifecycle errors + constants (Part C — ported from the token-lifecycle
+// workstream; semantics: reverse posts compensating journals and never
+// edits history; settled cancel fails closed).
+// ---------------------------------------------------------------------------
+
+/** Bounded reverse window, in ledger ticks (one tick per committed journal). */
+export const REVERSE_WINDOW_TICKS = 1000;
+
+export class AlreadyReversedError extends QuoteError {
+  constructor(message) {
+    super(message);
+    this.name = "AlreadyReversedError";
+  }
+}
+
+export class ReverseWindowExpiredError extends QuoteError {
+  constructor(message) {
+    super(message);
+    this.name = "ReverseWindowExpiredError";
+  }
+}
+
+export class CancelRejectedError extends QuoteError {
+  constructor(message) {
+    super(message);
+    this.name = "CancelRejectedError";
+  }
+}
+
+export class JournalNotFoundError extends QuoteError {
+  constructor(message) {
+    super(message);
+    this.name = "JournalNotFoundError";
   }
 }
 
@@ -303,6 +410,9 @@ export class QuoteEngine {
     this.ledger = new TokenLedger();
     this._receipts = new Map(); // idempotencyKey -> receipt
     this._executedQuoteIds = new Set(); // consumed quote ids
+    this._issuedQuoteIds = new Set(); // quote ids ever issued (Part C)
+    this._cancelledQuoteIds = new Set(); // cancelled quote ids (Part C)
+    this._reversedJournalKeys = new Set(); // idempotency keys already reversed (Part C)
     this._listeners = new Map();
     this._genesis();
   }
@@ -403,6 +513,7 @@ export class QuoteEngine {
       expiresAt: Date.now() + ttl,
     };
     q.hash = quoteHash(q);
+    this._issuedQuoteIds.add(q.id); // Part C: track issued quotes for cancel()
     return Object.freeze(q);
   }
 
@@ -449,6 +560,10 @@ export class QuoteEngine {
     if (replay) return replay;
     if (quote && this._executedQuoteIds.has(quote.id)) {
       throw new QuoteError(`quote ${quote.id} has already been executed`);
+    }
+    // Part C: a cancelled quote can never be executed (pending-state cancel).
+    if (quote && this._cancelledQuoteIds.has(quote.id)) {
+      throw new CancelRejectedError(`quote ${quote.id} was cancelled and cannot be executed`);
     }
 
     this._validateQuoteShape(quote);
@@ -501,6 +616,9 @@ export class QuoteEngine {
       amountOut: quote.amountOut,
       tithe,
       postings: journal.postings,
+      tick: journal.tick,
+      prevHash: journal.prevHash,
+      hash: journal.hash,
       ts: journal.ts,
     });
     this._receipts.set(key, receipt);
@@ -540,6 +658,141 @@ export class QuoteEngine {
     this._emit("receipt", { receipt });
     this._emit("balance-changed", { account: to, asset, balance: this.ledger.balance(to, asset) });
     return receipt;
+  }
+
+  // -------------------------------------------------------------------------
+  // 5c. Lifecycle: cancel (pending quotes) + reverse (settled journals).
+  // Ported from the token-lifecycle workstream. Reverse posts a compensating
+  // journal and never edits history; the Void tithe is never debited — on
+  // reversal of a market settlement the market maker absorbs the tithe.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Cancel a pending (issued, unexecuted) quote. Deterministic
+   * `cancel:<quoteId>` idempotency: repeats return the original record.
+   * Cancelling a settled quote fails closed — reverse the settlement instead.
+   */
+  cancelQuote(quoteId, { idempotencyKey } = {}) {
+    if (typeof quoteId !== "string" || quoteId.length === 0) {
+      throw new TypeError("quoteId must be a non-empty string");
+    }
+    const key = idempotencyKey ?? `cancel:${quoteId}`;
+    if (typeof key !== "string" || key.length === 0) {
+      throw new TypeError("idempotencyKey must be a non-empty string");
+    }
+    const replay = this._receipts.get(key);
+    if (replay) return replay;
+    if (this._executedQuoteIds.has(quoteId)) {
+      throw new CancelRejectedError(
+        `cannot cancel settled quote ${quoteId}; reverse the settlement within ${REVERSE_WINDOW_TICKS} ticks instead`
+      );
+    }
+    if (!this._issuedQuoteIds.has(quoteId)) {
+      throw new QuoteError(`unknown quote ${quoteId}`);
+    }
+    const record = Object.freeze({
+      id: newId("cancel"),
+      kind: "cancellation",
+      quoteId,
+      idempotencyKey: key,
+      cancelled: true,
+      tick: this.ledger.tick,
+      ts: Date.now(),
+    });
+    this._receipts.set(key, record);
+    this._cancelledQuoteIds.add(quoteId);
+    this._emit("receipt", { receipt: record });
+    return record;
+  }
+
+  /**
+   * Reverse a settled journal by posting a compensating journal with negated
+   * legs. Deterministic `reverse:<originalKey>` idempotency: a second reverse
+   * of the same journal returns the original reversal receipt (double-reverse
+   * is impossible). Reversals, cancellations, and genesis journals cannot be
+   * reversed; journals older than REVERSE_WINDOW_TICKS fail closed.
+   */
+  reverse({ idempotencyKey, journalId = null, actor = "sim", memo = null } = {}) {
+    let original = null;
+    if (typeof idempotencyKey === "string" && idempotencyKey.length > 0) {
+      original = this.ledger._receipts.get(idempotencyKey) ?? null;
+    }
+    if (!original && typeof journalId === "string" && journalId.length > 0) {
+      original = this.ledger._journals.find((j) => j.id === journalId) ?? null;
+    }
+    if (!original) {
+      throw new JournalNotFoundError(
+        `unknown journal (idempotencyKey=${String(idempotencyKey)} journalId=${String(journalId)})`
+      );
+    }
+    if (original.action === "genesis") {
+      throw new QuoteError(`genesis journal ${original.id} cannot be reversed`);
+    }
+    if (original.action === "reverse" || original.action === "cancel") {
+      throw new QuoteError(
+        `lifecycle journals cannot be reversed (journal ${original.id} is a ${original.action})`
+      );
+    }
+    const rkey = `reverse:${original.idempotencyKey}`;
+    const replayed = this.ledger._receipts.get(rkey);
+    if (replayed) return replayed;
+    if (this._reversedJournalKeys.has(original.idempotencyKey)) {
+      throw new AlreadyReversedError(`journal ${original.id} was already reversed`);
+    }
+    const age = this.ledger.tick - original.tick;
+    if (age > REVERSE_WINDOW_TICKS) {
+      throw new ReverseWindowExpiredError(
+        `reverse window expired: journal ${original.id} is ${age} ticks old (window is ${REVERSE_WINDOW_TICKS} ticks)`
+      );
+    }
+    // Negate every leg. The Void tithe leg (sys:void credit) is never
+    // debited — the market maker absorbs it on reversal instead.
+    const legs = original.postings.map((p) =>
+      p.account === VOID_ACCOUNT && p.amount > 0
+        ? { account: MARKET_MAKER, asset: p.asset, amount: -p.amount }
+        : { account: p.account, asset: p.asset, amount: -p.amount }
+    );
+    const journal = this.ledger.post(legs, {
+      idempotencyKey: rkey,
+      action: "reverse",
+      memo: memo ?? `reversal of ${original.id} (${original.action})`,
+      voidCreditReason: null,
+      links: { reverses: original.id, reversesKey: original.idempotencyKey, actor },
+    });
+    this._reversedJournalKeys.add(original.idempotencyKey);
+    this._emit("receipt", { receipt: journal });
+    for (const p of legs) {
+      this._emit("balance-changed", {
+        account: p.account,
+        asset: p.asset,
+        balance: this.ledger.balance(p.account, p.asset),
+      });
+    }
+    return journal;
+  }
+
+  /**
+   * Newest-first journal listing with action/account/asset filters.
+   * Unlike the first lifecycle draft, there is no genesis bypass: genesis
+   * journals only match when their own postings match the filter.
+   */
+  journalHistory({ action = null, account = null, asset = null, limit = 100, offset = 0 } = {}) {
+    let rows = [...this.ledger._journals].reverse();
+    if (action !== null && action !== undefined) {
+      rows = rows.filter((r) => r.action === action);
+    }
+    if (account !== null && account !== undefined) {
+      assertAccount(account);
+      rows = rows.filter((r) => r.postings.some((p) => p.account === account));
+    }
+    if (asset !== null && asset !== undefined) {
+      assertAsset(asset);
+      rows = rows.filter((r) => r.postings.some((p) => p.asset === asset));
+    }
+    const total = rows.length;
+    const bounded = Math.max(0, Math.min(1000, Math.floor(Number(limit) || 0)));
+    const start = Math.max(0, Math.floor(Number(offset) || 0));
+    return Object.freeze({ total, rows: Object.freeze(rows.slice(start, start + bounded)) });
   }
 
   balance(account, asset) {
@@ -743,14 +996,9 @@ export class TumboUserLedger {
   }
 
   _emitBoth(type, detail) {
-    // One event, two shapes: engine listeners get `detail`, DOM listeners
-    // get { type, ...detail } — satisfying both consumers.
+    // The engine emitter already notifies engine listeners AND dispatches
+    // the document "tumbo:token" CustomEvent, so a single call covers both.
     this._engine._emit(type, detail);
-    if (typeof document !== "undefined" && typeof CustomEvent === "function") {
-      try {
-        document.dispatchEvent(new CustomEvent(TUMBO_TOKEN_EVENT, { detail: { type, ...detail } }));
-      } catch {}
-    }
   }
 
   _pushHistory(entry) {
@@ -981,6 +1229,24 @@ export class TumboUserLedger {
     return released;
   }
 
+  /**
+   * Part C — reverse a settled journal by idempotency key. Posts a
+   * compensating journal on the engine (history is never edited) and records
+   * a wallet history row.
+   */
+  reverse(idempotencyKey, opts = {}) {
+    if (typeof idempotencyKey !== "string" || !idempotencyKey.trim()) {
+      throw new TypeError("idempotencyKey must be a non-empty string");
+    }
+    const journal = this._engine.reverse({ idempotencyKey: idempotencyKey.trim(), ...opts });
+    this._pushHistory({
+      id: journal.id, kind: "reverse", from: "ledger", to: "ledger",
+      asset: TUMBO_TOKEN_ASSET, amountFluff: 0, memo: journal.memo,
+      idempotencyKey: journal.idempotencyKey,
+    });
+    return journal;
+  }
+
   vault(acct = TUMBO_TOKEN_DEFAULT_ACCOUNT, asset = TUMBO_TOKEN_ASSET) {
     const displayAcct = String(acct ?? TUMBO_TOKEN_DEFAULT_ACCOUNT).trim() || TUMBO_TOKEN_DEFAULT_ACCOUNT;
     const displayAsset = String(asset ?? TUMBO_TOKEN_ASSET).trim() || TUMBO_TOKEN_ASSET;
@@ -1032,7 +1298,8 @@ let facadeSingleton = null;
 /**
  * Create (or reuse) the shared window.TumboToken facade:
  * { ledger, balance(acct, asset), fmt(fluff), on(evt, cb),
- *   quote, execute, faucet, engine }.
+ *   quote, execute, faucet, reverse, cancel, verifyReceipt, verifyChain,
+ *   journalHistory, tick, engine }.
  */
 export function ensureTumboTokenFacade({ seed = true } = {}) {
   if (facadeSingleton) return facadeSingleton;
@@ -1046,6 +1313,13 @@ export function ensureTumboTokenFacade({ seed = true } = {}) {
     quote: (input) => engine.quote(input),
     execute: (q, opts) => engine.execute(q, opts),
     faucet: (to, asset, amount, opts) => engine.faucet(to, asset, amount, opts),
+    // Part C — lifecycle surface.
+    reverse: (input) => engine.reverse(input),
+    cancel: (quoteId, opts) => engine.cancelQuote(quoteId, opts),
+    verifyReceipt: (idOrKey) => engine.ledger.verifyReceipt(idOrKey),
+    verifyChain: () => engine.ledger.verifyChain(),
+    journalHistory: (filters) => engine.journalHistory(filters),
+    tick: () => engine.ledger.tick,
     engine,
   });
   facadeSingleton = facade;
