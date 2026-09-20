@@ -6,6 +6,7 @@ if(resolveCityRoute(location.search).status==='rejected'){
   const safeUrl=new URL(location.href);safeUrl.search='?feature=reality-lens';history.replaceState(null,'',safeUrl);
 }
 import { mountCenteredSurfaces } from './render/centered-surfaces.js?v=20260918-compact-chip';
+import { mountTokenTicker } from './render/token-ticker.js?v=20260920-ticker1';
 import { createImmersiveSession } from './render/immersive-session.js';
 import { createMediaPreview } from './render/media-preview.js';
 import { initMobilePanelManager } from './render/mobile-panel-manager.js';
@@ -8545,6 +8546,7 @@ renderer.setAnimationLoop(animate);
 // URL-derived City navigation reuses the existing feature owner and avoids provider refresh.
 const cityJourney=mountCityJourney({navigate:(id,method)=>{featureNavigator.select(id,method||'popstate');featureNavigator.close();}});
 runtimeStatus?.markReady?.({ featureCount:featureNavigator?.getSnapshot?.().featureCount ?? 23 });
+mountTokenTicker();
 mountCenteredSurfaces();
 
 addEventListener('pagehide',()=>{
