@@ -767,7 +767,18 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
 
   function setupPanel(desc, ctx) {
     const el = desc.el;
+    if (el.dataset.panelSpaceIgnore === "true") return null;
     if (el.dataset.panelSpace === "managed") return ctx.byEl.get(el);
+
+    // Lazy feature consoles can be destroyed and recreated with the same id.
+    // Retire the old DOM record first so two handlers never compete.
+    const existing = ctx.recs.find((entry) => entry.id === desc.id && entry.el !== el);
+    if (existing) {
+      try { existing.cleanup.forEach((cleanup) => cleanup()); } catch {}
+      ctx.byEl.delete(existing.el);
+      const index = ctx.recs.indexOf(existing);
+      if (index >= 0) ctx.recs.splice(index, 1);
+    }
 
     const isHint = el.id === "hint";
     const rec = {
