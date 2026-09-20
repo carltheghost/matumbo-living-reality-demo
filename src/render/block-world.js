@@ -15,6 +15,12 @@ import {
 } from "../domains/block-world.js";
 import { previewBlockMigrationSnapshot } from "../domains/block-migration.js";
 import {
+  GLASS_OPACITY,
+  glassCubeMaterialParams,
+  glassEdgeMaterialParams,
+  glassTintFor,
+} from "./glass-style.js?v=20260920-p239";
+import {
   CUBE_DIVE_DOUBLE_TAP_DISTANCE_PX,
   CUBE_DIVE_DOUBLE_TAP_WINDOW_MS,
   resolveDiveBinding,
@@ -1146,22 +1152,19 @@ export function createBlockWorldLayer({
       const definition = BLOCK_TYPES[type] ?? BLOCK_TYPES.stone;
       const isContainer = role === "container" || role === "container-open";
       const isOpen = role === "container-open";
-      // Reality Lens translucency (2026-09-18): every cube reads as a glass
-      // shell tinted by its block type, matching the Reality Assembly city
-      // blocks. Containers keep a stronger accent glow so the openable
-      // affordance survives the glass; the interior (lid + contents) stays
-      // opaque so it reads as the solid thing inside the glass.
+      // Packet 239 one-glass language: canonical translucent blue glass from
+      // the first frame, tinted toward the block type. Emissive accents stay
+      // so containers, portals, and crystal keep their interaction cues.
+      const typeHex = `#${(definition.color >>> 0).toString(16).padStart(6, "0")}`;
+      const accentHex = `#${(definition.accent >>> 0).toString(16).padStart(6, "0")}`;
       materials.set(key, new three.MeshStandardMaterial({
-        color: definition.color,
-        emissive: isContainer ? definition.accent : definition.color,
-        emissiveIntensity: isContainer
-          ? (isOpen ? 0.8 : 0.95)
-          : (type === "portal" || type === "crystal" ? 0.85 : 0.42),
-        metalness: 0.22,
-        roughness: 0.16,
-        transparent: true,
-        opacity: isContainer ? (isOpen ? 0.4 : 0.52) : 0.55,
-        depthWrite: false,
+        ...glassCubeMaterialParams(glassTintFor(typeHex, 0.45), {
+          emissive: isContainer ? accentHex : typeHex,
+          emissiveIntensity: isContainer
+            ? (isOpen ? 0.8 : 0.95)
+            : (type === "portal" || type === "crystal" ? 0.85 : 0.42),
+          opacity: isContainer ? (isOpen ? 0.4 : 0.52) : GLASS_OPACITY,
+        }),
       }));
     }
     return materials.get(key);
@@ -1171,12 +1174,14 @@ export function createBlockWorldLayer({
     if (!three) return null;
     const key = `container-cue:${type}:${open ? "open" : "closed"}`;
     if (!materials.has(key)) {
+      // Packet 239: the container cue is a small translucent glass marker —
+      // never a solid cube — with a deep-red emissive signal.
       materials.set(key, new three.MeshStandardMaterial({
-        color: BLOCK_WORLD_CONTAINER_SIGNAL_COLOR,
-        emissive: BLOCK_WORLD_CONTAINER_SIGNAL_EMISSIVE,
-        emissiveIntensity: BLOCK_WORLD_CONTAINER_SIGNAL_INTENSITY,
-        metalness: 0.34,
-        roughness: 0.3,
+        ...glassCubeMaterialParams(glassTintFor("#8f122d", 0.55), {
+          emissive: BLOCK_WORLD_CONTAINER_SIGNAL_EMISSIVE,
+          emissiveIntensity: BLOCK_WORLD_CONTAINER_SIGNAL_INTENSITY,
+          opacity: 0.55,
+        }),
       }));
     }
     return materials.get(key);
@@ -1187,12 +1192,15 @@ export function createBlockWorldLayer({
     const key = `content:${type}`;
     if (!contentMaterials.has(key)) {
       const definition = BLOCK_TYPES[type] ?? BLOCK_TYPES.crystal;
+      // Packet 239: contents and the container lid are glass cubes too —
+      // translucent from the first frame, tinted by the content type.
+      const accentHex = `#${(definition.accent >>> 0).toString(16).padStart(6, "0")}`;
+      const colorHex = `#${(definition.color >>> 0).toString(16).padStart(6, "0")}`;
       contentMaterials.set(key, new three.MeshStandardMaterial({
-        color: definition.accent,
-        emissive: definition.color,
-        emissiveIntensity: 0.65,
-        metalness: 0.35,
-        roughness: 0.36,
+        ...glassCubeMaterialParams(glassTintFor(accentHex, 0.55), {
+          emissive: colorHex,
+          emissiveIntensity: 0.65,
+        }),
       }));
     }
     return contentMaterials.get(key);
@@ -1260,12 +1268,9 @@ export function createBlockWorldLayer({
     if (!three || typeof three.LineBasicMaterial !== "function") return null;
     if (!glassFrameMaterials.has(type)) {
       const definition = BLOCK_TYPES[type] ?? BLOCK_TYPES.stone;
-      glassFrameMaterials.set(type, new three.LineBasicMaterial({
-        color: definition.accent,
-        transparent: true,
-        opacity: 0.5,
-        depthWrite: false,
-      }));
+      glassFrameMaterials.set(type, new three.LineBasicMaterial(
+        glassEdgeMaterialParams({ color: definition.accent }),
+      ));
     }
     return glassFrameMaterials.get(type);
   }

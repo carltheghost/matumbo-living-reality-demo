@@ -1,5 +1,61 @@
 # Current State
 
+## Packet 239 — 233c glass language (FIDELITY RESTORATION, browser-verified 2026-09-20 — desktop; mobile 390×844 blocked by a pre-existing headless-env hang, reproduced identically on the Packet 238 base)
+
+One translucent-blue glass cube style everywhere, ported verbatim from the
+233c build (`1318488` / `5405437` / `31cd1f1`) onto the Packet 238 base.
+Labeled fidelity restoration, not full law compliance — residuals are listed
+below as explicit follow-ups.
+
+- NEW `src/render/glass-style.js` (224 lines, `1318488` verbatim): canon
+  recipe `#153954`/opacity `0.5`/roughness `0.15`/metalness `0.1`, glowing
+  edge `#7fd4ff`/`0.8`, connection lines `#36a6d3`/`0.34`, `makeGlassCube`,
+  `glassTintFor`, `addGlassLighting`, deterministic starfield. Builders take
+  `THREE` as a parameter; pure parts are Node-importable for unit tests.
+- `src/render/reality-assembly-scene.js` (`5405437` hunks, verified context):
+  `ASSEMBLY_CUBE_SCALES={core:1.1,primary:.68,secondary:.45}` +
+  `assemblyCubeScale()` replaces the `2.2/1.35/0.9` scales at the build site;
+  the dark core material is now translucent glass (`transparent,
+  opacity:.35, depthWrite:false`); `LOD_FAR` `40→120` (merge only at true far
+  zoom).
+- `src/render/block-world.js` (`1318488` four material-function hunks, by
+  function name): `materialFor`, `containerCueMaterialFor`,
+  `contentMaterialFor`, and the glass frame lines now build through
+  `glassCubeMaterialParams(glassTintFor(...))` / `glassEdgeMaterialParams`.
+  `456479b`'s cube-dive support in the same factory region is untouched.
+- `src/render/market-constellation.js` (`1318488` 52-line rewrite): shared
+  unit `BoxGeometry(1.2)`, one canonical glass material, `#7fd4ff` edge
+  frames, `makeConnectionLines()` parent→child, `addGlassLighting` +
+  starfield. The `import()` from `market-builder.js` needed no cache-bust
+  change.
+- `src/main.js` (evidence-cube conversion, `31cd1f1` as a SURGICAL FUNCTION
+  MERGE, not a hunk replay — the `31cd1f1` hunks predate `e8ebc51`'s raycast
+  fix): new `makeWorldEvidenceGlassCube(.24/.58/.72, name)` (Group: glass body
+  + edge glow), `worldEvidenceBodyOf()` (the body mesh is the raycast target —
+  the scene picker is non-recursive and `resolveWorldEvidenceTarget` walks up
+  to the group's `userData`), `disposeWorldEvidenceCube()` (full group
+  traversal disposal). All three cube sites (inner `.24`, event `.58+`,
+  humanitarian `.72`) create glass groups; raycast adds/removals target the
+  body mesh via `userData.evidenceBody`. Per-record color-kind signals now
+  live in `userData` (`worldEvidenceColorKind` for inner cubes;
+  `worldEvidenceBrutalityLevel/Band/Terms` for outer records) and the readout
+  labels — the cubes themselves stay one blue-glass style. The `e8ebc51`
+  `isWorldVisible()`/`raycastVisibleTargets()` filtering is preserved at all
+  five raycast call sites; raycast add/remove calls still use the raw
+  `raycastTargets` array, which `raycastVisibleTargets()` filters — same as
+  before, now targeting body meshes. The world-evidence pulse/rotation loop
+  operates on the group (`scale`/`rotation.y`) and is unchanged; reduced
+  motion freezes it as before.
+- Cache-bust token `?v=20260920-p239` on: main.js's glass-style import,
+  main.js's block-world import, block-world.js's glass-style import,
+  market-constellation.js's glass-style import. `reality-assembly.js`'s import
+  of reality-assembly-scene.js is bare (unversioned), so no bump was taken.
+
+Residuals (verbatim-first, NOT shipped as law-clean — follow-ups, not this
+packet): gold trims, accent badge/sub-cubes, gardens, multicolor beacons,
+`wb*` far-shell fade-in, accents/wayfinding markers not glass-ified (the law
+governs cubes; the warm/cool avatar-vs-world contrast is art direction).
+
 ## Packet 238 — Avatar-B: surgical canon repair (browser-verified 2026-09-20)
 
 The Person Studio avatar is the articulated fluffy Tumbo rig again; the flat
