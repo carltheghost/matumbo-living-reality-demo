@@ -1,0 +1,35 @@
+# token-ledger-core-ci — path-scoped CI for the TUMBO-SIM ledger core.
+# Runs the token test suites and syntax-checks every token module + suite.
+name: token-ledger-core-ci
+
+on:
+  push:
+    paths:
+      - 'src/domains/token*.js'
+      - 'tests/token-*.test.mjs'
+  pull_request:
+    paths:
+      - 'src/domains/token*.js'
+      - 'tests/token-*.test.mjs'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run token test suites
+        run: node --test tests/token-ledger.test.mjs tests/token-facade.test.mjs
+      - name: Syntax-check token modules and suites
+        run: |
+          node --check src/domains/token.js
+          node --check src/domains/token-prng.js
+          node --check src/domains/token-sha256.js
+          node --check src/domains/token-store.js
+          node --check src/domains/token-botpay.js
+          node --check src/domains/token-facade.js
+          node --check src/domains/token-boot.js
+          node --check tests/token-ledger.test.mjs
+          node --check tests/token-facade.test.mjs
