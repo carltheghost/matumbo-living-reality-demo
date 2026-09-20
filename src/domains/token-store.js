@@ -1,6 +1,6 @@
-// LedgerStore — local persistence. Browser: localStorage. Node: file path.
-// No network. Ever.
-import { TumboLedger } from "./ledger.js";
+// token-store.js — LedgerStore persistence for the TUMBO-SIM ledger core.
+// Browser: localStorage. Node: file path. No network. Ever.
+import { TumboLedger } from "./token.js";
 
 const KEY = "tumbo-ledger-v1";
 
