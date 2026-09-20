@@ -38,8 +38,8 @@ window.__harnessBoot = setTimeout(() => {
 }, 25000);
 </script>
 <script type="module">
-const BASE = 'https://cdn.jsdelivr.net/gh/carltheghost/matumbo-living-reality-demo@gpt/token-vault';
-const V = 'v=4';
+const BASE = 'https://raw.githack.com/carltheghost/matumbo-living-reality-demo/gpt/token-vault';
+const V = 'v=5';
 const errors = [];
 window.addEventListener('error', (e) => errors.push('window.onerror: ' + (e.message || e.type)));
 window.addEventListener('unhandledrejection', (e) => errors.push('unhandledrejection: ' + String((e.reason && e.reason.message) || e.reason)));
@@ -93,9 +93,8 @@ check('exact integer rewards on unstake', () => {
   v.advanceTick({ ticks: 200, idempotencyKey: key() });
   const done = v.unstake({ positionId: s.position.id, idempotencyKey: key() });
   const bal = v.balance('u:alice', 'TUMBO');
-  const legs = v.journals()[v.journals().length - 1].legs.map((l) => `${l.account}:${l.amount}`).join(',');
   assert(done.extra.rewardPaidFluff === 100_000, 'reward=' + done.extra.rewardPaidFluff);
-  assert(bal === 5_100_000, `payout got=${bal} legs=[${legs}]`);
+  assert(bal === 5_100_000, 'payout got=' + bal);
   assert(v.assertConservation() === true, 'conservation');
 });
 check('early withdrawal refused; matured withdrawal succeeds', () => {
