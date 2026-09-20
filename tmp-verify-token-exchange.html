@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>token exchange verification (temporary)</title>
+<style>body{background:#020407;color:#dff7ff;font-family:ui-monospace,monospace;padding:16px}pre{white-space:pre-wrap}</style>
+</head>
+<body>
+<pre id="out">running...</pre>
+<script type="module">
+import * as T from "./src/domains/token.js";
+
+const R = [];
+let P = 0, F = 0;
+function t(name, fn) {
+  try { fn(); P++; R.push("PASS " + name); }
+  catch (e) { F++; R.push("FAIL " + name + " :: " + (e && e.message ? e.message : String(e))); }
+}
+function eq(a, b, m) { if (a !== b) throw new Error((m || "mismatch") + ": expected " + JSON.stringify(b) + ", got " + JSON.stringify(a)); }
+function ok(v, m) { if (!v) throw new Error(m || "expected truthy"); }
+function th(f, re, m) {
+  let e = null;
+  try { f(); } catch (x) { e = x; }
+  if (!e) throw new Error((m || "expected throw") + ": nothing thrown");
+  if (re && !re.test(e.message)) throw new Error((m || "wrong error") + ": " + e.message);
+}
+
+const ALICE = "u:alice";
+const BOB = "u:bob";
+function funded() {
+  const e = T.createTokenEngine();
+  e.faucet(ALICE, "TUMBO", 100000000, { idempotencyKey: "fa" });
+  e.faucet(BOB, "TUMBO", 50000000, { idempotencyKey: "fb" });
+  return e;
+}
+
+t("mulDivFloor exact where float fails", () => {
+  const a = 9007199254740991;
+  eq(T.mulDivFloor(a, 7, 7), a, "exact");
+  ok(Math.floor((a * 7) / 7) !== a, "float must differ");
+  eq(T.mulDivFloor(10, 3, 4), 7, "floor");
+  th(() => T.mulDivFloor(1.5, 2, 3), /safe integer/);
+});
+
+t("genesis seeds market maker", () => {
+  const e = T.createTokenEngine();
+  eq(e.balance("sys:market", "sMIMAS"), T.CONFIG.supply.sMIMAS);
+  eq(e.balance("sys:market", "TUMBO"), T.CONFIG.marketFloatTumbo);
+});
+
+t("buy settles with 10bps tithe", () => {
+  const e = funded();
+  const r = e.execute(e.quote({ action: "buy", from: ALICE, fromAsset: "TUMBO", toAsset: "sMIMAS", amountIn: 100000 }));
+  eq(r.tithe, 100);
+  eq(r.amountOut, 1000000);
+  eq(e.balance(ALICE, "TUMBO"), 99900000);
+  eq(e.balance(ALICE, "sMIMAS"), 1000000);
+  eq(e.balance("sys:void", "TUMBO"), 100);
+  eq(e.balance("sys:market", "TUMBO"), T.CONFIG.marketFloatTumbo + 99900);
+});
+
+t("sell direction works", () => {
+  const e = funded();
+  e.execute(e.quote({ action: "buy", from: ALICE, fromAsset: "TUMBO", toAsset: "sMIMAS", amountIn: 100000 }));
+  const r = e.execute(e.quote({ action: "sell", from: ALICE, fromAsset: "sMIMAS", toAsset: "TUMBO", amountIn: 50000 }));
+  eq(r.amountOut, 5000);
+  eq(r.tithe, 50);
+  eq(e.balance("sys:void", "sMIMAS"), 50);
+});
+
+t("forged quote rejected", () => {
+  const e = funded();
+  const q = e.quote({ action: "buy", from: ALICE, fromAsset: "TUMBO", toAsset: "sMIMAS", amountIn: 100000 });
+  th(() => e.execute({ ...q, amountOut: q.amountOut + 1 }), /tampered|hash mismatch/);
+  th(() => e.execute({ ...q, from: BOB }), /tampered|hash mismatch/);
+  eq(e.balance(ALICE, "TUMBO"), 100000000);
+});
+
+t("expired quote rejected", () => {
+  const e = funded();
+  const q = e.quote({ action: "buy", from: ALICE, fromAsset: "TUMBO", toAsset: "sMIMAS", amountIn: 10000, ttlMs: -1 });
+  th(() => e.execute(q), /expired/);
+});
+
+t("double execution returns original receipt", () => {
+  const e = funded();
+  const q = e.quote({ action: "buy", from: ALICE, fromAsset: "TUMBO", toAsset: "sMIMAS", amountIn: 100000 });
+  const r1 = e.execute(q);
+  const b1 = e.balance(ALICE, "TUMBO");
+  const r2 = e.execute(q);
+  eq(r2, r1, "same receipt");
+  eq(e.balance(ALICE, "TUMBO"), b1, "funds moved once");
+  th(() => e.execute(q, { idempotencyKey: "other" }), /already been executed/);
+});
+
+t("rounding conservation", () => {
+  const e = funded();
+  const before = new Map();
+  for (const { account, asset } of e.ledger.accounts()) before.set(account + "|" + asset, e.balance(account, asset));
+  for (const a of [1, 3, 7, 999, 1000, 12345, 100000, 999999]) {
+    e.execute(e.quote({ action: "buy", from: ALICE, fromAsset: "TUMBO", toAsset: "sMIMAS", amountIn: a }));
+  }
+  for (const a of [500, 25000]) {
+    e.execute(e.quote({ action: "sell", from: ALICE, fromAsset: "sMIMAS", toAsset: "TUMBO", amountIn: a }));
+  }
+  for (const asset of T.ASSETS) {
+    let d = 0;
+    for (const { account, asset: a } of e.ledger.accounts()) {
+      if (a !== asset) continue;
+      d += e.balance(account, asset) - (before.get(account + "|" + asset) ?? 0);
+    }
+    eq(d, 0, "conservation " + asset);
+  }
+  for (const { account, asset } of e.ledger.accounts()) {
+    const b = e.balance(account, asset);
+    ok(account === "sys:issuance" ? b <= 0 : b >= 0, "non-negative " + account + " " + asset);
+  }
+});
+
+t("sys:void debit and credit rules", () => {
+  const e = T.createTokenEngine();
+  th(() => e.ledger.post([
+    { account: "sys:void", asset: "TUMBO", amount: -1 },
+    { account: ALICE, asset: "TUMBO", amount: 1 },
+  ], { idempotencyKey: "v1", action: "t" }), /never debited/);
+  th(() => e.ledger.post([
+    { account: "sys:market", asset: "TUMBO", amount: -1 },
+    { account: "sys:void", asset: "TUMBO", amount: 1 },
+  ], { idempotencyKey: "v2", action: "t" }), /only by tithes or burns/);
+});
+
+t("fmt renders fluff", () => {
+  eq(T.fmt(1000), "1.000 TUMBO-SIM");
+  eq(T.fmt(5), "0.005 TUMBO-SIM");
+  eq(T.fmt(0), "0.000 TUMBO-SIM");
+  eq(T.fmt(1234567), "1,234.567 TUMBO-SIM");
+});
+
+t("events fire on settle", () => {
+  const e = funded();
+  const seen = [];
+  e.on("receipt", (d) => seen.push("receipt:" + d.receipt.action));
+  e.on("balance-changed", (d) => seen.push("bal:" + d.account + ":" + d.asset));
+  e.execute(e.quote({ action: "buy", from: ALICE, fromAsset: "TUMBO", toAsset: "sMIMAS", amountIn: 10000 }));
+  ok(seen.includes("receipt:buy"));
+  ok(seen.filter((s) => s.indexOf("bal:") === 0).length >= 4);
+  const evts = [];
+  const rd = globalThis.document;
+  const rc = globalThis.CustomEvent;
+  globalThis.document = { dispatchEvent(ev) { evts.push(ev); } };
+  globalThis.CustomEvent = class { constructor(ty, init) { this.type = ty; this.detail = init && init.detail; } };
+  try {
+    e.execute(e.quote({ action: "buy", from: ALICE, fromAsset: "TUMBO", toAsset: "sMIMAS", amountIn: 10000 }));
+  } finally {
+    globalThis.document = rd;
+    globalThis.CustomEvent = rc;
+  }
+  ok(evts.length > 0);
+  ok(evts.every((x) => x.type === "tumbo:token"));
+  ok(evts.some((x) => x.detail.type === "receipt"));
+  ok(evts.some((x) => x.detail.type === "balance-changed"));
+});
+
+t("quote validation", () => {
+  const e = funded();
+  th(() => e.quote({ action: "swap", from: ALICE, fromAsset: "TUMBO", toAsset: "sMIMAS", amountIn: 10 }), /action must be/);
+  th(() => e.quote({ action: "buy", from: ALICE, fromAsset: "TUMBO", toAsset: "TUMBO", amountIn: 10 }), /must differ/);
+  th(() => e.quote({ action: "buy", from: ALICE, fromAsset: "sMIMAS", toAsset: "TUMBO", amountIn: 10 }), /TUMBO -> sMIMAS only/);
+  th(() => e.quote({ action: "buy", from: ALICE, fromAsset: "TUMBO", toAsset: "sMIMAS", amountIn: 0 }), /positive/);
+  th(() => e.quote({ action: "sell", from: ALICE, fromAsset: "sMIMAS", toAsset: "TUMBO", amountIn: 5 }), /rounds to zero/);
+  th(() => e.execute(null), /quote is required/);
+});
+
+t("facade installed on window", () => {
+  ok(typeof window.TumboToken === "object");
+  ok(typeof window.TumboToken.balance === "function");
+  ok(typeof window.TumboToken.fmt === "function");
+  ok(typeof window.TumboToken.on === "function");
+});
+
+document.getElementById("out").textContent = R.join("\n") + "\n\n" + P + " passed, " + F + " failed\nVERIFY-DONE";
+</script>
+</body>
+</html>
