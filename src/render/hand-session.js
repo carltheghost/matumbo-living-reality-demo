@@ -154,6 +154,8 @@ export function createHandLensSession({
   let mounted = false;
   let hudButton = null;
   let resizeHandler = null;
+  let spatialGestureHandler = null;
+  let airKeyboardCommandHandler = null;
 
   // ---- air-typing state ---------------------------------------------------
   // Mirrors of the visible keyboard's one-shot control state, so air taps
@@ -407,6 +409,34 @@ export function createHandLensSession({
       gestureEvents = [];
     }
 
+    // f0. Expose only sanitized hand gestures to the XR side rail.
+    // The side rail can move tabs and activate its own DOM controls without
+    // receiving camera frames, landmarks, or arbitrary host payloads.
+    for (const event of lensEvents) {
+      if (event.type === "tap") {
+        emitSpatialGesture({
+          type: "tap",
+          hand: event.hand,
+          finger: event.finger,
+          x: event.x,
+          y: event.y,
+          timestamp: nowMs,
+        });
+      }
+    }
+    for (const event of gestureEvents) {
+      if (event.type === "swipe") {
+        emitSpatialGesture({
+          type: "swipe",
+          hand: event.hand,
+          direction: event.direction,
+          x: event.x,
+          y: event.y,
+          timestamp: nowMs,
+        });
+      }
+    }
+
     // f. Route into the block-world authorities (never a second raycaster).
     try {
       handGrab.handleHandLensEvents(lensEvents);
@@ -544,6 +574,50 @@ export function createHandLensSession({
     }
   }
 
+  function emitSpatialGesture(detail) {
+    if (!documentRoot?.dispatchEvent || !detail || typeof detail.type !== "string") {
+      return;
+    }
+    const allowed = new Set(["tap", "swipe"]);
+    if (!allowed.has(detail.type)) return;
+
+    const x = Number(detail.x);
+    const y = Number(detail.y);
+    const payload = {
+      type: detail.type,
+      hand: typeof detail.hand === "string" ? detail.hand : null,
+      finger: typeof detail.finger === "string" ? detail.finger : null,
+      direction: typeof detail.direction === "string" ? detail.direction : null,
+      x: Number.isFinite(x) ? Math.min(1, Math.max(0, x)) : 0.5,
+      y: Number.isFinite(y) ? Math.min(1, Math.max(0, y)) : 0.5,
+      timestamp: Number.isFinite(detail.timestamp) ? detail.timestamp : Date.now(),
+      source: "hand-lens",
+      localOnly: true,
+      simulation: true,
+    };
+
+    try {
+      documentRoot.dispatchEvent(
+        new CustomEvent("matumbo:spatial-gesture", { detail: Object.freeze(payload) }),
+      );
+    } catch (error) {
+      reportError(error);
+    }
+  }
+
+  function syncAirKeyboardFromSpatial(event) {
+    const desired = event?.detail?.visible;
+    if (typeof desired !== "boolean" || !keyboard) return;
+    try {
+      if (desired) keyboard.show?.();
+      else keyboard.hide?.();
+      lastKeyboardVisible = desired;
+      refreshAirKeyMap();
+    } catch (error) {
+      reportError(error);
+    }
+  }
+
   function installResizeListener() {
     try {
       const view = documentRoot && documentRoot.defaultView;
@@ -598,6 +672,10 @@ export function createHandLensSession({
     }
 
     installHudButton();
+    spatialGestureHandler = () => {};
+    airKeyboardCommandHandler = syncAirKeyboardFromSpatial;
+    documentRoot?.addEventListener?.("matumbo:spatial-gesture", spatialGestureHandler);
+    documentRoot?.addEventListener?.("matumbo:xr-air-keyboard", airKeyboardCommandHandler);
     installResizeListener();
 
     mounted = true;
@@ -647,6 +725,14 @@ export function createHandLensSession({
       } catch (error) {
         reportError(error);
       }
+    }
+    if (spatialGestureHandler) {
+      documentRoot?.removeEventListener?.("matumbo:spatial-gesture", spatialGestureHandler);
+      spatialGestureHandler = null;
+    }
+    if (airKeyboardCommandHandler) {
+      documentRoot?.removeEventListener?.("matumbo:xr-air-keyboard", airKeyboardCommandHandler);
+      airKeyboardCommandHandler = null;
     }
     hudButton = null;
     try {
