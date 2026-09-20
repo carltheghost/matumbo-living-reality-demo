@@ -285,14 +285,16 @@ export class TumboLedger {
 
   // Commit a journal while releasing a vault hold first (exit actions).
   // The hold is restored if the commit throws, so state never half-updates.
+  // Returns { receipt, replayed } so callers can skip post-commit side effects
+  // (status flips, score credits) on an idempotent retry.
   _commitReleasingHold(holdId, spec) {
     const idx = this.s.vaultHolds.findIndex(h => h.id === holdId);
     const hold = idx >= 0 ? this.s.vaultHolds[idx] : null;
     if (idx >= 0) this.s.vaultHolds.splice(idx, 1);
     try {
-      const r = this._commitRaw(spec, { deferHolds: true, system: true });
+      const { receipt: r, replayed } = this._commitInner(spec, { deferHolds: true, system: true });
       if (this.strict) this.verifyInvariants();
-      return r;
+      return { receipt: r, replayed };
     } catch (e) {
       if (hold) this.s.vaultHolds.splice(Math.min(idx, this.s.vaultHolds.length), 0, hold);
       throw e;
@@ -502,16 +504,21 @@ export class TumboLedger {
   }
 
   // ---------- faucet + proof-of-presence (both settle via receive) ----------
-  faucetDrip({ to, amountTumbo = 1000 }) {
+  faucetDrip({ to, amountTumbo = 1000, idem }) {
     this.ensureAccount(to);
     assertSafeInt(amountTumbo, "amountTumbo");
     if (amountTumbo <= 0) throw new LedgerError("BAD_AMOUNT", "amountTumbo > 0");
     const amountFluff = amountTumbo * FLUFF_PER_TUMBO;
-    const last = this.s.popClaims[`faucet:${to}`];
-    if (last && this.s.clock - this.tx(last).createdTick < 500)
-      throw new LedgerError("FAUCET_COOLDOWN", "one drip per 500 ticks");
+    const key = idem || `faucet:${to}:${this.s.clock}`;
+    // The cooldown gates fresh drips. An explicit client-key retry skips it and
+    // replays through _commitInner, which validates payload identity.
+    if (!(idem && this.s.idem[idem])) {
+      const last = this.s.popClaims[`faucet:${to}`];
+      if (last && this.s.clock - this.tx(last).createdTick < 500)
+        throw new LedgerError("FAUCET_COOLDOWN", "one drip per 500 ticks");
+    }
     const { receipt: r, replayed } = this._commitInner({
-      action: "payreq", actor: SYS.faucet, idem: `faucet:${to}:${this.s.clock}`,
+      action: "payreq", actor: SYS.faucet, idem: key,
       entries: [
         { account: SYS.faucet, asset: "TUMBO", delta: -amountFluff },
         { account: SYS.escrow, asset: "TUMBO", delta:  amountFluff },
@@ -531,13 +538,18 @@ export class TumboLedger {
     return r; // recipient calls receive({intentTxId: r.txId, by: to})
   }
 
-  grantPop({ to, achievement, amountTumbo = 250, gate }) {
+  grantPop({ to, achievement, amountTumbo = 250, gate, idem }) {
     this._gate(gate, GATE_SYSTEM, "pop grant");
     this.ensureAccount(to);
     assertSafeInt(amountTumbo, "amountTumbo");
     if (amountTumbo <= 0) throw new LedgerError("BAD_AMOUNT", "amountTumbo > 0");
-    const key = `pop:${to}:${achievement}`;
-    if (this.s.popClaims[key]) throw new LedgerError("POP_CLAIMED", `${achievement} already claimed by ${to}`);
+    const claimKey = `pop:${to}:${achievement}`;
+    const key = idem || claimKey;
+    // One claim per achievement. An explicit client-key retry (key already
+    // seen) replays the original receipt; any other duplicate is rejected, so
+    // a different key can never double-claim the same achievement.
+    if (this.s.popClaims[claimKey] && !(idem && this.s.idem[idem]))
+      throw new LedgerError("POP_CLAIMED", `${achievement} already claimed by ${to}`);
     const amountFluff = amountTumbo * FLUFF_PER_TUMBO;
     const { receipt: r, replayed } = this._commitInner({
       action: "pop", actor: "sys", idem: key,
@@ -556,7 +568,7 @@ export class TumboLedger {
       };
     }
     if (this.strict) this.verifyInvariants(); // holds now registered
-    this.s.popClaims[key] = r.txId;
+    this.s.popClaims[claimKey] = r.txId;
     return r;
   }
 
@@ -820,38 +832,48 @@ export class TumboLedger {
     if (this.strict) this.verifyInvariants(); // holds now registered
     return { receipt: r, stakeId: sid };
   }
-  unstake({ stakeId, by }) {
+  unstake({ stakeId, by, idem }) {
     const st = this.s.stakes[stakeId];
     if (!st) throw new LedgerError("UNKNOWN_STAKE", stakeId);
-    if (st.status !== "active") throw new LedgerError("STAKE_CLOSED", `${stakeId} is ${st.status}`);
-    if (by !== st.owner) throw new LedgerError("NOT_OWNER", "only the staker unstakes");
-    if (this.s.clock < st.unlockTick) throw new LedgerError("STAKE_LOCKED", `unlocks at tick ${st.unlockTick}`);
-    const r = this._commitReleasingHold(stakeId, {
-      action: "unstake", actor: by, idem: `unstake:${stakeId}`,
+    const key = idem || `unstake:${stakeId}`;
+    const isRetry = !!idem && !!this.s.idem[idem];
+    // An explicit client-key retry returns the original receipt; any other
+    // call against a closed stake fails closed.
+    if (st.status !== "active" && !isRetry)
+      throw new LedgerError("STAKE_CLOSED", `${stakeId} is ${st.status}`);
+    if (!isRetry) {
+      if (by !== st.owner) throw new LedgerError("NOT_OWNER", "only the staker unstakes");
+      if (this.s.clock < st.unlockTick) throw new LedgerError("STAKE_LOCKED", `unlocks at tick ${st.unlockTick}`);
+    }
+    const { receipt: r, replayed } = this._commitReleasingHold(stakeId, {
+      action: "unstake", actor: by, idem: key,
       entries: [
         { account: SYS.vault, asset: "TUMBO", delta: -st.amount },
         { account: by,        asset: "TUMBO", delta:  st.amount },
       ],
       refs: {}, meta: { stakeId, contractId: st.contractId },
     });
-    st.status = "released";
+    if (!replayed) st.status = "released";
     return r;
   }
-  slash({ stakeId, gate }) {
+  slash({ stakeId, gate, idem }) {
     this._gate(gate, GATE_ARBITER, "slash");
     const st = this.s.stakes[stakeId];
     if (!st) throw new LedgerError("UNKNOWN_STAKE", stakeId);
-    if (st.status !== "active") throw new LedgerError("STAKE_CLOSED", `${stakeId} is ${st.status}`);
+    const key = idem || `slash:${stakeId}`;
+    const isRetry = !!idem && !!this.s.idem[idem];
+    if (st.status !== "active" && !isRetry)
+      throw new LedgerError("STAKE_CLOSED", `${stakeId} is ${st.status}`);
     const cut = mulDivFloor(st.amount, st.slashBps, 10000);
     const rest = st.amount - cut;
     const entries = [{ account: SYS.vault, asset: "TUMBO", delta: -st.amount }];
     if (cut > 0)  entries.push({ account: SYS.void, asset: "TUMBO", delta: cut });   // burned: The Void
     if (rest > 0) entries.push({ account: st.owner, asset: "TUMBO", delta: rest });
-    const r = this._commitReleasingHold(stakeId, {
-      action: "slash", actor: "sys:arbiter", idem: `slash:${stakeId}`,
+    const { receipt: r, replayed } = this._commitReleasingHold(stakeId, {
+      action: "slash", actor: "sys:arbiter", idem: key,
       entries, meta: { stakeId, contractId: st.contractId, burned: String(cut) },
     });
-    st.status = "slashed";
+    if (!replayed) st.status = "slashed";
     return r;
   }
 
@@ -878,27 +900,35 @@ export class TumboLedger {
     if (this.strict) this.verifyInvariants(); // holds now registered
     return { receipt: r, depositId: did };
   }
-  withdraw({ depositId, by }) {
+  withdraw({ depositId, by, idem }) {
     const d = this.s.deposits[depositId];
     if (!d) throw new LedgerError("UNKNOWN_DEPOSIT", depositId);
-    if (d.status !== "locked") throw new LedgerError("DEPOSIT_CLOSED", d.status);
-    if (by !== d.owner) throw new LedgerError("NOT_OWNER", "only the depositor withdraws");
-    if (this.s.clock < d.maturityTick)
-      throw new LedgerError("VAULT_SEALED", `Hibernation Vault: no early exit; matures at tick ${d.maturityTick}`);
+    const key = idem || `withdraw:${depositId}`;
+    const isRetry = !!idem && !!this.s.idem[idem];
+    if (d.status !== "locked" && !isRetry)
+      throw new LedgerError("DEPOSIT_CLOSED", d.status);
+    if (!isRetry) {
+      if (by !== d.owner) throw new LedgerError("NOT_OWNER", "only the depositor withdraws");
+      if (this.s.clock < d.maturityTick)
+        throw new LedgerError("VAULT_SEALED", `Hibernation Vault: no early exit; matures at tick ${d.maturityTick}`);
+    }
     // Burrow Score: non-transferable, computed BEFORE the fund release so an
-    // overflow throws before any mutation (score would otherwise be lost: DEPOSIT_CLOSED)
+    // overflow throws before any mutation. Credited only on fresh settlement —
+    // a replay must not double-count the score.
     const held = this.s.clock - this.tx(d.txId).createdTick;
     const s2 = mulDivFloor(d.amount, held, 1e6);
-    const r = this._commitReleasingHold(depositId, {
-      action: "withdraw", actor: by, idem: `withdraw:${depositId}`,
+    const { receipt: r, replayed } = this._commitReleasingHold(depositId, {
+      action: "withdraw", actor: by, idem: key,
       entries: [
         { account: SYS.vault, asset: "TUMBO", delta: -d.amount },
         { account: by,        asset: "TUMBO", delta:  d.amount },
       ],
       meta: { depositId },
     });
-    d.status = "withdrawn";
-    this.s.burrowScore[by] = (this.s.burrowScore[by] || 0) + s2;
+    if (!replayed) {
+      d.status = "withdrawn";
+      this.s.burrowScore[by] = (this.s.burrowScore[by] || 0) + s2;
+    }
     return { receipt: r, burrowScore: this.s.burrowScore[by] };
   }
 
@@ -924,21 +954,26 @@ export class TumboLedger {
     if (this.strict) this.verifyInvariants(); // holds now registered
     return { receipt: r, lockId: lid };
   }
-  unlock({ lockId, by }) {
+  unlock({ lockId, by, idem }) {
     const l = this.s.locks[lockId];
     if (!l) throw new LedgerError("UNKNOWN_LOCK", lockId);
-    if (l.status !== "locked") throw new LedgerError("LOCK_CLOSED", l.status);
-    if (by !== l.owner) throw new LedgerError("NOT_OWNER", "only the locker unlocks");
-    if (this.s.clock < l.unlockTick) throw new LedgerError("LOCK_SEALED", `unlocks at tick ${l.unlockTick}`);
-    const r = this._commitReleasingHold(lockId, {
-      action: "unlock", actor: by, idem: `unlock:${lockId}`,
+    const key = idem || `unlock:${lockId}`;
+    const isRetry = !!idem && !!this.s.idem[idem];
+    if (l.status !== "locked" && !isRetry)
+      throw new LedgerError("LOCK_CLOSED", l.status);
+    if (!isRetry) {
+      if (by !== l.owner) throw new LedgerError("NOT_OWNER", "only the locker unlocks");
+      if (this.s.clock < l.unlockTick) throw new LedgerError("LOCK_SEALED", `unlocks at tick ${l.unlockTick}`);
+    }
+    const { receipt: r, replayed } = this._commitReleasingHold(lockId, {
+      action: "unlock", actor: by, idem: key,
       entries: [
         { account: SYS.vault, asset: "TUMBO", delta: -l.amount },
         { account: by,        asset: "TUMBO", delta:  l.amount },
       ],
       meta: { lockId },
     });
-    l.status = "unlocked";
+    if (!replayed) l.status = "unlocked";
     return r;
   }
 
