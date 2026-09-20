@@ -7668,6 +7668,25 @@ addEventListener('pointermove',updateMouseFromPointer);
 addEventListener('pointerleave',()=>mouse.set(99,99));
 
 const raycaster=new THREE.Raycaster();
+// Raycast hits can include meshes whose layer root is hidden (e.g. Reality
+// Assembly nodes when the assembly UI is inactive). Three.js does not skip
+// those, so taps would be swallowed by invisible geometry. Filter to the
+// first hit that is actually visible in the world (2026-09-20).
+function isWorldVisible(object) {
+  let node = object;
+  while (node) {
+    if (node.visible === false) return false;
+    node = node.parent;
+  }
+  return true;
+}
+function raycastVisibleTargets() {
+  const hits = raycaster.intersectObjects(raycastTargets, false);
+  for (const hit of hits) {
+    if (isWorldVisible(hit.object)) return hit;
+  }
+  return null;
+}
 const clock=new THREE.Clock();
 const GESTURE_CUBE_FOCUS_SOURCE = 'gesture-cube-focus';
 const GESTURE_CUBE_FOCUS_BOUNDARY = 'Optional host gaze establishes a short target lock; native-hand pinch/point/open/inspect or XR-hand select can address that same local cube only while the lock is fresh. Explicit native-hand grab/hold/place/release can address only that fresh same-target local held draft; hold accepts only a bounded integer one-step delta and release places at the held coordinate. No raw frames, landmarks, identity, recording, upload, network, storage, inferred coordinates, arbitrary movement, wallet, token, settlement, or camera-driven edits are accepted.';
@@ -7874,7 +7893,7 @@ function applyGestureCubeFocus(gesture) {
     }
     mouse.set(rawPoint.x, rawPoint.y);
     raycaster.setFromCamera(mouse, camera);
-    const hit = raycaster.intersectObjects(raycastTargets, false)[0]?.object;
+    const hit = raycastVisibleTargets()?.object;
     const target = blockWorld.resolveTarget(hit);
     if (!target) {
       gazeHandCouplingState = createGazeHandCouplingState({ now, reason: 'gaze-empty-field' });
@@ -7950,7 +7969,7 @@ function applyGestureCubeFocus(gesture) {
   const point = resolution.normalized;
   mouse.set(point.x, point.y);
   raycaster.setFromCamera(mouse, camera);
-  const hit = raycaster.intersectObjects(raycastTargets, false)[0]?.object;
+  const hit = raycastVisibleTargets()?.object;
   let target = blockWorld.resolveTarget(hit);
   // A hand sample without coordinates intentionally reuses the fresh gaze
   // point. Presentation easing, hover lift, or an opened lid can move a
@@ -8188,7 +8207,7 @@ renderer.domElement.addEventListener('pointerdown',event=>{
   if (!blockWorldPresentationActive || (Number.isInteger(event.button) && event.button > 0)) return;
   updateMouseFromPointer(event);
   raycaster.setFromCamera(mouse,camera);
-  const hitObject = raycaster.intersectObjects(raycastTargets,false)[0]?.object;
+  const hitObject = raycastVisibleTargets()?.object;
   const sportsEvidence = sportsEvidenceLayer?.visible ? resolveSportsEvidenceTarget(hitObject) : null;
   if (sportsEvidence) {
     sportsEventsConsole?.selectRecord?.(sportsEvidence.id, 'canvas');
@@ -8293,7 +8312,7 @@ addEventListener('pointerdown',event=>{
   if(event.target!==renderer.domElement)return;
   if(personStudio?.active || realityAssembly?.active)return;
   raycaster.setFromCamera(mouse,camera);
-  const hitObject = raycaster.intersectObjects(raycastTargets,false)[0]?.object;
+  const hitObject = raycastVisibleTargets()?.object;
   const sportsEvidence = sportsEvidenceLayer?.visible ? resolveSportsEvidenceTarget(hitObject) : null;
   if (sportsEvidence) {
     sportsEventsConsole?.selectRecord?.(sportsEvidence.id, 'canvas');
@@ -8356,7 +8375,7 @@ function animate(){
     if(isMobile || renderer.xr.isPresenting)renderer.render(scene,camera);else composer.render();
     return;
   }
-  raycaster.setFromCamera(mouse,camera); const hit=raycaster.intersectObjects(raycastTargets,false)[0];
+  raycaster.setFromCamera(mouse,camera); const hit=raycastVisibleTargets();
   const nextContent = blockWorldPresentationActive
     ? blockWorld?.resolveContentTarget?.(hit?.object)
     : null;
