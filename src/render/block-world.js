@@ -15,10 +15,11 @@ import {
 } from "../domains/block-world.js";
 import { previewBlockMigrationSnapshot } from "../domains/block-migration.js";
 import {
-  CUBE_DIVE_DOUBLE_TAP_DISTANCE_PX,
-  CUBE_DIVE_DOUBLE_TAP_WINDOW_MS,
-  resolveDiveBinding,
-} from "../domains/cube-dive.js";
+  GLASS_OPACITY,
+  glassCubeMaterialParams,
+  glassEdgeMaterialParams,
+  glassTintFor,
+} from "./glass-style.js";
 import {
   MANIPULATE_MODE_LABELS,
   MANIPULATE_MODES,
@@ -671,13 +672,6 @@ export function createBlockWorldLayer({
   onFeatureNavigate = null,
   onDistributionNavigate = null,
   onMigrationOpen = null,
-  // Cube Dive Transport (2026-09-19): a recognized portal-cube double
-  // activation routes here instead of toggling the cube open. The host owns
-  // the camera flight; this module only reports the binding.
-  onDiveRequest = null,
-  // A quick second tap on the same nested content cube dives one level
-  // deeper into the current interior.
-  onContentDoubleTap = null,
   // Free 3D gizmo manipulation (additive, 2026-09-18). The TransformControls
   // class is injected by the host so this module stays Node-testable; when it
   // is absent the manipulator degrades to blocked no-op snapshots.
@@ -817,8 +811,6 @@ export function createBlockWorldLayer({
   // double activation. The candidate is discarded for drags, pointer
   // cancellation, different cubes, different pointer types, and stale taps.
   let lastFieldTap = null;
-  // Nested-content double-tap candidate (drives dive-deeper, not toggling).
-  let lastContentTap = null;
   let blockMeshes = new Map();
   let selectionCues = new Map();
   let gazeLockCues = new Map();
@@ -1146,22 +1138,19 @@ export function createBlockWorldLayer({
       const definition = BLOCK_TYPES[type] ?? BLOCK_TYPES.stone;
       const isContainer = role === "container" || role === "container-open";
       const isOpen = role === "container-open";
-      // Reality Lens translucency (2026-09-18): every cube reads as a glass
-      // shell tinted by its block type, matching the Reality Assembly city
-      // blocks. Containers keep a stronger accent glow so the openable
-      // affordance survives the glass; the interior (lid + contents) stays
-      // opaque so it reads as the solid thing inside the glass.
+      // Packet 233 one-glass language: canonical translucent blue glass from
+      // the first frame, tinted toward the block type. Emissive accents stay
+      // so containers, portals, and crystal keep their interaction cues.
+      const typeHex = `#${(definition.color >>> 0).toString(16).padStart(6, "0")}`;
+      const accentHex = `#${(definition.accent >>> 0).toString(16).padStart(6, "0")}`;
       materials.set(key, new three.MeshStandardMaterial({
-        color: definition.color,
-        emissive: isContainer ? definition.accent : definition.color,
-        emissiveIntensity: isContainer
-          ? (isOpen ? 0.8 : 0.95)
-          : (type === "portal" || type === "crystal" ? 0.85 : 0.42),
-        metalness: 0.22,
-        roughness: 0.16,
-        transparent: true,
-        opacity: isContainer ? (isOpen ? 0.4 : 0.52) : 0.55,
-        depthWrite: false,
+        ...glassCubeMaterialParams(glassTintFor(typeHex, 0.45), {
+          emissive: isContainer ? accentHex : typeHex,
+          emissiveIntensity: isContainer
+            ? (isOpen ? 0.8 : 0.95)
+            : (type === "portal" || type === "crystal" ? 0.85 : 0.42),
+          opacity: isContainer ? (isOpen ? 0.4 : 0.52) : GLASS_OPACITY,
+        }),
       }));
     }
     return materials.get(key);
@@ -1171,12 +1160,14 @@ export function createBlockWorldLayer({
     if (!three) return null;
     const key = `container-cue:${type}:${open ? "open" : "closed"}`;
     if (!materials.has(key)) {
+      // Packet 233: the container cue is a small translucent glass marker —
+      // never a solid cube — with a deep-red emissive signal.
       materials.set(key, new three.MeshStandardMaterial({
-        color: BLOCK_WORLD_CONTAINER_SIGNAL_COLOR,
-        emissive: BLOCK_WORLD_CONTAINER_SIGNAL_EMISSIVE,
-        emissiveIntensity: BLOCK_WORLD_CONTAINER_SIGNAL_INTENSITY,
-        metalness: 0.34,
-        roughness: 0.3,
+        ...glassCubeMaterialParams(glassTintFor("#8f122d", 0.55), {
+          emissive: BLOCK_WORLD_CONTAINER_SIGNAL_EMISSIVE,
+          emissiveIntensity: BLOCK_WORLD_CONTAINER_SIGNAL_INTENSITY,
+          opacity: 0.55,
+        }),
       }));
     }
     return materials.get(key);
@@ -1187,12 +1178,15 @@ export function createBlockWorldLayer({
     const key = `content:${type}`;
     if (!contentMaterials.has(key)) {
       const definition = BLOCK_TYPES[type] ?? BLOCK_TYPES.crystal;
+      // Packet 233: contents and the container lid are glass cubes too —
+      // translucent from the first frame, tinted by the content type.
+      const accentHex = `#${(definition.accent >>> 0).toString(16).padStart(6, "0")}`;
+      const colorHex = `#${(definition.color >>> 0).toString(16).padStart(6, "0")}`;
       contentMaterials.set(key, new three.MeshStandardMaterial({
-        color: definition.accent,
-        emissive: definition.color,
-        emissiveIntensity: 0.65,
-        metalness: 0.35,
-        roughness: 0.36,
+        ...glassCubeMaterialParams(glassTintFor(accentHex, 0.55), {
+          emissive: colorHex,
+          emissiveIntensity: 0.65,
+        }),
       }));
     }
     return contentMaterials.get(key);
@@ -1260,12 +1254,9 @@ export function createBlockWorldLayer({
     if (!three || typeof three.LineBasicMaterial !== "function") return null;
     if (!glassFrameMaterials.has(type)) {
       const definition = BLOCK_TYPES[type] ?? BLOCK_TYPES.stone;
-      glassFrameMaterials.set(type, new three.LineBasicMaterial({
-        color: definition.accent,
-        transparent: true,
-        opacity: 0.5,
-        depthWrite: false,
-      }));
+      glassFrameMaterials.set(type, new three.LineBasicMaterial(
+        glassEdgeMaterialParams({ color: definition.accent }),
+      ));
     }
     return glassFrameMaterials.get(type);
   }
@@ -1390,7 +1381,7 @@ export function createBlockWorldLayer({
     return parent ? resolveBlockWorldContent(parent, hoveredContent.contentId) : null;
   }
 
-  function selectContent(parentBlockId, contentIdOrIndex, method = "content-row", input = {}) {
+  function selectContent(parentBlockId, contentIdOrIndex, method = "content-row") {
     const parent = contentParent(parentBlockId);
     const record = resolveBlockWorldContent(parent, contentIdOrIndex);
     if (!parent || !record) {
@@ -1407,39 +1398,6 @@ export function createBlockWorldLayer({
     contentFocus = contentFocusSnapshot(record, method);
     render();
     const snapshot = contentFocusSnapshot(record, method);
-    // Canvas double-tap on a nested content cube dives one level deeper into
-    // the current interior instead of toggling anything. Button/keyboard
-    // content navigation never triggers this path.
-    if (method === "canvas") {
-      const pointerType = typeof input.pointerType === "string" && input.pointerType.trim() !== ""
-        ? input.pointerType
-        : "pointer";
-      const timestamp = tapTimestamp(input);
-      const point = directInputPoint(input);
-      const previous = lastContentTap;
-      const elapsed = previous ? timestamp - previous.timestamp : Infinity;
-      const sameContent = previous?.parentBlockId === parent.id
-        && previous?.contentId === record.contentId
-        && previous.pointerType === pointerType
-        && elapsed >= 0
-        && elapsed <= CUBE_DIVE_DOUBLE_TAP_WINDOW_MS
-        && tapDistance(previous.point, point) <= CUBE_DIVE_DOUBLE_TAP_DISTANCE_PX;
-      if (sameContent) {
-        lastContentTap = null;
-        onContentDoubleTap?.(cloneSnapshot({
-          parentBlockId: parent.id,
-          contentId: record.contentId,
-          contentIndex: record.index ?? 0,
-          label: record.content?.label ?? record.content?.contentType ?? "nested cube",
-          contentType: record.content?.contentType ?? null,
-          method: pointerType === "touch" ? "double-tap" : "double-click",
-          simulation: true,
-          externalTransfer: false,
-        }));
-      } else {
-        lastContentTap = { parentBlockId: parent.id, contentId: record.contentId, pointerType, timestamp, point };
-      }
-    }
     onContentSelect?.(snapshot);
     return snapshot;
   }
@@ -3399,11 +3357,7 @@ export function createBlockWorldLayer({
    * Record one pointer-up tap and recognize a same-cube, same-pointer-type
    * second tap inside the deterministic time and distance bounds. The first
    * tap only selects (the pointer-down seam owns that selection); it never
-   * opens a cube. Portal cubes reserve the double activation for Cube Dive
-   * Transport: a quick second tap dives the camera inside the cube instead
-   * of toggling it open (their open/close stays on the console OPEN control,
-   * the F key, and the explicit API). Other containers keep the toggle
-   * contract. This method is intentionally renderer-local and contains no
+   * opens a cube. This method is intentionally renderer-local and contains no
    * native `dblclick` listener, avoiding duplicate mouse click paths.
    */
   function registerFieldTap(target, input = {}) {
@@ -3424,39 +3378,11 @@ export function createBlockWorldLayer({
     const previous = lastFieldTap;
     const elapsed = previous ? timestamp - previous.timestamp : Infinity;
     const sameTarget = previous?.blockId === block.id && previous.pointerType === pointerType;
-    const diveBinding = resolveDiveBinding({ blocks: currentProjection.blocks, blockId: block.id });
-    const diveGesture = sameTarget
-      && elapsed >= 0
-      && elapsed <= CUBE_DIVE_DOUBLE_TAP_WINDOW_MS
-      && tapDistance(previous.point, point) <= CUBE_DIVE_DOUBLE_TAP_DISTANCE_PX;
-    if (diveGesture) {
-      lastFieldTap = null;
-      if (diveBinding.ok) {
-        const method = pointerType === "touch" ? "double-tap" : "double-click";
-        onDiveRequest?.(cloneSnapshot({
-          blockId: diveBinding.blockId,
-          featureId: diveBinding.featureId,
-          routeId: diveBinding.routeId,
-          label: diveBinding.label,
-          portalIndex: diveBinding.portalIndex,
-          method,
-          gesture: method,
-          simulation: true,
-          externalTransfer: false,
-        }));
-        return null;
-      }
-      // Not a portal cube: the container toggle window below applies.
-    }
     const sameGesture = sameTarget
       && elapsed >= 0
       && elapsed <= BLOCK_WORLD_DOUBLE_ACTIVATION_WINDOW_MS
       && tapDistance(previous.point, point) <= BLOCK_WORLD_DOUBLE_ACTIVATION_DISTANCE_PX;
-    if (sameGesture && !diveBinding.ok) {
-      // Portal cubes reserve double activation for the dive: a second tap
-      // past the 350ms dive window simply starts a new tap sequence instead
-      // of toggling. Their open/close stays on the console OPEN control,
-      // the F key, and the explicit openBlock/toggleBlock API.
+    if (sameGesture) {
       lastFieldTap = null;
       return activateFieldDouble(block.id, pointerType === "touch" ? "double-tap" : "double-click");
     }
@@ -3464,43 +3390,8 @@ export function createBlockWorldLayer({
     return null;
   }
 
-  /**
-   * World-space position of a nested content cube (parent center + the
-   * deterministic container peek offset). Renderer-local presentation math;
-   * canonical projection data is never mutated.
-   */
-  function getContentWorldPosition(parentBlockId, contentIndex = 0) {
-    const parent = contentParent(parentBlockId)
-      ?? resolveBlockFromProjection(currentProjection, parentBlockId);
-    if (!parent) return null;
-    const contents = asArray(parent.contents);
-    const safeIndex = Number.isFinite(Number(contentIndex)) ? Math.max(0, Number(contentIndex)) : 0;
-    const content = contents[safeIndex] ?? contents[0];
-    if (!content) return null;
-    const width = currentProjection.dimensions.width;
-    const depth = currentProjection.dimensions.depth;
-    const base = {
-      x: (parent.x ?? (width - 1) / 2) - (width - 1) / 2 - 3.8,
-      y: (parent.y ?? 1) * 0.82 - 0.75,
-      z: (parent.z ?? (depth - 1) / 2) - (depth - 1) / 2 - 3.2,
-    };
-    const peek = getBlockWorldContainerPeekOffset(content, safeIndex, contents.length);
-    return {
-      x: base.x + peek.x,
-      y: base.y + peek.y,
-      z: base.z + peek.z,
-      parentBlockId: parent.id,
-      contentId: content.id ?? null,
-      contentIndex: safeIndex,
-    };
-  }
-
   function clearFieldTap() {
     lastFieldTap = null;
-  }
-
-  function clearContentTap() {
-    lastContentTap = null;
   }
 
   function moveSelected(delta) {
@@ -4207,8 +4098,6 @@ export function createBlockWorldLayer({
     doubleActivateField: activateFieldDouble,
     registerFieldTap,
     noteFieldTap: registerFieldTap,
-    clearContentTap,
-    getContentWorldPosition,
     clearFieldTap,
     moveSelected,
     inspectBlock: inspectSelected,

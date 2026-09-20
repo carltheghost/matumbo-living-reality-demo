@@ -19,6 +19,17 @@
  * identity, signing, settlement, wallet, custody, or authority state.
  */
 
+import {
+  PANEL_SCROLL_ATTR,
+  dockSlot,
+  enhancePanel,
+  ensurePanelSystemStylesheet,
+  hasPanelState,
+  mountWorldDrawer,
+  readPanelState,
+  writePanelState,
+} from './panel-system.js?v=20260919-glass-world';
+
 /* ------------------------------------------------------------------ */
 /* Pure geometry helpers (unit-tested).                                */
 /* ------------------------------------------------------------------ */
@@ -62,14 +73,29 @@ export function composePanelTransform(x, y, z) {
 
 const EXTRA_PANEL_IDS = ['gesture-input-panel', 'media-preview', 'city-journey', 'hint'];
 
+/**
+ * Utility panels that dock as a tidy chip column instead of scattering
+ * overlapping boxes across the field (Packet 233a consolidation). They
+ * stay fully draggable and their positions persist like every panel.
+ */
+const DOCK_IDS = ['city-journey', 'camera-input-panel', 'media-preview', 'gesture-input-panel'];
+
+/* Panels whose bodies already scroll internally; the shared scroll-body
+   wrapper would only add a nested scroll layer. */
+const NO_SCROLL_WRAP_IDS = ['feature-shell', 'hint'];
+
 /** Every floating panel/tab: all asides plus the non-aside overlays. */
 export function collectPanelDescriptors(documentRoot) {
   const out = [];
   const seen = new Set();
+  const seenIds = new Set();
   const push = (el) => {
     if (!el || seen.has(el)) return;
+    const id = el.id || '(panel)';
+    if (seenIds.has(id)) return; // duplicate mount guard: keep the first panel per id
     seen.add(el);
-    out.push({ id: el.id || '(panel)', el });
+    seenIds.add(id);
+    out.push({ id, el });
   };
   if (documentRoot && typeof documentRoot.querySelectorAll === 'function') {
     const asides = documentRoot.querySelectorAll('aside');
@@ -119,6 +145,33 @@ export function isPanelVisible(el, view) {
 
 const STORE_KEY = 'matumbo.panelSpace.v1';
 
+/**
+ * Open a feature from the world drawer through the canonical Mission
+ * Control path: click the real feature-nav button when it exists, so the
+ * drawer never grows a second feature-opening implementation. Falls back
+ * to opening the shell first when the button is not mounted yet.
+ */
+export function openFeatureFromDrawer(documentRoot, featureId) {
+  if (!documentRoot || !featureId) return false;
+  try {
+    const getBtn = () => (documentRoot.getElementById
+      ? documentRoot.getElementById(`feature-button-${featureId}`)
+      : null);
+    let btn = getBtn();
+    if (!btn) {
+      const shell = documentRoot.getElementById ? documentRoot.getElementById('feature-shell') : null;
+      const toggle = documentRoot.getElementById ? documentRoot.getElementById('feature-toggle') : null;
+      if (shell && toggle && !shell.classList.contains('open')) toggle.click();
+      btn = getBtn();
+    }
+    if (btn) {
+      btn.click();
+      return true;
+    }
+  } catch { /* never break the field */ }
+  return false;
+}
+
 function readStore(view) {
   try {
     const raw = view && view.localStorage ? view.localStorage.getItem(STORE_KEY) : null;
@@ -156,6 +209,7 @@ const PANEL_SPACE_CSS = `
 [data-panel-space]:not([data-compact="true"]){max-width:min(80vw,calc(100vw - 16px)) !important;max-height:80vh !important}
 @keyframes panelSpaceIn{from{opacity:0}to{opacity:1}}
 .panel-space-appearing{animation:panelSpaceIn .18s ease-out}
+@media (prefers-reduced-motion: reduce){.panel-space-appearing{animation:none !important}}
 #hint[data-panel-space]{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
 `;
 
@@ -188,7 +242,17 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
       ctx.saveTimer = 0;
       const data = {};
       for (const rec of ctx.recs) {
-        if (rec.placed) data[rec.id] = { x: Math.round(rec.state.x), y: Math.round(rec.state.y), z: Math.round(rec.state.z) };
+        if (rec.placed) {
+          const snap = { x: Math.round(rec.state.x), y: Math.round(rec.state.y), z: Math.round(rec.state.z) };
+          data[rec.id] = snap;
+          // Packet 233a: the per-panel namespaced key is the source of
+          // truth for minimized state + position (legacy store kept for
+          // sessions saved before this packet).
+          writePanelState(view.localStorage, rec.id, {
+            ...snap,
+            minimized: rec.el.getAttribute('data-compact') === 'true',
+          });
+        }
       }
       writeStore(view, data);
     }, 250);
@@ -206,6 +270,10 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
     }
     if (rec.actionEl) rec.actionEl.textContent = on ? 'Open' : 'Minimize';
     if (rec.toggleBtn) rec.toggleBtn.setAttribute('aria-expanded', String(!on));
+    // Packet 233a: minimized state persists per panel under matumbo.panel.<id>.
+    try {
+      writePanelState(view.localStorage, rec.id, { minimized: !!on });
+    } catch { /* private mode etc: state simply does not persist */ }
     if (!on && rec.placed) {
       // The grown panel must stay in reach.
       const r = rec.el.getBoundingClientRect();
@@ -237,18 +305,37 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
     const r = el.getBoundingClientRect();
     if (!r || (r.width === 0 && r.height === 0)) return false; // not laid out yet; caller retries
     const saved = ctx.store[rec.id] || {};
+    // Packet 233a: per-panel namespaced state wins; the legacy panelSpace
+    // store is only a fallback for sessions saved before this packet.
+    // Fresh panels (no stored state) stay compact: small by default.
+    const remembered = hasPanelState(view.localStorage, rec.id)
+      ? readPanelState(view.localStorage, rec.id)
+      : null;
     const v = viewport();
-    const sx = Number(saved.x);
-    const sy = Number(saved.y);
+    const numOr = (a, b) => (Number.isFinite(a) ? a : Number(b));
+    const sx = remembered && remembered.x != null ? remembered.x : numOr(Number(saved.x), NaN);
+    const sy = remembered && remembered.y != null ? remembered.y : numOr(Number(saved.y), NaN);
     rec.home = { x: r.left, y: r.top };
     const st = el.style;
     st.position = 'fixed'; st.left = '0px'; st.top = '0px';
     st.right = 'auto'; st.bottom = 'auto'; st.margin = '0px';
     rec.placed = true;
-    const p = clampSurface(Number.isFinite(sx) ? sx : r.left, Number.isFinite(sy) ? sy : r.top, r.width, r.height, v.w, v.h);
+    // Docked utility panels stack in one tidy column (bottom-left) instead
+    // of scattering overlapping boxes; anywhere the user dragged them wins.
+    let defX = r.left;
+    let defY = r.top;
+    if (rec.docked) {
+      const slot = dockSlot(rec.dockIndex, { viewport: v });
+      defX = slot.x;
+      defY = slot.y;
+    }
+    const p = clampSurface(Number.isFinite(sx) ? sx : defX, Number.isFinite(sy) ? sy : defY, r.width, r.height, v.w, v.h);
     rec.state = { x: p.x, y: p.y, z: clampDepth(saved.z || 0) };
     applyTransform(rec);
-    if (rec.compactible) setCompact(rec, true, null); // small by default; interaction materializes
+    // Packet 233a: honor the remembered minimized state; fresh panels stay
+    // compact (small by default) and interaction materializes. The
+    // closed->open transition in reconcilePanel still appears small.
+    if (rec.compactible) setCompact(rec, !remembered || remembered.minimized, null);
     el.classList.add('panel-space-appearing');
     setTimeout(() => el.classList.remove('panel-space-appearing'), 260);
     persistSoon(ctx);
@@ -354,7 +441,10 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
 
   function setupPanel(desc, ctx) {
     const el = desc.el;
+    // Duplicate mount guard: one panel per id, the first wins.
+    if (ctx.byId.has(desc.id)) return ctx.byId.get(desc.id);
     const isHint = el.id === 'hint';
+    const docked = !isHint && DOCK_IDS.includes(el.id);
     const rec = {
       id: desc.id, el,
       state: { x: 0, y: 0, z: 0 },
@@ -362,8 +452,11 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
       wasVisible: isPanelVisible(el, view),
       originalCssText: el.style ? el.style.cssText : '',
       grip: null, toggleBtn: null, actionEl: null,
-      compactible: !isHint && el.id !== 'city-journey',
+      compactible: !isHint,
+      docked,
+      dockIndex: docked ? ctx.dockOrder.length : -1,
     };
+    if (docked) ctx.dockOrder.push(rec);
     if (!isHint) {
       const title = panelTitle(el);
       const grip = documentRoot.createElement('div');
@@ -401,6 +494,25 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
     el.setAttribute('data-panel-space', 'managed');
     ctx.recs.push(rec);
     ctx.byEl.set(el, rec);
+    ctx.byId.set(rec.id, rec);
+    // Packet 233a: every panel body scrolls (opt-in attribute, applied on
+    // mount) and minimized state persists per panel. The surface-grip is
+    // the desktop minimize control, so the panel system runs in delegate
+    // mode here: no second button, no second chip.
+    try {
+      if (!NO_SCROLL_WRAP_IDS.includes(rec.id) && el.hasAttribute && !el.hasAttribute(PANEL_SCROLL_ATTR)) {
+        el.setAttribute(PANEL_SCROLL_ATTR, '');
+      }
+      enhancePanel(el, {
+        id: rec.id,
+        documentRoot,
+        windowRoot: view,
+        mode: 'delegate',
+        applyMinimized: (minimized) => {
+          if (rec.compactible) setCompact(rec, minimized, ctx);
+        },
+      });
+    } catch { /* one bad panel never breaks the field */ }
     if (rec.wasVisible) requestPlace(rec, ctx);
     return rec;
   }
@@ -410,13 +522,37 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
     styleEl.setAttribute('data-panel-space-style', 'true');
     styleEl.textContent = PANEL_SPACE_CSS;
     (documentRoot.head || documentRoot).appendChild(styleEl);
+    // Packet 233a shared panel styles (scrollbars, chips, drawer).
+    try {
+      ensurePanelSystemStylesheet(documentRoot);
+    } catch { /* layout still works without the shared sheet */ }
 
     const ctx = {
-      recs: [], byEl: new Map(), store: readStore(view), saveTimer: 0, styleEl,
+      recs: [], byEl: new Map(), byId: new Map(), dockOrder: [],
+      store: readStore(view), saveTimer: 0, styleEl,
     };
     for (const desc of collectPanelDescriptors(documentRoot)) {
       try { setupPanel(desc, ctx); } catch { /* one bad panel never breaks the field */ }
     }
+
+    // Packet 233a: the single scrollable world drawer (left side
+    // consolidation). Drawer entries expand panels through the same
+    // code paths as the panels' own controls.
+    let drawerEl = null;
+    try {
+      drawerEl = mountWorldDrawer({
+        documentRoot,
+        windowRoot: view,
+        onOpenPanel: (id) => {
+          const rec = ctx.byId.get(id);
+          if (!rec) return false;
+          if (rec.compactible) setCompact(rec, false, ctx);
+          if (!rec.placed) requestPlace(rec, ctx);
+          return true;
+        },
+        onOpenFeature: (featureId) => openFeatureFromDrawer(documentRoot, featureId),
+      });
+    } catch { drawerEl = null; }
 
     const onMutations = (mutations) => {
       let reconcileAll = false;
@@ -458,6 +594,11 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
       if (observer) observer.disconnect();
       if (typeof view.removeEventListener === 'function') view.removeEventListener('resize', onResize);
       if (ctx.saveTimer) { clearTimeout(ctx.saveTimer); ctx.saveTimer = 0; }
+      // Remove the world drawer (re-mounted on the next activation).
+      try {
+        const drawer = documentRoot.getElementById ? documentRoot.getElementById('world-drawer') : null;
+        if (drawer && drawer.remove) drawer.remove();
+      } catch { /* ignore */ }
       for (const rec of ctx.recs) {
         try {
           if (rec.grip && rec.grip.remove) rec.grip.remove();

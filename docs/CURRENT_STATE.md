@@ -1,165 +1,195 @@
 # Current State
 
-## Packet 238 — Avatar-B: surgical canon repair (browser-verified 2026-09-20)
+## Packet 233 — one block system: glass cubes, deep zoom, feature worlds, scrolling panels (2026-09-19)
 
-The Person Studio avatar is the articulated fluffy Tumbo rig again; the flat
-hologram code path is **deleted** (locked 3). `src/render/person-studio-scene.js`:
-avatar region replaced with the staged `mountRig()` block from the 235/236
-build — `buildTumboFluffyRig(THREE,{seed:0, muffColor, faceDecalUrl:
-resolveFaceDecalUrl(storage), furQuality:(innerWidth<700)?.55:1})`,
-`FLUFFY_STUDIO_SCALE=1.35`, presence light `#9fd8ff`, `avatarPickMeshes`,
-`setupJiggle()` + `stepSecondaryMotion()` (Packet 236 spring-physics secondary
-motion — tail chain, body squash, headphone cups — plus GPU fur sway).
-**Both** rig modules import with `?v=20260920-p238` (the staged scene's
-asymmetric un-tokenized chibi import was not inherited). Deleted: the
-mesh-hiding `visible=false` traverse, the hologram sprite builder, and the
-eager `TextureLoader.load` (~246 KB / ~13 MB GPU win). Set dressing kept
-verbatim; wardrobe displays regained the earmuff swatch sphere. `update()` is
-the staged version: drag-ease + `setAvatarOffset` (clamp radius 3.4), greet
-mode select (`jump→'hop'`; reduced-motion forces `'wave'`),
-`updateTumboChibiRig`, pose slerp (`pose.joints.head→rig.joints.head`,
-`pose.joints.leftArm→rig.joints.armLeft` — verified present in the owner's
-`getPose()`/`moveRig` shape; the 2s neutral-decay in `samplePose()` means the
-`poseHeld` manual channel eases back to rest on its own, no fighting), floaters
-**without** the avatar entry (the rig bobs itself via `rigOut.bobY` — no
-double-bob). `apply()` tints `rig.materials.cushion` per outfit (white
-`#f5f2ea` on obsidian/ivory, teal `#4fd8cc` on cobalt/oxblood). Boot-path
-hardening (locked 5): the rig build is **deferred to first Person Studio
-open** (boot never builds 76–104 fur shells) and wrapped in try/catch — a
-throw logs a warning and leaves a rig-less studio, `getSnapshot().rigBuildFailed=true`,
-and the fingerprint promise resolves null so the owner falls back to the
-`STUDIO_MODEL` hash. `src/render/person-studio.js`: staged pointer block
-restored (`dragPlane`, `avatarHit()` over `spatial.avatarPickMeshes`,
-click→`greetAvatar()` with the verbatim lines "A friendly wave." / "A happy
-spin." / "A little jump for joy.", symmetric `pointermove` add/remove in
-`destroy()`), hint text "Click your avatar to say hi · drag it to move it",
-`kind==='greet'` branch in `selectObject`; dispatches
-`person-studio:avatar-changed` from `chooseFace` (the existing
-`chess-arena.js` subscriber is now live). `src/main.js`: one-line
-`?v=20260920-p238` bump on the person-studio import (the wrapper's scene
-import bumped to match, so the new scene is actually served).
+Every 3D panel is now one translucent blue glass cube with edge glow and
+connection lines — translucent from the first frame. `src/render/glass-style.js`
+is the single source (canonical material, edges, starfield, connection
+lines); `block-world.js`, `market-constellation.js` (the multicolor covenant
+graph was here, not contracts-markets), and main.js's world-events evidence
+cubes were converted. Giant solid-blue boxes and multicolor solids are gone;
+the remaining color signals (brutality bands, source/year/metric kinds) live
+in userData/readouts, not in the geometry. Cubes are smaller (core 1.1,
+primary 0.68, secondary 0.45; inner/outer radii 4.2/8), the camera zooms to
+240 with LOD far at 120, and double-click/double-tap on a cube travels into
+that feature's own glass-block world (feature-worlds.js, `worlds.enter(id)`),
+with a "← Reality Lens" breadcrumb and Escape to return. Hover peeks, single
+click selects. Normal chess stays on the arena table; the World Chess cube
+dispatches `world-chess:open` and the Table Chess cube navigates to arena.
 
-**Fingerprint-migration note:** the geometry fingerprint now hashes the fluffy
-rig instead of the mannequin, so `assetSha256` changes for anyone who approved
-the old model — the owner fail-closes with "Model geometry has changed since
-approval; review and approve the new model." (zero data loss; the saved profile
-is untouched). This is correct behavior, not a regression.
+Panels: one consolidated scrollable world drawer ("Find a connected
+feature"), every panel body scrolls with a thin blue scrollbar, every panel
+minimizes to a small translucent chip (click to restore) with persisted
+position/minimized state in localStorage, all movable by drag in full 3D.
+`src/render/panel-system.js` + `panel-system.css` provide the shared
+behavior; centered-surfaces.js and mobile-panel-manager.js call it.
 
-**P1-preservation note:** the Packet 236 fur-sway program-cache behavior was
-restored bugs-included from the staged build and was deliberately **not**
-fixed here — the cache-key fix stays a sign-off-gated follow-up.
+## Packet 234 — Avatar World Chess among the blocks (2026-09-19)
 
-**Browser verification (2026-09-20, headless Chromium + SwiftShader, desktop
-1440×900):** zero console errors, zero page errors, zero failed requests
-across every run (greet cycle, drag, wardrobe, reduced motion, photo face).
-Greet order exact: "A friendly wave." → "A happy spin." → "A little jump for
-joy." — each fired via click-to-greet on the avatar, wave pose visible
-mid-greet in `~/workspace/swarm-a/evidence/p238/probe3-greet.png`.
-Drag-to-move: avatar walks toward the drag point with a heading turn toward
-travel direction (`probe4-before.png` / `probe4-after.png`). Wardrobe:
-"Cobalt applied · identity unchanged. Save to keep this look." and back to
-"Obsidian applied · identity unchanged."; `apply()` sets
-`rig.materials.cushion` from `STUDIO_OUTFITS[].muffs` (cobalt→`#4fd8cc`,
-obsidian→`#f5f2ea`) with no errors — restored verbatim from the 226
-reference; note the cushion torus sits inside the headphone cup sphere in the
-226 geometry, so the tinted cushion itself is occluded from the front camera
-(reference-canon, not a 238 defect). Reduced motion: greeting stays
-"A friendly wave.", no animation-only console/page errors.
-Photo-face: seeded `your-photo` choice renders without errors. Mobile 390×844:
-studio opens with zero errors and no `document.scrollingElement` overflow.
-Screenshots: `~/workspace/swarm-a/evidence/p238/desktop.png`,
-`desktop-studio.png`, `desktop-studio-greet.png`, `probe3-greet.png`,
-`probe4-before.png`, `probe4-after.png`, `probe5-obsidian.png`,
-`probe5-cobalt.png`, `desktop-studio-reduced-motion.png`,
-`desktop-studio-photo-face.png`, `mobile-studio.png`.
+A second, full 3D chess board lives out among the world blocks (home at
+26, 6, -14, reviewable via setHomePosition), played with 32 articulated
+Tumbo chibi pieces built on Packet 232's shared rig factories
+(`createTumboGeometryCache`/`createTumboMaterialSet` — which also fixed a
+latent crash: the rig needs `G.hairCap`, absent from the old local cache).
+Full chess.js rules, legal highlights, castling, en passant, promotion
+chooser, walk-glide moves, victim spin/shrink, victor bow, human-vs-human
+and human-vs-AI (Easy/Medium/Hard), SAN list, new game, resign, board flip,
+camera save/restore, reduced-motion support. `src/domains/world-chess.js`
+(rules/state) + `src/render/world-chess.js` (`mountWorldChess`, listens for
+`world-chess:open`, exposes `window.__TUMBO_WORLD_CHESS__`). Existing table
+chess in the arena console is untouched and remains the on-table game.
 
-**Test-environment caveat:** under SwiftShader the full fluffy rig (76–104
-fur shells) renders at a few frames per minute, so CDP round-trips stretch to
-tens of seconds and a click can land before the deferred mount completes (the
-probes poll-click until the first greet fires before interacting). The
-`?v=20260920-p238`-busted jiggle vendor request returns 200.
+## Packet 232 — Person Studio on the shared Tumbo chibi rig (2026-09-19)
 
-## Packet 237 — Avatar-A: fidelity restoration, mechanical restore (verified 2026-09-20)
+The Person feature's 3D avatar is now the same articulated Tumbo chibi rig
+the chess champions use, instead of the older tall mannequin. The whole
+person-studio scene was rebuilt around `src/render/tumbo-chibi-rig.js`,
+which now exports shared geometry/material factories
+(`createTumboGeometryCache`, `createTumboMaterialSet`) and a shared
+face-decal resolver (`resolveFaceDecalUrl` in `src/domains/avatar-style.js`)
+so Person Studio and the chess foundry draw from one look. The studio keeps
+its lens-space environment, city backdrop, furniture, wardrobe displays, and
+Luna companion, but the mannequin is gone: the avatar is the big-head chibi
+with fluffy white/teal earmuffs, loc crown over a full hair cap (compared
+against the reference portraits — the sparse 8-loc crown without a cap read
+as bald at studio scale, so the cap + 12 fuller locs + two shoulder-falling
+front locs won), black hoodie with gold `TUMBO` chest text, brown furry
+paws, and a curling wagging tail.
 
-Restored the Packet 235/236 avatar files that `ceb1411` removed, as pure
-additions — zero behavior change, nothing visible changes, no live code imports
-the restored modules yet (the only new references are the two classic script
-tags in `index.html`). Verbatim from `c1d5a07`:
-`vendor/jiggle-physics/jiggle-physics.js`, `vendor/jiggle-physics/jiggle-chain.js`,
-`vendor/jiggle-physics/LICENSE` (BSD-3-Clause, © 2026 xlovecam — attribution
-kept), `src/render/tumbo-chibi-rig.js`, `src/render/tumbo-fluffy-rig.js`.
-`index.html` loads both vendored engine scripts (cache-busted
-`?v=20260920-p237`) immediately before the `./src/main.js` module tag; they
-publish `window.createJigglePhysics` / `window.createJiggleChain` /
-`window.createJiggleDriver`, and the app degrades gracefully without them.
-Domain data restored additively: `AVATAR_BLINK`/`avatarBlink`, `AVATAR_GREET` +
-`avatarWavePose`/`avatarSpinPose`/`avatarJumpPose`, `avatarBowPose`,
-`AVATAR_CELEBRATE`, `avatarWalkPhase` (`src/domains/avatar-motion.js`);
-`resolveFaceDecalUrl` (`src/domains/avatar-style.js`); `muffs` on all four
-`STUDIO_OUTFITS` (`src/domains/person-studio.js`). Deleted the orphaned
-`assets/avatar/avatar-bust.webp` (no JS/HTML references; its one JSON manifest
-entry was stale metadata in an unread file and was removed with it).
-Verification: `node --check` on all five restored files plus the three edited
-domain files; vendored engine loads under a `window` shim with all three
-factory functions present; headless-Chromium cold load — desktop 1440×900 and
-mobile 390×844 both with zero console errors, zero page errors, zero failed
-requests; Person Studio opens exactly as before (flat hologram still present —
-unchanged by this packet). Texture baseline: `renderer.info.memory.textures`
-is not reachable from page context (gap for the ≤32 MB audit); the
-default-framebuffer estimate at 1440×900 is 1440×900×4×1.33 ≈ 6.6 MB. Mobile
-note: the 390×844 main thread goes unresponsive under headless SwiftShader
-(evaluate/screenshot time out) — reproduced identically on pristine `e8ebc51`,
-so pre-existing and not caused by this packet. This packet is labeled fidelity
-restoration, never full law compliance.
+Click still cycles wave → spin → jump (now driven by the rig's shared
+animation states, with greet durations matching the rig's frame counts);
+drag still walks the avatar to the target within radius 3.4 with the same
+easing, facing, and room bounds; reduced motion still freezes travel and
+converts spin/jump to a gentle wave. Profile, Wardrobe, Your room, Presence,
+and Companion tabs are preserved; wardrobe live-tints hoodie, trim, and the
+white/teal earmuffs; "Make it me" still rebuilds the avatar with the local
+photo decal. The chess foundry was refactored onto the same factories (no
+geometry/material duplication) and all 12 piece variants build from them.
 
-## `e8ebc51` — raycast taps no longer swallowed by invisible assembly meshes (2026-09-20)
+The focused suite passes 62/62 in local node runs (rig factories, studio
+scene structure/snapshot, greet cycle, drag clamp/ease, reduced motion,
+wardrobe tint, face refresh, decal resolution, all six chess roles × both
+colors). Headless Chromium (SwiftShader) rendered the studio with zero
+console/page errors: idle, mid-wave, drag-walk, close-up face, Cobalt/teal
+earmuffs, and mid-spin screenshots were compared against the user's reference
+portraits; the chess board view was not reachable in the headless shell
+(stage mounts at 0×0 until opened), so chess is covered by the node-level
+factory regression plus the zero-error page load — the parent performs
+live-browser verification. All touched files pass `node --check`. No
+provider request, credential, advice, reward token, persistence, wallet, or
+external authority was added.
 
-Three.js Raycaster does not skip meshes whose ancestor layer is hidden. Reality
-Assembly nodes (visible=true on the mesh, hidden layer root when the assembly
-UI is inactive) won the raycast over block-world cubes, failed `resolveTarget`,
-and taps were dropped — canvas taps could not select cubes, making Cube Dive
-Transport unreachable by touch/mouse. `src/main.js` now filters to the first
-world-visible hit via `isWorldVisible()`/`raycastVisibleTargets()` at all five
-`raycastTargets` call sites. Verified: canvas clicks select blocks, double-tap
-dive reaches the 'Inside Rooms + Messaging' HUD. 903/903 tests, 9/9 release
-boundaries, local-only/simulated.
+## Packet 231 — animated Tumbo chess champions (2026-09-19)
 
-## `456479b` — cube dive transport: double-tap flies inside the cube (2026-09-19)
+The chess pieces are now articulated miniature Tumbo champions instead of
+billboard portraits. Each piece is a full 3D chibi rig (big head, fluffy
+earmuffs, black hoodie with drawstrings, brown paws, locs, eyeliner/beauty
+mark/goatee, wagging tail) built from shared geometry/material caches so all
+32 share draw state. They move like Tumbo: idle breathing/bob/blink/tail-wag,
+a wave when selected, a walk cycle (legs paddling, body bobbing, turning to
+face travel) while gliding to the target square, a bow from the victor after
+a capture lands, and a spin-away while the captured piece shrinks out.
+Tap-to-move, legal-target markers, AI, promotion, and all rules are unchanged.
+The personal-portrait decal slot resolves the user's stylized photo when one
+exists (default stays geometric Tumbo). Two visual alternatives were compared
+and retained: a full torus headband (physically connects both ear cups, reads
+identically from the front, correct from all angles) beat a partial crown
+arc; and distinct capture emotions (victim spins, victor bows) beat a shared
+celebration. The focused suite passes 45/45 in local node runs (bow math,
+rig joints, all motion modes, all six roles × both colors, no sprites,
+stature/ring differences, decal wiring, squarePosition); all touched files
+pass `node --check`. A headless-Chromium note: rAF does not fire in the
+software test shell, so glide/motion-loop frames were verified by driving
+the rig poses directly plus logic-level game flow (e4/d5/exd5, AI replies,
+zero console/page errors); the parent performs live-browser verification.
+No provider request, credential, advice, reward token, persistence, wallet,
+or external authority was added.
 
-Double-tap/double-click on a portal cube now transports the camera through its
-face into an inverted interior world tinted by the feature's accent, instead of
-just toggling a panel. Inside HUD: Dive deeper (nested cubes), Next cube (flies
-straight on via `FEATURE_HANDOFF_LINKS`, no return to field), Field (restore
-overview pose). Single tap still selects, drag still moves; 350ms/28px
-disambiguation, no native dblclick path. Mobile: bottom-docked HUD with 44px
-targets; panel manager rewritten so only one floating panel shows at a time on
-<=700px viewports. 903/903 tests, 9/9 release boundaries, local-only/simulated.
+## Packet 230 — Tumbo reference look for the Person avatar (2026-09-18)
 
-## `ceb1411` — "Republish demo from canonical work/reality-lens-person": clobbering republish, not a design decision (2026-09-19)
+The 3D avatar now reads as the Tumbo reference character. The rig is restyled
+to the reference portraits: the head is scaled up to big-chibi proportions;
+fluffy earmuffs (headband arc + two plush cups, procedural seeded-noise fur
+grain — no DOM, no external images) sit over the ears and tint with the
+wardrobe (white default on Obsidian/Ivory, teal on Cobalt/Oxblood, matching
+the reference variant); the torso is a black hoodie with drawstrings,
+kangaroo pocket and resting hood, plus gold `TUMBO` chest text drawn as a
+procedural canvas decal (browser only; the builder stays node-safe without
+DOM); hands and feet are brown furry paws; a fluffy tail curls beside the hip
+and wags gently in the idle loop; locs are kept; the face gains eyeliner,
+brown irises, a cheek beauty mark and a fuller goatee. Everything from
+Packets 226/227 keeps working: articulation, idle breathing/blinking, the
+wave→spin→jump greet cycle, drag-to-move with walk cycle, orbit/zoom, and
+reduced-motion support (tail wag and greet flourishes freeze). Wardrobe
+displays carry an earmuff swatch so the tint option reads at a glance. The
+focused suite passes 24/24 in local node runs (chibi scale, earmuff build +
+wardrobe tint, decal path with fake DOM and node-safe fallback, paws, tail
+wag/freeze, beauty mark, brown irises, greet + drag intact), with the Packet
+227 suites re-verified 20/20 and 26/26; all touched files pass `node --check`.
+No provider request, credential, advice, reward token, persistence, wallet, or
+external authority was added.
 
-`ceb1411` ("Republish demo from canonical work/reality-lens-person @ b28a03f5")
-re-published the demo from the older `work/reality-lens-person` branch and, in
-doing so, clobbered the Packet 235/236 avatar work. This was a republish
-accident, **not a design decision**: nothing about the articulated-3D Tumbo
-avatar was deliberately removed. What it did: (1) deleted 6 files —
-`src/render/tumbo-chibi-rig.js`, `src/render/tumbo-fluffy-rig.js`,
-`vendor/jiggle-physics/jiggle-physics.js`, `vendor/jiggle-physics/jiggle-chain.js`,
-`vendor/jiggle-physics/LICENSE`, and `src/domains/connected-city.js`;
-(2) dropped the motion-pose exports (`AVATAR_BLINK`/`avatarBlink`,
-`AVATAR_GREET` + wave/spin/jump poses, `avatarBowPose`, `AVATAR_CELEBRATE`,
-`avatarWalkPhase`) from `src/domains/avatar-motion.js`; (3) dropped
-`resolveFaceDecalUrl` from `src/domains/avatar-style.js`; (4) dropped `muffs`
-from the four `STUDIO_OUTFITS` in `src/domains/person-studio.js`; (5) truncated
-this log by deleting the six newest packet entries (227–232), leaving it at the
-early-September Financial Academy entry. The canon-divergence consequence: the
-Person Studio avatar regressed to a flat hologram sprite, violating the
-articulated-3D avatar law. Packets 225–236 are superseded **as tree state**
-(their commits remain in the history for reference); this entry is the single
-record of the republish — the 225–232 summaries are intentionally not backfilled.
+## Packet 227 — the Person avatar greets, walks, and can be moved (2026-09-18)
+
+The 3D avatar is now interactive. Clicking it plays the next reaction in a
+greet cycle — a wave (arm raise, hand oscillation, head tilt, happy bounce),
+a full spin with a hop, then a crouch-and-leap jump — each driven by pure
+keyframe helpers in `src/domains/avatar-motion.js`
+(`avatarWavePose`/`avatarSpinPose`/`avatarJumpPose`, all frozen,
+deterministic, throwing on bad input). Dragging the avatar moves it across
+the personal space on a chest-height plane (clamped to the room): it eases
+toward the drag target, plays a walk cycle (opposing leg swings, counter
+arm swings from `avatarWalkPhase`), turns smoothly to face its travel
+direction, and drifts back to facing forward at rest. Dragging empty space
+still orbits and the scroll still zooms; the orbit controls yield while an
+avatar drag is in flight. A soft presence light now travels with the rig so
+it reads as the hero of the lens space. Reduced motion keeps greetings to a
+gentle wave with no spin, hop, or walk. The focused suites pass 26/26
+(greet/walk math) and 20/20 (greet cycle, drag clamp/damping, walk travel)
+in local node runs, with the Packet 226 suites re-verified 16/16 and 31/31;
+all touched files pass `node --check`. No provider request, credential,
+advice, reward token, persistence, wallet, or external authority was added.
+
+## Packet 226 — the Person avatar is a living 3D rig (2026-09-18)
+
+`?feature=person` no longer shows a flat AI-portrait picture. The retired
+reference-avatar hologram sprite is gone; the fully articulated procedural
+rig built from Three.js primitives — head, lathed torso, arms with elbows,
+hands and fingers, legs, chibi proportions in Tumbo's approved look
+(headphones-era dreads, black TUMBO hoodie styling via the outfit system) —
+is the avatar itself, visible and animated in the lens space. The idle loop
+now runs on the shared motion language (`src/domains/avatar-motion.js`):
+gentle bob and sway-turn from `avatarIdlePose`, breathing torso scale, a
+slow head drift, and periodic blinks from the new pure `avatarBlink` helper
+(frozen open under reduced motion, matching the studio accessibility
+contract). Face choices and the Muse Agent hologram tint remain as
+state-keeping APIs — the face choice still dresses chess pieces and design
+records — but nothing renders a flat portrait in the studio anymore. The
+focused suites pass 16/16 (motion math) and 31/31 (scene build, rig
+visibility, blink drive, apply/destroy) in local node runs; all touched
+files pass `node --check`. Click-to-greet and drag-to-move arrive in the
+next packet; orbit (drag empty space) and zoom (scroll) are unchanged. No
+provider request, credential, advice, reward token, persistence, wallet, or
+external authority was added.
+
+## Packet 225 — Connected City foundation (2026-09-18)
+
+Connected City lands as the next connected-site concept after Financial
+Academy: a first-class `connected-city` feature definition, a frozen
+seven-district contract (`src/domains/connected-city.js`), and a
+`connected-city` projection contribution. Each district fixture points at an
+existing feature — Finance Row → PAYCORE, Academy Quarter → Academy, Arena
+Grounds → Arena, Contract Row → Contracts, Ledger Plaza → Ledger, Gateway
+Harbor → Gateway, Social Market → Social Explorer — and carries a retryable
+charter check with reduced-XP retries and page-session-only progress. The
+focused contract suite passes 31/31 in a local node run. The interactive
+console arrives in the next packet; this packet keeps the feature on the
+generic feature surface. No provider request, credential, advice, reward
+token, persistence, wallet, or external authority was added.
 
 ## Financial Academy restored into Living Reality (implemented 2026-09-04)
 
-Mission Control: 34 openable feature routes. The restored Financial Academy is
+Mission Control: 23 openable feature routes. The restored Financial Academy is
 a first-class `financial-academy` contribution, Block World feature cube, direct
 `?feature=academy` route, and interactive console. Its four connected lessons
 cover Financial OS authority, HTTP 402/x402, T402, and PAYCORE/evidence. Answers

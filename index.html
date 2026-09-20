@@ -1966,83 +1966,6 @@
       #block-world-quick-actions { left: 10px; right: 10px; bottom: 56px; width: auto; max-height: 34vh; }
     }
     @media(max-width:700px){#academy-console{left:12px;right:12px;top:86px;width:auto;max-height:calc(100vh - 112px);padding:11px}#academy-head h2{font-size:17px}#academy-lessons{grid-template-columns:1fr}}
-    /* Cube Dive Transport HUD (2026-09-19): compact inside-world bar. Bottom
-       docked on narrow screens with 44px touch targets; layout-only. */
-    #cube-dive-hud {
-      position: fixed; z-index: 1100; left: 50%; transform: translateX(-50%);
-      bottom: 18px; display: flex; flex-direction: column; gap: 8px;
-      align-items: center; padding: 10px 14px; border-radius: 14px;
-      background: rgba(6, 12, 18, 0.82); border: 1px solid rgba(120, 220, 255, 0.28);
-      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
-      max-width: calc(100vw - 24px);
-    }
-    #cube-dive-hud[hidden] { display: none; }
-    .cube-dive-hud-title {
-      font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase;
-      color: #bfe9ff; white-space: nowrap; overflow: hidden;
-      text-overflow: ellipsis; max-width: calc(100vw - 60px);
-    }
-    .cube-dive-hud-row { display: flex; gap: 8px; }
-    .cube-dive-hud-row button {
-      min-height: 44px; padding: 0 16px; border-radius: 10px;
-      border: 1px solid rgba(120, 220, 255, 0.35);
-      background: rgba(20, 40, 60, 0.6); color: #eaf7ff;
-      font-size: 14px; cursor: pointer; white-space: nowrap;
-    }
-    .cube-dive-hud-row button:active { background: rgba(40, 80, 120, 0.7); }
-    @media (max-width: 700px) {
-      #cube-dive-hud { left: 12px; right: 12px; transform: none; bottom: 12px; }
-      .cube-dive-hud-row { width: 100%; }
-      .cube-dive-hud-row button { flex: 1; padding: 0 8px; }
-    }
-    /* Story Mode console + player HUD (2026-09-20): closed by default,
-       materialized only on user interaction. Both are <aside> panels so the
-       mobile panel manager collapses them to one visible panel on <=700px. */
-    #story-mode-root { position: absolute; inset: 0; pointer-events: none; z-index: 32; }
-    #story-mode-console {
-      position: absolute; right: 20px; top: 145px; width: min(560px, calc(100vw - 40px));
-      max-height: calc(100vh - 190px); display: flex; flex-direction: column; gap: 10px;
-      padding: 15px; border: 1px solid rgba(120,180,255,.42); border-radius: 14px;
-      background: linear-gradient(160deg, rgba(8,22,44,.98), rgba(4,10,16,.98));
-      box-shadow: 0 24px 80px rgba(0,0,0,.64); pointer-events: auto; overflow: auto;
-      color: #eaf7ff; font-size: 13px;
-    }
-    #story-mode-console[hidden] { display: none; }
-    #story-mode-console strong { color: #f2fbff; }
-    #story-mode-console button {
-      background: rgba(30,60,110,.6); color: #eaf7ff; border: 1px solid rgba(120,180,255,.35);
-      border-radius: 8px; font-size: 12px; padding: 6px 10px; cursor: pointer; margin: 2px;
-    }
-    #story-mode-console button:active { background: rgba(50,90,150,.7); }
-    #story-mode-console input, #story-mode-console select, #story-mode-console textarea {
-      background: rgba(10,25,45,.9); color: #eaf7ff; border: 1px solid rgba(120,180,255,.3);
-      border-radius: 8px; font-size: 12px; padding: 6px 8px; margin: 2px; max-width: 100%;
-    }
-    #story-mode-boundary { font-size: 10px; letter-spacing: .04em; color: #9db8d8; opacity: .85; }
-    #story-mode-new-error, #story-mode-beat-error { color: #ff9d9d; font-size: 12px; min-height: 1em; }
-    #story-mode-hud {
-      position: absolute; left: 50%; transform: translateX(-50%); bottom: 18px;
-      width: min(520px, calc(100vw - 32px)); padding: 12px 14px;
-      border: 1px solid rgba(120,180,255,.42); border-radius: 12px;
-      background: rgba(5,16,30,.96); box-shadow: 0 16px 48px rgba(0,0,0,.6);
-      pointer-events: auto; color: #eaf7ff;
-    }
-    #story-mode-hud[hidden] { display: none; }
-    #story-mode-hud-title { font-size: 16px; font-weight: 700; color: #f2fbff; margin: 2px 0; }
-    #story-mode-hud-count { font-size: 10px; letter-spacing: .18em; color: #9db8d8; text-transform: uppercase; }
-    #story-mode-hud-caption { font-size: 12px; color: #c8dcee; margin: 4px 0 8px; }
-    #story-mode-hud button {
-      background: rgba(30,60,110,.6); color: #eaf7ff; border: 1px solid rgba(120,180,255,.35);
-      border-radius: 8px; font-size: 13px; padding: 8px 14px; cursor: pointer; margin-right: 6px;
-      min-height: 44px; min-width: 44px;
-    }
-    #story-mode-hud-progress { height: 4px; border-radius: 2px; background: rgba(120,180,255,.18); margin-top: 8px; }
-    #story-mode-hud-progress-fill { height: 100%; border-radius: 2px; background: #78b4ff; width: 0; }
-    @media (max-width: 700px) {
-      #story-mode-console { right: 12px; left: 12px; width: auto; top: 120px; }
-      #story-mode-hud { left: 12px; right: 12px; transform: none; bottom: 12px; width: auto; }
-    }
     /* Mobile panel manager (2026-09-18): one floating panel at a time on
        narrow screens. While any console is up, the bottom cube-field hint bar
        hides so it cannot collide with panels; every panel is boxed inside the
@@ -2084,7 +2007,7 @@
   </section>
   <div id="hud">
     <div id="brand"><b>maTumbo Ω</b><span id="sub">Living Reality / cube field + local feature lab</span></div>
-    <div id="legend"><strong>Cube field.</strong><br>Select a block, double-click or double-tap a portal cube to dive inside it, double-click or double-tap a container to open it, inspect its nested cubes, or drag it one local grid step. <strong>Empty-field drag orbits the camera; wheel/trackpad travels.</strong> Press <strong>F</strong> to open the feature directory, including Reality Lens Ω.</div>
+    <div id="legend"><strong>Cube field.</strong><br>Select a block, double-click or double-tap a container to open it, inspect its nested cubes, or drag it one local grid step. <strong>Empty-field drag orbits the camera; wheel/trackpad travels.</strong> Press <strong>F</strong> to open the feature directory, including Reality Lens Ω.</div>
     <button id="feature-toggle" type="button" aria-controls="feature-shell" aria-expanded="true">OPEN FEATURES · F</button>
     <details id="explain-white-paper" class="local-panel">
       <summary id="explain-white-paper-open">EXPLAIN · WHITE PAPER</summary>
@@ -2100,7 +2023,7 @@
         <button id="feature-close" type="button" aria-label="Close feature navigator">×</button>
       </div>
     <div id="feature-count" role="status" aria-live="polite">22 openable local features</div>
-      <div id="camera-actions"><button id="camera-reset" type="button">RESET CAMERA · R</button><button id="camera-input-open" type="button" aria-controls="camera-input-panel" aria-expanded="false">CAMERA MOTION</button><button id="story-mode-open" type="button" aria-controls="story-mode-console">STORIES</button><span id="camera-gesture-hint" title="Drag the empty field to orbit the camera; use the wheel or trackpad to travel.">CAMERA ORBIT: EMPTY-FIELD DRAG · WHEEL: TRAVEL</span></div>
+      <div id="camera-actions"><button id="camera-reset" type="button">RESET CAMERA · R</button><button id="camera-input-open" type="button" aria-controls="camera-input-panel" aria-expanded="false">CAMERA MOTION</button><span id="camera-gesture-hint" title="Drag the empty field to orbit the camera; use the wheel or trackpad to travel.">CAMERA ORBIT: EMPTY-FIELD DRAG · WHEEL: TRAVEL</span></div>
       <nav id="feature-nav" aria-label="Openable maTumbo features">
         <div id="feature-nav-fallback" aria-label="Static local feature directory">
           <div id="feature-nav-fallback-copy">The local directory is available while the 3-D surface starts. If WebGL or the renderer module cannot start, these names and local route links remain readable; no external service is contacted.</div>
@@ -2143,7 +2066,7 @@
       </nav>
       <section id="feature-detail" aria-live="polite" aria-label="Selected feature details"></section>
     </aside>
-    <aside id="camera-input-panel" hidden aria-hidden="true" aria-labelledby="camera-input-title">
+    <aside data-panel-scroll id="camera-input-panel" hidden aria-hidden="true" aria-labelledby="camera-input-title">
       <div id="camera-input-head">
         <div>
           <div class="eyebrow">Optional local input</div>
@@ -2176,13 +2099,13 @@
         <p id="gesture-input-boundary">No universal browser eye sensor is assumed. After explicit enable, a supported host gaze sample creates a short local target lock; LOOK THEN PINCH / POINT / OPEN / INSPECT / GRAB can address that same cube only while the lock is fresh. Press Calibrate hand / finger, then show one sanitized native pinch or XR-hand select; completion proves only that the host signal reached this bridge. A native hand host emits only coarse metadata; no camera hand landmarks are fabricated. Raw frames, joints, faces, gaze traces, identity, recordings, uploads, network calls, and storage remain outside this bridge. The coupled GRAB / one-step HOLD / PLACE / RELEASE path is a bounded in-memory local draft only; it never infers coordinates or edits cubes from camera pixels.</p>
       </section>
     </aside>
-    <aside id="portal-return-console" hidden aria-hidden="true" aria-labelledby="portal-return-status" aria-describedby="portal-return-detail portal-return-boundary">
+    <aside data-panel-scroll id="portal-return-console" hidden aria-hidden="true" aria-labelledby="portal-return-status" aria-describedby="portal-return-detail portal-return-boundary">
       <div id="portal-return-status" role="status" aria-live="polite">NO PORTAL DESTINATION OPEN</div>
       <div id="portal-return-detail">Open a feature from a portal cube to reveal the return handoff.</div>
       <button id="portal-return-button" type="button" disabled aria-label="Return to the cube field">RETURN TO CUBE FIELD</button>
       <div id="portal-return-boundary">Same-page local handoff only. Returning to the cube field preserves the current Block World draft and portal trace.</div>
     </aside>
-    <aside id="block-world-quick-actions" hidden aria-hidden="true" aria-labelledby="block-world-quick-actions-title" aria-describedby="block-world-quick-actions-selected block-world-quick-actions-status block-world-quick-view-status block-world-quick-actions-boundary block-world-quick-view-boundary">
+    <aside data-panel-scroll id="block-world-quick-actions" hidden aria-hidden="true" aria-labelledby="block-world-quick-actions-title" aria-describedby="block-world-quick-actions-selected block-world-quick-actions-status block-world-quick-view-status block-world-quick-actions-boundary block-world-quick-view-boundary">
       <div id="block-world-quick-actions-head">
         <div class="eyebrow">Cube field controls · local only</div>
         <strong id="block-world-quick-actions-title">Quick actions</strong>
@@ -2221,7 +2144,7 @@
       <p id="readout-body">—</p>
       <div id="readout-meta" class="meta"></div>
     </div>
-    <aside id="asset-launch" aria-labelledby="asset-launch-title">
+    <aside data-panel-scroll id="asset-launch" aria-labelledby="asset-launch-title">
       <div class="eyebrow">Social experiment · space explorer</div>
       <h2 id="asset-launch-title">TUMBO Asset Token</h2>
       <p>Explore a fixed fictional allocation map. This preview has no value, wallet, claim, or external transfer.</p>
@@ -2234,7 +2157,7 @@
       <div id="asset-launch-status" role="status" aria-live="polite">SIMULATED MAP READY · NO WALLET · NO TRANSFER</div>
       <div id="distribution-list" role="group" aria-label="Simulated TUMBO allocation pools"></div>
     </aside>
-    <aside id="launch-console" hidden aria-hidden="true" aria-labelledby="launch-console-title">
+    <aside data-panel-scroll id="launch-console" hidden aria-hidden="true" aria-labelledby="launch-console-title">
       <div id="launch-console-head">
         <div>
           <div class="eyebrow">Social experiment · launch rehearsal</div>
@@ -2304,7 +2227,7 @@
       </section>
       <div id="launch-console-boundary">Aggregate fictional cohorts only. No recipient addresses, wallet connection, custody, signing, settlement, transfer, or money.</div>
     </aside>
-    <aside id="launch-receipt-console" hidden aria-hidden="true" aria-labelledby="launch-receipt-title">
+    <aside data-panel-scroll id="launch-receipt-console" hidden aria-hidden="true" aria-labelledby="launch-receipt-title">
       <div id="launch-receipt-head">
         <div>
           <div class="eyebrow">Launch Rehearsal Receipt · TUMBO-SIM</div>
@@ -2336,7 +2259,7 @@
       </section>
       <div id="launch-receipt-boundary">TUMBO-SIM only. No real issuance, distribution, recipient addresses, wallet, custody, signing, transfer, exchange, persistence, network, or executable code.</div>
     </aside>
-    <aside id="launch-kit-console" hidden aria-hidden="true" aria-labelledby="launch-kit-title">
+    <aside data-panel-scroll id="launch-kit-console" hidden aria-hidden="true" aria-labelledby="launch-kit-title">
       <div id="launch-kit-head">
         <div>
           <div class="eyebrow">maTumbo · portable local manifest</div>
@@ -2391,7 +2314,7 @@
       </section>
       <div id="launch-kit-boundary">Launch Kit is local-only; no real issuance, recipient authority, wallet, network, external launch, persistence, or executable code.</div>
     </aside>
-    <aside id="world-events-projection" hidden aria-hidden="true" aria-labelledby="world-events-projection-title">
+    <aside data-panel-scroll id="world-events-projection" hidden aria-hidden="true" aria-labelledby="world-events-projection-title">
       <div id="world-events-projection-head">
         <div>
           <div class="eyebrow">Reality Lens · World Pulse field</div>
@@ -2405,7 +2328,7 @@
       <div id="world-events-projection-bands" role="group" aria-label="Projected title-language signal bands"></div>
       <div id="world-events-projection-boundary">TITLE-LANGUAGE SIGNAL ONLY · NO VERIFIED BRUTALITY, SEVERITY, CASUALTY, TRUTH, OR COMPLETENESS CLAIM</div>
     </aside>
-    <aside id="world-events-console" hidden aria-hidden="true" aria-labelledby="world-events-title">
+    <aside data-panel-scroll id="world-events-console" hidden aria-hidden="true" aria-labelledby="world-events-title">
       <div id="world-events-head">
         <div>
           <div class="eyebrow">World Pulse · public evidence</div>
@@ -2484,7 +2407,7 @@
       </section>
       <div id="world-events-boundary">No fabricated fallback records. Provider metadata, source URL, retrieval time, event-time availability, uncertainty, and title-language signal basis stay visible. Color and lift are presentation intensity only; the panel does not verify brutality, casualties, severity, reports, or trigger a response.</div>
     </aside>
-    <aside id="sports-events-console" hidden aria-hidden="true" aria-labelledby="sports-events-title">
+    <aside data-panel-scroll id="sports-events-console" hidden aria-hidden="true" aria-labelledby="sports-events-title">
       <div id="sports-events-head">
         <div>
           <div class="eyebrow">Tennis Evidence · public read</div>
@@ -2524,7 +2447,7 @@
       </section>
       <div id="sports-events-boundary">No fabricated fallback matches. Source URL, retrieved time, ranking/set-score availability, and the data-completeness grade stay visible. Provider detail/play-by-play is an explicit bounded read; an empty feed remains unavailable. A selected public match can open a local contract/pool draft builder, carrying provenance only; odds, picks, wagering, performance claims, liquidity, persistence, and external actions are not part of this surface.</div>
     </aside>
-    <aside id="multi-sport-events-console" hidden aria-hidden="true" aria-labelledby="multi-sport-events-title">
+    <aside data-panel-scroll id="multi-sport-events-console" hidden aria-hidden="true" aria-labelledby="multi-sport-events-title">
       <div id="multi-sport-events-head">
         <div>
           <div class="eyebrow">Multi-Sport Scoreboards · public read</div>
@@ -2555,7 +2478,7 @@
       </section>
       <div id="multi-sport-events-boundary">Provider rows are unverified research observations. Source URL, retrieval time, participant fields, score status, event time, and completeness stay visible. The route is read-only and has no outcome, performance, persistence, or external action authority.</div>
     </aside>
-    <aside id="asset-market-console" hidden aria-hidden="true" aria-labelledby="asset-market-title">
+    <aside data-panel-scroll id="asset-market-console" hidden aria-hidden="true" aria-labelledby="asset-market-title">
       <div id="asset-market-head">
         <div>
           <div class="eyebrow">Asset Market Evidence · public read</div>
@@ -2586,7 +2509,7 @@
       </section>
       <div id="asset-market-boundary">No fabricated peer rows. CoinGecko values are public research observations only; TUMBO-SIM is a local unlisted asset-token display unit with no price. Buy, sell, order, quote, wallet, custody, signing, transfer, settlement, persistence, and external writes are not part of this surface.</div>
     </aside>
-    <aside id="social-explorer-console" hidden aria-hidden="true" aria-labelledby="social-explorer-title">
+    <aside data-panel-scroll id="social-explorer-console" hidden aria-hidden="true" aria-labelledby="social-explorer-title">
       <div id="social-explorer-head">
         <div>
           <div class="eyebrow">Social Explorer · re-market rehearsal</div>
@@ -2663,7 +2586,7 @@
       </section>
      <div id="social-explorer-boundary">Fictional aggregate entries only. Discover, discuss, create, and allocate-preview emit local intents; no network, provider, recipient, market, wallet, transfer, settlement, or money.</div>
     </aside>
-    <aside id="room-console" hidden aria-hidden="true" aria-labelledby="room-console-title">
+    <aside data-panel-scroll id="room-console" hidden aria-hidden="true" aria-labelledby="room-console-title">
       <div id="room-console-head">
         <div>
           <div class="eyebrow">Rooms + Messaging · space explorer</div>
@@ -2692,7 +2615,7 @@
       </section>
       <div id="room-console-boundary">Rooms are local membership projections. Enter and leave are renderer-only; message content, cryptography, network, identity, and persistence are not active.</div>
     </aside>
-    <aside id="block-world-console" hidden aria-hidden="true" aria-labelledby="block-world-title" aria-describedby="block-world-description block-world-drag-hint">
+    <aside data-panel-scroll id="block-world-console" hidden aria-hidden="true" aria-labelledby="block-world-title" aria-describedby="block-world-description block-world-drag-hint">
       <div id="block-world-head">
         <div>
           <div class="eyebrow">Block World / Fabric · interactive voxel explorer</div>
@@ -2798,7 +2721,7 @@
       </section>
       <div id="block-world-boundary">Blocks are fictional local projections. Draft edits never persist, sync, mint assets, publish content, or become executable instructions.</div>
     </aside>
-    <aside id="block-world-snapshot-console" hidden aria-hidden="true" aria-labelledby="block-world-snapshot-title">
+    <aside data-panel-scroll id="block-world-snapshot-console" hidden aria-hidden="true" aria-labelledby="block-world-snapshot-title">
       <div id="block-world-snapshot-head">
         <div>
           <div class="eyebrow">Block World Snapshot · data-only handoff</div>
@@ -2834,7 +2757,7 @@
       </section>
       <div id="block-world-snapshot-boundary">Block snapshots are data-only local drafts. A user-selected .json file is read in memory only; arbitrary filesystem paths, imported code, network contact, persistence, wallet access, asset movement, and external-world publishing remain unavailable.</div>
     </aside>
-    <aside id="block-world-runtime-sync-console" hidden aria-hidden="true" aria-labelledby="block-world-runtime-sync-title">
+    <aside data-panel-scroll id="block-world-runtime-sync-console" hidden aria-hidden="true" aria-labelledby="block-world-runtime-sync-title">
       <div id="block-world-runtime-sync-head">
         <div>
           <div class="eyebrow">Merge 4 · local runtime bridge</div>
@@ -2875,7 +2798,7 @@
       </section>
       <div id="block-world-runtime-sync-boundary">Merge 4 sync is an explicit loopback-only bridge. Only a validated data-only Block World snapshot crosses the local runtime boundary; no public deployment, identity, wallet, token, imported code, or external execution is available.</div>
     </aside>
-    <aside id="block-migration-console" hidden aria-hidden="true" aria-labelledby="block-migration-title">
+    <aside data-panel-scroll id="block-migration-console" hidden aria-hidden="true" aria-labelledby="block-migration-title">
       <div id="block-migration-head">
         <div>
           <div class="eyebrow">Migration Bridge · old project → blocks</div>
@@ -2906,7 +2829,7 @@
       </section>
       <div id="block-migration-boundary">Local mapping only. No filesystem import, imported-code execution, persistence, network, identity, live chain, token, wallet, transfer, or external execution is active.</div>
     </aside>
-    <aside id="migration-snapshot-console" hidden aria-hidden="true" aria-labelledby="migration-snapshot-title">
+    <aside data-panel-scroll id="migration-snapshot-console" hidden aria-hidden="true" aria-labelledby="migration-snapshot-title">
       <div id="migration-snapshot-head">
         <div>
           <div class="eyebrow">Migration Snapshot · JSON fixture</div>
@@ -2946,7 +2869,7 @@
       </section>
       <div id="migration-snapshot-boundary">JSON fixtures only. A user-selected .json file is read in memory only; arbitrary filesystem import, unknown IDs, executable-looking fields, functions, cycles, code execution, persistence, network, identity, live chain, token, wallet, transfer, and external execution are rejected or unavailable.</div>
     </aside>
-    <aside id="arena-games-console" hidden aria-hidden="true" aria-labelledby="arena-games-title">
+    <aside data-panel-scroll id="arena-games-console" hidden aria-hidden="true" aria-labelledby="arena-games-title">
       <div id="arena-games-head">
         <div>
           <div class="eyebrow">ARENA / Game Lab · local rehearsal</div>
@@ -2974,7 +2897,7 @@
       </section>
       <div id="arena-games-boundary">ARENA is a deterministic local rehearsal. There is no multiplayer, network, imported runtime, reward, wallet, token, persistence, or value authority.</div>
     </aside>
-    <aside id="white-paper-console" hidden aria-hidden="true" aria-labelledby="white-paper-title">
+    <aside data-panel-scroll id="white-paper-console" hidden aria-hidden="true" aria-labelledby="white-paper-title">
       <div id="white-paper-head">
         <div>
           <div class="eyebrow">White Paper · living document</div>
@@ -2992,7 +2915,7 @@
       </div>
       <div id="white-paper-boundary"></div>
     </aside>
-    <aside id="gesture-lens-console" hidden aria-hidden="true" aria-labelledby="gesture-lens-title">
+    <aside data-panel-scroll id="gesture-lens-console" hidden aria-hidden="true" aria-labelledby="gesture-lens-title">
       <div id="gesture-lens-head">
         <div>
           <div class="eyebrow">Gesture Lens · mid-air rehearsal</div>
@@ -3026,7 +2949,7 @@
       <div id="gesture-lens-trace" role="log" aria-live="polite" aria-label="Gesture intent trace"></div>
       <div id="gesture-lens-boundary"></div>
     </aside>
-    <aside id="academy-console" hidden aria-hidden="true" aria-labelledby="academy-title">
+    <aside data-panel-scroll id="academy-console" hidden aria-hidden="true" aria-labelledby="academy-title">
       <div id="academy-head">
         <div>
           <div class="eyebrow">Financial Academy · restored ecosystem path</div>
@@ -3050,7 +2973,7 @@
       <button id="academy-reset" type="button">Reset local progress</button>
       <div id="academy-boundary">Academy is educational local rehearsal only. Demo XP is not a token, reward, credential, financial advice, or persisted identity record.</div>
     </aside>
-    <aside id="contracts-markets-console" hidden aria-hidden="true" aria-labelledby="contracts-markets-title">
+    <aside data-panel-scroll id="contracts-markets-console" hidden aria-hidden="true" aria-labelledby="contracts-markets-title">
       <div id="contracts-markets-head">
         <div>
           <div class="eyebrow">Contracts + Pools · local scenario</div>
@@ -3098,7 +3021,7 @@
       </section>
       <div id="contracts-markets-boundary">Contracts and pools are fictional local scenarios. No trade, custody, signing, settlement, or market authority is active.</div>
     </aside>
-    <aside id="paycore-console" hidden aria-hidden="true" aria-labelledby="paycore-console-title">
+    <aside data-panel-scroll id="paycore-console" hidden aria-hidden="true" aria-labelledby="paycore-console-title">
       <div id="paycore-console-head">
         <div>
           <div class="eyebrow">PAYCORE · asset-token value preview</div>
@@ -3128,7 +3051,7 @@
       </section>
       <div id="paycore-console-boundary">PAYCORE is a local TUMBO asset-token balance and flow preview. No custody, signing, transfer, settlement, or external financial authority is active.</div>
     </aside>
-    <aside id="t402-console" hidden aria-hidden="true" aria-labelledby="t402-console-title">
+    <aside data-panel-scroll id="t402-console" hidden aria-hidden="true" aria-labelledby="t402-console-title">
       <div id="t402-console-head">
         <div>
           <div class="eyebrow">T402 · local value-routing rehearsal</div>
@@ -3166,7 +3089,7 @@
       </section>
       <div id="t402-console-boundary">T402 is a local offer, route, and escrow rehearsal. Live value movement, custody, signing, release, transfer, and settlement are denied.</div>
     </aside>
-    <aside id="neural-mesh-console" hidden aria-hidden="true" aria-labelledby="neural-mesh-title">
+    <aside data-panel-scroll id="neural-mesh-console" hidden aria-hidden="true" aria-labelledby="neural-mesh-title">
       <div id="neural-mesh-head">
         <div>
           <div class="eyebrow">Neural Mesh · advisory graph</div>
@@ -3208,7 +3131,7 @@
       </section>
       <div id="neural-mesh-boundary">Advisory local projection only. Control Tower and Oracle records are inspectable, but no autonomous execution, provider access, or tool authority is active.</div>
     </aside>
-    <aside id="picture-matter-console" hidden aria-hidden="true" aria-labelledby="picture-matter-console-title">
+    <aside data-panel-scroll id="picture-matter-console" hidden aria-hidden="true" aria-labelledby="picture-matter-console-title">
       <div id="picture-matter-console-head">
         <div>
           <div class="eyebrow">Picture Matter · statement forge</div>
@@ -3261,7 +3184,7 @@
       </section>
       <div id="picture-matter-console-boundary">Picture Matter is a local word → statement → provenance rehearsal. Images stay local, interpretations stay non-authoritative, and external publishing is denied.</div>
     </aside>
-    <aside id="nft-atelier-console" hidden aria-hidden="true" aria-labelledby="nft-atelier-title">
+    <aside data-panel-scroll id="nft-atelier-console" hidden aria-hidden="true" aria-labelledby="nft-atelier-title">
       <div id="nft-atelier-head">
         <div>
           <div class="eyebrow">NFT Atelier · fictional collection</div>
@@ -3321,7 +3244,7 @@
       </section>
       <div id="nft-atelier-boundary"></div>
     </aside>
-    <aside id="muse-agent-console" hidden aria-hidden="true" aria-labelledby="muse-agent-title">
+    <aside data-panel-scroll id="muse-agent-console" hidden aria-hidden="true" aria-labelledby="muse-agent-title">
       <div id="muse-agent-head">
         <div>
           <div class="eyebrow">Muse Agent · in-world design companion</div>
@@ -3362,7 +3285,7 @@
       </section>
       <div id="muse-agent-boundary"></div>
     </aside>
-    <aside id="bot-plaza-console" hidden aria-hidden="true" aria-labelledby="bot-plaza-title">
+    <aside data-panel-scroll id="bot-plaza-console" hidden aria-hidden="true" aria-labelledby="bot-plaza-title">
       <div id="bot-plaza-head">
         <div>
           <div class="eyebrow">Bot Plaza · bring your own bot</div>
@@ -3446,7 +3369,7 @@
       </section>
       <div id="bot-plaza-boundary"></div>
     </aside>
-    <aside id="contract-atelier-console" hidden aria-hidden="true" aria-labelledby="contract-atelier-title">
+    <aside data-panel-scroll id="contract-atelier-console" hidden aria-hidden="true" aria-labelledby="contract-atelier-title">
       <div id="contract-atelier-head">
         <div>
           <div class="eyebrow">Contract Atelier · fictional markets</div>
@@ -3524,7 +3447,7 @@
       </section>
       <div id="contract-atelier-boundary"></div>
     </aside>
-    <aside id="luna-companion-console" hidden aria-hidden="true" aria-labelledby="luna-companion-title">
+    <aside data-panel-scroll id="luna-companion-console" hidden aria-hidden="true" aria-labelledby="luna-companion-title">
       <div id="luna-companion-head">
         <div>
           <div class="eyebrow">Luna Companion · scripted local guide</div>
@@ -3547,7 +3470,7 @@
       </section>
       <div id="luna-companion-boundary"></div>
     </aside>
-    <aside id="wardrobe-atelier-console" hidden aria-hidden="true" aria-labelledby="wardrobe-atelier-title">
+    <aside data-panel-scroll id="wardrobe-atelier-console" hidden aria-hidden="true" aria-labelledby="wardrobe-atelier-title">
       <div id="wardrobe-atelier-head">
         <div>
           <div class="eyebrow">Wardrobe Atelier · fictional looks</div>
@@ -3589,7 +3512,7 @@
       </section>
       <div id="wardrobe-atelier-boundary"></div>
     </aside>
-    <aside id="ledger-proof-console" hidden aria-hidden="true" aria-labelledby="ledger-proof-title">
+    <aside data-panel-scroll id="ledger-proof-console" hidden aria-hidden="true" aria-labelledby="ledger-proof-title">
       <div id="ledger-proof-head">
         <div>
           <div class="eyebrow">Prime Ledger · EchoProof summary</div>
@@ -3619,7 +3542,7 @@
       </section>
       <div id="ledger-proof-boundary">Prime Ledger and EchoProof are local summaries only. No authoritative ledger, cryptographic verification, signing, settlement, or publishing authority is active.</div>
     </aside>
-    <aside id="live-gateway-console" hidden aria-hidden="true" aria-labelledby="live-gateway-title">
+    <aside data-panel-scroll id="live-gateway-console" hidden aria-hidden="true" aria-labelledby="live-gateway-title">
       <div id="live-gateway-head">
         <div>
           <div class="eyebrow">Public Source Status · read-only</div>
@@ -3668,7 +3591,7 @@
         <div id="live-gateway-boundary">Legacy fixture only. It is not the World Pulse route and never represents live data, external providers, credentials, truth authority, or response action.</div>
       </div>
     </aside>
-    <aside id="device-projection-console" hidden aria-hidden="true" aria-labelledby="device-projection-title">
+    <aside data-panel-scroll id="device-projection-console" hidden aria-hidden="true" aria-labelledby="device-projection-title">
       <div id="device-projection-head">
         <div>
           <div class="eyebrow">Phone · PC · XR · device parity</div>
@@ -3699,7 +3622,7 @@
       <div id="device-projection-boundary">Phone and PC presentation metadata are local only. XR/WebXR sessions, shared parity, external sync, and device authority are not established.</div>
     </aside>
     <button id="intent-timeline-open" type="button" aria-controls="intent-timeline" aria-expanded="false">OPEN INTENT TRACE</button>
-    <aside id="intent-timeline" hidden aria-hidden="true" aria-labelledby="intent-timeline-title">
+    <aside data-panel-scroll id="intent-timeline" hidden aria-hidden="true" aria-labelledby="intent-timeline-title">
       <div id="intent-timeline-head">
         <div>
           <div class="eyebrow">Runtime trace · local projection</div>
@@ -3724,7 +3647,7 @@
       <button type="button" data-lens-mode="population" aria-pressed="false">PEOPLE</button>
       <button type="button" data-lens-mode="detail" aria-pressed="false">DETAIL</button>
     </div>
-    <div id="hint">cube field: tap select · double-tap a portal cube to dive inside · double-tap a container to open · cube drag move · empty-field drag orbit · F features</div>
+    <div id="hint">cube field: click select · double-click / double-tap open · cube drag move · empty-field drag orbit · F features</div>
   </div>
 
   <script type="importmap">
@@ -3865,14 +3788,6 @@
       }, 30000) ?? null;
     })();
   </script>
-    <!-- Packet 237 (fidelity restoration): jiggle-physics secondary-motion
-         engine (vendored, BSD-3-Clause, (c) 2026 xlovecam —
-         see vendor/jiggle-physics/LICENSE). Classic scripts: they publish
-         window.createJigglePhysics / window.createJiggleChain /
-         window.createJiggleDriver before the module below runs.
-         The avatar degrades gracefully without them. -->
-    <script src="./vendor/jiggle-physics/jiggle-physics.js?v=20260920-p237"></script>
-    <script src="./vendor/jiggle-physics/jiggle-chain.js?v=20260920-p237"></script>
-    <script type="module" src="./src/main.js?v=20260918-avatar-chess" onerror="globalThis.__MATUMBO_RUNTIME__?.markFailed?.(event, 'module load')"></script>
+    <script type="module" src="./src/main.js?v=20260919-glass-world" onerror="globalThis.__MATUMBO_RUNTIME__?.markFailed?.(event, 'module load')"></script>
 </body>
 </html>

@@ -17,11 +17,22 @@ export function featureTraits(id){
   };
 }
 const BEACON_COLORS=['#ae2848','#d0a03c','#3fa9e0'];
+/** Packet 233: halved cube scales — small translucent glass cubes everywhere,
+ * readable from the deep overview. Node-importable for unit tests. */
+export const ASSEMBLY_CUBE_SCALES={core:1.1,primary:.68,secondary:.45};
+export function assemblyCubeScale(feature){
+  if(!feature)return ASSEMBLY_CUBE_SCALES.primary;
+  if(feature.id==='block-world')return ASSEMBLY_CUBE_SCALES.core;
+  if(feature.assemblyTier==='secondary')return ASSEMBLY_CUBE_SCALES.secondary;
+  return ASSEMBLY_CUBE_SCALES.primary;
+}
 export function buildRealityAssemblyScene({THREE,parent,features,targets=[]}){
   const layer=new THREE.Group();layer.name='Reality Assembly / shared feature projection';layer.visible=false;parent.add(layer);
   const geometry=new Set(),materials=new Set(),selectable=[],nodes=new Map();
   const makeMaterial=(color,extra={})=>{const value=new THREE.MeshStandardMaterial({color,metalness:.55,roughness:.4,...extra});materials.add(value);return value;};
-  const gold=makeMaterial('#b89961',{metalness:.68,roughness:.28}),dark=makeMaterial('#14273c',{metalness:.32});
+  const gold=makeMaterial('#b89961',{metalness:.68,roughness:.28}),
+    // Translucent dark glass core — never a solid box, even up close.
+    dark=makeMaterial('#14273c',{metalness:.32,transparent:true,opacity:.35,depthWrite:false,roughness:.25});
   const baseGlass=makeMaterial('#153954',{transparent:true,opacity:.5,depthWrite:false,roughness:.15,metalness:.1});
   const blue=makeMaterial('#5dafff',{emissive:'#147bc6',emissiveIntensity:1.35}),red=makeMaterial('#ae2848',{emissive:'#f02644',emissiveIntensity:1.8});
   const violet=makeMaterial('#8e6ccb',{emissive:'#65448a',emissiveIntensity:.7}),green=makeMaterial('#32695b');
@@ -80,7 +91,7 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[]}){
     accent.emissiveIntensity=(accentBase.emissiveIntensity||1)*traits.glow;
     const glass=makeMaterial('#153954',{transparent:true,opacity:.52,depthWrite:false,roughness:.15,metalness:.1});
     glass.color.offsetHSL(traits.hueShift,0,traits.glassLight);
-    const scale=feature.id==='block-world'?2.2:feature.assemblyTier==='secondary'?.9:1.35;
+    const scale=assemblyCubeScale(feature);
     root.scale.setScalar(scale);
     const core=box([CORE,CORE,CORE],[0,0,0],dark,root);core.userData.assemblyId=feature.id;targets.push(core);selectable.push(core);
     frame(FACE,root,accent);
@@ -139,7 +150,8 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[]}){
   const connectionMaterial=new THREE.LineBasicMaterial({color:'#36a6d3',transparent:true,opacity:.34});materials.add(connectionMaterial);
   const connections=new THREE.LineSegments(connectionGeometry,connectionMaterial);connections.frustumCulled=false;layer.add(connections);
   let selected=null,hovered=null,mode='3d',viewState=null,focusId=null,lodBlend=0;
-  const LOD_FAR=40;
+  // Packet 233: merge only happens at true far zoom (maxDistance 240).
+  const LOD_FAR=120;
   const projectedPosition=new THREE.Vector3(),scatterDirection=new THREE.Vector3();
   function apply(snapshot,{viewMode='3d',hoveredId=null}={}){
     viewState=snapshot;selected=snapshot.selectedId;hovered=hoveredId;mode=viewMode;
