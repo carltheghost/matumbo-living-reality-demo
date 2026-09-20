@@ -154,7 +154,6 @@ export function createHandLensSession({
   let mounted = false;
   let hudButton = null;
   let resizeHandler = null;
-  let spatialGestureHandler = null;
   let airKeyboardCommandHandler = null;
 
   // ---- air-typing state ---------------------------------------------------
@@ -672,9 +671,7 @@ export function createHandLensSession({
     }
 
     installHudButton();
-    spatialGestureHandler = () => {};
     airKeyboardCommandHandler = syncAirKeyboardFromSpatial;
-    documentRoot?.addEventListener?.("matumbo:spatial-gesture", spatialGestureHandler);
     documentRoot?.addEventListener?.("matumbo:xr-air-keyboard", airKeyboardCommandHandler);
     installResizeListener();
 
@@ -725,10 +722,6 @@ export function createHandLensSession({
       } catch (error) {
         reportError(error);
       }
-    }
-    if (spatialGestureHandler) {
-      documentRoot?.removeEventListener?.("matumbo:spatial-gesture", spatialGestureHandler);
-      spatialGestureHandler = null;
     }
     if (airKeyboardCommandHandler) {
       documentRoot?.removeEventListener?.("matumbo:xr-air-keyboard", airKeyboardCommandHandler);
