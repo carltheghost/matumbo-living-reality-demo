@@ -1,5 +1,10 @@
 /**
- * Token Lifecycle - audit console view (browser).
+ * Token Lifecycle - audit console view (browser), on the unified token core.
+ *
+ * Ported from the token-lifecycle workstream (PR #5) onto the canonical
+ * src/domains/token.js core (PR #6, agent/token-unified). Only the renderer
+ * was ported - PR #5's competing core, supply constant, and genesis
+ * history-filter bug were deliberately left behind.
  *
  * Mounts the transaction history / audit view for TUMBO-SIM:
  *  - a three.js (pinned r179.1) glass-cube chain: one translucent blue
@@ -8,7 +13,18 @@
  *  - click a tx to inspect its EchoProof receipt with recomputed hashes
  *    and the prevHash chain-link check;
  *  - a "verify chain" control the user can run any time;
- *  - reverse / cancel / settle rehearsal controls.
+ *  - reverse / quote cancel / quote execute rehearsal controls.
+ *
+ * Unified-core mapping notes (the core has no per-journal "state" and no
+ * pending journals):
+ *  - journal identity is `id` (was `journalId`); ordering key is `tick`;
+ *    timestamps are `ts`; postings carry signed `amount` (not amountFluff).
+ *  - states are derived: genesis (action), reversed (a reverse journal
+ *    links to it), otherwise settled. Cancellations live on quotes, so the
+ *    console rehearses quote issue -> cancel / execute instead of
+ *    cancelling journals.
+ *  - history comes from engine.journalHistory() (newest-first, no genesis
+ *    filter bypass); verification from ledger.verifyReceipt()/verifyChain().
  *
  * Design laws honored: translucent blue glass cubes from the first frame;
  * cubes are small by default and open the inspector on interaction;
@@ -23,11 +39,19 @@
  */
 
 import * as THREE from "three";
-import { createTumboToken, fmtFluff, TOKEN_CONFIG } from "../domains/token.js";
+import {
+  createTokenEngine,
+  ensureTumboTokenFacade,
+  REVERSE_WINDOW_TICKS,
+  ASSETS,
+} from "../domains/token.js";
 import { runTokenLifecycleSelfTest } from "./token-lifecycle-selftest.js";
 
 const POS_KEY = "tumbo:token-lifecycle:cube-positions";
 const MAX_CUBES = 30;
+
+/** Actions the unified core can emit as ledger journals. */
+const KNOWN_ACTIONS = ["genesis", "faucet", "send", "lock", "unlock", "reverse", "exchange", "buy", "sell"];
 
 const STATE_COLORS = {
   genesis: 0xeafcff,
@@ -35,6 +59,7 @@ const STATE_COLORS = {
   settled: 0x6fc7ff,
   reversed: 0xb79aff,
   cancelled: 0xff8f9a,
+  executed: 0x6fc7ff,
 };
 
 const short = (h) => (typeof h === "string" && h.length > 18 ? h.slice(0, 10) + "\u2026" + h.slice(-6) : h);
@@ -45,6 +70,15 @@ const fmtTime = (ts) => {
   } catch { return String(ts); }
 };
 
+/** Integer fluff -> "1.500 TUMBO-SIM" / "0.000 sMIMAS-SIM" (no float math). */
+function fmtAsset(fluff, asset) {
+  const n = Number(fluff);
+  const neg = n < 0;
+  const abs = Math.abs(n);
+  const body = Math.floor(abs / 1000).toLocaleString("en-US") + "." + String(abs % 1000).padStart(3, "0");
+  return (neg ? "-" : "") + body + " " + (asset === "sMIMAS" ? "sMIMAS-SIM" : "TUMBO-SIM");
+}
+
 function loadPositions() {
   try { const raw = localStorage.getItem(POS_KEY); return raw ? JSON.parse(raw) : {}; }
   catch { return {}; }
@@ -53,35 +87,80 @@ function savePositions(map) {
   try { localStorage.setItem(POS_KEY, JSON.stringify(map)); } catch { /* best-effort */ }
 }
 
-function seedDemo(facade) {
-  const core = facade.ledger;
-  if (core.journalCount > 0) return;
-  const run = (p) => { try { return core.execute(p); } catch { return null; } };
-  run({ action: "send", from: "sys:treasury", to: "u:alice", amountFluff: 60000, idempotencyKey: "demo-fund-alice" });
-  run({ action: "send", from: "sys:treasury", to: "u:bob", amountFluff: 40000, idempotencyKey: "demo-fund-bob" });
-  run({ action: "send", asset: "sMIMAS", from: "sys:treasury", to: "u:alice", amountFluff: 25000, idempotencyKey: "demo-fund-asmimas" });
-  run({ action: "tip", from: "u:alice", to: "u:bob", amountFluff: 1500, idempotencyKey: "demo-tip-1", memo: "simulated tip" });
-  run({ action: "send", from: "u:bob", to: "u:carol", amountFluff: 8000, idempotencyKey: "demo-send-1" });
-  run({ action: "stake", from: "u:alice", amountFluff: 10000, idempotencyKey: "demo-stake-1" });
-  run({ action: "lock", from: "u:bob", amountFluff: 5000, idempotencyKey: "demo-lock-1" });
-  run({ action: "exchange", asset: "TUMBO", assetB: "sMIMAS", from: "u:alice", to: "u:bob", amountFluff: 2000, amountBFluff: 1000, idempotencyKey: "demo-xchg-1" });
-  run({ action: "send", from: "u:carol", to: "u:alice", amountFluff: 3000, idempotencyKey: "demo-pending-1", settle: false, memo: "simulated pending transfer" });
-  const doomed = run({ action: "send", from: "u:bob", to: "u:carol", amountFluff: 1200, idempotencyKey: "demo-cancel-me", settle: false });
-  const rev = run({ action: "tip", from: "u:alice", to: "u:carol", amountFluff: 900, idempotencyKey: "demo-reverse-me" });
-  if (doomed) { try { core.cancel(doomed.journal.journalId, { actor: "demo" }); } catch { /* noop */ } }
-  if (rev) { try { core.reverse(rev.journal.journalId, { actor: "demo" }); } catch { /* noop */ } }
+function resolveEngine(facade) {
+  if (facade && facade.engine && typeof facade.engine.journalHistory === "function") return facade.engine;
+  if (facade && typeof facade.journalHistory === "function" && facade.ledger) return facade;
+  throw new Error("audit console needs the unified token engine (facade.engine)");
+}
+
+/**
+ * Deterministic demo journals for the audit console. All idempotency keys
+ * are fixed, so re-mounts replay instead of duplicating. Uses only public
+ * unified-core paths: faucet (internal authority), direct user<->user posts,
+ * quote -> execute, and reverse.
+ */
+function seedDemo(engine) {
+  const existing = engine.journalHistory({ limit: 1000 });
+  if (existing.rows.some((r) => r.idempotencyKey === "audit-demo:fund-alice")) return;
+  const post = (legs, key, action, memo) => {
+    try { return engine.ledger.post(legs, { idempotencyKey: key, action, memo }); }
+    catch { return null; }
+  };
+  const send = (from, to, asset, fluff, key, memo) => post(
+    [{ account: from, asset, amount: -fluff }, { account: to, asset, amount: fluff }],
+    key, "send", memo
+  );
+  try { engine.faucet("u:alice", "TUMBO", 60000, { idempotencyKey: "audit-demo:fund-alice" }); } catch { /* replay */ }
+  try { engine.faucet("u:bob", "TUMBO", 40000, { idempotencyKey: "audit-demo:fund-bob" }); } catch { /* replay */ }
+  // The faucet holds TUMBO only; sMIMAS funding comes from the market maker
+  // through the internal-authority path (same as genesis).
+  try {
+    engine.ledger.post(
+      [{ account: "sys:market", asset: "sMIMAS", amount: -25000 }, { account: "u:alice", asset: "sMIMAS", amount: 25000 }],
+      { idempotencyKey: "audit-demo:fund-alice-smimas", action: "faucet", memo: "demo sMIMAS funding", authority: "internal" }
+    );
+  } catch { /* replay */ }
+  send("u:alice", "u:bob", "TUMBO", 1500, "audit-demo:tip-1", "simulated tip");
+  send("u:bob", "u:carol", "TUMBO", 8000, "audit-demo:send-1", "simulated send");
+  post(
+    [{ account: "u:alice", asset: "TUMBO", amount: -10000 }, { account: "sys:escrow", asset: "TUMBO", amount: 10000 }],
+    "audit-demo:lock-1", "lock", "simulated lock to escrow"
+  );
+  try {
+    const q = engine.quote({ action: "buy", from: "u:alice", fromAsset: "TUMBO", toAsset: "sMIMAS", amountIn: 2000 });
+    engine.execute(q, { idempotencyKey: "audit-demo:xchg-1" });
+  } catch { /* replay */ }
+  try { engine.reverse({ idempotencyKey: "audit-demo:tip-1", actor: "audit-demo" }); } catch { /* replay / already reversed */ }
+}
+
+/** Human one-liner for a unified journal receipt. */
+function summarize(r) {
+  if (r.action === "genesis") return "genesis \u2014 supply issuance anchors the chain";
+  const credits = r.postings.filter((p) => p.amount > 0);
+  const debits = r.postings.filter((p) => p.amount < 0);
+  const c0 = credits[0], d0 = debits[0];
+  if (c0 && d0) {
+    return r.action + " " + fmtAsset(c0.amount, c0.asset) + " " + d0.account + " \u2192 " + c0.account;
+  }
+  if (r.memo) return r.action + " \u2014 " + r.memo;
+  return r.action;
 }
 
 export function mountTokenLifecycleAudit(root, opts = {}) {
-  const facade = opts.facade ?? (typeof window !== "undefined" && window.TumboToken) ?? createTumboToken();
-  const core = facade.ledger;
-  if (core.journalCount === 0) seedDemo(facade);
+  const facade = opts.facade
+    ?? opts.engine
+    ?? (typeof window !== "undefined" && window.TumboToken)
+    ?? ensureTumboTokenFacade({ seed: true });
+  const engine = resolveEngine(facade);
+  const ledger = engine.ledger;
+  seedDemo(engine);
 
   const remembered = loadPositions();
   const ui = {
     selectedId: null,
     focusedId: null,
     filters: { action: "", account: "", asset: "", state: "" },
+    quotes: [],
   };
 
   root.innerHTML =
@@ -89,8 +168,8 @@ export function mountTokenLifecycleAudit(root, opts = {}) {
     '<header class="tl-head"><div class="tl-head-copy">' +
     '<div class="tl-eyebrow">TUMBO-SIM \u00B7 simulated points \u00B7 no real money, wallets, or custody</div>' +
     '<h1>Token Lifecycle \u2014 Audit Console</h1>' +
-    '<p>Reverse and cancel rehearsal on a local demo ledger. Every mutation is a balanced journal; ' +
-    'reversals post compensating journals and never edit history. Reverse window: <b>' + TOKEN_CONFIG.REVERSE_WINDOW_TICKS + ' ledger ticks</b>.</p>' +
+    '<p>Reverse and cancel rehearsal on the unified demo ledger. Every mutation is a balanced journal; ' +
+    'reversals post compensating journals and never edit history. Reverse window: <b>' + REVERSE_WINDOW_TICKS + ' ledger ticks</b>.</p>' +
     '</div><div class="tl-head-actions">' +
     '<span class="tl-pill" data-tl="chain-pill">chain \u2026</span>' +
     '<button class="tl-btn" data-tl="verify">Verify chain</button>' +
@@ -107,20 +186,24 @@ export function mountTokenLifecycleAudit(root, opts = {}) {
     '<div class="tl-panel-head"><strong>Ledger panel</strong><span class="tl-meta" data-tl="tick-line"></span></div>' +
     '<div class="tl-status" data-tl="status"></div>' +
     '<section class="tl-section"><h2>Lifecycle</h2>' +
-    '<div class="tl-row-btns"><button class="tl-btn" data-tl="do-reverse">Reverse selected</button>' +
-    '<button class="tl-btn" data-tl="do-cancel">Cancel selected</button>' +
-    '<button class="tl-btn" data-tl="do-settle">Settle selected</button></div>' +
-    '<p class="tl-note">Reverse posts a compensating journal inside a ' + TOKEN_CONFIG.REVERSE_WINDOW_TICKS + '-tick window. ' +
-    'Cancel only voids <i>pending</i> journals \u2014 cancelling a settled tx fails closed.</p></section>' +
+    '<div class="tl-row-btns"><button class="tl-btn" data-tl="do-reverse">Reverse selected</button></div>' +
+    '<p class="tl-note">Reverse posts a compensating journal inside a ' + REVERSE_WINDOW_TICKS + '-tick window. ' +
+    'Genesis, reversal, and cancellation journals cannot be reversed \u2014 attempts fail closed.</p></section>' +
+    '<section class="tl-section"><h2>Quote rehearsal</h2>' +
+    '<div class="tl-row-btns"><button class="tl-btn" data-tl="q-issue">Issue quote</button>' +
+    '<button class="tl-btn" data-tl="q-cancel">Cancel latest quote</button>' +
+    '<button class="tl-btn" data-tl="q-execute">Execute latest quote</button></div>' +
+    '<div class="tl-list" data-tl="quotes" style="margin-top:8px"><p class="tl-empty">No rehearsal quotes yet \u2014 issue one, then cancel or execute it. Cancelling an executed quote fails closed.</p></div>' +
+    '<p class="tl-note">Quotes are the pending stage of the lifecycle: issue \u2192 cancel (pending only) or execute (settles a journal).</p></section>' +
     '<section class="tl-section"><h2>Filters</h2><div class="tl-filters">' +
     '<label>Action<select data-tl="f-action"><option value="">All actions</option>' +
-    ["genesis"].concat(TOKEN_CONFIG.ACTIONS).map((a) => '<option value="' + a + '">' + a + '</option>').join("") + '</select></label>' +
-    '<label>Account<input data-tl="f-account" type="text" placeholder="u:alice or sys:vault" autocomplete="off" /></label>' +
+    KNOWN_ACTIONS.map((a) => '<option value="' + a + '">' + a + '</option>').join("") + '</select></label>' +
+    '<label>Account<input data-tl="f-account" type="text" placeholder="u:alice or sys:escrow" autocomplete="off" /></label>' +
     '<label>Asset<select data-tl="f-asset"><option value="">All assets</option>' +
-    TOKEN_CONFIG.ASSETS.map((a) => '<option value="' + a + '">' + a + '</option>').join("") + '</select></label>' +
+    ASSETS.map((a) => '<option value="' + a + '">' + a + '</option>').join("") + '</select></label>' +
     '<label>State<select data-tl="f-state"><option value="">Any state</option>' +
-    '<option value="pending">pending</option><option value="settled">settled</option>' +
-    '<option value="reversed">reversed</option><option value="cancelled">cancelled</option></select></label>' +
+    '<option value="settled">settled</option><option value="reversed">reversed</option>' +
+    '<option value="genesis">genesis</option></select></label>' +
     '</div></section>' +
     '<section class="tl-section tl-list-section"><h2>Journals <span class="tl-meta" data-tl="list-count"></span></h2>' +
     '<div class="tl-list" data-tl="list"></div></section>' +
@@ -137,7 +220,41 @@ export function mountTokenLifecycleAudit(root, opts = {}) {
   const statusEl = $("status");
   const listEl = $("list");
   const receiptEl = $("receipt");
+  const quotesEl = $("quotes");
   const setStatus = (msg) => { statusEl.textContent = msg; };
+
+  /* ---------- journal view model ---------- */
+  /** Ids of journals that have been reversed (derived from reverse journals). */
+  function reversedIds() {
+    const set = new Set();
+    try {
+      for (const r of engine.journalHistory({ action: "reverse", limit: 1000 }).rows) {
+        if (r.links && r.links.reverses) set.add(r.links.reverses);
+      }
+    } catch { /* best-effort */ }
+    return set;
+  }
+  let reversedCache = reversedIds();
+  const stateOf = (r) => (r.action === "genesis" ? "genesis" : (reversedCache.has(r.id) ? "reversed" : "settled"));
+  const stateColor = (r) => (STATE_COLORS[stateOf(r)] ?? STATE_COLORS.settled);
+  const isReversible = (r) => {
+    if (r.action === "genesis" || r.action === "reverse" || r.action === "cancel") return false;
+    if (reversedCache.has(r.id)) return false;
+    return (ledger.tick - r.tick) <= REVERSE_WINDOW_TICKS;
+  };
+  const windowRemaining = (r) => Math.max(0, REVERSE_WINDOW_TICKS - (ledger.tick - r.tick));
+  const findJournal = (id) => {
+    try {
+      const rows = engine.journalHistory({ limit: 1000 }).rows;
+      return rows.find((r) => r.id === id) || null;
+    } catch { return null; }
+  };
+  const findReverser = (id) => {
+    try {
+      const rows = engine.journalHistory({ action: "reverse", limit: 1000 }).rows;
+      return rows.find((r) => r.links && r.links.reverses === id) || null;
+    } catch { return null; }
+  };
 
   /* ---------- three.js glass-cube chain ---------- */
   let three = null;
@@ -147,8 +264,6 @@ export function mountTokenLifecycleAudit(root, opts = {}) {
    * suppressed and a single refresh runs at the end. Without this,
    * "+1005 ticks" would rebuild the whole scene 1005 times. */
   let suppressRefresh = 0;
-
-  const stateColor = (j) => (j.journalId === "genesis" ? STATE_COLORS.genesis : (STATE_COLORS[j.state] ?? STATE_COLORS.settled));
 
   function makeLabel(text) {
     const canvas = document.createElement("canvas");
@@ -245,9 +360,9 @@ export function mountTokenLifecycleAudit(root, opts = {}) {
           tooltipEl.hidden = false;
           tooltipEl.style.left = (e.clientX - sr.left + 14) + "px";
           tooltipEl.style.top = (e.clientY - sr.top + 10) + "px";
-          tooltipEl.innerHTML = "<strong>" + esc(j.journalId) + "</strong> \u00B7 " + esc(j.action) + " \u00B7 " + esc(j.state) + "<br>" + esc(j.summary);
+          tooltipEl.innerHTML = "<strong>" + esc(j.id) + "</strong> \u00B7 " + esc(j.action) + " \u00B7 " + esc(stateOf(j)) + "<br>" + esc(summarize(j));
           renderer.domElement.style.cursor = "pointer";
-          setHover(j.journalId);
+          setHover(j.id);
         } else {
           tooltipEl.hidden = true;
           renderer.domElement.style.cursor = "grab";
@@ -346,12 +461,13 @@ export function mountTokenLifecycleAudit(root, opts = {}) {
       m.label.material.dispose();
     }
     cubeMeshes.clear();
-    const rows = core.history({ limit: MAX_CUBES + 1 }).rows;
+    let rows = [];
+    try { rows = engine.journalHistory({ limit: MAX_CUBES + 1 }).rows; } catch { rows = []; }
     const chronological = rows.slice().reverse().slice(-MAX_CUBES);
     const n = chronological.length;
     chronological.forEach((j, i) => {
       const color = stateColor(j);
-      const size = j.journalId === "genesis" ? 1.05 : 0.85;
+      const size = j.action === "genesis" ? 1.05 : 0.85;
       const geo = new THREE.BoxGeometry(size, size, size);
       const mat = new THREE.MeshPhysicalMaterial({
         color, transparent: true, opacity: 0.3, roughness: 0.12, metalness: 0.1,
@@ -363,17 +479,17 @@ export function mountTokenLifecycleAudit(root, opts = {}) {
         new THREE.LineBasicMaterial({ color: 0x9fe8ff, transparent: true, opacity: 0.55 })
       );
       cube.add(edges);
-      const label = makeLabel(j.journalId === "genesis" ? "GEN" : ("#" + j.seq));
+      const label = makeLabel(j.action === "genesis" ? "GEN" : ("T" + j.tick));
       label.position.y = size * 0.95;
       const group = new THREE.Group();
       group.add(cube);
       group.add(label);
-      group.userData.journalId = j.journalId;
-      const saved = remembered[j.journalId];
+      group.userData.journalId = j.id;
+      const saved = remembered[j.id];
       if (Array.isArray(saved) && saved.length === 3) group.position.set(saved[0], saved[1], saved[2]);
       else group.position.set((i - (n - 1) / 2) * 1.9, Math.sin(i * 0.7) * 0.55, Math.cos(i * 0.55) * 0.6);
-      cube.userData = { group, journal: j, journalId: j.journalId };
-      cubeMeshes.set(j.journalId, { group, cube, edges, label, baseY: group.position.y, phase: i * 1.3, hit: cube });
+      cube.userData = { group, journal: j, journalId: j.id };
+      cubeMeshes.set(j.id, { group, cube, edges, label, baseY: group.position.y, phase: i * 1.3, hit: cube });
       three.world.add(group);
     });
     rebuildChainLine();
@@ -411,24 +527,26 @@ export function mountTokenLifecycleAudit(root, opts = {}) {
     const f = ui.filters;
     let result;
     try {
-      result = core.history({
+      result = engine.journalHistory({
         action: f.action || undefined,
         account: f.account.trim() || undefined,
         asset: f.asset || undefined,
-        state: f.state || undefined,
         limit: 200,
       });
     } catch (err) { setStatus("Filter error: " + (err && err.message)); return; }
-    $("list-count").textContent = result.total + " journal" + (result.total === 1 ? "" : "s");
-    if (!result.rows.length) { listEl.innerHTML = '<p class="tl-empty">No journals match these filters.</p>'; return; }
-    listEl.innerHTML = result.rows.map((j) =>
-      '<button class="tl-row' + (j.journalId === ui.selectedId ? " is-sel" : "") + '" data-jid="' + esc(j.journalId) + '">' +
-      '<span class="tl-row-seq">' + (j.journalId === "genesis" ? "GEN" : ("#" + j.seq)) + '</span>' +
-      '<span class="tl-row-main"><span class="tl-row-title">' + esc(j.journalId) + ' \u00B7 ' + esc(j.action) + '</span>' +
-      '<span class="tl-row-sub">' + esc(j.summary) + '</span>' +
-      '<span class="tl-row-meta">tick ' + j.tick + ' \u00B7 ' + fmtTime(j.createdAt) + (j.linkedJournalId ? ' \u00B7 linked ' + esc(j.linkedJournalId) : "") + '</span></span>' +
-      '<span class="tl-row-state st-' + esc(j.state) + '">' + esc(j.state) + '</span></button>'
-    ).join("");
+    let rows = result.rows;
+    if (f.state) rows = rows.filter((r) => stateOf(r) === f.state);
+    $("list-count").textContent = result.total + " journal" + (result.total === 1 ? "" : "s") + (f.state ? " (" + rows.length + " shown)" : "");
+    if (!rows.length) { listEl.innerHTML = '<p class="tl-empty">No journals match these filters.</p>'; return; }
+    listEl.innerHTML = rows.map((j) => {
+      const st = stateOf(j);
+      return '<button class="tl-row' + (j.id === ui.selectedId ? " is-sel" : "") + '" data-jid="' + esc(j.id) + '">' +
+      '<span class="tl-row-seq">' + (j.action === "genesis" ? "GEN" : ("T" + j.tick)) + '</span>' +
+      '<span class="tl-row-main"><span class="tl-row-title">' + esc(j.id) + ' \u00B7 ' + esc(j.action) + '</span>' +
+      '<span class="tl-row-sub">' + esc(summarize(j)) + '</span>' +
+      '<span class="tl-row-meta">tick ' + j.tick + ' \u00B7 ' + fmtTime(j.ts) + (j.links && j.links.reverses ? ' \u00B7 reverses ' + esc(j.links.reverses) : "") + '</span></span>' +
+      '<span class="tl-row-state st-' + esc(st) + '">' + esc(st) + '</span></button>';
+    }).join("");
     listEl.querySelectorAll(".tl-row").forEach((btn) => {
       btn.addEventListener("click", () => selectJournal(btn.getAttribute("data-jid"), true));
     });
@@ -437,50 +555,55 @@ export function mountTokenLifecycleAudit(root, opts = {}) {
   function renderReceipt() {
     const jid = ui.selectedId;
     if (!jid) { receiptEl.innerHTML = '<p class="tl-empty">Select a journal to inspect its EchoProof receipt.</p>'; return; }
-    const journal = core.journalOf(jid);
-    const receipt = core.receiptFor(jid);
-    if (!journal || !receipt) { receiptEl.innerHTML = '<p class="tl-empty">Journal not found.</p>'; return; }
+    const journal = findJournal(jid);
+    if (!journal) { receiptEl.innerHTML = '<p class="tl-empty">Journal not found.</p>'; return; }
+    const j = journal;
+    const st = stateOf(j);
     let verification;
-    try { verification = core.verifyJournal(jid); }
+    try { verification = ledger.verifyReceipt(j.id); }
     catch (err) { verification = { ok: false, checks: [{ name: "verify", ok: false, detail: err && err.message }] }; }
-    const postings = journal.postings.map((p) => {
-      const amt = BigInt(p.amountFluff);
-      const neg = amt < 0n;
+    const reverser = findReverser(j.id);
+    const postings = j.postings.map((p) => {
+      const amt = Number(p.amount);
+      const neg = amt < 0;
       const abs = neg ? -amt : amt;
       return '<tr><td>' + esc(p.account) + '</td><td>' + esc(p.asset) + '</td><td class="' + (neg ? "neg" : "pos") + '">' +
-        (neg ? "\u2212" : "+") + esc(fmtFluff(abs, p.asset)) + '</td></tr>';
+        (neg ? "\u2212" : "+") + esc(fmtAsset(abs, p.asset)) + '</td></tr>';
     }).join("");
     const checks = verification.checks.map((c) =>
       '<li class="' + (c.ok ? "ok" : "bad") + '"><span>' + (c.ok ? "\u2713" : "\u2717") + '</span> ' + esc(c.name) +
-      ' <code>' + esc(c.detail == null ? "" : c.detail) + '</code></li>'
+      (c.detail == null || c.detail === "" ? "" : ' <code>' + esc(c.detail) + '</code>') + '</li>'
     ).join("");
+    const actor = (j.links && j.links.actor) ? j.links.actor : "\u2014";
+    const remaining = windowRemaining(j);
+    const reversible = isReversible(j);
     receiptEl.innerHTML =
-      '<div class="tl-receipt-head"><strong>' + esc(journal.journalId) + '</strong>' +
-      '<span class="tl-pill">' + esc(journal.action) + '</span>' +
-      '<span class="tl-row-state st-' + esc(journal.state) + '">' + esc(journal.state) + '</span></div>' +
-      '<p class="tl-receipt-summary">' + esc(journal.summary) + '</p>' +
+      '<div class="tl-receipt-head"><strong>' + esc(j.id) + '</strong>' +
+      '<span class="tl-pill">' + esc(j.action) + '</span>' +
+      '<span class="tl-row-state st-' + esc(st) + '">' + esc(st) + '</span></div>' +
+      '<p class="tl-receipt-summary">' + esc(summarize(j)) + '</p>' +
       '<dl class="tl-kv">' +
-      '<div><dt>Sequence</dt><dd>#' + journal.seq + ' (receipt #' + receipt.sequence + ')</dd></div>' +
-      '<div><dt>Tick</dt><dd>' + journal.tick + '</dd></div>' +
-      '<div><dt>Actor</dt><dd>' + esc(journal.actor) + '</dd></div>' +
-      '<div><dt>Issued</dt><dd>' + fmtTime(receipt.issuedAt) + '</dd></div>' +
-      '<div><dt>Idempotency key</dt><dd><code>' + esc(journal.idempotencyKey) + '</code></dd></div>' +
-      (journal.linkedJournalId ? '<div><dt>Linked journal</dt><dd><button class="tl-link" data-goto="' + esc(journal.linkedJournalId) + '">' + esc(journal.linkedJournalId) + '</button></dd></div>' : "") +
-      (journal.reversedBy ? '<div><dt>Reversed by</dt><dd><button class="tl-link" data-goto="' + esc(journal.reversedBy) + '">' + esc(journal.reversedBy) + '</button></dd></div>' : "") +
-      (journal.memo ? '<div><dt>Memo</dt><dd>' + esc(journal.memo) + '</dd></div>' : "") +
+      '<div><dt>Tick</dt><dd>' + j.tick + ' (chain position #' + (j.tick) + ')</dd></div>' +
+      '<div><dt>Actor</dt><dd>' + esc(actor) + '</dd></div>' +
+      '<div><dt>Issued</dt><dd>' + fmtTime(j.ts) + '</dd></div>' +
+      '<div><dt>Reverse window</dt><dd>' + (reversible
+        ? remaining + " ticks remaining of " + REVERSE_WINDOW_TICKS
+        : (st === "reversed" ? "already reversed" : "not eligible (genesis / lifecycle journal, or window expired)")) + '</dd></div>' +
+      '<div><dt>Idempotency key</dt><dd><code>' + esc(j.idempotencyKey) + '</code></dd></div>' +
+      (j.links && j.links.reverses ? '<div><dt>Reverses</dt><dd><button class="tl-link" data-goto="' + esc(j.links.reverses) + '">' + esc(j.links.reverses) + '</button></dd></div>' : "") +
+      (reverser ? '<div><dt>Reversed by</dt><dd><button class="tl-link" data-goto="' + esc(reverser.id) + '">' + esc(reverser.id) + '</button></dd></div>' : "") +
+      (j.memo ? '<div><dt>Memo</dt><dd>' + esc(j.memo) + '</dd></div>' : "") +
       '</dl>' +
       (postings
         ? '<table class="tl-postings"><thead><tr><th>Account</th><th>Asset</th><th>Amount</th></tr></thead><tbody>' + postings + '</tbody></table>'
-        : '<p class="tl-note">Genesis allocation carries no postings; it anchors the chain.</p>') +
+        : '<p class="tl-note">No postings recorded on this journal.</p>') +
       '<h3>EchoProof receipt <span class="tl-meta">\u2014 recomputed just now</span></h3>' +
       '<dl class="tl-kv tl-hashes">' +
-      '<div><dt>beforeHash</dt><dd><code title="' + esc(receipt.beforeHash) + '">' + esc(short(receipt.beforeHash)) + '</code></dd></div>' +
-      '<div><dt>afterHash</dt><dd><code title="' + esc(receipt.afterHash) + '">' + esc(short(receipt.afterHash)) + '</code></dd></div>' +
-      '<div><dt>payloadHash</dt><dd><code title="' + esc(receipt.payloadHash) + '">' + esc(short(receipt.payloadHash)) + '</code></dd></div>' +
-      '<div><dt>stamp</dt><dd>' + esc(receipt.stamp) + '</dd></div>' +
+      '<div><dt>hash</dt><dd><code title="' + esc(j.hash) + '">' + esc(short(j.hash)) + '</code></dd></div>' +
+      '<div><dt>prevHash</dt><dd><code title="' + esc(j.prevHash) + '">' + esc(short(j.prevHash)) + '</code></dd></div>' +
       '</dl><ul class="tl-checks">' + checks + '</ul>' +
       '<p class="tl-note">' + (verification.ok
-        ? "All hashes recomputed and the prevHash link verified."
+        ? "Hash recomputed and the prevHash link verified against the chain."
         : "VERIFICATION FAILED \u2014 the chain may have been tampered with.") + '</p>';
     receiptEl.querySelectorAll("[data-goto]").forEach((b) => {
       b.addEventListener("click", () => selectJournal(b.getAttribute("data-goto"), true));
@@ -489,18 +612,37 @@ export function mountTokenLifecycleAudit(root, opts = {}) {
 
   function renderChainPill() {
     const pill = $("chain-pill");
-    let ok = false, count = 0;
-    try { ok = core.verifyChain(); count = core.journalCount + 1; } catch { ok = false; }
+    let report;
+    try { report = ledger.verifyChain(); } catch { report = { ok: false }; }
+    const ok = !!(report && report.ok);
+    const count = report && typeof report.count === "number" ? report.count : ledger.journalCount();
     pill.textContent = ok ? ("chain \u2713 " + count + " receipts") : "chain \u2717 FAILED";
     if (ok) pill.classList.remove("bad"); else pill.classList.add("bad");
   }
 
+  function renderQuotes() {
+    if (!ui.quotes.length) {
+      quotesEl.innerHTML = '<p class="tl-empty">No rehearsal quotes yet \u2014 issue one, then cancel or execute it. Cancelling an executed quote fails closed.</p>';
+      return;
+    }
+    quotesEl.innerHTML = ui.quotes.map((q) =>
+      '<div class="tl-row" style="cursor:default">' +
+      '<span class="tl-row-seq">' + esc(q.action) + '</span>' +
+      '<span class="tl-row-main"><span class="tl-row-title">' + esc(q.id) + '</span>' +
+      '<span class="tl-row-sub">' + esc(q.from) + ': ' + esc(fmtAsset(q.amountIn, q.fromAsset)) + ' \u2192 ' + esc(fmtAsset(q.amountOut, q.toAsset)) + '</span>' +
+      '<span class="tl-row-meta">' + esc(q.note || "") + '</span></span>' +
+      '<span class="tl-row-state st-' + esc(q.status) + '">' + esc(q.status) + '</span></div>'
+    ).join("");
+  }
+
   function refreshAll(statusMsg) {
+    reversedCache = reversedIds();
     rebuildCubes();
     renderList();
     renderReceipt();
     renderChainPill();
-    $("tick-line").textContent = "tick " + core.tick + " \u00B7 " + core.journalCount + " journals";
+    renderQuotes();
+    $("tick-line").textContent = "tick " + ledger.tick + " \u00B7 " + ledger.journalCount() + " journals";
     if (statusMsg) setStatus(statusMsg);
   }
 
@@ -524,47 +666,74 @@ export function mountTokenLifecycleAudit(root, opts = {}) {
   $("do-reverse").addEventListener("click", () => {
     const id = needSelection(); if (!id) return;
     try {
-      const res = core.reverse(id, { actor: "audit-console" });
-      refreshAll(res.replayed
-        ? "Replay: " + id + " was already reversed by " + res.journal.journalId + " (idempotent, no duplicate)."
-        : "Reversed " + id + " \u2192 compensating journal " + res.journal.journalId + ". History untouched.");
+      const res = engine.reverse({ journalId: id, actor: "audit-console" });
+      refreshAll("Reversed " + id + " \u2192 compensating journal " + res.id + ". History untouched; re-running is idempotent.");
+      selectJournal(res.id, true);
     } catch (err) { setStatus("Reverse failed closed: " + (err && err.message)); }
   });
-  $("do-cancel").addEventListener("click", () => {
-    const id = needSelection(); if (!id) return;
+  const latestPendingQuote = () => {
+    for (let i = ui.quotes.length - 1; i >= 0; i -= 1) {
+      if (ui.quotes[i].status === "pending") return ui.quotes[i];
+    }
+    return null;
+  };
+  $("q-issue").addEventListener("click", () => {
     try {
-      const res = core.cancel(id, { actor: "audit-console" });
-      refreshAll(res.replayed
-        ? "Replay: cancel of " + id + " already recorded as " + res.journal.journalId + "."
-        : "Cancelled pending " + id + " \u2192 compensating journal " + res.journal.journalId + ".");
+      const q = engine.quote({ action: "buy", from: "u:alice", fromAsset: "TUMBO", toAsset: "sMIMAS", amountIn: 1000 });
+      ui.quotes.push({
+        id: q.id, action: q.action, from: q.from,
+        fromAsset: q.fromAsset, toAsset: q.toAsset,
+        amountIn: q.amountIn, amountOut: q.amountOut,
+        status: "pending", note: "issued at tick " + ledger.tick,
+        quote: q,
+      });
+      refreshAll("Quote " + q.id + " issued (pending). Cancel it, or execute it to settle.");
+    } catch (err) { setStatus("Quote failed: " + (err && err.message)); }
+  });
+  $("q-cancel").addEventListener("click", () => {
+    const q = latestPendingQuote();
+    if (!q) { setStatus("No pending rehearsal quote to cancel \u2014 issue one first."); return; }
+    try {
+      engine.cancelQuote(q.id, { idempotencyKey: "audit-demo:cancel-" + q.id });
+      q.status = "cancelled";
+      q.note = "cancelled at tick " + ledger.tick;
+      refreshAll("Quote " + q.id + " cancelled. It can no longer be executed.");
     } catch (err) { setStatus("Cancel failed closed: " + (err && err.message)); }
   });
-  $("do-settle").addEventListener("click", () => {
-    const id = needSelection(); if (!id) return;
-    try { core.settle(id, { actor: "audit-console" }); refreshAll("Settled " + id + "."); }
-    catch (err) { setStatus("Settle failed: " + (err && err.message)); }
+  $("q-execute").addEventListener("click", () => {
+    const q = latestPendingQuote();
+    if (!q) { setStatus("No pending rehearsal quote to execute \u2014 issue one first."); return; }
+    try {
+      const receipt = engine.execute(q.quote, { idempotencyKey: "audit-demo:exec-" + q.id });
+      q.status = "executed";
+      q.note = "settled as " + receipt.id + " at tick " + ledger.tick;
+      refreshAll("Quote " + q.id + " executed \u2192 journal " + receipt.id + ". Cancelling it now would fail closed.");
+      selectJournal(receipt.id, true);
+    } catch (err) { setStatus("Execute failed: " + (err && err.message)); }
   });
   $("verify").addEventListener("click", () => {
     let report;
-    try { report = core.verifyChainReport(); }
+    try { report = ledger.verifyChain(); }
     catch (err) { setStatus("Chain verification error: " + (err && err.message)); return; }
-    const bad = report.filter((r) => !r.ok);
     renderChainPill();
-    setStatus(bad.length === 0
-      ? "Chain integrity verified: " + report.length + " receipts, every hash recomputed, every prevHash link intact."
-      : "Chain FAILED at " + bad.map((r) => r.journalId).join(", ") + " (" + bad[0].failures.join(", ") + ").");
+    setStatus(report && report.ok
+      ? "Chain integrity verified: " + report.count + " receipts, every hash recomputed, every prevHash link intact. Tip " + short(report.tip) + "."
+      : "Chain FAILED at " + ((report && report.at) || "?") + " (" + ((report && report.reason) || "unknown") + ").");
   });
   $("advance").addEventListener("click", () => {
     suppressRefresh += 1;
     let failed = null;
     try {
       for (let i = 0; i < 1005; i += 1) {
-        core.execute({ action: "send", from: "sys:treasury", to: "sys:faucet", amountFluff: 1, idempotencyKey: "audit-tick-" + core.tick + "-" + i });
+        ledger.post(
+          [{ account: "u:alice", asset: "TUMBO", amount: -1 }, { account: "u:bob", asset: "TUMBO", amount: 1 }],
+          { idempotencyKey: "audit-demo:tick-" + ledger.tick + "-" + i, action: "send", memo: "tick advance" }
+        );
       }
     } catch (err) { failed = err; }
     suppressRefresh -= 1;
     if (failed) { setStatus("Advance failed: " + (failed && failed.message)); return; }
-    refreshAll("Advanced 1005 ticks (now tick " + core.tick + "). Journals older than " + TOKEN_CONFIG.REVERSE_WINDOW_TICKS + " ticks can no longer be reversed \u2014 try reversing one.");
+    refreshAll("Advanced 1005 ticks (now tick " + ledger.tick + "). Journals older than " + REVERSE_WINDOW_TICKS + " ticks can no longer be reversed \u2014 try reversing one.");
   });
   $("minimize").addEventListener("click", () => { $("panel").hidden = true; $("chip").hidden = false; });
   $("chip").addEventListener("click", () => { $("panel").hidden = false; $("chip").hidden = true; });
@@ -590,7 +759,7 @@ export function mountTokenLifecycleAudit(root, opts = {}) {
     if (new URLSearchParams(window.location.search).get("selftest") === "1") {
       const box = $("selftest");
       box.hidden = false;
-      const rows = runTokenLifecycleSelfTest(facade);
+      const rows = runTokenLifecycleSelfTest(createTokenEngine);
       const passed = rows.filter((r) => r.ok).length;
       box.innerHTML = '<h2>Self-test \u2014 ' + passed + "/" + rows.length + ' passed</h2><div class="tl-selftest-rows">' +
         rows.map((r) => '<div class="tl-selftest-row ' + (r.ok ? "ok" : "bad") + '">' + (r.ok ? "\u2713" : "\u2717") + " " + esc(r.name) + (r.detail ? " \u2014 " + esc(r.detail) : "") + '</div>').join("") +
@@ -600,6 +769,7 @@ export function mountTokenLifecycleAudit(root, opts = {}) {
 
   return {
     facade,
+    engine,
     refresh: () => refreshAll(),
     select: selectJournal,
     destroy() { offReceipt(); if (three) three.destroy(); root.innerHTML = ""; },

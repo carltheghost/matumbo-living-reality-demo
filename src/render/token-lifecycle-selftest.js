@@ -1,21 +1,30 @@
 /**
- * Token Lifecycle - built-in self-test (browser).
+ * Token Lifecycle - built-in self-test (browser), on the unified token core.
  *
- * Runs the core lifecycle scenarios against a fresh ledger and returns
- * [{name, ok, detail}] rows for the audit console (?selftest=1). Mirrors
- * tests/token-lifecycle.test.mjs so the browser and Node suites agree.
+ * Runs the core lifecycle scenarios against a FRESH engine (never the shared
+ * singleton) and returns [{name, ok, detail}] rows for the audit console
+ * (?selftest=1). Mirrors tests/token-lifecycle-unified.test.mjs so the
+ * browser and Node suites agree.
  *
  * SIMULATION ONLY - no real value, no network, no wallets.
  */
 
 import {
-  TOKEN_CONFIG,
-  createTumboToken,
-  fmtFluff,
-  sha256Hex,
+  REVERSE_WINDOW_TICKS,
+  ASSETS,
+  fmt,
+  fnv1a64Hex,
+  QuoteError,
+  AlreadyReversedError,
+  ReverseWindowExpiredError,
+  CancelRejectedError,
+  JournalNotFoundError,
 } from "../domains/token.js";
 
-export function runTokenLifecycleSelfTest() {
+/**
+ * @param {() => import("../domains/token.js").QuoteEngine} engineFactory
+ */
+export function runTokenLifecycleSelfTest(engineFactory) {
   const rows = [];
   const check = (name, fn) => {
     try { fn(); rows.push({ name, ok: true }); }
@@ -25,150 +34,186 @@ export function runTokenLifecycleSelfTest() {
     if (a !== b) throw new Error((msg || "mismatch") + ": " + JSON.stringify(a) + " !== " + JSON.stringify(b));
   };
   const ok = (cond, msg) => { if (!cond) throw new Error(msg || "assertion failed"); };
-  const throwsCode = (fn, code) => {
+  const throws = (fn, Cls, msg) => {
     try { fn(); } catch (err) {
-      if (err && err.code === code) return;
-      throw new Error("expected code " + code + ", got " + (err && (err.code || err.message)));
+      if (err instanceof Cls) return;
+      throw new Error((msg || "wrong error") + ": expected " + Cls.name + ", got " + (err && err.constructor && err.constructor.name) + " (" + (err && err.message) + ")");
     }
-    throw new Error("expected throw with code " + code);
+    throw new Error((msg || "expected throw") + ": expected " + Cls.name + ", nothing thrown");
   };
-  const fresh = () => createTumboToken();
-  const fund = (t, acct, fluff, asset, key) =>
-    t.execute({ action: "send", asset: asset || "TUMBO", from: "sys:treasury", to: acct, amountFluff: fluff, idempotencyKey: key });
+  const fresh = () => engineFactory();
+  const fund = (eng, acct, fluff, asset, key) =>
+    eng.faucet(acct, asset || "TUMBO", fluff, { idempotencyKey: key });
+  const send = (eng, from, to, fluff, key) =>
+    eng.ledger.post(
+      [{ account: from, asset: "TUMBO", amount: -fluff }, { account: to, asset: "TUMBO", amount: fluff }],
+      { idempotencyKey: key, action: "send" }
+    );
 
-  check("sha256 matches the standard test vector", () => {
-    eq(sha256Hex("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+  check("fnv1a64Hex matches the pinned test vector", () => {
+    eq(fnv1a64Hex("abc"), "e71fa2190541574b");
+    eq(fnv1a64Hex("abc"), fnv1a64Hex("abc"));
   });
 
-  check("facade exposes { ledger, balance, fmt, on }; supply from one config constant", () => {
-    const t = fresh();
-    ok(typeof t.balance === "function" && typeof t.fmt === "function" && typeof t.on === "function" && t.ledger);
-    eq(t.balance("sys:treasury", "TUMBO"), TOKEN_CONFIG.SUPPLY_FLUFF);
-    eq(t.balance("sys:treasury", "sMIMAS"), TOKEN_CONFIG.SUPPLY_FLUFF);
-    eq(TOKEN_CONFIG.FLUFF_PER_UNIT, 1000);
+  check("engine boots with 4 genesis journals; tick starts at 4", () => {
+    const eng = fresh();
+    eq(eng.ledger.tick, 4);
+    eq(eng.ledger.journalCount(), 4);
+    const genesis = eng.journalHistory({ action: "genesis", limit: 10 });
+    eq(genesis.total, 4);
+    ok(genesis.rows.every((r) => r.action === "genesis"));
   });
 
-  check("fmt renders exact decimals without floats", () => {
-    eq(fmtFluff(1500), "1.500 TUMBO-SIM");
-    eq(fmtFluff(1), "0.001 TUMBO-SIM");
-    eq(fmtFluff(0, "sMIMAS"), "0.000 sMIMAS-SIM");
+  check("faucet funds a user; balance + fmt are exact", () => {
+    const eng = fresh();
+    fund(eng, "u:alice", 50000, "TUMBO", "st-f1");
+    eq(eng.balance("u:alice", "TUMBO"), 50000);
+    eq(fmt(1500), "1.500 TUMBO-SIM");
+    eq(fmt(1), "0.001 TUMBO-SIM");
+    eq(ASSETS.join(","), "TUMBO,sMIMAS");
   });
 
   check("send posts a balanced journal and moves balances", () => {
-    const t = fresh();
-    fund(t, "u:alice", 50000, "TUMBO", "st-f1");
-    const res = t.execute({ action: "send", from: "u:alice", to: "u:bob", amountFluff: 1500, idempotencyKey: "st-s1" });
-    eq(t.balance("u:bob"), 1500);
-    eq(t.balance("u:alice"), 48500);
-    const total = res.journal.postings.reduce((s, p) => s + BigInt(p.amountFluff), 0n);
-    eq(total, 0n);
-    eq(res.journal.state, "settled");
+    const eng = fresh();
+    fund(eng, "u:alice", 50000, "TUMBO", "st-f2");
+    const r = send(eng, "u:alice", "u:bob", 1500, "st-s1");
+    eq(eng.balance("u:bob", "TUMBO"), 1500);
+    eq(eng.balance("u:alice", "TUMBO"), 48500);
+    const total = r.postings.reduce((s, p) => s + p.amount, 0);
+    eq(total, 0);
+    eq(r.action, "send");
   });
 
   check("idempotency: replaying a key returns the original receipt", () => {
-    const t = fresh();
-    fund(t, "u:alice", 50000, "TUMBO", "st-f2");
-    const p = { action: "tip", from: "u:alice", to: "u:bob", amountFluff: 700, idempotencyKey: "st-tip" };
-    const first = t.execute(p);
-    const count = t.ledger.journalCount;
-    const again = t.execute(p);
-    eq(again.replayed, true);
-    eq(again.journal.journalId, first.journal.journalId);
-    eq(t.ledger.journalCount, count);
-    eq(t.balance("u:bob"), 700);
+    const eng = fresh();
+    fund(eng, "u:alice", 50000, "TUMBO", "st-f3");
+    const first = send(eng, "u:alice", "u:bob", 700, "st-tip");
+    const count = eng.ledger.journalCount();
+    const again = send(eng, "u:alice", "u:bob", 700, "st-tip");
+    eq(again.id, first.id);
+    eq(eng.ledger.journalCount(), count);
+    eq(eng.balance("u:bob", "TUMBO"), 700);
   });
 
   check("balances never go negative", () => {
-    const t = fresh();
-    fund(t, "u:alice", 1000, "TUMBO", "st-f3");
-    throwsCode(() => t.execute({ action: "send", from: "u:alice", to: "u:bob", amountFluff: 1001, idempotencyKey: "st-od" }), "insufficient-funds");
-    eq(t.balance("u:alice"), 1000);
+    const eng = fresh();
+    fund(eng, "u:alice", 1000, "TUMBO", "st-f4");
+    throws(() => send(eng, "u:alice", "u:bob", 1001, "st-od"), Error);
+    eq(eng.balance("u:alice", "TUMBO"), 1000);
   });
 
-  check("sys:void is credited only by burns and never debited", () => {
-    const t = fresh();
-    fund(t, "u:alice", 50000, "TUMBO", "st-f4");
-    t.execute({ action: "send", from: "u:alice", to: "sys:void", amountFluff: 500, idempotencyKey: "st-burn" });
-    eq(t.balance("sys:void"), 500);
-    throwsCode(() => t.execute({ action: "send", from: "sys:void", to: "u:bob", amountFluff: 1, idempotencyKey: "st-vd" }), "void-debit");
+  check("sys:void is never debited", () => {
+    const eng = fresh();
+    fund(eng, "u:alice", 50000, "TUMBO", "st-f5");
+    throws(() => eng.ledger.post(
+      [{ account: "sys:void", asset: "TUMBO", amount: -1 }, { account: "u:bob", asset: "TUMBO", amount: 1 }],
+      { idempotencyKey: "st-vd", action: "send" }
+    ), Error);
   });
 
   check("reverse within the window posts a compensating journal; history untouched", () => {
-    const t = fresh();
-    fund(t, "u:alice", 50000, "TUMBO", "st-f5");
-    const tx = t.execute({ action: "send", from: "u:alice", to: "u:bob", amountFluff: 9000, idempotencyKey: "st-rev" });
-    const before = JSON.stringify(tx.journal.postings);
-    const rev = t.reverse(tx.journal.journalId);
-    eq(rev.journal.action, "reverse");
-    eq(rev.journal.linkedJournalId, tx.journal.journalId);
-    eq(t.balance("u:bob"), 0);
-    const orig = t.journalOf(tx.journal.journalId);
-    eq(orig.state, "reversed");
-    eq(JSON.stringify(orig.postings), before);
-    ok(t.verifyChain());
+    const eng = fresh();
+    fund(eng, "u:alice", 50000, "TUMBO", "st-f6");
+    const tx = send(eng, "u:alice", "u:bob", 9000, "st-rev");
+    const before = JSON.stringify(tx.postings);
+    const rev = eng.reverse({ idempotencyKey: "st-rev" });
+    eq(rev.action, "reverse");
+    eq(rev.links.reverses, tx.id);
+    eq(eng.balance("u:bob", "TUMBO"), 0);
+    eq(JSON.stringify(tx.postings), before);
+    ok(eng.ledger.verifyChain().ok);
   });
 
-  check("double-reverse is impossible", () => {
-    const t = fresh();
-    fund(t, "u:alice", 50000, "TUMBO", "st-f6");
-    const tx = t.execute({ action: "send", from: "u:alice", to: "u:bob", amountFluff: 3000, idempotencyKey: "st-drev" });
-    const first = t.reverse(tx.journal.journalId);
-    const replay = t.reverse(tx.journal.journalId);
-    eq(replay.replayed, true);
-    eq(replay.journal.journalId, first.journal.journalId);
-    throwsCode(() => t.reverse(tx.journal.journalId, { idempotencyKey: "st-sneaky" }), "already-reversed");
-    eq(t.balance("u:bob"), 0);
+  check("double-reverse is idempotent; reverse of a reversal is rejected", () => {
+    const eng = fresh();
+    fund(eng, "u:alice", 50000, "TUMBO", "st-f7");
+    const tx = send(eng, "u:alice", "u:bob", 3000, "st-drev");
+    const first = eng.reverse({ idempotencyKey: "st-drev" });
+    const replay = eng.reverse({ idempotencyKey: "st-drev" });
+    eq(replay.id, first.id);
+    eq(eng.balance("u:bob", "TUMBO"), 0);
+    throws(() => eng.reverse({ idempotencyKey: first.idempotencyKey }), QuoteError);
+  });
+
+  check("reverse of unknown / genesis journals fails closed", () => {
+    const eng = fresh();
+    throws(() => eng.reverse({ idempotencyKey: "nope:missing" }), JournalNotFoundError);
+    throws(() => eng.reverse({ journalId: "rcpt_missing" }), JournalNotFoundError);
+    throws(() => eng.reverse({ idempotencyKey: "genesis:tumbo-supply" }), QuoteError);
   });
 
   check("reverse after the window expires fails closed", () => {
-    const t = fresh();
-    fund(t, "u:alice", 50000, "TUMBO", "st-f7");
-    const tx = t.execute({ action: "send", from: "u:alice", to: "u:bob", amountFluff: 2500, idempotencyKey: "st-old" });
-    for (let i = 0; i < TOKEN_CONFIG.REVERSE_WINDOW_TICKS + 1; i += 1) {
-      t.execute({ action: "send", from: "sys:treasury", to: "sys:faucet", amountFluff: 1, idempotencyKey: "st-age-" + i });
+    const eng = fresh();
+    const r = fund(eng, "u:alice", 200000, "TUMBO", "st-old");
+    for (let i = 0; i < REVERSE_WINDOW_TICKS + 1; i += 1) {
+      send(eng, "u:alice", "u:bob", 1, "st-age-" + i);
     }
-    ok(t.tick() - tx.journal.tick > TOKEN_CONFIG.REVERSE_WINDOW_TICKS);
-    throwsCode(() => t.reverse(tx.journal.journalId), "reverse-window-expired");
-    eq(t.journalOf(tx.journal.journalId).state, "settled");
-    eq(t.balance("u:bob"), 2500);
+    ok(eng.ledger.tick - r.tick > REVERSE_WINDOW_TICKS);
+    throws(() => eng.reverse({ idempotencyKey: "st-old" }), ReverseWindowExpiredError);
+    eq(eng.balance("u:alice", "TUMBO"), 200000 - (REVERSE_WINDOW_TICKS + 1));
   });
 
-  check("cancel of pending works; cancel of settled fails closed", () => {
-    const t = fresh();
-    fund(t, "u:alice", 50000, "TUMBO", "st-f8");
-    const p = t.execute({ action: "send", from: "u:alice", to: "u:bob", amountFluff: 4000, idempotencyKey: "st-pend", settle: false });
-    eq(p.journal.state, "pending");
-    const c = t.cancel(p.journal.journalId);
-    eq(c.journal.action, "cancel");
-    eq(t.journalOf(p.journal.journalId).state, "cancelled");
-    eq(t.balance("u:bob"), 0);
-    const s = t.execute({ action: "send", from: "u:alice", to: "u:bob", amountFluff: 10, idempotencyKey: "st-set" });
-    throwsCode(() => t.cancel(s.journal.journalId), "cancel-rejected");
-    eq(t.journalOf(s.journal.journalId).state, "settled");
+  check("cancel pending quote works; executing a cancelled quote fails closed", () => {
+    const eng = fresh();
+    fund(eng, "u:alice", 50000, "TUMBO", "st-f8");
+    const q = eng.quote({ action: "buy", from: "u:alice", fromAsset: "TUMBO", toAsset: "sMIMAS", amountIn: 1000 });
+    const rec = eng.cancelQuote(q.id, { idempotencyKey: "st-cancel-1" });
+    eq(rec.cancelled, true);
+    throws(() => eng.execute(q, { idempotencyKey: "st-exec-cancelled" }), QuoteError);
   });
 
-  check("history filters by action / account / asset", () => {
-    const t = fresh();
-    fund(t, "u:alice", 100000, "TUMBO", "st-f9");
-    fund(t, "u:alice", 9000, "sMIMAS", "st-f10");
-    t.execute({ action: "tip", from: "u:alice", to: "u:bob", amountFluff: 111, idempotencyKey: "st-tipf" });
-    t.execute({ action: "send", asset: "sMIMAS", from: "u:alice", to: "u:bob", amountFluff: 222, idempotencyKey: "st-smf" });
-    eq(t.history({ action: "tip" }).total, 1);
-    ok(t.history({ account: "u:alice" }).rows.every((r) => r.journalId === "genesis" || r.postings.some((p) => p.account === "u:alice")));
-    ok(t.history({ asset: "sMIMAS" }).rows.every((r) => r.journalId === "genesis" || r.postings.some((p) => p.asset === "sMIMAS")));
+  check("cancel of an executed quote fails closed; double-cancel is idempotent", () => {
+    const eng = fresh();
+    fund(eng, "u:alice", 50000, "TUMBO", "st-f9");
+    const q = eng.quote({ action: "buy", from: "u:alice", fromAsset: "TUMBO", toAsset: "sMIMAS", amountIn: 1000 });
+    eng.execute(q, { idempotencyKey: "st-exec-1" });
+    throws(() => eng.cancelQuote(q.id), CancelRejectedError);
+    const q2 = eng.quote({ action: "buy", from: "u:alice", fromAsset: "TUMBO", toAsset: "sMIMAS", amountIn: 10 });
+    const c1 = eng.cancelQuote(q2.id, { idempotencyKey: "st-cancel-2" });
+    const c2 = eng.cancelQuote(q2.id, { idempotencyKey: "st-cancel-2" });
+    eq(c2.id, c1.id);
+    throws(() => eng.cancelQuote("q_unknown"), QuoteError);
+  });
+
+  check("history filters by action / account / asset; no genesis bypass", () => {
+    const eng = fresh();
+    fund(eng, "u:alice", 100000, "TUMBO", "st-f10");
+    // The faucet holds TUMBO only; sMIMAS funding comes from the market
+    // maker through the internal-authority path (same as genesis).
+    eng.ledger.post(
+      [{ account: "sys:market", asset: "sMIMAS", amount: -9000 }, { account: "u:alice", asset: "sMIMAS", amount: 9000 }],
+      { idempotencyKey: "st-f11", action: "faucet", memo: "test sMIMAS funding", authority: "internal" }
+    );
+    send(eng, "u:alice", "u:bob", 111, "st-tipf");
+    eng.ledger.post(
+      [{ account: "u:alice", asset: "sMIMAS", amount: -222 }, { account: "u:bob", asset: "sMIMAS", amount: 222 }],
+      { idempotencyKey: "st-smf", action: "send" }
+    );
+    eq(eng.journalHistory({ action: "faucet" }).total, 2);
+    const byAcct = eng.journalHistory({ account: "u:alice", limit: 1000 });
+    ok(byAcct.rows.every((r) => r.postings.some((p) => p.account === "u:alice")),
+      "genesis rows must not bypass the account filter");
+    const byAsset = eng.journalHistory({ asset: "sMIMAS", limit: 1000 });
+    ok(byAsset.rows.every((r) => r.postings.some((p) => p.asset === "sMIMAS")));
+    ok(byAsset.rows.length >= 2);
   });
 
   check("chain verifies; receipt recompute + prevHash link; tamper detected", () => {
-    const t = fresh();
-    fund(t, "u:alice", 50000, "TUMBO", "st-f11");
-    const tx = t.execute({ action: "send", from: "u:alice", to: "u:bob", amountFluff: 1234, idempotencyKey: "st-ch1" });
-    ok(t.verifyChain());
-    const v = t.verifyJournal(tx.journal.journalId);
-    ok(v.ok && v.checks.length >= 6);
-    const t2 = fresh();
-    t2.execute({ action: "send", from: "sys:treasury", to: "u:alice", amountFluff: 10, idempotencyKey: "st-tf" });
-    t2.ledger._receipts[1] = Object.assign({}, t2.ledger._receipts[1], { afterHash: "00".repeat(32) });
-    ok(!t2.verifyChain());
+    const eng = fresh();
+    fund(eng, "u:alice", 50000, "TUMBO", "st-f12");
+    const tx = send(eng, "u:alice", "u:bob", 1234, "st-ch1");
+    ok(eng.ledger.verifyChain().ok);
+    const v = eng.ledger.verifyReceipt(tx.id);
+    ok(v.ok && v.checks.length >= 3);
+    const bad = fresh();
+    fund(bad, "u:alice", 10, "TUMBO", "st-tf");
+    const journals = bad.ledger._journals;
+    journals[journals.length - 1] = Object.assign({}, journals[journals.length - 1], { hash: "00".repeat(32) });
+    ok(!bad.ledger.verifyChain().ok);
+  });
+
+  check("REVERSE_WINDOW_TICKS is the canonical 1000", () => {
+    eq(REVERSE_WINDOW_TICKS, 1000);
   });
 
   return rows;
