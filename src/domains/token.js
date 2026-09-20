@@ -380,11 +380,15 @@ export function createTokenVaultLedger(options = {}) {
         if (sum !== 0) throw new TokenVaultError(`journal does not sum to 0 for ${asset}`, 'journal_imbalance');
       }
     }
-    // Apply atomically: validate every resulting balance first.
+    // Apply atomically: validate every resulting balance first. Legs that
+    // touch the same account+asset accumulate onto a running total, so no
+    // credit is clobbered (e.g. unstake pays principal + reward to the owner
+    // inside a single journal).
     const next = new Map();
     for (const leg of legs) {
       const k = bkey(leg.asset, leg.account);
-      const nb = (balances.get(k) || 0) + leg.amount;
+      const base = next.has(k) ? next.get(k) : (balances.get(k) || 0);
+      const nb = base + leg.amount;
       if (!Number.isSafeInteger(nb) || nb < 0) {
         throw new InsufficientFundsError(leg.account, leg.asset);
       }
