@@ -437,7 +437,7 @@ export function createWebAiConsole({
     if (!ok && typeof statusSetter === "function") {
       statusSetter("POP-UP BLOCKED — ALLOW POP-UPS FOR THIS PAGE, OR COPY THE URL MANUALLY.", "error");
     }
-    return publish(actionName, method, { targetUrl: url, userNavigation: "new-tab", popupBlocked: !ok });
+    return publish(actionName, method, { targetUrl: url, userNavigation: "new-tab", popupBlocked: !ok, externalNetwork: true });
   }
 
   function startEmbed(result, method) {
@@ -472,7 +472,7 @@ export function createWebAiConsole({
     publish("navigate-embed", method, {
       targetUrl: result.url,
       mode: result.mode,
-      externalContent: true,
+      externalContent: true, externalNetwork: true,
       sandbox: "sandboxed-iframe",
     });
   }
@@ -534,7 +534,7 @@ export function createWebAiConsole({
     if (state.url) openInNewTab(state.url, "button", "frame-open-new-tab", setStatus);
   });
   handoffOpenButton.addEventListener("click", () => {
-    if (state.url) openInNewTab(state.url, "button", "handoff-open-new-tab", setStatus);
+    if (state.url) { copyText(doc, windowRoot, assistantPrompt()); openInNewTab(state.url, "button", "handoff-open-new-tab", setStatus); }
   });
   handoffTryButton.addEventListener("click", () => {
     if (state.url) startEmbed({ mode: "try", url: state.url, reason: "Manual retry requested." }, "button");
@@ -584,7 +584,7 @@ export function createWebAiConsole({
         assistantId: assistant.id,
         targetUrl: assistant.url,
         userNavigation: "new-tab",
-        popupBlocked: !ok,
+        popupBlocked: !ok, externalNetwork: true,
       });
     });
     actions.appendChild(copyButton);
