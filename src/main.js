@@ -8,6 +8,7 @@ import { mountCenteredSurfaces } from './render/centered-surfaces.js?v=20260918-
 import { createImmersiveSession } from './render/immersive-session.js';
 import { createMediaPreview } from './render/media-preview.js';
 import { initMobilePanelManager } from './render/mobile-panel-manager.js';
+import { mountPhotoMascot } from './render/photo-mascot-mount.js';
 import { createPersonStudio } from './render/person-studio.js?v=20260918-avatar-chess';
 import { createRealityAssembly } from './render/reality-assembly.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -8443,6 +8444,34 @@ const mediaPreview = createMediaPreview();
 // preview and city dropdown when a console opens, and hides the bottom hint
 // bar while a console is up. Desktop layout is untouched.
 initMobilePanelManager();
+// Photo mascot: the comic "You" mascot. Starts closed and materializes only
+// when the MASCOT HUD button is pressed. Photos preload lazily on first open,
+// never at boot; the presence is draggable with a persisted position. The
+// mount never throws: without WebGL it resolves to { presence: null }.
+let mascotHandle=null;
+try{
+  const mountMascot=mountPhotoMascot({
+    scene,
+    camera,
+    hudRoot:document.getElementById('hud'),
+    canvas:renderer.domElement,
+    onOpenPanel:()=>{
+      // Mobile single-panel rule: close other floating panels when the mascot opens.
+      try{
+        if(window.matchMedia&&window.matchMedia('(max-width:700px)').matches){
+          document.querySelectorAll('aside.open, aside.visible').forEach((el)=>{
+            el.classList.remove('open');
+            el.classList.remove('visible');
+          });
+        }
+      }catch{/* non-fatal */}
+    },
+  });
+  mountMascot().then((handle)=>{mascotHandle=handle;});
+}catch{/* the mount degrades internally; this is belt-and-braces */}
+if(typeof window!=='undefined'){
+  window.addEventListener('beforeunload',()=>{try{mascotHandle?.unmount();}catch{/* non-fatal */}});
+}
 function animate(){
   const rawDt=Math.min(clock.getDelta(),.035),dt=rawDt*(reducedMotion?.22:1),t=clock.elapsedTime;
   if(realityAssembly?.active){

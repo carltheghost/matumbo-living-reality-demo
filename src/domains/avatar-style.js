@@ -29,9 +29,57 @@ export const AVATAR_FLUFFY_BODY_TEMPLATE_URL = 'assets/avatar/fluffy-body-templa
 export const AVATAR_TUMBO_CHIBI_FACE_URL = 'assets/avatar/tumbo-chibi.webp';
 export const AVATAR_FACE_CHOICE_STORAGE_KEY = 'matumbo.person-studio.avatar-face-choice.v1';
 
+/** The comic photo-mascot looks: Tumbo's real likeness in comic ink, one
+ *  face-choice entry per look. `look` maps to the photo-mascot-set look ids
+ *  (hoodie/hat/float/outfit); `url` is the texture the 2D placements wear. */
+export const AVATAR_PHOTO_MASCOT_LOOKS = Object.freeze([
+  Object.freeze({
+    id: 'photo-hoodie',
+    label: 'You · TUMBO hoodie',
+    blurb: 'Your comic photo mascot — black TUMBO hoodie.',
+    look: 'hoodie',
+    url: 'assets/avatar/photo-mascot/tumbo-hoodie.png',
+  }),
+  Object.freeze({
+    id: 'photo-hat',
+    label: 'You · snapback',
+    blurb: 'Your comic photo mascot — snapback hat.',
+    look: 'hat',
+    url: 'assets/avatar/photo-mascot/tumbo-hat.png',
+  }),
+  Object.freeze({
+    id: 'photo-float',
+    label: 'You · floating',
+    blurb: 'Your comic photo mascot — floating pose.',
+    look: 'float',
+    url: 'assets/avatar/photo-mascot/tumbo-float.png',
+  }),
+  Object.freeze({
+    id: 'photo-outfit',
+    label: 'You · jacket',
+    blurb: 'Your comic photo mascot — dark casual jacket.',
+    look: 'outfit',
+    url: 'assets/avatar/photo-mascot/tumbo-outfit.png',
+  }),
+]);
+
+const PHOTO_MASCOT_LOOK_BY_CHOICE = new Map(
+  AVATAR_PHOTO_MASCOT_LOOKS.map((entry) => [entry.id, entry.look]),
+);
+
+/** Map a face-choice id to its photo-mascot look id, or null for non-photo
+ *  choices. Lets render modules sync the mascot's persisted look when a
+ *  photo look is chosen in Person Studio. Never throws. */
+export function avatarFaceChoiceToMascotLook(choiceId) {
+  return PHOTO_MASCOT_LOOK_BY_CHOICE.get(choiceId) ?? null;
+}
+
 /** The face options Person Studio offers, in presentation order.
- *  `url: null` means "resolved per device" (the user's own chibi). */
+ *  The photo mascot ("You") leads; the default character and the on-device
+ *  "your photo" (Become Tumbo) stay as options. `url: null` means
+ *  "resolved per device" (the user's own chibi). */
 export const AVATAR_FACE_CHOICES = Object.freeze([
+  ...AVATAR_PHOTO_MASCOT_LOOKS,
   Object.freeze({
     id: 'tumbo',
     label: 'Chibi character',
@@ -53,7 +101,8 @@ export const AVATAR_FACE_CHOICES = Object.freeze([
 ]);
 
 const AVATAR_FACE_CHOICE_IDS = new Set(AVATAR_FACE_CHOICES.map((c) => c.id));
-export const AVATAR_FACE_CHOICE_DEFAULT = 'tumbo';
+/** New users start as the photo mascot (hoodie look): "it's be you". */
+export const AVATAR_FACE_CHOICE_DEFAULT = 'photo-hoodie';
 /** Stored face versions stay small: a 256px JPEG data URL is ~15-40KB. */
 export const AVATAR_FACE_MAX_DIM = 256;
 const MAX_STORED_BYTES = 1_500_000;
@@ -413,7 +462,7 @@ export function saveAvatarFaceChoice(storage, choiceId) {
 }
 
 /** Load the saved face choice; unknown or missing values fall back to the
- *  default Tumbo character. Never throws. */
+ *  default photo-mascot look. Never throws. */
 export function loadAvatarFaceChoice(storage) {
   if (!storage) return AVATAR_FACE_CHOICE_DEFAULT;
   let raw = null;
@@ -427,6 +476,8 @@ export function loadAvatarFaceChoice(storage) {
  *  returns a usable URL string; never throws. */
 export function resolveAvatarFaceUrl(storage) {
   const choice = loadAvatarFaceChoice(storage);
+  const photoLook = AVATAR_PHOTO_MASCOT_LOOKS.find((entry) => entry.id === choice);
+  if (photoLook) return photoLook.url;
   if (choice === 'tumbo-you') return AVATAR_TUMBO_CHIBI_FACE_URL;
   if (choice === 'your-photo') {
     const saved = loadAvatarFace(storage);
