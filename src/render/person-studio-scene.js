@@ -1,4 +1,5 @@
 import {STUDIO_MODEL,STUDIO_OUTFITS,STUDIO_ROOMS} from '../domains/person-studio.js';
+import {buildAgentSmithRig} from './agent-smith-rig.js?v=20260920-agent-smith';
 
 /** AI-built likeness: Tumbo's approved avatar bust portrait (cinematic teal/violet
  *  rim light) drives the camera-facing hologram; the procedural rig stays as
@@ -105,121 +106,38 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
     const displayRing=mesh(new THREE.TorusGeometry(.45,.016,8,56),ringBlue,[0,-.86,0],[1,1,1],g);displayRing.rotation.x=Math.PI/2;
   }
 
-  // Articulated human. Stable facial geometry lives outside the outfit materials.
-  const avatar=group('Reference-built avatar',[0,.55,0]);avatar.scale.setScalar(1.32);
-  const skin=material(STUDIO_MODEL.skin,.02,.66),skinLight=material('#85563f',.02,.64),hair=material(STUDIO_MODEL.hair,.15,.72);
-  const jacket=material(STUDIO_OUTFITS[0].color,.07,.65),trim=material(STUDIO_OUTFITS[0].trim,.8,.32);
-  const shirt=material('#181a22',.01,.9),pants=material('#20232d',.04,.82),sole=material('#25252a',.1,.65);
-  const eyes=material('#c3b4a4',0,.5),iris=material('#2a1a11',.05,.25),pupil=material('#050506',0,.25),lips=material('#4e2b25',0,.7);
-  const joints={};
-  const bone=(name,pos,owner)=>{const g=group(name,pos,owner);joints[name]=g;return g;};
-  const hips=bone('root',[0,.94,0],avatar);
-  sphere(pants,[0,.02,0],[.245,.17,.145],hips);
-  const torso=bone('spine',[0,.12,0],hips);
-  // Lathed torso includes waist, chest, shoulder taper rather than a scaled cube.
-  const profile=[[.18,0],[.205,.1],[.22,.3],[.3,.61],[.295,.68],[.20,.75]];
-  const torsoMesh=mesh(new THREE.LatheGeometry(profile.map(([x,y])=>new THREE.Vector2(x,y)),24),jacket,[0,0,0],[1,1,.63],torso);
-  target(torsoMesh,{kind:'tab',id:'wardrobe'});
-  box(.23,.57,.032,shirt,[0,.4,.182],torso);
-  const belt=mesh(new THREE.CylinderGeometry(.213,.22,.07,24),dark,[0,.025,0],[1,1,.7],torso);
-  box(.08,.06,.025,trim,[0,.025,.164],torso);
-  for(const side of [-1,1]){
-    const lapel=box(.080,.46,.035,jacket,[side*.13,.48,.185],torso);lapel.rotation.z=-side*.27;
-    const piping=box(.009,.46,.012,trim,[side*.155,.48,.209],torso);piping.rotation.z=-side*.27;
-    box(.011,.34,.015,trim,[side*.175,.20,.16],torso);
-    const tail=box(.17,.53,.035,jacket,[side*.20,-.21,-.07],torso);tail.rotation.z=-side*.1;
-    const edging=box(.012,.53,.043,trim,[side*.281,-.21,-.07],torso);edging.rotation.z=-side*.1;
-    const pocket=box(.085,.06,.026,dark,[side*.20,.20,.165],torso);pocket.rotation.z=side*.07;
-  }
-  tube([[-.075,.72,.12],[-.09,.61,.22],[0,.48,.225],[.09,.61,.22],[.075,.72,.12]],.006,trim,torso);
-  const emblem=mesh(new THREE.ConeGeometry(.029,.055,3),trim,[0,.45,.235],[1,1,.3],torso);emblem.rotation.z=Math.PI;
-  const neck=bone('neck',[0,.765,0],torso);mesh(new THREE.CylinderGeometry(.068,.085,.14,20),skin,[0,.02,0],[1,1,1],neck);
-  const head=bone('head',[0,.165,0],neck);
-  const headMesh=sphere(skin,[0,.025,0],[.175,.225,.16],head);target(headMesh,{kind:'tab',id:'identity'});
-  sphere(skin,[0,-.1,.025],[.145,.11,.138],head);
-  sphere(skinLight,[0,-.075,.084],[.124,.073,.095],head);
-  for(const side of [-1,1]){
-    sphere(skin,[side*.174,.005,0],[.031,.068,.026],head);
-    sphere(skinLight,[side*.110,-.013,.108],[.045,.041,.027],head);
-    const eye=sphere(eyes,[side*.073,.034,.141],[.038,.016,.016],head);
-    sphere(iris,[side*.073,.034,.153],[.015,.015,.005],head);sphere(pupil,[side*.073,.034,.158],[.007,.008,.003],head);
-    const brow=box(.074,.014,.02,hair,[side*.074,.071,.147],head);brow.rotation.z=-side*.10;
-    const lid=sphere(skin,[side*.073,.052,.138],[.040,.012,.018],head);lid.rotation.z=-side*.03;
-    sphere(hair,[side*.134,-.107,.059],[.026,.07,.055],head);
-    eye.userData.expressionPart='eye';
-  }
-  sphere(skinLight,[0,-.006,.159],[.030,.064,.028],head);
-  sphere(skin,[0,-.040,.184],[.037,.024,.033],head);
-  for(const x of [-.029,.029])sphere(skin,[x,-.041,.176],[.017,.015,.017],head);
-  sphere(lips,[0,-.094,.171],[.053,.013,.014],head);sphere(skinLight,[0,-.110,.169],[.046,.013,.013],head);
-  sphere(hair,[0,-.159,.095],[.11,.031,.066],head);
-  for(const x of [-.031,.031]){const mustache=sphere(hair,[x,-.080,.171],[.038,.009,.01],head);mustache.rotation.z=x>0?-.13:.13;}
-  const scalp=sphere(hair,[0,.125,-.025],[.181,.158,.146],head);
-  // Individual locs are tubes following permanent curves, not camera segmentation.
-  for(let i=0;i<24;i++){
-    const a=i*Math.PI*2/24,r=.146+(i%3)*.012,front=Math.sin(a)>.35;
-    const side=Math.cos(a)<0?-1:1;
-    const x=front?side*Math.max(.165,Math.abs(Math.cos(a)*r)):Math.cos(a)*r;
-    const z=front?.075:Math.sin(a)*r;
-    const length=.25+(i%5)*.045;
-    tube([[x,.20,z-.02],[x*1.18,.17,z*1.09],[x*1.28,.04,z*1.20],[x*1.35,-length*.45,z*1.24],[x*1.36+.012,-length+.14,z*1.25]],.016+(i%2)*.003,hair,head);
-    if(front&&i%2===0)tube([[side*.022,.261,.015],[side*.092,.233,.075],[side*.172,.13,.082],[side*.205,-.015,.065]],.016,hair,head);
-  }
-  for(const side of [-1,1]){
-    const name=side<0?'left':'right';
-    const arm=bone(name+'Arm',[side*.30,.62,0],torso);arm.rotation.z=side*.12;
-    sphere(jacket,[side*.035,-.032,0],[.115,.123,.10],arm);
-    mesh(new THREE.CapsuleGeometry(.086,.29,6,14),jacket,[side*.015,-.24,0],[1,1,.96],arm);
-    box(.012,.21,.015,trim,[side*.094,-.19,.065],arm);
-    const elbow=group(name+' elbow',[side*.026,-.45,.005],arm);elbow.rotation.x=-.09;
-    mesh(new THREE.CapsuleGeometry(.072,.22,6,14),jacket,[0,-.16,0],[1,1,.94],elbow);
-    mesh(new THREE.CylinderGeometry(.078,.077,.035,16),trim,[0,-.29,0],[1,1,1],elbow);
-    const hand=bone(name+'Hand',[0,-.36,0],elbow);
-    sphere(skin,[0,-.035,0],[.054,.082,.036],hand);
-    for(let finger=0;finger<4;finger++){
-      const digit=group(`${name} finger ${finger}`,[(finger-1.5)*.025,-.092,.004],hand);
-      const length=.047+(finger===1?.012:0);
-      mesh(new THREE.CapsuleGeometry(.010,length,3,7),skin,[0,-length*.45,0],[1,1,1],digit);
-    }
-    const thumb=mesh(new THREE.CapsuleGeometry(.016,.045,4,8),skin,[side*.052,-.03,.025],[1,1,1],hand);thumb.rotation.z=-side*.5;
-    const leg=bone(name+'Leg',[side*.129,-.075,0],hips);
-    mesh(new THREE.LatheGeometry([[.075,-.76],[.086,-.67],[.09,-.51],[.102,-.38],[.113,-.2],[.116,-.04],[.097,.07]].map(([x,y])=>new THREE.Vector2(x,y)),20),pants,[0,0,0],[1,1,.98],leg);
-    box(.035,.13,.055,jacket,[0,-.4,.097],leg);
-    box(.012,.59,.013,trim,[side*.104,-.35,.015],leg);
-    sphere(dark,[0,-.788,.054],[.114,.105,.185],leg);
-    box(.222,.035,.35,sole,[0,-.85,.055],leg);
-    box(.226,.016,.355,trim,[0,-.825,.055],leg);
-    for(let y=0;y<3;y++)box(.123,.01,.014,trim,[0,-.724-y*.026,.18-y*.013],leg);
-  }
+  // ---- Agent Smith: the in-world avatar character ----
+  // Procedural Pixar-style build (agent-smith-rig.js) from the approved
+  // reference: warm brown skin, short black hair, warm smile, brown suit,
+  // tan shirt, brown tie. The rig stays fully visible — the old hologram
+  // sprite is retired, so what you see is the character himself, floating.
+  const avatar=group('Agent Smith',[0,.55,0]);
+  const smith=buildAgentSmithRig(THREE,{seed:7});
+  avatar.add(smith.group);
+  const joints=smith.joints;
   // Lens space has no ground to receive shadows; the glow sprite and rings
   // carry the grounding read. Meshes neither cast nor receive.
   avatar.traverse(object=>{if(object.isMesh){object.castShadow=false;object.receiveShadow=false;}});
-  // Reference avatar hologram (2026-09-18): Tumbo's AI-built likeness (the bust
-  // portrait from his PERSON Ω concept art) as a camera-facing hologram
-  // sprite. The procedural rig is hidden but stays registered in `targets`,
-  // and three.js raycast ignores `visible`, so identity/wardrobe tab clicks
-  // keep working through the hologram.
-  avatar.traverse(object=>{if(object.isMesh)object.visible=false;});
-  const avatarHologram=(()=>{
-    if(!THREE||typeof THREE.Sprite!=='function'||typeof THREE.SpriteMaterial!=='function')return null;
-    const material=new THREE.SpriteMaterial({transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,opacity:.96});
-    const sprite=new THREE.Sprite(material);
-    sprite.name='Reference avatar hologram';
-    // The AI bust portrait is square (1:1); the hologram frames the bust.
-    sprite.scale.set(1.7,1.7,1);
-    sprite.position.set(0,1.15,0);
-    sprite.visible=false;
-    sprite.userData.avatarHologram=true;
-    sprite.userData.avatarHologramUrl=avatarTextureUrl;
-    const canLoad=typeof THREE.TextureLoader==='function'&&typeof Image!=='undefined'&&typeof avatarTextureUrl==='string'&&avatarTextureUrl.length>0;
-    if(canLoad){
-      new THREE.TextureLoader().load(avatarTextureUrl,texture=>{
-        material.map=texture;material.needsUpdate=true;sprite.visible=true;
-      },undefined,()=>{/* keep the hologram hidden; rig targets still work */});
-    }
-    avatar.add(sprite);
-    return sprite;
-  })();
+  // Click targets: the head opens the identity tab, the jacket opens
+  // wardrobe (the same tab contract as before); the rest of the character
+  // greets. three.js raycast ignores `visible`, so this keeps working even
+  // if a mesh is ever hidden.
+  for(const pick of smith.pickMeshes){
+    const part=pick.userData.smithPart;
+    target(pick,part==='head'?{kind:'tab',id:'identity'}:part==='torso'?{kind:'tab',id:'wardrobe'}:{kind:'greet'});
+  }
+  // Greet reactions: each greet() call starts the next reaction in the
+  // cycle — wave, spin, jump — played on the rig joints in update().
+  let greetState=null,greetIndex=0;
+  const GREET_ORDER=Object.freeze(['wave','spin','jump']);
+  const GREET_DURATIONS=Object.freeze({wave:1.6,spin:1.3,jump:1.0});
+  function greet(){
+    const kind=GREET_ORDER[greetIndex%GREET_ORDER.length];greetIndex++;
+    greetState={kind,t:0};
+    return kind;
+  }
+  function getGreetKind(){return greetState?.kind??null;}
+  const avatarHologram=null; // retired: Agent Smith is the visible character
   // Everything structural floats: the avatar, the lens-ring and the set
   // pieces bob gently in lens space (frozen under reduced motion).
   const floaters=[{obj:avatar,base:.55,amp:.045,speed:1.15,phase:.6},{obj:lensRing,base:.46,amp:.06,speed:1.05,phase:0}];
@@ -258,65 +176,86 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
     const clothing=STUDIO_OUTFITS.find(v=>v.id===snapshot.outfitId)??STUDIO_OUTFITS[0];
     const theme=STUDIO_ROOMS.find(v=>v.id===snapshot.roomId)??STUDIO_ROOMS[0];
     outfit=clothing.id;room=theme.id;form=snapshot.companion;
-    jacket.color.set(clothing.color);trim.color.set(clothing.trim);
+    // Agent Smith keeps his canonical brown suit; the studio wardrobe
+    // dresses the tie (and matching pocket square) in the outfit trim.
+    smith.materials.cushion.color.set(clothing.trim);
     light.color.set(theme.light);light.emissive.set(theme.light);
     skyMat.color.set(theme.sky);skyMat.emissive.set(theme.sky);rim.color.set(theme.light);
     skyline.visible=room!=='ocean';moon.visible=room==='night';
     companionBody.scale.set(form==='spark' ? .10 : .17,form==='bird' ? .18 : .15,.12);
     rimFrame.visible=form==='drone';wings.forEach(w=>w.visible=form!=='spark');tail.visible=form!=='drone';
   }
-  const restQuaternions=Object.fromEntries(Object.entries(joints).map(([name,j])=>[name,j.quaternion.clone()]));
+  const _greetQ=new THREE.Quaternion(),_greetE=new THREE.Euler();
+  function quatMul(j,x,y,z){if(!j)return;_greetE.set(x,y,z);_greetQ.setFromEuler(_greetE);j.quaternion.multiply(_greetQ);}
   function update(dt,time,pose={joints:{}},reducedMotion=false){
     if(!layer.visible)return;
     for(const [name,joint] of Object.entries(joints)){
-      const q=pose.joints?.[name];const targetQ=q?new THREE.Quaternion(...q):restQuaternions[name];
+      const q=pose.joints?.[name];const targetQ=q?new THREE.Quaternion(...q):smith.rest[name];
       joint.quaternion.slerp(targetQ,Math.min(1,dt*12));
     }
-    torso.position.y=.12+(reducedMotion?0:Math.sin(time*1.4)*.007);
+    // Breathing sway on the spine, then the float bobs below.
+    joints.spine.position.y=.10+(reducedMotion?0:Math.sin(time*1.4)*.007);
+    // Eye blink (eyes reopen under reduced motion).
+    const blinkPhase=(time+2.1)%3.7;
+    const openness=reducedMotion||blinkPhase>=.14?1:.12;
+    for(const eye of smith.blinkers)eye.scale.y=eye.userData.baseScaleY*openness;
+    // Greet reactions: wave / spin / jump, played on the rig joints.
+    let greetLift=0;
+    if(greetState&&!reducedMotion){
+      greetState.t+=dt;
+      const k=greetState.t/GREET_DURATIONS[greetState.kind];
+      if(k>=1)greetState=null;
+      else{
+        const env=Math.sin(Math.min(1,k)*Math.PI);
+        if(greetState.kind==='wave'){
+          quatMul(joints.rightArm,0,0,2.2*env);
+          quatMul(joints.rightElbow,0,0,-.4*env);
+          quatMul(joints.rightHand,0,0,Math.sin(greetState.t*14)*.5*env);
+          quatMul(joints.head,0,0,-.12*env);
+          greetLift=.06*env;
+        }else if(greetState.kind==='spin'){
+          avatar.rotation.y+=dt*2*Math.PI/GREET_DURATIONS.spin;
+          quatMul(joints.leftArm,0,0,-.9*env);
+          quatMul(joints.rightArm,0,0,.9*env);
+          quatMul(joints.head,0,.3*env,0);
+          greetLift=.10*env;
+        }else if(greetState.kind==='jump'){
+          greetLift=.35*env;
+          quatMul(joints.leftArm,0,0,-1.2*env);
+          quatMul(joints.rightArm,0,0,1.2*env);
+          quatMul(joints.leftLeg,.5*env,0,0);
+          quatMul(joints.rightLeg,-.3*env,0,0);
+          quatMul(joints.head,-.15*env,0,0);
+        }
+      }
+    }
     if(reducedMotion){for(const f of floaters)f.obj.position.y=f.base;}
     else{for(const f of floaters)f.obj.position.y=f.base+Math.sin(time*f.speed+f.phase)*f.amp;
+      // Agent Smith floats: gentle hover bob, slow rotational sway, and
+      // the greet lift on top.
+      avatar.position.y+=greetLift;
+      avatar.rotation.y+=dt*.12;
       lensRing.rotation.y+=dt*.22;ringInner.rotation.y-=dt*.31;glow.material.opacity=.46+Math.sin(time*1.6)*.06;}
     companion.position.y=2.78+(reducedMotion?0:Math.sin(time*1.8)*.075);
     companion.rotation.y=reducedMotion?0:Math.sin(time*.8)*.14;
     wings.forEach((wing,i)=>{wing.rotation.z=(i===0?-1:1)*(.55+(form==='bird'&&!reducedMotion?Math.sin(time*5)*.35:0));});
   }
-  function getSnapshot(){return {source:'person-studio-scene',modelId:STUDIO_MODEL.id,visible:layer.visible,outfitId:outfit,roomId:room,companionForm:form,jointNames:Object.keys(joints),meshCount:geometries.size,identityHeadGeometry:headMesh.geometry.uuid,geometryOnly:false,referenceImagesUsedAsTextures:true,avatarHologramUrl:avatarTextureUrl,avatarHologramPresent:!!avatarHologram,avatarHologramTint:avatarHologramTint};}
-  // Muse Agent dressing: re-tint the reference hologram when an avatar design
-  // is applied. Presentation only — identity geometry and outfit rig are
-  // untouched; `null` restores the neutral hologram.
-  // Swap the hologram's face at runtime: the user's chosen avatar face —
-  // default Tumbo character, Tumbo's own likeness, or their locally-styled
-  // photo. Presentation only — identity geometry and outfit rig are untouched.
-  // A failed load keeps the previous face; the hologram never goes blank.
+  function getSnapshot(){return {source:'person-studio-scene',modelId:STUDIO_MODEL.id,visible:layer.visible,referenceLook:'agent-smith-v1',outfitId:outfit,roomId:room,companionForm:form,jointNames:Object.keys(joints),meshCount:geometries.size,identityHeadGeometry:smith.headMesh.geometry.uuid,geometryOnly:false,referenceImagesUsedAsTextures:false,avatarHologramUrl:null,avatarHologramPresent:false,avatarHologramTint:avatarHologramTint};}
+  // Avatar faces now dress the chess pieces; Agent Smith keeps his own
+  // reference look, so this is a compatibility no-op that reports the
+  // current URL. Presentation only.
   function setAvatarFace(url){
     if(typeof url!=='string'||!url.length)return avatarTextureUrl;
-    if(!avatarHologram)return avatarTextureUrl;
-    const canLoad=typeof THREE.TextureLoader==='function'&&typeof Image!=='undefined';
-    if(!canLoad)return avatarTextureUrl;
     avatarTextureUrl=url;
-    avatarHologram.userData.avatarHologramUrl=url;
-    new THREE.TextureLoader().load(url,texture=>{
-      try{
-        avatarHologram.material.map?.dispose?.();
-        avatarHologram.material.map=texture;
-        avatarHologram.material.needsUpdate=true;
-        avatarHologram.visible=true;
-        if(avatarHologramTint&&avatarHologram.material?.color?.set)avatarHologram.material.color.set(avatarHologramTint);
-      }catch{/* keep the previous face on failure */}
-    },undefined,()=>{/* keep the previous face on failure */});
     return avatarTextureUrl;
   }
   let avatarHologramTint=null;
+  // The hologram sprite is retired (Agent Smith is the visible character);
+  // kept so older callers still get the stored tint back. Presentation only.
   function setHologramTint(tint,opacity){
     avatarHologramTint=typeof tint==='string'&&tint?tint:null;
-    if(!avatarHologram)return avatarHologramTint;
-    try{
-      if(avatarHologramTint&&avatarHologram.material?.color?.set)avatarHologram.material.color.set(avatarHologramTint);
-      else if(avatarHologram.material?.color?.set)avatarHologram.material.color.set('#ffffff');
-      if(Number.isFinite(Number(opacity))&&avatarHologram.material)avatarHologram.material.opacity=Number(opacity);
-    }catch{/* presentation only */}
     return avatarHologramTint;
   }
-  function destroy(){selectable.forEach(m=>{const i=targets.indexOf(m);if(i>=0)targets.splice(i,1);});geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());if(avatarHologram){avatarHologram.material.map?.dispose?.();avatarHologram.material.dispose?.();}layer.removeFromParent();}
-  return {layer,avatar,joints,apply,update,getSnapshot,destroy,fingerprint,avatarHologram,setAvatarFace,setHologramTint,resolve:object=>object?.userData?.personStudioAction??null};
+  function destroy(){selectable.forEach(m=>{const i=targets.indexOf(m);if(i>=0)targets.splice(i,1);});geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());try{smith.dispose();}catch{/* presentation only */}layer.removeFromParent();}
+  return {layer,avatar,joints,apply,update,getSnapshot,destroy,fingerprint,avatarHologram,greet,getGreetKind,setAvatarFace,setHologramTint,resolve:object=>object?.userData?.personStudioAction??null};
 }
