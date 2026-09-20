@@ -1,0 +1,137 @@
+/* token-ticker.css — Token ticker + live state panel.
+   Translucent blue glass, one cube style. Small by default: the chip strip
+   is always visible; the live state body only shows when the panel is
+   expanded (data-compact managed by centered-surfaces).
+   Simulation-only: every token surface carries the simulated notice. */
+
+#token-ticker {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 60;
+  width: 300px;
+  max-width: calc(100vw - 32px);
+  color: #dcebf7;
+  font: 12px/1.5 Inter, Segoe UI, system-ui, sans-serif;
+  border: 1px solid rgba(140, 195, 255, 0.28);
+  border-radius: 18px;
+  background: linear-gradient(155deg, rgba(38, 90, 140, 0.34), rgba(8, 17, 29, 0.62));
+  backdrop-filter: blur(16px) saturate(1.35);
+  -webkit-backdrop-filter: blur(16px) saturate(1.35);
+  box-shadow: 0 12px 44px rgba(0, 0, 0, 0.45), 0 0 28px rgba(95, 176, 255, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  overflow: hidden;
+}
+#token-ticker[hidden] { display: none; }
+#token-ticker * { box-sizing: border-box; }
+
+.token-ticker-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  cursor: default;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.token-ticker-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex: none;
+  background: #7fd4ff;
+  box-shadow: 0 0 10px rgba(127, 212, 255, 0.9);
+  animation: token-ticker-pulse 2.4s ease-in-out infinite;
+}
+.token-ticker-dot.is-off {
+  background: #8fa3b8;
+  box-shadow: none;
+  animation: none;
+}
+@keyframes token-ticker-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.token-ticker-balances {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: #eaf4fd;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+.token-ticker-acct {
+  margin-left: auto;
+  flex: none;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: #9fc6ea;
+}
+
+.token-ticker-body {
+  border-top: 1px solid rgba(140, 195, 255, 0.18);
+  padding: 12px 14px 10px;
+  max-height: min(52vh, 420px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+#token-ticker[data-compact="true"] .token-ticker-body { display: none; }
+
+.token-ticker-kicker {
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #9fd0ff;
+  margin: 0 0 8px;
+}
+.token-ticker-section { margin: 0 0 12px; }
+.token-ticker-section h3 {
+  margin: 0 0 6px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #a9c8e8;
+}
+.token-ticker-rows { display: grid; gap: 4px; }
+.token-ticker-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 11px;
+}
+.token-ticker-row .k { color: #8fa9c2; }
+.token-ticker-row .v {
+  font-variant-numeric: tabular-nums;
+  color: #eef6fd;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.token-ticker-row .v.dim { color: #8fa9c2; }
+.token-ticker-row .v.good { color: #9fe8b8; }
+.token-ticker-row .v.bad { color: #f0a8a8; }
+.token-ticker-hash {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+}
+.token-ticker-empty {
+  font-size: 11px;
+  color: #9db4c9;
+  padding: 8px 0;
+}
+.token-ticker-notice {
+  margin: 10px 0 2px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(140, 195, 255, 0.22);
+  font-size: 10px;
+  color: #9fc6ea;
+}
+.token-ticker-countdown { color: #ffd9a0; }
+
+@media (max-width: 700px) {
+  #token-ticker {
+    right: 12px;
+    bottom: 12px;
+    width: min(300px, calc(100vw - 24px));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .token-ticker-dot { animation: none; }
+}

@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-
 import {mountCityJourney,resolveCityRoute} from './render/city-journey.js';
 // Reject mixed/unknown City URLs before legacy route bootstrap can act on them.
 if(resolveCityRoute(location.search).status==='rejected'){
   const safeUrl=new URL(location.href);safeUrl.search='?feature=reality-lens';history.replaceState(null,'',safeUrl);
 }
 import { mountCenteredSurfaces } from './render/centered-surfaces.js?v=20260918-compact-chip';
+import { mountTokenTicker } from './render/token-ticker.js?v=20260920-ticker1';
 import { createImmersiveSession } from './render/immersive-session.js';
 import { createMediaPreview } from './render/media-preview.js';
 import { initMobilePanelManager } from './render/mobile-panel-manager.js';
@@ -18,8 +18,6 @@ import { MANIPULATE_MODES } from './render/manipulate-controls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { ensureTumboTokenFacade } from './domains/token.js';
-import { TOKEN_BLOCK_CONSOLE_SOURCE, createTokenBlock } from './render/token-block.js';
 import { createLivingRealityProjection } from './core/demo-projection.js?v=20260918-muse2';
 import { resolveDefaultFeature } from './core/default-landing.js';
 import { createDeviceProjection, readBrowserProjectionPreferences } from './projections/device-projection.js';
@@ -95,8 +93,6 @@ import { BOT_PLAZA_CONSOLE_SOURCE, createBotPlazaConsole } from './render/bot-pl
 import { createBotRegistry, createBotRuntime } from './domains/bot-plaza.js?v=20260918-botplaza1';
 import { createProposalQueue } from './domains/bot-plaza.js?v=20260918-ctr2';
 import { createOutcomeContracts } from './domains/outcome-contracts.js?v=20260918-ctr2';
-import { createContractLedger } from './domains/contract-ledger.js?v=20260920-cflow1';
-import { createContractFlow } from './domains/contract-flow.js?v=20260920-cflow1';
 import { mountBotPresence } from './render/bot-presence.js?v=20260918-botpresence1';
 import { CONTRACT_ATELIER_CONSOLE_SOURCE, createContractAtelierConsole } from './render/contract-atelier.js?v=20260918-ctr1';
 import { LUNA_CONSOLE_SOURCE, createLunaCompanionConsole } from './render/luna-companion.js?v=20260918-luna1';
@@ -940,48 +936,6 @@ document.getElementById('block-world-close')?.addEventListener('click', () => {
   setBlockWorldFocusMode(false);
 });
 window.__TUMBO_BLOCK_WORLD__ = blockWorld;
-// TUMBO Token glass block (token-block-ui, workstream 6 of 14): one
-// translucent blue glass cube in the block world. Click selects, hover peeks
-// the simulated balance, double-click / double-tap travels into the wallet
-// block world (balances, idempotency-keyed sends, history, vault). Draggable
-// in full 3D with its position remembered; the panel minimizes to a small
-// translucent chip. Simulation-first: TUMBO-SIM points only, every surface
-// labeled simulated — no custody, signing, settlement, or real-money path.
-let tokenBlock = null;
-try {
-  ensureTumboTokenFacade();
-  tokenBlock = createTokenBlock({
-    three: THREE,
-    renderer,
-    camera,
-    controls,
-    parent: world,
-    documentRoot: document,
-    isMobile,
-    reducedMotion,
-    onDragStateChange: (dragging) => { controls.enabled = !dragging; },
-    onIntent: (snapshot) => projectionBridge.emitIntent(
-      'projection.token-block',
-      snapshot?.source ?? TOKEN_BLOCK_CONSOLE_SOURCE,
-      Object.freeze({
-        action: snapshot?.action ?? 'token-block',
-        ...(snapshot?.detail ?? {}),
-        simulation: true,
-        localOnly: true,
-        externalNetwork: false,
-        externalTransfer: false,
-        executable: false,
-        custody: false,
-        signing: false,
-        settlement: false,
-      }),
-    ),
-  });
-} catch (tokenBlockError) {
-  try { console.warn('[tumbo-token-block] mount skipped:', tokenBlockError?.message ?? tokenBlockError); } catch {}
-}
-window.__TUMBO_TOKEN_BLOCK__ = tokenBlock;
-
 // Free 3D manipulation toolbar (additive, 2026-09-18). Touch-first: Tumbo has
 // no mouse, so these are large touch buttons, not just keyboard shortcuts.
 // Every handler delegates to the already-mounted Block World layer.
@@ -3343,34 +3297,6 @@ botPlazaRuntime.getBus().subscribe((entry) => {
 // player, stake rehearsal credits, and resolve it with TRUE/FALSE, AND, OR,
 // or IF/ELSE logic. No wallet, chain, custody, settlement, wagering, or real
 // money exists.
-// Contract mission part 4: the Reality Lens Ω contract flow. ESPN scoreboard
-// (read-only) → auto-drafts → optional read-only Kalshi/Polymarket odds →
-// the existing Contract Atelier review queue → approval (freezes the odds
-// quote) → the shared outcome desk → lifecycle ledger → deterministic
-// grading → claimable forever. Simulated TUMBO points only: no wallet,
-// signing, custody, orders, settlement, or mainnet anywhere in the flow.
-// Feed failures never damage manual Contract Atelier operation: a failed
-// feed yields zero drafts and the queue stays exactly as it was.
-const contractLifecycleLedger = createContractLedger();
-const contractFlow = createContractFlow({
-  fetchEspnRecords: async () => {
-    try {
-      const payload = await fetchMultiSportEvents();
-      return Array.isArray(payload?.records) ? payload.records : [];
-    } catch {
-      return [];
-    }
-  },
-  outcomeDesk: sharedOutcomeDesk,
-  proposalQueue: contractProposalQueue,
-  ledger: contractLifecycleLedger,
-  // No network handle is passed on purpose: the release boundary keeps
-  // src/main.js network-free, so the flow resolves the read-only odds
-  // retrieval lazily inside its own domain module (read-only public GETs,
-  // no keys).
-});
-window.__TUMBO_CONTRACT_LEDGER__ = contractLifecycleLedger;
-window.__TUMBO_CONTRACT_FLOW__ = contractFlow;
 contractAtelierConsole = createContractAtelierConsole({
   documentRoot: document,
   // Award NFTs from outcome contracts are minted as Frozen Relics from the
@@ -3379,11 +3305,6 @@ contractAtelierConsole = createContractAtelierConsole({
   // Part 3b: the shared bot-proposal queue and the shared outcome desk.
   proposalQueue: contractProposalQueue,
   outcomeDesk: sharedOutcomeDesk,
-  // Part 4: the contract flow seam. Approval freezes the attached odds quote
-  // into the lifecycle ledger; the scan button drafts upcoming ESPN games
-  // into the same review queue Tumbo already approves from.
-  onContractApproved: ({ contract, proposal }) => contractFlow.handleContractApproved({ contract, proposal }),
-  onScanRequested: () => contractFlow.scanAndQueue(),
   onSelect: (snapshot) => {
     const organ = organs.find((candidate) => candidate.id === 'contract');
     if (organ) focusOrgan(organ, `contract-atelier-select:${snapshot.selectedId}`);
@@ -8730,6 +8651,7 @@ renderer.setAnimationLoop(animate);
 // URL-derived City navigation reuses the existing feature owner and avoids provider refresh.
 const cityJourney=mountCityJourney({navigate:(id,method)=>{featureNavigator.select(id,method||'popstate');featureNavigator.close();}});
 runtimeStatus?.markReady?.({ featureCount:featureNavigator?.getSnapshot?.().featureCount ?? 23 });
+mountTokenTicker();
 mountCenteredSurfaces();
 
 addEventListener('pagehide',()=>{
