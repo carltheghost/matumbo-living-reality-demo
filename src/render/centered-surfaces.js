@@ -183,13 +183,34 @@ export function isPanelVisible(el, view) {
 /* ------------------------------------------------------------------ */
 
 const STORE_KEY = "matumbo.panelSpace.v2";
+const LEGACY_STORE_KEY = "matumbo.panelSpace.v1";
 
 function readStore(view) {
   try {
     const raw = view?.localStorage?.getItem(STORE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : {};
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") return parsed;
+    }
+
+    // One-time compatibility read. v1 stored only x/y/z; v2 keeps the same
+    // coordinates and adds size, compact state, and stacking order.
+    const legacyRaw = view?.localStorage?.getItem(LEGACY_STORE_KEY);
+    if (!legacyRaw) return {};
+    const legacy = JSON.parse(legacyRaw);
+    if (!legacy || typeof legacy !== "object") return {};
+
+    const migrated = {};
+    for (const [id, state] of Object.entries(legacy)) {
+      if (!state || typeof state !== "object") continue;
+      migrated[id] = {
+        x: Number(state.x) || 0,
+        y: Number(state.y) || 0,
+        z: Number(state.z) || 0,
+        compact: true,
+      };
+    }
+    return migrated;
   } catch {
     return {};
   }
