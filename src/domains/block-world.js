@@ -132,9 +132,9 @@ const PORTAL_ROUTE_DEFINITIONS = [
   {
     id: "ledger",
     featureId: "ledger",
-    label: "Prime Ledger + EchoProof",  {
+    label: "Prime Ledger + EchoProof",
     surface: "ledger-proof-console",
-    description: "Inspect the balanced local journal and declared proof ancestry.",id
+    description: "Inspect the balanced local journal and declared proof ancestry.",
   },
   {
     id: "gateway",
@@ -150,7 +150,7 @@ const PORTAL_ROUTE_DEFINITIONS = [
     surface: "world-events-console",
     description: "Refresh documented public event sources and inspect returned evidence.",
   },
-  {id
+  {
     id: "web-ai",
     featureId: "web-ai",
     label: "Web + AI",
