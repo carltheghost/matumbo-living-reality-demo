@@ -8467,7 +8467,12 @@ try{
       }catch{/* non-fatal */}
     },
   });
-  mountMascot().then((handle)=>{mascotHandle=handle;});
+  mountMascot().then((handle)=>{mascotHandle=handle;}).catch((mountError)=>{
+    // A rejected mascot mount must never surface as an unhandled rejection
+    // (which the boot banner would report as a module failure). The mount
+    // degrades internally; this just keeps the rejection observed.
+    try{console.warn('[photo-mascot] mount degraded:', mountError?.message || mountError);}catch{/* non-fatal */}
+  });
 }catch{/* the mount degrades internally; this is belt-and-braces */}
 if(typeof window!=='undefined'){
   window.addEventListener('beforeunload',()=>{try{mascotHandle?.unmount();}catch{/* non-fatal */}});

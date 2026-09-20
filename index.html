@@ -3755,6 +3755,10 @@
       const staticCubeReadout = document.getElementById('static-cube-readout');
       let state = root?.dataset.runtimeState || 'loading';
       let ready = false;
+      // First failure wins: once the error banner renders, later failure or
+      // stage reports must not clobber it (e.g. a rethrown renderer error
+      // relabeling "WebGL renderer" as "uncaught runtime").
+      let failed = false;
       let timeoutId = null;
       // Once the user deliberately closes the static feature directory,
       // boot failures must not auto-reopen it. The error banner still
@@ -3844,12 +3848,13 @@
 
       const runtime = {
         setStage(stage, nextMessage) {
-          if (ready) return state;
+          if (ready || failed) return state;
           const label = clean(stage, 'runtime').toUpperCase();
           render('loading', `Loading local Living Reality · ${label}`, clean(nextMessage, 'Preparing the local feature directory…'));
           return state;
         },
         markReady(meta = {}) {
+          if (failed) return state;
           ready = true;
           if (timeoutId !== null) clearTimeout(timeoutId);
           const count = Number.isSafeInteger(meta?.featureCount) ? `${meta.featureCount} features ready · ` : '';
@@ -3857,9 +3862,18 @@
           return state;
         },
         markFailed(error, phase = 'runtime') {
+          if (failed) return state;
+          failed = true;
           ready = false;
           activateStaticDirectory();
           const safePhase = clean(phase, 'runtime').toUpperCase();
+          const errorName = clean(error?.name, '');
+          const errorMessage = clean(error?.message, '');
+          // Surface the underlying failure in the banner itself: a red
+          // banner that hides its cause can never be fixed from a screenshot.
+          const diagnosis = (errorName || errorMessage)
+            ? `Reported error — ${errorName ? errorName + ': ' : ''}${errorMessage || 'no message'}. `
+            : '';
           const moduleLoadFailed = /module load|cdn/i.test(safePhase)
             || /failed to fetch dynamically imported module|importmap|cdn/i.test(clean(error?.message));
           const stillLoading = /still loading/i.test(safePhase);
@@ -3871,7 +3885,7 @@
                 ? 'The renderer is still loading after 30 seconds — this can happen on a slow connection. The files may still arrive; you can wait, or reload the local demo.'
                 : 'Reload the local demo; the static feature directory remains readable.';
           if (paperLink) paperLink.hidden = !moduleLoadFailed;
-          render('error', `Local 3-D surface unavailable · ${safePhase}`, `${hint} The static local feature directory and its local route links remain available; it does not replace the 3-D surface. No wallet, provider, persistence, or external execution was attempted.`);
+          render('error', `Local 3-D surface unavailable · ${safePhase}`, `${diagnosis}${hint} The static local feature directory and its local route links remain available; it does not replace the 3-D surface. No wallet, provider, persistence, or external execution was attempted.`);
           return state;
         },
         getState() { return state; },
