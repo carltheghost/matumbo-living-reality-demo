@@ -1,0 +1,35 @@
+# token-transfers-ci.yml — Part 02 · TUMBO-SIM transfer engine tests.
+#
+# Scoped workflow: runs the transfer tests on the gpt/token-transfers branch
+# and on PRs that touch the transfer files. Simulation-only; no secrets,
+# no deploys, no external network.
+name: token-transfers tests
+
+on:
+  push:
+    branches: [gpt/token-transfers]
+    paths:
+      - "src/domains/token-transfers*.js"
+      - "tests/token-transfers.test.mjs"
+      - ".github/workflows/token-transfers-ci.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/domains/token-transfers*.js"
+      - "tests/token-transfers.test.mjs"
+      - ".github/workflows/token-transfers-ci.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Run token-transfer tests
+        run: node --test tests/token-transfers.test.mjs
+      - name: Syntax-check the transfer modules
+        run: |
+          node --check src/domains/token-transfers.js
+          node --check tests/token-transfers.test.mjs
