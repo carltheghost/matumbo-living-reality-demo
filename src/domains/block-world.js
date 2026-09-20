@@ -116,11 +116,11 @@ const PORTAL_ROUTE_DEFINITIONS = [
     description: "Walk the fictional offer, route, and hold rehearsal.",
   },
   {
-    id: "neural-mesh",
-    featureId: "neural-mesh",
-    label: "Neural Mesh / Agents",
-    surface: "neural-mesh-console",
-    description: "Inspect the advisory Control Tower and Oracle graph.",
+    id: "agent",
+    featureId: "agent",
+    label: "Agent",
+    surface: "agent-console",
+    description: "Enter the consolidated agent block: bots, design companion, advisory mesh, and guide.",
   },
   {
     id: "picture-matter",
