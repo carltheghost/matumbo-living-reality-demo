@@ -89,6 +89,13 @@ export function composePanelTransform(x, y, z) {
   return `translate3d(${Number(x).toFixed(1)}px, ${Number(y).toFixed(1)}px, 0px) scale(${depthScale(z).toFixed(4)})`;
 }
 
+export function normalizePanelArrangement(value) {
+  const candidate = String(value ?? "").trim().toLowerCase();
+  return ["free", "left", "right", "top", "bottom", "front", "back"].includes(candidate)
+    ? candidate
+    : "free";
+}
+
 /* ------------------------------------------------------------------ */
 /* Panel discovery.                                                   */
 /* ------------------------------------------------------------------ */
