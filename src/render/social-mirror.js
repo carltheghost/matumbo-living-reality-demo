@@ -9,6 +9,12 @@
  * asks for, accepts, or stores credentials, API keys, tokens, or secrets.
  * Offline or empty states render quiet placeholders, never an error wall.
  *
+ * The adapter builds its own DOM and CSS (console aside, ticker strip,
+ * static-fallback link) so no index.html changes are needed. The aside is
+ * created before the host mounts its panel space, so the compact-chip law
+ * (draggable, small by default, positions remembered) and the mobile
+ * one-panel rule apply automatically.
+ *
  * No 3-D is built here: the mirror's glass cube is the existing
  * reality-assembly feature cube (pinned three.js r179.1 via the repo import
  * map), and the feed world's cubes reuse the canon feature-worlds glass
@@ -48,6 +54,157 @@ function makeText(documentRoot, tag, className, value) {
   if (className) element.className = className;
   element.textContent = safeText(value);
   return element;
+}
+
+/* ------------------------------------------------------------------ */
+/* Self-built DOM + CSS (no index.html changes needed).                */
+/* ------------------------------------------------------------------ */
+
+const SOCIAL_MIRROR_STYLE = `
+#social-mirror-console{position:absolute;right:20px;bottom:82px;z-index:27;width:min(500px,calc(100vw - 40px));max-height:min(74vh,660px);display:flex;flex-direction:column;gap:10px;padding:14px 16px;border:1px solid rgba(125,212,255,.2);border-radius:16px;background:linear-gradient(160deg,rgba(6,20,30,.92),rgba(3,8,14,.86));box-shadow:0 16px 52px rgba(0,0,0,.34),inset 0 0 28px rgba(70,210,255,.05);backdrop-filter:blur(14px);pointer-events:auto}
+#social-mirror-console[hidden]{display:none}
+#social-mirror-tabs{display:flex;gap:6px}
+#social-mirror-tabs [role="tab"]{appearance:none;border:1px solid rgba(125,212,255,.16);background:rgba(10,30,44,.5);color:#9fc3d2;border-radius:9px;padding:7px 12px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer}
+#social-mirror-tabs [role="tab"][aria-selected="true"]{border-color:rgba(125,212,255,.55);color:#eaf9ff;background:rgba(28,80,110,.55)}
+#social-mirror-tabs [role="tab"]:hover,#social-mirror-tabs [role="tab"]:focus-visible{color:#eaf9ff;border-color:rgba(125,212,255,.4);outline:none}
+.social-mirror-body{overflow-y:auto;min-height:0;max-height:calc(74vh - 220px);display:flex;flex-direction:column;gap:10px;scrollbar-width:thin;scrollbar-color:rgba(111,217,239,.42) rgba(5,20,28,.62);padding-right:2px}
+.social-mirror-feed-card{border:1px solid rgba(125,212,255,.14);border-radius:12px;background:rgba(8,22,34,.55);padding:10px 12px;display:grid;gap:8px}
+.social-mirror-feed-head{appearance:none;display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;background:transparent;border:0;padding:0;cursor:pointer;text-align:left}
+.social-mirror-feed-title{color:#dff3fa;font-size:12px;letter-spacing:.04em}
+.social-mirror-pill{font-size:8px;letter-spacing:.12em;padding:4px 8px;border-radius:999px;border:1px solid rgba(125,212,255,.25);color:#9fd8ea;text-transform:uppercase;white-space:nowrap}
+.social-mirror-pill-live{color:#8ee1bc;border-color:rgba(104,226,172,.4)}
+.social-mirror-pill-offline{color:#f4c98b;border-color:rgba(242,183,108,.4)}
+.social-mirror-feed-slot{min-height:64px;display:grid;gap:8px}
+.social-mirror-placeholder{display:grid;gap:8px;padding:10px 12px;border:1px dashed rgba(125,212,255,.25);border-radius:10px;background:rgba(6,18,28,.5)}
+.social-mirror-placeholder-title{color:#cfe9f5;font-size:11px;letter-spacing:.06em}
+.social-mirror-placeholder-copy{margin:0;color:#8ba7b3;font-size:11px;line-height:1.5}
+.social-mirror-connect{appearance:none;border:1px solid rgba(125,212,255,.25);border-radius:8px;background:rgba(20,50,70,.4);color:#9fc3d2;font-size:10px;letter-spacing:.06em;padding:8px 10px;cursor:not-allowed;opacity:.75}
+.social-mirror-docs{color:#8fd8f2;font-size:10px}
+.social-mirror-docs:hover{color:#eaf9ff}
+.social-mirror-embed-note{color:#6e99a5;font-size:9px;letter-spacing:.04em}
+.social-mirror-youtube{width:100%;aspect-ratio:16/9;border:0;border-radius:10px;background:#04121c}
+.social-mirror-feed-meta{color:#6e99a5;font-size:9px;letter-spacing:.04em}
+.social-mirror-source-card{border:1px solid rgba(125,212,255,.14);border-radius:12px;background:rgba(8,22,34,.55);padding:10px 12px;display:grid;gap:6px;cursor:pointer}
+.social-mirror-source-card:hover{border-color:rgba(125,212,255,.35)}
+.social-mirror-source-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.social-mirror-source-title{color:#dff3fa;font-size:12px}
+.social-mirror-source-copy{margin:0;color:#8ba7b3;font-size:11px;line-height:1.5}
+.social-mirror-about-copy{margin:0;color:#9db9c4;font-size:11px;line-height:1.55}
+.social-mirror-about-copy code{color:#cfe9f5;font-size:10px}
+#social-mirror-offline-note{border:1px solid rgba(242,183,108,.35);border-radius:10px;background:rgba(60,38,14,.35);color:#f4d9a8;font-size:10px;line-height:1.5;padding:8px 10px}
+#social-mirror-offline-note[hidden]{display:none}
+#social-mirror-boundary{color:#b6cdd4;font-size:9px;line-height:1.35}
+#social-mirror-ticker{position:fixed;left:12px;top:50%;transform:translateY(-50%);z-index:26;display:flex;align-items:center;gap:8px;max-width:238px;padding:8px 10px;border:1px solid rgba(125,212,255,.22);border-radius:999px;background:linear-gradient(180deg,rgba(4,11,17,.78),rgba(2,6,10,.55));backdrop-filter:blur(12px);box-shadow:0 10px 30px rgba(0,0,0,.35);pointer-events:auto;cursor:grab;touch-action:pan-y;user-select:none;-webkit-user-select:none}
+#social-mirror-ticker:active{cursor:grabbing}
+#social-mirror-ticker-dot{flex:none;width:8px;height:8px;border-radius:50%;background:#8fa7b3;box-shadow:0 0 8px rgba(140,180,200,.5)}
+#social-mirror-ticker[data-tone="live"] #social-mirror-ticker-dot{background:#72e4b5;box-shadow:0 0 10px rgba(114,228,181,.8)}
+#social-mirror-ticker[data-tone="offline"] #social-mirror-ticker-dot{background:#f4c98b;box-shadow:0 0 10px rgba(244,201,139,.8)}
+#social-mirror-ticker-label{flex:none;font-size:8px;letter-spacing:.14em;color:#7fd4e8;text-transform:uppercase;white-space:nowrap}
+#social-mirror-ticker-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;color:#b8d4de}
+#social-mirror-ticker-open{flex:none;appearance:none;border:1px solid rgba(125,212,255,.3);border-radius:999px;background:rgba(20,60,85,.5);color:#cfeeff;font-size:9px;letter-spacing:.08em;padding:5px 10px;cursor:pointer}
+#social-mirror-ticker-open:hover,#social-mirror-ticker-open:focus-visible{border-color:rgba(125,212,255,.6);color:#fff;outline:none}
+body.mobile-panel-open #social-mirror-ticker{opacity:0;pointer-events:none}
+@media (max-width:700px){#social-mirror-console{position:fixed;left:12px;right:12px;bottom:12px;top:auto;width:auto;max-height:72vh;z-index:27}#social-mirror-ticker{left:12px;right:12px;top:auto;bottom:64px;transform:none;max-width:none;cursor:default;touch-action:manipulation}}
+`;
+
+function ensureSocialMirrorStyle(documentRoot) {
+  if (documentRoot.querySelector?.('style[data-social-mirror-style="true"]')) return;
+  const styleEl = documentRoot.createElement("style");
+  styleEl.setAttribute("data-social-mirror-style", "true");
+  styleEl.textContent = SOCIAL_MIRROR_STYLE;
+  (documentRoot.head ?? documentRoot).appendChild(styleEl);
+}
+
+const SOCIAL_MIRROR_CONSOLE_HTML = `
+<div class="eyebrow">Ambient feed pass-through \u00b7 local only</div>
+<div class="console-head">
+<div>
+<h2 id="social-mirror-title">Social Mirror</h2>
+<p>X \u00b7 YouTube \u00b7 Snapchat \u00b7 Meta \u2014 a glanceable mirror of the owner\u2019s feeds.</p>
+</div>
+<button id="social-mirror-close" class="console-close" aria-label="Close Social Mirror">\u00d7</button>
+</div>
+<div class="console-toolbar">
+<button id="social-mirror-refresh">Refresh</button>
+<span id="social-mirror-status" role="status">MIRROR QUIET \u00b7 LOCAL ONLY</span>
+</div>
+<div id="social-mirror-tabs" role="tablist" aria-label="Social Mirror sections">
+<button id="social-mirror-tab-feed" role="tab" aria-selected="true" aria-controls="social-mirror-panel-feed">Feed</button>
+<button id="social-mirror-tab-sources" role="tab" aria-selected="false" aria-controls="social-mirror-panel-sources" tabindex="-1">Sources</button>
+<button id="social-mirror-tab-about" role="tab" aria-selected="false" aria-controls="social-mirror-panel-about" tabindex="-1">About</button>
+</div>
+<div class="social-mirror-body">
+<section id="social-mirror-panel-feed" role="tabpanel" aria-labelledby="social-mirror-tab-feed" tabindex="0">
+<div id="social-mirror-offline-note" hidden></div>
+<div id="social-mirror-feed"></div>
+</section>
+<section id="social-mirror-panel-sources" role="tabpanel" aria-labelledby="social-mirror-tab-sources" tabindex="0" hidden>
+<div id="social-mirror-source-list"></div>
+</section>
+<section id="social-mirror-panel-about" role="tabpanel" aria-labelledby="social-mirror-tab-about" tabindex="0" hidden>
+<p class="social-mirror-about-copy">The Social Mirror is a glass cube that reflects the owner\u2019s social feeds as an ambient, glanceable pass-through. A slim ticker strip stays visible at the side of the world without opening the block; double-click the cube to travel into this full feed world.</p>
+<p class="social-mirror-about-copy">To light up the X timeline or the YouTube player, the owner adds a public handle or uploads playlist id to <code>SOCIAL_MIRROR_DEFAULT_TARGETS</code> in <code>src/domains/social-mirror.js</code> \u2014 official embeds only, rendered in their own frames. Snapchat and Meta offer no unauthenticated embeds and stay as connect placeholders; this demo never asks for, accepts, or stores credentials.</p>
+<div id="social-mirror-boundary" class="console-boundary"></div>
+</section>
+</div>`;
+
+const SOCIAL_MIRROR_TICKER_HTML = `
+<span id="social-mirror-ticker-dot" aria-hidden="true"></span>
+<span id="social-mirror-ticker-label">Social Mirror</span>
+<span id="social-mirror-ticker-text" role="status">Social Mirror \u00b7 quiet \u00b7 local only</span>
+<button id="social-mirror-ticker-open" type="button">Open</button>`;
+
+function hudRoot(documentRoot) {
+  return documentRoot.getElementById?.("hud") ?? documentRoot.body ?? documentRoot;
+}
+
+/** Build the console aside if the host markup does not provide it. */
+function buildSocialMirrorConsoleDOM(documentRoot) {
+  ensureSocialMirrorStyle(documentRoot);
+  const existing = documentRoot.getElementById?.("social-mirror-console");
+  if (existing) return existing;
+  const aside = documentRoot.createElement("aside");
+  aside.id = "social-mirror-console";
+  aside.className = "console";
+  aside.hidden = true;
+  aside.setAttribute("aria-hidden", "true");
+  aside.setAttribute("aria-labelledby", "social-mirror-title");
+  aside.innerHTML = SOCIAL_MIRROR_CONSOLE_HTML;
+  hudRoot(documentRoot).appendChild(aside);
+  return aside;
+}
+
+/** Build the ticker strip if the host markup does not provide it. */
+function buildSocialMirrorTickerDOM(documentRoot) {
+  ensureSocialMirrorStyle(documentRoot);
+  const existing = documentRoot.getElementById?.("social-mirror-ticker");
+  if (existing) return existing;
+  const strip = documentRoot.createElement("section");
+  strip.id = "social-mirror-ticker";
+  strip.setAttribute("aria-label", "Social Mirror ticker");
+  strip.innerHTML = SOCIAL_MIRROR_TICKER_HTML;
+  hudRoot(documentRoot).appendChild(strip);
+  return strip;
+}
+
+/** Best-effort: list the mirror in the static fallback directory when it exists. */
+function appendStaticFallbackLink(documentRoot) {
+  try {
+    const list = documentRoot.getElementById?.("feature-nav-fallback-list");
+    if (!list || list.querySelector?.('[data-feature-fallback="social-mirror"]')) return;
+    const item = documentRoot.createElement("li");
+    const link = documentRoot.createElement("a");
+    link.className = "feature-nav-fallback-item";
+    link.href = "?feature=social-mirror";
+    link.setAttribute("data-feature-fallback", "social-mirror");
+    const title = documentRoot.createElement("strong");
+    title.textContent = "Social Mirror / Feed Ticker";
+    const meta = documentRoot.createElement("span");
+    meta.textContent = "ambient feed pass-through \u00b7 2026-09-20";
+    link.append(title, meta);
+    item.append(link);
+    list.append(item);
+  } catch { /* static fallback is best-effort only */ }
 }
 
 // --- X timeline widget (lazy, official) ----------------------------------
@@ -99,6 +256,7 @@ export function createSocialMirrorConsole({
   onIntent = null,
 } = {}) {
   if (!documentRoot?.getElementById) throw new Error("Social mirror needs a document-like owner");
+  buildSocialMirrorConsoleDOM(documentRoot);
   const panel = documentRoot.getElementById("social-mirror-console");
   const closeButton = documentRoot.getElementById("social-mirror-close");
   const refreshButton = documentRoot.getElementById("social-mirror-refresh");
@@ -412,7 +570,8 @@ export function createSocialMirrorConsole({
  * Mount the slim ambient ticker strip. It stays visible at the side of the
  * world without opening the block: glanceable source states that rotate
  * while the user does other things. Draggable along the side with its
- * position remembered; collapses to the bottom strip on narrow viewports.
+ * position remembered; bottom-docked on narrow viewports; rotation pauses
+ * under reduced motion.
  */
 export function mountSocialMirrorTicker({
   documentRoot = globalThis.document,
@@ -420,6 +579,7 @@ export function mountSocialMirrorTicker({
   onOpen = null,
 } = {}) {
   if (!documentRoot?.getElementById) throw new Error("Social mirror ticker needs a document-like owner");
+  buildSocialMirrorTickerDOM(documentRoot);
   const strip = documentRoot.getElementById("social-mirror-ticker");
   const textEl = documentRoot.getElementById("social-mirror-ticker-text");
   const dotEl = documentRoot.getElementById("social-mirror-ticker-dot");
@@ -585,6 +745,51 @@ export function mountSocialMirrorTicker({
       view?.removeEventListener?.("resize", applyStoredY);
     },
   });
+}
+
+/**
+ * One-call host integration: builds DOM + CSS, mounts the console and the
+ * ambient ticker, and wires feature-navigator / intent callbacks. Returns
+ * `{ console, ticker }`, or null when the mirror cannot mount (the host
+ * stays fully working — the failure is local to this feature).
+ */
+export function mountSocialMirrorFeature({
+  documentRoot = globalThis.document,
+  featureNavigator = null,
+  projectionBridge = null,
+} = {}) {
+  try {
+    const mirrorConsole = createSocialMirrorConsole({
+      documentRoot,
+      projection: createSocialMirrorProjection(),
+      onSelect: (snapshot) => {
+        try { featureNavigator?.setActive?.("social-mirror"); } catch { /* ignore */ }
+        try { projectionBridge?.emitIntent?.("social-mirror:select", "social-mirror", snapshot); } catch { /* ignore */ }
+      },
+      onRefresh: (snapshot) => {
+        try { projectionBridge?.emitIntent?.("social-mirror:refresh", "social-mirror", snapshot); } catch { /* ignore */ }
+      },
+    });
+    const ticker = mountSocialMirrorTicker({
+      documentRoot,
+      getProjection: () => {
+        try {
+          return mirrorConsole.getSnapshot()?.projection ?? createSocialMirrorProjection();
+        } catch {
+          return createSocialMirrorProjection();
+        }
+      },
+      onOpen: () => mirrorConsole.open("ticker"),
+    });
+    appendStaticFallbackLink(documentRoot);
+    if (typeof globalThis !== "undefined") globalThis.__TUMBO_SOCIAL_MIRROR__ = mirrorConsole;
+    return Object.freeze({ console: mirrorConsole, ticker });
+  } catch (error) {
+    if (typeof console !== "undefined" && typeof console.warn === "function") {
+      console.warn("Social Mirror unavailable:", error?.message);
+    }
+    return null;
+  }
 }
 
 export default createSocialMirrorConsole;
