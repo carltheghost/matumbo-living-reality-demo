@@ -40,7 +40,11 @@ export const JUDGMENTS_SOURCE = "ai-judgments";
 /** Below this confidence, code must clarify/confirm instead of acting. */
 export const CLARIFY_THRESHOLD = 0.65;
 
-export const JUDGMENT_PROVIDERS = Object.freeze(["mock", "heuristic", "http"]);\nexport const JEV_DEFAULT_MODEL = "jev-latest";\nexport const JEV_DEFAULT_TYPESAFE_ENDPOINT = "https://api.typesafe.ai/v1/systemone";\nexport const JEV_DEFAULT_AGENT_ENDPOINT = "https://jev-agent.com/api/v1/systemone";\nexport const JEV_TIMEOUT_MS = 10_000;
+export const JUDGMENT_PROVIDERS = Object.freeze(["mock", "heuristic", "http"]);
+export const JEV_DEFAULT_MODEL = "jev-latest";
+export const JEV_DEFAULT_TYPESAFE_ENDPOINT = "https://api.typesafe.ai/v1/systemone";
+export const JEV_DEFAULT_AGENT_ENDPOINT = "https://jev-agent.com/api/v1/systemone";
+export const JEV_TIMEOUT_MS = 10_000;
 
 // ---------------------------------------------------------------------------
 // Bot Plaza intents (Choice). One narrow question: which handler owns the turn?
