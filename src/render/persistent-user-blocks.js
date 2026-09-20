@@ -223,6 +223,11 @@ export function createPersistentUserBlocks({
     const output = {};
     for (const rec of records.values()) {
       output[rec.id] = {
+        id: rec.id,
+        title: rec.title,
+        type: rec.type,
+        body: rec.body,
+        items: [...rec.items],
         x: Math.round(rec.x),
         y: Math.round(rec.y),
         z: Math.round(rec.z),
@@ -824,27 +829,16 @@ export function createPersistentUserBlocks({
 
     launcher.append(add, templateRow);
 
-    const savedIds = Object.keys(saved).slice(0, limit);
-    for (const id of savedIds) {
-      const state = saved[id];
-      if (!isRecord(state)) continue;
-      // Saved entries require no content because the user-visible block
-      // itself was created explicitly. We only restore known template-shaped
-      // entries when their id tells us the type.
-      const type = id.includes("media") ? "media"
-        : id.includes("social") ? "social"
-          : id.includes("market") ? "market"
-            : id.includes("workspace") ? "workspace"
-              : null;
-      if (!type) continue;
-      const template = chooseTemplate(type);
+    const savedEntries = Object.values(saved).slice(0, limit);
+    for (const entry of savedEntries) {
+      if (!isRecord(entry)) continue;
       try {
         createBlock({
-          id,
-          title: template.title,
-          type: template.type,
-          body: template.body,
-          items: template.items,
+          id: entry.id,
+          title: entry.title,
+          type: entry.type,
+          body: entry.body,
+          items: entry.items,
         });
       } catch {
         // One corrupt saved block never breaks boot.
