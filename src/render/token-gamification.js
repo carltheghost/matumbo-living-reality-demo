@@ -427,9 +427,14 @@ export function mountTokenGamification({
   let dragging = false;
   let lastTap = null;
   let peekPinnedUntil = 0;
+  let lastPeekEvent = null;
   const reducedMotion =
     typeof matchMedia === "function" &&
     matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function setStatus(message) {
+    statusEl.textContent = String(message);
+  }
 
   function setNdc(event) {
     const rect = dom.getBoundingClientRect?.() ?? { left: 0, top: 0, width: 1, height: 1 };
@@ -443,22 +448,8 @@ export function mountTokenGamification({
     return raycaster.intersectObjects(pickTargets, false).length > 0;
   }
 
-  function setSelected(next, method = "tap") {
-    selected = Boolean(next);
-    const scale = selected ? 1.18 : 1;
-    inner.scale.setScalar(scale);
-    edges.material.opacity = selected ? 1 : 0.9;
-    if (selected) {
-      showPeekAtLast(method);
-      setStatus("Burrow cube selected — double-click to enter the burrow.");
-    } else if (method !== "hover") {
-      hidePeek();
-    }
-  }
-
-  let lastPeekEvent = null;
   function showPeek(event) {
-    lastPeekEvent = event ? { clientX: event.clientX, clientY: event.clientY } : lastPeekEvent;
+    if (event) lastPeekEvent = { clientX: event.clientX, clientY: event.clientY };
     const snap = gam.snapshot(DEMO_ACCOUNT);
     peekLine.textContent = `Hunger ${snap.hunger}/${HUNGER_MAX} · Score ${snap.score.total} pts`;
     peek.hidden = false;
@@ -474,10 +465,9 @@ export function mountTokenGamification({
     peek.style.top = `${Math.max(8, y)}px`;
   }
 
-  function showPeekAtLast(method) {
+  function showPeekPinned() {
     peekPinnedUntil = Date.now() + 2500;
-    showPeek(lastPeekEvent);
-    void method;
+    showPeek(null);
   }
 
   function hidePeek() {
@@ -485,8 +475,17 @@ export function mountTokenGamification({
     peek.hidden = true;
   }
 
-  function setStatus(message) {
-    statusEl.textContent = String(message);
+  function setSelected(next, method = "tap") {
+    selected = Boolean(next);
+    const scale = selected ? 1.18 : 1;
+    inner.scale.setScalar(scale);
+    edges.material.opacity = selected ? 1 : 0.9;
+    if (selected) {
+      showPeekPinned();
+      setStatus("Burrow cube selected — double-click to enter the burrow.");
+    } else if (method !== "hover") {
+      hidePeek();
+    }
   }
 
   function setOpen(next, method = "button") {
@@ -652,7 +651,7 @@ export function mountTokenGamification({
   on(doc, "keydown", (event) => {
     if (event.key === "Escape" && opened) setOpen(false, "escape");
   });
-  on(token, "receipt", () => {
+  const offReceipt = token.on("receipt", () => {
     if (opened) refresh();
   });
 
@@ -801,6 +800,11 @@ export function mountTokenGamification({
   function destroy() {
     disposed = true;
     aborter.abort();
+    try {
+      offReceipt?.();
+    } catch {
+      /* ignore */
+    }
     if (rafId) cancelAnimationFrame(rafId);
     try {
       gam.destroy();
