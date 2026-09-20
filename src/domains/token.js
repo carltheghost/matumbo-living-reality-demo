@@ -226,7 +226,7 @@ export class TokenLedger {
    * - sys:void is never debited, and is credited only when
    *   voidCreditReason is "tithe" or "burn".
    */
-  post(postings, { idempotencyKey, action = "post", memo = "", voidCreditReason = null, links = null } = {}) {
+  post(postings, { idempotencyKey, action = "post", memo = "", voidCreditReason = null, links = null, authority = null } = {}) {
     if (typeof idempotencyKey !== "string" || idempotencyKey.length === 0) {
       throw new TypeError("post() requires a client idempotencyKey");
     }
@@ -243,6 +243,12 @@ export class TokenLedger {
       assertSignedFluff(p.amount, "posting.amount");
       if (p.account === "sys:void" && p.amount < 0) {
         throw new Error("sys:void is never debited");
+      }
+      // System-account firewall: only internal engine paths may debit a
+      // sys:* account. Direct ledger.post() callers cannot move funds out of
+      // treasury, escrow, vault, market, or the faucet.
+      if (p.account.startsWith("sys:") && p.amount < 0 && authority !== "internal") {
+        throw new Error(`system account ${p.account} requires internal authority to debit`);
       }
       if (p.account === "sys:void" && p.amount > 0 && voidCreditReason !== "tithe" && voidCreditReason !== "burn") {
         throw new Error("sys:void is credited only by tithes or burns");
@@ -434,28 +440,28 @@ export class QuoteEngine {
         { account: "sys:issuance", asset: "TUMBO", amount: -supplyTumbo },
         { account: "sys:treasury", asset: "TUMBO", amount: supplyTumbo },
       ],
-      { idempotencyKey: "genesis:tumbo-supply", action: "genesis" }
+      { idempotencyKey: "genesis:tumbo-supply", action: "genesis", authority: "internal" }
     );
     this.ledger.post(
       [
         { account: "sys:issuance", asset: "sMIMAS", amount: -supplySmimas },
         { account: MARKET_MAKER, asset: "sMIMAS", amount: supplySmimas },
       ],
-      { idempotencyKey: "genesis:smimas-supply", action: "genesis" }
+      { idempotencyKey: "genesis:smimas-supply", action: "genesis", authority: "internal" }
     );
     this.ledger.post(
       [
         { account: "sys:treasury", asset: "TUMBO", amount: -floatTumbo },
         { account: MARKET_MAKER, asset: "TUMBO", amount: floatTumbo },
       ],
-      { idempotencyKey: "genesis:market-float", action: "genesis" }
+      { idempotencyKey: "genesis:market-float", action: "genesis", authority: "internal" }
     );
     this.ledger.post(
       [
         { account: "sys:treasury", asset: "TUMBO", amount: -faucetTumbo },
         { account: "sys:faucet", asset: "TUMBO", amount: faucetTumbo },
       ],
-      { idempotencyKey: "genesis:faucet", action: "genesis" }
+      { idempotencyKey: "genesis:faucet", action: "genesis", authority: "internal" }
     );
   }
 
@@ -600,6 +606,7 @@ export class QuoteEngine {
       action: quote.action,
       memo: `quote ${quote.id}`,
       voidCreditReason: "tithe",
+      authority: "internal",
     });
 
     const receipt = Object.freeze({
@@ -651,7 +658,7 @@ export class QuoteEngine {
         { account: "sys:faucet", asset, amount: -amount },
         { account: to, asset, amount },
       ],
-      { idempotencyKey: key, action: "faucet", memo: `demo faucet -> ${to}` }
+      { idempotencyKey: key, action: "faucet", memo: `demo faucet -> ${to}`, authority: "internal" }
     );
     const receipt = Object.freeze({ ...journal, quoteId: null, tithe: 0 });
     this._receipts.set(key, receipt);
@@ -757,6 +764,7 @@ export class QuoteEngine {
       action: "reverse",
       memo: memo ?? `reversal of ${original.id} (${original.action})`,
       voidCreditReason: null,
+      authority: "internal",
       links: { reverses: original.id, reversesKey: original.idempotencyKey, actor },
     });
     this._reversedJournalKeys.add(original.idempotencyKey);
@@ -1076,6 +1084,10 @@ export class TumboUserLedger {
     if (!displayTo) throw new TypeError("to must be a non-empty account");
     const coreFrom = toCoreAccount(displayFrom);
     const coreTo = toCoreAccount(displayTo);
+    // Wallet sends move funds between user accounts only; system accounts
+    // (sys:*) can never be debited or credited through send().
+    if (!isUserAccount(coreFrom)) throw new Error("send() debits user accounts (u:<name> or b:<name>) only");
+    if (!isUserAccount(coreTo)) throw new Error("send() credits user accounts (u:<name> or b:<name>) only");
     const coreAsset = toCoreAsset(asset);
     const fluff = assertFluff(amountFluff, "amountFluff");
     if (fluff <= 0) throw new TypeError("amountFluff must be greater than 0");
@@ -1160,7 +1172,7 @@ export class TumboUserLedger {
           { account: coreAcct, asset: coreAsset, amount: -fluff },
           { account: ESCROW_ACCOUNT, asset: coreAsset, amount: fluff },
         ],
-        { idempotencyKey: key, action: "lock", memo: label.trim().slice(0, 80) }
+        { idempotencyKey: key, action: "lock", memo: label.trim().slice(0, 80), authority: "internal" }
       );
     } catch (err) {
       if (/insufficient funds/.test(err?.message || "")) {
@@ -1214,7 +1226,7 @@ export class TumboUserLedger {
         { account: ESCROW_ACCOUNT, asset: coreAsset, amount: -entry.amountFluff },
         { account: coreAcct, asset: coreAsset, amount: entry.amountFluff },
       ],
-      { idempotencyKey: newIdempotencyKey("tumbo-unlock"), action: "unlock", memo: `release ${lockId}` }
+      { idempotencyKey: newIdempotencyKey("tumbo-unlock"), action: "unlock", memo: `release ${lockId}`, authority: "internal" }
     );
     const released = Object.freeze({ ...entry, status: "released", releasedAt: utcNowIso() });
     this._locks.set(lockId, released);

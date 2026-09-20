@@ -265,7 +265,7 @@ describe("token exchange: conservation and ledger invariants", () => {
             { account: MARKET_MAKER, asset: "TUMBO", amount: -1 },
             { account: VOID_ACCOUNT, asset: "TUMBO", amount: 1 },
           ],
-          { idempotencyKey: "void-credit", action: "test" }
+          { idempotencyKey: "void-credit", action: "test", authority: "internal" }
         ),
       /only by tithes or burns/
     );
