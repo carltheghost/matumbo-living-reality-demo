@@ -1,85 +1,117 @@
 /**
- * TUMBO-SIM token tunables — SINGLE SOURCE OF TRUTH.
+ * TUMBO-SIM token config — the ONE module that owns every tunable.
  *
- * Every module that needs supply, fees, windows, or genesis ribbon limits
- * MUST import from this file. Do not hardcode those numbers elsewhere.
+ * Units: integer fluff. 1 TUMBO-SIM = 1,000 fluff. Exact integer math only.
+ * No other module hardcodes a supply number, rate, cap, or weight.
  *
- * Simulation only. No real money, no custody, no wallets, no signing.
- * Standing public commitment: "Simulated points only — never real money or wagering."
+ * Nothing here is money: TUMBO-SIM is simulated demo points only — never
+ * real money, wagering, custody, wallets, or chains.
  */
+
+export const TOKEN_CONFIG_VERSION = 1;
+
+/** Integer fluff per 1 TUMBO-SIM. */
+export const FLUFF_PER_TUMBO = 1000;
 
 /**
- * Constitutional max supply.
- * UNDECIDED — the user has not chosen a public supply figure.
- * Do not invent, quote, or render this value in any user-facing UI.
- * Keep null until an explicit product decision is recorded.
+ * Total TUMBO supply in fluff (safe integer). Internal conservation anchor
+ * only — never quoted publicly; the user has not chosen a public figure.
  */
-export const TUMBO_MAX_SUPPLY = null;
+export const TOKEN_TOTAL_SUPPLY = 1_000_000_000_000;
 
-/**
- * Demo / rehearsal fixture only (existing projection math for launch receipt
- * and distribution registry). This is NOT a public commitment and MUST NOT
- * be shown as "the" supply in UI copy. Used solely so deterministic
- * reconciliation tests and local projections continue to add up.
- */
-export const DEMO_REHEARSAL_SUPPLY_UNITS = 1_000_000_000;
+/** Total sMIMAS supply in fluff (safe integer). Internal only. */
+export const SMIMAS_TOTAL_SUPPLY = 100_000_000_000;
 
-/** Total basis points for allocation schedules (100% = 10_000). */
-export const TUMBO_TOTAL_BASIS_POINTS = 10_000;
+/** TUMBO float allocated to the simulated market maker, in fluff. */
+export const MARKET_TUMBO_FLOAT = 10_000_000_000;
 
-/**
- * Micro-units per TUMBO-SIM (constitution draft uses 6 dp; ledger-core Money
- * currently uses 8). Prefer reading this constant rather than hardcoding.
- * "Fluff" = human-facing display scale for micro-actions.
- */
-export const FLUFF_PER_TUMBO = 1_000_000; // 10^-6 style micro-units for micro-actions
+/** sMIMAS float allocated to the simulated market maker, in fluff. */
+export const MARKET_SMIMAS_FLOAT = 10_000_000_000;
 
-/** Reverse window: sender may reverse a send/tip within this many sim ticks. */
-export const REVERSE_WINDOW_TICKS = 24 * 60; // 24 sim-hours if 1 tick = 1 sim-minute
+/** Faucet bootstrap allocation, in fluff. */
+export const FAUCET_BOOTSTRAP_FLUFF = 1_000_000_000;
 
-/**
- * Void tithe in basis points applied to market fees that route to the Void
- * (burn address). Example: half of a 1% market fee → 50 bps of the notional
- * if the fee is 100 bps total; adjust policy via this single knob.
- */
-export const VOID_TITHE_BPS = 50;
+/** Reverse window, in ledger ticks. */
+export const REVERSE_WINDOW_TICKS = 1000;
 
-/**
- * Genesis / Burrow Rights ribbon cap: maximum number of simulated genesis
- * passes claimable in the demo (Article 4 of the constitution draft).
- */
+/** Void tithe on market ops, in basis points (10 bps = 0.1%). */
+export const VOID_TITHE_BPS = 10;
+
+/** Quote time-to-live, in ledger ticks. */
+export const QUOTE_TTL_TICKS = 50;
+
+/** Supporter ribbon cap. Ribbons are free, non-transferable, non-monetized. */
 export const RIBBON_CAP = 5000;
 
-/** Unit label used everywhere in the demo. */
-export const TUMBO_UNIT = "TUMBO-SIM";
+/** Fixed simulated market rate: 1 TUMBO = 100 sMIMAS (exact rational). */
+export const MARKET_RATE = Object.freeze({ num: 100, den: 1 });
 
-/** Symbol (display only). */
-export const TUMBO_SYMBOL = "TUMBO";
+export const ASSETS = Object.freeze({
+  TUMBO: Object.freeze({
+    code: "TUMBO",
+    label: "TUMBO-SIM",
+    kind: "native",
+    decimals: 3,
+    simulation: true,
+    note: "Simulated points only — never real money or wagering.",
+  }),
+  sMIMAS: Object.freeze({
+    code: "sMIMAS",
+    label: "sMIMAS (synthetic demo asset)",
+    kind: "synthetic",
+    decimals: 3,
+    simulation: true,
+    note: "Simulated points only — never real money or wagering.",
+  }),
+});
 
-/** Standing public commitment — include on every token UI surface. */
-export const TUMBO_PUBLIC_COMMITMENT =
-  "Simulated points only — never real money or wagering.";
-
-/** Hard non-goals encoded from risk notes (do not implement). */
-export const TUMBO_NON_GOALS = Object.freeze([
-  "No fiat on/off ramps",
-  "No real custody",
-  "No real wallets or signing",
-  "No real issuance, sale, or airdrop",
-  "No redemption or buyback promises",
-  "No convertibility to anything of real-world value",
+export const SYSTEM_ACCOUNTS = Object.freeze([
+  "sys:treasury",
+  "sys:faucet",
+  "sys:escrow",
+  "sys:vault",
+  "sys:void",
+  "sys:market",
 ]);
 
-export default {
-  TUMBO_MAX_SUPPLY,
-  DEMO_REHEARSAL_SUPPLY_UNITS,
-  TUMBO_TOTAL_BASIS_POINTS,
-  FLUFF_PER_TUMBO,
-  REVERSE_WINDOW_TICKS,
-  VOID_TITHE_BPS,
-  RIBBON_CAP,
-  TUMBO_UNIT,
-  TUMBO_SYMBOL,
-  TUMBO_PUBLIC_COMMITMENT,
-  TUMBO_NON_GOALS,
-};
+/** Faucet drip per account per simulated day, in fluff (50 TUMBO-SIM). */
+export const FAUCET_DRIP_FLUFF = 50 * FLUFF_PER_TUMBO;
+export const FAUCET_DRIPS_PER_DAY = 1;
+
+/* ---------------- Infinite Burrow gamification ---------------- */
+
+/** Hunger meter bounds, in integer points. */
+export const HUNGER_MAX = 100;
+export const HUNGER_DECAY_PER_TICK = 1;
+/** At or below this level the burrow is starving: simulated rewards dip. */
+export const HUNGER_STARVATION_THRESHOLD = 20;
+/** Hunger feed per settled action (integer points). */
+export const HUNGER_FEED = Object.freeze({
+  presence: 30,
+  "ribbon-claim": 15,
+  tip: 6,
+  lock: 12,
+  stake: 8,
+  deposit: 8,
+  buy: 10,
+  sell: 10,
+  exchange: 10,
+  send: 3,
+  receive: 2,
+  save: 4,
+  deliver: 5,
+  "hunger-tick": 0,
+});
+/**
+ * Simulated-reward penalty while starved, in basis points of the reward.
+ * Applies to simulated rewards only — never to principal.
+ */
+export const STARVED_REWARD_PENALTY_BPS = 500;
+
+/** Burrow Score weights — a pure function of ledger history. */
+export const SCORE_PER_CHECKIN = 25;
+export const SCORE_PER_TIP_TUMBO = 1;
+export const SCORE_PER_LOCK_TUMBO = 2;
+export const SCORE_RIBBON_BONUS = 50;
+
+export const LEADERBOARD_SIZE = 25;

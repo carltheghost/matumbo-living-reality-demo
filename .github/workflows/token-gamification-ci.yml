@@ -1,0 +1,40 @@
+# token-gamification-ci.yml — Part 07 · TUMBO-SIM token gamification tests.
+#
+# Scoped workflow: runs the gamification tests on the gpt/token-gamification
+# branch and on PRs that touch the gamification files. Simulation-only; no
+# secrets, no deploys, no external network.
+name: token-gamification tests
+
+on:
+  push:
+    branches: [gpt/token-gamification]
+    paths:
+      - "src/domains/token-gamification*.js"
+      - "src/domains/token*.js"
+      - "src/render/token-gamification.js"
+      - "tests/token-gamification.test.mjs"
+      - ".github/workflows/token-gamification-ci.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/domains/token-gamification*.js"
+      - "src/domains/token*.js"
+      - "src/render/token-gamification.js"
+      - "tests/token-gamification.test.mjs"
+      - ".github/workflows/token-gamification-ci.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Run token gamification tests
+        run: node --test tests/token-gamification.test.mjs
+      - name: Syntax-check the gamification modules
+        run: |
+          for target in src/domains/token-config.js src/domains/token.js src/domains/token-gamification.js src/render/token-gamification.js tests/token-gamification.test.mjs; do
+            if [ -f "$target" ]; then node --check "$target"; else echo "pending: $target"; fi
+          done
