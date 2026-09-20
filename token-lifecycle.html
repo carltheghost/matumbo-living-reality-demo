@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Token Lifecycle — Audit Console (TUMBO-SIM)</title>
+<meta name="description" content="Simulated TUMBO-SIM token lifecycle audit console: glass-cube chain, history, EchoProof receipts, reverse/cancel rehearsal. No real money, wallets, or custody." />
+<style>
+  :root {
+    --ink: #d9f2ff;
+    --ink-dim: #9fc6e8;
+    --ink-faint: #7fa8cc;
+    --glass: rgba(120, 200, 255, 0.22);
+    --glass-soft: rgba(120, 200, 255, 0.12);
+    --panel: rgba(12, 32, 58, 0.55);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--ink);
+    background: radial-gradient(1200px 800px at 20% -10%, #0a2038 0%, #060f1d 45%, #03070d 100%);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  #tl-app { max-width: 1400px; margin: 0 auto; padding: 16px; }
+  .tl-boot, .tl-fatal {
+    border: 1px solid var(--glass);
+    background: var(--panel);
+    border-radius: 12px;
+    padding: 14px 16px;
+    font-size: 14px;
+    color: var(--ink-dim);
+  }
+  .tl-fatal { border-color: rgba(255, 140, 150, 0.5); color: #ffc9ce; margin-bottom: 12px; }
+  .tl-shell { display: flex; flex-direction: column; gap: 12px; }
+  .tl-head {
+    display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap;
+    background: rgba(20, 60, 100, 0.28);
+    border: 1px solid var(--glass);
+    border-radius: 14px;
+    padding: 14px 18px;
+    backdrop-filter: blur(8px);
+  }
+  .tl-eyebrow { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #8fd8ff; }
+  .tl-head h1 { font-size: 22px; margin: 6px 0; }
+  .tl-head p { margin: 0; font-size: 13px; color: var(--ink-dim); max-width: 60ch; }
+  .tl-head-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .tl-btn {
+    background: rgba(80, 160, 255, 0.15);
+    border: 1px solid rgba(120, 200, 255, 0.35);
+    color: var(--ink);
+    border-radius: 10px;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .tl-btn:hover { background: rgba(80, 160, 255, 0.32); }
+  .tl-btn:active { transform: translateY(1px); }
+  .tl-pill {
+    font-size: 12px; color: #aee3ff;
+    border: 1px solid var(--glass);
+    background: rgba(40, 120, 200, 0.16);
+    border-radius: 20px;
+    padding: 6px 12px;
+    white-space: nowrap;
+  }
+  .tl-pill.bad { border-color: rgba(255, 140, 150, 0.55); color: #ffc9ce; }
+  .tl-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+  .tl-stage-wrap {
+    position: relative;
+    background: rgba(10, 30, 55, 0.4);
+    border: 1px solid rgba(120, 200, 255, 0.2);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .tl-stage { height: 480px; touch-action: none; }
+  .tl-stage canvas { display: block; width: 100%; height: 100%; }
+  .tl-tooltip {
+    position: absolute; pointer-events: none; z-index: 5;
+    background: rgba(6, 20, 36, 0.94);
+    border: 1px solid rgba(120, 200, 255, 0.35);
+    padding: 8px 10px; border-radius: 8px;
+    font-size: 12px; max-width: 260px;
+  }
+  .tl-stage-hint {
+    position: absolute; left: 10px; right: 10px; bottom: 8px;
+    font-size: 11px; color: #9fd0f0; opacity: 0.85;
+    pointer-events: none;
+  }
+  .tl-panel {
+    background: var(--panel);
+    border: 1px solid rgba(120, 200, 255, 0.22);
+    border-radius: 14px;
+    padding: 14px;
+    display: flex; flex-direction: column; gap: 12px;
+    max-height: 680px;
+    overflow-y: auto;
+    backdrop-filter: blur(8px);
+  }
+  .tl-panel-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .tl-meta { font-size: 11px; color: var(--ink-faint); }
+  .tl-status {
+    font-size: 12px; color: #a8dcff;
+    background: rgba(40, 120, 200, 0.12);
+    border: 1px solid rgba(120, 200, 255, 0.2);
+    border-radius: 8px;
+    padding: 8px 10px;
+    min-height: 18px;
+  }
+  .tl-section h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: #8fd8ff; margin: 0 0 8px; }
+  .tl-row-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+  .tl-note { font-size: 12px; color: var(--ink-dim); margin: 8px 0 0; }
+  .tl-empty { color: var(--ink-faint); font-size: 12px; }
+  .tl-filters { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .tl-filters label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--ink-dim); }
+  .tl-filters select, .tl-filters input {
+    background: rgba(6, 20, 38, 0.75);
+    border: 1px solid rgba(120, 200, 255, 0.3);
+    color: var(--ink);
+    border-radius: 8px;
+    padding: 8px;
+    font-size: 13px;
+    width: 100%;
+  }
+  .tl-list { display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow-y: auto; }
+  .tl-row {
+    display: flex; gap: 10px; align-items: center; text-align: left;
+    background: rgba(30, 70, 120, 0.18);
+    border: 1px solid rgba(120, 200, 255, 0.18);
+    border-radius: 10px;
+    padding: 8px 10px;
+    cursor: pointer; color: var(--ink); width: 100%;
+    font-family: inherit;
+  }
+  .tl-row:hover { background: rgba(50, 110, 180, 0.28); }
+  .tl-row.is-sel { border-color: #8fd8ff; background: rgba(60, 140, 220, 0.3); }
+  .tl-row-seq { font-weight: 700; color: #8fd8ff; min-width: 44px; font-size: 12px; }
+  .tl-row-main { flex: 1; min-width: 0; }
+  .tl-row-title { font-size: 13px; font-weight: 600; }
+  .tl-row-sub { display: block; font-size: 12px; color: #a8dcff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tl-row-meta { display: block; font-size: 11px; color: var(--ink-faint); }
+  .tl-row-state { font-size: 10px; padding: 3px 8px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; }
+  .st-settled { background: rgba(80, 180, 255, 0.2); color: #aee3ff; }
+  .st-pending { background: rgba(255, 200, 110, 0.18); color: #ffd9a0; }
+  .st-reversed { background: rgba(180, 140, 255, 0.2); color: #d5c2ff; }
+  .st-cancelled { background: rgba(255, 140, 150, 0.18); color: #ffb3ba; }
+  .tl-receipt {
+    background: rgba(6, 20, 38, 0.55);
+    border: 1px solid rgba(120, 200, 255, 0.2);
+    border-radius: 10px;
+    padding: 10px;
+    max-height: 360px;
+    overflow-y: auto;
+    font-size: 12px;
+  }
+  .tl-receipt.tl-focus { outline: 2px solid #8fd8ff; outline-offset: 2px; }
+  .tl-receipt-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .tl-receipt-summary { color: var(--ink-dim); }
+  .tl-kv { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; margin: 8px 0; }
+  .tl-kv > div { min-width: 0; }
+  .tl-kv dt { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-faint); }
+  .tl-kv dd { margin: 2px 0 0; font-size: 12px; word-break: break-all; }
+  .tl-kv code { font-size: 11px; color: #aee3ff; }
+  .tl-postings { width: 100%; border-collapse: collapse; font-size: 12px; margin: 8px 0; }
+  .tl-postings th, .tl-postings td { padding: 4px 6px; border-bottom: 1px solid rgba(120, 200, 255, 0.12); text-align: left; }
+  .tl-postings .neg { color: #ff9aa5; }
+  .tl-postings .pos { color: #9df0c0; }
+  .tl-checks { list-style: none; padding: 0; margin: 8px 0; font-size: 12px; }
+  .tl-checks li { margin: 3px 0; }
+  .tl-checks li.ok { color: #9df0c0; }
+  .tl-checks li.bad { color: #ff9aa5; }
+  .tl-checks code { color: var(--ink-faint); font-size: 11px; margin-left: 6px; }
+  .tl-link { background: none; border: none; color: #8fd8ff; text-decoration: underline; cursor: pointer; font-size: 12px; padding: 0; }
+  .tl-boundary { font-size: 11px; color: var(--ink-faint); border-top: 1px solid rgba(120, 200, 255, 0.15); padding-top: 8px; }
+  .tl-chip {
+    position: fixed; bottom: 16px; right: 16px; z-index: 50;
+    background: rgba(20, 60, 110, 0.88);
+    border: 1px solid rgba(140, 210, 255, 0.4);
+    color: var(--ink);
+    border-radius: 24px;
+    padding: 10px 16px;
+    cursor: pointer;
+    backdrop-filter: blur(8px);
+    font-size: 13px;
+  }
+  .tl-selftest { background: rgba(6, 20, 38, 0.6); border: 1px solid var(--glass); border-radius: 12px; padding: 12px 14px; }
+  .tl-selftest h2 { font-size: 14px; margin: 0 0 8px; color: #8fd8ff; }
+  .tl-selftest-rows { max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+  .tl-selftest-row { font-size: 12px; }
+  .tl-selftest-row.ok { color: #9df0c0; }
+  .tl-selftest-row.bad { color: #ff9aa5; }
+  @media (max-width: 860px) {
+    #tl-app { padding: 10px; }
+    .tl-grid { grid-template-columns: 1fr; }
+    .tl-stage { height: 300px; }
+    .tl-panel { max-height: none; }
+    .tl-kv { grid-template-columns: 1fr; }
+    .tl-filters { grid-template-columns: 1fr; }
+    .tl-head h1 { font-size: 18px; }
+  }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three-r179.1/build/three.module.js",
+    "three/addons/": "./vendor/three-r179.1/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="tl-fatal" class="tl-fatal" hidden></div>
+<main id="tl-app">
+  <p class="tl-boot">Loading the simulated audit console&hellip; TUMBO-SIM are simulated points &mdash; no real money, wallets, or custody.</p>
+  <noscript><p class="tl-boot">This audit console needs JavaScript. Simulation only &mdash; TUMBO-SIM are simulated points with no real value.</p></noscript>
+</main>
+<script type="module">
+  const fatalBox = document.getElementById("tl-fatal");
+  const showFatal = (msg) => {
+    fatalBox.hidden = false;
+    fatalBox.textContent = "Audit console failed to start (simulation only, nothing was moved): " + msg;
+  };
+  window.addEventListener("error", (e) => {
+    if (e && e.message) showFatal(e.message);
+  }, true);
+  window.addEventListener("unhandledrejection", (e) => {
+    showFatal((e && e.reason && (e.reason.message || String(e.reason))) || "unhandled rejection");
+  });
+  try {
+    const { mountTokenLifecycleAudit } = await import("./src/render/token-lifecycle.js");
+    mountTokenLifecycleAudit(document.getElementById("tl-app"));
+  } catch (err) {
+    showFatal(err && err.message ? err.message : String(err));
+  }
+</script>
+</body>
+</html>
