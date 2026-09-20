@@ -810,7 +810,7 @@ export function createFeatureNavigator({
           ? "REPLAY LAUNCH PREVIEW"
           : feature.id === "social-explorer"
             ? "REPLAY SOCIAL REHEARSAL"
-            : "REPLAY LOCAL VIEW REPLAYED";
+            : "REPLAY LOCAL VIEW";
       }, 1200);
     });
     actionBar.appendChild(action);
