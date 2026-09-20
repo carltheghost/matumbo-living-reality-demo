@@ -1,0 +1,607 @@
+/**
+ * Token Lifecycle - audit console view (browser).
+ *
+ * Mounts the transaction history / audit view for TUMBO-SIM:
+ *  - a three.js (pinned r179.1) glass-cube chain: one translucent blue
+ *    glass cube per journal, linked in hash-chain order;
+ *  - the journal list with filters by action / account / asset / state;
+ *  - click a tx to inspect its EchoProof receipt with recomputed hashes
+ *    and the prevHash chain-link check;
+ *  - a "verify chain" control the user can run any time;
+ *  - reverse / cancel / settle rehearsal controls.
+ *
+ * Design laws honored: translucent blue glass cubes from the first frame;
+ * cubes are small by default and open the inspector on interaction;
+ * draggable in full 3D with positions remembered (localStorage);
+ * the panel minimizes to a small translucent chip; single click selects,
+ * hover peeks, double-click enters the tx block world (focused view);
+ * every panel body scrolls; 1440x900 and 390x844 layouts; zero console
+ * errors (all failures surface in the status line).
+ *
+ * SIMULATION ONLY - TUMBO-SIM are simulated points. No real money,
+ * wagering, wallets, custody, or chains. Every surface labels this.
+ */
+
+import * as THREE from "three";
+import { createTumboToken, fmtFluff, TOKEN_CONFIG } from "../domains/token.js";
+import { runTokenLifecycleSelfTest } from "./token-lifecycle-selftest.js";
+
+const POS_KEY = "tumbo:token-lifecycle:cube-positions";
+const MAX_CUBES = 30;
+
+const STATE_COLORS = {
+  genesis: 0xeafcff,
+  pending: 0xffc76f,
+  settled: 0x6fc7ff,
+  reversed: 0xb79aff,
+  cancelled: 0xff8f9a,
+};
+
+const short = (h) => (typeof h === "string" && h.length > 18 ? h.slice(0, 10) + "\u2026" + h.slice(-6) : h);
+const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const fmtTime = (ts) => {
+  try {
+    return new Date(ts).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  } catch { return String(ts); }
+};
+
+function loadPositions() {
+  try { const raw = localStorage.getItem(POS_KEY); return raw ? JSON.parse(raw) : {}; }
+  catch { return {}; }
+}
+function savePositions(map) {
+  try { localStorage.setItem(POS_KEY, JSON.stringify(map)); } catch { /* best-effort */ }
+}
+
+function seedDemo(facade) {
+  const core = facade.ledger;
+  if (core.journalCount > 0) return;
+  const run = (p) => { try { return core.execute(p); } catch { return null; } };
+  run({ action: "send", from: "sys:treasury", to: "u:alice", amountFluff: 60000, idempotencyKey: "demo-fund-alice" });
+  run({ action: "send", from: "sys:treasury", to: "u:bob", amountFluff: 40000, idempotencyKey: "demo-fund-bob" });
+  run({ action: "send", asset: "sMIMAS", from: "sys:treasury", to: "u:alice", amountFluff: 25000, idempotencyKey: "demo-fund-asmimas" });
+  run({ action: "tip", from: "u:alice", to: "u:bob", amountFluff: 1500, idempotencyKey: "demo-tip-1", memo: "simulated tip" });
+  run({ action: "send", from: "u:bob", to: "u:carol", amountFluff: 8000, idempotencyKey: "demo-send-1" });
+  run({ action: "stake", from: "u:alice", amountFluff: 10000, idempotencyKey: "demo-stake-1" });
+  run({ action: "lock", from: "u:bob", amountFluff: 5000, idempotencyKey: "demo-lock-1" });
+  run({ action: "exchange", asset: "TUMBO", assetB: "sMIMAS", from: "u:alice", to: "u:bob", amountFluff: 2000, amountBFluff: 1000, idempotencyKey: "demo-xchg-1" });
+  run({ action: "send", from: "u:carol", to: "u:alice", amountFluff: 3000, idempotencyKey: "demo-pending-1", settle: false, memo: "simulated pending transfer" });
+  const doomed = run({ action: "send", from: "u:bob", to: "u:carol", amountFluff: 1200, idempotencyKey: "demo-cancel-me", settle: false });
+  const rev = run({ action: "tip", from: "u:alice", to: "u:carol", amountFluff: 900, idempotencyKey: "demo-reverse-me" });
+  if (doomed) { try { core.cancel(doomed.journal.journalId, { actor: "demo" }); } catch { /* noop */ } }
+  if (rev) { try { core.reverse(rev.journal.journalId, { actor: "demo" }); } catch { /* noop */ } }
+}
+
+export function mountTokenLifecycleAudit(root, opts = {}) {
+  const facade = opts.facade ?? (typeof window !== "undefined" && window.TumboToken) ?? createTumboToken();
+  const core = facade.ledger;
+  if (core.journalCount === 0) seedDemo(facade);
+
+  const remembered = loadPositions();
+  const ui = {
+    selectedId: null,
+    focusedId: null,
+    filters: { action: "", account: "", asset: "", state: "" },
+  };
+
+  root.innerHTML =
+    '<div class="tl-shell">' +
+    '<header class="tl-head"><div class="tl-head-copy">' +
+    '<div class="tl-eyebrow">TUMBO-SIM \u00B7 simulated points \u00B7 no real money, wallets, or custody</div>' +
+    '<h1>Token Lifecycle \u2014 Audit Console</h1>' +
+    '<p>Reverse and cancel rehearsal on a local demo ledger. Every mutation is a balanced journal; ' +
+    'reversals post compensating journals and never edit history. Reverse window: <b>' + TOKEN_CONFIG.REVERSE_WINDOW_TICKS + ' ledger ticks</b>.</p>' +
+    '</div><div class="tl-head-actions">' +
+    '<span class="tl-pill" data-tl="chain-pill">chain \u2026</span>' +
+    '<button class="tl-btn" data-tl="verify">Verify chain</button>' +
+    '<button class="tl-btn" data-tl="advance">+1005 ticks</button>' +
+    '<button class="tl-btn" data-tl="minimize" aria-label="Minimize panel">\u2014</button>' +
+    '</div></header>' +
+    '<div class="tl-selftest" data-tl="selftest" hidden></div>' +
+    '<div class="tl-grid">' +
+    '<section class="tl-stage-wrap"><div class="tl-stage" data-tl="stage"></div>' +
+    '<div class="tl-tooltip" data-tl="tooltip" hidden></div>' +
+    '<div class="tl-stage-hint">drag a cube to move it \u00B7 drag background to orbit \u00B7 scroll to zoom \u00B7 single-click selects \u00B7 double-click enters its block world</div>' +
+    '</section>' +
+    '<aside class="tl-panel" data-tl="panel">' +
+    '<div class="tl-panel-head"><strong>Ledger panel</strong><span class="tl-meta" data-tl="tick-line"></span></div>' +
+    '<div class="tl-status" data-tl="status"></div>' +
+    '<section class="tl-section"><h2>Lifecycle</h2>' +
+    '<div class="tl-row-btns"><button class="tl-btn" data-tl="do-reverse">Reverse selected</button>' +
+    '<button class="tl-btn" data-tl="do-cancel">Cancel selected</button>' +
+    '<button class="tl-btn" data-tl="do-settle">Settle selected</button></div>' +
+    '<p class="tl-note">Reverse posts a compensating journal inside a ' + TOKEN_CONFIG.REVERSE_WINDOW_TICKS + '-tick window. ' +
+    'Cancel only voids <i>pending</i> journals \u2014 cancelling a settled tx fails closed.</p></section>' +
+    '<section class="tl-section"><h2>Filters</h2><div class="tl-filters">' +
+    '<label>Action<select data-tl="f-action"><option value="">All actions</option>' +
+    ["genesis"].concat(TOKEN_CONFIG.ACTIONS).map((a) => '<option value="' + a + '">' + a + '</option>').join("") + '</select></label>' +
+    '<label>Account<input data-tl="f-account" type="text" placeholder="u:alice or sys:vault" autocomplete="off" /></label>' +
+    '<label>Asset<select data-tl="f-asset"><option value="">All assets</option>' +
+    TOKEN_CONFIG.ASSETS.map((a) => '<option value="' + a + '">' + a + '</option>').join("") + '</select></label>' +
+    '<label>State<select data-tl="f-state"><option value="">Any state</option>' +
+    '<option value="pending">pending</option><option value="settled">settled</option>' +
+    '<option value="reversed">reversed</option><option value="cancelled">cancelled</option></select></label>' +
+    '</div></section>' +
+    '<section class="tl-section tl-list-section"><h2>Journals <span class="tl-meta" data-tl="list-count"></span></h2>' +
+    '<div class="tl-list" data-tl="list"></div></section>' +
+    '<section class="tl-section"><h2>Receipt inspector</h2>' +
+    '<div class="tl-receipt" data-tl="receipt"><p class="tl-empty">Select a journal to inspect its EchoProof receipt.</p></div></section>' +
+    '<div class="tl-boundary">Simulation boundary: TUMBO-SIM are demo points. Nothing here settles, custodies, or represents real value.</div>' +
+    '</aside></div>' +
+    '<button class="tl-chip" data-tl="chip" hidden>\u25C6 Token audit</button>' +
+    '</div>';
+
+  const $ = (sel) => root.querySelector('[data-tl="' + sel + '"]');
+  const stageEl = $("stage");
+  const tooltipEl = $("tooltip");
+  const statusEl = $("status");
+  const listEl = $("list");
+  const receiptEl = $("receipt");
+  const setStatus = (msg) => { statusEl.textContent = msg; };
+
+  /* ---------- three.js glass-cube chain ---------- */
+  let three = null;
+  const cubeMeshes = new Map();
+  let hoverId = null;
+  /* Bulk-advance guard: while advancing many ticks, receipt events are
+   * suppressed and a single refresh runs at the end. Without this,
+   * "+1005 ticks" would rebuild the whole scene 1005 times. */
+  let suppressRefresh = 0;
+
+  const stateColor = (j) => (j.journalId === "genesis" ? STATE_COLORS.genesis : (STATE_COLORS[j.state] ?? STATE_COLORS.settled));
+
+  function makeLabel(text) {
+    const canvas = document.createElement("canvas");
+    canvas.width = 256; canvas.height = 128;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      ctx.fillStyle = "rgba(190,240,255,0.92)";
+      ctx.font = "600 44px ui-sans-serif, system-ui";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(text, 128, 64);
+    }
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), transparent: true, depthWrite: false }));
+    sprite.scale.set(1.5, 0.75, 1);
+    return sprite;
+  }
+
+  function initThree() {
+    try {
+      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      stageEl.appendChild(renderer.domElement);
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 200);
+      camera.position.set(0, 3.4, 11);
+      scene.add(new THREE.AmbientLight(0x88bbdd, 0.75));
+      const dir = new THREE.DirectionalLight(0xffffff, 1.4);
+      dir.position.set(5, 8, 6);
+      scene.add(dir);
+      const pt = new THREE.PointLight(0x66ccff, 30, 40);
+      pt.position.set(-6, 2, 4);
+      scene.add(pt);
+      const world = new THREE.Group();
+      scene.add(world);
+
+      const ray = new THREE.Raycaster();
+      const ptr = new THREE.Vector2();
+      const dragPlane = new THREE.Plane();
+      const dragOffset = new THREE.Vector3();
+      const hitPoint = new THREE.Vector3();
+      const camDir = new THREE.Vector3();
+      let dragTarget = null, orbiting = false, downPos = null;
+      let yaw = 0.35, pitch = 0.12, camDist = 11;
+      let focusGoal = null;
+
+      const setPtr = (e) => {
+        const r = renderer.domElement.getBoundingClientRect();
+        ptr.x = ((e.clientX - r.left) / r.width) * 2 - 1;
+        ptr.y = -((e.clientY - r.top) / r.height) * 2 + 1;
+      };
+      const pick = (e) => {
+        setPtr(e);
+        ray.setFromCamera(ptr, camera);
+        const hits = ray.intersectObjects(Array.from(cubeMeshes.values()).map((m) => m.hit), false);
+        return hits.length ? hits[0] : null;
+      };
+
+      renderer.domElement.addEventListener("pointerdown", (e) => {
+        downPos = [e.clientX, e.clientY];
+        const hit = pick(e);
+        if (hit) {
+          dragTarget = hit.object.userData.group;
+          camera.getWorldDirection(camDir);
+          dragPlane.setFromNormalAndCoplanarPoint(camDir, hit.point);
+          dragOffset.copy(dragTarget.position).sub(hit.point);
+          try { renderer.domElement.setPointerCapture(e.pointerId); } catch { /* noop */ }
+        } else { orbiting = true; }
+      });
+      renderer.domElement.addEventListener("pointermove", (e) => {
+        if (dragTarget) {
+          setPtr(e);
+          ray.setFromCamera(ptr, camera);
+          if (ray.ray.intersectPlane(dragPlane, hitPoint)) {
+            const p = hitPoint.clone().add(dragOffset);
+            if (p.length() > 14) p.setLength(14);
+            dragTarget.position.copy(p);
+            const entry = cubeMeshes.get(dragTarget.userData.journalId);
+            if (entry) entry.baseY = p.y;
+            remembered[dragTarget.userData.journalId] = [p.x, p.y, p.z];
+            savePositions(remembered);
+            rebuildChainLine();
+          }
+          return;
+        }
+        if (orbiting && downPos) {
+          yaw -= (e.clientX - downPos[0]) * 0.008;
+          pitch = Math.max(-1.2, Math.min(1.2, pitch + (e.clientY - downPos[1]) * 0.006));
+          downPos = [e.clientX, e.clientY];
+          return;
+        }
+        const hit = pick(e);
+        const sr = stageEl.getBoundingClientRect();
+        if (hit) {
+          const j = hit.object.userData.journal;
+          tooltipEl.hidden = false;
+          tooltipEl.style.left = (e.clientX - sr.left + 14) + "px";
+          tooltipEl.style.top = (e.clientY - sr.top + 10) + "px";
+          tooltipEl.innerHTML = "<strong>" + esc(j.journalId) + "</strong> \u00B7 " + esc(j.action) + " \u00B7 " + esc(j.state) + "<br>" + esc(j.summary);
+          renderer.domElement.style.cursor = "pointer";
+          setHover(j.journalId);
+        } else {
+          tooltipEl.hidden = true;
+          renderer.domElement.style.cursor = "grab";
+          setHover(null);
+        }
+      });
+      const endPointer = (e) => {
+        const wasClick = downPos && Math.hypot(e.clientX - downPos[0], e.clientY - downPos[1]) < 6;
+        if (wasClick) {
+          const hit = pick(e);
+          if (hit) selectJournal(hit.object.userData.journalId, true);
+          else if (ui.focusedId) exitFocus();
+        }
+        dragTarget = null; orbiting = false; downPos = null;
+      };
+      renderer.domElement.addEventListener("pointerup", endPointer);
+      renderer.domElement.addEventListener("pointercancel", endPointer);
+      renderer.domElement.addEventListener("pointerleave", () => { tooltipEl.hidden = true; setHover(null); });
+      renderer.domElement.addEventListener("dblclick", (e) => {
+        const hit = pick(e);
+        if (hit) enterFocus(hit.object.userData.journalId);
+      });
+      renderer.domElement.addEventListener("wheel", (e) => {
+        e.preventDefault();
+        camDist = Math.max(5, Math.min(22, camDist + e.deltaY * 0.01));
+      }, { passive: false });
+
+      const clock = new THREE.Clock();
+      let raf = 0;
+      const focusDest = new THREE.Vector3();
+      const animate = () => {
+        raf = requestAnimationFrame(animate);
+        const t = clock.getElapsedTime();
+        world.rotation.y += (yaw - world.rotation.y) * 0.08;
+        world.rotation.x += (pitch - world.rotation.x) * 0.08;
+        camera.position.z += (camDist - camera.position.z) * 0.1;
+        camera.position.y += (3.4 - camera.position.y) * 0.1;
+        camera.lookAt(0, 0, 0);
+        for (const entry of cubeMeshes.values()) {
+          if (entry.group !== dragTarget) entry.group.position.y = entry.baseY + Math.sin(t * 0.9 + entry.phase) * 0.08;
+          const target = entry.group.userData.journalId === ui.selectedId ? 1.18 : 1;
+          const s = entry.group.scale.x + (target - entry.group.scale.x) * 0.15;
+          entry.group.scale.setScalar(s);
+        }
+        if (focusGoal) {
+          focusGoal.getWorldPosition(focusDest);
+          const dest = new THREE.Vector3(focusDest.x * 0.55, focusDest.y * 0.55 + 1.2, focusDest.z + 4.2);
+          camera.position.lerp(dest, 0.08);
+          if (camera.position.distanceTo(dest) < 0.15) focusGoal = null;
+        }
+        renderer.render(scene, camera);
+      };
+      const resize = () => {
+        const w = stageEl.clientWidth || 300;
+        const h = stageEl.clientHeight || 300;
+        renderer.setSize(w, h);
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+      };
+      new ResizeObserver(resize).observe(stageEl);
+      resize();
+      animate();
+      three = {
+        renderer, scene, camera, world,
+        destroy() { cancelAnimationFrame(raf); renderer.dispose(); stageEl.innerHTML = ""; },
+        setFocus(g) { focusGoal = g; },
+        clearFocus() { focusGoal = null; camDist = 11; },
+      };
+    } catch (err) {
+      stageEl.innerHTML = '<div class="tl-empty">3D unavailable (' + esc(err && err.message) + '). The ledger panel works without it.</div>';
+      three = null;
+    }
+  }
+
+  let chainLine = null;
+  function rebuildChainLine() {
+    if (!three) return;
+    if (chainLine) { three.world.remove(chainLine); chainLine.geometry.dispose(); chainLine.material.dispose(); chainLine = null; }
+    const pts = Array.from(cubeMeshes.values()).map((m) => m.group.position.clone());
+    if (pts.length < 2) return;
+    chainLine = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(pts),
+      new THREE.LineBasicMaterial({ color: 0x7fd4ff, transparent: true, opacity: 0.35 })
+    );
+    three.world.add(chainLine);
+  }
+
+  function rebuildCubes() {
+    if (!three) return;
+    for (const m of cubeMeshes.values()) {
+      three.world.remove(m.group);
+      m.cube.geometry.dispose();
+      m.edges.geometry.dispose();
+      m.cube.material.dispose();
+      m.label.material.map.dispose();
+      m.label.material.dispose();
+    }
+    cubeMeshes.clear();
+    const rows = core.history({ limit: MAX_CUBES + 1 }).rows;
+    const chronological = rows.slice().reverse().slice(-MAX_CUBES);
+    const n = chronological.length;
+    chronological.forEach((j, i) => {
+      const color = stateColor(j);
+      const size = j.journalId === "genesis" ? 1.05 : 0.85;
+      const geo = new THREE.BoxGeometry(size, size, size);
+      const mat = new THREE.MeshPhysicalMaterial({
+        color, transparent: true, opacity: 0.3, roughness: 0.12, metalness: 0.1,
+        emissive: color, emissiveIntensity: 0.06,
+      });
+      const cube = new THREE.Mesh(geo, mat);
+      const edges = new THREE.LineSegments(
+        new THREE.EdgesGeometry(geo),
+        new THREE.LineBasicMaterial({ color: 0x9fe8ff, transparent: true, opacity: 0.55 })
+      );
+      cube.add(edges);
+      const label = makeLabel(j.journalId === "genesis" ? "GEN" : ("#" + j.seq));
+      label.position.y = size * 0.95;
+      const group = new THREE.Group();
+      group.add(cube);
+      group.add(label);
+      group.userData.journalId = j.journalId;
+      const saved = remembered[j.journalId];
+      if (Array.isArray(saved) && saved.length === 3) group.position.set(saved[0], saved[1], saved[2]);
+      else group.position.set((i - (n - 1) / 2) * 1.9, Math.sin(i * 0.7) * 0.55, Math.cos(i * 0.55) * 0.6);
+      cube.userData = { group, journal: j, journalId: j.journalId };
+      cubeMeshes.set(j.journalId, { group, cube, edges, label, baseY: group.position.y, phase: i * 1.3, hit: cube });
+      three.world.add(group);
+    });
+    rebuildChainLine();
+    paintSelection();
+  }
+
+  function setHover(journalId) {
+    if (hoverId === journalId) return;
+    hoverId = journalId;
+    paintSelection();
+  }
+  function paintSelection() {
+    for (const entry of cubeMeshes.values()) {
+      const jid = entry.group.userData.journalId;
+      entry.cube.material.emissiveIntensity = jid === ui.selectedId ? 0.55 : (jid === hoverId ? 0.3 : 0.06);
+    }
+  }
+  function enterFocus(journalId) {
+    ui.focusedId = journalId;
+    const m = cubeMeshes.get(journalId);
+    if (m && three) three.setFocus(m.group);
+    selectJournal(journalId, true);
+    receiptEl.classList.add("tl-focus");
+    try { receiptEl.scrollIntoView({ behavior: "smooth", block: "nearest" }); } catch { /* noop */ }
+    setStatus("Entered the block world of " + journalId + " \u2014 click empty space or pick another tx to leave.");
+  }
+  function exitFocus() {
+    ui.focusedId = null;
+    if (three) three.clearFocus();
+    receiptEl.classList.remove("tl-focus");
+  }
+
+  /* ---------- list / receipt / chain ---------- */
+  function renderList() {
+    const f = ui.filters;
+    let result;
+    try {
+      result = core.history({
+        action: f.action || undefined,
+        account: f.account.trim() || undefined,
+        asset: f.asset || undefined,
+        state: f.state || undefined,
+        limit: 200,
+      });
+    } catch (err) { setStatus("Filter error: " + (err && err.message)); return; }
+    $("list-count").textContent = result.total + " journal" + (result.total === 1 ? "" : "s");
+    if (!result.rows.length) { listEl.innerHTML = '<p class="tl-empty">No journals match these filters.</p>'; return; }
+    listEl.innerHTML = result.rows.map((j) =>
+      '<button class="tl-row' + (j.journalId === ui.selectedId ? " is-sel" : "") + '" data-jid="' + esc(j.journalId) + '">' +
+      '<span class="tl-row-seq">' + (j.journalId === "genesis" ? "GEN" : ("#" + j.seq)) + '</span>' +
+      '<span class="tl-row-main"><span class="tl-row-title">' + esc(j.journalId) + ' \u00B7 ' + esc(j.action) + '</span>' +
+      '<span class="tl-row-sub">' + esc(j.summary) + '</span>' +
+      '<span class="tl-row-meta">tick ' + j.tick + ' \u00B7 ' + fmtTime(j.createdAt) + (j.linkedJournalId ? ' \u00B7 linked ' + esc(j.linkedJournalId) : "") + '</span></span>' +
+      '<span class="tl-row-state st-' + esc(j.state) + '">' + esc(j.state) + '</span></button>'
+    ).join("");
+    listEl.querySelectorAll(".tl-row").forEach((btn) => {
+      btn.addEventListener("click", () => selectJournal(btn.getAttribute("data-jid"), true));
+    });
+  }
+
+  function renderReceipt() {
+    const jid = ui.selectedId;
+    if (!jid) { receiptEl.innerHTML = '<p class="tl-empty">Select a journal to inspect its EchoProof receipt.</p>'; return; }
+    const journal = core.journalOf(jid);
+    const receipt = core.receiptFor(jid);
+    if (!journal || !receipt) { receiptEl.innerHTML = '<p class="tl-empty">Journal not found.</p>'; return; }
+    let verification;
+    try { verification = core.verifyJournal(jid); }
+    catch (err) { verification = { ok: false, checks: [{ name: "verify", ok: false, detail: err && err.message }] }; }
+    const postings = journal.postings.map((p) => {
+      const amt = BigInt(p.amountFluff);
+      const neg = amt < 0n;
+      const abs = neg ? -amt : amt;
+      return '<tr><td>' + esc(p.account) + '</td><td>' + esc(p.asset) + '</td><td class="' + (neg ? "neg" : "pos") + '">' +
+        (neg ? "\u2212" : "+") + esc(fmtFluff(abs, p.asset)) + '</td></tr>';
+    }).join("");
+    const checks = verification.checks.map((c) =>
+      '<li class="' + (c.ok ? "ok" : "bad") + '"><span>' + (c.ok ? "\u2713" : "\u2717") + '</span> ' + esc(c.name) +
+      ' <code>' + esc(c.detail == null ? "" : c.detail) + '</code></li>'
+    ).join("");
+    receiptEl.innerHTML =
+      '<div class="tl-receipt-head"><strong>' + esc(journal.journalId) + '</strong>' +
+      '<span class="tl-pill">' + esc(journal.action) + '</span>' +
+      '<span class="tl-row-state st-' + esc(journal.state) + '">' + esc(journal.state) + '</span></div>' +
+      '<p class="tl-receipt-summary">' + esc(journal.summary) + '</p>' +
+      '<dl class="tl-kv">' +
+      '<div><dt>Sequence</dt><dd>#' + journal.seq + ' (receipt #' + receipt.sequence + ')</dd></div>' +
+      '<div><dt>Tick</dt><dd>' + journal.tick + '</dd></div>' +
+      '<div><dt>Actor</dt><dd>' + esc(journal.actor) + '</dd></div>' +
+      '<div><dt>Issued</dt><dd>' + fmtTime(receipt.issuedAt) + '</dd></div>' +
+      '<div><dt>Idempotency key</dt><dd><code>' + esc(journal.idempotencyKey) + '</code></dd></div>' +
+      (journal.linkedJournalId ? '<div><dt>Linked journal</dt><dd><button class="tl-link" data-goto="' + esc(journal.linkedJournalId) + '">' + esc(journal.linkedJournalId) + '</button></dd></div>' : "") +
+      (journal.reversedBy ? '<div><dt>Reversed by</dt><dd><button class="tl-link" data-goto="' + esc(journal.reversedBy) + '">' + esc(journal.reversedBy) + '</button></dd></div>' : "") +
+      (journal.memo ? '<div><dt>Memo</dt><dd>' + esc(journal.memo) + '</dd></div>' : "") +
+      '</dl>' +
+      (postings
+        ? '<table class="tl-postings"><thead><tr><th>Account</th><th>Asset</th><th>Amount</th></tr></thead><tbody>' + postings + '</tbody></table>'
+        : '<p class="tl-note">Genesis allocation carries no postings; it anchors the chain.</p>') +
+      '<h3>EchoProof receipt <span class="tl-meta">\u2014 recomputed just now</span></h3>' +
+      '<dl class="tl-kv tl-hashes">' +
+      '<div><dt>beforeHash</dt><dd><code title="' + esc(receipt.beforeHash) + '">' + esc(short(receipt.beforeHash)) + '</code></dd></div>' +
+      '<div><dt>afterHash</dt><dd><code title="' + esc(receipt.afterHash) + '">' + esc(short(receipt.afterHash)) + '</code></dd></div>' +
+      '<div><dt>payloadHash</dt><dd><code title="' + esc(receipt.payloadHash) + '">' + esc(short(receipt.payloadHash)) + '</code></dd></div>' +
+      '<div><dt>stamp</dt><dd>' + esc(receipt.stamp) + '</dd></div>' +
+      '</dl><ul class="tl-checks">' + checks + '</ul>' +
+      '<p class="tl-note">' + (verification.ok
+        ? "All hashes recomputed and the prevHash link verified."
+        : "VERIFICATION FAILED \u2014 the chain may have been tampered with.") + '</p>';
+    receiptEl.querySelectorAll("[data-goto]").forEach((b) => {
+      b.addEventListener("click", () => selectJournal(b.getAttribute("data-goto"), true));
+    });
+  }
+
+  function renderChainPill() {
+    const pill = $("chain-pill");
+    let ok = false, count = 0;
+    try { ok = core.verifyChain(); count = core.journalCount + 1; } catch { ok = false; }
+    pill.textContent = ok ? ("chain \u2713 " + count + " receipts") : "chain \u2717 FAILED";
+    if (ok) pill.classList.remove("bad"); else pill.classList.add("bad");
+  }
+
+  function refreshAll(statusMsg) {
+    rebuildCubes();
+    renderList();
+    renderReceipt();
+    renderChainPill();
+    $("tick-line").textContent = "tick " + core.tick + " \u00B7 " + core.journalCount + " journals";
+    if (statusMsg) setStatus(statusMsg);
+  }
+
+  function selectJournal(journalId, scroll) {
+    if (ui.focusedId && journalId !== ui.focusedId) exitFocus();
+    ui.selectedId = journalId;
+    paintSelection();
+    renderList();
+    renderReceipt();
+    if (scroll) {
+      const row = listEl.querySelector('[data-jid="' + journalId.replace(/"/g, "") + '"]');
+      if (row) { try { row.scrollIntoView({ block: "nearest", behavior: "smooth" }); } catch { /* noop */ } }
+    }
+  }
+
+  /* ---------- lifecycle controls ---------- */
+  const needSelection = () => {
+    if (!ui.selectedId) { setStatus("Select a journal first (click a cube or a row)."); return null; }
+    return ui.selectedId;
+  };
+  $("do-reverse").addEventListener("click", () => {
+    const id = needSelection(); if (!id) return;
+    try {
+      const res = core.reverse(id, { actor: "audit-console" });
+      refreshAll(res.replayed
+        ? "Replay: " + id + " was already reversed by " + res.journal.journalId + " (idempotent, no duplicate)."
+        : "Reversed " + id + " \u2192 compensating journal " + res.journal.journalId + ". History untouched.");
+    } catch (err) { setStatus("Reverse failed closed: " + (err && err.message)); }
+  });
+  $("do-cancel").addEventListener("click", () => {
+    const id = needSelection(); if (!id) return;
+    try {
+      const res = core.cancel(id, { actor: "audit-console" });
+      refreshAll(res.replayed
+        ? "Replay: cancel of " + id + " already recorded as " + res.journal.journalId + "."
+        : "Cancelled pending " + id + " \u2192 compensating journal " + res.journal.journalId + ".");
+    } catch (err) { setStatus("Cancel failed closed: " + (err && err.message)); }
+  });
+  $("do-settle").addEventListener("click", () => {
+    const id = needSelection(); if (!id) return;
+    try { core.settle(id, { actor: "audit-console" }); refreshAll("Settled " + id + "."); }
+    catch (err) { setStatus("Settle failed: " + (err && err.message)); }
+  });
+  $("verify").addEventListener("click", () => {
+    let report;
+    try { report = core.verifyChainReport(); }
+    catch (err) { setStatus("Chain verification error: " + (err && err.message)); return; }
+    const bad = report.filter((r) => !r.ok);
+    renderChainPill();
+    setStatus(bad.length === 0
+      ? "Chain integrity verified: " + report.length + " receipts, every hash recomputed, every prevHash link intact."
+      : "Chain FAILED at " + bad.map((r) => r.journalId).join(", ") + " (" + bad[0].failures.join(", ") + ").");
+  });
+  $("advance").addEventListener("click", () => {
+    suppressRefresh += 1;
+    let failed = null;
+    try {
+      for (let i = 0; i < 1005; i += 1) {
+        core.execute({ action: "send", from: "sys:treasury", to: "sys:faucet", amountFluff: 1, idempotencyKey: "audit-tick-" + core.tick + "-" + i });
+      }
+    } catch (err) { failed = err; }
+    suppressRefresh -= 1;
+    if (failed) { setStatus("Advance failed: " + (failed && failed.message)); return; }
+    refreshAll("Advanced 1005 ticks (now tick " + core.tick + "). Journals older than " + TOKEN_CONFIG.REVERSE_WINDOW_TICKS + " ticks can no longer be reversed \u2014 try reversing one.");
+  });
+  $("minimize").addEventListener("click", () => { $("panel").hidden = true; $("chip").hidden = false; });
+  $("chip").addEventListener("click", () => { $("panel").hidden = false; $("chip").hidden = true; });
+
+  /* ---------- filters ---------- */
+  const fAction = $("f-action"), fAccount = $("f-account"), fAsset = $("f-asset"), fState = $("f-state");
+  const applyFilters = () => {
+    ui.filters = { action: fAction.value, account: fAccount.value, asset: fAsset.value, state: fState.value };
+    renderList();
+  };
+  [fAction, fAccount, fAsset, fState].forEach((el) => {
+    el.addEventListener("input", applyFilters);
+    el.addEventListener("change", applyFilters);
+  });
+
+  /* ---------- boot ---------- */
+  initThree();
+  refreshAll();
+  setStatus("Ready. Simulated ledger \u2014 no real value moves here.");
+  const offReceipt = facade.on("receipt", () => { if (suppressRefresh === 0) refreshAll(); });
+
+  try {
+    if (new URLSearchParams(window.location.search).get("selftest") === "1") {
+      const box = $("selftest");
+      box.hidden = false;
+      const rows = runTokenLifecycleSelfTest(facade);
+      const passed = rows.filter((r) => r.ok).length;
+      box.innerHTML = '<h2>Self-test \u2014 ' + passed + "/" + rows.length + ' passed</h2><div class="tl-selftest-rows">' +
+        rows.map((r) => '<div class="tl-selftest-row ' + (r.ok ? "ok" : "bad") + '">' + (r.ok ? "\u2713" : "\u2717") + " " + esc(r.name) + (r.detail ? " \u2014 " + esc(r.detail) : "") + '</div>').join("") +
+        '</div>';
+    }
+  } catch { /* self-test is best-effort */ }
+
+  return {
+    facade,
+    refresh: () => refreshAll(),
+    select: selectJournal,
+    destroy() { offReceipt(); if (three) three.destroy(); root.innerHTML = ""; },
+  };
+}
