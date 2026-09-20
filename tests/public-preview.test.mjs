@@ -1,0 +1,29 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtemp, mkdir, writeFile, rm} from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import {createPreviewServer} from '../scripts/public-preview.mjs';
+
+test('public preview allowlist, read-only routes, context and live revisions', async t=>{
+  const root=await mkdtemp(path.join(os.tmpdir(),'matumbo-preview-test-'));
+  await mkdir(path.join(root,'src'));
+  await writeFile(path.join(root,'index.html'),'<body><a href="?feature=contracts">Contracts</a><a href="?feature=t402">T402</a><a href="?panel=runtime-sync&amp;world=demo">Runtime Sync</a></body>');
+  await writeFile(path.join(root,'src','main.js'),'export const revision=1;');
+  await writeFile(path.join(root,'.env'),'PRIVATE');
+  const server=await createPreviewServer(root);
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  t.after(async()=>{await new Promise(resolve=>server.close(resolve));await rm(root,{recursive:true,force:true});});
+  const base=`http://127.0.0.1:${server.address().port}`;
+  const rootResponse=await fetch(base); assert.equal(rootResponse.status,200);
+  assert.match(await rootResponse.text(),/__preview\/client.js/);
+  for(const p of ['/.env','/.git/config','/runtime/merge4/server.js','/scripts/public-preview.mjs','/src/%2e%2e%5c.env','/src/../.env','/src/not.js','/api/world'])assert.equal((await fetch(base+p)).status,404,p);
+  assert.equal((await fetch(base+'/context',{method:'POST'})).status,405);
+  const before=await (await fetch(base+'/context.json')).json();
+  assert.deepEqual(before.features,['contracts','t402','runtime-sync']); assert.ok(!JSON.stringify(before).includes(root));
+  assert.match(await (await fetch(base+'/context')).text(),/Source revision/);
+  await writeFile(path.join(root,'src','main.js'),'export const revision=2;');
+  await new Promise(resolve=>setTimeout(resolve,1600));
+  const after=await (await fetch(base+'/__preview/revision')).json();
+  assert.notEqual(before.revision,after.revision);
+});

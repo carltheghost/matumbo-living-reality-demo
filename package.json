@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
-    "test:token": "node --test tests/token-*.test.mjs",
     "test:release": "node --test tests/release-boundaries.test.mjs",
-    "check": "node --check src/main.js"
+    "check": "node --check src/main.js",
+    "test:token": "node --test tests/token-*.test.mjs"
   }
 }

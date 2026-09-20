@@ -5,9 +5,16 @@ if(resolveCityRoute(location.search).status==='rejected'){
   const safeUrl=new URL(location.href);safeUrl.search='?feature=reality-lens';history.replaceState(null,'',safeUrl);
 }
 import { mountCenteredSurfaces } from './render/centered-surfaces.js?v=20260918-compact-chip';
-import { mountTokenTicker } from './render/token-ticker.js?v=20260920-ticker1';
 import { createImmersiveSession } from './render/immersive-session.js';
 import { createMediaPreview } from './render/media-preview.js';
+import { mountTokenTicker } from './render/token-ticker.js?v=20260920-ticker1';
+// Hibernation vault console — mounts the vault glass-cube chip.
+// Guarded dynamic import: token-vault-ui.js is mid-flight (its imports don't
+// match token.js yet); a static import would fail the whole module graph and
+// red-banner the boot. Mounts automatically once the lane lands a consistent graph.
+import('./domains/token-vault-ui.js').catch(() => {});
+// Token transfers console — side-effect import; mounts the transfers glass-cube chip.
+import './domains/token-transfers-ui.js?v=20260920-token-transfers1';
 import { initMobilePanelManager } from './render/mobile-panel-manager.js';
 import { mountPhotoMascot } from './render/photo-mascot-mount.js';
 import { createPersonStudio } from './render/person-studio.js?v=20260918-avatar-chess';
@@ -19,13 +26,6 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { createLivingRealityProjection } from './core/demo-projection.js?v=20260918-muse2';
-// Hibernation vault console — mounts the vault glass-cube chip.
-// Guarded dynamic import: token-vault-ui.js is mid-flight (its imports don't
-// match token.js yet); a static import would fail the whole module graph and
-// red-banner the boot. Mounts automatically once the lane lands a consistent graph.
-import('./domains/token-vault-ui.js').catch(() => {});
-// Token transfers console — side-effect import; mounts the transfers glass-cube chip.
-import './domains/token-transfers-ui.js?v=20260920-token-transfers1';
 import { resolveDefaultFeature } from './core/default-landing.js';
 import { createDeviceProjection, readBrowserProjectionPreferences } from './projections/device-projection.js';
 import { createDistributionExplorer } from './render/distribution-explorer.js';
@@ -100,12 +100,13 @@ import { BOT_PLAZA_CONSOLE_SOURCE, createBotPlazaConsole } from './render/bot-pl
 import { createBotRegistry, createBotRuntime } from './domains/bot-plaza.js?v=20260918-botplaza1';
 import { createProposalQueue } from './domains/bot-plaza.js?v=20260918-ctr2';
 import { createOutcomeContracts } from './domains/outcome-contracts.js?v=20260918-ctr2';
+import { createContractLedger } from './domains/contract-ledger.js?v=20260920-cflow1';
+import { createContractFlow } from './domains/contract-flow.js?v=20260920-cflow1';
 import { mountBotPresence } from './render/bot-presence.js?v=20260918-botpresence1';
 import { CONTRACT_ATELIER_CONSOLE_SOURCE, createContractAtelierConsole } from './render/contract-atelier.js?v=20260918-ctr1';
 import { LUNA_CONSOLE_SOURCE, createLunaCompanionConsole } from './render/luna-companion.js?v=20260918-luna1';
 import { WARDROBE_ATELIER_CONSOLE_SOURCE, createWardrobeAtelierConsole } from './render/wardrobe-atelier.js?v=20260918-wdr1';
 import { WHITE_PAPER_CONSOLE_SOURCE, createWhitePaperConsole } from './render/white-paper.js?v=20260918-wp1';
-
 import { GESTURE_LENS_CONSOLE_SOURCE, createGestureLensConsole } from './render/gesture-lens.js?v=20260918-gl1';
 import { createHandLensSession } from './render/hand-session.js?v=20260920-hand-lens';
 import { createStoryModeConsole } from './render/story-mode.js?v=20260920-story1';
@@ -123,7 +124,7 @@ import { createUnavailableMultiSportEvents, fetchMultiSportEventDetail, fetchMul
 import { DEVICE_PROJECTION_CONSOLE_SOURCE, createDeviceProjectionConsole } from './render/device-projection.js?v=20260827-device1';
 import { ASSET_MARKET_CONSOLE_SOURCE, createAssetMarketConsole } from './render/asset-market.js?v=20260828-asset-market1';
 import { createUnavailableAssetMarketEvidence, fetchAssetMarketEvidence } from './domains/asset-market.js?v=20260828-asset-market1';
-import { POPULATION_CONTEXT_SOURCE, createUnavailablePopulationContext, fetchPopulationContext } from './domains/population-context.js?v=20260828-population-context1'; import './domains/token-transfers-ui.js?v=20260920-token-transfers1';
+import { POPULATION_CONTEXT_SOURCE, createUnavailablePopulationContext, fetchPopulationContext } from './domains/population-context.js?v=20260828-population-context1';
 import { WEB_AI_CONSOLE_SOURCE, createWebAiConsole } from './render/web-ai.js';
 
 const runtimeStatus = globalThis.__MATUMBO_RUNTIME__;
@@ -3307,6 +3308,34 @@ botPlazaRuntime.getBus().subscribe((entry) => {
 // player, stake rehearsal credits, and resolve it with TRUE/FALSE, AND, OR,
 // or IF/ELSE logic. No wallet, chain, custody, settlement, wagering, or real
 // money exists.
+// Contract mission part 4: the Reality Lens Ω contract flow. ESPN scoreboard
+// (read-only) → auto-drafts → optional read-only Kalshi/Polymarket odds →
+// the existing Contract Atelier review queue → approval (freezes the odds
+// quote) → the shared outcome desk → lifecycle ledger → deterministic
+// grading → claimable forever. Simulated TUMBO points only: no wallet,
+// signing, custody, orders, settlement, or mainnet anywhere in the flow.
+// Feed failures never damage manual Contract Atelier operation: a failed
+// feed yields zero drafts and the queue stays exactly as it was.
+const contractLifecycleLedger = createContractLedger();
+const contractFlow = createContractFlow({
+  fetchEspnRecords: async () => {
+    try {
+      const payload = await fetchMultiSportEvents();
+      return Array.isArray(payload?.records) ? payload.records : [];
+    } catch {
+      return [];
+    }
+  },
+  outcomeDesk: sharedOutcomeDesk,
+  proposalQueue: contractProposalQueue,
+  ledger: contractLifecycleLedger,
+  // No network handle is passed on purpose: the release boundary keeps
+  // src/main.js network-free, so the flow resolves the read-only odds
+  // retrieval lazily inside its own domain module (read-only public GETs,
+  // no keys).
+});
+window.__TUMBO_CONTRACT_LEDGER__ = contractLifecycleLedger;
+window.__TUMBO_CONTRACT_FLOW__ = contractFlow;
 contractAtelierConsole = createContractAtelierConsole({
   documentRoot: document,
   // Award NFTs from outcome contracts are minted as Frozen Relics from the
@@ -3315,6 +3344,11 @@ contractAtelierConsole = createContractAtelierConsole({
   // Part 3b: the shared bot-proposal queue and the shared outcome desk.
   proposalQueue: contractProposalQueue,
   outcomeDesk: sharedOutcomeDesk,
+  // Part 4: the contract flow seam. Approval freezes the attached odds quote
+  // into the lifecycle ledger; the scan button drafts upcoming ESPN games
+  // into the same review queue Tumbo already approves from.
+  onContractApproved: ({ contract, proposal }) => contractFlow.handleContractApproved({ contract, proposal }),
+  onScanRequested: () => contractFlow.scanAndQueue(),
   onSelect: (snapshot) => {
     const organ = organs.find((candidate) => candidate.id === 'contract');
     if (organ) focusOrgan(organ, `contract-atelier-select:${snapshot.selectedId}`);
@@ -7341,7 +7375,7 @@ projectionSession = createProjectionSession({
   // cannot inspect amounts or initiate a transfer, signing, custody, or flow.
   getAssetTokenSnapshot: () => paycoreConsole?.getSnapshot?.(),
   getT402Snapshot: () => t402Console?.getSnapshot?.(),
-  getNeuralMeshSnapshot: () => neuralMeshConsole?.getSnapshot?.(),
+  getAgentBlockSnapshot: () => neuralMeshConsole?.getSnapshot?.(),
   // Picture Matter retains local fixture content and metadata source details.
   // The session reads aggregate metadata-only state and cannot request, render,
   // store, publish, or identify from an image.

@@ -1,6 +1,7 @@
 import {createPersonStudioOwner,STUDIO_OUTFITS,STUDIO_ROOMS,STUDIO_COMPANIONS} from '../domains/person-studio.js';
 import {buildPersonStudioScene} from './person-studio-scene.js?v=20260918-avatar-chess';
-import {AVATAR_FACE_CHOICES,AVATAR_FACE_MAX_DIM,AVATAR_FLUFFY_BODY_TEMPLATE_URL,buildChibi,loadAvatarFaceChoice,resolveAvatarFaceUrl,saveAvatarFace,saveAvatarFaceChoice} from '../domains/avatar-style.js';
+import {AVATAR_FACE_CHOICES,AVATAR_FACE_MAX_DIM,AVATAR_FLUFFY_BODY_TEMPLATE_URL,avatarFaceChoiceToMascotLook,buildChibi,loadAvatarFaceChoice,resolveAvatarFaceUrl,saveAvatarFace,saveAvatarFaceChoice} from '../domains/avatar-style.js';
+import {setMascotLook} from './photo-mascot-set.js';
 
 export function createPersonStudio({THREE,renderer,scene,camera,controls,world,targets,documentRoot=document,onNavigate,onFrame,onIntent,reducedMotion=false}) {
   let storage=null;try{storage=globalThis.localStorage;}catch{}
@@ -82,6 +83,18 @@ export function createPersonStudio({THREE,renderer,scene,camera,controls,world,t
   function chooseFace(id){
     if(!saveAvatarFaceChoice(storage,id)){announce('Could not save the face choice on this browser.');return;}
     spatial.setAvatarFace(resolveAvatarFaceUrl(storage));
+    // A photo-mascot look also becomes the 3D mascot's look: persist it and
+    // notify a live mascot presence so it swaps without reopening.
+    const mascotLook=avatarFaceChoiceToMascotLook(id);
+    if(mascotLook){
+      try{setMascotLook(mascotLook);}catch{/* non-fatal: the mascot falls back to its own default */}
+      try{
+        const root=typeof window!=='undefined'?window:(typeof globalThis!=='undefined'?globalThis:null);
+        if(root&&typeof root.dispatchEvent==='function'&&typeof CustomEvent==='function'){
+          root.dispatchEvent(new CustomEvent('tumbo:mascot-look',{detail:{look:mascotLook}}));
+        }
+      }catch{/* non-fatal */}
+    }
     refreshFacePressed();
     const choice=AVATAR_FACE_CHOICES.find(c=>c.id===id);
     announce(`${choice?choice.label:'Face'} selected · your avatar and chess pieces wear it now.`);
