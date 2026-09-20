@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+
 import {mountCityJourney,resolveCityRoute} from './render/city-journey.js';
 // Reject mixed/unknown City URLs before legacy route bootstrap can act on them.
 if(resolveCityRoute(location.search).status==='rejected'){
@@ -17,6 +18,8 @@ import { MANIPULATE_MODES } from './render/manipulate-controls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { ensureTumboTokenFacade } from './domains/token.js';
+import { TOKEN_BLOCK_CONSOLE_SOURCE, createTokenBlock } from './render/token-block.js';
 import { createLivingRealityProjection } from './core/demo-projection.js?v=20260918-muse2';
 import { resolveDefaultFeature } from './core/default-landing.js';
 import { createDeviceProjection, readBrowserProjectionPreferences } from './projections/device-projection.js';
@@ -935,6 +938,48 @@ document.getElementById('block-world-close')?.addEventListener('click', () => {
   setBlockWorldFocusMode(false);
 });
 window.__TUMBO_BLOCK_WORLD__ = blockWorld;
+// TUMBO Token glass block (token-block-ui, workstream 6 of 14): one
+// translucent blue glass cube in the block world. Click selects, hover peeks
+// the simulated balance, double-click / double-tap travels into the wallet
+// block world (balances, idempotency-keyed sends, history, vault). Draggable
+// in full 3D with its position remembered; the panel minimizes to a small
+// translucent chip. Simulation-first: TUMBO-SIM points only, every surface
+// labeled simulated — no custody, signing, settlement, or real-money path.
+let tokenBlock = null;
+try {
+  ensureTumboTokenFacade();
+  tokenBlock = createTokenBlock({
+    three: THREE,
+    renderer,
+    camera,
+    controls,
+    parent: world,
+    documentRoot: document,
+    isMobile,
+    reducedMotion,
+    onDragStateChange: (dragging) => { controls.enabled = !dragging; },
+    onIntent: (snapshot) => projectionBridge.emitIntent(
+      'projection.token-block',
+      snapshot?.source ?? TOKEN_BLOCK_CONSOLE_SOURCE,
+      Object.freeze({
+        action: snapshot?.action ?? 'token-block',
+        ...(snapshot?.detail ?? {}),
+        simulation: true,
+        localOnly: true,
+        externalNetwork: false,
+        externalTransfer: false,
+        executable: false,
+        custody: false,
+        signing: false,
+        settlement: false,
+      }),
+    ),
+  });
+} catch (tokenBlockError) {
+  try { console.warn('[tumbo-token-block] mount skipped:', tokenBlockError?.message ?? tokenBlockError); } catch {}
+}
+window.__TUMBO_TOKEN_BLOCK__ = tokenBlock;
+
 // Free 3D manipulation toolbar (additive, 2026-09-18). Touch-first: Tumbo has
 // no mouse, so these are large touch buttons, not just keyboard shortcuts.
 // Every handler delegates to the already-mounted Block World layer.
