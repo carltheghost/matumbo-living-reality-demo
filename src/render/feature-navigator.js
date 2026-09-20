@@ -143,7 +143,7 @@ export const FEATURE_DEFINITIONS = Object.freeze([
     description: "Walk a fictional offer, route, and escrow rehearsal through a visible local sequence.",
     boundary: "Live value movement, custody, signing, release, and settlement are explicitly denied.",
   }),
-  Object.freeze({     id: "agent",     label: "Agent",     kicker: "guide · design · bots · mesh",     focusOrganId: "bots",     sources: ["skynet-neural-mesh", "agent", "agent", "agent"],     description: "Open the consolidated agent block: Luna guide, Muse design companion, Bot Plaza registry, and Neural Mesh advisory graph.",     boundary: "Agents are advisory fixtures. They have no autonomous execution, provider, or tool authority. Bot Plaza contracts are fictional local rehearsals; no wallet, chain, custody, settlement, or wagering is available.",   }),
+  Object.freeze({     id: "agent",     label: "Agent",     kicker: "guide · design · bots · mesh",     focusOrganId: "bots",     sources: ["skynet-neural-mesh", "agent"],     description: "Open the consolidated agent block: Luna guide, Muse design companion, Bot Plaza registry, and Neural Mesh advisory graph.",     boundary: "Agents are advisory fixtures. They have no autonomous execution, provider, or tool authority. Bot Plaza contracts are fictional local rehearsals; no wallet, chain, custody, settlement, or wagering is available.",   }),
   Object.freeze({
     id: "picture-matter",
     label: "Picture Matter",
@@ -303,13 +303,13 @@ export const FEATURE_HANDOFF_LINKS = Object.freeze({
   "asset-token": Object.freeze(["asset-market", "launch-distribution", "ledger"]),
   "asset-market": Object.freeze(["asset-token", "contracts", "ledger"]),
   "launch-distribution": Object.freeze(["asset-token", "asset-market", "white-paper"]),
-  "social-explorer": Object.freeze(["rooms", "agent", "agent"]),
+  "social-explorer": Object.freeze(["rooms", "agent"]),
   paycore: Object.freeze(["ledger", "t402", "contracts"]),
   contracts: Object.freeze(["contract-atelier", "paycore", "ledger"]),
   "contract-atelier": Object.freeze(["contracts", "paycore", "academy"]),
   ledger: Object.freeze(["paycore", "t402", "contracts"]),
   t402: Object.freeze(["paycore", "ledger", "gateway"]),
-  "agent": Object.freeze(["agent", "rooms", "social-explorer"]),
+  "agent": Object.freeze(["rooms", "social-explorer"]),
   "picture-matter": Object.freeze(["nft-atelier", "white-paper", "reality-lens"]),
   "nft-atelier": Object.freeze(["picture-matter", "agent", "asset-market"]),
   
@@ -422,18 +422,6 @@ const FEATURE_SURFACE_ROUTES = Object.freeze({
     Object.freeze(["FICTIONAL MINT", "name a piece · deterministic local id"]),
     Object.freeze(["PROVENANCE", "designed → minted → burned trail"]),
     Object.freeze(["NO CHAIN", "no wallet · no transfer · no sale"]),
-  ]),
-  
-    
-    
-  ]),
-  
-    
-    
-  ]),
-  
-    
-    
   ]),
   "wardrobe-atelier": Object.freeze([
     Object.freeze(["BROWSE", "four starter looks · design your own"]),

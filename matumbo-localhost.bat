@@ -83,7 +83,7 @@ start http://localhost:8080/index.html
 start http://localhost:8181/paper.html
 start http://localhost:8282/index.html?feature=nft-atelier
 start http://localhost:8383/index.html?feature=person
-start http://localhost:8484/index.html?feature=luna-companion
+start http://localhost:8484/index.html?feature=agent
 start http://localhost:8585/index.html?feature=contract-atelier
 exit /b 0
 
@@ -94,7 +94,7 @@ echo   8080  full 3D demo
 echo   8181  white paper
 echo   8282  NFT Atelier
 echo   8383  Person
-echo   8484  Luna Companion
+echo   8484  Agent
 echo   8585  Contract Atelier
 echo  -----------------------------------------
 echo   [1-6] open a view   [P] pull latest
@@ -107,7 +107,7 @@ if %errorlevel%==9 call :status & goto :menu
 if %errorlevel%==8 call :restart & goto :menu
 if %errorlevel%==7 call :dopull & goto :menu
 if %errorlevel%==6 start http://localhost:8585/index.html?feature=contract-atelier & goto :menu
-if %errorlevel%==5 start http://localhost:8484/index.html?feature=luna-companion & goto :menu
+if %errorlevel%==5 start http://localhost:8484/index.html?feature=agent & goto :menu
 if %errorlevel%==4 start http://localhost:8383/index.html?feature=person & goto :menu
 if %errorlevel%==3 start http://localhost:8282/index.html?feature=nft-atelier & goto :menu
 if %errorlevel%==2 start http://localhost:8181/paper.html & goto :menu

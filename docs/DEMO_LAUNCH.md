@@ -201,11 +201,11 @@ then replay or reset the sequence. It never creates custody, signing, release,
 transfer, settlement, or a payment rail. A shareable local route is
 `/?feature=t402`.
 
-**Neural Mesh / Agents** opens the advisory graph. The Control Tower → Oracle
+**Agent** opens the advisory graph. The Control Tower → Oracle
 relationship, declared ancestry, intent, and proposal are selectable records;
 replay follows their local links and reset clears the in-memory trace. These
 fixtures have no provider, tool, autonomous execution, or identity authority.
-Use `/?feature=neural-mesh` to open it directly.
+Use `/?feature=agent` to open it directly.
 
 **Picture Matter** opens the word → statement → provenance chain. Select the
 local `reality` word-object, its interpretation, or either provenance link to

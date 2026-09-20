@@ -79,21 +79,17 @@ import { PAYCORE_CONSOLE_SOURCE, createPaycoreConsole } from './render/paycore.j
 import { T402_SOURCE } from './domains/t402.js?v=20260826-t4021';
 import { T402_CONSOLE_SOURCE, createT402Console } from './render/t402.js?v=20260826-t4021';
 import { NEURAL_MESH_SOURCE } from './domains/neural-mesh.js?v=20260827-neural1';
-import { NEURAL_MESH_CONSOLE_SOURCE, createNeuralMeshConsole } from './render/neural-mesh.js?v=20260827-neural1';
+import { AGENT_BLOCK_SOURCE, createAgentBlock } from './render/agent.js?v=20260920-agent1';
 import { MATTER_FORGE_SOURCE } from './domains/matter-forge.js?v=20260827-picture1';
 import { PICTURE_MATTER_METADATA_SOURCE, createUnavailablePictureMatterMetadata, fetchPictureMatterMetadata } from './domains/picture-matter-metadata.js?v=20260828-picture-metadata1';
 import { PICTURE_MATTER_CONSOLE_SOURCE, createPictureMatterConsole } from './render/picture-matter.js?v=20260828-picture-metadata1';
 import { NFT_ATELIER_CONSOLE_SOURCE, createNftAtelierConsole } from './render/nft-atelier.js?v=20260918-nft1';
 import { createFrozenRelics } from './domains/frozen-relics.js?v=20260918-fr1';
 import { FROZEN_RELICS_CONSOLE_SOURCE, createFrozenRelicsConsole } from './render/frozen-relics.js?v=20260918-fr1';
-import { MUSE_AGENT_CONSOLE_SOURCE, createMuseAgentConsole } from './render/muse-agent.js?v=20260918-muse1';
-import { BOT_PLAZA_CONSOLE_SOURCE, createBotPlazaConsole } from './render/bot-plaza.js?v=20260918-botplaza1';
 import { createBotRegistry, createBotRuntime } from './domains/bot-plaza.js?v=20260918-botplaza1';
 import { createProposalQueue } from './domains/bot-plaza.js?v=20260918-ctr2';
 import { createOutcomeContracts } from './domains/outcome-contracts.js?v=20260918-ctr2';
-import { mountBotPresence } from './render/bot-presence.js?v=20260918-botpresence1';
 import { CONTRACT_ATELIER_CONSOLE_SOURCE, createContractAtelierConsole } from './render/contract-atelier.js?v=20260918-ctr1';
-import { LUNA_CONSOLE_SOURCE, createLunaCompanionConsole } from './render/luna-companion.js?v=20260918-luna1';
 import { WARDROBE_ATELIER_CONSOLE_SOURCE, createWardrobeAtelierConsole } from './render/wardrobe-atelier.js?v=20260918-wdr1';
 import { WHITE_PAPER_CONSOLE_SOURCE, createWhitePaperConsole } from './render/white-paper.js?v=20260918-wp1';
 import { GESTURE_LENS_CONSOLE_SOURCE, createGestureLensConsole } from './render/gesture-lens.js?v=20260918-gl1';
@@ -164,23 +160,23 @@ let contractsMarkets = null;
 let protocolEvidence = null;
 let paycoreConsole = null;
 let t402Console = null;
-let neuralMeshConsole = null;
+let agentBlock = null;
 let pictureMatterConsole = null;
 let pictureMatterMetadata = createUnavailablePictureMatterMetadata();
 let nftAtelierConsole = null;
 let frozenRelicsVault = null;
 let frozenRelicsConsole = null;
-let museAgentConsole = null;
+
 let botPlazaRegistry = null;
 let botPlazaRuntime = null;
-let botPlazaConsole = null;
+
 let storyModeConsole = null;
-let botPresence = null;
+
 let contractProposalQueue = null;
 let sharedOutcomeDesk = null;
 const recentProposalTitles = new Map();
 let contractAtelierConsole = null;
-let lunaCompanionConsole = null;
+
 let wardrobeAtelierConsole = null;
 let whitePaperConsole = null;
 let gestureLensConsole = null;
@@ -218,11 +214,9 @@ const PORTAL_CUBE_SUBSTRATE_FEATURES = new Set([
   'contracts',
   'paycore',
   't402',
-  'neural-mesh',
+  'agent',
   'picture-matter',
   'nft-atelier',
-  'muse-agent',
-  'bot-plaza',
   'contract-atelier',
   'ledger',
   'gateway',
@@ -676,13 +670,10 @@ blockWorld = createBlockWorldLayer({
       contracts: () => contractsMarkets?.open(),
       paycore: () => paycoreConsole?.open(),
       t402: () => t402Console?.open(),
-      'neural-mesh': () => neuralMeshConsole?.open(),
+      agent: () => agentBlock?.open(),
       'picture-matter': () => pictureMatterConsole?.open(),
       'nft-atelier': () => nftAtelierConsole?.open(),
-      'muse-agent': () => museAgentConsole?.open(),
-      'bot-plaza': () => botPlazaConsole?.open(),
       'contract-atelier': () => contractAtelierConsole?.open(),
-      'luna-companion': () => lunaCompanionConsole?.open(),
       'wardrobe-atelier': () => wardrobeAtelierConsole?.open(),
       ledger: () => ledgerProofConsole?.open(),
       'sports-events': () => {
@@ -2794,65 +2785,9 @@ t402Console = createT402Console({
   })),
 });
 window.__TUMBO_T402__ = t402Console;
-// Neural Mesh is an inspectable advisory graph. It makes Control Tower,
-// Oracle, intent, proposal, relationship, and ancestry links clickable while
-// keeping autonomous execution, providers, tools, and persistence disabled.
-neuralMeshConsole = createNeuralMeshConsole({
-  documentRoot: document,
-  projection: livingRealityWorld,
-  onSelect: (snapshot) => {
-    const organ = organs.find((candidate) => candidate.id === 'bots');
-    if (organ) focusOrgan(organ, `neural-select:${snapshot.recordId}`);
-    projectionBridge.emitIntent('projection.select-neural-record', `${NEURAL_MESH_CONSOLE_SOURCE}:${snapshot.recordId}`, Object.freeze({
-      action: snapshot.action,
-      recordId: snapshot.recordId,
-      recordType: snapshot.recordType,
-      method: snapshot.method,
-      simulation: true,
-      advisoryOnly: true,
-      localOnly: true,
-      externalNetwork: false,
-      providerAccess: false,
-      toolAccess: false,
-      autonomousExecution: false,
-      executable: false,
-    }));
-  },
-  onReplay: (snapshot) => projectionBridge.emitIntent('projection.replay-neural-mesh', NEURAL_MESH_CONSOLE_SOURCE, Object.freeze({
-    action: snapshot.action,
-    recordId: snapshot.recordId,
-    recordType: snapshot.recordType,
-    sequence: snapshot.sequence,
-    sequenceTypes: snapshot.sequenceTypes,
-    replayedRecordCount: snapshot.replayedRecordCount,
-    method: snapshot.method,
-    simulation: true,
-    advisoryOnly: true,
-    deterministic: true,
-    localOnly: true,
-    externalNetwork: false,
-    providerAccess: false,
-    toolAccess: false,
-    autonomousExecution: false,
-    executable: false,
-  })),
-  onReset: (snapshot) => projectionBridge.emitIntent('projection.reset-neural-mesh', NEURAL_MESH_CONSOLE_SOURCE, Object.freeze({
-    action: snapshot.action,
-    recordId: snapshot.recordId,
-    recordType: snapshot.recordType,
-    method: snapshot.method,
-    simulation: true,
-    advisoryOnly: true,
-    deterministic: true,
-    localOnly: true,
-    externalNetwork: false,
-    providerAccess: false,
-    toolAccess: false,
-    autonomousExecution: false,
-    executable: false,
-  })),
-});
-window.__TUMBO_NEURAL_MESH__ = neuralMeshConsole;
+// Agent block replaces the four retired consoles (Neural Mesh, Muse Agent,
+// Bot Plaza console, Luna Companion). See the consolidated instantiation below.
+
 // Picture Matter makes the word → statement → provenance seam inspectable in
 // the same projection. It never downloads or renders image bytes, publishes
 // text, or decides truth. The optional public metadata read is explicitly
@@ -3072,61 +3007,7 @@ frozenRelicsConsole = createFrozenRelicsConsole({
   })),
 });
 window.__TUMBO_FROZEN_RELICS__ = frozenRelicsConsole;
-// Muse Agent is the in-world design companion: anyone opening Matumbo meets
-// the agent, adds a local profile (their Muse account tag or another
-// account tag — display names only, no login, no token, no external
-// linking), and composes deterministic local image/avatar designs. Avatar
-// designs dress the Person Studio projection (outfit + hologram tint);
-// image designs are copy-ready briefs. No AI service or network is used.
-museAgentConsole = createMuseAgentConsole({
-  documentRoot: document,
-  onApplyAvatar: (design, snapshot) => {
-    if (design?.outfitId) {
-      try { personStudio?.chooseOutfit?.(design.outfitId); } catch {}
-    }
-    try { personStudio?.setHologramTint?.(design?.hologramTint ?? null, design?.hologramOpacity ?? 0.96); } catch {}
-    projectionBridge.emitIntent('projection.muse-agent-apply-avatar', `${MUSE_AGENT_CONSOLE_SOURCE}:${design?.id ?? 'unknown'}`, Object.freeze({
-      action: snapshot.action,
-      designId: design?.id ?? null,
-      outfitId: design?.outfitId ?? null,
-      hologramTint: design?.hologramTint ?? null,
-      profileName: design?.profileName ?? null,
-      method: snapshot.method,
-      simulation: true,
-      localOnly: true,
-      deterministic: true,
-      executable: false,
-    }));
-  },
-  onGenerate: (snapshot, design) => projectionBridge.emitIntent('projection.muse-agent-generate', `${MUSE_AGENT_CONSOLE_SOURCE}:${design?.id ?? 'draft'}`, Object.freeze({
-    action: snapshot.action,
-    kind: design?.kind ?? null,
-    title: design?.title ?? null,
-    method: snapshot.method,
-    simulation: true,
-    localOnly: true,
-    deterministic: true,
-    executable: false,
-  })),
-  onProfile: (snapshot, detail) => projectionBridge.emitIntent('projection.muse-agent-profile', `${MUSE_AGENT_CONSOLE_SOURCE}:${detail?.profileId ?? 'unknown'}`, Object.freeze({
-    action: snapshot.action,
-    profileId: detail?.profileId ?? null,
-    method: snapshot.method,
-    simulation: true,
-    localOnly: true,
-    externalAuth: false,
-    executable: false,
-  })),
-  onReplay: (snapshot) => projectionBridge.emitIntent('projection.replay-muse-agent', MUSE_AGENT_CONSOLE_SOURCE, Object.freeze({
-    action: snapshot.action,
-    method: snapshot.method,
-    simulation: true,
-    deterministic: true,
-    localOnly: true,
-    executable: false,
-  })),
-});
-window.__TUMBO_MUSE_AGENT__ = museAgentConsole;
+
 // Bot Plaza — bring-your-own-bot plugin layer. The in-world agent is now a
 // bot: anyone can plug in their own bot, build one with the no-code Bot
 // Atelier, chat user↔bot and bot↔bot, and let bots do things in the world
@@ -3152,11 +3033,9 @@ botPlazaRuntime = createBotRuntime({
     // subscribe can skip the duplicate if the runtime also posts it.
     const title = proposal?.title ?? "a new proposal";
     recentProposalTitles.set(botId, { title: String(title), at: Date.now() });
-    botPresence?.speak(botId, `I drafted a contract for your review: ${title}`);
   },
   actionHandlers: {
     'world.announce': ({ botId, params }) => {
-      botPresence?.speak(botId, params.text);
       return { announced: true };
     },
     'world.focus-cube': ({ params }) => {
@@ -3164,12 +3043,12 @@ botPlazaRuntime = createBotRuntime({
       return { cubeId: params.cubeId };
     },
     'world.select-cube': ({ params }) => {
-      blockWorld?.selectBlock?.(params.cubeId, 'bot-plaza');
+      blockWorld?.selectBlock?.(params.cubeId, 'agent');
       botPlazaRuntime.publishWorldEvent('cube.selected', { cubeId: params.cubeId });
       return { cubeId: params.cubeId };
     },
     'world.open-cube': ({ params }) => {
-      if (params.cubeId) blockWorld?.selectBlock?.(params.cubeId, 'bot-plaza');
+      if (params.cubeId) blockWorld?.selectBlock?.(params.cubeId, 'agent');
       blockWorld?.openBlock?.(true);
       botPlazaRuntime.publishWorldEvent('cube.opened', { cubeId: params.cubeId ?? null });
       return { cubeId: params.cubeId ?? null };
@@ -3183,25 +3062,74 @@ botPlazaRuntime = createBotRuntime({
       return { x, y, z };
     },
     'world.launch-feature': ({ params }) => {
-      featureNavigator?.select?.(params.featureId, 'bot-plaza');
+      featureNavigator?.select?.(params.featureId, 'agent');
       return { featureId: params.featureId };
     },
   },
 });
-botPlazaConsole = createBotPlazaConsole({
+// Agent block — the single consolidated surface for the retired Neural Mesh,
+// Muse Agent, Bot Plaza console, and Luna Companion consoles. Four
+// translucent blue glass sections (Guide / Design / Bots / Mesh) in one
+// three.js scene. Advisory fixtures only: no autonomous execution, provider,
+// or tool authority; Bot Plaza contracts remain fictional local rehearsals.
+agentBlock = createAgentBlock({
   documentRoot: document,
+  projection: livingRealityWorld,
   registry: botPlazaRegistry,
   runtime: botPlazaRuntime,
-  onReplay: (snapshot) => projectionBridge.emitIntent('projection.replay-bot-plaza', BOT_PLAZA_CONSOLE_SOURCE, Object.freeze({
+  onSelect: (snapshot) => {
+    const organ = organs.find((candidate) => candidate.id === 'bots');
+    if (organ) focusOrgan(organ, `agent-select:${snapshot.selectedSection}`);
+    projectionBridge.emitIntent('projection.select-agent-section', `${AGENT_BLOCK_SOURCE}:${snapshot.selectedSection}`, Object.freeze({
+      action: snapshot.action,
+      section: snapshot.selectedSection,
+      method: snapshot.method,
+      simulation: true,
+      advisoryOnly: true,
+      localOnly: true,
+      externalNetwork: false,
+      providerAccess: false,
+      toolAccess: false,
+      autonomousExecution: false,
+      executable: false,
+    }));
+  },
+  onReplay: (snapshot) => projectionBridge.emitIntent('projection.replay-agent-block', AGENT_BLOCK_SOURCE, Object.freeze({
     action: snapshot.action,
     method: snapshot.method,
     simulation: true,
+    advisoryOnly: true,
     deterministic: true,
     localOnly: true,
+    externalNetwork: false,
+    providerAccess: false,
+    toolAccess: false,
+    autonomousExecution: false,
+    executable: false,
+  })),
+  onReset: (snapshot) => projectionBridge.emitIntent('projection.reset-agent-block', AGENT_BLOCK_SOURCE, Object.freeze({
+    action: snapshot.action,
+    method: snapshot.method,
+    simulation: true,
+    advisoryOnly: true,
+    deterministic: true,
+    localOnly: true,
+    externalNetwork: false,
+    autonomousExecution: false,
+    executable: false,
+  })),
+  onOpenBot: (botId, snapshot) => projectionBridge.emitIntent('projection.open-agent-bot', `${AGENT_BLOCK_SOURCE}:${botId ?? 'unknown'}`, Object.freeze({
+    action: snapshot.action,
+    botId: botId ?? null,
+    method: snapshot.method,
+    simulation: true,
+    localOnly: true,
+    externalNetwork: false,
     executable: false,
   })),
 });
-window.__TUMBO_BOT_PLAZA__ = { registry: botPlazaRegistry, runtime: botPlazaRuntime, console: botPlazaConsole };
+window.__TUMBO_AGENT_BLOCK__ = agentBlock;
+window.__TUMBO_BOT_PLAZA__ = { registry: botPlazaRegistry, runtime: botPlazaRuntime, console: agentBlock };
 // Story Mode — guided storylines through the world. The planner/player UI is
 // the story-mode console; beat navigation resolves here through the feature
 // navigator (camera focus + local console) or direct camera flights for
@@ -3242,10 +3170,10 @@ function navigateStoryBeat(beat) {
       return;
     }
     if (beat.kind === 'bot') {
-      if (refId && typeof botPlazaConsole?.openWithBot === 'function') {
-        botPlazaConsole.openWithBot(refId);
+      if (refId && typeof agentBlock?.openWithBot === 'function') {
+        agentBlock.openWithBot(refId);
       } else {
-        featureNavigator?.select?.('bot-plaza', 'story-mode');
+        featureNavigator?.select?.('agent', 'story-mode');
       }
     }
   } catch {
@@ -3262,20 +3190,9 @@ storyModeConsole = createStoryModeConsole({
 });
 window.__TUMBO_STORY_MODE__ = storyModeConsole;
 document.getElementById('story-mode-open')?.addEventListener('click', () => storyModeConsole?.open());
-// Bot presences live in the 3D world as glass orbs; bot chatter shows as
-// speech bubbles above them, and clicking one opens the chat.
-botPresence = mountBotPresence({
-  documentRoot: document,
-  three: THREE,
-  scene,
-  camera,
-  container: document.body,
-  getBots: () => botPlazaRegistry.listBots(),
-  getRuntime: () => botPlazaRuntime,
-  onOrbClick: (botId) => {
-    botPlazaConsole?.openWithBot?.(botId);
-  },
-});
+// Bot presences were retired with the agent consolidation; the Bots glass
+// section of the agent block now surfaces the local bot registry instead.
+
 botPlazaRuntime.getBus().subscribe((entry) => {
   if (entry.kind === 'chat' || entry.kind === 'announce' || entry.kind === 'event') {
     if (entry.from !== 'user' && entry.from !== 'world') {
@@ -3285,10 +3202,8 @@ botPlazaRuntime.getBus().subscribe((entry) => {
       const duplicate = entry.kind === 'announce' && recent
         && Date.now() - recent.at < 5000
         && typeof entry.text === 'string' && recent.title && entry.text.includes(recent.title);
-      if (!duplicate) botPresence?.speak(entry.from, entry.text);
     }
   }
-  botPresence?.refresh();
 });
 // Contract Atelier is a standalone fictional market surface: anyone can open
 // a pool, binary, or multi-outcome contract on any topic as the house or a
@@ -3344,35 +3259,7 @@ window.__TUMBO_CONTRACT_ATELIER__ = contractAtelierConsole;
 // explanations, and current-context narration. No AI model, no conversation
 // service, no network, no memory past this page session. Navigation uses the
 // same feature-select path as a click; Luna changes no world state.
-lunaCompanionConsole = createLunaCompanionConsole({
-  documentRoot: document,
-  features: FEATURE_DEFINITIONS,
-  getCurrentFeature: () => featureNavigator?.getActiveId?.() ?? null,
-  onNavigate: (featureId, snapshot) => {
-    featureNavigator?.select(featureId, 'luna');
-    projectionBridge.emitIntent('projection.feature-open', `${LUNA_CONSOLE_SOURCE}:${featureId}`, Object.freeze({
-      action: snapshot.action,
-      featureId,
-      method: 'luna',
-      simulation: true,
-      localOnly: true,
-      network: false,
-      aiModel: false,
-      executable: false,
-    }));
-  },
-  onReplay: (snapshot) => projectionBridge.emitIntent('projection.replay-luna-companion', LUNA_CONSOLE_SOURCE, Object.freeze({
-    action: snapshot.action,
-    method: snapshot.method,
-    simulation: true,
-    deterministic: true,
-    localOnly: true,
-    network: false,
-    aiModel: false,
-    executable: false,
-  })),
-});
-window.__TUMBO_LUNA__ = lunaCompanionConsole;
+
 // Wardrobe Atelier is a fictional local outfit studio: browse and design
 // simulated looks, equip a look. Starter looks that map to a person-studio
 // outfit id also dress the 3D person. No marketplace, ownership, purchase,
@@ -4130,7 +4017,7 @@ function applyProjection(projection){
   const neuralMeshContribution = Array.isArray(projection?.contributions)
     ? projection.contributions.find((contribution) => contribution?.source === NEURAL_MESH_SOURCE)
     : null;
-  if (neuralMeshContribution) neuralMeshConsole?.syncProjection(neuralMeshContribution);
+  if (neuralMeshContribution) agentBlock?.syncProjection(neuralMeshContribution);
   const pictureMatterContribution = Array.isArray(projection?.contributions)
     ? projection.contributions.find((contribution) => contribution?.source === MATTER_FORGE_SOURCE)
     : null;
@@ -4660,12 +4547,12 @@ function openLaunchKit(method = 'button') {
   contractsMarkets?.close();
   paycoreConsole?.close();
   t402Console?.close();
-  neuralMeshConsole?.close();
+  agentBlock?.close();
   pictureMatterConsole?.close();
   nftAtelierConsole?.close();
-  museAgentConsole?.close();
+  agentBlock?.close();
   contractAtelierConsole?.close();
-  lunaCompanionConsole?.close();
+  agentBlock?.close();
   wardrobeAtelierConsole?.close();
   whitePaperConsole?.close();
   gestureLensConsole?.close();
@@ -4749,12 +4636,12 @@ function openWorldEvents(method = 'button', refresh = true, options = {}) {
   contractsMarkets?.close();
   paycoreConsole?.close();
   t402Console?.close();
-  neuralMeshConsole?.close();
+  agentBlock?.close();
   pictureMatterConsole?.close();
   nftAtelierConsole?.close();
-  museAgentConsole?.close();
+  agentBlock?.close();
   contractAtelierConsole?.close();
-  lunaCompanionConsole?.close();
+  agentBlock?.close();
   wardrobeAtelierConsole?.close();
   whitePaperConsole?.close();
   gestureLensConsole?.close();
@@ -4897,12 +4784,12 @@ function openLivePublicStatus(method = 'button', refresh = true, options = {}) {
   contractsMarkets?.close();
   paycoreConsole?.close();
   t402Console?.close();
-  neuralMeshConsole?.close();
+  agentBlock?.close();
   pictureMatterConsole?.close();
   nftAtelierConsole?.close();
-  museAgentConsole?.close();
+  agentBlock?.close();
   contractAtelierConsole?.close();
-  lunaCompanionConsole?.close();
+  agentBlock?.close();
   wardrobeAtelierConsole?.close();
   whitePaperConsole?.close();
   gestureLensConsole?.close();
@@ -5050,12 +4937,12 @@ function openSportsEvents(method = 'button', refresh = true, options = {}) {
   contractsMarkets?.close();
   paycoreConsole?.close();
   t402Console?.close();
-  neuralMeshConsole?.close();
+  agentBlock?.close();
   pictureMatterConsole?.close();
   nftAtelierConsole?.close();
-  museAgentConsole?.close();
+  agentBlock?.close();
   contractAtelierConsole?.close();
-  lunaCompanionConsole?.close();
+  agentBlock?.close();
   wardrobeAtelierConsole?.close();
   whitePaperConsole?.close();
   gestureLensConsole?.close();
@@ -5141,12 +5028,12 @@ function openMultiSportEvents(method = 'button', refresh = true, options = {}) {
   contractsMarkets?.close();
   paycoreConsole?.close();
   t402Console?.close();
-  neuralMeshConsole?.close();
+  agentBlock?.close();
   pictureMatterConsole?.close();
   nftAtelierConsole?.close();
-  museAgentConsole?.close();
+  agentBlock?.close();
   contractAtelierConsole?.close();
-  lunaCompanionConsole?.close();
+  agentBlock?.close();
   wardrobeAtelierConsole?.close();
   whitePaperConsole?.close();
   gestureLensConsole?.close();
@@ -5203,12 +5090,12 @@ function openAssetMarket(method = 'button', refresh = true) {
   contractsMarkets?.close();
   paycoreConsole?.close();
   t402Console?.close();
-  neuralMeshConsole?.close();
+  agentBlock?.close();
   pictureMatterConsole?.close();
   nftAtelierConsole?.close();
-  museAgentConsole?.close();
+  agentBlock?.close();
   contractAtelierConsole?.close();
-  lunaCompanionConsole?.close();
+  agentBlock?.close();
   wardrobeAtelierConsole?.close();
   whitePaperConsole?.close();
   gestureLensConsole?.close();
@@ -6363,7 +6250,7 @@ featureNavigator = createFeatureNavigator({
     personStudio?.close();
     realityAssembly?.close();
     try { botPlazaRuntime?.publishWorldEvent('feature.entered', { featureId: feature?.id ?? null, method: String(method ?? '') }); } catch {}
-    if (feature?.id !== 'bot-plaza') botPlazaConsole?.close();
+    if (feature?.id !== 'agent') agentBlock?.close();
     const genericUserSelection = method === 'button'
       || method === 'keyboard'
       || method === 'feature-navigator'
@@ -6446,12 +6333,12 @@ featureNavigator = createFeatureNavigator({
       contractsMarkets?.close();
       paycoreConsole?.close();
       t402Console?.close();
-      neuralMeshConsole?.close();
+      agentBlock?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
-      museAgentConsole?.close();
+      agentBlock?.close();
       contractAtelierConsole?.close();
-      lunaCompanionConsole?.close();
+      agentBlock?.close();
       wardrobeAtelierConsole?.close();
       whitePaperConsole?.close();
       gestureLensConsole?.close();
@@ -6473,12 +6360,12 @@ featureNavigator = createFeatureNavigator({
       contractsMarkets?.close();
       paycoreConsole?.close();
       t402Console?.close();
-      neuralMeshConsole?.close();
+      agentBlock?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
-      museAgentConsole?.close();
+      agentBlock?.close();
       contractAtelierConsole?.close();
-      lunaCompanionConsole?.close();
+      agentBlock?.close();
       wardrobeAtelierConsole?.close();
       whitePaperConsole?.close();
       gestureLensConsole?.close();
@@ -6504,12 +6391,12 @@ featureNavigator = createFeatureNavigator({
       contractsMarkets?.close();
       paycoreConsole?.close();
       t402Console?.close();
-      neuralMeshConsole?.close();
+      agentBlock?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
-      museAgentConsole?.close();
+      agentBlock?.close();
       contractAtelierConsole?.close();
-      lunaCompanionConsole?.close();
+      agentBlock?.close();
       wardrobeAtelierConsole?.close();
       whitePaperConsole?.close();
       gestureLensConsole?.close();
@@ -6527,12 +6414,12 @@ featureNavigator = createFeatureNavigator({
       contractsMarkets?.close();
       paycoreConsole?.close();
       t402Console?.close();
-      neuralMeshConsole?.close();
+      agentBlock?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
-      museAgentConsole?.close();
+      agentBlock?.close();
       contractAtelierConsole?.close();
-      lunaCompanionConsole?.close();
+      agentBlock?.close();
       wardrobeAtelierConsole?.close();
       whitePaperConsole?.close();
       gestureLensConsole?.close();
@@ -6550,12 +6437,12 @@ featureNavigator = createFeatureNavigator({
       contractsMarkets?.close();
       paycoreConsole?.close();
       t402Console?.close();
-      neuralMeshConsole?.close();
+      agentBlock?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
-      museAgentConsole?.close();
+      agentBlock?.close();
       contractAtelierConsole?.close();
-      lunaCompanionConsole?.close();
+      agentBlock?.close();
       wardrobeAtelierConsole?.close();
       whitePaperConsole?.close();
       gestureLensConsole?.close();
@@ -6571,12 +6458,12 @@ featureNavigator = createFeatureNavigator({
       contractsMarkets?.close();
       paycoreConsole?.close();
       t402Console?.close();
-      neuralMeshConsole?.close();
+      agentBlock?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
-      museAgentConsole?.close();
+      agentBlock?.close();
       contractAtelierConsole?.close();
-      lunaCompanionConsole?.close();
+      agentBlock?.close();
       wardrobeAtelierConsole?.close();
       whitePaperConsole?.close();
       gestureLensConsole?.close();
@@ -6608,12 +6495,12 @@ featureNavigator = createFeatureNavigator({
       contractsMarkets?.close();
       paycoreConsole?.close();
       t402Console?.close();
-      neuralMeshConsole?.close();
+      agentBlock?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
-      museAgentConsole?.close();
+      agentBlock?.close();
       contractAtelierConsole?.close();
-      lunaCompanionConsole?.close();
+      agentBlock?.close();
       wardrobeAtelierConsole?.close();
       whitePaperConsole?.close();
       gestureLensConsole?.close();
@@ -6634,12 +6521,12 @@ featureNavigator = createFeatureNavigator({
       contractsMarkets?.close();
       paycoreConsole?.close();
       t402Console?.close();
-      neuralMeshConsole?.close();
+      agentBlock?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
-      museAgentConsole?.close();
+      agentBlock?.close();
       contractAtelierConsole?.close();
-      lunaCompanionConsole?.close();
+      agentBlock?.close();
       wardrobeAtelierConsole?.close();
       whitePaperConsole?.close();
       gestureLensConsole?.close();
@@ -6662,12 +6549,12 @@ featureNavigator = createFeatureNavigator({
       contractsMarkets?.close();
       paycoreConsole?.close();
       t402Console?.close();
-      neuralMeshConsole?.close();
+      agentBlock?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
-      museAgentConsole?.close();
+      agentBlock?.close();
       contractAtelierConsole?.close();
-      lunaCompanionConsole?.close();
+      agentBlock?.close();
       wardrobeAtelierConsole?.close();
       whitePaperConsole?.close();
       gestureLensConsole?.close();
@@ -6684,12 +6571,12 @@ featureNavigator = createFeatureNavigator({
       contractsMarkets?.close();
       paycoreConsole?.close();
       t402Console?.close();
-      neuralMeshConsole?.close();
+      agentBlock?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
-      museAgentConsole?.close();
+      agentBlock?.close();
       contractAtelierConsole?.close();
-      lunaCompanionConsole?.close();
+      agentBlock?.close();
       wardrobeAtelierConsole?.close();
       whitePaperConsole?.close();
       gestureLensConsole?.close();
@@ -6705,12 +6592,12 @@ featureNavigator = createFeatureNavigator({
       contractsMarkets?.close();
       paycoreConsole?.close();
       t402Console?.close();
-      neuralMeshConsole?.close();
+      agentBlock?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
-      museAgentConsole?.close();
+      agentBlock?.close();
       contractAtelierConsole?.close();
-      lunaCompanionConsole?.close();
+      agentBlock?.close();
       wardrobeAtelierConsole?.close();
       whitePaperConsole?.close();
       gestureLensConsole?.close();
@@ -6733,12 +6620,12 @@ featureNavigator = createFeatureNavigator({
       featureNavigator?.close();
       paycoreConsole?.close();
       t402Console?.close();
-      neuralMeshConsole?.close();
+      agentBlock?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
-      museAgentConsole?.close();
+      agentBlock?.close();
       contractAtelierConsole?.close();
-      lunaCompanionConsole?.close();
+      agentBlock?.close();
       wardrobeAtelierConsole?.close();
       whitePaperConsole?.close();
       gestureLensConsole?.close();
@@ -6754,12 +6641,12 @@ featureNavigator = createFeatureNavigator({
       contractsMarkets?.close();
       paycoreConsole?.open();
       t402Console?.close();
-      neuralMeshConsole?.close();
+      agentBlock?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
-      museAgentConsole?.close();
+      agentBlock?.close();
       contractAtelierConsole?.close();
-      lunaCompanionConsole?.close();
+      agentBlock?.close();
       wardrobeAtelierConsole?.close();
       whitePaperConsole?.close();
       gestureLensConsole?.close();
@@ -6775,18 +6662,18 @@ featureNavigator = createFeatureNavigator({
       contractsMarkets?.close();
       paycoreConsole?.close();
       t402Console?.open();
-      neuralMeshConsole?.close();
+      agentBlock?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
-      museAgentConsole?.close();
+      agentBlock?.close();
       contractAtelierConsole?.close();
-      lunaCompanionConsole?.close();
+      agentBlock?.close();
       wardrobeAtelierConsole?.close();
       whitePaperConsole?.close();
       gestureLensConsole?.close();
       ledgerProofConsole?.close();
       sportsEventsConsole?.close();
-    } else if (feature.id === 'neural-mesh') {
+    } else if (feature.id === 'agent') {
       launchConsole?.close();
       socialExplorer?.close();
       roomSpaces?.close();
@@ -6796,12 +6683,10 @@ featureNavigator = createFeatureNavigator({
       contractsMarkets?.close();
       paycoreConsole?.close();
       t402Console?.close();
-      neuralMeshConsole?.open();
+      agentBlock?.open();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
-      museAgentConsole?.close();
       contractAtelierConsole?.close();
-      lunaCompanionConsole?.close();
       wardrobeAtelierConsole?.close();
       whitePaperConsole?.close();
       gestureLensConsole?.close();
@@ -6817,12 +6702,12 @@ featureNavigator = createFeatureNavigator({
       contractsMarkets?.close();
       paycoreConsole?.close();
       t402Console?.close();
-      neuralMeshConsole?.close();
+      agentBlock?.close();
       pictureMatterConsole?.open();
       nftAtelierConsole?.close();
-      museAgentConsole?.close();
+      agentBlock?.close();
       contractAtelierConsole?.close();
-      lunaCompanionConsole?.close();
+      agentBlock?.close();
       wardrobeAtelierConsole?.close();
       whitePaperConsole?.close();
       gestureLensConsole?.close();
@@ -6838,55 +6723,11 @@ featureNavigator = createFeatureNavigator({
       contractsMarkets?.close();
       paycoreConsole?.close();
       t402Console?.close();
-      neuralMeshConsole?.close();
+      agentBlock?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.open();
       contractAtelierConsole?.close();
-      lunaCompanionConsole?.close();
-      wardrobeAtelierConsole?.close();
-      whitePaperConsole?.close();
-      gestureLensConsole?.close();
-      ledgerProofConsole?.close();
-      sportsEventsConsole?.close();
-    } else if (feature.id === 'muse-agent') {
-      launchConsole?.close();
-      socialExplorer?.close();
-      roomSpaces?.close();
-      blockWorld?.close();
-      blockMigration?.close();
-      arenaGames?.close();
-      contractsMarkets?.close();
-      paycoreConsole?.close();
-      t402Console?.close();
-      neuralMeshConsole?.close();
-      pictureMatterConsole?.close();
-      nftAtelierConsole?.close();
-      museAgentConsole?.open();
-      contractAtelierConsole?.close();
-      lunaCompanionConsole?.close();
-      wardrobeAtelierConsole?.close();
-      whitePaperConsole?.close();
-      gestureLensConsole?.close();
-      ledgerProofConsole?.close();
-      sportsEventsConsole?.close();
-      botPlazaConsole?.close();
-    } else if (feature.id === 'bot-plaza') {
-      launchConsole?.close();
-      socialExplorer?.close();
-      roomSpaces?.close();
-      blockWorld?.close();
-      blockMigration?.close();
-      arenaGames?.close();
-      contractsMarkets?.close();
-      paycoreConsole?.close();
-      t402Console?.close();
-      neuralMeshConsole?.close();
-      pictureMatterConsole?.close();
-      nftAtelierConsole?.close();
-      museAgentConsole?.close();
-      botPlazaConsole?.open();
-      contractAtelierConsole?.close();
-      lunaCompanionConsole?.close();
+      agentBlock?.close();
       wardrobeAtelierConsole?.close();
       whitePaperConsole?.close();
       gestureLensConsole?.close();
@@ -6902,32 +6743,11 @@ featureNavigator = createFeatureNavigator({
       contractsMarkets?.close();
       paycoreConsole?.close();
       t402Console?.close();
-      neuralMeshConsole?.close();
+      agentBlock?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
-      museAgentConsole?.close();
+      agentBlock?.close();
       contractAtelierConsole?.open();
-      ledgerProofConsole?.close();
-      sportsEventsConsole?.close();
-    } else if (feature.id === 'luna-companion') {
-      launchConsole?.close();
-      socialExplorer?.close();
-      roomSpaces?.close();
-      blockWorld?.close();
-      blockMigration?.close();
-      arenaGames?.close();
-      contractsMarkets?.close();
-      paycoreConsole?.close();
-      t402Console?.close();
-      neuralMeshConsole?.close();
-      pictureMatterConsole?.close();
-      nftAtelierConsole?.close();
-      museAgentConsole?.close();
-      contractAtelierConsole?.close();
-      lunaCompanionConsole?.open();
-      wardrobeAtelierConsole?.close();
-      whitePaperConsole?.close();
-      gestureLensConsole?.close();
       ledgerProofConsole?.close();
       sportsEventsConsole?.close();
     } else if (feature.id === 'wardrobe-atelier') {
@@ -6940,12 +6760,12 @@ featureNavigator = createFeatureNavigator({
       contractsMarkets?.close();
       paycoreConsole?.close();
       t402Console?.close();
-      neuralMeshConsole?.close();
+      agentBlock?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
-      museAgentConsole?.close();
+      agentBlock?.close();
       contractAtelierConsole?.close();
-      lunaCompanionConsole?.close();
+      agentBlock?.close();
       wardrobeAtelierConsole?.open();
       whitePaperConsole?.close();
       gestureLensConsole?.close();
@@ -6964,12 +6784,12 @@ featureNavigator = createFeatureNavigator({
       contractsMarkets?.close();
       paycoreConsole?.close();
       t402Console?.close();
-      neuralMeshConsole?.close();
+      agentBlock?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
-      museAgentConsole?.close();
+      agentBlock?.close();
       contractAtelierConsole?.close();
-      lunaCompanionConsole?.close();
+      agentBlock?.close();
       wardrobeAtelierConsole?.close();
       whitePaperConsole?.open();
       gestureLensConsole?.close();
@@ -6988,12 +6808,12 @@ featureNavigator = createFeatureNavigator({
       contractsMarkets?.close();
       paycoreConsole?.close();
       t402Console?.close();
-      neuralMeshConsole?.close();
+      agentBlock?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
-      museAgentConsole?.close();
+      agentBlock?.close();
       contractAtelierConsole?.close();
-      lunaCompanionConsole?.close();
+      agentBlock?.close();
       wardrobeAtelierConsole?.close();
       whitePaperConsole?.close();
       gestureLensConsole?.open();
@@ -7009,12 +6829,12 @@ featureNavigator = createFeatureNavigator({
       contractsMarkets?.close();
       paycoreConsole?.close();
       t402Console?.close();
-      neuralMeshConsole?.close();
+      agentBlock?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
-      museAgentConsole?.close();
+      agentBlock?.close();
       contractAtelierConsole?.close();
-      lunaCompanionConsole?.close();
+      agentBlock?.close();
       wardrobeAtelierConsole?.close();
       whitePaperConsole?.close();
       gestureLensConsole?.close();
@@ -7030,12 +6850,12 @@ featureNavigator = createFeatureNavigator({
       contractsMarkets?.close();
       paycoreConsole?.close();
       t402Console?.close();
-      neuralMeshConsole?.close();
+      agentBlock?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
-      museAgentConsole?.close();
+      agentBlock?.close();
       contractAtelierConsole?.close();
-      lunaCompanionConsole?.close();
+      agentBlock?.close();
       wardrobeAtelierConsole?.close();
       whitePaperConsole?.close();
       gestureLensConsole?.close();
@@ -7058,12 +6878,12 @@ featureNavigator = createFeatureNavigator({
       contractsMarkets?.close();
       paycoreConsole?.close();
       t402Console?.close();
-      neuralMeshConsole?.close();
+      agentBlock?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
-      museAgentConsole?.close();
+      agentBlock?.close();
       contractAtelierConsole?.close();
-      lunaCompanionConsole?.close();
+      agentBlock?.close();
       wardrobeAtelierConsole?.close();
       whitePaperConsole?.close();
       gestureLensConsole?.close();
@@ -7082,12 +6902,12 @@ featureNavigator = createFeatureNavigator({
       contractsMarkets?.close();
       paycoreConsole?.close();
       t402Console?.close();
-      neuralMeshConsole?.close();
+      agentBlock?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
-      museAgentConsole?.close();
+      agentBlock?.close();
       contractAtelierConsole?.close();
-      lunaCompanionConsole?.close();
+      agentBlock?.close();
       wardrobeAtelierConsole?.close();
       whitePaperConsole?.close();
       gestureLensConsole?.close();
@@ -7108,12 +6928,12 @@ featureNavigator = createFeatureNavigator({
       contractsMarkets?.close();
       paycoreConsole?.close();
       t402Console?.close();
-      neuralMeshConsole?.close();
+      agentBlock?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
-      museAgentConsole?.close();
+      agentBlock?.close();
       contractAtelierConsole?.close();
-      lunaCompanionConsole?.close();
+      agentBlock?.close();
       wardrobeAtelierConsole?.close();
       whitePaperConsole?.close();
       gestureLensConsole?.close();
@@ -7137,12 +6957,12 @@ featureNavigator = createFeatureNavigator({
       contractsMarkets?.close();
       paycoreConsole?.close();
       t402Console?.close();
-      neuralMeshConsole?.close();
+      agentBlock?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
-      museAgentConsole?.close();
+      agentBlock?.close();
       contractAtelierConsole?.close();
-      lunaCompanionConsole?.close();
+      agentBlock?.close();
       wardrobeAtelierConsole?.close();
       whitePaperConsole?.close();
       gestureLensConsole?.close();
@@ -7162,12 +6982,12 @@ featureNavigator = createFeatureNavigator({
       contractsMarkets?.close();
       paycoreConsole?.close();
       t402Console?.close();
-      neuralMeshConsole?.close();
+      agentBlock?.close();
       pictureMatterConsole?.close();
       nftAtelierConsole?.close();
-      museAgentConsole?.close();
+      agentBlock?.close();
       contractAtelierConsole?.close();
-      lunaCompanionConsole?.close();
+      agentBlock?.close();
       wardrobeAtelierConsole?.close();
       whitePaperConsole?.close();
       gestureLensConsole?.close();
@@ -7198,13 +7018,10 @@ featureNavigator = createFeatureNavigator({
     if (feature.id === 'contracts' && method === 'replay') contractsMarkets?.replay('feature-navigator');
     if (feature.id === 'paycore' && method === 'replay') paycoreConsole?.replay('feature-navigator');
     if (feature.id === 't402' && method === 'replay') t402Console?.replay('feature-navigator');
-    if (feature.id === 'neural-mesh' && method === 'replay') neuralMeshConsole?.replay('feature-navigator');
+    if (feature.id === 'agent' && method === 'replay') agentBlock?.replay('feature-navigator');
     if (feature.id === 'picture-matter' && method === 'replay') pictureMatterConsole?.replay('feature-navigator');
     if (feature.id === 'nft-atelier' && method === 'replay') nftAtelierConsole?.replay('feature-navigator');
-    if (feature.id === 'muse-agent' && method === 'replay') museAgentConsole?.replay('feature-navigator');
-    if (feature.id === 'bot-plaza' && method === 'replay') botPlazaConsole?.replay('feature-navigator');
     if (feature.id === 'contract-atelier' && method === 'replay') contractAtelierConsole?.replay('feature-navigator');
-    if (feature.id === 'luna-companion' && method === 'replay') lunaCompanionConsole?.replay('feature-navigator');
     if (feature.id === 'wardrobe-atelier' && method === 'replay') wardrobeAtelierConsole?.replay('feature-navigator');
     if (feature.id === 'white-paper' && method === 'replay') whitePaperConsole?.replay('feature-navigator');
     if (feature.id === 'gesture-lens' && method === 'replay') gestureLensConsole?.replay('feature-navigator');
@@ -7329,7 +7146,7 @@ projectionSession = createProjectionSession({
   // cannot inspect amounts or initiate a transfer, signing, custody, or flow.
   getAssetTokenSnapshot: () => paycoreConsole?.getSnapshot?.(),
   getT402Snapshot: () => t402Console?.getSnapshot?.(),
-  getNeuralMeshSnapshot: () => neuralMeshConsole?.getSnapshot?.(),
+  getAgentBlockSnapshot: () => agentBlock?.getSnapshot?.(),
   // Picture Matter retains local fixture content and metadata source details.
   // The session reads aggregate metadata-only state and cannot request, render,
   // store, publish, or identify from an image.
@@ -7383,13 +7200,10 @@ projectionSession = createProjectionSession({
     academy: academyConsole?.getSnapshot?.(),
     paycore: paycoreConsole?.getSnapshot?.(),
     t402: t402Console?.getSnapshot?.(),
-    "neural-mesh": neuralMeshConsole?.getSnapshot?.(),
+    "agent": agentBlock?.getSnapshot?.(),
     "picture-matter": pictureMatterConsole?.getSnapshot?.(),
     "nft-atelier": nftAtelierConsole?.getSnapshot?.(),
-    "muse-agent": museAgentConsole?.getSnapshot?.(),
-    "bot-plaza": botPlazaConsole?.getSnapshot?.(),
     "contract-atelier": contractAtelierConsole?.getSnapshot?.(),
-    "luna-companion": lunaCompanionConsole?.getSnapshot?.(),
     "wardrobe-atelier": wardrobeAtelierConsole?.getSnapshot?.(),
     ledger: ledgerProofConsole?.getSnapshot?.(),
     gateway: liveGatewayConsole?.getSnapshot?.(),
