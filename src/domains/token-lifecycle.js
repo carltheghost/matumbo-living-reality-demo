@@ -12,6 +12,9 @@
  * wagering, wallets, custody, or chains.
  */
 
+// One source of truth for lifecycle constants — no hardcoded duplicates.
+import { TOKEN_CONFIG } from "./token.js";
+
 export const TOKEN_LIFECYCLE_SCHEMA_VERSION = 1;
 export const TOKEN_LIFECYCLE_SOURCE = "tumbo-token-lifecycle";
 export const TOKEN_LIFECYCLE_UNIT = "TUMBO-SIM";
@@ -132,7 +135,7 @@ function createEvidence(updatedAt) {
       kind: "lifecycle-semantics",
       status: "declared",
       simulation: true,
-      reverseWindowTicks: 1000,
+      reverseWindowTicks: TOKEN_CONFIG.REVERSE_WINDOW_TICKS,
       reverseModel: "compensating-journal",
       historyModel: "append-only",
       doubleReverse: "impossible-by-deterministic-idempotency-key",
