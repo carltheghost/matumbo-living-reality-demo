@@ -40,7 +40,7 @@ export const JUDGMENTS_SOURCE = "ai-judgments";
 /** Below this confidence, code must clarify/confirm instead of acting. */
 export const CLARIFY_THRESHOLD = 0.65;
 
-export const JUDGMENT_PROVIDERS = Object.freeze(["mock", "heuristic", "http"]);
+export const JUDGMENT_PROVIDERS = Object.freeze(["mock", "heuristic", "http"]);\nexport const JEV_DEFAULT_MODEL = "jev-latest";\nexport const JEV_DEFAULT_TYPESAFE_ENDPOINT = "https://api.typesafe.ai/v1/systemone";\nexport const JEV_DEFAULT_AGENT_ENDPOINT = "https://jev-agent.com/api/v1/systemone";\nexport const JEV_TIMEOUT_MS = 10_000;
 
 // ---------------------------------------------------------------------------
 // Bot Plaza intents (Choice). One narrow question: which handler owns the turn?
@@ -410,11 +410,11 @@ export function proposalReadinessQuestion() {
     id: "proposal-readiness",
     kind: "score",
     instructions:
-      "How ready is this contract proposal for Tumbo's review? 1 = fully reviewable (clear title, named event, at least two distinct outcomes, a sane stake range, source and research notes, still pending). 0 = not reviewable.",
-    criteria: {
-      "1.0": "complete proposal: clear title, named event, >=2 distinct outcomes, min/max stake with min <= max, source notes, research notes, pending status",
-      "0.0": "missing the fields above or no longer pending",
-    },
+      "How ready is this contract proposal for Tumbo's review? Level 1 = fully reviewable; level 0 = not reviewable.",
+    criteria: [
+      "not reviewable: missing required proposal fields, invalid stake range, or no longer pending",
+      "fully reviewable: clear title, named event, at least two distinct outcomes, sane min/max stake range, source and research notes, and pending status",
+    ],
   };
 }
 
@@ -479,8 +479,8 @@ function mockAnswer(question) {
 }
 
 function readServerEnv(name) {
-  // Server-side only: in a browser bundle `process` is undefined and this
-  // returns undefined, so keys can never leak into client code.
+  // Server-side only: in a browser bundle process is undefined and this
+  // returns undefined, so API keys can never leak into client code.
   try {
     if (typeof process !== "undefined" && process.env) return process.env[name];
   } catch {
@@ -489,16 +489,197 @@ function readServerEnv(name) {
   return undefined;
 }
 
+function serverJevConfig() {
+  const typesafeKey = readServerEnv("TYPESAFE_API_KEY");
+  const jevKey = readServerEnv("JEV_AGENT_KEY") ?? readServerEnv("JEV_API_KEY");
+  const explicitUrl = readServerEnv("JEV_API_URL") ?? readServerEnv("TYPESAFE_API_URL");
+  const model = readServerEnv("JEV_MODEL") || JEV_DEFAULT_MODEL;
+
+  if (explicitUrl) {
+    const key = typesafeKey || jevKey;
+    return key ? { key, url: explicitUrl, model } : { key: null, url: explicitUrl, model };
+  }
+  if (typesafeKey) {
+    return { key: typesafeKey, url: JEV_DEFAULT_TYPESAFE_ENDPOINT, model };
+  }
+  if (jevKey) {
+    return { key: jevKey, url: JEV_DEFAULT_AGENT_ENDPOINT, model };
+  }
+  return { key: null, url: null, model };
+}
+
+function toJevQuestion(question, state) {
+  const kind = question?.kind === "choice"
+    ? "choice"
+    : question?.kind === "score"
+      ? "score"
+      : "noul";
+
+  if (kind === "choice") {
+    const options = Array.isArray(question?.options) ? question.options.map(String) : null;
+    let criteria = question?.criteria;
+
+    if (question?.id === "bot-slot" && options) {
+      const candidates = Array.isArray(state?.candidates) ? state.candidates : [];
+      const byId = new Map(candidates.map((candidate) => [
+        String(candidate?.id ?? ""),
+        String(candidate?.label ?? candidate?.id ?? "candidate bot"),
+      ]));
+      criteria = Object.fromEntries(options.map((option) => [
+        option,
+        option === "none"
+          ? "no clear bot was named"
+          : "candidate bot selected by code from name matching: " + (byId.get(option) ?? "named candidate"),
+      ]));
+    } else if (options) {
+      const existing = criteria && typeof criteria === "object" ? criteria : {};
+      criteria = Object.fromEntries(options.map((option) => [option, existing[option] ?? null]));
+    }
+
+    return {
+      type: "choice",
+      instructions: String(question?.instructions ?? ""),
+      criteria: criteria && typeof criteria === "object" ? criteria : {},
+    };
+  }
+
+  if (kind === "score") {
+    return {
+      type: "score",
+      instructions: String(question?.instructions ?? ""),
+      criteria: Array.isArray(question?.criteria) ? question.criteria : [],
+    };
+  }
+
+  return {
+    type: "noul",
+    instructions: String(question?.instructions ?? ""),
+    ...(question?.criteria === undefined ? {} : { criteria: question.criteria }),
+  };
+}
+
+function validProbabilityMap(value) {
+  return value !== null
+    && typeof value === "object"
+    && !Array.isArray(value)
+    && Object.values(value).length > 0
+    && Object.values(value).every((entry) => {
+      const numberValue = Number(entry);
+      return Number.isFinite(numberValue) && numberValue >= 0 && numberValue <= 1;
+    });
+}
+
+function validateJevAnswer(question, rawAnswer) {
+  if (!rawAnswer || typeof rawAnswer !== "object") return null;
+
+  if (question?.kind === "choice") {
+    const choice = String(rawAnswer.choice ?? "");
+    const options = Array.isArray(question?.options)
+      ? question.options.map(String)
+      : Object.keys(question?.criteria ?? {});
+    const confidence = Number(rawAnswer.confidence);
+
+    if (!options.includes(choice) || !Number.isFinite(confidence) || confidence < 0 || confidence > 1) return null;
+    if (!validProbabilityMap(rawAnswer.probabilities)) return null;
+
+    return {
+      kind: "choice",
+      answer: {
+        choice,
+        probabilities: rawAnswer.probabilities,
+        confidence,
+      },
+    };
+  }
+
+  if (question?.kind === "score") {
+    // Jev Score is a probability-weighted index. This question deliberately
+    // has exactly two levels, so the result is normalized to the local 0..1
+    // readiness convention used by the existing UI and heuristic.
+    const score = Number(rawAnswer.score);
+    const confidence = Number(rawAnswer.confidence);
+    if (!Number.isFinite(score) || score < 0 || score > 1) return null;
+    if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) return null;
+    if (!validProbabilityMap(rawAnswer.probabilities)) return null;
+
+    return {
+      kind: "score",
+      answer: {
+        score,
+        probabilities: rawAnswer.probabilities,
+        confidence,
+        legend: rawAnswer.legend ?? null,
+      },
+    };
+  }
+
+  if (question?.kind === "noul") {
+    const noul = Number(rawAnswer.noul);
+    if (!Number.isFinite(noul) || noul < 0 || noul > 1) return null;
+    return { kind: "noul", answer: { noul } };
+  }
+
+  return null;
+}
+
+async function fetchJevDecision(state, questions, config) {
+  if (typeof fetch !== "function") throw new Error("server fetch unavailable");
+
+  const controller = typeof AbortController === "function" ? new AbortController() : null;
+  const timeoutId = setTimeout(() => controller?.abort(), JEV_TIMEOUT_MS);
+
+  try {
+    const bodyQuestions = {};
+    for (const question of questions) {
+      bodyQuestions[question.id] = toJevQuestion(question, state);
+    }
+
+    const response = await fetch(config.url, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + config.key,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: config.model,
+        state,
+        questions: bodyQuestions,
+      }),
+      signal: controller?.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error("Jev request failed with HTTP " + response.status);
+    }
+
+    const payload = await response.json();
+    if (!payload?.answers || typeof payload.answers !== "object") {
+      throw new Error("Jev response did not include answers");
+    }
+
+    const answers = {};
+    for (const question of questions) {
+      const normalized = validateJevAnswer(question, payload.answers[question.id]);
+      if (!normalized) throw new Error("Jev returned a non-conforming answer for " + question.id);
+      answers[question.id] = normalized;
+    }
+
+    return {
+      answers,
+      provider: "jev",
+      model: String(payload.model ?? config.model),
+      usage: payload.usage ?? null,
+    };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 /**
- * askJudgments(state, questions, provider?) — asks independent questions over
- * the same state in one parallel batch. Returns
- * { answers: { [questionId]: { kind, answer } }, provider }.
- *
- * The "http" provider requires TYPESAFE_API_KEY and TYPESAFE_API_URL in the
- * SERVER environment and falls back to the heuristic provider on ANY failure
- * (missing credentials, network error, malformed response) — the demo never
- * blocks and never acts blind. Live Jev is never active in the local demo
- * because the demo never sets those variables.
+ * askJudgments(state, questions, provider?) — independent questions can be
+ * fanned out in one Jev request. Live Jev is server-only; the public static
+ * browser keeps using the deterministic heuristic unless a trusted server
+ * explicitly selects the HTTP provider with a secret key.
  */
 export async function askJudgments(state = {}, questions = [], provider = undefined) {
   const requested = provider ?? selectProvider();
@@ -511,20 +692,15 @@ export async function askJudgments(state = {}, questions = [], provider = undefi
   }
 
   if (requested === "http") {
-    const key = readServerEnv("TYPESAFE_API_KEY");
-    const url = readServerEnv("TYPESAFE_API_URL");
-    if (!key || !url) {
-      // No server-side credentials: fall back, labeled honestly.
+    const config = serverJevConfig();
+    if (!config.key || !config.url) {
       const answers = {};
       for (const question of list) answers[question.id] = heuristicAnswer(question, state);
       return { answers, provider: "heuristic" };
     }
+
     try {
-      // The exact Jev HTTP contract (path, payload shape, answer schema)
-      // comes from the live TypeSafe docs at deploy time and is not
-      // compiled into this demo build. Attempt a conservative call; any
-      // deviation falls back to the deterministic heuristic below.
-      throw new Error("no verified Jev HTTP contract compiled into this build");
+      return await fetchJevDecision(state, list, config);
     } catch {
       const answers = {};
       for (const question of list) answers[question.id] = heuristicAnswer(question, state);
