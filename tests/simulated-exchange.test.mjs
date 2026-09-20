@@ -90,7 +90,7 @@ test("reserved symbols and duplicate definitions are blocked", () => {
     () =>
       exchange.createCoin({
         creatorId: "alice2",
-        symbol: "MAT2",
+        symbol: "MAT",
         name: "Matumbo",
         description: "same",
       }),
