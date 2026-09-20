@@ -17,7 +17,7 @@ import { MANIPULATE_MODES } from './render/manipulate-controls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { createLivingRealityProjection } from './core/demo-projection.js?v=20260918-muse2';
+import { createLivingRealityProjection } from './core/demo-projection.js?v=20260918-muse2';import'./render/social-mirror-bootstrap.js';
 import { createDeviceProjection, readBrowserProjectionPreferences } from './projections/device-projection.js';
 import { createDistributionExplorer } from './render/distribution-explorer.js';
 import { createLaunchDistributionRehearsal } from './domains/distribution-registry.js?v=20260828-distribution163';
