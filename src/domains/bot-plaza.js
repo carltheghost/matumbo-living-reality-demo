@@ -764,6 +764,187 @@ export function createProposalQueue({ storage = null, now = null } = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// Proposal review ranking: "Contracts for your review" display order.
+// ---------------------------------------------------------------------------
+// A proposal is review-ready when it is concrete: linked to a real event,
+// with well-formed outcomes, bounded stakes, and research attached. The
+// ranking is a deterministic, documented heuristic for DISPLAY ORDER ONLY —
+// the queue itself keeps submission order, and the renderer falls back to
+// submission order if ranking ever throws. Pure: no queue mutation.
+const PROPOSAL_READINESS_WEIGHTS = freeze({
+  base: 0.30, // submitted and pending review
+  eventLinked: 0.25, // eventId present: a concrete event, not a vague idea
+  outcomesRich: 0.15, // 3+ distinct outcomes: a well-formed market
+  outcomesBinary: 0.08, // exactly 2 outcomes: reviewable, less expressive
+  stakeBounds: 0.10, // minStake and/or maxStake defined
+  sourceNotes: 0.08, // source notes attached
+  researchNotes: 0.08, // research notes attached
+  expiresSoon: 0.06, // expires within 24h of `now`: needs eyes first
+});
+const PROPOSAL_REVIEW_SOON_MS = 24 * 3600 * 1000;
+
+function reviewNowMs(now) {
+  if (now === null || now === undefined) return null;
+  if (typeof now === "number" && Number.isFinite(now)) return now;
+  if (now instanceof Date && !Number.isNaN(now.getTime())) return now.getTime();
+  const ms = Date.parse(safeText(now));
+  return Number.isNaN(ms) ? null : ms;
+}
+
+function scoreProposalReadiness(proposal, nowMs) {
+  const reasons = ["pending review"];
+  let score = PROPOSAL_READINESS_WEIGHTS.base;
+  const entry = proposal && typeof proposal === "object" ? proposal : {};
+  if (safeText(entry.eventId).trim()) {
+    score += PROPOSAL_READINESS_WEIGHTS.eventLinked;
+    reasons.push("linked to an event");
+  }
+  const outcomes = Array.isArray(entry.outcomes) ? entry.outcomes : [];
+  if (outcomes.length >= 3) {
+    score += PROPOSAL_READINESS_WEIGHTS.outcomesRich;
+    reasons.push(`${outcomes.length} outcomes defined`);
+  } else if (outcomes.length === 2) {
+    score += PROPOSAL_READINESS_WEIGHTS.outcomesBinary;
+    reasons.push("binary outcomes");
+  }
+  if (entry.minStake !== undefined && entry.minStake !== null
+    || entry.maxStake !== undefined && entry.maxStake !== null) {
+    score += PROPOSAL_READINESS_WEIGHTS.stakeBounds;
+    reasons.push("stake bounds set");
+  }
+  if (safeText(entry.sourceNotes).trim()) {
+    score += PROPOSAL_READINESS_WEIGHTS.sourceNotes;
+    reasons.push("source notes attached");
+  }
+  if (safeText(entry.researchNotes).trim()) {
+    score += PROPOSAL_READINESS_WEIGHTS.researchNotes;
+    reasons.push("research notes attached");
+  }
+  if (nowMs !== null) {
+    const expiresMs = Date.parse(safeText(entry.expiresAt));
+    if (!Number.isNaN(expiresMs) && expiresMs > nowMs
+      && expiresMs - nowMs <= PROPOSAL_REVIEW_SOON_MS) {
+      score += PROPOSAL_READINESS_WEIGHTS.expiresSoon;
+      reasons.push("expires soon");
+    }
+  }
+  return { readiness: Math.min(1, Math.max(0, score)), reasons };
+}
+
+function proposalListFrom(source) {
+  if (source && typeof source.getProposals === "function") {
+    return source.getProposals({ status: "pending" });
+  }
+  if (Array.isArray(source)) return source;
+  throw new TypeError("rankProposalsForReview needs a proposal queue or a proposal array");
+}
+
+export function rankProposalsForReview(source, { now = null } = {}) {
+  const list = proposalListFrom(source);
+  const nowMs = reviewNowMs(now);
+  const scored = list.map((proposal, index) => {
+    const { readiness, reasons } = scoreProposalReadiness(proposal, nowMs);
+    const entry = proposal && typeof proposal === "object" ? proposal : {};
+    return {
+      proposal,
+      readiness,
+      reasons,
+      index,
+      createdAt: safeText(entry.createdAt),
+      id: safeText(entry.id),
+    };
+  });
+  scored.sort((a, b) => (
+    b.readiness - a.readiness
+    || (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0)
+    || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+    || a.index - b.index
+  ));
+  return freeze(scored.map(({ proposal, readiness, reasons }) => freeze({
+    proposal,
+    readiness,
+    reasons: freeze([...reasons]),
+  })));
+}
+
+// ---------------------------------------------------------------------------
+// Intent router: turns a raw user message into a typed routing decision.
+// ---------------------------------------------------------------------------
+// Pure text classification over the installed bots — no messages are sent,
+// no capabilities are exercised, nothing executes. Ambiguity is surfaced as
+// a clarification decision the renderer can ask about; the router itself
+// never guesses past the evidence. A token that names a bot belongs to bot
+// resolution and is never double-counted as an intent keyword.
+const INTENT_ROUTER_KEYWORDS = freeze({
+  draft_contract: ["contract", "contracts", "draft", "propose", "proposal"],
+  scout: ["scout", "scouting", "research", "investigate"],
+});
+const INTENT_ROUTER_LABELS = freeze({
+  draft_contract: "a contract draft",
+  scout: "scouting",
+});
+
+function tokenizeRouterText(value) {
+  return safeText(value).toLowerCase().split(/[^a-z0-9]+/).filter((token) => token.length >= 2);
+}
+
+export function createIntentRouter({ registry = null, now = null } = {}) {
+  if (!registry || typeof registry.listBots !== "function") {
+    throw new TypeError("createIntentRouter needs a bot registry");
+  }
+
+  function matchBots(tokens, text) {
+    const tokenSet = new Set(tokens);
+    const lowered = safeText(text).toLowerCase();
+    return registry.listBots().filter((bot) => {
+      const name = safeText(bot?.name).toLowerCase();
+      if (name && lowered.includes(name)) return true;
+      return tokenizeRouterText(bot?.name).some((token) => token.length >= 3 && tokenSet.has(token));
+    });
+  }
+
+  async function route(text) {
+    const tokens = tokenizeRouterText(text);
+    const matched = matchBots(tokens, text);
+    const botNameTokens = new Set();
+    for (const bot of matched) {
+      for (const token of tokenizeRouterText(bot?.name)) botNameTokens.add(token);
+    }
+    const intentTokens = tokens.filter((token) => !botNameTokens.has(token));
+    const hits = Object.keys(INTENT_ROUTER_KEYWORDS).filter((intent) => (
+      INTENT_ROUTER_KEYWORDS[intent].some((keyword) => intentTokens.includes(keyword))
+    ));
+    const intent = hits.length >= 1 ? hits[0] : "chat";
+    if (matched.length > 1) {
+      const names = matched.map((bot) => safeText(bot?.name) || safeText(bot?.id)).join(" or ");
+      return freeze({
+        intent,
+        botId: null,
+        clarify: true,
+        clarificationText: `Not sure which bot you meant — ${names}?`,
+      });
+    }
+    if (hits.length > 1) {
+      const labels = hits.map((entry) => INTENT_ROUTER_LABELS[entry] ?? entry).join(" or ");
+      return freeze({
+        intent,
+        botId: null,
+        clarify: true,
+        clarificationText: `I wasn't sure what you wanted — ${labels}? Say a little more.`,
+      });
+    }
+    return freeze({
+      intent,
+      botId: matched.length === 1 ? safeText(matched[0]?.id) : null,
+      clarify: false,
+      clarificationText: null,
+    });
+  }
+
+  return freeze({ route, source: BOT_PLAZA_SOURCE });
+}
+
+// ---------------------------------------------------------------------------
 // Bot Atelier templates: one-click starting points for no-code bots. A
 // template pre-fills the atelier form; the user still reviews and approves
 // every capability before plugging the bot in.

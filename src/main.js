@@ -18,6 +18,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { createLivingRealityProjection } from './core/demo-projection.js?v=20260918-muse2';
+import { resolveDefaultFeature } from './core/default-landing.js';
 import { createDeviceProjection, readBrowserProjectionPreferences } from './projections/device-projection.js';
 import { createDistributionExplorer } from './render/distribution-explorer.js';
 import { createLaunchDistributionRehearsal } from './domains/distribution-registry.js?v=20260828-distribution163';
@@ -7454,14 +7455,14 @@ if (requestedSocialPanel) {
     void socialExplorer?.refreshPublicPulse?.('url');
   }
 }
-// The no-query landing view is deliberately cube-first.  The focused Block
-// World is the interaction surface users can open, inspect, move, carry, and
-// route from; Reality Lens remains available as an explicit semantic view.
+// Default landing is the clean constellation overview (reality-lens),
+// resolved by the pure, unit-tested resolveDefaultFeature(); the
+// cube-field interior only appears on deliberate entry.
 const initialLandingQuery = new URLSearchParams(globalThis.location?.search ?? '');
 const initialLandingHash = String(globalThis.location?.hash ?? '');
-if (!initialLandingQuery.get('feature') && !initialLandingQuery.get('panel') && !initialLandingHash) {
-  featureNavigator.select('block-world', 'default', { updateLocation: false });
-  featureNavigator.close();
+const defaultLandingFeature = resolveDefaultFeature(initialLandingQuery, initialLandingHash);
+if (defaultLandingFeature) {
+  featureNavigator.select(defaultLandingFeature, 'default', { updateLocation: false }); featureNavigator.close();
 } else if (initialLandingQuery.get('feature') === 'block-world' && !initialLandingQuery.get('panel')) {
   // URL-driven cube links should open directly into the field as well. The
   // directory remains available from OPEN FEATURES / F, but it must not cover

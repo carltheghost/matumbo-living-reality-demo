@@ -3893,7 +3893,16 @@
 
       globalThis.__MATUMBO_RUNTIME__ = Object.freeze(runtime);
       const handleError = (event) => {
-        const error = event?.error ?? event?.reason ?? event?.message;
+        let error = event?.error ?? event?.reason ?? event?.message;
+        // Resource load failures (script/link/img) arrive as plain Events with
+        // no error object — without this the banner hides WHICH file failed.
+        // Name the failed URL so a screenshot alone identifies the cause.
+        const failedTarget = event?.target;
+        const failedUrl = failedTarget && failedTarget !== globalThis
+          && (failedTarget.currentSrc || failedTarget.src || failedTarget.href);
+        if ((error === null || error === undefined) && failedUrl) {
+          error = { name: "", message: `resource failed to load: ${String(failedUrl).slice(0, 220)}` };
+        }
         runtime.markFailed(error, event?.type === 'unhandledrejection' ? 'module promise' : 'uncaught runtime');
       };
       globalThis.addEventListener?.('error', handleError, true);
