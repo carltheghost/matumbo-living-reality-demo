@@ -112,8 +112,8 @@ test("Jev Score readiness remains normalized to the local 0..1 convention", asyn
     globalThis.fetch = originalFetch;
     if (previousKey === undefined) delete process.env.JEV_AGENT_KEY;
     else process.env.JEV_AGENT_KEY = previousKey;
-    if (previousJevUrl === undefined) process.env.JEV_API_URL;
-    else process.env.JEV_AGENT_KEY = previousKey;
+    if (previousJevUrl === undefined) delete process.env.JEV_API_URL;
+    else process.env.JEV_API_URL = previousJevUrl;
   }
 });
 
