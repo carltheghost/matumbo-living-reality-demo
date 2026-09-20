@@ -12,9 +12,15 @@
 // Facade API (also exposed as window.TumboToken by token-boot.js):
 //   { ledger, balance(account, asset?), fmt(fluff), quote(args),
 //     execute(action, args), on(evt, cb) }
-//   execute() requires args.idem (LedgerError MISSING_IDEM otherwise) and
-//   suppresses events on idempotent replays. "deliver" routes to deliverCreate;
-//   confirm delivery via action "confirm" (deliverConfirm).
+//   execute() requires args.idem (LedgerError MISSING_IDEM otherwise).
+//   "deliver" routes to deliverCreate; confirm delivery via action "confirm"
+//   (deliverConfirm).
+//
+// Event model: the facade subscribes once to ledger.onCommit() and announces
+// every settled commit as exactly one event wave (balance-changed events, then
+// the receipt). Idempotent replays never emit — _commitInner returns before
+// _emitCommit when the idem key was already seen — so there is no second wave
+// to suppress. Direct ledger commits (bypassing execute) emit the same wave.
 import { LedgerError, fmtTumbo } from "./token.js";
 
 export const TOKEN_EVENT = "tumbo:token";
@@ -39,9 +45,10 @@ function touchedPairs(entries) {
   return [...map.values()];
 }
 
-// Per-action routing. Each handler receives (ledger, args) and must return the
-// sealed receipt. Extra args (e.g. a facade-required idem on gate-only
-// methods) are ignored by the ledger methods that do not need them.
+// Per-action routing. Each handler receives (ledger, args) and returns the
+// ledger result (a sealed receipt, or a wrapper like { receipt, stakeId }).
+// Extra args (e.g. a facade-required idem on gate-only methods) are ignored
+// by the ledger methods that do not need them.
 const EXECUTE = {
   send:       (L, a) => L.send(a),
   tip:        (L, a) => L.tip(a),
@@ -94,6 +101,12 @@ export function createTokenFacade(ledger) {
     });
   }
 
+  // Single subscription: every settled commit emits exactly one wave, whether
+  // it arrived via execute() or a direct ledger call. The receipt handed to
+  // onCommit is always the sealed receipt — wrapper-returning actions
+  // (stake/deposit/lock/withdraw) cannot produce a malformed wave.
+  ledger.onCommit(dispatchReceipt);
+
   const api = {
     ledger,
     balance: (account, asset = "TUMBO") => ledger.balance(account, asset),
@@ -103,13 +116,7 @@ export function createTokenFacade(ledger) {
       const handler = EXECUTE[action];
       if (!handler) throw new LedgerError("UNKNOWN_ACTION", String(action));
       if (!args.idem) throw new LedgerError("MISSING_IDEM", "execute requires args.idem");
-      const jlen = ledger.s.journal.length;
-      const receipt = handler(ledger, args);
-      // Idempotent replay: the ledger appended no journal entry, so there is
-      // no new settlement to announce — return the original receipt silently.
-      if (ledger.s.journal.length === jlen) return receipt;
-      dispatchReceipt(receipt);
-      return receipt;
+      return handler(ledger, args);
     },
     on(evt, cb) {
       // "receipt" / "balance-changed": in-process subscription (works without a DOM).
@@ -129,7 +136,5 @@ export function createTokenFacade(ledger) {
     },
   };
 
-  // Internal hook for token-boot: announce commits that bypass execute().
-  api._dispatchReceipt = dispatchReceipt;
   return api;
 }

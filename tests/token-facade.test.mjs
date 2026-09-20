@@ -94,10 +94,12 @@ test("execute routes deliver -> deliverCreate and confirm -> deliverConfirm", ()
   const F = createTokenFacade(L);
   const a0 = L.balance("u:alice");
   const d = F.execute("deliver", { from: "u:alice", to: "u:bob", amountFluff: 3000, idem: "fx3", contractId: "c1" });
-  assert.equal(d.action, "deliverCreate");
+  assert.equal(d.action, "deliver");
+  assert.equal(d.meta.phase, "escrowed");
   assert.equal(L.balance(SYS.escrow, "TUMBO"), 3000);
   const c = F.execute("confirm", { intentTxId: d.txId, by: "u:bob", idem: "fx4" });
-  assert.equal(c.action, "deliverConfirm");
+  assert.equal(c.action, "deliver");
+  assert.equal(c.meta.phase, "confirmed");
   assert.equal(L.balance("u:bob"), 3000);
   assert.equal(L.balance("u:alice"), a0 - 3000);
   assert.equal(L.balance(SYS.escrow, "TUMBO"), 0);

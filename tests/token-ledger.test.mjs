@@ -541,10 +541,12 @@ test("REGRESSION receipt<->journal linkage: truncation and tamper detected (M2)"
   const L2 = TumboLedger.load(L.serialize());
   L2.s.receipts.pop();
   assert.throws(() => L2.verifyInvariants(), (e) => e.code === "INVARIANT_LINK");
-  // receipt entry tamper
+  // receipt entry tamper: the receipt's sealed hash no longer matches its body.
+  // The journal is clean, so journal->receipt linkage holds; the violation is
+  // the receipt's own chain integrity -> INVARIANT_CHAIN (via verifyChain).
   const L3 = TumboLedger.load(L.serialize());
   L3.s.receipts[2].entries[0].delta = "1";
-  assert.throws(() => L3.verifyInvariants(), (e) => e.code === "INVARIANT_LINK");
+  assert.throws(() => L3.verifyInvariants(), (e) => e.code === "INVARIANT_CHAIN");
   // journal refs tamper (rewriting reversedBy / intentOf)
   const L4 = TumboLedger.load(L.serialize());
   L4.s.journal[2].refs.intentOf = "tx-999999";

@@ -8,12 +8,15 @@
 //      fresh ledger — silently, no console error.
 //   2. Fund generic demo genesis accounts (u:visitor, b:guide) from sys:faucet
 //      with explicit, fixed idempotency keys (re-boots replay safely).
+//      b:guide is registered with kind "bot".
 //   3. verifyInvariants() before exposing anything.
 //   4. Expose window.TumboToken = { ledger, balance, fmt, quote, execute, on }.
-//   5. Wire every settled commit to document CustomEvent("tumbo:token") events
-//      (receipt + balance-changed) and queue persistence in a microtask — never
+//   5. Queue persistence in a microtask after every settled commit — never
 //      synchronously inside the commit, because vault/escrow bookkeeping for
-//      stake/deposit/intent actions may not be finished yet.
+//      stake/deposit/intent actions may not be finished yet. (Receipt +
+//      balance-changed document CustomEvent("tumbo:token") dispatch lives in
+//      the facade's own onCommit subscription, so each settlement emits
+//      exactly one event wave.)
 //
 // Simulation only: TUMBO-SIM is a demo token. No real money, wagering, wallet
 // custody, or chains are involved anywhere in this module.
@@ -45,8 +48,11 @@ function loadPersisted() {
 }
 
 function fundDemoGenesis(ledger) {
-  for (const acct of DEMO_ACCOUNTS) ledger.ensureAccount(acct);
+  for (const acct of DEMO_ACCOUNTS)
+    ledger.ensureAccount(acct, acct.startsWith("b:") ? "bot" : "user");
   // Fixed idempotency keys make re-boots replay-safe: funded once, ever.
+  // faucetDrip honors the explicit idem, so a re-boot finds both keys in the
+  // idem registry and skips (no second drip, no FAUCET_COOLDOWN trip).
   for (const acct of DEMO_ACCOUNTS) {
     const dripKey = `${GENESIS_IDEM}:${acct.slice(2)}`;
     const recvKey = `${GENESIS_IDEM}:recv:${acct.slice(2)}`;
@@ -76,13 +82,10 @@ export function bootToken({ persist = true } = {}) {
     });
   }
 
-  // Every settled action: announce receipt + balance-changed events, then
-  // persist. Deferred to a microtask so post-commit bookkeeping for
-  // stake/deposit/intent actions is complete before the snapshot is taken.
-  ledger.onCommit((receipt) => {
-    facade._dispatchReceipt(receipt);
-    queuePersist();
-  });
+  // Persistence only. The facade already announces every settled commit via
+  // its own onCommit subscription — this listener must not dispatch events,
+  // or execute() calls would emit a second, duplicate wave.
+  ledger.onCommit(() => queuePersist());
 
   if (typeof window !== "undefined" && typeof document !== "undefined") {
     window.TumboToken = {
