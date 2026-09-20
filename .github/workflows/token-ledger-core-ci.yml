@@ -21,7 +21,7 @@ jobs:
         with:
           node-version: 22
       - name: Run token test suites
-        run: node --test tests/token-ledger.test.mjs tests/token-facade.test.mjs
+        run: node --test tests/token-ledger.test.mjs tests/token-facade.test.mjs tests/token-idempotency.test.mjs
       - name: Syntax-check token modules and suites
         run: |
           node --check src/domains/token.js
@@ -33,3 +33,4 @@ jobs:
           node --check src/domains/token-boot.js
           node --check tests/token-ledger.test.mjs
           node --check tests/token-facade.test.mjs
+          node --check tests/token-idempotency.test.mjs
