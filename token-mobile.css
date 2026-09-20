@@ -1,0 +1,77 @@
+/* token-mobile.css — mobile verification + fix pass for token UI surfaces.
+ * Branch: grok/token-mobile. Scope: narrow viewports only (max-width: 700px,
+ * covering the 390x844 phone bar). Desktop 1440x900 geometry is untouched.
+ *
+ * Token surfaces covered: #asset-launch (TUMBO Asset Token map card),
+ * #launch-console (allocation registry), #launch-receipt-console (receipt /
+ * history), #launch-kit-console (share kit), #asset-market-console (peer
+ * ticker), #paycore-console (vault balances + flow previews).
+ *
+ * Verified on main before writing:
+ * - Zero horizontal overflow: every token console is width-bounded
+ *   (min(...,calc(100vw - 40px)) or the narrow-screen left:10px/right:10px
+ *   rule); inner grids use minmax(0,1fr) with ellipsis/overflow-wrap.
+ * - #paycore-console was the one token console missing from the
+ *   narrow-screen scrollable-console treatment -> fixed below (rule 1).
+ * - Tap targets: most token console buttons measured 24-38px tall -> 44px
+ *   below (rule 3). The repo's mobile panel manager only guaranteed 44px
+ *   on panel chrome (close buttons).
+ * - Panel bodies: #launch-console, #launch-receipt-console,
+ *   #launch-kit-console and #asset-market-console already scroll internally
+ *   on narrow screens; #asset-launch kept overflow:hidden -> scrolls now
+ *   (rule 2).
+ * - Minimize chips: the chip system (src/render/centered-surfaces.js) is
+ *   desktop-only and stays inert at <=700px, so no minimized chip can cover
+ *   content on phones.
+ * - Cubes: in-world blocks (incl. the asset-token block) are three.js
+ *   BoxGeometry meshes via the repo's pinned three.js r179.1 import map
+ *   ("three" -> ./vendor/three-r179.1/build/three.module.js), 0.78 units -
+ *   small by default, translucent blue glass from the first frame. No 3D
+ *   changes in this file (CSS layout only).
+ * - Simulation-first: every token surface already labels TUMBO-SIM as
+ *   simulated (SIMULATED MAP READY / NO TRANSFER / BALANCE PREVIEW ONLY /
+ *   TUMBO-SIM UNLISTED / NO CUSTODY). Read-only previews only; no buy/sell,
+ *   transfer-form, or leaderboard surfaces exist by design.
+ *
+ * Specificity note: this file is linked before the inline <style> block in
+ * index.html, so selectors are prefixed with `body` to outrank the
+ * single-ID desktop rules they refine.
+ */
+@media (max-width: 700px) {
+  /* 1. #paycore-console joins the narrow-screen scrollable-console
+     treatment. Before: it kept desktop geometry (right:20px;top:145px;
+     width:min(500px,calc(100vw - 40px))) with no guaranteed internal scroll
+     while its stacked sections (summary, current, balances 17vh, flows 17vh,
+     trace 11vh, boundary) can exceed max-height:calc(100vh - 190px). */
+  body #paycore-console {
+    left: 10px;
+    right: 10px;
+    top: 54px;
+    bottom: auto;
+    width: auto;
+    max-width: none;
+    max-height: calc(100vh - 72px);
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+  body #paycore-console > * {
+    flex: 0 0 auto;
+  }
+
+  /* 2. #asset-launch keeps its designed phone geometry but scrolls
+     internally instead of clipping (overflow:hidden) on short viewports. */
+  body #asset-launch {
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  /* 3. Tap targets >= 44px on every token console control at phone widths. */
+  body #asset-launch button,
+  body #launch-console button,
+  body #launch-receipt-console button,
+  body #launch-kit-console button,
+  body #asset-market-console button,
+  body #paycore-console button {
+    min-height: 44px;
+  }
+}
