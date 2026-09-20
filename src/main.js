@@ -96,7 +96,8 @@ import { mountBotPresence } from './render/bot-presence.js?v=20260918-botpresenc
 import { CONTRACT_ATELIER_CONSOLE_SOURCE, createContractAtelierConsole } from './render/contract-atelier.js?v=20260918-ctr1';
 import { LUNA_CONSOLE_SOURCE, createLunaCompanionConsole } from './render/luna-companion.js?v=20260918-luna1';
 import { WARDROBE_ATELIER_CONSOLE_SOURCE, createWardrobeAtelierConsole } from './render/wardrobe-atelier.js?v=20260918-wdr1';
-import { WHITE_PAPER_CONSOLE_SOURCE, createWhitePaperConsole } from './render/white-paper.js?v=20260918-wp1';
+import { WHITE_PAPER_CONSOLE_SOURCE, createWhitePaperConsole } from './render/white-paper.js?v=20260import './domains/token-transfers-ui.js?v=20260920-token-transfers1';918-wp1';
+
 import { GESTURE_LENS_CONSOLE_SOURCE, createGestureLensConsole } from './render/gesture-lens.js?v=20260918-gl1';
 import { createHandLensSession } from './render/hand-session.js?v=20260920-hand-lens';
 import { createStoryModeConsole } from './render/story-mode.js?v=20260920-story1';
@@ -114,7 +115,7 @@ import { createUnavailableMultiSportEvents, fetchMultiSportEventDetail, fetchMul
 import { DEVICE_PROJECTION_CONSOLE_SOURCE, createDeviceProjectionConsole } from './render/device-projection.js?v=20260827-device1';
 import { ASSET_MARKET_CONSOLE_SOURCE, createAssetMarketConsole } from './render/asset-market.js?v=20260828-asset-market1';
 import { createUnavailableAssetMarketEvidence, fetchAssetMarketEvidence } from './domains/asset-market.js?v=20260828-asset-market1';
-import { POPULATION_CONTEXT_SOURCE, createUnavailablePopulationContext, fetchPopulationContext } from './domains/population-context.js?v=20260828-population-context1';
+import { POPULATION_CONTEXT_SOURCE, createUnavailablePopulationContext, fetchPopulationContext } from './domains/population-context.js?v=20260828-population-context1'; import './domains/token-transfers-ui.js?v=20260920-token-transfers1';
 
 const runtimeStatus = globalThis.__MATUMBO_RUNTIME__;
 runtimeStatus?.setStage?.('projection', 'Preparing the canonical local world envelope…');
