@@ -35,9 +35,9 @@ function funded() {
 }
 
 t("mulDivFloor exact where float fails", () => {
-  const a = 9007199254740991;
-  eq(T.mulDivFloor(a, 7, 7), a, "exact");
-  ok(Math.floor((a * 7) / 7) !== a, "float must differ");
+  // 134217727 * 134217729 = 2^54 - 1 exactly; float64 rounds the product up to 2^54.
+  eq(T.mulDivFloor(134217727, 134217729, 4), 4503599627370495, "exact");
+  ok(Math.floor((134217727 * 134217729) / 4) !== 4503599627370495, "float must differ");
   eq(T.mulDivFloor(10, 3, 4), 7, "floor");
   th(() => T.mulDivFloor(1.5, 2, 3), /safe integer/);
 });
@@ -141,24 +141,20 @@ t("events fire on settle", () => {
   const seen = [];
   e.on("receipt", (d) => seen.push("receipt:" + d.receipt.action));
   e.on("balance-changed", (d) => seen.push("bal:" + d.account + ":" + d.asset));
-  e.execute(e.quote({ action: "buy", from: ALICE, fromAsset: "TUMBO", toAsset: "sMIMAS", amountIn: 10000 }));
-  ok(seen.includes("receipt:buy"));
-  ok(seen.filter((s) => s.indexOf("bal:") === 0).length >= 4);
-  const evts = [];
-  const rd = globalThis.document;
-  const rc = globalThis.CustomEvent;
-  globalThis.document = { dispatchEvent(ev) { evts.push(ev); } };
-  globalThis.CustomEvent = class { constructor(ty, init) { this.type = ty; this.detail = init && init.detail; } };
+  const domEvents = [];
+  const domListener = (ev) => domEvents.push(ev);
+  document.addEventListener("tumbo:token", domListener);
   try {
     e.execute(e.quote({ action: "buy", from: ALICE, fromAsset: "TUMBO", toAsset: "sMIMAS", amountIn: 10000 }));
   } finally {
-    globalThis.document = rd;
-    globalThis.CustomEvent = rc;
+    document.removeEventListener("tumbo:token", domListener);
   }
-  ok(evts.length > 0);
-  ok(evts.every((x) => x.type === "tumbo:token"));
-  ok(evts.some((x) => x.detail.type === "receipt"));
-  ok(evts.some((x) => x.detail.type === "balance-changed"));
+  ok(seen.includes("receipt:buy"));
+  ok(seen.filter((s) => s.indexOf("bal:") === 0).length >= 4);
+  ok(domEvents.length > 0, "expected DOM tumbo:token events");
+  ok(domEvents.every((x) => x.type === "tumbo:token"));
+  ok(domEvents.some((x) => x.detail && x.detail.type === "receipt"));
+  ok(domEvents.some((x) => x.detail && x.detail.type === "balance-changed"));
 });
 
 t("quote validation", () => {
