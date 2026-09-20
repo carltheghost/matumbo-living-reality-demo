@@ -21,7 +21,8 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { createLivingRealityProjection } from './core/demo-projection.js?v=20260918-muse2';
 // Hibernation vault console — side-effect import; mounts the vault glass-cube chip.
 import './domains/token-vault-ui.js';
-
+// Token transfers console — side-effect import; mounts the transfers glass-cube chip.
+import './domains/token-transfers-ui.js?v=20260920-token-transfers1';
 import { resolveDefaultFeature } from './core/default-landing.js';
 import { createDeviceProjection, readBrowserProjectionPreferences } from './projections/device-projection.js';
 import { createDistributionExplorer } from './render/distribution-explorer.js';
@@ -101,6 +102,7 @@ import { CONTRACT_ATELIER_CONSOLE_SOURCE, createContractAtelierConsole } from '.
 import { LUNA_CONSOLE_SOURCE, createLunaCompanionConsole } from './render/luna-companion.js?v=20260918-luna1';
 import { WARDROBE_ATELIER_CONSOLE_SOURCE, createWardrobeAtelierConsole } from './render/wardrobe-atelier.js?v=20260918-wdr1';
 import { WHITE_PAPER_CONSOLE_SOURCE, createWhitePaperConsole } from './render/white-paper.js?v=20260918-wp1';
+
 import { GESTURE_LENS_CONSOLE_SOURCE, createGestureLensConsole } from './render/gesture-lens.js?v=20260918-gl1';
 import { createHandLensSession } from './render/hand-session.js?v=20260920-hand-lens';
 import { createStoryModeConsole } from './render/story-mode.js?v=20260920-story1';
@@ -118,7 +120,7 @@ import { createUnavailableMultiSportEvents, fetchMultiSportEventDetail, fetchMul
 import { DEVICE_PROJECTION_CONSOLE_SOURCE, createDeviceProjectionConsole } from './render/device-projection.js?v=20260827-device1';
 import { ASSET_MARKET_CONSOLE_SOURCE, createAssetMarketConsole } from './render/asset-market.js?v=20260828-asset-market1';
 import { createUnavailableAssetMarketEvidence, fetchAssetMarketEvidence } from './domains/asset-market.js?v=20260828-asset-market1';
-import { POPULATION_CONTEXT_SOURCE, createUnavailablePopulationContext, fetchPopulationContext } from './domains/population-context.js?v=20260828-population-context1';
+import { POPULATION_CONTEXT_SOURCE, createUnavailablePopulationContext, fetchPopulationContext } from './domains/population-context.js?v=20260828-population-context1'; import './domains/token-transfers-ui.js?v=20260920-token-transfers1';
 
 const runtimeStatus = globalThis.__MATUMBO_RUNTIME__;
 runtimeStatus?.setStage?.('projection', 'Preparing the canonical local world envelope…');
