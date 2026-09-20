@@ -1,3 +1,7 @@
+// TUMBO-SIM ledger core boot: exposes window.TumboToken and funds demo accounts.
+// Side-effect import only; resolveDefaultFeature below stays pure and DOM-free.
+import '../domains/token-boot.js';
+
 /** Default-landing routing: which feature view opens when the page loads.
  *
  * Pure and DOM-free so the decision is unit-testable; the caller
