@@ -95,6 +95,7 @@ function injectStyles() {
     background:rgba(16,34,70,.72);border:1px solid rgba(140,200,255,.4);
     backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
     box-shadow:0 12px 44px rgba(30,110,210,.35);font:400 12px/1.5 system-ui,sans-serif}
+  .tv-panel[hidden]{display:none}
   .tv-head{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;cursor:grab;
     background:rgba(30,70,140,.35);border-bottom:1px solid rgba(140,200,255,.25)}
   .tv-title{font-weight:700;font-size:12px;letter-spacing:.1em}
