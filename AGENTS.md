@@ -12,3 +12,8 @@ This folder is the canonical Living Reality source. Agent 01 / Control Tower own
 
 ## Current baseline
 The original app is a static Three.js 0.179.1 organ-and-semantic-object study served with `python -m http.server 8080`.
+
+
+## Integration boundary
+
+Read `docs/REPO_BOUNDARIES.md` before changing the repository. The White Paper is documentation, not a runtime feature/domain contribution. Do not add documentation concepts to the feature registry or SIMFABRIC projection merely because they are described in the paper. Parallel work lands on a branch and is integrated through the control owner.
