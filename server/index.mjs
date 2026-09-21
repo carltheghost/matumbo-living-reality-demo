@@ -208,7 +208,7 @@ async function marketSnapshot(providerName, limit = 50) {
 
 async function route(req, res) {
   cors(res);
-  if (req.method === "OPTIONS") {\n    if (TRUSTED_ORIGIN && req.headers.origin && req.headers.origin !== TRUSTED_ORIGIN) return json(res, 403, { error: "origin_not_allowed" });
+  if (req.method === "OPTIONS") {
     res.writeHead(204); return res.end();
   }
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
@@ -223,7 +223,8 @@ async function route(req, res) {
       const limit = Math.max(1, Math.min(MAX_MARKETS, Number(url.searchParams.get("limit") || 50)));
       return json(res, 200, await marketSnapshot(provider, limit));
     }
-    if (req.method === "POST" && url.pathname === "/api/auth/register") {\n      if (!enforceRateLimit(req, res, "auth", 10)) return;
+    if (req.method === "POST" && url.pathname === "/api/auth/register") {
+      if (!enforceRateLimit(req, res, "auth", 10)) return;
       const data = await body(req); const username = cleanName(data.username); const password = String(data.password || "");
       if (password.length < 10) return json(res, 400, { error: "password_min_10" });
       if (state.users[username]) return json(res, 409, { error: "username_taken" });
@@ -231,7 +232,8 @@ async function route(req, res) {
       state.users[username] = user; await persist();
       return json(res, 201, { user: publicUser(user) });
     }
-    if (req.method === "POST" && url.pathname === "/api/auth/login") {\n      if (!enforceRateLimit(req, res, "auth", 20)) return;
+    if (req.method === "POST" && url.pathname === "/api/auth/login") {
+      if (!enforceRateLimit(req, res, "auth", 20)) return;
       const data = await body(req); const username = cleanName(data.username); const user = state.users[username];
       if (!user || !(await verifyPassword(String(data.password || ""), user.passwordHash))) return json(res, 401, { error: "invalid_credentials" });
       const token = crypto.randomBytes(32).toString("base64url");
