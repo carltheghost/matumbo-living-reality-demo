@@ -8786,7 +8786,20 @@ realityAssembly=createRealityAssembly({THREE,renderer,scene,camera,controls,worl
 window.__TUMBO_REALITY_ASSEMBLY__=realityAssembly;
 document.addEventListener('person-studio:enter-vr',()=>immersiveSession.start('immersive-vr'));
 if(featureNavigator.getSnapshot().activeId==='person'&&!new URLSearchParams(location.search).has('person'))personStudio.open();
-if(featureNavigator.getSnapshot().activeId==='reality-lens')realityAssembly.open();
+// The clean landing is owned by Reality Assembly itself. Do not make its
+// visibility depend on the navigator's transient activeId: the navigator is
+// mounted before the assembly renderer and other feature callbacks can change
+// presentation state during bootstrap. On the plain root route, explicitly
+// open the connected glass-cube world after the renderer exists.
+const cleanRealityLanding = !new URLSearchParams(globalThis.location?.search ?? '').get('feature')
+  && !new URLSearchParams(globalThis.location?.search ?? '').get('panel')
+  && !String(globalThis.location?.hash ?? '');
+if (cleanRealityLanding) {
+  featureNavigator.close();
+  realityAssembly.open();
+} else if(featureNavigator.getSnapshot().activeId==='reality-lens') {
+  realityAssembly.open();
+}
 renderer.setAnimationLoop(animate); /* TUMBO-SIM token gamification (Infinite Burrow, Part 7): self-contained glass cube + console, mounted lazily so a mount failure can never break the world bootstrap. */ import('./render/token-gamification.js?v=20260920-gam1').then(({ mountTokenGamification }) => { try { window.__TUMBO_TOKEN_GAMIFICATION__ = mountTokenGamification({ three: THREE, scene, world, camera, renderer, controls, documentRoot: document }); } catch (error) { console.warn('[token-gamification] mount failed:', error); } }).catch((error) => { console.warn('[token-gamification] load failed:', error); });
 // URL-derived City navigation reuses the existing feature owner and avoids provider refresh.
 const mobilePanelManager = initMobilePanelManager({ documentRoot: document, windowRoot: window });
