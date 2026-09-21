@@ -2,13 +2,13 @@
 
 ## Financial Academy restored into Living Reality (implemented 2026-09-04)
 
-Mission Control: 23 openable feature routes. The restored Financial Academy is
+Historical 2026-09-04 snapshot: Mission Control exposed 23 openable feature routes. The restored Financial Academy is
 a first-class `financial-academy` contribution, Block World feature cube, direct
 `?feature=academy` route, and interactive console. Its four connected lessons
 cover Financial OS authority, HTTP 402/x402, T402, and PAYCORE/evidence. Answers
 change local progress immediately; incorrect answers can be retried, a correct
 retry earns reduced demo XP, completed lessons cannot award twice, and Reset
-clears the page-session state. The current full suite passes 442/442. Academy
+clears the page-session state. The full suite was recorded as 442/442 in that historical snapshot; this is not current release verification. Academy
 adds no provider request, credential, advice, reward token, persistence, wallet,
 or external authority.
 
@@ -34,7 +34,7 @@ Multi-Sport cards clear stale specialized query keys, preserve build/fresh,
 open their existing local surfaces, and make zero provider or unexpected
 requests. Explicit Tennis refresh remains allowlisted ESPN-only and does not
 fabricate records. Receipt `work/audit-feature-block-provider-boundary-217.json`
-passed at `2026-09-02T04:25:46.486Z`; the current full suite passes 437/437 and release
+passed at `2026-09-02T04:25:46.486Z`; the recorded suite for that historical verification was 437/437 and release
 boundaries 9/9. No authority or execution capability was added.
 
 ## Packet 224 — provider readiness in the shared session (verified 2026-08-31)
@@ -300,12 +300,7 @@ changed in this packet.
 
 ## Packet 202 — documentation frontier consistency reconciliation (verified 2026-08-30)
 
-The project-map consistency test now inspects a 32,000-character frontier of
-`.tumbo/continuity/NEXT.md`, retaining the historical packet assertions after
-the newer entries. The project-map test passes 1/1, the serial full suite
-passes 382/382, the release suite passes 9/9, and syntax checks pass. This was
-a docs/test consistency change only; no Person route, product, provider, or
-execution behavior changed.
+The project-map consistency check now validates current source-of-truth documents and the authoritative feature registry. The continuity queue is optional historical context, and old packet/count assertions are not release gates.
 
 ## Packet 201 — canonical Person detail deep link (browser verified 2026-08-30)
 
