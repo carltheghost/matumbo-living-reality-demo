@@ -221,7 +221,7 @@ export function createContractAtelierConsole({
       const resolveBox = element(documentRoot, "div", "contract-atelier-box");
       resolveBox.append(element(documentRoot, "div", "contract-atelier-section-label", "RESOLVE (HOUSE / CREATOR REHEARSAL)"));
       resolveBox.append(element(documentRoot, "div", "contract-atelier-hint",
-        "Resolution needs facts that satisfy this contract's logic conditions. Multi-outcome contracts also need a winning outcome named from the list above."));
+        "Resolution uses the contract's fixed two-sided outcomes; the logic determines which side wins."));
       const factsInput = element(documentRoot, "input", "contract-atelier-text-input");
       factsInput.id = "contract-atelier-facts";
       factsInput.type = "text";
@@ -312,7 +312,7 @@ export function createContractAtelierConsole({
 
   createButton.addEventListener("click", () => {
     try {
-      // A blank Outcomes field means "use the domain default" (binary → YES, NO);
+      // Outcomes are fixed by contract type (YES/NO, HOME/AWAY, OVER/UNDER);
       // parseOutcomes("") would yield [] and the domain rejects empty arrays.
       const parsedOutcomes = parseOutcomes(outcomesInput.value);
       const contract = studio.createContract({
