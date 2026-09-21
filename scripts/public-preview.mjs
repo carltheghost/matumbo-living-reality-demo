@@ -175,6 +175,21 @@ export async function createPreviewServer(rootDirectory) {
       res.end();
       return;
     }
+
+    // Inject the preview client into the served root document without
+    // modifying index.html on disk.
+    if (pathname === "/" && extension === ".html") {
+      const html = await readFile(file, "utf8");
+      const script = "<script type=\"module\" src=\"/__preview/client.js\"></script>";
+      const body = html.includes("/__preview/client.js")
+        ? html
+        : html.includes("</body>")
+          ? html.replace("</body>", script + "</body>")
+          : html + script;
+      res.end(body);
+      return;
+    }
+
     createReadStream(file).pipe(res);
   });
 
