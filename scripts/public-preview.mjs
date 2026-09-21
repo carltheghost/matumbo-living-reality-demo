@@ -30,7 +30,7 @@ const MIME = new Map([
 ]);
 
 const HIDDEN = new Set([".env", ".git", "node_modules"]);
-const IGNORED_DIRS = new Set([".git", "node_modules", ".tumbo", "work"]);
+const IGNORED_DIRS = new Set([".git", "node_modules", ".tumbo", "work", "scripts"]);
 
 async function walk(root, directory = root, out = []) {
   for (const entry of await readdir(directory, {withFileTypes: true})) {
@@ -136,7 +136,7 @@ export async function createPreviewServer(rootDirectory) {
       return;
     }
 
-    if (pathname === "/api/world" || pathname.startsWith("/api/")) {
+    if (pathname === "/scripts/public-preview.mjs" || pathname.startsWith("/scripts/")) {\n      text(res, 404, "Not Found");\n      return;\n    }\n\n    if (pathname === "/api/world" || pathname.startsWith("/api/")) {
       text(res, 404, "Not Found");
       return;
     }
