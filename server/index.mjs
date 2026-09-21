@@ -208,6 +208,7 @@ async function marketSnapshot(providerName, limit = 50) {
 
 async function route(req, res) {
   cors(res);
+  if (!originAllowed(req)) return json(res, 403, { error: "origin_not_allowed" });
   if (req.method === "OPTIONS") {
     res.writeHead(204); return res.end();
   }
