@@ -23,7 +23,6 @@ import { createBotPlazaContribution } from "../domains/bot-plaza.js";
 import { createContractAtelierContribution } from "../domains/contract-atelier.js";
 import { createLunaCompanionContribution } from "../domains/luna-companion.js";
 import { createWardrobeAtelierContribution } from "../domains/wardrobe-atelier.js";
-import { createWhitePaperContribution } from "../domains/white-paper.js";
 import { createGestureLensContribution } from "../domains/gesture-lens.js";
 
 export const LIVING_REALITY_SAMPLE_TIME = "2025-01-01T00:00:00.000Z";
@@ -134,7 +133,6 @@ export function createLivingRealityProjection({ projectedAt = LIVING_REALITY_SAM
   const wardrobeAtelier = createWardrobeAtelierContribution({ updatedAt: projectedAt });
   // White paper: document-section metadata only, never composed text. The
   // living document is composed read-only from the envelope at render time.
-  const whitePaper = createWhitePaperContribution({ updatedAt: projectedAt });
   // Gesture Lens: pose/intent schema metadata only — the console is a local
   // rehearsal surface and the projection records only its vocabulary.
   const gestureLens = createGestureLensContribution({ updatedAt: projectedAt });
@@ -239,7 +237,6 @@ export function createLivingRealityProjection({ projectedAt = LIVING_REALITY_SAM
       contractAtelier,
       lunaCompanion,
       wardrobeAtelier,
-      whitePaper,
       gestureLens,
       contracts,
       ledger,
