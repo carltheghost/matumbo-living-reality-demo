@@ -320,54 +320,17 @@ export function createContractAtelier({ seed = "local-contracts", now = null } =
     if (!contract) throw new TypeError("unknown contract id");
     if (contract.status !== "open") throw new TypeError("contract is already resolved");
     const outcome = evaluateContractLogic(contract.logic, facts);
-    let winningSide;
-    if (contract.type === "yes_no" || contract.type === "home_away" || contract.type === "over_under") {
-      winningSide = outcome ? contract.outcomes[0] : contract.outcomes[1];
-    } else if (contract.type === "pool") {
-      winningSide = outcome ? contract.outcomes[0] : contract.outcomes[1];
-    } else {
-      const named = safeText(winner);
-      if (!contract.outcomes.includes(named)) {
-        throw new TypeError(`winner must be one of: ${contract.outcomes.join(", ")}`);
-      }
-      if (!outcome) throw new TypeError("multi contracts resolve only when the logic conditions hold");
-      winningSide = named;
-    }
+    const winningSide = outcome ? contract.outcomes[0] : contract.outcomes[1];
     const total = totalStaked(contract);
     const winningStakes = contract.stakes.filter((stake) => stake.side === winningSide);
-    const winningTotal = winningStakes.reduce((sum, stake) => sum + stake.amount, 0);
-    let payouts;
-    if (contract.type === "binary") {
-      // Fictional double-or-nothing paid by the rehearsal house; no real funds move.
-      payouts = freeze(winningStakes.map((stake) => freeze({
-        stakeId: stake.id,
-        side: stake.side,
-        amount: Math.round(stake.amount * 2 * 100) / 100,
-        unit: CONTRACT_ATELIER_STAKE_UNIT,
-        simulation: true,
-      })));
-    } else {
-      // Parimutuel rehearsal: the pool splits pro-rata among winning stakes.
-      let remainder = Math.round(total * 100);
-      payouts = freeze(winningStakes.map((stake, index) => {
-        let share;
-        if (winningTotal <= 0) {
-          share = 0;
-        } else if (index === winningStakes.length - 1) {
-          share = remainder;
-        } else {
-          share = Math.floor((stake.amount / winningTotal) * total * 100);
-        }
-        remainder -= share;
-        return freeze({
-          stakeId: stake.id,
-          side: stake.side,
-          amount: share / 100,
-          unit: CONTRACT_ATELIER_STAKE_UNIT,
-          simulation: true,
-        });
-      }));
-    }
+    const payouts = freeze(winningStakes.map((stake) => freeze({
+      stakeId: stake.id,
+      side: stake.side,
+      amount: Math.round(stake.amount * 2 * 100) / 100,
+      unit: CONTRACT_ATELIER_STAKE_UNIT,
+      simulation: true,
+    })));
+
     const resolution = freeze({
       winningSide,
       facts: freeze({ ...(facts && typeof facts === "object" ? facts : {}) }),
