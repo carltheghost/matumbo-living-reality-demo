@@ -3916,6 +3916,10 @@
       }, 30000) ?? null;
     })();
   </script>
-    <script type="module" src="./src/main.js?v=20260918-avatar-chess" onerror="globalThis.__MATUMBO_RUNTIME__?.markFailed?.(event, 'module load')"></script>
+    <script type="module">
+    import { mountLiveNetworkConsole } from "./src/render/live-network.js";
+    mountLiveNetworkConsole();
+  </script>
+  <script type="module" src="./src/main.js?v=20260918-avatar-chess" onerror="globalThis.__MATUMBO_RUNTIME__?.markFailed?.(event, 'module load')"></script>
 </body>
 </html>
