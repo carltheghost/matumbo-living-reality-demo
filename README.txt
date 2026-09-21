@@ -223,3 +223,24 @@ npm start
 ```
 
 The demo reports `postgres:false` and uses non-durable in-memory storage. The canonical browser remains the root Living Reality page.
+
+LIVE LAUNCH API
+The browser can remain a static/public frontend while an optional Node API supplies real accounts, shared rooms, presence, world synchronization, consented app-event collection, and live public prediction-market observations.
+
+Start the API:
+```bash
+npm run start:live
+```
+Default: `http://localhost:8091`. For deployment, put the API behind HTTPS and set `?api=https://your-api.example.com` on the public page. The API supports:
+- accounts: register/login/logout with salted scrypt password hashes and expiring bearer sessions;
+- multiplayer: authenticated room events, presence, Server-Sent Events, and optimistic world snapshots;
+- prediction markets: live read-only adapters for Kalshi, Polymarket, and Manifold with provider/source/timestamp metadata;
+- data collection: explicit account-scoped event ingestion and JSON export;
+- no brokerage, wagering, wallet, custody, signing, or settlement endpoint.
+
+The static demo remains usable without the API. Public prediction-market observations are informational data and are not recommendations or execution.
+
+SHARE TODAY
+For a hosted frontend, append the API origin to the URL:
+`https://YOUR-FRONTEND/?api=https%3A%2F%2FYOUR-API.example.com`
+The **LIVE NETWORK** control then exposes account, multiplayer, live market-data, consent, export, and share-link controls.
