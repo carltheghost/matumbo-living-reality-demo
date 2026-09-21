@@ -38,9 +38,11 @@ User-created contracts keep working exactly as before — drafts arrive
   - The odds line rides in the proposal's `sourceNotes`, so it renders on
     the existing review card's SOURCES row with zero UI changes.
 - `src/main.js` — creates one `createContractLedger()` and one
-  `createContractFlow()` at startup (no network until a scan is requested),
-  wires both hooks, exposes `window.__TUMBO_CONTRACT_FLOW__` and
-  `window.__TUMBO_CONTRACT_LEDGER__`.
+  `createContractFlow()` at startup, wires both hooks, then automatically
+  scans on boot and every five minutes. Exposes
+  `window.__TUMBO_CONTRACT_FLOW__`,
+  `window.__TUMBO_CONTRACT_LEDGER__`, and
+  `window.__TUMBO_AUTO_CONTRACTS__`.
 
 ## Invariants (all tested)
 
@@ -69,10 +71,11 @@ User-created contracts keep working exactly as before — drafts arrive
 
 ## Operating it
 
-1. Open the Contract Atelier, find "CONTRACTS FOR YOUR REVIEW".
-2. Press SCAN UPCOMING GAMES — drafts appear as review cards with the
-   odds line on their SOURCES row.
-3. APPROVE opens the book (quote frozen into the ledger); EDIT adjusts;
+1. Open the Contract Atelier and find "CONTRACTS FOR YOUR REVIEW".
+2. Upcoming games are scanned automatically on boot and every five minutes;
+   new drafts appear as review cards with the odds line on their SOURCES row.
+3. SCAN UPCOMING GAMES remains available as an explicit manual refresh.
+4. APPROVE opens the book (quote frozen into the ledger); EDIT adjusts;
    DISMISS returns the draft.
 4. When the event lands, `flow.gradeOnLanding(contractId, { winner })`
    grades deterministically; winners claim via
