@@ -168,3 +168,31 @@
 #feature-toggle {
   min-height: 40px;
 }
+
+/* Mission Control: compact desktop directory. The feature rail is intentionally
+   narrow so the 3-D world remains the primary surface. Its directory/detail
+   panes remain independently scrollable; mobile keeps the existing sheet. */
+@media (min-width: 701px) {
+  body #feature-shell {
+    width: min(280px, 25vw);
+    min-width: 250px;
+    max-width: 280px;
+    height: min(770px, calc(100vh - 135px));
+  }
+  body #feature-nav {
+    grid-template-columns: 1fr;
+    flex: 0 1 min(44vh, 430px);
+    max-height: min(44vh, 430px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+  body #feature-detail {
+    min-height: 170px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+  }
+}
+
