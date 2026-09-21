@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {resolveDefaultFeature} from '../src/core/default-landing.js';
 
-test('no route params -> reality-lens (clean constellation overview)',()=>{
+test('no route params -> block-world (Living Reality engine)',()=>{
   assert.equal(resolveDefaultFeature(new URLSearchParams(''),''),'block-world');
   assert.equal(resolveDefaultFeature(new URLSearchParams(''),null),'block-world');
   assert.equal(resolveDefaultFeature('',''),'block-world');
