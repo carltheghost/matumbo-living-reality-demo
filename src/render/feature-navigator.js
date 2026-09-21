@@ -418,7 +418,7 @@ const FEATURE_SURFACE_ROUTES = Object.freeze({
   "contract-atelier": Object.freeze([
     Object.freeze(["OPEN CONTRACT", "yes/no · home/away · over/under"]),
     Object.freeze(["CHOOSE POSITION", "house counterparty or player"]),
-    Object.freeze(["RESOLVE", "true/false · AND · OR · IF/ELSE logic"]),
+    Object.freeze(["RESOLVE", "YES/NO · true/false · AND · OR · IF/ELSE"]),
   ]),
   ledger: Object.freeze([
     Object.freeze(["JOURNAL", "balanced local rehearsal record"]),
