@@ -3458,7 +3458,7 @@
         <div>
           <div class="eyebrow">Contract Atelier · fictional markets</div>
           <h2 id="contract-atelier-title">Open · Stake · Resolve</h2>
-          <p>Open a pool, binary, or multi-outcome contract on any topic as the house or a player. Stakes are rehearsal credits with zero real value.</p>
+          <p>Open a YES/NO, HOME/AWAY, or OVER/UNDER contract on any topic as the house or a player. Stakes are rehearsal credits with zero real value.</p>
         </div>
         <button id="contract-atelier-close" type="button" aria-label="Close Contract Atelier">×</button>
       </div>
@@ -3476,9 +3476,9 @@
         <h3 id="contract-atelier-create-title" class="room-console-section-title">Open a fictional contract</h3>
         <label class="contract-atelier-field" for="contract-atelier-type">Market type
           <select id="contract-atelier-type">
-            <option value="binary">Binary — yes / no</option>
-            <option value="pool">Pool — parimutuel split</option>
-            <option value="multi">Multi — pick 1 of N outcomes</option>
+            <option value="yes_no">YES / NO</option>
+            <option value="home_away">HOME / AWAY</option>
+            <option value="over_under">OVER / UNDER</option>
           </select>
         </label>
         <label class="contract-atelier-field" for="contract-atelier-role">Your position
@@ -3517,9 +3517,9 @@
           <input id="contract-atelier-prop-c" type="text" maxlength="200" autocomplete="off" placeholder="IF/ELSE else-branch only">
         </label>
         <label class="contract-atelier-field" for="contract-atelier-outcomes">Outcomes (comma-separated)
-          <input id="contract-atelier-outcomes" type="text" maxlength="200" autocomplete="off" placeholder="e.g. RAIN, DRY — binary defaults to YES, NO">
+          <input id="contract-atelier-outcomes" type="text" maxlength="200" autocomplete="off" placeholder="Fixed by contract type — YES/NO, HOME/AWAY, or OVER/UNDER">
         </label>
-        <p class="contract-atelier-hint">Resolution: binary → logic TRUE picks the first outcome; pool → TRUE picks the first outcome, pool splits among winners; multi → logic must hold and you name the winning outcome.</p>
+        <p class="contract-atelier-hint">Resolution: the logic decides one side of the selected pair: YES/NO, HOME/AWAY, or OVER/UNDER.</p>
         <div id="contract-atelier-create-actions">
           <button id="contract-atelier-create" type="button">Open fictional contract</button>
           <button id="contract-atelier-reset" type="button">Reset atelier</button>
