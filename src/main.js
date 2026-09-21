@@ -3386,6 +3386,53 @@ contractAtelierConsole = createContractAtelierConsole({
   })),
 });
 window.__TUMBO_CONTRACT_ATELIER__ = contractAtelierConsole;
+
+// Automatic prediction-contract generation.
+// The Prediction Place should populate itself without requiring a button press:
+// scan once after boot, then refresh every five minutes. The shared proposal
+// queue and contract-flow idempotency guard prevent duplicate game proposals,
+// including across page reloads. Failures are contained inside scanAndQueue()
+// and never affect the manual Contract Atelier.
+const AUTO_CONTRACT_SCAN_INTERVAL_MS = 5 * 60 * 1000;
+let automaticContractScanInFlight = null;
+let automaticContractScanLastResult = null;
+
+function runAutomaticContractScan() {
+  if (automaticContractScanInFlight) return automaticContractScanInFlight;
+  automaticContractScanInFlight = Promise.resolve()
+    .then(() => contractFlow.scanAndQueue())
+    .then((result) => {
+      automaticContractScanLastResult = result;
+      return result;
+    })
+    .catch((error) => {
+      const fallback = Object.freeze({
+        proposals: Object.freeze([]),
+        drafts: Object.freeze([]),
+        errors: Object.freeze([String(error?.message ?? error)]),
+      });
+      automaticContractScanLastResult = fallback;
+      return fallback;
+    })
+    .finally(() => {
+      automaticContractScanInFlight = null;
+    });
+  return automaticContractScanInFlight;
+}
+
+const automaticContractScanTimer = window.setInterval(() => {
+  void runAutomaticContractScan();
+}, AUTO_CONTRACT_SCAN_INTERVAL_MS);
+
+window.__TUMBO_AUTO_CONTRACTS__ = Object.freeze({
+  intervalMs: AUTO_CONTRACT_SCAN_INTERVAL_MS,
+  scanNow: runAutomaticContractScan,
+  getLastScan: () => automaticContractScanLastResult,
+});
+
+void runAutomaticContractScan();
+window.addEventListener("pagehide", () => window.clearInterval(automaticContractScanTimer), { once: true });
+
 // Luna Companion is a scripted local guide: plain-word navigation, feature
 // explanations, and current-context narration. No AI model, no conversation
 // service, no network, no memory past this page session. Navigation uses the
