@@ -11,7 +11,7 @@
 export const ASSET_MARKET_SCHEMA_VERSION = 1;
 export const ASSET_MARKET_SOURCE = "public-asset-market-evidence";
 export const ASSET_MARKET_REPLAY_SOURCE = "public-asset-market-replay";
-export const ASSET_MARKET_MAX_RECORDS = 4;
+export const ASSET_MARKET_MAX_RECORDS = 20;
 export const ASSET_MARKET_FETCH_TIMEOUT_MS = 9_000;
 
 export const ASSET_MARKET_BOUNDARY =
@@ -21,10 +21,26 @@ const COINGECKO_API_BASE = "https://api.coingecko.com/api/v3";
 const COINGECKO_DOCS = "https://docs.coingecko.com/reference/coins-markets";
 
 export const ASSET_MARKET_PEER_ASSETS = Object.freeze([
-  Object.freeze({ id: "bitcoin", symbol: "BTC", label: "Bitcoin" }),
-  Object.freeze({ id: "ethereum", symbol: "ETH", label: "Ethereum" }),
-  Object.freeze({ id: "official-trump", symbol: "TRUMP", label: "Official Trump" }),
-  Object.freeze({ id: "melania-meme", symbol: "MELANIA", label: "Melania Meme" }),
+  { id: "bitcoin", symbol: "BTC", label: "Bitcoin" },
+  { id: "ethereum", symbol: "ETH", label: "Ethereum" },
+  { id: "tether", symbol: "USDT", label: "Tether" },
+  { id: "binancecoin", symbol: "BNB", label: "BNB" },
+  { id: "ripple", symbol: "XRP", label: "XRP" },
+  { id: "usd-coin", symbol: "USDC", label: "USD Coin" },
+  { id: "solana", symbol: "SOL", label: "Solana" },
+  { id: "tron", symbol: "TRX", label: "TRON" },
+  { id: "zcash", symbol: "ZEC", label: "Zcash" },
+  { id: "figure-heloc", symbol: "FIGR_HELOC", label: "Figure Heloc" },
+  { id: "hyperliquid", symbol: "HYPE", label: "Hyperliquid" },
+  { id: "dogecoin", symbol: "DOGE", label: "Dogecoin" },
+  { id: "monero", symbol: "XMR", label: "Monero" },
+  { id: "rain", symbol: "RAIN", label: "Rain" },
+  { id: "whitebit-token", symbol: "WBT", label: "WhiteBIT Coin" },
+  { id: "usds", symbol: "USDS", label: "USDS" },
+  { id: "chainlink", symbol: "LINK", label: "Chainlink" },
+  { id: "cardano", symbol: "ADA", label: "Cardano" },
+  { id: "leo-token", symbol: "LEO", label: "LEO Token" },
+  { id: "stellar", symbol: "XLM", label: "Stellar" },
 ]);
 
 export const ASSET_MARKET_PEER_ASSET_IDS = Object.freeze(ASSET_MARKET_PEER_ASSETS.map(({ id }) => id));
