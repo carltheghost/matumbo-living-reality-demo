@@ -136,7 +136,12 @@ export async function createPreviewServer(rootDirectory) {
       return;
     }
 
-    if (pathname === "/scripts/public-preview.mjs" || pathname.startsWith("/scripts/")) {\n      text(res, 404, "Not Found");\n      return;\n    }\n\n    if (pathname === "/api/world" || pathname.startsWith("/api/")) {
+    if (pathname === "/scripts/public-preview.mjs" || pathname.startsWith("/scripts/")) {
+      text(res, 404, "Not Found");
+      return;
+    }
+
+    if (pathname === "/api/world" || pathname.startsWith("/api/")) {
       text(res, 404, "Not Found");
       return;
     }
