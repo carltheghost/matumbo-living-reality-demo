@@ -290,10 +290,15 @@ export function createContractFlow({
           try {
             proposal = gameToDraft(game);
           } catch {
+            // Do not permanently suppress a game when draft construction fails.
+            seenGameIds.delete(gameId);
             continue;
           }
           const draft = normalizeDraft(proposal, now);
-          if (!draft) continue;
+          if (!draft) {
+            seenGameIds.delete(gameId);
+            continue;
+          }
           draftsByGameId.set(gameId, draft);
           drafts.push(draft);
         }
@@ -388,7 +393,12 @@ export function createContractFlow({
       } catch {
         continue;
       }
-      if (!proposal || !proposal.id) continue;
+      if (!proposal || !proposal.id) {
+        // Submission can fail transiently; allow the next automatic scan to retry.
+        seenGameIds.delete(draft.gameId);
+        draftsByGameId.delete(draft.gameId);
+        continue;
+      }
       quotesByProposalId.set(proposal.id, draft.oddsQuote || null);
       try {
         ledger.record({
