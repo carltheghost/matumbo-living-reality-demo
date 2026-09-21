@@ -3484,6 +3484,18 @@
                   <option value="house">HOUSE — provide liquidity</option>
                   <option value="player">PLAYER — take YES / NO position</option>
                 </select>
+                <label class="contract-atelier-field">HOUSE MODE
+                  <select id="contract-atelier-house-mode">
+                    <option value="single">HOUSE — one liquidity provider</option>
+                    <option value="pool">HOUSE POOL — multiple providers</option>
+                  </select>
+                </label>
+                <label class="contract-atelier-field">HOUSE FEE (BPS)
+                  <input id="contract-atelier-fee-bps" type="number" min="0" max="1000" value="100" />
+                </label>
+                <label class="contract-atelier-field">LIQUIDITY B
+                  <input id="contract-atelier-liquidity-b" type="number" min="10" max="10000" value="100" />
+                </label>
         </label>
         <label class="contract-atelier-field" for="contract-atelier-topic">Topic
           <select id="contract-atelier-topic">
