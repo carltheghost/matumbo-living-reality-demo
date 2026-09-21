@@ -115,14 +115,20 @@ const TAB_ENGINE_CSS = `
   justify-content: center;
   flex-wrap: wrap;
 }
-/* desktop: left glass rail */
+/* desktop: left glass rail.
+   The rail reserves a 96px top band for the page's fixed top-left HUD chrome
+   (the city-journey widget at top:8px/~74px tall collapsed, the brand mark):
+   the rail centers 48px below viewport center and its max-height shrinks by
+   the full band, so the rail's top edge can never rise above 108px. No chip
+   can slide underneath the chrome and become unclickable; long chip lists
+   scroll inside the rail instead. */
 .tl-dock--desktop {
   left: 12px;
-  top: 50%;
+  top: calc(50% + 48px);
   transform: translateY(-50%);
   flex-direction: column;
   align-items: stretch;
-  max-height: calc(100vh - 24px);
+  max-height: calc(100vh - 24px - 96px);
   overflow-y: auto;
 }
 /* ar: compact right-edge rail (lane 2 owns AR visuals; layout switch only) */
