@@ -2574,7 +2574,7 @@ export function createBlockWorldLayer({
     const groups = [
       ["WORLD", ["reality-lens", "person", "wardrobe-atelier", "rooms", "block-world", "runtime-sync", "migration", "social-explorer", "projections"]],
       ["VALUE", ["asset-token", "asset-market", "launch-distribution", "paycore", "contracts", "contract-atelier", "ledger", "t402"]],
-      ["EVIDENCE", ["gateway", "world-events", "sports-events", "multi-sport-events", "picture-matter", "nft-atelier", "white-paper"]],
+      ["EVIDENCE", ["gateway", "world-events", "sports-events", "multi-sport-events", "picture-matter", "nft-atelier"]],
       ["AGENTS + PLAY", ["agent", "arena", "academy", "gesture-lens", "web-ai"]],
     ];
     groups.forEach(([groupName, ids]) => {
