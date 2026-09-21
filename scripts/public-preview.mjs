@@ -98,7 +98,7 @@ function safePath(root, pathname) {
   const prefix = root.endsWith(sep) ? root : root + sep;
   if (candidate !== root && !candidate.startsWith(prefix)) return null;
   const parts = relative(root, candidate).split(sep);
-  if (parts.some((part) => HIDDEN.has(part))) return null;
+  if (parts.some((part) => HIDDEN.has(part) || IGNORED_DIRS.has(part))) return null;
   return candidate;
 }
 
