@@ -54,8 +54,30 @@ function cors(res) {
   const origin = TRUSTED_ORIGIN || "*";
   res.setHeader("access-control-allow-origin", origin);
   res.setHeader("access-control-allow-headers", "content-type, authorization");
-  res.setHeader("access-control-allow-methods", "GET,POST,PUT,OPTIONS");
+  res.setHeader("access-control-allow-methods", "DELETE,GET,POST,PUT,OPTIONS");
   res.setHeader("access-control-expose-headers", "x-matumboversion");
+}
+const rateBuckets = new Map();
+function rateLimit(req, key, limit, windowMs = 60_000) {
+  const address = String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "unknown").split(",")[0].trim();
+  const bucketKey = `${address}:${key}`;
+  const current = rateBuckets.get(bucketKey);
+  const timestamp = Date.now();
+  if (!current || timestamp - current.startedAt >= windowMs) {
+    rateBuckets.set(bucketKey, { startedAt: timestamp, count: 1 });
+    return true;
+  }
+  current.count += 1;
+  return current.count <= limit;
+}
+function enforceRateLimit(req, res, key, limit) {
+  if (rateLimit(req, key, limit)) return true;
+  res.setHeader("retry-after", "60");
+  json(res, 429, { error: "rate_limited" });
+  return false;
+}
+function originAllowed(req) {
+  return !TRUSTED_ORIGIN || !req.headers.origin || req.headers.origin === TRUSTED_ORIGIN;
 }
 function publicUser(user) {
   return { id: user.id, username: user.username, displayName: user.displayName, createdAt: user.createdAt };
@@ -199,7 +221,7 @@ async function route(req, res) {
       const limit = Math.max(1, Math.min(MAX_MARKETS, Number(url.searchParams.get("limit") || 50)));
       return json(res, 200, await marketSnapshot(provider, limit));
     }
-    if (req.method === "POST" && url.pathname === "/api/auth/register") {
+    if (req.method === "POST" && url.pathname === "/api/auth/register") {\n      if (!enforceRateLimit(req, res, "auth", 10)) return;
       const data = await body(req); const username = cleanName(data.username); const password = String(data.password || "");
       if (password.length < 10) return json(res, 400, { error: "password_min_10" });
       if (state.users[username]) return json(res, 409, { error: "username_taken" });
@@ -207,7 +229,7 @@ async function route(req, res) {
       state.users[username] = user; await persist();
       return json(res, 201, { user: publicUser(user) });
     }
-    if (req.method === "POST" && url.pathname === "/api/auth/login") {
+    if (req.method === "POST" && url.pathname === "/api/auth/login") {\n      if (!enforceRateLimit(req, res, "auth", 20)) return;
       const data = await body(req); const username = cleanName(data.username); const user = state.users[username];
       if (!user || !(await verifyPassword(String(data.password || ""), user.passwordHash))) return json(res, 401, { error: "invalid_credentials" });
       const token = crypto.randomBytes(32).toString("base64url");
@@ -265,7 +287,7 @@ async function route(req, res) {
     }
     if (req.method === "POST" && url.pathname === "/api/data/events") {
       const session = requireAuth(req, res); if (!session) return;
-      const data = await body(req); const record = { id: id("data"), userId: session.user.id, type: String(data.type || "event").slice(0, 64), createdAt: now(), properties: data.properties && typeof data.properties === "object" ? data.properties : {} };
+      if (!enforceRateLimit(req, res, "telemetry", 120)) return;\n      const data = await body(req);\n      if (JSON.stringify(data.properties ?? {}).length > 16_000) return json(res, 413, { error: "event_properties_too_large" });\n      const record = { id: id("data"), userId: session.user.id, type: String(data.type || "event").slice(0, 64), createdAt: now(), properties: data.properties && typeof data.properties === "object" ? data.properties : {} };
       state.telemetry.push(record); if (state.telemetry.length > 20000) state.telemetry.splice(0, state.telemetry.length - 20000);
       await persist(); return json(res, 201, { accepted: true, id: record.id });
     }
