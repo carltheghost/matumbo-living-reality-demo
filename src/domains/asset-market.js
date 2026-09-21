@@ -11,7 +11,7 @@
 export const ASSET_MARKET_SCHEMA_VERSION = 1;
 export const ASSET_MARKET_SOURCE = "public-asset-market-evidence";
 export const ASSET_MARKET_REPLAY_SOURCE = "public-asset-market-replay";
-export const ASSET_MARKET_MAX_RECORDS = 40;
+export const ASSET_MARKET_MAX_RECORDS = 44;
 export const ASSET_MARKET_FETCH_TIMEOUT_MS = 9_000;
 
 export const ASSET_MARKET_BOUNDARY =
