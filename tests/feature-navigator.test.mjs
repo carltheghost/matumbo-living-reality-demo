@@ -27,7 +27,6 @@ const expectedIds = [
   "bot-plaza",
   "luna-companion",
   "wardrobe-atelier",
-  "white-paper",
   "gesture-lens",
   "gateway",
   "world-events",
