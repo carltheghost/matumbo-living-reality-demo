@@ -10,9 +10,9 @@ import('../domains/token-boot.js').catch(() => {});
  * Pure and DOM-free so the decision is unit-testable; the caller
  * (`src/main.js`) hands it the current query params and hash.
  *
- * - No `feature` / `panel` query param and no hash → `'reality-lens'`
- *   (the clean constellation world overview: labeled glass feature cubes,
- *   all consoles closed, the directory closed).
+ * - No `feature` / `panel` query param and no hash → `'block-world'`
+ *   (the connected glass-cube world: small blocks, connection lines, zoom,
+ *   and deliberate double-click/double-tap entry).
  * - Any explicit route (`?feature=…`, `?panel=…`, or a hash) → `null`,
  *   meaning the caller leaves the URL-driven routing exactly as it is.
  *
@@ -28,5 +28,5 @@ export function resolveDefaultFeature(search, hash) {
   if (params.get('feature') || params.get('panel')) return null;
   const fragment = String(hash ?? '');
   if (fragment && fragment !== '#') return null;
-  return 'reality-lens';
+  return 'block-world';
 }
