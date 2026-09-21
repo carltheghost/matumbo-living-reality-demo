@@ -67,17 +67,25 @@ function extractFeatures(html) {
   return features;
 }
 
-function json(res, status, body) {
+function json(res, status, body, head = false) {
   const payload = JSON.stringify(body);
   res.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
     "cache-control": "no-store",
   });
+  if (head) {
+    res.end();
+    return;
+  }
   res.end(payload);
 }
 
-function text(res, status, body, contentType = "text/plain; charset=utf-8") {
+function text(res, status, body, contentType = "text/plain; charset=utf-8", head = false) {
   res.writeHead(status, {"content-type": contentType, "cache-control": "no-store"});
+  if (head) {
+    res.end();
+    return;
+  }
   res.end(body);
 }
 
@@ -108,12 +116,12 @@ export async function createPreviewServer(rootDirectory) {
     const pathname = requestUrl.pathname;
 
     if (pathname === "/__preview/client.js") {
-      text(res, 200, PREVIEW_CLIENT, "text/javascript; charset=utf-8");
+      text(res, 200, PREVIEW_CLIENT, "text/javascript; charset=utf-8", req.method === "HEAD");
       return;
     }
 
     if (pathname === "/__preview/revision") {
-      json(res, 200, {revision: await sourceRevision(root)});
+      json(res, 200, {revision: await sourceRevision(root)}, req.method === "HEAD");
       return;
     }
 
@@ -128,10 +136,12 @@ export async function createPreviewServer(rootDirectory) {
       };
       if (pathname === "/context") {
         text(res, 200,
-          `# Public Preview Context\\n\\nSource revision: ${revision}\\n\\nFeatures: ${body.features.join(", ")}\\n`,
+          `# Public Preview Context\n\nSource revision: ${revision}\n\nFeatures: ${body.features.join(", ")}\n`,
+          "text/plain; charset=utf-8",
+          req.method === "HEAD",
         );
       } else {
-        json(res, 200, body);
+        json(res, 200, body, req.method === "HEAD");
       }
       return;
     }
