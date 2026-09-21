@@ -181,7 +181,7 @@ async function marketSnapshot(providerName, limit = 50) {
     }
   }));
   await persist();
-  return { retrievedAt: now(), providers: results, records: results.flatMap(r => r.records || []) };
+  return { retrievedAt: now(), providers: results, records: results.flatMap(r => r.records || []), disclaimer: "Read-only public observations; not trading, wagering, or investment advice." };
 }
 
 async function route(req, res) {
