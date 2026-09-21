@@ -119,6 +119,74 @@ test("scanToday skips games that already started", async () => {
   assert.equal(drafts.length, 0);
 });
 
+test("scanAndQueue does not duplicate a persisted game proposal after a reload", async () => {
+  const state = new Map();
+  const storage = {
+    getItem(key) {
+      return state.get(key) ?? null;
+    },
+    setItem(key, value) {
+      state.set(key, value);
+    },
+  };
+
+  const firstQueue = createProposalQueue({ storage, now: nowFn });
+  const first = createContractFlow({
+    fetchEspnRecords: async () => [espnRecord()],
+    outcomeDesk: createOutcomeContracts({ seed: "persisted-first" }),
+    proposalQueue: firstQueue,
+    ledger: createContractLedger(),
+    fetchImpl: fakeOddsFetch([]),
+    now: nowFn,
+  });
+  const firstResult = await first.scanAndQueue();
+  assert.equal(firstResult.proposals.length, 1);
+
+  const secondQueue = createProposalQueue({ storage, now: nowFn });
+  const second = createContractFlow({
+    fetchEspnRecords: async () => [espnRecord()],
+    outcomeDesk: createOutcomeContracts({ seed: "persisted-second" }),
+    proposalQueue: secondQueue,
+    ledger: createContractLedger(),
+    fetchImpl: fakeOddsFetch([]),
+    now: nowFn,
+  });
+  const secondResult = await second.scanAndQueue();
+  assert.equal(secondResult.proposals.length, 0, "reload must not create a duplicate");
+  assert.equal(
+    secondQueue.getProposals({ status: "pending" }).filter(
+      (proposal) => proposal.eventId === "espn-multi-sport:soccer:eng.1:123:456:0",
+    ).length,
+    1,
+  );
+});
+
+test("scanAndQueue retries a game after transient proposal submission failure", async () => {
+  let submitCalls = 0;
+  const proposalQueue = {
+    getProposals: () => [],
+    submitProposal() {
+      submitCalls += 1;
+      if (submitCalls === 1) throw new Error("temporary queue failure");
+      return { id: "proposal:retry:1" };
+    },
+  };
+  const flow = createContractFlow({
+    fetchEspnRecords: async () => [espnRecord()],
+    outcomeDesk: createOutcomeContracts({ seed: "retry" }),
+    proposalQueue,
+    ledger: createContractLedger(),
+    fetchImpl: fakeOddsFetch([]),
+    now: nowFn,
+  });
+
+  const first = await flow.scanAndQueue();
+  assert.equal(first.proposals.length, 0);
+  const second = await flow.scanAndQueue();
+  assert.equal(second.proposals.length, 1);
+  assert.equal(submitCalls, 2);
+});
+
 test("enrichWithOdds attaches a fresh simulated quote", async () => {
   const quoteTime = new Date(Date.now() - 60_000).toISOString();
   const { flow } = flowHarness({
