@@ -3908,6 +3908,17 @@
         if ((error === null || error === undefined) && failedUrl) {
           error = { name: "", message: `resource failed to load: ${String(failedUrl).slice(0, 220)}` };
         }
+        const recovery = globalThis.__TUMBO_RENDER_RECOVERY__?.(error);
+        if (recovery?.recovered) {
+          // WebGL is already alive, so a later optional-surface failure is
+          // degraded rather than presented as a dead 3-D application.
+          globalThis.__MATUMBO_BOOT_DEGRADED__ = Object.freeze({
+            reason: clean(error?.message, 'optional runtime failure'),
+            recovered: true,
+          });
+          runtime.markReady({ featureCount: Number.parseInt(featureCountEl?.textContent, 10) || 0 });
+          return;
+        }
         runtime.markFailed(error, event?.type === 'unhandledrejection' ? 'module promise' : 'uncaught runtime');
       };
       globalThis.addEventListener?.('error', handleError, true);
