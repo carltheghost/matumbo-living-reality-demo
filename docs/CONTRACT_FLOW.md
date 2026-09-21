@@ -77,13 +77,13 @@ User-created contracts keep working exactly as before — drafts arrive
 3. SCAN UPCOMING GAMES remains available as an explicit manual refresh.
 4. APPROVE opens the book (quote frozen into the ledger); EDIT adjusts;
    DISMISS returns the draft.
-4. When the event lands, `flow.gradeOnLanding(contractId, { winner })`
+5. When the event lands, `flow.gradeOnLanding(contractId, { winner })`
    grades deterministically; winners claim via
    `flow.claimForever({ nftId })` — forever.
 
 ## Tests
 
-- `tests/contract-flow.test.mjs` — 15 tests: mapping, normalization,
+- `tests/contract-flow.test.mjs` — 17 tests: mapping, normalization,
   odds attach/reject, idempotent scan, review submission, approval-time
   freezing, stale-quote honesty, grading, anti-double-grade, forever claim,
   anti-double-claim.
