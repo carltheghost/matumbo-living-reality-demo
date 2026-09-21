@@ -208,7 +208,9 @@ async function marketSnapshot(providerName, limit = 50) {
 
 async function route(req, res) {
   cors(res);
-  if (req.method === "OPTIONS") {\n    if (TRUSTED_ORIGIN && req.headers.origin && req.headers.origin !== TRUSTED_ORIGIN) return json(res, 403, { error: "origin_not_allowed" });\n    res.writeHead(204); return res.end();\n  }
+  if (req.method === "OPTIONS") {\n    if (TRUSTED_ORIGIN && req.headers.origin && req.headers.origin !== TRUSTED_ORIGIN) return json(res, 403, { error: "origin_not_allowed" });
+    res.writeHead(204); return res.end();
+  }
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
   const parts = url.pathname.split("/").filter(Boolean);
   try {
@@ -240,9 +242,17 @@ async function route(req, res) {
       const session = auth(req); if (session) { delete state.sessions[session.token]; await persist(); }
       return json(res, 200, { ok: true });
     }
-    if (req.method === "GET" && url.pathname === "/api/me") {
+    if ((req.method === "GET" || req.method === "DELETE") && url.pathname === "/api/me") {
       const session = requireAuth(req, res); if (!session) return;
-      return json(res, 200, { user: publicUser(session.user) });
+      if (req.method === "GET") return json(res, 200, { user: publicUser(session.user) });
+      delete state.users[session.user.username];
+      for (const [sessionToken, stored] of Object.entries(state.sessions)) {
+        if (stored.userId === session.user.id) delete state.sessions[sessionToken];
+      }
+      state.telemetry = state.telemetry.filter(event => event.userId !== session.user.id);
+      for (const room of Object.values(state.rooms)) delete room.presence[session.user.id];
+      await persist();
+      return json(res, 200, { ok: true, deleted: true });
     }
     if (parts[0] === "api" && parts[1] === "rooms" && parts[2] && parts[3] === "events") {
       const roomId = cleanRoom(parts[2]); const room = roomFor(roomId);
@@ -251,7 +261,9 @@ async function route(req, res) {
         return json(res, 200, { roomId, version: room.version, events: room.events.filter(e => e.sequence > since) });
       }
       const session = requireAuth(req, res); if (!session) return;
+      if (!enforceRateLimit(req, res, "room-event", 120)) return;
       const data = await body(req);
+      if (JSON.stringify(data.payload ?? {}).length > 32_000) return json(res, 413, { error: "event_payload_too_large" });
       const event = { id: id("evt"), sequence: ++room.version, type: String(data.type || "message").slice(0, 48),
         roomId, user: publicUser(session.user), createdAt: now(), payload: data.payload ?? {} };
       publish(roomId, event); await persist(); return json(res, 201, event, { "x-matumboversion": String(room.version) });
@@ -287,7 +299,10 @@ async function route(req, res) {
     }
     if (req.method === "POST" && url.pathname === "/api/data/events") {
       const session = requireAuth(req, res); if (!session) return;
-      if (!enforceRateLimit(req, res, "telemetry", 120)) return;\n      const data = await body(req);\n      if (JSON.stringify(data.properties ?? {}).length > 16_000) return json(res, 413, { error: "event_properties_too_large" });\n      const record = { id: id("data"), userId: session.user.id, type: String(data.type || "event").slice(0, 64), createdAt: now(), properties: data.properties && typeof data.properties === "object" ? data.properties : {} };
+      if (!enforceRateLimit(req, res, "telemetry", 120)) return;
+      const data = await body(req);
+      if (JSON.stringify(data.properties ?? {}).length > 16_000) return json(res, 413, { error: "event_properties_too_large" });
+      const record = { id: id("data"), userId: session.user.id, type: String(data.type || "event").slice(0, 64), createdAt: now(), properties: data.properties && typeof data.properties === "object" ? data.properties : {} };
       state.telemetry.push(record); if (state.telemetry.length > 20000) state.telemetry.splice(0, state.telemetry.length - 20000);
       await persist(); return json(res, 201, { accepted: true, id: record.id });
     }
