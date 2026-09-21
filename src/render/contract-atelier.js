@@ -322,7 +322,7 @@ export function createContractAtelierConsole({
       // parseOutcomes("") would yield [] and the domain rejects empty arrays.
       const parsedOutcomes = parseOutcomes(outcomesInput.value);
       const contract = studio.createContract({
-        type: typeInput.value,
+        type: "yes_no",
         role: roleInput.value,
         topic: topicInput.value,
         title: titleInput.value,
