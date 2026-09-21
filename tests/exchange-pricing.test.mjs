@@ -16,7 +16,7 @@ test("four venue observations are retained, outliers are filtered, and reference
       const symbol = value.split("/products/")[1].split("-USD")[0];
       return { ok: true, json: async () => ({ price: String(symbol === "BTC" ? 100 : priceFor(symbol)), time: new Date().toISOString() }) };
     }
-    if (value.includes("api.bitstamp.net/api/v2/ticker/")) {
+    if (value.includes("www.bitstamp.net/api/v2/ticker/")) {
       const symbol = value.split("/ticker/")[1].split("usd")[0].toUpperCase();
       return { ok: true, json: async () => ({ last: String(priceFor(symbol)), timestamp: String(Date.now()/1000) }) };
     }
