@@ -88,6 +88,28 @@
     </ul>
   </section>
 
+
+  <section>
+    <h2>Live network layer</h2>
+    <p>The public world can stay a static front end while an optional HTTPS API supplies the shared services that a static site cannot safely own: accounts, multiplayer rooms, presence, synchronized world snapshots, consented application-event collection, and live public prediction-market observations.</p>
+    <div class="cols">
+      <ul>
+        <li><strong>Accounts</strong> — salted password hashing, expiring sessions, explicit login.</li>
+        <li><strong>Multiplayer</strong> — room events, presence, live event streams, optimistic world sync.</li>
+        <li><strong>Markets</strong> — provider adapters for Kalshi, Polymarket, and Manifold.</li>
+      </ul>
+      <ul>
+        <li><strong>Data</strong> — account-scoped event collection with user export.</li>
+        <li><strong>Provenance</strong> — provider, source, retrieval time, and availability stay visible.</li>
+        <li><strong>Boundary</strong> — no wagering, brokerage, wallet, custody, signing, or settlement endpoint.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>People can do more</h2>
+    <p>A person can create an account, join a shared room, see other participants, send room events, synchronize a world draft, inspect live market observations, and export their own collected app events. The 3D world remains the presentation layer; the API becomes the shared data layer.</p>
+  </section>
   <section class="bound">
     <h2>Hard boundaries</h2>
     <ul>
