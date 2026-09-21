@@ -105,6 +105,9 @@ export function createContractAtelierConsole({
   const propBInput = documentRoot?.getElementById?.("contract-atelier-prop-b");
   const propCInput = documentRoot?.getElementById?.("contract-atelier-prop-c");
   const outcomesInput = documentRoot?.getElementById?.("contract-atelier-outcomes");
+  const houseModeInput = documentRoot?.getElementById?.("contract-atelier-house-mode");
+  const feeInput = documentRoot?.getElementById?.("contract-atelier-fee-bps");
+  const liquidityInput = documentRoot?.getElementById?.("contract-atelier-liquidity-b");
   const createButton = documentRoot?.getElementById?.("contract-atelier-create");
   const resetButton = documentRoot?.getElementById?.("contract-atelier-reset");
   const traceEl = documentRoot?.getElementById?.("contract-atelier-trace");
@@ -170,9 +173,12 @@ export function createContractAtelierConsole({
     card.append(element(documentRoot, "div", "contract-atelier-card-id", contract.id));
     card.append(element(documentRoot, "strong", "contract-atelier-card-name", contract.title));
     card.append(element(documentRoot, "div", "contract-atelier-card-meta",
-      `${contract.type.toUpperCase()} · ${contract.role.toUpperCase()} · ${contract.topic.toUpperCase()} · ${contract.status.toUpperCase()}`));
+      `YES/NO · ${contract.houseMode.toUpperCase()} HOUSE · ${contract.role.toUpperCase()} · ${contract.topic.toUpperCase()} · ${contract.status.toUpperCase()}`));
     card.append(kvRow(documentRoot, "LOGIC", describeContractLogic(contract.logic)));
-    card.append(kvRow(documentRoot, "OUTCOMES", contract.outcomes.join(" · ")));
+    card.append(kvRow(documentRoot, "OUTCOMES", "YES · NO"));
+    card.append(kvRow(documentRoot, "HOUSE", `${contract.houseMode.toUpperCase()} · ${contract.feeBps} bps fee · b=${contract.liquidityB}`));
+    const prices = contract.status === "open" ? studio.getSnapshot().contracts.find((entry) => entry.id === contract.id) : null;
+    if (prices) card.append(kvRow(documentRoot, "LIVE PRICE", `YES ${Math.round(prices.yesPrice * 100)}% · NO ${Math.round(prices.noPrice * 100)}%`));
     const total = contract.stakes.reduce((sum, stake) => sum + stake.amount, 0);
     card.append(kvRow(documentRoot, "STAKED", `${Math.round(total * 100) / 100} ${CONTRACT_ATELIER_STAKE_UNIT}`));
 
@@ -221,14 +227,14 @@ export function createContractAtelierConsole({
       const resolveBox = element(documentRoot, "div", "contract-atelier-box");
       resolveBox.append(element(documentRoot, "div", "contract-atelier-section-label", "RESOLVE (HOUSE / CREATOR REHEARSAL)"));
       resolveBox.append(element(documentRoot, "div", "contract-atelier-hint",
-        "Resolution needs facts that satisfy this contract's logic conditions. Multi-outcome contracts also need a winning outcome named from the list above."));
+        "Resolution uses the contract's fixed two-sided outcomes; the logic determines which side wins."));
       const factsInput = element(documentRoot, "input", "contract-atelier-text-input");
       factsInput.id = "contract-atelier-facts";
       factsInput.type = "text";
       factsInput.placeholder = "Facts: rain before 15:00=true, quorum met=false";
       resolveBox.append(factsInput);
       let winnerInput = null;
-      if (contract.type === "multi") {
+      if (contract.type !== "yes_no") {
         winnerInput = element(documentRoot, "input", "contract-atelier-text-input");
         winnerInput.id = "contract-atelier-winner";
         winnerInput.type = "text";
@@ -281,7 +287,7 @@ export function createContractAtelierConsole({
       button.append(
         element(documentRoot, "strong", "contract-atelier-item-name", contract.title),
         element(documentRoot, "span", "contract-atelier-item-meta",
-          `${contract.type.toUpperCase()} · ${contract.role.toUpperCase()} · ${contract.topic.toUpperCase()} · ${contract.status.toUpperCase()}`),
+          `YES/NO · ${contract.houseMode.toUpperCase()} HOUSE · ${contract.role.toUpperCase()} · ${contract.topic.toUpperCase()} · ${contract.status.toUpperCase()}`),
         element(documentRoot, "span", "contract-atelier-item-id", contract.id),
       );
       button.addEventListener("click", () => {
@@ -312,16 +318,19 @@ export function createContractAtelierConsole({
 
   createButton.addEventListener("click", () => {
     try {
-      // A blank Outcomes field means "use the domain default" (binary → YES, NO);
+      // Every Contract Atelier market is a YES/NO question. House mode controls who provides liquidity.
       // parseOutcomes("") would yield [] and the domain rejects empty arrays.
       const parsedOutcomes = parseOutcomes(outcomesInput.value);
       const contract = studio.createContract({
-        type: typeInput.value,
+        type: "yes_no",
         role: roleInput.value,
         topic: topicInput.value,
         title: titleInput.value,
         logic: buildLogic(logicKindInput.value, propAInput.value, propBInput.value, propCInput.value),
         outcomes: parsedOutcomes.length ? parsedOutcomes : null,
+        houseMode: houseModeInput?.value || "single",
+        feeBps: feeInput?.value || undefined,
+        liquidityB: liquidityInput?.value || undefined,
       });
       selectedId = contract.id;
       titleInput.value = "";

@@ -17,7 +17,8 @@ test('public preview allowlist, read-only routes, context and live revisions', a
   const base=`http://127.0.0.1:${server.address().port}`;
   const rootResponse=await fetch(base); assert.equal(rootResponse.status,200);
   assert.match(await rootResponse.text(),/__preview\/client.js/);
-  for(const p of ['/.env','/.git/config','/runtime/merge4/server.js','/scripts/public-preview.mjs','/src/%2e%2e%5c.env','/src/../.env','/src/not.js','/api/world'])assert.equal((await fetch(base+p)).status,404,p);
+  for(const p of ['/.env','/.git/config','/package.json','/README.md','/runtime/merge4/server.js','/scripts/public-preview.mjs','/src/%2e%2e%5c.env','/src/../.env','/src/not.js','/api/world'])assert.equal((await fetch(base+p)).status,404,p);
+  assert.equal((await fetch(base+'/src/main.js')).status,200,'src assets remain public');
   assert.equal((await fetch(base+'/context',{method:'POST'})).status,405);
   const before=await (await fetch(base+'/context.json')).json();
   assert.deepEqual(before.features,['contracts','t402','runtime-sync']); assert.ok(!JSON.stringify(before).includes(root));

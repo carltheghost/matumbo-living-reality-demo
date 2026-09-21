@@ -131,7 +131,7 @@ export const FEATURE_DEFINITIONS = Object.freeze([
     kicker: "create · stake · resolve",
     focusOrganId: "contract",
     sources: ["contract-atelier"],
-    description: "Open your own pool, binary, or multi-outcome contract on any topic as the house or a player — then stake rehearsal credits and resolve it with true/false, AND, OR, or IF/ELSE logic.",
+    description: "Open a YES/NO, HOME/AWAY, or OVER/UNDER contract on any topic as the house or a player — then stake rehearsal credits and resolve it with simple true/false logic.",
     boundary: "Every contract is a fictional local rehearsal. No wallet, chain, custody, settlement, wagering, or real money exists; stakes are rehearsal credits with zero real value.",
   }),
   Object.freeze({
@@ -416,9 +416,9 @@ const FEATURE_SURFACE_ROUTES = Object.freeze({
     Object.freeze(["RISK", "position exposure is a rehearsal"]),
   ]),
   "contract-atelier": Object.freeze([
-    Object.freeze(["OPEN CONTRACT", "pool · binary · multi on any topic"]),
-    Object.freeze(["CHOOSE POSITION", "house counterparty or yes/no player"]),
-    Object.freeze(["RESOLVE", "true/false · AND · OR · IF/ELSE logic"]),
+    Object.freeze(["OPEN CONTRACT", "yes/no · home/away · over/under"]),
+    Object.freeze(["CHOOSE POSITION", "house counterparty or player"]),
+    Object.freeze(["RESOLVE", "YES/NO · true/false · AND · OR · IF/ELSE"]),
   ]),
   ledger: Object.freeze([
     Object.freeze(["JOURNAL", "balanced local rehearsal record"]),

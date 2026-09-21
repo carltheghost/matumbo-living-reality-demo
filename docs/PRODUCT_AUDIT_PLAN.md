@@ -2,8 +2,7 @@
 
 ## Current ecosystem migration frontier — 2026-09-04
 
-Financial Academy restores the first missing connected-site concept as the
-23rd openable local feature. It is projected into SIMFABRIC, reachable as a
+The 2026-09-04 migration snapshot records Financial Academy as the 23rd openable local feature. It is projected into SIMFABRIC, reachable as a
 Block World cube, and provides four retryable knowledge checks with bounded
 page-session progress. Connected City is the next migration target.
 
@@ -458,10 +457,7 @@ browser route evidence agree.
 
 ## Verified frontier — packets 166–215
 
-The older queue above is retained as historical implementation context. The
-current project map is the packet frontier recorded in `CURRENT_STATE.md` and
-`.tumbo/continuity/NEXT.md`: Mission Control exposes 22 openable local
-features, while the cube field remains the visible cube-only substrate.
+The older queue above is retained as historical implementation context. The packet frontier below is historical evidence; current route membership is owned by the authoritative feature registry and current renderer wiring. The cube field remains the visible cube-only substrate.
 
 - **Packet 166 — integrated cube-first journey (verified).** The real Portal
   container can be hovered, opened, inspected, and navigated through existing
