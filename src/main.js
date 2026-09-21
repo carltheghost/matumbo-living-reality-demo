@@ -5670,6 +5670,13 @@ assetMarketConsole = createExchangeBoardConsole({
 });
 window.__TUMBO_ASSET_MARKET__ = assetMarketConsole;
 document.getElementById('asset-market-open')?.addEventListener('click', () => openAssetMarket('launch-kit-asset-market'));
+const LIVE_EXCHANGE_REFRESH_MS = 15000;
+const liveExchangeRefreshTimer = window.setInterval(() => {
+  if (assetMarketConsole?.getSnapshot?.().opened === true && !assetMarketConsole?.getSnapshot?.().loading) {
+    void assetMarketConsole.refresh('live-interval');
+  }
+}, LIVE_EXCHANGE_REFRESH_MS);
+window.addEventListener('pagehide', () => window.clearInterval(liveExchangeRefreshTimer), { once: true });
 if (new URLSearchParams(globalThis.location?.search ?? '').get('panel') === 'launch-kit') {
   // `panel=launch-kit` is a shareable inspection link for the complete local
   // handoff.  It intentionally omits a feature query so Mission Control does
