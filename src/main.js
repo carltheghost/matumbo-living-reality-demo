@@ -3394,11 +3394,18 @@ window.__TUMBO_CONTRACT_ATELIER__ = contractAtelierConsole;
 // including across page reloads. Failures are contained inside scanAndQueue()
 // and never affect the manual Contract Atelier.
 const AUTO_CONTRACT_SCAN_INTERVAL_MS = 5 * 60 * 1000;
+const AUTO_CONTRACT_SCAN_MIN_GAP_MS = 60 * 1000;
 let automaticContractScanInFlight = null;
 let automaticContractScanLastResult = null;
+let automaticContractScanLastStartedAt = 0;
 
-function runAutomaticContractScan() {
+function runAutomaticContractScan({ force = false } = {}) {
   if (automaticContractScanInFlight) return automaticContractScanInFlight;
+  const now = Date.now();
+  if (!force && automaticContractScanLastStartedAt && now - automaticContractScanLastStartedAt < AUTO_CONTRACT_SCAN_MIN_GAP_MS) {
+    return Promise.resolve(automaticContractScanLastResult);
+  }
+  automaticContractScanLastStartedAt = now;
   automaticContractScanInFlight = Promise.resolve()
     .then(() => contractFlow.scanAndQueue())
     .then((result) => {
@@ -3426,12 +3433,27 @@ const automaticContractScanTimer = window.setInterval(() => {
 
 window.__TUMBO_AUTO_CONTRACTS__ = Object.freeze({
   intervalMs: AUTO_CONTRACT_SCAN_INTERVAL_MS,
-  scanNow: runAutomaticContractScan,
+  minGapMs: AUTO_CONTRACT_SCAN_MIN_GAP_MS,
+  scanNow: () => runAutomaticContractScan({ force: true }),
   getLastScan: () => automaticContractScanLastResult,
 });
 
-void runAutomaticContractScan();
-window.addEventListener("pagehide", () => window.clearInterval(automaticContractScanTimer), { once: true });
+void runAutomaticContractScan({ force: true });
+
+// Background tabs can throttle timers. Re-check as soon as the Prediction
+// Place becomes visible again, while retaining a short guard against duplicate
+// scans from rapid visibility/online events.
+window.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    void runAutomaticContractScan();
+  }
+});
+window.addEventListener("online", () => {
+  void runAutomaticContractScan();
+});
+window.addEventListener("pagehide", () => {
+  window.clearInterval(automaticContractScanTimer);
+}, { once: true });
 
 // Luna Companion is a scripted local guide: plain-word navigation, feature
 // explanations, and current-context narration. No AI model, no conversation
