@@ -24,6 +24,7 @@ import { createContractAtelierContribution } from "../domains/contract-atelier.j
 import { createLunaCompanionContribution } from "../domains/luna-companion.js";
 import { createWardrobeAtelierContribution } from "../domains/wardrobe-atelier.js";
 import { createWhitePaperContribution } from "../domains/white-paper.js";
+import { createCryptoExchangeCatalogContribution } from "../domains/crypto-exchange.js";
 import { createGestureLensContribution } from "../domains/gesture-lens.js";
 
 export const LIVING_REALITY_SAMPLE_TIME = "2025-01-01T00:00:00.000Z";
@@ -138,6 +139,7 @@ export function createLivingRealityProjection({ projectedAt = LIVING_REALITY_SAM
   // Gesture Lens: pose/intent schema metadata only — the console is a local
   // rehearsal surface and the projection records only its vocabulary.
   const gestureLens = createGestureLensContribution({ updatedAt: projectedAt });
+  const cryptoExchange = createCryptoExchangeCatalogContribution({ updatedAt: projectedAt });
 
   const contracts = createContractsMarketsContribution({
     updatedAt: projectedAt,
@@ -241,6 +243,7 @@ export function createLivingRealityProjection({ projectedAt = LIVING_REALITY_SAM
       wardrobeAtelier,
       whitePaper,
       gestureLens,
+      cryptoExchange,
       contracts,
       ledger,
       t402,
