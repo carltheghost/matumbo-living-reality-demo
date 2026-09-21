@@ -73,7 +73,7 @@ export const FEATURE_DEFINITIONS = Object.freeze([
   }),
   Object.freeze({
     id: "asset-market",
-    label: "Asset Market Evidence",
+    label: "Live Exchange Board",
     kicker: "public market read",
     focusOrganId: "market",
     sources: [],
