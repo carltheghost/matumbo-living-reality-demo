@@ -31,22 +31,23 @@ const autoContracts = createAutoContracts({
 The now dependency is injectable so tests and replay environments can provide
 a deterministic clock.
 
-## 3. Scan at boot
+## 3. Scan automatically at boot
 
-After the read-only sports-events dependencies have been initialized, perform
-the first scan:
+The application now performs an initial read-only scan automatically after the
+Contract Atelier is wired, so the prediction place populates itself without a
+button press:
 
 ```js
-await autoContracts.scanToday();
+void contractFlow.scanAndQueue();
 ```
 
-The scan:
+The automatic scan:
 
-1. Calls the existing fetchSportsEvents.
+1. Calls the existing read-only multi-sport feed.
 2. Keeps only games whose start time is still in the future.
-3. Deduplicates by game id.
+3. Deduplicates by game id and against the persisted proposal queue.
 4. Creates one DRAFT proposal per upcoming game.
-5. Stores those proposals in the automatic-contract review queue.
+5. Places those proposals in the existing "Contracts for your review" queue.
 
 No execution occurs during this scan.
 
@@ -79,26 +80,23 @@ source: "ESPN_READ_ONLY"
 They therefore enter the existing bot-plaza review path as review proposals,
 not executable actions.
 
-## 5. Run the scan on an interval
+## 5. Keep scanning automatically
 
-A lightweight periodic scan can be installed after boot:
+The app refreshes upcoming prediction contracts every five minutes:
 
 ```js
 const AUTO_CONTRACT_SCAN_INTERVAL_MS = 5 * 60 * 1000;
-const autoContractScanTimer = setInterval(async () => {
-  try {
-    await autoContracts.scanToday();
-  } catch (error) {
-    console.warn("Automatic contract scan failed.", error);
-  }
+const automaticContractScanTimer = window.setInterval(() => {
+  void runAutomaticContractScan();
 }, AUTO_CONTRACT_SCAN_INTERVAL_MS);
 ```
 
-The engine is idempotent by game id, so repeatedly scanning the same ESPN feed
-does not create duplicate drafts.
+The scan is serialized while one request is in flight, and the queue is checked
+for an existing `eventId` before a new proposal is created. This prevents
+duplicates during repeated scans and after page reloads.
 
-If the application has an existing lifecycle/shutdown mechanism, clear the
-interval there:
+The timer is cleared on `pagehide`:
+
 
 ```js
 clearInterval(autoContractScanTimer);
