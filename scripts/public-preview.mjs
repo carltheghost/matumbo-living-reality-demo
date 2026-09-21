@@ -31,6 +31,8 @@ const MIME = new Map([
 
 const HIDDEN = new Set([".env", ".git", "node_modules"]);
 const IGNORED_DIRS = new Set([".git", "node_modules", ".tumbo", "work", "scripts"]);
+const PUBLIC_ROOT_FILES = new Set(["index.html", "favicon.svg", "token-mobile.css"]);
+const PUBLIC_PREFIXES = ["src/", "assets/", "vendor/three-r179.1/"];
 
 async function walk(root, directory = root, out = []) {
   for (const entry of await readdir(directory, {withFileTypes: true})) {
@@ -97,8 +99,10 @@ function safePath(root, pathname) {
   const candidate = resolve(root, "." + decoded);
   const prefix = root.endsWith(sep) ? root : root + sep;
   if (candidate !== root && !candidate.startsWith(prefix)) return null;
-  const parts = relative(root, candidate).split(sep);
+  const rel = relative(root, candidate).split(sep).join("/");
+  const parts = rel.split("/");
   if (parts.some((part) => HIDDEN.has(part) || IGNORED_DIRS.has(part))) return null;
+  if (!PUBLIC_ROOT_FILES.has(rel) && !PUBLIC_PREFIXES.some((prefix) => rel.startsWith(prefix))) return null;
   return candidate;
 }
 
