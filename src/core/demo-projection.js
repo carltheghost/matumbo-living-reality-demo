@@ -131,8 +131,6 @@ export function createLivingRealityProjection({ projectedAt = LIVING_REALITY_SAM
   const contractAtelier = createContractAtelierContribution({ updatedAt: projectedAt });
   const lunaCompanion = createLunaCompanionContribution({ updatedAt: projectedAt });
   const wardrobeAtelier = createWardrobeAtelierContribution({ updatedAt: projectedAt });
-  // White paper: document-section metadata only, never composed text. The
-  // living document is composed read-only from the envelope at render time.
   // Gesture Lens: pose/intent schema metadata only — the console is a local
   // rehearsal surface and the projection records only its vocabulary.
   const gestureLens = createGestureLensContribution({ updatedAt: projectedAt });
