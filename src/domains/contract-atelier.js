@@ -1,9 +1,8 @@
 /**
  * Fictional local Contract Atelier for the Living Reality demo.
  *
- * Anyone can open a contract here: a pool, a normal binary (yes/no), or a
- * multi-outcome market, on any imaginable topic (sports, politics, weather,
- * transport, custom). The opener chooses any position: HOUSE (the
+ * Anyone can open one of three simple binary contracts: YES / NO, HOME / AWAY,
+ * or OVER / UNDER. The opener chooses any position: HOUSE (the
  * counterparty that sets the terms) or PLAYER (takes a yes/no side like
  * everyone else). Contracts resolve through a small logic constructor:
  * TRUE/FALSE on one condition, AND, OR, or IF/ELSE branches.
@@ -25,13 +24,13 @@ export const CONTRACT_ATELIER_MAX_OUTCOMES = 6;
 export const CONTRACT_ATELIER_MAX_STAKE = 10000;
 export const CONTRACT_ATELIER_STAKE_UNIT = "rehearsal credits";
 
-export const CONTRACT_ATELIER_MARKET_TYPES = Object.freeze(["binary", "pool", "multi"]);
+export const CONTRACT_ATELIER_MARKET_TYPES = Object.freeze(["yes_no", "home_away", "over_under"]);
 export const CONTRACT_ATELIER_ROLES = Object.freeze(["house", "player"]);
 export const CONTRACT_ATELIER_TOPICS = Object.freeze(["sports", "politics", "weather", "transport", "custom"]);
 export const CONTRACT_ATELIER_LOGIC_KINDS = Object.freeze(["condition", "and", "or", "if_else"]);
 
 export const CONTRACT_ATELIER_BOUNDARY =
-  "Contract Atelier is a fictional local rehearsal. Anyone may open a pool, binary, or multi-outcome contract as house or player and stake rehearsal credits, but every stake is simulated: no wallet, no chain, no custody, no settlement, no wagering, and no real money exists here. Resolutions are rehearsal outcomes only; nothing staked has value outside this page session.";
+  "Contract Atelier is a fictional local rehearsal. Anyone may open a YES/NO, HOME/AWAY, or OVER/UNDER contract as house or player and stake rehearsal credits, but every stake is simulated: no wallet, no chain, no custody, no settlement, no wagering, and no real money exists here. Resolutions are rehearsal outcomes only; nothing staked has value outside this page session.";
 
 /** Fictional unit label carried on every stake so no real-money reading is possible. */
 export const CONTRACT_ATELIER_NO_VALUE = "Stakes are rehearsal credits with zero real value.";
@@ -153,53 +152,51 @@ export function evaluateContractLogic(node, facts = {}) {
   return visit(node);
 }
 
+const FIXED_OUTCOMES = Object.freeze({
+  yes_no: Object.freeze(["YES", "NO"]),
+  home_away: Object.freeze(["HOME", "AWAY"]),
+  over_under: Object.freeze(["OVER", "UNDER"]),
+});
+
 function normalizeOutcomes(type, outcomes) {
-  if (outcomes === null || outcomes === undefined) {
-    if (type === "binary") return ["YES", "NO"];
-    throw new TypeError(`${type} contracts need an explicit outcomes list`);
-  }
+  const expected = FIXED_OUTCOMES[type];
+  if (!expected) throw new TypeError("unknown contract type: " + (type || "(missing)"));
+  if (outcomes === null || outcomes === undefined) return expected;
   if (!Array.isArray(outcomes)) throw new TypeError("outcomes must be an array of labels");
-  const labels = outcomes
-    .map((entry) => safeText(entry).trim().replace(/\s+/g, " ").slice(0, 32))
-    .filter((label) => label.length > 0);
-  const unique = [...new Set(labels)];
-  if (type === "binary" || type === "pool") {
-    if (unique.length !== 2) throw new TypeError(`${type} contracts need exactly two distinct outcomes`);
-  } else if (type === "multi") {
-    if (unique.length < 2 || unique.length > CONTRACT_ATELIER_MAX_OUTCOMES) {
-      throw new TypeError(`multi contracts need 2–${CONTRACT_ATELIER_MAX_OUTCOMES} distinct outcomes`);
-    }
+  const labels = outcomes.map((entry) => safeText(entry).trim().replace(/s+/g, " ").toUpperCase()).filter(Boolean);
+  if (labels.length !== 2 || labels[0] !== expected[0] || labels[1] !== expected[1]) {
+    throw new TypeError(type + " contracts use fixed outcomes: " + expected.join(", "));
   }
-  return freeze(unique);
+  return expected;
 }
 
 export const CONTRACT_ATELIER_STARTER_CONTRACTS = freeze([
   {
     key: "derby-day",
-    type: "binary",
+    type: "home_away",
     role: "house",
     topic: "sports",
-    title: "Derby day: the home side wins",
+    title: "Derby day: who wins?",
     logic: "the home side wins the derby",
+    outcomes: ["HOME", "AWAY"],
+  },
+  {
+    key: "afternoon-rain",
+    type: "yes_no",
+    role: "player",
+    topic: "weather",
+    title: "Will it rain this afternoon?",
+    logic: { kind: "or", conditions: ["rain before 15:00", "rain after 15:00"] },
     outcomes: ["YES", "NO"],
   },
   {
-    key: "afternoon-rain-pool",
-    type: "pool",
-    role: "player",
-    topic: "weather",
-    title: "Afternoon rain pool",
-    logic: { kind: "or", conditions: ["rain before 15:00", "rain after 15:00"] },
-    outcomes: ["RAIN", "DRY"],
-  },
-  {
-    key: "which-motion-carries",
-    type: "multi",
+    key: "match-total",
+    type: "over_under",
     role: "house",
-    topic: "politics",
-    title: "Which motion carries the council vote?",
-    logic: { kind: "and", conditions: ["quorum met", "vote concluded"] },
-    outcomes: ["Motion A", "Motion B", "Neither"],
+    topic: "sports",
+    title: "Will the match go over the line?",
+    logic: "match total exceeds the line",
+    outcomes: ["OVER", "UNDER"],
   },
 ]);
 
@@ -324,7 +321,7 @@ export function createContractAtelier({ seed = "local-contracts", now = null } =
     if (contract.status !== "open") throw new TypeError("contract is already resolved");
     const outcome = evaluateContractLogic(contract.logic, facts);
     let winningSide;
-    if (contract.type === "binary") {
+    if (contract.type === "yes_no" || contract.type === "home_away" || contract.type === "over_under") {
       winningSide = outcome ? contract.outcomes[0] : contract.outcomes[1];
     } else if (contract.type === "pool") {
       winningSide = outcome ? contract.outcomes[0] : contract.outcomes[1];
