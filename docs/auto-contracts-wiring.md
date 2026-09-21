@@ -24,7 +24,7 @@ After Contract Atelier is mounted, the entry point starts the automatic scan:
 void runAutomaticContractScan();
 ```
 
-It then refreshes every five minutes:
+It then refreshes every five minutes. The app also triggers a refresh when the browser returns to the visible tab or network connectivity comes back online, with a 60-second minimum gap between automatic scans:
 
 ```js
 const AUTO_CONTRACT_SCAN_INTERVAL_MS = 5 * 60 * 1000;
@@ -34,7 +34,8 @@ window.setInterval(() => {
 ```
 
 The scan is serialized so overlapping timer ticks cannot create concurrent
-contract batches.
+contract batches. A short minimum-gap guard also prevents visibility and online
+events from causing rapid duplicate feed requests.
 
 ## Automatic pipeline
 
