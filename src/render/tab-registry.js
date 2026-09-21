@@ -41,6 +41,7 @@ const TITLES = {
   'gesture-input-panel': 'Gesture Input',
   'media-preview': 'Media Preview',
   'readout': 'Readout',
+  'asset-launch': 'Asset Launch',
 };
 
 const ICONS = {
@@ -48,6 +49,7 @@ const ICONS = {
   'gesture-input-panel': '✋',
   'media-preview': '▣',
   'readout': '◉',
+  'asset-launch': '⬢',
 };
 
 function humanize(id) {
@@ -73,9 +75,16 @@ function collectPanels(documentRoot) {
   for (const el of asides) {
     if (!el || EXCLUDED_IDS.has(el.id)) continue;
     // The TabEngine's own layer/dock are divs, never asides — no self-hit.
+    // asset-launch is class-driven (portal-destination-visible /
+    // asset-route-hidden / cube-first-hidden + body mode classes), NOT the
+    // `hidden` attribute — it gets its own visibility kind below.
     panels.push({
       id: el.id || '(aside)',
-      kind: el.id === 'feature-shell' ? 'class-open' : 'hidden',
+      kind: el.id === 'feature-shell'
+        ? 'class-open'
+        : el.id === 'asset-launch'
+          ? 'portal-visible'
+          : 'hidden',
       el,
     });
   }
@@ -139,8 +148,11 @@ function setAriaHidden(el, hidden) {
 /**
  * Build the engine open()/close() pair for a panel, reusing that panel's own
  * visibility mechanism so existing show/hide logic keeps working unchanged.
+ * Every pair VERIFIES the result and falls back to a dock-owned mechanism
+ * when the panel's native one cannot reveal/hide it — a chip must never lie
+ * about its panel's state.
  */
-function visibilityHandlers(panel, documentRoot) {
+function visibilityHandlers(panel, documentRoot, windowRoot) {
   const el = panel.el;
   if (panel.kind === 'details') {
     return {
@@ -166,7 +178,13 @@ function visibilityHandlers(panel, documentRoot) {
               : null;
             if (closeBtn && typeof closeBtn.click === 'function') {
               closeBtn.click();
-              return;
+              // Verify: the native close control can be unreachable (the 3D
+              // canvas intercepts the hit test) or its handler may leave the
+              // shell up. Fall back to hiding the panel programmatically.
+              if (!isPanelVisible(panel, windowRoot)) {
+                setAriaHidden(el, true);
+                return;
+              }
             }
           }
           el.classList.remove('open');
@@ -184,6 +202,48 @@ function visibilityHandlers(panel, documentRoot) {
       close() {
         try { el.classList.remove('visible'); } catch { /* ignore */ }
         setAriaHidden(el, true);
+      },
+    };
+  }
+  if (panel.kind === 'portal-visible') {
+    // The Asset Launch panel (aside#asset-launch) is class-driven: its
+    // visibility comes from `portal-destination-visible` (shown),
+    // `asset-route-hidden` / `cube-first-hidden` (hidden), and body mode
+    // classes — never the `hidden` attribute. Mirror the native mechanism
+    // from src/main.js (portal surface opener + route toggles), then verify
+    // with computed style and fall back to dock-owned state when the page's
+    // mode classes would otherwise keep it hidden/shown.
+    const HIDE_CLASSES = ['asset-route-hidden', 'cube-first-hidden'];
+    const SHOW_CLASS = 'portal-destination-visible';
+    return {
+      open() {
+        try {
+          el.classList.remove(...HIDE_CLASSES);
+          el.classList.add(SHOW_CLASS);
+          el.hidden = false;
+        } catch { /* ignore */ }
+        setAriaHidden(el, false);
+        try {
+          if (computedHidden(el, windowRoot) === true && el.style) {
+            el.style.display = 'block';
+          }
+        } catch { /* ignore */ }
+      },
+      close() {
+        try {
+          el.classList.remove(SHOW_CLASS);
+          // Mirrors navigating off the asset-token route in src/main.js.
+          el.classList.add('asset-route-hidden');
+          if (el.style) el.style.display = '';
+        } catch { /* ignore */ }
+        setAriaHidden(el, true);
+        try {
+          // Outside the cube presentation modes the hiding classes above are
+          // inert; the `hidden` attribute is then the dock-owned fallback.
+          // The panel's native code only toggles classes, never `hidden`,
+          // so this fallback state belongs to the dock (cleared on open).
+          if (computedHidden(el, windowRoot) === false) el.hidden = true;
+        } catch { /* ignore */ }
       },
     };
   }
@@ -218,7 +278,15 @@ export function initTabDock({
       if (!id || id === '(aside)' || registered.has(id) || engine.getTab(id)) return false;
       const node = panel.el;
       if (!node) return false;
-      const { open, close } = visibilityHandlers(panel, documentRoot);
+      const { open, close } = visibilityHandlers(panel, documentRoot, windowRoot);
+      // Persistent chrome that is already natively visible when the panel is
+      // registered (token ticker, block launcher, readout… at boot) is
+      // adopted AND pinned: the dock tracks its state, but the LRU cap and
+      // close-all may never evict or hide it — the dock must not hide what
+      // it did not open. Only tabs the user materializes through the dock
+      // are subject to eviction.
+      let visibleNow = false;
+      try { visibleNow = isPanelVisible(panel, windowRoot); } catch { visibleNow = false; }
       try {
         engine.registerTab({
           id,
@@ -228,6 +296,7 @@ export function initTabDock({
           close,
           node,
           adoptNode: false, // in place: never move, never rename, never restyle
+          pinned: visibleNow,
         });
       } catch {
         return false; // duplicate or invalid — skip, never break the scan
@@ -236,7 +305,7 @@ export function initTabDock({
       // Adopt panels that are already natively visible (state sync, not an
       // auto-open: the panel was opened by existing boot/app logic).
       try {
-        if (isPanelVisible(panel, windowRoot)) engine.activate(id);
+        if (visibleNow) engine.activate(id);
       } catch { /* activation is best-effort */ }
       return true;
     }

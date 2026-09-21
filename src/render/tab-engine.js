@@ -48,13 +48,15 @@
  *
  * MODES
  *  - 'phone'   → bottom glass dock, one tab materialized at a time.
- *  - 'desktop' → left glass rail dock, up to 3 tabs pinned (LRU eviction).
+ *  - 'desktop' → left glass rail dock, up to 3 user tabs (LRU eviction).
+ *                Tabs registered with `pinned: true` (persistent HUD chrome
+ *                adopted at boot) are exempt from eviction and from the cap.
  *  - 'ar'      → compact edge rail, one tab at a time. The AR lane owns AR
  *                visuals; the engine only switches layout + policy here.
  *
  * PUBLIC API
  *  new TabEngine({ root, document?, mode?, maxPinnedDesktop?, autoDetect? })
- *  registerTab({ id, title, icon, open(), close(), node, adoptNode? }) → tab record
+ *  registerTab({ id, title, icon, open(), close(), node, adoptNode?, pinned? }) → tab record
  *    adoptNode (default true): move the node into the engine's panel layer and
  *    let the engine own its visibility classes/ids. Pass `adoptNode: false`
  *    to register an existing floating panel IN PLACE: the engine then only
@@ -62,6 +64,11 @@
  *    panel's own show/hide logic keeps owning its DOM position and styles.
  *    Safe for panels (e.g. Mission Control's feature-shell) whose layout or
  *    id-based lookups must not be disturbed.
+ *    pinned (default false): eviction-exempt persistent chrome. A pinned tab
+ *    is never evicted by the LRU cap and never counts toward it. The tab
+ *    registry pins panels that are already natively visible when the dock
+ *    boots (token ticker, block launcher, readout…): the dock adopts their
+ *    state but must never hide what it did not open.
  *  unregisterTab(id) → boolean
  *  activate(id) → boolean        (false when id is unknown)
  *  deactivate(id) → boolean
@@ -356,7 +363,7 @@ export class TabEngine {
 
   // ---------------------------------------------------------------- registry
 
-  registerTab({ id, title, icon, open, close, node, adoptNode = true }) {
+  registerTab({ id, title, icon, open, close, node, adoptNode = true, pinned = false }) {
     if (typeof id !== 'string' || id.trim() === '') {
       throw new TypeError('registerTab: "id" must be a non-empty string.');
     }
@@ -371,6 +378,8 @@ export class TabEngine {
     // state, renders the dock chip, and calls open()/close(); the panel's own
     // logic keeps owning its position, styles, and attributes.
     const adopted = adoptNode !== false;
+    // pinned:true marks eviction-exempt persistent chrome (see PUBLIC API).
+    const isPinned = pinned === true;
 
     const tabTitle = typeof title === 'string' && title.trim() !== '' ? title.trim() : id;
     const record = {
@@ -383,6 +392,7 @@ export class TabEngine {
       chip: null,
       active: false,
       adopted,
+      pinned: isPinned,
       _originalParent: node.parentNode || null,
       _originalNext: node.nextSibling || null,
       _originalAttrs: {
@@ -509,13 +519,13 @@ export class TabEngine {
       this._returnFocus = this._currentFocus();
     }
 
-    const limit = this._activeLimit();
-    while (this.activeOrder.length >= limit) {
-      this._deactivateId(this.activeOrder[0], { restoreFocus: false });
-    }
-
     tab.active = true;
     this.activeOrder.push(id);
+    // Airtight cap: evict oldest non-pinned tabs over the limit, purge stale
+    // entries, never evict the tab being activated. Pinned persistent chrome
+    // is exempt and does not count toward the cap.
+    this._enforceCap(id);
+
     if (tab.adopted) {
       tab.node.classList.add('tl-open');
       tab.node.setAttribute('aria-hidden', 'false');
@@ -543,11 +553,17 @@ export class TabEngine {
     return this.activate(id);
   }
 
-  /** Closes every materialized tab. Returns how many were closed. */
+  /**
+   * Closes every materialized tab the user opened. Pinned persistent chrome
+   * (adopted at boot, never opened through the dock) survives close-all:
+   * the dock must not hide what it did not open. Returns how many were closed.
+   */
   closeAll() {
     const ids = [...this.activeOrder];
     let closed = 0;
     for (const id of ids) {
+      const tab = this.tabs.get(id);
+      if (tab && tab.pinned === true) continue;
       if (this._deactivateId(id, { restoreFocus: false })) closed += 1;
     }
     this._restoreFocus();
@@ -572,10 +588,15 @@ export class TabEngine {
     this.mode = mode;
     this._applyDockModeClass();
 
-    // Enforce the single-active policy outside desktop: keep most recent.
-    if (mode !== 'desktop' && this.activeOrder.length > 1) {
-      const keep = this.activeOrder[this.activeOrder.length - 1];
-      for (const id of [...this.activeOrder]) {
+    // Enforce the single-active policy outside desktop: keep the most recent
+    // non-pinned tab; pinned persistent chrome stays untouched.
+    if (mode !== 'desktop') {
+      const nonPinned = this.activeOrder.filter((id) => {
+        const t = this.tabs.get(id);
+        return !!t && t.pinned !== true;
+      });
+      const keep = nonPinned[nonPinned.length - 1];
+      for (const id of nonPinned) {
         if (id !== keep) this._deactivateId(id, { restoreFocus: false });
       }
     }
@@ -695,6 +716,38 @@ export class TabEngine {
     return this.mode === 'desktop' ? this.maxPinnedDesktop : 1;
   }
 
+  /** Active, registered, non-pinned tab ids, oldest activation first. */
+  _activeNonPinnedIds() {
+    return this.activeOrder.filter((x) => {
+      const t = this.tabs.get(x);
+      return !!t && t.active === true && t.pinned !== true;
+    });
+  }
+
+  /**
+   * Enforce the active-tab cap exactly. Purges stale activeOrder entries
+   * (ids whose tab is gone or no longer active — these could otherwise wedge
+   * the eviction loop), then evicts the oldest non-pinned tabs until at most
+   * `limit` non-pinned tabs remain. Pinned persistent chrome is exempt and
+   * never counts toward the cap; `protectId` (the tab being activated) is
+   * never chosen as an eviction victim.
+   */
+  _enforceCap(protectId = null) {
+    this.activeOrder = this.activeOrder.filter((x) => {
+      const t = this.tabs.get(x);
+      return !!t && t.active === true;
+    });
+    const limit = this._activeLimit();
+    let guard = this.tabs.size + 2;
+    while (guard-- > 0) {
+      const over = this._activeNonPinnedIds();
+      if (over.length <= limit) break;
+      const victim = over.find((x) => x !== protectId);
+      if (!victim) break; // only pinned/protected tabs remain — nothing evictable
+      this._deactivateId(victim, { restoreFocus: false });
+    }
+  }
+
   _touchRecency(id) {
     this.activeOrder = this.activeOrder.filter((x) => x !== id);
     this.activeOrder.push(id);
@@ -702,9 +755,12 @@ export class TabEngine {
 
   _deactivateId(id, { restoreFocus = true } = {}) {
     const tab = this.tabs.get(id);
+    // Always purge the id from the activation order first: a stale entry
+    // (tab gone, or tab.active already false) must never wedge the eviction
+    // loop in _enforceCap.
+    this.activeOrder = this.activeOrder.filter((x) => x !== id);
     if (!tab || !tab.active) return false;
     tab.active = false;
-    this.activeOrder = this.activeOrder.filter((x) => x !== id);
     if (tab.adopted) {
       tab.node.classList.remove('tl-open');
       tab.node.setAttribute('aria-hidden', 'true');
