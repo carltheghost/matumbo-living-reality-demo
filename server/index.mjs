@@ -7,6 +7,7 @@ import { URL } from "node:url";
 const PORT = Number(process.env.PORT || 8091);
 const HOST = process.env.HOST || "0.0.0.0";
 const DATA_DIR = path.resolve(process.env.MATUMBO_DATA_DIR || ".data");
+const TRUSTED_ORIGIN = process.env.CORS_ORIGIN || "";
 const STATE_FILE = path.join(DATA_DIR, "state.json");
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 14;
 const BODY_LIMIT = 512 * 1024;
@@ -50,7 +51,7 @@ function json(res, status, body, headers = {}) {
   res.end(payload);
 }
 function cors(res) {
-  const origin = process.env.CORS_ORIGIN || "*";
+  const origin = TRUSTED_ORIGIN || "*";
   res.setHeader("access-control-allow-origin", origin);
   res.setHeader("access-control-allow-headers", "content-type, authorization");
   res.setHeader("access-control-allow-methods", "GET,POST,PUT,OPTIONS");
@@ -185,7 +186,7 @@ async function marketSnapshot(providerName, limit = 50) {
 
 async function route(req, res) {
   cors(res);
-  if (req.method === "OPTIONS") { res.writeHead(204); return res.end(); }
+  if (req.method === "OPTIONS") {\n    if (TRUSTED_ORIGIN && req.headers.origin && req.headers.origin !== TRUSTED_ORIGIN) return json(res, 403, { error: "origin_not_allowed" });\n    res.writeHead(204); return res.end();\n  }
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
   const parts = url.pathname.split("/").filter(Boolean);
   try {
