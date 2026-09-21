@@ -1,0 +1,20 @@
+name: Launch readiness
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, launch-readiness-shareable]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --check server/index.mjs
+      - run: node --check server/market-normalize.mjs
+      - run: node --test tests/live-network.test.mjs
+      - run: npm test
