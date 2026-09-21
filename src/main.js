@@ -296,6 +296,33 @@ const key = new THREE.DirectionalLight(0xbdefff, 2.2); key.position.set(8,16,8);
 const rim = new THREE.PointLight(0x62d9ff, 32, 45, 2); rim.position.set(-12,6,-6); scene.add(rim);
 const warm = new THREE.PointLight(0xffb866, 18, 30, 2); warm.position.set(14,-2,6); scene.add(warm);
 
+// Graceful renderer recovery: optional feature mounts must never turn a live
+// Three.js surface into a red boot failure. If a later console/module throws
+// after WebGL is already online, the index-level error boundary can switch to
+// this minimal renderer loop and keep the world visible while the failed
+// optional surface is skipped. The normal animate() loop replaces this as
+// soon as full boot reaches the end of main.js.
+let rendererRecoveryActive = false;
+globalThis.__TUMBO_RENDER_RECOVERY__ = (reason = null) => {
+  if (rendererRecoveryActive) return Object.freeze({ recovered: true, alreadyActive: true });
+  rendererRecoveryActive = true;
+  try {
+    renderer.setAnimationLoop(() => {
+      try {
+        if (!renderer.xr.isPresenting) controls.update();
+        renderer.render(scene, camera);
+      } catch (renderError) {
+        try { console.warn('[runtime-recovery] renderer loop degraded:', renderError); } catch {}
+      }
+    });
+    try { console.warn('[runtime-recovery] keeping the 3-D surface alive after optional boot failure:', reason); } catch {}
+    return Object.freeze({ recovered: true, alreadyActive: false });
+  } catch (recoveryError) {
+    try { console.warn('[runtime-recovery] unable to recover renderer:', recoveryError); } catch {}
+    return Object.freeze({ recovered: false });
+  }
+};
+
 const mats = {
   dark: new THREE.MeshPhysicalMaterial({color:0x111821,metalness:.92,roughness:.26,clearcoat:.65,clearcoatRoughness:.22}),
   metal: new THREE.MeshPhysicalMaterial({color:0x7f97a1,metalness:1,roughness:.2,clearcoat:1}),
@@ -3396,6 +3423,75 @@ contractAtelierConsole = createContractAtelierConsole({
   })),
 });
 window.__TUMBO_CONTRACT_ATELIER__ = contractAtelierConsole;
+
+// Automatic prediction-contract generation.
+// The Prediction Place should populate itself without requiring a button press:
+// scan once after boot, then refresh every five minutes. The shared proposal
+// queue and contract-flow idempotency guard prevent duplicate game proposals,
+// including across page reloads. Failures are contained inside scanAndQueue()
+// and never affect the manual Contract Atelier.
+const AUTO_CONTRACT_SCAN_INTERVAL_MS = 5 * 60 * 1000;
+const AUTO_CONTRACT_SCAN_MIN_GAP_MS = 60 * 1000;
+let automaticContractScanInFlight = null;
+let automaticContractScanLastResult = null;
+let automaticContractScanLastStartedAt = 0;
+
+function runAutomaticContractScan({ force = false } = {}) {
+  if (automaticContractScanInFlight) return automaticContractScanInFlight;
+  const now = Date.now();
+  if (!force && automaticContractScanLastStartedAt && now - automaticContractScanLastStartedAt < AUTO_CONTRACT_SCAN_MIN_GAP_MS) {
+    return Promise.resolve(automaticContractScanLastResult);
+  }
+  automaticContractScanLastStartedAt = now;
+  automaticContractScanInFlight = Promise.resolve()
+    .then(() => contractFlow.scanAndQueue())
+    .then((result) => {
+      automaticContractScanLastResult = result;
+      return result;
+    })
+    .catch((error) => {
+      const fallback = Object.freeze({
+        proposals: Object.freeze([]),
+        drafts: Object.freeze([]),
+        errors: Object.freeze([String(error?.message ?? error)]),
+      });
+      automaticContractScanLastResult = fallback;
+      return fallback;
+    })
+    .finally(() => {
+      automaticContractScanInFlight = null;
+    });
+  return automaticContractScanInFlight;
+}
+
+const automaticContractScanTimer = window.setInterval(() => {
+  void runAutomaticContractScan();
+}, AUTO_CONTRACT_SCAN_INTERVAL_MS);
+
+window.__TUMBO_AUTO_CONTRACTS__ = Object.freeze({
+  intervalMs: AUTO_CONTRACT_SCAN_INTERVAL_MS,
+  minGapMs: AUTO_CONTRACT_SCAN_MIN_GAP_MS,
+  scanNow: () => runAutomaticContractScan({ force: true }),
+  getLastScan: () => automaticContractScanLastResult,
+});
+
+void runAutomaticContractScan({ force: true });
+
+// Background tabs can throttle timers. Re-check as soon as the Prediction
+// Place becomes visible again, while retaining a short guard against duplicate
+// scans from rapid visibility/online events.
+window.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    void runAutomaticContractScan();
+  }
+});
+window.addEventListener("online", () => {
+  void runAutomaticContractScan();
+});
+window.addEventListener("pagehide", () => {
+  window.clearInterval(automaticContractScanTimer);
+}, { once: true });
+
 // Luna Companion is a scripted local guide: plain-word navigation, feature
 // explanations, and current-context narration. No AI model, no conversation
 // service, no network, no memory past this page session. Navigation uses the
@@ -8751,13 +8847,44 @@ realityAssembly=createRealityAssembly({THREE,renderer,scene,camera,controls,worl
 window.__TUMBO_REALITY_ASSEMBLY__=realityAssembly;
 document.addEventListener('person-studio:enter-vr',()=>immersiveSession.start('immersive-vr'));
 if(featureNavigator.getSnapshot().activeId==='person'&&!new URLSearchParams(location.search).has('person'))personStudio.open();
-if(featureNavigator.getSnapshot().activeId==='reality-lens')realityAssembly.open();
+// The clean landing is owned by Reality Assembly itself. Do not make its
+// visibility depend on the navigator's transient activeId: the navigator is
+// mounted before the assembly renderer and other feature callbacks can change
+// presentation state during bootstrap. On the plain root route, explicitly
+// open the connected glass-cube world after the renderer exists.
+const cleanRealityLanding = !new URLSearchParams(globalThis.location?.search ?? '').get('feature')
+  && !new URLSearchParams(globalThis.location?.search ?? '').get('panel')
+  && !String(globalThis.location?.hash ?? '');
+if (cleanRealityLanding) {
+  featureNavigator.close();
+  realityAssembly.open();
+} else if(featureNavigator.getSnapshot().activeId==='reality-lens') {
+  realityAssembly.open();
+}
 renderer.setAnimationLoop(animate); /* TUMBO-SIM token gamification (Infinite Burrow, Part 7): self-contained glass cube + console, mounted lazily so a mount failure can never break the world bootstrap. */ import('./render/token-gamification.js?v=20260920-gam1').then(({ mountTokenGamification }) => { try { window.__TUMBO_TOKEN_GAMIFICATION__ = mountTokenGamification({ three: THREE, scene, world, camera, renderer, controls, documentRoot: document }); } catch (error) { console.warn('[token-gamification] mount failed:', error); } }).catch((error) => { console.warn('[token-gamification] load failed:', error); });
 // URL-derived City navigation reuses the existing feature owner and avoids provider refresh.
+const mobilePanelManager = initMobilePanelManager({ documentRoot: document, windowRoot: window });
+window.__TUMBO_MOBILE_PANEL_MANAGER__ = mobilePanelManager;
 const cityJourney=mountCityJourney({navigate:(id,method)=>{featureNavigator.select(id,method||'popstate');featureNavigator.close();}});
 runtimeStatus?.markReady?.({ featureCount:featureNavigator?.getSnapshot?.().featureCount ?? 23 });
 mountTokenTicker();
 mountCenteredSurfaces();
+
+// Persistent user-created app blocks live outside feature navigation.
+// Changing feature/scene never closes, recenters, or recreates these blocks.
+let persistentUserBlocks = null;
+import("./render/persistent-user-blocks.js")
+  .then(({ createPersistentUserBlocks }) => {
+    try {
+      persistentUserBlocks = createPersistentUserBlocks({
+        documentRoot: document,
+        view: window,
+      });
+      persistentUserBlocks.mount();
+      window.__TUMBO_PERSISTENT_BLOCKS__ = persistentUserBlocks;
+    } catch {}
+  })
+  .catch(() => {});
 
 addEventListener('pagehide',()=>{
   cameraInput?.destroy();
@@ -8767,6 +8894,7 @@ addEventListener('pagehide',()=>{
   personStudio.destroy();
   realityAssembly.destroy();
   cityJourney.destroy();
+  persistentUserBlocks?.destroy?.();
 },{once:true});
 
 addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setPixelRatio(isMobile?1:Math.min(devicePixelRatio,1.5));renderer.setSize(innerWidth,innerHeight);if(!isMobile)composer.setSize(innerWidth,innerHeight);});
