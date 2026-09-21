@@ -290,6 +290,33 @@ const key = new THREE.DirectionalLight(0xbdefff, 2.2); key.position.set(8,16,8);
 const rim = new THREE.PointLight(0x62d9ff, 32, 45, 2); rim.position.set(-12,6,-6); scene.add(rim);
 const warm = new THREE.PointLight(0xffb866, 18, 30, 2); warm.position.set(14,-2,6); scene.add(warm);
 
+// Graceful renderer recovery: optional feature mounts must never turn a live
+// Three.js surface into a red boot failure. If a later console/module throws
+// after WebGL is already online, the index-level error boundary can switch to
+// this minimal renderer loop and keep the world visible while the failed
+// optional surface is skipped. The normal animate() loop replaces this as
+// soon as full boot reaches the end of main.js.
+let rendererRecoveryActive = false;
+globalThis.__TUMBO_RENDER_RECOVERY__ = (reason = null) => {
+  if (rendererRecoveryActive) return Object.freeze({ recovered: true, alreadyActive: true });
+  rendererRecoveryActive = true;
+  try {
+    renderer.setAnimationLoop(() => {
+      try {
+        if (!renderer.xr.isPresenting) controls.update();
+        renderer.render(scene, camera);
+      } catch (renderError) {
+        try { console.warn('[runtime-recovery] renderer loop degraded:', renderError); } catch {}
+      }
+    });
+    try { console.warn('[runtime-recovery] keeping the 3-D surface alive after optional boot failure:', reason); } catch {}
+    return Object.freeze({ recovered: true, alreadyActive: false });
+  } catch (recoveryError) {
+    try { console.warn('[runtime-recovery] unable to recover renderer:', recoveryError); } catch {}
+    return Object.freeze({ recovered: false });
+  }
+};
+
 const mats = {
   dark: new THREE.MeshPhysicalMaterial({color:0x111821,metalness:.92,roughness:.26,clearcoat:.65,clearcoatRoughness:.22}),
   metal: new THREE.MeshPhysicalMaterial({color:0x7f97a1,metalness:1,roughness:.2,clearcoat:1}),
