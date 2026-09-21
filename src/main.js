@@ -8698,6 +8698,22 @@ runtimeStatus?.markReady?.({ featureCount:featureNavigator?.getSnapshot?.().feat
 mountTokenTicker();
 mountCenteredSurfaces();
 
+// Persistent user-created app blocks live outside feature navigation.
+// Changing feature/scene never closes, recenters, or recreates these blocks.
+let persistentUserBlocks = null;
+import("./render/persistent-user-blocks.js")
+  .then(({ createPersistentUserBlocks }) => {
+    try {
+      persistentUserBlocks = createPersistentUserBlocks({
+        documentRoot: document,
+        view: window,
+      });
+      persistentUserBlocks.mount();
+      window.__TUMBO_PERSISTENT_BLOCKS__ = persistentUserBlocks;
+    } catch {}
+  })
+  .catch(() => {});
+
 addEventListener('pagehide',()=>{
   cameraInput?.destroy();
   gestureInput?.destroy();
@@ -8706,6 +8722,7 @@ addEventListener('pagehide',()=>{
   personStudio.destroy();
   realityAssembly.destroy();
   cityJourney.destroy();
+  persistentUserBlocks?.destroy?.();
 },{once:true});
 
 addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setPixelRatio(isMobile?1:Math.min(devicePixelRatio,1.5));renderer.setSize(innerWidth,innerHeight);if(!isMobile)composer.setSize(innerWidth,innerHeight);});
