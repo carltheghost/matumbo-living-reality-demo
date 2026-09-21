@@ -83,7 +83,7 @@ const PORTAL_ROUTE_DEFINITIONS = [
   {
     id: "asset-market",
     featureId: "asset-market",
-    label: "Asset Market Evidence",
+    label: "Live Exchange Board",
     surface: "asset-market-console",
     description: "Refresh a bounded public market snapshot for comparison assets.",
   },
