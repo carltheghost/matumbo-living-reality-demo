@@ -8865,6 +8865,24 @@ renderer.setAnimationLoop(animate); /* TUMBO-SIM token gamification (Infinite Bu
 // URL-derived City navigation reuses the existing feature owner and avoids provider refresh.
 const mobilePanelManager = initMobilePanelManager({ documentRoot: document, windowRoot: window });
 window.__TUMBO_MOBILE_PANEL_MANAGER__ = mobilePanelManager;
+// Tab dock: ONE coherent dock for every floating panel (Reality Lens Ω).
+// The TabEngine owns the dock — closed by default, panels materialize only on
+// interaction (pointer/touch chips, keyboard 1-9/Escape, voice intents, Hand
+// Lens pinch, gaze-dwell) — and the AR adapter enhances that same dock for
+// phone/desktop/AR viewports. Panels are registered in place; the dock never
+// moves, renames, or restyles them. Guarded dynamic import: a tab-dock failure
+// degrades to "no dock" and can never break the world boot.
+import("./render/tab-registry.js?v=20260921-tabs1")
+  .then(({ initTabDock }) => {
+    try {
+      window.__TUMBO_TAB_DOCK__ = initTabDock({ documentRoot: document, windowRoot: window });
+    } catch (error) {
+      console.warn("[tab-dock] init failed:", error);
+    }
+  })
+  .catch((error) => {
+    console.warn("[tab-dock] load failed:", error);
+  });
 const cityJourney=mountCityJourney({navigate:(id,method)=>{featureNavigator.select(id,method||'popstate');featureNavigator.close();}});
 runtimeStatus?.markReady?.({ featureCount:featureNavigator?.getSnapshot?.().featureCount ?? 23 });
 mountTokenTicker();
