@@ -2,10 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {resolveDefaultFeature} from '../src/core/default-landing.js';
 
-test('no route params -> block-world (Living Reality engine)',()=>{
-  assert.equal(resolveDefaultFeature(new URLSearchParams(''),''),'block-world');
-  assert.equal(resolveDefaultFeature(new URLSearchParams(''),null),'block-world');
-  assert.equal(resolveDefaultFeature('',''),'block-world');
+test('no route params -> reality-lens (new Living Reality UI)',()=>{
+  assert.equal(resolveDefaultFeature(new URLSearchParams(''),''),'reality-lens');
+  assert.equal(resolveDefaultFeature(new URLSearchParams(''),null),'reality-lens');
+  assert.equal(resolveDefaultFeature('',''),'reality-lens');
 });
 
 test('any explicit route -> null (never rewritten)',()=>{
@@ -18,7 +18,7 @@ test('any explicit route -> null (never rewritten)',()=>{
 
 test('hash -> null (an explicit route, even a bare #fragment)',()=>{
   assert.equal(resolveDefaultFeature(new URLSearchParams(''),'#intro'),null);
-  assert.equal(resolveDefaultFeature(new URLSearchParams(''),'#'), 'block-world');
+  assert.equal(resolveDefaultFeature(new URLSearchParams(''),'#'), 'reality-lens');
 });
 
 test('deliberate cube-field entries keep working unchanged',()=>{
@@ -31,5 +31,5 @@ test('deliberate cube-field entries keep working unchanged',()=>{
 
 test('accepts a raw query string as well as URLSearchParams',()=>{
   assert.equal(resolveDefaultFeature('feature=contracts',''),null);
-  assert.equal(resolveDefaultFeature('',''),'block-world');
+  assert.equal(resolveDefaultFeature('',''),'reality-lens');
 });
