@@ -43,5 +43,15 @@ test('desktop tabs stay on the right and use the TUMBO-SIM minimized glass langu
   assert.doesNotMatch(source, /\.tl-layer--desktop\s*\{[\s\S]*?left:\s*92px;/);
   assert.match(source, /\.tl-chip\s*\{[\s\S]*?border:\s*1px solid rgba\(129, 232, 255, 0\.24\)/);
   assert.match(source, /\.tl-chip\s*\{[\s\S]*?linear-gradient\(165deg/);
-  assert.match(source, /\.tl-chip-icon\s*\{[\s\S]*?34px/);
+  assert.match(source, /\.tl-chip-cube\s*\{[\s\S]*?transform-style:\s*preserve-3d/);
+  assert.match(source, /@keyframes\s+tl-minimized-cube-spin/);
+  assert.match(source, /\.tl-cube-face--front/);
+  assert.match(source, /cubeEl\.className = 'tl-chip-cube'/);
+  assert.match(source, /\.tl-dock--desktop \{[\s\S]*?right:\s*12px;/);
+});
+
+test('token transfer UI stays behind the primary panel/tabs layer', async () => {
+  const source = await readFile(new URL('../src/domains/token-transfers-ui.js', import.meta.url), 'utf8');
+  assert.match(source, /#token-transfer-chip\{position:fixed;z-index:44;/);
+  assert.match(source, /#token-transfer-console\{position:fixed;z-index:45;/);
 });
