@@ -207,7 +207,15 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
   function update(dt,time,pose={joints:{}},reducedMotion=false){
     if(!layer.visible)return;
     for(const [name,joint] of Object.entries(joints)){
-      const q=pose.joints?.[name];const targetQ=q?new THREE.Quaternion(...q):smith.rest[name];
+      // Motion packets normally contain canonical quaternion arrays. A stale or
+      // partially-restored pose must never crash the 3-D surface at this boundary.
+      const q=pose?.joints?.[name];
+      let targetQ=smith.rest[name];
+      if(Array.isArray(q)&&q.length===4&&q.every(Number.isFinite)){
+        targetQ=new THREE.Quaternion(q[0],q[1],q[2],q[3]);
+      }else if(q&&typeof q==='object'&&Number.isFinite(q.x)&&Number.isFinite(q.y)&&Number.isFinite(q.z)&&Number.isFinite(q.w)){
+        targetQ=new THREE.Quaternion(q.x,q.y,q.z,q.w);
+      }
       joint.quaternion.slerp(targetQ,Math.min(1,dt*12));
     }
     // Breathing sway on the spine, then the float bobs below.
