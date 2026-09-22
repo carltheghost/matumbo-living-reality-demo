@@ -94,6 +94,7 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[]}){
   const wbCore=box([30,16,30],[0,2,0],wbGlass,worldBlock);wbCore.name='world-block/core';
   const wbEdgeGeo=new THREE.EdgesGeometry(new THREE.BoxGeometry(30,16,30));geometry.add(wbEdgeGeo);
   worldBlock.add(new THREE.LineSegments(wbEdgeGeo,wbEdgeMat));
+  const wbHalo=new THREE.Mesh(new THREE.TorusGeometry(17.2,.035,8,64),haloMaterialFor(new THREE.Color('#58d9ff')));geometry.add(wbHalo.geometry);wbHalo.name='world-block/outer-halo';wbHalo.rotation.x=Math.PI/2;wbHalo.renderOrder=-1;worldBlock.add(wbHalo);
   const wbRand=traitRandom(hashString('matumbo:world-block'));
   const wbCellMat=makeMaterial('#2a6d96',{transparent:true,opacity:0,depthWrite:false,roughness:.2,fog:false});
   const wbCells=[];
@@ -151,6 +152,16 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[]}){
     root.scale.setScalar(scale);
     const core=box([CORE,CORE,CORE],[0,0,0],dark,root);core.userData.assemblyId=feature.id;targets.push(core);selectable.push(core);
     frame(FACE,root,accent);
+    // Every cube gets the same intentional visual grammar: an orbital halo,
+    // inner ring, luminous core and small corner pylons. These are decoration
+    // only, so rotated and non-rotated cubes remain equally legible.
+    const haloMat=haloMaterialFor(accent.color);
+    const halo=new THREE.Mesh(haloGeometry,haloMat);halo.name=feature.id+'/halo';halo.scale.setScalar(.92);halo.renderOrder=-1;root.add(halo);
+    const innerHalo=new THREE.Mesh(innerHaloGeometry,haloMaterialFor(accent.color));innerHalo.name=feature.id+'/inner-halo';innerHalo.rotation.x=Math.PI/2;innerHalo.scale.setScalar(.95);root.add(innerHalo);
+    const glowCore=new THREE.Mesh(coreGeometry,haloMaterialFor(accent.color));glowCore.name=feature.id+'/glow-core';glowCore.renderOrder=1;root.add(glowCore);
+    const cornerPositions=[[.96,.96,.96],[-.96,.96,.96],[.96,-.96,.96],[-.96,-.96,.96],[.96,.96,-.96],[-.96,.96,-.96],[.96,-.96,-.96],[-.96,-.96,-.96]];
+    const cornerMat=makeMaterial(accent.color,{emissive:accent.color,emissiveIntensity:.65,metalness:.5,roughness:.2});
+    cornerPositions.forEach((pos,i)=>{const pin=box([.085,.085,.085],pos,cornerMat,root);pin.name=feature.id+'/corner-'+i;});
     const faces=[];
     for(const [axis,sign] of [[0,-1],[0,1],[1,-1],[1,1],[2,-1],[2,1]]){
       const pivot=group(`${feature.id}/face-${axis}-${sign}`,root),size=[FACE,FACE,FACE];size[axis]=.04;
@@ -249,7 +260,7 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[]}){
     // A geometric open-book/circuit marker, not a screenshot or text texture.
     box([.34,.03,.06],[0,.24,CORE/2+.16],blue,root);box([.34,.03,.06],[0,-.24,CORE/2+.16],blue,root);
     box([.03,.5,.06],[-.17,0,CORE/2+.16],blue,root);box([.03,.5,.06],[.17,0,CORE/2+.16],blue,root);
-    nodes.set(feature.id,{root,core,faces,city,inner,nested,beacon,beaconHot,beaconMat,traits,open:0,goalOpen:0,position:new THREE.Vector3(),scale,feature});
+    nodes.set(feature.id,{root,core,faces,city,inner,nested,beacon,beaconHot,beaconMat,halo,innerHalo,glowCore,traits,open:0,goalOpen:0,position:new THREE.Vector3(),scale,feature});
   }
   const edges=features.filter(f=>f.id!=='block-world').map(f=>['block-world',f.id]);
   const connectionGeometry=new THREE.BufferGeometry().setAttribute('position',new THREE.Float32BufferAttribute(new Float32Array(edges.length*6),3));geometry.add(connectionGeometry);
@@ -277,6 +288,7 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[]}){
     wbCellMat.opacity=(1-lodBlend)*.4;
     for(const wbCell of wbCells)wbCell.visible=lodBlend<=.5;
     wbGlass.emissiveIntensity=.22+.14*Math.sin(time*.8);
+    if(wbHalo){wbHalo.rotation.z=reducedMotion?0:time*.075;wbHalo.scale.setScalar(1+.018*Math.sin(time*.65));}
     wbFaceSystems.forEach(({face,panelMaterial,glowMaterial,frameMaterial,phase})=>{
       const pulse=.82+.18*Math.sin(time*.72+phase);
       panelMaterial.opacity=lodBlend*.72;
@@ -311,7 +323,11 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[]}){
         cell.group.position.set(cell.restX,cell.open*.4,CORE/2+.78+cell.open*.3);
         for(const sub of cell.subs)sub.visible=cell.open>.3;
       }
-      node.city.position.y=node.open*.55;node.root.rotation.y=reducedMotion?0:Math.sin(time*.18+node.traits.phase)*.025;
+      node.city.position.y=node.open*.55;
+      if(node.halo){node.halo.rotation.z=reducedMotion?0:time*.11+node.traits.phase;node.halo.scale.setScalar(.9+.055*Math.sin(time*.8+node.traits.phase));}
+      if(node.innerHalo){node.innerHalo.rotation.y=reducedMotion?0:time*.16-node.traits.phase*.4;}
+      if(node.glowCore){node.glowCore.scale.setScalar(.92+.12*Math.sin(time*1.25+node.traits.phase)*.5+node.open*.08);}
+      node.root.rotation.y=reducedMotion?0:Math.sin(time*.18+node.traits.phase)*.025;
       node.beacon.material=level?node.beaconHot:node.beaconMat;
     }
     if(!showWorld){edges.forEach(([from,to],i)=>{const a=nodes.get(from).root.position,b=nodes.get(to).root.position;buffer.setXYZ(i*2,a.x,a.y,a.z);buffer.setXYZ(i*2+1,b.x,b.y,b.z);});buffer.needsUpdate=true;}
