@@ -72,6 +72,8 @@ export function createDimensionalChessState() {
     winner:null,
     lastMove:null,
     kings,
+    undoStack:[],
+    redoStack:[],
   };
 }
 
@@ -223,6 +225,13 @@ function formatMove(board,from,to){
   return `${names[p.type]}${String.fromCharCode(97+a[0])}${a[1]+1}:${a[2]+1},${a[3]+1} → ${String.fromCharCode(97+b[0])}${b[1]+1}:${b[2]+1}`;
 }
 
+const snapshotState = (state) => ({
+  board: state.board.slice(), turn: state.turn, history: state.history.slice(),
+  selected:null, ply:state.ply, gameOver:state.gameOver, winner:state.winner,
+  lastMove:state.lastMove ? {...state.lastMove} : null,
+});
+const restoreSnapshot = (state, snap) => ({...state, ...snap, selected:null, undoStack:state.undoStack||[], redoStack:state.redoStack||[]});
+
 export function applyDimensionalMove(state,from,to){
   const move=legalMoves4D(state,from).find(m=>m.to===to);
   if(!move)return {accepted:false,reason:"Illegal 4D move",state};
@@ -230,13 +239,31 @@ export function applyDimensionalMove(state,from,to){
   board[to]=piece;board[from]=null;
   const c=coords(to), axis=piece.axis==="w"?3:1;
   if(piece.type==="p"&&(c[axis]===0||c[axis]===7))board[to]={...piece,type:"q"};
-  const next={...state,board,turn:state.turn==="w"?"b":"w",ply:state.ply+1,history:[...state.history,move],selected:null,lastMove:move};
+  const next={...state,board,turn:state.turn==="w"?"b":"w",ply:state.ply+1,history:[...state.history,move],selected:null,lastMove:move,undoStack:[...(state.undoStack||[]),snapshotState(state)],redoStack:[]};
   const opp=next.turn;
   const oppHasKing=next.board.some(p=>p?.color===opp&&p.type==="k");
   const replies=legalMoves4D(next);
   if(!oppHasKing){next.gameOver=true;next.winner=state.turn;}
   else if(replies.length===0){next.gameOver=true;next.winner=isKingAttacked(board,opp)?state.turn:null;}
   return {accepted:true,move,state:next};
+}
+
+export function undoDimensionalMove(state){
+  const stack=state.undoStack||[];
+  if(!stack.length)return {changed:false,state};
+  const restored=restoreSnapshot(state,stack[stack.length-1]);
+  restored.undoStack=stack.slice(0,-1);
+  restored.redoStack=[...(state.redoStack||[]),snapshotState(state)];
+  return {changed:true,state:restored};
+}
+
+export function redoDimensionalMove(state){
+  const stack=state.redoStack||[];
+  if(!stack.length)return {changed:false,state};
+  const restored=restoreSnapshot(state,stack[stack.length-1]);
+  restored.redoStack=stack.slice(0,-1);
+  restored.undoStack=[...(state.undoStack||[]),snapshotState(state)];
+  return {changed:true,state:restored};
 }
 
 export function slicePieces(state,z,w){
