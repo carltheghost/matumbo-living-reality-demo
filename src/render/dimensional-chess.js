@@ -32,7 +32,7 @@ function armorShoulders(THREE,parent,material){
   }
 }
 function createCharacterPiece(THREE,type,color){
-  const g=new THREE.Group();g.name=\`character-\${color}-\${type}\`;
+  const g=new THREE.Group();g.name=`character-${color}-${type}`;
   const white=color==="w";
   const primary=mat(THREE,white?0xe7eef7:0x171a25,.82,.24);
   const secondary=mat(THREE,white?0x3c78a8:0x7b1f3a,.68,.28);
@@ -85,7 +85,7 @@ function makeBoard(THREE,size=8){
     const cell=part(THREE,new THREE.BoxGeometry(size/8-.025,.10,size/8-.025),(x+y)%2?dark:light,root,"cell");
     cell.position.set((x-3.5)*size/8,.0,(3.5-y)*size/8);
     cell.userData={x,y,cell:true};
-    cells.set(\`\${x},\${y}\`,cell);
+    cells.set(`${x},${y}`,cell);
   }
   const frame=part(THREE,new THREE.BoxGeometry(size+.22,.20,size+.22),mat(THREE,0x111722,.65,.28),root,"frame");
   frame.position.y=-.10;
@@ -96,7 +96,7 @@ function boardPosition(size,x,y){return [(x-3.5)*size/8,.11,(3.5-y)*size/8];}
 
 function makePanel(doc){
   const root=doc.createElement("section");root.className="dimensional-chess";
-  root.innerHTML=\`
+  root.innerHTML=`
   <style>
   .dimensional-chess{color:#eef6ff;background:linear-gradient(145deg,#07111b,#0b0e18 55%,#150c1a);border:1px solid rgba(91,188,255,.32);border-radius:18px;overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,.45);font-family:Inter,system-ui,sans-serif}
   .dc-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.08)}
@@ -122,7 +122,7 @@ function makePanel(doc){
       <section class="dc-card"><h3>Move history</h3><div class="dc-moves" data-moves></div></section>
     </aside>
   </div>
-  <footer class="dc-footer"><button class="dc-action" data-new>New game</button><button class="dc-action" data-center>Center board</button><button class="dc-action" data-brenda>Ask Brenda</button></footer>\`;
+  <footer class="dc-footer"><button class="dc-action" data-new>New game</button><button class="dc-action" data-center>Center board</button><button class="dc-action" data-brenda>Ask Brenda</button></footer>`;
   return root;
 }
 
@@ -221,13 +221,13 @@ export function mountDimensionalChess({documentRoot=document,host=document.body}
 
   function refresh(){
     const turn=mode==="4d"?state4.turn:state2.turn;
-    root.querySelector("[data-turn]").textContent=\`\${turn==="w"?"WHITE":"BLACK"} TO MOVE\`;
-    root.querySelector("[data-coords]").textContent=mode==="4d"?\`Z\${sliceZ} · W\${sliceW}\`:"CLASSIC BOARD";
-    const status=mode==="4d"?(state4.gameOver?\`\${state4.winner?"CHECKMATE":"DRAW"} · 4D\`:\`\${countPieces(state4).w}W / \${countPieces(state4).b}B pieces\`):(state2.checkmate?"CHECKMATE":state2.check?"CHECK":"Classic chess");
+    root.querySelector("[data-turn]").textContent=`${turn==="w"?"WHITE":"BLACK"} TO MOVE`;
+    root.querySelector("[data-coords]").textContent=mode==="4d"?`Z${sliceZ} · W${sliceW}`:"CLASSIC BOARD";
+    const status=mode==="4d"?(state4.gameOver?`${state4.winner?"CHECKMATE":"DRAW"} · 4D`:`${countPieces(state4).w}W / ${countPieces(state4).b}B pieces`):(state2.checkmate?"CHECKMATE":state2.check?"CHECK":"Classic chess");
     root.querySelector("[data-status]").textContent=status;
-    root.querySelector("[data-slice-help]").textContent=mode==="4d"?\`Active slice Z=\${sliceZ}, W=\${sliceW}. A move may land on another slice; select a destination after switching Z/W.\`:"Classic chess board with the same character champions.";
+    root.querySelector("[data-slice-help]").textContent=mode==="4d"?`Active slice Z=${sliceZ}, W=${sliceW}. A move may land on another slice; select a destination after switching Z/W.`:"Classic chess board with the same character champions.";
     const list=root.querySelector("[data-moves]");const history=mode==="4d"?state4.history:state2.history;
-    list.replaceChildren();history.slice(-18).forEach((m,i)=>{const d=documentRoot.createElement("div");d.className="dc-move";d.textContent=m.san||\`\${m.from} → \${m.to}\`;list.append(d);});
+    list.replaceChildren();history.slice(-18).forEach((m,i)=>{const d=documentRoot.createElement("div");d.className="dc-move";d.textContent=m.san||`${m.from} → ${m.to}`;list.append(d);});
   }
 
   function setMode(next){
@@ -245,8 +245,8 @@ export function mountDimensionalChess({documentRoot=document,host=document.body}
   root.querySelectorAll("[data-contract]").forEach(btn=>btn.addEventListener("click",()=>{
     const kind=btn.dataset.contract;const outcome=kind==="white"?"WHITE":kind==="black"?"BLACK":kind==="draw"?"DRAW":"NEXT-MOVE-KNIGHT";
     try{
-      const c=contractDesk.createContract({eventId:\`chess:\${mode}:\${Date.now()}\`,eventLabel:kind==="move"?"Next move contract":"Dimensional Chess outcome",outcomes:kind==="move"?["NEXT-MOVE-KNIGHT","OTHER"]:["WHITE","BLACK","DRAW"],creator:"player"});
-      contractCount++;root.querySelector("[data-status]").textContent=\`Contract #\${contractCount} staged · \${outcome} · TUMBO-SIM\`;
+      const c=contractDesk.createContract({eventId:`chess:${mode}:contract-${contractCount+1}`,eventLabel:kind==="move"?"Next move contract":"Dimensional Chess outcome",outcomes:kind==="move"?["NEXT-MOVE-KNIGHT","OTHER"]:["WHITE","BLACK","DRAW"],creator:"player"});
+      contractCount++;root.querySelector("[data-status]").textContent=`Contract #${contractCount} staged · ${outcome} · TUMBO-SIM`;
     }catch{root.querySelector("[data-status]").textContent="Contract unavailable in this session";}
   }));
   canvas.addEventListener("pointerdown",e=>{drag=true;lastX=e.clientX;lastY=e.clientY;canvas.setPointerCapture?.(e.pointerId);});
