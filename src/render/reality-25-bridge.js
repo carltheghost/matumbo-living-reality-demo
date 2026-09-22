@@ -5,7 +5,7 @@
  */
 import * as THREE from '../../vendor/three-r179.1/build/three.module.js';
 import { OrbitControls } from '../../vendor/three-r179.1/examples/jsm/controls/OrbitControls.js';
-import { RealityField } from 'https://raw.githubusercontent.com/carltheghost/matumbo-living-reality-25/main/reality-field.js';
+import { RealityField } from 'https://raw.githubusercontent.com/carltheghost/matumbo-living-reality-25/main/reality-field.js?v=20260922-r25b';
 
 const FIELD_SEEDS = [
   ['R01','R07'],['R07','R15'],['R15','R18'],
@@ -143,59 +143,127 @@ layer.add(nucleus);
 
 const nodeMeshes=new Map();
 const realityDirections=new Map();
+const realityGroups=new Map();
+const realityContents=new Map();
 const baseAxis=new THREE.Vector3(0,0,1);
+
+const REALITY_META={
+  R01:{name:'Core World',kind:'world',color:0x4ca8ff},
+  R02:{name:'Social',kind:'social',color:0xff78b7},
+  R03:{name:'Contracts',kind:'contracts',color:0xffc86b},
+  R04:{name:'Person',kind:'person',color:0xb891ff},
+  R05:{name:'Blocks',kind:'blocks',color:0x68d6a0},
+  R06:{name:'Arena',kind:'arena',color:0xff6f63},
+  R07:{name:'Academy',kind:'academy',color:0x66b8ff},
+  R08:{name:'World Pulse',kind:'world-events',color:0x8de0ff},
+  R09:{name:'Sports',kind:'sports',color:0x72e69b},
+  R10:{name:'Asset Market',kind:'asset-market',color:0xf2cf71},
+  R11:{name:'Gateway',kind:'gateway',color:0x9c8cff},
+  R12:{name:'Neural Mesh',kind:'neural',color:0xc08cff},
+  R13:{name:'Picture Matter',kind:'picture',color:0xff9a6f},
+  R14:{name:'NFT Atelier',kind:'nft',color:0xffd36e},
+  R15:{name:'Bot Plaza',kind:'bots',color:0x55d6ff},
+  R16:{name:'Ledger',kind:'ledger',color:0x75c77c},
+  R17:{name:'T402',kind:'t402',color:0x89a8ff},
+  R18:{name:'Living Lens',kind:'lens',color:0xf39ad7},
+};
+
+function makeLocalContent(meta){
+  const group=new THREE.Group();
+  const blockGeo=new THREE.BoxGeometry(.12,.12,.12);
+  const accent=new THREE.MeshStandardMaterial({
+    color:meta.color,emissive:meta.color,emissiveIntensity:.55,
+    metalness:.15,roughness:.3
+  });
+  const placements=[
+    [-.2,-.16,-.06],[.02,.1,.04],[.2,-.02,-.02],
+    [-.04,-.22,.10],[.19,.18,.08]
+  ];
+  placements.forEach(([x,y,z],i)=>{
+    const b=new THREE.Mesh(blockGeo,accent);
+    b.position.set(x,y,z);
+    b.scale.setScalar(i===0?.8:1);
+    group.add(b);
+  });
+  return group;
+}
 
 for(const reality of field.realties.values()){
   const raw=new THREE.Vector3(...reality.address.vector).normalize();
   realityDirections.set(reality.id,raw);
 
-  // Every reality is a real cube, and every cube faces its own vector.
-  // Local +Z is treated as the "front" of the reality cube.
-  // Cardinals point along their axis; edge/diagonal realities point between
-  // the corresponding axes, giving the full 18-direction radial structure.
-  const material=new THREE.MeshPhysicalMaterial({
-    color:reality.address.vector.filter(Boolean).length===1?0x4ca8ff:0x9b7cff,
-    emissive:0x183452,
-    emissiveIntensity:.75,
-    metalness:.18,
-    roughness:.24,
-    transmission:.18,
-    transparent:true,
-    opacity:.88
-  });
-  const mesh=new THREE.Mesh(new THREE.BoxGeometry(.62,.62,.62),material);
-  mesh.position.copy(positions.get(reality.id));
+  const meta=REALITY_META[reality.id]||{name:'Reality',kind:'world',color:0x8db8ff};
+  reality.localState.role=meta.kind;
+  reality.localState.domain=meta.name;
 
+  const group=new THREE.Group();
   const orientation=new THREE.Quaternion().setFromUnitVectors(baseAxis,raw);
-  const roll=(Number(reality.id.slice(1))%6)*0.12;
-  const rollQuat=new THREE.Quaternion().setFromAxisAngle(raw,roll);
-  mesh.quaternion.copy(orientation).premultiply(rollQuat);
+  const roll=(Number(reality.id.slice(1))%6)*0.15;
+  group.quaternion.copy(orientation);
+  group.rotateZ(roll);
+  group.position.copy(positions.get(reality.id));
+  group.userData.realityId=reality.id;
+  group.userData.direction=[...reality.address.vector];
+  group.userData.directionLabel=reality.address.label;
+  group.userData.realityName=meta.name;
+  layer.add(group);
+  realityGroups.set(reality.id,group);
 
-  mesh.userData.realityId=reality.id;
-  mesh.userData.direction=[...reality.address.vector];
-  mesh.userData.directionLabel=reality.address.label;
-  layer.add(mesh);
-  nodeMeshes.set(reality.id,mesh);
+  const shellMat=new THREE.MeshPhysicalMaterial({
+    color:meta.color,emissive:meta.color,emissiveIntensity:.24,
+    metalness:.16,roughness:.2,transmission:.28,
+    transparent:true,opacity:.4
+  });
+  const shell=new THREE.Mesh(new THREE.BoxGeometry(1.35,1.35,1.35),shellMat);
+  shell.userData.realityId=reality.id;
+  group.add(shell);
+  nodeMeshes.set(reality.id,shell);
 
-  // A thin directional stem makes the facing direction unmistakable.
-  const stemGeo=new THREE.BufferGeometry().setFromPoints([
-    mesh.position.clone().add(raw.clone().multiplyScalar(.36)),
-    mesh.position.clone().add(raw.clone().multiplyScalar(.92))
-  ]);
-  const stem=new THREE.Line(
-    stemGeo,
-    new THREE.LineBasicMaterial({color:0xbfeaff,transparent:true,opacity:.34})
-  );
-  stem.userData.realityId=reality.id;
-  layer.add(stem);
-}
-const nucleusLines=new THREE.Group();layer.add(nucleusLines);
-for(const reality of field.realties.values()){
+  const portalMat=new THREE.MeshStandardMaterial({
+    color:meta.color,emissive:meta.color,emissiveIntensity:1.2,
+    transparent:true,opacity:.84,metalness:.12,roughness:.22,
+    side:THREE.DoubleSide
+  });
+  const portal=new THREE.Mesh(new THREE.PlaneGeometry(.82,.82),portalMat);
+  portal.position.z=.69;
+  portal.userData.realityId=reality.id;
+  portal.userData.portal=true;
+  group.add(portal);
+
+  const railMat=new THREE.LineBasicMaterial({color:meta.color,transparent:true,opacity:.88});
+  const edgePoints=[
+    new THREE.Vector3(-.52,-.52,.71),new THREE.Vector3(.52,-.52,.71),
+    new THREE.Vector3(.52,.52,.71),new THREE.Vector3(-.52,.52,.71),
+    new THREE.Vector3(-.52,-.52,.71)
+  ];
+  const rail=new THREE.Line(new THREE.BufferGeometry().setFromPoints(edgePoints),railMat);
+  rail.userData.realityId=reality.id;
+  group.add(rail);
+
+  const content=makeLocalContent(meta);
+  content.scale.setScalar(.92);
+  content.position.z=-.08;
+  content.traverse(object=>object.userData.realityId=reality.id);
+  group.add(content);
+  realityContents.set(reality.id,content);
+
+  const arrow=new THREE.ArrowHelper(new THREE.Vector3(0,0,1),new THREE.Vector3(0,0,.74),.72,meta.color,.16,.1);
+  arrow.userData.realityId=reality.id;
+  group.add(arrow);
+
   const p=positions.get(reality.id);
-  const g=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0),p]);
-  nucleusLines.add(new THREE.Line(g,new THREE.LineBasicMaterial({color:0x45627f,transparent:true,opacity:.32})));
+  const start=raw.clone().multiplyScalar(.42);
+  const end=p.clone().sub(raw.clone().multiplyScalar(.69));
+  const spoke=new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([start,end]),
+    new THREE.LineBasicMaterial({color:0x45627f,transparent:true,opacity:.46})
+  );
+  spoke.userData.realityId=reality.id;
+  layer.add(spoke);
 }
-const edgeGroup=new THREE.Group();layer.add(edgeGroup);
+
+const edgeGroup=new THREE.Group();
+layer.add(edgeGroup);
 
 function redrawEdges(){
   while(edgeGroup.children.length)edgeGroup.remove(edgeGroup.children[0]);
@@ -203,7 +271,10 @@ function redrawEdges(){
     if(!edge.active)continue;
     const a=positions.get(edge.from),b=positions.get(edge.to);
     if(!a||!b)continue;
-    const g=new THREE.BufferGeometry().setFromPoints([a,b]);
+    const direction=b.clone().sub(a).normalize();
+    const pa=a.clone().add(direction.clone().multiplyScalar(.72));
+    const pb=b.clone().sub(direction.clone().multiplyScalar(.72));
+    const g=new THREE.BufferGeometry().setFromPoints([pa,pb]);
     const m=new THREE.LineBasicMaterial({
       color:edge.type==='fold'?0xf3cf73:0x67c9ff,
       transparent:true,opacity:edge.type==='fold'?.88:.6,
@@ -240,7 +311,7 @@ function projectLabel(id){
 function ensureLabels(){
   if(labels.childElementCount)return;
   for(const reality of field.realties.values()){
-    const el=document.createElement('div');el.className='r25-label';el.dataset.label=reality.id;el.textContent=reality.id;labels.appendChild(el);
+    const el=document.createElement('div');el.className='r25-label';el.dataset.label=reality.id;const meta=REALITY_META[reality.id];el.textContent=meta?reality.id+' · '+meta.name:reality.id;labels.appendChild(el);
   }
 }
 function renderStats(){
@@ -257,14 +328,16 @@ function select(id){
   selected=id;
   for(const [rid,mesh] of nodeMeshes){
     const on=rid===id;
-    mesh.scale.setScalar(on?1.8:1);
-    mesh.material.emissiveIntensity=on?1.7:.7;
+    mesh.scale.setScalar(on?1.08:1);
+    mesh.material.emissiveIntensity=on?0.42:.24;
   }
+  for(const [rid,group] of realityGroups)group.scale.setScalar(rid===id?1.08:1);
   const reality=field.realties.get(id);
-  status.textContent=id==='NUCLEUS'?'NUCLEUS · shared origin':`${id} · ${reality.address.label}`;
+  const meta=REALITY_META[id];
+  status.textContent=id==='NUCLEUS'?'NUCLEUS · shared origin':\`\${id} · \${meta?.name||reality.address.label} · \${reality.address.vector.join(',')}\`;
   selection.textContent=id==='NUCLEUS'
-    ?'Central nucleus — anchor only; it is not a routing bottleneck.'
-    :`${id} · activity ${Number(reality.localState.activity).toFixed(2)} · timeline ${reality.timeline.tick.toFixed(0)}`;
+    ?'Central nucleus — anchor only; each primary reality owns its own local state, timeline and space.'
+    :\`\${id} · \${meta?.name||reality.address.label} · direction \${reality.address.vector.join(',')} · local tick \${reality.timeline.tick.toFixed(0)}\`;
 }
 const items=root.querySelector('[data-list]');
 for(const reality of field.realties.values()){
@@ -289,7 +362,7 @@ canvas.addEventListener('pointerdown',event=>{
   pointer.x=((event.clientX-rect.left)/rect.width)*2-1;
   pointer.y=-((event.clientY-rect.top)/rect.height)*2+1;
   raycaster.setFromCamera(pointer,camera);
-  const hit=raycaster.intersectObjects([...nodeMeshes.values(),nucleus],false)[0];
+  const hit=raycaster.intersectObjects([nucleus,...realityGroups.values()],true)[0];
   if(hit?.object===nucleus)select('NUCLEUS');
   else if(hit?.object?.userData?.realityId)select(hit.object.userData.realityId);
 });
@@ -297,12 +370,15 @@ canvas.addEventListener('pointerdown',event=>{
 function animate(time){
   if(!started)return;
   const t=time*.001;
-  for(const [id,mesh] of nodeMeshes){
+  for(const [id,group] of realityGroups){
     const reality=field.realties.get(id);
     const activity=Number(reality.localState.activity||0);
-    const pulse=1+activity*.34+Math.sin(t*1.5+reality.address.vector[0]+reality.address.vector[1]*2)*.035;
-    mesh.scale.lerp(new THREE.Vector3(pulse*(id===selected?1.35:1),pulse*(id===selected?1.35:1),pulse*(id===selected?1.35:1)),.12);
-    mesh.rotation.y+=.0025;
+    const pulse=1+activity*.10+Math.sin(t*1.5+reality.address.vector[0]+reality.address.vector[1]*2)*.018;
+    const target=id===selected?1.08*pulse:pulse;
+    group.scale.lerp(new THREE.Vector3(target,target,target),.12);
+    group.children.forEach(child=>{
+      if(child.userData?.portal)child.material.emissiveIntensity=1.15+activity*.5;
+    });
     projectLabel(id);
   }
   nucleus.rotation.y+=.003;
@@ -315,7 +391,7 @@ function open(){
   if(root.classList.contains('open'))return;
   root.classList.add('open');started=true;ensureLabels();resize();select(selected);renderStats();
   requestAnimationFrame(animate);
-  output.textContent='18 primary realities live. Direct edges are independent of the nucleus.';
+  output.textContent='18 primary realities live. Each cube owns its direction, local space and domain. Spokes terminate at reality faces; they do not collapse the realities into one point.';
 }
 function close(){root.classList.remove('open');started=false}
 
