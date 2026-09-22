@@ -150,3 +150,10 @@ test('arena hall stages a glowing cinematic board',()=>{
   assert.equal(hall.markers.list.filter((marker)=>marker.visible).length,0);
   hall.dispose();
 });
+
+test('chess renderer is standard-piece-only and does not depend on avatar textures',()=>{
+  assert.equal(typeof CHESS_ROLE_GLYPHS_WHITE.k,'string');
+  assert.equal(typeof CHESS_ROLE_GLYPHS_BLACK.k,'string');
+  assert.equal(AVATAR_CHIBI_FALLBACK_URL,null);
+  assert.deepEqual(CHESS_BUST_CROPS,{});
+});
