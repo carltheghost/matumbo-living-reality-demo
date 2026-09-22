@@ -297,7 +297,9 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[]}){
     viewState=snapshot;selected=snapshot.selectedId;hovered=hoveredId;mode=viewMode;
     snapshot.objects.forEach(object=>{
       const node=nodes.get(object.id);if(!node)return;
-      node.position.set(...object.position);node.goalOpen=object.open?1:object.id===hovered?.23:0;
+      const position=Array.isArray(object.position)?object.position:(object.position&&typeof object.position.x==='number'&&typeof object.position.y==='number'&&typeof object.position.z==='number'?[object.position.x,object.position.y,object.position.z]:null);
+      if(!position) return;
+      node.position.set(position[0],position[1],position[2]);node.goalOpen=object.open?1:object.id===hovered?.23:0;
     });
     connectionMaterial.color.set(snapshot.mode==='proposed'?'#b194ed':snapshot.mode==='past'?'#9a9fae':'#36a6d3');
   }
