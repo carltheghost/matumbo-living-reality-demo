@@ -238,19 +238,6 @@ export function createContractFlow({
   const quotesByProposalId = new Map();
   const draftsByGameId = new Map();
 
-  // ProposalQueue persists across page reloads. Hydrate the in-memory
-  // idempotency guard from that queue so automatic boot scans never duplicate
-  // an existing prediction contract proposal for the same game.
-  function hasExistingProposalForGame(gameId) {
-    const id = cleanText(gameId);
-    if (!id) return false;
-    try {
-      return proposalQueue.getProposals().some((proposal) => cleanText(proposal?.eventId) === id);
-    } catch {
-      return false;
-    }
-  }
-
   function mapGames(records) {
     const games = [];
     for (const record of Array.isArray(records) ? records : []) {
@@ -281,24 +268,15 @@ export function createContractFlow({
         for (const game of fresh) {
           const gameId = cleanText(game.gameId || game.id);
           if (!gameId || seenGameIds.has(gameId)) continue;
-          if (hasExistingProposalForGame(gameId)) {
-            seenGameIds.add(gameId);
-            continue;
-          }
           seenGameIds.add(gameId);
           let proposal = null;
           try {
             proposal = gameToDraft(game);
           } catch {
-            // Do not permanently suppress a game when draft construction fails.
-            seenGameIds.delete(gameId);
             continue;
           }
           const draft = normalizeDraft(proposal, now);
-          if (!draft) {
-            seenGameIds.delete(gameId);
-            continue;
-          }
+          if (!draft) continue;
           draftsByGameId.set(gameId, draft);
           drafts.push(draft);
         }
@@ -393,12 +371,7 @@ export function createContractFlow({
       } catch {
         continue;
       }
-      if (!proposal || !proposal.id) {
-        // Submission can fail transiently; allow the next automatic scan to retry.
-        seenGameIds.delete(draft.gameId);
-        draftsByGameId.delete(draft.gameId);
-        continue;
-      }
+      if (!proposal || !proposal.id) continue;
       quotesByProposalId.set(proposal.id, draft.oddsQuote || null);
       try {
         ledger.record({

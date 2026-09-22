@@ -95,7 +95,7 @@ Focused verification:
 node --test tests/launch-kit.test.mjs tests/launch-kit-render.test.mjs
 ```
 
-The Launch Kit directory recorded a historical feature count in the 2026-09-04 snapshot; current route count comes from the authoritative feature registry. Packet
+The Launch Kit directory currently contains 23 openable local features. Packet
 169 verified the Launch Kit → `panel=live-status&live=all` handoff and Packet
 172 verified the Launch Kit → `?panel=runtime-sync` handoff. These are local
 same-origin routes; neither is a public share service, durable sync channel,

@@ -2077,7 +2077,6 @@
       }
     }
   </style>
-    <link rel="stylesheet" href="./mobile-polish.css?v=20260920-mobile-polish">
 </head>
 <body>
   <section id="runtime-status" data-runtime-state="loading" role="status" aria-live="polite" aria-atomic="true">
@@ -3458,7 +3457,7 @@
         <div>
           <div class="eyebrow">Contract Atelier · fictional markets</div>
           <h2 id="contract-atelier-title">Open · Stake · Resolve</h2>
-          <p>Open a YES/NO, HOME/AWAY, or OVER/UNDER contract on any topic as the house or a player. Stakes are rehearsal credits with zero real value.</p>
+          <p>Open a pool, binary, or multi-outcome contract on any topic as the house or a player. Stakes are rehearsal credits with zero real value.</p>
         </div>
         <button id="contract-atelier-close" type="button" aria-label="Close Contract Atelier">×</button>
       </div>
@@ -3476,26 +3475,16 @@
         <h3 id="contract-atelier-create-title" class="room-console-section-title">Open a fictional contract</h3>
         <label class="contract-atelier-field" for="contract-atelier-type">Market type
           <select id="contract-atelier-type">
-                  <option value="yes_no">YES / NO — binary prediction market</option>
-                </select>
+            <option value="binary">Binary — yes / no</option>
+            <option value="pool">Pool — parimutuel split</option>
+            <option value="multi">Multi — pick 1 of N outcomes</option>
+          </select>
         </label>
         <label class="contract-atelier-field" for="contract-atelier-role">Your position
           <select id="contract-atelier-role">
-                  <option value="house">HOUSE — provide liquidity</option>
-                  <option value="player">PLAYER — take YES / NO position</option>
-                </select>
-                <label class="contract-atelier-field">HOUSE MODE
-                  <select id="contract-atelier-house-mode">
-                    <option value="single">HOUSE — one liquidity provider</option>
-                    <option value="pool">HOUSE POOL — multiple providers</option>
-                  </select>
-                </label>
-                <label class="contract-atelier-field">HOUSE FEE (BPS)
-                  <input id="contract-atelier-fee-bps" type="number" min="0" max="1000" value="100" />
-                </label>
-                <label class="contract-atelier-field">LIQUIDITY B
-                  <input id="contract-atelier-liquidity-b" type="number" min="10" max="10000" value="100" />
-                </label>
+            <option value="house">House — set the terms, take the other side</option>
+            <option value="player">Player — take a yes/no side</option>
+          </select>
         </label>
         <label class="contract-atelier-field" for="contract-atelier-topic">Topic
           <select id="contract-atelier-topic">
@@ -3527,9 +3516,9 @@
           <input id="contract-atelier-prop-c" type="text" maxlength="200" autocomplete="off" placeholder="IF/ELSE else-branch only">
         </label>
         <label class="contract-atelier-field" for="contract-atelier-outcomes">Outcomes (comma-separated)
-          <input id="contract-atelier-outcomes" type="text" maxlength="200" autocomplete="off" placeholder="Fixed by contract type — YES/NO, HOME/AWAY, or OVER/UNDER">
+          <input id="contract-atelier-outcomes" type="text" maxlength="200" autocomplete="off" placeholder="e.g. RAIN, DRY — binary defaults to YES, NO">
         </label>
-        <p class="contract-atelier-hint">Resolution: the logic decides one side of the selected pair: YES/NO, HOME/AWAY, or OVER/UNDER.</p>
+        <p class="contract-atelier-hint">Resolution: binary → logic TRUE picks the first outcome; pool → TRUE picks the first outcome, pool splits among winners; multi → logic must hold and you name the winning outcome.</p>
         <div id="contract-atelier-create-actions">
           <button id="contract-atelier-create" type="button">Open fictional contract</button>
           <button id="contract-atelier-reset" type="button">Reset atelier</button>
@@ -3918,17 +3907,6 @@
         if ((error === null || error === undefined) && failedUrl) {
           error = { name: "", message: `resource failed to load: ${String(failedUrl).slice(0, 220)}` };
         }
-        const recovery = globalThis.__TUMBO_RENDER_RECOVERY__?.(error);
-        if (recovery?.recovered) {
-          // WebGL is already alive, so a later optional-surface failure is
-          // degraded rather than presented as a dead 3-D application.
-          globalThis.__MATUMBO_BOOT_DEGRADED__ = Object.freeze({
-            reason: clean(error?.message, 'optional runtime failure'),
-            recovered: true,
-          });
-          runtime.markReady({ featureCount: Number.parseInt(featureCountEl?.textContent, 10) || 0 });
-          return;
-        }
         runtime.markFailed(error, event?.type === 'unhandledrejection' ? 'module promise' : 'uncaught runtime');
       };
       globalThis.addEventListener?.('error', handleError, true);
@@ -3938,6 +3916,6 @@
       }, 30000) ?? null;
     })();
   </script>
-    <script type="module" src="./src/main.js?v=20260921-882e62b1" onerror="globalThis.__MATUMBO_RUNTIME__?.markFailed?.(event, 'module load')"></script>
+    <script type="module" src="./src/main.js?v=20260922-startcube" onerror="globalThis.__MATUMBO_RUNTIME__?.markFailed?.(event, 'module load')"></script>
 </body>
 </html>

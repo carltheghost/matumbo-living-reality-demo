@@ -4,8 +4,8 @@ Current runtime note (2026-09-04): the normal localhost shell and packaged
 artifact both resolve Three.js 0.179.1 from the checksum-verified local vendor
 closure. External requests are reserved for explicit provider refresh actions;
 the historical CDN counts preserved in older receipts remain accurate for the
-runs that produced them. Financial Academy is now the 23rd openable feature in the 2026-09-04 snapshot and
-the full suite was recorded as 442/442 in that historical snapshot; this is not current release verification.
+runs that produced them. Financial Academy is now the 23rd openable feature and
+the current full suite is 442/442.
 
 Packet 218 adds the one composed projection-session seam: the cube substrate,
 feature navigator, Sports Evidence, and Contracts + Pools remain bounded

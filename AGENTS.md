@@ -12,11 +12,3 @@ This folder is the canonical Living Reality source. Agent 01 / Control Tower own
 
 ## Current baseline
 The original app is a static Three.js 0.179.1 organ-and-semantic-object study served with `python -m http.server 8080`.
-
-## Canonical Living Reality UI lock
-
-The clean root landing is the **connected Block World / Living Reality cube field**. This is the actual glass-cube UI: small connected blocks, visible connection lines, 3-D orbit/zoom, hover/select behavior, and deliberate double-click/double-tap on a portal cube to enter/dive inside it.
-
-Do **not** replace the clean root with the Gateway Tentacles/tentacle cube, a constellation-overview overlay, Tab Dock/Tab Engine, the old Reality Lens presentation, or another competing root presentation. Those are not the canonical landing.
-
-Keep `src/core/default-landing.js` resolving a clean root to `block-world` and keep the cube-first presentation contract/tests green. New experiments may exist as explicit features/routes, but they must not take ownership of the clean root.

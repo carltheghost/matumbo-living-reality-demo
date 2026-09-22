@@ -2,92 +2,137 @@
 
 Reality Lens Ω projection-only wiring.
 
-The prediction place automatically turns upcoming games from the existing
-read-only multi-sport feed into DRAFT proposal entries. The proposals enter the
-same persisted **Contracts for your review** queue used by Contract Atelier.
+The automatic contract engine turns upcoming games from the existing read-only
+sports-events feed into DRAFT proposal entries. Nothing in this flow places a
+bet, moves money, signs a transaction, connects a wallet, settles a contract,
+or writes to mainnet.
 
-Nothing in this flow places a bet, moves money, signs a transaction, connects a
-wallet, settles a contract, or writes to mainnet.
+## 1. Import the engine
 
-## Runtime wiring
-
-`src/main.js` creates the shared `createContractFlow()` with:
-
-- the existing `fetchMultiSportEvents()` read-only feed;
-- the shared outcome desk;
-- the shared persisted proposal queue;
-- the lifecycle ledger.
-
-After Contract Atelier is mounted, the entry point starts the automatic scan:
+Add this import beside the existing domain imports at the application's boot
+entry point:
 
 ```js
-void runAutomaticContractScan();
+import { createAutoContracts } from "./domains/auto-contracts.js";
 ```
 
-It then refreshes every five minutes. The app also triggers a refresh when the browser returns to the visible tab or network connectivity comes back online, with a 60-second minimum gap between automatic scans:
+## 2. Create the automatic-contract engine
+
+Use the existing domain dependencies already owned by the application:
+
+```js
+const autoContracts = createAutoContracts({
+  fetchSportsEvents,
+  createOutcomeContracts,
+  now: () => new Date(),
+});
+```
+
+The now dependency is injectable so tests and replay environments can provide
+a deterministic clock.
+
+## 3. Scan at boot
+
+After the read-only sports-events dependencies have been initialized, perform
+the first scan:
+
+```js
+await autoContracts.scanToday();
+```
+
+The scan:
+
+1. Calls the existing fetchSportsEvents.
+2. Keeps only games whose start time is still in the future.
+3. Deduplicates by game id.
+4. Creates one DRAFT proposal per upcoming game.
+5. Stores those proposals in the automatic-contract review queue.
+
+No execution occurs during this scan.
+
+## 4. Add the drafts to the bot-plaza review queue
+
+Whenever the application builds the proposal-review queue, append the generated
+drafts before passing the queue to the existing rankProposalsForReview:
+
+```js
+const proposalQueue = [
+  ...existingProposalQueue,
+  ...autoContracts.getDrafts(),
+];
+const rankedReviewQueue = rankProposalsForReview(proposalQueue);
+```
+
+The resulting entries already carry:
+
+```
+kind: "contract-review"
+type: "contract-review"
+queue: "Contracts for your review"
+status: "DRAFT"
+createdBy: "auto-contracts"
+simulationOnly: true
+execution: "NONE"
+source: "ESPN_READ_ONLY"
+```
+
+They therefore enter the existing bot-plaza review path as review proposals,
+not executable actions.
+
+## 5. Run the scan on an interval
+
+A lightweight periodic scan can be installed after boot:
 
 ```js
 const AUTO_CONTRACT_SCAN_INTERVAL_MS = 5 * 60 * 1000;
-window.setInterval(() => {
-  void runAutomaticContractScan();
+const autoContractScanTimer = setInterval(async () => {
+  try {
+    await autoContracts.scanToday();
+  } catch (error) {
+    console.warn("Automatic contract scan failed.", error);
+  }
 }, AUTO_CONTRACT_SCAN_INTERVAL_MS);
 ```
 
-The scan is serialized so overlapping timer ticks cannot create concurrent
-contract batches. A short minimum-gap guard also prevents visibility and online
-events from causing rapid duplicate feed requests.
+The engine is idempotent by game id, so repeatedly scanning the same ESPN feed
+does not create duplicate drafts.
 
-## Automatic pipeline
-
-Each scan:
-
-1. Fetches the existing read-only multi-sport events.
-2. Keeps only games whose start time is still in the future.
-3. Maps the event into the auto-contract draft shape.
-4. Enriches the draft with optional read-only Kalshi/Polymarket quotes.
-5. Rejects stale quotes while keeping the draft usable.
-6. Submits one proposal per game to the persisted review queue.
-7. Leaves approval, opening, grading, and claiming to the existing Contract
-   Atelier/outcome-desk lifecycle.
-
-The proposal queue is the source of truth for the review surface, so automatic
-drafts appear alongside manually created contracts.
-
-## Idempotency and retry behavior
-
-The flow has two layers of deduplication:
-
-- an in-memory `gameId` guard prevents duplicate work during one page session;
-- the persisted proposal queue is checked by `eventId`, preventing duplicate
-  proposals after a page reload.
-
-Transient draft-construction or proposal-submission failures remove the game
-from the in-memory guard, so the next five-minute scan can retry it.
-
-Dismissed/expired proposals remain historical queue records and are still
-recognized by `eventId`; the automatic engine does not silently recreate them.
-
-## Manual refresh
-
-The existing **SCAN UPCOMING GAMES** button remains available. It calls the
-same `contractFlow.scanAndQueue()` path as the automatic timer.
-
-For diagnostics, the entry point exposes:
+If the application has an existing lifecycle/shutdown mechanism, clear the
+interval there:
 
 ```js
-window.__TUMBO_AUTO_CONTRACTS__.scanNow()
-window.__TUMBO_AUTO_CONTRACTS__.getLastScan()
+clearInterval(autoContractScanTimer);
 ```
 
-`getLastScan()` contains the latest `{ proposals, drafts, errors }` result.
+## 6. Keep the review queue connected to the UI
 
-## Data boundary
+The review surface should read the current queue from:
+
+```js
+autoContracts.getDrafts()
+```
+
+and combine it with the application's other proposal entries before calling:
+
+```js
+rankProposalsForReview(queue)
+```
+
+Do not call a wallet API, signing API, payment API, settlement API, blockchain
+RPC, or mainnet transaction API from this integration.
+
+## 7. Data boundary
+
+The intended data flow is:
 
 ```
-ESPN / multi-sport read-only feed
+ESPN read-only feed
         |
         v
-contractFlow.scanAndQueue()
+fetchSportsEvents()
+        |
+        v
+scanToday()
         |
         v
 upcoming games
@@ -99,38 +144,33 @@ gameToDraft()
 simulated TUMBO Points DRAFT
         |
         v
-persisted "Contracts for your review"
+"Contracts for your review"
         |
         v
-approval in Contract Atelier
+rankProposalsForReview()
         |
         v
-canonical local outcome desk
+human/bot review surface
 ```
 
-The final boundary is deliberately:
+The final boundary is deliberately projection-only:
 
-- NO REAL MONEY
-- NO WALLET
-- NO SIGNING
-- NO CUSTODY
-- NO SETTLEMENT
-- NO MAINNET
+```
+NO REAL MONEY
+NO WALLET
+NO SIGNING
+NO CUSTODY
+NO SETTLEMENT
+NO MAINNET
+```
 
-## Tests
+## 8. Tests
 
-`tests/contract-flow.test.mjs` covers:
-
-- upcoming-game mapping and idempotency;
-- persisted deduplication across a simulated page reload;
-- retry after transient proposal submission failure;
-- odds enrichment and stale-feed handling;
-- review submission and approval-time quote freezing;
-- deterministic grading and anti-double-grade;
-- forever claims and anti-double-claim.
-
-Run the project test suite with:
+Run the lane tests with:
 
 ```bash
-npm test
+node --test tests/auto-contracts.test.mjs
 ```
+
+The tests use fake ESPN events and a fake outcome-contract factory, so they do
+not require a browser, DOM, network access, wallet, or blockchain connection.

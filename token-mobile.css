@@ -1,8 +1,48 @@
-/* token-mobile.css — mobile verification + shared UI polish for token and app surfaces.
- * Keeps the existing simulation boundaries and adds a consistent glass-console
- * treatment, stronger focus states, safer small-screen spacing, and touch behavior.
+/* token-mobile.css — mobile verification + fix pass for token UI surfaces.
+ * Branch: grok/token-mobile. Scope: narrow viewports only (max-width: 700px,
+ * covering the 390x844 phone bar). Desktop 1440x900 geometry is untouched.
+ *
+ * Token surfaces covered: #asset-launch (TUMBO Asset Token map card),
+ * #launch-console (allocation registry), #launch-receipt-console (receipt /
+ * history), #launch-kit-console (share kit), #asset-market-console (peer
+ * ticker), #paycore-console (vault balances + flow previews).
+ *
+ * Verified on main before writing:
+ * - Zero horizontal overflow: every token console is width-bounded
+ *   (min(...,calc(100vw - 40px)) or the narrow-screen left:10px/right:10px
+ *   rule); inner grids use minmax(0,1fr) with ellipsis/overflow-wrap.
+ * - #paycore-console was the one token console missing from the
+ *   narrow-screen scrollable-console treatment -> fixed below (rule 1).
+ * - Tap targets: most token console buttons measured 24-38px tall -> 44px
+ *   below (rule 3). The repo's mobile panel manager only guaranteed 44px
+ *   on panel chrome (close buttons).
+ * - Panel bodies: #launch-console, #launch-receipt-console,
+ *   #launch-kit-console and #asset-market-console already scroll internally
+ *   on narrow screens; #asset-launch kept overflow:hidden -> scrolls now
+ *   (rule 2).
+ * - Minimize chips: the chip system (src/render/centered-surfaces.js) is
+ *   desktop-only and stays inert at <=700px, so no minimized chip can cover
+ *   content on phones.
+ * - Cubes: in-world blocks (incl. the asset-token block) are three.js
+ *   BoxGeometry meshes via the repo's pinned three.js r179.1 import map
+ *   ("three" -> ./vendor/three-r179.1/build/three.module.js), 0.78 units -
+ *   small by default, translucent blue glass from the first frame. No 3D
+ *   changes in this file (CSS layout only).
+ * - Simulation-first: every token surface already labels TUMBO-SIM as
+ *   simulated (SIMULATED MAP READY / NO TRANSFER / BALANCE PREVIEW ONLY /
+ *   TUMBO-SIM UNLISTED / NO CUSTODY). Read-only previews only; no buy/sell,
+ *   transfer-form, or leaderboard surfaces exist by design.
+ *
+ * Specificity note: this file is linked before the inline <style> block in
+ * index.html, so selectors are prefixed with `body` to outrank the
+ * single-ID desktop rules they refine.
  */
 @media (max-width: 700px) {
+  /* 1. #paycore-console joins the narrow-screen scrollable-console
+     treatment. Before: it kept desktop geometry (right:20px;top:145px;
+     width:min(500px,calc(100vw - 40px))) with no guaranteed internal scroll
+     while its stacked sections (summary, current, balances 17vh, flows 17vh,
+     trace 11vh, boundary) can exceed max-height:calc(100vh - 190px). */
   body #paycore-console {
     left: 10px;
     right: 10px;
@@ -14,8 +54,18 @@
     overflow-y: auto;
     overflow-x: hidden;
   }
-  body #paycore-console > * { flex: 0 0 auto; }
-  body #asset-launch { overflow-y: auto; overflow-x: hidden; }
+  body #paycore-console > * {
+    flex: 0 0 auto;
+  }
+
+  /* 2. #asset-launch keeps its designed phone geometry but scrolls
+     internally instead of clipping (overflow:hidden) on short viewports. */
+  body #asset-launch {
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  /* 3. Tap targets >= 44px on every token console control at phone widths. */
   body #asset-launch button,
   body #launch-console button,
   body #launch-receipt-console button,
@@ -23,176 +73,5 @@
   body #asset-market-console button,
   body #paycore-console button {
     min-height: 44px;
-    touch-action: manipulation;
-  }
-
-  /* The scene stays visible on phones: controls become a compact bottom dock
-     instead of competing with the cube field. */
-  body #hint {
-    left: 10px;
-    right: 10px;
-    bottom: 12px;
-    width: auto;
-    transform: none;
-    text-align: center;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  body #brand {
-    left: 14px;
-    top: 12px;
-  }
-  body #brand b { font-size: 15px; }
-  body #sub { font-size: 8px; }
-
-  body #feature-toggle {
-    left: 12px;
-    top: 54px;
-    min-height: 44px;
-    padding: 10px 12px;
-  }
-  body #feature-shell {
-    left: 8px;
-    right: 8px;
-    top: 106px;
-    width: auto;
-    height: min(72vh, 610px);
-    max-height: calc(100vh - 116px);
-    padding: 10px;
-    border-radius: 16px;
-  }
-  body #feature-shell-head h2 { font-size: 17px; }
-  body #feature-nav {
-    grid-template-columns: 1fr;
-    max-height: 34vh;
-    flex-basis: 34vh;
-    gap: 6px;
-  }
-  body .feature-button {
-    min-height: 48px;
-    padding: 9px 10px;
-    touch-action: manipulation;
-  }
-  body #feature-detail {
-    min-height: 145px;
-    padding: 10px;
-  }
-  body .feature-route-steps,
-  body .feature-stats {
-    grid-template-columns: 1fr 1fr;
-  }
-  body .feature-handoff-action {
-    min-height: 44px;
-  }
-
-  body #readout {
-    left: 10px;
-    right: 10px;
-    top: 12px;
-    width: auto;
-    max-width: none;
-  }
-
-  body #reality-lens {
-    left: 10px;
-    right: 10px;
-    bottom: 56px;
-    justify-content: center;
-    overflow-x: auto;
   }
 }
-
-/* Shared polish: preserve the existing visual language while making every
-   interactive surface feel like part of one system. */
-:where(button, a, input, select, textarea) {
-  -webkit-tap-highlight-color: rgba(126, 231, 255, .18);
-}
-:where(button, a, input, select, textarea):focus-visible {
-  outline: 2px solid rgba(126, 231, 255, .9);
-  outline-offset: 2px;
-}
-:where(button, a) { touch-action: manipulation; }
-
-@media (prefers-reduced-motion: reduce) {
-  :where(*, *::before, *::after) {
-    scroll-behavior: auto !important;
-    animation-duration: .001ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: .001ms !important;
-  }
-}
-
-/* Give the main navigator a clearer hierarchy without changing its routing. */
-#feature-shell {
-  border-color: rgba(126, 231, 255, .3);
-  box-shadow:
-    0 28px 90px rgba(0, 0, 0, .58),
-    inset 0 1px 0 rgba(220, 250, 255, .08),
-    inset 0 0 45px rgba(56, 203, 235, .045);
-}
-#feature-shell-head {
-  padding-bottom: 3px;
-  border-bottom: 1px solid rgba(126, 231, 255, .08);
-}
-#feature-nav {
-  scrollbar-gutter: stable;
-}
-.feature-button {
-  position: relative;
-  overflow: hidden;
-}
-.feature-button::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(120deg, rgba(255,255,255,.045), transparent 42%);
-  opacity: 0;
-  transition: opacity .18s ease;
-}
-.feature-button:hover::after,
-.feature-button:focus-visible::after,
-.feature-button[aria-pressed="true"]::after {
-  opacity: 1;
-}
-.feature-button[aria-pressed="true"] {
-  box-shadow: 0 0 0 1px rgba(197,168,255,.08), 0 8px 28px rgba(89,64,150,.16);
-}
-#feature-detail {
-  box-shadow: inset 0 1px 0 rgba(220,250,255,.04);
-}
-#feature-close,
-#camera-reset,
-#camera-input-open,
-#feature-toggle {
-  min-height: 40px;
-}
-
-/* Mission Control: compact desktop directory. The feature rail is intentionally
-   narrow so the 3-D world remains the primary surface. Its directory/detail
-   panes remain independently scrollable; mobile keeps the existing sheet. */
-@media (min-width: 701px) {
-  body #feature-shell {
-    width: min(280px, 25vw);
-    min-width: 250px;
-    max-width: 280px;
-    height: min(770px, calc(100vh - 135px));
-  }
-  body #feature-nav {
-    grid-template-columns: 1fr;
-    flex: 0 1 min(44vh, 430px);
-    max-height: min(44vh, 430px);
-    overflow-y: auto;
-    overflow-x: hidden;
-    overscroll-behavior: contain;
-    scrollbar-gutter: stable;
-  }
-  body #feature-detail {
-    min-height: 170px;
-    overflow-y: auto;
-    overflow-x: hidden;
-    overscroll-behavior: contain;
-  }
-}
-
