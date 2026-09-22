@@ -29,7 +29,7 @@ const DEMO_USER = "u:you";
 const TRANSFER_CUBE_TINT = glassTintFor("#2fd4c8", 0.32);
 
 const CSS = `
-#token-transfer-chip{position:fixed;z-index:60;width:118px;padding:8px 8px 7px;border:1px solid rgba(129,232,255,.24);border-radius:16px;background:linear-gradient(165deg,rgba(4,17,25,.93),rgba(3,7,12,.88));box-shadow:0 18px 50px rgba(0,0,0,.45),inset 0 0 24px rgba(70,210,255,.05);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;color:#dff7ff;font:inherit;text-align:center}
+#token-transfer-chip{position:fixed;z-index:44;width:118px;padding:8px 8px 7px;border:1px solid rgba(129,232,255,.24);border-radius:16px;background:linear-gradient(165deg,rgba(4,17,25,.93),rgba(3,7,12,.88));box-shadow:0 18px 50px rgba(0,0,0,.45),inset 0 0 24px rgba(70,210,255,.05);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;color:#dff7ff;font:inherit;text-align:center}
 #token-transfer-chip:active{cursor:grabbing}
 #token-transfer-chip:focus-visible{outline:2px solid #7ae6ff;outline-offset:2px}
 #token-transfer-chip[data-selected=true]{border-color:rgba(197,230,255,.75);box-shadow:0 18px 50px rgba(0,0,0,.45),0 0 26px rgba(110,220,255,.28)}
@@ -38,7 +38,7 @@ const CSS = `
 .tt-chip-sim{display:inline-block;margin-top:3px;padding:2px 6px;border:1px solid rgba(255,194,139,.4);border-radius:999px;color:#f0d3a8;background:rgba(121,75,40,.16);font-size:7px;letter-spacing:.12em}
 .tt-chip-peek{position:absolute;left:50%;bottom:calc(100% + 8px);transform:translateX(-50%);min-width:170px;max-width:230px;padding:8px 10px;border:1px solid rgba(129,232,255,.25);border-radius:10px;background:rgba(3,12,18,.95);color:#b9deea;font-size:9px;line-height:1.5;letter-spacing:.03em;pointer-events:none;white-space:pre-line}
 .tt-chip-peek[hidden]{display:none}
-#token-transfer-console{position:fixed;z-index:61;right:20px;bottom:86px;width:min(440px,calc(100vw - 40px));max-height:min(660px,calc(100vh - 110px));display:flex;flex-direction:column;border:1px solid rgba(129,232,255,.26);border-radius:18px;background:linear-gradient(165deg,rgba(4,17,25,.96),rgba(3,7,12,.94));box-shadow:0 24px 70px rgba(0,0,0,.55),inset 0 0 36px rgba(56,203,235,.05);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);overflow:hidden}
+#token-transfer-console{position:fixed;z-index:45;right:20px;bottom:86px;width:min(440px,calc(100vw - 40px));max-height:min(660px,calc(100vh - 110px));display:flex;flex-direction:column;border:1px solid rgba(129,232,255,.26);border-radius:18px;background:linear-gradient(165deg,rgba(4,17,25,.96),rgba(3,7,12,.94));box-shadow:0 24px 70px rgba(0,0,0,.55),inset 0 0 36px rgba(56,203,235,.05);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);overflow:hidden}
 #token-transfer-console[hidden]{display:none}
 #token-transfer-console.tt-expanded{width:min(620px,calc(100vw - 40px));max-height:calc(100vh - 60px);top:30px;bottom:auto}
 .tt-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:13px 14px 10px;border-bottom:1px solid rgba(129,232,255,.14)}
