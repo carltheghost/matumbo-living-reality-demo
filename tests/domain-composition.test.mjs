@@ -37,7 +37,6 @@ test("all role contributions compose into one deterministic world", () => {
     "t402-value-routing",
     "person-profile",
     "wardrobe-atelier",
-    "white-paper-document",
     "gesture-lens",
   ].sort((a, b) => a.localeCompare(b)));
 });
