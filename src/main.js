@@ -14,7 +14,10 @@ import { mountTokenTicker } from './render/token-ticker.js?v=20260920-ticker1';
 // red-banner the boot. Mounts automatically once the lane lands a consistent graph.
 import('./domains/token-vault-ui.js?v=20260922-cache2').catch(() => {});
 // Token transfers console — side-effect import; mounts the transfers glass-cube chip.
-import './domains/token-transfers-ui.js?v=20260922-token-transfers-cube3';
+// Optional token-transfer presentation lane: a broken transfer UI must never red-banner the main world boot.
+import('./domains/token-transfers-ui.js?v=20260922-token-transfers-cube3').catch((error) => {
+  console.warn('[token-transfers] presentation lane degraded:', error);
+});
 import { initMobilePanelManager } from './render/mobile-panel-manager.js?v=20260922-cache2';
 import { installMobileFreezeGuard } from './render/mobile-freeze-guard.js?v=20260922-mfg1';
 import { mountPhotoMascot } from './render/photo-mascot-mount.js?v=20260922-cache2';
