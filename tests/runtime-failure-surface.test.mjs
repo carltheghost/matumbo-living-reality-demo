@@ -22,6 +22,14 @@ test("first boot failure wins and is never relabeled by later reports", async ()
   assert.match(html, /markReady\(meta = \{\}\) \{\s*\n?\s*if \(failed\) return state;/);
 });
 
+test("late network promise failures do not demote a live renderer", async () => {
+  const html = await readFile(new URL("index.html", ROOT), "utf8");
+
+  assert.match(html, /reportBackgroundFailure\(error, phase = 'background promise'\)/);
+  assert.match(html, /if \(!ready \|\| failed\) return state;/);
+  assert.match(html, /console\.warn\('\[runtime\] background failure; keeping 3-D surface online:/);
+});
+
 test("the error banner names the underlying failure", async () => {
   const html = await readFile(new URL("index.html", ROOT), "utf8");
 
@@ -34,6 +42,10 @@ test("the error banner names the underlying failure", async () => {
     html,
     /let error = event\?\.error \?\? event\?\.reason \?\? event\?\.message;/
   );
+  assert.match(html, /reportBackgroundFailure\(error, 'background network promise'\)/);
+  assert.match(html, /const backgroundNetworkFailure = ready && event\?\.type === 'unhandledrejection'/);
+  assert.match(html, /failed to fetch\|networkerror\|load failed\|fetch failed/);
+  assert.match(html, /event\?\.preventDefault\?\.\(\);/);
   assert.match(html, /runtime\.markFailed\(error, event\?\.type === 'unhandledrejection' \? 'module promise' : 'uncaught runtime'\)/);
 });
 
