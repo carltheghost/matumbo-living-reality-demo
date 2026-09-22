@@ -8898,7 +8898,7 @@ window.__TUMBO_MOBILE_PANEL_MANAGER__ = mobilePanelManager;
 // phone/desktop/AR viewports. Panels are registered in place; the dock never
 // moves, renames, or restyles them. Guarded dynamic import: a tab-dock failure
 // degrades to "no dock" and can never break the world boot.
-import("./render/tab-registry.js?v=20260921-tabs1")
+import("./render/tab-registry.js?v=20260922-tabs2")
   .then(({ initTabDock }) => {
     try {
       window.__TUMBO_TAB_DOCK__ = initTabDock({ documentRoot: document, windowRoot: window });
