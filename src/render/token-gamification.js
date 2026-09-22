@@ -15,7 +15,7 @@
  * Simulated points only — never real money or wagering.
  */
 
-import * as THREE from "three?v=20260922-cache2";
+import * as THREE from "three";
 import { ensureTumboToken, fmtFluff } from "../domains/token.js?v=20260922-cache2";
 import {
   HUNGER_MAX,

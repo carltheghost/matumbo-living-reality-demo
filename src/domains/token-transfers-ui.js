@@ -10,7 +10,7 @@
  * wagering, wallets, custody, or chains.
  */
 
-import * as THREE from "three?v=20260922-cache2";
+import * as THREE from "three";
 import {
   makeGlassCube,
   addGlassLighting,

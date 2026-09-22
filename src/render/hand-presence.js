@@ -34,7 +34,7 @@
  *   }
  *   (or any object that can be queried by handedness)
  */
-import * as THREE from "three?v=20260922-cache2";
+import * as THREE from "three";
 // ─── Tunables ───────────────────────────────────────────────────────────────
 /** Fixed depth (world units) at which hands float in front of the camera. */
 const HAND_DEPTH = 0.55;

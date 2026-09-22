@@ -1,4 +1,4 @@
-import * as THREE from "three?v=20260922-cache2";
+import * as THREE from "three";
 
 const TAU = Math.PI * 2;
 const TOTAL_BASIS_POINTS = 10_000;

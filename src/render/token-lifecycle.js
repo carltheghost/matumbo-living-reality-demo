@@ -38,7 +38,7 @@
  * wagering, wallets, custody, or chains. Every surface labels this.
  */
 
-import * as THREE from "three?v=20260922-cache2";
+import * as THREE from "three";
 import {
   createTokenEngine,
   ensureTumboTokenFacade,
