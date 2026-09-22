@@ -12,8 +12,8 @@ export const CELL_COUNT = 4096;
 const AXES = [0,1,2,3];
 const TYPES = ["p","n","b","r","q","k"];
 
-const key = (x,y,z,w) => (((((w * 8) + z) * 8 + y) * 8) + x);
-const coords = (k) => {
+export const key = (x,y,z,w) => (((((w * 8) + z) * 8 + y) * 8) + x);
+export const coords = (k) => {
   const x = k & 7;
   const y = (k >> 3) & 7;
   const z = (k >> 6) & 7;
