@@ -1,4 +1,5 @@
 import {createRealityTimeline} from '../domains/reality-timeline.js';
+import {createRealityGraph} from '../domains/side-living-reality.js';
 import {buildRealityAssemblyScene,LOD_FAR} from './reality-assembly-scene.js';
 
 // Approved clean-root start pose: the camera parks beyond LOD_FAR so the
@@ -52,6 +53,15 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     };
   });
   const owner=createRealityTimeline({objects:positions});
+  // Side Living Reality is layered onto the existing timeline; the timeline
+  // remains the layout/history source of truth while the graph tracks which
+  // independent reality the user is currently inhabiting.
+  const realityGraph=createRealityGraph({
+    rootState:{objects:positions},
+    rootLabel:'Living Reality',
+  });
+  const sideRealityByFeature=new Map();
+  const rootRealityId='reality:root';
   const spatial=buildRealityAssemblyScene({THREE,parent:scene,features:ordered.map((feature,i)=>({...feature,assemblyTier:i===0?'core':i<8?'primary':'secondary'})),targets});
   const featureMap=new Map(features.map(feature=>[feature.id,feature]));
   const stylesheet=document.createElement('link');stylesheet.rel='stylesheet';stylesheet.href=new URL('./reality-assembly.css',import.meta.url).href;document.head.append(stylesheet);
@@ -60,7 +70,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   <aside class="assembly-directory"><p class="assembly-eyebrow">Reality Lens Ω</p><h1>Many worlds.<br><em>One reality.</em></h1><p class="assembly-intro">Open a world. Follow a connection.<br>Stay with the same object through time.</p><label class="assembly-search-label">Find a connected feature<input data-search placeholder="Search worlds, contracts…" type="search"></label><nav class="assembly-catalog" aria-label="Feature objects"></nav><p class="assembly-note">Designed 3D architecture.<br>Feature routes, not real cities or online populations.</p></aside>
   <div class="assembly-labels" aria-label="Spatial feature labels"></div>
   <div class="assembly-world-label" data-world-label hidden>maTumbo Living Reality Ω · one world — scroll or pinch to approach</div>
-  <aside class="assembly-inspector" aria-label="Selected object"><header><span class="assembly-eyebrow">Object inspector</span><button data-fold-inspector aria-label="Minimize inspector">−</button></header><div class="assembly-inspector-body"><div class="assembly-object-symbol" aria-hidden="true">◇</div><h2 data-title></h2><p data-description></p><div class="assembly-tags"><span data-mode>Present</span><span>Same feature identity</span></div><dl><dt>Object ID</dt><dd data-object-id></dd><dt>Coordinates</dt><dd data-coordinate></dd><dt>View state</dt><dd data-open-state></dd><dt>Sources</dt><dd data-source-count></dd></dl><div class="assembly-actions"><button data-open>Open cube</button><button data-focus>Approach</button><button data-enter class="assembly-primary">Enter feature ↗</button></div><h3>Connected source references</h3><div data-sources></div><p class="assembly-note" data-boundary></p><p class="assembly-source-detail" data-source-detail></p></div></aside>
+  <aside class="assembly-inspector" aria-label="Selected object"><header><span class="assembly-eyebrow">Object inspector</span><button data-fold-inspector aria-label="Minimize inspector">−</button></header><div class="assembly-inspector-body"><div class="assembly-object-symbol" aria-hidden="true">◇</div><h2 data-title></h2><p data-description></p><div class="assembly-tags"><span data-mode>Present</span><span>Same feature identity</span></div><dl><dt>Object ID</dt><dd data-object-id></dd><dt>Coordinates</dt><dd data-coordinate></dd><dt>View state</dt><dd data-open-state></dd><dt>Sources</dt><dd data-source-count></dd></dl><div class="assembly-actions"><button data-open>Open cube</button><button data-side-reality>Enter side reality</button><button data-focus>Approach</button><button data-enter class="assembly-primary">Enter feature ↗</button></div><h3>Connected source references</h3><div data-sources></div><p class="assembly-note" data-boundary></p><p class="assembly-source-detail" data-source-detail></p></div></aside>
   <div class="assembly-selection-hint" data-hover-label>Hover to peek · click to select · double-click to open</div>
   <footer class="assembly-toolbar"><div class="assembly-view"><span class="assembly-eyebrow">View</span><button data-view="3d" aria-pressed="true">3D</button><button data-view="4d" aria-pressed="false">4D · time</button></div><div class="assembly-tools"><button data-interaction="orbit" aria-pressed="true">Orbit</button><button data-interaction="move" aria-pressed="false">Move</button><button data-open-secondary>Open / close</button><button data-home>Overview</button></div><div class="assembly-timeline"><label>Observed local history<input data-time type="range" min="0" max="0" value="0" step="1" aria-label="Recorded view frame"></label><span data-time-label>No previous observations</span><button data-present>Present</button></div><button data-export>Export history</button></footer>
   <section class="assembly-branches" hidden aria-label="Proposed branches"><div><span class="assembly-eyebrow">4D = space + observed time / proposed states</span><p>History is read-only. Proposed layouts do not change the present.</p></div><form data-branch-form><label class="assembly-sr-only" for="assembly-branch-name">Proposed branch name</label><input id="assembly-branch-name" name="branchName" maxlength="60" required placeholder="Name a proposed branch"><button class="assembly-primary">Create branch</button></form><label>View branch<select data-branch-select><option value="present">Present</option></select></label></section>
@@ -94,18 +104,49 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   const say=message=>{find('[data-status]').textContent=message;};
   const guard=fn=>(...args)=>{try{return fn(...args);}catch(error){say(error.message);return null;}};
   const currentObject=()=>owner.getSnapshot().objects.find(object=>object.id===owner.getSnapshot().selectedId);
-  function snapshot(){return {...owner.getSnapshot(),active,viewMode,interaction,camera:{position:camera.position.toArray(),target:controls.target.toArray()},spatial:spatial.getSnapshot()};}
+  function snapshot(){return {...owner.getSnapshot(),active,viewMode,interaction,camera:{position:camera.position.toArray(),target:controls.target.toArray()},spatial:spatial.getSnapshot(),reality:realityGraph.getSnapshot()};}
+  function ensureSideReality(featureId){
+    const existing=sideRealityByFeature.get(featureId);
+    if(existing)return existing;
+    const feature=featureMap.get(featureId);
+    const branch=realityGraph.fork(rootRealityId,{label:feature.label+' · Side Reality',bidirectional:true,state:{featureId,objects:owner.getSnapshot().objects}});
+    sideRealityByFeature.set(featureId,branch.id);
+    return branch.id;
+  }
+  function enterSideReality(featureId){
+    const id=ensureSideReality(featureId);
+    realityGraph.travel(id);
+    render();
+    say('Entered '+featureMap.get(featureId).label+' · independent side reality. The parent reality remains intact.');
+  }
+  function returnToRootReality(){
+    if(realityGraph.activeId===rootRealityId)return;
+    realityGraph.travel(rootRealityId);
+    render();
+    say('Returned to Living Reality. The side reality remains available as its own state.');
+  }
+  function syncActiveReality(){
+    const state={objects:owner.getSnapshot().objects};
+    realityGraph.updateState(realityGraph.activeId,state);
+  }
   function render(){
     const state=owner.getSnapshot(),feature=featureMap.get(state.selectedId),object=state.objects.find(item=>item.id===state.selectedId);
     spatial.apply(state,{viewMode,hoveredId:hovered});
     find('[data-title]').textContent=feature.label;find('[data-description]').textContent=feature.description;
     find('[data-object-id]').textContent=feature.id;find('[data-coordinate]').textContent=object.position.map(n=>n.toFixed(1)).join(' / ');
-    find('[data-open-state]').textContent=object.open?'Open · interior exposed':'Closed';find('[data-mode]').textContent=state.mode==='past'?'Recorded past':state.mode==='proposed'?'Proposed · not live':'Present · local view';
+    find('[data-open-state]').textContent=object.open?'Open · interior exposed':'Closed';
+    const activeReality=realityGraph.getNode();
+    find('[data-mode]').textContent=state.mode==='past'?'Recorded past':state.mode==='proposed'?'Proposed · not live':'Present · local view';
     find('[data-source-count]').textContent=String(feature.sources?.length??0);find('[data-boundary]').textContent=feature.boundary;
     const sourceContainer=find('[data-sources]');sourceContainer.replaceChildren();
     for(const source of feature.sources?.length?feature.sources:['Feature navigation']){const code=document.createElement('code');code.textContent=source;sourceContainer.append(code);}
     const detail=readFeature(feature.id);find('[data-source-detail]').textContent=detail?.summary??'Open this feature for its controls and source evidence. No provider request is made by inspecting its cube.';
     all('[data-open],[data-open-secondary]').forEach(button=>{button.disabled=state.mode==='past';});find('[data-open]').textContent=object.open?'Close cube':'Open cube';
+    const sideId=sideRealityByFeature.get(state.selectedId);
+    const sideButton=find('[data-side-reality]');
+    sideButton.textContent=activeReality.id===sideId?'Return to Living Reality':sideId?'Enter side reality':'Create side reality';
+    sideButton.disabled=state.mode==='past';
+    find('[data-object-id]').textContent=feature.id+' · '+activeReality.id;
     for(const [id,button] of catalog)button.setAttribute('aria-current',String(id===state.selectedId));
     for(const [id,label] of labels){label.classList.toggle('is-selected',id===state.selectedId);label.classList.toggle('is-hovered',id===hovered);}
     const slider=find('[data-time]');slider.max=String(state.frames.length-1);slider.value=String(state.mode==='past'?state.frames.findIndex(frame=>frame.revision===state.frameCursor):state.frames.length-1);
@@ -117,7 +158,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     root.dataset.historyMode=state.mode;
   }
   function select(id){owner.select(id);render();say(`${featureMap.get(id).label} selected. Open the cube to reveal its interior or enter the feature.`);}
-  function toggle(){const object=currentObject();owner.setOpen(object.id,!object.open);render();say(`${object.open?'Closed':'Opened'} ${featureMap.get(object.id).label} · same object ID.`);}
+  function toggle(){const object=currentObject();const nextOpen=!object.open;owner.setOpen(object.id,nextOpen);if(nextOpen)enterSideReality(object.id);else if(realityGraph.activeId===sideRealityByFeature.get(object.id))returnToRootReality();else render();say(`${object.open?'Closed':'Opened'} ${featureMap.get(object.id).label} · same object ID.`);}
   function focus(){
     const object=currentObject(),mobile=innerWidth<700,position=new THREE.Vector3(...object.position);
     const outward=new THREE.Vector3(position.x,0,position.z);if(outward.length()<1)outward.set(.15,0,1);outward.normalize().multiplyScalar(mobile?11:9);outward.y=3.2;
@@ -138,7 +179,9 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   }
   find('[data-search]').oninput=event=>{const query=event.target.value.toLowerCase().trim();for(const [id,button] of catalog)button.hidden=!`${featureMap.get(id).label} ${id}`.toLowerCase().includes(query);};
   all('[data-home]').forEach(button=>button.onclick=overview);find('[data-focus]').onclick=focus;
-  all('[data-open],[data-open-secondary]').forEach(button=>button.onclick=guard(toggle));find('[data-enter]').onclick=enter;
+  all('[data-open],[data-open-secondary]').forEach(button=>button.onclick=guard(toggle));
+  find('[data-side-reality]').onclick=guard(()=>{const id=owner.getSnapshot().selectedId;if(realityGraph.activeId===sideRealityByFeature.get(id))returnToRootReality();else enterSideReality(id);});
+  find('[data-enter]').onclick=enter;
   find('[data-enter-person]').onclick=()=>onNavigate?.('person');find('[data-enter-contracts]').onclick=()=>onNavigate?.('contracts');find('[data-grid]').onclick=()=>onNavigate?.('block-world');
   all('[data-view]').forEach(button=>button.onclick=()=>setMode(button.dataset.view));all('[data-interaction]').forEach(button=>button.onclick=()=>setInteraction(button.dataset.interaction));
   find('[data-present]').onclick=()=>{owner.goTo('present');render();say('Returned to the unchanged present layout.');};
@@ -173,7 +216,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   });
   const release=guard(event=>{
     if(!active||!pointer||event.pointerId!==pointer.id)return;const previous=pointer;pointer=null;controls.enabled=true;
-    if(previous.move){if(event.type==='pointerup')owner.move(previous.objectId,previous.next);render();say(event.type==='pointerup'?'Layout move recorded. Use 4D to inspect it through time.':'Move cancelled.');return;}
+    if(previous.move){if(event.type==='pointerup'){owner.move(previous.objectId,previous.next);syncActiveReality();}render();say(event.type==='pointerup'?'Layout move recorded. Use 4D to inspect it through time.':'Move cancelled.');return;}
     if(event.type==='pointerup'&&previous.objectId&&Math.hypot(event.clientX-previous.x,event.clientY-previous.y)<7)select(previous.objectId);
   });
   const double=guard(event=>{if(!active)return;const hit=locate(event),id=spatial.resolve(hit?.object);if(id){select(id);toggle();focus();}});
@@ -185,7 +228,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     if(event.key==='Enter'){toggle();event.preventDefault();return;}
     if(interaction!=='move')return;
     const deltas={ArrowLeft:[-.5,0,0],ArrowRight:[.5,0,0],ArrowUp:[0,0,-.5],ArrowDown:[0,0,.5],PageUp:[0,.5,0],PageDown:[0,-.5,0]},delta=deltas[event.key];
-    if(delta){const object=currentObject();owner.move(object.id,object.position.map((n,i)=>n+delta[i]));render();event.preventDefault();}
+    if(delta){const object=currentObject();owner.move(object.id,object.position.map((n,i)=>n+delta[i]));syncActiveReality();render();event.preventDefault();}
   });
   const canvas=renderer.domElement;canvas.addEventListener('pointerdown',down,true);canvas.addEventListener('pointermove',move);canvas.addEventListener('pointerup',release);canvas.addEventListener('pointercancel',release);canvas.addEventListener('dblclick',double);document.addEventListener('keydown',keys);
   function open(){

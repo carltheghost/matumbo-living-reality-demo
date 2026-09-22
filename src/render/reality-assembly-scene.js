@@ -41,6 +41,8 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[]}){
   const innerHaloGeometry=new THREE.TorusGeometry(.86,.008,6,36);geometry.add(innerHaloGeometry);
   const coreGeometry=new THREE.SphereGeometry(.16,12,12);geometry.add(coreGeometry);
   const signalGeometry=new THREE.SphereGeometry(.045,8,8);geometry.add(signalGeometry);
+  const actorGeometry=new THREE.SphereGeometry(.075,8,8);geometry.add(actorGeometry);
+  const pulseGeometry=new THREE.RingGeometry(.11,.16,12);geometry.add(pulseGeometry);
   const haloMaterials=new Map();
   const haloMaterialFor=(color)=>{
     const key=color?.getHexString?.()??String(color);
@@ -52,6 +54,10 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[]}){
   };
   const signalMaterial=new THREE.MeshBasicMaterial({color:'#86ecff',transparent:true,opacity:.52,depthWrite:false,blending:THREE.AdditiveBlending});
   materials.add(signalMaterial);
+  const actorMaterial=new THREE.MeshStandardMaterial({color:'#dff8ff',emissive:'#4bcfff',emissiveIntensity:1.5,metalness:.15,roughness:.25});
+  materials.add(actorMaterial);
+  const pulseMaterial=new THREE.MeshBasicMaterial({color:'#8cecff',transparent:true,opacity:.34,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide});
+  materials.add(pulseMaterial);
   const colorById=id=>/person|rooms|social/.test(id)?violet:/world|gateway|sports/.test(id)?green:/asset|paycore|contract|ledger|t402/.test(id)?gold:blue;
   const mesh=(shape,material,position,scale,owner=layer)=>{geometry.add(shape);const m=new THREE.Mesh(shape,material);m.position.set(...position);m.scale.set(...scale);owner.add(m);return m;};
   const box=(size,position,material,owner=layer)=>mesh(unit,material,position,size,owner);
@@ -134,8 +140,14 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[]}){
     }
     bars.forEach(([size,pos],i)=>{const bar=box(size,pos,wbFrameMat,face);bar.name=`world-block/face-${axis}-${sign}/frame-${i}`;});
     const mini=axis===1?[[3.6,.22,2.7],[-3.6,.22,2.7],[3.6,.22,-2.7]]:axis===0?[[.22,3.7,3.9],[.22,3.7,-3.9],[.22,-2.1,3.9]]:[[3.6,2.7,.22],[-3.6,2.7,.22],[3.6,-2.1,.22]];
-    mini.forEach((pos,i)=>{const mat=makeMaterial(['#7fdfff','#b892ff','#79f0b8'][i],{transparent:true,opacity:0,emissive:['#2ec9ff','#8050ff','#36d78f'][i],emissiveIntensity:.9,metalness:.3,roughness:.2,fog:false});box([.55,.55,.55],pos,mat,face);});
-    wbFaceSystems.push({face,panelMaterial:panelMat,glowMaterial:glowMat,frameMaterial:wbFrameMat,phase:faceIndex*.9});
+    const miniActors=[];
+    mini.forEach((pos,i)=>{const mat=makeMaterial(['#7fdfff','#b892ff','#79f0b8'][i],{transparent:true,opacity:0,emissive:['#2ec9ff','#8050ff','#36d78f'][i],emissiveIntensity:.9,metalness:.3,roughness:.2,fog:false});const miniMesh=box([.55,.55,.55],pos,mat,face);miniMesh.userData.actorIndex=i;miniActors.push(miniMesh);});
+    const faceActors=[];
+    for(let actorIndex=0;actorIndex<3;actorIndex++){
+      const actor=mesh(actorGeometry,actorMaterial,[0,0,0],[1,1,1],face);
+      actor.userData.actorIndex=actorIndex;faceActors.push(actor);
+    }
+    wbFaceSystems.push({face,panelMaterial:panelMat,glowMaterial:glowMat,frameMaterial:wbFrameMat,phase:faceIndex*.9,axis,sign,miniActors,faceActors});
   });
 
   const CORE=2.0,FACE=2.14,REST=CORE/2+.09;
@@ -163,6 +175,29 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[]}){
         box(trimSize,trimPosition,gold,pivot);
       }
     }
+
+    // Every face is a living surface: small local actors circulate, pulse,
+    // and react to the cube opening. They are attached to the face pivot so
+    // they move with that side instead of behaving like painted decoration.
+    faces.forEach(({pivot,axis,sign},faceIndex)=>{
+      const activity=group(`${feature.id}/face-${axis}-${sign}/activity`,pivot);
+      const faceActors=[];
+      for(let actorIndex=0;actorIndex<4;actorIndex++){
+        const actor=mesh(actorGeometry,actorMaterial,[0,0,0],[1,1,1],activity);
+        actor.userData.faceIndex=faceIndex;
+        actor.userData.actorIndex=actorIndex;
+        faceActors.push(actor);
+      }
+      const pulse=mesh(pulseGeometry,pulseMaterial,[0,0,0],[1,1,1],activity);
+      pulse.rotation.set(axis===0?0:axis===1?0:Math.PI/2,axis===0?Math.PI/2:0,0);
+      nodes.get(feature.id)?.faceActivity;
+      if(!nodes.has(feature.id)){
+        // Node metadata is installed below; retain the activity on the face
+        // object until that record is created.
+      }
+      activity.userData.faceActors=faceActors;
+      activity.userData.pulse=pulse;
+    });
 
     // The central/root cube is not a blank box. Each of its six faces gets
     // the same local-cube visual language: a colored door, a frame, and
@@ -249,7 +284,8 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[]}){
     // A geometric open-book/circuit marker, not a screenshot or text texture.
     box([.34,.03,.06],[0,.24,CORE/2+.16],blue,root);box([.34,.03,.06],[0,-.24,CORE/2+.16],blue,root);
     box([.03,.5,.06],[-.17,0,CORE/2+.16],blue,root);box([.03,.5,.06],[.17,0,CORE/2+.16],blue,root);
-    nodes.set(feature.id,{root,core,faces,city,inner,nested,beacon,beaconHot,beaconMat,traits,open:0,goalOpen:0,position:new THREE.Vector3(),scale,feature});
+    const faceActivity=faces.map(({pivot})=>pivot.children.find(child=>child.userData?.faceActors)?.userData ?? null);
+    nodes.set(feature.id,{root,core,faces,faceActivity,city,inner,nested,beacon,beaconHot,beaconMat,traits,open:0,goalOpen:0,position:new THREE.Vector3(),scale,feature});
   }
   const edges=features.filter(f=>f.id!=='block-world').map(f=>['block-world',f.id]);
   const connectionGeometry=new THREE.BufferGeometry().setAttribute('position',new THREE.Float32BufferAttribute(new Float32Array(edges.length*6),3));geometry.add(connectionGeometry);
@@ -284,6 +320,23 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[]}){
       frameMaterial.opacity=lodBlend*.72;
       face.visible=lodBlend>.02;
       panelMaterial.emissiveIntensity=.8+.28*pulse;
+      const orbit=.9+.22*Math.sin(time*.9+phase);
+      faceActors.forEach((actor,actorIndex)=>{
+        const t=time*(.38+.06*actorIndex)+phase+actorIndex*2.1;
+        const u=Math.sin(t)*orbit*2.2;
+        const v=Math.cos(t*.77)*orbit*1.35;
+        if(axis===0)actor.position.set(sign*15.35,1+v,u);
+        else if(axis===1)actor.position.set(u,sign*8.35,v);
+        else actor.position.set(u,1+v,sign*15.35);
+        actor.scale.setScalar(.65+.25*Math.sin(t*1.4));
+        actor.visible=lodBlend>.04;
+      });
+      miniActors.forEach((actor,actorIndex)=>{
+        const t=time*.55+phase+actorIndex*2;
+        actor.position.x+=Math.sin(t)*.008;
+        actor.position.y+=Math.cos(t*.8)*.006;
+        actor.position.z+=Math.sin(t*.65)*.008;
+      });
     });
     connections.visible=!showWorld;
     const buffer=connectionGeometry.attributes.position;
@@ -299,9 +352,35 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[]}){
       const targetOpen=Math.max(node.goalOpen,proximityOpen);
       node.open+=(targetOpen-node.open)*blend;
       const targetScale=node.scale*(focusId&&id!==focusId?.72:1);node.root.scale.lerp(new THREE.Vector3(targetScale,targetScale,targetScale),blend);
-      node.faces.forEach(({pivot,axis,sign,rest})=>{
+      node.faces.forEach(({pivot,axis,sign,rest},faceIndex)=>{
         const property=['x','y','z'][axis];pivot.position[property]=rest+sign*node.open*.72;
-        pivot.rotation.set(0,0,0);if(axis!==1)pivot.rotation[(axis===0?'z':'x')]=sign*node.open*.65;
+        const breathing=.045*Math.sin(time*1.15+node.traits.phase+faceIndex*.83);
+        pivot.rotation.set(0,0,0);
+        if(axis!==1)pivot.rotation[(axis===0?'z':'x')]=sign*(node.open*.65+breathing);
+        else pivot.rotation.z=breathing*.65;
+        const activity=node.faceActivity[faceIndex];
+        if(activity){
+          const actors=activity.faceActors;
+          actors.forEach((actor,actorIndex)=>{
+            const phase=time*(.65+.12*faceIndex)+node.traits.phase+actorIndex*1.57;
+            const orbit=.46+node.open*.22;
+            const u=Math.sin(phase)*orbit;
+            const v=Math.cos(phase*.73+faceIndex)*orbit*.72;
+            if(axis===0)actor.position.set(sign*(.055+node.open*.04),v,u);
+            else if(axis===1)actor.position.set(u,sign*(.055+node.open*.04),v);
+            else actor.position.set(u,v,sign*(.055+node.open*.04));
+            const beat=.8+.25*Math.sin(phase*1.7);
+            actor.scale.setScalar(beat*(.72+.28*node.open));
+          });
+          const pulse=activity.pulse;
+          const pulseBeat=(Math.sin(time*1.7+faceIndex+node.traits.phase)+1)*.5;
+          pulse.scale.setScalar(.65+pulseBeat*.7+node.open*.5);
+          pulse.material.opacity=.12+pulseBeat*.22+node.open*.12;
+          if(axis===0)pulse.rotation.set(0,Math.PI/2,0);
+          else if(axis===1)pulse.rotation.set(0,0,0);
+          else pulse.rotation.set(Math.PI/2,0,0);
+          pulse.visible=node.open>.03 || nodeDist<15;
+        }
       });
       node.core.scale.setScalar(1-node.open*.35);node.inner.visible=node.open>.12;
       for(const cell of node.nested){
