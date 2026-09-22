@@ -8,7 +8,7 @@
  * Projection only: no network, identity authority, wallet, settlement, or
  * external asset loading is involved.
  */
-import {STUDIO_MODEL} from '../domains/person-studio.js';
+import {STUDIO_MODEL, STUDIO_OUTFITS, PERSON_STUDIO_STORAGE_KEY} from '../domains/person-studio.js';
 
 export const CHESS_ARENA_PIECE_TYPES = Object.freeze(['p','n','b','r','q','k']);
 const FILES = 'abcdefgh';
@@ -22,6 +22,49 @@ export function squarePosition(square) {
 
 /** Kept as a compatibility export for older callers/tests. No avatar is used. */
 export const AVATAR_CHIBI_FALLBACK_URL = null;
+
+const DEFAULT_APPEARANCE = Object.freeze({
+  skin: STUDIO_MODEL.skin,
+  hair: STUDIO_MODEL.hair,
+  outfitId: 'obsidian',
+  outfitColor: '#111620',
+  outfitTrim: '#d9ae60',
+  displayName: '',
+  approved: false,
+});
+
+function outfitById(id) {
+  return STUDIO_OUTFITS.find((outfit) => outfit.id === id) ?? STUDIO_OUTFITS[0];
+}
+
+/** Compatibility reader for Person Studio state. Chess never uses the face or
+ * avatar texture; only the display name/status may be shown in the HUD badge. */
+export function readArenaAvatarAppearance({storage = null} = {}) {
+  const fallback = () => Object.freeze({...DEFAULT_APPEARANCE});
+  let store = storage;
+  if (!store) { try { store = globalThis.localStorage ?? null; } catch { store = null; } }
+  if (!store) return fallback();
+  let raw = null;
+  try { raw = store.getItem(PERSON_STUDIO_STORAGE_KEY); } catch { return fallback(); }
+  if (!raw) return fallback();
+  let saved = null;
+  try { saved = JSON.parse(raw); } catch { return fallback(); }
+  if (!saved || typeof saved !== 'object') return fallback();
+  let outfit = outfitById(typeof saved.outfitId === 'string' ? saved.outfitId : '');
+  try {
+    const snapshot = JSON.parse(saved.avatar);
+    const asset = snapshot?.appearance?.outfitAssetIds?.[0];
+    if (typeof asset === 'string' && asset.startsWith('studio-outfit:')) outfit = outfitById(asset.slice('studio-outfit:'.length));
+  } catch {}
+  return Object.freeze({
+    ...DEFAULT_APPEARANCE,
+    outfitId: outfit.id,
+    outfitColor: outfit.color,
+    outfitTrim: outfit.trim,
+    displayName: typeof saved.displayName === 'string' ? saved.displayName.slice(0, 60) : '',
+    approved: true,
+  });
+}
 
 /** Conventional Unicode chess glyphs, one identity per piece type. */
 export const CHESS_ROLE_GLYPHS = Object.freeze({
@@ -52,6 +95,7 @@ function createGeometryCache(THREE) {
   };
   return {
     torus: (r, t) => get(`torus:${r}:${t}`, () => new THREE.TorusGeometry(r, t, 10, 24)),
+    cylinder: (rt, rb, h, s = 24) => get(`cylinder:${rt}:${rb}:${h}:${s}`, () => new THREE.CylinderGeometry(rt, rb, h, s)),
     dispose() { cache.forEach((geometry) => geometry.dispose()); cache.clear(); },
   };
 }
@@ -134,7 +178,7 @@ function buildPiece(THREE, G, M, color, type, glyphRegistry = null) {
   // A small physical base makes the glyph read like a normal chess piece
   // rather than a floating emoji.
   const base = new THREE.Mesh(
-    new THREE.CylinderGeometry(ringRadius * 0.88, ringRadius * 1.08, 0.16, 24),
+    G.cylinder(ringRadius * 0.88, ringRadius * 1.08, 0.16, 24),
     style.base,
   );
   base.position.y = 0.10;
@@ -173,7 +217,7 @@ export function createPieceBuilders(THREE, _appearance = null) {
     });
     glyphRegistry.clear();
   }
-  return Object.freeze({appearance: Object.freeze({...(_appearance ?? {}), skin: STUDIO_MODEL.skin}), buildPiece: buildPiecePublic, dispose});
+  return Object.freeze({appearance: Object.freeze({...DEFAULT_APPEARANCE, ...(_appearance ?? {})}), buildPiece: buildPiecePublic, dispose});
 }
 
 /** Cinematic arena hall: dark ground, glow halos, eight pillared columns with
