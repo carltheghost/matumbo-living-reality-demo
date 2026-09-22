@@ -247,6 +247,15 @@ export const FEATURE_DEFINITIONS = Object.freeze([
     boundary: "ARENA is a deterministic local rehearsal. There is no multiplayer, network, imported runtime, reward, wallet, token, persistence, or value authority.",
   }),
   Object.freeze({
+    id: "chess",
+    label: "Chess",
+    kicker: "standard chess",
+    focusOrganId: "arena",
+    sources: ["chess-arena"],
+    description: "Open the dedicated chess room with standard recognizable chess pieces, legal move validation, local AI, and a two-player mode.",
+    boundary: "Chess is a local browser game. No wager, wallet, token, network multiplayer, or external authority is attached.",
+  }),
+  Object.freeze({
     id: "web-ai",
     label: "Web + AI",
     kicker: "browse + ask",
@@ -339,7 +348,8 @@ export const FEATURE_HANDOFF_LINKS = Object.freeze({
   "world-events": Object.freeze(["sports-events", "multi-sport-events", "gateway"]),
   "sports-events": Object.freeze(["world-events", "multi-sport-events", "arena"]),
   "multi-sport-events": Object.freeze(["sports-events", "world-events", "arena"]),
-  arena: Object.freeze(["person", "wardrobe-atelier", "academy"]),
+  arena: Object.freeze(["chess", "person", "wardrobe-atelier"]),
+  chess: Object.freeze(["arena", "person", "academy"]),
   academy: Object.freeze(["arena", "contract-atelier", "white-paper"]),
   projections: Object.freeze(["reality-lens", "block-world", "white-paper"]),
 });
