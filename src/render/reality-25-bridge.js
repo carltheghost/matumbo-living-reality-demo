@@ -31,7 +31,7 @@ const uiStyle = `
 #matumbo-reality25 .r25-eyebrow{font-size:10px;letter-spacing:.16em;opacity:.62}
 #matumbo-reality25 h2{font-size:22px;line-height:1.05;margin:8px 0}
 #matumbo-reality25 p{font-size:12px;line-height:1.5;opacity:.72}
-#matumbo-reality25 .r25-stage{position:relative;min-width:0;min-height:0}
+#matumbo-reality25 .r25-stage{position:relative;min-width:0;min-height:0}\n#matumbo-reality25 .r25-direction-key{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);padding:6px 10px;border:1px solid rgba(147,213,255,.14);border-radius:999px;background:rgba(3,10,18,.52);backdrop-filter:blur(10px);font-size:9px;letter-spacing:.08em;opacity:.55;z-index:3;pointer-events:none;white-space:nowrap}
 #matumbo-reality25 canvas{display:block;width:100%;height:100%}
 #matumbo-reality25 .r25-top{position:absolute;left:18px;right:18px;top:16px;display:flex;justify-content:space-between;pointer-events:none}
 #matumbo-reality25 .r25-pill{padding:8px 11px;border:1px solid rgba(147,213,255,.18);border-radius:999px;background:rgba(2,8,15,.58);backdrop-filter:blur(10px);font-size:11px}
@@ -80,7 +80,7 @@ root.innerHTML=`
     <div class="r25-eyebrow" style="margin-top:18px">REALITIES</div>
     <div class="r25-list" data-list></div>
   </aside>
-  <main class="r25-stage">
+  <main class="r25-stage"><div class="r25-direction-key" aria-hidden="true">X / Y / Z · every chamber faces its own vector</div>
     <canvas data-canvas></canvas>
     <div class="r25-top">
       <div class="r25-pill" data-status>NUCLEUS · shared origin</div>
@@ -214,7 +214,7 @@ for(const reality of field.realties.values()){
     metalness:.16,roughness:.2,transmission:.28,
     transparent:true,opacity:.4
   });
-  const shell=new THREE.Mesh(new THREE.BoxGeometry(1.35,1.35,1.35),shellMat);
+  const shell=new THREE.Mesh(new THREE.BoxGeometry(1.12,1.12,1.7),shellMat);
   shell.userData.realityId=reality.id;
   group.add(shell);
   nodeMeshes.set(reality.id,shell);
@@ -224,17 +224,17 @@ for(const reality of field.realties.values()){
     transparent:true,opacity:.84,metalness:.12,roughness:.22,
     side:THREE.DoubleSide
   });
-  const portal=new THREE.Mesh(new THREE.PlaneGeometry(.82,.82),portalMat);
-  portal.position.z=.69;
+  const portal=new THREE.Mesh(new THREE.PlaneGeometry(.84,.84),portalMat);
+  portal.position.z=.88;
   portal.userData.realityId=reality.id;
   portal.userData.portal=true;
   group.add(portal);
 
   const railMat=new THREE.LineBasicMaterial({color:meta.color,transparent:true,opacity:.88});
   const edgePoints=[
-    new THREE.Vector3(-.52,-.52,.71),new THREE.Vector3(.52,-.52,.71),
-    new THREE.Vector3(.52,.52,.71),new THREE.Vector3(-.52,.52,.71),
-    new THREE.Vector3(-.52,-.52,.71)
+    new THREE.Vector3(-.48,-.48,.88),new THREE.Vector3(.48,-.48,.88),
+    new THREE.Vector3(.48,.48,.88),new THREE.Vector3(-.48,.48,.88),
+    new THREE.Vector3(-.48,-.48,.88)
   ];
   const rail=new THREE.Line(new THREE.BufferGeometry().setFromPoints(edgePoints),railMat);
   rail.userData.realityId=reality.id;
@@ -242,18 +242,18 @@ for(const reality of field.realties.values()){
 
   const content=makeLocalContent(meta);
   content.scale.setScalar(.92);
-  content.position.z=-.08;
+  content.position.z=-.28;
   content.traverse(object=>object.userData.realityId=reality.id);
   group.add(content);
   realityContents.set(reality.id,content);
 
-  const arrow=new THREE.ArrowHelper(new THREE.Vector3(0,0,1),new THREE.Vector3(0,0,.74),.72,meta.color,.16,.1);
+  const arrow=new THREE.ArrowHelper(new THREE.Vector3(0,0,1),new THREE.Vector3(0,0,.98),.9,meta.color,.16,.1);
   arrow.userData.realityId=reality.id;
   group.add(arrow);
 
   const p=positions.get(reality.id);
-  const start=raw.clone().multiplyScalar(.42);
-  const end=p.clone().sub(raw.clone().multiplyScalar(.69));
+  const start=raw.clone().multiplyScalar(.46);
+  const end=p.clone().sub(raw.clone().multiplyScalar(1.0));
   const spoke=new THREE.Line(
     new THREE.BufferGeometry().setFromPoints([start,end]),
     new THREE.LineBasicMaterial({color:0x45627f,transparent:true,opacity:.46})
@@ -272,8 +272,8 @@ function redrawEdges(){
     const a=positions.get(edge.from),b=positions.get(edge.to);
     if(!a||!b)continue;
     const direction=b.clone().sub(a).normalize();
-    const pa=a.clone().add(direction.clone().multiplyScalar(.72));
-    const pb=b.clone().sub(direction.clone().multiplyScalar(.72));
+    const pa=a.clone().add(direction.clone().multiplyScalar(1.0));
+    const pb=b.clone().sub(direction.clone().multiplyScalar(1.0));
     const g=new THREE.BufferGeometry().setFromPoints([pa,pb]);
     const m=new THREE.LineBasicMaterial({
       color:edge.type==='fold'?0xf3cf73:0x67c9ff,
