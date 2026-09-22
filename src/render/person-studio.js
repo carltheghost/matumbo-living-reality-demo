@@ -22,7 +22,7 @@ export function createPersonStudio({THREE,renderer,scene,camera,controls,world,t
   root.innerHTML=`
     <header class="studio-topbar">
       <div class="studio-brand"><span class="studio-monogram" aria-hidden="true">M</span><div><strong>maTumbo</strong><small>People × worlds × possibility</small></div></div>
-      <nav class="studio-tabs" role="tablist" aria-label="Personal space"><button data-tab="identity" role="tab">Profile</button><button data-tab="wardrobe" role="tab">Wardrobe</button><button data-tab="room" role="tab">Your room</button><button data-tab="presence" role="tab">Presence</button><button data-tab="companion" role="tab">Companion</button></nav>
+      <nav class="studio-tabs" role="tablist" aria-label="Personal space"><button data-tab="identity" role="tab"><span aria-hidden="true">◉</span><b>Profile</b></button><button data-tab="wardrobe" role="tab"><span aria-hidden="true">◇</span><b>Wardrobe</b></button><button data-tab="room" role="tab"><span aria-hidden="true">⌂</span><b>Your room</b></button><button data-tab="presence" role="tab"><span aria-hidden="true">◌</span><b>Presence</b></button><button data-tab="companion" role="tab"><span aria-hidden="true">✦</span><b>Companion</b></button></nav>
       <div class="studio-top-right"><span class="studio-local">Local personal space</span><button type="button" data-world="reality-lens">Explore ↗</button></div>
     </header>
     <div class="studio-title"><span class="studio-kicker">01 / Person Ω</span><h1>The same you.<br><i>Everywhere.</i></h1><p>Your identity stays yours.<br>Dress it. Move it. Make this space your own.</p></div>
