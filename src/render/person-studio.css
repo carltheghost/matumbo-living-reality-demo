@@ -44,3 +44,69 @@ body.person-studio-mode #feature-shell{z-index:120}
 .studio-hint button{pointer-events:auto;margin-top:8px;font-size:10px!important;padding:6px 14px!important;background:rgba(8,21,35,.6)!important}.studio-clear-view .studio-inspector,.studio-clear-view .studio-identity,.studio-clear-view .studio-title{display:none}.studio-clear-view .studio-hint{bottom:166px}
 body.person-studio-mode #explain,body.person-studio-mode #explain-toggle,body.person-studio-mode #whitepaper,body.person-studio-mode #whitepaper-toggle{display:none!important}
 body.person-studio-mode #explain-white-paper{display:none!important}
+
+/* Mobile Person Studio: compact thumb-friendly navigation.
+   The five personal-space destinations are a dock, not a full-screen panel.
+   The 3-D avatar remains the visual priority. */
+@media(max-width:700px){
+  #person-studio .studio-topbar{
+    left:10px;right:10px;top:10px;
+    min-height:52px;padding:7px 10px;
+    border-radius:16px;display:flex;flex-wrap:nowrap;
+    gap:8px;
+  }
+  #person-studio .studio-brand{min-width:0;flex:1;gap:8px}
+  #person-studio .studio-monogram{font-size:23px}
+  #person-studio .studio-brand strong{font-size:15px}
+  #person-studio .studio-brand small{font-size:6px;letter-spacing:.12em}
+  #person-studio .studio-top-right{position:static;flex:0 0 auto}
+  #person-studio .studio-top-right .studio-local{display:none}
+  #person-studio .studio-top-right button{min-height:34px!important;padding:6px 10px!important;font-size:9px!important}
+  #person-studio .studio-tabs{
+    position:absolute;
+    left:10px;right:10px;top:70px;
+    width:auto;height:58px;
+    display:grid;grid-template-columns:repeat(5,minmax(0,1fr));
+    gap:4px;padding:4px;
+    border-radius:17px;
+    overflow:hidden;
+    background:rgba(5,12,21,.68);
+  }
+  #person-studio .studio-tabs button{
+    min-width:0!important;min-height:48px!important;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:2px;padding:4px 2px!important;border-radius:12px!important;
+    font-size:8px!important;line-height:1.05;
+  }
+  #person-studio .studio-tabs button span{
+    display:block;font-size:15px;line-height:1;color:#9fd0ff;
+  }
+  #person-studio .studio-tabs button b{
+    display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:8px;font-weight:500;
+  }
+  #person-studio .studio-tabs button[aria-selected=true] span{color:#ffe4ae}
+  #person-studio .studio-title{top:144px;left:16px;width:190px}
+  #person-studio .studio-inspector{
+    left:10px;right:10px;bottom:118px;
+    max-height:min(38dvh,300px);
+    padding:13px 14px;
+    border-radius:17px;
+  }
+  #person-studio .studio-inspector h2{font-size:18px}
+  #person-studio .studio-inspector p{font-size:9px;line-height:1.5}
+  #person-studio .studio-footer{
+    left:10px;right:10px;bottom:8px;
+    padding:6px 8px;border-radius:16px;
+    gap:0;
+  }
+  #person-studio .studio-routes{gap:4px}
+  #person-studio .studio-routes button{min-width:74px;min-height:38px!important;padding:6px!important}
+  #person-studio .studio-hint{display:none}
+}
+@media(max-width:380px){
+  #person-studio .studio-tabs{left:7px;right:7px}
+  #person-studio .studio-tabs button b{font-size:7px}
+  #person-studio .studio-tabs button span{font-size:14px}
+  #person-studio .studio-inspector{left:7px;right:7px;bottom:112px}
+  #person-studio .studio-footer{left:7px;right:7px}
+}
