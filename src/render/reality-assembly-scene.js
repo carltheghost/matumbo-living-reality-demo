@@ -102,6 +102,41 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[]}){
     const cell=box([s,s,s],[(wbRand()-.5)*22,2+(wbRand()-.5)*10,(wbRand()-.5)*22],wbCellMat,worldBlock);
     cell.name=`world-block/cell-${i}`;wbCells.push(cell);
   }
+  // The extreme far-zoom cube is still a real six-sided object, not a blank
+  // translucent shell. Each side gets its own colored door/window treatment so
+  // the merged world retains the same materialized block language as the
+  // close-up feature cubes.
+  const wbFaceColors=['#48d7ff','#7ff0b7','#c59cff','#ffd166','#ff7188','#72a7ff'];
+  const wbFaceSystems=[];
+  const wbFrameMat=makeMaterial('#d9f7ff',{transparent:true,opacity:0,emissive:'#7fdfff',emissiveIntensity:.75,metalness:.7,roughness:.16,fog:false});
+  [[0,-1],[0,1],[1,-1],[1,1],[2,-1],[2,1]].forEach(([axis,sign],faceIndex)=>{
+    const face=group(`world-block/face-${axis}-${sign}`,worldBlock);
+    const accent=wbFaceColors[faceIndex];
+    const panelMat=makeMaterial(accent,{transparent:true,opacity:0,depthWrite:false,emissive:accent,emissiveIntensity:.95,metalness:.16,roughness:.2,fog:false});
+    const glowMat=makeMaterial(accent,{transparent:true,opacity:0,depthWrite:false,emissive:accent,emissiveIntensity:1.65,metalness:.05,roughness:.18,fog:false});
+    const panelDepth=.08;
+    const panelSize=axis===1?[10,panelDepth,8]:axis===0?[panelDepth,7,9]:[10,7,panelDepth];
+    const panelPos=[0,0,0];
+    panelPos[axis]=sign*((axis===1?8:15)+.08);
+    if(axis===1)panelPos[1]+=sign*.15; else panelPos[1]=1;
+    const panel=box(panelSize,panelPos,panelMat,face);panel.name=`world-block/face-${axis}-${sign}/window`;
+    const glowSize=axis===1?[6,.045,4.4]:axis===0?[.045,4.8,5.2]:[6,4.8,.045];
+    const glowPos=[0,0,0];glowPos[axis]=sign*((axis===1?8:15)+.135);if(axis!==1)glowPos[1]=1;
+    box(glowSize,glowPos,glowMat,face);
+    const frameOuter=sign*((axis===1?8:15)+.18);
+    const bars=[];
+    if(axis===1){
+      bars.push([[8.9,.05,.05],[frameOuter,1,3.75]],[[8.9,.05,.05],[frameOuter,1,-3.75]],[[.05,.05,7.6],[frameOuter,1,0]]);
+    }else if(axis===0){
+      bars.push([[.05,6.7,.05],[frameOuter,4.5,0]],[[.05,6.7,.05],[frameOuter,-2.5,0]],[[.05,.05,8.8],[frameOuter,1,4.4]],[[.05,.05,8.8],[frameOuter,1,-4.4]]);
+    }else{
+      bars.push([[8.9,.05,.05],[0,4.5,frameOuter]],[[8.9,.05,.05],[0,-2.5,frameOuter]],[[.05,6.7,.05],[4.45,1,frameOuter]],[[.05,6.7,.05],[-4.45,1,frameOuter]]);
+    }
+    bars.forEach(([size,pos],i)=>{const bar=box(size,pos,wbFrameMat,face);bar.name=`world-block/face-${axis}-${sign}/frame-${i}`;});
+    const mini=axis===1?[[3.6,.22,2.7],[-3.6,.22,2.7],[3.6,.22,-2.7]]:axis===0?[[.22,3.7,3.9],[.22,3.7,-3.9],[.22,-2.1,3.9]]:[[3.6,2.7,.22],[-3.6,2.7,.22],[3.6,-2.1,.22]];
+    mini.forEach((pos,i)=>{const mat=makeMaterial(['#7fdfff','#b892ff','#79f0b8'][i],{transparent:true,opacity:0,emissive:['#2ec9ff','#8050ff','#36d78f'][i],emissiveIntensity:.9,metalness:.3,roughness:.2,fog:false});box([.55,.55,.55],pos,mat,face);});
+    wbFaceSystems.push({face,panelMaterial:panelMat,glowMaterial:glowMat,frameMaterial:wbFrameMat,phase:faceIndex*.9});
+  });
 
   const CORE=2.0,FACE=2.14,REST=CORE/2+.09;
   for(let index=0;index<features.length;index++){
@@ -242,6 +277,14 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[]}){
     wbCellMat.opacity=(1-lodBlend)*.4;
     for(const wbCell of wbCells)wbCell.visible=lodBlend<=.5;
     wbGlass.emissiveIntensity=.22+.14*Math.sin(time*.8);
+    wbFaceSystems.forEach(({face,panelMaterial,glowMaterial,frameMaterial,phase})=>{
+      const pulse=.82+.18*Math.sin(time*.72+phase);
+      panelMaterial.opacity=lodBlend*.72;
+      glowMaterial.opacity=lodBlend*.32*pulse;
+      frameMaterial.opacity=lodBlend*.72;
+      face.visible=lodBlend>.02;
+      panelMaterial.emissiveIntensity=.8+.28*pulse;
+    });
     connections.visible=!showWorld;
     const buffer=connectionGeometry.attributes.position;
     for(const [id,node] of nodes){
