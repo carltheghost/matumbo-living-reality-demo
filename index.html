@@ -1971,6 +1971,60 @@
       }
       #block-world-quick-actions { left: 10px; right: 10px; bottom: 56px; width: auto; max-height: 34vh; }
     }
+    /* Mobile mission-control: keep the navigator compact so the 3-D world remains usable on phones. */
+    @media (max-width:700px){
+      #feature-shell{
+        left:8px!important;
+        right:auto!important;
+        top:58px!important;
+        width:min(224px,calc(100vw - 16px))!important;
+        height:min(46vh,390px)!important;
+        max-height:min(46vh,390px)!important;
+        padding:9px!important;
+        border-radius:14px!important;
+      }
+      #feature-shell-head{gap:7px}
+      #feature-shell-head h2{font-size:15px}
+      #feature-shell-head p{font-size:8px}
+      #feature-nav{
+        grid-template-columns:1fr!important;
+        flex:0 1 min(22vh,180px)!important;
+        max-height:min(22vh,180px)!important;
+        min-height:72px;
+        overflow-y:auto!important;
+        overflow-x:hidden!important;
+        -webkit-overflow-scrolling:touch;
+      }
+      .feature-button{
+        min-height:42px;
+        padding:7px 8px!important;
+        text-align:left;
+      }
+      .feature-button-title{font-size:9px!important}
+      .feature-button-meta{font-size:7px!important}
+      #feature-detail{
+        min-height:0!important;
+        overflow-y:auto!important;
+        overflow-x:hidden!important;
+        -webkit-overflow-scrolling:touch;
+        padding:8px!important;
+      }
+      #feature-detail h3{font-size:13px}
+      #feature-detail p{font-size:9px;line-height:1.35}
+      #feature-shell .feature-action-bar{gap:5px}
+      #feature-shell .feature-action{min-height:40px;font-size:8px;padding:6px}
+    }
+    @media (max-width:420px){
+      #feature-shell{
+        width:min(208px,calc(100vw - 16px))!important;
+        height:min(44vh,350px)!important;
+        max-height:min(44vh,350px)!important;
+      }
+      #feature-nav{max-height:min(19vh,150px)!important}
+      .feature-button{min-height:40px}
+    }
+
+
     @media(max-width:700px){#academy-console{left:12px;right:12px;top:86px;width:auto;max-height:calc(100vh - 112px);padding:11px}#academy-head h2{font-size:17px}#academy-lessons{grid-template-columns:1fr}}
     /* Cube Dive Transport HUD (2026-09-19): compact inside-world bar. Bottom
        docked on narrow screens with 44px touch targets; layout-only. */
