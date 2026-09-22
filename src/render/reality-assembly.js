@@ -74,7 +74,18 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   <div class="assembly-selection-hint" data-hover-label>Hover to peek · click to select · double-click to open</div>
   <footer class="assembly-toolbar"><div class="assembly-view"><span class="assembly-eyebrow">View</span><button data-view="3d" aria-pressed="true">3D</button><button data-view="4d" aria-pressed="false">4D · time</button></div><div class="assembly-tools"><button data-interaction="orbit" aria-pressed="true">Orbit</button><button data-interaction="move" aria-pressed="false">Move</button><button data-open-secondary>Open / close</button><button data-home>Overview</button></div><div class="assembly-timeline"><label>Observed local history<input data-time type="range" min="0" max="0" value="0" step="1" aria-label="Recorded view frame"></label><span data-time-label>No previous observations</span><button data-present>Present</button></div><button data-export>Export history</button></footer>
   <section class="assembly-branches" hidden aria-label="Proposed branches"><div><span class="assembly-eyebrow">4D = space + observed time / proposed states</span><p>History is read-only. Proposed layouts do not change the present.</p></div><form data-branch-form><label class="assembly-sr-only" for="assembly-branch-name">Proposed branch name</label><input id="assembly-branch-name" name="branchName" maxlength="60" required placeholder="Name a proposed branch"><button class="assembly-primary">Create branch</button></form><label>View branch<select data-branch-select><option value="present">Present</option></select></label></section>
-  <p class="assembly-status" data-status role="status" aria-live="polite"></p>`;
+  <p class="assembly-status" data-status role="status" aria-live="polite"></p>
+  <section class="reality-architecture" aria-label="Living Reality architecture">
+    <header><div><p class="assembly-eyebrow">Architecture</p><h2>Living Reality</h2></div><span>REALITY GRAPH</span></header>
+    <div class="reality-architecture-flow">
+      <button type="button" data-architecture-node="reality:root"><strong>Reality A</strong><small>existing world · own state</small></button>
+      <div class="reality-architecture-branch" aria-hidden="true"><i></i><i></i></div>
+      <button type="button" data-architecture-node="side"><strong>Side Reality B</strong><small>alternate state · own objects · own space</small></button>
+    </div>
+    <div class="reality-architecture-link"><span></span><b>JOIN / LINK</b><span></span></div>
+    <div class="reality-architecture-destination"><span>another reality</span><em>connection / portal</em></div>
+    <p class="reality-architecture-state">Each reality is an independent node. A fork copies state; a connection explicitly links worlds without collapsing them into one.</p>
+  </section>`;
   document.body.append(root);
   let lastAssemblyFocus=null,resizeFocusUntil=0;
   root.addEventListener('focusin',event=>{lastAssemblyFocus=event.target;});
@@ -177,6 +188,17 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     const button=document.createElement('button');button.type='button';button.textContent=feature.label;button.onclick=guard(()=>{select(feature.id);focus();if(root.classList.contains('assembly-directory-open'))setDirectory(false,{restoreFocus:true});});find('.assembly-catalog').append(button);catalog.set(feature.id,button);
     const label=document.createElement('button');label.type='button';label.className='assembly-node-label';label.textContent=feature.label;label.setAttribute('aria-label',`Inspect ${feature.label}`);label.onclick=guard(()=>select(feature.id));label.ondblclick=guard(()=>{select(feature.id);toggle();focus();});label.onpointerenter=()=>{hovered=feature.id;render();};label.onpointerleave=()=>{hovered=null;render();};find('.assembly-labels').append(label);labels.set(feature.id,label);
   }
+  all('[data-architecture-node]').forEach(button=>button.onclick=guard(()=>{
+    const requested=button.dataset.architectureNode;
+    if(requested==='side'){
+      const id=ensureSideReality(owner.getSnapshot().selectedId);
+      realityGraph.travel(id);
+      render();
+      say('Side Reality B is active: independent state, objects, and space linked to the parent reality.');
+    }else{
+      returnToRootReality();
+    }
+  }));
   find('[data-search]').oninput=event=>{const query=event.target.value.toLowerCase().trim();for(const [id,button] of catalog)button.hidden=!`${featureMap.get(id).label} ${id}`.toLowerCase().includes(query);};
   all('[data-home]').forEach(button=>button.onclick=overview);find('[data-focus]').onclick=focus;
   all('[data-open],[data-open-secondary]').forEach(button=>button.onclick=guard(toggle));
