@@ -39,6 +39,16 @@ jobs:
           find . -maxdepth 1 -type f \( -name '*.css' -o -name '*.html' \) -not -path './index.html' -exec cp {} dist/ \;
           printf '%s\n' "maTumbo Living Reality deployment" > dist/health.txt
 
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('dist/index.html')
+          html = p.read_text(encoding='utf-8')
+          marker = '<script type="module" src="./src/render/reality-25-bridge.js"></script>'
+          if marker not in html:
+              html = html.replace('</body>', f'{marker}</body>')
+          p.write_text(html, encoding='utf-8')
+          PY
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
