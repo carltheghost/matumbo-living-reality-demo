@@ -1,74 +1,66 @@
 // token-boot.js — side-effect boot module for the TUMBO-SIM ledger core.
 // Part of the TUMBO-SIM ledger core (src/domains).
 //
-// Imported once by the app entry (transitively, so the huge main bundle stays
-// untouched). Responsibilities:
-//   1. Load a persisted ledger (localStorage "tumbo.token.ledger.v1", strict
-//      load). A corrupt/tampered snapshot is discarded and replaced with a
-//      fresh ledger — silently, no console error.
-//   2. Fund generic demo genesis accounts (u:visitor, b:guide) from sys:faucet
-//      with explicit, fixed idempotency keys (re-boots replay safely).
-//      b:guide is registered with kind "bot".
-//   3. verifyInvariants() before exposing anything.
-//   4. Expose window.TumboToken = { ledger, balance, fmt, quote, execute, on }.
-//   5. Queue persistence in a microtask after every settled commit — never
-//      synchronously inside the commit, because vault/escrow bookkeeping for
-//      stake/deposit/intent actions may not be finished yet. (Receipt +
-//      balance-changed document CustomEvent("tumbo:token") dispatch lives in
-//      the facade's own onCommit subscription, so each settlement emits
-//      exactly one event wave.)
-//
-// Simulation only: TUMBO-SIM is a demo token. No real money, wagering, wallet
-// custody, or chains are involved anywhere in this module.
-import { TumboLedger } from "./token.js";
+// Aligns to the canonical src/domains/token.js only (ensureTumboTokenFacade,
+// engine, TokenLedger, fmt). Simulation only — no real money, wagering,
+// wallet custody, or chains.
+
+import {
+  ensureTumboTokenFacade,
+  getTumboTokenFacade,
+  engine,
+  fmt,
+  assertAccount,
+  assertFluff,
+  newId,
+} from "./token.js";
 import { createTokenFacade } from "./token-facade.js";
 
 const STORAGE_KEY = "tumbo.token.ledger.v1";
 const GENESIS_IDEM = "genesis:demo-funding:v1";
 const DEMO_ACCOUNTS = ["u:visitor", "b:guide"];
-const DEMO_GRANT_TUMBO = 1000;
+const DEMO_GRANT_FLUFF = 1000 * 1000; // 1000 TUMBO-SIM in fluff
 
 function storage() {
-  try { return typeof localStorage !== "undefined" ? localStorage : null; }
-  catch { return null; }
-}
-
-function loadPersisted() {
-  const ls = storage();
-  if (!ls) return null;
-  let raw = null;
-  try { raw = ls.getItem(STORAGE_KEY); } catch { return null; }
-  if (!raw) return null;
   try {
-    return TumboLedger.load(raw); // strict: throws on tamper/corruption
+    return typeof localStorage !== "undefined" ? localStorage : null;
   } catch {
-    try { ls.removeItem(STORAGE_KEY); } catch { /* keep going in memory */ }
-    return null; // corrupt snapshot: start fresh, silently
+    return null;
   }
 }
 
-function fundDemoGenesis(ledger) {
-  for (const acct of DEMO_ACCOUNTS)
-    ledger.ensureAccount(acct, acct.startsWith("b:") ? "bot" : "user");
-  // Fixed idempotency keys make re-boots replay-safe: funded once, ever.
-  // faucetDrip honors the explicit idem, so a re-boot finds both keys in the
-  // idem registry and skips (no second drip, no FAUCET_COOLDOWN trip).
+function fundDemoGenesis(eng) {
   for (const acct of DEMO_ACCOUNTS) {
+    try {
+      assertAccount(acct);
+    } catch {
+      continue;
+    }
     const dripKey = `${GENESIS_IDEM}:${acct.slice(2)}`;
-    const recvKey = `${GENESIS_IDEM}:recv:${acct.slice(2)}`;
-    if (ledger.s.idem[dripKey] && ledger.s.idem[recvKey]) continue;
-    const drip = ledger.faucetDrip({ to: acct, amountTumbo: DEMO_GRANT_TUMBO, idem: dripKey });
-    ledger.receive({ intentTxId: drip.txId, by: acct, idem: recvKey });
+    // Idempotent faucet: re-boots replay safely via ledger receipt map.
+    try {
+      eng.faucet(acct, "TUMBO", DEMO_GRANT_FLUFF, { idempotencyKey: dripKey });
+    } catch {
+      /* already funded or insufficient faucet float — best-effort */
+    }
   }
 }
 
-export function bootToken({ persist = true } = {}) {
-  const ledger = loadPersisted() || new TumboLedger({ seed: 20260920 });
-  fundDemoGenesis(ledger);
-  ledger.verifyInvariants();
+/**
+ * Boot the shared token surface.
+ * Returns a facade { ledger, balance, fmt, quote, execute, on, engine }.
+ */
+export function bootToken({ persist = true, seed = true } = {}) {
+  // Prefer the canonical shared facade (seeds demo wallet when seed=true).
+  const canonical = ensureTumboTokenFacade({ seed });
+  const eng = canonical.engine ?? engine;
 
-  const facade = createTokenFacade(ledger);
+  // Fund generic demo accounts used by older surfaces (idempotent).
+  fundDemoGenesis(eng);
 
+  const facade = createTokenFacade(eng);
+
+  // Optional persistence of a minimal snapshot (best-effort, non-blocking).
   let persistQueued = false;
   function queuePersist() {
     if (!persist || persistQueued) return;
@@ -77,28 +69,45 @@ export function bootToken({ persist = true } = {}) {
       persistQueued = false;
       const ls = storage();
       if (!ls) return;
-      try { ls.setItem(STORAGE_KEY, ledger.serialize()); }
-      catch { /* storage full/blocked: ledger keeps running in memory */ }
+      try {
+        const tip = eng.ledger?.verifyChain?.() ?? null;
+        ls.setItem(
+          STORAGE_KEY,
+          JSON.stringify({
+            v: 1,
+            tick: eng.ledger?.tick ?? 0,
+            tip: tip?.tip ?? null,
+            simulation: true,
+          })
+        );
+      } catch {
+        /* storage full/blocked: keep running in memory */
+      }
     });
   }
 
-  // Persistence only. The facade already announces every settled commit via
-  // its own onCommit subscription — this listener must not dispatch events,
-  // or execute() calls would emit a second, duplicate wave.
-  ledger.onCommit(() => queuePersist());
+  eng.on("receipt", () => queuePersist());
 
-  if (typeof window !== "undefined" && typeof document !== "undefined") {
+  if (typeof window !== "undefined") {
     window.TumboToken = {
-      ledger,
-      balance: facade.balance,
-      fmt: facade.fmt,
-      quote: facade.quote,
-      execute: facade.execute,
-      on: facade.on,
+      ledger: eng.ledger,
+      balance: (acct, asset) => eng.balance(acct, asset),
+      fmt,
+      quote: (args) => eng.quote(args),
+      execute: (q, opts) => eng.execute(q, opts),
+      on: (evt, cb) => eng.on(evt, cb),
+      engine: eng,
+      faucet: (to, asset, amount, opts) => eng.faucet(to, asset, amount, opts),
+      reverse: (input) => eng.reverse(input),
+      cancel: (quoteId, opts) => eng.cancelQuote(quoteId, opts),
+      verifyReceipt: (id) => eng.ledger.verifyReceipt(id),
+      verifyChain: () => eng.ledger.verifyChain(),
     };
   }
+
   return facade;
 }
 
 const api = bootToken();
 export default api;
+export { ensureTumboTokenFacade, getTumboTokenFacade };
