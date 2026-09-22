@@ -522,8 +522,11 @@ export function createHandLensSession({
             : null;
       if (!hud || typeof documentRoot.createElement !== "function") return;
       hudButton = documentRoot.createElement("button");
+      hudButton.type = "button";
+      hudButton.className = "camera-action hand-lens-toggle";
       hudButton.textContent = "HAND LENS";
-      // The HUD container is pointer-events:none; the button opts back in.
+      hudButton.setAttribute("aria-label", "Open Hand Lens controls");
+      hudButton.title = "Open local Hand Lens controls";
       hudButton.style.pointerEvents = "auto";
       hudButton.addEventListener("click", () => {
         if (
@@ -538,7 +541,16 @@ export function createHandLensSession({
           }
         }
       });
-      if (typeof hud.appendChild === "function") hud.appendChild(hudButton);
+      const cameraActions =
+        typeof documentRoot.getElementById === "function"
+          ? documentRoot.getElementById("camera-actions")
+          : null;
+      if (cameraActions && typeof cameraActions.appendChild === "function") {
+        // Hand Lens belongs with the camera/input controls, not over the 3-D scene.
+        cameraActions.appendChild(hudButton);
+      } else if (typeof hud.appendChild === "function") {
+        hud.appendChild(hudButton);
+      }
     } catch (error) {
       reportError(error);
     }
