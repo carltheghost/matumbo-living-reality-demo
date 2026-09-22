@@ -33,10 +33,23 @@ export function computeLabelSafeBand(chromeRects,viewportHeight){
 export function createRealityAssembly({THREE,renderer,scene,camera,controls,world,targets,features,onNavigate,onFrame,readFeature=()=>null,environmentTexture=null,reducedMotion=false}){
   const primary=['block-world','contracts','person','rooms','academy','world-events','multi-sport-events','asset-market'];
   const ordered=[...features].sort((a,b)=>{const aIndex=primary.indexOf(a.id),bIndex=primary.indexOf(b.id);return (aIndex<0?100:aIndex)-(bIndex<0?100:bIndex);});
+  // Final canonical spacing: the core cube has breathing room around it;
+  // primary worlds sit on a 10.5-unit ring and secondary worlds on a 20.5-unit
+  // ring so labels/connections remain legible instead of collapsing together.
   const positions=ordered.map((feature,i)=>{
     if(i===0)return {id:feature.id,position:[0,2,0]};
-    const outer=i>=8,angle=(outer?(i-8)/(ordered.length-8):(i-1)/7)*Math.PI*2-Math.PI/2,radius=outer?14:7.2;
-    return {id:feature.id,position:[Math.cos(angle)*radius,outer?Math.sin(angle*3)*3-1:Math.sin(angle*2)*2+1,Math.sin(angle)*radius*.68]};
+    const outer=i>=8;
+    const outerCount=Math.max(1,ordered.length-8);
+    const angle=(outer?(i-8)/outerCount:(i-1)/7)*Math.PI*2-Math.PI/2;
+    const radius=outer?20.5:10.5;
+    return {
+      id:feature.id,
+      position:[
+        Math.cos(angle)*radius,
+        outer?Math.sin(angle*3)*3.5-1:Math.sin(angle*2)*2.4+1,
+        Math.sin(angle)*radius*.72,
+      ],
+    };
   });
   const owner=createRealityTimeline({objects:positions});
   const spatial=buildRealityAssemblyScene({THREE,parent:scene,features:ordered.map((feature,i)=>({...feature,assemblyTier:i===0?'core':i<8?'primary':'secondary'})),targets});
@@ -110,7 +123,12 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     const outward=new THREE.Vector3(position.x,0,position.z);if(outward.length()<1)outward.set(.15,0,1);outward.normalize().multiplyScalar(mobile?11:9);outward.y=3.2;
     focusTarget=position.clone();focusPosition=position.clone().add(outward);spatial.focus(object.id);onFrame?.();
   }
-  function overview(){focusTarget=new THREE.Vector3(0,2,0);focusPosition=new THREE.Vector3(innerWidth<700?8:6,innerWidth<700?20:15,innerWidth<700?68:50);spatial.focus(null);onFrame?.();}
+  function overview(){
+    focusTarget=new THREE.Vector3(0,2,0);
+    focusPosition=new THREE.Vector3(innerWidth<700?10:7,innerWidth<700?24:17,innerWidth<700?92:76);
+    spatial.focus(null);
+    onFrame?.();
+  }
   function setMode(mode){viewMode=mode;all('[data-view]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.view===mode)));render();}
   function setInteraction(next){interaction=next;all('[data-interaction]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.interaction===next)));say(next==='move'?'Drag a cube to move its local layout. Arrow keys move the selected cube; Page Up / Down changes its height.':'Drag to orbit. Scroll or pinch to approach.');}
   const enter=()=>onNavigate?.(owner.getSnapshot().selectedId);

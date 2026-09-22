@@ -123,6 +123,56 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[]}){
         box(trimSize,trimPosition,gold,pivot);
       }
     }
+
+    // The central/root cube is not a blank box. Each of its six faces gets
+    // the same local-cube visual language: a colored door, a frame, and
+    // three smaller attached blocks. Each side gets a different accent.
+    if(feature.id==='block-world'){
+      const faceColors=['#48d7ff','#7ff0b7','#c59cff','#ffd166','#ff7188','#72a7ff'];
+      faces.forEach(({pivot,axis,sign},faceIndex)=>{
+        const accentColor=faceColors[faceIndex%faceColors.length];
+        const faceMat=makeMaterial(accentColor,{emissive:accentColor,emissiveIntensity:1.15,metalness:.18,roughness:.22});
+        const depth=axis===1?.06:.055;
+        const doorSize=axis===1?[.62,depth,.62]:axis===0?[depth,.82,.62]:[.62,.82,depth];
+        const doorPos=[0,0,0];doorPos[axis]=sign*(depth*.62+.035);
+        const door=box(doorSize,doorPos,faceMat,pivot);
+        door.name=`${feature.id}/face-${axis}-${sign}/door`;
+        door.userData.assemblyId=feature.id;
+        const frameMat=makeMaterial('#d9f7ff',{emissive:'#7fdfff',emissiveIntensity:.7,metalness:.7,roughness:.16});
+        const front=sign*(depth*.95+.07);
+        if(axis===1){
+          box([.72,.035,.035],[0,front,.37],frameMat,pivot);
+          box([.72,.035,.035],[0,front,-.37],frameMat,pivot);
+          box([.035,.035,.72],[-.37,front,0],frameMat,pivot);
+          box([.035,.035,.72],[.37,front,0],frameMat,pivot);
+        }else if(axis===0){
+          box([.055,.9,.035],[front,.45,.0],frameMat,pivot);
+          box([.055,.9,.035],[front,-.45,.0],frameMat,pivot);
+          box([.055,.035,.72],[front,0,.37],frameMat,pivot);
+          box([.055,.035,.72],[front,0,-.37],frameMat,pivot);
+        }else{
+          box([.035,.9,.055],[.37,.45,front],frameMat,pivot);
+          box([.035,.9,.055],[-.37,.45,front],frameMat,pivot);
+          box([.72,.035,.055],[0,.45,front],frameMat,pivot);
+          box([.72,.035,.055],[0,-.45,front],frameMat,pivot);
+        }
+        const miniMats=[
+          makeMaterial('#7fdfff',{emissive:'#2ec9ff',emissiveIntensity:.85,metalness:.35,roughness:.2}),
+          makeMaterial('#b892ff',{emissive:'#8050ff',emissiveIntensity:.8,metalness:.3,roughness:.2}),
+          makeMaterial('#79f0b8',{emissive:'#36d78f',emissiveIntensity:.8,metalness:.3,roughness:.2}),
+        ];
+        const miniPositions=axis===1
+          ? [[-.78,sign*.12,.78],[.78,sign*.12,.78],[.78,sign*.12,-.78]]
+          : axis===0
+            ? [[sign*.12,.78,.78],[sign*.12,.78,-.78],[sign*.12,-.78,.78]]
+            : [[.78,.78,sign*.12],[-.78,.78,sign*.12],[.78,-.78,sign*.12]];
+        miniPositions.forEach((pos,i)=>{
+          const mini=box([.22,.22,.22],pos,miniMats[i],pivot);
+          mini.name=`${feature.id}/face-${axis}-${sign}/block-${i}`;
+          mini.userData.assemblyId=feature.id;
+        });
+      });
+    }
     const rand=traitRandom(traits.interiorSeed);
     const city=group(`${feature.id}/architectural-interior`,root),towers=[],lights=[],gardens=[];
     for(let k=0;k<17;k++){
