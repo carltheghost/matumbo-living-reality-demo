@@ -92,7 +92,7 @@ const TAB_ENGINE_CSS = `
    Animation uses transform/opacity ONLY (no layout thrash). */
 .tl-dock {
   position: fixed;
-  z-index: 1040;
+  z-index: 3200;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -140,7 +140,7 @@ const TAB_ENGINE_CSS = `
   border-radius: 16px;
 }
 .tl-dock--ar .tl-chip-label { display: none; }
-.tl-dock--ar .tl-chip { border-radius: 50%; padding: 0; }
+.tl-dock--ar .tl-chip { position:relative; border-radius: 50%; padding: 0; }
 
 .tl-chip {
   --tl-cube-size: 42px;
@@ -214,6 +214,7 @@ const TAB_ENGINE_CSS = `
 .tl-cube-face--back .tl-cube-mark,.tl-cube-face--left .tl-cube-mark,.tl-cube-face--bottom .tl-cube-mark { color:#b7f4ff; }
 .tl-cube-face--right .tl-cube-mark { color:#ffd37e; }
 .tl-cube-face--top .tl-cube-mark { color:#b5ffcf; }
+.tl-chip-close{position:absolute;right:5px;top:4px;width:20px;height:20px;display:grid;place-items:center;border:1px solid rgba(255,123,143,.34);border-radius:50%;background:rgba(7,17,25,.88);color:#ffd6de;font:700 13px/1 system-ui;z-index:8;opacity:.92;cursor:pointer}.tl-chip-close:hover{border-color:rgba(255,123,143,.75);background:rgba(74,19,31,.9)}
 .tl-chip-label {
   width: 72px;
   max-width: 72px;
@@ -234,7 +235,7 @@ const TAB_ENGINE_CSS = `
 /* Panel layer: pointer-events off so closed panels never intercept input. */
 .tl-layer {
   position: fixed;
-  z-index: 1030;
+  z-index: 3050;
   display: flex;
   gap: 12px;
   pointer-events: none;
@@ -475,7 +476,7 @@ export class TabEngine {
       this.layer.appendChild(node);
     }
 
-    this._enablePanelDragging(record);
+    if (record.adopted) this._enablePanelDragging(record);
 
     const shortcutIndex = this.order.length + 1; // 1–9 keyboard map
     const chip = this.document.createElement('button');
@@ -524,7 +525,30 @@ export class TabEngine {
 
     chip.appendChild(cubeEl);
     chip.appendChild(labelEl);
-    chip.addEventListener('click', () => this.toggle(id));
+    const chipClose = this.document.createElement('span');
+    chipClose.className = 'tl-chip-close';
+    chipClose.textContent = '×';
+    chipClose.setAttribute('role', 'button');
+    chipClose.setAttribute('tabindex', '0');
+    chipClose.setAttribute('aria-label', `Close ${tabTitle}`);
+    chipClose.title = `Close ${tabTitle}`;
+    chip.appendChild(chipClose);
+    chipClose.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.deactivate(id);
+    });
+    chipClose.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        event.stopPropagation();
+        this.deactivate(id);
+      }
+    });
+    chip.addEventListener('click', (event) => {
+      if (event.target === chipClose) return;
+      this.toggle(id);
+    });
     record.chip = chip;
     this.dock.appendChild(chip);
 
