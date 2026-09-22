@@ -223,3 +223,12 @@ npm start
 ```
 
 The demo reports `postgres:false` and uses non-durable in-memory storage. The canonical browser remains the root Living Reality page.
+
+
+## Live launch layer
+
+This repository now includes an optional live API layer for public demos. It provides expiring account sessions, multiplayer rooms with presence/event streaming and optimistic shared-world state, read-only live observations from supported prediction-market providers (Kalshi, Polymarket, and Manifold), and account-scoped app-event export/deletion.
+
+Run locally with `npm run start:live`. The static GitHub Pages experience remains usable without the API. For a public deployment, put the API behind HTTPS, set an explicit `CORS_ORIGIN`, and use durable production storage/secrets rather than the default JSON-file store.
+
+Market data is observational only: no wagering, brokerage, wallet custody, signing, settlement, or real-money transfer is implemented.
