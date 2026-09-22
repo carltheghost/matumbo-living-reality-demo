@@ -3943,6 +3943,20 @@
           render('error', `Local 3-D surface unavailable · ${safePhase}`, `${diagnosis}${hint} The static local feature directory and its local route links remain available; it does not replace the 3-D surface. No wallet, provider, persistence, or external execution was attempted.`);
           return state;
         },
+        reportBackgroundFailure(error, phase = 'background promise') {
+          // A late network/provider rejection is not a renderer failure. The
+          // local 3-D world is already live, so keep the ready surface intact
+          // and leave the provider-specific console responsible for showing
+          // its own unavailable state.
+          if (!ready || failed) return state;
+          try {
+            console.warn('[runtime] background failure; keeping 3-D surface online:', {
+              phase,
+              error,
+            });
+          } catch {}
+          return state;
+        },
         getState() { return state; },
       };
 
@@ -3957,6 +3971,17 @@
           && (failedTarget.currentSrc || failedTarget.src || failedTarget.href);
         if ((error === null || error === undefined) && failedUrl) {
           error = { name: "", message: `resource failed to load: ${String(failedUrl).slice(0, 220)}` };
+        }
+        const errorMessage = clean(error?.message, '');
+        const backgroundNetworkFailure = ready && event?.type === 'unhandledrejection'
+          && (
+            error?.name === 'AbortError'
+            || /failed to fetch|networkerror|load failed|fetch failed|network request|timed out/i.test(errorMessage)
+          );
+        if (backgroundNetworkFailure) {
+          runtime.reportBackgroundFailure(error, 'background network promise');
+          event?.preventDefault?.();
+          return;
         }
         runtime.markFailed(error, event?.type === 'unhandledrejection' ? 'module promise' : 'uncaught runtime');
       };
