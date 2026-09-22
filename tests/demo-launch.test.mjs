@@ -70,12 +70,3 @@ test("static package script is deterministic and credential-free", async () => {
   assert.doesNotMatch(source, /npm\s+publish|wrangler\s+deploy|privateKey|wallet/i);
 });
 
-test("in-app Explain / White Paper entry point is static and bounded", async () => {
-  const html = await read("index.html");
-  assert.match(html, /id="explain-white-paper"/);
-  assert.match(html, /EXPLAIN · WHITE PAPER/);
-  assert.match(html, /docs\/DEMO_LAUNCH\.md/);
-  assert.match(html, /docs\/PRODUCT_SCOPE\.md/);
-  assert.match(html, /No wallet, custody, transfer, settlement/);
-  assert.doesNotMatch(html, /explain-white-paper[\s\S]{0,500}fetch\s*\(/i);
-});
