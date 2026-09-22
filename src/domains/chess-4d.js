@@ -220,7 +220,7 @@ export function legalMoves4D(state, from = null) {
 function formatMove(board,from,to){
   const p=board[from], a=coords(from), b=coords(to);
   const names={p:"",n:"N",b:"B",r:"R",q:"Q",k:"K"};
-  return \`\${names[p.type]}\${String.fromCharCode(97+a[0])}\${a[1]+1}:\${a[2]+1},\${a[3]+1} → \${String.fromCharCode(97+b[0])}\${b[1]+1}:\${b[2]+1}\`;
+  return `${names[p.type]}${String.fromCharCode(97+a[0])}${a[1]+1}:${a[2]+1},${a[3]+1} → ${String.fromCharCode(97+b[0])}${b[1]+1}:${b[2]+1}`;
 }
 
 export function applyDimensionalMove(state,from,to){
