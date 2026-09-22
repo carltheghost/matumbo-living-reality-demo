@@ -12,3 +12,17 @@ This folder is the canonical Living Reality source. Agent 01 / Control Tower own
 
 ## Current baseline
 The original app is a static Three.js 0.179.1 organ-and-semantic-object study served with `python -m http.server 8080`.
+
+
+## FINAL canonical landing contract — do not regress
+
+The clean root is **Reality Assembly / Living Reality** and stays that way.
+
+The accepted visual contract is:
+- Connected translucent feature cubes with clear breathing room; primary worlds use a wider ring and secondary worlds an even wider outer ring.
+- The central **Block World** cube is a real volumetric cube with six distinct local-style faces. Every face has a colored door, door frame, and attached mini-blocks; it must not collapse into a plain painted box.
+- Approaching the central cube preserves the existing local-cube opening/nested-block behavior.
+- **TUMBO-SIM TRANSFERS** is a standalone glass cube that continuously rotates by itself. It is not a floating satellite cluster.
+- The tentacle/Gateway cube, the old Block World landing, and any competing constellation/root are secondary routes only.
+
+Any future visual experiment must be additive or explicitly routed. It must not replace this clean root or undo these spacing/cube-detail contracts.
