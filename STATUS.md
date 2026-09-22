@@ -42,7 +42,7 @@ active in the demo.
 The demo includes:
 - Reality Lens Ω
 - Floating Person Studio Profile (no floor, hologram rings, glass lens interface)
-- Cinematic Avatar Chess Arena using your saved Person appearance
+- Dedicated standard Chess room using recognizable chess pieces
 - Luna Companion
 - Wardrobe Atelier
 - NFT Atelier

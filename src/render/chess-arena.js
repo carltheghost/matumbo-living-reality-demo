@@ -1,7 +1,7 @@
 /** Arena chess — the 3D board IS the play surface.
  *
  * A real chess game (chess.js rules via src/domains/chess-arena.js) played by
- * tapping the 3D avatar pieces and board squares directly (raycast picking).
+ * tapping standard chess pieces and board squares directly (raycast picking).
  * A local minimax AI (src/domains/chess-ai.js, no network) can take either
  * side; 2-player local is also available. The 2D button grid is gone — what
  * remains of 2D is a compact control chip (mode, AI difficulty, new game,
@@ -18,9 +18,7 @@ import * as THREE from 'three';
 import {createChessArenaState,applyChessArenaMove} from '../domains/chess-arena.js?v=20260918-avatar-chess';
 import {chooseAiMove,CHESS_AI_DIFFICULTIES,resolveAiDifficulty} from '../domains/chess-ai.js?v=20260918-avatar-chess';
 import {avatarIdlePose,avatarGlide,AVATAR_MOTION} from '../domains/avatar-motion.js?v=20260918-avatar-chess';
-import {AVATAR_FACE_STORAGE_KEY} from '../domains/avatar-style.js?v=20260918-avatar-chess';
-import {PERSON_STUDIO_STORAGE_KEY} from '../domains/person-studio.js';
-import {buildArenaHall,createPieceBuilders,readArenaAvatarAppearance,squarePosition,CHESS_ROLE_GLYPHS} from './chess-arena-pieces.js?v=20260918-avatar-chess';
+import {buildArenaHall,createPieceBuilders,squarePosition,CHESS_ROLE_GLYPHS} from './chess-arena-pieces.js?v=20260918-avatar-chess';
 import {isCompactViewport,resolvePixelRatioCap,shouldRunSecondaryLoop} from './render-perf.js';
 
 const pieceName={p:'Pawn',n:'Knight',b:'Bishop',r:'Rook',q:'Queen',k:'King'};
@@ -139,8 +137,7 @@ export function mountChessArena({documentRoot=document,host}){
   }
 
   // ---- three.js scene ----
-  let appearance=readArenaAvatarAppearance();
-  let builders=createPieceBuilders(THREE,appearance);
+  let builders=createPieceBuilders(THREE);
   // Mobile perf: compact viewports get no MSAA and a pixelRatio of 1, which
   // cuts the fill-rate/transparent-overdraw cost on phone GPUs. Desktop is
   // untouched (antialias on, cap 1.5).
@@ -161,8 +158,8 @@ export function mountChessArena({documentRoot=document,host}){
   const pointerNDC=new THREE.Vector2();
 
   function describeBadge(){
-    badge.textContent=appearance.approved&&appearance.displayName?`Avatar champions · ${appearance.displayName}`:'Avatar champions · default look';
-    badge.title=appearance.approved?'Pieces wear your approved Person Studio appearance.':'Approve a Person Studio profile and the pieces will wear your look.';
+    badge.textContent='Standard chess pieces';
+    badge.title='Classic king, queen, rook, bishop, knight, and pawn set.';
   }
 
   /** Dispose per-piece sprite resources and per-champion ring-material clones.
@@ -465,20 +462,8 @@ export function mountChessArena({documentRoot=document,host}){
     refreshStatus();
   });
 
-  function getSnapshot(){return {state,selected,appearance,mode,difficulty,resigned,aiThinking,sanLog:[...sanLog]};}
-  function refreshAppearance(){
-    const next=readArenaAvatarAppearance();
-    builders.dispose();builders=createPieceBuilders(THREE,next);appearance=next;
-    buildAllPieces();refreshStatus();
-    return getSnapshot();
-  }
+  function getSnapshot(){return {state,selected,mode,difficulty,resigned,aiThinking,sanLog:[...sanLog]};}
   const view=documentRoot.defaultView??null;
-  const onStorage=(event)=>{
-    if(!event||event.key===null||event.key===PERSON_STUDIO_STORAGE_KEY||event.key===AVATAR_FACE_STORAGE_KEY)refreshAppearance();
-  };
-  view?.addEventListener?.('storage',onStorage);
-  const onAvatarFaceChanged=()=>{refreshAppearance();};
-  documentRoot.addEventListener?.('person-studio:avatar-changed',onAvatarFaceChanged);
 
   // Orbit on drag, board tap on tap: a press that barely moves is a move.
   let yaw=0,pitch=-0.45,dist=13,drag=null,downInfo=null;
@@ -583,10 +568,8 @@ export function mountChessArena({documentRoot=document,host}){
       alive=false;
       stopMotionLoop();
       ro.disconnect();
-      view?.removeEventListener?.('storage',onStorage);
       view?.removeEventListener?.('visibilitychange',onMotionVisibilityChange);
       motionVisibilityObserver?.disconnect?.();motionVisibilityObserver=null;
-      documentRoot.removeEventListener?.('person-studio:avatar-changed',onAvatarFaceChanged);
       hall.dispose();
       for(const [,group] of meshes){pieces.remove(group);releasePiece(group);}
       meshes.clear();

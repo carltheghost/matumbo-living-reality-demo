@@ -79,48 +79,39 @@ test('avatar appearance tolerates corrupt or foreign profiles',()=>{
   assert.equal(readArenaAvatarAppearance({storage:{getItem:()=>{throw Error('denied');}}}).outfitColor,'#111620');
 });
 
-test('piece foundry builds every type for both sides as the same avatar likeness',()=>{
-  const foundry=createPieceBuilders(THREE,{skin:'#794b36',hair:'#171311',outfitColor:'#111620',outfitTrim:'#d9ae60'});
-  assert.equal(AVATAR_CHIBI_FALLBACK_URL,'assets/avatar/fluffy-body-template.webp');
+test('piece foundry builds standard chess pieces for every type and side',()=>{
+  const foundry=createPieceBuilders(THREE);
+  assert.equal(AVATAR_CHIBI_FALLBACK_URL,null);
+  const expectedWhite={p:'♙',n:'♘',b:'♗',r:'♖',q:'♕',k:'♔'};
+  const expectedBlack={p:'♟',n:'♞',b:'♝',r:'♜',q:'♛',k:'♚'};
   for(const type of CHESS_ARENA_PIECE_TYPES){
-    assert.ok(CHESS_ROLE_GLYPHS[type],'role badge glyph for every type');
-    assert.ok(CHESS_BUST_CROPS[type],'face-region crop for every type');
+    assert.equal(CHESS_ROLE_GLYPHS[type],expectedBlack[type]);
+    assert.deepEqual(CHESS_BUST_CROPS,{});
     for(const color of ['w','b']){
       const piece=foundry.buildPiece(type,color);
-      assert.ok(piece.isGroup);
-      assert.equal(piece.userData.avatarPiece,true);
+      assert.equal(piece.userData.standardChessPiece,true);
+      assert.equal(piece.userData.avatarPiece,false);
       assert.equal(piece.userData.pieceType,type);
       assert.equal(piece.userData.color,color);
-      const hologram=part(piece,'hologram');
-      assert.ok(hologram&&hologram.isSprite,'each piece billboards the avatar likeness');
-      assert.equal(hologram.userData.textureUrl,AVATAR_CHIBI_FALLBACK_URL);
-      assert.deepEqual(hologram.userData.bustCrop,{...CHESS_BUST_CROPS[type]});
-      // Square framing: the same face on every piece, never a distorted body.
-      assert.equal(hologram.scale.x,hologram.scale.y);
-      assert.equal(hologram.scale.y,CHESS_PIECE_HEIGHTS[type]);
-      const badge=part(piece,'role-badge');
-      assert.ok(badge&&badge.isSprite,'role badge billboards with the piece');
-      assert.equal(badge.userData.roleGlyph,CHESS_ROLE_GLYPHS[type]);
-      assert.equal(badge.userData.roleBadgeSide,color);
+      const glyph=part(piece,'chess-piece');
+      assert.ok(glyph&&glyph.isSprite,'each piece uses a standard chess glyph');
+      assert.equal(glyph.userData.chessGlyph,color==='w'?expectedWhite[type]:expectedBlack[type]);
+      assert.equal(glyph.userData.isStandardChessPiece,true);
       const ring=part(piece,'ring');
       assert.equal(ring.userData.ringRadius,CHESS_PIECE_RING_RADII[type]);
-      assert.equal(ring.material.emissive.getHex(),color==='w'?0xd77a1a:0x5b1ee0);
     }
   }
   foundry.dispose();
 });
 
-test('every piece wears the same face and the king stands tallest',()=>{
-  const foundry=createPieceBuilders(THREE,readArenaAvatarAppearance({storage:nullStorage()}));
-  const faces=new Set();
+test('standard piece identities are unique and king stands tallest',()=>{
+  const foundry=createPieceBuilders(THREE);
   const glyphs=new Set();
   for(const type of CHESS_ARENA_PIECE_TYPES){
-    faces.add(part(foundry.buildPiece(type,'w'),'hologram').userData.textureUrl);
-    glyphs.add(part(foundry.buildPiece(type,'w'),'role-badge').userData.roleGlyph);
+    glyphs.add(part(foundry.buildPiece(type,'w'),'chess-piece').userData.chessGlyph);
   }
-  assert.equal(faces.size,1,'one shared bust portrait for every piece');
-  assert.equal(glyphs.size,CHESS_ARENA_PIECE_TYPES.length,'role identity rides on the badge glyph');
-  const height=(type)=>part(foundry.buildPiece(type,'w'),'hologram').scale.y;
+  assert.equal(glyphs.size,CHESS_ARENA_PIECE_TYPES.length);
+  const height=(type)=>part(foundry.buildPiece(type,'w'),'chess-piece').scale.y;
   const radius=(type)=>part(foundry.buildPiece(type,'w'),'ring').userData.ringRadius;
   assert.ok(height('k')>height('q'));
   assert.ok(height('q')>height('r'));
@@ -130,13 +121,12 @@ test('every piece wears the same face and the king stands tallest',()=>{
   foundry.dispose();
 });
 
-test('piece foundry reuses shared ring geometry while sides keep their own glow',()=>{
-  const foundry=createPieceBuilders(THREE,readArenaAvatarAppearance({storage:nullStorage()}));
+test('piece foundry reuses shared ring geometry while sides keep their own material',()=>{
+  const foundry=createPieceBuilders(THREE);
   const first=foundry.buildPiece('p','w'),second=foundry.buildPiece('p','w'),foe=foundry.buildPiece('p','b');
   assert.equal(part(first,'ring').geometry,part(second,'ring').geometry);
-  assert.equal(part(first,'hologram').userData.textureUrl,part(second,'hologram').userData.textureUrl);
   assert.notEqual(part(first,'ring').material,part(foe,'ring').material);
-  assert.notEqual(part(first,'hologram').material,part(foe,'hologram').material);
+  assert.notEqual(part(first,'chess-piece').material,part(foe,'chess-piece').material);
   assert.throws(()=>foundry.buildPiece('x','w'),/Unknown chess piece type/);
   assert.throws(()=>foundry.buildPiece('p','g'),/Unknown chess side/);
   foundry.dispose();
@@ -159,4 +149,11 @@ test('arena hall stages a glowing cinematic board',()=>{
   hall.markers.hide();
   assert.equal(hall.markers.list.filter((marker)=>marker.visible).length,0);
   hall.dispose();
+});
+
+test('chess renderer is standard-piece-only and does not depend on avatar textures',()=>{
+  assert.equal(typeof CHESS_ROLE_GLYPHS_WHITE.k,'string');
+  assert.equal(typeof CHESS_ROLE_GLYPHS_BLACK.k,'string');
+  assert.equal(AVATAR_CHIBI_FALLBACK_URL,null);
+  assert.deepEqual(CHESS_BUST_CROPS,{});
 });

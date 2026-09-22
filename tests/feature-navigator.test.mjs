@@ -34,6 +34,7 @@ const expectedIds = [
   "sports-events",
   "multi-sport-events",
   "arena",
+  "chess",
   "academy",
   "projections",
 ];
@@ -93,6 +94,7 @@ test("navigator markup is explicit and remains local-only", async () => {
   assert.match(navigatorSource, /feature-route/);
   assert.match(navigatorSource, /reality-lens.*WORLD FIELD/s);
   assert.match(navigatorSource, /arena.*GAME LAB/s);
+  assert.match(navigatorSource, /chess.*STANDARD PIECES/s);
   assert.match(navigatorSource, /aria-hidden and inert/);
   assert.match(navigatorSource, /toggle\.focus/);
   assert.match(navigatorSource, /feature-future-action/);

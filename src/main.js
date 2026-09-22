@@ -172,6 +172,7 @@ let migrationSnapshot = null;
 let blockWorldSnapshot = null;
 let blockWorldRuntimeSync = null;
 let arenaGames = null;
+let chessConsole = null;
 let academyConsole = null;
 let contractsMarkets = null;
 let protocolEvidence = null;
@@ -2397,9 +2398,40 @@ arenaGames = createArenaGamesConsole({
   })),
 });
 window.__TUMBO_ARENA_GAMES__ = arenaGames;
-// A playable chess room is mounted inside the Arena console. Its 3D character
-// pieces and accessible board are two views of one chess.js-backed state.
-const chessArena = mountChessArena({documentRoot: document, host: document.getElementById('arena-games-console')});
+// Chess is deliberately its own first-class surface. It is not part of the
+// Share/Social surfaces and it is no longer nested inside ARENA / Game Lab.
+chessConsole = document.createElement('aside');
+chessConsole.id = 'chess-console';
+chessConsole.className = 'console chess-console';
+chessConsole.hidden = true;
+chessConsole.setAttribute('aria-hidden', 'true');
+chessConsole.setAttribute('aria-label', 'Chess');
+chessConsole.innerHTML = '<div class="chess-console-head"><div><span class="eyebrow">STANDARD CHESS</span><h2>Chess</h2><p>Classic pieces · local AI · two players</p></div><button type="button" class="console-close" aria-label="Close Chess">×</button></div>';
+const chessStyle = document.createElement('style');
+chessStyle.textContent = [
+  '#chess-console{position:fixed;right:18px;bottom:76px;z-index:9400;width:min(780px,calc(100vw - 28px));max-height:min(88vh,860px);overflow:auto;padding:14px;border:1px solid rgba(125,212,255,.24);border-radius:16px;background:linear-gradient(160deg,rgba(5,13,22,.97),rgba(8,7,18,.97));box-shadow:0 18px 60px rgba(0,0,0,.5);backdrop-filter:blur(16px);color:#eaf4ff}',
+  '#chess-console[hidden]{display:none}',
+  '#chess-console .chess-console-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px}',
+  '#chess-console .chess-console-head h2{margin:2px 0 0;font-size:18px}',
+  '#chess-console .chess-console-head p{margin:3px 0 0;color:#9fc3d2;font-size:11px}',
+  '#chess-console .chess-console-head .console-close{flex:none;min-width:40px;min-height:40px}',
+  '#chess-console .chess-arena-runtime{margin-top:0}',
+  '@media(max-width:700px){#chess-console{left:8px;right:8px;bottom:8px;width:auto;max-height:88vh;padding:8px;border-radius:13px}#chess-console .chess-console-head{margin-bottom:4px}#chess-console .chess-arena-stage{height:min(58vw,330px)}}',
+].join('');
+document.head.appendChild(chessStyle);
+document.body.appendChild(chessConsole);
+const chessCloseButton = chessConsole.querySelector('.console-close');
+const setChessConsoleOpen = (open, method = 'api') => {
+  const visible = Boolean(open);
+  chessConsole.hidden = !visible;
+  chessConsole.setAttribute('aria-hidden', String(!visible));
+  if (visible && method === 'open') chessCloseButton?.focus?.({preventScroll:true});
+};
+chessConsole.open = () => setChessConsoleOpen(true, 'open');
+chessConsole.close = () => setChessConsoleOpen(false);
+chessCloseButton?.addEventListener('click', () => chessConsole.close());
+// A playable chess room is mounted only in this dedicated surface.
+const chessArena = mountChessArena({documentRoot: document, host: chessConsole});
 window.__TUMBO_CHESS_ARENA__ = chessArena;
 academyConsole = createAcademyConsole({
   documentRoot: document,
@@ -6602,6 +6634,7 @@ featureNavigator = createFeatureNavigator({
     sportsEventsConsole?.close();
     multiSportEventsConsole?.close();
     assetMarketConsole?.close();
+    chessConsole?.close();
     if (feature.id !== 'academy') academyConsole?.close('feature-select');
     if (feature.id !== 'world-events' && feature.id !== 'gateway') worldEvidenceLayer && (worldEvidenceLayer.visible = false);
     if (feature.id !== 'sports-events') sportsEvidenceLayer && (sportsEvidenceLayer.visible = false);
@@ -6887,6 +6920,30 @@ featureNavigator = createFeatureNavigator({
       ledgerProofConsole?.close();
       sportsEventsConsole?.close();
       blockMigration?.open();
+    } else if (feature.id === 'chess') {
+      launchConsole?.close();
+      socialExplorer?.close();
+      roomSpaces?.close();
+      blockWorld?.close();
+      blockMigration?.close();
+      arenaGames?.close();
+      contractsMarkets?.close();
+      paycoreConsole?.close();
+      t402Console?.close();
+      neuralMeshConsole?.close();
+      pictureMatterConsole?.close();
+      nftAtelierConsole?.close();
+      museAgentConsole?.close();
+      contractAtelierConsole?.close();
+      lunaCompanionConsole?.close();
+      wardrobeAtelierConsole?.close();
+      whitePaperConsole?.close();
+      gestureLensConsole?.close();
+      ledgerProofConsole?.close();
+      sportsEventsConsole?.close();
+      multiSportEventsConsole?.close();
+      featureNavigator?.close();
+      chessConsole?.open('feature');
     } else if (feature.id === 'arena') {
       launchConsole?.close();
       socialExplorer?.close();
