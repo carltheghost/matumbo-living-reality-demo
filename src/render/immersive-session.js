@@ -1,15 +1,11 @@
 import { inspectXrSession, XR_OPTIONAL_FEATURES } from "./xr-capabilities.js";
+import { createXrSpatialUi } from "./xr-spatial-ui.js";
 
 /** A single renderer/scene and the existing domain actions across desktop, VR and AR. */
 export const IMMERSIVE_SESSION_SOURCE = "immersive-session";
 
 export const XR_SESSION_OPTIONS = Object.freeze({
-  optionalFeatures: Object.freeze([
-    "local-floor",
-    "bounded-floor",
-    "hand-tracking",
-    "dom-overlay",
-  ]),
+  optionalFeatures: Object.freeze([...XR_OPTIONAL_FEATURES]),
 });
 
 function safeText(value, fallback = "") {
@@ -17,11 +13,6 @@ function safeText(value, fallback = "") {
   return text || fallback;
 }
 
-/**
- * Create the one immersive-session controller for the canonical Three.js
- * renderer. VR and AR both reuse the same scene, camera, raycast targets and
- * selection authorities; no second world is constructed.
- */
 export function createImmersiveSession({
   THREE,
   renderer,
@@ -42,17 +33,25 @@ export function createImmersiveSession({
   let starting = false;
   let activeMode = null;
   let destroyed = false;
+  let sessionCapabilities = null;
+  let handFactory = null;
 
   const ray = new THREE.Raycaster();
   const rotation = new THREE.Matrix4();
   const controllerRigs = [];
+  const handRigs = [];
 
   const original = {
     background: scene.background,
-    clearAlpha: typeof renderer.getClearAlpha === "function" ? renderer.getClearAlpha() : 1,
+    clearAlpha:
+      typeof renderer.getClearAlpha === "function"
+        ? renderer.getClearAlpha()
+        : 1,
   };
 
   renderer.xr.enabled = true;
+
+  const spatialUi = createXrSpatialUi({ documentRoot });
 
   const toolbar = documentRoot?.createElement?.("div") ?? null;
   const status = documentRoot?.createElement?.("span") ?? null;
@@ -70,11 +69,23 @@ export function createImmersiveSession({
       simulation: true,
       externalNetwork: false,
       externalExecution: false,
-      handTracking: activeMode ? "requested-if-supported" : "not-requested",
+      handTracking: activeMode
+        ? sessionCapabilities?.handTracking === true
+          ? "granted"
+          : "requested-if-supported"
+        : "not-requested",
+      enabledFeatures: sessionCapabilities?.enabledFeatures ?? [],
+      environmentBlendMode: sessionCapabilities?.environmentBlendMode ?? null,
       detail: detail ?? null,
     });
+
     if (status) {
-      status.textContent = detail ?? (state.toUpperCase() + (activeMode ? " · " + (activeMode === "immersive-ar" ? "AR" : "VR") : ""));
+      status.textContent =
+        detail ??
+        (state.toUpperCase() +
+          (activeMode
+            ? " · " + (activeMode === "immersive-ar" ? "AR" : "VR")
+            : ""));
     }
     onStatus?.(snapshot);
     return snapshot;
@@ -95,6 +106,7 @@ export function createImmersiveSession({
     toolbar.id = "immersive-toolbar";
     toolbar.style.cssText =
       "position:fixed;right:12px;top:8px;z-index:110;display:flex;gap:6px;align-items:center;flex-wrap:wrap;max-width:calc(100vw - 24px);background:#091723;padding:6px;border:1px solid #4e788f;border-radius:8px;font:12px system-ui;color:#d9efff";
+
     const vr = makeButton("Enter VR", () => start("immersive-vr"));
     const ar = makeButton("Enter AR", () => start("immersive-ar"));
     const leave = makeButton("Exit XR", () => session?.end());
@@ -105,6 +117,7 @@ export function createImmersiveSession({
       status.textContent = "Same world · XR ready";
       toolbar.append(status);
     }
+
     documentRoot.body.append(toolbar);
     toolbar._xrButtons = { vr, ar, leave };
   }
@@ -147,6 +160,7 @@ export function createImmersiveSession({
       simulation: true,
       localOnly: true,
     });
+
     return hit.object;
   }
 
@@ -165,7 +179,7 @@ export function createImmersiveSession({
     line.scale.z = 25;
     controller.add(line);
     scene.add(controller);
-    controllerRigs.push(controller);
+    controllerRigs.push({ controller, geometry, material, line });
 
     const onSelectStart = () => selectFromController(controller);
     const onSelect = () => selectFromController(controller);
@@ -185,6 +199,44 @@ export function createImmersiveSession({
 
   wireController(0);
   wireController(1);
+
+  function updateHandTrackingFlags() {
+    const sources = Array.from(session?.inputSources ?? []);
+    const hasHand = sources.some((input) => Boolean(input?.hand));
+    controllerRigs.forEach(({ controller }) => {
+      controller.userData.handTracking = hasHand;
+    });
+    return hasHand;
+  }
+
+  async function ensureHandModels() {
+    if (!session || !renderer.xr?.getHand) return false;
+    try {
+      if (!handFactory) {
+        const module = await import(
+          "../../vendor/three-r179.1/examples/jsm/webxr/XRHandModelFactory.js"
+        );
+        handFactory = new module.XRHandModelFactory();
+      }
+
+      if (!handRigs.length) {
+        for (let index = 0; index < 2; index += 1) {
+          const hand = renderer.xr.getHand(index);
+          const model = handFactory.createHandModel(hand, "spheres");
+          hand.add(model);
+          scene.add(hand);
+          handRigs.push({ hand, model });
+        }
+      }
+
+      updateHandTrackingFlags();
+      return true;
+    } catch {
+      // XR hand models are optional presentation; input still works through
+      // the existing controller and session input-source events.
+      return false;
+    }
+  }
 
   async function supports(mode) {
     if (destroyed || !navigatorRoot?.xr?.requestSession) return false;
@@ -214,24 +266,37 @@ export function createImmersiveSession({
 
     const supported = await supports(mode);
     if (!supported) {
-      emitStatus("unsupported", (mode === "immersive-ar" ? "AR" : "VR") + " is not supported on this browser/device");
+      emitStatus(
+        "unsupported",
+        (mode === "immersive-ar" ? "AR" : "VR") +
+          " is not supported on this browser/device",
+      );
       return false;
     }
 
     starting = true;
     activeMode = mode;
     setButtonState(false);
-    emitStatus("starting", "Starting " + (mode === "immersive-ar" ? "AR" : "VR") + " session…");
+    spatialUi.mount();
+    spatialUi.show();
+    emitStatus(
+      "starting",
+      "Starting " + (mode === "immersive-ar" ? "AR" : "VR") + " session…",
+    );
 
     try {
       const requestOptions = {
         optionalFeatures: [...XR_SESSION_OPTIONS.optionalFeatures],
       };
+
       if (documentRoot?.body) {
         requestOptions.domOverlay = { root: documentRoot.body };
       }
 
-      const nextSession = await navigatorRoot.xr.requestSession(mode, requestOptions);
+      const nextSession = await navigatorRoot.xr.requestSession(
+        mode,
+        requestOptions,
+      );
       session = nextSession;
 
       if (mode === "immersive-ar") {
@@ -242,25 +307,29 @@ export function createImmersiveSession({
       setReferenceSpace();
       await renderer.xr.setSession(nextSession);
 
+      sessionCapabilities = inspectXrSession(
+        nextSession,
+        XR_SESSION_OPTIONS.optionalFeatures,
+      );
+
+      nextSession.addEventListener("inputsourceschange", updateHandTrackingFlags);
       nextSession.addEventListener("end", reset, { once: true });
 
-      controllerRigs.forEach((controller) => {
-        const hasHand = Array.from(nextSession.inputSources ?? []).some((input) => input?.hand);
-        controller.userData.handTracking = hasHand;
-      });
+      await ensureHandModels();
 
       starting = false;
       setButtonState(true);
       emitStatus(
         "active",
-        (mode === "immersive-ar" ? "AR" : "VR") + " · point + pinch / trigger to open cube",
+        (mode === "immersive-ar" ? "AR" : "VR") +
+          " · point + pinch / trigger · swipe tabs · AIR KB",
       );
       return true;
     } catch (error) {
       try {
         await session?.end?.();
       } catch {
-        // Keep the fallback path deterministic when XR rejects startup.
+        // Keep fallback deterministic when XR rejects startup.
       }
       reset();
       const name = safeText(error?.name, "unavailable");
@@ -270,11 +339,21 @@ export function createImmersiveSession({
   }
 
   function reset() {
+    if (session) {
+      try {
+        session.removeEventListener("inputsourceschange", updateHandTrackingFlags);
+      } catch {
+        // Ignore listener cleanup failures.
+      }
+    }
+
     session = null;
     activeMode = null;
     starting = false;
+    sessionCapabilities = null;
     scene.background = original.background;
     renderer.setClearAlpha(original.clearAlpha);
+    spatialUi.hide();
     setButtonState(false);
     emitStatus("desktop", "Desktop · same world retained");
   }
@@ -287,7 +366,14 @@ export function createImmersiveSession({
       mode: activeMode,
       webxr: Boolean(navigatorRoot?.xr?.requestSession),
       controllerCount: controllerRigs.length,
+      handModelCount: handRigs.length,
       requestedFeatures: [...XR_SESSION_OPTIONS.optionalFeatures],
+      sessionCapabilities,
+      environmentBlendMode: sessionCapabilities?.environmentBlendMode ?? null,
+      enabledFeatures: sessionCapabilities?.enabledFeatures ?? [],
+      handTracking: sessionCapabilities?.handTracking ?? false,
+      domOverlay: sessionCapabilities?.domOverlay ?? null,
+      spatialUi: spatialUi.getSnapshot(),
       simulation: true,
       localOnly: true,
       externalNetwork: false,
@@ -306,7 +392,14 @@ export function createImmersiveSession({
     }
 
     reset();
-    controllerRigs.splice(0).forEach((controller) => controller._maTumboCleanup?.());
+    controllerRigs.splice(0).forEach(({ controller }) => controller._maTumboCleanup?.());
+
+    handRigs.splice(0).forEach(({ hand, model }) => {
+      hand.remove?.(model);
+      hand.parent?.remove(hand);
+    });
+
+    spatialUi.destroy();
     toolbar?.remove?.();
   }
 
