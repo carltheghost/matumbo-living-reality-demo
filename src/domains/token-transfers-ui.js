@@ -21,10 +21,11 @@ import {
   FLUFF_PER_TUMBO_SIM,
 } from "./token-transfers.js";
 
-export const TOKEN_TRANSFER_UI_VERSION = "20260922-token-transfers-cube2";
+export const TOKEN_TRANSFER_UI_VERSION = "20260922-token-transfers-cube3";
 export const TOKEN_TRANSFER_UI_SOURCE = "tumbo-token-transfer-console";
 
 const CHIP_STORAGE_KEY = "tumbo:token-transfer-chip-pos";
+const PANEL_STORAGE_KEY = "tumbo:token-transfer-panel-pos";
 const DEMO_USER = "u:you";
 const TRANSFER_CUBE_TINT = glassTintFor("#2fd4c8", 0.32);
 
@@ -41,8 +42,8 @@ const CSS = `
 #token-transfer-console{position:fixed;z-index:45;right:20px;bottom:86px;width:min(440px,calc(100vw - 40px));max-height:min(660px,calc(100vh - 110px));display:flex;flex-direction:column;border:1px solid rgba(129,232,255,.26);border-radius:18px;background:linear-gradient(165deg,rgba(4,17,25,.96),rgba(3,7,12,.94));box-shadow:0 24px 70px rgba(0,0,0,.55),inset 0 0 36px rgba(56,203,235,.05);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);overflow:hidden}
 #token-transfer-console[hidden]{display:none}
 #token-transfer-console.tt-expanded{width:min(620px,calc(100vw - 40px));max-height:calc(100vh - 60px);top:30px;bottom:auto}
-.tt-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:13px 14px 10px;border-bottom:1px solid rgba(129,232,255,.14)}
-.tt-eyebrow{display:block;color:#70cce0;font-size:8px;letter-spacing:.2em;text-transform:uppercase}
+.tt-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;cursor:grab;padding:13px 14px 10px;border-bottom:1px solid rgba(129,232,255,.14)}
+.tt-head:active{cursor:grabbing}.tt-eyebrow{display:block;color:#70cce0;font-size:8px;letter-spacing:.2em;text-transform:uppercase}
 .tt-head h2{margin:4px 0 3px;color:#e0fbff;font-size:18px;letter-spacing:.01em}
 .tt-head p{margin:0;color:#8baab5;font-size:10px;line-height:1.4}
 .tt-head-actions{display:flex;gap:6px;flex:0 0 auto}
@@ -111,6 +112,23 @@ function readStoredPos(storage) {
 function writeStoredPos(storage, pos) {
   try {
     if (storage && typeof storage.setItem === "function") storage.setItem(CHIP_STORAGE_KEY, JSON.stringify(pos));
+  } catch (_) {}
+}
+
+function readStoredPanelPos(storage) {
+  try {
+    if (!storage || typeof storage.getItem !== "function") return null;
+    const raw = storage.getItem(PANEL_STORAGE_KEY);
+    if (!raw) return null;
+    const pos = JSON.parse(raw);
+    if (pos && Number.isFinite(pos.left) && Number.isFinite(pos.top)) return pos;
+  } catch (_) {}
+  return null;
+}
+
+function writeStoredPanelPos(storage, pos) {
+  try {
+    if (storage && typeof storage.setItem === "function") storage.setItem(PANEL_STORAGE_KEY, JSON.stringify(pos));
   } catch (_) {}
 }
 
@@ -346,6 +364,53 @@ function wireChipInteractions(ctx) {
   function togglePanel() {
     if (ctx.panel.hidden) openPanel(ctx);
     else closePanel(ctx);
+  }
+  const storedPanelPos = readStoredPanelPos(ctx.storage);
+  if (storedPanelPos) {
+    ctx.panel.style.left = storedPanelPos.left + "px";
+    ctx.panel.style.top = storedPanelPos.top + "px";
+    ctx.panel.style.right = "auto";
+    ctx.panel.style.bottom = "auto";
+  }
+  let panelDragState = null;
+  const clampPanel = (left, top) => {
+    const rect = ctx.panel.getBoundingClientRect();
+    const width = rect.width || 420, height = rect.height || 500;
+    const vw = Math.max(320, window.innerWidth || 0), vh = Math.max(320, window.innerHeight || 0), margin = 18;
+    return { left: Math.max(margin - width + 44, Math.min(vw - margin - 44, left)), top: Math.max(margin, Math.min(vh - margin - 44, top)) };
+  };
+  ctx.byId("tt-transfer-drag-handle");
+  const panelHead = ctx.panel.querySelector?.(".tt-head");
+  if (panelHead) {
+    panelHead.addEventListener("pointerdown", function (event) {
+      try {
+        if (event.button !== 0 || event.target?.closest?.("button, a, input, select, textarea")) return;
+        const rect = ctx.panel.getBoundingClientRect();
+        panelDragState = { pointerId:event.pointerId, startX:event.clientX, startY:event.clientY, origLeft:rect.left, origTop:rect.top, moved:false };
+        panelHead.setPointerCapture?.(event.pointerId);
+      } catch (_) { panelDragState = null; }
+    });
+    panelHead.addEventListener("pointermove", function (event) {
+      try {
+        if (!panelDragState || event.pointerId !== panelDragState.pointerId) return;
+        const dx=event.clientX-panelDragState.startX, dy=event.clientY-panelDragState.startY;
+        if (!panelDragState.moved && Math.hypot(dx,dy)<5) return;
+        panelDragState.moved=true;
+        const next=clampPanel(panelDragState.origLeft+dx,panelDragState.origTop+dy);
+        ctx.panel.style.left=next.left+"px"; ctx.panel.style.top=next.top+"px"; ctx.panel.style.right="auto"; ctx.panel.style.bottom="auto";
+        event.preventDefault();
+      } catch (_) {}
+    });
+    const endPanelDrag=function(event){
+      try {
+        if(!panelDragState || (event && event.pointerId!==panelDragState.pointerId)) return;
+        const wasDrag=panelDragState.moved; panelDragState=null;
+        panelHead.releasePointerCapture?.(event.pointerId);
+        if(wasDrag){ const rect=ctx.panel.getBoundingClientRect(); writeStoredPanelPos(ctx.storage,{left:Math.round(rect.left),top:Math.round(rect.top)}); }
+      } catch (_) { panelDragState=null; }
+    };
+    panelHead.addEventListener("pointerup", endPanelDrag);
+    panelHead.addEventListener("pointercancel", endPanelDrag);
   }
   chip.addEventListener("pointerdown", function (event) {
     try {
