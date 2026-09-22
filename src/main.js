@@ -14,7 +14,7 @@ import { mountTokenTicker } from './render/token-ticker.js?v=20260920-ticker1';
 // red-banner the boot. Mounts automatically once the lane lands a consistent graph.
 import('./domains/token-vault-ui.js').catch(() => {});
 // Token transfers console — side-effect import; mounts the transfers glass-cube chip.
-import './domains/token-transfers-ui.js?v=20260922-token-transfers-cube2';
+import './domains/token-transfers-ui.js?v=20260922-token-transfers-cube3';
 import { initMobilePanelManager } from './render/mobile-panel-manager.js';
 import { installMobileFreezeGuard } from './render/mobile-freeze-guard.js?v=20260922-mfg1';
 import { mountPhotoMascot } from './render/photo-mascot-mount.js';
