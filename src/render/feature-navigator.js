@@ -251,7 +251,7 @@ export const FEATURE_DEFINITIONS = Object.freeze([
     label: "Chess",
     kicker: "standard chess",
     focusOrganId: "arena",
-    sources: ["chess-arena"],
+    sources: [],
     description: "Open the dedicated chess room with standard recognizable chess pieces, legal move validation, local AI, and a two-player mode.",
     boundary: "Chess is a local browser game. No wager, wallet, token, network multiplayer, or external authority is attached.",
   }),
