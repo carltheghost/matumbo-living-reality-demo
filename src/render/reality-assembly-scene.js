@@ -100,7 +100,8 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[]}){
   const wbCore=box([30,16,30],[0,2,0],wbGlass,worldBlock);wbCore.name='world-block/core';
   const wbEdgeGeo=new THREE.EdgesGeometry(new THREE.BoxGeometry(30,16,30));geometry.add(wbEdgeGeo);
   worldBlock.add(new THREE.LineSegments(wbEdgeGeo,wbEdgeMat));
-  const wbHalo=new THREE.Mesh(new THREE.TorusGeometry(17.2,.035,8,64),haloMaterialFor(new THREE.Color('#58d9ff')));
+  const wbHaloGeometry=new THREE.TorusGeometry(17.2,.035,8,64);geometry.add(wbHaloGeometry);
+  const wbHalo=new THREE.Mesh(wbHaloGeometry,haloMaterialFor(new THREE.Color('#58d9ff')));
   wbHalo.name='world-block/outer-halo'; wbHalo.rotation.x=Math.PI/2; wbHalo.renderOrder=-1; worldBlock.add(wbHalo);
   const wbRand=traitRandom(hashString('matumbo:world-block'));
   const wbCellMat=makeMaterial('#2a6d96',{transparent:true,opacity:0,depthWrite:false,roughness:.2,fog:false});
@@ -328,7 +329,7 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[]}){
     for(const wbCell of wbCells)wbCell.visible=lodBlend<=.5;
     wbGlass.emissiveIntensity=.22+.14*Math.sin(time*.8);
     if(wbHalo){wbHalo.rotation.z=reducedMotion?0:time*.075;wbHalo.scale.setScalar(1+.018*Math.sin(time*.65));}
-    wbFaceSystems.forEach(({face,panelMaterial,glowMaterial,frameMaterial,phase})=>{
+    wbFaceSystems.forEach(({face,panelMaterial,glowMaterial,frameMaterial,phase,axis,sign,miniActors,faceActors})=>{
       const pulse=.82+.18*Math.sin(time*.72+phase);
       panelMaterial.opacity=lodBlend*.72;
       glowMaterial.opacity=lodBlend*.32*pulse;
