@@ -300,13 +300,15 @@ function resize(){
 addEventListener('resize',()=>{if(started)resize()});
 
 function projectLabel(id){
-  const mesh=nodeMeshes.get(id);if(!mesh)return;
-  const p=mesh.position.clone().project(camera);
+  const group=realityGroups.get(id);if(!group)return;
+  const worldPosition=new THREE.Vector3();
+  group.getWorldPosition(worldPosition);
+  const p=worldPosition.project(camera);
   const rect=root.querySelector('.r25-stage').getBoundingClientRect();
   const x=(p.x*.5+.5)*rect.width;
   const y=(-p.y*.5+.5)*rect.height;
-  const label=labels.querySelector(`[data-label="${id}"]`);
-  if(label){label.style.left=`${x}px`;label.style.top=`${y}px`;label.style.opacity=p.z<1?'1':'0';}
+  const label=labels.querySelector(\`[data-label="\${id}"]\`);
+  if(label){label.style.left=\`\${x}px\`;label.style.top=\`\${y}px\`;label.style.opacity=p.z<1?'1':'0';}
 }
 function ensureLabels(){
   if(labels.childElementCount)return;
