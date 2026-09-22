@@ -1,4 +1,4 @@
-import * as THREE from 'three?v=20260922-cache2';
+import * as THREE from 'three';
 import {mountCityJourney,resolveCityRoute} from './render/city-journey.js?v=20260922-cache2';
 // Reject mixed/unknown City URLs before legacy route bootstrap can act on them.
 if(resolveCityRoute(location.search).status==='rejected'){
@@ -20,12 +20,12 @@ import { installMobileFreezeGuard } from './render/mobile-freeze-guard.js?v=2026
 import { mountPhotoMascot } from './render/photo-mascot-mount.js?v=20260922-cache2';
 import { createPersonStudio } from './render/person-studio.js?v=20260918-avatar-chess';
 import { createRealityAssembly, CLEAN_LANDING_CAMERA } from './render/reality-assembly.js?v=20260922-fogfix1';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js?v=20260922-cache2';
-import { TransformControls } from 'three/addons/controls/TransformControls.js?v=20260922-cache2';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { MANIPULATE_MODES } from './render/manipulate-controls.js?v=20260922-cache2';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js?v=20260922-cache2';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js?v=20260922-cache2';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js?v=20260922-cache2';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { createLivingRealityProjection } from './core/demo-projection.js?v=20260918-muse2';
 import { resolveDefaultFeature } from './core/default-landing.js?v=20260922-cache2';
 import { createDeviceProjection, readBrowserProjectionPreferences } from './projections/device-projection.js?v=20260922-cache2';
