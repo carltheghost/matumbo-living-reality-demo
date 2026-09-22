@@ -160,7 +160,7 @@ export function adaptFeatureContent(featureId,domains={}){
       // open the full feature so the provider can be refreshed there.
       case 'world-events':return navigateCubes('world-events',4,'Signal','blue','Provider observations load in the full feature — double-click to open it and refresh.');
       case 'multi-sport-events':return navigateCubes('multi-sport-events',4,'Event','green','Provider records load in the full feature — double-click to open it and refresh.');
-      case 'asset-market':return navigateCubes('asset-market',4,'Asset','gold','Market records load in the full feature — double-click to open it and refresh.');
+      case 'asset-market':return navigateCubes('asset-market',4,'Asset','gold','44 live spot assets load in the exchange board — double-click to open and refresh.');
       default:return navigateCubes(featureId||'feature',3,'World','blue');
     }
   }catch{

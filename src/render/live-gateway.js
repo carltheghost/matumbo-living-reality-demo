@@ -16,7 +16,7 @@ export const LIVE_GATEWAY_PUBLIC_AUTO_REFRESH_INTERVAL_MS = 30 * 1000;
 export const LIVE_GATEWAY_PUBLIC_SURFACES = Object.freeze([
   Object.freeze({ id: "world-events", label: "World Pulse", description: "public world-event observations", refreshLabel: "Refresh World Pulse" }),
   Object.freeze({ id: "sports-events", label: "Tennis Evidence", description: "public ATP / WTA scoreboard observations", refreshLabel: "Refresh Tennis" }),
-  Object.freeze({ id: "asset-market", label: "Asset Market Evidence", description: "public market observations", refreshLabel: "Refresh Asset Market" }),
+  Object.freeze({ id: "asset-market", label: "Live Exchange Board", description: "44-asset multi-venue spot observations", refreshLabel: "Refresh Exchange Board" }),
   Object.freeze({ id: "protocol-evidence", label: "Protocol TVL Evidence", description: "public DeFiLlama protocol TVL observations", refreshLabel: "Refresh Protocol TVL" }),
   Object.freeze({ id: "multi-sport-events", label: "Multi-Sport Scoreboards", description: "public soccer / NBA / NFL scoreboard observations", refreshLabel: "Refresh Multi-Sport Scoreboards" }),
   Object.freeze({ id: "social-pulse", label: "Social Pulse", description: "public Bluesky author-feed observations", refreshLabel: "Refresh Social Pulse" }),

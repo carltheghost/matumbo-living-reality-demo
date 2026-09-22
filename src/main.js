@@ -122,8 +122,8 @@ import { createUnavailableSportsEvents, fetchSportsEventDetail, fetchSportsEvent
 import { MULTI_SPORT_EVENTS_CONSOLE_SOURCE, createMultiSportEventsConsole } from './render/multi-sport-events.js?v=20260828-multisport162';
 import { createUnavailableMultiSportEvents, fetchMultiSportEventDetail, fetchMultiSportEvents } from './domains/multi-sport-events.js?v=20260828-multisport162';
 import { DEVICE_PROJECTION_CONSOLE_SOURCE, createDeviceProjectionConsole } from './render/device-projection.js?v=20260827-device1';
-import { ASSET_MARKET_CONSOLE_SOURCE, createAssetMarketConsole } from './render/asset-market.js?v=20260828-asset-market1';
-import { createUnavailableAssetMarketEvidence, fetchAssetMarketEvidence } from './domains/asset-market.js?v=20260828-asset-market1';
+import { EXCHANGE_BOARD_CONSOLE_SOURCE, createExchangeBoardConsole } from './render/exchange-board.js?v=20260921-live44';
+import { createUnavailableExchangeBoard, fetchExchangeBoard } from './domains/exchange-pricing.js?v=20260921-live44';
 import { POPULATION_CONTEXT_SOURCE, createUnavailablePopulationContext, fetchPopulationContext } from './domains/population-context.js?v=20260828-population-context1';
 import { WEB_AI_CONSOLE_SOURCE, createWebAiConsole } from './render/web-ai.js';
 
@@ -5674,64 +5674,65 @@ multiSportEventsConsole = createMultiSportEventsConsole({
 });
 window.__TUMBO_MULTI_SPORT_EVENTS__ = multiSportEventsConsole;
 document.getElementById('multi-sport-events-open')?.addEventListener('click', () => openMultiSportEvents('launch-kit-multi-sport'));
-assetMarketConsole = createAssetMarketConsole({
+assetMarketConsole = createExchangeBoardConsole({
   documentRoot: document,
-  data: createUnavailableAssetMarketEvidence({
-    reason: 'Refresh public market sources to request real peer rows; no local fallback data is used.',
-  }),
+  data: createUnavailableExchangeBoard('No live exchange refresh has completed in this page session.'),
   onRefresh: async ({ assetIds }) => {
-    const result = await fetchAssetMarketEvidence({ assetIds });
-    liveGatewayConsole?.syncPublicSourceStatus?.('asset-market', result, { method: 'asset-market-refresh' });
+    const result = await fetchExchangeBoard({ assetIds });
+    liveGatewayConsole?.syncPublicSourceStatus?.('asset-market', result, { method: 'live-exchange-board-refresh' });
     return result;
   },
   onSelect: (snapshot) => {
     const organ = resolveOrganById('market');
-    if (organ) focusOrgan(organ, `asset-market-select:${snapshot.recordId}`);
-    projectionBridge.emitIntent('projection.select-asset-market-evidence', snapshot.recordId ?? ASSET_MARKET_CONSOLE_SOURCE, Object.freeze({
+    if (organ) focusOrgan(organ, `exchange-board-select:${snapshot.recordId}`);
+    projectionBridge.emitIntent('projection.select-exchange-board-asset', snapshot.recordId ?? EXCHANGE_BOARD_CONSOLE_SOURCE, Object.freeze({
       assetId: snapshot.record?.assetId ?? null,
       symbol: snapshot.record?.symbol ?? null,
-      sourceUrl: snapshot.record?.sourceUrl ?? null,
-      dataCompletenessGrade: snapshot.record?.dataCompletenessGrade ?? null,
-      liveFetch: snapshot.summary?.liveFetch === true,
+      referencePriceUsd: snapshot.record?.referencePriceUsd ?? null,
+      bidUsd: snapshot.record?.bidUsd ?? null,
+      askUsd: snapshot.record?.askUsd ?? null,
+      sourceCount: snapshot.record?.sourceCount ?? 0,
+      acceptedObservationCount: snapshot.record?.acceptedObservations?.length ?? 0,
+      rejectedObservationCount: snapshot.record?.rejectedObservations?.length ?? 0,
+      liveFetch: snapshot.summary?.status === 'ready',
       simulation: true,
       localOnly: true,
       externalNetwork: false,
       executable: false,
-      trading: false,
-      custody: false,
-      settlement: false,
+      predictionContracts: false,
     }));
   },
-  onReplay: (snapshot) => projectionBridge.emitIntent('projection.replay-asset-market-evidence', ASSET_MARKET_CONSOLE_SOURCE, Object.freeze({
+  onReplay: (snapshot) => projectionBridge.emitIntent('projection.replay-exchange-board', EXCHANGE_BOARD_CONSOLE_SOURCE, Object.freeze({
     action: snapshot.action,
     recordId: snapshot.recordId,
-    recordCount: snapshot.recordCount,
     method: snapshot.method,
     simulation: true,
     deterministic: true,
     localOnly: true,
     externalNetwork: false,
     executable: false,
-    trading: false,
-    custody: false,
-    settlement: false,
+    predictionContracts: false,
   })),
-  onReset: (snapshot) => projectionBridge.emitIntent('projection.reset-asset-market-evidence', ASSET_MARKET_CONSOLE_SOURCE, Object.freeze({
+  onReset: (snapshot) => projectionBridge.emitIntent('projection.reset-exchange-board', EXCHANGE_BOARD_CONSOLE_SOURCE, Object.freeze({
     action: snapshot.action,
     recordId: snapshot.recordId,
     method: snapshot.method,
     simulation: true,
-    deterministic: true,
     localOnly: true,
     externalNetwork: false,
     executable: false,
-    trading: false,
-    custody: false,
-    settlement: false,
+    predictionContracts: false,
   })),
 });
 window.__TUMBO_ASSET_MARKET__ = assetMarketConsole;
 document.getElementById('asset-market-open')?.addEventListener('click', () => openAssetMarket('launch-kit-asset-market'));
+const LIVE_EXCHANGE_REFRESH_MS = 15000;
+const liveExchangeRefreshTimer = window.setInterval(() => {
+  if (assetMarketConsole?.getSnapshot?.().opened === true && !assetMarketConsole?.getSnapshot?.().loading) {
+    void assetMarketConsole.refresh('live-interval');
+  }
+}, LIVE_EXCHANGE_REFRESH_MS);
+window.addEventListener('pagehide', () => window.clearInterval(liveExchangeRefreshTimer), { once: true });
 if (new URLSearchParams(globalThis.location?.search ?? '').get('panel') === 'launch-kit') {
   // `panel=launch-kit` is a shareable inspection link for the complete local
   // handoff.  It intentionally omits a feature query so Mission Control does
