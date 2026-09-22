@@ -142,14 +142,52 @@ const nucleus=new THREE.Mesh(
 layer.add(nucleus);
 
 const nodeMeshes=new Map();
+const realityDirections=new Map();
+const baseAxis=new THREE.Vector3(0,0,1);
+
 for(const reality of field.realties.values()){
-  const mesh=new THREE.Mesh(
-    new THREE.SphereGeometry(.22,20,20),
-    new THREE.MeshStandardMaterial({color:reality.address.vector.filter(Boolean).length===1?0x4ca8ff:0x9b7cff,emissive:0x183452,emissiveIntensity:.7,metalness:.25,roughness:.3})
-  );
+  const raw=new THREE.Vector3(...reality.address.vector).normalize();
+  realityDirections.set(reality.id,raw);
+
+  // Every reality is a real cube, and every cube faces its own vector.
+  // Local +Z is treated as the "front" of the reality cube.
+  // Cardinals point along their axis; edge/diagonal realities point between
+  // the corresponding axes, giving the full 18-direction radial structure.
+  const material=new THREE.MeshPhysicalMaterial({
+    color:reality.address.vector.filter(Boolean).length===1?0x4ca8ff:0x9b7cff,
+    emissive:0x183452,
+    emissiveIntensity:.75,
+    metalness:.18,
+    roughness:.24,
+    transmission:.18,
+    transparent:true,
+    opacity:.88
+  });
+  const mesh=new THREE.Mesh(new THREE.BoxGeometry(.62,.62,.62),material);
   mesh.position.copy(positions.get(reality.id));
+
+  const orientation=new THREE.Quaternion().setFromUnitVectors(baseAxis,raw);
+  const roll=(Number(reality.id.slice(1))%6)*0.12;
+  const rollQuat=new THREE.Quaternion().setFromAxisAngle(raw,roll);
+  mesh.quaternion.copy(orientation).premultiply(rollQuat);
+
   mesh.userData.realityId=reality.id;
-  layer.add(mesh);nodeMeshes.set(reality.id,mesh);
+  mesh.userData.direction=[...reality.address.vector];
+  mesh.userData.directionLabel=reality.address.label;
+  layer.add(mesh);
+  nodeMeshes.set(reality.id,mesh);
+
+  // A thin directional stem makes the facing direction unmistakable.
+  const stemGeo=new THREE.BufferGeometry().setFromPoints([
+    mesh.position.clone().add(raw.clone().multiplyScalar(.36)),
+    mesh.position.clone().add(raw.clone().multiplyScalar(.92))
+  ]);
+  const stem=new THREE.Line(
+    stemGeo,
+    new THREE.LineBasicMaterial({color:0xbfeaff,transparent:true,opacity:.34})
+  );
+  stem.userData.realityId=reality.id;
+  layer.add(stem);
 }
 const nucleusLines=new THREE.Group();layer.add(nucleusLines);
 for(const reality of field.realties.values()){
