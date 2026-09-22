@@ -26,3 +26,8 @@ The accepted visual contract is:
 - The tentacle/Gateway cube, the old Block World landing, and any competing constellation/root are secondary routes only.
 
 Any future visual experiment must be additive or explicitly routed. It must not replace this clean root or undo these spacing/cube-detail contracts.
+
+
+## FINAL overlay / minimized-tab contract
+
+The TabEngine's desktop dock is a **right-side glass rail**, never a left rail. Minimized tabs use the same small translucent glass language as **TUMBO-SIM TRANSFERS**: dark blue-black gradient, cyan edge, rounded cube-like icon tile, compact label, blur, and glow. Materialized TabEngine panels open immediately to the left of that rail. Do not move the tab dock or tab layer behind the left-side Mission Control / control panel.
