@@ -24,8 +24,24 @@ function marketRow(id, values = {}) {
   const labels = {
     bitcoin: ["Bitcoin", "btc"],
     ethereum: ["Ethereum", "eth"],
-    "official-trump": ["Official Trump", "trump"],
-    "melania-meme": ["Melania Meme", "melania"],
+    tether: ["Tether", "usdt"],
+    binancecoin: ["BNB", "bnb"],
+    ripple: ["XRP", "xrp"],
+    "usd-coin": ["USD Coin", "usdc"],
+    solana: ["Solana", "sol"],
+    tron: ["TRON", "trx"],
+    zcash: ["Zcash", "zec"],
+    "figure-heloc": ["Figure Heloc", "figr_heloc"],
+    hyperliquid: ["Hyperliquid", "hype"],
+    dogecoin: ["Dogecoin", "doge"],
+    monero: ["Monero", "xmr"],
+    rain: ["Rain", "rain"],
+    "whitebit-token": ["WhiteBIT Coin", "wbt"],
+    usds: ["USDS", "usds"],
+    chainlink: ["Chainlink", "link"],
+    cardano: ["Cardano", "ada"],
+    "leo-token": ["LEO Token", "leo"],
+    stellar: ["Stellar", "xlm"],
   };
   const [name, symbol] = labels[id];
   return {
