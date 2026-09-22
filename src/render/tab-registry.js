@@ -26,7 +26,7 @@
  * dock" and can never red-banner the boot.
  */
 
-import { TabEngine } from './tab-engine.js';
+import { TabEngine } from './tab-engine.js?v=20260922-rotating-cubes2';
 import { initTabAR } from './tab-ar-tabs.js';
 
 const NARROW_QUERY = '(max-width:700px)';
