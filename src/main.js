@@ -8862,7 +8862,21 @@ if (cleanRealityLanding) {
 } else if(featureNavigator.getSnapshot().activeId==='reality-lens') {
   realityAssembly.open();
 }
-renderer.setAnimationLoop(animate); /* TUMBO-SIM token gamification (Infinite Burrow, Part 7): self-contained glass cube + console, mounted lazily so a mount failure can never break the world bootstrap. */ import('./render/token-gamification.js?v=20260920-gam1').then(({ mountTokenGamification }) => { try { window.__TUMBO_TOKEN_GAMIFICATION__ = mountTokenGamification({ three: THREE, scene, world, camera, renderer, controls, documentRoot: document }); } catch (error) { console.warn('[token-gamification] mount failed:', error); } }).catch((error) => { console.warn('[token-gamification] load failed:', error); });
+renderer.setAnimationLoop(animate);
+// Final presentation latch: optional/async mounts must not be able to steal the
+// clean root landing after the Reality Assembly has been opened. The assembly
+// is opened once the render loop exists, then checked on the next frame and
+// shortly after boot. Explicit feature/panel/hash routes are never touched.
+if (cleanRealityLanding) {
+  realityAssembly.open();
+  requestAnimationFrame(() => {
+    if (cleanRealityLanding && !realityAssembly.active) realityAssembly.open();
+  });
+  setTimeout(() => {
+    if (cleanRealityLanding && !realityAssembly.active) realityAssembly.open();
+  }, 250);
+}
+/* TUMBO-SIM token gamification (Infinite Burrow, Part 7): self-contained glass cube + console, mounted lazily so a mount failure can never break the world bootstrap. */ import('./render/token-gamification.js?v=20260920-gam1').then(({ mountTokenGamification }) => { try { window.__TUMBO_TOKEN_GAMIFICATION__ = mountTokenGamification({ three: THREE, scene, world, camera, renderer, controls, documentRoot: document }); } catch (error) { console.warn('[token-gamification] mount failed:', error); } }).catch((error) => { console.warn('[token-gamification] load failed:', error); });
 // URL-derived City navigation reuses the existing feature owner and avoids provider refresh.
 const mobilePanelManager = initMobilePanelManager({ documentRoot: document, windowRoot: window });
 window.__TUMBO_MOBILE_PANEL_MANAGER__ = mobilePanelManager;
