@@ -33,3 +33,15 @@ test('TUMBO-SIM transfer chip is one continuously rotating cube', async () => {
   assert.doesNotMatch(source, /const satA = makeGlassCube/);
   assert.doesNotMatch(source, /makeConnectionLines\(THREE/);
 });
+
+
+test('desktop tabs stay on the right and use the TUMBO-SIM minimized glass language', async () => {
+  const source = await readFile(new URL('../src/render/tab-engine.js', import.meta.url), 'utf8');
+  assert.match(source, /\.tl-dock--desktop\s*\{[\s\S]*?right:\s*12px;/);
+  assert.doesNotMatch(source, /\.tl-dock--desktop\s*\{[\s\S]*?left:\s*12px;/);
+  assert.match(source, /\.tl-layer--desktop\s*\{[\s\S]*?right:\s*154px;/);
+  assert.doesNotMatch(source, /\.tl-layer--desktop\s*\{[\s\S]*?left:\s*92px;/);
+  assert.match(source, /\.tl-chip\s*\{[\s\S]*?border:\s*1px solid rgba\(129, 232, 255, 0\.24\)/);
+  assert.match(source, /\.tl-chip\s*\{[\s\S]*?linear-gradient\(165deg/);
+  assert.match(source, /\.tl-chip-icon\s*\{[\s\S]*?34px/);
+});
