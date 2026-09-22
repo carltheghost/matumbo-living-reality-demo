@@ -13,13 +13,11 @@
 import * as THREE from "three";
 import {
   makeGlassCube,
-  makeConnectionLines,
   addGlassLighting,
   glassTintFor,
 } from "../render/glass-style.js";
 import {
   attachTokenTransfers,
-  TOKEN_TRANSFER_ASSETS,
   FLUFF_PER_TUMBO_SIM,
 } from "./token-transfers.js";
 
