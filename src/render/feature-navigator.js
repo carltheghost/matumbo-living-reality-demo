@@ -131,7 +131,7 @@ export const FEATURE_DEFINITIONS = Object.freeze([
     kicker: "create · stake · resolve",
     focusOrganId: "contract",
     sources: ["contract-atelier"],
-    description: "Open your own pool, binary, or multi-outcome contract on any topic as the house or a player — then stake rehearsal credits and resolve it with true/false, AND, OR, or IF/ELSE logic.",
+    description: "Open a YES/NO, HOME/AWAY, or OVER/UNDER contract on any topic as the house or a player — then stake rehearsal credits and resolve it with simple true/false logic.",
     boundary: "Every contract is a fictional local rehearsal. No wallet, chain, custody, settlement, wagering, or real money exists; stakes are rehearsal credits with zero real value.",
   }),
   Object.freeze({
@@ -240,11 +240,7 @@ export const FEATURE_DEFINITIONS = Object.freeze([
   Object.freeze({
     id: "arena",
     label: "ARENA / Game Lab",
-    kicker: "playable rehearsal",
-    focusOrganId: "arena",
-    sources: ["arena-games"],
-    description: "Open the local Game Lab: choose Nebula Rally, Chrono Grid, or Orbital Duel, take legal turns, inspect the event chain, and replay the result.",
-    boundary: "ARENA is a deterministic local rehearsal. There is no multiplayer, network, imported runtime, reward, wallet, token, persistence, or value authority.",
+    kicker: "playable rehearsal",boundary: "VR/AR/WebXR support is not established by this local projection; the fallback remains the source of truth.",
   }),
   Object.freeze({
     id: "web-ai",
@@ -254,6 +250,10 @@ export const FEATURE_DEFINITIONS = Object.freeze([
     sources: [],
     description: "Browse the open web in a sandboxed frame, or hand your task note to Meta AI, ChatGPT, or Grok in a new tab.",
     boundary: "Framing-friendly sites embed; framing-blocked sites open in a new tab. AI assistants are links only — no credentials, keys, tokens, or secrets are accepted or stored.",
+    focusOrganId: "arena",
+    sources: ["arena-games"],
+    description: "Open the local Game Lab: choose Nebula Rally, Chrono Grid, or Orbital Duel, take legal turns, inspect the event chain, and replay the result.",
+    boundary: "ARENA is a deterministic local rehearsal. There is no multiplayer, network, imported runtime, reward, wallet, token, persistence, or value authority.",
   }),
   Object.freeze({
     id: "academy",
@@ -416,9 +416,9 @@ const FEATURE_SURFACE_ROUTES = Object.freeze({
     Object.freeze(["RISK", "position exposure is a rehearsal"]),
   ]),
   "contract-atelier": Object.freeze([
-    Object.freeze(["OPEN CONTRACT", "pool · binary · multi on any topic"]),
-    Object.freeze(["CHOOSE POSITION", "house counterparty or yes/no player"]),
-    Object.freeze(["RESOLVE", "true/false · AND · OR · IF/ELSE logic"]),
+    Object.freeze(["OPEN CONTRACT", "yes/no · home/away · over/under"]),
+    Object.freeze(["CHOOSE POSITION", "house counterparty or player"]),
+    Object.freeze(["RESOLVE", "YES/NO · true/false · AND · OR · IF/ELSE"]),
   ]),
   ledger: Object.freeze([
     Object.freeze(["JOURNAL", "balanced local rehearsal record"]),
