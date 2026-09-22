@@ -24,6 +24,19 @@ test('central cube has six local-style face systems', async () => {
   assert.match(source, /\/face-\$\{axis\}-\$\{sign\}\/block-\$\{i\}/);
 });
 
+test('merged main cube keeps six colored door/window faces', async () => {
+  const source = await readFile(new URL('../src/render/reality-assembly-scene.js', import.meta.url), 'utf8');
+  assert.match(source, /const wbFaceColors=\['#48d7ff','#7ff0b7','#c59cff','#ffd166','#ff7188','#72a7ff'\]/);
+  assert.match(source, /world-block\/face-\$\{axis\}-\$\{sign\}\/window/);
+  assert.match(source, /world-block\/face-\$\{axis\}-\$\{sign\}\/frame-\$\{i\}/);
+  assert.match(source, /wbFaceSystems\.forEach/);
+});
+
+test('bottom View toolbar is compact and centered instead of edge-to-edge', async () => {
+  const source = await readFile(new URL('../src/render/reality-assembly.css', import.meta.url), 'utf8');
+  assert.match(source, /\.assembly-toolbar\{position:absolute;bottom:69px;left:50%;right:auto;width:min\(760px,calc\(100vw - 50px\)\);transform:translateX\(-50%\)/);
+});
+
 test('TUMBO-SIM transfer chip is one continuously rotating cube', async () => {
   const source = await readFile(new URL('../src/domains/token-transfers-ui.js', import.meta.url), 'utf8');
   assert.match(source, /TOKEN_TRANSFER_UI_VERSION = "20260922-token-transfers-cube2"/);
