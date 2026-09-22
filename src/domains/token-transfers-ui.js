@@ -23,7 +23,7 @@ import {
   FLUFF_PER_TUMBO_SIM,
 } from "./token-transfers.js";
 
-export const TOKEN_TRANSFER_UI_VERSION = "20260920-token-transfers1";
+export const TOKEN_TRANSFER_UI_VERSION = "20260922-token-transfers-cube2";
 export const TOKEN_TRANSFER_UI_SOURCE = "tumbo-token-transfer-console";
 
 const CHIP_STORAGE_KEY = "tumbo:token-transfer-chip-pos";
@@ -437,22 +437,59 @@ function startChipScene(canvas) {
     const renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true });
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 50);
-    camera.position.set(0, 0.35, 4.8);
+    camera.position.set(0, 0.25, 4.8);
     camera.lookAt(0, 0, 0);
     addGlassLighting(THREE, scene);
-    const cube = makeGlassCube(THREE, { size: 1.45, tint: TRANSFER_CUBE_TINT });
-    scene.add(cube);
-    const satA = makeGlassCube(THREE, { size: 0.5, tint: glassTintFor("#7fd4ff", 0.3) });
-    satA.position.set(1.4, 0.6, 0.25);
-    const satB = makeGlassCube(THREE, { size: 0.38, tint: glassTintFor("#2fd4c8", 0.35) });
-    satB.position.set(-1.3, -0.62, -0.2);
-    scene.add(satA);
-    scene.add(satB);
-    const lines = makeConnectionLines(THREE, [
-      [new THREE.Vector3(0, 0, 0), new THREE.Vector3(1.4, 0.6, 0.25)],
-      [new THREE.Vector3(0, 0, 0), new THREE.Vector3(-1.3, -0.62, -0.2)],
-    ]);
-    scene.add(lines);
+
+    // The transfer chip is one self-contained cube, not a little constellation.
+    // Its six faces carry local-style doors + attached blocks and the whole
+    // object continuously rotates on its own.
+    const cubeRoot = new THREE.Group();
+    cubeRoot.name = "tumbo-transfer-cube";
+    scene.add(cubeRoot);
+    const cube = makeGlassCube(THREE, { size: 1.5, tint: TRANSFER_CUBE_TINT });
+    cubeRoot.add(cube);
+
+    const faceColors = ["#48d7ff", "#7ff0b7", "#c59cff", "#ffd166", "#ff7188", "#72a7ff"];
+    const faceDefs = [
+      { axis: "x", sign: 1 }, { axis: "x", sign: -1 },
+      { axis: "y", sign: 1 }, { axis: "y", sign: -1 },
+      { axis: "z", sign: 1 }, { axis: "z", sign: -1 },
+    ];
+    faceDefs.forEach(function (def, index) {
+      const face = new THREE.Group();
+      face.position[def.axis] = def.sign * 0.78;
+      const color = faceColors[index];
+      const doorSize = def.axis === "y" ? [0.55, 0.055, 0.55] : def.axis === "x" ? [0.055, 0.7, 0.55] : [0.55, 0.7, 0.055];
+      const doorGeo = new THREE.BoxGeometry(doorSize[0], doorSize[1], doorSize[2]);
+      const doorMat = new THREE.MeshStandardMaterial({ color: color, emissive: color, emissiveIntensity: 0.8, transparent: true, opacity: 0.78, metalness: 0.2, roughness: 0.2 });
+      const door = new THREE.Mesh(doorGeo, doorMat);
+      door.position[def.axis] = def.sign * 0.035;
+      face.add(door);
+      const edge = new THREE.LineSegments(new THREE.EdgesGeometry(doorGeo), new THREE.LineBasicMaterial({ color: "#e6fbff", transparent: true, opacity: 0.55 }));
+      face.add(edge);
+      const miniMat = new THREE.MeshStandardMaterial({ color: "#8deaff", emissive: "#39cfff", emissiveIntensity: 0.65, metalness: 0.35, roughness: 0.2 });
+      const miniPositions = def.axis === "y"
+        ? [[-0.55, def.sign * 0.09, 0.55], [0.55, def.sign * 0.09, 0.55], [0.55, def.sign * 0.09, -0.55]]
+        : def.axis === "x"
+          ? [[def.sign * 0.09, 0.55, 0.55], [def.sign * 0.09, 0.55, -0.55], [def.sign * 0.09, -0.55, 0.55]]
+          : [[0.55, 0.55, def.sign * 0.09], [-0.55, 0.55, def.sign * 0.09], [0.55, -0.55, def.sign * 0.09]];
+      miniPositions.forEach(function (pos, miniIndex) {
+        const mini = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.15), miniMat.clone());
+        mini.material.color.offsetHSL(miniIndex * 0.07, 0, miniIndex * 0.04);
+        mini.position.set(pos[0], pos[1], pos[2]);
+        face.add(mini);
+      });
+      cubeRoot.add(face);
+    });
+
+    const innerCore = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(0.18, 1),
+      new THREE.MeshStandardMaterial({ color: "#f4fdff", emissive: "#7fe8ff", emissiveIntensity: 1.5, transparent: true, opacity: 0.78, metalness: 0.1, roughness: 0.08 }),
+    );
+    innerCore.name = "tumbo-transfer-core";
+    cubeRoot.add(innerCore);
+
     function resize() {
       try {
         const w = canvas.clientWidth || 104;
@@ -464,12 +501,8 @@ function startChipScene(canvas) {
     resize();
     try { window.addEventListener("resize", resize); } catch (_) {}
     let pulseUntil = 0;
-    api.pulse = function () {
-      try { pulseUntil = performance.now() + 900; } catch (_) {}
-    };
-    let raf = 0;
-    let disposed = false;
-    let clock = null;
+    api.pulse = function () { try { pulseUntil = performance.now() + 900; } catch (_) {} };
+    let raf = 0, disposed = false, clock = null;
     try { clock = new THREE.Clock(); } catch (_) { return api; }
     function frame() {
       if (disposed) return;
@@ -477,32 +510,28 @@ function startChipScene(canvas) {
       try {
         if (document.hidden) return;
         const t = clock.getElapsedTime();
-        cube.rotation.y = t * 0.45;
-        cube.rotation.x = Math.sin(t * 0.32) * 0.16;
-        satA.rotation.y = -t * 0.7;
-        satB.rotation.y = t * 0.6;
-        satA.position.y = 0.6 + Math.sin(t * 0.9) * 0.08;
-        satB.position.y = -0.62 + Math.cos(t * 0.8) * 0.08;
-        let s = 1;
+        cubeRoot.rotation.y = t * 0.5;
+        cubeRoot.rotation.x = Math.sin(t * 0.24) * 0.2;
+        cubeRoot.rotation.z = Math.cos(t * 0.17) * 0.1;
+        innerCore.rotation.x = t * 0.75;
+        innerCore.rotation.y = -t * 0.55;
         const now = performance.now();
-        if (now < pulseUntil) s = 1 + 0.14 * Math.sin(((pulseUntil - now) / 900) * Math.PI);
-        cube.scale.set(s, s, s);
+        let scale = 1;
+        if (now < pulseUntil) scale = 1 + 0.13 * Math.sin(((pulseUntil - now) / 900) * Math.PI);
+        cubeRoot.scale.setScalar(scale);
         renderer.render(scene, camera);
       } catch (_) {}
     }
     frame();
     api.dispose = function () {
-      try {
-        disposed = true;
-        cancelAnimationFrame(raf);
-        try { window.removeEventListener("resize", resize); } catch (_) {}
-        renderer.dispose();
-      } catch (_) {}
+      try { disposed = true; cancelAnimationFrame(raf); } catch (_) {}
+      try { window.removeEventListener("resize", resize); } catch (_) {}
+      try { cubeRoot.traverse(function (object) { if (object.geometry) object.geometry.dispose(); if (object.material) { const mats = Array.isArray(object.material) ? object.material : [object.material]; mats.forEach(function (mat) { mat.dispose?.(); }); } }); } catch (_) {}
+      try { renderer.dispose(); } catch (_) {}
     };
   } catch (_) {}
   return api;
 }
-
 function escapeHtml(value) {
   return String(value == null ? "" : value).replace(/[&<>"']/g, function (c) {
     return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
