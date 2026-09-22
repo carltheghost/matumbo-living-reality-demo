@@ -14,7 +14,7 @@
 // simulated on every surface.
 // ============================================================================
 
-import * as THREE from 'three?v=20260922-cache2';
+import * as THREE from 'three';
 import { makeGlassCube, makeConnectionLines, addGlassLighting, glassTintFor } from '../render/glass-style.js?v=20260922-cache2';
 import { attachTokenVault, fmtTokenFluff, parseTumboSim } from './token.js?v=20260922-cache2';
 
