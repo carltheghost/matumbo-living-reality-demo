@@ -4,7 +4,7 @@ import {mountCityJourney,resolveCityRoute} from './render/city-journey.js';
 if(resolveCityRoute(location.search).status==='rejected'){
   const safeUrl=new URL(location.href);safeUrl.search='?feature=reality-lens';history.replaceState(null,'',safeUrl);
 }
-import { mountCenteredSurfaces } from './render/centered-surfaces.js?v=20260918-compact-chip';
+import { mountCenteredSurfaces } from './render/centered-surfaces.js?v=20260922-spatial-windows';
 import { createImmersiveSession } from './render/immersive-session.js';
 import { createMediaPreview } from './render/media-preview.js';
 import { mountTokenTicker } from './render/token-ticker.js?v=20260920-ticker1';
