@@ -38,7 +38,7 @@ function placeStandard(board, z, w, color) {
   // the same physical 16-piece set but records orientation by file parity.
   for (let x=0;x<8;x++) {
     const p = board[key(x,pawnY,z,w)];
-    if (p) p.axis = x % 2 === 0 ? "y" : "w";
+    if (p) p.axis = ((z===3||z===4)&&(w===3||w===4)&&x%2===1) ? "w" : "y";
   }
 }
 
