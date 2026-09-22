@@ -208,16 +208,12 @@ const TAB_ENGINE_CSS = `
 .tl-cube-face--left { transform: rotateY(-90deg) translateZ(var(--tl-cube-depth)); }
 .tl-cube-face--top { transform: rotateX(90deg) translateZ(var(--tl-cube-depth)); }
 .tl-cube-face--bottom { transform: rotateX(-90deg) translateZ(var(--tl-cube-depth)); }
-.tl-cube-glyph {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  color: #e8fdff;
-  font-size: 16px;
-  letter-spacing: 0;
-  text-shadow: 0 0 12px rgba(117,232,255,.8);
-}
+.tl-cube-mark { position:absolute; inset:4px; display:grid; place-items:center; align-content:center; gap:2px; color:#e8fdff; font-size:13px; line-height:1; text-align:center; text-shadow:0 0 12px rgba(117,232,255,.82); }
+.tl-cube-code { display:block; color:rgba(213,247,255,.82); font:700 5px/1.05 ui-monospace,SFMono-Regular,Consolas,monospace; letter-spacing:.08em; text-transform:uppercase; white-space:nowrap; transform:scale(.9); }
+.tl-cube-mark::after { content:""; position:absolute; inset:5px; border:1px solid rgba(151,238,255,.22); border-radius:2px; box-shadow:inset 0 0 9px rgba(113,220,255,.08); }
+.tl-cube-face--back .tl-cube-mark,.tl-cube-face--left .tl-cube-mark,.tl-cube-face--bottom .tl-cube-mark { color:#b7f4ff; }
+.tl-cube-face--right .tl-cube-mark { color:#ffd37e; }
+.tl-cube-face--top .tl-cube-mark { color:#b5ffcf; }
 .tl-chip-label {
   width: 72px;
   max-width: 72px;
@@ -292,6 +288,10 @@ const TAB_ENGINE_CSS = `
   transform: translateX(-16px) scale(0.96);
   transform-origin: left center;
 }
+.tl-panel-movable { cursor:grab; translate:var(--tl-panel-drag-x, 0px) var(--tl-panel-drag-y, 0px); }
+.tl-panel-movable.tl-dragging { cursor:grabbing; user-select:none; -webkit-user-select:none; }
+.tl-panel-movable.tl-dragging * { user-select:none; -webkit-user-select:none; }
+
 .tl-panel.tl-open {
   opacity: 1;
   visibility: visible;
@@ -475,6 +475,8 @@ export class TabEngine {
       this.layer.appendChild(node);
     }
 
+    this._enablePanelDragging(record);
+
     const shortcutIndex = this.order.length + 1; // 1–9 keyboard map
     const chip = this.document.createElement('button');
     chip.setAttribute('type', 'button');
@@ -493,15 +495,28 @@ export class TabEngine {
     cubeEl.className = 'tl-chip-cube';
     cubeEl.setAttribute('aria-hidden', 'true');
     cubeEl.innerHTML = [
-      "<span class='tl-cube-face tl-cube-face--front'><span class='tl-cube-glyph'></span></span>",
-      "<span class='tl-cube-face tl-cube-face--back'></span>",
-      "<span class='tl-cube-face tl-cube-face--right'></span>",
-      "<span class='tl-cube-face tl-cube-face--left'></span>",
-      "<span class='tl-cube-face tl-cube-face--top'></span>",
-      "<span class='tl-cube-face tl-cube-face--bottom'></span>",
+      "<span class='tl-cube-face tl-cube-face--front'><span class='tl-cube-mark'></span></span>",
+      "<span class='tl-cube-face tl-cube-face--back'><span class='tl-cube-mark'></span></span>",
+      "<span class='tl-cube-face tl-cube-face--right'><span class='tl-cube-mark'></span></span>",
+      "<span class='tl-cube-face tl-cube-face--left'><span class='tl-cube-mark'></span></span>",
+      "<span class='tl-cube-face tl-cube-face--top'><span class='tl-cube-mark'></span></span>",
+      "<span class='tl-cube-face tl-cube-face--bottom'><span class='tl-cube-mark'></span></span>",
     ].join("");
-    const glyph = cubeEl.querySelector('.tl-cube-glyph');
-    if (glyph) glyph.textContent = record.icon;
+    const faceMarks = [
+      { selector: '.tl-cube-face--front', symbol: record.icon, code: tabTitle.slice(0, 5) },
+      { selector: '.tl-cube-face--back', symbol: '⌖', code: 'TACT' },
+      { selector: '.tl-cube-face--right', symbol: 'T', code: 'TUMBO' },
+      { selector: '.tl-cube-face--left', symbol: 'Ω', code: 'REALITY' },
+      { selector: '.tl-cube-face--top', symbol: '✦', code: 'SIM' },
+      { selector: '.tl-cube-face--bottom', symbol: '▦', code: 'GRID' },
+    ];
+    for (const face of faceMarks) {
+      const mark = cubeEl.querySelector(face.selector + ' .tl-cube-mark');
+      if (!mark) continue;
+      const symbol = this.document.createElement('span'); symbol.textContent = face.symbol;
+      const code = this.document.createElement('span'); code.className = 'tl-cube-code'; code.textContent = face.code;
+      mark.replaceChildren(symbol, code);
+    }
 
     const labelEl = this.document.createElement('span');
     labelEl.className = 'tl-chip-label';
@@ -525,6 +540,7 @@ export class TabEngine {
     this._deactivateId(id, { restoreFocus: false });
 
     if (tab.chip && typeof tab.chip.remove === 'function') tab.chip.remove();
+    this._disablePanelDragging(tab);
 
     const node = tab.node;
     if (tab.adopted) {
@@ -640,6 +656,22 @@ export class TabEngine {
     return closed;
   }
 
+  // ------------------------------------------------------------- drag UX
+  _enablePanelDragging(tab) {
+    const node=tab?.node; if(!node || typeof node.addEventListener!=='function') return;
+    const drag={active:false,pointerId:null,startX:0,startY:0,originX:0,originY:0,offsetX:0,offsetY:0,rect:null};
+    const interactive=(target)=>{try{return !!target?.closest?.('button,input,select,textarea,option,a[href],[contenteditable="true"],[data-no-panel-drag]');}catch{return false;}};
+    const apply=(x,y)=>{drag.offsetX=x;drag.offsetY=y;node.style.setProperty('--tl-panel-drag-x',String(x)+'px');node.style.setProperty('--tl-panel-drag-y',String(y)+'px');};
+    const clamp=(dx,dy)=>{const r=drag.rect;if(!r||typeof window==='undefined')return[dx,dy];const vw=Math.max(320,Number(window.innerWidth)||0),vh=Math.max(320,Number(window.innerHeight)||0),m=22;return[Math.max(m-r.left,Math.min(vw-m-r.right,dx)),Math.max(m-r.top,Math.min(vh-m-r.bottom,dy))];};
+    const move=(e)=>{if(!drag.active||e.pointerId!==drag.pointerId)return;const d=clamp(drag.originX+e.clientX-drag.startX,drag.originY+e.clientY-drag.startY);if(Math.abs(d[0]-drag.offsetX)+Math.abs(d[1]-drag.offsetY)>2){node.classList.add('tl-dragging');try{e.preventDefault();}catch{}}apply(d[0],d[1]);};
+    const end=(e)=>{if(!drag.active||e.pointerId!==drag.pointerId)return;drag.active=false;node.classList.remove('tl-dragging');try{node.releasePointerCapture?.(drag.pointerId);}catch{}drag.pointerId=null;drag.rect=null;};
+    const start=(e)=>{if(!tab.active||e.button!==0||interactive(e.target)||typeof node.getBoundingClientRect!=='function')return;drag.active=true;drag.pointerId=e.pointerId;drag.startX=e.clientX;drag.startY=e.clientY;drag.originX=drag.offsetX;drag.originY=drag.offsetY;drag.rect=node.getBoundingClientRect();try{node.setPointerCapture?.(e.pointerId);}catch{}};
+    node.classList.add('tl-panel-movable');node.addEventListener('pointerdown',start);node.addEventListener('pointermove',move);node.addEventListener('pointerup',end);node.addEventListener('pointercancel',end);
+    tab._panelDrag={node,start,move,end,drag};node.style.setProperty('--tl-panel-drag-x','0px');node.style.setProperty('--tl-panel-drag-y','0px');
+  }
+  _disablePanelDragging(tab) {
+    const d=tab?._panelDrag;if(!d)return;const {node,start,move,end}=d;try{node.removeEventListener('pointerdown',start);}catch{}try{node.removeEventListener('pointermove',move);}catch{}try{node.removeEventListener('pointerup',end);}catch{}try{node.removeEventListener('pointercancel',end);}catch{}try{node.classList.remove('tl-panel-movable','tl-dragging');}catch{}try{node.style.removeProperty('--tl-panel-drag-x');node.style.removeProperty('--tl-panel-drag-y');}catch{}delete tab._panelDrag;
+  }
   // ------------------------------------------------------------------- mode
 
   /**
