@@ -1,26 +1,16 @@
-/** Chess Arena avatar piece foundry — Reality Lens cinematic staging builders.
+/** Standard chess-piece foundry for the Living Reality chess arena.
  *
- * Pure builders: every factory takes the THREE namespace explicitly and this
- * module never imports 'three' itself, so the foundry is testable in node
- * against the vendored build. The browser mount (./chess-arena.js) passes the
- * import-mapped namespace.
+ * Chess is a game first: the board uses conventional, immediately recognizable
+ * chess glyphs rather than custom avatars. The glyphs are rendered locally as
+ * text textures when a browser canvas is available, with deterministic
+ * structural metadata retained for non-DOM tests.
  *
- * Every piece is the same character — the user's chosen avatar face (the
- * default Tumbo bust portrait, Tumbo's own likeness, or their own photo
- * styled into the Tumbo look) — reimagined per chess role through stature
- * (height), a role glyph badge, and the side's material language (light/gold
- * for white, dark/obsidian with violet glow for black). The portrait's face
- * region is cropped per role via texture offset/repeat so the likeness reads
- * at board scale; role identity comes from the badge, not a different face.
- *
- * Projection only: no network, no identity authority, no wallet, no
- * settlement. Geometries and materials are shared across every piece so the
- * cinematic staging does not explode draw state.
+ * Projection only: no network, identity authority, wallet, settlement, or
+ * external asset loading is involved.
  */
-import {PERSON_STUDIO_STORAGE_KEY, STUDIO_MODEL, STUDIO_OUTFITS} from '../domains/person-studio.js';
-import {resolveAvatarFaceUrl} from '../domains/avatar-style.js';
+import {STUDIO_MODEL} from '../domains/person-studio.js';
 
-export const CHESS_ARENA_PIECE_TYPES = Object.freeze(['p', 'n', 'b', 'r', 'q', 'k']);
+export const CHESS_ARENA_PIECE_TYPES = Object.freeze(['p','n','b','r','q','k']);
 const FILES = 'abcdefgh';
 
 /** Board square -> [x, y, z] in arena units. No THREE dependency. */
@@ -30,315 +20,160 @@ export function squarePosition(square) {
   return [file - 3.5, 0.06, 3.5 - rank];
 }
 
-const DEFAULT_APPEARANCE = Object.freeze({
-  skin: STUDIO_MODEL.skin,
-  hair: STUDIO_MODEL.hair,
-  outfitId: 'obsidian',
-  outfitColor: '#111620',
-  outfitTrim: '#d9ae60',
-  displayName: '',
-  approved: false,
+/** Kept as a compatibility export for older callers/tests. No avatar is used. */
+export const AVATAR_CHIBI_FALLBACK_URL = null;
+
+/** Conventional Unicode chess glyphs, one identity per piece type. */
+export const CHESS_ROLE_GLYPHS = Object.freeze({
+  p: '♟', n: '♞', b: '♝', r: '♜', q: '♛', k: '♚',
+});
+export const CHESS_ROLE_GLYPHS_WHITE = Object.freeze({
+  p: '♙', n: '♘', b: '♗', r: '♖', q: '♕', k: '♔',
+});
+export const CHESS_ROLE_GLYPHS_BLACK = Object.freeze({
+  p: '♟', n: '♞', b: '♝', r: '♜', q: '♛', k: '♚',
 });
 
-function outfitById(id) {
-  return STUDIO_OUTFITS.find((outfit) => outfit.id === id) ?? STUDIO_OUTFITS[0];
-}
+export const CHESS_PIECE_HEIGHTS = Object.freeze({p: 1.15, n: 1.35, b: 1.45, r: 1.45, q: 1.60, k: 1.72});
+export const CHESS_PIECE_RING_RADII = Object.freeze({p: 0.27, n: 0.30, b: 0.31, r: 0.31, q: 0.34, k: 0.36});
+export const CHESS_BUST_CROPS = Object.freeze({}); // compatibility only; avatars are not used.
 
-/** Read the approved avatar appearance from the Person Studio saved profile.
- *  Never throws: falls back to the reference defaults when nothing valid is
- *  saved. The renderer is a projection, not a validator — person-studio owns
- *  validation; here we only borrow its colors. */
-export function readArenaAvatarAppearance({storage = null} = {}) {
-  const fallback = () => Object.freeze({...DEFAULT_APPEARANCE});
-  let store = storage;
-  if (!store) {
-    try {
-      store = globalThis.localStorage ?? null;
-    } catch {
-      store = null;
-    }
-  }
-  if (!store) return fallback();
-  let raw = null;
-  try {
-    raw = store.getItem(PERSON_STUDIO_STORAGE_KEY);
-  } catch {
-    return fallback();
-  }
-  if (!raw) return fallback();
-  let saved = null;
-  try {
-    saved = JSON.parse(raw);
-  } catch {
-    return fallback();
-  }
-  if (!saved || typeof saved !== 'object') return fallback();
-  // The avatar snapshot's outfit asset is authoritative when present; the
-  // top-level outfitId is the studio's current selection. Prefer the asset.
-  let outfit = outfitById(typeof saved.outfitId === 'string' ? saved.outfitId : '');
-  try {
-    const snapshot = JSON.parse(saved.avatar);
-    const asset = snapshot?.appearance?.outfitAssetIds?.[0];
-    if (typeof asset === 'string' && asset.startsWith('studio-outfit:')) {
-      outfit = outfitById(asset.slice('studio-outfit:'.length));
-    }
-  } catch {
-    /* keep the studio selection */
-  }
-  return Object.freeze({
-    skin: STUDIO_MODEL.skin,
-    hair: STUDIO_MODEL.hair,
-    outfitId: outfit.id,
-    outfitColor: outfit.color,
-    outfitTrim: outfit.trim,
-    displayName: typeof saved.displayName === 'string' ? saved.displayName.slice(0, 60) : '',
-    approved: true,
-    // The face every champion wears: the user's chosen chibi — the
-    // default character, Tumbo's own chibi, or their own chibi built
-    // locally ("Become Tumbo"). Always resolves to a usable URL.
-    faceUrl: resolveAvatarFaceUrl(store),
-  });
-}
+const SIDE_STYLE = Object.freeze({
+  w: Object.freeze({body: 0xf4ead8, edge: 0x9b8567, glyph: '#fffaf0', halo: 0xffd98a}),
+  b: Object.freeze({body: 0x202733, edge: 0x080b10, glyph: '#f0e6ff', halo: 0xb48cff}),
+});
 
 function createGeometryCache(THREE) {
   const cache = new Map();
   const get = (key, make) => {
     let geometry = cache.get(key);
-    if (!geometry) {
-      geometry = make();
-      cache.set(key, geometry);
-    }
+    if (!geometry) { geometry = make(); cache.set(key, geometry); }
     return geometry;
   };
   return {
-    capsule: (r, length) => get(`capsule:${r}:${length}`, () => new THREE.CapsuleGeometry(r, length, 4, 10)),
-    sphere: (r, w = 14, h = 10) => get(`sphere:${r}:${w}:${h}`, () => new THREE.SphereGeometry(r, w, h)),
-    hairCap: (r) => get(`haircap:${r}`, () => new THREE.SphereGeometry(r, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.58)),
-    box: (w, h, d) => get(`box:${w}:${h}:${d}`, () => new THREE.BoxGeometry(w, h, d)),
-    cone: (r, h, s = 8) => get(`cone:${r}:${h}:${s}`, () => new THREE.ConeGeometry(r, h, s)),
-    cylinder: (rt, rb, h, s = 12) => get(`cyl:${rt}:${rb}:${h}:${s}`, () => new THREE.CylinderGeometry(rt, rb, h, s)),
     torus: (r, t) => get(`torus:${r}:${t}`, () => new THREE.TorusGeometry(r, t, 10, 24)),
-    circle: (r, s = 24) => get(`circle:${r}:${s}`, () => new THREE.CircleGeometry(r, s)),
-    ring: (inner, outer, s = 64) => get(`ring:${inner}:${outer}:${s}`, () => new THREE.RingGeometry(inner, outer, s)),
-    dispose() {
-      cache.forEach((geometry) => geometry.dispose());
-      cache.clear();
-    },
+    dispose() { cache.forEach((geometry) => geometry.dispose()); cache.clear(); },
   };
 }
 
-function createMaterialSet(THREE, appearance) {
-  const source = appearance && typeof appearance === 'object' ? appearance : {};
+function createMaterialSet(THREE) {
   const std = (params) => new THREE.MeshStandardMaterial(params);
   return {
-    skin: std({color: source.skin || DEFAULT_APPEARANCE.skin, roughness: 0.62, metalness: 0}),
-    hair: std({color: source.hair || DEFAULT_APPEARANCE.hair, roughness: 0.48, metalness: 0.12}),
-    outfit: std({color: source.outfitColor || DEFAULT_APPEARANCE.outfitColor, roughness: 0.5, metalness: 0.28}),
-    trim: std({
-      color: source.outfitTrim || DEFAULT_APPEARANCE.outfitTrim,
-      emissive: source.outfitTrim || DEFAULT_APPEARANCE.outfitTrim,
-      emissiveIntensity: 0.35, metalness: 0.6, roughness: 0.32,
-    }),
     side: {
       w: {
-        base: std({color: 0xe9dcc0, metalness: 0.35, roughness: 0.38}),
-        glow: std({color: 0xffc25e, emissive: 0x9a5200, emissiveIntensity: 1.6, metalness: 0.55, roughness: 0.3}),
-        ring: std({color: 0xffd98a, emissive: 0xd77a1a, emissiveIntensity: 2.4, metalness: 0.4, roughness: 0.35}),
+        base: std({color: SIDE_STYLE.w.body, metalness: 0.2, roughness: 0.42}),
+        glow: std({color: SIDE_STYLE.w.body, emissive: 0x7a4b10, emissiveIntensity: 0.55, metalness: 0.15, roughness: 0.42}),
+        ring: std({color: SIDE_STYLE.w.halo, emissive: 0x8b4b08, emissiveIntensity: 1.35, metalness: 0.35, roughness: 0.34}),
       },
       b: {
-        base: std({color: 0x211829, metalness: 0.55, roughness: 0.3}),
-        glow: std({color: 0x9a5cff, emissive: 0x43119c, emissiveIntensity: 1.9, metalness: 0.45, roughness: 0.3}),
-        ring: std({color: 0xb48cff, emissive: 0x5b1ee0, emissiveIntensity: 2.6, metalness: 0.4, roughness: 0.35}),
+        base: std({color: SIDE_STYLE.b.body, metalness: 0.42, roughness: 0.34}),
+        glow: std({color: SIDE_STYLE.b.body, emissive: 0x160b30, emissiveIntensity: 0.75, metalness: 0.45, roughness: 0.32}),
+        ring: std({color: SIDE_STYLE.b.halo, emissive: 0x4b1aa0, emissiveIntensity: 1.55, metalness: 0.35, roughness: 0.32}),
       },
     },
   };
 }
 
-/** Fallback face every chess piece wears when no choice resolves: the generic
- *  chibi character. Local projection asset only. */
-export const AVATAR_CHIBI_FALLBACK_URL = 'assets/avatar/fluffy-body-template.webp';
-/** Hologram heights in arena units: the king stands tallest, the pawn shortest. */
-export const CHESS_PIECE_HEIGHTS = Object.freeze({p: 1.3, n: 1.5, b: 1.55, r: 1.6, q: 1.75, k: 1.9});
-/** Glow-ring radii in arena units: stature reads per role at a glance. */
-export const CHESS_PIECE_RING_RADII = Object.freeze({p: 0.30, n: 0.33, b: 0.34, r: 0.35, q: 0.38, k: 0.42});
-/** Role glyphs for the badge each piece carries at its base. */
-export const CHESS_ROLE_GLYPHS = Object.freeze({p: '♟', n: '♞', b: '♝', r: '♜', q: '♛', k: '♚'});
-/** Face-region crops of the square bust portrait in UV space (center + size).
- *  The portrait's face sits near (0.5, 0.69); higher roles frame a slightly
- *  wider bust for presence. Applied via texture offset/repeat in the browser. */
-export const CHESS_BUST_CROPS = Object.freeze({
-  p: Object.freeze({cx: 0.5, cy: 0.69, size: 0.30}),
-  n: Object.freeze({cx: 0.5, cy: 0.69, size: 0.32}),
-  b: Object.freeze({cx: 0.5, cy: 0.69, size: 0.34}),
-  r: Object.freeze({cx: 0.5, cy: 0.69, size: 0.36}),
-  q: Object.freeze({cx: 0.5, cy: 0.69, size: 0.40}),
-  k: Object.freeze({cx: 0.5, cy: 0.69, size: 0.44}),
-});
-const CHESS_PIECE_TINTS = Object.freeze({w: 0xffe2ae, b: 0xc4a4ff});
-const ROLE_BADGE_RING = Object.freeze({w: '#ffd98a', b: '#b48cff'});
-const ROLE_BADGE_GLYPH = Object.freeze({w: '#ffe9c0', b: '#d9c2ff'});
+function buildStandardGlyph(THREE, color, type, glyphRegistry = null) {
+  const glyph = color === 'w' ? CHESS_ROLE_GLYPHS_WHITE[type] : CHESS_ROLE_GLYPHS_BLACK[type];
+  const material = new THREE.SpriteMaterial({
+    transparent: true,
+    depthWrite: false,
+    color: color === 'w' ? 0xffffff : 0xffffff,
+    opacity: 1,
+  });
+  const sprite = new THREE.Sprite(material);
+  const height = CHESS_PIECE_HEIGHTS[type] ?? 1.3;
+  sprite.scale.set(height * 0.82, height, 1);
+  sprite.position.set(0, height * 0.52, 0);
+  sprite.userData.part = 'chess-piece';
+  sprite.userData.pieceType = type;
+  sprite.userData.chessGlyph = glyph;
+  sprite.userData.isStandardChessPiece = true;
+  sprite.userData.avatarPiece = false;
+  if (glyphRegistry) glyphRegistry.add({material, getTexture: () => material.map ?? null});
 
-/** Role badge: a small billboarded plaque at the piece's base carrying the
- *  role glyph in the side's color. In the browser the glyph is drawn on a
- *  canvas texture; in node (tests) the badge records its metadata and stays
- *  untextured so every structural assertion still holds. */
-function buildRoleBadge(THREE, color, type, textureRegistry = null) {
-  const material = new THREE.SpriteMaterial({transparent: true, depthWrite: false, opacity: 0.95});
-  const badge = new THREE.Sprite(material);
-  const size = 0.36;
-  badge.scale.set(size, size, 1);
-  badge.position.set(0, 0.32, 0);
-  badge.userData.part = 'role-badge';
-  badge.userData.roleGlyph = CHESS_ROLE_GLYPHS[type];
-  badge.userData.roleBadgeSide = color;
-  if (textureRegistry) textureRegistry.add({material, getTexture: () => material.map ?? null});
   const canDraw = typeof document !== 'undefined'
     && typeof document.createElement === 'function'
     && typeof THREE.CanvasTexture === 'function';
   if (canDraw) {
     try {
       const canvas = document.createElement('canvas');
-      canvas.width = 128; canvas.height = 128;
+      canvas.width = 256; canvas.height = 256;
       const ctx = canvas.getContext('2d');
-      ctx.beginPath(); ctx.arc(64, 64, 58, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(6,8,14,0.85)'; ctx.fill();
-      ctx.lineWidth = 6; ctx.strokeStyle = ROLE_BADGE_RING[color]; ctx.stroke();
-      ctx.font = '68px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillStyle = ROLE_BADGE_GLYPH[color];
-      ctx.fillText(CHESS_ROLE_GLYPHS[type], 64, 68);
+      ctx.clearRect(0, 0, 256, 256);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = '220px "DejaVu Sans", "Noto Sans Symbols 2", "Segoe UI Symbol", serif';
+      // A restrained shadow keeps the standard silhouette legible on the dark board.
+      ctx.lineWidth = 8;
+      ctx.strokeStyle = color === 'w' ? 'rgba(20,14,8,.95)' : 'rgba(0,0,0,.95)';
+      ctx.strokeText(glyph, 128, 132);
+      ctx.fillStyle = SIDE_STYLE[color].glyph;
+      ctx.fillText(glyph, 128, 132);
       const texture = new THREE.CanvasTexture(canvas);
+      texture.needsUpdate = true;
       material.map = texture;
       material.needsUpdate = true;
-    } catch { /* badge keeps its glyph metadata; the plaque simply stays untextured */ }
+    } catch { /* structural glyph metadata remains available */ }
   }
-  return badge;
+  return sprite;
 }
 
-/** Avatar chess piece: the user's chosen chibi on every piece,
- *  billboarded so it reads from every camera angle, standing on the
- *  role-sized, side-colored glow ring with its role glyph badge at the base.
- *  The chibi texture loads lazily from local assets; without a DOM Image
- *  (node tests) the sprite is built untextured and every structural
- *  assertion still holds. */
-function buildHologramPiece(THREE, G, M, color, type, hologramRegistry = null, appearance = null) {
-  const side = M.side[color];
+function buildPiece(THREE, G, M, color, type, glyphRegistry = null) {
   const group = new THREE.Group();
-  // The face every champion wears: the user's chosen chibi — the
-  // default character, Tumbo's own chibi, or the player's own "Become
-  // Tumbo" chibi — resolved per device by readArenaAvatarAppearance.
-  const faceUrl = (appearance && typeof appearance.faceUrl === 'string' && appearance.faceUrl)
-    ? appearance.faceUrl
-    : AVATAR_CHIBI_FALLBACK_URL;
-  const ringRadius = CHESS_PIECE_RING_RADII[type] ?? 0.34;
-  const ring = new THREE.Mesh(G.torus(ringRadius, 0.05), side.ring);
+  const style = M.side[color];
+  const ringRadius = CHESS_PIECE_RING_RADII[type] ?? 0.30;
+  const ring = new THREE.Mesh(G.torus(ringRadius, 0.045), style.ring);
   ring.rotation.x = Math.PI / 2;
-  ring.position.set(0, 0.05, 0);
+  ring.position.y = 0.05;
   ring.userData.part = 'ring';
   ring.userData.ringRadius = ringRadius;
   group.add(ring);
-  const height = CHESS_PIECE_HEIGHTS[type] ?? 1.4;
-  const crop = CHESS_BUST_CROPS[type] ?? CHESS_BUST_CROPS.p;
-  const material = new THREE.SpriteMaterial({
-    transparent: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-    color: CHESS_PIECE_TINTS[color] ?? 0xffffff,
-    opacity: 0.97,
-  });
-  const sprite = new THREE.Sprite(material);
-  sprite.scale.set(height, height, 1);
-  sprite.position.set(0, height / 2 + 0.04, 0);
-  sprite.userData.part = 'hologram';
-  sprite.userData.pieceType = type;
-  sprite.userData.textureUrl = faceUrl;
-  sprite.userData.bustCrop = {...crop};
-  sprite.visible = false;
-  group.add(sprite);
-  group.add(buildRoleBadge(THREE, color, type, hologramRegistry));
-  if (hologramRegistry) hologramRegistry.add({material, getTexture: () => material.map ?? null});
-  const canLoad = typeof THREE.TextureLoader === 'function'
-    && typeof Image !== 'undefined'
-    && typeof faceUrl === 'string';
-  if (canLoad) {
-    new THREE.TextureLoader().load(
-      faceUrl,
-      (texture) => {
-        texture.wrapS = THREE.ClampToEdgeWrapping;
-        texture.wrapT = THREE.ClampToEdgeWrapping;
-        texture.repeat.set(crop.size, crop.size);
-        texture.offset.set(crop.cx - crop.size / 2, crop.cy - crop.size / 2);
-        texture.needsUpdate = true;
-        material.map = texture;
-        material.needsUpdate = true;
-        sprite.visible = true;
-      },
-      undefined,
-      () => { sprite.visible = false; },
-    );
-  } else {
-    // Deterministic in node: the hologram slot exists with its metadata even
-    // though no pixels load outside the browser.
-    sprite.visible = true;
-  }
+
+  // A small physical base makes the glyph read like a normal chess piece
+  // rather than a floating emoji.
+  const base = new THREE.Mesh(
+    new THREE.CylinderGeometry(ringRadius * 0.88, ringRadius * 1.08, 0.16, 24),
+    style.base,
+  );
+  base.position.y = 0.10;
+  base.userData.part = 'base';
+  group.add(base);
+
+  group.add(buildStandardGlyph(THREE, color, type, glyphRegistry));
+  group.userData.standardChessPiece = true;
+  group.userData.avatarPiece = false;
+  group.userData.pieceType = type;
+  group.userData.color = color;
   return group;
 }
 
-function buildPawn(THREE, G, M, color, _type, hologramRegistry = null) {
-  return buildHologramPiece(THREE, G, M, color, 'p', hologramRegistry);
-}
-
-function buildKnight(THREE, G, M, color, _type, hologramRegistry = null) {
-  return buildHologramPiece(THREE, G, M, color, 'n', hologramRegistry);
-}
-
-function buildBishop(THREE, G, M, color, _type, hologramRegistry = null) {
-  return buildHologramPiece(THREE, G, M, color, 'b', hologramRegistry);
-}
-
-function buildRook(THREE, G, M, color, _type, hologramRegistry = null) {
-  return buildHologramPiece(THREE, G, M, color, 'r', hologramRegistry);
-}
-
-function buildQueen(THREE, G, M, color, _type, hologramRegistry = null) {
-  return buildHologramPiece(THREE, G, M, color, 'q', hologramRegistry);
-}
-
-function buildKing(THREE, G, M, color, _type, hologramRegistry = null) {
-  return buildHologramPiece(THREE, G, M, color, 'k', hologramRegistry);
-}
-
-/** Piece foundry with shared geometry/material caches. Dispose when the
- *  appearance is refreshed or the arena unmounts. */
-export function createPieceBuilders(THREE, appearance = null) {
+/** Piece foundry with shared ring geometry/material caches. */
+export function createPieceBuilders(THREE, _appearance = null) {
   if (!THREE) throw new Error('createPieceBuilders needs the THREE namespace');
-  const resolved = Object.freeze({...DEFAULT_APPEARANCE, ...(appearance ?? {})});
   const G = createGeometryCache(THREE);
-  const M = createMaterialSet(THREE, resolved);
-  const builders = {p: buildPawn, n: buildKnight, b: buildBishop, r: buildRook, q: buildQueen, k: buildKing};
-  // Every hologram piece owns a SpriteMaterial (and, in the browser, a loaded
-  // texture). Track them so dispose() releases per-sprite GPU resources too.
-  const hologramRegistry = new Set();
-  function buildPiece(type, color) {
-    const build = builders[type];
-    if (!build) throw new Error(`Unknown chess piece type: ${type}`);
+  const M = createMaterialSet(THREE);
+  const glyphRegistry = new Set();
+  function buildPiecePublic(type, color) {
+    if (!CHESS_ARENA_PIECE_TYPES.includes(type)) throw new Error(`Unknown chess piece type: ${type}`);
     if (color !== 'w' && color !== 'b') throw new Error(`Unknown chess side: ${color}`);
-    const group = build(THREE, G, M, color, type, hologramRegistry, resolved);
-    group.userData.avatarPiece = true;
-    group.userData.pieceType = type;
-    group.userData.color = color;
-    return group;
+    return buildPiece(THREE, G, M, color, type, glyphRegistry);
   }
   function dispose() {
     G.dispose();
-    const mats = [M.skin, M.hair, M.outfit, M.trim, M.side.w.base, M.side.w.glow, M.side.w.ring, M.side.b.base, M.side.b.glow, M.side.b.ring];
-    mats.forEach((mat) => mat.dispose());
-    hologramRegistry.forEach(({material, getTexture}) => {
-      try { getTexture()?.dispose?.(); } catch { /* already released */ }
-      try { material.dispose?.(); } catch { /* already released */ }
+    for (const side of ['w','b']) {
+      M.side[side].base.dispose();
+      M.side[side].glow.dispose();
+      M.side[side].ring.dispose();
+    }
+    glyphRegistry.forEach(({material, getTexture}) => {
+      try { getTexture()?.dispose?.(); } catch {}
+      try { material.dispose?.(); } catch {}
     });
-    hologramRegistry.clear();
+    glyphRegistry.clear();
   }
-  return Object.freeze({appearance: resolved, buildPiece, dispose});
+  return Object.freeze({appearance: Object.freeze({...(_appearance ?? {}), skin: STUDIO_MODEL.skin}), buildPiece: buildPiecePublic, dispose});
 }
 
 /** Cinematic arena hall: dark ground, glow halos, eight pillared columns with
