@@ -34,6 +34,24 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[]}){
   const blue=makeMaterial('#5dafff',{emissive:'#147bc6',emissiveIntensity:1.35}),red=makeMaterial('#ae2848',{emissive:'#f02644',emissiveIntensity:1.8});
   const violet=makeMaterial('#8e6ccb',{emissive:'#65448a',emissiveIntensity:.7}),green=makeMaterial('#32695b');
   const unit=new THREE.BoxGeometry(1,1,1);geometry.add(unit);
+  // Advanced constellation layer: subtle orbital rings, luminous inner cores,
+  // and moving signal particles make the graph feel alive while remaining a
+  // pure renderer projection over the same feature identities.
+  const haloGeometry=new THREE.TorusGeometry(1.28,.012,8,48);geometry.add(haloGeometry);
+  const innerHaloGeometry=new THREE.TorusGeometry(.86,.008,6,36);geometry.add(innerHaloGeometry);
+  const coreGeometry=new THREE.SphereGeometry(.16,12,12);geometry.add(coreGeometry);
+  const signalGeometry=new THREE.SphereGeometry(.045,8,8);geometry.add(signalGeometry);
+  const haloMaterials=new Map();
+  const haloMaterialFor=(color)=>{
+    const key=color?.getHexString?.()??String(color);
+    if(!haloMaterials.has(key)){
+      const material=new THREE.MeshBasicMaterial({color,transparent:true,opacity:.22,depthWrite:false,blending:THREE.AdditiveBlending});
+      materials.add(material);haloMaterials.set(key,material);
+    }
+    return haloMaterials.get(key);
+  };
+  const signalMaterial=new THREE.MeshBasicMaterial({color:'#86ecff',transparent:true,opacity:.52,depthWrite:false,blending:THREE.AdditiveBlending});
+  materials.add(signalMaterial);
   const colorById=id=>/person|rooms|social/.test(id)?violet:/world|gateway|sports/.test(id)?green:/asset|paycore|contract|ledger|t402/.test(id)?gold:blue;
   const mesh=(shape,material,position,scale,owner=layer)=>{geometry.add(shape);const m=new THREE.Mesh(shape,material);m.position.set(...position);m.scale.set(...scale);owner.add(m);return m;};
   const box=(size,position,material,owner=layer)=>mesh(unit,material,position,size,owner);
