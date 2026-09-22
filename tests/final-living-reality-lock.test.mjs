@@ -39,7 +39,7 @@ test('bottom View toolbar is compact and centered instead of edge-to-edge', asyn
 
 test('TUMBO-SIM transfer chip is one continuously rotating cube', async () => {
   const source = await readFile(new URL('../src/domains/token-transfers-ui.js', import.meta.url), 'utf8');
-  assert.match(source, /TOKEN_TRANSFER_UI_VERSION = "20260922-token-transfers-cube2"/);
+  assert.match(source, /TOKEN_TRANSFER_UI_VERSION = "20260922-token-transfers-cube3"/);
   assert.match(source, /const cubeRoot = new THREE\.Group\(\)/);
   assert.match(source, /cubeRoot\.rotation\.y = t \* 0\.5/);
   assert.match(source, /const faceDefs = \[/);
@@ -75,6 +75,18 @@ test('desktop tabs stay on the right and use the TUMBO-SIM minimized glass langu
   assert.match(source, /\.tl-cube-face--front/);
   assert.match(source, /cubeEl\.className = 'tl-chip-cube'/);
   assert.match(source, /\.tl-dock--desktop \{[\s\S]*?right:\s*12px;/);
+});
+
+test('all tab surfaces expose six face marks and movable panels, including Token Transfer', async () => {
+  const tabs = await readFile(new URL('../src/render/tab-engine.js', import.meta.url), 'utf8');
+  const transfer = await readFile(new URL('../src/domains/token-transfers-ui.js', import.meta.url), 'utf8');
+  assert.match(tabs, /symbol: 'T', code: 'TUMBO'/);
+  assert.match(tabs, /symbol: 'Ω', code: 'REALITY'/);
+  assert.match(tabs, /_enablePanelDragging\(record\)/);
+  assert.match(tabs, /--tl-panel-drag-x/);
+  assert.match(transfer, /PANEL_STORAGE_KEY =/);
+  assert.match(transfer, /panelHead\.addEventListener\("pointerdown"/);
+  assert.match(transfer, /writeStoredPanelPos/);
 });
 
 test('token transfer UI stays behind the primary panel/tabs layer', async () => {
