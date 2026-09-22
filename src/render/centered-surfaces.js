@@ -30,6 +30,10 @@ export function clampSurface(x, y, width, height, viewportWidth, viewportHeight)
 
 export const PANEL_DEPTH_MIN = -800;
 export const PANEL_DEPTH_MAX = 500;
+export const PANEL_WIDTH_MIN = 180;
+export const PANEL_WIDTH_MAX = 1200;
+export const PANEL_HEIGHT_MIN = 100;
+export const PANEL_HEIGHT_MAX = 900;
 const PANEL_PERSPECTIVE = 1400;
 
 /** Depth axis in px: positive = toward the viewer (closer), negative = away. */
@@ -51,6 +55,22 @@ export function depthBrightness(z) {
   return Math.max(0.75, Math.min(1.12, 1 + c / 4500));
 }
 
+export function clampSurfaceSize(width, height, viewportWidth, viewportHeight) {
+  const vw = Math.max(240, Number(viewportWidth) || 0);
+  const vh = Math.max(180, Number(viewportHeight) || 0);
+  const maxW = Math.max(PANEL_WIDTH_MIN, Math.min(PANEL_WIDTH_MAX, vw - 36));
+  const maxH = Math.max(PANEL_HEIGHT_MIN, Math.min(PANEL_HEIGHT_MAX, vh - 78));
+  return {
+    width: Math.max(PANEL_WIDTH_MIN, Math.min(maxW, Number(width) || PANEL_WIDTH_MIN)),
+    height: Math.max(PANEL_HEIGHT_MIN, Math.min(maxH, Number(height) || PANEL_HEIGHT_MIN)),
+  };
+}
+
+export function normalizePanelArrangement(value) {
+  const key = String(value || '').toLowerCase();
+  return new Set(['free','left','right','top','bottom','front','back']).has(key) ? key : 'free';
+}
+
 /** CSS transform for an independent panel transform {x, y, z}. */
 export function composePanelTransform(x, y, z) {
   return `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0px) scale(${depthScale(z).toFixed(4)})`;
@@ -66,21 +86,24 @@ const EXTRA_PANEL_IDS = ['gesture-input-panel', 'media-preview', 'city-journey',
 export function collectPanelDescriptors(documentRoot) {
   const out = [];
   const seen = new Set();
-  const push = (el) => {
+  const push = (el, type = 'panel') => {
     if (!el || seen.has(el)) return;
+    if (el.getAttribute?.('data-panel-space-ignore') === 'true') return;
+    if (el.id === 'portal-return-console' || el.id === 'cube-dive-hud') return;
+    if (el.classList?.contains?.('assembly-directory')) return;
     seen.add(el);
-    out.push({ id: el.id || '(panel)', el });
+    out.push({ id: el.id || el.getAttribute?.('data-panel-space-title') || '(panel)', el, type });
   };
-  if (documentRoot && typeof documentRoot.querySelectorAll === 'function') {
-    const asides = documentRoot.querySelectorAll('aside');
-    for (const el of asides) push(el);
+  if (!documentRoot) return out;
+  if (typeof documentRoot.querySelectorAll === 'function') {
+    for (const el of documentRoot.querySelectorAll('aside')) push(el, 'aside');
+    for (const el of documentRoot.querySelectorAll('[data-floating-panel="true"]')) push(el, 'floating');
   }
-  if (documentRoot && typeof documentRoot.getElementById === 'function') {
-    for (const id of EXTRA_PANEL_IDS) push(documentRoot.getElementById(id));
+  if (typeof documentRoot.getElementById === 'function') {
+    for (const id of EXTRA_PANEL_IDS) { const el = documentRoot.getElementById(id); if (el) push(el, 'extra'); }
   }
   return out;
 }
-
 /** Human label for a panel's drag grip. */
 export function panelTitle(el) {
   if (!el) return 'Panel';
@@ -140,24 +163,8 @@ function writeStore(view, data) {
 
 const NARROW_QUERY = '(max-width:700px)';
 
-const PANEL_SPACE_CSS = `
-.surface-grip{display:flex;align-items:center;gap:8px;flex-shrink:0;padding:6px 8px;border-bottom:1px solid rgba(120,160,190,.25);touch-action:none;color:#d9eeff;font:12px system-ui;background:rgba(10,25,38,.35);border-radius:10px 10px 0 0;user-select:none;-webkit-user-select:none}
-.surface-grip-toggle{flex:1;min-width:0;display:flex;align-items:center;gap:8px;overflow:hidden;color:inherit;background:transparent;border:0;padding:6px 4px;cursor:grab;font:inherit;text-align:left}
-.surface-grip-toggle:active{cursor:grabbing}
-.surface-grip-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.surface-grip-depth{flex:none;opacity:.55;font-size:10px;white-space:nowrap}
-.surface-grip-action{flex:none;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#8fd8f2;border:1px solid rgba(120,180,220,.35);border-radius:6px;padding:3px 8px;white-space:nowrap}
-.surface-grip-center{flex:none;color:inherit;background:#15283b;border:1px solid #68859e;border-radius:6px;padding:5px 9px;cursor:pointer;font-size:11px}
-[data-panel-space]{transform-origin:0 0;transition-property:opacity !important}
-[data-panel-space][data-compact="true"]{width:auto !important;max-width:min(340px,calc(100vw - 16px)) !important}
-[data-panel-space][data-compact="true"] > :not(.surface-grip){display:none !important}
-/* An expanded (materialized) console must never swallow the world: it stays
-   bounded so the 3D field remains visible and interactive around it. */
-[data-panel-space]:not([data-compact="true"]){max-width:min(80vw,calc(100vw - 16px)) !important;max-height:80vh !important}
-@keyframes panelSpaceIn{from{opacity:0}to{opacity:1}}
-.panel-space-appearing{animation:panelSpaceIn .18s ease-out}
-#hint[data-panel-space]{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
-`;
+const PANEL_SPACE_CSS = "[data-panel-space]{transform-origin:0 0!important;transition-property:opacity,filter!important;will-change:transform,opacity;box-sizing:border-box!important}\n[data-panel-space].panel-space-front{box-shadow:0 22px 80px rgba(0,0,0,.62),0 0 0 1px rgba(116,218,255,.12),0 0 36px rgba(95,191,255,.08)!important}\n.surface-grip{display:grid;grid-template-columns:50px minmax(0,1fr) auto auto;align-items:center;gap:8px;min-height:78px;width:100%;padding:8px;touch-action:none;color:#dff7ff;background:linear-gradient(145deg,rgba(25,59,82,.97),rgba(5,15,24,.97) 70%);border:1px solid rgba(129,232,255,.24);border-radius:16px;box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 10px 34px rgba(0,0,0,.48);user-select:none;-webkit-user-select:none}\n.surface-grip-toggle{display:flex;align-items:center;gap:9px;min-width:0;min-height:58px;padding:4px 6px;border:0;background:transparent;color:inherit;cursor:grab;text-align:left;font:600 11px/1.2 system-ui,-apple-system,\"Segoe UI\",sans-serif}\n.surface-grip-toggle:active{cursor:grabbing}\n.surface-grip-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:.05em;text-transform:uppercase}\n.surface-grip-action,.surface-grip-center,.surface-grip-arrange,.surface-grip-close{flex:none;min-width:38px;min-height:38px;padding:6px 8px;border:1px solid rgba(129,232,255,.28);border-radius:9px;color:#dff8ff;background:rgba(8,24,36,.76);cursor:pointer;font-size:10px}\n.surface-grip-action{padding:7px 9px;border-color:rgba(127,218,255,.32);color:#9ee9ff;letter-spacing:.08em;text-transform:uppercase}\n.surface-grip-close{font-size:18px;border-color:rgba(255,123,143,.38);color:#ffd5dc}\n.surface-grip-close:hover{border-color:rgba(255,123,143,.72);background:rgba(74,19,31,.86)}\n.surface-mini-cube{position:relative;width:42px;height:42px;flex:none;transform-style:preserve-3d;transform:rotateX(-18deg) rotateY(28deg);animation:panel-space-cube-spin 6s linear infinite;perspective:520px}\n.surface-mini-face{position:absolute;inset:0;border:1px solid rgba(153,238,255,.55);border-radius:6px;background:linear-gradient(145deg,rgba(111,225,255,.34),rgba(8,26,36,.92));box-shadow:inset 0 0 14px rgba(103,224,255,.12),0 0 15px rgba(103,224,255,.09);backface-visibility:hidden}\n.surface-mini-face--front{transform:translateZ(21px)}.surface-mini-face--back{transform:rotateY(180deg) translateZ(21px)}.surface-mini-face--right{transform:rotateY(90deg) translateZ(21px)}.surface-mini-face--left{transform:rotateY(-90deg) translateZ(21px)}.surface-mini-face--top{transform:rotateX(90deg) translateZ(21px)}.surface-mini-face--bottom{transform:rotateX(-90deg) translateZ(21px)}\n.surface-mini-mark{position:absolute;inset:0;display:grid;place-items:center;color:#e9fdff;font-size:14px;text-shadow:0 0 12px rgba(117,232,255,.82)}\n@keyframes panel-space-cube-spin{0%{transform:rotateX(-18deg) rotateY(0deg)}50%{transform:rotateX(-18deg) rotateY(180deg)}100%{transform:rotateX(-18deg) rotateY(360deg)}}\n[data-panel-space][data-compact=\"true\"]{width:auto!important;max-width:none!important;max-height:none!important;overflow:visible!important;background:transparent!important;border:0!important;box-shadow:none!important}\n[data-panel-space][data-compact=\"true\"]>:not(.surface-grip){display:none!important}\n[data-panel-space][data-compact=\"true\"]>.surface-grip{display:grid!important;width:min(286px,calc(100vw - 28px))!important}\n[data-panel-space][data-compact=\"true\"] .surface-grip-center,[data-panel-space][data-compact=\"true\"] .surface-grip-arrange{display:none!important}\n[data-panel-space]:not([data-compact=\"true\"]){min-width:180px;max-width:min(92vw,1200px);max-height:min(88vh,900px);border-radius:17px}\n.panel-space-resize{position:absolute;z-index:4;width:14px;height:14px;margin:-3px;background:transparent;border:0;padding:0;touch-action:none}\n.panel-space-resize[data-dir=\"n\"]{top:0;left:50%;transform:translate(-50%,-30%);cursor:ns-resize}.panel-space-resize[data-dir=\"s\"]{bottom:0;left:50%;transform:translate(-50%,30%);cursor:ns-resize}.panel-space-resize[data-dir=\"e\"]{top:50%;right:0;transform:translate(30%,-50%);cursor:ew-resize}.panel-space-resize[data-dir=\"w\"]{top:50%;left:0;transform:translate(-30%,-50%);cursor:ew-resize}.panel-space-resize[data-dir=\"ne\"]{top:0;right:0;transform:translate(30%,-30%);cursor:nesw-resize}.panel-space-resize[data-dir=\"nw\"]{top:0;left:0;transform:translate(-30%,-30%);cursor:nwse-resize}.panel-space-resize[data-dir=\"se\"]{bottom:0;right:0;transform:translate(30%,30%);cursor:nwse-resize}.panel-space-resize[data-dir=\"sw\"]{bottom:0;left:0;transform:translate(-30%,30%);cursor:nesw-resize}\n.panel-space-dragging *,.panel-space-resizing *{user-select:none!important;-webkit-user-select:none!important}\n@media(prefers-reduced-motion:reduce){.surface-mini-cube{animation:none}}\n";
+
 
 export function mountCenteredSurfaces(documentRoot = document, view = window) {
   const noop = () => {};
