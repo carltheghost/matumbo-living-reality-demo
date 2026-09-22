@@ -70,7 +70,7 @@ test("keyless CoinGecko read normalizes the fixed peer set and keeps TUMBO expli
   });
   assert.equal(snapshot.status, "ready");
   assert.deepEqual(snapshot.records.map((record) => record.assetId), ASSET_MARKET_PEER_ASSET_IDS);
-  assert.equal(snapshot.records.length, 4);
+  assert.equal(snapshot.records.length, ASSET_MARKET_PEER_ASSET_IDS.length);
   assert.equal(snapshot.sources[0].available, true);
   assert.deepEqual(snapshot.nativeAsset, {
     id: "tumbo-sim",
@@ -99,7 +99,7 @@ test("keyless CoinGecko read normalizes the fixed peer set and keeps TUMBO expli
   assert.equal(Object.isFrozen(snapshot), true);
   assert.equal(Object.isFrozen(snapshot.records[0]), true);
   assert.equal(requested.length, 1);
-  assert.match(requested[0].url, /ids=bitcoin%2Cethereum%2Cofficial-trump%2Cmelania-meme/);
+  assert.match(requested[0].url, /ids=bitcoin%2Cethereum%2Ctether%2Cbinancecoin/);
   assert.equal(requested[0].options.method, "GET");
   assert.equal(requested[0].options.headers.accept, "application/json");
   assert.equal(Object.hasOwn(requested[0].options.headers, "authorization"), false);
@@ -147,8 +147,8 @@ test("summary and replay are local, immutable, and do not refetch", async () => 
     },
   });
   const summary = summarizeAssetMarketEvidence(snapshot);
-  assert.equal(summary.recordCount, 4);
-  assert.equal(summary.completeRecordCount, 4);
+  assert.equal(summary.recordCount, ASSET_MARKET_PEER_ASSET_IDS.length);
+  assert.equal(summary.completeRecordCount, ASSET_MARKET_PEER_ASSET_IDS.length);
   assert.equal(summary.missingAssetIds.length, 0);
   const replay = replayAssetMarketEvidence(summary, snapshot.records[1].id, "test");
   assert.equal(calls, 1);

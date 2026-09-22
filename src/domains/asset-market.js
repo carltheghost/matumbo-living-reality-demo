@@ -11,7 +11,7 @@
 export const ASSET_MARKET_SCHEMA_VERSION = 1;
 export const ASSET_MARKET_SOURCE = "public-asset-market-evidence";
 export const ASSET_MARKET_REPLAY_SOURCE = "public-asset-market-replay";
-export const ASSET_MARKET_MAX_RECORDS = 4;
+export const ASSET_MARKET_MAX_RECORDS = 44;
 export const ASSET_MARKET_FETCH_TIMEOUT_MS = 9_000;
 
 export const ASSET_MARKET_BOUNDARY =
@@ -23,6 +23,46 @@ const COINGECKO_DOCS = "https://docs.coingecko.com/reference/coins-markets";
 export const ASSET_MARKET_PEER_ASSETS = Object.freeze([
   Object.freeze({ id: "bitcoin", symbol: "BTC", label: "Bitcoin" }),
   Object.freeze({ id: "ethereum", symbol: "ETH", label: "Ethereum" }),
+  Object.freeze({ id: "tether", symbol: "USDT", label: "Tether" }),
+  Object.freeze({ id: "binancecoin", symbol: "BNB", label: "BNB" }),
+  Object.freeze({ id: "ripple", symbol: "XRP", label: "XRP" }),
+  Object.freeze({ id: "usd-coin", symbol: "USDC", label: "USDC" }),
+  Object.freeze({ id: "solana", symbol: "SOL", label: "Solana" }),
+  Object.freeze({ id: "tron", symbol: "TRX", label: "TRON" }),
+  Object.freeze({ id: "dogecoin", symbol: "DOGE", label: "Dogecoin" }),
+  Object.freeze({ id: "cardano", symbol: "ADA", label: "Cardano" }),
+  Object.freeze({ id: "bitcoin-cash", symbol: "BCH", label: "Bitcoin Cash" }),
+  Object.freeze({ id: "chainlink", symbol: "LINK", label: "Chainlink" }),
+  Object.freeze({ id: "stellar", symbol: "XLM", label: "Stellar" }),
+  Object.freeze({ id: "leo-token", symbol: "LEO", label: "LEO Token" }),
+  Object.freeze({ id: "avalanche-2", symbol: "AVAX", label: "Avalanche" }),
+  Object.freeze({ id: "litecoin", symbol: "LTC", label: "Litecoin" }),
+  Object.freeze({ id: "shiba-inu", symbol: "SHIB", label: "Shiba Inu" }),
+  Object.freeze({ id: "the-open-network", symbol: "TON", label: "Toncoin" }),
+  Object.freeze({ id: "polkadot", symbol: "DOT", label: "Polkadot" }),
+  Object.freeze({ id: "uniswap", symbol: "UNI", label: "Uniswap" }),
+  Object.freeze({ id: "dai", symbol: "DAI", label: "Dai" }),
+  Object.freeze({ id: "near", symbol: "NEAR", label: "NEAR Protocol" }),
+  Object.freeze({ id: "aptos", symbol: "APT", label: "Aptos" }),
+  Object.freeze({ id: "internet-computer", symbol: "ICP", label: "Internet Computer" }),
+  Object.freeze({ id: "ethereum-classic", symbol: "ETC", label: "Ethereum Classic" }),
+  Object.freeze({ id: "cosmos", symbol: "ATOM", label: "Cosmos" }),
+  Object.freeze({ id: "monero", symbol: "XMR", label: "Monero" }),
+  Object.freeze({ id: "okb", symbol: "OKB", label: "OKB" }),
+  Object.freeze({ id: "filecoin", symbol: "FIL", label: "Filecoin" }),
+  Object.freeze({ id: "crypto-com-chain", symbol: "CRO", label: "Cronos" }),
+  Object.freeze({ id: "arbitrum", symbol: "ARB", label: "Arbitrum" }),
+  Object.freeze({ id: "optimism", symbol: "OP", label: "Optimism" }),
+  Object.freeze({ id: "maker", symbol: "MKR", label: "Maker" }),
+  Object.freeze({ id: "aave", symbol: "AAVE", label: "Aave" }),
+  Object.freeze({ id: "algorand", symbol: "ALGO", label: "Algorand" }),
+  Object.freeze({ id: "vechain", symbol: "VET", label: "VeChain" }),
+  Object.freeze({ id: "sui", symbol: "SUI", label: "Sui" }),
+  Object.freeze({ id: "injective-protocol", symbol: "INJ", label: "Injective" }),
+  Object.freeze({ id: "hedera-hashgraph", symbol: "HBAR", label: "Hedera" }),
+  Object.freeze({ id: "pepe", symbol: "PEPE", label: "Pepe" }),
+  Object.freeze({ id: "sei-network", symbol: "SEI", label: "Sei" }),
+  Object.freeze({ id: "render-token", symbol: "RENDER", label: "Render" }),
   Object.freeze({ id: "official-trump", symbol: "TRUMP", label: "Official Trump" }),
   Object.freeze({ id: "melania-meme", symbol: "MELANIA", label: "Melania Meme" }),
 ]);
