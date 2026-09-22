@@ -1,29 +1,6 @@
 import {createRealityTimeline} from '../domains/reality-timeline.js';
 import {buildRealityAssemblyScene} from './reality-assembly-scene.js';
 
-// A block's name must survive camera rotation: a label is hidden only when its
-// cube is behind the camera or outside the projectable frustum. Anything
-// projectable stays visible — it is clamped into the visible band instead of
-// being culled for overlapping another label or HUD chrome.
-export function placeAssemblyLabel({ndcX,ndcY,ndcZ,viewportWidth,viewportHeight,safeTop,safeBottom}){
-  if(!(ndcZ>-1&&ndcZ<1)||Math.abs(ndcX)>1.25||Math.abs(ndcY)>1.25)return {visible:false};
-  const x=Math.min(Math.max((ndcX*.5+.5)*viewportWidth,8),viewportWidth-8);
-  const y=Math.min(Math.max((-ndcY*.5+.5)*viewportHeight,safeTop),safeBottom);
-  return {visible:true,x,y};
-}
-// HUD chrome (header, toolbar, inspector panels) reserves screen space; the
-// label band is whatever vertical space remains, so names slide along chrome
-// edges instead of vanishing behind them.
-export function computeLabelSafeBand(chromeRects,viewportHeight){
-  let safeTop=8,safeBottom=viewportHeight-8;
-  for(const rect of chromeRects){
-    if(rect.bottom<viewportHeight/2&&rect.bottom+8>safeTop)safeTop=rect.bottom+8;
-    else if(rect.top>=viewportHeight/2&&rect.top-8<safeBottom)safeBottom=rect.top-8;
-  }
-  if(safeBottom<safeTop+24){safeTop=8;safeBottom=viewportHeight-8;}
-  return {safeTop,safeBottom};
-}
-
 export function createRealityAssembly({THREE,renderer,scene,camera,controls,world,targets,features,onNavigate,onFrame,readFeature=()=>null,environmentTexture=null,reducedMotion=false}){
   const primary=['block-world','contracts','person','rooms','academy','world-events','multi-sport-events','asset-market'];
   const ordered=[...features].sort((a,b)=>{const aIndex=primary.indexOf(a.id),bIndex=primary.indexOf(b.id);return (aIndex<0?100:aIndex)-(bIndex<0?100:bIndex);});
@@ -210,26 +187,15 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
       worldLabel.hidden=lod!=='world-block';
       if(lod==='world-block'){for(const [,label] of labels)label.hidden=true;}
       else{
-      // Block names survive camera rotation: nothing is culled for overlapping
-      // another label or HUD chrome. A projectable label is always shown,
-      // clamped into the visible safe band so it slides along chrome edges
-      // instead of vanishing behind them.
-      const {safeTop,safeBottom}=computeLabelSafeBand(occupied,innerHeight);
       const orderedLabels=[...labels].sort(([a],[b])=>(a===selectedId?-2:a===hovered?-1:0)-(b===selectedId?-2:b===hovered?-1:0));
       for(const [id,label] of orderedLabels){
         if(label===focusedLabel)continue;
-        const node=spatial.nodes.get(id);if(!node){label.hidden=true;continue;}
-        screenPoint.copy(node.root.position);screenPoint.y-=1.55*node.scale;screenPoint.project(camera);
-        const placement=placeAssemblyLabel({ndcX:screenPoint.x,ndcY:screenPoint.y,ndcZ:screenPoint.z,viewportWidth:innerWidth,viewportHeight:innerHeight,safeTop,safeBottom});
-        if(!placement.visible){label.hidden=true;continue;}
-        label.hidden=false;label.style.left=`${placement.x}px`;label.style.top=`${placement.y}px`;
-        // Keep the full pill inside the safe band after centering.
+        const node=spatial.nodes.get(id);screenPoint.copy(node.root.position);screenPoint.y-=1.55*node.scale;screenPoint.project(camera);
+        if(screenPoint.z<=-1||screenPoint.z>=1||Math.abs(screenPoint.x)>1||Math.abs(screenPoint.y)>.91){label.hidden=true;continue;}
+        label.hidden=false;label.style.left=`${(screenPoint.x*.5+.5)*innerWidth}px`;label.style.top=`${(-screenPoint.y*.5+.5)*innerHeight}px`;
         const bounds=label.getBoundingClientRect();
-        let dx=0,dy=0;
-        if(bounds.left<8)dx=8-bounds.left;else if(bounds.right>innerWidth-8)dx=innerWidth-8-bounds.right;
-        if(bounds.top<safeTop)dy=safeTop-bounds.top;else if(bounds.bottom>safeBottom)dy=safeBottom-bounds.bottom;
-        if(dx||dy){label.style.left=`${placement.x+dx}px`;label.style.top=`${placement.y+dy}px`;}
-        label.style.zIndex=id===selectedId?'3':id===hovered?'2':'1';
+        if(bounds.left<8||bounds.right>innerWidth-8||bounds.top<8||bounds.bottom>innerHeight-8||occupied.some(rect=>overlaps(bounds,rect))){label.hidden=true;continue;}
+        occupied.push(bounds);label.style.zIndex=id===selectedId?'2':'1';
       }
       }
     },
