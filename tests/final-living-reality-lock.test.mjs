@@ -48,6 +48,20 @@ test('TUMBO-SIM transfer chip is one continuously rotating cube', async () => {
 });
 
 
+test('desktop tabs use six decorated faces and movable panels', async () => {
+  const source = await readFile(new URL('../src/render/tab-engine.js', import.meta.url), 'utf8');
+  assert.match(source, /const faceMarks = \\[/);
+  assert.match(source, /symbol: '⌖', code: 'TACT'/);
+  assert.match(source, /symbol: 'T', code: 'TUMBO'/);
+  assert.match(source, /symbol: 'Ω', code: 'REALITY'/);
+  assert.match(source, /symbol: '✦', code: 'SIM'/);
+  assert.match(source, /symbol: '▦', code: 'GRID'/);
+  assert.match(source, /_enablePanelDragging\\(record\\)/);
+  assert.match(source, /_enablePanelDragging\\(tab\\)/);
+  assert.match(source, /pointerdown/);
+  assert.match(source, /--tl-panel-drag-x/);
+});
+
 test('desktop tabs stay on the right and use the TUMBO-SIM minimized glass language', async () => {
   const source = await readFile(new URL('../src/render/tab-engine.js', import.meta.url), 'utf8');
   assert.match(source, /\.tl-dock--desktop\s*\{[\s\S]*?right:\s*12px;/);
