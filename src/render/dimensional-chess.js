@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import {createChessArenaState,applyChessArenaMove} from "../domains/chess-arena.js?v=20260922-cache2";
-import {createDimensionalChessState,legalMoves4D,applyDimensionalMove,coords,key,slicePieces,countPieces} from "../domains/chess-4d.js?v=20260922-4d1";
+import {createDimensionalChessState,legalMoves4D,applyDimensionalMove,undoDimensionalMove,redoDimensionalMove,coords,key,slicePieces,countPieces} from "../domains/chess-4d.js?v=20260922-4d1";
 import {createOutcomeContracts} from "../domains/outcome-contracts.js?v=20260922-cache2";
 
 const PIECE_NAMES={p:"Pawn",n:"Knight",b:"Bishop",r:"Rook",q:"Queen",k:"King"};
@@ -108,7 +108,7 @@ function makePanel(doc){
   .dc-side{display:flex;flex-direction:column;gap:10px;min-width:0}.dc-card{border:1px solid rgba(255,255,255,.08);background:rgba(7,16,25,.78);border-radius:13px;padding:11px}.dc-card h3{margin:0 0 8px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#9fd9f5}
   .dc-controls{display:grid;grid-template-columns:1fr 1fr;gap:8px}.dc-controls label{font-size:11px;color:#91a9ba;display:grid;gap:5px}.dc-controls input{width:100%}
   .dc-contract{display:grid;gap:7px}.dc-contract button{text-align:left;min-height:42px;border:1px solid rgba(88,176,224,.25);border-radius:9px;background:#0d1d2a;color:#e8f6ff;padding:8px;cursor:pointer}.dc-contract button strong{display:block;font-size:12px}.dc-contract button span{font-size:10px;color:#8ea9b8}
-  .dc-moves{max-height:150px;overflow:auto;font:11px ui-monospace,monospace;color:#b9d3e3}.dc-move{padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+  .dc-moves{max-height:150px;overflow:auto;font:11px ui-monospace,monospace;color:#b9d3e3}.dc-targets{display:grid;gap:5px;max-height:170px;overflow:auto}.dc-target{width:100%;text-align:left;border:1px solid rgba(86,190,255,.22);border-radius:8px;background:#0b1b27;color:#dff5ff;padding:7px;cursor:pointer;font-size:10px}.dc-target.capture{border-color:rgba(255,102,125,.5)}.dc-move{padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)}
   .dc-footer{display:flex;gap:8px;flex-wrap:wrap;padding:0 12px 12px}.dc-footer button{flex:1;min-width:130px}
   @media(max-width:850px){.dc-body{grid-template-columns:1fr}.dc-stage,.dc-canvas{min-height:390px}.dc-side{display:grid;grid-template-columns:1fr 1fr}.dc-card:last-child{grid-column:1/-1}}
   @media(max-width:560px){.dc-head{align-items:flex-start;gap:10px;flex-direction:column}.dc-mode{width:100%}.dc-mode button{flex:1}.dc-side{display:block}.dc-stage,.dc-canvas{min-height:330px}.dc-body{padding:8px}.dc-footer{padding:0 8px 8px}}
@@ -119,10 +119,10 @@ function makePanel(doc){
     <aside class="dc-side">
       <section class="dc-card"><h3>Dimension navigator</h3><div class="dc-controls"><label>W slice<input data-w type="range" min="0" max="7" value="3"></label><label>Z slice<input data-z type="range" min="0" max="7" value="3"></label></div><div style="font-size:11px;color:#8fa8b9;margin-top:8px" data-slice-help>Active 8×8 slice. Move across Z/W to travel the hypercube.</div></section>
       <section class="dc-card"><h3>Contracts · TUMBO-SIM</h3><div class="dc-contract"><button data-contract="white"><strong>White wins</strong><span>Game outcome contract · simulated points</span></button><button data-contract="black"><strong>Black wins</strong><span>Game outcome contract · simulated points</span></button><button data-contract="draw"><strong>Draw</strong><span>Game outcome contract · simulated points</span></button><button data-contract="move"><strong>Next move · Knight</strong><span>Move contract tied to the live turn</span></button></div><div style="font-size:10px;color:#718b9c;margin-top:8px">Simulation only. No wallet, real-money wager, custody or settlement.</div></section>
-      <section class="dc-card"><h3>Move history</h3><div class="dc-moves" data-moves></div></section>
+      <section class="dc-card"><h3>Legal dimensional moves</h3><div class="dc-targets" data-targets><div style="font-size:10px;color:#718b9c">Select a character to reveal legal destinations.</div></div></section><section class="dc-card"><h3>Move history</h3><div class="dc-moves" data-moves></div></section>
     </aside>
   </div>
-  <footer class="dc-footer"><button class="dc-action" data-new>New game</button><button class="dc-action" data-center>Center board</button><button class="dc-action" data-brenda>Ask Brenda</button></footer>`;
+  <footer class="dc-footer"><button class="dc-action" data-undo>Undo</button><button class="dc-action" data-redo>Redo</button><button class="dc-action" data-new>New game</button><button class="dc-action" data-center>Center board</button><button class="dc-action" data-brenda>Ask Brenda</button></footer>`;
   return root;
 }
 
@@ -143,7 +143,7 @@ export function mountDimensionalChess({documentRoot=document,host=document.body}
   const board3=makeBoard(THREE,6.5);world.add(board3.root);
   const board4=makeBoard(THREE,5.2);world.add(board4.root);board4.root.visible=false;
   const pieces=new THREE.Group();world.add(pieces);
-  const links=new THREE.Group();world.add(links);
+  const links=new THREE.Group();world.add(links);const targets=new THREE.Group();world.add(targets);
   const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
   let mode="4d", state2=createChessArenaState(), state4=createDimensionalChessState();
   let sliceZ=3,sliceW=3,selected2=null,selected4=null, destroyed=false,drag=false,lastX=0,lastY=0,yaw=0,pitch=-.55,distance=10;
@@ -164,12 +164,21 @@ export function mountDimensionalChess({documentRoot=document,host=document.body}
     }
   }
   function render4Pieces(){
-    clearGroup(pieces);meshes.clear();
+    clearGroup(pieces);meshes.clear();clearGroup(targets);
     const list=slicePieces(state4,sliceZ,sliceW);
     for(const p of list){
       const g=createCharacterPiece(THREE,p.type,p.color);showPiece(g,p.x,p.y,5.2);g.userData.key=p.key;pieces.add(g);meshes.set(p.key,g);
     }
     renderSliceLinks();
+    if(selected4!==null){
+      const moves=legalMoves4D(state4,selected4);
+      for(const move of moves){
+        const c=coords(move.to); if(c[2]!==sliceZ||c[3]!==sliceW)continue;
+        const p=boardPosition(5.2,c[0],c[1]);
+        const g=new THREE.Group();g.position.set(p[0],p[1]+.08,p[2]);g.userData.destinationKey=move.to;
+        const ring=new THREE.Mesh(new THREE.TorusGeometry(.22,.045,8,20),new THREE.MeshBasicMaterial({color:state4.board[move.to]?0xff6b7d:0x55d8ff,transparent:true,opacity:.9}));ring.rotation.x=Math.PI/2;g.add(ring);targets.add(g);
+      }
+    }
   }
   function renderSliceLinks(){
     clearGroup(links);
@@ -201,8 +210,12 @@ export function mountDimensionalChess({documentRoot=document,host=document.body}
   function pick(event){
     const r=canvas.getBoundingClientRect();pointer.x=((event.clientX-r.left)/r.width)*2-1;pointer.y=-((event.clientY-r.top)/r.height)*2+1;
     raycaster.setFromCamera(pointer,camera);
-    const hits=raycaster.intersectObjects([...meshes.values()],true);
-    let g=hits[0]?.object;while(g&&!g.userData?.square&&!Number.isInteger(g.userData?.key))g=g.parent;
+    const hits=raycaster.intersectObjects([...targets.children,...meshes.values()],true);
+    let g=hits[0]?.object;while(g&&!Number.isInteger(g.userData?.destinationKey)&&!g.userData?.square&&!Number.isInteger(g.userData?.key))g=g.parent;
+    if(g&&Number.isInteger(g.userData?.destinationKey)&&mode==="4d"&&selected4!==null){
+      const result=applyDimensionalMove(state4,selected4,g.userData.destinationKey);
+      if(result.accepted){const destination=coords(g.userData.destinationKey);state4=result.state;sliceZ=destination[2];sliceW=destination[3];selected4=null;root.querySelector("[data-z]").value=sliceZ;root.querySelector("[data-w]").value=sliceW;render4Pieces();refresh();return;}
+    }while(g&&!g.userData?.square&&!Number.isInteger(g.userData?.key))g=g.parent;
     if(!g)return;
     if(mode==="4d"){
       const k=g.userData.key;
@@ -220,6 +233,13 @@ export function mountDimensionalChess({documentRoot=document,host=document.body}
   }
 
   function refresh(){
+    const targetBox=root.querySelector("[data-targets]");
+    targetBox.replaceChildren();
+    if(mode==="4d"&&selected4!==null){
+      const moves=legalMoves4D(state4,selected4);
+      if(!moves.length){const d=documentRoot.createElement("div");d.style.cssText="font-size:10px;color:#718b9c";d.textContent="No legal destinations.";targetBox.append(d);}
+      else moves.slice(0,80).forEach(m=>{const q=coords(m.to),b=documentRoot.createElement("button");b.className="dc-target"+(state4.board[m.to]?" capture":"");b.textContent=(state4.board[m.to]?"Capture · ":"Move · ")+String.fromCharCode(97+q[0])+(q[1]+1)+" · Z"+q[2]+" W"+q[3];b.addEventListener("click",()=>{sliceZ=q[2];sliceW=q[3];root.querySelector("[data-z]").value=sliceZ;root.querySelector("[data-w]").value=sliceW;const result=applyDimensionalMove(state4,selected4,m.to);if(result.accepted){state4=result.state;selected4=null;render4Pieces();refresh();}});targetBox.append(b);});
+    }else{const d=documentRoot.createElement("div");d.style.cssText="font-size:10px;color:#718b9c";d.textContent=mode==="4d"?"Select a character to reveal legal destinations.":"Switch to 4D for dimensional move targets.";targetBox.append(d);}
     const turn=mode==="4d"?state4.turn:state2.turn;
     root.querySelector("[data-turn]").textContent=`${turn==="w"?"WHITE":"BLACK"} TO MOVE`;
     root.querySelector("[data-coords]").textContent=mode==="4d"?`Z${sliceZ} · W${sliceW}`:"CLASSIC BOARD";
@@ -239,6 +259,8 @@ export function mountDimensionalChess({documentRoot=document,host=document.body}
   root.querySelectorAll("[data-mode]").forEach(b=>b.addEventListener("click",()=>setMode(b.dataset.mode)));
   root.querySelector("[data-w]").addEventListener("input",e=>{sliceW=Number(e.target.value);if(mode==="4d")render4Pieces();refresh();});
   root.querySelector("[data-z]").addEventListener("input",e=>{sliceZ=Number(e.target.value);if(mode==="4d")render4Pieces();refresh();});
+  root.querySelector("[data-undo]").addEventListener("click",()=>{if(mode!=="4d")return;const r=undoDimensionalMove(state4);if(r.changed){state4=r.state;selected4=null;const last=state4.lastMove;if(last){const q=coords(last.to);sliceZ=q[2];sliceW=q[3];root.querySelector("[data-z]").value=sliceZ;root.querySelector("[data-w]").value=sliceW;}render4Pieces();refresh();}});
+  root.querySelector("[data-redo]").addEventListener("click",()=>{if(mode!=="4d")return;const r=redoDimensionalMove(state4);if(r.changed){state4=r.state;selected4=null;const last=state4.lastMove;if(last){const q=coords(last.to);sliceZ=q[2];sliceW=q[3];root.querySelector("[data-z]").value=sliceZ;root.querySelector("[data-w]").value=sliceW;}render4Pieces();refresh();}});
   root.querySelector("[data-new]").addEventListener("click",()=>{state2=createChessArenaState();state4=createDimensionalChessState();selected2=null;selected4=null;contractDesk=createOutcomeContracts({seed:"matumbo-chess"});contractCount=0;setMode(mode);});
   root.querySelector("[data-center]").addEventListener("click",()=>{yaw=0;pitch=-.55;distance=10;cameraUpdate();});
   root.querySelector("[data-brenda]").addEventListener("click",()=>{root.querySelector("[data-status]").textContent=mode==="4d"?"Brenda: Watch the Z/W slice indicators — they are your doorway through the fourth dimension.":"Brenda: The champions are ordinary chess pieces in the classic mode; 4D is where they gain dimensional movement.";});
