@@ -13,14 +13,10 @@ This folder is the canonical Living Reality source. Agent 01 / Control Tower own
 ## Current baseline
 The original app is a static Three.js 0.179.1 organ-and-semantic-object study served with `python -m http.server 8080`.
 
-## Canonical UI lock — DO NOT REGRESS
-The clean root route is permanently owned by the **Reality Assembly**: the connected translucent/glass cube field implemented by `src/render/reality-assembly.js`. It is the canonical Living Reality landing surface.
+## Canonical Living Reality UI lock
 
-- Do **not** replace the root landing with Block World, the old Reality Lens, a constellation overlay, Tab Dock/Tab Engine, Gateway Tentacles, or any other parallel presentation stack.
-- Do **not** add a second root presentation layer that can compete with Reality Assembly during boot.
-- Do **not** change `resolveDefaultFeature()` away from `reality-lens` for the clean root route without an explicit project-owner decision.
-- Keep `tests/reality-assembly-canonical.test.mjs` green. A change that breaks this test is a regression, not a harmless UI experiment.
-- If a new UI is proposed, it must be a deliberate feature reachable from the canonical assembly, not a replacement of the root surface.
-- The canonical assembly must remain mounted and opened after its renderer exists; async feature mounts must never be allowed to steal the clean landing.
+The clean root landing is the **connected Block World / Living Reality cube field**. This is the actual glass-cube UI: small connected blocks, visible connection lines, 3-D orbit/zoom, hover/select behavior, and deliberate double-click/double-tap on a portal cube to enter/dive inside it.
 
-This lock exists because multiple agents previously replaced the intended UI with competing surfaces. Preserve the canonical surface unless the project owner explicitly changes the product decision.
+Do **not** replace the clean root with the Gateway Tentacles/tentacle cube, a constellation-overview overlay, Tab Dock/Tab Engine, the old Reality Lens presentation, or another competing root presentation. Those are not the canonical landing.
+
+Keep `src/core/default-landing.js` resolving a clean root to `block-world` and keep the cube-first presentation contract/tests green. New experiments may exist as explicit features/routes, but they must not take ownership of the clean root.
