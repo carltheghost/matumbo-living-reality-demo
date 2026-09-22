@@ -138,6 +138,7 @@ async function mountInner({ scene, camera, hudRoot, onOpenPanel, canvas, tick })
     if (!button) return;
     try {
       button.setAttribute("aria-pressed", open ? "true" : "false");
+      button.setAttribute("data-open", open ? "true" : "false");
       if (button.classList && typeof button.classList.toggle === "function") {
         button.classList.toggle("is-open", !!open);
       }
@@ -187,14 +188,31 @@ async function mountInner({ scene, camera, hudRoot, onOpenPanel, canvas, tick })
   if (canUseHud) {
     button = doc.createElement("button");
     button.type = "button";
-    button.textContent = BUTTON_LABEL;
+    const mascotGlyph = doc.createElement("span");
+    mascotGlyph.textContent = "◇";
+    mascotGlyph.setAttribute("aria-hidden", "true");
+    mascotGlyph.style.cssText = "display:inline-grid;place-items:center;width:24px;height:24px;border:1px solid rgba(142,232,255,.55);border-radius:6px;background:linear-gradient(145deg,rgba(90,211,255,.35),rgba(8,24,36,.9));box-shadow:inset 0 0 9px rgba(90,211,255,.16),0 0 14px rgba(90,211,255,.1);font-size:14px;text-shadow:0 0 9px rgba(142,232,255,.8);";
+    const mascotLabel = doc.createElement("span");
+    mascotLabel.textContent = "TUMBO";
+    mascotLabel.style.cssText = "letter-spacing:.14em;font-size:9px;font-weight:700;text-transform:uppercase;";
+    button.replaceChildren(mascotGlyph, mascotLabel);
     button.setAttribute("aria-label", BUTTON_ARIA_LABEL);
     button.setAttribute("aria-pressed", "false");
     if (button.classList && typeof button.classList.add === "function") {
       button.classList.add("hud-button", "mascot-toggle");
     }
     if (button.style) {
-      button.style.minWidth = `${MIN_TOUCH_TARGET_PX}px`;
+      button.style.minWidth = `${MIN_TOUCH_TARGET_PX + 52}px`;
+      button.style.display = "inline-flex";
+      button.style.alignItems = "center";
+      button.style.gap = "8px";
+      button.style.padding = "7px 10px";
+      button.style.border = "1px solid rgba(129,232,255,.26)";
+      button.style.borderRadius = "14px";
+      button.style.background = "linear-gradient(145deg,rgba(20,52,72,.96),rgba(4,14,23,.97))";
+      button.style.color = "#dff8ff";
+      button.style.boxShadow = "inset 0 1px 0 rgba(255,255,255,.08),0 9px 28px rgba(0,0,0,.42),0 0 20px rgba(83,203,255,.08)";
+      button.style.backdropFilter = "blur(12px)";
       button.style.minHeight = `${MIN_TOUCH_TARGET_PX}px`;
     }
     button.addEventListener("click", handleToggle);
