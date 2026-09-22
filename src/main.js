@@ -18,7 +18,7 @@ import './domains/token-transfers-ui.js?v=20260920-token-transfers1';
 import { initMobilePanelManager } from './render/mobile-panel-manager.js';
 import { mountPhotoMascot } from './render/photo-mascot-mount.js';
 import { createPersonStudio } from './render/person-studio.js?v=20260918-avatar-chess';
-import { createRealityAssembly } from './render/reality-assembly.js?v=20260921-labels';
+import { createRealityAssembly } from './render/reality-assembly.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { MANIPULATE_MODES } from './render/manipulate-controls.js';
@@ -204,12 +204,6 @@ let multiSportEventsConsole = null;
 let assetMarketConsole = null;
 let deviceProjectionConsole = null; let webAiConsole = null;
 let gestureInput = null;
-// World Gateway 3D views: tentacles + constellation overview. Mounted lazily
-// behind guarded dynamic imports — never part of the static boot graph.
-let gatewayTentacles3D = null;
-let gatewayTentacles3DLoading = false;
-let constellationOverview3D = null;
-let constellationOverview3DLoading = false;
 // Sensor coupling state is initialized before the gesture panel mounts. The
 // bridge publishes an initial OFF status during construction, so callbacks
 // must never observe a temporal-dead-zone value here.
@@ -3269,11 +3263,7 @@ function navigateStoryBeat(beat) {
         return;
       }
       if (refId === 'constellation') {
-        // Restored blocks-and-lines overview: feature cubes + handoff-graph
-        // lines. The giant-block far view stays the start; this is the view
-        // you drift into.
-        closeGatewayTentacles3D();
-        openConstellationOverview3D();
+        featureNavigator?.select?.('block-world', 'story-mode');
         return;
       }
       if (refId === 'tentacles') {
@@ -5030,52 +5020,6 @@ async function refreshLiveStatusSurfaces(method = 'status-dashboard', all = fals
     finishedAt: Date.now(),
   });
 }
-/* World Gateway 3D views: tentacles + constellation overview.
- * Both mount lazily behind guarded dynamic imports so a load or mount
- * failure can never break boot (same discipline as the token guards). */
-function openGatewayTentacles3D() {
-  if (gatewayTentacles3D) { try { gatewayTentacles3D.open(); } catch {} return; }
-  if (gatewayTentacles3DLoading) return;
-  gatewayTentacles3DLoading = true;
-  import('./render/gateway-tentacles.js?v=20260921-gtw1').then((mod) => {
-    try {
-      gatewayTentacles3D = mod.mountGatewayTentacles({
-        three: THREE, parent: world, camera, documentRoot: document,
-        onOpenConstellation: () => { closeGatewayTentacles3D(); openConstellationOverview3D(); },
-      });
-      window.__TUMBO_GATEWAY_TENTACLES__ = gatewayTentacles3D;
-      gatewayTentacles3D.open();
-    } catch (error) { console.warn('[gateway-tentacles] mount failed:', error); }
-  }).catch((error) => { console.warn('[gateway-tentacles] load failed:', error); })
-    .finally(() => { gatewayTentacles3DLoading = false; });
-}
-function closeGatewayTentacles3D() {
-  try { gatewayTentacles3D?.close(); } catch {}
-}
-function openConstellationOverview3D() {
-  if (constellationOverview3D) { try { constellationOverview3D.open(); } catch {} return; }
-  if (constellationOverview3DLoading) return;
-  constellationOverview3DLoading = true;
-  import('./render/constellation-overview.js?v=20260921-gtw1').then((mod) => {
-    try {
-      constellationOverview3D = mod.mountConstellationOverview({
-        three: THREE, parent: world, camera, documentRoot: document,
-        nodes: FEATURE_DEFINITIONS.map((f) => ({
-          id: f.id, label: f.label, kicker: f.kicker, description: f.description,
-        })),
-        links: FEATURE_HANDOFF_LINKS,
-        onOpenFeature: (id) => featureNavigator?.select?.(id, 'constellation'),
-        onOpenTentacles: () => featureNavigator?.select?.('gateway', 'constellation'),
-      });
-      window.__TUMBO_CONSTELLATION_OVERVIEW__ = constellationOverview3D;
-      constellationOverview3D.open();
-    } catch (error) { console.warn('[constellation-overview] mount failed:', error); }
-  }).catch((error) => { console.warn('[constellation-overview] load failed:', error); })
-    .finally(() => { constellationOverview3DLoading = false; });
-}
-function closeConstellationOverview3D() {
-  try { constellationOverview3D?.close(); } catch {}
-}
 function openLivePublicStatus(method = 'button', refresh = true, options = {}) {
   alignFeatureSurface('gateway', method);
   featureNavigator?.close();
@@ -6595,11 +6539,6 @@ featureNavigator = createFeatureNavigator({
     if (feature.id !== 'academy') academyConsole?.close('feature-select');
     if (feature.id !== 'world-events' && feature.id !== 'gateway') worldEvidenceLayer && (worldEvidenceLayer.visible = false);
     if (feature.id !== 'sports-events') sportsEvidenceLayer && (sportsEvidenceLayer.visible = false);
-    // World Gateway 3D views: the tentacles materialize only while the gateway
-    // feature is active; the constellation overview is a transient world view
-    // that any feature selection dismisses.
-    if (feature.id === 'gateway') openGatewayTentacles3D(); else closeGatewayTentacles3D();
-    closeConstellationOverview3D();
     syncBlockWorldCameraStatus(cameraInput?.getSnapshot?.());
     const portalMethod = String(method ?? '').startsWith('block-portal:');
     // A normal Mission Control selection starts a new presentation context;
@@ -8847,42 +8786,11 @@ realityAssembly=createRealityAssembly({THREE,renderer,scene,camera,controls,worl
 window.__TUMBO_REALITY_ASSEMBLY__=realityAssembly;
 document.addEventListener('person-studio:enter-vr',()=>immersiveSession.start('immersive-vr'));
 if(featureNavigator.getSnapshot().activeId==='person'&&!new URLSearchParams(location.search).has('person'))personStudio.open();
-// The clean landing is owned by Reality Assembly itself. Do not make its
-// visibility depend on the navigator's transient activeId: the navigator is
-// mounted before the assembly renderer and other feature callbacks can change
-// presentation state during bootstrap. On the plain root route, explicitly
-// open the connected glass-cube world after the renderer exists.
-const cleanRealityLanding = !new URLSearchParams(globalThis.location?.search ?? '').get('feature')
-  && !new URLSearchParams(globalThis.location?.search ?? '').get('panel')
-  && !String(globalThis.location?.hash ?? '');
-if (cleanRealityLanding) {
-  featureNavigator.close();
-  realityAssembly.open();
-} else if(featureNavigator.getSnapshot().activeId==='reality-lens') {
-  realityAssembly.open();
-}
+if(featureNavigator.getSnapshot().activeId==='reality-lens')realityAssembly.open();
 renderer.setAnimationLoop(animate); /* TUMBO-SIM token gamification (Infinite Burrow, Part 7): self-contained glass cube + console, mounted lazily so a mount failure can never break the world bootstrap. */ import('./render/token-gamification.js?v=20260920-gam1').then(({ mountTokenGamification }) => { try { window.__TUMBO_TOKEN_GAMIFICATION__ = mountTokenGamification({ three: THREE, scene, world, camera, renderer, controls, documentRoot: document }); } catch (error) { console.warn('[token-gamification] mount failed:', error); } }).catch((error) => { console.warn('[token-gamification] load failed:', error); });
 // URL-derived City navigation reuses the existing feature owner and avoids provider refresh.
 const mobilePanelManager = initMobilePanelManager({ documentRoot: document, windowRoot: window });
 window.__TUMBO_MOBILE_PANEL_MANAGER__ = mobilePanelManager;
-// Tab dock: ONE coherent dock for every floating panel (Reality Lens Ω).
-// The TabEngine owns the dock — closed by default, panels materialize only on
-// interaction (pointer/touch chips, keyboard 1-9/Escape, voice intents, Hand
-// Lens pinch, gaze-dwell) — and the AR adapter enhances that same dock for
-// phone/desktop/AR viewports. Panels are registered in place; the dock never
-// moves, renames, or restyles them. Guarded dynamic import: a tab-dock failure
-// degrades to "no dock" and can never break the world boot.
-import("./render/tab-registry.js?v=20260921-tabs1")
-  .then(({ initTabDock }) => {
-    try {
-      window.__TUMBO_TAB_DOCK__ = initTabDock({ documentRoot: document, windowRoot: window });
-    } catch (error) {
-      console.warn("[tab-dock] init failed:", error);
-    }
-  })
-  .catch((error) => {
-    console.warn("[tab-dock] load failed:", error);
-  });
 const cityJourney=mountCityJourney({navigate:(id,method)=>{featureNavigator.select(id,method||'popstate');featureNavigator.close();}});
 runtimeStatus?.markReady?.({ featureCount:featureNavigator?.getSnapshot?.().featureCount ?? 23 });
 mountTokenTicker();
