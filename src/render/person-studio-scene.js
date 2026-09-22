@@ -96,14 +96,31 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
   const garmentDisplays=[];
   for(let i=0;i<3;i++){
     const item=STUDIO_OUTFITS[i],g=group(`Wardrobe display / ${item.name}`,[2.5+i*.78,1.8,-3.25]);
+    // Turn the plain rotating cubes into miniature floating fashion vitrines.
+    const displayBack=box(.60,1.30,.045,dark,[0,.02,-.16],g);
+    displayBack.material.emissive.set('#091827');
     frame(.65,1.45,.42,gold,[0,0,0],g,.018);
-    const cloth=material(item.color,.25,.5);
-    const garment=box(.33,.75,.13,cloth,[0,-.05,0],g);
+    const innerFrame=frame(.55,1.18,.05,seam,[0,.02,-.19],g,.012);
+    const hangerRod=mesh(new THREE.CylinderGeometry(.012,.012,.42,12),gold,[0,.54,.03],g);
+    hangerRod.rotation.z=Math.PI/2;
+    const hangerOrb=sphere(light,[-.25,.54,.03],[.028,.028,.028],g);
+    const cloth=material(item.color,.35,.42,{emissive:item.color,emissiveIntensity:.08});
+    const garment=box(.33,.75,.13,cloth,[0,-.05,.01],g);
     box(.045,.74,.025,seam,[.105,-.05,.09],g);box(.045,.74,.025,seam,[-.105,-.05,.09],g);
-    for(const side of [-1,1]){const sleeve=box(.12,.56,.13,cloth,[side*.23,.02,0],g);sleeve.rotation.z=side*.16;target(sleeve,{kind:'outfit',id:item.id});}
+    // Shoulder details make each outfit read as an intentional garment, not a cube.
+    for(const side of [-1,1]){const sleeve=box(.12,.56,.13,cloth,[side*.23,.02,.01],g);sleeve.rotation.z=side*.16;target(sleeve,{kind:'outfit',id:item.id});}
+    const collar=mesh(new THREE.TorusGeometry(.075,.012,8,24),seam,[0,.31,.085],g);collar.scale.set(.85,.7,1);collar.rotation.x=Math.PI/2;
+    const centerBadge=sphere(ringGold,[0,-.34,.10],[.028,.028,.028],g);
     target(garment,{kind:'outfit',id:item.id});garmentDisplays.push(g);
-    // Each wardrobe display hangs in lens space with its own hologram ring.
+    // Each wardrobe display has a floating nameplate, glow ring and orbiting light.
+    const namePlate=box(.42,.12,.025,dark,[0,-.72,.04],g);
+    const plateAccent=box(.24,.012,.032,light,[0,-.72,.058],g);
     const displayRing=mesh(new THREE.TorusGeometry(.45,.016,8,56),ringBlue,[0,-.86,0],[1,1,1],g);displayRing.rotation.x=Math.PI/2;
+    const orbitLight=sphere(light,[.47,.12,.02],[.035,.035,.035],g);
+    orbitLight.userData.orbitOffset=i*2.1;
+    // Give each display a slightly different presentation angle while preserving
+    // the click targets on the garment.
+    g.rotation.y=(i-1)*.16;
   }
 
   // ---- Agent Smith: the in-world avatar character ----
@@ -235,6 +252,17 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
       // the greet lift on top.
       avatar.position.y+=greetLift;
       avatar.rotation.y+=dt*.12;
+      // Wardrobe vitrines rotate slowly like premium display stands.
+      garmentDisplays.forEach((display,i)=>{
+        display.rotation.y+=dt*(.16+i*.025);
+        const orb=display.children.find(child=>child.userData.orbitOffset===i*2.1);
+        if(orb){
+          const a=time*.9+i*2.1;
+          orb.position.x=Math.cos(a)*.47;
+          orb.position.z=Math.sin(a)*.10;
+          orb.position.y=.12+Math.sin(a)*.10;
+        }
+      });
       lensRing.rotation.y+=dt*.22;ringInner.rotation.y-=dt*.31;glow.material.opacity=.46+Math.sin(time*1.6)*.06;}
     companion.position.y=2.78+(reducedMotion?0:Math.sin(time*1.8)*.075);
     companion.rotation.y=reducedMotion?0:Math.sin(time*.8)*.14;
