@@ -140,21 +140,38 @@ export function isPanelVisible(el, view) {
 /* Per-panel persisted space (best-effort local storage).              */
 /* ------------------------------------------------------------------ */
 
-const STORE_KEY = 'matumbo.panelSpace.v1';
+const STORE_KEY = 'matumbo.panelSpace.v2';
+const LEGACY_STORE_KEY = 'matumbo.panelSpace.v1';
+const PANEL_GUTTER = 18;
+const RIGHT_RAIL_GUTTER = 116;
+const Z_BASE = 2200;
 
-function readStore(view) {
+function readJson(view, key) {
   try {
-    const raw = view && view.localStorage ? view.localStorage.getItem(STORE_KEY) : null;
+    const raw = view && view.localStorage ? view.localStorage.getItem(key) : null;
     if (!raw) return {};
     const data = JSON.parse(raw);
     return data && typeof data === 'object' ? data : {};
   } catch { return {}; }
 }
 
+function readStore(view) {
+  const legacy = readJson(view, LEGACY_STORE_KEY);
+  const modern = readJson(view, STORE_KEY);
+  const merged = { ...legacy };
+  for (const [id, value] of Object.entries(modern)) merged[id] = { ...(merged[id] || {}), ...(value || {}) };
+  return merged;
+}
+
 function writeStore(view, data) {
   try {
-    if (view && view.localStorage) view.localStorage.setItem(STORE_KEY, JSON.stringify(data));
-  } catch { /* private mode etc: positions simply do not persist */ }
+    if (view && view.localStorage) {
+      view.localStorage.setItem(STORE_KEY, JSON.stringify(data));
+      const legacy = {};
+      for (const [id, value] of Object.entries(data || {})) legacy[id] = { x: value.x, y: value.y, z: value.z };
+      view.localStorage.setItem(LEGACY_STORE_KEY, JSON.stringify(legacy));
+    }
+  } catch { /* storage is best effort */ }
 }
 
 /* ------------------------------------------------------------------ */
@@ -186,7 +203,16 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
   function applyTransform(rec) {
     const { x, y, z } = rec.state;
     rec.el.style.transform = composePanelTransform(x, y, z);
-    rec.el.style.filter = z === 0 ? '' : `brightness(${depthBrightness(z).toFixed(3)})`;
+    rec.el.style.filter = z === 0 ? '' : 'brightness(' + depthBrightness(z).toFixed(3) + ')';
+    rec.el.style.zIndex = String(rec.state.zIndex || Z_BASE);
+  }
+
+  function bringFront(rec, ctx) {
+    if (!rec || !rec.placed) return;
+    rec.state.zIndex = ++ctx.zCounter;
+    rec.el.style.zIndex = String(rec.state.zIndex);
+    rec.el.classList?.add?.('panel-space-front');
+    persistSoon(ctx);
   }
 
   function persistSoon(ctx) {
@@ -195,73 +221,117 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
       ctx.saveTimer = 0;
       const data = {};
       for (const rec of ctx.recs) {
-        if (rec.placed) data[rec.id] = { x: Math.round(rec.state.x), y: Math.round(rec.state.y), z: Math.round(rec.state.z) };
+        if (!rec.placed) continue;
+        data[rec.id] = {
+          x: Math.round(rec.state.x),
+          y: Math.round(rec.state.y),
+          z: Math.round(rec.state.z),
+          width: Math.round(rec.state.width || 320),
+          height: Math.round(rec.state.height || 220),
+          compact: rec.compact !== false,
+          arrangement: rec.arrangement || 'free',
+          zIndex: Math.round(rec.state.zIndex || Z_BASE),
+        };
       }
       writeStore(view, data);
-    }, 250);
+    }, 180);
+  }
+
+  function panelDimensions(rec) {
+    const v = viewport();
+    if (rec.compact) return { width: Math.min(286, Math.max(220, v.w - 28)), height: 78 };
+    return { width: rec.state.width || 320, height: rec.state.height || 220 };
+  }
+
+  function clampPosition(rec) {
+    const d = panelDimensions(rec);
+    const s = depthScale(rec.state.z);
+    const v = viewport();
+    const p = clampSurface(rec.state.x, rec.state.y, d.width * s, d.height * s, v.w, v.h);
+    rec.state.x = p.x; rec.state.y = p.y;
   }
 
   function setCompact(rec, on, ctx) {
     if (!rec.compactible) return;
-    if (on) {
-      // Compact applies even before placement: a console that materializes
-      // must be small from its very first visible frame.
-      rec.el.setAttribute('data-compact', 'true');
+    rec.compact = !!on;
+    rec.el.setAttribute('data-compact', rec.compact ? 'true' : 'false');
+    if (rec.actionEl) rec.actionEl.textContent = rec.compact ? 'Open' : 'Minimize';
+    if (rec.toggleBtn) rec.toggleBtn.setAttribute('aria-expanded', String(!rec.compact));
+    if (rec.compact) {
+      rec.el.style.removeProperty?.('width');
+      rec.el.style.removeProperty?.('height');
     } else {
-      if (!rec.placed) return; // cannot measure an unplaced panel; stay a chip
-      rec.el.removeAttribute('data-compact');
+      rec.el.style.width = (rec.state.width || 320) + 'px';
+      rec.el.style.height = (rec.state.height || 220) + 'px';
+      clampPosition(rec);
     }
-    if (rec.actionEl) rec.actionEl.textContent = on ? 'Open' : 'Minimize';
-    if (rec.toggleBtn) rec.toggleBtn.setAttribute('aria-expanded', String(!on));
-    if (!on && rec.placed) {
-      // The grown panel must stay in reach.
-      const r = rec.el.getBoundingClientRect();
-      const v = viewport();
-      const p = clampSurface(rec.state.x, rec.state.y, r.width, r.height, v.w, v.h);
-      rec.state.x = p.x; rec.state.y = p.y;
-      applyTransform(rec);
-    }
+    applyTransform(rec);
     if (ctx) persistSoon(ctx);
   }
-
   function toggleCompact(rec, ctx) {
     setCompact(rec, rec.el.getAttribute('data-compact') !== 'true', ctx);
   }
 
   function recenter(rec, ctx) {
-    if (!rec.placed || !rec.home) return;
-    const r = rec.el.getBoundingClientRect();
-    const v = viewport();
-    const p = clampSurface(rec.home.x, rec.home.y, r.width, r.height, v.w, v.h);
-    rec.state.x = p.x; rec.state.y = p.y; rec.state.z = 0;
+    if (!rec.placed) return;
+    const v = viewport(), d = panelDimensions(rec);
+    rec.state.x = Math.max(8, (v.w - d.width) / 2);
+    rec.state.y = Math.max(48, (v.h - d.height) / 2);
+    rec.state.z = 0;
+    rec.arrangement = 'free';
+    bringFront(rec, ctx);
     applyTransform(rec);
     persistSoon(ctx);
   }
 
+  function arrange(rec, ctx, value) {
+    const arrangement = normalizePanelArrangement(value);
+    const v = viewport(), d = panelDimensions(rec);
+    rec.arrangement = arrangement;
+    if (arrangement === 'left') { rec.state.x = PANEL_GUTTER; rec.state.y = Math.max(48, (v.h - d.height) / 2); }
+    else if (arrangement === 'right') { rec.state.x = Math.max(PANEL_GUTTER, v.w - d.width - RIGHT_RAIL_GUTTER); rec.state.y = Math.max(48, (v.h - d.height) / 2); }
+    else if (arrangement === 'top') { rec.state.x = Math.max(PANEL_GUTTER, (v.w - d.width) / 2); rec.state.y = 56; }
+    else if (arrangement === 'bottom') { rec.state.x = Math.max(PANEL_GUTTER, (v.w - d.width) / 2); rec.state.y = Math.max(48, v.h - d.height - 58); }
+    else if (arrangement === 'front') rec.state.z = PANEL_DEPTH_MAX;
+    else if (arrangement === 'back') rec.state.z = PANEL_DEPTH_MIN;
+    clampPosition(rec);
+    bringFront(rec, ctx);
+    applyTransform(rec);
+    persistSoon(ctx);
+  }
   function placePanel(rec, ctx) {
     const el = rec.el;
     if (rec.placed || !isPanelVisible(el, view)) return false;
-    const r = el.getBoundingClientRect();
-    if (!r || (r.width === 0 && r.height === 0)) return false; // not laid out yet; caller retries
+    let r;
+    try { r = el.getBoundingClientRect(); } catch { r = null; }
+    if (!r || (r.width === 0 && r.height === 0)) return false;
     const saved = ctx.store[rec.id] || {};
     const v = viewport();
-    const sx = Number(saved.x);
-    const sy = Number(saved.y);
-    rec.home = { x: r.left, y: r.top };
-    const st = el.style;
-    st.position = 'fixed'; st.left = '0px'; st.top = '0px';
-    st.right = 'auto'; st.bottom = 'auto'; st.margin = '0px';
+    rec.home = { x: Number.isFinite(r.left) ? r.left : 32, y: Number.isFinite(r.top) ? r.top : 86 };
     rec.placed = true;
-    const p = clampSurface(Number.isFinite(sx) ? sx : r.left, Number.isFinite(sy) ? sy : r.top, r.width, r.height, v.w, v.h);
-    rec.state = { x: p.x, y: p.y, z: clampDepth(saved.z || 0) };
+    const size = clampSurfaceSize(Number(saved.width) || r.width || 320, Number(saved.height) || r.height || 220, v.w, v.h);
+    rec.state.width = size.width; rec.state.height = size.height;
+    rec.state.x = Number.isFinite(Number(saved.x)) ? Number(saved.x) : rec.home.x;
+    rec.state.y = Number.isFinite(Number(saved.y)) ? Number(saved.y) : rec.home.y;
+    rec.state.z = clampDepth(saved.z);
+    rec.state.zIndex = Number.isFinite(Number(saved.zIndex)) ? Math.max(Z_BASE, Number(saved.zIndex)) : ++ctx.zCounter;
+    rec.compact = saved.compact === false ? false : (saved.compact === true ? true : true);
+    rec.arrangement = normalizePanelArrangement(saved.arrangement);
+    const st = el.style;
+    st.position = 'fixed'; st.left = '0px'; st.top = '0px'; st.right = 'auto'; st.bottom = 'auto'; st.margin = '0px';
+    if (!rec.compact) { st.width = rec.state.width + 'px'; st.height = rec.state.height + 'px'; }
+    else { st.removeProperty?.('width'); st.removeProperty?.('height'); }
+    clampPosition(rec);
+    setCompact(rec, rec.compact, ctx);
+    // Newly surfaced panels always enter above existing chrome, but their
+    // saved x/y/size/compact state stays untouched.
+    bringFront(rec, ctx);
     applyTransform(rec);
-    if (rec.compactible) setCompact(rec, true, null); // small by default; interaction materializes
     el.classList.add('panel-space-appearing');
     setTimeout(() => el.classList.remove('panel-space-appearing'), 260);
     persistSoon(ctx);
     return true;
   }
-
   function requestPlace(rec, ctx, attempt = 0) {
     if (rec.placed || rec.placeQueued) return;
     rec.placeQueued = true;
@@ -289,8 +359,8 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
       requestPlace(rec, ctx);
       return;
     }
-    // Closed -> open transition: appear small; interaction materializes.
-    if (!was && rec.compactible) setCompact(rec, true, ctx);
+    // Closed -> open transition: keep the live layout authoritative. A user
+    // who expanded or moved a panel should not see it snap when reopened.
   }
 
   function attachPlaneDepthDrag(rec, ctx, handle, { tapToggles }) {
@@ -359,56 +429,94 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
     }
   }
 
-  function setupPanel(desc, ctx) {
-    const el = desc.el;
-    const isHint = el.id === 'hint';
-    const rec = {
-      id: desc.id, el,
-      state: { x: 0, y: 0, z: 0 },
-      home: null, placed: false, placeQueued: false,
-      wasVisible: isPanelVisible(el, view),
-      originalCssText: el.style ? el.style.cssText : '',
-      grip: null, toggleBtn: null, actionEl: null,
-      compactible: !isHint && el.id !== 'city-journey',
-    };
-    if (!isHint) {
-      const title = panelTitle(el);
-      const grip = documentRoot.createElement('div');
-      grip.className = 'surface-grip';
-      const toggle = documentRoot.createElement('button');
-      toggle.type = 'button';
-      toggle.className = 'surface-grip-toggle';
-      toggle.title = `${title} — drag to move anywhere, shift-drag or wheel for depth, click to open or minimize`;
-      const label = documentRoot.createElement('span');
-      label.className = 'surface-grip-label';
-      label.textContent = `${title} · drag to move`;
-      const depthHint = documentRoot.createElement('span');
-      depthHint.className = 'surface-grip-depth';
-      depthHint.textContent = 'depth: shift-drag / wheel';
-      const action = documentRoot.createElement('span');
-      action.className = 'surface-grip-action';
-      action.textContent = 'Open';
-      toggle.append(label, depthHint, action);
-      const center = documentRoot.createElement('button');
-      center.type = 'button';
-      center.className = 'surface-grip-center';
-      center.textContent = 'Center';
-      center.title = 'Return to the designed position';
-      grip.append(toggle, center);
-      const summary = el.tagName === 'DETAILS' ? el.querySelector('summary') : null;
-      if (summary && summary.parentNode === el) summary.after(grip);
-      else if (typeof el.prepend === 'function') el.prepend(grip);
-      else el.insertBefore(grip, el.firstChild);
-      center.addEventListener('click', () => recenter(rec, ctx));
-      attachPlaneDepthDrag(rec, ctx, toggle, { tapToggles: true });
-      rec.grip = grip; rec.toggleBtn = toggle; rec.actionEl = action;
-    } else {
-      attachPlaneDepthDrag(rec, ctx, el, { tapToggles: false });
+  function createMiniCube(rec) {
+    const cube = documentRoot.createElement('span');
+    cube.className = 'surface-mini-cube';
+    cube.setAttribute('aria-hidden', 'true');
+    cube.innerHTML = '<span class="surface-mini-face surface-mini-face--front"><span class="surface-mini-mark"></span></span>'
+      + '<span class="surface-mini-face surface-mini-face--back"><span class="surface-mini-mark">⌖</span></span>'
+      + '<span class="surface-mini-face surface-mini-face--right"><span class="surface-mini-mark">T</span></span>'
+      + '<span class="surface-mini-face surface-mini-face--left"><span class="surface-mini-mark">Ω</span></span>'
+      + '<span class="surface-mini-face surface-mini-face--top"><span class="surface-mini-mark">✦</span></span>'
+      + '<span class="surface-mini-face surface-mini-face--bottom"><span class="surface-mini-mark">▦</span></span>';
+    const mark = cube.querySelector?.('.surface-mini-face--front .surface-mini-mark');
+    if (mark) mark.textContent = rec.icon;
+    return cube;
+  }
+
+  function createGrip(rec, ctx) {
+    const grip = documentRoot.createElement('div'); grip.className = 'surface-grip';
+    const toggle = documentRoot.createElement('button'); toggle.type = 'button'; toggle.className = 'surface-grip-toggle';
+    toggle.title = rec.title + ' — drag to move; Shift-drag or wheel for depth';
+    const cube = createMiniCube(rec);
+    const label = documentRoot.createElement('span'); label.className = 'surface-grip-label'; label.textContent = rec.title;
+    const action = documentRoot.createElement('span'); action.className = 'surface-grip-action'; action.textContent = 'Open';
+    toggle.append(cube, label);
+    const center = documentRoot.createElement('button'); center.type = 'button'; center.className = 'surface-grip-center'; center.textContent = '⌖'; center.title = 'Center panel';
+    const arrangeSelect = documentRoot.createElement('select'); arrangeSelect.className = 'surface-grip-arrange'; arrangeSelect.title = 'Arrange panel'; arrangeSelect.setAttribute('aria-label','Arrange ' + rec.title);
+    for (const value of ['free','left','right','top','bottom','front','back']) {
+      const option = documentRoot.createElement('option'); option.value = value; option.textContent = value === 'free' ? 'Free' : value.charAt(0).toUpperCase() + value.slice(1); arrangeSelect.appendChild(option);
     }
-    el.setAttribute('data-panel-space', 'managed');
-    ctx.recs.push(rec);
-    ctx.byEl.set(el, rec);
-    if (rec.wasVisible) requestPlace(rec, ctx);
+    arrangeSelect.value = rec.arrangement;
+    const close = documentRoot.createElement('button'); close.type = 'button'; close.className = 'surface-grip-close'; close.textContent = '×'; close.title = 'Close panel'; close.setAttribute('aria-label','Close ' + rec.title);
+    grip.append(toggle, action, center, arrangeSelect, close);
+    center.addEventListener('click', () => recenter(rec, ctx));
+    arrangeSelect.addEventListener('change', () => arrange(rec, ctx, arrangeSelect.value));
+    close.addEventListener('click', () => { try { rec.hide(); } catch { rec.el.hidden = true; } rec.wasVisible = false; persistSoon(ctx); });
+    attachPlaneDepthDrag(rec, ctx, toggle, { tapToggles: true });
+    rec.grip = grip; rec.toggleBtn = toggle; rec.actionEl = action; rec.center = center; rec.arrange = arrangeSelect; rec.close = close;
+    return grip;
+  }
+
+  function addResizeHandles(rec, ctx) {
+    rec.resizeHandles = [];
+    for (const dir of ['n','s','e','w','ne','nw','se','sw']) {
+      const handle = documentRoot.createElement('button');
+      handle.type = 'button'; handle.className = 'panel-space-resize'; handle.setAttribute('data-dir',dir); handle.setAttribute('data-panel-space-resize',dir); handle.tabIndex = -1;
+      handle.setAttribute('aria-label','Resize ' + rec.title + ' ' + dir);
+      const onDown = (e) => {
+        if (!rec.placed || rec.compact || (e.pointerType === 'mouse' && e.button !== 0)) return;
+        try { handle.setPointerCapture(e.pointerId); } catch {}
+        rec.resize = { pointerId:e.pointerId, dir, startX:e.clientX, startY:e.clientY, x:rec.state.x, y:rec.state.y, width:rec.state.width, height:rec.state.height };
+        ctx.activeResize = rec; rec.el.classList.add('panel-space-resizing'); bringFront(rec, ctx); e.preventDefault?.(); e.stopPropagation?.();
+      };
+      const onMove = (e) => {
+        const r = rec.resize; if (!r || r.pointerId !== e.pointerId) return;
+        const dx = e.clientX-r.startX, dy = e.clientY-r.startY; let x=r.x,y=r.y,w=r.width,h=r.height;
+        if (dir.includes('e')) w=r.width+dx; if (dir.includes('s')) h=r.height+dy; if (dir.includes('w')) { w=r.width-dx; x=r.x+dx; } if (dir.includes('n')) { h=r.height-dy; y=r.y+dy; }
+        const size = clampSurfaceSize(w,h,viewport().w,viewport().h);
+        if (dir.includes('w')) x=r.x+(r.width-size.width); if (dir.includes('n')) y=r.y+(r.height-size.height);
+        rec.state.width=size.width; rec.state.height=size.height; rec.state.x=x; rec.state.y=y; rec.arrangement='free';
+        rec.el.style.width=size.width+'px'; rec.el.style.height=size.height+'px'; clampPosition(rec); applyTransform(rec); e.preventDefault?.(); e.stopPropagation?.();
+      };
+      const onUp = (e) => { const r=rec.resize; if(!r||r.pointerId!==e.pointerId)return; try{handle.releasePointerCapture(e.pointerId);}catch{} rec.resize=null; ctx.activeResize=null; rec.el.classList.remove('panel-space-resizing'); persistSoon(ctx); e.stopPropagation?.(); };
+      handle.addEventListener('pointerdown',onDown); handle.addEventListener('pointermove',onMove); handle.addEventListener('pointerup',onUp); handle.addEventListener('pointercancel',onUp);
+      rec.resizeHandles.push(handle); rec.el.appendChild(handle);
+    }
+  }
+
+  function setupPanel(desc, ctx) {
+    const el = desc.el; const isHint = el.id === 'hint';
+    const rec = {
+      id:desc.id, el, title:panelTitle(el), icon:el.getAttribute?.('data-panel-space-icon') || '◈',
+      state:{x:0,y:0,z:0,width:320,height:220,zIndex:Z_BASE}, home:null, placed:false, placeQueued:false,
+      wasVisible:isPanelVisible(el,view), originalCssText:el.style?.cssText || '',
+      grip:null,toggleBtn:null,actionEl:null,resizeHandles:[],resize:null,drag:null,
+      compactible:!isHint, compact:true, arrangement:'free', hide:()=>{el.hidden=true;},
+    };
+    el.setAttribute('data-panel-space','managed');
+    if (!isHint) {
+      const grip=createGrip(rec,ctx);
+      const summary=el.tagName==='DETAILS'?el.querySelector('summary'):null;
+      if(summary&&summary.parentNode===el)summary.after(grip); else if(typeof el.prepend==='function')el.prepend(grip); else el.insertBefore(grip,el.firstChild);
+      addResizeHandles(rec,ctx);
+    } else {
+      attachPlaneDepthDrag(rec,ctx,el,{tapToggles:false});
+    }
+    rec.onContentPointerDown=()=>{if(rec.placed)bringFront(rec,ctx);};
+    el.addEventListener?.('pointerdown',rec.onContentPointerDown,true);
+    ctx.recs.push(rec); ctx.byEl.set(el,rec);
+    if(rec.wasVisible)requestPlace(rec,ctx);
     return rec;
   }
 
@@ -419,25 +527,40 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
     (documentRoot.head || documentRoot).appendChild(styleEl);
 
     const ctx = {
-      recs: [], byEl: new Map(), store: readStore(view), saveTimer: 0, styleEl,
+      recs: [], byEl: new Map(), byId: new Map(), store: readStore(view), saveTimer: 0, zCounter: Z_BASE, activeResize: null, styleEl,
     };
-    for (const desc of collectPanelDescriptors(documentRoot)) {
-      try { setupPanel(desc, ctx); } catch { /* one bad panel never breaks the field */ }
-    }
+    const registerDescriptor = (desc) => {
+      if (!desc?.el) return;
+      const id = String(desc.id || '');
+      const old = ctx.byId.get(id);
+      if (old && old.el !== desc.el) {
+        const oi = ctx.recs.indexOf(old); if (oi >= 0) ctx.recs.splice(oi,1);
+        ctx.byEl.delete(old.el); ctx.byId.delete(id);
+        try { old.el.removeEventListener?.('pointerdown', old.onContentPointerDown, true); old.grip?.remove?.(); for (const h of old.resizeHandles||[]) h.remove?.(); old.el.removeAttribute?.('data-panel-space'); old.el.removeAttribute?.('data-compact'); old.el.style.cssText = old.originalCssText; } catch {}
+      }
+      if (ctx.byEl.has(desc.el)) return;
+      try { const rec=setupPanel(desc,ctx); if(rec)ctx.byId.set(id,rec); } catch {}
+    };
+    for (const desc of collectPanelDescriptors(documentRoot)) registerDescriptor(desc);
+
+    const reconcileAll = () => {
+      const current = new Map(collectPanelDescriptors(documentRoot).map(desc => [String(desc.id || ''), desc]));
+      for (const desc of current.values()) registerDescriptor(desc);
+      for (const rec of [...ctx.recs]) {
+        const live=current.get(String(rec.id));
+        if(!live||live.el!==rec.el){const i=ctx.recs.indexOf(rec);if(i>=0)ctx.recs.splice(i,1);ctx.byEl.delete(rec.el);ctx.byId.delete(rec.id);try{rec.grip?.remove?.();for(const h of rec.resizeHandles||[])h.remove?.();rec.el.removeAttribute?.('data-panel-space');rec.el.removeAttribute?.('data-compact');rec.el.style.cssText=rec.originalCssText;}catch{}}
+      }
+      for (const rec of ctx.recs) reconcilePanel(rec,ctx);
+    };
 
     const onMutations = (mutations) => {
-      let reconcileAll = false;
-      for (const m of mutations || []) {
-        const t = m.target;
-        if (!t) continue;
-        if (t === documentRoot.body || t === documentRoot.documentElement) { reconcileAll = true; continue; }
-        const rec = ctx.byEl.get(t);
-        if (rec) { reconcilePanel(rec, ctx); continue; }
-        // feature-shell's .open class drives asset-launch visibility via a
-        // sibling selector, so its class change reconciles the whole field.
-        if (t.id === 'feature-shell') reconcileAll = true;
+      let structural=false;
+      for(const m of mutations||[]){
+        if(m.type==='childList'){structural=true;continue;}
+        const t=m.target;if(!t)continue;
+        if(ctx.byEl.has(t)||t.id==='feature-shell'||t.closest?.('#reality-assembly')){reconcileAll();break;}
       }
-      if (reconcileAll) for (const rec of ctx.recs) reconcilePanel(rec, ctx);
+      if(structural)reconcileAll();
     };
 
     const MO = view.MutationObserver || (typeof MutationObserver !== 'undefined' ? MutationObserver : null);
@@ -445,18 +568,20 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
     if (MO && documentRoot.documentElement) {
       observer = new MO(onMutations);
       observer.observe(documentRoot.documentElement, {
-        subtree: true, attributes: true, attributeFilter: ['hidden', 'open', 'class', 'style'],
+        subtree: true, childList: true, attributes: true, attributeFilter: ['hidden', 'open', 'class', 'style', 'data-floating-panel'],
       });
     }
 
     const onResize = () => {
       const v = viewport();
       for (const rec of ctx.recs) {
-        if (!rec.placed || !isPanelVisible(rec.el, view)) continue;
-        const r = rec.el.getBoundingClientRect();
-        const p = clampSurface(rec.state.x, rec.state.y, r.width, r.height, v.w, v.h);
-        rec.state.x = p.x; rec.state.y = p.y;
-        applyTransform(rec);
+        if (!rec.placed) continue;
+        if (!rec.compact) {
+          const size=clampSurfaceSize(rec.state.width,rec.state.height,v.w,v.h);
+          rec.state.width=size.width; rec.state.height=size.height;
+          rec.el.style.width=size.width+'px'; rec.el.style.height=size.height+'px';
+        }
+        if (isPanelVisible(rec.el,view)) { clampPosition(rec); applyTransform(rec); }
       }
     };
     if (typeof view.addEventListener === 'function') view.addEventListener('resize', onResize);
@@ -467,7 +592,9 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
       if (ctx.saveTimer) { clearTimeout(ctx.saveTimer); ctx.saveTimer = 0; }
       for (const rec of ctx.recs) {
         try {
+          if (rec.onContentPointerDown) rec.el.removeEventListener?.('pointerdown', rec.onContentPointerDown, true);
           if (rec.grip && rec.grip.remove) rec.grip.remove();
+          for (const handle of rec.resizeHandles || []) handle.remove?.();
           rec.el.removeAttribute('data-panel-space');
           rec.el.removeAttribute('data-compact');
           rec.el.classList.remove('panel-space-appearing');
