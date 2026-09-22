@@ -83,14 +83,19 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[]}){
   const warm=new THREE.DirectionalLight('#fce2b6',2.4);warm.position.set(-7,14,10);layer.add(warm);
 
   // ONE giant block: the extreme far-zoom view of the whole world.
+  // The approved clean-root camera parks at ~175 units (beyond LOD_FAR), but
+  // the scene fog (FogExp2 .009, tuned for the ≤76-unit constellation range)
+  // would fog 92% of the cube away at that distance and leave a black canvas.
+  // The merged cube is exempt from fog so the single clean glass cube stays
+  // visible; the constellation keeps its fog untouched.
   const worldBlock=group('world-block');worldBlock.visible=false;
-  const wbGlass=makeMaterial('#1b4d6e',{transparent:true,opacity:0,depthWrite:false,roughness:.12,metalness:.15,emissive:'#0e5a8a',emissiveIntensity:.25});
-  const wbEdgeMat=new THREE.LineBasicMaterial({color:'#7fd4ff',transparent:true,opacity:0});materials.add(wbEdgeMat);
+  const wbGlass=makeMaterial('#1b4d6e',{transparent:true,opacity:0,depthWrite:false,roughness:.12,metalness:.15,emissive:'#0e5a8a',emissiveIntensity:.25,fog:false});
+  const wbEdgeMat=new THREE.LineBasicMaterial({color:'#7fd4ff',transparent:true,opacity:0,fog:false});materials.add(wbEdgeMat);
   const wbCore=box([30,16,30],[0,2,0],wbGlass,worldBlock);wbCore.name='world-block/core';
   const wbEdgeGeo=new THREE.EdgesGeometry(new THREE.BoxGeometry(30,16,30));geometry.add(wbEdgeGeo);
   worldBlock.add(new THREE.LineSegments(wbEdgeGeo,wbEdgeMat));
   const wbRand=traitRandom(hashString('matumbo:world-block'));
-  const wbCellMat=makeMaterial('#2a6d96',{transparent:true,opacity:0,depthWrite:false,roughness:.2});
+  const wbCellMat=makeMaterial('#2a6d96',{transparent:true,opacity:0,depthWrite:false,roughness:.2,fog:false});
   const wbCells=[];
   for(let i=0;i<8;i++){
     const s=2+wbRand()*3;
