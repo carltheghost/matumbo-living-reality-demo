@@ -465,6 +465,7 @@ export function mountChessArena({documentRoot=document,host}){
     refreshStatus();
   });
 
+  const view=documentRoot.defaultView??null;
   function getSnapshot(){return {state,selected,appearance,mode,difficulty,resigned,aiThinking,sanLog:[...sanLog]};}
   function refreshAppearance(){
     const next=readArenaAvatarAppearance({storage:globalThis.localStorage??null});
@@ -481,7 +482,6 @@ export function mountChessArena({documentRoot=document,host}){
   view?.addEventListener?.('storage',onStorage);
   const onAvatarFaceChanged=()=>{refreshAppearance();};
   documentRoot.addEventListener?.('person-studio:avatar-changed',onAvatarFaceChanged);
-  const view=documentRoot.defaultView??null;
 
   // Orbit on drag, board tap on tap: a press that barely moves is a move.
   let yaw=0,pitch=-0.45,dist=13,drag=null,downInfo=null;
