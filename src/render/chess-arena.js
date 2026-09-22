@@ -14,7 +14,7 @@
  * Projection only: local simulation, no identity authority, no wallet, no
  * ledger, no signing, no settlement.
  */
-import * as THREE from 'three?v=20260922-cache2';
+import * as THREE from 'three';
 import {createChessArenaState,applyChessArenaMove} from '../domains/chess-arena.js?v=20260918-avatar-chess';
 import {chooseAiMove,CHESS_AI_DIFFICULTIES,resolveAiDifficulty} from '../domains/chess-ai.js?v=20260918-avatar-chess';
 import {avatarIdlePose,avatarGlide,AVATAR_MOTION} from '../domains/avatar-motion.js?v=20260918-avatar-chess';
