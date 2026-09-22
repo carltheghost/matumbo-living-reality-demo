@@ -18,7 +18,9 @@ import * as THREE from 'three';
 import {createChessArenaState,applyChessArenaMove} from '../domains/chess-arena.js?v=20260918-avatar-chess';
 import {chooseAiMove,CHESS_AI_DIFFICULTIES,resolveAiDifficulty} from '../domains/chess-ai.js?v=20260918-avatar-chess';
 import {avatarIdlePose,avatarGlide,AVATAR_MOTION} from '../domains/avatar-motion.js?v=20260918-avatar-chess';
-import {buildArenaHall,createPieceBuilders,squarePosition,CHESS_ROLE_GLYPHS} from './chess-arena-pieces.js?v=20260918-avatar-chess';
+import {AVATAR_FACE_STORAGE_KEY} from '../domains/avatar-style.js?v=20260918-avatar-chess';
+import {PERSON_STUDIO_STORAGE_KEY} from '../domains/person-studio.js?v=20260922-cache2';
+import {buildArenaHall,createPieceBuilders,readArenaAvatarAppearance,squarePosition,CHESS_ROLE_GLYPHS} from './chess-arena-pieces.js?v=20260918-avatar-chess';
 import {isCompactViewport,resolvePixelRatioCap,shouldRunSecondaryLoop} from './render-perf.js?v=20260922-cache2';
 
 const pieceName={p:'Pawn',n:'Knight',b:'Bishop',r:'Rook',q:'Queen',k:'King'};
@@ -137,7 +139,8 @@ export function mountChessArena({documentRoot=document,host}){
   }
 
   // ---- three.js scene ----
-  let builders=createPieceBuilders(THREE);
+  let appearance=readArenaAvatarAppearance({storage:globalThis.localStorage??null});
+  let builders=createPieceBuilders(THREE,appearance);
   // Mobile perf: compact viewports get no MSAA and a pixelRatio of 1, which
   // cuts the fill-rate/transparent-overdraw cost on phone GPUs. Desktop is
   // untouched (antialias on, cap 1.5).
@@ -462,7 +465,22 @@ export function mountChessArena({documentRoot=document,host}){
     refreshStatus();
   });
 
-  function getSnapshot(){return {state,selected,mode,difficulty,resigned,aiThinking,sanLog:[...sanLog]};}
+  function getSnapshot(){return {state,selected,appearance,mode,difficulty,resigned,aiThinking,sanLog:[...sanLog]};}
+  function refreshAppearance(){
+    const next=readArenaAvatarAppearance({storage:globalThis.localStorage??null});
+    builders.dispose();
+    builders=createPieceBuilders(THREE,next);
+    appearance=next;
+    buildAllPieces();
+    refreshStatus();
+    return getSnapshot();
+  }
+  const onStorage=(event)=>{
+    if(!event||event.key===null||event.key===PERSON_STUDIO_STORAGE_KEY||event.key===AVATAR_FACE_STORAGE_KEY)refreshAppearance();
+  };
+  view?.addEventListener?.('storage',onStorage);
+  const onAvatarFaceChanged=()=>{refreshAppearance();};
+  documentRoot.addEventListener?.('person-studio:avatar-changed',onAvatarFaceChanged);
   const view=documentRoot.defaultView??null;
 
   // Orbit on drag, board tap on tap: a press that barely moves is a move.
@@ -568,6 +586,8 @@ export function mountChessArena({documentRoot=document,host}){
       alive=false;
       stopMotionLoop();
       ro.disconnect();
+      view?.removeEventListener?.('storage',onStorage);
+      documentRoot.removeEventListener?.('person-studio:avatar-changed',onAvatarFaceChanged);
       view?.removeEventListener?.('visibilitychange',onMotionVisibilityChange);
       motionVisibilityObserver?.disconnect?.();motionVisibilityObserver=null;
       hall.dispose();
