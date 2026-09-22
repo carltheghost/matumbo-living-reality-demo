@@ -23,8 +23,10 @@ test("4D rules expose the native hypercube movement model",()=>{
 
 test("a legal 4D move changes turn and preserves piece accounting",()=>{
   const s=createDimensionalChessState();
-  const move=legalMoves4D(s)[0];
-  const r=applyDimensionalMove(s,move.from,move.to);
+  const from=key(4,1,3,3);
+  const to=key(4,2,3,3);
+  assert.ok(legalMoves4D(s,from).some(m=>m.to===to));
+  const r=applyDimensionalMove(s,from,to);
   assert.equal(r.accepted,true);
   assert.equal(r.state.turn,"b");
   assert.equal(r.state.ply,1);
