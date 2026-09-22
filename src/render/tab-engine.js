@@ -143,72 +143,96 @@ const TAB_ENGINE_CSS = `
 .tl-dock--ar .tl-chip { border-radius: 50%; padding: 0; }
 
 .tl-chip {
+  --tl-cube-size: 42px;
+  --tl-cube-depth: 21px;
   appearance: none;
   -webkit-appearance: none;
-  border: 1px solid rgba(129, 232, 255, 0.24);
-  background: linear-gradient(165deg, rgba(4, 17, 25, 0.93), rgba(3, 7, 12, 0.88));
+  border: 0;
+  background: transparent;
   color: #dff7ff;
-  width: 118px;
-  min-width: 118px;
-  min-height: 64px;
-  padding: 8px;
-  border-radius: 16px;
+  width: 76px;
+  min-width: 76px;
+  min-height: 76px;
+  padding: 4px;
+  border-radius: 14px;
   display: inline-flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 5px;
-  font: 700 9px/1.25 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  letter-spacing: .14em;
+  font: 700 8px/1.15 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  letter-spacing: .12em;
   text-transform: uppercase;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  box-shadow: 0 18px 50px rgba(0,0,0,.45), inset 0 0 24px rgba(70,210,255,.05);
-  transition: transform 0.22s ease,
-              background 0.2s ease,
-              border-color 0.2s ease,
-              box-shadow 0.2s ease;
+  perspective: 520px;
+  transition: transform 0.22s ease;
 }
-.tl-dock--desktop .tl-chip { width: 118px; justify-content: center; }
-.tl-chip:hover {
-  border-color: rgba(178,244,255,.62);
-  box-shadow: 0 18px 50px rgba(0,0,0,.45), 0 0 26px rgba(110,220,255,.2), inset 0 0 24px rgba(70,210,255,.08);
-}
+.tl-dock--desktop .tl-chip { width: 76px; min-width: 76px; min-height: 84px; }
+.tl-chip:hover { transform: translateY(-2px) scale(1.03); }
 .tl-chip:active { transform: scale(0.96); }
 .tl-chip:focus-visible { outline: 2px solid #7ae6ff; outline-offset: 2px; }
-.tl-chip.tl-active {
-  border-color: rgba(197,230,255,.75);
-  background: linear-gradient(165deg, rgba(9, 31, 43, .96), rgba(3, 9, 15, .92));
-  box-shadow: 0 18px 50px rgba(0,0,0,.45), 0 0 26px rgba(110,220,255,.28), inset 0 0 24px rgba(70,210,255,.08);
+.tl-chip.tl-active .tl-chip-cube {
+  filter: brightness(1.12);
+  box-shadow: 0 0 24px rgba(110,220,255,.28);
 }
-.tl-chip-icon {
-  width: 34px;
-  height: 34px;
-  flex: none;
+.tl-chip-cube {
+  position: relative;
+  width: var(--tl-cube-size);
+  height: var(--tl-cube-size);
+  flex: 0 0 auto;
+  transform-style: preserve-3d;
+  transform: rotateX(-18deg) rotateY(28deg);
+  animation: tl-minimized-cube-spin 5.5s linear infinite;
+  will-change: transform;
+}
+.tl-cube-face {
+  position: absolute;
+  inset: 0;
+  width: var(--tl-cube-size);
+  height: var(--tl-cube-size);
+  border: 1px solid rgba(154,239,255,.52);
+  border-radius: 5px;
+  background:
+    linear-gradient(145deg, rgba(111,225,255,.34), rgba(8,26,36,.92)),
+    linear-gradient(45deg, rgba(255,255,255,.08), transparent 60%);
+  box-shadow:
+    inset 0 0 14px rgba(103,224,255,.12),
+    0 0 12px rgba(103,224,255,.08);
+  backface-visibility: hidden;
+}
+.tl-cube-face--front { transform: translateZ(var(--tl-cube-depth)); }
+.tl-cube-face--back { transform: rotateY(180deg) translateZ(var(--tl-cube-depth)); }
+.tl-cube-face--right { transform: rotateY(90deg) translateZ(var(--tl-cube-depth)); }
+.tl-cube-face--left { transform: rotateY(-90deg) translateZ(var(--tl-cube-depth)); }
+.tl-cube-face--top { transform: rotateX(90deg) translateZ(var(--tl-cube-depth)); }
+.tl-cube-face--bottom { transform: rotateX(-90deg) translateZ(var(--tl-cube-depth)); }
+.tl-cube-glyph {
+  position: absolute;
+  inset: 0;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(129,232,255,.28);
-  border-radius: 10px;
-  background: linear-gradient(150deg, rgba(54,170,205,.18), rgba(4,18,27,.62));
-  color: #c8f7ff;
-  box-shadow: inset 0 0 16px rgba(70,210,255,.08), 0 0 12px rgba(70,210,255,.08);
-  font-size: 17px;
-  line-height: 1;
+  color: #e8fdff;
+  font-size: 16px;
   letter-spacing: 0;
-  text-transform: none;
+  text-shadow: 0 0 12px rgba(117,232,255,.8);
 }
 .tl-chip-label {
-  width: 100%;
-  max-width: 104px;
+  width: 72px;
+  max-width: 72px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: center;
   color: #c8f7ff;
-  letter-spacing: .12em;
+  letter-spacing: .1em;
+  text-shadow: 0 1px 10px rgba(0,0,0,.75);
+}
+@keyframes tl-minimized-cube-spin {
+  0% { transform: rotateX(-18deg) rotateY(0deg); }
+  50% { transform: rotateX(-18deg) rotateY(180deg); }
+  100% { transform: rotateX(-18deg) rotateY(360deg); }
 }
 
 /* Panel layer: pointer-events off so closed panels never intercept input. */
@@ -465,16 +489,25 @@ export class TabEngine {
     chip.setAttribute('title', tabTitle);
     if (shortcutIndex <= 9) chip.setAttribute('aria-keyshortcuts', String(shortcutIndex));
 
-    const iconEl = this.document.createElement('span');
-    iconEl.className = 'tl-chip-icon';
-    iconEl.setAttribute('aria-hidden', 'true');
-    iconEl.textContent = record.icon;
+    const cubeEl = this.document.createElement('span');
+    cubeEl.className = 'tl-chip-cube';
+    cubeEl.setAttribute('aria-hidden', 'true');
+    cubeEl.innerHTML = [
+      "<span class='tl-cube-face tl-cube-face--front'><span class='tl-cube-glyph'></span></span>",
+      "<span class='tl-cube-face tl-cube-face--back'></span>",
+      "<span class='tl-cube-face tl-cube-face--right'></span>",
+      "<span class='tl-cube-face tl-cube-face--left'></span>",
+      "<span class='tl-cube-face tl-cube-face--top'></span>",
+      "<span class='tl-cube-face tl-cube-face--bottom'></span>",
+    ].join("");
+    const glyph = cubeEl.querySelector('.tl-cube-glyph');
+    if (glyph) glyph.textContent = record.icon;
 
     const labelEl = this.document.createElement('span');
     labelEl.className = 'tl-chip-label';
     labelEl.textContent = tabTitle;
 
-    chip.appendChild(iconEl);
+    chip.appendChild(cubeEl);
     chip.appendChild(labelEl);
     chip.addEventListener('click', () => this.toggle(id));
     record.chip = chip;
