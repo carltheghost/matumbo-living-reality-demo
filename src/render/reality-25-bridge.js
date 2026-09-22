@@ -189,7 +189,15 @@ function makeLocalContent(meta){
 }
 
 for(const reality of field.realties.values()){
-  const raw=new THREE.Vector3(...reality.address.vector).normalize();
+  const vector=reality?.address?.vector;
+  const x=Array.isArray(vector)?Number(vector[0]):Number(vector?.x);
+  const y=Array.isArray(vector)?Number(vector[1]):Number(vector?.y);
+  const z=Array.isArray(vector)?Number(vector[2]):Number(vector?.z);
+  const raw=new THREE.Vector3(
+    Number.isFinite(x)?x:0,
+    Number.isFinite(y)?y:0,
+    Number.isFinite(z)?z:0,
+  ).normalize();
   realityDirections.set(reality.id,raw);
 
   const meta=REALITY_META[reality.id]||{name:'Reality',kind:'world',color:0x8db8ff};
@@ -203,7 +211,7 @@ for(const reality of field.realties.values()){
   group.rotateZ(roll);
   group.position.copy(positions.get(reality.id));
   group.userData.realityId=reality.id;
-  group.userData.direction=[...reality.address.vector];
+  group.userData.direction=[raw.x,raw.y,raw.z];
   group.userData.directionLabel=reality.address.label;
   group.userData.realityName=meta.name;
   layer.add(group);
