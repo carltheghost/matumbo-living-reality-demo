@@ -8936,8 +8936,8 @@ if (cleanRealityLanding) {
   // the boot frame shows only the merged world-block. Zero the in-flight
   // camera tweens from bootstrap so the first frames cannot drift back toward
   // the constellation; the user springs the world open by moving/zooming in.
-  camera.position.set(...CLEAN_LANDING_CAMERA.position);
-  controls.target.set(...CLEAN_LANDING_CAMERA.target);
+  camera.position.set(CLEAN_LANDING_CAMERA.position[0], CLEAN_LANDING_CAMERA.position[1], CLEAN_LANDING_CAMERA.position[2]);
+  controls.target.set(CLEAN_LANDING_CAMERA.target[0], CLEAN_LANDING_CAMERA.target[1], CLEAN_LANDING_CAMERA.target[2]);
   desiredCameraPosition.copy(camera.position);
   desiredTarget.copy(controls.target);
   cameraPositionTween = 0;
