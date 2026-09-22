@@ -30,3 +30,5 @@ test("a legal 4D move changes turn and preserves piece accounting",()=>{
   assert.equal(r.state.ply,1);
   assert.equal(countPieces(r.state).w+countPieces(r.state).b,896);
 });
+
+// CI smoke coverage: native 4D rules remain dependency-free.
