@@ -108,7 +108,7 @@ import { LUNA_CONSOLE_SOURCE, createLunaCompanionConsole } from './render/luna-c
 import { WARDROBE_ATELIER_CONSOLE_SOURCE, createWardrobeAtelierConsole } from './render/wardrobe-atelier.js?v=20260918-wdr1';
 import { WHITE_PAPER_CONSOLE_SOURCE, createWhitePaperConsole } from './render/white-paper.js?v=20260918-wp1';
 import { GESTURE_LENS_CONSOLE_SOURCE, createGestureLensConsole } from './render/gesture-lens.js?v=20260918-gl1';
-import { createHandLensSession } from './render/hand-session.js?v=20260920-hand-lens';
+import { createHandLensSession } from './render/hand-session.js?v=20260922-hand-lens-relocated';
 import { createStoryModeConsole } from './render/story-mode.js?v=20260920-story1';
 import { LEDGER_PROOF_SOURCE } from './domains/ledger-proof.js?v=20260827-ledger1';
 import { LEDGER_PROOF_CONSOLE_SOURCE, createLedgerProofConsole } from './render/ledger-proof.js?v=20260827-ledger1';
