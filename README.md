@@ -11,7 +11,7 @@ Works on desktop and phone. Tested in browser viewports (desktop + 390×844 phon
 ## What's inside
 
 - **Glass-cube world** — one cube style everywhere: translucent blue glass cubes with connection lines. Everything small by default, everything draggable in full 3D, positions remembered. Double-click a cube to travel into its own world; single click selects, hover peeks.
-- **Two chess modes** — normal chess stays on the table console; avatar chess is a full 3D board out in the world, played with Tumbo chibi pieces.
+- **Chess** — a dedicated standard-chess room with recognizable king, queen, rook, bishop, knight, and pawn pieces; local AI and two-player play remain available.
 - **Fluffy Tumbo avatar rig** — fur-shell technique (opaque root + normal-displaced shells with strand alpha), spring-physics tail, squash-and-stretch landings, springy headphone cups. Same 13 joints as the chibi rig; all animations reused.
 - **Simulation engine** — vendored jiggle-physics driving tail, body, and headphone springs from real acceleration; seeded deterministic builds (same seed = same Tumbo).
 
