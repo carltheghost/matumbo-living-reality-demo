@@ -68,7 +68,7 @@ import { BLOCK_WORLD_SNAPSHOT_CONSOLE_SOURCE, createBlockWorldSnapshotConsole } 
 import { BLOCK_WORLD_RUNTIME_SYNC_SOURCE, createBlockWorldRuntimeSync } from './render/block-world-runtime-sync.js?v=20260828-runtime-sync171';
 import { ARENA_GAMES_SOURCE, ARENA_GAMES_CONSOLE_SOURCE } from './domains/arena-games.js?v=20260826-arena1';
 import { createArenaGamesConsole } from './render/arena-games.js?v=20260826-arena1';
-import { mountChessArena } from './render/chess-arena.js?v=20260918-avatar-chess';
+import { mountDimensionalChess } from './render/dimensional-chess.js?v=20260922-4d1';
 import { ACADEMY_CONSOLE_SOURCE, createAcademyConsole } from './render/academy.js?v=20260904-academy1';
 import {
   CONTRACTS_MARKETS_SOURCE,
@@ -8968,6 +8968,39 @@ import("./render/tab-registry.js?v=20260922-tabs2")
   });
 const cityJourney=mountCityJourney({navigate:(id,method)=>{featureNavigator.select(id,method||'popstate');featureNavigator.close();}});
 runtimeStatus?.markReady?.({ featureCount:featureNavigator?.getSnapshot?.().featureCount ?? 23 });
+
+/* Dedicated Dimensional Chess room. It is mounted only when requested, so
+ * the large WebGL chess scene can never participate in the canonical world
+ * bootstrap or turn a chess-specific failure into the red boot banner. */
+let dimensionalChessHandle = null;
+function openDimensionalChessRoom() {
+  if (dimensionalChessHandle) return dimensionalChessHandle;
+  const host = document.createElement("aside");
+  host.className = "matumbo-dimensional-chess-host";
+  host.setAttribute("aria-label", "maTumbo Dimensional Chess");
+  host.style.cssText = "position:fixed;z-index:1200;left:clamp(8px,2vw,28px);right:clamp(8px,2vw,28px);top:clamp(8px,3vh,28px);bottom:clamp(8px,3vh,28px);overflow:auto;pointer-events:auto";
+  document.body.append(host);
+  try {
+    dimensionalChessHandle = mountDimensionalChess({documentRoot:document,host});
+    const close = document.createElement("button");
+    close.type = "button";
+    close.textContent = "Close";
+    close.setAttribute("aria-label","Close Dimensional Chess");
+    close.style.cssText = "position:absolute;right:12px;top:12px;z-index:5;min-height:40px;padding:8px 12px;border-radius:9px;border:1px solid #46667a;background:#0b1823;color:#e9f6ff;cursor:pointer";
+    host.append(close);
+    close.addEventListener("click",()=>{dimensionalChessHandle?.destroy?.();dimensionalChessHandle=null;host.remove();});
+  } catch (error) {
+    host.textContent = "Dimensional Chess could not start.";
+    console.warn("[dimensional-chess] mount failed:", error);
+  }
+  return dimensionalChessHandle;
+}
+if (typeof window !== "undefined") {
+  window.addEventListener("world-chess:open", openDimensionalChessRoom);
+  if (new URLSearchParams(window.location.search).get("feature") === "chess") openDimensionalChessRoom();
+  window.__TUMBO_DIMENSIONAL_CHESS__ = {open:openDimensionalChessRoom};
+}
+
 mountTokenTicker();
 mountCenteredSurfaces();
 
