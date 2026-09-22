@@ -23,7 +23,7 @@ import {
   avatarSpinPose,
   avatarWalkPhase,
   avatarWavePose,
-} from '../domains/avatar-motion.js';
+} from '../domains/avatar-motion.js?v=20260922-cache2';
 
 /** Base height of the rig in arena units before per-role scaling. */
 export const CHIBI_RIG_BASE_HEIGHT = 1.7;

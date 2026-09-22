@@ -1,4 +1,4 @@
-import {approveAvatarGenome, createAvatarEmbodiment, restoreAvatarEmbodiment} from './avatar-embodiment.js';
+import {approveAvatarGenome, createAvatarEmbodiment, restoreAvatarEmbodiment} from './avatar-embodiment.js?v=20260922-cache2';
 
 export const PERSON_STUDIO_STORAGE_KEY = 'matumbo.person-studio.v1';
 export const STUDIO_MODEL = Object.freeze({

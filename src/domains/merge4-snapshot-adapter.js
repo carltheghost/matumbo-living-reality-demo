@@ -7,7 +7,7 @@
  * migration/review seam, never a server client: it does not read files,
  * contact the API, persist state, execute imported values, or move assets.
  */
-import { createProjectionEnvelope } from "../core/view-state.js";
+import { createProjectionEnvelope } from "../core/view-state.js?v=20260922-cache2";
 
 export const MERGE4_SNAPSHOT_ADAPTER_SOURCE = "merge4-snapshot-adapter";
 export const MERGE4_SNAPSHOT_SCHEMA_VERSION = 1;

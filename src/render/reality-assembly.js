@@ -1,6 +1,6 @@
-import {createRealityTimeline} from '../domains/reality-timeline.js';
-import {createRealityGraph} from '../domains/side-living-reality.js';
-import {buildRealityAssemblyScene,LOD_FAR} from './reality-assembly-scene.js';
+import {createRealityTimeline} from '../domains/reality-timeline.js?v=20260922-cache2';
+import {createRealityGraph} from '../domains/side-living-reality.js?v=20260922-cache2';
+import {buildRealityAssemblyScene,LOD_FAR} from './reality-assembly-scene.js?v=20260922-cache2';
 
 // Approved clean-root start pose: the camera parks beyond LOD_FAR so the
 // world boots as ONE single merged glass cube — nothing else in the 3D scene.

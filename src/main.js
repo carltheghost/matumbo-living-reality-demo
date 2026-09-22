@@ -1,48 +1,48 @@
-import * as THREE from 'three';
-import {mountCityJourney,resolveCityRoute} from './render/city-journey.js';
+import * as THREE from 'three?v=20260922-cache2';
+import {mountCityJourney,resolveCityRoute} from './render/city-journey.js?v=20260922-cache2';
 // Reject mixed/unknown City URLs before legacy route bootstrap can act on them.
 if(resolveCityRoute(location.search).status==='rejected'){
   const safeUrl=new URL(location.href);safeUrl.search='?feature=reality-lens';history.replaceState(null,'',safeUrl);
 }
 import { mountCenteredSurfaces } from './render/centered-surfaces.js?v=20260918-compact-chip';
-import { createImmersiveSession } from './render/immersive-session.js';
-import { createMediaPreview } from './render/media-preview.js';
+import { createImmersiveSession } from './render/immersive-session.js?v=20260922-cache2';
+import { createMediaPreview } from './render/media-preview.js?v=20260922-cache2';
 import { mountTokenTicker } from './render/token-ticker.js?v=20260920-ticker1';
 // Hibernation vault console — mounts the vault glass-cube chip.
 // Guarded dynamic import: token-vault-ui.js is mid-flight (its imports don't
 // match token.js yet); a static import would fail the whole module graph and
 // red-banner the boot. Mounts automatically once the lane lands a consistent graph.
-import('./domains/token-vault-ui.js').catch(() => {});
+import('./domains/token-vault-ui.js?v=20260922-cache2').catch(() => {});
 // Token transfers console — side-effect import; mounts the transfers glass-cube chip.
 import './domains/token-transfers-ui.js?v=20260922-token-transfers-cube3';
-import { initMobilePanelManager } from './render/mobile-panel-manager.js';
+import { initMobilePanelManager } from './render/mobile-panel-manager.js?v=20260922-cache2';
 import { installMobileFreezeGuard } from './render/mobile-freeze-guard.js?v=20260922-mfg1';
-import { mountPhotoMascot } from './render/photo-mascot-mount.js';
+import { mountPhotoMascot } from './render/photo-mascot-mount.js?v=20260922-cache2';
 import { createPersonStudio } from './render/person-studio.js?v=20260918-avatar-chess';
 import { createRealityAssembly, CLEAN_LANDING_CAMERA } from './render/reality-assembly.js?v=20260922-fogfix1';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { TransformControls } from 'three/addons/controls/TransformControls.js';
-import { MANIPULATE_MODES } from './render/manipulate-controls.js';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js?v=20260922-cache2';
+import { TransformControls } from 'three/addons/controls/TransformControls.js?v=20260922-cache2';
+import { MANIPULATE_MODES } from './render/manipulate-controls.js?v=20260922-cache2';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js?v=20260922-cache2';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js?v=20260922-cache2';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js?v=20260922-cache2';
 import { createLivingRealityProjection } from './core/demo-projection.js?v=20260918-muse2';
-import { resolveDefaultFeature } from './core/default-landing.js';
-import { createDeviceProjection, readBrowserProjectionPreferences } from './projections/device-projection.js';
-import { createDistributionExplorer } from './render/distribution-explorer.js';
+import { resolveDefaultFeature } from './core/default-landing.js?v=20260922-cache2';
+import { createDeviceProjection, readBrowserProjectionPreferences } from './projections/device-projection.js?v=20260922-cache2';
+import { createDistributionExplorer } from './render/distribution-explorer.js?v=20260922-cache2';
 import { createLaunchDistributionRehearsal } from './domains/distribution-registry.js?v=20260828-distribution163';
-import { createPersonOrganisms } from './render/person-organisms.js';
+import { createPersonOrganisms } from './render/person-organisms.js?v=20260922-cache2';
 import { FEATURE_DEFINITIONS, FEATURE_HANDOFF_LINKS, createFeatureNavigator } from './render/feature-navigator.js?v=20260918-muse2';
 import { createCubeDive } from './render/cube-dive.js?v=20260919-dive';
 import { resolveHandoffHop, resolveHopVessel, resolveNestedDiveTargets } from './domains/cube-dive.js?v=20260919-dive';
-import { createLaunchConsole, validateLaunchCohortRoute, validateLaunchCohortCompareRoute } from './render/launch-console.js';
+import { createLaunchConsole, validateLaunchCohortRoute, validateLaunchCohortCompareRoute } from './render/launch-console.js?v=20260922-cache2';
 import { LAUNCH_RECEIPT_CONSOLE_SOURCE, createLaunchReceiptConsole } from './render/launch-receipt.js?v=20260827-receipt2';
 import { createSocialExplorerConsole } from './render/social-explorer.js?v=20260828-social-pulse1';
 import { SOCIAL_PULSE_SOURCE, createUnavailableSocialPulse, fetchSocialPulse } from './domains/social-pulse.js?v=20260828-social-pulse1';
 import { LAUNCH_KIT_CONSOLE_SOURCE, createLaunchKitConsole } from './render/launch-kit.js?v=20260827-kit2';
-import { createRoomSpaces } from './render/room-spaces.js';
-import { CAMERA_INPUT_SOURCE, createCameraInput } from './render/camera-input.js';
-import { GESTURE_INPUT_SOURCE, createGestureInput } from './render/gesture-input.js';
+import { createRoomSpaces } from './render/room-spaces.js?v=20260922-cache2';
+import { CAMERA_INPUT_SOURCE, createCameraInput } from './render/camera-input.js?v=20260922-cache2';
+import { GESTURE_INPUT_SOURCE, createGestureInput } from './render/gesture-input.js?v=20260922-cache2';
 import {
   GAZE_HAND_COUPLING_SOURCE,
   GAZE_HAND_COUPLING_BOUNDARY,
@@ -54,8 +54,8 @@ import {
   normalizeGazeHandPoint,
   resolveGazeHandAction,
 } from './render/gaze-hand-coupling.js?v=20260829-gaze-hand185';
-import { createProjectionBridge } from './render/projection-bridge.js';
-import { createIntentTimeline } from './render/intent-timeline.js';
+import { createProjectionBridge } from './render/projection-bridge.js?v=20260922-cache2';
+import { createIntentTimeline } from './render/intent-timeline.js?v=20260922-cache2';
 import { createBlockWorldLayer } from './render/block-world.js?v=20260918-glass-open';
 import { createProjectionSession } from './render/projection-session.js?v=20260830-session218';
 import { applyBlockWorldFocusMode } from './render/block-world-focus.js?v=20260827-block-focus1';
@@ -126,7 +126,7 @@ import { DEVICE_PROJECTION_CONSOLE_SOURCE, createDeviceProjectionConsole } from 
 import { ASSET_MARKET_CONSOLE_SOURCE, createAssetMarketConsole } from './render/asset-market.js?v=20260828-asset-market1';
 import { createUnavailableAssetMarketEvidence, fetchAssetMarketEvidence } from './domains/asset-market.js?v=20260828-asset-market1';
 import { POPULATION_CONTEXT_SOURCE, createUnavailablePopulationContext, fetchPopulationContext } from './domains/population-context.js?v=20260828-population-context1';
-import { WEB_AI_CONSOLE_SOURCE, createWebAiConsole } from './render/web-ai.js';
+import { WEB_AI_CONSOLE_SOURCE, createWebAiConsole } from './render/web-ai.js?v=20260922-cache2';
 
 const runtimeStatus = globalThis.__MATUMBO_RUNTIME__;
 runtimeStatus?.setStage?.('projection', 'Preparing the canonical local world envelope…');
@@ -8974,7 +8974,7 @@ mountCenteredSurfaces();
 // Persistent user-created app blocks live outside feature navigation.
 // Changing feature/scene never closes, recenters, or recreates these blocks.
 let persistentUserBlocks = null;
-import("./render/persistent-user-blocks.js")
+import("./render/persistent-user-blocks.js?v=20260922-cache2")
   .then(({ createPersistentUserBlocks }) => {
     try {
       persistentUserBlocks = createPersistentUserBlocks({

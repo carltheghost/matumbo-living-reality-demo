@@ -21,7 +21,7 @@ import {
   resetSocialExplorerFlow,
   resetSocialExplorerLaunchPlan,
   selectSocialExplorerLaunchMode,
-} from "../domains/social-explorer.js";
+} from "../domains/social-explorer.js?v=20260922-cache2";
 
 export const SOCIAL_EXPLORER_CONSOLE_SOURCE = "social-explorer-rehearsal";
 export const DEFAULT_SOCIAL_EXPLORER_ID = "social-explorer:demo";

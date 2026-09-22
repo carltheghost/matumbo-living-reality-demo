@@ -22,8 +22,8 @@
  * only when needed, simulated TUMBO points only, projection only.
  */
 
-import { createPhotoMascotPresence } from "./photo-mascot-presence.js";
-import { preloadPhotos } from "./photo-mascot-set.js";
+import { createPhotoMascotPresence } from "./photo-mascot-presence.js?v=20260922-cache2";
+import { preloadPhotos } from "./photo-mascot-set.js?v=20260922-cache2";
 
 const TAG = "[photo-mascot-mount]";
 const BUTTON_LABEL = "MASCOT";

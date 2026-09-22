@@ -23,8 +23,8 @@ import {
   SCORE_RIBBON_BONUS,
   LEADERBOARD_SIZE,
   RIBBON_CAP,
-} from "./token-config.js";
-import { TumboLedger, TokenError, mulDivFloor } from "./token.js";
+} from "./token-config.js?v=20260922-cache2";
+import { TumboLedger, TokenError, mulDivFloor } from "./token.js?v=20260922-cache2";
 
 export const GAMIFICATION_VERSION = 1;
 export const GAMIFICATION_SOURCE = "tumbo-token-gamification";

@@ -2,7 +2,7 @@ import {
   LUNA_BOUNDARY,
   LUNA_CONSOLE_SOURCE,
   createLunaCompanion,
-} from "../domains/luna-companion.js";
+} from "../domains/luna-companion.js?v=20260922-cache2";
 
 export { LUNA_CONSOLE_SOURCE };
 export const LUNA_RENDER_SOURCE = LUNA_CONSOLE_SOURCE;

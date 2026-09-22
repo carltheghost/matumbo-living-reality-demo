@@ -38,10 +38,10 @@
  * Simulated TUMBO points only — no wallets / crypto.
  */
 
-import * as THREE from "three";
-import { buildPhotoMascot } from "./photo-mascot.js";
-import { createMascotMotion, MASCOT_STATES } from "../domains/mascot-motion.js";
-import { getMascotLook, getPhoto, setMascotLook, preloadPhotos } from "./photo-mascot-set.js";
+import * as THREE from "three?v=20260922-cache2";
+import { buildPhotoMascot } from "./photo-mascot.js?v=20260922-cache2";
+import { createMascotMotion, MASCOT_STATES } from "../domains/mascot-motion.js?v=20260922-cache2";
+import { getMascotLook, getPhoto, setMascotLook, preloadPhotos } from "./photo-mascot-set.js?v=20260922-cache2";
 
 const STORAGE_KEY = "tumbo-mascot-presence-pos";
 const MOBILE_QUERY = "(max-width: 700px)";

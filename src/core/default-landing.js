@@ -3,7 +3,7 @@
 // imports don't match token.js yet), so a static import would fail the whole
 // module graph and red-banner the boot. This boots the ledger automatically
 // once the lane lands a consistent graph; until then boot continues cleanly.
-import('../domains/token-boot.js').catch(() => {});
+import('../domains/token-boot.js?v=20260922-cache2').catch(() => {});
 
 /** Default-landing routing: which feature view opens when the page loads.
  *

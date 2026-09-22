@@ -1,4 +1,4 @@
-import {FEATURE_DEFINITIONS} from './feature-navigator.js';
+import {FEATURE_DEFINITIONS} from './feature-navigator.js?v=20260922-cache2';
 export const CITY_DISTRICTS=Object.freeze([
   ['finance','Finance','paycore'],['academy','Academy','academy'],['t402','T402','t402'],
   ['contracts','Contracts','contracts'],['arena','Arena','arena'],['rooms','Rooms','rooms'],['receipt','Receipt evidence','ledger'],

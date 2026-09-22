@@ -14,9 +14,9 @@
 // simulated on every surface.
 // ============================================================================
 
-import * as THREE from 'three';
-import { makeGlassCube, makeConnectionLines, addGlassLighting, glassTintFor } from '../render/glass-style.js';
-import { attachTokenVault, fmtTokenFluff, parseTumboSim } from './token.js';
+import * as THREE from 'three?v=20260922-cache2';
+import { makeGlassCube, makeConnectionLines, addGlassLighting, glassTintFor } from '../render/glass-style.js?v=20260922-cache2';
+import { attachTokenVault, fmtTokenFluff, parseTumboSim } from './token.js?v=20260922-cache2';
 
 const VAULT_USER = 'u:you';
 const STORE_KEY = 'tumbo:vault:ui:v1';

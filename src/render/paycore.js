@@ -3,7 +3,7 @@ import {
   PAYCORE_ENTITY_KINDS,
   normalizePaycoreEntityKind,
   PAYCORE_SOURCE,
-} from "../domains/paycore.js";
+} from "../domains/paycore.js?v=20260922-cache2";
 
 export const PAYCORE_CONSOLE_SOURCE = "paycore-console";
 export const PAYCORE_RENDER_SOURCE = PAYCORE_CONSOLE_SOURCE;

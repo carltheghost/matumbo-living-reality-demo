@@ -27,7 +27,7 @@
  */
 
 import { TabEngine } from './tab-engine.js?v=20260922-rotating-cubes3';
-import { initTabAR } from './tab-ar-tabs.js';
+import { initTabAR } from './tab-ar-tabs.js?v=20260922-cache2';
 
 const NARROW_QUERY = '(max-width:700px)';
 

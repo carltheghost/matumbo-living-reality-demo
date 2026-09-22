@@ -26,15 +26,15 @@ import {
   gameToDraft,
   isUpcoming,
   dedupeGames,
-} from "./auto-contracts.js";
+} from "./auto-contracts.js?v=20260922-cache2";
 import {
   attachOddsToDraft,
   fetchKalshiOdds,
   fetchPolymarketOdds,
   isFreshQuote,
   validateQuoteShape,
-} from "./odds-feeds.js";
-import { toCanonical } from "./contract-status-vocab.js";
+} from "./odds-feeds.js?v=20260922-cache2";
+import { toCanonical } from "./contract-status-vocab.js?v=20260922-cache2";
 
 const FLOW_SOURCE = "contract-flow";
 const REVIEW_DIALECT = "review";

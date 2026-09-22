@@ -2,7 +2,7 @@ import {
   PROTOCOL_EVIDENCE_BOUNDARY,
   createUnavailableProtocolEvidence,
   summarizeProtocolEvidence,
-} from "../domains/protocol-evidence.js";
+} from "../domains/protocol-evidence.js?v=20260922-cache2";
 
 export const PROTOCOL_EVIDENCE_CONSOLE_SOURCE = "protocol-evidence-console";
 

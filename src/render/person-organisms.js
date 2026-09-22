@@ -1,4 +1,4 @@
-import * as THREE from "three";
+import * as THREE from "three?v=20260922-cache2";
 
 const TAU = Math.PI * 2;
 

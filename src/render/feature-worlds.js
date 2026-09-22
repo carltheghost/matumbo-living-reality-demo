@@ -26,11 +26,11 @@
  * the shared detector for ALL pointer types — no native dblclick here, so
  * mouse and touch share one click path and can never double-fire.
  */
-import {createWardrobeAtelier} from '../domains/wardrobe-atelier.js';
-import {ARENA_GAME_MODES} from '../domains/arena-games.js';
-import {ACADEMY_LESSONS} from '../domains/academy.js';
+import {createWardrobeAtelier} from '../domains/wardrobe-atelier.js?v=20260922-cache2';
+import {ARENA_GAME_MODES} from '../domains/arena-games.js?v=20260922-cache2';
+import {ACADEMY_LESSONS} from '../domains/academy.js?v=20260922-cache2';
 import {CONNECTED_CITY_DISTRICTS} from '../domains/connected-city.js?v=20260920-p240';
-import {createContractAtelier} from '../domains/contract-atelier.js';
+import {createContractAtelier} from '../domains/contract-atelier.js?v=20260922-cache2';
 import {makeGlassCubeMaterial,glassEdgeMaterialParams} from './glass-style.js?v=20260920-p239';
 import {createDoubleTapDetector} from './double-tap.js?v=20260920-p240';
 

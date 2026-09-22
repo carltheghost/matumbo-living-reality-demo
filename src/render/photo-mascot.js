@@ -15,7 +15,7 @@
  * the browser importmap maps "three" to), so Node tests resolve it too.
  */
 
-import * as THREE from "../../vendor/three-r179.1/build/three.module.js";
+import * as THREE from "../../vendor/three-r179.1/build/three.module.js?v=20260922-cache2";
 
 const TILT_FACTOR = 0.12;
 const PHOTO_HEIGHT = 1;

@@ -21,7 +21,7 @@
 // the receipt). Idempotent replays never emit — _commitInner returns before
 // _emitCommit when the idem key was already seen — so there is no second wave
 // to suppress. Direct ledger commits (bypassing execute) emit the same wave.
-import { LedgerError, fmtTumbo } from "./token.js";
+import { LedgerError, fmtTumbo } from "./token.js?v=20260922-cache2";
 
 export const TOKEN_EVENT = "tumbo:token";
 

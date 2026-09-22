@@ -131,7 +131,7 @@ export async function resolveTokenFacade() {
     if (typeof window !== 'undefined' && window.TumboToken) return window.TumboToken;
   } catch { /* ignore */ }
   try {
-    const mod = await import('../domains/token.js');
+    const mod = await import('../domains/token.js?v=20260922-cache2');
     if (mod && typeof mod.ensureTumboTokenFacade === 'function') {
       return mod.ensureTumboTokenFacade({ seed: true });
     }
@@ -369,7 +369,7 @@ export function mountTokenTicker({ documentRoot = (typeof document !== 'undefine
       }
       facade = found;
       try {
-        const mod = await import('../domains/token.js');
+        const mod = await import('../domains/token.js?v=20260922-cache2');
         if (mod && Number.isFinite(Number(mod.REVERSE_WINDOW_TICKS))) {
           windowTicks = Number(mod.REVERSE_WINDOW_TICKS);
         }

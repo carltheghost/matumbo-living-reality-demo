@@ -6,4 +6,4 @@ export {
   createDeviceProjection,
   createDeviceProjectionMetadata,
   readBrowserProjectionPreferences,
-} from "./device-projection.js";
+} from "./device-projection.js?v=20260922-cache2";

@@ -4,7 +4,7 @@ import {
   createUnavailableSportsEvents,
   replaySportsEvents,
   summarizeSportsEvents,
-} from "../domains/sports-events.js";
+} from "../domains/sports-events.js?v=20260922-cache2";
 
 export const SPORTS_EVENTS_CONSOLE_SOURCE = "sports-events-evidence-console";
 // Keep this in parity with the route validator in main.js. ESPN-style event

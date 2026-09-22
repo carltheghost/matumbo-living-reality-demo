@@ -8,7 +8,7 @@ import {
   createArenaGamesContribution,
   replayArenaGame,
   resetArenaGame,
-} from "../domains/arena-games.js";
+} from "../domains/arena-games.js?v=20260922-cache2";
 
 const freeze = (value) => Object.freeze(value);
 

@@ -10,16 +10,16 @@
  * wagering, wallets, custody, or chains.
  */
 
-import * as THREE from "three";
+import * as THREE from "three?v=20260922-cache2";
 import {
   makeGlassCube,
   addGlassLighting,
   glassTintFor,
-} from "../render/glass-style.js";
+} from "../render/glass-style.js?v=20260922-cache2";
 import {
   attachTokenTransfers,
   FLUFF_PER_TUMBO_SIM,
-} from "./token-transfers.js";
+} from "./token-transfers.js?v=20260922-cache2";
 
 export const TOKEN_TRANSFER_UI_VERSION = "20260922-token-transfers-cube3";
 export const TOKEN_TRANSFER_UI_SOURCE = "tumbo-token-transfer-console";

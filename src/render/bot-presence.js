@@ -8,7 +8,7 @@
  * lens lighting, no floor.
  */
 
-import { BOT_AVATARS } from "../domains/bot-plaza.js";
+import { BOT_AVATARS } from "../domains/bot-plaza.js?v=20260922-cache2";
 
 export const BOT_PRESENCE_SOURCE = "bot-presence";
 export const BOT_PRESENCE_CENTER = Object.freeze({ x: 13.5, y: 5.5, z: -5 });

@@ -9,7 +9,7 @@
 //   const ch  = pay.request({ fromBot, service, resource });   // may throw Pay402
 //   const r   = pay.pay({ challengeId: ch.challengeId, authToken });        // ledger tip fromBot→payTo, memo=nonce
 //   const res = pay.fulfill({ challengeId: ch.challengeId, receiptHash: r.hash }); // 200 {result} | 402 {error}
-import { LedgerError, SYS, GATE_SYSTEM, assertSafeInt } from "./token.js";
+import { LedgerError, SYS, GATE_SYSTEM, assertSafeInt } from "./token.js?v=20260922-cache2";
 
 export const DEFAULT_PRICING = Object.freeze({
   "cube.spawn":   50,

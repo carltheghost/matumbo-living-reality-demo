@@ -36,7 +36,7 @@ import {
   buildAiPrompt,
   classifyWebTarget,
   getWebAiAssistant,
-} from "../domains/web-ai.js";
+} from "../domains/web-ai.js?v=20260922-cache2";
 
 export { WEB_AI_CONSOLE_SOURCE };
 

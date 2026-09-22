@@ -38,7 +38,7 @@ import {
   STORY_MODE_BEAT_KINDS,
   STORY_MODE_BOUNDARY,
   JOURNEY_STORY_ID,
-} from "../domains/story-mode.js";
+} from "../domains/story-mode.js?v=20260922-cache2";
 
 const PLAYER_FINISHED = "finished";
 

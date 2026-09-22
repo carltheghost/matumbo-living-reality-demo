@@ -1,4 +1,4 @@
-import { DEVICE_PROJECTION_SCHEMA_VERSION } from "../projections/device-projection.js";
+import { DEVICE_PROJECTION_SCHEMA_VERSION } from "../projections/device-projection.js?v=20260922-cache2";
 
 export const DEVICE_PROJECTION_CONSOLE_SOURCE = "device-projection-console";
 export const DEVICE_PROJECTION_RENDER_SOURCE = DEVICE_PROJECTION_CONSOLE_SOURCE;

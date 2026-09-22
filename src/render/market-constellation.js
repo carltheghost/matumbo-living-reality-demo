@@ -1,5 +1,5 @@
-import * as THREE from 'three';
-import {isCompactViewport,resolvePixelRatioCap} from './render-perf.js';
+import * as THREE from 'three?v=20260922-cache2';
+import {isCompactViewport,resolvePixelRatioCap} from './render-perf.js?v=20260922-cache2';
 
 /** Geometry is a view, never the authority for contract records. */
 export function mountMarketConstellation({host,onSelect}) {

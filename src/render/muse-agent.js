@@ -3,7 +3,7 @@ import {
   MUSE_AGENT_CONSOLE_SOURCE,
   MUSE_AGENT_PROVIDERS,
   createMuseAgent,
-} from "../domains/muse-agent.js";
+} from "../domains/muse-agent.js?v=20260922-cache2";
 
 export { MUSE_AGENT_BOUNDARY, MUSE_AGENT_CONSOLE_SOURCE };
 export const MUSE_AGENT_RENDER_SOURCE = MUSE_AGENT_CONSOLE_SOURCE;

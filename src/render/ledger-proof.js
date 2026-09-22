@@ -1,4 +1,4 @@
-import { LEDGER_PROOF_SOURCE } from "../domains/ledger-proof.js";
+import { LEDGER_PROOF_SOURCE } from "../domains/ledger-proof.js?v=20260922-cache2";
 
 export const LEDGER_PROOF_CONSOLE_SOURCE = "ledger-proof-console";
 export const LEDGER_PROOF_RENDER_SOURCE = LEDGER_PROOF_CONSOLE_SOURCE;

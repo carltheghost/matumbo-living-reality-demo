@@ -1,4 +1,4 @@
-import * as THREE from "../../vendor/three-r179.1/build/three.module.js";
+import * as THREE from "../../vendor/three-r179.1/build/three.module.js?v=20260922-cache2";
 
 export const AGENT_BLOCK_SOURCE = "agent-block";
 

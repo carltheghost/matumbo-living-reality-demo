@@ -12,18 +12,18 @@ import {
   createBlockWorldNavigationDraft,
   createBlockWorldPlaceDraft,
   inspectBlockWorldBlock,
-} from "../domains/block-world.js";
-import { previewBlockMigrationSnapshot } from "../domains/block-migration.js";
+} from "../domains/block-world.js?v=20260922-cache2";
+import { previewBlockMigrationSnapshot } from "../domains/block-migration.js?v=20260922-cache2";
 import {
   CUBE_DIVE_DOUBLE_TAP_DISTANCE_PX,
   CUBE_DIVE_DOUBLE_TAP_WINDOW_MS,
   resolveDiveBinding,
-} from "../domains/cube-dive.js";
+} from "../domains/cube-dive.js?v=20260922-cache2";
 import {
   MANIPULATE_MODE_LABELS,
   MANIPULATE_MODES,
   createManipulateControls,
-} from "./manipulate-controls.js";
+} from "./manipulate-controls.js?v=20260922-cache2";
 
 const freeze = (value) => Object.freeze(value);
 

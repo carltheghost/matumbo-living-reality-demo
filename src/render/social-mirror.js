@@ -30,7 +30,7 @@ import {
   SOCIAL_MIRROR_TABS,
   createSocialMirrorProjection,
   getSocialMirrorTickerItems,
-} from "../domains/social-mirror.js";
+} from "../domains/social-mirror.js?v=20260922-cache2";
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];

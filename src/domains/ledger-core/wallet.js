@@ -27,10 +27,10 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { EchoProof } from "./echoproof.js";
-import { Ledger, Posting } from "./ledger.js";
-import { Money, TUMBO } from "./money.js";
-import { PermissionDenied, PolicyEngine, Principal, Role } from "./permissions.js";
+import { EchoProof } from "./echoproof.js?v=20260922-cache2";
+import { Ledger, Posting } from "./ledger.js?v=20260922-cache2";
+import { Money, TUMBO } from "./money.js?v=20260922-cache2";
+import { PermissionDenied, PolicyEngine, Principal, Role } from "./permissions.js?v=20260922-cache2";
 
 export const REALM = "quark_wallet";
 export const ISSUANCE_ACCOUNT = "system:issuance";

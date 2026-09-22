@@ -2,7 +2,7 @@ import {
   NFT_ATELIER_BOUNDARY,
   NFT_ATELIER_CONSOLE_SOURCE,
   createNftAtelier,
-} from "../domains/nft-atelier.js";
+} from "../domains/nft-atelier.js?v=20260922-cache2";
 
 export { NFT_ATELIER_CONSOLE_SOURCE };
 export const NFT_ATELIER_RENDER_SOURCE = NFT_ATELIER_CONSOLE_SOURCE;

@@ -1,4 +1,4 @@
-import { T402_SOURCE } from "../domains/t402.js";
+import { T402_SOURCE } from "../domains/t402.js?v=20260922-cache2";
 
 export const T402_CONSOLE_SOURCE = "t402-console";
 export const T402_RENDER_SOURCE = T402_CONSOLE_SOURCE;

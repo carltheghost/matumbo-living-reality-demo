@@ -1,4 +1,4 @@
-import { LIVE_GATEWAY_SOURCE } from "../domains/live-gateway.js";
+import { LIVE_GATEWAY_SOURCE } from "../domains/live-gateway.js?v=20260922-cache2";
 
 export const LIVE_GATEWAY_CONSOLE_SOURCE = "live-gateway-console";
 export const LIVE_GATEWAY_RENDER_SOURCE = LIVE_GATEWAY_CONSOLE_SOURCE;

@@ -10,7 +10,7 @@ import {
   summarizeWorldEventMapCells,
   summarizeWorldEvents,
   worldEventMapCell,
-} from "../domains/world-events.js";
+} from "../domains/world-events.js?v=20260922-cache2";
 
 export const WORLD_EVENTS_CONSOLE_SOURCE = "world-events-evidence-console";
 

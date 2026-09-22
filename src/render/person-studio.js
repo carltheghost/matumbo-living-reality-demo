@@ -1,7 +1,7 @@
-import {createPersonStudioOwner,STUDIO_OUTFITS,STUDIO_ROOMS,STUDIO_COMPANIONS} from '../domains/person-studio.js';
+import {createPersonStudioOwner,STUDIO_OUTFITS,STUDIO_ROOMS,STUDIO_COMPANIONS} from '../domains/person-studio.js?v=20260922-cache2';
 import {buildPersonStudioScene} from './person-studio-scene.js?v=20260918-avatar-chess';
-import {AVATAR_FACE_CHOICES,AVATAR_FACE_MAX_DIM,AVATAR_FLUFFY_BODY_TEMPLATE_URL,avatarFaceChoiceToMascotLook,buildChibi,loadAvatarFaceChoice,resolveAvatarFaceUrl,saveAvatarFace,saveAvatarFaceChoice} from '../domains/avatar-style.js';
-import {setMascotLook} from './photo-mascot-set.js';
+import {AVATAR_FACE_CHOICES,AVATAR_FACE_MAX_DIM,AVATAR_FLUFFY_BODY_TEMPLATE_URL,avatarFaceChoiceToMascotLook,buildChibi,loadAvatarFaceChoice,resolveAvatarFaceUrl,saveAvatarFace,saveAvatarFaceChoice} from '../domains/avatar-style.js?v=20260922-cache2';
+import {setMascotLook} from './photo-mascot-set.js?v=20260922-cache2';
 
 export function createPersonStudio({THREE,renderer,scene,camera,controls,world,targets,documentRoot=document,onNavigate,onFrame,onIntent,reducedMotion=false}) {
   let storage=null;try{storage=globalThis.localStorage;}catch{}

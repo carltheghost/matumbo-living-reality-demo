@@ -13,7 +13,7 @@
  */
 
 // One source of truth for lifecycle constants — no hardcoded duplicates.
-import { TOKEN_CONFIG } from "./token.js";
+import { TOKEN_CONFIG } from "./token.js?v=20260922-cache2";
 
 export const TOKEN_LIFECYCLE_SCHEMA_VERSION = 1;
 export const TOKEN_LIFECYCLE_SOURCE = "tumbo-token-lifecycle";

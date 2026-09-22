@@ -7,7 +7,7 @@ import {
   createBlockMigrationManifest,
   previewBlockMigration,
   resetBlockMigrationDraft,
-} from "../domains/block-migration.js";
+} from "../domains/block-migration.js?v=20260922-cache2";
 
 const freeze = (value) => Object.freeze(value);
 

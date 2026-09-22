@@ -1,4 +1,4 @@
-import {STUDIO_MODEL,STUDIO_OUTFITS,STUDIO_ROOMS} from '../domains/person-studio.js';
+import {STUDIO_MODEL,STUDIO_OUTFITS,STUDIO_ROOMS} from '../domains/person-studio.js?v=20260922-cache2';
 import {buildAgentSmithRig} from './agent-smith-rig.js?v=20260920-agent-smith';
 
 /** AI-built likeness: Tumbo's approved avatar bust portrait (cinematic teal/violet

@@ -10,7 +10,7 @@
  * Simulation only. Never throws into the host runtime.
  */
 
-import { mountTokenSocialUx } from "./token-social-ux.js";
+import { mountTokenSocialUx } from "./token-social-ux.js?v=20260922-cache2";
 
 export function bootTokenSocialUx(opts = {}) {
   try {

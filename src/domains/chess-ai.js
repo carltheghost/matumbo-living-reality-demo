@@ -14,7 +14,7 @@
  * wallet, ledger, signing, settlement, or anything outside the board.
  * Projection only.
  */
-import {Chess} from '../vendor/chess-1.4.0/chess.js';
+import {Chess} from '../vendor/chess-1.4.0/chess.js?v=20260922-cache2';
 
 export const CHESS_AI_SOURCE = 'chess-ai-local';
 

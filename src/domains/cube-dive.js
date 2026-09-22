@@ -10,7 +10,7 @@
 // Local-only: every snapshot carries the standard local-simulation flags
 // and this module never touches storage, network, or authority APIs.
 
-import { BLOCK_WORLD_PORTAL_ROUTE_REGISTRY } from "./block-world.js";
+import { BLOCK_WORLD_PORTAL_ROUTE_REGISTRY } from "./block-world.js?v=20260922-cache2";
 
 export const CUBE_DIVE_DOUBLE_TAP_WINDOW_MS = 350;
 export const CUBE_DIVE_DOUBLE_TAP_DISTANCE_PX = 28;

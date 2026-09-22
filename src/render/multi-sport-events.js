@@ -3,7 +3,7 @@ import {
   createUnavailableMultiSportEvents,
   replayMultiSportEvents,
   summarizeMultiSportEvents,
-} from "../domains/multi-sport-events.js";
+} from "../domains/multi-sport-events.js?v=20260922-cache2";
 
 export const MULTI_SPORT_EVENTS_CONSOLE_SOURCE = "multi-sport-events-evidence-console";
 const SOURCE_RETURN_RECORD_ID_PATTERN = /^[a-z0-9:_.-]{1,160}$/i;

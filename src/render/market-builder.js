@@ -1,4 +1,4 @@
-import {summarizeMarket,createMarketBook} from '../domains/market-engine.js';
+import {summarizeMarket,createMarketBook} from '../domains/market-engine.js?v=20260922-cache2';
 
 export function mountMarketBuilder({documentRoot,panel,getSource}) {
   // Minimal DOM fixtures intentionally omit native form APIs.
@@ -50,7 +50,7 @@ export function mountMarketBuilder({documentRoot,panel,getSource}) {
   `;root.append(styles);
   action('Normal view',()=>{viewport.hidden=true;view?.setVisible(false);},controls);
   action('Export workspace',()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(book.snapshot(),null,2)],{type:'application/json'}));const link=documentRoot.createElement('a');link.href=url;link.download='matumbo-contract-workspace.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);},controls);
-  action('Cube view',()=>{viewport.hidden=false;if(view){view.setVisible(true);return;}status.textContent='Loading contract geometry…';import('./market-constellation.js').then(({mountMarketConstellation})=>{if(!view)view=mountMarketConstellation({host:viewport,onSelect:id=>{selected=id;render();list.querySelector('[data-selected="true"]')?.scrollIntoView({block:'nearest'});}});view.update(markets,selected);}).catch(error=>{viewport.hidden=true;status.textContent='3D unavailable: '+error.message;});},controls);
+  action('Cube view',()=>{viewport.hidden=false;if(view){view.setVisible(true);return;}status.textContent='Loading contract geometry…';import('./market-constellation.js?v=20260922-cache2').then(({mountMarketConstellation})=>{if(!view)view=mountMarketConstellation({host:viewport,onSelect:id=>{selected=id;render();list.querySelector('[data-selected="true"]')?.scrollIntoView({block:'nearest'});}});view.update(markets,selected);}).catch(error=>{viewport.hidden=true;status.textContent='3D unavailable: '+error.message;});},controls);
   book.subscribe(records=>{markets=records;try{if(storageBlocked)throw Error();documentRoot.defaultView.localStorage.setItem(storageKey,JSON.stringify(records));}catch{storageBlocked=true;}root.dataset.previewDirty=storageBlocked?'true':'false';render();});
   function action(title,fn,parent) {const b=documentRoot.createElement('button');b.type='button';b.textContent=title;b.style.cssText='margin:4px;min-height:44px';b.onclick=()=>{try{fn();status.textContent=storageBlocked?'Storage unavailable: export work before leaving.':'Saved on this browser · both views use the same records';render();}catch(e){status.textContent=e.message;}};parent.append(b);}
   function render(){

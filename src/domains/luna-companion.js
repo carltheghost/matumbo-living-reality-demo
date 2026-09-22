@@ -12,7 +12,7 @@
  * certainty → action, uncertainty → conversation, unknown → guidance.
  */
 
-import { parseLunaIntent } from "./luna-intent.js";
+import { parseLunaIntent } from "./luna-intent.js?v=20260922-cache2";
 
 export const LUNA_SCHEMA_VERSION = 2;
 export const LUNA_SOURCE = "luna-companion";

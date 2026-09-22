@@ -8,7 +8,7 @@
  * Projection only: no network, identity authority, wallet, settlement, or
  * external asset loading is involved.
  */
-import {STUDIO_MODEL, STUDIO_OUTFITS, PERSON_STUDIO_STORAGE_KEY} from '../domains/person-studio.js';
+import {STUDIO_MODEL, STUDIO_OUTFITS, PERSON_STUDIO_STORAGE_KEY} from '../domains/person-studio.js?v=20260922-cache2';
 
 export const CHESS_ARENA_PIECE_TYPES = Object.freeze(['p','n','b','r','q','k']);
 const FILES = 'abcdefgh';

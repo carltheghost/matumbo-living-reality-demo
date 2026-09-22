@@ -12,13 +12,13 @@ export {
   MoneyError,
   CurrencyMismatchError,
   PrecisionError,
-} from "./money.js";
+} from "./money.js?v=20260922-cache2";
 export {
   createEvent,
   EventLog,
   canonicalJson,
   contentHash,
-} from "./events.js";
+} from "./events.js?v=20260922-cache2";
 export {
   Ledger,
   Account,
@@ -27,16 +27,16 @@ export {
   InsufficientFundsError,
   UnbalancedTransactionError,
   UnknownAccountError,
-} from "./ledger.js";
-export { EchoProof, Receipt, DEMO_STAMP } from "./echoproof.js";
+} from "./ledger.js?v=20260922-cache2";
+export { EchoProof, Receipt, DEMO_STAMP } from "./echoproof.js?v=20260922-cache2";
 export {
   Principal,
   PolicyEngine,
   Role,
   AutonomyLevel,
   PermissionDenied,
-} from "./permissions.js";
-export { MAJOR_CRYPTOS } from "./assets.js";
+} from "./permissions.js?v=20260922-cache2";
+export { MAJOR_CRYPTOS } from "./assets.js?v=20260922-cache2";
 export {
   QuarkWallet,
   WalletBalance,
@@ -44,4 +44,4 @@ export {
   subAccount,
   REALM as WALLET_REALM,
   ISSUANCE_ACCOUNT,
-} from "./wallet.js";
+} from "./wallet.js?v=20260922-cache2";

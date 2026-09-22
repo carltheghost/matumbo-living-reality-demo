@@ -15,13 +15,13 @@
  * Simulated points only — never real money or wagering.
  */
 
-import * as THREE from "three";
-import { ensureTumboToken, fmtFluff } from "../domains/token.js";
+import * as THREE from "three?v=20260922-cache2";
+import { ensureTumboToken, fmtFluff } from "../domains/token.js?v=20260922-cache2";
 import {
   HUNGER_MAX,
   RIBBON_CAP,
   LEADERBOARD_SIZE,
-} from "../domains/token-config.js";
+} from "../domains/token-config.js?v=20260922-cache2";
 import {
   GAMIFICATION_VERSION,
   SIM_BOUNDARY_NOTE,
@@ -29,7 +29,7 @@ import {
   createTokenGamification,
   seedDemoBurrow,
   presenceDayKey,
-} from "../domains/token-gamification.js";
+} from "../domains/token-gamification.js?v=20260922-cache2";
 
 export const TOKEN_GAMIFICATION_CONSOLE_SOURCE = "token-gamification-console";
 export const TOKEN_GAMIFICATION_VERSION = GAMIFICATION_VERSION;

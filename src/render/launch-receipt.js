@@ -14,8 +14,8 @@
  * export of that validated text; it does not import files, persist app state,
  * or share anything externally.
  */
-import { DEFAULT_LAUNCH_DISTRIBUTION_PREVIEW } from "../domains/distribution-registry.js";
-import { summarizeLaunchDistribution } from "./launch-console.js";
+import { DEFAULT_LAUNCH_DISTRIBUTION_PREVIEW } from "../domains/distribution-registry.js?v=20260922-cache2";
+import { summarizeLaunchDistribution } from "./launch-console.js?v=20260922-cache2";
 
 export const LAUNCH_RECEIPT_CONSOLE_SOURCE = "launch-rehearsal-receipt-console";
 export const LAUNCH_RECEIPT_SOURCE = "launch-rehearsal-receipt";

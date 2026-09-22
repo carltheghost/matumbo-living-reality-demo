@@ -17,7 +17,7 @@ import {
   fmt,
   balance,
   attachWindowFacade,
-} from "../domains/token.js";
+} from "../domains/token.js?v=20260922-cache2";
 
 export const TOKEN_TRADE_CONSOLE_SOURCE = "token-trade-console";
 export const TOKEN_TRADE_BOUNDARY = TOKEN_STUB_BOUNDARY;

@@ -20,8 +20,8 @@
 //
 // Simulation only: TUMBO-SIM is a demo token. No real money, wagering, wallet
 // custody, or chains are involved anywhere in this module.
-import { TumboLedger } from "./token.js";
-import { createTokenFacade } from "./token-facade.js";
+import { TumboLedger } from "./token.js?v=20260922-cache2";
+import { createTokenFacade } from "./token-facade.js?v=20260922-cache2";
 
 const STORAGE_KEY = "tumbo.token.ledger.v1";
 const GENESIS_IDEM = "genesis:demo-funding:v1";

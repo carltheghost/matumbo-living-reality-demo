@@ -1,4 +1,4 @@
-import { MATTER_FORGE_SOURCE } from "../domains/matter-forge.js";
+import { MATTER_FORGE_SOURCE } from "../domains/matter-forge.js?v=20260922-cache2";
 
 /**
  * Renderer-only source marker.  The Picture Matter console reads the

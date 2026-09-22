@@ -27,8 +27,8 @@
  * money, no custody, no settlement.
  */
 
-import { createEvent, EventLog } from "./events.js";
-import { Money, TUMBO } from "./money.js";
+import { createEvent, EventLog } from "./events.js?v=20260922-cache2";
+import { Money, TUMBO } from "./money.js?v=20260922-cache2";
 
 export class LedgerError extends Error {}
 export class InsufficientFundsError extends LedgerError {}
