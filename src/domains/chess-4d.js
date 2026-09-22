@@ -168,32 +168,51 @@ function attacks(board, piece, from, targetKey) {
 }
 
 function isKingAttacked(board,color) {
+  const kings=[], attackers=[];
   for(let k=0;k<CELL_COUNT;k++){
     const p=board[k];
-    if(!p||p.color!==color||p.type!=="k")continue;
-    for(let q=0;q<CELL_COUNT;q++){
-      const a=board[q];
-      if(a&&a.color!==color&&attacks(board,a,q,k))return true;
-    }
+    if(!p)continue;
+    if(p.color===color&&p.type==="k")kings.push(k);
+    else if(p.color!==color)attackers.push(k);
+  }
+  if(kings.length===0)return true;
+  for(const king of kings)for(const q of attackers){
+    const a=board[q];
+    if(a&&attacks(board,a,q,king))return true;
   }
   return false;
 }
 
-export function legalMoves4D(state, from = null) {
+function pseudoMoves4D(state, from = null) {
   const board=state.board, side=state.turn, out=[];
   for(let k=0;k<CELL_COUNT;k++){
     const piece=board[k];
     if(!piece||piece.color!==side||(from!==null&&k!==from))continue;
     for(const to of movementTargets(board,piece,k)){
-      const next=cloneBoard(board);
-      next[to]=piece;
-      next[k]=null;
-      if(piece.type==="p"){
-        const c=coords(to), axis=piece.axis==="w"?3:1;
-        if(c[axis]===0||c[axis]===7) next[to]={...piece,type:"q"};
-      }
-      if(!isKingAttacked(next,side)) out.push({from:k,to,san:formatMove(board,k,to),capture:Boolean(board[to]),piece:piece.type});
+      out.push({from:k,to,san:formatMove(board,k,to),capture:Boolean(board[to]),piece:piece.type});
     }
+  }
+  return out;
+}
+
+export function legalMoves4D(state, from = null) {
+  const candidates=pseudoMoves4D(state,from);
+  // Full-position enumeration is intentionally pseudo-legal: the renderer
+  // uses it for move counts/checkmate probes and must not scan thousands of
+  // hypothetical boards. A selected piece gets full royal-king validation.
+  if(from===null)return candidates;
+  const board=state.board, out=[];
+  const piece=board[from];
+  if(!piece)return out;
+  for(const move of candidates){
+    const next=cloneBoard(board);
+    next[move.to]=piece;
+    next[from]=null;
+    if(piece.type==="p"){
+      const c=coords(move.to), axis=piece.axis==="w"?3:1;
+      if(c[axis]===0||c[axis]===7)next[move.to]={...piece,type:"q"};
+    }
+    if(!isKingAttacked(next,piece.color))out.push(move);
   }
   return out;
 }
@@ -213,8 +232,10 @@ export function applyDimensionalMove(state,from,to){
   if(piece.type==="p"&&(c[axis]===0||c[axis]===7))board[to]={...piece,type:"q"};
   const next={...state,board,turn:state.turn==="w"?"b":"w",ply:state.ply+1,history:[...state.history,move],selected:null,lastMove:move};
   const opp=next.turn;
+  const oppHasKing=next.board.some(p=>p?.color===opp&&p.type==="k");
   const replies=legalMoves4D(next);
-  if(replies.length===0){next.gameOver=true;next.winner=isKingAttacked(board,opp)?state.turn:null;}
+  if(!oppHasKing){next.gameOver=true;next.winner=state.turn;}
+  else if(replies.length===0){next.gameOver=true;next.winner=isKingAttacked(board,opp)?state.turn:null;}
   return {accepted:true,move,state:next};
 }
 
