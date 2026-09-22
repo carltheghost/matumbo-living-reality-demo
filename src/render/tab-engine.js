@@ -48,7 +48,7 @@
  *
  * MODES
  *  - 'phone'   → bottom glass dock, one tab materialized at a time.
- *  - 'desktop' → left glass rail dock, up to 3 user tabs (LRU eviction).
+ *  - 'desktop' → right glass rail dock, up to 3 user tabs (LRU eviction).
  *                Tabs registered with `pinned: true` (persistent HUD chrome
  *                adopted at boot) are exempt from eviction and from the cap.
  *  - 'ar'      → compact edge rail, one tab at a time. The AR lane owns AR
@@ -115,21 +115,20 @@ const TAB_ENGINE_CSS = `
   justify-content: center;
   flex-wrap: wrap;
 }
-/* desktop: left glass rail.
-   The rail reserves a 96px top band for the page's fixed top-left HUD chrome
-   (the city-journey widget at top:8px/~74px tall collapsed, the brand mark):
-   the rail centers 48px below viewport center and its max-height shrinks by
-   the full band, so the rail's top edge can never rise above 108px. No chip
-   can slide underneath the chrome and become unclickable; long chip lists
-   scroll inside the rail instead. */
+/* desktop: right glass rail.
+   The left side is intentionally reserved for Mission Control and other
+   persistent navigation chrome. Minimized tabs live in this right-hand lane
+   so they cannot disappear underneath the left control panel. */
 .tl-dock--desktop {
-  left: 12px;
-  top: calc(50% + 48px);
-  transform: translateY(-50%);
+  right: 12px;
+  top: 84px;
+  bottom: 84px;
   flex-direction: column;
   align-items: stretch;
-  max-height: calc(100vh - 24px - 96px);
+  max-height: none;
+  overflow-x: hidden;
   overflow-y: auto;
+  scrollbar-width: thin;
 }
 /* ar: compact right-edge rail (lane 2 owns AR visuals; layout switch only) */
 .tl-dock--ar {
@@ -146,41 +145,70 @@ const TAB_ENGINE_CSS = `
 .tl-chip {
   appearance: none;
   -webkit-appearance: none;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.06);
-  color: #eef1f8;
-  min-width: 44px;
-  min-height: 44px;
-  padding: 8px 12px;
-  border-radius: 14px;
+  border: 1px solid rgba(129, 232, 255, 0.24);
+  background: linear-gradient(165deg, rgba(4, 17, 25, 0.93), rgba(3, 7, 12, 0.88));
+  color: #dff7ff;
+  width: 118px;
+  min-width: 118px;
+  min-height: 64px;
+  padding: 8px;
+  border-radius: 16px;
   display: inline-flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  font: 600 13px/1.2 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  gap: 5px;
+  font: 700 9px/1.25 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  letter-spacing: .14em;
+  text-transform: uppercase;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
-  transition: transform 0.28s cubic-bezier(0.3, 1.4, 0.5, 1),
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 18px 50px rgba(0,0,0,.45), inset 0 0 24px rgba(70,210,255,.05);
+  transition: transform 0.22s ease,
               background 0.2s ease,
               border-color 0.2s ease,
               box-shadow 0.2s ease;
 }
-.tl-dock--desktop .tl-chip { width: 100%; justify-content: flex-start; }
-.tl-chip:hover { background: rgba(255, 255, 255, 0.12); }
-.tl-chip:active { transform: scale(0.94); }
-.tl-chip:focus-visible { outline: 2px solid #7dd3fc; outline-offset: 2px; }
-.tl-chip.tl-active {
-  background: rgba(125, 211, 252, 0.18);
-  border-color: rgba(125, 211, 252, 0.55);
-  box-shadow: 0 0 0 1px rgba(125, 211, 252, 0.35), 0 6px 18px rgba(0, 0, 0, 0.35);
+.tl-dock--desktop .tl-chip { width: 118px; justify-content: center; }
+.tl-chip:hover {
+  border-color: rgba(178,244,255,.62);
+  box-shadow: 0 18px 50px rgba(0,0,0,.45), 0 0 26px rgba(110,220,255,.2), inset 0 0 24px rgba(70,210,255,.08);
 }
-.tl-chip-icon { font-size: 18px; line-height: 1; flex: none; }
+.tl-chip:active { transform: scale(0.96); }
+.tl-chip:focus-visible { outline: 2px solid #7ae6ff; outline-offset: 2px; }
+.tl-chip.tl-active {
+  border-color: rgba(197,230,255,.75);
+  background: linear-gradient(165deg, rgba(9, 31, 43, .96), rgba(3, 9, 15, .92));
+  box-shadow: 0 18px 50px rgba(0,0,0,.45), 0 0 26px rgba(110,220,255,.28), inset 0 0 24px rgba(70,210,255,.08);
+}
+.tl-chip-icon {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(129,232,255,.28);
+  border-radius: 10px;
+  background: linear-gradient(150deg, rgba(54,170,205,.18), rgba(4,18,27,.62));
+  color: #c8f7ff;
+  box-shadow: inset 0 0 16px rgba(70,210,255,.08), 0 0 12px rgba(70,210,255,.08);
+  font-size: 17px;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: none;
+}
 .tl-chip-label {
-  white-space: nowrap;
+  width: 100%;
+  max-width: 104px;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 120px;
+  white-space: nowrap;
+  text-align: center;
+  color: #c8f7ff;
+  letter-spacing: .12em;
 }
 
 /* Panel layer: pointer-events off so closed panels never intercept input. */
@@ -199,11 +227,13 @@ const TAB_ENGINE_CSS = `
   justify-content: center;
 }
 .tl-layer--desktop {
-  left: 92px;
+  right: 154px;
+  left: auto;
   top: 50%;
   transform: translateY(-50%);
   flex-direction: column;
-  max-height: calc(100vh - 48px);
+  align-items: flex-end;
+  max-height: calc(100vh - 96px);
   overflow-y: auto;
   padding: 4px;
 }
