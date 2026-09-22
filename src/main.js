@@ -16,6 +16,7 @@ import('./domains/token-vault-ui.js').catch(() => {});
 // Token transfers console — side-effect import; mounts the transfers glass-cube chip.
 import './domains/token-transfers-ui.js?v=20260922-token-transfers-cube2';
 import { initMobilePanelManager } from './render/mobile-panel-manager.js';
+import { installMobileFreezeGuard } from './render/mobile-freeze-guard.js?v=20260922-mfg1';
 import { mountPhotoMascot } from './render/photo-mascot-mount.js';
 import { createPersonStudio } from './render/person-studio.js?v=20260918-avatar-chess';
 import { createRealityAssembly, CLEAN_LANDING_CAMERA } from './render/reality-assembly.js?v=20260922-nextgen';
@@ -278,6 +279,15 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.12;
 document.body.prepend(renderer.domElement);
+// Mobile freeze guard (lane/mobile-freeze-grok): caps pixel ratio on phones,
+// pauses GPU work when the tab is hidden, adapts quality on sustained slow
+// frames. Projection-only: scales cost, never redesigns visuals. A failed
+// install degrades to the unguarded boot, never a red banner.
+let mobileFreezeGuard = null;
+try {
+  mobileFreezeGuard = installMobileFreezeGuard({ renderer, scene, camera, document, viewportWidth: innerWidth });
+} catch (freezeGuardError) { try { console.warn('[mobile-freeze-guard] install failed:', freezeGuardError); } catch {} }
+window.__TUMBO_FREEZE_GUARD__ = mobileFreezeGuard;
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
@@ -8682,16 +8692,18 @@ if(typeof window!=='undefined'){
 }
 function animate(){
   const rawDt=Math.min(clock.getDelta(),.035),dt=rawDt*(reducedMotion?.22:1),t=clock.elapsedTime;
+  if(window.__TUMBO_FREEZE_GUARD__?.getPaused())return;
+  window.__TUMBO_FREEZE_GUARD__?.notifyFrame(rawDt*1000);
   if(realityAssembly?.active){
     realityAssembly.update(dt,t);
     if(!renderer.xr.isPresenting)controls.update();
-    if(isMobile || renderer.xr.isPresenting)renderer.render(scene,camera);else composer.render();
+    if(isMobile || renderer.xr.isPresenting || scene.userData?.__mf_postDisabled)renderer.render(scene,camera);else composer.render();
     return;
   }
   if(personStudio?.active){
     personStudio.update(dt,t);
     if(!renderer.xr.isPresenting)controls.update();
-    if(isMobile || renderer.xr.isPresenting)renderer.render(scene,camera);else composer.render();
+    if(isMobile || renderer.xr.isPresenting || scene.userData?.__mf_postDisabled)renderer.render(scene,camera);else composer.render();
     return;
   }
   raycaster.setFromCamera(mouse,camera); const hit=raycastVisibleTargets();
@@ -8826,7 +8838,7 @@ function animate(){
     };
   }
   if(!renderer.xr.isPresenting)controls.update();
-  if(isMobile || renderer.xr.isPresenting) renderer.render(scene,camera); else composer.render();
+  if(isMobile || renderer.xr.isPresenting || scene.userData?.__mf_postDisabled) renderer.render(scene,camera); else composer.render();
 }
 personStudio=createPersonStudio({THREE,renderer,scene,camera,controls,world,targets:raycastTargets,reducedMotion,
   onNavigate:(id)=>{featureNavigator.select(id,'button');featureNavigator.close();},
@@ -8919,6 +8931,7 @@ import("./render/persistent-user-blocks.js")
   .catch(() => {});
 
 addEventListener('pagehide',()=>{
+  window.__TUMBO_FREEZE_GUARD__?.dispose?.();
   cameraInput?.destroy();
   gestureInput?.destroy();
   mediaPreview.destroy();

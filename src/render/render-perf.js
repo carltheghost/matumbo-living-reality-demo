@@ -80,3 +80,36 @@ export function createVisibilityLoop({
     },
   };
 }
+
+/** Adaptive quality tier from recent frame cost and device class.
+ * Levels: 0 = lowest, 1 = medium, 2 = full. Never returns full (2) on
+ * compact viewports — phones stay at 1 or below to keep the GPU cool. */
+export function decideQualityLevel({ avgFrameMs, viewportWidth, dpr }) {
+  const compact = isCompactViewport(viewportWidth);
+  const ms = typeof avgFrameMs === 'number' && avgFrameMs > 0 ? avgFrameMs : 16.7;
+  if (compact) {
+    if (ms > 48) return 0;
+    return 1;
+  }
+  if (ms > 40) return 0;
+  if (ms > 22) return 1;
+  if (dpr > 1.5) return 1;
+  return 2;
+}
+
+/** True when the document is hidden and rendering should pause entirely. */
+export function shouldPauseRendering({ documentHidden }) {
+  return documentHidden === true;
+}
+
+/** Particle budget for a viewport width and quality level.
+ * Compact viewports start from a smaller base (400 vs 1200); level 1 halves,
+ * level 0 quarters (floored at 50). Never returns zero or negative. */
+export function particleBudget({ viewportWidth, qualityLevel }) {
+  const compact = isCompactViewport(viewportWidth);
+  const base = compact ? 400 : 1200;
+  const level = typeof qualityLevel === 'number' ? qualityLevel : 2;
+  if (level <= 0) return Math.max(50, Math.floor(base * 0.25));
+  if (level === 1) return Math.max(100, Math.floor(base * 0.5));
+  return base;
+}
