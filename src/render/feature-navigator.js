@@ -500,6 +500,11 @@ const FEATURE_SURFACE_ROUTES = Object.freeze({
     Object.freeze(["TURN LOOP", "legal action → visible state change"]),
     Object.freeze(["REPLAY", "event/hash trace · no reward"]),
   ]),
+  chess: Object.freeze([
+    Object.freeze(["STANDARD PIECES", "recognizable king · queen · rook · bishop · knight · pawn"]),
+    Object.freeze(["PLAY", "legal moves · local AI · two-player mode"]),
+    Object.freeze(["MOBILE", "compact board and touch controls"]),
+  ]),
   academy: Object.freeze([
     Object.freeze(["LEARNING PATH", "four connected Financial OS lessons"]),
     Object.freeze(["KNOWLEDGE CHECK", "retryable local questions"]),
