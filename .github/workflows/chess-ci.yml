@@ -1,0 +1,28 @@
+name: Chess regression
+
+on:
+  pull_request:
+    paths:
+      - "src/render/chess-arena.js"
+      - "src/render/chess-arena-pieces.js"
+      - "src/render/feature-navigator.js"
+      - "src/main.js"
+      - "index.html"
+      - "tests/chess-arena.test.mjs"
+      - "tests/feature-navigator.test.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/chess-ci.yml"
+
+jobs:
+  chess:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: node --test tests/chess-arena.test.mjs tests/feature-navigator.test.mjs
