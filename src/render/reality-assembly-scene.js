@@ -140,8 +140,14 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[]}){
     }
     bars.forEach(([size,pos],i)=>{const bar=box(size,pos,wbFrameMat,face);bar.name=`world-block/face-${axis}-${sign}/frame-${i}`;});
     const mini=axis===1?[[3.6,.22,2.7],[-3.6,.22,2.7],[3.6,.22,-2.7]]:axis===0?[[.22,3.7,3.9],[.22,3.7,-3.9],[.22,-2.1,3.9]]:[[3.6,2.7,.22],[-3.6,2.7,.22],[3.6,-2.1,.22]];
-    mini.forEach((pos,i)=>{const mat=makeMaterial(['#7fdfff','#b892ff','#79f0b8'][i],{transparent:true,opacity:0,emissive:['#2ec9ff','#8050ff','#36d78f'][i],emissiveIntensity:.9,metalness:.3,roughness:.2,fog:false});box([.55,.55,.55],pos,mat,face);});
-    wbFaceSystems.push({face,panelMaterial:panelMat,glowMaterial:glowMat,frameMaterial:wbFrameMat,phase:faceIndex*.9});
+    const miniActors=[];
+    mini.forEach((pos,i)=>{const mat=makeMaterial(['#7fdfff','#b892ff','#79f0b8'][i],{transparent:true,opacity:0,emissive:['#2ec9ff','#8050ff','#36d78f'][i],emissiveIntensity:.9,metalness:.3,roughness:.2,fog:false});const miniMesh=box([.55,.55,.55],pos,mat,face);miniMesh.userData.actorIndex=i;miniActors.push(miniMesh);});
+    const faceActors=[];
+    for(let actorIndex=0;actorIndex<3;actorIndex++){
+      const actor=mesh(actorGeometry,actorMaterial,[0,0,0],[1,1,1],face);
+      actor.userData.actorIndex=actorIndex;faceActors.push(actor);
+    }
+    wbFaceSystems.push({face,panelMaterial:panelMat,glowMaterial:glowMat,frameMaterial:wbFrameMat,phase:faceIndex*.9,axis,sign,miniActors,faceActors});
   });
 
   const CORE=2.0,FACE=2.14,REST=CORE/2+.09;
@@ -314,6 +320,23 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[]}){
       frameMaterial.opacity=lodBlend*.72;
       face.visible=lodBlend>.02;
       panelMaterial.emissiveIntensity=.8+.28*pulse;
+      const orbit=.9+.22*Math.sin(time*.9+phase);
+      faceActors.forEach((actor,actorIndex)=>{
+        const t=time*(.38+.06*actorIndex)+phase+actorIndex*2.1;
+        const u=Math.sin(t)*orbit*2.2;
+        const v=Math.cos(t*.77)*orbit*1.35;
+        if(axis===0)actor.position.set(sign*15.35,1+v,u);
+        else if(axis===1)actor.position.set(u,sign*8.35,v);
+        else actor.position.set(u,1+v,sign*15.35);
+        actor.scale.setScalar(.65+.25*Math.sin(t*1.4));
+        actor.visible=lodBlend>.04;
+      });
+      miniActors.forEach((actor,actorIndex)=>{
+        const t=time*.55+phase+actorIndex*2;
+        actor.position.x+=Math.sin(t)*.008;
+        actor.position.y+=Math.cos(t*.8)*.006;
+        actor.position.z+=Math.sin(t*.65)*.008;
+      });
     });
     connections.visible=!showWorld;
     const buffer=connectionGeometry.attributes.position;
