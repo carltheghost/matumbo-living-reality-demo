@@ -110,3 +110,117 @@ body.person-studio-mode #explain-white-paper{display:none!important}
   #person-studio .studio-inspector{left:7px;right:7px;bottom:112px}
   #person-studio .studio-footer{left:7px;right:7px}
 }
+
+
+/* Personal-space navigation refinement.
+   One navigation language at every viewport: equal destinations, explicit icon/text
+   spacing, no compressed pills, and a safe tablet breakpoint before mobile. */
+#person-studio .studio-topbar{
+  gap:14px;
+}
+#person-studio .studio-tabs{
+  display:grid;
+  grid-template-columns:repeat(5,minmax(104px,1fr));
+  gap:5px;
+  padding:5px;
+  flex:0 1 auto;
+  width:min(650px,53vw);
+  min-width:520px;
+  border-radius:18px;
+}
+#person-studio .studio-tabs button{
+  min-width:0;
+  min-height:40px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  padding:9px 11px;
+  border-radius:12px;
+  white-space:nowrap;
+  line-height:1;
+}
+#person-studio .studio-tabs button span{
+  flex:0 0 auto;
+  display:inline-grid;
+  place-items:center;
+  width:1.05em;
+  font-size:15px;
+  line-height:1;
+  color:#9fd0ff;
+}
+#person-studio .studio-tabs button b{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  font-size:11px;
+  font-weight:500;
+  letter-spacing:.01em;
+}
+#person-studio .studio-tabs button[aria-selected=true]{
+  gap:9px;
+}
+#person-studio .studio-tabs button[aria-selected=true] span{
+  color:#ffe4ae;
+}
+@media(max-width:1180px) and (min-width:701px){
+  #person-studio .studio-topbar{
+    left:18px;right:18px;
+    flex-wrap:wrap;
+    gap:10px 14px;
+  }
+  #person-studio .studio-brand{
+    flex:1 1 auto;
+  }
+  #person-studio .studio-top-right{
+    flex:0 0 auto;
+  }
+  #person-studio .studio-tabs{
+    order:3;
+    flex:1 0 100%;
+    width:100%;
+    min-width:0;
+    max-width:none;
+    grid-template-columns:repeat(5,minmax(0,1fr));
+  }
+}
+@media(max-width:700px){
+  #person-studio .studio-tabs{
+    grid-template-columns:repeat(5,minmax(0,1fr));
+    gap:4px;
+    padding:4px;
+    height:58px;
+  }
+  #person-studio .studio-tabs button{
+    min-height:48px!important;
+    gap:3px;
+    padding:4px 2px!important;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    border-radius:12px!important;
+  }
+  #person-studio .studio-tabs button span{
+    width:auto;
+    font-size:15px!important;
+  }
+  #person-studio .studio-tabs button b{
+    font-size:8px!important;
+    line-height:1;
+  }
+}
+@media(max-width:380px){
+  #person-studio .studio-tabs{
+    gap:3px;
+    padding:3px;
+  }
+  #person-studio .studio-tabs button{
+    min-height:49px!important;
+  }
+  #person-studio .studio-tabs button span{
+    font-size:14px!important;
+  }
+  #person-studio .studio-tabs button b{
+    font-size:7px!important;
+  }
+}
