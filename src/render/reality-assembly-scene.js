@@ -313,7 +313,7 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[]}){
     wbCellMat.opacity=(1-lodBlend)*.4;
     for(const wbCell of wbCells)wbCell.visible=lodBlend<=.5;
     wbGlass.emissiveIntensity=.22+.14*Math.sin(time*.8);
-    wbFaceSystems.forEach(({face,panelMaterial,glowMaterial,frameMaterial,phase})=>{
+    wbFaceSystems.forEach(({face,panelMaterial,glowMaterial,frameMaterial,phase,axis,sign,miniActors,faceActors})=>{
       const pulse=.82+.18*Math.sin(time*.72+phase);
       panelMaterial.opacity=lodBlend*.72;
       glowMaterial.opacity=lodBlend*.32*pulse;
