@@ -54,11 +54,6 @@
     #camera-input-open{appearance:none;border:1px solid rgba(154,222,255,.22);border-radius:7px;padding:5px 7px;background:rgba(66,126,166,.11);color:#a9d6e4;font-size:8px;letter-spacing:.08em;cursor:pointer}
     #camera-input-open:hover,#camera-input-open:focus-visible{border-color:rgba(190,244,255,.62);background:rgba(66,126,166,.25);color:#effcff;outline:none}
     #feature-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;flex:0 1 min(46vh,448px);min-height:0;max-height:min(46vh,448px);overflow-y:scroll;overflow-x:hidden;padding:1px 5px 3px 0;scrollbar-color:rgba(111,217,239,.6) rgba(5,20,28,.62);scrollbar-width:thin}
-    #living-reality-architecture{display:none;position:fixed;z-index:89;left:50%;top:88px;transform:translateX(-50%);width:min(560px,calc(100vw - 28px));padding:14px;border:1px solid rgba(110,196,224,.35);border-radius:12px;background:linear-gradient(145deg,rgba(5,22,33,.96),rgba(3,9,15,.96));box-shadow:0 18px 55px rgba(0,0,0,.48);backdrop-filter:blur(16px);color:#dff6ff}
-    #runtime-status[data-runtime-state="loading"]~#living-reality-architecture,#runtime-status[data-runtime-state="error"]~#living-reality-architecture{display:block}
-    .lra-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}.lra-head small{font-size:8px;letter-spacing:.16em;color:#72c4df}.lra-head h1{font-size:18px;font-weight:500;margin:2px 0}.lra-head>span{font:8px ui-monospace,monospace;color:#72c4df}
-    .lra-row{display:grid;grid-template-columns:1fr 42px 1fr;align-items:center;gap:7px;margin-top:10px}.lra-node{padding:9px;border:1px solid #31596d;border-radius:7px;background:#091d2b}.lra-node b{display:block;font-size:10px}.lra-node small{display:block;margin-top:3px;color:#84a8b7;font-size:8px;line-height:1.35}.lra-fork{height:42px;position:relative}.lra-fork:before{content:"";position:absolute;left:20px;top:2px;bottom:2px;border-left:1px solid #4e91ab}.lra-fork i{position:absolute;left:2px;width:18px;border-top:1px solid #4e91ab;top:11px}.lra-fork i+i{top:30px}.lra-link{display:flex;gap:7px;align-items:center;margin:8px 9px}.lra-link span{height:1px;flex:1;background:#526c79}.lra-link b{font-size:8px;letter-spacing:.12em;color:#d9c18a}.lra-dest{display:flex;justify-content:space-between;padding:7px 9px;border:1px dashed #466877;border-radius:6px}.lra-dest b{font-size:9px}.lra-dest small{font-size:8px;color:#79bdd1}.lra-head~p{margin:8px 2px 0;color:#7899a8;font-size:8px;line-height:1.4}
-    @media(max-width:700px){#living-reality-architecture{top:82px;width:calc(100vw - 20px);padding:11px}.lra-head h1{font-size:16px}.lra-row{grid-template-columns:1fr 26px 1fr;gap:4px}.lra-node{padding:7px}.lra-node b{font-size:9px}.lra-node small{font-size:7px}.lra-fork{height:36px}.lra-fork:before{left:13px}.lra-fork i{width:12px}.lra-link{margin:6px 4px}.lra-head~p{font-size:7px}}
     #runtime-status{position:fixed;left:50%;top:16px;z-index:90;display:flex;align-items:center;gap:10px;width:min(430px,calc(100vw - 32px));padding:10px 12px;border:1px solid rgba(126,224,246,.28);border-radius:12px;background:linear-gradient(135deg,rgba(5,24,33,.94),rgba(4,10,16,.9));box-shadow:0 14px 46px rgba(0,0,0,.38),inset 0 0 24px rgba(79,208,234,.045);backdrop-filter:blur(16px);transform:translateX(-50%);transition:border-color .2s ease,background .2s ease,opacity .2s ease}
     #runtime-status[data-runtime-state="loading"]{border-color:rgba(126,224,246,.38);pointer-events:none}
     #runtime-status[data-runtime-state="ready"]{border-color:rgba(112,226,184,.34);background:linear-gradient(135deg,rgba(5,31,29,.88),rgba(4,12,16,.84));pointer-events:none}
@@ -2147,17 +2142,6 @@
     </span>
     <a id="runtime-status-retry" href="./index.html" hidden>Reload local demo</a>
     <a id="runtime-status-paper" href="./paper-live.html" hidden>Read the live white paper</a>
-  </section>
-  <section id="living-reality-architecture" aria-label="Living Reality architecture">
-    <div class="lra-head"><div><small>ARCHITECTURE</small><h1>Living Reality</h1></div><span>REALITY GRAPH</span></div>
-    <div class="lra-row">
-      <div class="lra-node"><b>Reality A</b><small>existing world<br>own state</small></div>
-      <div class="lra-fork"><i></i><i></i></div>
-      <div class="lra-node"><b>Side Reality B</b><small>alternate state<br>own objects · own space</small></div>
-    </div>
-    <div class="lra-link"><span></span><b>JOIN / LINK</b><span></span></div>
-    <div class="lra-dest"><b>another reality</b><small>connection / portal</small></div>
-    <p>A fork creates an independent reality. A link connects realities without merging their state.</p>
   </section>
   <div id="hud">
     <div id="brand"><b>maTumbo Ω</b><span id="sub">Living Reality / cube field + local feature lab</span></div>
