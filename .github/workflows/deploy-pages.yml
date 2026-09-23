@@ -43,7 +43,7 @@ jobs:
           from pathlib import Path
           p = Path('dist/index.html')
           html = p.read_text(encoding='utf-8')
-          marker = '<script type="module" src="./src/render/reality-25-bridge.js?v=20260922-directional2"></script>'
+          marker = '<script type="module">import("./src/render/reality-25-bridge.js?v=20260922-directional3").catch((error)=>{try{console.warn("[reality25] optional surface degraded:",error);}catch{}});</script>'
           if marker not in html:
               html = html.replace('</body>', f'{marker}</body>')
           p.write_text(html, encoding='utf-8')
