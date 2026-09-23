@@ -101,7 +101,7 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
     displayBack.material.emissive.set('#091827');
     frame(.65,1.45,.42,gold,[0,0,0],g,.018);
     const innerFrame=frame(.55,1.18,.05,seam,[0,.02,-.19],g,.012);
-    const hangerRod=mesh(new THREE.CylinderGeometry(.012,.012,.42,12),gold,[0,.54,.03],g);
+    const hangerRod=mesh(new THREE.CylinderGeometry(.012,.012,.42,12),gold,[0,.54,.03],[1,1,1],g);
     hangerRod.rotation.z=Math.PI/2;
     const hangerOrb=sphere(light,[-.25,.54,.03],[.028,.028,.028],g);
     const cloth=material(item.color,.35,.42,{emissive:item.color,emissiveIntensity:.08});
@@ -109,7 +109,7 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
     box(.045,.74,.025,seam,[.105,-.05,.09],g);box(.045,.74,.025,seam,[-.105,-.05,.09],g);
     // Shoulder details make each outfit read as an intentional garment, not a cube.
     for(const side of [-1,1]){const sleeve=box(.12,.56,.13,cloth,[side*.23,.02,.01],g);sleeve.rotation.z=side*.16;target(sleeve,{kind:'outfit',id:item.id});}
-    const collar=mesh(new THREE.TorusGeometry(.075,.012,8,24),seam,[0,.31,.085],g);collar.scale.set(.85,.7,1);collar.rotation.x=Math.PI/2;
+    const collar=mesh(new THREE.TorusGeometry(.075,.012,8,24),seam,[0,.31,.085],[1,1,1],g);collar.scale.set(.85,.7,1);collar.rotation.x=Math.PI/2;
     const centerBadge=sphere(ringGold,[0,-.34,.10],[.028,.028,.028],g);
     target(garment,{kind:'outfit',id:item.id});garmentDisplays.push(g);
     // Each wardrobe display has a floating nameplate, glow ring and orbiting light.
