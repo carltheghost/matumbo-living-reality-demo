@@ -210,7 +210,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     if(pointer?.move&&pointer.id===event.pointerId){
       if(ray.ray.intersectPlane(dragPlane,dragPoint)){
         const delta=dragPoint.clone().sub(pointer.hit),next=[Math.max(-24,Math.min(24,pointer.origin[0]+delta.x)),pointer.origin[1],Math.max(-24,Math.min(24,pointer.origin[2]+delta.z))];
-        pointer.next=next;const state=owner.getSnapshot();const safePosition=[next.x,next.y,next.z];spatial.apply({...state,objects:state.objects.map(object=>object.id===pointer.objectId?{...object,position:safePosition}:object)},{viewMode,hoveredId:pointer.objectId});
+        pointer.next=next;const state=owner.getSnapshot();const safePosition=next;spatial.apply({...state,objects:state.objects.map(object=>object.id===pointer.objectId?{...object,position:safePosition}:object)},{viewMode,hoveredId:pointer.objectId});
       }return;
     }
     const id=spatial.resolve(hit?.object);if(id!==hovered){hovered=id;render();find('[data-hover-label]').textContent=id?`${featureMap.get(id).label} · click to inspect / double-click to open`:'Hover to peek · click to select · double-click to open';}
