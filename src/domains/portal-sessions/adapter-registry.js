@@ -12,13 +12,17 @@ export function registerAdapter({
   securityClass
 }) {
   if (![serviceId, adapterId, adapterVersion, securityClass].every(validString)) {
-    throw new TypeError('serviceId, adapterId, adapterVersion, and securityClass are required');
+    throw new TypeError(
+      'serviceId, adapterId, adapterVersion, and securityClass are required'
+    );
   }
+
   if (!Array.isArray(capabilities) ||
       capabilities.length === 0 ||
       capabilities.some((value) => !validString(value))) {
     throw new TypeError('capabilities must be a non-empty array of strings');
   }
+
   if (adapters.has(serviceId)) {
     throw new Error(`adapter already registered for service: ${serviceId}`);
   }
@@ -30,7 +34,9 @@ export function registerAdapter({
     capabilities: Object.freeze([...capabilities]),
     securityClass
   });
+
   adapters.set(serviceId, record);
+
   return Object.freeze({
     serviceId,
     adapterId,
@@ -39,9 +45,13 @@ export function registerAdapter({
 }
 
 export function resolve(serviceId) {
-  if (!validString(serviceId)) throw new TypeError('serviceId must be a non-empty string');
+  if (!validString(serviceId)) {
+    throw new TypeError('serviceId must be a non-empty string');
+  }
+
   const record = adapters.get(serviceId);
   if (!record) return undefined;
+
   return Object.freeze({
     serviceId: record.serviceId,
     adapterId: record.adapterId,

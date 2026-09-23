@@ -35,6 +35,7 @@ export function createHandle({ serviceId, capabilities, issuedAt, ttlMs }) {
 
   handleCounter += 1;
   const handleId = `h_${fnv1a(`${serviceId}${issuedAt}${handleCounter}`)}`;
+
   return Object.freeze({
     schemaVersion: 1,
     handleId,
@@ -55,9 +56,10 @@ export function isExpired(handle, now) {
 }
 
 export function revoke(handle) {
-  if (!handle || typeof handle !== 'object' || !HEX.test(String(handle.handleId ?? ''))) {
+  if (!handle || typeof handle !== 'object' || typeof handle.handleId !== 'string') {
     throw new TypeError('invalid handle');
   }
+
   return Object.freeze({
     schemaVersion: 1,
     handleId: handle.handleId,

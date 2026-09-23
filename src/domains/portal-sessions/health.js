@@ -4,12 +4,18 @@ import { sessionHealthView } from './session.js';
 const NEXT_CHECK_MS = 1000;
 
 export function checkSession(session, now) {
-  if (!session || typeof session !== 'object' || typeof session[sessionHealthView] !== 'function') {
+  if (!session ||
+      typeof session !== 'object' ||
+      typeof session[sessionHealthView] !== 'function') {
     throw new TypeError('session must be a portal session');
   }
-  if (!Number.isFinite(now)) throw new TypeError('now must be a finite number');
+
+  if (!Number.isFinite(now)) {
+    throw new TypeError('now must be a finite number');
+  }
 
   const view = session[sessionHealthView]();
+
   let status;
   let reason;
 
