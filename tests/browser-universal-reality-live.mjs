@@ -142,7 +142,7 @@ try{
     assert.deepEqual(failedRequests,[]);
 
     const screenshot=resolve(output,`${mode}-reality-lens-universal.png`);
-    await page.screenshot({path:screenshot,fullPage:true});
+    await page.screenshot({path:screenshot,fullPage:false,timeout:15000});
     results.push({mode,proof,pageErrors,consoleErrors,failedRequests,screenshot});
     await context.close();
   }
