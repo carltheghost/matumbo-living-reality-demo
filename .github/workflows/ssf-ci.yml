@@ -43,3 +43,5 @@ jobs:
           node --check src/render/universal-reality-bridge.js
       - name: Surface Semantic Field tests
         run: node --test tests/surface-semantic-field.test.mjs tests/surface-semantic-field-three.test.mjs tests/topology-semantic-field.test.mjs tests/topology-surface-object.test.mjs tests/universal-reality-bridge.test.mjs
+      - name: Reality Lens integration regressions
+        run: node --test tests/reality-assembly-scene.test.mjs tests/reality-assembly-unified.test.mjs tests/final-living-reality-lock.test.mjs tests/cube-substrate-default.test.mjs tests/contract-world-projection.test.mjs
