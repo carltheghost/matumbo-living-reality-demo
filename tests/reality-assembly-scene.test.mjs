@@ -58,7 +58,7 @@ test('duplicate feature records render as one real-world tab',()=>{
   scene.destroy();assert.equal(parent.children.length,0);assert.equal(targets.length,0);
 });
 
-test('close focus keeps every feature alive while the selected tab leads',()=>{
+test('focus fades context during approach then clears it for the selected working surface',()=>{
   const parent=new THREE.Scene(),targets=[],features=[
     {id:'block-world',assemblyTier:'tab',sources:['semantic-block-fabric']},
     {id:'agent',lensGroup:'agents',sources:['muse-agent','bot-plaza']},
@@ -69,15 +69,25 @@ test('close focus keeps every feature alive while the selected tab leads',()=>{
   const scene=buildRealityAssemblyScene({THREE,parent,features,targets});
   scene.apply({selectedId:'muse-agent',mode:'present',objects:features.map((feature,index)=>({id:feature.id,position:[index*5,0,-index*4],shape:'rectangle',size:1,anchor:false,locked:false,open:false}))});
   scene.setActiveGroup('*');scene.focus('muse-agent');
-  const focusPosition=scene.nodes.get('muse-agent').position.clone().add(new THREE.Vector3(0,0,9));
-  scene.update(.1,0,{reducedMotion:true,cameraDistance:9,cameraPosition:focusPosition});
-  const snapshot=scene.getSnapshot();
-  assert.equal(snapshot.focusIsolated,true);
-  assert.equal(snapshot.visibleFeatureIds.length,features.length);
+  const arrivingPosition=scene.nodes.get('muse-agent').position.clone().add(new THREE.Vector3(0,0,14));
+  scene.update(.1,0,{reducedMotion:true,cameraDistance:14,cameraPosition:arrivingPosition});
+  const arriving=scene.getSnapshot();
+  assert.equal(arriving.focusIsolated,false);
+  assert.equal(arriving.visibleFeatureIds.length,features.length);
   assert.equal(scene.nodes.get('agent').root.visible,true);
   assert.equal(scene.nodes.get('neural-mesh').root.visible,true);
   assert.equal(scene.nodes.get('contracts').root.visible,true);
-  assert.ok(scene.nodes.get('contracts').contextOpacity>=.2);
+  assert.ok(scene.nodes.get('contracts').contextOpacity<1);
+  const intimatePosition=scene.nodes.get('muse-agent').position.clone().add(new THREE.Vector3(0,0,7));
+  scene.update(.1,.5,{reducedMotion:true,cameraDistance:7,cameraPosition:intimatePosition});
+  const snapshot=scene.getSnapshot();
+  assert.equal(snapshot.focusIsolated,true);
+  assert.deepEqual(snapshot.visibleFeatureIds,['muse-agent']);
+  assert.equal(scene.nodes.get('agent').root.visible,false);
+  assert.equal(scene.nodes.get('neural-mesh').root.visible,false);
+  assert.equal(scene.nodes.get('contracts').root.visible,false);
+  assert.equal(scene.nodes.get('muse-agent').liveContent.visible,false);
+  assert.equal(scene.nodes.get('muse-agent').sourceLayer.visible,false);
   assert.equal(snapshot.visibleGroupCount,0);
   assert.equal(snapshot.funnelGuideVisible,false);
   scene.destroy();assert.equal(parent.children.length,0);assert.equal(targets.length,0);

@@ -108,9 +108,9 @@ body.assembly-mode .reality-lens-feature-panel[data-object-shape=phone]:not([hid
 body.assembly-mode .reality-lens-feature-panel[data-object-shape=sphere]:not([hidden]){border-radius:42% / 28%!important}
 body.assembly-mode .reality-lens-feature-panel[data-object-shape=cylinder]:not([hidden]){border-radius:38% / 22%!important}
 body.assembly-mode .reality-lens-feature-panel[data-object-shape=wave]:not([hidden]){border-radius:32px 20px 32px 20px!important}
-.assembly-node-label{background:linear-gradient(135deg,#0b1e30c9,#07111dc2)!important;border-color:#5a819655!important;box-shadow:0 5px 20px #0005,0 0 16px #4caad20a!important;backdrop-filter:blur(8px)}
-.assembly-node-label.is-selected{background:#202319e8!important}
-.assembly-node-label.is-hovered{background:#174768e8!important}
+.assembly-node-label{background:linear-gradient(135deg,rgba(34,29,18,.88),rgba(10,13,15,.82))!important;border-color:rgba(198,164,89,.38)!important;color:#d8bb78!important;box-shadow:0 5px 20px #0005,0 0 14px rgba(187,147,73,.08)!important;backdrop-filter:blur(8px)}
+.assembly-node-label.is-selected{background:rgba(47,39,22,.9)!important;color:#f0d695!important}
+.assembly-node-label.is-hovered{background:rgba(63,48,23,.94)!important;color:#f4da98!important}
 .assembly-catalog-group{display:grid;gap:3px;min-width:0}
 .assembly-domain-toggle{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-height:34px!important;padding:7px 9px!important;color:#d5c79e!important;background:linear-gradient(90deg,#102536f0,#081625cf)!important;border-color:#425c5e!important;text-align:left;font-size:10px!important;letter-spacing:.07em;text-transform:uppercase}
 .assembly-domain-toggle[aria-expanded=true]{border-color:#b89b65!important;background:#1b2830!important}
@@ -185,6 +185,14 @@ body.assembly-mode .reality-lens-feature-panel[data-object-shape=cylinder]:not([
 body.assembly-mode .reality-lens-feature-panel[data-object-shape=phone]:not([hidden])::before,body.assembly-mode .reality-lens-feature-panel[data-object-shape=phone]:not([hidden])::after{left:10%;width:80%;border-radius:12px}
 body.assembly-mode #web-ai-console.reality-lens-feature-panel .web-ai-body{min-height:0;flex:1;overflow:auto}
 body.assembly-mode #web-ai-console.reality-lens-feature-panel .web-ai-frame{height:clamp(90px,22vh,180px)}
+/* The Web + AI panel is the selected object face in the Lens: use the same
+   restrained gold language as the shell rather than the old cyan console. */
+body.assembly-mode #web-ai-console.reality-lens-feature-panel[data-lens-surface-attached=true]{color:#e4d6b5!important}
+body.assembly-mode #web-ai-console.reality-lens-feature-panel[data-lens-surface-attached=true] .eyebrow,body.assembly-mode #web-ai-console.reality-lens-feature-panel[data-lens-surface-attached=true] .web-ai-field>span{color:#c9a464!important}
+body.assembly-mode #web-ai-console.reality-lens-feature-panel[data-lens-surface-attached=true] h2,body.assembly-mode #web-ai-console.reality-lens-feature-panel[data-lens-surface-attached=true] .web-ai-assistant strong{color:#f1dfb0!important}
+body.assembly-mode #web-ai-console.reality-lens-feature-panel[data-lens-surface-attached=true] .web-ai-head p,body.assembly-mode #web-ai-console.reality-lens-feature-panel[data-lens-surface-attached=true] .web-ai-assistant p,body.assembly-mode #web-ai-console.reality-lens-feature-panel[data-lens-surface-attached=true] .web-ai-boundary{color:#b7ae94!important}
+body.assembly-mode #web-ai-console.reality-lens-feature-panel[data-lens-surface-attached=true] .web-ai-tab,body.assembly-mode #web-ai-console.reality-lens-feature-panel[data-lens-surface-attached=true] .web-ai-iconbtn,body.assembly-mode #web-ai-console.reality-lens-feature-panel[data-lens-surface-attached=true] .web-ai-btn{border-color:rgba(201,164,93,.38)!important;background:rgba(115,83,35,.13)!important;color:#dcc891!important}
+body.assembly-mode #web-ai-console.reality-lens-feature-panel[data-lens-surface-attached=true] .web-ai-tab[aria-selected=true],body.assembly-mode #web-ai-console.reality-lens-feature-panel[data-lens-surface-attached=true] .web-ai-btn:hover,body.assembly-mode #web-ai-console.reality-lens-feature-panel[data-lens-surface-attached=true] .web-ai-btn:focus-visible{border-color:rgba(234,200,124,.78)!important;background:rgba(150,112,48,.26)!important;color:#f4e2b2!important}
 @media(max-width:700px){body.assembly-mode .reality-lens-feature-panel:not([hidden]){width:min(var(--lens-object-width,420px),calc(100vw - 24px))!important;height:min(var(--lens-object-height,520px),calc(100dvh - 156px))!important;max-width:calc(100vw - 24px)!important;max-height:calc(100dvh - 156px)!important}.assembly-toolbar{z-index:3}}
 
 /* A selected feature's inspector is its object membrane, projected directly

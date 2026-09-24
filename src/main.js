@@ -22,7 +22,7 @@ import { initMobilePanelManager } from './render/mobile-panel-manager.js?v=20260
 import { installMobileFreezeGuard } from './render/mobile-freeze-guard.js?v=20260922-mfg1';
 import { mountPhotoMascot } from './render/photo-mascot-mount.js?v=20260922-cache2';
 import { createPersonStudio } from './render/person-studio.js?v=20260918-avatar-chess';
-import { createRealityAssembly, CLEAN_LANDING_CAMERA } from './render/reality-assembly.js?v=20260923-spatial-tabs27';
+import { createRealityAssembly, CLEAN_LANDING_CAMERA } from './render/reality-assembly.js?v=20260923-spatial-tabs28';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { MANIPULATE_MODES } from './render/manipulate-controls.js?v=20260922-cache2';
@@ -106,7 +106,7 @@ import { createProposalQueue } from './domains/bot-plaza.js?v=20260918-ctr2';
 import { createOutcomeContracts } from './domains/outcome-contracts.js?v=20260918-ctr2';
 import { createContractLedger } from './domains/contract-ledger.js?v=20260920-cflow1';
 import { createContractFlow } from './domains/contract-flow.js?v=20260920-cflow1';
-import { mountBotPresence } from './render/bot-presence.js?v=20260918-botpresence1';
+import { mountBotPresence } from './render/bot-presence.js?v=20260923-lens-focus1';
 import { CONTRACT_ATELIER_CONSOLE_SOURCE, createContractAtelierConsole } from './render/contract-atelier.js?v=20260918-ctr1';
 import { LUNA_CONSOLE_SOURCE, createLunaCompanionConsole } from './render/luna-companion.js?v=20260918-luna1';
 import { WARDROBE_ATELIER_CONSOLE_SOURCE, createWardrobeAtelierConsole } from './render/wardrobe-atelier.js?v=20260918-wdr1';
@@ -9056,6 +9056,10 @@ window.__TUMBO_PERSON_STUDIO__=personStudio;
 realityAssembly=createRealityAssembly({THREE,renderer,scene,camera,controls,world,targets:raycastTargets,features:FEATURE_DEFINITIONS,relationships:FEATURE_HANDOFF_LINKS,reducedMotion,environmentTexture:personStudio.getEnvironmentTexture(),
   onNavigate:(id)=>{featureNavigator.select(id,'reality-assembly',{updateLocation:false});featureNavigator.close();},
   onFrame:()=>{cameraTween=0;cameraPositionTween=0;},
+  // The Lens owns the visual field while a feature is being inspected. Bot
+  // presences remain registered and return on exit; they do not float over a
+  // selected object's own interactive surface.
+  onActiveChange:(active)=>botPresence?.setVisible?.(!active),
   onPanelFrame:(id)=>{if(id&&id===featureNavigator?.getSnapshot?.().activeId)exposeRealityAssemblyFeaturePanel(id);},
   readFeature:(id)=>{
     if(id==='person'){const state=personStudio.getSnapshot();return {summary:state.approved?'Approved local avatar and saved wardrobe are connected. No cloud account is implied.':'Reference-built local avatar is available for explicit approval.'};}

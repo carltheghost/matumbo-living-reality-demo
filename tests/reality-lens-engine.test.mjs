@@ -52,12 +52,23 @@ test('selected objects grow into a readable surface while context recedes',()=>{
   const far=realityLensEngine.objectResponse({id:'person',selectedId:'person',distance:20,baseScale:1.1,size:1.2});
   const context=realityLensEngine.objectResponse({id:'rooms',selectedId:'person',distance:3.5,baseScale:1.1,size:1.2});
   assert.ok(near.scale>far.scale);
-  assert.equal(near.scale,1.1*1.2*2.2);
-  assert.ok(near.scale>far.scale*2);
+  assert.equal(near.scale,1.1*1.2*realityLensEngine.profile.focus.maxScale);
+  assert.ok(near.scale>far.scale*1.8);
   assert.equal(context.scale,1.1*1.2);
   assert.ok(context.contextOpacity<1);
-  assert.ok(context.contextOpacity<=.2,'unrelated tabs stay quiet while remaining visibly alive');
+  assert.ok(context.contextOpacity<=realityLensEngine.profile.focus.minContextOpacity,'unrelated tabs clear completely at intimate focus');
   assert.ok(context.contextOpacity>=realityLensEngine.profile.focus.minContextOpacity);
+  assert.equal(context.contextHidden,true);
+  assert.equal(near.isolationReached,true);
+});
+
+test('focus fades context before clearing it for a readable selected surface',()=>{
+  const arriving=realityLensEngine.objectResponse({id:'rooms',selectedId:'person',distance:14});
+  const intimate=realityLensEngine.objectResponse({id:'rooms',selectedId:'person',distance:7});
+  assert.ok(arriving.contextOpacity>intimate.contextOpacity);
+  assert.equal(arriving.contextHidden,false);
+  assert.equal(intimate.contextHidden,true);
+  assert.equal(intimate.isolationReached,true);
 });
 
 test('custom object profiles reuse the same funnel, focus and stage rules',()=>{

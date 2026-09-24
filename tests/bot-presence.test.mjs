@@ -170,3 +170,13 @@ test('speak targets the right orb bubble and destroy detaches listeners', () => 
   assert.deepEqual(container.listeners.pointerdown ?? [], []);
   assert.deepEqual(container.listeners.pointerup ?? [], []);
 });
+
+test('Lens presentation can temporarily hide bot ornaments without removing their state', () => {
+  const { presence } = mount({});
+  assert.equal(presence.visible, true);
+  assert.equal(presence.setVisible(false), false);
+  assert.equal(presence.visible, false);
+  assert.deepEqual(presence.getBotIds(), ['b1']);
+  assert.equal(presence.setVisible(true), true);
+  presence.destroy();
+});

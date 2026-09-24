@@ -247,9 +247,9 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[],rela
   // Bounded deterministic star field, not a live astronomical catalogue.
   const points=[];for(let i=0;i<620;i++){const a=i*2.399963,b=((i*37)%181)/180*Math.PI,r=70+(i%15)*3.2;points.push(Math.cos(a)*Math.sin(b)*r,Math.cos(b)*r,Math.sin(a)*Math.sin(b)*r);}
   const starGeometry=new THREE.BufferGeometry().setAttribute('position',new THREE.Float32BufferAttribute(points,3));geometry.add(starGeometry);
-  const starMaterial=new THREE.PointsMaterial({color:'#a9c8e2',size:.12,transparent:true,opacity:.56,sizeAttenuation:true});materials.add(starMaterial);layer.add(new THREE.Points(starGeometry,starMaterial));
+  const starMaterial=new THREE.PointsMaterial({color:'#c5a768',size:.12,transparent:true,opacity:.38,sizeAttenuation:true});materials.add(starMaterial);layer.add(new THREE.Points(starGeometry,starMaterial));
   layer.add(new THREE.HemisphereLight('#96b2bf','#08101a',.72));
-  const warm=new THREE.DirectionalLight('#ecd7b5',1.35);warm.position.set(-7,14,10);layer.add(warm);
+  const warm=new THREE.DirectionalLight('#d7b66b',1.16);warm.position.set(-7,14,10);layer.add(warm);
 
   // Empty compatibility group: Reality Lens never swaps in a giant far object.
   const worldBlock=group('world-block');worldBlock.visible=false;
@@ -333,7 +333,7 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[],rela
     const curved=['sphere','cylinder'].includes(shapeName),art=drawFeatureArtwork(THREE,node.feature,node.accent.color,shapeName);if(art)textures.add(art);
     const sphereForm=shapeName==='sphere';
     const shell=makeMaterial(sphereForm?'#a8874c':'#0c1c2c',{metalness:sphereForm?.72:.45,roughness:sphereForm?.24:.3,transparent:true,opacity:sphereForm?.64:curved?.42:.76,emissive:sphereForm?'#715625':'#000000',emissiveIntensity:sphereForm?.38:0,depthWrite:false,side:THREE.DoubleSide});
-    const artMaterial=art?makeMaterial('#d2d8d1',{map:art,metalness:.03,roughness:.52,transparent:true,opacity:.96,depthWrite:false,side:THREE.DoubleSide}):null;
+    const artMaterial=art?makeMaterial('#b99154',{map:art,metalness:.03,roughness:.52,transparent:true,opacity:.78,depthWrite:false,side:THREE.DoubleSide}):null;
     const parts=[];
     let bodyGeometry;
     if(shapeName==='sphere')bodyGeometry=new THREE.SphereGeometry(Math.min(width,height,depth)/2,36,28);
@@ -406,7 +406,7 @@ function applyTabDepthMode(node){
         const object=new THREE.Mesh(nestedGeometry,material);object.name=`${feature.id}/nested-source-${index}`;object.userData.assemblySource=source;
         nestedLayer.add(object);return object;
       });
-      node.statusMaterial=makeMaterial('#75eaff',{emissive:'#31bfe9',emissiveIntensity:1.4,metalness:.1,roughness:.25});
+      node.statusMaterial=makeMaterial('#d4ad61',{emissive:'#8f672d',emissiveIntensity:.9,metalness:.1,roughness:.25});
       node.formParts=[];makeTabForm(node,feature.initialTabShape??tabShapes[(index-1+tabShapes.length)%tabShapes.length]??'rectangle');
       nodes.set(feature.id,node);
       continue;
@@ -576,7 +576,7 @@ function applyTabDepthMode(node){
   const connectionGeometry=new THREE.BufferGeometry().setAttribute('position',new THREE.Float32BufferAttribute(new Float32Array(edges.length*6),3));geometry.add(connectionGeometry);
   const connectionMaterial=new THREE.LineBasicMaterial({color:'#36a6d3',transparent:true,opacity:.34});materials.add(connectionMaterial);
   const connections=new THREE.LineSegments(connectionGeometry,connectionMaterial);connections.frustumCulled=false;layer.add(connections);
-  let selected=null,hovered=null,mode='3d',viewState=null,focusId=null,activeFocusStrength=0,activeFocusDistance=Infinity,activeGroupId='*';
+  let selected=null,hovered=null,mode='3d',viewState=null,focusId=null,activeFocusStrength=0,activeFocusDistance=Infinity,activeFocusIsolated=false,activeGroupId='*';
   function setActiveGroup(groupId=null){
     if(groupId!==null&&groupId!=='*'&&!groupParents.has(groupId))throw Error(`Unknown Reality Lens domain: ${groupId}`);
     activeGroupId=groupId;
@@ -595,8 +595,8 @@ function applyTabDepthMode(node){
         node.locked=object.locked===true;
         if(node.shape!==nextShape)makeTabForm(node,nextShape);
         if(node.indicator){
-          node.indicator.material.color.set(node.locked?'#f0ce8a':'#75eaff');
-          node.indicator.material.emissive.set(node.locked?'#c18b42':'#31bfe9');
+          node.indicator.material.color.set(node.locked?'#f0ce8a':'#d4ad61');
+          node.indicator.material.emissive.set(node.locked?'#c18b42':'#8f672d');
         }
       }
     });
@@ -719,7 +719,7 @@ function applyTabDepthMode(node){
     const focusDistance=cameraPosition&&focalNode?cameraPosition.distanceTo(focalNode.position):cameraDistance;
     const focusResponse=realityLensEngine.objectResponse({id:focusId,selectedId:focusId,distance:focusDistance});
     activeFocusStrength=focusResponse.focusStrength;activeFocusDistance=focusId?focusDistance:Infinity;
-    const focusIsolated=Boolean(focusId&&activeFocusStrength>=.5);
+    const focusIsolated=Boolean(focusId&&focusResponse.isolationReached);activeFocusIsolated=focusIsolated;
     // The funnel is a guide while travelling, not another object layered on
     // top of the feature. Clear it as the user arrives at a focused tab.
     funnelGuide.visible=approachBlend>.035&&!focusIsolated;
@@ -742,20 +742,38 @@ function applyTabDepthMode(node){
       const response=realityLensEngine.objectResponse({id,selectedId:focusId,distance:focusDistance,baseScale:node.scale??1,size:node.size??1,tabReveal});
       if(node.lastContextOpacity===undefined||Math.abs(node.lastContextOpacity-response.contextOpacity)>.008){setNodeOpacity(node,response.contextOpacity);node.lastContextOpacity=response.contextOpacity;}
       const groupMatches=activeGroupId==='*'||(node.isTab&&node.lensGroup===activeGroupId);
-      node.root.visible=(!node.isTab||tabReveal>.008)&&response.contextOpacity>.05&&groupMatches;
+      // Context remains available while approaching, then genuinely clears so
+      // the selected object can be read and used as the Lens working surface.
+      node.root.visible=(!node.isTab||tabReveal>.008)&&!response.contextHidden&&response.contextOpacity>.05&&groupMatches;
       if(!node.root.visible)continue;
       if(node.isTab){
         const targetScale=response.scale;
         node.root.scale.lerp(new THREE.Vector3(targetScale,targetScale,targetScale),blend);
+        // Once a real feature panel is mounted on this object, its physical
+        // shell becomes a quiet perimeter. This avoids a duplicate bright
+        // wireframe fighting the readable, interactive face.
+        const cover= response.isSelected ? Math.max(0,Math.min(1,(response.focusStrength-.24)/.76)) : 0;
+        const tuneSurface=(material,multiplier)=>{if(!material)return;const base=material.userData?.realityLensBaseOpacity??1;material.opacity=base*(1-cover*multiplier);};
+        tuneSurface(node.shellMaterial,.76);
+        // The frame is useful while approaching. At the readable stage it
+        // almost disappears, leaving the mounted panel as the object's face.
+        if(node.edgeMaterial){const base=node.edgeMaterial.userData?.realityLensBaseOpacity??1;node.edgeMaterial.opacity=base*(1-cover)*(1-cover);}
+        if(node.artMaterial){const base=node.artMaterial.userData?.realityLensBaseOpacity??1;node.artMaterial.opacity=base*(1-cover)*(1-cover);}
+        tuneSurface(node.indicator?.material,.55);
         node.root.rotation.y=reducedMotion?0:Math.sin(time*.18+node.traits.phase)*.025;
         node.root.rotation.x=reducedMotion?0:Math.sin(time*.13+node.traits.phase)*.012;
         if(node.indicator){const pulse=.9+.1*Math.sin(time*.92+node.traits.phase);node.indicator.scale.setScalar(pulse);if(node.indicator.material?.emissiveIntensity!==undefined)node.indicator.material.emissiveIntensity=.28+.18*(.5+.5*Math.sin(time*1.3+node.traits.phase));}
-        node.liveContent.visible=node.revealStage>=1&&node.open>.05&&tabReveal>.18;
+        // At close focus the interactive panel is the living object. Its
+        // ornamental orbit layers return while travelling, not over its face.
+        const panelOwnsAttention=response.isSelected&&response.focusStrength>.6;
+        node.liveContent.visible=node.revealStage>=1&&node.open>.05&&tabReveal>.18&&!panelOwnsAttention;
         node.liveContent.scale.setScalar(node.liveContent.visible ? .45+node.open*.55 : .001);
-        node.sourceLayer.visible=node.revealStage>=2;
-        node.sourceLayer.scale.setScalar(node.revealStage>=2 ? .74+node.revealProgress*.26 : .001);
-        node.nestedLayer.visible=node.revealStage>=3;
-        node.nestedLayer.scale.setScalar(node.revealStage>=3 ? .72+node.revealProgress*.28 : .001);
+        // Sources are available in the approach layers; a close living panel
+        // already contains its own data and should not grow floating badges.
+        node.sourceLayer.visible=node.revealStage>=2&&!panelOwnsAttention;
+        node.sourceLayer.scale.setScalar(node.sourceLayer.visible ? .74+node.revealProgress*.26 : .001);
+        node.nestedLayer.visible=node.revealStage>=3&&!panelOwnsAttention;
+        node.nestedLayer.scale.setScalar(node.nestedLayer.visible ? .72+node.revealProgress*.28 : .001);
         continue;
       }
       node.root.scale.lerp(new THREE.Vector3(response.scale, response.scale, response.scale),blend);
@@ -822,7 +840,7 @@ function applyTabDepthMode(node){
     const lod=approachBlend<.04?'nucleus':approachBlend<.98?'unfolding':'field';
     const groupIds=[...new Set([...nodes.values()].map(node=>node.lensGroup).filter(Boolean))];
     const formerCenter=nodes.get('block-world');
-    return {geometryOnly:true,referenceImagesUsedAsTextures:false,funnelGuideVisible:funnelGuide.visible,nodeIds:[...nodes.keys()],nodeCount:nodes.size,tabCount:[...nodes.values()].filter(node=>node.isTab).length,visibleFeatureIds:[...nodes.values()].filter(node=>node.isTab&&node.root.visible).map(node=>node.feature.id),visibleTabCount:[...nodes.values()].filter(node=>node.isTab&&node.root.visible&&node.tabReveal>.35&&node.contextOpacity>.05).length,groupIds,visibleGroupCount:[...groupParents.values()].filter(marker=>marker.root.visible).length,activeGroupId,focusedId:focusId,focusStrength:Number(activeFocusStrength.toFixed(3)),focusIsolated:Boolean(focusId&&activeFocusStrength>=.5),focusDistance:Number.isFinite(activeFocusDistance)?Number(activeFocusDistance.toFixed(2)):null,selectedStage:nodes.get(focusId)?.revealStage??0,approachProgress:Number(approachBlend.toFixed(3)),anchorOpen:formerCenter?.isTab?0:Number((formerCenter?.open??0).toFixed(3)),edgeCount:edges.length,relationshipSource:'authored feature navigation graph',connectionsVisible:connections.visible,connectionPairs:edges.map(pair=>[...pair]),viewMode:mode,selectedId:selected,historyMode:viewState?.mode??'present',designedArchitecture:true,equalAxisCubes:false,singleFixedAnchorCube:[...nodes.values()].some(node=>!node.isTab&&node.feature.id==='block-world'),formerCenterIsMovableTab:formerCenter?.isTab===true,lensMode,lod};
+    return {geometryOnly:true,referenceImagesUsedAsTextures:false,funnelGuideVisible:funnelGuide.visible,nodeIds:[...nodes.keys()],nodeCount:nodes.size,tabCount:[...nodes.values()].filter(node=>node.isTab).length,visibleFeatureIds:[...nodes.values()].filter(node=>node.isTab&&node.root.visible).map(node=>node.feature.id),visibleTabCount:[...nodes.values()].filter(node=>node.isTab&&node.root.visible&&node.tabReveal>.35&&node.contextOpacity>.05).length,groupIds,visibleGroupCount:[...groupParents.values()].filter(marker=>marker.root.visible).length,activeGroupId,focusedId:focusId,focusStrength:Number(activeFocusStrength.toFixed(3)),focusIsolated:activeFocusIsolated,focusDistance:Number.isFinite(activeFocusDistance)?Number(activeFocusDistance.toFixed(2)):null,selectedStage:nodes.get(focusId)?.revealStage??0,approachProgress:Number(approachBlend.toFixed(3)),anchorOpen:formerCenter?.isTab?0:Number((formerCenter?.open??0).toFixed(3)),edgeCount:edges.length,relationshipSource:'authored feature navigation graph',connectionsVisible:connections.visible,connectionPairs:edges.map(pair=>[...pair]),viewMode:mode,selectedId:selected,historyMode:viewState?.mode??'present',designedArchitecture:true,equalAxisCubes:false,singleFixedAnchorCube:[...nodes.values()].some(node=>!node.isTab&&node.feature.id==='block-world'),formerCenterIsMovableTab:formerCenter?.isTab===true,lensMode,lod};
   }
   return {layer,nodes,groupParents,worldBlock,backdrop,apply,update,getSnapshot,setLensMode,setActiveGroup,getGroupPosition:id=>groupParents.get(id)?.root.position??null,focus:id=>{focusId=nodes.has(id)?id:null;},resolve:object=>object?.userData?.assemblyId??null,
     destroy(){selectable.forEach(object=>{const i=targets.indexOf(object);if(i>=0)targets.splice(i,1);});geometry.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());textures.forEach(t=>t.dispose());layer.removeFromParent();}};

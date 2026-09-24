@@ -56,7 +56,7 @@ export function computeLabelSafeBand(chromeRects,viewportHeight){
   return {safeTop,safeBottom};
 }
 
-export function createRealityAssembly({THREE,renderer,scene,camera,controls,world,targets,features,relationships={},onNavigate,onFrame,onPanelFrame=()=>{},readFeature=()=>null,environmentTexture=null,reducedMotion=false}){
+export function createRealityAssembly({THREE,renderer,scene,camera,controls,world,targets,features,relationships={},onNavigate,onFrame,onPanelFrame=()=>{},onActiveChange=()=>{},readFeature=()=>null,environmentTexture=null,reducedMotion=false}){
   const SURFACE_PIXELS_PER_UNIT=160;
   const latinShapes={phone:'Telephonum',square:'Quadratum',rectangle:'Rectangulum',sphere:'Sphaera',cylinder:'Cylindrus',cube:'Cubus',wave:'Unda'};
   const shapeOptions=Object.entries(REALITY_TAB_FORMS).map(([id])=>`<option value="${id}">${latinShapes[id]??id}</option>`).join('');
@@ -416,7 +416,9 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   }
   function focus(){
     const object=currentObject(),mobile=innerWidth<700,position=new THREE.Vector3(...object.position);
-    const outward=camera.position.clone().sub(controls.target);if(outward.length()<1)outward.set(54,36,164);outward.normalize().multiplyScalar(mobile?11:9);
+    // Close enough for the object face to become a working surface, while
+    // retaining a visible field around it instead of becoming a full-screen card.
+    const outward=camera.position.clone().sub(controls.target);if(outward.length()<1)outward.set(54,36,164);outward.normalize().multiplyScalar(mobile?8.2:7.4);
     focusTarget=position.clone();focusPosition=position.clone().add(outward);spatial.focus(object.id);onFrame?.();
   }
   function overview(){
@@ -542,7 +544,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   let activeLensMode=false;
   function open({lensMode=false,featureId=null}={}){
     if(active)return;active=true;saved={position:camera.position.clone(),target:controls.target.clone(),fov:camera.fov,min:controls.minDistance,max:controls.maxDistance,worldVisible:world.visible,fog:scene.fog,environment:scene.environment,background:scene.background};
-    root.hidden=false;
+    root.hidden=false;onActiveChange(true);
     // Panels start CLOSED: the default view is a clean spatial universe.
     // The user materializes the directory / inspector with the header
     // toggles ("Objectum", "Invenire", inspector fold); nothing
@@ -555,7 +557,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     camera.position.copy(focusPosition);controls.target.copy(focusTarget);focusPosition=null;focusTarget=null;controls.update();render();
   }
   function close(){
-    if(!active)return;setDirectory(false);active=false;pointer=null;controls.enabled=true;root.hidden=true;spatial.layer.visible=false;document.body.classList.remove('assembly-mode');
+    if(!active)return;setDirectory(false);active=false;onActiveChange(false);pointer=null;controls.enabled=true;root.hidden=true;spatial.layer.visible=false;document.body.classList.remove('assembly-mode');
     clearFeatureSurface();
     spatial.setLensMode(false);activeLensMode=false;
     if(saved){camera.position.copy(saved.position);controls.target.copy(saved.target);camera.fov=saved.fov;camera.updateProjectionMatrix();controls.minDistance=saved.min;controls.maxDistance=saved.max;world.visible=saved.worldVisible;scene.fog=saved.fog;scene.environment=saved.environment;scene.background=saved.background;saved=null;}
@@ -625,6 +627,9 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
       const orderedLabels=[...labels].sort(([a],[b])=>(a===selectedId?-2:a===hovered?-1:0)-(b===selectedId?-2:b===hovered?-1:0)),acceptedLabelBounds=[];
       for(const [id,label] of orderedLabels){
         if(label===focusedLabel)continue;
+        // Labels are quiet navigation affordances, not captions floating in
+        // front of a living object. The object surface owns its name in focus.
+        if(spatialState.focusIsolated){label.hidden=true;continue;}
         const node=spatial.nodes.get(id);if(!node){label.hidden=true;continue;}
       if((activeLensGroup&&activeLensGroup!=='*'&&node.lensGroup!==activeLensGroup)||(id!==selectedId&&node.contextOpacity<.12)){label.hidden=true;continue;}
         if(node.isTab&&node.tabReveal<.35){label.hidden=true;continue;}

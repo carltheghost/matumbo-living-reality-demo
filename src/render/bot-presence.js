@@ -76,6 +76,7 @@ export function mountBotPresence({
   let raf = 0;
   let frame = 0;
   let destroyed = false;
+  let visible = true;
   const textureLoader = new THREE.TextureLoader();
 
   function placeOrb(entry, index, count) {
@@ -187,6 +188,19 @@ export function mountBotPresence({
     return true;
   }
 
+  // Reality Lens renders the selected feature as its own spatial surface.
+  // Bot Plaza orbs belong to the broader world, so keep them out of the way
+  // while the Lens has isolated one object, without deleting bot state.
+  function setVisible(nextVisible) {
+    visible = Boolean(nextVisible);
+    group.visible = visible;
+    bubbleLayer.hidden = !visible;
+    if (!visible) {
+      for (const entry of orbs.values()) entry.bubble.hidden = true;
+    }
+    return visible;
+  }
+
   function updateBubbles() {
     const rect = container.getBoundingClientRect?.() ?? { left: 0, top: 0, width: 0, height: 0 };
     const now = performance.now();
@@ -244,7 +258,7 @@ export function mountBotPresence({
       }
     }
     if (!reducedMotion) ring.rotation.z = t * 0.05;
-    updateBubbles();
+    if (visible) updateBubbles();
   }
   refresh();
   tick();
@@ -252,6 +266,8 @@ export function mountBotPresence({
   return Object.freeze({
     refresh,
     speak,
+    setVisible,
+    get visible() { return visible; },
     getBotIds: () => Object.freeze([...orbs.keys()]),
     destroy() {
       destroyed = true;

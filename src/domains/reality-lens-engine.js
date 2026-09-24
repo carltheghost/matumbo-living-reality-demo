@@ -27,9 +27,9 @@ const DEFAULT_PROFILE = Object.freeze({
   axis:Object.freeze([54,36,164]),
   funnel:Object.freeze({nearDepth:5,farDepth:36,nearRadius:3.2,farRadius:14.6,clusterRadius:4.6}),
   overview:Object.freeze({farDistance:160,fullDistance:64}),
-  // Approaching one object grows its own face into a working surface, while
-  // sibling objects fade away. This gives its information room to unfold.
-  focus:Object.freeze({startDistance:20,endDistance:3.5,maxScale:2.2,minContextOpacity:.2}),
+  // A focus is a journey, not a permanent pile-up: surrounding objects first
+  // recede, then leave the selected living surface clear at close approach.
+  focus:Object.freeze({startDistance:24,endDistance:5.4,maxScale:2.6,minContextOpacity:.035,isolateAt:.78}),
   stages:Object.freeze([18,7,3.4]),
 });
 
@@ -115,11 +115,13 @@ export function createRealityLensEngine(overrides={}){
 
   function objectResponse({id,selectedId=null,distance=Infinity,baseScale=1,size=1,tabReveal=1}={}){
     const isSelected=id===selectedId;
-    const {startDistance,endDistance,maxScale,minContextOpacity}=profile.focus;
+    const {startDistance,endDistance,maxScale,minContextOpacity,isolateAt}=profile.focus;
     const focusStrength=selectedId===null?0:clamp((startDistance-distance)/(startDistance-endDistance));
     const contextOpacity=isSelected?1:minContextOpacity+(1-minContextOpacity)*(1-focusStrength)**2;
     const approachScale=isSelected?mix(1,maxScale,focusStrength):1;
-    return {isSelected,focusStrength,contextOpacity,scale:baseScale*size*approachScale*clamp(tabReveal),...stageAt(distance)};
+    const isolationReached=selectedId!==null&&focusStrength>=isolateAt;
+    const contextHidden=!isSelected&&isolationReached;
+    return {isSelected,focusStrength,contextOpacity,isolationReached,contextHidden,scale:baseScale*size*approachScale*clamp(tabReveal),...stageAt(distance)};
   }
 
   return Object.freeze({profile:Object.freeze(profile),placeInFunnel,surfacePoint,overviewProgress,stageAt,objectResponse,groupFor:resolveRealityLensGroup});
