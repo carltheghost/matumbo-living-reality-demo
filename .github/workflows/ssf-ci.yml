@@ -1,0 +1,47 @@
+name: Surface Semantic Field CI
+
+on:
+  push:
+    branches:
+      - feature/ssf-surface-native
+  pull_request:
+    paths:
+      - 'src/domains/surface-semantic-field.js'
+      - 'src/render/surface-semantic-field-three.js'
+      - 'src/render/surface-semantic-field-lab.js'
+      - 'src/domains/topology-semantic-field.js'
+      - 'src/render/topology-surface-object.js'
+      - 'surface-field.html'
+      - 'index.html'
+      - 'src/universal/**'
+      - 'src/render/universal-reality-bridge.js'
+      - 'tests/surface-semantic-field*.test.mjs'
+      - 'tests/universal-reality-bridge.test.mjs'
+      - '.github/workflows/ssf-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  ssf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax
+        run: |
+          node --check src/domains/surface-semantic-field.js
+          node --check src/render/surface-semantic-field-three.js
+          node --check src/render/surface-semantic-field-lab.js
+          node --check src/domains/topology-semantic-field.js
+          node --check src/render/topology-surface-object.js
+          node --check src/universal/universal-entity.js
+          node --check src/universal/universal-object-renderer.js
+          node --check src/render/universal-reality-bridge.js
+      - name: Surface Semantic Field tests
+        run: node --test tests/surface-semantic-field.test.mjs tests/surface-semantic-field-three.test.mjs tests/topology-semantic-field.test.mjs tests/topology-surface-object.test.mjs tests/universal-reality-bridge.test.mjs
+      - name: Reality Lens integration regressions
+        run: node --test tests/reality-assembly-scene.test.mjs tests/reality-assembly-unified.test.mjs tests/cube-substrate-default.test.mjs tests/contract-world-projection.test.mjs
