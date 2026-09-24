@@ -550,6 +550,23 @@ function sameIds(rendered,entities){
   return rendered.length===entities.length&&rendered.every((item,index)=>item.entity.id===entities[index]?.id);
 }
 
+function renderEntitySignature(entity){
+  return JSON.stringify({
+    id:entity?.id,
+    kind:entity?.kind,
+    title:entity?.title,
+    summary:entity?.summary,
+    status:entity?.status,
+    geometryFamily:entity?.geometryFamily,
+    priority:entity?.priority,
+    metrics:entity?.metrics,
+    relations:entity?.relations,
+    actions:entity?.actions,
+    content:entity?.content,
+    interactionState:entity?.interactionState,
+  });
+}
+
 function syncRecord(record,entities){
   if(!sameIds(record.rendered,entities)){
     for(const rendered of record.rendered){
@@ -557,13 +574,20 @@ function syncRecord(record,entities){
       record.renderer.remove(rendered.entity.id);
     }
     record.rendered=[];
+    record.signatures.clear();
     for(const entity of entities){
       const rendered=record.renderer.create(entity);
       record.group.add(rendered.mesh);
       record.rendered.push(rendered);
+      record.signatures.set(entity.id,renderEntitySignature(entity));
     }
   }else{
-    entities.forEach(entity=>record.renderer.upsert(entity));
+    entities.forEach(entity=>{
+      const signature=renderEntitySignature(entity);
+      if(record.signatures.get(entity.id)===signature)return;
+      record.renderer.upsert(entity);
+      record.signatures.set(entity.id,signature);
+    });
   }
   layoutRendered(record);
 }
@@ -579,6 +603,7 @@ function createRecord(featureObject,featureId,renderer){
     group,
     renderer,
     rendered:[],
+    signatures:new Map(),
     restore:new Map(),
     feed:Object.freeze({available:false,sourceName:null,snapshot:null}),
   };
@@ -612,6 +637,7 @@ export function createUniversalRealityBridge({
       rendered.mesh.removeFromParent();
       renderer.remove(rendered.entity.id);
     }
+    record.signatures.clear();
     record.group.removeFromParent();
     records.delete(featureId);
   }
