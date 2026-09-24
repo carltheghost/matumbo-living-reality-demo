@@ -119,6 +119,7 @@ try{
         webgl:canvas.length>0,
         expectedMissing:expectedFeatureIds.filter(id=>!universal.features[id]),
         unexpectedFeatures:Object.keys(universal.features).filter(id=>!expectedFeatureIds.includes(id)),
+        universalErrors:universal.errors??{},
       };
     },expectedFeatureIds);
 
@@ -128,6 +129,7 @@ try{
     assert.equal(proof.featureCount,expectedFeatureCount,`expected all ${expectedFeatureCount} Reality Lens feature objects`);
     assert.deepEqual(proof.expectedMissing,[]);
     assert.deepEqual(proof.unexpectedFeatures,[]);
+    assert.deepEqual(proof.universalErrors,{},`universal renderer errors: ${JSON.stringify(proof.universalErrors)}`);
     assert.equal(proof.realFeedRegisteredCount,proof.featureCount,'every rendered feature must declare a real-data feed');
     assert.deepEqual(proof.unregistered,[]);
     assert.deepEqual(proof.missingUniversal,[]);
