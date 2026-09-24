@@ -98,7 +98,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   const sideRealityByFeature=new Map();
   const sideRealityKey=(parentId,featureId)=>`${parentId}\u0000${featureId}`;
   const initialShapes=new Map(positions.map(object=>[object.id,object.shape]));
-  const spatial=buildRealityAssemblyScene({THREE,parent:scene,features:ordered.map((feature,i)=>({...feature,label:labelFor(feature),description:copyFor(feature.description),boundary:copyFor(feature.boundary),sources:(feature.sources??[]).map(copyFor),assemblyTier:'tab',lensGroup:positions[i]?.lensGroup??'worlds',initialTabShape:initialShapes.get(feature.id),initialPosition:positions[i]?.position,fittedObject:{width:positions[i]?.width,height:positions[i]?.height,depth:positions[i]?.depth},contentMetrics:positions[i]?.contentMetrics})),targets,relationships});
+  const spatial=buildRealityAssemblyScene({THREE,parent:scene,viewport,features:ordered.map((feature,i)=>({...feature,label:labelFor(feature),description:copyFor(feature.description),boundary:copyFor(feature.boundary),sources:(feature.sources??[]).map(copyFor),assemblyTier:'tab',lensGroup:positions[i]?.lensGroup??'worlds',initialTabShape:initialShapes.get(feature.id),initialPosition:positions[i]?.position,fittedObject:{width:positions[i]?.width,height:positions[i]?.height,depth:positions[i]?.depth},contentMetrics:positions[i]?.contentMetrics})),targets,relationships});
   spatial.setActiveGroup(null);
   const featureMap=new Map(features.map(feature=>[feature.id,feature]));
   const stylesheet=document.createElement('link');stylesheet.rel='stylesheet';stylesheet.href=`${new URL('./reality-assembly.css',import.meta.url).href}?v=20260923-spatial-tabs25`;document.head.append(stylesheet);
