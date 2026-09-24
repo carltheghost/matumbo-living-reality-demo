@@ -270,8 +270,8 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     }
     node.root.updateMatrixWorld(true);camera.updateMatrixWorld();const cameraWorld=camera.getWorldPosition(new THREE.Vector3()),lensState=spatial.getSnapshot();
     record.surfaces.forEach(item=>{
-      const face=layout.find(candidate=>candidate.id===item.id),object3d=item.object3d;if(!face||!object3d)return;
-      object3d.position.set(...face.position);object3d.rotation.set(...face.rotation);object3d.updateMatrixWorld(true);
+      const transform=surfaceTransform(fitted,metrics,item.id),object3d=item.object3d;if(!transform||!object3d)return;
+      object3d.position.set(...transform.position);object3d.rotation.set(...transform.rotation);object3d.updateMatrixWorld(true);
       const faceWorld=object3d.getWorldPosition(new THREE.Vector3()),normal=new THREE.Vector3(0,0,1).applyQuaternion(object3d.getWorldQuaternion(new THREE.Quaternion())).normalize();
       const towardCamera=cameraWorld.clone().sub(faceWorld).normalize(),facesCamera=normal.dot(towardCamera)>.06;
       object3d.visible=realityObjectSurfaceEngine.shouldShowFace({faceId:item.id,facesCamera,focusIsolated:lensState.focusIsolated,focusedId:lensState.focusedId,featureId:record.featureId,stage:node.revealStage??0,objectVisible:node.root.visible});
@@ -317,8 +317,9 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     const fitted=fitObjectToContent(metrics,{shape:object.shape??'rectangle'}),surface=realityObjectSurfaceEngine.describe({feature,object:{...object,width:fitted.width,height:fitted.height,depth:fitted.depth},stage:node.revealStage??0,summary:detail?.summary,readOnly:owner.getSnapshot().mode==='past'});
     const restore=livePanel?{parent:livePanel.parentNode,next:livePanel.nextSibling,style:livePanel.getAttribute('style'),shape:livePanel.getAttribute('data-object-shape'),lensAttached:livePanel.getAttribute('data-lens-surface-attached'),panelSpace:livePanel.getAttribute('data-panel-space'),compact:livePanel.getAttribute('data-compact'),hadLensClass:livePanel.classList.contains('reality-lens-feature-panel')} : null;
     if(livePanel){
+      const frontTransform=surfaceTransform(fitted,metrics,'front');
       livePanel.classList.add('reality-lens-feature-panel');livePanel.dataset.lensSurfaceAttached='true';livePanel.dataset.objectShape=surface.shape;
-      livePanel.style.position='absolute';livePanel.style.inset='auto';livePanel.style.left='auto';livePanel.style.right='auto';livePanel.style.top='auto';livePanel.style.bottom='auto';livePanel.style.margin='0';livePanel.style.transformOrigin='50% 50%';livePanel.style.setProperty('--lens-surface-width',`${Math.round(fitted.width*SURFACE_PIXELS_PER_UNIT)}px`);livePanel.style.setProperty('--lens-surface-height',`${Math.round(fitted.height*SURFACE_PIXELS_PER_UNIT)}px`);
+      livePanel.style.position='absolute';livePanel.style.inset='auto';livePanel.style.left='auto';livePanel.style.right='auto';livePanel.style.top='auto';livePanel.style.bottom='auto';livePanel.style.margin='0';livePanel.style.transformOrigin='50% 50%';livePanel.style.setProperty('--lens-surface-width',`${Math.round(frontTransform.width*SURFACE_PIXELS_PER_UNIT)}px`);livePanel.style.setProperty('--lens-surface-height',`${Math.round(frontTransform.height*SURFACE_PIXELS_PER_UNIT)}px`);
       document.dispatchEvent(new CustomEvent('matumbo:reality-lens-surface-attachment',{detail:{panelId:livePanel.id,attached:true}}));
     }
     const detailFaces=['back','left','right','top','bottom'].map(id=>({id,element:buildFaceElement(id,feature,surface,detail),object3d:null}));
