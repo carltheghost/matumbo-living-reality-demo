@@ -94,3 +94,24 @@ node --test tests/surface-semantic-field.test.mjs tests/surface-semantic-field-t
 ## Next integration step after review
 
 Wire `SurfaceObject` into Reality Assembly's selected object body and progressively retire its CSS3D reading surface. The existing canonical root, cube spacing, Block World volume contract and right-side minimized-tab rail must stay intact while the object's own skin takes over the readable information role.
+
+
+## Topology-native extension
+
+This branch now includes `src/domains/topology-semantic-field.js` and
+`src/render/topology-surface-object.js`.
+
+The analyzer derives welded adjacency/local neighborhoods, connected
+components, boundary/non-manifold edges, dihedral seams, approximate signed
+curvature, ridge/valley/cavity classification, open/closed shells and semantic
+cells separated by natural mesh seams.
+
+`TopologySurfaceObject` converts those cells into semantic patches. Where UVs
+exist (or the SSF fallback generated them), each patch carries its actual
+triangle UVs and the material painter fills those triangles rather than a
+detached rectangular panel. Hit resolution prefers the triangle face's topology
+cell before falling back to UV rectangle lookup.
+
+The topology descriptor is immutable and safe to share among multiple lens
+projections. Mutable Three.js meshes/materials, camera state, focus state and
+navigation must remain per-lens.
