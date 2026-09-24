@@ -58,7 +58,7 @@ try{
     // Carry the real persisted contract into the canonical Reality Lens and
     // prove that the universal renderer reads the actual contract domain
     // instead of substituting a catalog/demo record.
-    await page.goto(`${base}?feature=reality-lens&contractProof=${encodeURIComponent(completed.id)}`,{waitUntil:'domcontentloaded',timeout:60000});
+    await page.goto(`${base}?feature=reality-lens&contractProof=${encodeURIComponent(completed.id)}`,{waitUntil:'commit',timeout:30000});
     await page.waitForFunction(()=>window.__MATUMBO_RUNTIME__?.getState?.()==='ready'&&window.__TUMBO_UNIVERSAL_OBJECTS__?.getSnapshot?.()?.features?.['contract-atelier'],null,{timeout:60000});
     await page.waitForFunction(()=>{
       const feature=window.__TUMBO_UNIVERSAL_OBJECTS__.getSnapshot().features['contract-atelier'];
