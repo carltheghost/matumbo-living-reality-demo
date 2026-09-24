@@ -222,12 +222,15 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
     setCompact(rec, rec.el.getAttribute('data-compact') !== 'true', ctx);
   }
 
-  function recenter(rec, ctx) {
-    if (!rec.placed || !rec.home) return;
+  function fitSurface(rec, ctx) {
+    if (!rec.placed || rec.spatialAttached) return;
     const r = rec.el.getBoundingClientRect();
     const v = viewport();
-    const p = clampSurface(rec.home.x, rec.home.y, r.width, r.height, v.w, v.h);
-    rec.state.x = p.x; rec.state.y = p.y; rec.state.z = 0;
+    // "Centered" surfaces are fitted to their available viewport, not
+    // centered as generic containers. Preserve the user's spatial placement;
+    // only bring an expanded surface back inside the readable bounds.
+    const p = clampSurface(rec.state.x, rec.state.y, r.width, r.height, v.w, v.h);
+    rec.state.x = p.x; rec.state.y = p.y;
     applyTransform(rec);
     persistSoon(ctx);
   }
@@ -377,14 +380,14 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
     const center = documentRoot.createElement('button');
     center.type = 'button';
     center.className = 'surface-grip-center';
-    center.textContent = 'Center panel';
-    center.title = 'Return this panel to its designed position';
+    center.textContent = 'Fit surface';
+    center.title = 'Fit this surface to the readable viewport';
     grip.append(toggle, center);
     const summary = el.tagName === 'DETAILS' ? el.querySelector('summary') : null;
     if (summary && summary.parentNode === el) summary.after(grip);
     else if (typeof el.prepend === 'function') el.prepend(grip);
     else el.insertBefore(grip, el.firstChild);
-    center.addEventListener('click', () => recenter(rec, ctx));
+    center.addEventListener('click', () => fitSurface(rec, ctx));
     attachPlaneDepthDrag(rec, ctx, toggle, { tapToggles: true });
     rec.grip = grip;
     rec.toggleBtn = toggle;
