@@ -12,7 +12,11 @@ on:
       - 'src/domains/topology-semantic-field.js'
       - 'src/render/topology-surface-object.js'
       - 'surface-field.html'
+      - 'index.html'
+      - 'src/universal/**'
+      - 'src/render/universal-reality-bridge.js'
       - 'tests/surface-semantic-field*.test.mjs'
+      - 'tests/universal-reality-bridge.test.mjs'
       - '.github/workflows/ssf-ci.yml'
 
 permissions:
@@ -34,5 +38,8 @@ jobs:
           node --check src/render/surface-semantic-field-lab.js
           node --check src/domains/topology-semantic-field.js
           node --check src/render/topology-surface-object.js
+          node --check src/universal/universal-entity.js
+          node --check src/universal/universal-object-renderer.js
+          node --check src/render/universal-reality-bridge.js
       - name: Surface Semantic Field tests
-        run: node --test tests/surface-semantic-field.test.mjs tests/surface-semantic-field-three.test.mjs tests/topology-semantic-field.test.mjs tests/topology-surface-object.test.mjs
+        run: node --test tests/surface-semantic-field.test.mjs tests/surface-semantic-field-three.test.mjs tests/topology-semantic-field.test.mjs tests/topology-surface-object.test.mjs tests/universal-reality-bridge.test.mjs
