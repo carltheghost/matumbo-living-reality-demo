@@ -21,8 +21,8 @@ const ROOT_SCALE_BY_SHAPE=Object.freeze({
 });
 
 const KIND_HINTS=Object.freeze([
-  ['contract',['contract','agreement','covenant']],
   ['slip',['slip','receipt']],
+  ['contract',['contract','agreement','covenant']],
   ['contractor',['contract-party','contractor','participant','party']],
   ['person',['person','profile','avatar','identity']],
   ['pool',['pool','liquidity']],
