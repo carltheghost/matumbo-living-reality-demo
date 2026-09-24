@@ -1,4 +1,5 @@
 import {REALITY_TAB_FORMS} from './reality-tab-layout.js';
+import {measureContent,fitObjectToContent,surfaceTransform} from './living-surface-layout-engine.js';
 
 const STAGE_NAMES=Object.freeze(['Signum','Identitas','Fontes','Interior']);
 const LATIN_LABELS=Object.freeze({
@@ -26,18 +27,51 @@ const freeze=value=>{if(value&&typeof value==='object'){Object.values(value).for
  * object. It describes what the object may show; it never grants feature,
  * provider, wallet, or tool authority. */
 export function createRealityObjectSurfaceEngine(){
-  function wrapLayout(shape='rectangle',{depthRatio=.42,clearance=.018}={}){
-    const form=REALITY_TAB_FORMS[shape]??REALITY_TAB_FORMS.rectangle;
+  function wrapLayout(shape='rectangle',{depthRatio=.42,clearance=.018,descriptor=null,panel=null}={}){
+    const requestedShape=REALITY_TAB_FORMS[shape]?shape:'rectangle';
     if(!Number.isFinite(depthRatio)||depthRatio<=0||!Number.isFinite(clearance)||clearance<0)throw Error('Reality Lens wrap dimensions must be positive and finite');
-    const width=form.width,height=form.height,depth=Math.max(form.depth,Math.min(width,height)*depthRatio),z=depth/2+clearance;
+    const content=descriptor??{title:requestedShape,lines:[],actions:[]};
+    const metrics=measureContent(content);
+    const fitted=fitObjectToContent(metrics,{shape:requestedShape});
+    const object={
+      shape:fitted.shape,
+      width:fitted.width,
+      height:fitted.height,
+      depth:Math.max(fitted.depth,Math.min(fitted.width,fitted.height)*depthRatio),
+    };
+    const makeFace=(id,facePanel,face)=>{
+      const mounted=surfaceTransform(object,facePanel,face);
+      return {
+        id,
+        width:Number(mounted.width.toFixed(4)),
+        height:Number(mounted.height.toFixed(4)),
+        position:mounted.position.map(value=>Number((value+(face==='front'||face==='back'?Math.sign(value||1)*clearance:0)).toFixed(4))),
+        rotation:mounted.rotation.map(value=>Number(value.toFixed(4))),
+      };
+    };
+    const frontPanel=panel??{width:metrics.width,height:metrics.height};
+    const sidePanel={width:object.depth,height:object.height};
+    const topPanel={width:object.width,height:object.depth};
     return freeze([
-      {id:'front',width,height,position:[0,0,z],rotation:[0,0,0]},
-      {id:'back',width,height,position:[0,0,-z],rotation:[0,Math.PI,0]},
-      {id:'left',width:depth,height,position:[-width/2-clearance,0,0],rotation:[0,-Math.PI/2,0]},
-      {id:'right',width:depth,height,position:[width/2+clearance,0,0],rotation:[0,Math.PI/2,0]},
-      {id:'top',width,height:depth,position:[0,height/2+clearance,0],rotation:[-Math.PI/2,0,0]},
-      {id:'bottom',width,height:depth,position:[0,-height/2-clearance,0],rotation:[Math.PI/2,0,0]},
-    ].map(face=>({...face,width:Number(face.width.toFixed(4)),height:Number(face.height.toFixed(4)),position:face.position.map(value=>Number(value.toFixed(4)))})));
+      makeFace('front',frontPanel,'front'),
+      makeFace('back',frontPanel,'back'),
+      makeFace('left',sidePanel,'left'),
+      makeFace('right',sidePanel,'right'),
+      makeFace('top',topPanel,'top'),
+      makeFace('bottom',topPanel,'bottom'),
+    ]);
+  }
+  function buildSurface({feature,object,descriptor=null,panel={width:1,height:1},face='front'}={}){
+    if(!feature?.id||!object?.id||feature.id!==object.id)throw Error('A Reality Lens surface must preserve the owning feature identity');
+    const content=descriptor??{
+      title:feature.label??feature.id,
+      lines:[feature.description??'',feature.boundary??''],
+      actions:(feature.sources??[]).slice(0,4),
+    };
+    const metrics=measureContent(content);
+    const fitted=fitObjectToContent(metrics,{shape:object.shape??'rectangle',size:object.size??1});
+    const transform=surfaceTransform(fitted,panel,face);
+    return freeze({metrics,fitted,transform,content});
   }
   // All shapes share the same readable-focus rule. While travelling, the
   // surrounding faces make the object feel volumetric; once that object is
@@ -90,7 +124,9 @@ export function createRealityObjectSurfaceEngine(){
     const fitScale=viewportScale*(1-inset*2);
     return Object.freeze({shape,width:bounds.width*fitScale,height:bounds.height*fitScale,objectWidth:bounds.width*viewportScale,objectHeight:bounds.height*viewportScale,aspectRatio:bounds.width/bounds.height,scale:fitScale,scrollable:true});
   }
-  return Object.freeze({describe,projectedBounds,fitPanel,wrapLayout,shouldShowFace});
+  return Object.freeze({describe,projectedBounds,fitPanel,wrapLayout,buildSurface,measureContent,fitObjectToContent,surfaceTransform});
 }
 
 export const realityObjectSurfaceEngine=createRealityObjectSurfaceEngine();
+
+export {measureContent,fitObjectToContent,surfaceTransform};
