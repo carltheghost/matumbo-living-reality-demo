@@ -84,8 +84,10 @@ export function createContractAtelierConsole({
   outcomeDesk = null,
   // Integration seam (Reality Lens Ω contract flow): called with
   // { contract, proposal } right after a review approval opens the book.
-  // Never allowed to break approval — failures are swallowed with a warning.
+  // A persistence failure must remain visible, not masquerade as approval.
   onContractApproved = null,
+  // Owns durable, idempotent book creation + binding + queue transition.
+  approveContractProposal = null,
   // Integration seam: async () => { proposals, drafts, errors } that scans
   // ESPN for upcoming games and queues auto-drafts for review. When wired,
   // a "scan upcoming games" control appears in the review section.
@@ -656,6 +658,9 @@ export function createContractAtelierConsole({
 
   function approveProposal(proposal) {
     try {
+      if(typeof approveContractProposal==='function') {
+        approveContractProposal(proposal);
+      } else {
       const contract = outcomesStudio.createContract({
         eventId: proposal.eventId ?? proposal.id,
         eventLabel: proposal.eventLabel,
@@ -663,15 +668,11 @@ export function createContractAtelierConsole({
         creator: `bot:${proposal.botName}`,
         status: "open",
       });
-      proposalQueue.setProposalStatus(proposal.id, "approved", { by: "user" });
-      // Integration seam: freeze the odds quote (if any) at approval and
-      // audit the lifecycle. A hook failure must never unwind the approval.
+      // Legacy hosts retain their callback; never suppress a failed binding.
       if (typeof onContractApproved === "function") {
-        try {
-          onContractApproved({ contract, proposal });
-        } catch (hookError) {
-          console.warn("[contract-atelier] onContractApproved hook failed", hookError);
-        }
+        onContractApproved({ contract, proposal });
+      }
+      proposalQueue.setProposalStatus(proposal.id, "approved", { by: "user" });
       }
       statusEl.textContent = `APPROVED · BOOK OPENED · "${String(proposal.eventLabel).toUpperCase().slice(0, 44)}" · SIMULATED ONLY`;
     } catch (error) {
@@ -891,6 +892,7 @@ export function createContractAtelierConsole({
       return publish("resolve", method);
     },
     replay: (method = "api") => publish("replay", method),
+    refresh: () => { renderOutcomes(); renderReview(); return snapshot(); },
     getSnapshot: () => snapshot(),
     getOutcomeSnapshot: () => deskSnapshot(),
     getReviewQueue: () => proposalQueue,

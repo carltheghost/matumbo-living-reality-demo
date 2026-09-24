@@ -97,15 +97,18 @@ import { MATTER_FORGE_SOURCE } from './domains/matter-forge.js?v=20260827-pictur
 import { PICTURE_MATTER_METADATA_SOURCE, createUnavailablePictureMatterMetadata, fetchPictureMatterMetadata } from './domains/picture-matter-metadata.js?v=20260828-picture-metadata1';
 import { PICTURE_MATTER_CONSOLE_SOURCE, createPictureMatterConsole } from './render/picture-matter.js?v=20260828-picture-metadata1';
 import { NFT_ATELIER_CONSOLE_SOURCE, createNftAtelierConsole } from './render/nft-atelier.js?v=20260918-nft1';
-import { createFrozenRelics } from './domains/frozen-relics.js?v=20260918-fr1';
 import { FROZEN_RELICS_CONSOLE_SOURCE, createFrozenRelicsConsole } from './render/frozen-relics.js?v=20260918-fr1';
 import { MUSE_AGENT_CONSOLE_SOURCE, createMuseAgentConsole } from './render/muse-agent.js?v=20260918-muse1';
 import { BOT_PLAZA_CONSOLE_SOURCE, createBotPlazaConsole } from './render/bot-plaza.js?v=20260918-botplaza1';
 import { createBotRegistry, createBotRuntime } from './domains/bot-plaza.js?v=20260918-botplaza1';
 import { createProposalQueue } from './domains/bot-plaza.js?v=20260918-ctr2';
-import { createOutcomeContracts } from './domains/outcome-contracts.js?v=20260918-ctr2';
 import { createContractLedger } from './domains/contract-ledger.js?v=20260920-cflow1';
-import { createContractFlow } from './domains/contract-flow.js?v=20260920-cflow1';
+import { createBrowserContractAutomation, createBrowserContractWorkspace, createBrowserContractFlow, createUnavailableContractWorkspace } from './domains/contract-runtime.js';
+import { applyContractPublicEvidence } from './domains/contract-public-evidence.js';
+import { createContractWorldContribution } from './domains/contract-world-projection.js';
+import { createProjectionEnvelope } from './core/view-state.js';
+import { mountContractWorkbench } from './render/contract-workbench.js';
+import { createContractOrganism } from './render/contract-organism.js';
 import { mountBotPresence } from './render/bot-presence.js?v=20260923-lens-focus1';
 import { CONTRACT_ATELIER_CONSOLE_SOURCE, createContractAtelierConsole } from './render/contract-atelier.js?v=20260918-ctr1';
 import { LUNA_CONSOLE_SOURCE, createLunaCompanionConsole } from './render/luna-companion.js?v=20260918-luna1';
@@ -136,8 +139,8 @@ import { createYoutubeSurface } from './render/youtube-surface.js?v=20260923-you
 
 const runtimeStatus = globalThis.__MATUMBO_RUNTIME__;
 runtimeStatus?.setStage?.('projection', 'Preparing the canonical local world envelope…');
-const livingRealityEnvelope = createLivingRealityProjection();
-const livingRealityWorld = livingRealityEnvelope.world;
+let livingRealityEnvelope = createLivingRealityProjection();
+let livingRealityWorld = livingRealityEnvelope.world;
 const devicePreferences = readBrowserProjectionPreferences();
 const deviceProjection = createDeviceProjection(livingRealityEnvelope, devicePreferences);
 window.__SIMFABRIC_PROJECTION__ = livingRealityWorld;
@@ -3063,10 +3066,14 @@ window.__TUMBO_PICTURE_MATTER__ = pictureMatterConsole;
 // NFT Atelier is a standalone fictional collection surface: simulated mints,
 // provenance inspection, and local burns. No wallet, chain, transfer, sale,
 // custody, or external publication exists.
-// Frozen Relics share one vault across the whole page session: the NFT
+// Frozen Relics share one atomically persisted vault: the NFT
 // Atelier section seals standalone relics, and the Contract Atelier's
 // outcome desk mints award NFTs as living relics from the same vault.
-frozenRelicsVault = createFrozenRelics({ seed: 'local-relics' });
+let contractWorkspace;
+try { contractWorkspace=createBrowserContractWorkspace(); }
+catch(error) { contractWorkspace=createUnavailableContractWorkspace(error); }
+frozenRelicsVault = contractWorkspace.vault;
+window.__TUMBO_CONTRACT_WORKSPACE__=contractWorkspace;
 nftAtelierConsole = createNftAtelierConsole({
   documentRoot: document,
   onSelect: (snapshot) => {
@@ -3234,7 +3241,7 @@ botPlazaRegistry = createBotRegistry();
 // The queue factory lands with the bot-plaza proposal-queue change, hence
 // the guard — without it the atelier simply shows "no proposal queue wired".
 contractProposalQueue = typeof createProposalQueue === "function" ? createProposalQueue() : null;
-sharedOutcomeDesk = createOutcomeContracts({ seed: "local-outcomes", relicVault: frozenRelicsVault });
+sharedOutcomeDesk = contractWorkspace.outcomeDesk;
 window.__TUMBO_PROPOSAL_QUEUE__ = contractProposalQueue;
 window.__TUMBO_OUTCOME_DESK__ = sharedOutcomeDesk;
 botPlazaRuntime = createBotRuntime({
@@ -3402,13 +3409,19 @@ botPlazaRuntime.getBus().subscribe((entry) => {
 // Feed failures never damage manual Contract Atelier operation: a failed
 // feed yields zero drafts and the queue stays exactly as it was.
 const contractLifecycleLedger = createContractLedger();
-const contractFlow = createContractFlow({
+let lastContractPublicRecords = [];
+let lastContractEvidenceReport = {observed:0,pending:0,errors:[]};
+const contractFlowOptions = {
   fetchEspnRecords: async () => {
     try {
       const payload = await fetchMultiSportEvents();
-      return Array.isArray(payload?.records) ? payload.records : [];
-    } catch {
-      return [];
+      lastContractPublicRecords = Array.isArray(payload?.records) ? payload.records : [];
+      lastContractEvidenceReport = applyContractPublicEvidence({engine:contractAutomation,records:lastContractPublicRecords});
+      if(!lastContractPublicRecords.length && payload?.status==='unavailable')throw new Error('Public scoreboards unavailable; contract rules remain waiting for evidence.');
+      return lastContractPublicRecords;
+    } catch(error) {
+      lastContractEvidenceReport={observed:0,pending:0,errors:[String(error?.message??error)]};
+      throw error;
     }
   },
   outcomeDesk: sharedOutcomeDesk,
@@ -3418,7 +3431,14 @@ const contractFlow = createContractFlow({
   // src/main.js network-free, so the flow resolves the read-only odds
   // retrieval lazily inside its own domain module (read-only public GETs,
   // no keys).
-});
+};
+let contractFlow;
+try { contractFlow=createBrowserContractFlow(contractFlowOptions); }
+catch(error) {
+  const message=String(error?.message??error);
+  const held=()=>{throw new Error(`Automatic market approval held: ${message}. Saved data has not been changed.`);};
+  contractFlow={approveProposal:held,handleContractApproved:held,scanAndQueue:async()=>({proposals:[],drafts:[],errors:[message]}),getPersistenceStatus:()=>({status:'held',error:message})};
+}
 window.__TUMBO_CONTRACT_LEDGER__ = contractLifecycleLedger;
 window.__TUMBO_CONTRACT_FLOW__ = contractFlow;
 contractAtelierConsole = createContractAtelierConsole({
@@ -3433,6 +3453,7 @@ contractAtelierConsole = createContractAtelierConsole({
   // into the lifecycle ledger; the scan button drafts upcoming ESPN games
   // into the same review queue Tumbo already approves from.
   onContractApproved: ({ contract, proposal }) => contractFlow.handleContractApproved({ contract, proposal }),
+  approveContractProposal: proposal=>contractFlow.approveProposal(proposal),
   onScanRequested: () => contractFlow.scanAndQueue(),
   onSelect: (snapshot) => {
     const organ = organs.find((candidate) => candidate.id === 'contract');
@@ -3472,6 +3493,95 @@ contractAtelierConsole = createContractAtelierConsole({
 });
 window.__TUMBO_CONTRACT_ATELIER__ = contractAtelierConsole;
 
+// All new workflows share one persisted domain, not a parallel renderer store.
+// Local names are approval assertions only; no verified signing/payment exists.
+const contractWorkbenchHost = document.createElement('section');
+contractWorkbenchHost.id = 'contract-workbench';
+document.getElementById('contract-atelier-status')?.after(contractWorkbenchHost);
+const contractSessionDesk = document.createElement('details');
+const contractSessionSummary = document.createElement('summary');
+contractSessionSummary.textContent='Pooled markets & live review queue · saved local desk';
+contractSessionDesk.append(contractSessionSummary);
+while(contractWorkbenchHost.nextSibling)contractSessionDesk.append(contractWorkbenchHost.nextSibling);
+contractSessionDesk.append(document.getElementById('contract-atelier-status'));
+contractWorkbenchHost.after(contractSessionDesk);
+for(const [label,status] of [['Market and relic storage',contractWorkspace.getPersistenceStatus()],['Market automation',contractFlow.getPersistenceStatus()]]){
+  if(status.status==='held'){
+    const notice=document.createElement('p');notice.setAttribute('role','alert');notice.textContent=`${label} unavailable: ${status.error}. Existing saved data has not been changed; affected actions are held.`;
+    contractSessionDesk.before(notice);
+    if(label==='Market and relic storage')document.getElementById('frozen-relics-boundary')?.before(notice.cloneNode(true));
+  }
+}
+const contractStyle = document.createElement('link');
+contractStyle.rel = 'stylesheet'; contractStyle.href = new URL('./render/contract-workbench.css', import.meta.url).href;
+document.head.append(contractStyle);
+let contractAutomation = null;
+let contractWorkbench = null;
+let contractAutomationError = null;
+let contractWorldSnapshot = null;
+const contractOrganism = createContractOrganism({three:THREE,getObject:id=>realityAssembly?.getFeatureObject?.(id)});
+function updateContractOrganism() {
+  if(contractWorldSnapshot)contractOrganism.sync(contractWorldSnapshot,contractWorkbench?.getSnapshot?.().selectedId);
+}
+function publishContractWorld(snapshot = null) {
+  if (!contractAutomation) return;
+  contractWorldSnapshot = snapshot ?? contractAutomation.snapshot();
+  const contribution = createContractWorldContribution(contractWorldSnapshot);
+  const outcomes = sharedOutcomeDesk?.createContribution();
+  const relics = frozenRelicsVault?.createContribution();
+  livingRealityEnvelope = createProjectionEnvelope({
+    contributions: [...livingRealityWorld.contributions.filter(item => item.source !== contribution.source && item.source !== outcomes?.source && item.source !== relics?.source), contribution, ...(outcomes?[outcomes]:[]),...(relics?[relics]:[])],
+    projectedAt: contribution.updatedAt,
+  });
+  livingRealityWorld = livingRealityEnvelope.world;
+  window.__SIMFABRIC_PROJECTION__ = livingRealityWorld;
+  window.__SIMFABRIC_ENVELOPE__ = livingRealityEnvelope;
+  window.__SIMFABRIC_DEVICE_PROJECTION__ = createDeviceProjection(livingRealityEnvelope, devicePreferences);
+  window.dispatchEvent(new CustomEvent('simfabric:projection', {detail:livingRealityWorld}));
+  updateContractOrganism();
+}
+try {
+  contractAutomation = createBrowserContractAutomation({
+    onEvent: event => {
+      projectionBridge.emitIntent('projection.contract-transition', event.contractId ?? 'contract-organism', {...event, simulation:true, localOnly:true, executable:false});
+    },
+  });
+  contractWorkbench = mountContractWorkbench({
+    root:contractWorkbenchHost,engine:contractAutomation,onSelect:updateContractOrganism,
+    getPublicEvents:()=>lastContractPublicRecords.map(record=>({id:record.id,label:record.title,status:record.status,participants:(record.participants??record.teams??[]).map(team=>({name:team.name}))})),
+    onRefreshEvidence:async({contractId})=>{
+      await runAutomaticContractScan({force:true});
+      return lastContractEvidenceReport.byContract?.[contractId]??{observed:0,pending:0,errors:lastContractEvidenceReport.byContract?[]:lastContractEvidenceReport.errors};
+    },
+  });
+  // Re-publish only when the domain changes; quiet ticks do not rebuild UI.
+  contractAutomation.subscribe(publishContractWorld);
+  contractWorkspace.subscribe(()=>{publishContractWorld();contractAtelierConsole?.refresh();});
+  queueMicrotask(publishContractWorld);
+} catch (error) {
+  contractAutomationError = String(error?.message ?? error);
+  contractWorkbenchHost.textContent = `Contract automation unavailable: ${contractAutomationError}. Stored data has not been deleted.`;
+  contractWorkbenchHost.setAttribute('role','alert');
+}
+window.__TUMBO_CONTRACT_AUTOMATION__ = contractAutomation;
+window.__TUMBO_CONTRACT_WORKBENCH__ = contractWorkbench;
+window.__TUMBO_CONTRACT_ORGANISM__ = contractOrganism;
+const contractAutomationAlert = document.createElement('p');
+contractAutomationAlert.setAttribute('role','alert'); contractAutomationAlert.hidden=true;
+contractWorkbenchHost.before(contractAutomationAlert);
+function runContractAutomation() {
+  try { contractAutomation?.tick(); updateContractOrganism(); contractAutomationError=null; contractAutomationAlert.hidden=true; }
+  catch(error) {
+    contractAutomationError=String(error?.message ?? error);
+    contractAutomationAlert.textContent=`Automation held: ${contractAutomationError}. No unsaved effects were applied.`;
+    contractAutomationAlert.hidden=false;
+  }
+}
+let contractAutomationTimer = window.setInterval(runContractAutomation,1000);
+window.addEventListener('pageshow',()=>{if(contractAutomationTimer===null)contractAutomationTimer=window.setInterval(runContractAutomation,1000);runContractAutomation();});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')runContractAutomation();});
+window.addEventListener('pagehide',()=>{window.clearInterval(contractAutomationTimer);contractAutomationTimer=null;});
+
 // Automatic prediction-contract generation.
 // The Prediction Place should populate itself without requiring a button press:
 // scan once after boot, then refresh every five minutes. The shared proposal
@@ -3495,6 +3605,11 @@ function runAutomaticContractScan({ force = false } = {}) {
     .then(() => contractFlow.scanAndQueue())
     .then((result) => {
       automaticContractScanLastResult = result;
+      if(result?.automation?.graded?.length){
+        contractAtelierConsole?.refresh();
+        projectionBridge.emitIntent('projection.contract-public-graded','contract-flow',{results:result.automation.graded,simulation:true,localOnly:true,executable:false});
+        publishContractWorld();
+      }
       return result;
     })
     .catch((error) => {
@@ -3512,7 +3627,7 @@ function runAutomaticContractScan({ force = false } = {}) {
   return automaticContractScanInFlight;
 }
 
-const automaticContractScanTimer = window.setInterval(() => {
+let automaticContractScanTimer = window.setInterval(() => {
   void runAutomaticContractScan();
 }, AUTO_CONTRACT_SCAN_INTERVAL_MS);
 
@@ -3538,7 +3653,12 @@ window.addEventListener("online", () => {
 });
 window.addEventListener("pagehide", () => {
   window.clearInterval(automaticContractScanTimer);
-}, { once: true });
+  automaticContractScanTimer = null;
+});
+window.addEventListener('pageshow', () => {
+  if(automaticContractScanTimer===null)automaticContractScanTimer=window.setInterval(()=>void runAutomaticContractScan(),AUTO_CONTRACT_SCAN_INTERVAL_MS);
+  void runAutomaticContractScan();
+});
 
 // Luna Companion is a scripted local guide: plain-word navigation, feature
 // explanations, and current-context narration. No AI model, no conversation
@@ -7808,7 +7928,7 @@ projectionSession = createProjectionSession({
     "nft-atelier": nftAtelierConsole?.getSnapshot?.(),
     "muse-agent": museAgentConsole?.getSnapshot?.(),
     "bot-plaza": botPlazaConsole?.getSnapshot?.(),
-    "contract-atelier": contractAtelierConsole?.getSnapshot?.(),
+    "contract-atelier": {...contractAtelierConsole?.getSnapshot?.(),automation:contractAutomation?.snapshot?.(),automationError:contractAutomationError},
     "luna-companion": lunaCompanionConsole?.getSnapshot?.(),
     "wardrobe-atelier": wardrobeAtelierConsole?.getSnapshot?.(),
     ledger: ledgerProofConsole?.getSnapshot?.(),
@@ -8863,7 +8983,8 @@ const mediaPreview = createMediaPreview();
 // Narrow viewports: one floating panel at a time; collapses the camera/audio
 // preview and city dropdown when a console opens, and hides the bottom hint
 // bar while a console is up. Desktop layout is untouched.
-initMobilePanelManager();
+// Mobile panel arbitration starts once, after the selected object's surface
+// has mounted below. Starting here lets boot chrome evict a requested route.
 // Photo mascot: the comic "You" mascot. Starts closed and materializes only
 // when the MASCOT HUD button is pressed. Photos preload lazily on first open,
 // never at boot; the presence is draggable with a persisted position. The
@@ -9062,6 +9183,7 @@ realityAssembly=createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   onActiveChange:(active)=>botPresence?.setVisible?.(!active),
   onPanelFrame:(id)=>{if(id&&id===featureNavigator?.getSnapshot?.().activeId)exposeRealityAssemblyFeaturePanel(id);},
   readFeature:(id)=>{
+    if(id==='contract-atelier'){const contracts=contractWorldSnapshot?.contracts??[];return {summary:`${contracts.length} saved contracts · ${contracts.filter(item=>item.status==='active').length} armed · ${contracts.reduce((total,item)=>total+item.receipts.length,0)} local receipts. Conditions, approvals and history belong to the same world entity.`};}
     if(id==='person'){const state=personStudio.getSnapshot();return {summary:state.approved?'Approved local avatar and saved wardrobe are connected. No cloud account is implied.':'Reference-built local avatar is available for explicit approval.'};}
     if(id==='multi-sport-events'){const state=multiSportEventsConsole?.getSnapshot();return {summary:state?.summary?.records?.length?`${state.summary.records.length} public records currently loaded. Open Sports for timestamps and source evidence.`:'No public sports records loaded in this session. Open Sports and explicitly refresh a provider.'};}
     if(id==='world-events'){const state=worldEventsConsole?.getSnapshot();return {summary:state?.summary?.records?.length?`${state.summary.records.length} provider observations loaded; inspect their provenance in World Pulse.`:'Open World Pulse to request current source observations. The designed city geometry is not a real-world measurement.'};}

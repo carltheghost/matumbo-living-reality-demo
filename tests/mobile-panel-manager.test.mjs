@@ -1,6 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import { applyMobilePanelPolicy, initMobilePanelManager } from '../src/render/mobile-panel-manager.js';
+
+test('bootstrap initializes the mobile keeper once, after the world route is mounted',()=>{
+  const main=readFileSync(new URL('../src/main.js',import.meta.url),'utf8');
+  assert.equal((main.match(/\binitMobilePanelManager\s*\(/g)??[]).length,1,'two managers can evict the requested surface before attachment');
+  assert.ok(main.indexOf('const mobilePanelManager = initMobilePanelManager')>main.indexOf('renderer.setAnimationLoop(animate)'), 'mobile ownership begins after Assembly has been opened');
+});
 
 test('policy keeps only the just-opened panel visible', () => {
   const panels = [
@@ -190,4 +197,48 @@ test('desktop layouts are left alone', () => {
   assert.equal(wide.t402.hidden, false, 'desktop keeps both consoles');
   assert.ok(!wide.doc.body.classList.contains('mobile-panel-open'));
   mgr2.destroy();
+});
+
+test('mobile observer reaches quiescence instead of writing hidden forever',()=>{
+  const h=makeHarness({narrow:true});
+  let hidden=false,writes=0;
+  Object.defineProperty(h.hint,'hidden',{get:()=>hidden,set:value=>{hidden=value;writes++;}});
+  const manager=initMobilePanelManager({documentRoot:h.doc,windowRoot:h.win});
+  assert.equal(writes,0,'boot does not rewrite an unchanged hidden attribute');
+  h.room.hidden=false;h.fire(h.room);
+  assert.equal(writes,1);
+  // A real browser enqueues this record after the reflected hidden write.
+  // The old implementation created another record on every callback.
+  for(let tick=0;tick<20;tick++)h.fire(h.hint);
+  assert.equal(writes,1,'self-generated observer records make no further writes');
+  h.room.hidden=true;h.fire(h.room);assert.equal(writes,2);
+  h.fire(h.hint);assert.equal(writes,2);
+  manager.destroy();
+});
+
+test('a world-attached reading surface is not evicted by mobile overlay policy',()=>{
+  const h=makeHarness({narrow:true});
+  h.room.setAttribute('data-lens-surface-attached','true');h.room.hidden=false;
+  const manager=initMobilePanelManager({documentRoot:h.doc,windowRoot:h.win});
+  h.t402.hidden=false;h.fire(h.t402);
+  assert.equal(h.room.hidden,false,'entity skin stays owned by the world renderer');
+  assert.equal(h.t402.hidden,false);
+  manager.destroy();
+});
+
+test('CSS-hidden Mission Control cannot evict the feature being mounted into the world',()=>{
+  const h=makeHarness({narrow:true});
+  h.shell.classList.add('open');h.room.hidden=false;
+  h.win.getComputedStyle=el=>({display:el===h.shell?'none':'block',visibility:'visible'});
+  const manager=initMobilePanelManager({documentRoot:h.doc,windowRoot:h.win});
+  assert.equal(h.room.hidden,false,'the visible feature survives initial keeper election');
+  manager.destroy();
+});
+
+test('an aside inside a hidden ancestor cannot win mobile panel election',()=>{
+  const h=makeHarness({narrow:true});h.room.hidden=false;h.t402.hidden=false;
+  h.room.getClientRects=()=>[];
+  const manager=initMobilePanelManager({documentRoot:h.doc,windowRoot:h.win});
+  assert.equal(h.t402.hidden,false);
+  manager.destroy();
 });

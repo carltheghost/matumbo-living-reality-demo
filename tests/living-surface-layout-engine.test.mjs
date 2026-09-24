@@ -6,6 +6,9 @@ import {
   fitLivingSurface,
   focusDistanceForLivingObject,
   relaxLivingRealityLayout,
+  composeLivingSurface,
+  readingFrameForLivingObject,
+  livingReadingProjection,
 } from '../src/domains/living-surface-layout-engine.js';
 
 test('each Reality Lens form owns bounded outward-facing living surfaces',()=>{
@@ -26,10 +29,54 @@ test('curved forms keep a compact readable skin instead of filling their whole b
   assert.ok(cylinder.primary.width<REALITY_TAB_FORMS.cylinder.width);
   assert.ok(cylinder.primary.height<REALITY_TAB_FORMS.cylinder.height);
   assert.equal(cylinder.primary.kind,'arc');
-  assert.ok(cylinder.primary.position[2]>=REALITY_TAB_FORMS.cylinder.radius);
+  assert.ok(cylinder.primary.position[2]<REALITY_TAB_FORMS.cylinder.radius,'cylinder skin lies on a cut body facet, not outside its tangent');
   assert.equal(sphere.primary.kind,'hemisphere');
   assert.ok(sphere.primary.width<REALITY_TAB_FORMS.sphere.width);
-  assert.ok(sphere.primary.position[2]>=REALITY_TAB_FORMS.sphere.radius);
+  assert.ok(sphere.primary.position[2]<REALITY_TAB_FORMS.sphere.radius,'sphere skin is an in-body reading facet');
+});
+
+test('optical composition keeps native-size type and touch controls at every form, device and object scale',()=>{
+  for(const shape of Object.keys(REALITY_TAB_FORMS))for(const [viewportWidth,viewportHeight] of [[390,844],[1440,900]])for(const size of [.5,1,4]){
+    const frame=readingFrameForLivingObject({shape,size,approachScale:2.6,viewportWidth,viewportHeight});
+    const face=createLivingSurfaceMap(shape).primary;
+    const composed=composeLivingSurface({shape,worldScale:size*2.6,distance:frame.distance-face.position[2]*size*2.6,viewportWidth,viewportHeight});
+    assert.equal(composed.textPx,16);assert.equal(composed.touchPx,44);
+    assert.ok(composed.actualWidth<=frame.availableWidth+.5,`${shape} fits usable width`);
+    assert.ok(composed.actualHeight<=frame.availableHeight+.5,`${shape} fits usable height`);
+    assert.ok(Math.abs(composed.width-composed.actualWidth)<10,`${shape} CSS raster does not shrink desktop typography`);
+    assert.equal(composed.overflow,'scroll');assert.equal(composed.bodyMutation,false);
+    if(viewportWidth<700)assert.equal(composed.columns,1);
+    assert.ok(Object.isFrozen(composed));
+  }
+});
+
+test('edge-on content requests a whole-body turn and never claims readability',()=>{
+  for(const cosine of [-1,0,.2,.7]){
+    const projection=composeLivingSurface({faceCosine:cosine});
+    assert.equal(projection.readable,false);assert.equal(projection.needsTurn,true);
+  }
+  assert.throws(()=>composeLivingSurface({faceCosine:NaN}),/projection/);
+  assert.throws(()=>readingFrameForLivingObject({safeTop:-1}),/frame/);
+});
+
+test('phone orientation adapts the whole reading body without changing canonical shape',()=>{
+  for(const shape of Object.keys(REALITY_TAB_FORMS))for(const [viewportWidth,viewportHeight] of [[390,844],[844,390]]){
+    const projection=livingReadingProjection({shape,viewportWidth,viewportHeight});
+    const frame=readingFrameForLivingObject({shape,size:1,approachScale:2.6,viewportWidth,viewportHeight,...projection});
+    const face=createLivingSurfaceMap(shape).primary;
+    const composition=composeLivingSurface({shape,worldScale:2.6*projection.stretch[0],verticalScale:2.6*projection.stretch[1],distance:frame.distance-face.position[2]*2.6,viewportWidth,viewportHeight});
+    assert.equal(projection.shape,shape);assert.equal(projection.canonicalShapeUnchanged,true);
+    assert.equal(projection.authority,'projection-only');
+    assert.ok(composition.actualHeight>=(viewportHeight>600?340:190),`${shape} has a usable ${projection.mode} reader`);
+    assert.ok(composition.actualWidth<=frame.availableWidth+.5);
+    assert.ok(composition.actualHeight<=frame.availableHeight+.5);
+    assert.ok(Math.abs(composition.width-composition.actualWidth)<10);
+    assert.ok(Math.abs(composition.height-composition.actualHeight)<10,'vertical glyph density compensates body stretch');
+    if(viewportWidth<700&&['wave','rectangle'].includes(shape))assert.ok(projection.stretch[1]>2,'wide forms unfold vertically as bodies');
+    if(viewportHeight<600&&shape==='phone')assert.ok(projection.stretch[0]>2,'landscape phone becomes a broad reading body');
+    assert.ok(Object.isFrozen(projection.stretch));
+  }
+  assert.deepEqual(livingReadingProjection({shape:'wave',viewportWidth:1440,viewportHeight:900}).stretch,[1,1,1]);
 });
 
 test('content is clamped to a readable viewport surface instead of stretching the object body',()=>{

@@ -58,8 +58,10 @@ function makeFace(id,width,height,position,rotation,{kind='plane',curvature=0,re
 
 function planarSurfaceLayout(shape,{clearance=.018,depthRatio=.42}={}){
   const form=formFor(shape),width=form.width,height=form.height;
-  const depth=Math.max(form.depth,Math.min(width,height)*depthRatio);
-  const z=depth/2+clearance;
+  const depth=form.depth;
+  // Extruded forms are authored from z=0 to z=depth. The skin belongs to
+  // that front wall, not to an invented thicker, disconnected box.
+  const z=depth+clearance;
   // Keep the primary silhouette true to the chosen tab form. A phone stays
   // portrait and a wave stays wide even when its content becomes scrollable.
   const frontWidth=width*.9,frontHeight=height*.9;
@@ -79,12 +81,12 @@ function cylinderSurfaceLayout({clearance=.018,depthRatio=.42}={}){
   // A chord is deliberately smaller than the cylinder wall. The primary
   // reading face lives on the front arc rather than filling its whole height.
   const aspect=form.width/form.height,maxHeight=height*.76;
-  const frontWidth=Math.min(form.width*.84,2*radius*Math.sin(arc/2)*.98,maxHeight*aspect);
+  const frontWidth=Math.min(form.width*.9,2*radius*Math.sin(arc/2)*.98,maxHeight*aspect);
   const frontHeight=frontWidth/aspect;
   const sideWidth=Math.max(.42,frontWidth*.58),sideHeight=Math.min(height*.64,frontHeight*.82);
   const cap=Math.min(radius*1.26,frontWidth*.92);
   return [
-    makeFace('front',frontWidth,frontHeight,[0,0,radius+clearance],[0,0,0],{kind:'arc',curvature:arc}),
+    makeFace('front',frontWidth,frontHeight,[0,0,Math.sqrt(radius*radius-(frontWidth/2)**2)+clearance],[0,0,0],{kind:'arc',curvature:arc}),
     makeFace('back',frontWidth*.78,frontHeight*.76,[0,0,-radius-clearance],[0,Math.PI,0],{kind:'arc',curvature:arc,readable:false}),
     makeFace('left',sideWidth,sideHeight,[-radius-clearance,0,0],[0,-Math.PI/2,0],{kind:'arc',curvature:arc*.58,readable:false}),
     makeFace('right',sideWidth,sideHeight,[radius+clearance,0,0],[0,Math.PI/2,0],{kind:'arc',curvature:arc*.58,readable:false}),
@@ -99,7 +101,7 @@ function sphereSurfaceLayout({clearance=.018,depthRatio=.42}={}){
   // atmosphere and short metadata, not as duplicate browser windows.
   const primary=radius*1.62,side=radius*.88,cap=radius*1.08;
   return [
-    makeFace('front',primary,primary,[0,0,radius+clearance],[0,0,0],{kind:'hemisphere',curvature:Math.PI*.58}),
+    makeFace('front',primary,primary,[0,0,Math.sqrt(radius*radius-(primary/2)**2)+clearance],[0,0,0],{kind:'hemisphere',curvature:Math.PI*.58}),
     makeFace('back',primary*.68,primary*.68,[0,0,-radius-clearance],[0,Math.PI,0],{kind:'hemisphere',curvature:Math.PI*.42,readable:false}),
     makeFace('left',side,side,[-radius*.86-clearance,0,radius*.16],[0,-Math.PI/2.55,0],{kind:'hemisphere',curvature:Math.PI*.34,readable:false}),
     makeFace('right',side,side,[radius*.86+clearance,0,radius*.16],[0,Math.PI/2.55,0],{kind:'hemisphere',curvature:Math.PI*.34,readable:false}),
@@ -135,6 +137,68 @@ export function createLivingSurfaceMap(shape='rectangle',options={}){
         ?cubeSurfaceLayout({depthRatio,clearance})
         :planarSurfaceLayout(resolved,{depthRatio,clearance});
   return freeze({shape:resolved,body:freeze({...formFor(resolved)}),primary:faces[0],faces});
+}
+
+/**
+ * Optical layout, not texture resolution. One CSS pixel should project to
+ * approximately one screen pixel when reading. A fixed 320px/unit raster
+ * made 16px text microscopic on phone/cylinder bodies. Quantization plus a
+ * caller-side hysteresis prevents continuous layout while approaching.
+ */
+export function composeLivingSurface({shape='rectangle',worldScale=1,verticalScale=worldScale,distance=9,viewportWidth=1280,viewportHeight=900,fov=60,faceCosine=1}={}){
+  for(const [value,name] of [[worldScale,'World scale'],[distance,'Surface distance'],[viewportWidth,'Viewport width'],[viewportHeight,'Viewport height'],[fov,'Camera field of view']])finitePositive(value,name);
+  if(fov>=179||!Number.isFinite(faceCosine)||faceCosine<-1||faceCosine>1)throw Error('Invalid readable projection');
+  finitePositive(verticalScale,'Vertical world scale');
+  const map=createLivingSurfaceMap(shape),face=map.primary;
+  const pixelsPerUnit=viewportHeight*worldScale/(2*distance*Math.tan(fov*Math.PI/360));
+  const density=Math.max(8,Math.round(pixelsPerUnit/8)*8);
+  const densityY=Math.max(8,Math.round(pixelsPerUnit*verticalScale/worldScale/8)*8);
+  const width=Math.max(1,Math.round(face.width*density)),height=Math.max(1,Math.round(face.height*densityY));
+  const actualWidth=face.width*pixelsPerUnit*Math.max(0,faceCosine),actualHeight=face.height*pixelsPerUnit*verticalScale/worldScale;
+  const inset=shape==='sphere'?Math.round(width*.15):shape==='cylinder'?Math.round(width*.07):16;
+  return freeze({shape:map.shape,width,height,pixelsPerUnit:density,pixelsPerUnitY:densityY,cssScale:1/density,cssScaleY:1/densityY,
+    actualWidth,actualHeight,columns:width-inset*2>=620?2:1,inset,
+    textPx:16,touchPx:44,readable:actualWidth>=160&&actualHeight>=160&&faceCosine>=.72,
+    needsTurn:faceCosine<.92,mode:width<220?'compact':width<620?'reading':'expanded',
+    // No letter shrinking and no silhouette stretching to fit long content.
+    overflow:'scroll',bodyMutation:false,source:'owning-object-projection'});
+}
+
+/** A device projection may reflow the whole body, never the canonical entity.
+ * Wide forms unfold vertically on a portrait phone; tall forms broaden in
+ * landscape. Corners, cut facets, wave edges and volume travel together. */
+export function livingReadingProjection({shape='rectangle',viewportWidth=1280,viewportHeight=900}={}){
+  finitePositive(viewportWidth,'Viewport width');finitePositive(viewportHeight,'Viewport height');
+  const face=createLivingSurfaceMap(shape).primary;
+  const landscape=viewportHeight<=600&&viewportWidth>viewportHeight;
+  const portrait=!landscape&&viewportWidth<=700;
+  const aspect=face.width/face.height;
+  const targetAspect=landscape?Math.max(aspect,1.7):portrait?Math.min(aspect,.78):aspect;
+  const stretch=targetAspect>aspect?[targetAspect/aspect,1,1]:[1,aspect/targetAspect,1];
+  return freeze({shape:createLivingSurfaceMap(shape).shape,stretch,
+    mode:landscape?'landscape':portrait?'portrait':'desktop',
+    safeTop:landscape?60:portrait?182:112,safeBottom:landscape?72:portrait?186:142,safeSide:landscape?28:portrait?20:48,
+    targetAspect,canonicalShapeUnchanged:true,authority:'projection-only'});
+}
+
+/** Fit an entire body and its reading skin inside usable chrome-free space. */
+export function readingFrameForLivingObject({shape='rectangle',size=1,approachScale=1,stretch=[1,1,1],viewportWidth=1280,viewportHeight=900,fov=60,safeTop=110,safeBottom=150,safeSide=20,maxDistance=190}={}){
+  for(const [value,name] of [[size,'Object size'],[approachScale,'Approach scale'],[viewportWidth,'Viewport width'],[viewportHeight,'Viewport height'],[fov,'Camera field of view']])finitePositive(value,name);
+  if([safeTop,safeBottom,safeSide].some(value=>!Number.isFinite(value)||value<0)||fov>=179)throw Error('Invalid reading frame');
+  if(!Array.isArray(stretch)||stretch.length!==3||stretch.some(value=>!Number.isFinite(value)||value<=0))throw Error('Invalid reading stretch');
+  const {body,primary}=createLivingSurfaceMap(shape),scale=size*approachScale;
+  const availableWidth=Math.max(80,viewportWidth-safeSide*2),availableHeight=Math.max(100,viewportHeight-safeTop-safeBottom);
+  const tangent=Math.tan(fov*Math.PI/360),unit=viewportHeight/(2*tangent);
+  // Account for the skin being forward of the center. Looking at just the
+  // center-distance allowed sphere surfaces to leap over the header.
+  const skinDistance=Math.max(primary.width*stretch[0]*unit/availableWidth,primary.height*stretch[1]*unit/availableHeight)*scale;
+  const bodyDistance=Math.max(body.width*stretch[0]*unit/availableWidth,body.height*stretch[1]*unit/availableHeight)*scale;
+  const wanted=Math.max(skinDistance+primary.position[2]*stretch[2]*scale,bodyDistance)*1.025;
+  const distance=clamp(wanted,.7,maxDistance);
+  return freeze({distance,unclampedDistance:wanted,capped:distance!==wanted,
+    targetYOffset:(safeBottom-safeTop)/2/viewportHeight*2*distance*tangent,
+    availableWidth,availableHeight,occupancy:availableHeight/viewportHeight,
+    bodyRadius:realityTabRadius({shape,size})*approachScale});
 }
 
 /** The readable primary surface, not the whole body, projected into pixels. */
@@ -266,6 +330,9 @@ export function createLivingSurfaceLayoutEngine(){
     project:projectLivingSurface,
     fit:fitLivingSurface,
     focusFrame:focusDistanceForLivingObject,
+    readingFrame:readingFrameForLivingObject,
+    compose:composeLivingSurface,
+    readingProjection:livingReadingProjection,
     relax:relaxLivingRealityLayout,
   });
 }

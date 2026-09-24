@@ -1,5 +1,6 @@
 import {REALITY_TAB_FORMS} from '../domains/reality-tab-layout.js?v=20260923-spatial-tabs16';
 import {REALITY_LENS_GROUPS,realityLensEngine,resolveRealityLensGroup} from '../domains/reality-lens-engine.js?v=20260923-lens-engine9';
+import {createLivingSurfaceMap} from '../domains/living-surface-layout-engine.js';
 
 /** Shape-changing, image-bearing feature tabs only; the former central cube is
  * now the same status and geometry as every other Reality Lens object. */
@@ -336,12 +337,21 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[],rela
     const artMaterial=art?makeMaterial('#b99154',{map:art,metalness:.03,roughness:.52,transparent:true,opacity:.78,depthWrite:false,side:THREE.DoubleSide}):null;
     const parts=[];
     let bodyGeometry;
-    if(shapeName==='sphere')bodyGeometry=new THREE.SphereGeometry(Math.min(width,height,depth)/2,36,28);
-    else if(shapeName==='cylinder')bodyGeometry=new THREE.CylinderGeometry(Math.min(width,depth)/2,Math.min(width,depth)/2,height,36,1,false);
+    if(shapeName==='sphere')bodyGeometry=new THREE.SphereGeometry(Math.min(width,height,depth)/2,24,18);
+    else if(shapeName==='cylinder')bodyGeometry=new THREE.CylinderGeometry(Math.min(width,depth)/2,Math.min(width,depth)/2,height,24,1,false);
     else if(shapeName==='cube')bodyGeometry=new THREE.BoxGeometry(width,height,depth);
     else{
       const outline=shapeName==='wave'?wavePanelShape(THREE,width,height):roundedPanelShape(THREE,width,height,form.radius);
       bodyGeometry=new THREE.ExtrudeGeometry(outline,{depth,bevelEnabled:true,bevelSegments:3,bevelSize:.035,bevelThickness:.035,curveSegments:10});
+    }
+    if(curved){
+      // A machined reading facet is part of this body. Clipping its front
+      // vertices creates a flush cap instead of floating a browser plaque
+      // beyond the sphere/cylinder's tangent. The rear silhouette remains.
+      const cap=createLivingSurfaceMap(shapeName).primary.position[2]-.018;
+      const positions=bodyGeometry.getAttribute('position');
+      for(let index=0;index<positions.count;index++)positions.setZ(index,Math.min(positions.getZ(index),cap));
+      positions.needsUpdate=true;bodyGeometry.computeVertexNormals();
     }
     geometry.add(bodyGeometry);
     const bodyMaterial=shapeName==='cube'?[shell,shell,shell,shell,artMaterial??shell,shell]:shell;
@@ -747,22 +757,27 @@ function applyTabDepthMode(node){
       node.root.visible=(!node.isTab||tabReveal>.008)&&!response.contextHidden&&response.contextOpacity>.05&&groupMatches;
       if(!node.root.visible)continue;
       if(node.isTab){
-        const targetScale=response.scale;
-        node.root.scale.lerp(new THREE.Vector3(targetScale,targetScale,targetScale),blend);
+        // A mounted reader uses the same stable scale as its camera framing.
+        // Distance-driven growth otherwise shrank a wide phone surface to
+        // ~150px tall even after its reading frame had been calculated.
+        const reading=node.surfaceReading&&response.isSelected;
+        const targetScale=reading?node.scale*node.size*realityLensEngine.profile.focus.maxScale:response.scale;
+        const stretch=reading?(node.surfaceStretch??[1,1,1]):[1,1,1];
+        node.root.scale.lerp(new THREE.Vector3(targetScale*stretch[0],targetScale*stretch[1],targetScale*stretch[2]),blend);
         // Once a real feature panel is mounted on this object, its physical
         // shell becomes a quiet perimeter. This avoids a duplicate bright
         // wireframe fighting the readable, interactive face.
         const cover= response.isSelected ? Math.max(0,Math.min(1,(response.focusStrength-.24)/.76)) : 0;
         const tuneSurface=(material,multiplier)=>{if(!material)return;const base=material.userData?.realityLensBaseOpacity??1;material.opacity=base*(1-cover*multiplier)*response.contextOpacity;};
-        tuneSurface(node.shellMaterial,.76);
+        tuneSurface(node.shellMaterial,.35);
         // The frame is useful while approaching. At the readable stage it
         // almost disappears, leaving the mounted panel as the object's face.
-        if(node.edgeMaterial){const base=node.edgeMaterial.userData?.realityLensBaseOpacity??1;node.edgeMaterial.opacity=base*(1-cover)*(1-cover)*response.contextOpacity;}
+        if(node.edgeMaterial){const base=node.edgeMaterial.userData?.realityLensBaseOpacity??1;node.edgeMaterial.opacity=base*(1-cover*.58)*response.contextOpacity;}
         if(node.artMaterial){const base=node.artMaterial.userData?.realityLensBaseOpacity??1;node.artMaterial.opacity=base*(1-cover)*(1-cover)*response.contextOpacity;}
         tuneSurface(node.indicator?.material,.55);
         node.root.rotation.y=reducedMotion?0:Math.sin(time*.18+node.traits.phase)*.025;
         node.root.rotation.x=reducedMotion?0:Math.sin(time*.13+node.traits.phase)*.012;
-        if(node.indicator){const pulse=.9+.1*Math.sin(time*.92+node.traits.phase);node.indicator.scale.setScalar(pulse);if(node.indicator.material?.emissiveIntensity!==undefined)node.indicator.material.emissiveIntensity=.28+.18*(.5+.5*Math.sin(time*1.3+node.traits.phase));}
+        if(node.indicator){node.indicator.visible=!node.surfaceReading;const pulse=reducedMotion?1:.9+.1*Math.sin(time*.92+node.traits.phase);node.indicator.scale.setScalar(pulse);if(node.indicator.material?.emissiveIntensity!==undefined)node.indicator.material.emissiveIntensity=node.surfaceReading||reducedMotion?.28:.28+.18*(.5+.5*Math.sin(time*1.3+node.traits.phase));}
         // At close focus the interactive panel is the living object. Its
         // ornamental orbit layers return while travelling, not over its face.
         const panelOwnsAttention=response.isSelected&&response.focusStrength>.6;

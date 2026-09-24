@@ -39,6 +39,7 @@ import { toCanonical } from "./contract-status-vocab.js?v=20260922-cache2";
 const FLOW_SOURCE = "contract-flow";
 const REVIEW_DIALECT = "review";
 const LEDGER_DIALECT = "ledger";
+export const CONTRACT_FLOW_STORAGE_KEY = 'matumbo.contract-flow.v1';
 
 const DEFAULT_BOT_IDENTITY = Object.freeze({
   botId: "contract-scout",
@@ -220,6 +221,8 @@ export function createContractFlow({
   fetchImpl = null,
   now = () => new Date(),
   botIdentity = DEFAULT_BOT_IDENTITY,
+  storage = null,
+  storageKey = CONTRACT_FLOW_STORAGE_KEY,
 } = {}) {
   if (typeof fetchEspnRecords !== "function") {
     throw new TypeError("createContractFlow requires fetchEspnRecords");
@@ -237,6 +240,80 @@ export function createContractFlow({
   const seenGameIds = new Set();
   const quotesByProposalId = new Map();
   const draftsByGameId = new Map();
+  const approvedBindings = new Map();
+  let storedRaw = null;
+  let persistence = { mode: storage ? 'durable' : 'memory', status: 'ok', error: null };
+  if (storage && (typeof storage.getItem !== 'function' || typeof storage.setItem !== 'function')) throw new TypeError('Contract flow storage requires getItem/setItem');
+  const bookIdentity = (contract) => ({ eventId: contract.eventId, eventLabel: contract.eventLabel, creator: contract.creator, outcomes: [...contract.outcomes], createdAt: contract.createdAt });
+  function plainKeys(value, keys, label) {
+    if (!isRecord(value) || ![Object.prototype, null].includes(Object.getPrototypeOf(value)) || Object.keys(value).some(key => !keys.includes(key))) throw new TypeError(`Invalid saved ${label} schema`);
+  }
+  function validateBinding(binding) {
+    plainKeys(binding, ['contractId', 'gameId', 'approvedAt', 'startsAt', 'proposalId', 'book', 'quote', 'quoteStatus', 'simulation'], 'approval binding');
+    if (typeof binding.contractId !== 'string' || binding.contractId.length > 160 || typeof binding.gameId !== 'string' || !binding.gameId.startsWith('espn-multi-sport:') || binding.gameId.length > 160 || binding.simulation !== true) throw new TypeError('Invalid saved approval identity');
+    if (!Number.isFinite(Date.parse(binding.approvedAt)) || (binding.startsAt !== null && !Number.isFinite(Date.parse(binding.startsAt)))) throw new TypeError('Invalid saved approval time');
+    if (typeof binding.proposalId !== 'string' || binding.proposalId.length > 300) throw new TypeError('Invalid saved proposal identity');
+    const contract = outcomeDesk.get?.(binding.contractId);
+    if (!contract || JSON.stringify(bookIdentity(contract)) !== JSON.stringify(binding.book) || contract.eventId !== binding.gameId) throw new TypeError('Saved approval does not match the immutable outcome book');
+    if (!['frozen-at-approval', 'unavailable-at-approval'].includes(binding.quoteStatus) || (binding.quoteStatus === 'frozen-at-approval') !== (binding.quote !== null)) throw new TypeError('Invalid saved quote status');
+    if (binding.quote !== null && (!validateQuoteShape(binding.quote) || !isFreshQuote(binding.quote, Date.parse(binding.approvedAt)))) throw new TypeError('Saved quote was not valid at approval');
+    return freezeDeep(JSON.parse(JSON.stringify(binding)));
+  }
+  function assertStorageCurrent() {
+    if (!storage) return;
+    let currentRaw;
+    try { currentRaw = storage.getItem(storageKey) ?? null; }
+    catch (error) {
+      persistence = { mode: 'durable', status: 'error', error: String(error.message ?? error) };
+      throw new Error(`Contract approval storage unavailable: ${persistence.error}`);
+    }
+    if (currentRaw !== storedRaw) {
+      persistence = { mode: 'durable', status: 'error', error: 'Another tab changed contract approvals; reload before continuing' };
+      throw new Error(persistence.error);
+    }
+  }
+  function saveBinding(binding) {
+    assertStorageCurrent();
+    const validated = validateBinding(binding);
+    const prior = approvedBindings.get(binding.contractId);
+    if (prior) {
+      if (JSON.stringify(prior.book) !== JSON.stringify(binding.book) || prior.gameId !== binding.gameId || prior.proposalId !== binding.proposalId) throw new Error('Approved binding identity cannot be replaced');
+      return prior;
+    }
+    if (binding.proposalId && [...approvedBindings.values()].some(entry => entry.proposalId === binding.proposalId)) throw new Error('Proposal already has an approved outcome book');
+    if (approvedBindings.size >= 2000) throw new Error('Contract approval storage limit reached');
+    const serialized = JSON.stringify({ schemaVersion: 1, simulation: true, bindings: [...approvedBindings.values(), validated] });
+    if (serialized.length > 2000000) throw new Error('Contract approval storage size limit reached');
+    if (storage) {
+      try { assertStorageCurrent(); storage.setItem(storageKey, serialized); }
+      catch (error) { persistence = { mode: 'durable', status: 'error', error: String(error.message) }; throw new Error(`Approval automation held: ${error.message}`); }
+    }
+    approvedBindings.set(binding.contractId, validated); storedRaw = storage ? serialized : null;
+    persistence = { mode: storage ? 'durable' : 'memory', status: 'ok', error: null };
+    return validated;
+  }
+  if (storage) {
+    try {
+      storedRaw = storage.getItem(storageKey) ?? null;
+      if (storedRaw !== null) {
+        if (typeof storedRaw !== 'string' || storedRaw.length > 2000000) throw new TypeError('Approval storage size limit exceeded');
+        const saved = JSON.parse(storedRaw);
+        plainKeys(saved, ['schemaVersion', 'simulation', 'bindings'], 'approval storage');
+        if (saved.schemaVersion !== 1 || saved.simulation !== true || !Array.isArray(saved.bindings) || saved.bindings.length > 2000) throw new TypeError('Unsupported approval storage version or shape');
+        for (const raw of saved.bindings) {
+          const binding = validateBinding(raw);
+          if (approvedBindings.has(binding.contractId) || (binding.proposalId && [...approvedBindings.values()].some(entry => entry.proposalId === binding.proposalId))) throw new TypeError('Duplicate saved approval identity');
+          approvedBindings.set(binding.contractId, binding); seenGameIds.add(binding.gameId);
+        }
+      }
+    } catch (error) { throw new Error(`Contract approval restore failed; saved data was not changed: ${error.message}`); }
+  }
+  let latestRecords = [];
+  let lastAutomation = freezeDeep({ checked: 0, graded: [], waiting: [], errors: [] });
+
+  function alreadyQueued(gameId) {
+    return (proposalQueue.getProposals?.() ?? []).some((proposal) => proposal.eventId === gameId);
+  }
 
   function mapGames(records) {
     const games = [];
@@ -255,6 +332,7 @@ export function createContractFlow({
     return Promise.resolve()
       .then(() => fetchEspnRecords())
       .then((records) => {
+        latestRecords = Array.isArray(records) ? records : [];
         const games = mapGames(records);
         const upcoming = games.filter((game) => {
           try {
@@ -267,7 +345,7 @@ export function createContractFlow({
         const drafts = [];
         for (const game of fresh) {
           const gameId = cleanText(game.gameId || game.id);
-          if (!gameId || seenGameIds.has(gameId)) continue;
+          if (!gameId || seenGameIds.has(gameId) || alreadyQueued(gameId)) continue;
           seenGameIds.add(gameId);
           let proposal = null;
           try {
@@ -349,6 +427,7 @@ export function createContractFlow({
     const proposals = [];
     for (const draft of list) {
       if (!isRecord(draft) || !draft.gameId) continue;
+      if (alreadyQueued(draft.gameId)) continue;
       const oddsLine = describeOddsQuote(draft.oddsQuote);
       const sourceNotes = oddsLine
         ? `Odds info (read-only): ${oddsLine}`
@@ -369,9 +448,10 @@ export function createContractFlow({
           },
         );
       } catch {
+        seenGameIds.delete(draft.gameId);
         continue;
       }
-      if (!proposal || !proposal.id) continue;
+      if (!proposal || !proposal.id) { seenGameIds.delete(draft.gameId); continue; }
       quotesByProposalId.set(proposal.id, draft.oddsQuote || null);
       try {
         ledger.record({
@@ -413,7 +493,8 @@ export function createContractFlow({
     } catch (error) {
       errors.push(`queue: ${error?.message ?? error}`);
     }
-    return freezeDeep({ proposals, drafts: enriched, errors });
+    const automation = reconcileApprovedContracts(latestRecords);
+    return freezeDeep({ proposals, drafts: enriched, errors, automation });
   }
 
   /**
@@ -433,12 +514,29 @@ export function createContractFlow({
     const contractId = cleanText(contract?.id);
     const proposalId = cleanText(proposal?.id);
     if (!contractId) return null;
+    const previousApproval = approvedBindings.get(contractId);
+    if (previousApproval) {
+      assertStorageCurrent();
+      if (previousApproval.proposalId !== proposalId || contract?.eventId !== previousApproval.gameId) throw new Error('Approved binding identity cannot be replaced');
+      return freezeDeep({ contractId, quote: previousApproval.quote, quoteStatus: previousApproval.quoteStatus });
+    }
     const candidate = proposalId ? quoteForProposal(proposalId) : null;
     const currentMs = nowMsOf(now);
-    const frozen = candidate && validateQuoteShape(candidate) && isFreshQuote(candidate, currentMs)
+    let frozen = candidate && validateQuoteShape(candidate) && isFreshQuote(candidate, currentMs)
       ? freezeDeep({ ...candidate })
       : null;
-    const quoteStatus = frozen ? "frozen-at-approval" : "unavailable-at-approval";
+    let quoteStatus = frozen ? "frozen-at-approval" : "unavailable-at-approval";
+    const gameId = cleanText(proposal?.eventId || contract?.eventId);
+    if (gameId.startsWith('espn-multi-sport:') && contract?.eventId === gameId) {
+      const canonical = outcomeDesk.get?.(contractId);
+      if (!canonical || canonical.eventId !== gameId) throw new Error('Approval must reference an existing canonical outcome book');
+      const saved = saveBinding({
+        contractId, gameId, approvedAt: nowIsoOf(now), proposalId,
+        startsAt: draftsByGameId.get(gameId)?.startsAt ?? proposal?.expiresAt ?? null,
+        book: bookIdentity(canonical), quote: frozen, quoteStatus, simulation: true,
+      });
+      frozen = saved.quote; quoteStatus = saved.quoteStatus;
+    }
     try {
       ledger.record({
         contractId,
@@ -459,6 +557,90 @@ export function createContractFlow({
       // Ledger failure never unwinds an approval.
     }
     return freezeDeep({ contractId, quote: frozen, quoteStatus });
+  }
+
+  /** Only approved books are eligible. Missing/stale/conflicting provider
+   * evidence waits; it must never be interpreted as a loss or a void. */
+  function reconcileApprovedContracts(records = []) {
+    const report = { checked: 0, graded: [], waiting: [], errors: [] };
+    try { assertStorageCurrent(); }
+    catch (error) { report.errors.push({ contractId: null, reason: String(error.message) }); lastAutomation = freezeDeep(report); return lastAutomation; }
+    const current = nowMsOf(now);
+    for (const binding of approvedBindings.values()) {
+      const contract = outcomeDesk.get?.(binding.contractId);
+      if (!contract || JSON.stringify(bookIdentity(contract)) !== JSON.stringify(binding.book)) {
+        report.errors.push({ contractId: binding.contractId, reason: 'Approved book identity is missing or changed; automatic grading held' }); continue;
+      }
+      if (contract.status === 'graded') {
+        report.checked++;
+        try {
+          outcomeDesk.settle({ contractId: contract.id });
+          report.graded.push({ contractId: contract.id, winner: contract.grading.result, simulation: true, resumedSettlement: true });
+        } catch (error) { report.errors.push({ contractId: contract.id, reason: String(error.message) }); }
+        continue;
+      }
+      if (!contract || !['open', 'locked'].includes(contract.status)) continue;
+      report.checked++;
+      const start = Date.parse(binding.startsAt);
+      if (contract.status === 'open' && Number.isFinite(start) && start <= current) {
+        try { outcomeDesk.lock({contractId: contract.id}); }
+        catch (error) { report.errors.push({contractId: contract.id, reason: String(error.message)}); continue; }
+      }
+      const candidates = records.filter(record => record?.id === binding.gameId);
+      const record = candidates.length === 1 ? candidates[0] : null;
+      const observed = Date.parse(record?.retrievedAt);
+      let reason = null;
+      if (!record) reason = 'Missing or ambiguous event observation';
+      else if (record.providerAvailable !== true || record.liveFetch !== true || !/^https:\/\/(?:[a-z0-9-]+\.)*espn\.com(?:\/|$)/i.test(record.sourceUrl ?? '')) reason = 'Provider provenance unavailable';
+      else if (!Number.isFinite(observed) || observed > current + 30_000 || current - observed > 15 * 60_000) reason = 'Observation is stale or has an invalid timestamp';
+      else if (record.statusDetail?.completed !== true || record.statusDetail?.final !== true) reason = 'Waiting for explicit provider completion';
+      const participants = Array.isArray(record?.participants) ? record.participants : record?.teams ?? [];
+      const names = participants.map(team => cleanText(team.name).toUpperCase());
+      const winners = participants.filter(team => team.winner === true);
+      let winner = null;
+      if (!reason && (participants.length !== 2 || contract.outcomes.length !== 2 || !contract.outcomes.every(name => names.includes(name)))) reason = 'Participant identity differs from approved outcomes';
+      if (!reason && winners.length === 1) winner = cleanText(winners[0].name).toUpperCase();
+      else if (!reason && winners.length === 0 && participants.every(team => team.winner === false && typeof team.scoreValue === 'number' && Number.isFinite(team.scoreValue)) && participants[0].scoreValue === participants[1].scoreValue) winner = 'DRAW';
+      else if (!reason) reason = 'Winner is unavailable or contradictory';
+      if (reason) { report.waiting.push({contractId: contract.id, reason}); continue; }
+      const result = gradeOnLanding(contract.id, {winner});
+      if (!result.graded) { report.errors.push({contractId: contract.id, reason: result.reason}); continue; }
+      try {
+        if (outcomeDesk.get(contract.id)?.status === 'graded') outcomeDesk.settle({contractId: contract.id});
+        ledger.record({contractId: contract.id, type: 'audit_note', reason: 'Automatic local resolution from approved public observation', payload: {gameId: binding.gameId, sourceUrl: record.sourceUrl, observedAt: record.retrievedAt, winner}, ts: current});
+        report.graded.push({contractId: contract.id, winner, simulation: true});
+      } catch (error) { report.errors.push({contractId: contract.id, reason: String(error.message)}); }
+    }
+    lastAutomation = freezeDeep(report);
+    return lastAutomation;
+  }
+
+  async function refreshApprovedContracts() {
+    try { latestRecords = await fetchEspnRecords(); return reconcileApprovedContracts(Array.isArray(latestRecords) ? latestRecords : []); }
+    catch (error) { return freezeDeep({checked: 0, graded: [], waiting: [], errors: [String(error?.message ?? error)]}); }
+  }
+
+  /** User-facing approval orchestration. Durable desk creation accepts an
+   * idempotency key, so retry after a binding-write failure reuses the same book.
+   * The review queue is marked approved only after the binding is persisted. */
+  function approveProposal(proposal) {
+    const proposalId = cleanText(proposal?.id);
+    if (!proposalId) throw new TypeError('Approval requires a proposal id');
+    assertStorageCurrent();
+    const existing = [...approvedBindings.values()].find(binding => binding.proposalId === proposalId);
+    const current = proposalQueue.getProposals?.().find(entry => entry.id === proposalId);
+    if (current?.status === 'expired' && !existing) throw new Error('Proposal review window expired before approval');
+    if (current && current.status !== 'pending' && !(current.status === 'approved' && existing)) throw new Error('Only pending proposals can receive a new approval');
+    if (!existing && proposal.expiresAt && Date.parse(proposal.expiresAt) <= nowMsOf(now)) throw new Error('Proposal review window expired before approval');
+    let contract = existing ? outcomeDesk.get(existing.contractId) : null;
+    if (!contract) contract = outcomeDesk.createContract({
+      eventId: proposal.eventId ?? proposalId, eventLabel: proposal.eventLabel,
+      outcomes: [...(proposal.outcomes ?? [])], creator: `bot:${proposal.botName}`,
+      status: 'open', idempotencyKey: `proposal:${proposalId}`,
+    });
+    const approval = handleContractApproved({ contract, proposal });
+    if (current?.status !== 'approved') proposalQueue.setProposalStatus?.(proposalId, 'approved', { by: 'user' });
+    return freezeDeep({ contract: outcomeDesk.get?.(contract.id) ?? contract, approval });
   }
 
   /**
@@ -528,6 +710,13 @@ export function createContractFlow({
     scanAndQueue,
     quoteForProposal,
     handleContractApproved,
+    approveProposal,
+    getApprovedBindings: () => freezeDeep([...approvedBindings.values()]),
+    getApprovedBindingForProposal: (proposalId) => [...approvedBindings.values()].find(binding => binding.proposalId === proposalId) ?? null,
+    getPersistenceStatus: () => freezeDeep({ ...persistence }),
+    reconcileApprovedContracts,
+    refreshApprovedContracts,
+    getAutomationStatus: () => lastAutomation,
     gradeOnLanding,
     claimForever,
   });
