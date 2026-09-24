@@ -2,11 +2,14 @@ import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
+import {FEATURE_DEFINITIONS} from '../src/render/feature-navigator.js';
 
 const require=createRequire(process.env.MATUMBO_NODE_DEPENDENCIES??new URL('../package.json',import.meta.url).pathname);
 const {chromium}=require('playwright');
 const base=process.env.MATUMBO_PREVIEW_URL??'http://127.0.0.1:4184/';
 const expectedBuild=process.env.MATUMBO_EXPECTED_BUILD??null;
+const expectedFeatureIds=FEATURE_DEFINITIONS.map(feature=>feature.id).filter(id=>id!=='reality-lens');
+const expectedFeatureCount=expectedFeatureIds.length;
 const output=resolve('artifacts/universal-browser');
 await mkdir(output,{recursive:true});
 
@@ -66,7 +69,13 @@ try{
         universal:window.__TUMBO_UNIVERSAL_OBJECTS__?.getSnapshot?.()??null,
         runtimeBanner:document.getElementById('runtime-status-message')?.textContent??null,
       }));
-      if(diagnostics.hasAssembly&&diagnostics.assemblyActive&&diagnostics.universal?.featureCount>10){ready=true;break;}
+      if(
+        diagnostics.hasAssembly
+        && diagnostics.assemblyActive
+        && diagnostics.universal
+        && diagnostics.universal.syncing===false
+        && diagnostics.universal.featureCount>=expectedFeatureCount
+      ){ready=true;break;}
       await page.waitForTimeout(500);
     }
     if(!ready){
@@ -75,7 +84,7 @@ try{
     }
     await page.waitForTimeout(1200);
 
-    const proof=await page.evaluate(()=>{
+    const proof=await page.evaluate((expectedFeatureIds)=>{
       const universal=window.__TUMBO_UNIVERSAL_OBJECTS__.getSnapshot();
       const assembly=window.__TUMBO_REALITY_ASSEMBLY__.getSnapshot();
       const featureEntries=Object.entries(universal.features);
@@ -108,13 +117,17 @@ try{
         assemblyObjectCount:assembly.objects?.length??0,
         canvas,
         webgl:canvas.length>0,
+        expectedMissing:expectedFeatureIds.filter(id=>!universal.features[id]),
+        unexpectedFeatures:Object.keys(universal.features).filter(id=>!expectedFeatureIds.includes(id)),
       };
-    });
+    },expectedFeatureIds);
 
     assert.equal(proof.route,'reality-lens');
     assert.equal(proof.runtime,'ready');
     assert.equal(proof.active,true);
-    assert.ok(proof.featureCount>=30,`expected broad Reality Lens feature coverage, got ${proof.featureCount}`);
+    assert.equal(proof.featureCount,expectedFeatureCount,`expected all ${expectedFeatureCount} Reality Lens feature objects`);
+    assert.deepEqual(proof.expectedMissing,[]);
+    assert.deepEqual(proof.unexpectedFeatures,[]);
     assert.equal(proof.realFeedRegisteredCount,proof.featureCount,'every rendered feature must declare a real-data feed');
     assert.deepEqual(proof.unregistered,[]);
     assert.deepEqual(proof.missingUniversal,[]);
