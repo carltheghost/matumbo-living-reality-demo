@@ -38,6 +38,7 @@ jobs:
           cp -R vendor dist/
           find . -maxdepth 1 -type f \( -name '*.css' -o -name '*.html' \) -not -path './index.html' -exec cp {} dist/ \;
           printf '%s\n' "maTumbo Living Reality deployment" > dist/health.txt
+          printf '%s\n' "$GITHUB_SHA" > dist/build.txt
 
           python3 - <<'PY'
           from pathlib import Path
@@ -57,3 +58,36 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install browser proof runtime
+        run: |
+          npm install --no-save --ignore-scripts playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Prove exact deployed Reality Lens build
+        env:
+          MATUMBO_NODE_DEPENDENCIES: \${{ github.workspace }}/package.json
+          MATUMBO_PREVIEW_URL: \${{ steps.deployment.outputs.page_url }}
+          MATUMBO_EXPECTED_BUILD: \${{ github.sha }}
+        run: node tests/browser-universal-reality-live.mjs
+
+      - name: Prove real contract data on exact deployed build
+        env:
+          MATUMBO_NODE_DEPENDENCIES: \${{ github.workspace }}/package.json
+          MATUMBO_PREVIEW_URL: \${{ steps.deployment.outputs.page_url }}
+        run: node tests/browser-contract-workflow.mjs
+
+      - name: Upload deployed browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployed-universal-reality-proof-\${{ github.sha }}
+          path: |
+            artifacts/universal-browser
+            artifacts/contract-browser
+          if-no-files-found: warn
+          retention-days: 30
