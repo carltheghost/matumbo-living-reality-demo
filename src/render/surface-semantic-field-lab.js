@@ -1,7 +1,8 @@
 import * as THREE from '../../vendor/three-r179.1/build/three.module.js';
 import { OrbitControls } from '../../vendor/three-r179.1/examples/jsm/controls/OrbitControls.js';
 import { mergeGeometries } from '../../vendor/three-r179.1/examples/jsm/utils/BufferGeometryUtils.js';
-import { SurfaceObject, createSurfaceInteractionSystem, surfaceContact } from './surface-semantic-field-three.js';
+import { createSurfaceInteractionSystem, surfaceContact } from './surface-semantic-field-three.js';
+import { TopologySurfaceObject } from './topology-surface-object.js';
 import { breedTraits } from '../domains/surface-semantic-field.js';
 
 const CYAN='#55e8ff', GOLD='#d9ae60';
@@ -60,7 +61,7 @@ function irregularNoUv(){
 function makeObject(scene,{id,label,shape,geometry,position,rotation=[0,0,0],palette}){
   const mesh=new THREE.Mesh(geometry,new THREE.MeshBasicMaterial({color:0x08202b}));
   mesh.name=id;mesh.position.fromArray(position);mesh.rotation.set(...rotation);scene.add(mesh);
-  const ssf=new SurfaceObject({id,mesh,shape,content:contentFor(id,label),palette,atlasSize:1024,enableDisplacement:true});
+  const ssf=new TopologySurfaceObject({id,mesh,shape,content:contentFor(id,label),palette,atlasSize:1024,enableDisplacement:true,topologyOptions:{seamAngle:Math.PI/7,curvatureThreshold:.02}});
   return ssf;
 }
 
