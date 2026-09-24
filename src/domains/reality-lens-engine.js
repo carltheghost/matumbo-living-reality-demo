@@ -80,25 +80,34 @@ export function createRealityLensEngine(overrides={}){
     return {position,radius,depth:f.nearDepth+axialDepth};
   }
 
-  function placeInFunnel({id,index=0,count=1,groupId=resolveRealityLensGroup(id),depth=null,seed=0}={}){
+  function placeInFunnel({id,index=0,count=1,groupId=resolveRealityLensGroup(id),depth=null,seed=0,viewport={width:1600,height:900}}={}){
     const f=profile.funnel,groupNumber=GROUP_INDEX.get(groupId)??REALITY_LENS_GROUPS.length-1;
     const axialDepth=clamp((depth??groupDepth.get(groupId)??f.farDepth)-f.nearDepth,0,f.farDepth-f.nearDepth);
     const t=axialDepth/Math.max(1e-6,f.farDepth-f.nearDepth);
     const radius=mix(f.nearRadius,f.farRadius,t);
     const countSafe=Math.max(1,Math.floor(count));
     const localIndex=((Math.floor(index)%countSafe)+countSafe)%countSafe;
-    const hash=stableHash(`${groupId}:${id}:${seed}`)/4294967296;
-    const golden=2.399963229728653;
-    const clusterAngle=groupNumber*Math.PI*2/REALITY_LENS_GROUPS.length-Math.PI/2;
-    const angle=clusterAngle+(localIndex-(countSafe-1)/2)*golden+hash*.12;
-    const ring=Math.sqrt((localIndex+.5)/countSafe)*Math.min(f.clusterRadius,radius*.42);
-    const radialA=Math.cos(angle)*ring+Math.cos(clusterAngle)*radius*.55;
-    const radialB=Math.sin(angle)*ring+Math.sin(clusterAngle)*radius*.55;
-    const center=profile.origin.map((value,axisIndex)=>value+axis[axisIndex]*(f.nearDepth+axialDepth));
-    const position=center.map((value,axisIndex)=>value+basisA[axisIndex]*radialA+basisB[axisIndex]*radialB);
+    const golden=2.399963229728653,clusterAngle=groupNumber*Math.PI*2/REALITY_LENS_GROUPS.length-Math.PI/2;
+    const items=Array.from({length:countSafe},(_,itemIndex)=>{
+      const itemId=itemIndex===localIndex?String(id):`${groupId}:${itemIndex}:${seed}`;
+      const hash=stableHash(`${groupId}:${itemId}:${seed}`)/4294967296;
+      const angle=clusterAngle+(itemIndex-(countSafe-1)/2)*golden+hash*.12;
+      const ring=Math.sqrt((itemIndex+.5)/countSafe)*Math.min(f.clusterRadius,radius*.42);
+      const radialA=Math.cos(angle)*ring+Math.cos(clusterAngle)*radius*.55;
+      const radialB=Math.sin(angle)*ring+Math.sin(clusterAngle)*radius*.55;
+      const center=profile.origin.map((value,axisIndex)=>value+axis[axisIndex]*(f.nearDepth+axialDepth));
+      const position=center.map((value,axisIndex)=>value+basisA[axisIndex]*radialA+basisB[axisIndex]*radialB);
+      return {id:itemId,position,width:Math.max(1,f.clusterRadius),height:Math.max(1,f.clusterRadius)};
+    });
+    const laidOut=layoutObjects(items,{width:Number.isFinite(viewport?.width)?viewport.width:1600,height:Number.isFinite(viewport?.height)?viewport.height:900});
+    const laid=laidOut.find(item=>item.id===String(id))??laidOut[localIndex];
+    const position=laid?.position??items[localIndex].position;
     return {position,groupId,depth:f.nearDepth+axialDepth,radius};
   }
-
+  function clampObjectToView(object,camera){
+    if(!object||!camera)return object;
+    return clampToView(object,camera);
+  }
   function overviewProgress(cameraDistance){
     const {farDistance,fullDistance}=profile.overview;
     if(!Number.isFinite(cameraDistance)||farDistance<=fullDistance)throw Error('Invalid Reality Lens overview distances');
@@ -115,7 +124,7 @@ export function createRealityLensEngine(overrides={}){
     return {stage:3,progress:1};
   }
 
-  function objectResponse({id,selectedId=null,distance=Infinity,baseScale=1,size=1,tabReveal=1}={}){
+  function objectResponse({id,selectedId=null,distance=Infinity,baseScale=1,size=1,tabReveal=1,object=null,camera=null}={}){
     const isSelected=id===selectedId;
     const {startDistance,endDistance,maxScale,minContextOpacity,isolateAt}=profile.focus;
     const focusStrength=selectedId===null?0:clamp((startDistance-distance)/(startDistance-endDistance));
@@ -123,10 +132,12 @@ export function createRealityLensEngine(overrides={}){
     const approachScale=isSelected?mix(1,maxScale,focusStrength):1;
     const isolationReached=selectedId!==null&&focusStrength>=isolateAt;
     const contextHidden=!isSelected&&isolationReached;
-    return {isSelected,focusStrength,contextOpacity,isolationReached,contextHidden,scale:baseScale*size*approachScale*clamp(tabReveal),...stageAt(distance)};
+    const scale=baseScale*size*approachScale*clamp(tabReveal);
+    const clampedObject=camera&&object?clampToView({...object,scale},camera):null;
+    return {isSelected,focusStrength,contextOpacity,isolationReached,contextHidden,scale:clampedObject?.scale??scale,...stageAt(distance)};
   }
 
-  return Object.freeze({profile:Object.freeze(profile),placeInFunnel,surfacePoint,overviewProgress,stageAt,objectResponse,groupFor:resolveRealityLensGroup});
+  return Object.freeze({profile:Object.freeze(profile),placeInFunnel,clampObjectToView,surfacePoint,overviewProgress,stageAt,objectResponse,groupFor:resolveRealityLensGroup,layoutObjects});
 }
 
 export const realityLensEngine=createRealityLensEngine();
