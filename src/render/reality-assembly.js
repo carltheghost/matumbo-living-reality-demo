@@ -165,14 +165,14 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   find('.assembly-tab-controls h3').textContent='Mutabilitas';
   find('[data-anchor-note]').textContent='Instrumentum fixum.';
   find('[data-lock-toggle]').textContent='Fige';find('[data-focus]').textContent='Apropinqua';find('[data-side-reality]').textContent='Nova realitas';
-  find('[data-enter]').textContent='Ingredere ↗';find('[data-open]').textContent='Aperi';find('[data-open-secondary]').textContent='Aperi / claude';
+  find('[data-enter]').textContent='Ingredere ↗';find('[data-open]').textContent='Aperi';find('[data-open-secondary]').textContent='Expand / Close';
   all('.assembly-inspector h3')[1].textContent='Fontes eiusdem instrumenti';
-  find('.assembly-toolbar [data-home]').textContent='Initium';find('.assembly-toolbar [data-view="4d"]').textContent='4D · tempus';
+  find('.assembly-toolbar [data-home]').textContent='Home';find('.assembly-toolbar [data-view="4d"]').textContent='IV · tempus';find('.assembly-toolbar [data-view="3d"]').textContent='III';
   find('.assembly-toolbar .assembly-view .assembly-eyebrow').textContent='Aspectus';
-  find('[data-present]').textContent='Praesens';find('[data-export]').textContent='Exporta';
+  find('[data-present]').textContent='Present';find('[data-export]').textContent='Export';
   const readout=document.createElement('div');readout.className='assembly-size-readout';readout.innerHTML='<span>Magnitudo</span><strong data-size-readout>1.0×</strong><small>Scrolla super obiectum</small>';
   find('[data-tab-size]').closest('label').replaceWith(readout);find('.assembly-nudges').remove();
-  find('.assembly-travel').remove();find('[data-interaction="orbit"]').remove();find('[data-interaction="move"]').textContent='Disponde';
+  find('.assembly-travel').remove();find('[data-interaction="orbit"]').remove();find('[data-interaction="move"]').textContent='Arrange';
   find('[data-edit-note]').textContent='Trahe ad disponendum; Shift-trahe per profunditatem. Scrolla obiectum ad augendum.';
   all('.assembly-inspector dt').forEach((term,index)=>{term.textContent=['Identitas','Positio · x / y / z','Status','Fontes'][index]??term.textContent;});
   const objectSymbol=find('.assembly-object-symbol'),objectTitle=find('[data-title]'),objectDescription=find('[data-description]'),objectHero=document.createElement('div'),objectCopy=document.createElement('div'),stageBadge=document.createElement('span');
