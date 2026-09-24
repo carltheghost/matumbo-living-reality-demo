@@ -101,7 +101,12 @@ export function createRealityLensEngine(overrides={}){
     });
     const laidOut=layoutObjects(items,{width:Number.isFinite(viewport?.width)?viewport.width:1600,height:Number.isFinite(viewport?.height)?viewport.height:900});
     const laid=laidOut.find(item=>item.id===String(id))??laidOut[localIndex];
-    const position=laid?.position??items[localIndex].position;
+    // Preserve the semantic funnel/depth authored above; the shared packer
+    // contributes only a small deterministic separation nudge rather than
+    // replacing the lens' radial geometry with a flat grid.
+    const rawPosition=items[localIndex].position;
+    const packNudge=laid?.position??[0,0,0];
+    const position=rawPosition.map((value,axisIndex)=>Number((value+packNudge[axisIndex]*.08).toFixed(4)));
     return {position,groupId,depth:f.nearDepth+axialDepth,radius};
   }
   function clampObjectToView(object,camera){
