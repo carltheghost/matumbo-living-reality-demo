@@ -2,6 +2,7 @@ import {createRealityWorkspace} from '../domains/reality-workspace.js?v=20260923
 import {REALITY_TAB_FORMS,REALITY_TAB_SIZE_MIN,REALITY_TAB_SIZE_MAX,resolveRealityTabPosition} from '../domains/reality-tab-layout.js?v=20260923-spatial-tabs15';
 import {REALITY_LENS_GROUPS,realityLensEngine,resolveRealityLensGroup} from '../domains/reality-lens-engine.js?v=20260923-lens-engine7';
 import {realityLensCopy,realityLensLabel,realityObjectSurfaceEngine} from '../domains/reality-object-engine.js?v=20260923-object-surface5';
+import {measureContent,fitObjectToContent,surfaceTransform,layoutObjects,clampToView} from '../domains/living-surface-layout-engine.js';
 import {buildRealityAssemblyScene,LOD_FAR} from './reality-assembly-scene.js?v=20260923-spatial-tabs20';
 
 // The lens contains only equal-status feature tabs; no center cube or anchor.
@@ -74,22 +75,30 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   const labelFor=feature=>realityLensLabel(feature);
   const copyFor=value=>realityLensCopy(value);
   const visibleId=id=>id==='block-world'?'materia':String(id).replace(/(^|-)world(?=-|$)/gi,'$1locus');
-  const positions=ordered.map((feature,i)=>{
+  const viewport={width:Math.max(1,innerWidth||1280),height:Math.max(1,innerHeight||768)};
+  const contentFor=feature=>{
+    const detail=readFeature(feature.id)??{};
+    return measureContent({
+      title:labelFor(feature),
+      lines:[copyFor(feature.description),copyFor(feature.boundary),...(feature.sources??[]).slice(0,4).map(copyFor),copyFor(detail.summary??'')].filter(Boolean),
+      actions:['Expand','Enter feature'],
+    });
+  };
+  const fittedFor=(feature,shape)=>fitObjectToContent(contentFor(feature),{shape});
+  const seeded=ordered.map((feature,i)=>{
     const groupId=resolveRealityLensGroup(feature.id),members=groupMembers.get(groupId)??[feature],index=groupOffsets.get(groupId)?.get(feature.id)??0;
     const {position}=realityLensEngine.placeInFunnel({id:feature.id,index,count:members.length,groupId});
-    return {
-      id:feature.id,
-      position,
-      lensGroup:groupId,
-      shape:defaultForms[i%defaultForms.length],size:1,
-    };
+    const shape=defaultForms[i%defaultForms.length],fitted=fittedFor(feature,shape);
+    return {id:feature.id,position,lensGroup:groupId,shape,size:1,width:fitted.width,height:fitted.height,depth:fitted.depth,contentMetrics:contentFor(feature)};
   });
+  const laidOut=layoutObjects(seeded,viewport);
+  const positions=laidOut.map((item,index)=>({...seeded[index],position:item.position}));
   const workspace=createRealityWorkspace({objects:positions,selectedId:ordered[0]?.id,rootLabel:'Una Realitas'});
   let owner=workspace.timeline;
   const sideRealityByFeature=new Map();
   const sideRealityKey=(parentId,featureId)=>`${parentId}\u0000${featureId}`;
   const initialShapes=new Map(positions.map(object=>[object.id,object.shape]));
-  const spatial=buildRealityAssemblyScene({THREE,parent:scene,features:ordered.map((feature,i)=>({...feature,label:labelFor(feature),description:copyFor(feature.description),boundary:copyFor(feature.boundary),sources:(feature.sources??[]).map(copyFor),assemblyTier:'tab',lensGroup:positions[i]?.lensGroup??'worlds',initialTabShape:initialShapes.get(feature.id),initialPosition:positions[i]?.position})),targets,relationships});
+  const spatial=buildRealityAssemblyScene({THREE,parent:scene,features:ordered.map((feature,i)=>({...feature,label:labelFor(feature),description:copyFor(feature.description),boundary:copyFor(feature.boundary),sources:(feature.sources??[]).map(copyFor),assemblyTier:'tab',lensGroup:positions[i]?.lensGroup??'worlds',initialTabShape:initialShapes.get(feature.id),initialPosition:positions[i]?.position,fittedObject:{width:positions[i]?.width,height:positions[i]?.height,depth:positions[i]?.depth},contentMetrics:positions[i]?.contentMetrics})),targets,relationships});
   spatial.setActiveGroup(null);
   const featureMap=new Map(features.map(feature=>[feature.id,feature]));
   const stylesheet=document.createElement('link');stylesheet.rel='stylesheet';stylesheet.href=`${new URL('./reality-assembly.css',import.meta.url).href}?v=20260923-spatial-tabs25`;document.head.append(stylesheet);
@@ -243,13 +252,15 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     if(!record||!CSS3DObject)return;
     const node=spatial.nodes.get(record.featureId),feature=featureMap.get(record.featureId),data=owner.getSnapshot().objects.find(item=>item.id===record.featureId);
     if(!node||!feature||!data)return;
-    const shape=data.shape??'rectangle',layout=realityObjectSurfaceEngine.wrapLayout(shape),detail=readFeature(record.featureId),stage=spatial.nodes.get(record.featureId)?.revealStage??0;
-    const surface=realityObjectSurfaceEngine.describe({feature,object:data,stage,summary:detail?.summary,readOnly:owner.getSnapshot().mode==='past'});
+    const shape=data.shape??'rectangle',detail=readFeature(record.featureId),stage=spatial.nodes.get(record.featureId)?.revealStage??0;
+    const metrics=measureContent({title:labelFor(feature),lines:[copyFor(feature.description),copyFor(feature.boundary),...(feature.sources??[]).slice(0,4).map(copyFor),copyFor(detail?.summary??'')].filter(Boolean),actions:['Expand','Enter feature']});
+    const fitted=fitObjectToContent(metrics,{shape});
+    const surface=realityObjectSurfaceEngine.describe({feature,object:{...data,width:fitted.width,height:fitted.height,depth:fitted.depth},stage,summary:detail?.summary,readOnly:owner.getSnapshot().mode==='past'});
     if(record.shape!==shape){
       record.shape=shape;
       record.surfaces.forEach(item=>{
-        const face=layout.find(candidate=>candidate.id===item.id);if(!face)return;
-        item.element.style.width=`${Math.round(face.width*SURFACE_PIXELS_PER_UNIT)}px`;item.element.style.height=`${Math.round(face.height*SURFACE_PIXELS_PER_UNIT)}px`;
+        const transform=surfaceTransform(fitted,metrics,item.id);
+        item.element.style.width=`${Math.round(transform.width*SURFACE_PIXELS_PER_UNIT)}px`;item.element.style.height=`${Math.round(transform.height*SURFACE_PIXELS_PER_UNIT)}px`;
         item.element.dataset.objectShape=shape;
         if(item.id==='front'&&record.livePanel){
           record.livePanel.style.setProperty('--lens-surface-width',`${Math.round(face.width*SURFACE_PIXELS_PER_UNIT)}px`);
@@ -305,7 +316,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     const restore=livePanel?{parent:livePanel.parentNode,next:livePanel.nextSibling,style:livePanel.getAttribute('style'),shape:livePanel.getAttribute('data-object-shape'),lensAttached:livePanel.getAttribute('data-lens-surface-attached'),panelSpace:livePanel.getAttribute('data-panel-space'),compact:livePanel.getAttribute('data-compact'),hadLensClass:livePanel.classList.contains('reality-lens-feature-panel')} : null;
     if(livePanel){
       livePanel.classList.add('reality-lens-feature-panel');livePanel.dataset.lensSurfaceAttached='true';livePanel.dataset.objectShape=surface.shape;
-      livePanel.style.position='absolute';livePanel.style.inset='auto';livePanel.style.left='auto';livePanel.style.right='auto';livePanel.style.top='auto';livePanel.style.bottom='auto';livePanel.style.margin='0';livePanel.style.transformOrigin='50% 50%';livePanel.style.setProperty('--lens-surface-width',`${Math.round(REALITY_TAB_FORMS[surface.shape].width*SURFACE_PIXELS_PER_UNIT)}px`);livePanel.style.setProperty('--lens-surface-height',`${Math.round(REALITY_TAB_FORMS[surface.shape].height*SURFACE_PIXELS_PER_UNIT)}px`);
+      livePanel.style.position='absolute';livePanel.style.inset='auto';livePanel.style.left='auto';livePanel.style.right='auto';livePanel.style.top='auto';livePanel.style.bottom='auto';livePanel.style.margin='0';livePanel.style.transformOrigin='50% 50%';livePanel.style.setProperty('--lens-surface-width',`${Math.round(fitted.width*SURFACE_PIXELS_PER_UNIT)}px`);livePanel.style.setProperty('--lens-surface-height',`${Math.round(fitted.height*SURFACE_PIXELS_PER_UNIT)}px`);
       document.dispatchEvent(new CustomEvent('matumbo:reality-lens-surface-attachment',{detail:{panelId:livePanel.id,attached:true}}));
     }
     const detailFaces=['back','left','right','top','bottom'].map(id=>({id,element:buildFaceElement(id,feature,surface,detail),object3d:null}));
@@ -583,8 +594,8 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   return {open,close,get active(){return active;},getSnapshot:snapshot,resolve:spatial.resolve,focusFeature(id){if(!featureMap.has(id))return false;if(!active)open({lensMode:true,featureId:id});else select(id);return true;},mountFeatureSurface,clearFeatureSurface,setInspectorVisible(visible){selectedSurface.hidden=!visible;root.classList.toggle('assembly-object-focused',Boolean(visible));root.classList.toggle('assembly-clean',!visible);find('[data-clean]').textContent=visible?'Celare':'Objectum';if(visible)render();},
     getPanelAnchor(featureId){
       const node=spatial.nodes.get(featureId),object=owner.getSnapshot().objects.find(item=>item.id===featureId);if(!node||!object)return null;
-      const distance=Math.max(.45,camera.position.distanceTo(node.root.position));
-      const fitted=realityObjectSurfaceEngine.fitPanel({shape:object.shape??'rectangle',size:object.size??1,approachScale:(node.root.scale.x||1)/Math.max(.01,object.size??1),distance,viewportWidth:innerWidth,viewportHeight:innerHeight,fov:camera.fov,safeWidth:36,safeHeight:190,inset:0});
+      const metrics=measureContent({title:labelFor(featureMap.get(featureId)),lines:[copyFor(featureMap.get(featureId).description),copyFor(featureMap.get(featureId).boundary),...(featureMap.get(featureId).sources??[]).slice(0,4).map(copyFor)].filter(Boolean),actions:['Expand','Enter feature']});
+      const fitted=fitObjectToContent(metrics,{shape:object.shape??'rectangle'});
       screenPoint.copy(node.root.position);screenPoint.project(camera);
       if(screenPoint.z<=-1||screenPoint.z>=1||Math.abs(screenPoint.x)>1.2||Math.abs(screenPoint.y)>1.2)return null;
       const {width,height}=fitted;
@@ -608,8 +619,8 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     const focusedNode=spatial.nodes.get(selectedId),focusedObject=owner.getSnapshot().objects.find(object=>object.id===selectedId);
     if(!selectedSurface.hidden&&focusedNode&&focusedObject){
       const distance=Math.max(.45,camera.position.distanceTo(focusedNode.position));
-      const projected=realityObjectSurfaceEngine.projectedBounds({shape:focusedObject.shape??'cube',size:focusedObject.size??1,approachScale:(focusedNode.root.scale.x||1)/Math.max(.01,focusedObject.size??1),distance,viewportHeight:innerHeight,fov:camera.fov});
-      const fitted=realityObjectSurfaceEngine.fitPanel({shape:focusedObject.shape??'rectangle',size:focusedObject.size??1,approachScale:(focusedNode.root.scale.x||1)/Math.max(.01,focusedObject.size??1),distance,viewportWidth:innerWidth,viewportHeight:innerHeight,fov:camera.fov,safeWidth:28,safeHeight:210,inset:0});
+      const metrics=measureContent({title:labelFor(featureMap.get(selectedId)),lines:[copyFor(featureMap.get(selectedId).description),copyFor(featureMap.get(selectedId).boundary),...(featureMap.get(selectedId).sources??[]).slice(0,4).map(copyFor)].filter(Boolean),actions:['Expand','Enter feature']});
+      const fitted=fitObjectToContent(metrics,{shape:focusedObject.shape??'rectangle'});
       const width=fitted.width,height=fitted.height;
       screenPoint.copy(focusedNode.root.position);screenPoint.project(camera);
       const centerX=(screenPoint.x*.5+.5)*innerWidth,centerY=(-screenPoint.y*.5+.5)*innerHeight;
