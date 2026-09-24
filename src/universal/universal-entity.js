@@ -316,7 +316,7 @@ export function featureToPrimaryEntity(feature, regionId = "explore") {
     summary: feature.summary,
     status: defaultStateForKind(kind),
     metrics: deterministicMetrics(feature),
-    relations: [regionId, feature.group, "shared-universe"],
+    relations: [regionId, feature.group, "shared-universe"].filter(Boolean),
     actions: ["inspect", "expand", "trace"],
     provenance: ["ivlens-feature-catalog", `feature:${feature.id}`],
     accent: feature.accent,
