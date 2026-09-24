@@ -58,12 +58,18 @@ function irregularNoUv(){
   p.needsUpdate=true;g.computeVertexNormals();return g;
 }
 
+export function resolveLabAtlasSize(width=1280,dpr=1){
+  const w=Number.isFinite(Number(width))?Number(width):1280;
+  const pixelRatio=Number.isFinite(Number(dpr))?Number(dpr):1;
+  if(w<700)return 384;
+  if(w<1100||pixelRatio>1.5)return 512;
+  return 768;
+}
+
 function adaptiveAtlasSize(){
   const width=typeof innerWidth==='number'?innerWidth:1280;
   const dpr=typeof devicePixelRatio==='number'?devicePixelRatio:1;
-  if(width<700)return 384;
-  if(width<1100||dpr>1.5)return 512;
-  return 768;
+  return resolveLabAtlasSize(width,dpr);
 }
 
 function makeObject(scene,{id,label,shape,geometry,position,rotation=[0,0,0],palette}){
