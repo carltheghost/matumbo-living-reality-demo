@@ -1,5 +1,6 @@
 import {REALITY_TAB_FORMS} from '../domains/reality-tab-layout.js?v=20260923-spatial-tabs14';
 import {REALITY_LENS_GROUPS,realityLensEngine,resolveRealityLensGroup} from '../domains/reality-lens-engine.js?v=20260923-lens-engine4';
+import {measureContent,fitObjectToContent,layoutObjects,clampToView} from '../domains/living-surface-layout-engine.js';
 
 /** Shape-changing, image-bearing feature tabs only; the former central cube is
  * now the same status and geometry as every other Reality Lens object. */
@@ -148,7 +149,7 @@ function drawFeatureArtwork(THREE,feature,color,shapeName){
   ctx.fillText('CLICCA · MAGNIFICA OBIECTUM · PERCURRE SPATIUM',40,474,690);
   const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=4;return texture;
 }
-export function buildRealityAssemblyScene({THREE,parent,features,targets=[],relationships={}}){
+export function buildRealityAssemblyScene({THREE,parent,features,targets=[],relationships={},viewport={width:1280,height:768}}){
   // Feature IDs are the identity boundary for a reality tab. A duplicate
   // record must never create a second rendered copy of that same reality.
   const uniqueFeatures=[],seenFeatureIds=new Set();
@@ -318,8 +319,13 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[],rela
   const CORE=1.45,FACE=1.55,REST=CORE/2+.09;
   let lensMode=false;
   const tabShapes=Object.keys(REALITY_TAB_FORMS),tabSelectable=new Set();
+  function contentMetricsFor(node){
+    return node.contentMetrics??measureContent({title:node.feature.label??node.feature.id,lines:[node.feature.description,node.feature.boundary,...(node.feature.sources??[])].filter(Boolean),actions:['Expand','Enter feature']});
+  }
   function makeTabForm(node,shapeName){
     const form=REALITY_TAB_FORMS[shapeName]??REALITY_TAB_FORMS.rectangle;
+    const fitted=fitObjectToContent(contentMetricsFor(node),{shape:shapeName});
+    node.fittedObject=fitted;
     node.formParts?.forEach(part=>{
       part.removeFromParent();
       if(part.userData?.assemblyId){const targetIndex=targets.indexOf(part);if(targetIndex>=0)targets.splice(targetIndex,1);tabSelectable.delete(part);selectable.delete(part);}
@@ -329,11 +335,10 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[],rela
         materials.delete(material);node.fadeMaterials?.delete(material);node.fadeMap?.delete(material.userData?.realityLensFadeSource);material.dispose();
       }
     });
-    const width=form.width,height=form.height,depth=form.depth;
-    const curved=['sphere','cylinder'].includes(shapeName),art=drawFeatureArtwork(THREE,node.feature,node.accent.color,shapeName);if(art)textures.add(art);
+    const width=fitted.width,height=fitted.height,depth=fitted.depth;
+    const curved=['sphere','cylinder'].includes(shapeName);
     const sphereForm=shapeName==='sphere';
     const shell=makeMaterial(sphereForm?'#a8874c':'#0c1c2c',{metalness:sphereForm?.72:.45,roughness:sphereForm?.24:.3,transparent:true,opacity:sphereForm?.64:curved?.42:.76,emissive:sphereForm?'#715625':'#000000',emissiveIntensity:sphereForm?.38:0,depthWrite:false,side:THREE.DoubleSide});
-    const artMaterial=art?makeMaterial('#b99154',{map:art,metalness:.03,roughness:.52,transparent:true,opacity:.78,depthWrite:false,side:THREE.DoubleSide}):null;
     const parts=[];
     let bodyGeometry;
     if(shapeName==='sphere')bodyGeometry=new THREE.SphereGeometry(Math.min(width,height,depth)/2,36,28);
@@ -344,21 +349,16 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[],rela
       bodyGeometry=new THREE.ExtrudeGeometry(outline,{depth,bevelEnabled:true,bevelSegments:3,bevelSize:.035,bevelThickness:.035,curveSegments:10});
     }
     geometry.add(bodyGeometry);
-    const bodyMaterial=shapeName==='cube'?[shell,shell,shell,shell,artMaterial??shell,shell]:shell;
+    const bodyMaterial=shapeName==='cube'?[shell,shell,shell,shell,shell,shell]:shell;
     const body=new THREE.Mesh(bodyGeometry,bodyMaterial);body.userData.assemblyId=node.feature.id;body.name=`${node.feature.id}/spatial-tab/${shapeName}`;
     body.renderOrder=20;body.castShadow=false;body.receiveShadow=false;node.root.add(body);targets.push(body);selectable.add(body);tabSelectable.add(body);parts.push(body);
-    if(!curved&&shapeName!=='cube'&&art&&artMaterial){
-      const screenGeometry=new THREE.PlaneGeometry(width*.9,height*.88);geometry.add(screenGeometry);
-      const screen=new THREE.Mesh(screenGeometry,artMaterial);screen.position.z=depth+.025;screen.userData.assemblyId=node.feature.id;screen.name=`${node.feature.id}/spatial-tab/image`;
-      screen.renderOrder=21;node.root.add(screen);targets.push(screen);selectable.add(screen);tabSelectable.add(screen);parts.push(screen);
-    }
     const edgeGeometry=new THREE.EdgesGeometry(bodyGeometry,18);geometry.add(edgeGeometry);
     const edgeMaterial=new THREE.LineBasicMaterial({color:sphereForm?'#e4c878':node.accent.color,transparent:true,opacity:sphereForm?.82:.58,depthWrite:false,depthTest:true});materials.add(edgeMaterial);
     const edges=new THREE.LineSegments(edgeGeometry,edgeMaterial);edges.renderOrder=22;node.root.add(edges);parts.push(edges);
     const indicatorGeometry=new THREE.SphereGeometry(.09,12,10);geometry.add(indicatorGeometry);
     const indicatorMaterial=makeMaterial(node.locked?'#d1ae70':'#659b91',{emissive:node.locked?'#9e7134':'#316e68',emissiveIntensity:.72,metalness:.1,roughness:.4});
     const indicator=mesh(indicatorGeometry,indicatorMaterial,[width*.36,height*.36,depth*.52+.08],[1,1,1],node.root);indicator.name=`${node.feature.id}/tab-lock-state`;
-    node.formParts=[...parts,indicator];node.tabMesh=body;node.artMaterial=artMaterial;node.shellMaterial=shell;node.edgeMaterial=edgeMaterial;node.indicator=indicator;node.shape=shapeName;positionEmbeddedData(node);
+    node.formParts=[...parts,indicator];node.tabMesh=body;node.artMaterial=null;node.shellMaterial=shell;node.edgeMaterial=edgeMaterial;node.indicator=indicator;node.shape=shapeName;positionEmbeddedData(node);
     applyTabDepthMode(node);
     prepareFadeMaterials(node);
     node.artMaterial=node.fadeMap.get(artMaterial)??artMaterial;
@@ -389,7 +389,7 @@ function applyTabDepthMode(node){
       accent.emissive.copy(accentBase.emissive||new THREE.Color('#000000')).offsetHSL(traits.hueShift,0,traits.lightShift);
       accent.emissiveIntensity=(accentBase.emissiveIntensity||1)*traits.glow;
       const tabScale=feature.assemblyTier==='secondary'?.94:1;
-      const node={isTab:true,root,feature,traits,accent,position:new THREE.Vector3(...initialPosition),scale:tabScale,size:1,shape:'',locked:false,formParts:[],open:0,goalOpen:0,tabReveal:0,revealOrder:index,tabMesh:null,liveObjects:[],lensGroup:feature.lensGroup??resolveRealityLensGroup(feature.id),fadeMaterials:new Set(),fadeMap:new Map()};
+      const node={isTab:true,root,feature,traits,accent,position:new THREE.Vector3(...initialPosition),scale:tabScale,size:1,shape:'',locked:false,formParts:[],open:0,goalOpen:0,tabReveal:0,revealOrder:index,tabMesh:null,liveObjects:[],lensGroup:feature.lensGroup??resolveRealityLensGroup(feature.id),contentMetrics:feature.contentMetrics??null,fittedObject:feature.fittedObject??null,fadeMaterials:new Set(),fadeMap:new Map()};
       root.scale.setScalar(tabScale);
       const activity=group(`${feature.id}/live-content`,root);node.liveContent=activity;activity.scale.setScalar(.001);activity.visible=false;
       const sourceLayer=group(`${feature.id}/source-layer`,root);sourceLayer.visible=false;node.sourceLayer=sourceLayer;
@@ -576,7 +576,7 @@ function applyTabDepthMode(node){
   const connectionGeometry=new THREE.BufferGeometry().setAttribute('position',new THREE.Float32BufferAttribute(new Float32Array(edges.length*6),3));geometry.add(connectionGeometry);
   const connectionMaterial=new THREE.LineBasicMaterial({color:'#36a6d3',transparent:true,opacity:.34});materials.add(connectionMaterial);
   const connections=new THREE.LineSegments(connectionGeometry,connectionMaterial);connections.frustumCulled=false;layer.add(connections);
-  let selected=null,hovered=null,mode='3d',viewState=null,focusId=null,activeFocusStrength=0,activeFocusDistance=Infinity,activeFocusIsolated=false,activeGroupId='*';
+  let selected=null,hovered=null,mode='3d',viewState=null,focusId=null,activeFocusStrength=0,activeFocusDistance=Infinity,activeFocusIsolated=false,activeGroupId='*',initialLayoutApplied=false;
   function setActiveGroup(groupId=null){
     if(groupId!==null&&groupId!=='*'&&!groupParents.has(groupId))throw Error(`Unknown Reality Lens domain: ${groupId}`);
     activeGroupId=groupId;
@@ -584,6 +584,11 @@ function applyTabDepthMode(node){
   const projectedPosition=new THREE.Vector3(),scatterDirection=new THREE.Vector3();
   function apply(snapshot,{viewMode='3d',hoveredId=null}={}){
     viewState=snapshot;selected=snapshot.selectedId;hovered=hoveredId;mode=viewMode;
+    if(!initialLayoutApplied&&snapshot.objects.length){
+      const laid=layoutObjects(snapshot.objects,viewport),byId=new Map(laid.map(item=>[item.id,item.position]));
+      snapshot.objects.forEach(object=>{const position=byId.get(object.id),node=nodes.get(object.id);if(node&&Array.isArray(position))node.position.set(...position);});
+      initialLayoutApplied=true;
+    }
     snapshot.objects.forEach(object=>{
       const node=nodes.get(object.id);if(!node)return;
       const position=Array.isArray(object.position)?object.position:(object.position&&typeof object.position.x==='number'&&typeof object.position.y==='number'&&typeof object.position.z==='number'?[object.position.x,object.position.y,object.position.z]:null);
@@ -593,7 +598,7 @@ function applyTabDepthMode(node){
         const nextShape=REALITY_TAB_FORMS[object.shape]?object.shape:'rectangle';
         node.size=Number.isFinite(object.size)?object.size:1;
         node.locked=object.locked===true;
-        if(node.shape!==nextShape)makeTabForm(node,nextShape);
+        if(node.shape!==nextShape){node.contentMetrics=contentMetricsFor(node);makeTabForm(node,nextShape);}
         if(node.indicator){
           node.indicator.material.color.set(node.locked?'#f0ce8a':'#d4ad61');
           node.indicator.material.emissive.set(node.locked?'#c18b42':'#8f672d');
@@ -739,6 +744,10 @@ function applyTabDepthMode(node){
       node.revealProgress=node.goalOpen>=.99?1:physicalStage.progress;
       const stageOpen=[0,.28,.56,.82][node.revealStage]+node.revealProgress*.16;
       node.open+=(Math.max(node.goalOpen,stageOpen)-node.open)*blend;
+      const fitted=node.fittedObject??fitObjectToContent(contentMetricsFor(node),{shape:node.shape||'rectangle'});
+      const constrained=clampToView({id,shape:node.shape,width:fitted.width,height:fitted.height,depth:fitted.depth,size:node.size??1,position:node.root.position.toArray()},camera);
+      if(Array.isArray(constrained?.position)&&constrained.position.length===3)node.root.position.set(...constrained.position);
+      if(Number.isFinite(constrained?.size))node.size=constrained.size;
       const response=realityLensEngine.objectResponse({id,selectedId:focusId,distance:focusDistance,baseScale:node.scale??1,size:node.size??1,tabReveal});
       if(node.lastContextOpacity===undefined||Math.abs(node.lastContextOpacity-response.contextOpacity)>.008){setNodeOpacity(node,response.contextOpacity);node.lastContextOpacity=response.contextOpacity;}
       const groupMatches=activeGroupId==='*'||(node.isTab&&node.lensGroup===activeGroupId);
