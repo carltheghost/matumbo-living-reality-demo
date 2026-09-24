@@ -246,7 +246,7 @@ function liveRecordEntity(record,featureId,index,sourceName,fallbackKind='generi
     metrics:snapshotMetrics(record),
     relations:array(record?.relations).map(value=>typeof value==='string'?value:value?.id).filter(Boolean),
     provenance:[BRIDGE_SOURCE,'real-data',sourceName],
-    source:record,
+    source:{feed:sourceName,recordId:clean(record?.id??record?.key,index)},
   });
 }
 
@@ -269,7 +269,7 @@ function realFeedEntities(feature,featureId,feed,selected){
     status:clean(feed.snapshot?.status??feed.snapshot?.state??feed.snapshot?.action,'live'),
     metrics:snapshotMetrics(feed.snapshot),
     provenance:[BRIDGE_SOURCE,'real-data',feed.sourceName],
-    source:feed.snapshot,
+    source:{feed:feed.sourceName,live:true},
   });
   if(!selected)return Object.freeze([base]);
   const records=collectSnapshotRecords(feed.snapshot,4)
@@ -401,7 +401,7 @@ export function contractEntitiesFromRecords(contracts=[],selectedId=null){
       kind:'condition',
       action:'inspect',
     })),
-    source:contract,
+    source:{feed:'contract-ledger',contractId:String(contract.id)},
   });
 
   const slipEntity=normalizeUniversalEntity({
@@ -428,7 +428,7 @@ export function contractEntitiesFromRecords(contracts=[],selectedId=null){
       kind:'proof',
       action:'inspect',
     }]:[],
-    source:latestReceipt??contract,
+    source:{feed:'contract-ledger',contractId:String(contract.id),receiptId:latestReceipt?.id??null},
   });
 
   const contractorEntity=normalizeUniversalEntity({
@@ -445,7 +445,7 @@ export function contractEntitiesFromRecords(contracts=[],selectedId=null){
     relations:[contractEntity.id,slipEntity.id],
     actions:['inspect','trace'],
     provenance:[BRIDGE_SOURCE,'contract-ledger','participants'],
-    source:{parties,approvals},
+    source:{feed:'contract-ledger',contractId:String(contract.id),partyCount:parties.length},
   });
 
   return Object.freeze([contractEntity,slipEntity,contractorEntity]);
