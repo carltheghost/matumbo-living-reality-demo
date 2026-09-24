@@ -1,4 +1,4 @@
-import {REALITY_TAB_FORMS, realityTabRadius} from './reality-tab-layout.js';
+import {REALITY_TAB_FORMS,REALITY_TAB_GAP,realityTabRadius,resolveRealityTabPosition} from './reality-tab-layout.js';
 
 /**
  * Geometry and layout rules for Reality Lens living objects.
@@ -56,96 +56,42 @@ function makeFace(id,width,height,position,rotation,{kind='plane',curvature=0,re
   });
 }
 
-function planarSurfaceLayout(shape,{clearance=.018,depthRatio=.42}={}){
-  const form=formFor(shape),width=form.width,height=form.height;
-  const depth=Math.max(form.depth,Math.min(width,height)*depthRatio);
-  const z=depth/2+clearance;
-  // Keep the primary silhouette true to the chosen tab form. A phone stays
-  // portrait and a wave stays wide even when its content becomes scrollable.
-  const frontWidth=width*.9,frontHeight=height*.9;
-  return [
-    makeFace('front',frontWidth,frontHeight,[0,0,z],[0,0,0],{kind:'front'}),
-    makeFace('back',width*.82,height*.82,[0,0,-z],[0,Math.PI,0],{kind:'back',readable:false}),
-    makeFace('left',depth*.82,height*.76,[-width/2-clearance,0,0],[0,-Math.PI/2,0],{kind:'edge',readable:false}),
-    makeFace('right',depth*.82,height*.76,[width/2+clearance,0,0],[0,Math.PI/2,0],{kind:'edge',readable:false}),
-    makeFace('top',width*.74,depth*.74,[0,height/2+clearance,0],[-Math.PI/2,0,0],{kind:'edge',readable:false}),
-    makeFace('bottom',width*.74,depth*.74,[0,-height/2-clearance,0],[Math.PI/2,0,0],{kind:'edge',readable:false}),
-  ];
-}
-
-function cylinderSurfaceLayout({clearance=.018,depthRatio=.42}={}){
-  const form=formFor('cylinder'),radius=Math.max(form.radius,form.depth/2,form.width/2*.94),height=form.height;
-  const arc=Math.PI*.64;
-  // A chord is deliberately smaller than the cylinder wall. The primary
-  // reading face lives on the front arc rather than filling its whole height.
-  const aspect=form.width/form.height,maxHeight=height*.76;
-  const frontWidth=Math.min(form.width*.84,2*radius*Math.sin(arc/2)*.98,maxHeight*aspect);
-  const frontHeight=frontWidth/aspect;
-  const sideWidth=Math.max(.42,frontWidth*.58),sideHeight=Math.min(height*.64,frontHeight*.82);
-  const cap=Math.min(radius*1.26,frontWidth*.92);
-  return [
-    makeFace('front',frontWidth,frontHeight,[0,0,radius+clearance],[0,0,0],{kind:'arc',curvature:arc}),
-    makeFace('back',frontWidth*.78,frontHeight*.76,[0,0,-radius-clearance],[0,Math.PI,0],{kind:'arc',curvature:arc,readable:false}),
-    makeFace('left',sideWidth,sideHeight,[-radius-clearance,0,0],[0,-Math.PI/2,0],{kind:'arc',curvature:arc*.58,readable:false}),
-    makeFace('right',sideWidth,sideHeight,[radius+clearance,0,0],[0,Math.PI/2,0],{kind:'arc',curvature:arc*.58,readable:false}),
-    makeFace('top',cap,cap,[0,height/2+clearance,0],[-Math.PI/2,0,0],{kind:'cap',readable:false}),
-    makeFace('bottom',cap,cap,[0,-height/2-clearance,0],[Math.PI/2,0,0],{kind:'cap',readable:false}),
-  ];
-}
-
-function sphereSurfaceLayout({clearance=.018,depthRatio=.42}={}){
-  const form=formFor('sphere'),radius=Math.max(form.radius,Math.min(form.width,form.height,form.depth)/2);
-  // Keep text on the front hemisphere. The other tangent segments exist for
-  // atmosphere and short metadata, not as duplicate browser windows.
-  const primary=radius*1.62,side=radius*.88,cap=radius*1.08;
-  return [
-    makeFace('front',primary,primary,[0,0,radius+clearance],[0,0,0],{kind:'hemisphere',curvature:Math.PI*.58}),
-    makeFace('back',primary*.68,primary*.68,[0,0,-radius-clearance],[0,Math.PI,0],{kind:'hemisphere',curvature:Math.PI*.42,readable:false}),
-    makeFace('left',side,side,[-radius*.86-clearance,0,radius*.16],[0,-Math.PI/2.55,0],{kind:'hemisphere',curvature:Math.PI*.34,readable:false}),
-    makeFace('right',side,side,[radius*.86+clearance,0,radius*.16],[0,Math.PI/2.55,0],{kind:'hemisphere',curvature:Math.PI*.34,readable:false}),
-    makeFace('top',cap,cap,[0,radius*.86+clearance,0],[-Math.PI/2.55,0,0],{kind:'hemisphere',curvature:Math.PI*.3,readable:false}),
-    makeFace('bottom',cap,cap,[0,-radius*.86-clearance,0],[Math.PI/2.55,0,0],{kind:'hemisphere',curvature:Math.PI*.3,readable:false}),
-  ];
-}
-
-function cubeSurfaceLayout({clearance=.018,depthRatio=.42}={}){
-  const form=formFor('cube'),edge=Math.min(form.width,form.height,form.depth),half=edge/2+clearance;
-  const primary=edge*.88,side=edge*.7;
-  return [
-    makeFace('front',primary,primary,[0,0,half],[0,0,0],{kind:'face'}),
-    makeFace('back',side,side,[0,0,-half],[0,Math.PI,0],{kind:'face',readable:false}),
-    makeFace('left',side,side,[-half,0,0],[0,-Math.PI/2,0],{kind:'face',readable:false}),
-    makeFace('right',side,side,[half,0,0],[0,Math.PI/2,0],{kind:'face',readable:false}),
-    makeFace('top',side,side,[0,half,0],[-Math.PI/2,0,0],{kind:'face',readable:false}),
-    makeFace('bottom',side,side,[0,-half,0],[Math.PI/2,0,0],{kind:'face',readable:false}),
-  ];
-}
-
 /** Return six bounded, outward-facing content anchors for one shape. */
 export function createLivingSurfaceMap(shape='rectangle',options={}){
-  const {depthRatio=.42,clearance=.018}=options;
+  const {depthRatio=.42,clearance=.018,profile}=options;
   finitePositive(depthRatio,'Living surface depth ratio');
   if(!Number.isFinite(clearance)||clearance<0)throw Error('Living surface clearance must be finite and non-negative');
-  const resolved=REALITY_TAB_FORMS[shape]?shape:'rectangle';
-  const faces=resolved==='cylinder'
-    ?cylinderSurfaceLayout({depthRatio,clearance})
-    :resolved==='sphere'
-      ?sphereSurfaceLayout({depthRatio,clearance})
-      :resolved==='cube'
-        ?cubeSurfaceLayout({depthRatio,clearance})
-        :planarSurfaceLayout(resolved,{depthRatio,clearance});
-  return freeze({shape:resolved,body:freeze({...formFor(resolved)}),primary:faces[0],faces});
+  // Compatibility callers receive their six face IDs, but the dimensions and
+  // front placement now come from the same wrapper used by the live scene.
+  const layout=surfaceLayout({id:'surface-map',shape,profile}),w=layout.wrapper.width,
+    h=layout.wrapper.height,d=layout.wrapper.depth;
+  const byId=new Map([layout.primarySurface,...layout.secondarySurfaces].map(face=>[face.id,face]));
+  if(!byId.has('back'))byId.set('back',surface('back',layout.primarySurface.width*.72,
+    layout.primarySurface.height*.72,[0,0,-layout.wrapper.frontDepth],[0,Math.PI,0],[0,0,-1]));
+  const top=()=>surface('top',w*.74,d*.74,[0,h/2+clearance,0],[-Math.PI/2,0,0],[0,1,0]);
+  const bottom=()=>surface('bottom',w*.74,d*.74,[0,-h/2-clearance,0],[Math.PI/2,0,0],[0,-1,0]);
+  if(!byId.has('top'))byId.set('top',top());
+  if(!byId.has('bottom'))byId.set('bottom',bottom());
+  const kind=layout.wrapper.contour==='circle'?'hemisphere':layout.wrapper.contour==='cylinder'?'arc':'face';
+  const faces=FACE_IDS.map(id=>{
+    const face=byId.get(id);
+    return makeFace(id,face.width,face.height,face.position,face.rotation,
+      {kind:id==='front'?kind:id==='back'?'back':'edge',
+        curvature:(face.arcDegrees??0)*Math.PI/180,readable:id==='front'});
+  });
+  return freeze({shape:layout.wrapper.shape,body:freeze({...formFor(layout.wrapper.shape),...layout.bodyBounds}),
+    primary:faces[0],faces});
 }
 
 /** The readable primary surface, not the whole body, projected into pixels. */
-export function projectLivingSurface({shape='rectangle',size=1,distance=9,approachScale=1,viewportHeight=900,fov=60}={}){
+export function projectLivingSurface({shape='rectangle',profile,size=1,distance=9,approachScale=1,viewportHeight=900,fov=60}={}){
   for(const [value,name] of [[size,'Object size'],[distance,'Camera distance'],[approachScale,'Approach scale'],[viewportHeight,'Viewport height'],[fov,'Camera field of view']])finitePositive(value,name);
-  const surface=createLivingSurfaceMap(shape).primary;
+  const map=createLivingSurfaceMap(shape,{profile}),surface=map.primary;
   const pixelsPerUnit=viewportHeight/(2*distance*Math.tan(fov*Math.PI/360));
   const scale=size*approachScale;
-  const body=formFor(shape);
+  const body=map.body;
   return freeze({
-    shape:createLivingSurfaceMap(shape).shape,
+    shape:map.shape,
     width:surface.width*scale*pixelsPerUnit,
     height:surface.height*scale*pixelsPerUnit,
     bodyWidth:body.width*scale*pixelsPerUnit,
@@ -160,11 +106,11 @@ export function projectLivingSurface({shape='rectangle',size=1,distance=9,approa
  * clamps the panel, never the world object, so long content scrolls instead of
  * growing the geometry.
  */
-export function fitLivingSurface({shape='rectangle',size=1,distance=9,approachScale=1,viewportWidth=1280,viewportHeight=900,fov=60,safeWidth=32,safeHeight=176,inset=0,screenWidth=.64,screenHeight=.64}={}){
+export function fitLivingSurface({shape='rectangle',profile,size=1,distance=9,approachScale=1,viewportWidth=1280,viewportHeight=900,fov=60,safeWidth=32,safeHeight=176,inset=0,screenWidth=.64,screenHeight=.64}={}){
   for(const [value,name] of [[viewportWidth,'Viewport width'],[viewportHeight,'Viewport height']])finitePositive(value,name);
   if(!Number.isFinite(inset)||inset<0||inset>=.5)throw Error('Living surface inset must be between zero and one half');
   if(!Number.isFinite(screenWidth)||screenWidth<=0||screenWidth>1||!Number.isFinite(screenHeight)||screenHeight<=0||screenHeight>1)throw Error('Living surface screen limits must be between zero and one');
-  const projected=projectLivingSurface({shape,size,distance,approachScale,viewportHeight,fov});
+  const projected=projectLivingSurface({shape,profile,size,distance,approachScale,viewportHeight,fov});
   const availableWidth=Math.max(1,viewportWidth-safeWidth),availableHeight=Math.max(1,viewportHeight-safeHeight);
   const maxWidth=Math.max(1,availableWidth*screenWidth),maxHeight=Math.max(1,availableHeight*screenHeight);
   const scale=Math.min(1,maxWidth/projected.width,maxHeight/projected.height)*(1-inset*2);
@@ -186,22 +132,19 @@ export function fitLivingSurface({shape='rectangle',size=1,distance=9,approachSc
 }
 
 /** Calculate a camera distance that keeps a selected body readable but bounded. */
-export function focusDistanceForLivingObject({shape='rectangle',size=1,approachScale=1,viewportWidth=1280,viewportHeight=900,fov=60,occupancy=.54,minDistance=7.4,maxDistance=190}={}){
+export function focusDistanceForLivingObject({shape='rectangle',profile,size=1,approachScale=1,viewportWidth=1280,viewportHeight=900,fov=60,occupancy=.54,minDistance=7.4,maxDistance=190}={}){
   for(const [value,name] of [[size,'Object size'],[approachScale,'Approach scale'],[viewportWidth,'Viewport width'],[viewportHeight,'Viewport height'],[fov,'Camera field of view'],[occupancy,'Focus occupancy'],[minDistance,'Minimum focus distance'],[maxDistance,'Maximum focus distance']])finitePositive(value,name);
   if(occupancy>=.9||minDistance>maxDistance)throw Error('Living focus bounds are invalid');
-  const form=formFor(shape),scale=size*approachScale,viewportAspect=viewportWidth/viewportHeight;
-  // Preserve both vertical and horizontal breathing room. A wide wave uses
-  // its width as the limiting dimension; a tall phone/cylinder uses height.
-  const apparentHeight=Math.max(form.height,form.width/Math.max(.35,viewportAspect))*scale;
-  const unclamped=apparentHeight/(2*occupancy*Math.tan(fov*Math.PI/360));
+  const frame=focusDistance({shape,profile,size,approachScale,viewportWidth,viewportHeight,fov,occupancy});
+  const unclamped=frame.distance;
   const distance=clamp(unclamped,minDistance,maxDistance);
   return freeze({
-    shape:REALITY_TAB_FORMS[shape]?shape:'rectangle',
+    shape:profile?String(shape):shapeOf(shape),
     distance,
     unclampedDistance:unclamped,
     occupancy,
     capped:Math.abs(distance-unclamped)>.0001,
-    bodyRadius:realityTabRadius({shape,size})*approachScale,
+    bodyRadius:frame.radius,
   });
 }
 
@@ -219,7 +162,10 @@ export function relaxLivingRealityLayout(objects,{gap=1.28,maxIterations=18,boun
   const axisUnit=axis?normalized(axis):null;
   const nodes=objects.map(object=>{
     if(!object?.id||!Array.isArray(object.position)||object.position.length!==3||object.position.some(value=>!Number.isFinite(value)))throw Error('Each living layout object needs an id and finite position');
-    return {...object,position:[...object.position],radius:realityTabRadius(object),fixed:Boolean(object.anchor||object.locked)};
+    const profile=object.profile;
+    const radius=profile?surfaceLayout({id:object.id,shape:object.shape,size:object.size??1,profile}).radius:
+      realityTabRadius(object);
+    return {...object,position:[...object.position],radius,fixed:Boolean(object.anchor||object.locked)};
   });
   let movedObjectCount=0;
   for(let iteration=0;iteration<maxIterations;iteration++){
@@ -294,15 +240,99 @@ function nonNegative(value,name){
 }
 function formOf(shape){return REALITY_TAB_FORMS[shape]??REALITY_TAB_FORMS.rectangle;}
 function shapeOf(shape){return REALITY_TAB_FORMS[shape]?shape:'rectangle';}
+const WRAPPER_CONTOURS=new Set(['rounded-rectangle','circle','cylinder','wave','polygon']);
+function polygonOutline(vertices){
+  if(!Array.isArray(vertices)||vertices.length<3||vertices.length>24||vertices.some(point=>
+    !Array.isArray(point)||point.length!==2||point.some(value=>!Number.isFinite(value)||Math.abs(value)>.5)))
+    throw new RangeError('polygon outline needs 3–24 normalized [x,y] vertices within ±0.5');
+  const outline=vertices.map(point=>[...point]);
+  const cross=(a,b,c)=>(b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]);
+  let winding=0;
+  for(let index=0;index<outline.length;index++){
+    const a=outline[index],b=outline[(index+1)%outline.length],c=outline[(index+2)%outline.length];
+    const bend=cross(a,b,c),center=cross(a,b,[0,0]);
+    if(Math.abs(bend)<1e-6||Math.abs(center)<1e-6||winding&&bend*winding<0||bend*center<0)
+      throw new RangeError('polygon outline must be convex, nondegenerate, and contain its center');
+    winding=Math.sign(bend);
+  }
+  const xs=outline.map(point=>point[0]),ys=outline.map(point=>point[1]);
+  if(Math.abs(Math.min(...xs)+.5)>.001||Math.abs(Math.max(...xs)-.5)>.001||
+    Math.abs(Math.min(...ys)+.5)>.001||Math.abs(Math.max(...ys)-.5)>.001)
+    throw new RangeError('polygon outline must span its declared body width and height');
+  return outline;
+}
+function polygonContentBounds(outline,width,height,faceWidth,faceHeight){
+  const inside=(x,y)=>outline.every((a,index)=>{
+    const b=outline[(index+1)%outline.length],edgeX=(b[0]-a[0])*width,edgeY=(b[1]-a[1])*height;
+    const pointX=x-a[0]*width,pointY=y-a[1]*height;
+    const centerCross=edgeX*(-a[1]*height)-edgeY*(-a[0]*width);
+    return (edgeX*pointY-edgeY*pointX)*centerCross>=-1e-9;
+  });
+  let low=0,high=1;
+  for(let iteration=0;iteration<26;iteration++){
+    const scale=(low+high)/2,x=faceWidth*scale/2,y=faceHeight*scale/2;
+    if([[-x,-y],[-x,y],[x,-y],[x,y]].every(([px,py])=>inside(px,py)))low=scale;
+    else high=scale;
+  }
+  return {width:ROUND(faceWidth*low*.96),height:ROUND(faceHeight*low*.96)};
+}
+function builtinWrapperProfile(shape){
+  const form=formOf(shape),curved=shape==='sphere'||shape==='cylinder';
+  return {body:{width:form.width,height:form.height,depth:form.depth},
+    contour:shape==='sphere'?'circle':shape==='cylinder'?'cylinder':shape==='wave'?'wave':'rounded-rectangle',
+    coverage:.9,cornerRadius:shape==='cube'?.07:form.radius,
+    radius:curved?Math.min(form.width,form.depth)/2:undefined,
+    centered:curved||shape==='cube'};
+}
+/** Profiles specify local physical dimensions, so one more object form can be
+ * introduced without changing the renderer's placement algorithm. */
+function wrapperProfile(shape,override){
+  if(override!==undefined&&(override===null||typeof override!=='object'||Array.isArray(override)))
+    throw new TypeError('wrapper profile must be an object');
+  const base=builtinWrapperProfile(shape),input=override??{};
+  const body={...base.body,...input.body};
+  for(const axis of ['width','height','depth'])positive(body[axis],`profile body ${axis}`);
+  const contour=input.contour??base.contour;
+  if(!WRAPPER_CONTOURS.has(contour))throw new RangeError('profile contour must be rounded-rectangle, circle, cylinder, wave, or polygon');
+  const outline=contour==='polygon'?polygonOutline(input.outline):null;
+  const coverage=input.coverage??(input.inset===undefined?base.coverage:1-2*input.inset);
+  if(!Number.isFinite(coverage)||coverage<=0||coverage>=1)
+    throw new RangeError('profile coverage must be between zero and one');
+  const cornerRadius=input.cornerRadius??base.cornerRadius;
+  nonNegative(cornerRadius,'profile cornerRadius');
+  const radius=input.radius??(contour==='circle'?Math.min(body.width,body.height,body.depth)/2:
+    contour==='cylinder'?Math.min(body.width,body.depth)/2:undefined);
+  if(radius!==undefined)positive(radius,'profile radius');
+  if(contour==='circle'&&(
+    Math.abs(body.width-body.height)>body.width*.001||
+    Math.abs(body.width-body.depth)>body.width*.001||
+    Math.abs(radius-body.width/2)>body.width*.001))
+    throw new RangeError('circular sphere profile needs equal body dimensions and radius equal to half its diameter');
+  if(contour==='cylinder'&&(
+    Math.abs(body.width-body.depth)>body.width*.001||
+    Math.abs(radius-body.width/2)>body.width*.001))
+    throw new RangeError('cylinder profile needs equal width and depth and radius equal to half its diameter');
+  const centered=input.centered??(contour==='circle'||contour==='cylinder'||shape==='cube');
+  const clearance=centered?OFFSET:.04;
+  const defaultFront=(contour==='circle'||contour==='cylinder'?radius:
+    centered?body.depth/2:body.depth)+clearance;
+  const frontDepth=input.frontDepth??defaultFront;
+  positive(frontDepth,'profile frontDepth');
+  const physicalFront=contour==='circle'||contour==='cylinder'?radius:
+    centered?body.depth/2:body.depth;
+  if(frontDepth<physicalFront+.001)
+    throw new RangeError('profile frontDepth must place the readable face outside its body');
+  return {body,contour,outline,coverage,cornerRadius,radius,centered:Boolean(centered),frontDepth};
+}
 function positionOf(position){
   const coordinates=Array.isArray(position)?position:[position?.x,position?.y,position?.z];
   if(coordinates.length!==3||coordinates.some(value=>!Number.isFinite(value)))
     throw new TypeError('position must contain three finite coordinates');
   return [...coordinates];
 }
-function boundingRadius(shape,form){
-  if(shape==='sphere')return Math.min(form.width,form.height,form.depth)/2;
-  if(shape==='cylinder')return Math.hypot(Math.min(form.width,form.depth)/2,form.height/2);
+function boundingRadius(shape,form,contour=shape){
+  if(contour==='circle'||contour==='sphere')return Math.min(form.width,form.height,form.depth)/2;
+  if(contour==='cylinder')return Math.hypot(Math.min(form.width,form.depth)/2,form.height/2);
   return Math.hypot(form.width/2,form.height/2,form.depth/2);
 }
 function surface(id,width,height,position,rotation,normal,arcDegrees,curvatureRadius){
@@ -319,30 +349,38 @@ function curvedFace(id,r,angle,width,height,arcDegrees){
 }
 
 /**
- * Describe bounded reading patches on a fixed physical shape. size changes
- * only the outer root scale and the layout radius; copy density only requests
- * scrolling within the same readable area.
+ * Describe the frame and its near-full readable face from the same profile.
+ * size changes only the outer root scale and layout radius; copy density only
+ * requests scrolling within the same face.
  */
-export function surfaceLayout({id,shape='rectangle',size=1,contentDensity=0,position=[0,0,0],locked=false}={}){
+export function surfaceLayout({id,shape='rectangle',size=1,contentDensity=0,position=[0,0,0],locked=false,profile}={}){
   if(id===undefined||id===null||String(id).length===0)throw new TypeError('object id is required');
   positive(size,'size');
   nonNegative(contentDensity,'contentDensity');
-  const anchor=positionOf(position),name=shapeOf(shape),form=formOf(name);
+  const anchor=positionOf(position),name=profile?String(shape):shapeOf(shape);
+  const selected=wrapperProfile(name,profile),form=selected.body;
+  const {contour,coverage,frontDepth,centered}=selected;
   const bodyBounds={width:form.width,height:form.height,depth:form.depth};
-  const radius=ROUND(boundingRadius(name,form)*size);
+  const radius=ROUND(boundingRadius(name,form,contour)*size);
+  // The face is the outer presentation area. A rectangular control viewport
+  // inside a circular skin must fit its diagonal inside the circle; otherwise
+  // its corners protrude past the object even when both are centered.
+  const faceWidth=ROUND(form.width*coverage),faceHeight=ROUND(form.height*coverage);
+  const polygonContent=contour==='polygon'?polygonContentBounds(selected.outline,form.width,form.height,faceWidth,faceHeight):null;
+  const contentWidth=polygonContent?.width??(contour==='circle'?ROUND(Math.min(faceWidth,form.width/Math.SQRT2*.96)):faceWidth);
+  const contentHeight=polygonContent?.height??(contour==='circle'?ROUND(Math.min(faceHeight,form.height/Math.SQRT2*.96)):faceHeight);
   let primarySurface,secondarySurfaces;
-  if(name==='cylinder'){
-    const r=Math.min(form.width,form.depth)/2,primaryArc=98,secondaryArc=40;
-    primarySurface=curvedFace('front',r,0,2*r*Math.sin(primaryArc*Math.PI/360)*.94,form.height*.72,primaryArc);
+  if(contour==='cylinder'){
+    const r=selected.radius,primaryArc=ROUND(2*Math.asin(Math.min(.9999,faceWidth/(2*r)))*180/Math.PI),secondaryArc=40;
+    primarySurface=surface('front',faceWidth,faceHeight,[0,0,frontDepth],[0,0,0],[0,0,1],primaryArc,r);
     secondarySurfaces=[
       curvedFace('left',r,-2*Math.PI/5,2*r*Math.sin(secondaryArc*Math.PI/360)*.92,form.height*.64,secondaryArc),
       curvedFace('right',r,2*Math.PI/5,2*r*Math.sin(secondaryArc*Math.PI/360)*.92,form.height*.64,secondaryArc),
       curvedFace('back',r,Math.PI,2*r*Math.sin(secondaryArc*Math.PI/360)*.92,form.height*.64,secondaryArc),
     ];
-  }else if(name==='sphere'){
-    const r=Math.min(form.width,form.height,form.depth)/2,primaryArc=80,secondaryArc=32;
-    primarySurface=curvedFace('front',r,0,2*r*Math.sin(primaryArc*Math.PI/360)*.94,
-      2*r*Math.sin(primaryArc*Math.PI/360)*.9,primaryArc);
+  }else if(contour==='circle'){
+    const r=selected.radius,primaryArc=ROUND(2*Math.asin(Math.min(.9999,faceWidth/(2*r)))*180/Math.PI),secondaryArc=32;
+    primarySurface=surface('front',faceWidth,faceHeight,[0,0,frontDepth],[0,0,0],[0,0,1],primaryArc,r);
     secondarySurfaces=[
       curvedFace('left',r,-Math.PI*11/36,2*r*Math.sin(secondaryArc*Math.PI/360)*.9,
         2*r*Math.sin(secondaryArc*Math.PI/360)*.85,secondaryArc),
@@ -356,42 +394,64 @@ export function surfaceLayout({id,shape='rectangle',size=1,contentDensity=0,posi
   }else{
     // Extruded flat forms occupy z=[0,depth]; the centered cube occupies
     // z=[-depth/2,+depth/2]. Never put the face inside the solid shell.
-    const cube=name==='cube',clearance=cube?OFFSET:.04;
-    const front=(cube?form.depth/2:form.depth)+clearance;
-    const back=(cube?-form.depth/2:0)-clearance,sideZ=cube?0:form.depth/2;
-    const w=form.width*(name==='wave'?.78:.86),h=form.height*(name==='wave'?.68:.78);
-    primarySurface=surface('front',w,h,[0,0,front],[0,0,0],[0,0,1]);
+    const clearance=centered?OFFSET:.04;
+    const back=(centered?-form.depth/2:0)-clearance,sideZ=centered?0:form.depth/2;
+    primarySurface=surface('front',faceWidth,faceHeight,[0,0,frontDepth],[0,0,0],[0,0,1]);
     secondarySurfaces=[
-      surface('back',w,h,[0,0,back],[0,Math.PI,0],[0,0,-1]),
-      surface('left',form.depth*.72,h,[-form.width/2-clearance,0,sideZ],[0,-Math.PI/2,0],[-1,0,0]),
-      surface('right',form.depth*.72,h,[form.width/2+clearance,0,sideZ],[0,Math.PI/2,0],[1,0,0]),
+      surface('back',faceWidth,faceHeight,[0,0,back],[0,Math.PI,0],[0,0,-1]),
+      surface('left',form.depth*.72,faceHeight,[-form.width/2-clearance,0,sideZ],[0,-Math.PI/2,0],[-1,0,0]),
+      surface('right',form.depth*.72,faceHeight,[form.width/2+clearance,0,sideZ],[0,Math.PI/2,0],[1,0,0]),
     ];
-    if(cube)secondarySurfaces.push(
-      surface('top',w,form.depth*.72,[0,form.height/2+OFFSET,0],[-Math.PI/2,0,0],[0,1,0]),
-      surface('bottom',w,form.depth*.72,[0,-form.height/2-OFFSET,0],[Math.PI/2,0,0],[0,-1,0]));
+    if(centered)secondarySurfaces.push(
+      surface('top',faceWidth,form.depth*.72,[0,form.height/2+OFFSET,0],[-Math.PI/2,0,0],[0,1,0]),
+      surface('bottom',faceWidth,form.depth*.72,[0,-form.height/2-OFFSET,0],[Math.PI/2,0,0],[0,-1,0]));
   }
+  const wrapper={shape:name,contour,width:ROUND(form.width),height:ROUND(form.height),depth:ROUND(form.depth),
+    frontDepth:ROUND(frontDepth),cornerRadius:ROUND(Math.min(selected.cornerRadius,form.width/2,form.height/2)),
+    inset:ROUND((1-coverage)/2),coverage:ROUND(coverage),radius:selected.radius===undefined?null:ROUND(selected.radius),
+    outline:selected.outline,
+    frameBounds:{width:ROUND(form.width),height:ROUND(form.height)},
+    contentBounds:{width:contentWidth,height:contentHeight}};
   return {objectId:String(id),primarySurface,secondarySurfaces,
-    readableBounds:{width:primarySurface.width,height:primarySurface.height},bodyBounds,radius,
+    readableBounds:{width:contentWidth,height:contentHeight},bodyBounds,radius,wrapper,
     diagnostics:{shape:name,locked:Boolean(locked),anchorPosition:anchor,
       contentDensity,requiresScroll:contentDensity>1,geometryDependsOnContent:false}};
 }
 
+/** Inject more object forms without adding another shape-specific renderer
+ * branch. A per-object profile may still override a registry entry. */
+export function createLivingSurfaceComposer({profiles={}}={}){
+  if(!profiles||typeof profiles!=='object'||Array.isArray(profiles))throw new TypeError('profiles must be an object');
+  const registry=new Map(Object.entries(profiles).map(([shape,profile])=>{
+    if(!shape)throw new TypeError('profile shape must have an id');
+    return [shape,wrapperProfile(shape,profile)];
+  }));
+  return Object.freeze({
+    profileFor(shape){return registry.has(shape)?structuredClone(registry.get(shape)):wrapperProfile(shape);},
+    surfaceLayout(options={}){return surfaceLayout({...options,profile:options.profile??registry.get(options.shape)});},
+    focusDistance(options={}){return focusDistance({...options,profile:options.profile??registry.get(options.shape)});},
+    solveLivingLayout(items,options={}){return solveLivingLayout(items,{...options,profiles:Object.fromEntries(registry)});},
+  });
+}
+
 /** Camera framing from the scaled body's actual projected width and height.
  * Content length never enters this calculation; it scrolls on the skin. */
-export function focusDistance({shape='rectangle',size=1,baseScale=1,approachScale=1,
+export function focusDistance({shape='rectangle',profile,size=1,baseScale=1,approachScale=1,
   viewportWidth,viewportHeight,fov=60,occupancy=.5}={}){
   const width=positive(viewportWidth,'viewportWidth'),height=positive(viewportHeight,'viewportHeight');
   const scale=positive(size,'size')*positive(baseScale,'baseScale')*positive(approachScale,'approachScale');
   if(!Number.isFinite(fov)||fov<=0||fov>=170)throw new RangeError('fov must be between 0 and 170 degrees');
   if(!Number.isFinite(occupancy)||occupancy<=0||occupancy>1)
     throw new RangeError('occupancy must be between 0 and 1');
-  const name=shapeOf(shape),form=formOf(name),radius=boundingRadius(name,form)*scale;
+  const name=profile?String(shape):shapeOf(shape),selected=wrapperProfile(name,profile),form=selected.body;
+  const radius=boundingRadius(name,form,selected.contour)*scale;
   const tanVertical=Math.tan(fov*Math.PI/360),tanHorizontal=tanVertical*width/height;
   // The cube may present a diagonal when viewed from its side; the cylinder
   // and sphere retain their silhouettes as the observer moves around them.
-  const projectedWidth=(name==='cube'?Math.hypot(form.width,form.depth):form.width)*scale;
-  const projectedHeight=(name==='cube'?Math.hypot(form.height,form.depth):form.height)*scale;
-  const frontDepth=(['phone','square','rectangle','wave'].includes(name)?form.depth+.04:form.depth/2)*scale;
+  const box=selected.centered&&!['circle','cylinder'].includes(selected.contour);
+  const projectedWidth=(box?Math.hypot(form.width,form.depth):form.width)*scale;
+  const projectedHeight=(box?Math.hypot(form.height,form.depth):form.height)*scale;
+  const frontDepth=selected.frontDepth*scale;
   const minimum=frontDepth+.1+Math.max(projectedWidth/(2*tanHorizontal*occupancy),
     projectedHeight/(2*tanVertical*occupancy));
   const distance=ROUND(Math.ceil(minimum*1e6)/1e6),nearestDistance=distance-frontDepth;
@@ -439,10 +499,11 @@ function escape(candidate,placed,gap,maxRings){
 
 /** Preserve already clear locations and pinned objects, then place only
  * conflicting movable objects at deterministic nonintersecting locations. */
-export function solveLivingLayout(items,{gap=.3,iterations=128}={}){
+export function solveLivingLayout(items,{gap=.3,iterations=128,profiles={}}={}){
   if(!Array.isArray(items))throw new TypeError('items must be an array');
   nonNegative(gap,'gap');
   if(!Number.isInteger(iterations)||iterations<1)throw new RangeError('iterations must be a positive integer');
+  if(!profiles||typeof profiles!=='object'||Array.isArray(profiles))throw new TypeError('profiles must be an object');
   const ids=new Set();
   const objects=items.map((item,index)=>{
     if(!item||item.id===undefined||item.id===null||String(item.id).length===0)
@@ -450,9 +511,12 @@ export function solveLivingLayout(items,{gap=.3,iterations=128}={}){
     const id=String(item.id);
     if(ids.has(id))throw new TypeError(`duplicate object id: ${id}`);
     ids.add(id);
-    const shape=shapeOf(item.shape),size=positive(item.size??1,'size');
+    const profile=item.profile??profiles[item.shape];
+    const shape=profile?String(item.shape??'rectangle'):shapeOf(item.shape),size=positive(item.size??1,'size');
+    const selected=profile?wrapperProfile(shape,profile):null;
     return {...item,id,position:positionOf(item.position??[0,0,0]),
-      radius:ROUND(realityTabRadius({...item,shape,size}))};
+      radius:ROUND(selected?boundingRadius(shape,selected.body,selected.contour)*size:
+        realityTabRadius({...item,shape,size}))};
   });
   const fixed=object=>object.locked===true||object.pinned===true||object.pin===true||object.anchor===true;
   const collidedOriginally=objects.map((a,i)=>objects.some((b,j)=>i!==j&&collides(a,b,gap)));
@@ -482,6 +546,22 @@ export function solveLivingLayout(items,{gap=.3,iterations=128}={}){
     minimumGap:Number.isFinite(minimumGap)?ROUND(minimumGap):null,
     panelOverflowCount:objects.filter(object=>(object.contentDensity??0)>1).length,
     resolved:collisions.length===0,gap,iterations}};
+}
+
+/** The drag preview and recorded move use the same profile-aware resolver. */
+export function resolveLivingTabPosition(id,proposed,objects,{shapeProfiles={}}={}){
+  const profileFor=object=>shapeProfiles[object.id]?.[object.shape];
+  if(!objects.some(object=>profileFor(object)))return resolveRealityTabPosition(id,proposed,objects);
+  const packed=solveLivingLayout(objects.map(object=>({
+    ...object,position:object.id===id?proposed:object.position,pinned:object.id!==id,
+    ...(profileFor(object)?{profile:profileFor(object)}:{}),
+  })),{gap:REALITY_TAB_GAP});
+  const moving=packed.objects.find(object=>object.id===id);
+  if(!moving)throw Error('Unknown object');
+  if(packed.objects.some(object=>object.id!==id&&Math.hypot(...moving.position.map((value,axis)=>value-object.position[axis]))<
+    moving.radius+object.radius+REALITY_TAB_GAP-.001))
+    throw Error('No collision-free space is available here. Move a nearby tab first.');
+  return moving.position.map(value=>Math.round(value*1000)/1000);
 }
 
 /** The same wheel gesture has one owner at a time. */

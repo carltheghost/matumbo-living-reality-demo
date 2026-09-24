@@ -22,7 +22,7 @@ import { initMobilePanelManager } from './render/mobile-panel-manager.js?v=20260
 import { installMobileFreezeGuard } from './render/mobile-freeze-guard.js?v=20260922-mfg1';
 import { mountPhotoMascot } from './render/photo-mascot-mount.js?v=20260922-cache2';
 import { createPersonStudio } from './render/person-studio.js?v=20260918-avatar-chess';
-import { createRealityAssembly, CLEAN_LANDING_CAMERA } from './render/reality-assembly.js?v=20260924-living-surfaces2';
+import { createRealityAssembly, CLEAN_LANDING_CAMERA } from './render/reality-assembly.js?v=20260924-living-wrapper1';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { MANIPULATE_MODES } from './render/manipulate-controls.js?v=20260922-cache2';
@@ -6706,6 +6706,7 @@ const REALITY_ASSEMBLY_FEATURE_PANEL_IDS = Object.freeze({
   'picture-matter': 'picture-matter-console',
   'nft-atelier': 'nft-atelier-console',
   'wardrobe-atelier': 'wardrobe-atelier-console',
+  'white-paper': 'white-paper-console',
   'gesture-lens': 'gesture-lens-console',
   gateway: 'live-gateway-console',
   'world-events': 'world-events-console',

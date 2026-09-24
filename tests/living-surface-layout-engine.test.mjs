@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {REALITY_TAB_FORMS,REALITY_TAB_GAP,realityTabRadius,resolveRealityTabPosition} from '../src/domains/reality-tab-layout.js';
 import {
   createLivingSurfaceMap,
+  projectLivingSurface,
   fitLivingSurface,
   focusDistanceForLivingObject,
   relaxLivingRealityLayout,
@@ -68,7 +69,7 @@ test('the deterministic layout solver adds breathing room without moving a locke
   assert.equal(first.diagnostics.collisionCount,0);
 });
 
-import {surfaceLayout,focusDistance,solveLivingLayout,wheelIntent}
+import {surfaceLayout,createLivingSurfaceComposer,focusDistance,solveLivingLayout,wheelIntent}
   from '../src/domains/living-surface-layout-engine.js';
 
 test('every form has a bounded exterior reading surface in local coordinates',()=>{
@@ -81,8 +82,12 @@ test('every form has a bounded exterior reading surface in local coordinates',()
     assert.ok(layout.primarySurface.height<form.height);
     assert.deepEqual(layout.primarySurface.normal,[0,0,1]);
     assert.deepEqual(layout.primarySurface.up,[0,1,0]);
-    assert.deepEqual(layout.readableBounds,{
-      width:layout.primarySurface.width,height:layout.primarySurface.height});
+    assert.deepEqual(layout.readableBounds,layout.wrapper.contentBounds);
+    assert.equal(layout.wrapper.shape,shape);
+    assert.deepEqual(layout.wrapper.frameBounds,{width:form.width,height:form.height});
+    assert.deepEqual(layout.wrapper.contentBounds,layout.readableBounds);
+    assert.equal(layout.wrapper.frontDepth,layout.primarySurface.position[2]);
+    assert.equal(layout.wrapper.depth,form.depth);
     assert.ok(layout.primarySurface.position[2]>0);
     assert.ok(layout.primarySurface.position[2]<form.depth+.1);
     assert.ok(layout.radius>0);
@@ -107,15 +112,20 @@ test('flat extrusions expose their front beyond the bevel; cube stays centered',
   assert.ok(cube.primarySurface.position[2]<cube.bodyBounds.depth/2+.05);
 });
 
-test('cylinder keeps its chosen silhouette and small outward curved patches',()=>{
+test('cylinder keeps its portrait silhouette with a near-full outward reading face',()=>{
   const cylinder=surfaceLayout({id:'contract',shape:'cylinder',contentDensity:30});
   assert.equal(cylinder.bodyBounds.width,1.36);
   assert.equal(cylinder.bodyBounds.height,1.64);
   assert.ok(cylinder.bodyBounds.height/cylinder.bodyBounds.width>1.2);
-  assert.ok(cylinder.primarySurface.width<1.1);
-  assert.ok(cylinder.primarySurface.height<1.3);
+  assert.ok(cylinder.primarySurface.width>=cylinder.bodyBounds.width*.86);
+  assert.ok(cylinder.primarySurface.height>=cylinder.bodyBounds.height*.86);
+  assert.ok(cylinder.primarySurface.width<cylinder.bodyBounds.width);
+  assert.ok(cylinder.primarySurface.height<cylinder.bodyBounds.height);
+  assert.equal(cylinder.wrapper.contour,'cylinder');
+  assert.ok(Math.abs(cylinder.primarySurface.width/cylinder.primarySurface.height-
+    cylinder.bodyBounds.width/cylinder.bodyBounds.height)<1e-5);
   assert.ok(cylinder.primarySurface.position[2]>.68);
-  assert.equal(cylinder.primarySurface.arcDegrees,98);
+  assert.ok(cylinder.primarySurface.arcDegrees>=120&&cylinder.primarySurface.arcDegrees<=140);
   assert.ok(cylinder.secondarySurfaces.reduce((sum,face)=>sum+face.arcDegrees,0)<=140);
   for(const face of cylinder.secondarySurfaces){
     assert.ok(Math.hypot(face.position[0],face.position[2])>.68);
@@ -124,15 +134,123 @@ test('cylinder keeps its chosen silhouette and small outward curved patches',()=
   assert.equal(cylinder.diagnostics.requiresScroll,true);
 });
 
-test('sphere reading face stays inside the front hemisphere band',()=>{
+test('sphere reading face uses a circular near-full front hemisphere',()=>{
   const sphere=surfaceLayout({id:'person',shape:'sphere'});
-  assert.ok(sphere.primarySurface.width<.9);
-  assert.ok(sphere.primarySurface.height<.9);
+  assert.equal(sphere.wrapper.contour,'circle');
+  assert.equal(sphere.primarySurface.width,sphere.primarySurface.height);
+  assert.ok(sphere.primarySurface.width>=sphere.bodyBounds.width*.86);
+  assert.ok(sphere.primarySurface.width<sphere.bodyBounds.width);
+  assert.ok(Math.hypot(sphere.readableBounds.width,sphere.readableBounds.height)<=sphere.bodyBounds.width*.97,
+    'the rectangular controls fit inside the circular skin');
   assert.ok(sphere.primarySurface.position[2]>.725);
-  assert.equal(sphere.primarySurface.arcDegrees,80);
+  assert.ok(sphere.primarySurface.arcDegrees>=120&&sphere.primarySurface.arcDegrees<=140);
   assert.ok(sphere.secondarySurfaces.every(face=>Math.hypot(...face.position)>.725));
   assert.ok(sphere.secondarySurfaces.every(face=>face.position[2]>0&&face.normal[2]>0),
     'supporting sphere copy stays on the visible front hemisphere');
+});
+
+test('every wrapper and its readable face have the same silhouette and aspect ratio',()=>{
+  const expected={phone:'rounded-rectangle',square:'rounded-rectangle',rectangle:'rounded-rectangle',
+    sphere:'circle',cylinder:'cylinder',cube:'rounded-rectangle',wave:'wave'};
+  for(const [shape,form] of Object.entries(REALITY_TAB_FORMS)){
+    const {wrapper,primarySurface}=surfaceLayout({id:shape,shape});
+    assert.equal(wrapper.contour,expected[shape]);
+    assert.ok(wrapper.coverage>=.86&&wrapper.coverage<=.92);
+    if(shape==='sphere'){
+      assert.ok(wrapper.contentBounds.width<primarySurface.width);
+      assert.ok(wrapper.contentBounds.height<primarySurface.height);
+    }else{
+      assert.equal(primarySurface.width,wrapper.contentBounds.width);
+      assert.equal(primarySurface.height,wrapper.contentBounds.height);
+    }
+    assert.ok(Math.abs(primarySurface.width/primarySurface.height-form.width/form.height)<1e-5);
+    assert.ok(primarySurface.width>=wrapper.width*.86&&primarySurface.width<=wrapper.width*.92);
+    assert.ok(primarySurface.height>=wrapper.height*.86&&primarySurface.height<=wrapper.height*.92);
+  }
+});
+
+test('legacy map, projector and fitter read the same wrapper geometry',()=>{
+  for(const shape of Object.keys(REALITY_TAB_FORMS)){
+    const layout=surfaceLayout({id:shape,shape}),map=createLivingSurfaceMap(shape);
+    assert.equal(map.primary.width,layout.primarySurface.width);
+    assert.equal(map.primary.height,layout.primarySurface.height);
+    assert.deepEqual(map.primary.position,layout.primarySurface.position);
+    const projected=projectLivingSurface({shape,distance:9,viewportHeight:900});
+    const fitted=fitLivingSurface({shape,distance:9,viewportWidth:1440,viewportHeight:900});
+    assert.equal(projected.primary.width,layout.primarySurface.width);
+    assert.equal(projected.primary.height,layout.primarySurface.height);
+    assert.equal(fitted.primary.width,layout.primarySurface.width);
+    assert.equal(fitted.primary.height,layout.primarySurface.height);
+    assert.ok(projected.width>0&&fitted.width>0);
+  }
+});
+
+test('custom object profiles compose a new shape without a shape-specific branch',()=>{
+  const profile={body:{width:2,height:1.5,depth:.2},contour:'rounded-rectangle',coverage:.88,
+    cornerRadius:.22,frontDepth:.26};
+  const composer=createLivingSurfaceComposer({profiles:{'hex-diary':profile}});
+  const registered=composer.surfaceLayout({id:'diary',shape:'hex-diary',size:3,contentDensity:10});
+  const direct=surfaceLayout({id:'diary',shape:'hex-diary',size:3,contentDensity:10,profile});
+  assert.deepEqual(registered,direct);
+  assert.equal(registered.wrapper.shape,'hex-diary');
+  assert.deepEqual(registered.bodyBounds,{width:2,height:1.5,depth:.2});
+  assert.deepEqual(registered.wrapper.contentBounds,{width:1.76,height:1.32});
+  assert.equal(registered.wrapper.frontDepth,.26);
+  assert.equal(registered.primarySurface.position[2],.26);
+  assert.equal(registered.wrapper.cornerRadius,.22);
+  assert.equal(registered.wrapper.inset,.06);
+  assert.equal(registered.diagnostics.requiresScroll,true);
+  assert.deepEqual(composer.profileFor('hex-diary').body,profile.body);
+  const map=createLivingSurfaceMap('hex-diary',{profile});
+  assert.equal(map.primary.width,registered.primarySurface.width);
+  assert.equal(projectLivingSurface({shape:'hex-diary',profile}).primary.height,registered.primarySurface.height);
+  assert.throws(()=>surfaceLayout({id:'bad',shape:'hex-diary',profile:{...profile,coverage:1}}),/coverage/);
+  assert.throws(()=>surfaceLayout({id:'buried',shape:'hex-diary',profile:{...profile,frontDepth:.1}}),/frontDepth/);
+  assert.throws(()=>createLivingSurfaceComposer({profiles:{bad:{...profile,contour:'unknown'}}}),/contour/);
+});
+
+test('custom profile drives focus framing and deterministic spacing at its physical size',()=>{
+  const composer=createLivingSurfaceComposer({profiles:{'long-diary':{
+    body:{width:7,height:1.5,depth:.3},contour:'rounded-rectangle',coverage:.88,frontDepth:.34,
+  }}});
+  const lens={shape:'long-diary',size:2,viewportWidth:960,viewportHeight:720,occupancy:.5};
+  const customFocus=composer.focusDistance(lens);
+  assert.ok(customFocus.distance>focusDistance({...lens,shape:'rectangle'}).distance*2);
+  assert.ok(customFocus.widthOccupancy<=.5);
+  const input=[{id:'fixed',shape:'long-diary',size:2,position:[0,0,0],locked:true},
+    {id:'moving',shape:'long-diary',size:2,position:[0,0,0]}];
+  const packed=composer.solveLivingLayout(input,{gap:.5});
+  assert.equal(packed.diagnostics.collisionCount,0);
+  assert.deepEqual(input[0].position,[0,0,0]);
+  assert.deepEqual(packed.objects[0].position,[0,0,0]);
+  assert.ok(packed.objects[0].radius>7);
+  assert.ok(Math.hypot(...packed.objects[1].position)>=packed.objects[0].radius*2+.5-.01);
+  assert.throws(()=>surfaceLayout({id:'bad-sphere',shape:'spherical',profile:{
+    body:{width:2,height:2,depth:.2},contour:'circle',radius:1,
+  }}),/circular sphere profile/);
+  assert.throws(()=>surfaceLayout({id:'bad-cylinder',shape:'cylindrical',profile:{
+    body:{width:2,height:3,depth:1},contour:'cylinder',radius:1,
+  }}),/cylinder profile/);
+});
+
+test('a new convex polygon uses one profile for its frame, safe controls, focus, and spacing',()=>{
+  const outline=[[-.5,0],[-.25,.5],[.25,.5],[.5,0],[.25,-.5],[-.25,-.5]];
+  const profile={body:{width:2,height:1.6,depth:.25},contour:'polygon',outline,coverage:.9};
+  const composer=createLivingSurfaceComposer({profiles:{'hex-archive':profile}});
+  const {wrapper,primarySurface}=composer.surfaceLayout({id:'archive',shape:'hex-archive'});
+  assert.deepEqual(wrapper.outline,outline);
+  assert.equal(wrapper.shape,'hex-archive');
+  assert.equal(wrapper.contour,'polygon');
+  assert.equal(primarySurface.width,1.8);
+  assert.ok(wrapper.contentBounds.width<primarySurface.width);
+  assert.ok(wrapper.contentBounds.height<primarySurface.height);
+  const frame=composer.focusDistance({shape:'hex-archive',viewportWidth:390,viewportHeight:844,occupancy:.55});
+  assert.ok(frame.widthOccupancy<=.55&&frame.heightOccupancy<=.55);
+  const packed=composer.solveLivingLayout([{id:'archive',shape:'hex-archive',position:[0,0,0],pinned:true},
+    {id:'archive-2',shape:'hex-archive',position:[0,0,0]}],{gap:1});
+  assert.equal(packed.diagnostics.collisionCount,0);
+  assert.throws(()=>surfaceLayout({id:'bad',shape:'hex-archive',profile:{...profile,
+    outline:[[-.5,0],[.5,0],[0,.5],[0,-.5]]}}),/convex/);
 });
 
 test('copy density never changes body or surface geometry and size only changes radius',()=>{
