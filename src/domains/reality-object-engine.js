@@ -39,6 +39,22 @@ export function createRealityObjectSurfaceEngine(){
       {id:'bottom',width,height:depth,position:[0,-height/2-clearance,0],rotation:[Math.PI/2,0,0]},
     ].map(face=>({...face,width:Number(face.width.toFixed(4)),height:Number(face.height.toFixed(4)),position:face.position.map(value=>Number(value.toFixed(4)))})));
   }
+  // All shapes share the same readable-focus rule. While travelling, the
+  // surrounding faces make the object feel volumetric; once that object is
+  // isolated, only its interactive front remains. This prevents a sphere,
+  // wave, phone, or cube from turning into a stack of overlapping panels.
+  function shouldShowFace({faceId,facesCamera,focusIsolated=false,focusedId=null,featureId=null,stage=0,objectVisible=true}={}){
+    if(!['front','back','left','right','top','bottom'].includes(faceId))throw Error('A Reality Lens surface needs a known face');
+    if(!Number.isInteger(stage)||stage<0||stage>3)throw Error('A Reality Lens surface stage must be between zero and three');
+    if(!objectVisible)return false;
+    const intimateFocus=Boolean(focusIsolated&&focusedId&&featureId&&focusedId===featureId);
+    // The primary surface is the living reading face of the selected object.
+    // It remains mounted through rotation, while only the wrapping context
+    // surfaces depend on the viewing angle and approach distance.
+    if(faceId==='front')return true;
+    if(!facesCamera||intimateFocus)return false;
+    return stage>=1;
+  }
   function describe({feature,object,stage=0,summary='',readOnly=false}={}){
     if(!feature?.id||!object?.id||feature.id!==object.id)throw Error('A Reality Lens surface must preserve the owning feature identity');
     if(!Number.isInteger(stage)||stage<0||stage>3)throw Error('Reality Lens surface stage must be between zero and three');
@@ -74,7 +90,7 @@ export function createRealityObjectSurfaceEngine(){
     const fitScale=viewportScale*(1-inset*2);
     return Object.freeze({shape,width:bounds.width*fitScale,height:bounds.height*fitScale,objectWidth:bounds.width*viewportScale,objectHeight:bounds.height*viewportScale,aspectRatio:bounds.width/bounds.height,scale:fitScale,scrollable:true});
   }
-  return Object.freeze({describe,projectedBounds,fitPanel,wrapLayout});
+  return Object.freeze({describe,projectedBounds,fitPanel,wrapLayout,shouldShowFace});
 }
 
 export const realityObjectSurfaceEngine=createRealityObjectSurfaceEngine();

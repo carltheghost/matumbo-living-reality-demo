@@ -57,6 +57,15 @@ test('wrap layout refuses invalid thickness and always falls back to a supported
   assert.throws(()=>realityObjectSurfaceEngine.wrapLayout('sphere',{depthRatio:0}),/positive/);
 });
 
+test('the shared face rule keeps a wrap while approaching and a single readable face at intimate focus',()=>{
+  const visible=faceId=>realityObjectSurfaceEngine.shouldShowFace({faceId,facesCamera:true,stage:2,featureId:'youtube',focusedId:'youtube'});
+  assert.equal(visible('front'),true);
+  assert.equal(visible('left'),true);
+  assert.equal(realityObjectSurfaceEngine.shouldShowFace({faceId:'front',facesCamera:true,stage:3,featureId:'youtube',focusedId:'youtube',focusIsolated:true}),true);
+  for(const faceId of ['back','left','right','top','bottom'])assert.equal(realityObjectSurfaceEngine.shouldShowFace({faceId,facesCamera:true,stage:3,featureId:'youtube',focusedId:'youtube',focusIsolated:true}),false,faceId);
+  assert.equal(realityObjectSurfaceEngine.shouldShowFace({faceId:'front',facesCamera:false,stage:3,featureId:'youtube',focusedId:'youtube',focusIsolated:true}),true);
+});
+
 test('surface identity mismatch and invalid reveal levels are rejected',()=>{
   assert.throws(()=>realityObjectSurfaceEngine.describe({feature,object:{...object,id:'other'}}),/identity/);
   assert.throws(()=>realityObjectSurfaceEngine.describe({feature,object,stage:4}),/stage/);

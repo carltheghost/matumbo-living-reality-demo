@@ -1,7 +1,7 @@
 import {createRealityWorkspace} from '../domains/reality-workspace.js?v=20260923-spatial-tabs16';
 import {REALITY_TAB_FORMS,REALITY_TAB_SIZE_MIN,REALITY_TAB_SIZE_MAX,resolveRealityTabPosition} from '../domains/reality-tab-layout.js?v=20260923-spatial-tabs15';
 import {REALITY_LENS_GROUPS,realityLensEngine,resolveRealityLensGroup} from '../domains/reality-lens-engine.js?v=20260923-lens-engine6';
-import {realityLensCopy,realityLensLabel,realityObjectSurfaceEngine} from '../domains/reality-object-engine.js?v=20260923-object-surface4';
+import {realityLensCopy,realityLensLabel,realityObjectSurfaceEngine} from '../domains/reality-object-engine.js?v=20260923-object-surface5';
 import {buildRealityAssemblyScene,LOD_FAR} from './reality-assembly-scene.js?v=20260923-spatial-tabs20';
 
 // The lens contains only equal-status feature tabs; no center cube or anchor.
@@ -255,13 +255,13 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
         }
       });
     }
-    node.root.updateMatrixWorld(true);camera.updateMatrixWorld();const cameraWorld=camera.getWorldPosition(new THREE.Vector3());
+    node.root.updateMatrixWorld(true);camera.updateMatrixWorld();const cameraWorld=camera.getWorldPosition(new THREE.Vector3()),lensState=spatial.getSnapshot();
     record.surfaces.forEach(item=>{
       const face=layout.find(candidate=>candidate.id===item.id),object3d=item.object3d;if(!face||!object3d)return;
       object3d.position.set(...face.position);object3d.rotation.set(...face.rotation);object3d.updateMatrixWorld(true);
       const faceWorld=object3d.getWorldPosition(new THREE.Vector3()),normal=new THREE.Vector3(0,0,1).applyQuaternion(object3d.getWorldQuaternion(new THREE.Quaternion())).normalize();
       const towardCamera=cameraWorld.clone().sub(faceWorld).normalize(),facesCamera=normal.dot(towardCamera)>.06;
-      object3d.visible=node.root.visible&&facesCamera&&(item.id==='front'||(node.revealStage??0)>=1);
+      object3d.visible=realityObjectSurfaceEngine.shouldShowFace({faceId:item.id,facesCamera,focusIsolated:lensState.focusIsolated,focusedId:lensState.focusedId,featureId:record.featureId,stage:node.revealStage??0,objectVisible:node.root.visible});
       if(item.id!=='front'){
         item.element.style.opacity=String(.58+.42*Math.min(1,node.open??0));
         const copy=faceText(item.id,feature,surface,detail),[eyebrow,title,body,detailLine]=item.element.children;

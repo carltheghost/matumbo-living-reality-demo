@@ -147,26 +147,22 @@ test('lens mode preserves real depth occlusion and hides distant tabs',()=>{
   scene.destroy();
 });
 
-test('selecting a tab brings it forward, fades other groups, and reveals three distinct cumulative stages',()=>{
+test('selecting a tab keeps approach layers readable, then clears ornament for the intimate live surface',()=>{
   const {scene}=build();scene.apply(snapshot(objects()),{viewMode:'3d'});scene.focus('contracts');
   const focused=scene.nodes.get('contracts'),context=scene.nodes.get('person');
-  scene.update(.1,0,{reducedMotion:true,cameraDistance:9,cameraPosition:new THREE.Vector3(6,1,9)});
+  scene.update(.1,0,{reducedMotion:true,cameraDistance:14,cameraPosition:new THREE.Vector3(6,1,14)});
   assert.equal(focused.revealStage,1,'automatic approach starts the first layer');
   assert.equal(focused.liveContent.visible,true,'the first layer contains the live feature signal');
   assert.equal(focused.sourceLayer.visible,false,'source structure waits for a deeper approach');
   assert.ok(focused.root.scale.x>1,'focus grows modestly instead of scaling with reversed distance');
-  assert.ok(context.contextOpacity<.4&&context.contextOpacity>.2,'unrelated features stay quiet while remaining visibly alive');
+  assert.ok(context.contextOpacity<1&&context.contextOpacity>.05,'unrelated features begin fading during approach');
   scene.update(.1,1,{reducedMotion:true,cameraDistance:6,cameraPosition:new THREE.Vector3(6,1,6)});
-  assert.equal(focused.revealStage,2,'the second approach adds source structure');
-  assert.equal(focused.sourceLayer.visible,true);
-  assert.equal(focused.nestedLayer.visible,false,'the deepest layer remains closed');
-  scene.update(.1,2,{reducedMotion:true,cameraDistance:2,cameraPosition:new THREE.Vector3(6,1,2)});
-  assert.equal(focused.revealStage,3,'the deepest approach reveals nested source structure');
-  assert.equal(focused.liveContent.visible,true,'the earlier live layer remains present');
-  assert.equal(focused.sourceLayer.visible,true,'the earlier source layer remains present');
-  assert.equal(focused.nestedLayer.visible,true);
-  assert.equal(context.root.visible,true,'unrelated tabs remain in the field as quiet context');
-  assert.ok(context.contextOpacity>=.2);
+  assert.equal(scene.getSnapshot().focusIsolated,true);
+  assert.equal(focused.revealStage,2,'the selected object continues to unfold by depth');
+  assert.equal(focused.liveContent.visible,false,'the mounted live panel owns the close-up instead of decorative duplicate layers');
+  assert.equal(focused.sourceLayer.visible,false);
+  assert.equal(focused.nestedLayer.visible,false);
+  assert.equal(context.root.visible,false,'unrelated tabs clear away at intimate focus');
   scene.destroy();
 });
 
