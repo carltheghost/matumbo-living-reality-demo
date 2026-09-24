@@ -3,12 +3,68 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import * as THREE from '../vendor/three-r179.1/build/three.module.js';
 import {
+  FEATURE_REAL_FEEDS,
   contractEntitiesFromRecords,
   entitiesForFeature,
   inferProjectionEntityKind,
   projectionEntitiesForFeature,
+  resolveRealFeatureFeed,
 } from '../src/render/universal-reality-bridge.js';
 import { createUniversalObjectRenderer } from '../src/universal/universal-object-renderer.js';
+import { FEATURE_DEFINITIONS } from '../src/render/feature-navigator.js';
+
+test('every current Reality Lens feature has a declared real-data feed',()=>{
+  const ids=FEATURE_DEFINITIONS.map(feature=>feature.id);
+  const missing=ids.filter(id=>!FEATURE_REAL_FEEDS[id]?.length);
+  assert.deepEqual(missing,[]);
+});
+
+test('real feature snapshots outrank catalog fallback data',()=>{
+  const scope={
+    __TUMBO_ACADEMY__:{
+      getSnapshot:()=>({
+        status:'learning',
+        selectedRecord:{id:'lesson-7',kind:'artifact',label:'Orbital Energy',progress:72},
+        lessons:[{id:'lesson-7',kind:'artifact',label:'Orbital Energy',progress:72}],
+        completed:4,
+      }),
+    },
+  };
+  const feed=resolveRealFeatureFeed('academy',scope);
+  assert.equal(feed.available,true);
+  assert.equal(feed.sourceName,'__TUMBO_ACADEMY__');
+  const entities=entitiesForFeature({
+    feature:{id:'academy',label:'Academy',description:'Knowledge object'},
+    featureId:'academy',
+    projection:{entities:[]},
+    selected:true,
+    scope,
+  });
+  assert.equal(entities[0].id,'academy:live');
+  assert.ok(entities[0].provenance.includes('real-data'));
+  assert.equal(entities[0].status,'learning');
+  assert.ok(entities.length>=2);
+});
+
+test('nested real feeds such as Bot Plaza console are resolved without renderer-specific code',()=>{
+  const scope={
+    __TUMBO_BOT_PLAZA__:{
+      console:{getSnapshot:()=>({status:'advisory',agents:[{id:'bot-1',kind:'agent',label:'Builder'}]})},
+    },
+  };
+  const feed=resolveRealFeatureFeed('bot-plaza',scope);
+  assert.equal(feed.available,true);
+  assert.equal(feed.sourceName,'__TUMBO_BOT_PLAZA__.console');
+  const entities=entitiesForFeature({
+    feature:{id:'bot-plaza',label:'Bot Plaza'},
+    featureId:'bot-plaza',
+    projection:{entities:[]},
+    selected:true,
+    scope,
+  });
+  assert.equal(entities[0].status,'advisory');
+  assert.ok(entities.some(entity=>entity.kind==='bot'));
+});
 
 test('contract records become contract + Covenant Slip + contractor anatomy',()=>{
   const contract={
