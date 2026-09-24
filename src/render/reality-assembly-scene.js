@@ -361,7 +361,7 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[],rela
     node.formParts=[...parts,indicator];node.tabMesh=body;node.artMaterial=null;node.shellMaterial=shell;node.edgeMaterial=edgeMaterial;node.indicator=indicator;node.shape=shapeName;positionEmbeddedData(node);
     applyTabDepthMode(node);
     prepareFadeMaterials(node);
-    node.artMaterial=node.fadeMap.get(artMaterial)??artMaterial;
+    node.artMaterial=null;
     node.shellMaterial=node.fadeMap.get(shell)??shell;
     node.edgeMaterial=node.fadeMap.get(edgeMaterial)??edgeMaterial;
     node.indicator.material=node.fadeMap.get(indicatorMaterial)??indicatorMaterial;
