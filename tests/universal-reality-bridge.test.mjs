@@ -19,6 +19,24 @@ test('every current Reality Lens feature has a declared real-data feed',()=>{
   assert.deepEqual(missing,[]);
 });
 
+test('real-domain snapshots are never frozen or adopted as renderer-owned state',()=>{
+  const liveRecord={id:'live-1',label:'Mutable domain record',status:'ready'};
+  const liveSnapshot={status:'ready',records:[liveRecord]};
+  const scope={__TUMBO_ACADEMY__:{getSnapshot:()=>liveSnapshot}};
+  const entities=entitiesForFeature({
+    feature:{id:'academy',label:'Academy'},
+    featureId:'academy',
+    projection:{entities:[]},
+    selected:true,
+    scope,
+  });
+  assert.ok(entities.length>=1);
+  assert.equal(Object.isFrozen(liveSnapshot),false);
+  assert.equal(Object.isFrozen(liveRecord),false);
+  liveRecord.status='updated';
+  assert.equal(liveRecord.status,'updated');
+});
+
 test('real feature snapshots outrank catalog fallback data',()=>{
   const scope={
     __TUMBO_ACADEMY__:{
