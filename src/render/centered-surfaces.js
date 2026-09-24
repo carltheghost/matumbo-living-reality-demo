@@ -160,6 +160,7 @@ const PANEL_SPACE_CSS = `
 `;
 
 export function mountCenteredSurfaces(documentRoot = document, view = window) {
+  // Surface-mounted Reality Lens panels are explicitly excluded from this 2D manager.
   const noop = () => {};
   if (!documentRoot || !view) return noop;
   const mq = typeof view.matchMedia === 'function' ? view.matchMedia(NARROW_QUERY) : null;
