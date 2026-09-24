@@ -22,7 +22,7 @@ import { initMobilePanelManager } from './render/mobile-panel-manager.js?v=20260
 import { installMobileFreezeGuard } from './render/mobile-freeze-guard.js?v=20260922-mfg1';
 import { mountPhotoMascot } from './render/photo-mascot-mount.js?v=20260922-cache2';
 import { createPersonStudio } from './render/person-studio.js?v=20260918-avatar-chess';
-import { createRealityAssembly, CLEAN_LANDING_CAMERA } from './render/reality-assembly.js?v=20260923-spatial-tabs34';
+import { createRealityAssembly, CLEAN_LANDING_CAMERA } from './render/reality-assembly.js?v=20260924-living-surfaces1';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { MANIPULATE_MODES } from './render/manipulate-controls.js?v=20260922-cache2';
@@ -268,6 +268,45 @@ camera.position.set(0, 10, 30);
 
 const isMobile = deviceProjection.presentation.viewport.class === 'compact' || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 const reducedMotion = deviceProjection.presentation.accessibility.motion === 'reduced';
+
+// These two existing panels are DOM-only. A direct link can still open its
+// requested surface when WebGL construction fails, before Feature Navigator
+// and the normal panel wiring are available. All other routes keep the static
+// directory supplied by index.html; none is silently promoted to execution.
+function openStaticFeatureRouteOnWebglFailure() {
+  const feature = new URLSearchParams(globalThis.location?.search ?? '').get('feature');
+  if (feature !== 'web-ai' && feature !== 'youtube') return;
+
+  if (feature === 'youtube') {
+    createYoutubeSurface({ documentRoot: document }).open();
+  } else {
+    // The failed renderer has no projection bridge or persistence contract.
+    // Mount Web + AI with volatile storage and no session store. External tabs
+    // and framed pages still require the existing panel's explicit controls.
+    const volatileStorage = { getItem: () => null, setItem: () => {} };
+    const transientWindow = {
+      get innerWidth() { return window.innerWidth; },
+      get innerHeight() { return window.innerHeight; },
+      navigator: window.navigator,
+      open: (url, target) => window.open(url, target),
+      addEventListener: (...args) => window.addEventListener(...args),
+    };
+    createWebAiConsole({
+      documentRoot: document,
+      windowRoot: transientWindow,
+      storage: volatileStorage,
+    }).open('webgl-fallback');
+  }
+
+  // The independent command deck may boot even though this module failed.
+  // Hide it only after the requested panel mounts; the static directory stays
+  // available if the user closes the panel or follows another route.
+  document.body.dataset.staticFeatureRoute = feature;
+  const style = document.createElement('style');
+  style.textContent = 'body[data-static-feature-route] #matumbo-command-deck{display:none!important}';
+  document.head.appendChild(style);
+}
+
 let renderer;
 try {
   renderer = new THREE.WebGLRenderer({ alpha:true, antialias:!isMobile, powerPreference:isMobile?'low-power':'high-performance' });
@@ -277,6 +316,8 @@ try {
   // path; report the local failure and let the browser error boundary stop
   // this module cleanly.
   runtimeStatus?.markFailed?.(error, 'WebGL renderer');
+  try { openStaticFeatureRouteOnWebglFailure(); }
+  catch (fallbackError) { console.warn('[static-feature-route] panel unavailable:', fallbackError); }
   throw error;
 }
 runtimeStatus?.setStage?.('renderer', 'WebGL renderer online; assembling local organs…');

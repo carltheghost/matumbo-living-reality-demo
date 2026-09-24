@@ -2,7 +2,8 @@ import {createRealityWorkspace} from '../domains/reality-workspace.js?v=20260923
 import {REALITY_TAB_FORMS,REALITY_TAB_SIZE_MIN,REALITY_TAB_SIZE_MAX,resolveRealityTabPosition} from '../domains/reality-tab-layout.js?v=20260923-spatial-tabs15';
 import {REALITY_LENS_GROUPS,realityLensEngine,resolveRealityLensGroup} from '../domains/reality-lens-engine.js?v=20260923-lens-engine7';
 import {realityLensCopy,realityLensLabel,realityObjectSurfaceEngine} from '../domains/reality-object-engine.js?v=20260923-object-surface5';
-import {buildRealityAssemblyScene,LOD_FAR} from './reality-assembly-scene.js?v=20260923-spatial-tabs20';
+import {surfaceLayout,focusDistance,solveLivingLayout,wheelIntent} from '../domains/living-surface-layout-engine.js';
+import {buildRealityAssemblyScene,LOD_FAR} from './reality-assembly-scene.js?v=20260924-focus-cap1';
 
 // The lens contains only equal-status feature tabs; no center cube or anchor.
 export const CLEAN_LANDING_CAMERA={position:[36,25,110],target:[0,2,0],fov:60,mergeThreshold:LOD_FAR};
@@ -57,7 +58,9 @@ export function computeLabelSafeBand(chromeRects,viewportHeight){
 }
 
 export function createRealityAssembly({THREE,renderer,scene,camera,controls,world,targets,features,relationships={},onNavigate,onFrame,onPanelFrame=()=>{},onActiveChange=()=>{},readFeature=()=>null,environmentTexture=null,reducedMotion=false}){
-  const SURFACE_PIXELS_PER_UNIT=160;
+  // More internal CSS pixels make a small physical reading patch legible
+  // without inflating the object or its footprint in the 3D universe.
+  const SURFACE_PIXELS_PER_UNIT=320;
   const latinShapes={phone:'Telephonum',square:'Quadratum',rectangle:'Rectangulum',sphere:'Sphaera',cylinder:'Cylindrus',cube:'Cubus',wave:'Unda'};
   const shapeOptions=Object.entries(REALITY_TAB_FORMS).map(([id])=>`<option value="${id}">${latinShapes[id]??id}</option>`).join('');
   const primary=['block-world','contracts','person','rooms','academy','world-events','multi-sport-events','asset-market'];
@@ -74,7 +77,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   const labelFor=feature=>realityLensLabel(feature);
   const copyFor=value=>realityLensCopy(value);
   const visibleId=id=>id==='block-world'?'materia':String(id).replace(/(^|-)world(?=-|$)/gi,'$1locus');
-  const positions=ordered.map((feature,i)=>{
+  const seededPositions=ordered.map((feature,i)=>{
     const groupId=resolveRealityLensGroup(feature.id),members=groupMembers.get(groupId)??[feature],index=groupOffsets.get(groupId)?.get(feature.id)??0;
     const {position}=realityLensEngine.placeInFunnel({id:feature.id,index,count:members.length,groupId});
     return {
@@ -84,6 +87,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
       shape:defaultForms[i%defaultForms.length],size:1,
     };
   });
+  const positions=solveLivingLayout(seededPositions,{gap:1.02,iterations:96}).objects;
   const workspace=createRealityWorkspace({objects:positions,selectedId:ordered[0]?.id,rootLabel:'Una Realitas'});
   let owner=workspace.timeline;
   const sideRealityByFeature=new Map();
@@ -92,7 +96,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   const spatial=buildRealityAssemblyScene({THREE,parent:scene,features:ordered.map((feature,i)=>({...feature,label:labelFor(feature),description:copyFor(feature.description),boundary:copyFor(feature.boundary),sources:(feature.sources??[]).map(copyFor),assemblyTier:'tab',lensGroup:positions[i]?.lensGroup??'worlds',initialTabShape:initialShapes.get(feature.id),initialPosition:positions[i]?.position})),targets,relationships});
   spatial.setActiveGroup(null);
   const featureMap=new Map(features.map(feature=>[feature.id,feature]));
-  const stylesheet=document.createElement('link');stylesheet.rel='stylesheet';stylesheet.href=`${new URL('./reality-assembly.css',import.meta.url).href}?v=20260923-spatial-tabs25`;document.head.append(stylesheet);
+  const stylesheet=document.createElement('link');stylesheet.rel='stylesheet';stylesheet.href=`${new URL('./reality-assembly.css',import.meta.url).href}?v=20260924-living-surfaces1`;document.head.append(stylesheet);
   const root=document.createElement('section');root.id='reality-assembly';root.hidden=true;root.setAttribute('aria-label','Reality Lens spatial assembly');
   root.innerHTML=`<header class="assembly-header"><a class="assembly-brand" href="?feature=reality-lens"><span aria-hidden="true">◇</span><div>maTumbo<small>People × planet × possibility</small></div></a><nav aria-label="Assembly navigation"><button data-home>Explore</button><button data-enter-person>Your space</button><button data-enter-contracts>Contracts</button><button data-grid>Block World</button></nav><form class="assembly-quick-find" data-quick-find role="search"><label><span>Find object</span><input data-quick-search type="search" autocomplete="off" placeholder="Search YouTube, agents…" aria-label="Find a Reality Lens object"></label><button type="submit">Locate</button></form><button data-clean>Hide panels</button></header>
   <aside class="assembly-directory"><p class="assembly-eyebrow">Reality Lens Ω</p><h1>Many worlds.<br><em>One reality.</em></h1><p class="assembly-intro">Explore the same universe across space and depth.<br>Every window is a real, rearrangeable tab.</p><label class="assembly-search-label">Find a connected feature<input data-search placeholder="Search worlds, contracts…" type="search"></label><nav class="assembly-catalog" aria-label="Feature objects"></nav><p class="assembly-note">Designed 3D feature previews.<br>Only the selected feature opens its connected controls.</p></aside>
@@ -203,7 +207,21 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   const say=message=>{find('[data-status]').textContent=copyFor(message);};
   const guard=fn=>(...args)=>{try{return fn(...args);}catch(error){say(error.message);return null;}};
   const currentObject=()=>owner.getSnapshot().objects.find(object=>object.id===owner.getSnapshot().selectedId);
-  function snapshot(){return {...owner.getSnapshot(),active,viewMode,interaction,camera:{position:camera.position.toArray(),target:controls.target.toArray()},spatial:spatial.getSnapshot(),reality:workspace.getSnapshot()};}
+  function fitReadingSurface(object,node,distance,{safeWidth=36,safeHeight=190}={}){
+    const {primarySurface}=surfaceLayout({id:object.id,shape:object.shape,size:object.size,position:object.position});
+    const scale=Math.max(.001,node.root.scale.x),front=Math.max(.45,distance-primarySurface.position[2]*scale);
+    const pixelsPerUnit=innerHeight/(2*front*Math.tan(camera.fov*Math.PI/360));
+    const rawWidth=primarySurface.width*scale*pixelsPerUnit,rawHeight=primarySurface.height*scale*pixelsPerUnit;
+    const fit=Math.min(1,Math.max(1,innerWidth-safeWidth)/rawWidth,Math.max(1,innerHeight-safeHeight)/rawHeight);
+    return {width:rawWidth*fit,height:rawHeight*fit,aspectRatio:primarySurface.width/primarySurface.height};
+  }
+  let lastLayoutDiagnostics=null;
+  function snapshot(){return {...owner.getSnapshot(),active,viewMode,interaction,camera:{position:camera.position.toArray(),target:controls.target.toArray()},spatial:spatial.getSnapshot(),layoutDiagnostics:lastLayoutDiagnostics,reality:workspace.getSnapshot()};}
+  function projectSpacedLayout(state,pinnedId=state.selectedId){
+    const layout=solveLivingLayout(state.objects.map(object=>object.id===pinnedId?{...object,pinned:true}:object),{gap:1.02,iterations:96});
+    lastLayoutDiagnostics=layout.diagnostics;
+    return {...state,objects:layout.objects};
+  }
   function faceText(face,feature,surface,detail){
     if(face==='back')return {eyebrow:'CONTINUATIO · IDEM INSTRUMENTUM',title:surface.label,body:surface.description||surface.summary,detail:surface.boundary};
     if(face==='left')return {eyebrow:'STATUS · LOCALIS',title:surface.state,body:detail?.summary||'Status ex instrumento locali, non ex titulo decorativo.',detail:`Forma ${latinShapes[surface.shape]??surface.shape} · ${surface.size.toFixed(1)}×`};
@@ -243,12 +261,14 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     if(!record||!CSS3DObject)return;
     const node=spatial.nodes.get(record.featureId),feature=featureMap.get(record.featureId),data=owner.getSnapshot().objects.find(item=>item.id===record.featureId);
     if(!node||!feature||!data)return;
-    const shape=data.shape??'rectangle',layout=realityObjectSurfaceEngine.wrapLayout(shape),detail=readFeature(record.featureId),stage=spatial.nodes.get(record.featureId)?.revealStage??0;
+    const shape=data.shape??'rectangle',layout=surfaceLayout({id:record.featureId,shape,size:data.size,
+      position:data.position,locked:data.locked}),faces=[layout.primarySurface,...layout.secondarySurfaces],
+      detail=readFeature(record.featureId),stage=spatial.nodes.get(record.featureId)?.revealStage??0;
     const surface=realityObjectSurfaceEngine.describe({feature,object:data,stage,summary:detail?.summary,readOnly:owner.getSnapshot().mode==='past'});
     if(record.shape!==shape){
       record.shape=shape;
       record.surfaces.forEach(item=>{
-        const face=layout.find(candidate=>candidate.id===item.id);if(!face)return;
+        const face=faces.find(candidate=>candidate.id===item.id);if(!face)return;
         item.element.style.width=`${Math.round(face.width*SURFACE_PIXELS_PER_UNIT)}px`;item.element.style.height=`${Math.round(face.height*SURFACE_PIXELS_PER_UNIT)}px`;
         item.element.dataset.objectShape=shape;
         if(item.id==='front'&&record.livePanel){
@@ -258,12 +278,23 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
       });
     }
     node.root.updateMatrixWorld(true);camera.updateMatrixWorld();const cameraWorld=camera.getWorldPosition(new THREE.Vector3()),lensState=spatial.getSnapshot();
+    // Curved skins turn their active reading band toward the observer. The
+    // cylinder rotates around its vertical axis; a sphere may turn freely.
+    const localCamera=node.root.worldToLocal(cameraWorld.clone()).normalize();
+    const curvedRotation=new THREE.Quaternion();
+    if(shape==='cylinder')curvedRotation.setFromAxisAngle(new THREE.Vector3(0,1,0),Math.atan2(localCamera.x,localCamera.z));
+    else if(shape==='sphere')curvedRotation.setFromUnitVectors(new THREE.Vector3(0,0,1),localCamera);
     record.surfaces.forEach(item=>{
-      const face=layout.find(candidate=>candidate.id===item.id),object3d=item.object3d;if(!face||!object3d)return;
-      object3d.position.set(...face.position);object3d.rotation.set(...face.rotation);object3d.updateMatrixWorld(true);
+      const face=faces.find(candidate=>candidate.id===item.id),object3d=item.object3d;
+      if(!object3d)return;
+      if(!face){object3d.visible=false;return;}
+      object3d.position.set(...face.position).applyQuaternion(curvedRotation);
+      object3d.quaternion.copy(curvedRotation).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(...face.rotation)));
+      object3d.updateMatrixWorld(true);
       const faceWorld=object3d.getWorldPosition(new THREE.Vector3()),normal=new THREE.Vector3(0,0,1).applyQuaternion(object3d.getWorldQuaternion(new THREE.Quaternion())).normalize();
       const towardCamera=cameraWorld.clone().sub(faceWorld).normalize(),facesCamera=normal.dot(towardCamera)>.06;
-      object3d.visible=realityObjectSurfaceEngine.shouldShowFace({faceId:item.id,facesCamera,focusIsolated:lensState.focusIsolated,focusedId:lensState.focusedId,featureId:record.featureId,stage:node.revealStage??0,objectVisible:node.root.visible});
+      const readable=item.id==='front'||(face.width*SURFACE_PIXELS_PER_UNIT>=110&&face.height*SURFACE_PIXELS_PER_UNIT>=80);
+      object3d.visible=readable&&realityObjectSurfaceEngine.shouldShowFace({faceId:item.id,facesCamera,focusIsolated:lensState.focusIsolated,focusedId:lensState.focusedId,featureId:record.featureId,stage:node.revealStage??0,objectVisible:node.root.visible});
       if(item.id!=='front'){
         item.element.style.opacity=String(.58+.42*Math.min(1,node.open??0));
         const copy=faceText(item.id,feature,surface,detail),[eyebrow,title,body,detailLine]=item.element.children;
@@ -359,7 +390,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   }
   function render(){
     const state=owner.getSnapshot(),feature=featureMap.get(state.selectedId),object=state.objects.find(item=>item.id===state.selectedId);
-    spatial.apply(state,{viewMode,hoveredId:hovered});
+    spatial.apply(projectSpacedLayout(state),{viewMode,hoveredId:hovered});
     const detail=readFeature(feature.id),surface=realityObjectSurfaceEngine.describe({feature,object,stage:spatial.getSnapshot().selectedStage,summary:detail?.summary,readOnly:state.mode==='past'});
     find('[data-title]').textContent=labelFor(feature);find('[data-description]').textContent=copyFor(surface.description);
     find('[data-stage-badge]').textContent=`${surface.stageLabel} · ${latinShapes[surface.shape]??surface.shape}`;
@@ -418,14 +449,21 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   }
   function focus(){
     const object=currentObject(),mobile=innerWidth<700,position=new THREE.Vector3(...object.position);
-    // Close enough for the object face to become a working surface, while
-    // retaining a visible field around it instead of becoming a full-screen card.
-    const outward=camera.position.clone().sub(controls.target);if(outward.length()<1)outward.set(54,36,164);outward.normalize().multiplyScalar(mobile?8.2:7.4);
-    focusTarget=position.clone();focusPosition=position.clone().add(outward);spatial.focus(object.id);onFrame?.();
+    const node=spatial.nodes.get(object.id);
+    const projected=projectSpacedLayout(owner.getSnapshot()).objects.find(item=>item.id===object.id);
+    if(projected)position.set(...projected.position);
+    const framing=focusDistance({shape:object.shape,size:object.size,baseScale:node?.scale??1,
+      approachScale:realityLensEngine.profile.focus.maxScale,viewportWidth:innerWidth,
+      viewportHeight:innerHeight,fov:camera.fov,occupancy:mobile?.55:.58});
+    const outward=camera.position.clone().sub(controls.target);if(outward.length()<1)outward.set(54,36,164);
+    outward.normalize().multiplyScalar(framing.distance);
+    focusTarget=position.clone();focusPosition=position.clone().add(outward);spatial.focus(object.id,{distance:framing.distance});
+    controls.maxDistance=Math.max(220,framing.distance*1.3);onFrame?.();
   }
   function overview(){
     activeLensGroup=null;
     spatial.setActiveGroup(null);
+    controls.maxDistance=220;
     focusTarget=new THREE.Vector3(...CLEAN_LANDING_CAMERA.target);
     focusPosition=new THREE.Vector3(...CLEAN_LANDING_CAMERA.position);
     spatial.focus(null);
@@ -500,10 +538,9 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   const locate=event=>{const rect=renderer.domElement.getBoundingClientRect();point.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);ray.setFromCamera(point,camera);return ray.intersectObjects(targets,false).find(hit=>{const id=spatial.resolve(hit.object);return id&&spatial.nodes.get(id)?.root.visible&&hit.object.visible;})??null;};
   const resizeOnScroll=guard(event=>{
     if(!active||event.ctrlKey||event.target?.closest?.('.assembly-inspector'))return;
-    const overFeatureSurface=event.target?.closest?.('.reality-lens-feature-panel[data-lens-surface-attached=true],.assembly-wrap-face');
-    if(overFeatureSurface&&!event.shiftKey)return;
-    const hit=locate(event),id=spatial.resolve(hit?.object),object=id&&owner.getSnapshot().objects.find(item=>item.id===id);
-    if(!object?.id||object.anchor||object.locked||owner.getSnapshot().mode==='past')return;
+    const overContent=Boolean(event.target?.closest?.('.reality-lens-feature-panel[data-lens-surface-attached=true],.assembly-wrap-face'));
+    const hit=overContent?null:locate(event),id=spatial.resolve(hit?.object),object=id&&owner.getSnapshot().objects.find(item=>item.id===id);
+    if(wheelIntent({overContent,overObject:Boolean(id),mutable:Boolean(object&&!object.anchor&&!object.locked&&owner.getSnapshot().mode!=='past')})!=='resize')return;
     const delta=event.deltaY*(event.deltaMode===1?16:event.deltaMode===2?innerHeight:1);
     if(!Number.isFinite(delta)||Math.abs(delta)<1)return;
     const next=Math.max(REALITY_TAB_SIZE_MIN,Math.min(REALITY_TAB_SIZE_MAX,object.size*Math.exp(-delta*.0012)));
@@ -518,7 +555,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     if(interaction==='move'&&id&&owner.getSnapshot().mode!=='past'){
       select(id,{approach:false});const object=currentObject();
       if(object.anchor||object.locked){say(object.anchor?'Objectum fixum est.':'Instrumentum immutabile est; prius libera.');return;}
-      camera.getWorldDirection(dragNormal);dragPlane.setFromNormalAndCoplanarPoint(dragNormal,new THREE.Vector3(...object.position));
+      camera.getWorldDirection(dragNormal);dragPlane.setFromNormalAndCoplanarPoint(dragNormal,spatial.nodes.get(id)?.position??new THREE.Vector3(...object.position));
       if(ray.ray.intersectPlane(dragPlane,dragPoint)){pointer.move=true;pointer.origin=object.position;pointer.hit=dragPoint.clone();pointer.next=object.position;pointer.startY=event.clientY;pointer.cameraForward=dragNormal.clone();controls.enabled=false;renderer.domElement.setPointerCapture(event.pointerId);event.stopImmediatePropagation();event.preventDefault();}
     }
   });
@@ -536,7 +573,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
         if(event.shiftKey)proposed.addScaledVector(pointer.cameraForward,-(event.clientY-pointer.startY)*.055);
         const next=[proposed.x,proposed.y,proposed.z].map(value=>Math.max(-60,Math.min(60,value)));
         const state=owner.getSnapshot(),safePosition=resolveRealityTabPosition(pointer.objectId,next,state.objects);pointer.next=safePosition;
-        spatial.apply({...state,objects:state.objects.map(object=>object.id===pointer.objectId?{...object,position:safePosition}:object)},{viewMode,hoveredId:pointer.objectId});
+        spatial.apply(projectSpacedLayout({...state,objects:state.objects.map(object=>object.id===pointer.objectId?{...object,position:safePosition}:object)},pointer.objectId),{viewMode,hoveredId:pointer.objectId});
       }return;
     }
     const id=spatial.resolve(hit?.object);if(id!==hovered){hovered=id;render();find('[data-hover-label]').textContent=id?`${labelFor(featureMap.get(id))} · clicca ut instrumentum aperias`:'Spatium: iter · obiectum: magnitudo · clic: ingredere';}
@@ -584,7 +621,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     getPanelAnchor(featureId){
       const node=spatial.nodes.get(featureId),object=owner.getSnapshot().objects.find(item=>item.id===featureId);if(!node||!object)return null;
       const distance=Math.max(.45,camera.position.distanceTo(node.root.position));
-      const fitted=realityObjectSurfaceEngine.fitPanel({shape:object.shape??'rectangle',size:object.size??1,approachScale:(node.root.scale.x||1)/Math.max(.01,object.size??1),distance,viewportWidth:innerWidth,viewportHeight:innerHeight,fov:camera.fov,safeWidth:36,safeHeight:190,inset:0});
+      const fitted=fitReadingSurface(object,node,distance);
       screenPoint.copy(node.root.position);screenPoint.project(camera);
       if(screenPoint.z<=-1||screenPoint.z>=1||Math.abs(screenPoint.x)>1.2||Math.abs(screenPoint.y)>1.2)return null;
       const {width,height}=fitted;
@@ -598,18 +635,20 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
       if(!active)return;
       if(focusTarget&&!renderer.xr.isPresenting){const blend=reducedMotion?1:1-Math.exp(-dt*6);controls.target.lerp(focusTarget,blend);camera.position.lerp(focusPosition,blend);if(camera.position.distanceTo(focusPosition)<.02){focusTarget=null;focusPosition=null;}}
       const cameraDistance=camera.position.distanceTo(controls.target);
-      spatial.update(dt,time,{reducedMotion,cameraDistance,cameraPosition:camera.position});spatial.layer.updateMatrixWorld(true);camera.updateMatrixWorld();
+      spatial.update(dt,time,{reducedMotion,cameraDistance,cameraPosition:camera.position,
+        viewportWidth:innerWidth,viewportHeight:innerHeight,fov:camera.fov,occupancy:innerWidth<700?.55:.58});spatial.layer.updateMatrixWorld(true);camera.updateMatrixWorld();
       cssSurfaceHost.hidden=Boolean(renderer.xr?.isPresenting);
       if(mountedSurface&&!cssSurfaceHost.hidden){materializeSurfaceObjects(mountedSurface);sizeAndPlaceSurface(mountedSurface);css3dRenderer?.render(scene,camera);}
       onPanelFrame(owner.getSnapshot().selectedId);
       const overlaps=(a,b)=>a.left<b.right+4&&a.right>b.left-4&&a.top<b.bottom+4&&a.bottom>b.top-4;
       const occupied=[...all('.assembly-header,.assembly-directory,.assembly-inspector,.assembly-toolbar,.assembly-branches,.assembly-selection-hint,.assembly-world-label,.assembly-status'),...document.querySelectorAll('body.assembly-mode #immersive-toolbar')].filter(element=>!element.hidden&&getComputedStyle(element).display!=='none'&&getComputedStyle(element).visibility!=='hidden').map(element=>element.getBoundingClientRect());
+      if(mountedSurface?.front?.isConnected&&spatial.nodes.get(mountedSurface.featureId)?.root.visible)
+        occupied.push(mountedSurface.front.getBoundingClientRect());
     const selectedId=owner.getSnapshot().selectedId;
     const focusedNode=spatial.nodes.get(selectedId),focusedObject=owner.getSnapshot().objects.find(object=>object.id===selectedId);
     if(!selectedSurface.hidden&&focusedNode&&focusedObject){
       const distance=Math.max(.45,camera.position.distanceTo(focusedNode.position));
-      const projected=realityObjectSurfaceEngine.projectedBounds({shape:focusedObject.shape??'cube',size:focusedObject.size??1,approachScale:(focusedNode.root.scale.x||1)/Math.max(.01,focusedObject.size??1),distance,viewportHeight:innerHeight,fov:camera.fov});
-      const fitted=realityObjectSurfaceEngine.fitPanel({shape:focusedObject.shape??'rectangle',size:focusedObject.size??1,approachScale:(focusedNode.root.scale.x||1)/Math.max(.01,focusedObject.size??1),distance,viewportWidth:innerWidth,viewportHeight:innerHeight,fov:camera.fov,safeWidth:28,safeHeight:210,inset:0});
+      const fitted=fitReadingSurface(focusedObject,focusedNode,distance,{safeWidth:28,safeHeight:210});
       const width=fitted.width,height=fitted.height;
       screenPoint.copy(focusedNode.root.position);screenPoint.project(camera);
       const centerX=(screenPoint.x*.5+.5)*innerWidth,centerY=(-screenPoint.y*.5+.5)*innerHeight;
