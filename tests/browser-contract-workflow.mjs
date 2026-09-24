@@ -53,9 +53,35 @@ try{
     assert.equal(projection.geometry.attached,true);assert.equal(projection.geometry.idleAnimation,false);
     assert.ok(projection.geometry.relationshipCount>0);assert.ok(projection.worldRelationships>projection.geometry.relationshipCount);
     assert.equal(projection.panel.horizontalOverflow,false);assert.equal(projection.panel.onscreen,true);
-    assert.deepEqual(errors,[]);
     await page.screenshot({path:resolve(output,`${mode}-contract-completed.png`)});
-    results.push({mode,completed,projection,errors});
+
+    // Carry the real persisted contract into the canonical Reality Lens and
+    // prove that the universal renderer reads the actual contract domain
+    // instead of substituting a catalog/demo record.
+    await page.goto(`${base}?feature=reality-lens&contractProof=${encodeURIComponent(completed.id)}`,{waitUntil:'domcontentloaded',timeout:60000});
+    await page.waitForFunction(()=>window.__MATUMBO_RUNTIME__?.getState?.()==='ready'&&window.__TUMBO_UNIVERSAL_OBJECTS__?.getSnapshot?.()?.features?.['contract-atelier'],null,{timeout:60000});
+    await page.waitForFunction(()=>{
+      const feature=window.__TUMBO_UNIVERSAL_OBJECTS__.getSnapshot().features['contract-atelier'];
+      return feature?.kinds?.includes('contract')&&feature?.kinds?.includes('slip')&&feature?.kinds?.includes('contractor');
+    },null,{timeout:60000});
+    const universal=await page.evaluate(()=>{
+      const snapshot=window.__TUMBO_UNIVERSAL_OBJECTS__.getSnapshot();
+      const feature=snapshot.features['contract-atelier'];
+      return {
+        feature,
+        feed:snapshot.dataFeeds['contract-atelier'],
+        available:snapshot.realFeedAvailableCount,
+        universalObjectCount:snapshot.universalObjectCount,
+      };
+    });
+    assert.deepEqual(universal.feature.kinds,['contract','slip','contractor']);
+    assert.equal(universal.feed.registered,true);
+    assert.equal(universal.feed.available,true);
+    assert.match(universal.feed.sourceName,/CONTRACT_/);
+    assert.ok(universal.universalObjectCount>0);
+    await page.screenshot({path:resolve(output,`${mode}-reality-lens-contract-universal.png`),fullPage:true});
+    assert.deepEqual(errors,[]);
+    results.push({mode,completed,projection,universal,errors});
     await context.close();
   }
   console.log(JSON.stringify({passed:true,results},null,2));
