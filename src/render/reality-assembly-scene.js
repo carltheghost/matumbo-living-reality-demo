@@ -1,5 +1,5 @@
-import {REALITY_TAB_FORMS} from '../domains/reality-tab-layout.js?v=20260923-spatial-tabs14';
-import {REALITY_LENS_GROUPS,realityLensEngine,resolveRealityLensGroup} from '../domains/reality-lens-engine.js?v=20260923-lens-engine4';
+import {REALITY_TAB_FORMS} from '../domains/reality-tab-layout.js?v=20260923-spatial-tabs16';
+import {REALITY_LENS_GROUPS,realityLensEngine,resolveRealityLensGroup} from '../domains/reality-lens-engine.js?v=20260923-lens-engine9';
 
 /** Shape-changing, image-bearing feature tabs only; the former central cube is
  * now the same status and geometry as every other Reality Lens object. */
@@ -709,15 +709,15 @@ function applyTabDepthMode(node){
   }
   function update(dt,time,{reducedMotion=false,cameraDistance=0,cameraPosition=null}={}){
     const blend=reducedMotion?1:1-Math.exp(-dt*9);
-    const targetProgress=realityLensEngine.overviewProgress(cameraDistance);
+    const focalNode=nodes.get(focusId),focusScale=Math.max(1,focalNode?.size??1);
+    const targetProgress=realityLensEngine.overviewProgress(cameraDistance/focusScale);
     approachBlend+=(targetProgress-approachBlend)*blend;
     worldBlock.visible=false;
     const activeRelation=(nodes.get(selected)?.isTab||nodes.get(hovered)?.isTab)===true;
     connections.visible=edges.length>0&&approachBlend>.3&&activeRelation&&cameraDistance>24&&!focusId;
     connectionMaterial.opacity=.26*approachBlend;
-    const focalNode=nodes.get(focusId);
     const focusDistance=cameraPosition&&focalNode?cameraPosition.distanceTo(focalNode.position):cameraDistance;
-    const focusResponse=realityLensEngine.objectResponse({id:focusId,selectedId:focusId,distance:focusDistance});
+    const focusResponse=realityLensEngine.objectResponse({id:focusId,selectedId:focusId,distance:focusDistance,focusScale});
     activeFocusStrength=focusResponse.focusStrength;activeFocusDistance=focusId?focusDistance:Infinity;
     const focusIsolated=Boolean(focusId&&focusResponse.isolationReached);activeFocusIsolated=focusIsolated;
     // The funnel is a guide while travelling, not another object layered on
@@ -734,12 +734,12 @@ function applyTabDepthMode(node){
       projectedPosition.copy(node.position);
       node.root.position.lerp(projectedPosition,blend);
       const nodeDistance=cameraPosition?cameraPosition.distanceTo(node.root.position):cameraDistance;
-      const physicalStage=realityLensEngine.stageAt(nodeDistance);
+      const physicalStage=realityLensEngine.stageAt(nodeDistance/Math.max(1,node.size??1));
       node.revealStage=node.goalOpen>=.99?3:physicalStage.stage;
       node.revealProgress=node.goalOpen>=.99?1:physicalStage.progress;
       const stageOpen=[0,.28,.56,.82][node.revealStage]+node.revealProgress*.16;
       node.open+=(Math.max(node.goalOpen,stageOpen)-node.open)*blend;
-      const response=realityLensEngine.objectResponse({id,selectedId:focusId,distance:focusDistance,baseScale:node.scale??1,size:node.size??1,tabReveal});
+      const response=realityLensEngine.objectResponse({id,selectedId:focusId,distance:focusDistance,focusScale,baseScale:node.scale??1,size:node.size??1,tabReveal});
       if(node.lastContextOpacity===undefined||Math.abs(node.lastContextOpacity-response.contextOpacity)>.008){setNodeOpacity(node,response.contextOpacity);node.lastContextOpacity=response.contextOpacity;}
       const groupMatches=activeGroupId==='*'||(node.isTab&&node.lensGroup===activeGroupId);
       // Context remains available while approaching, then genuinely clears so
@@ -753,12 +753,12 @@ function applyTabDepthMode(node){
         // shell becomes a quiet perimeter. This avoids a duplicate bright
         // wireframe fighting the readable, interactive face.
         const cover= response.isSelected ? Math.max(0,Math.min(1,(response.focusStrength-.24)/.76)) : 0;
-        const tuneSurface=(material,multiplier)=>{if(!material)return;const base=material.userData?.realityLensBaseOpacity??1;material.opacity=base*(1-cover*multiplier);};
+        const tuneSurface=(material,multiplier)=>{if(!material)return;const base=material.userData?.realityLensBaseOpacity??1;material.opacity=base*(1-cover*multiplier)*response.contextOpacity;};
         tuneSurface(node.shellMaterial,.76);
         // The frame is useful while approaching. At the readable stage it
         // almost disappears, leaving the mounted panel as the object's face.
-        if(node.edgeMaterial){const base=node.edgeMaterial.userData?.realityLensBaseOpacity??1;node.edgeMaterial.opacity=base*(1-cover)*(1-cover);}
-        if(node.artMaterial){const base=node.artMaterial.userData?.realityLensBaseOpacity??1;node.artMaterial.opacity=base*(1-cover)*(1-cover);}
+        if(node.edgeMaterial){const base=node.edgeMaterial.userData?.realityLensBaseOpacity??1;node.edgeMaterial.opacity=base*(1-cover)*(1-cover)*response.contextOpacity;}
+        if(node.artMaterial){const base=node.artMaterial.userData?.realityLensBaseOpacity??1;node.artMaterial.opacity=base*(1-cover)*(1-cover)*response.contextOpacity;}
         tuneSurface(node.indicator?.material,.55);
         node.root.rotation.y=reducedMotion?0:Math.sin(time*.18+node.traits.phase)*.025;
         node.root.rotation.x=reducedMotion?0:Math.sin(time*.13+node.traits.phase)*.012;

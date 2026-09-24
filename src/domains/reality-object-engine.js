@@ -1,4 +1,4 @@
-import {REALITY_TAB_FORMS} from './reality-tab-layout.js';
+import {livingSurfaceLayoutEngine} from './living-surface-layout-engine.js';
 
 const STAGE_NAMES=Object.freeze(['Signum','Identitas','Fontes','Interior']);
 const LATIN_LABELS=Object.freeze({
@@ -27,17 +27,7 @@ const freeze=value=>{if(value&&typeof value==='object'){Object.values(value).for
  * provider, wallet, or tool authority. */
 export function createRealityObjectSurfaceEngine(){
   function wrapLayout(shape='rectangle',{depthRatio=.42,clearance=.018}={}){
-    const form=REALITY_TAB_FORMS[shape]??REALITY_TAB_FORMS.rectangle;
-    if(!Number.isFinite(depthRatio)||depthRatio<=0||!Number.isFinite(clearance)||clearance<0)throw Error('Reality Lens wrap dimensions must be positive and finite');
-    const width=form.width,height=form.height,depth=Math.max(form.depth,Math.min(width,height)*depthRatio),z=depth/2+clearance;
-    return freeze([
-      {id:'front',width,height,position:[0,0,z],rotation:[0,0,0]},
-      {id:'back',width,height,position:[0,0,-z],rotation:[0,Math.PI,0]},
-      {id:'left',width:depth,height,position:[-width/2-clearance,0,0],rotation:[0,-Math.PI/2,0]},
-      {id:'right',width:depth,height,position:[width/2+clearance,0,0],rotation:[0,Math.PI/2,0]},
-      {id:'top',width,height:depth,position:[0,height/2+clearance,0],rotation:[-Math.PI/2,0,0]},
-      {id:'bottom',width,height:depth,position:[0,-height/2-clearance,0],rotation:[Math.PI/2,0,0]},
-    ].map(face=>({...face,width:Number(face.width.toFixed(4)),height:Number(face.height.toFixed(4)),position:face.position.map(value=>Number(value.toFixed(4)))})));
+    return livingSurfaceLayoutEngine.surfaceMap(shape,{depthRatio,clearance}).faces;
   }
   // All shapes share the same readable-focus rule. While travelling, the
   // surrounding faces make the object feel volumetric; once that object is
@@ -76,21 +66,16 @@ export function createRealityObjectSurfaceEngine(){
     });
   }
   function projectedBounds({shape='rectangle',size=1,distance=9,approachScale=1,viewportHeight=900,fov=60}={}){
-    const form=REALITY_TAB_FORMS[shape]??REALITY_TAB_FORMS.rectangle;
-    for(const value of [size,distance,viewportHeight,fov,approachScale])if(!Number.isFinite(value)||value<=0)throw Error('Reality Lens surface projection inputs must be finite and positive');
-    const pixelsPerUnit=viewportHeight/(2*distance*Math.tan(fov*Math.PI/360));
-    return Object.freeze({width:form.width*size*approachScale*pixelsPerUnit,height:form.height*size*approachScale*pixelsPerUnit});
+    const projected=livingSurfaceLayoutEngine.project({shape,size,distance,approachScale,viewportHeight,fov});
+    return Object.freeze({width:projected.width,height:projected.height,bodyWidth:projected.bodyWidth,bodyHeight:projected.bodyHeight,primary:projected.primary});
   }
   function fitPanel({shape='rectangle',size=1,distance=9,approachScale=1,viewportWidth=1280,viewportHeight=900,fov=60,safeWidth=32,safeHeight=176,inset=0}={}){
-    if(!Number.isFinite(viewportWidth)||!Number.isFinite(viewportHeight)||viewportWidth<=0||viewportHeight<=0)throw Error('Reality Lens panel needs a positive viewport');
-    if(!Number.isFinite(inset)||inset<0||inset>=.5)throw Error('Reality Lens panel inset must be between zero and one half');
-    const bounds=projectedBounds({shape,size,distance,approachScale,viewportHeight,fov});
-    const availableWidth=Math.max(1,viewportWidth-safeWidth),availableHeight=Math.max(1,viewportHeight-safeHeight);
-    const viewportScale=Math.min(1,availableWidth/bounds.width,availableHeight/bounds.height);
-    const fitScale=viewportScale*(1-inset*2);
-    return Object.freeze({shape,width:bounds.width*fitScale,height:bounds.height*fitScale,objectWidth:bounds.width*viewportScale,objectHeight:bounds.height*viewportScale,aspectRatio:bounds.width/bounds.height,scale:fitScale,scrollable:true});
+    return livingSurfaceLayoutEngine.fit({shape,size,distance,approachScale,viewportWidth,viewportHeight,fov,safeWidth,safeHeight,inset});
   }
-  return Object.freeze({describe,projectedBounds,fitPanel,wrapLayout,shouldShowFace});
+  function focusFrame({shape='rectangle',size=1,approachScale=1,viewportWidth=1280,viewportHeight=900,fov=60,occupancy=.54,minDistance=7.4,maxDistance=190}={}){
+    return livingSurfaceLayoutEngine.focusFrame({shape,size,approachScale,viewportWidth,viewportHeight,fov,occupancy,minDistance,maxDistance});
+  }
+  return Object.freeze({describe,projectedBounds,fitPanel,focusFrame,wrapLayout,shouldShowFace});
 }
 
 export const realityObjectSurfaceEngine=createRealityObjectSurfaceEngine();

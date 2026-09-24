@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {assemblySideLabelPoint,placeAssemblyLabel} from '../src/render/reality-assembly.js';
+import {assemblySideLabelPoint,placeAssemblyLabel,shouldShowRealityObjectLabel} from '../src/render/reality-assembly.js';
 
 test('object labels sit a consistent margin beside either side of the object',()=>{
   assert.deepEqual(assemblySideLabelPoint({position:[3,4,5],cameraRight:[1,0,0],halfWidth:1.2,side:1}),[4.68,4,5]);
@@ -47,4 +47,19 @@ test('tab labels yield to overlays and previously placed labels',()=>{
 test('a label is hidden only when the viewport has no collision-free slot',()=>{
   const placement=project({viewportWidth:100,viewportHeight:100,safeTop:8,safeBottom:92,labelWidth:80,labelHeight:80,occupied:[{left:0,right:100,top:0,bottom:100}]});
   assert.deepEqual(placement,{visible:false});
+});
+
+test('overview keeps feature labels inside their visible domain object',()=>{
+  const tab={isTab:true,lensGroup:'network',root:{visible:false},contextOpacity:1,tabReveal:1};
+  assert.equal(shouldShowRealityObjectLabel({node:tab,activeGroupId:null,objectId:'web-ai'}),false);
+  tab.root.visible=true;
+  assert.equal(shouldShowRealityObjectLabel({node:tab,activeGroupId:'network',objectId:'web-ai'}),true);
+  assert.equal(shouldShowRealityObjectLabel({node:tab,activeGroupId:'value',objectId:'web-ai'}),false);
+});
+
+test('object labels clear when the focused living surface owns attention',()=>{
+  const tab={isTab:true,lensGroup:'network',root:{visible:true},contextOpacity:.05,tabReveal:1};
+  assert.equal(shouldShowRealityObjectLabel({node:tab,activeGroupId:'*',focusIsolated:true,selectedId:'bot-plaza',objectId:'web-ai'}),false);
+  assert.equal(shouldShowRealityObjectLabel({node:tab,activeGroupId:'*',selectedId:'bot-plaza',objectId:'web-ai'}),false);
+  assert.equal(shouldShowRealityObjectLabel({node:{...tab,contextOpacity:1},activeGroupId:'*',selectedId:'bot-plaza',objectId:'bot-plaza'}),true);
 });

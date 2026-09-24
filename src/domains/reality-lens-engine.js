@@ -1,5 +1,7 @@
 /** Reusable presentation rules for Reality Lens objects. This module is pure:
  * it positions and stages local view objects without changing feature state. */
+import {livingSurfaceLayoutEngine} from './living-surface-layout-engine.js';
+
 export const REALITY_LENS_GROUPS = Object.freeze([
   Object.freeze({id:'worlds',label:'Loca',depth:8}),
   Object.freeze({id:'people',label:'Homines',depth:13.6}),
@@ -115,18 +117,28 @@ export function createRealityLensEngine(overrides={}){
     return {stage:3,progress:1};
   }
 
-  function objectResponse({id,selectedId=null,distance=Infinity,baseScale=1,size=1,tabReveal=1}={}){
+  function objectResponse({id,selectedId=null,distance=Infinity,focusScale=1,baseScale=1,size=1,tabReveal=1}={}){
     const isSelected=id===selectedId;
     const {startDistance,endDistance,maxScale,minContextOpacity,isolateAt}=profile.focus;
-    const focusStrength=selectedId===null?0:clamp((startDistance-distance)/(startDistance-endDistance));
+    // The camera backs away when a user enlarges an object. Evaluate focus in
+    // that object's units so the same apparent approach still clears context.
+    const relativeDistance=distance/Math.max(1,Number.isFinite(focusScale)?focusScale:1);
+    const focusStrength=selectedId===null?0:clamp((startDistance-relativeDistance)/(startDistance-endDistance));
     const contextOpacity=isSelected?1:minContextOpacity+(1-minContextOpacity)*(1-focusStrength)**2;
     const approachScale=isSelected?mix(1,maxScale,focusStrength):1;
     const isolationReached=selectedId!==null&&focusStrength>=isolateAt;
     const contextHidden=!isSelected&&isolationReached;
-    return {isSelected,focusStrength,contextOpacity,isolationReached,contextHidden,scale:baseScale*size*approachScale*clamp(tabReveal),...stageAt(distance)};
+    return {isSelected,focusStrength,contextOpacity,isolationReached,contextHidden,scale:baseScale*size*approachScale*clamp(tabReveal),...stageAt(relativeDistance)};
   }
 
-  return Object.freeze({profile:Object.freeze(profile),placeInFunnel,surfacePoint,overviewProgress,stageAt,objectResponse,groupFor:resolveRealityLensGroup});
+  // This keeps the widening Lens readable at every depth.  It only resolves
+  // tab collisions sideways from the cone axis, so it cannot flatten the
+  // sequence of near -> middle -> far realities into a pile.
+  function relaxLayout(objects,options={}){
+    return livingSurfaceLayoutEngine.relax(objects,{gap:1.28,maxIterations:18,axis,...options});
+  }
+
+  return Object.freeze({profile:Object.freeze(profile),placeInFunnel,surfacePoint,overviewProgress,stageAt,objectResponse,relaxLayout,groupFor:resolveRealityLensGroup});
 }
 
 export const realityLensEngine=createRealityLensEngine();
