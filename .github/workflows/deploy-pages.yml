@@ -70,22 +70,22 @@ jobs:
 
       - name: Prove exact deployed Reality Lens build
         env:
-          MATUMBO_NODE_DEPENDENCIES: \${{ github.workspace }}/package.json
-          MATUMBO_PREVIEW_URL: \${{ steps.deployment.outputs.page_url }}
-          MATUMBO_EXPECTED_BUILD: \${{ github.sha }}
+          MATUMBO_NODE_DEPENDENCIES: ${{ github.workspace }}/package.json
+          MATUMBO_PREVIEW_URL: ${{ steps.deployment.outputs.page_url }}
+          MATUMBO_EXPECTED_BUILD: ${{ github.sha }}
         run: node tests/browser-universal-reality-live.mjs
 
       - name: Prove real contract data on exact deployed build
         env:
-          MATUMBO_NODE_DEPENDENCIES: \${{ github.workspace }}/package.json
-          MATUMBO_PREVIEW_URL: \${{ steps.deployment.outputs.page_url }}
+          MATUMBO_NODE_DEPENDENCIES: ${{ github.workspace }}/package.json
+          MATUMBO_PREVIEW_URL: ${{ steps.deployment.outputs.page_url }}
         run: node tests/browser-contract-workflow.mjs
 
       - name: Upload deployed browser evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: deployed-universal-reality-proof-\${{ github.sha }}
+          name: deployed-universal-reality-proof-${{ github.sha }}
           path: |
             artifacts/universal-browser
             artifacts/contract-browser
