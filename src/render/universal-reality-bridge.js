@@ -620,6 +620,7 @@ export function createUniversalRealityBridge({
   pollMs=900,
 }={}){
   const records=new Map();
+  const syncErrors=new Map();
   let timer=0;
   let batchTimer=0;
   let syncing=false;
@@ -652,36 +653,48 @@ export function createUniversalRealityBridge({
     if(!featureObject?.root||!featureObject?.feature)return;
     liveIds.add(featureId);
 
-    let record=records.get(featureId);
-    if(!record){
-      record=createRecord(featureObject,featureId,renderer);
-      records.set(featureId,record);
-    }else{
-      record.featureObject=featureObject;
-      if(record.group.parent!==featureObject.root)featureObject.root.add(record.group);
-    }
+    try{
+      let record=records.get(featureId);
+      if(!record){
+        record=createRecord(featureObject,featureId,renderer);
+        records.set(featureId,record);
+      }else{
+        record.featureObject=featureObject;
+        if(record.group.parent!==featureObject.root)featureObject.root.add(record.group);
+      }
 
-    softenLegacySurface(featureObject.root,featureId,record.restore);
-    if(preserveFeature(featureId)){
-      record.group.visible=false;
+      softenLegacySurface(featureObject.root,featureId,record.restore);
       record.feed=resolveRealFeatureFeed(featureId,scope);
-      return;
-    }
 
-    record.group.visible=true;
-    record.feed=resolveRealFeatureFeed(featureId,scope);
-    const entities=entitiesForFeature({
-      feature:featureObject.feature,
-      featureId,
-      projection,
-      selected:featureId===selectedId||featureId==='contract-atelier',
-      scope,
-    });
-    syncRecord(record,entities);
+      if(preserveFeature(featureId)){
+        record.group.visible=false;
+        syncErrors.delete(featureId);
+        return;
+      }
+
+      record.group.visible=true;
+      const entities=entitiesForFeature({
+        feature:featureObject.feature,
+        featureId,
+        projection,
+        selected:featureId===selectedId||featureId==='contract-atelier',
+        scope,
+      });
+      syncRecord(record,entities);
+      syncErrors.delete(featureId);
+    }catch(error){
+      const message=String(error?.stack??error?.message??error);
+      syncErrors.set(featureId,message);
+      try{scope?.console?.warn?.(`[${BRIDGE_SOURCE}] ${featureId} degraded:`,error);}catch{}
+      // A malformed entity must not stop every other object from becoming
+      // visible. Keep the original object available and continue the batch.
+      const record=records.get(featureId);
+      if(record)record.group.visible=false;
+    }
   }
 
   function finishSync(liveIds){
-    for(const id of [...records.keys()])if(!liveIds.has(id))removeRecord(id);
+    for(const id of [...records.keys()])if(!liveIds.has(id)){removeRecord(id);syncErrors.delete(id);}
     syncing=false;
     batchTimer=0;
     if(resyncRequested){
@@ -757,6 +770,7 @@ export function createUniversalRealityBridge({
         preserved:Object.freeze([...records.keys()].filter(preserveFeature)),
         realFeedRegisteredCount:[...records.keys()].filter(id=>Boolean(FEATURE_REAL_FEEDS[id]?.length)).length,
         realFeedAvailableCount:[...records.values()].filter(record=>record.feed?.available).length,
+        errors:Object.freeze(Object.fromEntries(syncErrors)),
         dataFeeds:Object.freeze(Object.fromEntries([...records].map(([id,record])=>[
           id,
           Object.freeze({
