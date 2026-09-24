@@ -9,6 +9,8 @@ on:
       - 'src/domains/surface-semantic-field.js'
       - 'src/render/surface-semantic-field-three.js'
       - 'src/render/surface-semantic-field-lab.js'
+      - 'src/domains/topology-semantic-field.js'
+      - 'src/render/topology-surface-object.js'
       - 'surface-field.html'
       - 'tests/surface-semantic-field*.test.mjs'
       - '.github/workflows/ssf-ci.yml'
@@ -30,5 +32,7 @@ jobs:
           node --check src/domains/surface-semantic-field.js
           node --check src/render/surface-semantic-field-three.js
           node --check src/render/surface-semantic-field-lab.js
+          node --check src/domains/topology-semantic-field.js
+          node --check src/render/topology-surface-object.js
       - name: Surface Semantic Field tests
-        run: node --test tests/surface-semantic-field.test.mjs tests/surface-semantic-field-three.test.mjs
+        run: node --test tests/surface-semantic-field.test.mjs tests/surface-semantic-field-three.test.mjs tests/topology-semantic-field.test.mjs tests/topology-surface-object.test.mjs
