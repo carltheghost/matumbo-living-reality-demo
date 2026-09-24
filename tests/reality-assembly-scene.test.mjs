@@ -4,8 +4,8 @@ import * as THREE from '../vendor/three-r179.1/build/three.module.js';
 import {buildRealityAssemblyScene} from '../src/render/reality-assembly-scene.js';
 import {createLivingSurfaceMap} from '../src/domains/living-surface-layout-engine.js';
 
-test('curved living objects have a flush readable facet backed by their actual volume',()=>{
-  for(const shape of ['sphere','cylinder']){
+test('cylindrical living objects have a flush readable facet backed by their actual volume',()=>{
+  for(const shape of ['cylinder']){
     const parent=new THREE.Scene(),targets=[],feature={id:'agent',assemblyTier:'tab',sources:[]};
     const scene=buildRealityAssemblyScene({THREE,parent,features:[feature],targets});
     scene.apply({selectedId:'agent',mode:'present',objects:[{id:'agent',position:[0,0,0],shape,size:1,locked:false,open:true}]});
@@ -17,6 +17,29 @@ test('curved living objects have a flush readable facet backed by their actual v
     assert.ok(bounds.max.x-bounds.min.x>face.width,'shoulders remain around the reading skin');
     scene.destroy();
   }
+});
+test('the universal XR view keeps exactly five quiet, inscribed feature meshes in one scene',()=>{
+  const ids=['contract-atelier','agent','arena','rooms','youtube'],features=[...ids,'offscreen-feature'].map((id,index)=>({id,assemblyTier:'tab',sources:[],lensGroup:'experiences'}));
+  const parent=new THREE.Scene(),scene=buildRealityAssemblyScene({THREE,parent,features,targets:[]});
+  scene.setLensMode(true);scene.setActiveGroup('*');scene.setVisibleFeatureIds(ids);
+  scene.apply({selectedId:'arena',mode:'present',objects:features.map((feature,index)=>({id:feature.id,position:[index*3,0,-5],shape:'sphere',size:1,locked:false,open:false}))});
+  scene.update(1/60,12.5,{reducedMotion:true,cameraDistance:8,cameraPosition:new THREE.Vector3(0,.8,3.9)});
+  const state=scene.getSnapshot();
+  assert.deepEqual(state.featuredLensIds,ids);
+  assert.deepEqual([...state.visibleFeatureIds].sort(),[...ids].sort());
+  assert.equal(scene.nodes.get('offscreen-feature').root.visible,false);
+  assert.equal(state.connectionsVisible,false);
+  assert.equal(state.funnelGuideVisible,false);
+  assert.equal(state.visibleGroupCount,0);
+  for(const id of ids){
+    const node=scene.nodes.get(id);
+    assert.equal(node.root.rotation.x,0,id);
+    assert.equal(node.root.rotation.y,0,id);
+    assert.equal(node.liveContent.visible,false,id);
+    assert.equal(node.sourceLayer.visible,false,id);
+    assert.equal(node.nestedLayer.visible,false,id);
+  }
+  scene.destroy();assert.equal(parent.children.length,0);
 });
 test('the former central feature is an ordinary mutable sphere tab like every other identity',()=>{
   const parent=new THREE.Scene(),targets=[],features=[{id:'block-world',assemblyTier:'tab',sources:['semantic-block-fabric']},{id:'contracts',assemblyTier:'tab',sources:['contracts-markets']}];

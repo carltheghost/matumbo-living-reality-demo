@@ -2,7 +2,8 @@ import {createRealityWorkspace} from '../domains/reality-workspace.js?v=20260923
 import {REALITY_TAB_FORMS,REALITY_TAB_SIZE_MIN,REALITY_TAB_SIZE_MAX,resolveRealityTabPosition} from '../domains/reality-tab-layout.js?v=20260923-spatial-tabs16';
 import {REALITY_LENS_GROUPS,realityLensEngine,resolveRealityLensGroup} from '../domains/reality-lens-engine.js?v=20260923-lens-engine9';
 import {realityLensCopy,realityLensLabel,realityObjectSurfaceEngine} from '../domains/reality-object-engine.js?v=20260923-object-surface6';
-import {buildRealityAssemblyScene,LOD_FAR} from './reality-assembly-scene.js?v=20260923-spatial-tabs21';
+import {resolveUniversalLensLayout} from '../domains/universal-lens-layout.js?v=20260924-universe-lenses6';
+import {buildRealityAssemblyScene,LOD_FAR} from './reality-assembly-scene.js?v=20260924-universe-lenses6';
 
 // The lens contains only equal-status feature tabs; no center cube or anchor.
 export const CLEAN_LANDING_CAMERA={position:[36,25,110],target:[0,2,0],fov:60,mergeThreshold:LOD_FAR};
@@ -28,67 +29,7 @@ export function mountLivingSurfaceIntro(panel){
   };
 }
 
-// Keep every in-view feature label readable. When two projected tabs converge,
-// shift only the DOM label into the nearest open screen-space pocket; the 3D
-// tab stays put, and the cards do not turn into a web of permanent links.
-export function placeAssemblyLabel({ndcX,ndcY,ndcZ,viewportWidth,viewportHeight,safeTop,safeBottom,labelWidth=120,labelHeight=27,occupied=[]}){
-  if(!(ndcZ>-1&&ndcZ<1)||Math.abs(ndcX)>1.25||Math.abs(ndcY)>1.25)return {visible:false};
-  const halfWidth=labelWidth/2,halfHeight=labelHeight/2,margin=8;
-  const minX=margin+halfWidth,maxX=viewportWidth-margin-halfWidth,minY=safeTop+halfHeight,maxY=safeBottom-halfHeight;
-  if(maxX<minX||maxY<minY)return {visible:false};
-  const preferred={x:Math.min(Math.max((ndcX*.5+.5)*viewportWidth,minX),maxX),y:Math.min(Math.max((-ndcY*.5+.5)*viewportHeight,minY),maxY)};
-  const clear=({x,y})=>{
-    const bounds={left:x-halfWidth,right:x+halfWidth,top:y-halfHeight,bottom:y+halfHeight};
-    return !occupied.some(other=>bounds.left<other.right+4&&bounds.right>other.left-4&&bounds.top<other.bottom+4&&bounds.bottom>other.top-4);
-  };
-  const placed=(position)=>({visible:true,...position,preferredX:preferred.x,preferredY:preferred.y,offset:Math.hypot(position.x-preferred.x,position.y-preferred.y)});
-  if(clear(preferred))return placed(preferred);
-  const stepX=labelWidth+10,stepY=labelHeight+10;
-  for(let ring=1;ring<=8;ring++){
-    const candidates=[
-      [0,-ring*stepY],[0,ring*stepY],[ring*stepX,0],[-ring*stepX,0],
-      [ring*stepX,-ring*stepY],[ring*stepX,ring*stepY],[-ring*stepX,ring*stepY],[-ring*stepX,-ring*stepY],
-    ];
-    for(const [dx,dy] of candidates){
-      const candidate={x:Math.min(Math.max(preferred.x+dx,minX),maxX),y:Math.min(Math.max(preferred.y+dy,minY),maxY)};
-      if(clear(candidate))return placed(candidate);
-    }
-  }
-  return {visible:false};
-}
-export function assemblySideLabelPoint({position,cameraRight,halfWidth=0,side=1,gap=.48}={}){
-  if(!Array.isArray(position)||position.length!==3||position.some(value=>!Number.isFinite(value)))throw Error('A spatial label needs a finite object position');
-  if(!Array.isArray(cameraRight)||cameraRight.length!==3||cameraRight.some(value=>!Number.isFinite(value)))throw Error('A spatial label needs the camera side axis');
-  if(!Number.isFinite(halfWidth)||halfWidth<0||!Number.isFinite(gap)||gap<0)throw Error('A spatial label needs a valid side clearance');
-  const length=Math.hypot(...cameraRight);if(length<1e-8)throw Error('The camera side axis cannot be zero');
-  const direction=side<0?-1:1,offset=halfWidth+gap;
-  return position.map((value,index)=>Number((value+cameraRight[index]/length*direction*offset).toFixed(4)));
-}
-
-// A Lens overview is intentionally hierarchical: the domain object is visible
-// first and its feature tabs only receive labels after the domain has opened.
-// Without this gate invisible children leave a misleading cloud of detached
-// words behind their parent object.
-export function shouldShowRealityObjectLabel({node,activeGroupId=null,focusIsolated=false,selectedId=null,objectId=null}={}){
-  if(!node?.isTab||node.root?.visible===false||focusIsolated)return false;
-  if(activeGroupId&&activeGroupId!=='*'&&node.lensGroup!==activeGroupId)return false;
-  if(objectId!==selectedId&&Number(node.contextOpacity??1)<.12)return false;
-  return Number(node.tabReveal??1)>=.35;
-}
-// HUD chrome (header, toolbar, inspector panels) reserves screen space; the
-// label band is whatever vertical space remains, so names slide along chrome
-// edges instead of vanishing behind them.
-export function computeLabelSafeBand(chromeRects,viewportHeight){
-  let safeTop=8,safeBottom=viewportHeight-8;
-  for(const rect of chromeRects){
-    if(rect.bottom<viewportHeight/2&&rect.bottom+8>safeTop)safeTop=rect.bottom+8;
-    else if(rect.top>=viewportHeight/2&&rect.top-8<safeBottom)safeBottom=rect.top-8;
-  }
-  if(safeBottom<safeTop+24){safeTop=8;safeBottom=viewportHeight-8;}
-  return {safeTop,safeBottom};
-}
-
-export function createRealityAssembly({THREE,renderer,scene,camera,controls,world,targets,features,relationships={},onNavigate,onFrame,onPanelFrame=()=>{},onActiveChange=()=>{},readFeature=()=>null,environmentTexture=null,reducedMotion=false}){
+export function createRealityAssembly({THREE,renderer,scene,camera,controls,world,worldGrid=null,worldHorizonRings=[],targets,features,relationships={},onNavigate,onFrame,onPanelFrame=()=>{},onActiveChange=()=>{},readFeature=()=>null,environmentTexture=null,reducedMotion=false}){
   // Initial density only; the optical composer sizes a reading skin from
   // its actual projection. Geometry owns the surface; text never gets scaled
   // down to fit an arbitrary desktop raster.
@@ -96,7 +37,13 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   const latinShapes={phone:'Telephonum',square:'Quadratum',rectangle:'Rectangulum',sphere:'Sphaera',cylinder:'Cylindrus',cube:'Cubus',wave:'Unda'};
   const shapeOptions=Object.entries(REALITY_TAB_FORMS).map(([id])=>`<option value="${id}">${latinShapes[id]??id}</option>`).join('');
   const primary=['block-world','contracts','person','rooms','academy','world-events','multi-sport-events','asset-market'];
-  const ordered=[...features].sort((a,b)=>{const aIndex=primary.indexOf(a.id),bIndex=primary.indexOf(b.id);return (aIndex<0?100:aIndex)-(bIndex<0?100:bIndex);});
+  const allOrdered=[...features].sort((a,b)=>{const aIndex=primary.indexOf(a.id),bIndex=primary.indexOf(b.id);return (aIndex<0?100:aIndex)-(bIndex<0?100:bIndex);});
+  const universeLensLayout=resolveUniversalLensLayout(allOrdered,globalThis.location?.search??'');
+  // A five-lens route constructs only those five objects and their artwork.
+  // Ordinary Reality Lens views retain the complete feature catalogue.
+  const ordered=universeLensLayout.active
+    ? universeLensLayout.lenses.map(lens=>allOrdered.find(feature=>feature.id===lens.id)).filter(Boolean)
+    : allOrdered;
   // Feature windows sit in six semantic clusters along a widening spatial
   // funnel. The former central cube is now an ordinary spherical feature tab.
   const defaultForms=['sphere','phone','rectangle','square','wave','cylinder'];
@@ -123,23 +70,25 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   // body collisions.  The solver moves sideways from the Lens axis, so the
   // near -> middle -> far order stays legible rather than becoming a pile.
   const initialLayout=realityLensEngine.relaxLayout(placedPositions);
-  const positions=initialLayout.objects;
-  const workspace=createRealityWorkspace({objects:positions,selectedId:ordered[0]?.id,rootLabel:'Una Realitas'});
+  const lensById=new Map(universeLensLayout.lenses.map(lens=>[lens.id,lens]));
+  const positions=initialLayout.objects.map(object=>{
+    const lens=lensById.get(object.id);
+    return lens?{...object,position:[...lens.position],shape:lens.shape,size:lens.size}:object;
+  });
+  const workspace=createRealityWorkspace({objects:positions,selectedId:universeLensLayout.centerId??ordered[0]?.id,rootLabel:universeLensLayout.active?'Una Realitas · Quinque Lentes':'Una Realitas'});
   let owner=workspace.timeline;
   const sideRealityByFeature=new Map();
   const sideRealityKey=(parentId,featureId)=>`${parentId}\u0000${featureId}`;
   const initialShapes=new Map(positions.map(object=>[object.id,object.shape]));
   const spatial=buildRealityAssemblyScene({THREE,parent:scene,features:ordered.map((feature,i)=>({...feature,label:labelFor(feature),description:copyFor(feature.description),boundary:copyFor(feature.boundary),sources:(feature.sources??[]).map(copyFor),assemblyTier:'tab',lensGroup:positions[i]?.lensGroup??'worlds',initialTabShape:initialShapes.get(feature.id),initialPosition:positions[i]?.position})),targets,relationships});
   spatial.setActiveGroup(null);
-  const featureMap=new Map(features.map(feature=>[feature.id,feature]));
-  const stylesheet=document.createElement('link');stylesheet.rel='stylesheet';stylesheet.href=`${new URL('./reality-assembly.css',import.meta.url).href}?v=20260924-aspectus1`;document.head.append(stylesheet);
+  const featureMap=new Map(ordered.map(feature=>[feature.id,feature]));
+  const stylesheet=document.createElement('link');stylesheet.rel='stylesheet';stylesheet.href=`${new URL('./reality-assembly.css',import.meta.url).href}?v=20260924-universe-lenses5`;document.head.append(stylesheet);
   const root=document.createElement('section');root.id='reality-assembly';root.hidden=true;root.setAttribute('aria-label','Reality Lens spatial assembly');
   root.innerHTML=`<header class="assembly-header"><a class="assembly-brand" href="?feature=reality-lens"><span aria-hidden="true">◇</span><div>maTumbo<small>People × planet × possibility</small></div></a><nav aria-label="Assembly navigation"><button data-home>Explore</button><button data-enter-person>Your space</button><button data-enter-contracts>Contracts</button><button data-grid>Block World</button></nav><form class="assembly-quick-find" data-quick-find role="search"><label><span>Find object</span><input data-quick-search type="search" autocomplete="off" placeholder="Search YouTube, agents…" aria-label="Find a Reality Lens object"></label><button type="submit">Locate</button></form><button data-clean>Hide panels</button></header>
   <aside class="assembly-directory"><p class="assembly-eyebrow">Reality Lens Ω</p><h1>Many worlds.<br><em>One reality.</em></h1><p class="assembly-intro">Explore the same universe across space and depth.<br>Every window is a real, rearrangeable tab.</p><label class="assembly-search-label">Find a connected feature<input data-search placeholder="Search worlds, contracts…" type="search"></label><nav class="assembly-catalog" aria-label="Feature objects"></nav><p class="assembly-note">Designed 3D feature previews.<br>Only the selected feature opens its connected controls.</p></aside>
-  <div class="assembly-labels" aria-label="Spatial feature labels"></div>
-  <div class="assembly-world-label" data-world-label hidden>One quiet point · scroll, pinch, or move Travel to enter</div>
   <aside class="assembly-inspector" aria-label="Selected tab inspector"><header><span class="assembly-eyebrow">Reality Lens · selected tab</span><button data-fold-inspector aria-label="Minimize inspector">−</button></header><div class="assembly-inspector-body"><div class="assembly-object-symbol" aria-hidden="true">◇</div><h2 data-title></h2><p data-description></p><div class="assembly-tags"><span data-mode>Present</span><span>Same feature identity</span></div><dl><dt>Feature</dt><dd data-object-id></dd><dt>Position · x / y / z</dt><dd data-coordinate></dd><dt>State</dt><dd data-open-state></dd><dt>Source refs</dt><dd data-source-count></dd></dl><section class="assembly-tab-controls" data-tab-controls><h3>Tab shape &amp; movement</h3><p data-anchor-note hidden>Block World is the fixed central cube anchor.</p><label>Shape<select data-tab-shape>${shapeOptions}</select></label><label>Size<input data-tab-size type="range" min="${REALITY_TAB_SIZE_MIN}" max="${REALITY_TAB_SIZE_MAX}" step="0.05" value="1" aria-label="Spatial tab size"></label><div class="assembly-lock-row"><button data-lock-toggle>Lock tab</button><span data-lock-state>Mutable</span></div><p>Move by axis · one tap at a time</p><div class="assembly-nudges" aria-label="Move tab in three dimensions"><button data-nudge-axis="x" data-nudge-step="-1">X −</button><button data-nudge-axis="x" data-nudge-step="1">X +</button><button data-nudge-axis="y" data-nudge-step="-1">Y −</button><button data-nudge-axis="y" data-nudge-step="1">Y +</button><button data-nudge-axis="z" data-nudge-step="-1">Z −</button><button data-nudge-axis="z" data-nudge-step="1">Z +</button></div><p class="assembly-note" data-edit-note>Choose Move, then drag a tab; hold Shift while dragging to travel through depth.</p></section><div class="assembly-actions"><button data-open>Expand tab</button><button data-side-reality>Enter side reality</button><button data-focus>Approach</button><button data-enter class="assembly-primary">Enter feature ↗</button></div><h3>Connected source references</h3><div data-sources></div><p class="assembly-note" data-boundary></p><p class="assembly-source-detail" data-source-detail></p></div></aside>
-  <div class="assembly-selection-hint" data-hover-label>Hover to peek · click to select · double-click to expand</div>
+  <div class="assembly-selection-hint" data-hover-label>Click a lens object to enter its feature.</div>
   <footer class="assembly-toolbar"><div class="assembly-view"><span class="assembly-eyebrow">View</span><button data-view="3d" aria-pressed="true">3D</button><button data-view="4d" aria-pressed="false">4D · time</button></div><div class="assembly-tools"><button data-interaction="orbit" aria-pressed="true">Orbit</button><button data-interaction="move" aria-pressed="false">Move tabs</button><button data-open-secondary>Expand / close</button><button data-home>Overview</button></div><label class="assembly-travel">Travel<input data-travel type="range" min="3" max="220" value="173" step="1" aria-label="Move the viewpoint closer or farther"></label><div class="assembly-timeline"><label>Observed local history<input data-time type="range" min="0" max="0" value="0" step="1" aria-label="Recorded view frame"></label><span data-time-label>No previous observations</span><button data-present>Present</button></div><button data-export>Export history</button></footer>
   <section class="assembly-branches" hidden aria-label="Proposed branches"><div><span class="assembly-eyebrow">4D = space + observed time / proposed states</span><p>History is read-only. Proposed layouts do not change the present.</p></div><form data-branch-form><label class="assembly-sr-only" for="assembly-branch-name">Proposed branch name</label><input id="assembly-branch-name" name="branchName" maxlength="60" required placeholder="Name a proposed branch"><button class="assembly-primary">Create branch</button></form><label>View branch<select data-branch-select><option value="present">Present</option></select></label></section>
   <p class="assembly-status" data-status role="status" aria-live="polite"></p>
@@ -158,8 +107,6 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     if(mountedSurface)materializeSurfaceObjects(mountedSurface);
   }).catch(()=>{css3dFailed=true;if(mountedSurface)materializeSurfaceObjects(mountedSurface);});
   window.addEventListener('resize',resizeCss3d);
-  let lastAssemblyFocus=null,resizeFocusUntil=0;
-  root.addEventListener('focusin',event=>{lastAssemblyFocus=event.target;});
   const all=selector=>[...root.querySelectorAll(selector)],find=selector=>root.querySelector(selector);
   const directory=find('.assembly-directory');directory.id='assembly-feature-directory';
   const directoryToggle=document.createElement('button');directoryToggle.type='button';directoryToggle.dataset.directoryToggle='';directoryToggle.textContent='Invenire';directoryToggle.setAttribute('aria-label','Find an object');directoryToggle.setAttribute('aria-controls',directory.id);directoryToggle.setAttribute('aria-expanded','false');find('.assembly-header').append(directoryToggle);
@@ -179,7 +126,6 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   find('[data-enter-person]').textContent='Meum spatium';find('[data-enter-contracts]').textContent='Foedera';find('[data-grid]').textContent='Cubus';
   find('[data-enter-person]').setAttribute('aria-label','Meum spatium');find('[data-enter-contracts]').setAttribute('aria-label','Foedera');find('[data-grid]').textContent='Materia';find('[data-grid]').setAttribute('aria-label','Materia');
   find('[data-clean]').textContent='Objectum';find('[data-clean]').setAttribute('aria-label','Ostende vel cela superficiem electam');
-  find('[data-world-label]').textContent='Unum punctum · scrolla vel preme ut accedas';
   find('[data-hover-label]').textContent='Spatium: iter · obiectum: magnitudo · clic: ingredere';
   find('.assembly-inspector .assembly-eyebrow').textContent='Oculus Realitatis · instrumentum apertum';
   find('.assembly-tab-controls h3').textContent='Mutabilitas';
@@ -210,18 +156,8 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     else if(restoreFocus)directoryToggle.focus();
   }
   directoryToggle.onclick=()=>setDirectory(!root.classList.contains('assembly-directory-open'),{restoreFocus:true});directoryClose.onclick=()=>setDirectory(false,{restoreFocus:true});
-  const resizeFocus=()=>{
-    if(root.hidden)return;
-    const focused=lastAssemblyFocus;
-    if(!focused||![document.body,focused].includes(document.activeElement))return;
-    resizeFocusUntil=performance.now()+250;
-    if(innerWidth<700&&directory.contains(focused))setDirectory(true);
-    const restore=()=>{if(root.hidden)return;if(focused.classList.contains('assembly-node-label'))focused.hidden=false;focused.focus({preventScroll:true});if(directory.contains(focused))focused.scrollIntoView({block:'nearest'});};
-    restore();requestAnimationFrame(restore);
-  };
-  window.addEventListener('resize',resizeFocus);
-  let active=false,saved=null,viewMode='3d',interaction='orbit',hovered=null,pointer=null,focusTarget=null,focusPosition=null,inspectorFolded=false,activeLensGroup=null;
-  const labels=new Map(),catalog=new Map(),catalogSections=new Map();
+  let active=false,saved=null,viewMode='3d',interaction='orbit',hovered=null,pointer=null,focusTarget=null,focusPosition=null,inspectorFolded=false,activeLensGroup=null,activeUniversalLensScene=false;
+  const catalog=new Map(),catalogSections=new Map();
   for(const domain of REALITY_LENS_GROUPS){
     const members=groupMembers.get(domain.id)??[];if(!members.length)continue;
     const section=document.createElement('section');section.className='assembly-catalog-group';section.dataset.domain=domain.id;
@@ -239,11 +175,11 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
       render();
     };
   }
-  const ray=new THREE.Raycaster(),point=new THREE.Vector2(),screenPoint=new THREE.Vector3(),labelRight=new THREE.Vector3(),dragPlane=new THREE.Plane(),dragPoint=new THREE.Vector3(),dragNormal=new THREE.Vector3();
+  const ray=new THREE.Raycaster(),point=new THREE.Vector2(),screenPoint=new THREE.Vector3(),dragPlane=new THREE.Plane(),dragPoint=new THREE.Vector3(),dragNormal=new THREE.Vector3();
   const say=message=>{find('[data-status]').textContent=copyFor(message);};
   const guard=fn=>(...args)=>{try{return fn(...args);}catch(error){say(error.message);return null;}};
   const currentObject=()=>owner.getSnapshot().objects.find(object=>object.id===owner.getSnapshot().selectedId);
-  function snapshot(){return {...owner.getSnapshot(),active,viewMode,interaction,camera:{position:camera.position.toArray(),target:controls.target.toArray()},spatial:spatial.getSnapshot(),layoutDiagnostics:initialLayout.diagnostics,reality:workspace.getSnapshot()};}
+  function snapshot(){return {...owner.getSnapshot(),active,viewMode,interaction,universeLensMode:activeUniversalLensScene,universeLensLayout:{model:universeLensLayout.model,centerId:universeLensLayout.centerId,ids:[...universeLensLayout.ids]},camera:{position:camera.position.toArray(),target:controls.target.toArray()},spatial:spatial.getSnapshot(),layoutDiagnostics:initialLayout.diagnostics,reality:workspace.getSnapshot()};}
   function faceText(face,feature,surface,detail){
     if(face==='back')return {eyebrow:'CONTINUATIO · IDEM INSTRUMENTUM',title:surface.label,body:surface.description||surface.summary,detail:surface.boundary};
     if(face==='left')return {eyebrow:'STATUS · LOCALIS',title:surface.state,body:detail?.summary||'Status ex instrumento locali, non ex titulo decorativo.',detail:`Forma ${latinShapes[surface.shape]??surface.shape} · ${surface.size.toFixed(1)}×`};
@@ -483,7 +419,6 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     sideButton.disabled=state.mode==='past';
     find('[data-object-id]').textContent=visibleId(feature.id)+' · '+activeReality.id;
     for(const [id,button] of catalog)button.setAttribute('aria-current',String(id===state.selectedId));
-    for(const [id,label] of labels){label.classList.toggle('is-selected',id===state.selectedId);label.classList.toggle('is-hovered',id===hovered);}
     const slider=find('[data-time]');slider.max=String(state.frames.length-1);slider.value=String(state.mode==='past'?state.frames.findIndex(frame=>frame.revision===state.frameCursor):state.frames.length-1);
     const frame=state.frames[Number(slider.value)];find('[data-time-label]').textContent=state.mode==='proposed'?'User-proposed branch':`${new Date(frame.observedAt).toLocaleTimeString()} · ${frame.action}`;
     find('.assembly-branches').hidden=viewMode!=='4d';find('.assembly-timeline').classList.toggle('is-expanded',viewMode==='4d');
@@ -554,18 +489,13 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     const axisIndex={x:0,y:1,z:2}[axis],next=[...object.position];next[axisIndex]=Math.max(-60,Math.min(60,next[axisIndex]+steps));
     owner.move(object.id,next);syncActiveReality();render();
   }
-  const enter=(id=owner.getSnapshot().selectedId)=>onNavigate?.(id);
-  const spatialGroupLabels=new Map();
-  for(const domain of REALITY_LENS_GROUPS){
-    const members=groupMembers.get(domain.id)??[];if(!members.length)continue;
-    const label=document.createElement('button');label.type='button';label.className='assembly-group-label';label.textContent=`${domain.label} · ${members.length}`;label.setAttribute('aria-label',`Explora ${domain.label} · ${members.length} instrumenta`);
-    label.onclick=()=>exploreGroup(domain.id);
-    find('.assembly-labels').append(label);spatialGroupLabels.set(domain.id,label);
-  }
+  const enter=(id=owner.getSnapshot().selectedId)=>{
+    if(activeUniversalLensScene){activeUniversalLensScene=false;spatial.setVisibleFeatureIds(null);spatial.setActiveGroup('*');root.classList.remove('universe-lens-mode');}
+    return onNavigate?.(id);
+  };
   for(const feature of ordered){
     const groupId=resolveRealityLensGroup(feature.id),domain=catalogSections.get(groupId);
     const visibleLabel=labelFor(feature),button=document.createElement('button');button.type='button';button.textContent=visibleLabel;button.onclick=guard(()=>{select(feature.id);if(interaction!=='move')enter(feature.id);if(root.classList.contains('assembly-directory-open'))setDirectory(false,{restoreFocus:true});});(domain?.children??find('.assembly-catalog')).append(button);catalog.set(feature.id,button);
-    const label=document.createElement('button');label.type='button';label.className='assembly-node-label';label.textContent=visibleLabel;label.dataset.group=groupId;label.setAttribute('aria-label',`Aperi ${visibleLabel} · instrumentum`);label.onclick=guard(()=>{select(feature.id);if(interaction!=='move')enter(feature.id);});label.onpointerenter=()=>{hovered=feature.id;render();};label.onpointerleave=()=>{hovered=null;render();};find('.assembly-labels').append(label);labels.set(feature.id,label);
   }
   const catalogSearch=find('[data-search]'),quickSearch=find('[data-quick-search]');
   const applySearch=queryValue=>{
@@ -675,28 +605,40 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   const canvas=renderer.domElement;canvas.addEventListener('pointerdown',down,true);canvas.addEventListener('pointermove',move);canvas.addEventListener('pointerup',release);canvas.addEventListener('pointercancel',release);canvas.addEventListener('wheel',resizeOnScroll,{capture:true,passive:false});root.addEventListener('wheel',resizeOnScroll,{capture:true,passive:false});document.addEventListener('keydown',keys);
   let activeLensMode=false;
   function open({lensMode=false,featureId=null}={}){
-    if(active)return;active=true;saved={position:camera.position.clone(),target:controls.target.clone(),fov:camera.fov,min:controls.minDistance,max:controls.maxDistance,worldVisible:world.visible,fog:scene.fog,environment:scene.environment,background:scene.background};
+    if(active)return;active=true;saved={position:camera.position.clone(),target:controls.target.clone(),fov:camera.fov,min:controls.minDistance,max:controls.maxDistance,worldVisible:world.visible,worldGridVisible:worldGrid?.visible,worldHorizonVisible:worldHorizonRings.map(ring=>ring.visible),fog:scene.fog,environment:scene.environment,background:scene.background};
     root.hidden=false;onActiveChange(true);
     // Panels start CLOSED: the default view is a clean spatial universe.
     // The user materializes the directory / inspector with the header
     // toggles ("Objectum", "Invenire", inspector fold); nothing
     // auto-opens large over the 3D view.
     root.classList.add('assembly-clean');find('[data-clean]').textContent='Objectum';selectedSurface.hidden=true;
-    activeLensMode=Boolean(lensMode);spatial.setLensMode(activeLensMode);spatial.layer.visible=true;world.visible=false;scene.fog=activeLensMode?null:new THREE.FogExp2('#030911',.009);if(activeLensMode)scene.background=spatial.backdrop;document.body.classList.add('assembly-mode');
+    activeUniversalLensScene=universeLensLayout.active&&(!featureId||universeLensLayout.ids.includes(featureId));
+    root.classList.toggle('universe-lens-mode',activeUniversalLensScene);
+    spatial.setVisibleFeatureIds(activeUniversalLensScene?universeLensLayout.ids:null);
+    activeLensMode=Boolean(lensMode||activeUniversalLensScene);spatial.setLensMode(activeLensMode);spatial.layer.visible=true;world.visible=false;scene.fog=activeLensMode?null:new THREE.FogExp2('#030911',.009);if(activeLensMode)scene.background=spatial.backdrop;document.body.classList.add('assembly-mode');
     scene.environment=environmentTexture;
-    camera.fov=CLEAN_LANDING_CAMERA.fov;camera.updateProjectionMatrix();controls.minDistance=.45;controls.maxDistance=220;
-    if(featureId&&featureMap.has(featureId))select(featureId);else overview();
+    if(activeUniversalLensScene){
+      if(worldGrid)worldGrid.visible=false;worldHorizonRings.forEach(ring=>{ring.visible=false;});
+      activeLensGroup=null;spatial.setActiveGroup('*');spatial.focus(null);owner.select(universeLensLayout.centerId);
+      focusTarget=new THREE.Vector3(0,0,-5.35);focusPosition=new THREE.Vector3(0,.8,3.9);
+      selectedSurface.hidden=true;camera.fov=48;controls.minDistance=2;controls.maxDistance=40;
+      renderer.domElement.setAttribute('aria-label','One Universe XR · five inscribed feature objects in one shared scene and clock');
+    }else{
+      camera.fov=CLEAN_LANDING_CAMERA.fov;controls.minDistance=.45;controls.maxDistance=220;
+      if(featureId&&featureMap.has(featureId))select(featureId);else overview();
+    }
+    camera.updateProjectionMatrix();
     camera.position.copy(focusPosition);controls.target.copy(focusTarget);focusPosition=null;focusTarget=null;controls.update();render();
   }
   function close(){
-    if(!active)return;setDirectory(false);active=false;onActiveChange(false);pointer=null;controls.enabled=true;root.hidden=true;spatial.layer.visible=false;document.body.classList.remove('assembly-mode');
+    if(!active)return;setDirectory(false);active=false;activeUniversalLensScene=false;spatial.setVisibleFeatureIds(null);root.classList.remove('universe-lens-mode');onActiveChange(false);pointer=null;controls.enabled=true;root.hidden=true;spatial.layer.visible=false;document.body.classList.remove('assembly-mode');
     clearFeatureSurface();
     spatial.setLensMode(false);activeLensMode=false;
-    if(saved){camera.position.copy(saved.position);controls.target.copy(saved.target);camera.fov=saved.fov;camera.updateProjectionMatrix();controls.minDistance=saved.min;controls.maxDistance=saved.max;world.visible=saved.worldVisible;scene.fog=saved.fog;scene.environment=saved.environment;scene.background=saved.background;saved=null;}
+    if(saved){camera.position.copy(saved.position);controls.target.copy(saved.target);camera.fov=saved.fov;camera.updateProjectionMatrix();controls.minDistance=saved.min;controls.maxDistance=saved.max;world.visible=saved.worldVisible;if(worldGrid&&saved.worldGridVisible!==undefined)worldGrid.visible=saved.worldGridVisible;worldHorizonRings.forEach((ring,index)=>{if(saved.worldHorizonVisible[index]!==undefined)ring.visible=saved.worldHorizonVisible[index];});scene.fog=saved.fog;scene.environment=saved.environment;scene.background=saved.background;saved=null;}
   }
   render();
   const selectionObserver=new MutationObserver(()=>{compactSelection.textContent=find('[data-title]').textContent;});selectionObserver.observe(find('[data-title]'),{childList:true});
-  return {open,close,get active(){return active;},getSnapshot:snapshot,resolve:spatial.resolve,focusFeature(id){if(!featureMap.has(id))return false;if(!active)open({lensMode:true,featureId:id});else select(id);return true;},mountFeatureSurface,clearFeatureSurface,setInspectorVisible(visible){selectedSurface.hidden=!visible;root.classList.toggle('assembly-object-focused',Boolean(visible));root.classList.toggle('assembly-clean',!visible);find('[data-clean]').textContent=visible?'Celare':'Objectum';if(visible)render();},
+  return {open,close,get active(){return active;},get isUniversalLensLayout(){return universeLensLayout.active;},getSnapshot:snapshot,resolve:spatial.resolve,focusFeature(id){if(!featureMap.has(id))return false;if(!active)open({lensMode:true,featureId:id});else select(id);return true;},mountFeatureSurface,clearFeatureSurface,setInspectorVisible(visible){if(activeUniversalLensScene&&visible)return false;selectedSurface.hidden=!visible;root.classList.toggle('assembly-object-focused',Boolean(visible));root.classList.toggle('assembly-clean',!visible);find('[data-clean]').textContent=visible?'Celare':'Objectum';if(visible)render();return true;},
     getFeatureObject(id){const node=spatial.nodes.get(id);return node?{root:node.root,feature:featureMap.get(id),get shape(){return node.shape;}}:null;},
     getPanelAnchor(featureId){
       const node=spatial.nodes.get(featureId),object=owner.getSnapshot().objects.find(item=>item.id===featureId);if(!node||!object)return null;
@@ -710,91 +652,26 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
       // panel settles over the selected object instead of beside the object.
       return {anchorX:centerX-width/2-24,anchorY:centerY,width,height,shape:object.shape??'rectangle',aspectRatio:fitted.aspectRatio};
     },
-    selectObject(object){const id=spatial.resolve(object);if(!id)return false;select(id);toggle();return true;},
+    selectObject(object){const id=spatial.resolve(object);if(!id)return false;if(activeUniversalLensScene)return enter(id);select(id);toggle();return true;},
     update(dt,time){
       if(!active)return;
       if(focusTarget&&!renderer.xr.isPresenting){const blend=reducedMotion?1:1-Math.exp(-dt*6);controls.target.lerp(focusTarget,blend);camera.position.lerp(focusPosition,blend);if(camera.position.distanceTo(focusPosition)<.02){focusTarget=null;focusPosition=null;}}
       const cameraDistance=camera.position.distanceTo(controls.target);
       spatial.update(dt,time,{reducedMotion,cameraDistance,cameraPosition:camera.position});spatial.layer.updateMatrixWorld(true);camera.updateMatrixWorld();
-      cssSurfaceHost.hidden=Boolean(renderer.xr?.isPresenting);
+      cssSurfaceHost.hidden=activeUniversalLensScene||Boolean(renderer.xr?.isPresenting);
       if(mountedSurface&&!cssSurfaceHost.hidden){materializeSurfaceObjects(mountedSurface);sizeAndPlaceSurface(mountedSurface);css3dRenderer?.render(scene,camera);}
-      onPanelFrame(owner.getSnapshot().selectedId);
-      const overlaps=(a,b)=>a.left<b.right+4&&a.right>b.left-4&&a.top<b.bottom+4&&a.bottom>b.top-4;
-      const occupied=[...all('.assembly-header,.assembly-directory,.assembly-inspector,.assembly-toolbar,.assembly-branches,.assembly-selection-hint,.assembly-world-label,.assembly-status'),...document.querySelectorAll('body.assembly-mode #immersive-toolbar')].filter(element=>!element.hidden&&getComputedStyle(element).display!=='none'&&getComputedStyle(element).visibility!=='hidden').map(element=>element.getBoundingClientRect());
-    const selectedId=owner.getSnapshot().selectedId;
-    const focusedNode=spatial.nodes.get(selectedId),focusedObject=owner.getSnapshot().objects.find(object=>object.id===selectedId);
-    if(!selectedSurface.hidden&&focusedNode&&focusedObject){
-      const distance=Math.max(.45,camera.position.distanceTo(focusedNode.position));
-      const projected=realityObjectSurfaceEngine.projectedBounds({shape:focusedObject.shape??'cube',size:focusedObject.size??1,approachScale:(focusedNode.root.scale.x||1)/Math.max(.01,focusedObject.size??1),distance,viewportHeight:innerHeight,fov:camera.fov});
-      const fitted=realityObjectSurfaceEngine.fitPanel({shape:focusedObject.shape??'rectangle',size:focusedObject.size??1,approachScale:(focusedNode.root.scale.x||1)/Math.max(.01,focusedObject.size??1),distance,viewportWidth:innerWidth,viewportHeight:innerHeight,fov:camera.fov,safeWidth:28,safeHeight:210,inset:0});
-      const width=fitted.width,height=fitted.height;
-      screenPoint.copy(focusedNode.root.position);screenPoint.project(camera);
-      const centerX=(screenPoint.x*.5+.5)*innerWidth,centerY=(-screenPoint.y*.5+.5)*innerHeight;
-      selectedSurface.style.left=`${Math.max(14,Math.min(innerWidth-width-14,centerX-width/2))}px`;
-      selectedSurface.style.top=`${Math.max(88,Math.min(innerHeight-height-160,centerY-height/2))}px`;
-      selectedSurface.style.right='auto';selectedSurface.style.bottom='auto';selectedSurface.style.width=`${width}px`;selectedSurface.style.height=`${height}px`;
-      selectedSurface.style.maxHeight=`${height}px`;
-      selectedSurface.dataset.shape=focusedObject.shape??'cube';
-    }
-      if(performance.now()<resizeFocusUntil&&document.activeElement===document.body&&lastAssemblyFocus?.classList.contains('assembly-node-label')){lastAssemblyFocus.hidden=false;lastAssemblyFocus.focus({preventScroll:true});}
-      // A moving projection must not hide the DOM control holding keyboard focus.
-      // Pin its current screen position until blur; other labels yield to it.
-      const focusedLabel=[...labels.values()].find(label=>label===document.activeElement&&!label.hidden);
-      if(focusedLabel){
-        let bounds=focusedLabel.getBoundingClientRect();
-        if(bounds.left<8||bounds.right>innerWidth-8||bounds.top<8||bounds.bottom>innerHeight-8||occupied.some(rect=>overlaps(bounds,rect))){
-          const w=bounds.width,h=bounds.height;
-          let placement=null;
-          for(let y=8;y+h<=innerHeight-8&&!placement;y+=h+8)for(let x=8;x+w<=innerWidth-8;x+=w+8){const candidate={left:x,top:y,right:x+w,bottom:y+h};if(!occupied.some(rect=>overlaps(candidate,rect))){placement=candidate;break;}}
-          if(placement){focusedLabel.style.left=`${placement.left+w/2}px`;focusedLabel.style.top=`${placement.top+h/2}px`;bounds=focusedLabel.getBoundingClientRect();}
-          else if(innerWidth<700){directoryToggle.focus({preventScroll:true});say('No free label space. Use Find a world to inspect the selected object.');focusedLabel.hidden=true;}
-        }
-        occupied.push(bounds);
-      }
-      const spatialState=spatial.getSnapshot(),lod=spatialState.lod,worldLabel=find('[data-world-label]');
-      worldLabel.hidden=lod!=='nucleus';
-      if(lod==='nucleus'){for(const [,label] of labels)label.hidden=true;for(const [,label] of spatialGroupLabels)label.hidden=true;}
-      else{
-      // Selected and hovered labels get first choice of screen-space slots.
-      const {safeTop,safeBottom}=computeLabelSafeBand(occupied,innerHeight);
-      const orderedLabels=[...labels].sort(([a],[b])=>(a===selectedId?-2:a===hovered?-1:0)-(b===selectedId?-2:b===hovered?-1:0)),acceptedLabelBounds=[];
-      for(const [id,label] of orderedLabels){
-        if(label===focusedLabel)continue;
-        // Labels are quiet navigation affordances, not captions floating in
-        // front of a living object. The object surface owns its name in focus.
-        if(spatialState.focusIsolated){label.hidden=true;continue;}
-        const node=spatial.nodes.get(id);if(!node){label.hidden=true;continue;}
-        if(!shouldShowRealityObjectLabel({node,activeGroupId:activeLensGroup,focusIsolated:spatialState.focusIsolated,selectedId,objectId:id})){label.hidden=true;continue;}
-        labelRight.setFromMatrixColumn(camera.matrixWorld,0).normalize();
-        const form=REALITY_TAB_FORMS[node.shape],side=node.revealOrder%2===0?1:-1;
-        const labelPosition=assemblySideLabelPoint({position:node.root.position.toArray(),cameraRight:labelRight.toArray(),halfWidth:node.isTab?((form?.width??1.2)*(node.root.scale.x||node.size||1))/2:Math.max(.7,node.scale*.55),side,gap:node.isTab?.58:.46});
-        screenPoint.set(...labelPosition).project(camera);
-        label.hidden=false;
-        const measured=label.getBoundingClientRect();
-        const placement=placeAssemblyLabel({ndcX:screenPoint.x,ndcY:screenPoint.y,ndcZ:screenPoint.z,viewportWidth:innerWidth,viewportHeight:innerHeight,safeTop,safeBottom,labelWidth:measured.width,labelHeight:measured.height,occupied:[...occupied,...acceptedLabelBounds]});
-        if(!placement.visible){label.hidden=true;continue;}
-        label.style.left=`${placement.x}px`;label.style.top=`${placement.y}px`;
-        const bounds=label.getBoundingClientRect();
-        if(occupied.some(rect=>overlaps(bounds,rect))||acceptedLabelBounds.some(rect=>overlaps(bounds,rect))){label.hidden=true;continue;}
-        acceptedLabelBounds.push(bounds);
-        label.style.zIndex=id===selectedId?'3':id===hovered?'2':'1';
-      }
-      for(const [groupId,label] of spatialGroupLabels){
-        if(spatialState.focusIsolated){label.hidden=true;continue;}
-        const groupPosition=spatial.getGroupPosition(groupId),marker=spatial.groupParents.get(groupId);
-        if(!groupPosition||!marker?.root.visible||activeLensGroup===groupId){label.hidden=true;continue;}
-        labelRight.setFromMatrixColumn(camera.matrixWorld,0).normalize();
-        const groupIndex=REALITY_LENS_GROUPS.findIndex(group=>group.id===groupId),groupSide=groupIndex%2===0?-1:1;
-        screenPoint.set(...assemblySideLabelPoint({position:groupPosition.toArray(),cameraRight:labelRight.toArray(),halfWidth:2.7,side:groupSide,gap:.55})).project(camera);
-        label.hidden=false;const measured=label.getBoundingClientRect();
-        const placement=placeAssemblyLabel({ndcX:screenPoint.x,ndcY:screenPoint.y,ndcZ:screenPoint.z,viewportWidth:innerWidth,viewportHeight:innerHeight,safeTop,safeBottom,labelWidth:measured.width,labelHeight:measured.height,occupied:[...occupied,...acceptedLabelBounds]});
-        if(!placement.visible){label.hidden=true;continue;}
-        label.style.left=`${placement.x}px`;label.style.top=`${placement.y}px`;
-        const bounds=label.getBoundingClientRect();
-        if(occupied.some(rect=>overlaps(bounds,rect))||acceptedLabelBounds.some(rect=>overlaps(bounds,rect))){label.hidden=true;continue;}
-        acceptedLabelBounds.push(bounds);label.style.zIndex='1';
-      }
+      if(!activeUniversalLensScene)onPanelFrame(owner.getSnapshot().selectedId);
+      const selectedId=owner.getSnapshot().selectedId,focusedNode=spatial.nodes.get(selectedId),focusedObject=owner.getSnapshot().objects.find(object=>object.id===selectedId);
+      if(!selectedSurface.hidden&&focusedNode&&focusedObject){
+        const distance=Math.max(.45,camera.position.distanceTo(focusedNode.position));
+        const fitted=realityObjectSurfaceEngine.fitPanel({shape:focusedObject.shape??'rectangle',size:focusedObject.size??1,approachScale:(focusedNode.root.scale.x||1)/Math.max(.01,focusedObject.size??1),distance,viewportWidth:innerWidth,viewportHeight:innerHeight,fov:camera.fov,safeWidth:28,safeHeight:210,inset:0});
+        const {width,height}=fitted;screenPoint.copy(focusedNode.root.position);screenPoint.project(camera);
+        const centerX=(screenPoint.x*.5+.5)*innerWidth,centerY=(-screenPoint.y*.5+.5)*innerHeight;
+        selectedSurface.style.left=`${Math.max(14,Math.min(innerWidth-width-14,centerX-width/2))}px`;
+        selectedSurface.style.top=`${Math.max(88,Math.min(innerHeight-height-160,centerY-height/2))}px`;
+        selectedSurface.style.right='auto';selectedSurface.style.bottom='auto';selectedSurface.style.width=`${width}px`;selectedSurface.style.height=`${height}px`;
+        selectedSurface.style.maxHeight=`${height}px`;selectedSurface.dataset.shape=focusedObject.shape??'cube';
       }
     },
-    destroy(){close();destroyed=true;clearFeatureSurface();window.removeEventListener('resize',resizeCss3d);window.removeEventListener('resize',resizeFocus);selectionObserver.disconnect();spatial.destroy();root.remove();stylesheet.remove();cssSurfaceHost.removeEventListener('pointerdown',downOnObjectSurface,true);canvas.removeEventListener('pointerdown',down,true);canvas.removeEventListener('pointermove',move);canvas.removeEventListener('pointerup',release);canvas.removeEventListener('pointercancel',release);canvas.removeEventListener('wheel',resizeOnScroll,true);root.removeEventListener('wheel',resizeOnScroll,true);document.removeEventListener('keydown',keys);}};
+    destroy(){close();destroyed=true;clearFeatureSurface();window.removeEventListener('resize',resizeCss3d);selectionObserver.disconnect();spatial.destroy();root.remove();stylesheet.remove();cssSurfaceHost.removeEventListener('pointerdown',downOnObjectSurface,true);canvas.removeEventListener('pointerdown',down,true);canvas.removeEventListener('pointermove',move);canvas.removeEventListener('pointerup',release);canvas.removeEventListener('pointercancel',release);canvas.removeEventListener('wheel',resizeOnScroll,true);root.removeEventListener('wheel',resizeOnScroll,true);document.removeEventListener('keydown',keys);}};
 }

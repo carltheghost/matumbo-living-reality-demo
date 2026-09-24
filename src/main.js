@@ -22,7 +22,7 @@ import { initMobilePanelManager } from './render/mobile-panel-manager.js?v=20260
 import { installMobileFreezeGuard } from './render/mobile-freeze-guard.js?v=20260922-mfg1';
 import { mountPhotoMascot } from './render/photo-mascot-mount.js?v=20260922-cache2';
 import { createPersonStudio } from './render/person-studio.js?v=20260918-avatar-chess';
-import { createRealityAssembly, CLEAN_LANDING_CAMERA } from './render/reality-assembly.js?v=20260924-aspectus1';
+import { createRealityAssembly, CLEAN_LANDING_CAMERA } from './render/reality-assembly.js?v=20260924-universe-lenses6';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { MANIPULATE_MODES } from './render/manipulate-controls.js?v=20260922-cache2';
@@ -9174,7 +9174,7 @@ personStudio=createPersonStudio({THREE,renderer,scene,camera,controls,world,targ
   onIntent:(type,detail)=>projectionBridge.emitIntent(type,'person-studio',detail),
 });
 window.__TUMBO_PERSON_STUDIO__=personStudio;
-realityAssembly=createRealityAssembly({THREE,renderer,scene,camera,controls,world,targets:raycastTargets,features:FEATURE_DEFINITIONS,relationships:FEATURE_HANDOFF_LINKS,reducedMotion,environmentTexture:personStudio.getEnvironmentTexture(),
+realityAssembly=createRealityAssembly({THREE,renderer,scene,camera,controls,world,worldGrid:grid,worldHorizonRings:blockWorldHorizonRings,targets:raycastTargets,features:FEATURE_DEFINITIONS,relationships:FEATURE_HANDOFF_LINKS,reducedMotion,environmentTexture:personStudio.getEnvironmentTexture(),
   onNavigate:(id)=>{featureNavigator.select(id,'reality-assembly',{updateLocation:false});featureNavigator.close();},
   onFrame:()=>{cameraTween=0;cameraPositionTween=0;},
   // The Lens owns the visual field while a feature is being inspected. Bot
@@ -9222,7 +9222,7 @@ if (cleanRealityLanding) {
   const featureId = featureNavigator.getSnapshot().activeId;
   setBlockWorldPresentation(false);
   realityAssembly.open({ lensMode: true, featureId });
-  if (featureId && exposeRealityAssemblyFeaturePanel(featureId)) realityAssembly.setInspectorVisible(false);
+  if (featureId && !realityAssembly.isUniversalLensLayout && exposeRealityAssemblyFeaturePanel(featureId)) realityAssembly.setInspectorVisible(false);
 } else if(featureNavigator.getSnapshot().activeId==='reality-lens') {
   realityAssembly.open({lensMode:true});
 }

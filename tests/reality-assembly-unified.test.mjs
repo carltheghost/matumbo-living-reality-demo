@@ -178,7 +178,8 @@ test('each supported tab form rebuilds the same selectable feature object',()=>{
     const tab=scene.nodes.get('contracts');
     assert.equal(tab.shape,shape);assert.equal(tab.tabMesh.name,`contracts/spatial-tab/${shape}`);
     assert.ok(Math.abs(tab.root.scale.x-1.25)<.001,`${shape} keeps its configured size`);
-    if(['sphere','cylinder'].includes(shape))assert.equal(tab.tabMesh.material,tab.shellMaterial,`${shape} stays readable instead of wrapping feature text around a curved surface`);
+    if(shape==='cylinder')assert.equal(tab.tabMesh.material,tab.shellMaterial,`${shape} keeps its flush readable facet`);
+    if(shape==='sphere')assert.equal(tab.artSurface,tab.tabMesh,'sphere inscriptions wrap the object instead of using a plaque');
     assert.equal(tab.core,undefined);assert.equal(tab.faces,undefined);
     assert.ok(targets.every(object=>scene.resolve(object)),`${shape} ray targets keep their feature ids`);
   }
