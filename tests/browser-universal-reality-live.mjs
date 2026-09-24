@@ -53,15 +53,27 @@ try{
     const url=new URL(base);
     url.searchParams.set('feature','reality-lens');
     url.searchParams.set('proof',expectedBuild??'local');
-    await page.goto(url.href,{waitUntil:'domcontentloaded',timeout:90000});
-    await page.waitForFunction(
-      ()=>window.__MATUMBO_RUNTIME__?.getState?.()==='ready'
-        && window.__TUMBO_REALITY_ASSEMBLY__?.active===true
-        && window.__TUMBO_UNIVERSAL_OBJECTS__?.getSnapshot?.()?.featureCount>10,
-      null,
-      {timeout:90000},
-    );
-    await page.waitForTimeout(1800);
+    await page.goto(url.href,{waitUntil:'domcontentloaded',timeout:60000});
+    const deadline=Date.now()+45000;
+    let ready=false;
+    let diagnostics=null;
+    while(Date.now()<deadline){
+      diagnostics=await page.evaluate(()=>({
+        runtime:window.__MATUMBO_RUNTIME__?.getState?.()??null,
+        hasAssembly:Boolean(window.__TUMBO_REALITY_ASSEMBLY__),
+        assemblyActive:Boolean(window.__TUMBO_REALITY_ASSEMBLY__?.active),
+        hasUniversal:Boolean(window.__TUMBO_UNIVERSAL_OBJECTS__),
+        universal:window.__TUMBO_UNIVERSAL_OBJECTS__?.getSnapshot?.()??null,
+        runtimeBanner:document.getElementById('runtime-status-message')?.textContent??null,
+      }));
+      if(diagnostics.hasAssembly&&diagnostics.assemblyActive&&diagnostics.universal?.featureCount>10){ready=true;break;}
+      await page.waitForTimeout(500);
+    }
+    if(!ready){
+      await page.screenshot({path:resolve(output,`${mode}-startup-failure.png`),fullPage:true});
+      throw new Error(`Reality Lens universal startup timeout: ${JSON.stringify(diagnostics)}`);
+    }
+    await page.waitForTimeout(1200);
 
     const proof=await page.evaluate(()=>{
       const universal=window.__TUMBO_UNIVERSAL_OBJECTS__.getSnapshot();
