@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as THREE from '../vendor/three-r179.1/build/three.module.js';
 import {FEATURE_DEFINITIONS} from '../src/render/feature-navigator.js';
 import {realityLensEngine,resolveRealityLensGroup} from '../src/domains/reality-lens-engine.js';
-import {REALITY_TAB_FORMS} from '../src/domains/reality-tab-layout.js';
+import {REALITY_TAB_FORMS,REALITY_TAB_GAP} from '../src/domains/reality-tab-layout.js';
 import {focusDistance,solveLivingLayout,surfaceLayout} from '../src/domains/living-surface-layout-engine.js';
 import {buildRealityAssemblyScene} from '../src/render/reality-assembly-scene.js';
 
@@ -21,10 +21,10 @@ test('Bot Plaza stays an exterior, readable cylinder in the actual 36-object Len
       position:realityLensEngine.placeInFunnel({id:feature.id,index:siblings.findIndex(item=>item.id===feature.id),count:siblings.length,groupId:group}).position};
   });
   const bot=seeded.find(object=>object.id==='bot-plaza');bot.pinned=true;
-  const layout=solveLivingLayout(seeded,{gap:1.02,iterations:96});
+  const layout=solveLivingLayout(seeded,{gap:REALITY_TAB_GAP,iterations:96});
   assert.equal(layout.objects.length,FEATURE_DEFINITIONS.length);
   assert.equal(layout.diagnostics.collisionCount,0);
-  assert.ok(layout.diagnostics.minimumGap>=1.02-1e-5);
+  assert.ok(layout.diagnostics.minimumGap>=REALITY_TAB_GAP-1e-5);
   assert.deepEqual(layout.objects.find(object=>object.id==='bot-plaza').position,bot.position);
 
   const skin=surfaceLayout({id:'bot-plaza',shape:'cylinder',size:24,contentDensity:100});

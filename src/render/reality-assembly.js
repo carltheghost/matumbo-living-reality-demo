@@ -1,9 +1,9 @@
 import {createRealityWorkspace} from '../domains/reality-workspace.js?v=20260923-spatial-tabs16';
-import {REALITY_TAB_FORMS,REALITY_TAB_SIZE_MIN,REALITY_TAB_SIZE_MAX,resolveRealityTabPosition} from '../domains/reality-tab-layout.js?v=20260923-spatial-tabs15';
-import {REALITY_LENS_GROUPS,realityLensEngine,resolveRealityLensGroup} from '../domains/reality-lens-engine.js?v=20260923-lens-engine7';
-import {realityLensCopy,realityLensLabel,realityObjectSurfaceEngine} from '../domains/reality-object-engine.js?v=20260923-object-surface5';
+import {REALITY_TAB_FORMS,REALITY_TAB_SIZE_MIN,REALITY_TAB_SIZE_MAX,REALITY_TAB_GAP,resolveRealityTabPosition} from '../domains/reality-tab-layout.js?v=20260924-living-surfaces2';
+import {REALITY_LENS_GROUPS,realityLensEngine,resolveRealityLensGroup} from '../domains/reality-lens-engine.js?v=20260924-living-surfaces2';
+import {realityLensCopy,realityLensLabel,realityObjectSurfaceEngine} from '../domains/reality-object-engine.js?v=20260924-living-surfaces2';
 import {surfaceLayout,focusDistance,solveLivingLayout,wheelIntent} from '../domains/living-surface-layout-engine.js';
-import {buildRealityAssemblyScene,LOD_FAR} from './reality-assembly-scene.js?v=20260924-focus-cap1';
+import {buildRealityAssemblyScene,LOD_FAR} from './reality-assembly-scene.js?v=20260924-living-surfaces2';
 
 // The lens contains only equal-status feature tabs; no center cube or anchor.
 export const CLEAN_LANDING_CAMERA={position:[36,25,110],target:[0,2,0],fov:60,mergeThreshold:LOD_FAR};
@@ -43,6 +43,17 @@ export function assemblySideLabelPoint({position,cameraRight,halfWidth=0,side=1,
   const length=Math.hypot(...cameraRight);if(length<1e-8)throw Error('The camera side axis cannot be zero');
   const direction=side<0?-1:1,offset=halfWidth+gap;
   return position.map((value,index)=>Number((value+cameraRight[index]/length*direction*offset).toFixed(4)));
+}
+
+// A Lens overview is intentionally hierarchical: the domain object is visible
+// first and its feature tabs only receive labels after the domain has opened.
+// Without this gate invisible children leave a misleading cloud of detached
+// words behind their parent object.
+export function shouldShowRealityObjectLabel({node,activeGroupId=null,focusIsolated=false,selectedId=null,objectId=null}={}){
+  if(!node?.isTab||node.root?.visible===false||focusIsolated)return false;
+  if(activeGroupId&&activeGroupId!=='*'&&node.lensGroup!==activeGroupId)return false;
+  if(objectId!==selectedId&&Number(node.contextOpacity??1)<.12)return false;
+  return Number(node.tabReveal??1)>=.35;
 }
 // HUD chrome (header, toolbar, inspector panels) reserves screen space; the
 // label band is whatever vertical space remains, so names slide along chrome
@@ -87,7 +98,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
       shape:defaultForms[i%defaultForms.length],size:1,
     };
   });
-  const positions=solveLivingLayout(seededPositions,{gap:1.02,iterations:96}).objects;
+  const positions=solveLivingLayout(seededPositions,{gap:REALITY_TAB_GAP,iterations:96}).objects;
   const workspace=createRealityWorkspace({objects:positions,selectedId:ordered[0]?.id,rootLabel:'Una Realitas'});
   let owner=workspace.timeline;
   const sideRealityByFeature=new Map();
@@ -96,7 +107,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   const spatial=buildRealityAssemblyScene({THREE,parent:scene,features:ordered.map((feature,i)=>({...feature,label:labelFor(feature),description:copyFor(feature.description),boundary:copyFor(feature.boundary),sources:(feature.sources??[]).map(copyFor),assemblyTier:'tab',lensGroup:positions[i]?.lensGroup??'worlds',initialTabShape:initialShapes.get(feature.id),initialPosition:positions[i]?.position})),targets,relationships});
   spatial.setActiveGroup(null);
   const featureMap=new Map(features.map(feature=>[feature.id,feature]));
-  const stylesheet=document.createElement('link');stylesheet.rel='stylesheet';stylesheet.href=`${new URL('./reality-assembly.css',import.meta.url).href}?v=20260924-living-surfaces1`;document.head.append(stylesheet);
+  const stylesheet=document.createElement('link');stylesheet.rel='stylesheet';stylesheet.href=`${new URL('./reality-assembly.css',import.meta.url).href}?v=20260924-living-surfaces2`;document.head.append(stylesheet);
   const root=document.createElement('section');root.id='reality-assembly';root.hidden=true;root.setAttribute('aria-label','Reality Lens spatial assembly');
   root.innerHTML=`<header class="assembly-header"><a class="assembly-brand" href="?feature=reality-lens"><span aria-hidden="true">◇</span><div>maTumbo<small>People × planet × possibility</small></div></a><nav aria-label="Assembly navigation"><button data-home>Explore</button><button data-enter-person>Your space</button><button data-enter-contracts>Contracts</button><button data-grid>Block World</button></nav><form class="assembly-quick-find" data-quick-find role="search"><label><span>Find object</span><input data-quick-search type="search" autocomplete="off" placeholder="Search YouTube, agents…" aria-label="Find a Reality Lens object"></label><button type="submit">Locate</button></form><button data-clean>Hide panels</button></header>
   <aside class="assembly-directory"><p class="assembly-eyebrow">Reality Lens Ω</p><h1>Many worlds.<br><em>One reality.</em></h1><p class="assembly-intro">Explore the same universe across space and depth.<br>Every window is a real, rearrangeable tab.</p><label class="assembly-search-label">Find a connected feature<input data-search placeholder="Search worlds, contracts…" type="search"></label><nav class="assembly-catalog" aria-label="Feature objects"></nav><p class="assembly-note">Designed 3D feature previews.<br>Only the selected feature opens its connected controls.</p></aside>
@@ -184,7 +195,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     restore();requestAnimationFrame(restore);
   };
   window.addEventListener('resize',resizeFocus);
-  let active=false,saved=null,viewMode='3d',interaction='orbit',hovered=null,pointer=null,focusTarget=null,focusPosition=null,inspectorFolded=false,activeLensGroup=null;
+  let active=false,saved=null,viewMode='3d',interaction='orbit',hovered=null,pointer=null,focusTarget=null,focusPosition=null,restoreCameraRangeOnOverview=false,inspectorFolded=false,activeLensGroup=null;
   const labels=new Map(),catalog=new Map(),catalogSections=new Map();
   for(const domain of REALITY_LENS_GROUPS){
     const members=groupMembers.get(domain.id)??[];if(!members.length)continue;
@@ -218,7 +229,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   let lastLayoutDiagnostics=null;
   function snapshot(){return {...owner.getSnapshot(),active,viewMode,interaction,camera:{position:camera.position.toArray(),target:controls.target.toArray()},spatial:spatial.getSnapshot(),layoutDiagnostics:lastLayoutDiagnostics,reality:workspace.getSnapshot()};}
   function projectSpacedLayout(state,pinnedId=state.selectedId){
-    const layout=solveLivingLayout(state.objects.map(object=>object.id===pinnedId?{...object,pinned:true}:object),{gap:1.02,iterations:96});
+    const layout=solveLivingLayout(state.objects.map(object=>object.id===pinnedId?{...object,pinned:true}:object),{gap:REALITY_TAB_GAP,iterations:96});
     lastLayoutDiagnostics=layout.diagnostics;
     return {...state,objects:layout.objects};
   }
@@ -428,7 +439,17 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     root.dataset.previewDirty=String(state.revision>0||state.branches.length>0);
     root.dataset.historyMode=state.mode;
   }
-  function select(id,{approach=true}={}){owner.select(id);activeLensGroup=null;spatial.setActiveGroup('*');spatial.focus(id);if(approach)focus();root.classList.remove('assembly-clean');root.classList.add('assembly-object-focused');selectedSurface.hidden=false;find('[data-clean]').textContent='Celare';render();say(`${labelFor(featureMap.get(id))} · superficiem vivam aperire.`);}
+  function select(id,{approach=true,revealInspector=false}={}){
+    owner.select(id);activeLensGroup=null;spatial.setActiveGroup('*');spatial.focus(id);if(approach)focus();
+    // Selecting an object must reveal its own attached living surface, not
+    // force the old detached inspector over the scene. The central inspector
+    // remains available through the Objectum toggle for deliberate inspection.
+    selectedSurface.hidden=!revealInspector;
+    root.classList.toggle('assembly-object-focused',revealInspector);
+    root.classList.toggle('assembly-clean',!revealInspector);
+    find('[data-clean]').textContent=revealInspector?'Celare':'Objectum';
+    render();say(`${labelFor(featureMap.get(id))} · superficiem vivam aperire.`);
+  }
   function exploreGroup(groupId){
     const record=catalogSections.get(groupId);if(!record)return;
     activeLensGroup=groupId;spatial.setActiveGroup(groupId);
@@ -458,12 +479,20 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     const outward=camera.position.clone().sub(controls.target);if(outward.length()<1)outward.set(54,36,164);
     outward.normalize().multiplyScalar(framing.distance);
     focusTarget=position.clone();focusPosition=position.clone().add(outward);spatial.focus(object.id,{distance:framing.distance});
-    controls.maxDistance=Math.max(220,framing.distance*1.3);onFrame?.();
+    controls.maxDistance=Math.max(220,framing.distance*1.3);
+    // OrbitControls can travel beyond the ordinary camera's far plane when a
+    // user enlarges a form. Keep its whole body visible through that journey.
+    restoreCameraRangeOnOverview=false;
+    const requiredFar=controls.maxDistance+position.length()+framing.radius*2+40;
+    if(camera.far<requiredFar){camera.far=requiredFar;camera.updateProjectionMatrix();}
+    onFrame?.();
   }
   function overview(){
     activeLensGroup=null;
     spatial.setActiveGroup(null);
-    controls.maxDistance=220;
+    // Restore the default range after the camera returns; reducing it during
+    // flight would clip the large object or abruptly clamp OrbitControls.
+    restoreCameraRangeOnOverview=true;
     focusTarget=new THREE.Vector3(...CLEAN_LANDING_CAMERA.target);
     focusPosition=new THREE.Vector3(...CLEAN_LANDING_CAMERA.position);
     spatial.focus(null);
@@ -596,7 +625,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   const canvas=renderer.domElement;canvas.addEventListener('pointerdown',down,true);canvas.addEventListener('pointermove',move);canvas.addEventListener('pointerup',release);canvas.addEventListener('pointercancel',release);canvas.addEventListener('wheel',resizeOnScroll,{capture:true,passive:false});root.addEventListener('wheel',resizeOnScroll,{capture:true,passive:false});document.addEventListener('keydown',keys);
   let activeLensMode=false;
   function open({lensMode=false,featureId=null}={}){
-    if(active)return;active=true;saved={position:camera.position.clone(),target:controls.target.clone(),fov:camera.fov,min:controls.minDistance,max:controls.maxDistance,worldVisible:world.visible,fog:scene.fog,environment:scene.environment,background:scene.background};
+    if(active)return;active=true;saved={position:camera.position.clone(),target:controls.target.clone(),fov:camera.fov,far:camera.far,min:controls.minDistance,max:controls.maxDistance,worldVisible:world.visible,fog:scene.fog,environment:scene.environment,background:scene.background};
     root.hidden=false;onActiveChange(true);
     // Panels start CLOSED: the default view is a clean spatial universe.
     // The user materializes the directory / inspector with the header
@@ -613,7 +642,8 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     if(!active)return;setDirectory(false);active=false;onActiveChange(false);pointer=null;controls.enabled=true;root.hidden=true;spatial.layer.visible=false;document.body.classList.remove('assembly-mode');
     clearFeatureSurface();
     spatial.setLensMode(false);activeLensMode=false;
-    if(saved){camera.position.copy(saved.position);controls.target.copy(saved.target);camera.fov=saved.fov;camera.updateProjectionMatrix();controls.minDistance=saved.min;controls.maxDistance=saved.max;world.visible=saved.worldVisible;scene.fog=saved.fog;scene.environment=saved.environment;scene.background=saved.background;saved=null;}
+    if(saved){camera.position.copy(saved.position);controls.target.copy(saved.target);camera.fov=saved.fov;camera.far=saved.far;camera.updateProjectionMatrix();controls.minDistance=saved.min;controls.maxDistance=saved.max;world.visible=saved.worldVisible;scene.fog=saved.fog;scene.environment=saved.environment;scene.background=saved.background;saved=null;}
+    restoreCameraRangeOnOverview=false;
   }
   render();
   const selectionObserver=new MutationObserver(()=>{compactSelection.textContent=find('[data-title]').textContent;});selectionObserver.observe(find('[data-title]'),{childList:true});
@@ -633,7 +663,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     selectObject(object){const id=spatial.resolve(object);if(!id)return false;select(id);toggle();return true;},
     update(dt,time){
       if(!active)return;
-      if(focusTarget&&!renderer.xr.isPresenting){const blend=reducedMotion?1:1-Math.exp(-dt*6);controls.target.lerp(focusTarget,blend);camera.position.lerp(focusPosition,blend);if(camera.position.distanceTo(focusPosition)<.02){focusTarget=null;focusPosition=null;}}
+      if(focusTarget&&!renderer.xr.isPresenting){const blend=reducedMotion?1:1-Math.exp(-dt*6);controls.target.lerp(focusTarget,blend);camera.position.lerp(focusPosition,blend);if(camera.position.distanceTo(focusPosition)<.02){focusTarget=null;focusPosition=null;if(restoreCameraRangeOnOverview){controls.maxDistance=220;camera.far=saved?.far??camera.far;camera.updateProjectionMatrix();restoreCameraRangeOnOverview=false;}}}
       const cameraDistance=camera.position.distanceTo(controls.target);
       spatial.update(dt,time,{reducedMotion,cameraDistance,cameraPosition:camera.position,
         viewportWidth:innerWidth,viewportHeight:innerHeight,fov:camera.fov,occupancy:innerWidth<700?.55:.58});spatial.layer.updateMatrixWorld(true);camera.updateMatrixWorld();
@@ -686,8 +716,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
         // front of a living object. The object surface owns its name in focus.
         if(spatialState.focusIsolated){label.hidden=true;continue;}
         const node=spatial.nodes.get(id);if(!node){label.hidden=true;continue;}
-      if((activeLensGroup&&activeLensGroup!=='*'&&node.lensGroup!==activeLensGroup)||(id!==selectedId&&node.contextOpacity<.12)){label.hidden=true;continue;}
-        if(node.isTab&&node.tabReveal<.35){label.hidden=true;continue;}
+        if(!shouldShowRealityObjectLabel({node,activeGroupId:activeLensGroup,focusIsolated:spatialState.focusIsolated,selectedId,objectId:id})){label.hidden=true;continue;}
         labelRight.setFromMatrixColumn(camera.matrixWorld,0).normalize();
         const form=REALITY_TAB_FORMS[node.shape],side=node.revealOrder%2===0?1:-1;
         const labelPosition=assemblySideLabelPoint({position:node.root.position.toArray(),cameraRight:labelRight.toArray(),halfWidth:node.isTab?((form?.width??1.2)*(node.root.scale.x||node.size||1))/2:Math.max(.7,node.scale*.55),side,gap:node.isTab?.58:.46});

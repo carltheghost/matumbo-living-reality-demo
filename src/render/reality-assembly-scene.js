@@ -1,5 +1,5 @@
-import {REALITY_TAB_FORMS} from '../domains/reality-tab-layout.js?v=20260923-spatial-tabs14';
-import {REALITY_LENS_GROUPS,realityLensEngine,resolveRealityLensGroup} from '../domains/reality-lens-engine.js?v=20260923-lens-engine4';
+import {REALITY_TAB_FORMS} from '../domains/reality-tab-layout.js?v=20260924-living-surfaces2';
+import {REALITY_LENS_GROUPS,realityLensEngine,resolveRealityLensGroup} from '../domains/reality-lens-engine.js?v=20260924-living-surfaces2';
 
 /** Shape-changing, image-bearing feature tabs only; the former central cube is
  * now the same status and geometry as every other Reality Lens object. */
@@ -729,13 +729,13 @@ function applyTabDepthMode(node){
   }
   function update(dt,time,{reducedMotion=false,cameraDistance=0,cameraPosition=null,viewportWidth=1280,viewportHeight=900,fov=60,occupancy=.58}={}){
     const blend=reducedMotion?1:1-Math.exp(-dt*9);
-    const targetProgress=realityLensEngine.overviewProgress(cameraDistance);
+    const focalNode=nodes.get(focusId),focusScale=Math.max(1,focalNode?.size??1);
+    const targetProgress=realityLensEngine.overviewProgress(cameraDistance/focusScale);
     approachBlend+=(targetProgress-approachBlend)*blend;
     worldBlock.visible=false;
     const activeRelation=(nodes.get(selected)?.isTab||nodes.get(hovered)?.isTab)===true;
     connections.visible=edges.length>0&&approachBlend>.3&&activeRelation&&cameraDistance>24&&!focusId;
     connectionMaterial.opacity=.26*approachBlend;
-    const focalNode=nodes.get(focusId);
     const focusDistance=cameraPosition&&focalNode?cameraPosition.distanceTo(focalNode.position):cameraDistance;
     // Lens milestones describe a journey relative to the object's framing
     // distance. A physically large form can reach focus from farther away.
@@ -781,12 +781,12 @@ function applyTabDepthMode(node){
         // wireframe fighting the readable, interactive face.
         const cover= response.isSelected ? Math.max(0,Math.min(1,(response.focusStrength-.24)/.76)) : 0;
         const curvedSkin=node.shape==='sphere'||node.shape==='cylinder';
-        const tuneSurface=(material,multiplier)=>{if(!material)return;const base=material.userData?.realityLensBaseOpacity??1;material.opacity=base*(1-cover*multiplier);};
+        const tuneSurface=(material,multiplier)=>{if(!material)return;const base=material.userData?.realityLensBaseOpacity??1;material.opacity=base*(1-cover*multiplier)*response.contextOpacity;};
         tuneSurface(node.shellMaterial,curvedSkin?.4:.76);
         // The frame is useful while approaching. At the readable stage it
         // almost disappears, leaving the mounted panel as the object's face.
-        if(node.edgeMaterial){const base=node.edgeMaterial.userData?.realityLensBaseOpacity??1;node.edgeMaterial.opacity=base*(curvedSkin?1-cover*.6:(1-cover)*(1-cover));}
-        if(node.artMaterial){const base=node.artMaterial.userData?.realityLensBaseOpacity??1;node.artMaterial.opacity=base*(1-cover)*(1-cover);}
+        if(node.edgeMaterial){const base=node.edgeMaterial.userData?.realityLensBaseOpacity??1;node.edgeMaterial.opacity=base*(curvedSkin?1-cover*.6:(1-cover)*(1-cover))*response.contextOpacity;}
+        if(node.artMaterial){const base=node.artMaterial.userData?.realityLensBaseOpacity??1;node.artMaterial.opacity=base*(1-cover)*(1-cover)*response.contextOpacity;}
         tuneSurface(node.indicator?.material,.55);
         node.root.rotation.y=reducedMotion?0:Math.sin(time*.18+node.traits.phase)*.025;
         node.root.rotation.x=reducedMotion?0:Math.sin(time*.13+node.traits.phase)*.012;
