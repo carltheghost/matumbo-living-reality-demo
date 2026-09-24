@@ -2,6 +2,22 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from '../vendor/three-r179.1/build/three.module.js';
 import {buildRealityAssemblyScene} from '../src/render/reality-assembly-scene.js';
+import {createLivingSurfaceMap} from '../src/domains/living-surface-layout-engine.js';
+
+test('curved living objects have a flush readable facet backed by their actual volume',()=>{
+  for(const shape of ['sphere','cylinder']){
+    const parent=new THREE.Scene(),targets=[],feature={id:'agent',assemblyTier:'tab',sources:[]};
+    const scene=buildRealityAssemblyScene({THREE,parent,features:[feature],targets});
+    scene.apply({selectedId:'agent',mode:'present',objects:[{id:'agent',position:[0,0,0],shape,size:1,locked:false,open:true}]});
+    const node=scene.nodes.get('agent'),face=createLivingSurfaceMap(shape).primary;
+    node.tabMesh.geometry.computeBoundingBox();
+    const bounds=node.tabMesh.geometry.boundingBox;
+    assert.ok(Math.abs(bounds.max.z-(face.position[2]-.018))<.00001,'skin and machined cap share the same seam');
+    assert.ok(bounds.min.z<-.5,'rear volume is retained');
+    assert.ok(bounds.max.x-bounds.min.x>face.width,'shoulders remain around the reading skin');
+    scene.destroy();
+  }
+});
 test('the former central feature is an ordinary mutable sphere tab like every other identity',()=>{
   const parent=new THREE.Scene(),targets=[],features=[{id:'block-world',assemblyTier:'tab',sources:['semantic-block-fabric']},{id:'contracts',assemblyTier:'tab',sources:['contracts-markets']}];
   const scene=buildRealityAssemblyScene({THREE,parent,features,targets});scene.layer.visible=true;

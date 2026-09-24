@@ -147,6 +147,42 @@ body.assembly-mode .reality-lens-feature-panel[data-object-shape=wave]:not([hidd
 #reality-assembly .assembly-css3d-host{position:absolute;inset:0;z-index:1;overflow:visible;pointer-events:none}
 #reality-assembly .assembly-css3d-renderer{position:absolute!important;inset:0!important;overflow:visible!important;pointer-events:none!important}
 body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true]{position:absolute!important;inset:auto!important;left:auto!important;right:auto!important;top:auto!important;bottom:auto!important;margin:0!important;box-sizing:border-box!important;width:var(--lens-surface-width)!important;height:var(--lens-surface-height)!important;min-width:0!important;min-height:0!important;max-width:none!important;max-height:none!important;overflow:auto!important;overscroll-behavior:contain;scrollbar-width:thin;pointer-events:auto!important;z-index:auto!important;transform-origin:50% 50%!important;border:1px solid rgba(215,185,113,.78)!important;border-radius:13px!important;background:radial-gradient(ellipse at 18% 0%,rgba(185,153,89,.14),transparent 48%),linear-gradient(148deg,rgba(15,25,27,.985),rgba(4,11,16,.99))!important;box-shadow:inset 0 1px 0 rgba(244,225,177,.12),inset 0 0 28px rgba(188,150,73,.07),0 0 18px rgba(190,158,89,.12)!important;backdrop-filter:blur(13px)!important;isolation:isolate!important}
+/* Optical surface composition: native-size type, one owner and no duplicated
+   side panels. A surface is a small responsive viewport, not a desktop panel
+   shrunk as a texture. Container rules work on every device/projection. */
+body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true],
+#reality-assembly .assembly-wrap-fallback{
+  container-type:inline-size;container-name:living-surface;display:flex!important;flex-direction:column!important;
+  align-items:stretch!important;justify-content:flex-start!important;gap:12px;
+  font-size:16px!important;line-height:1.5;overflow-x:hidden!important;overflow-y:auto!important;
+  padding:20px var(--surface-inset,16px)!important;backdrop-filter:none!important;
+  box-shadow:inset 0 1px 0 #eedaa733,inset 0 -2px 0 #09131a!important;
+  border-radius:12px!important;backface-visibility:hidden;
+}
+body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true]>*{flex-shrink:0!important;min-width:0;max-width:100%}
+body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true] :is(p,label,input,select,textarea,button,summary){font-size:16px!important;line-height:1.45!important;overflow-wrap:break-word;word-break:normal}
+body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true] :is(h1,h2,h3){line-height:1.2!important;overflow-wrap:break-word;word-break:normal}
+body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true] :is(h1,h2){font-size:24px!important}
+body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true] :is(button,input,select,textarea,summary),
+#reality-assembly .assembly-wrap-fallback :is(button,summary){min-height:48px!important;min-width:48px;max-width:100%;height:auto!important;white-space:normal!important}
+body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true] :is(header,footer,[class*="actions"],[class*="toolbar"]){display:flex!important;flex-wrap:wrap!important;align-items:center;gap:8px}
+body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true] :is(input,select,textarea){box-sizing:border-box;width:100%;min-width:0!important}
+body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true] :is(input[type=checkbox],input[type=radio]){width:22px;min-height:22px!important}
+body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true][data-object-shape=sphere]{border-radius:50%!important;padding:15% var(--surface-inset,16px)!important}
+body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true][data-object-shape=cylinder]{border-radius:8% / 5%!important;padding:18px var(--surface-inset,16px)!important}
+#reality-assembly .assembly-surface-provenance{flex:none;border-top:1px solid #c9a76a66;padding-top:8px;text-align:left;color:#cbbd9d}
+#reality-assembly .assembly-surface-provenance summary{cursor:pointer;display:flex;align-items:center;font-size:14px}
+#reality-assembly .assembly-surface-provenance p{font-size:14px!important;overflow-wrap:anywhere}
+#reality-assembly .assembly-surface-provenance button{margin:4px 6px 4px 0}
+@container living-surface (max-width:620px){
+  body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true] [data-surface-flow=grid]{grid-template-columns:minmax(0,1fr)!important;grid-auto-flow:row!important;min-width:0!important}
+  body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true] [data-surface-flow=row]{flex-wrap:wrap!important;min-width:0!important;gap:8px}
+  body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true] [data-surface-flow=row]>button{flex:1 1 140px!important}
+  body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true] :is([class*="grid"],[class*="columns"],[class*="layout"],[class*="split"],[class*="stats"]){grid-template-columns:minmax(0,1fr)!important;grid-auto-flow:row!important;min-width:0!important}
+  body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true] :is([class*="actions"],[class*="toolbar"]){flex-direction:row!important;align-items:stretch!important}
+  body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true] :is([class*="actions"],[class*="toolbar"])>button{flex:1 1 140px!important}
+  body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true] :is(header,footer)>*{min-width:0;max-width:100%}
+}
 /* The scroll track is part of the object membrane, not a bright browser rail. */
 body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true]{scrollbar-color:rgba(203,169,93,.76) rgba(5,14,19,.74)}
 body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true]::-webkit-scrollbar{width:8px;height:8px}
@@ -247,4 +283,49 @@ body.assembly-mode #reality-assembly.assembly-directory-open .assembly-directory
   #reality-assembly .assembly-inspector .assembly-tags{display:flex}
   #reality-assembly .assembly-inspector h3{margin:12px 0 5px}
   #reality-assembly .assembly-inspector [data-sources]{max-height:70px;overflow:auto}
+}
+
+/* These final facet silhouettes deliberately override legacy rounded plaques. */
+body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true][data-object-shape=cylinder]{border-radius:8% / 5%!important;padding:18px var(--surface-inset,16px)!important}
+body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true][data-object-shape=sphere]{padding:15% var(--surface-inset,16px)!important}
+#reality-assembly .assembly-wrap-fallback[data-object-shape=sphere]{border-radius:50%;padding:15% var(--surface-inset,16px)!important;text-align:left}
+#reality-assembly .assembly-wrap-fallback[data-object-shape=cylinder]{border-radius:8% / 5%;padding:18px var(--surface-inset,16px)!important;text-align:left}
+#reality-assembly .assembly-wrap-fallback :is(p,button){font-size:16px;line-height:1.5}
+#reality-assembly .assembly-wrap-fallback :is(h2,h3){font-size:24px}
+#reality-assembly .assembly-surface-intro summary{cursor:pointer;color:#b8c2b5;display:flex;align-items:center;gap:8px}
+#reality-assembly .assembly-surface-intro summary::before{content:'+';color:#d5ba81;font-size:20px}
+#reality-assembly .assembly-surface-intro[open] summary::before{content:'−'}
+#reality-assembly .assembly-surface-intro:not([data-compact=true]) summary{display:none}
+#reality-assembly .assembly-surface-intro p{margin:0 0 10px}
+#reality-assembly[data-reading-projection=portrait] .reality-lens-feature-panel[data-lens-surface-attached=true] :is([id$="-head"],header) h2,
+#reality-assembly[data-reading-projection=landscape] .reality-lens-feature-panel[data-lens-surface-attached=true] :is([id$="-head"],header) h2{font-size:20px!important;line-height:1.2!important}
+#reality-assembly .assembly-css3d-host[data-surface-fallback=true]{display:grid;place-items:center;padding:130px 20px 150px;overflow:auto;pointer-events:auto}
+body.assembly-mode #reality-assembly .assembly-css3d-host[data-surface-fallback=true]>:is(.reality-lens-feature-panel,.assembly-wrap-fallback){position:relative!important;transform:none!important;width:min(640px,100%)!important;height:auto!important;max-height:100%!important;border-radius:16px!important;padding:20px!important}
+/* Close is a fixed-sized affordance, not another equal-width content column. */
+body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true] :has(>button[aria-label^="Close"]){position:relative!important;display:block!important}
+body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true] button[aria-label^="Close"]{position:absolute!important;right:0;top:0;flex:none!important;width:48px!important;height:48px!important;padding:0!important;min-width:48px!important}
+body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true] :has(>button[aria-label^="Close"]) h2{padding-right:54px}
+@media(max-width:700px){
+  /* The visible Find button opens the same searchable directory on phone. */
+  #reality-assembly .assembly-header .assembly-quick-find{display:none}
+  #reality-assembly .assembly-header{max-width:calc(100vw - 30px)}
+}
+
+/* A short landscape screen reserves room for the object, not stacked chrome.
+   All toolbar actions remain reachable by horizontal scrolling. */
+@media(max-height:600px) and (orientation:landscape){
+  #reality-assembly .assembly-header{top:6px;left:14px;right:14px;max-width:none;padding-bottom:5px;flex-wrap:nowrap;height:48px;gap:10px}
+  #reality-assembly .assembly-header .assembly-brand{margin-right:auto;font-size:20px}
+  #reality-assembly .assembly-header .assembly-brand small,#reality-assembly .assembly-header nav,#reality-assembly .assembly-header .assembly-quick-find{display:none}
+  #reality-assembly [data-directory-toggle]{display:block;min-height:40px}
+  #reality-assembly .assembly-header>[data-clean]{min-height:40px}
+  #reality-assembly .assembly-toolbar{left:14px;right:184px;bottom:8px;transform:none;width:auto;height:54px;max-height:54px;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;justify-content:flex-start;padding:6px;gap:8px;scrollbar-width:thin}
+  #reality-assembly .assembly-toolbar>*{flex-shrink:0}
+  #reality-assembly .assembly-toolbar button{min-height:40px!important}
+  #reality-assembly .assembly-toolbar .assembly-timeline{min-width:250px;flex-basis:auto}
+  #reality-assembly .assembly-selection-hint,#reality-assembly .assembly-status{display:none}
+  body.assembly-mode #immersive-toolbar{top:auto!important;bottom:8px!important;right:10px!important;left:auto!important;width:160px!important;min-height:54px;align-items:center}
+  body.assembly-mode #immersive-toolbar span{display:none}
+  body.assembly-mode #immersive-toolbar button{min-height:40px}
+  #reality-assembly.assembly-directory-open .assembly-directory{inset:60px 14px 72px;width:auto}
 }

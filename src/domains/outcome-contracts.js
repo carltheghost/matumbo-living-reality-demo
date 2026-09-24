@@ -435,9 +435,13 @@ export function createOutcomeContracts({ seed = "local-outcomes", now = null, re
     if (initial !== "open" && initial !== "draft") {
       throw new TypeError('new contracts start as "open" or "draft"');
     }
+    // Event IDs are provider identities, not presentation labels. Truncating a
+    // long namespaced college-sports ID breaks the approved evidence binding.
+    const exactEventId = safeText(eventId).trim();
+    if (!exactEventId || exactEventId.length > 160) throw new TypeError('event id must be 1–160 characters without truncation');
     const contract = freeze({
       id: nextId("oct"),
-      eventId: boundedLabel(eventId, "event id", 64),
+      eventId: exactEventId,
       eventLabel: boundedLabel(eventLabel, "event label", 96),
       outcomes: normalizeOutcomes(outcomes),
       creator: boundedParticipant(creator),

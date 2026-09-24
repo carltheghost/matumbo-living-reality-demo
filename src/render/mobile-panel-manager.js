@@ -31,7 +31,12 @@ function collectPanels(documentRoot) {
     ? Array.from(documentRoot.querySelectorAll('aside'))
     : [];
   for (const el of asides) {
-    if (!el || EXCLUDED_IDS.has(el.id)) continue;
+    if (!el || !el.id || EXCLUDED_IDS.has(el.id)) continue;
+    if(el.parentElement?.closest?.('aside'))continue;
+    // Object skins and Assembly chrome are owned by the spatial renderer,
+    // not loose floating panels. A mobile keeper election must not hide the
+    // selected entity or its directory because a second aside exists.
+    if (el.getAttribute?.('data-lens-surface-attached') === 'true' || el.closest?.('#reality-assembly')) continue;
     // Mission Control's shell is class-driven (#feature-shell.open); every
     // other aside uses the `hidden` attribute.
     panels.push({ id: el.id || '(aside)', kind: el.id === 'feature-shell' ? 'class-open' : 'hidden', el });
@@ -69,9 +74,13 @@ function computedHidden(el, windowRoot) {
 function isPanelVisible(panel, windowRoot) {
   if (!panel || !panel.el) return false;
   const el = panel.el;
+  // Computed display on a child can be block while an ancestor is hidden.
+  // Nested dashboard asides previously evicted the requested feature even
+  // though their entire dashboard had no rendered box.
+  if(typeof el.getClientRects==='function'&&el.getClientRects().length===0)return false;
   if (panel.kind === 'details') return el.open === true;
-  if (panel.kind === 'class-open') return classSaysVisible(el, ['open']);
-  if (panel.kind === 'class-visible') return classSaysVisible(el, ['visible']);
+  if (panel.kind === 'class-open') return classSaysVisible(el, ['open']) && computedHidden(el, windowRoot) !== true;
+  if (panel.kind === 'class-visible') return classSaysVisible(el, ['visible']) && computedHidden(el, windowRoot) !== true;
   if (el.hidden === true) return false;
   // Class-less panels (e.g. #asset-launch) can be suppressed purely by
   // stylesheet rules while carrying no `hidden` attribute. A display:none
@@ -108,8 +117,8 @@ function hidePanel(panel, documentRoot) {
     if (typeof el.setAttribute === 'function') el.setAttribute('aria-hidden', 'true');
     return;
   }
-  el.hidden = true;
-  if (typeof el.setAttribute === 'function') el.setAttribute('aria-hidden', 'true');
+  if (!el.hidden) el.hidden = true;
+  if (typeof el.setAttribute === 'function' && el.getAttribute?.('aria-hidden') !== 'true') el.setAttribute('aria-hidden', 'true');
 }
 
 /**
@@ -133,7 +142,10 @@ function closeCityDistricts(documentRoot) {
 
 function setHintHidden(documentRoot, hidden) {
   const hint = documentRoot && documentRoot.getElementById ? documentRoot.getElementById('hint') : null;
-  if (hint && 'hidden' in hint) hint.hidden = Boolean(hidden);
+  // Setting a reflected boolean to its existing value still mutates its
+  // attribute. The observer watches `hidden`, so unconditional writes here
+  // starve the event loop forever on narrow screens (including initial boot).
+  if (hint && 'hidden' in hint && hint.hidden !== Boolean(hidden)) hint.hidden = Boolean(hidden);
 }
 
 export function initMobilePanelManager({
@@ -158,7 +170,8 @@ export function initMobilePanelManager({
     const narrow = isNarrow();
     const panels = collectPanels(documentRoot);
     const visibleNow = panels.some((p) => isPanelVisible(p, windowRoot));
-    body.classList.toggle(BODY_OPEN_CLASS, narrow && visibleNow);
+    const bodyOpen=narrow&&visibleNow;
+    if(body.classList.contains(BODY_OPEN_CLASS)!==bodyOpen)body.classList.toggle(BODY_OPEN_CLASS,bodyOpen);
     if (!narrow) return;
     applying = true;
     try {

@@ -1,0 +1,33 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import * as THREE from '../vendor/three-r179.1/build/three.module.js';
+import {createContractOrganism} from '../src/render/contract-organism.js';
+test('contract geometry attaches to its object and changes only with semantic state',()=>{
+  const root=new THREE.Group();const target={root,shape:'sphere'};
+  const renderer=createContractOrganism({three:THREE,getObject:()=>target});
+  const contract={id:'a',status:'active',parties:['owner','reviewer'],approvals:[{actor:'owner'}],terms:{rules:[{id:'delivered'}]},receipts:[],evaluation:{rules:[{id:'delivered',state:'waiting'}]}};
+  assert.equal(renderer.sync({contracts:[contract]},'a'),true);
+  assert.equal(renderer.getSnapshot().meshCount,4);
+  assert.equal(root.children.length,1);
+  assert.equal(renderer.sync({contracts:[contract]},'a'),false);
+  contract.receipts.push({id:'receipt:a'});contract.status='completed';
+  assert.equal(renderer.sync({contracts:[contract]},'a'),true);
+  assert.equal(renderer.getSnapshot().meshCount,5);
+  assert.equal(renderer.getSnapshot().idleAnimation,false);
+  assert.ok(renderer.getSnapshot().relationshipCount>=4);
+  const threads=root.children[0].children.find(item=>item.isLineSegments);
+  assert.equal(threads.userData.source,'contract-organism');
+  assert.equal(threads.userData.relationshipIds.length,renderer.getSnapshot().relationshipCount);
+  renderer.destroy();assert.equal(root.children.length,0);
+});
+test('source ports, observations and receipts are geometric entities joined by stored causal edges',()=>{
+  const root=new THREE.Group();const renderer=createContractOrganism({three:THREE,getObject:()=>({root,shape:'cylinder'})});
+  const c={id:'c',status:'completed',title:'Proof',parties:['alice'],approvals:[{actor:'alice'}],terms:{sources:[{id:'accepted'}],rules:[{id:'accept',when:{op:'eq',source:'accepted',value:true}}]},evidence:[{id:'proof',source:'accepted'}],receipts:[{id:'receipt',ruleId:'accept',evidenceIds:['proof']}],evaluation:{rules:[{id:'accept',state:'done'}]}};
+  renderer.sync({contracts:[c]},'c');
+  const meshes=root.children[0].children.filter(child=>child.isMesh);
+  for(const id of ['c:source:accepted','c:evidence:proof','c:receipt:receipt'])assert.ok(meshes.some(mesh=>mesh.userData.entityId===id),id);
+  const ids=renderer.getSnapshot().relationshipIds;
+  for(const kind of [':observes:',':input-to:',':used-by:',':fulfills:'])assert.ok(ids.some(id=>id.includes(kind)),kind);
+  assert.equal(renderer.sync({contracts:[c]},'c'),false,'quiet state must not rebuild geometry');
+  renderer.destroy();
+});
