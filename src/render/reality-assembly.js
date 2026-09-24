@@ -2,7 +2,7 @@ import {createRealityWorkspace} from '../domains/reality-workspace.js?v=20260923
 import {REALITY_TAB_FORMS,REALITY_TAB_SIZE_MIN,REALITY_TAB_SIZE_MAX,resolveRealityTabPosition} from '../domains/reality-tab-layout.js?v=20260923-spatial-tabs15';
 import {REALITY_LENS_GROUPS,realityLensEngine,resolveRealityLensGroup} from '../domains/reality-lens-engine.js?v=20260923-lens-engine7';
 import {realityLensCopy,realityLensLabel,realityObjectSurfaceEngine} from '../domains/reality-object-engine.js?v=20260923-object-surface5';
-import {measureContent,fitObjectToContent,surfaceTransform,layoutObjects,clampToView} from '../domains/living-surface-layout-engine.js';
+import {measureContent,fitObjectToContent,surfaceTransform,layoutObjects} from '../domains/living-surface-layout-engine.js';
 import {buildRealityAssemblyScene,LOD_FAR} from './reality-assembly-scene.js?v=20260923-spatial-tabs20';
 
 // The lens contains only equal-status feature tabs; no center cube or anchor.
