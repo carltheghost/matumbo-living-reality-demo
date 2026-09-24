@@ -18,9 +18,9 @@ export const WEB_AI_CONSOLE_SOURCE = "web-ai-console";
 export const WEB_AI_SCHEMA_VERSION = 1;
 
 export const WEB_AI_BOUNDARY =
-  "External sites open only by your explicit tap — inside a sandboxed frame or a new tab. " +
-  "This demo never collects, stores, or sends credentials, API keys, tokens, or logins. " +
-  "AI handoffs are plain links plus a prompt you copy yourself.";
+  "External sites open only by your explicit tap — inside a sandboxed frame or a separate tab that leaves the Reality Lens open. " +
+  "Return to the Lens tab to continue; provider sign-in does not authorize this demo or return through an OAuth callback. " +
+  "This demo never collects, stores, or sends credentials, API keys, tokens, or logins. AI handoffs are links plus a prompt you copy yourself.";
 
 export const WEB_AI_STORAGE_KEYS = Object.freeze({
   position: "tumbo.web-ai.pos.v1",
@@ -28,6 +28,7 @@ export const WEB_AI_STORAGE_KEYS = Object.freeze({
   taskNote: "tumbo.web-ai.note.v1",
   lastUrl: "tumbo.web-ai.url.v1",
   lastTab: "tumbo.web-ai.tab.v1",
+  lensReturn: "tumbo.web-ai.lens-return.v1",
 });
 
 /** Sites verified to permit framing — safe to embed in the glass frame. */
@@ -192,14 +193,15 @@ export function buildAiPrompt({ taskNote = "", pageUrl = "", pageTitle = "" } = 
   const page = String(pageUrl ?? "").trim().slice(0, 300);
   const title = String(pageTitle ?? "").trim().slice(0, 120);
   const lines = [
-    "I'm working inside the maTumbo Living Reality demo — a static three.js world of translucent blue glass cubes, served from GitHub Pages.",
+    "I'm using maTumbo Living Reality, a browser-based Reality Lens. Feature tools are live interfaces attached to mutable 3D objects; the selected object's real controls stay in the Lens.",
+    "External assistants may open in a separate tab. This demo has no provider OAuth or sign-in bridge: returning to the Lens resumes its object and locally saved note, but does not connect the provider account.",
     "",
     `Task note: ${note}`,
   ];
   if (page) lines.push(`Page I was viewing: ${title ? `${title} — ` : ""}${page}`);
   lines.push(
     "",
-    "Please help me implement or fix this. Reply with concrete steps and code that fits the repo's existing module pattern.",
+    "Please help with the task note. Treat the repository as the source of truth; inspect its current code instead of assuming a cube-only scene. Give concrete, scoped steps that fit its existing patterns.",
   );
   return lines.join("\n").slice(0, WEB_AI_MAX_PROMPT_CHARS);
 }

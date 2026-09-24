@@ -2,19 +2,13 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 
-test("normal feature routes keep the cube substrate as the visual layer", async () => {
+test("every direct feature route uses the Reality Lens tab surface", async () => {
   const source = await readFile(new URL("../src/main.js", import.meta.url), "utf8");
-  assert.match(source, /setBlockWorldPresentation\(true, \{\s*cubeFirstUi: feature\.id === 'block-world' \|\| feature\.id === 'runtime-sync' \|\| preserveCubeSubstrate,\s*\}\);/);
-  assert.match(source, /world\.children\.forEach\(child=>\{child\.visible=child===blockWorld\?\.layer;\}\);/);
-  assert.match(source, /if \(portalCubeSubstrateActive \|\| blockWorldPresentationActive\) \{\s*restorePortalCubeReadout\(method\);/);
-  assert.match(source, /const cubeTarget = blockWorldPresentationActive \? blockWorld\?\.getFocusTarget\?\.\(\) : null;/);
-  assert.match(source, /feature\.id === 'reality-lens'[\s\S]*setRealityLens\('world'/);
-  assert.match(source, /feature\.id === 'person'[\s\S]*setRealityLens\('detail'/);
-  assert.match(source, /feature\.id === 'rooms'[\s\S]*roomSpaces\?\.open\(\)/);
-  assert.match(source, /feature\.id === 'asset-token'[\s\S]*previewAssetLaunch/);
-  assert.match(source, /feature\.id === 'contracts'[\s\S]*contractsMarkets\?\.open\(\)/);
-  assert.match(source, /assetLaunchPanel\?\.classList\.toggle\(\s*'asset-route-hidden',\s*feature\.id !== 'asset-token',\s*\);/);
-  assert.match(source, /if \(cubeTarget\) restorePortalCubeReadout\(method\);\s*else if\(realityLensMode==='detail'/);
+  assert.match(source, /if \(active && realityAssembly\?\.active\) return;/);
+  assert.match(source, /if \(!enteredFromRealityAssembly\) \{\s*setBlockWorldPresentation\(true,/);
+  assert.match(source, /if \(enteredFromRealityAssembly\) \{\s*if \(exposeRealityAssemblyFeaturePanel\(feature\.id\)\)/);
+  assert.match(source, /else if \(new URLSearchParams\(globalThis\.location\?\.search \?\? ''\)\.has\('feature'\)\) \{[\s\S]{0,220}realityAssembly\.open\(\{ lensMode: true, featureId \}\)/);
+  assert.match(source, /onPanelFrame:[\s\S]{0,180}exposeRealityAssemblyFeaturePanel\(id\)/);
 });
 
 test("cube substrate hides only the round selector rail while route controls remain mounted", async () => {

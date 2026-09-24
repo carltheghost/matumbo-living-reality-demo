@@ -35,12 +35,13 @@ test('every registered feature carries complete directory metadata', () => {
   }
 });
 
-test('every feature id reaches a seam file: main.js, index.html, or demo-projection.js', () => {
+test('every feature id reaches a seam file: feature registry, main.js, index.html, or projection', () => {
   const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   const projection = readFileSync(new URL('../src/core/demo-projection.js', import.meta.url), 'utf8');
+  const featureNavigator = readFileSync(new URL('../src/render/feature-navigator.js', import.meta.url), 'utf8');
   for (const id of defIds) {
-    const reachable = main.includes(id) || html.includes(id) || projection.includes(id);
+    const reachable = featureNavigator.includes(id) || main.includes(id) || html.includes(id) || projection.includes(id);
     assert.ok(reachable, `feature ${id} is registered but reaches no seam file`);
   }
 });

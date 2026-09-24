@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { createLivingRealityProjection } from "../src/core/demo-projection.js";
-import { FEATURE_DEFINITIONS, FEATURE_FUTURE_OPTIONS } from "../src/render/feature-navigator.js";
+import { FEATURE_DEFINITIONS, FEATURE_FUTURE_OPTIONS, FEATURE_SURFACE_ROUTES } from "../src/render/feature-navigator.js";
 
 const expectedIds = [
   "reality-lens",
@@ -15,17 +15,20 @@ const expectedIds = [
   "asset-market",
   "launch-distribution",
   "social-explorer",
+  "social-mirror",
+  "youtube",
   "paycore",
   "contracts",
   "contract-atelier",
   "ledger",
   "t402",
+  "agent",
   "neural-mesh",
-  "picture-matter",
-  "nft-atelier",
   "muse-agent",
   "bot-plaza",
   "luna-companion",
+  "picture-matter",
+  "nft-atelier",
   "wardrobe-atelier",
   "white-paper",
   "gesture-lens",
@@ -35,6 +38,7 @@ const expectedIds = [
   "multi-sport-events",
   "arena",
   "chess",
+  "web-ai",
   "academy",
   "projections",
 ];
@@ -46,6 +50,38 @@ test("mission control exposes every major local feature", () => {
     assert.ok(feature.description, `${feature.id} has an opening description`);
     assert.ok(feature.boundary, `${feature.id} has an authority boundary`);
   }
+});
+
+test("spatial inspector routes describe the feature they actually open", async () => {
+  for (const feature of FEATURE_DEFINITIONS) {
+    assert.ok(FEATURE_SURFACE_ROUTES[feature.id]?.length, `${feature.id} has a concrete inspector route`);
+  }
+  assert.deepEqual(FEATURE_SURFACE_ROUTES["sports-events"].map(([title]) => title), [
+    "PUBLIC SCOREBOARD",
+    "PLAYER + SETS",
+    "DATA GRADE",
+  ]);
+  assert.deepEqual(FEATURE_SURFACE_ROUTES["web-ai"].map(([title]) => title), [
+    "WEB TAB",
+    "AI TAB",
+    "TASK NOTE",
+    "OPENING",
+  ]);
+  assert.match(FEATURE_DEFINITIONS.find((feature) => feature.id === "agent").description, /Bot Plaza roster/);
+
+  const mainSource = await readFile(new URL("../src/main.js", import.meta.url), "utf8");
+  assert.match(mainSource, /webAiConsole\s*=\s*createWebAiConsole\(/);
+  assert.match(mainSource, /socialMirrorConsole\s*=\s*createSocialMirrorConsole\(/);
+  assert.match(mainSource, /feature\.id === 'agent'[\s\S]{0,180}botPlazaConsole\?\.open\(\)/);
+  assert.match(mainSource, /feature\.id === 'social-mirror'[\s\S]{0,180}socialMirrorConsole\?\.open/);
+  assert.match(mainSource, /feature\.id === 'web-ai'[\s\S]{0,180}webAiConsole\?\.open/);
+  assert.match(mainSource, /const enteredFromRealityAssembly = Boolean\(feature\?\.id && realityAssembly\?\.active\)/);
+  assert.match(mainSource, /focusFeature\?\.\(feature\.id\)/);
+  assert.match(mainSource, /genericNoAutoRefresh = \[[^\]]*'reality-assembly'\]/);
+  assert.match(mainSource, /REALITY_ASSEMBLY_FEATURE_PANEL_IDS = Object\.freeze/);
+  assert.match(mainSource, /onNavigate:\(id\)=>\{featureNavigator\.select\(id,'reality-assembly',\{updateLocation:false\}\);featureNavigator\.close\(\);\}/);
+  const assemblyCss = await readFile(new URL("../src/render/reality-assembly.css", import.meta.url), "utf8");
+  assert.match(assemblyCss, /body\.assembly-mode \.reality-lens-feature-panel:not\(\[hidden\]\)\{display:flex!important;z-index:120!important\}/);
 });
 
 test("mission control keeps future options visible and capability-gated", async () => {

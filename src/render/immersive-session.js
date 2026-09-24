@@ -42,15 +42,13 @@ export function createImmersiveSession({
   let starting = false;
   let activeMode = null;
   let destroyed = false;
+  let controlsEnabledBeforeSession = null;
 
   const ray = new THREE.Raycaster();
   const rotation = new THREE.Matrix4();
   const controllerRigs = [];
 
-  const original = {
-    background: scene.background,
-    clearAlpha: typeof renderer.getClearAlpha === "function" ? renderer.getClearAlpha() : 1,
-  };
+  let visualStateBeforeSession = null;
 
   renderer.xr.enabled = true;
 
@@ -220,6 +218,10 @@ export function createImmersiveSession({
 
     starting = true;
     activeMode = mode;
+    visualStateBeforeSession = {
+      background: scene.background,
+      clearAlpha: typeof renderer.getClearAlpha === "function" ? renderer.getClearAlpha() : 1,
+    };
     setButtonState(false);
     emitStatus("starting", "Starting " + (mode === "immersive-ar" ? "AR" : "VR") + " session…");
 
@@ -241,6 +243,8 @@ export function createImmersiveSession({
 
       setReferenceSpace();
       await renderer.xr.setSession(nextSession);
+      controlsEnabledBeforeSession = controls?.enabled ?? null;
+      if (controls) controls.enabled = false;
 
       nextSession.addEventListener("end", reset, { once: true });
 
@@ -273,8 +277,13 @@ export function createImmersiveSession({
     session = null;
     activeMode = null;
     starting = false;
-    scene.background = original.background;
-    renderer.setClearAlpha(original.clearAlpha);
+    if (visualStateBeforeSession) {
+      scene.background = visualStateBeforeSession.background;
+      renderer.setClearAlpha(visualStateBeforeSession.clearAlpha);
+      visualStateBeforeSession = null;
+    }
+    if (controls && controlsEnabledBeforeSession !== null) controls.enabled = controlsEnabledBeforeSession;
+    controlsEnabledBeforeSession = null;
     setButtonState(false);
     emitStatus("desktop", "Desktop · same world retained");
   }
@@ -310,7 +319,9 @@ export function createImmersiveSession({
     toolbar?.remove?.();
   }
 
-  emitStatus("ready", "Same world · XR ready");
+  emitStatus("ready", navigatorRoot?.xr?.requestSession
+    ? "Same world · XR checked when you enter"
+    : "Same world · XR unavailable in this browser");
 
   return Object.freeze({
     start,

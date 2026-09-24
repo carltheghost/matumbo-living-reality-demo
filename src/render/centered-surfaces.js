@@ -195,6 +195,7 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
   }
 
   function setCompact(rec, on, ctx) {
+    if (rec.spatialAttached) return;
     if (!rec.compactible) return;
     if (on) {
       // Compact applies even before placement: a console that materializes
@@ -233,7 +234,7 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
 
   function placePanel(rec, ctx) {
     const el = rec.el;
-    if (rec.placed || !isPanelVisible(el, view)) return false;
+    if (rec.spatialAttached || rec.placed || !isPanelVisible(el, view)) return false;
     const r = el.getBoundingClientRect();
     if (!r || (r.width === 0 && r.height === 0)) return false; // not laid out yet; caller retries
     const saved = ctx.store[rec.id] || {};
@@ -256,11 +257,11 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
   }
 
   function requestPlace(rec, ctx, attempt = 0) {
-    if (rec.placed || rec.placeQueued) return;
+    if (rec.spatialAttached || rec.placed || rec.placeQueued) return;
     rec.placeQueued = true;
     raf(() => {
       rec.placeQueued = false;
-      if (rec.placed || !isPanelVisible(rec.el, view)) return;
+      if (rec.spatialAttached || rec.placed || !isPanelVisible(rec.el, view)) return;
       if (placePanel(rec, ctx)) return; // placed and chipped
       // Layout was not ready (zero rect): retry with backoff instead of
       // giving up forever. Any later visibility signal also re-arms this.
@@ -271,6 +272,7 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
   }
 
   function reconcilePanel(rec, ctx) {
+    if (rec.spatialAttached) return;
     const visible = isPanelVisible(rec.el, view);
     const was = rec.wasVisible === true;
     rec.wasVisible = visible;
@@ -352,56 +354,74 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
     }
   }
 
+  function attachPanelGrip(rec, ctx) {
+    if (rec.grip || rec.isHint) return;
+    const el = rec.el;
+    const title = panelTitle(el);
+    const grip = documentRoot.createElement('div');
+    grip.className = 'surface-grip';
+    const toggle = documentRoot.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'surface-grip-toggle';
+    toggle.title = `${title} — drag to move anywhere, shift-drag or wheel for depth, click to open or minimize`;
+    const label = documentRoot.createElement('span');
+    label.className = 'surface-grip-label';
+    label.textContent = `${title} · drag to move`;
+    const depthHint = documentRoot.createElement('span');
+    depthHint.className = 'surface-grip-depth';
+    depthHint.textContent = 'depth: shift-drag / wheel';
+    const action = documentRoot.createElement('span');
+    action.className = 'surface-grip-action';
+    action.textContent = 'Open';
+    toggle.append(label, depthHint, action);
+    const center = documentRoot.createElement('button');
+    center.type = 'button';
+    center.className = 'surface-grip-center';
+    center.textContent = 'Center panel';
+    center.title = 'Return this panel to its designed position';
+    grip.append(toggle, center);
+    const summary = el.tagName === 'DETAILS' ? el.querySelector('summary') : null;
+    if (summary && summary.parentNode === el) summary.after(grip);
+    else if (typeof el.prepend === 'function') el.prepend(grip);
+    else el.insertBefore(grip, el.firstChild);
+    center.addEventListener('click', () => recenter(rec, ctx));
+    attachPlaneDepthDrag(rec, ctx, toggle, { tapToggles: true });
+    rec.grip = grip;
+    rec.toggleBtn = toggle;
+    rec.actionEl = action;
+  }
+
   function setupPanel(desc, ctx) {
     const el = desc.el;
     const isHint = el.id === 'hint';
+    const spatialAttached = el.getAttribute?.('data-lens-surface-attached') === 'true';
     const rec = {
       id: desc.id, el,
       state: { x: 0, y: 0, z: 0 },
       home: null, placed: false, placeQueued: false,
       wasVisible: isPanelVisible(el, view),
       originalCssText: el.style ? el.style.cssText : '',
+      spatialAttached,
+      isHint,
       grip: null, toggleBtn: null, actionEl: null,
       compactible: !isHint && el.id !== 'city-journey',
     };
-    if (!isHint) {
-      const title = panelTitle(el);
-      const grip = documentRoot.createElement('div');
-      grip.className = 'surface-grip';
-      const toggle = documentRoot.createElement('button');
-      toggle.type = 'button';
-      toggle.className = 'surface-grip-toggle';
-      toggle.title = `${title} — drag to move anywhere, shift-drag or wheel for depth, click to open or minimize`;
-      const label = documentRoot.createElement('span');
-      label.className = 'surface-grip-label';
-      label.textContent = `${title} · drag to move`;
-      const depthHint = documentRoot.createElement('span');
-      depthHint.className = 'surface-grip-depth';
-      depthHint.textContent = 'depth: shift-drag / wheel';
-      const action = documentRoot.createElement('span');
-      action.className = 'surface-grip-action';
-      action.textContent = 'Open';
-      toggle.append(label, depthHint, action);
-      const center = documentRoot.createElement('button');
-      center.type = 'button';
-      center.className = 'surface-grip-center';
-      center.textContent = 'Center';
-      center.title = 'Return to the designed position';
-      grip.append(toggle, center);
-      const summary = el.tagName === 'DETAILS' ? el.querySelector('summary') : null;
-      if (summary && summary.parentNode === el) summary.after(grip);
-      else if (typeof el.prepend === 'function') el.prepend(grip);
-      else el.insertBefore(grip, el.firstChild);
-      center.addEventListener('click', () => recenter(rec, ctx));
-      attachPlaneDepthDrag(rec, ctx, toggle, { tapToggles: true });
-      rec.grip = grip; rec.toggleBtn = toggle; rec.actionEl = action;
-    } else {
+    if (!spatialAttached && !isHint) attachPanelGrip(rec, ctx);
+    else if (isHint) {
       attachPlaneDepthDrag(rec, ctx, el, { tapToggles: false });
     }
-    el.setAttribute('data-panel-space', 'managed');
+    if (spatialAttached) {
+      // Reality Assembly can mount before this manager starts on a direct-link
+      // load. Never re-chip or overlay a panel already parented to its object.
+      el.removeAttribute('data-panel-space');
+      el.removeAttribute('data-compact');
+      el.classList.remove('panel-space-appearing');
+    } else {
+      el.setAttribute('data-panel-space', 'managed');
+    }
     ctx.recs.push(rec);
     ctx.byEl.set(el, rec);
-    if (rec.wasVisible) requestPlace(rec, ctx);
+    if (rec.wasVisible && !rec.spatialAttached) requestPlace(rec, ctx);
     return rec;
   }
 
@@ -425,13 +445,62 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
         if (!t) continue;
         if (t === documentRoot.body || t === documentRoot.documentElement) { reconcileAll = true; continue; }
         const rec = ctx.byEl.get(t);
-        if (rec) { reconcilePanel(rec, ctx); continue; }
+        if (rec) { if (!rec.spatialAttached) reconcilePanel(rec, ctx); continue; }
         // feature-shell's .open class drives asset-launch visibility via a
         // sibling selector, so its class change reconciles the whole field.
         if (t.id === 'feature-shell') reconcileAll = true;
       }
       if (reconcileAll) for (const rec of ctx.recs) reconcilePanel(rec, ctx);
     };
+
+    const onMaterializeRealityLensPanel = (event) => {
+      const panelId = String(event?.detail?.panelId ?? '');
+      const rec = ctx.recs.find((candidate) => candidate.id === panelId);
+      if (!rec || rec.spatialAttached) return;
+      const anchorX = Number(event?.detail?.anchorX);
+      const anchorY = Number(event?.detail?.anchorY);
+      const hasAnchor = Number.isFinite(anchorX) && Number.isFinite(anchorY);
+      const shouldAnchor = hasAnchor && (event?.detail?.forceAnchor === true || (!rec.placed && !ctx.store[rec.id]));
+      const materialize = (attempt = 0) => {
+        if (rec.spatialAttached) return;
+        if (!isPanelVisible(rec.el, view)) return;
+        if (rec.placed) {
+          if(rec.compactible&&rec.el.getAttribute('data-compact')==='true')setCompact(rec,false,ctx);
+          if (shouldAnchor) {
+            if(rec.state.z!==0){rec.state.z=0;applyTransform(rec);}
+            const rect = rec.el.getBoundingClientRect();
+            const point = clampSurface(anchorX + 24, anchorY - rect.height / 2, rect.width, rect.height, viewport().w, viewport().h);
+            if(Math.abs(rec.state.x-point.x)>.65||Math.abs(rec.state.y-point.y)>.65){
+              rec.state.x = point.x;
+              rec.state.y = point.y;
+              rec.home = { x: point.x, y: point.y };
+              applyTransform(rec);
+            }
+          }
+          return;
+        }
+        requestPlace(rec, ctx);
+        if (attempt < 6) raf(() => materialize(attempt + 1));
+      };
+      materialize();
+    };
+    documentRoot.addEventListener?.('matumbo:reality-lens-materialize', onMaterializeRealityLensPanel);
+    const onRealityLensAttachment = (event) => {
+      const rec = ctx.recs.find((candidate) => candidate.id === String(event?.detail?.panelId ?? ''));
+      if (!rec) return;
+      rec.spatialAttached = event?.detail?.attached === true;
+      if (rec.spatialAttached) {
+        rec.el.removeAttribute('data-panel-space');
+        rec.el.removeAttribute('data-compact');
+        rec.el.classList.remove('panel-space-appearing');
+      } else {
+        rec.el.setAttribute('data-panel-space', 'managed');
+        attachPanelGrip(rec, ctx);
+        if (rec.placed) applyTransform(rec);
+        reconcilePanel(rec, ctx);
+      }
+    };
+    documentRoot.addEventListener?.('matumbo:reality-lens-surface-attachment', onRealityLensAttachment);
 
     const MO = view.MutationObserver || (typeof MutationObserver !== 'undefined' ? MutationObserver : null);
     let observer = null;
@@ -445,6 +514,7 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
     const onResize = () => {
       const v = viewport();
       for (const rec of ctx.recs) {
+        if (rec.spatialAttached) continue;
         if (!rec.placed || !isPanelVisible(rec.el, view)) continue;
         const r = rec.el.getBoundingClientRect();
         const p = clampSurface(rec.state.x, rec.state.y, r.width, r.height, v.w, v.h);
@@ -456,9 +526,12 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
 
     return function teardown() {
       if (observer) observer.disconnect();
+      documentRoot.removeEventListener?.('matumbo:reality-lens-materialize', onMaterializeRealityLensPanel);
+      documentRoot.removeEventListener?.('matumbo:reality-lens-surface-attachment', onRealityLensAttachment);
       if (typeof view.removeEventListener === 'function') view.removeEventListener('resize', onResize);
       if (ctx.saveTimer) { clearTimeout(ctx.saveTimer); ctx.saveTimer = 0; }
       for (const rec of ctx.recs) {
+        if (rec.spatialAttached) continue;
         try {
           if (rec.grip && rec.grip.remove) rec.grip.remove();
           rec.el.removeAttribute('data-panel-space');

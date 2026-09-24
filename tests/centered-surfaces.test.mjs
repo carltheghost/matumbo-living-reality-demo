@@ -189,11 +189,15 @@ function makeHarness({ narrow = false, shellOpen = true } = {}) {
   for (const el of [aside1, aside2, shell, hint]) body.appendChild(el);
 
   const asides = [aside1, aside2, shell];
+  const docListeners = {};
   const doc = {
     head, documentElement: docEl, body,
     createElement: (tag) => new FakeElement(tag),
     querySelectorAll: (sel) => (sel === 'aside' ? [...asides] : []),
     getElementById: (id) => ({ hint }[id] || null),
+    addEventListener: (type, fn) => { (docListeners[type] = docListeners[type] || []).push(fn); },
+    removeEventListener: (type, fn) => { docListeners[type] = (docListeners[type] || []).filter((entry) => entry !== fn); },
+    dispatchEvent: (event) => { for (const fn of [...(docListeners[event.type] || [])]) fn(event); },
   };
   const view = {
     innerWidth: 1440, innerHeight: 900,
@@ -210,6 +214,7 @@ function makeHarness({ narrow = false, shellOpen = true } = {}) {
     mutate(target, attrs = {}) {
       for (const mo of moInstances) mo.cb([{ target }], mo);
     },
+    dispatchDoc(event) { doc.dispatchEvent(event); },
     gripOf(el) { return el.children.find((c) => c.className === 'surface-grip') || null; },
     toggleOf(el) { const g = this.gripOf(el); return g ? g.children.find((c) => c.className === 'surface-grip-toggle') : null; },
   };
@@ -220,6 +225,9 @@ test('desktop mount adds grips, places visible panels small, and leaves hidden p
   const destroy = mountCenteredSurfaces(h.doc, h.view);
   assert.ok(h.gripOf(h.aside1), 'visible console gets a grip');
   assert.ok(h.gripOf(h.shell), 'feature shell gets a grip');
+  const centerPanel = h.gripOf(h.aside1).children.find((child) => child.className === 'surface-grip-center');
+  assert.equal(centerPanel.textContent, 'Center panel', 'center control names the panel, not the 3D object');
+  assert.equal(centerPanel.title, 'Return this panel to its designed position');
   assert.equal(h.gripOf(h.hint), null, 'hint has no grip chrome');
   assert.equal(h.aside1.getAttribute('data-panel-space'), 'managed');
   h.flushRaf();
@@ -262,6 +270,61 @@ test('opening a hidden panel places it small; tap toggles materialize; drag move
   toggle.dispatch('pointermove', { pointerId: 3, clientX: 100, clientY: 100 });
   toggle.dispatch('pointerup', { pointerId: 3, clientX: 100, clientY: 100, shiftKey: true });
   assert.match(h.aside2.style.transform, /scale\(1\.2963\)/);
+});
+
+test('Reality Lens feature handoff expands only the explicitly opened panel', () => {
+  const h = makeHarness();
+  const destroy = mountCenteredSurfaces(h.doc, h.view);
+  h.flushRaf();
+  h.aside2.hidden = false;
+  h.mutate(h.aside2);
+  h.flushRaf();
+  assert.equal(h.aside2.getAttribute('data-compact'), 'true');
+  h.dispatchDoc({
+    type: 'matumbo:reality-lens-materialize',
+    detail: { panelId: h.aside2.id },
+  });
+  assert.equal(h.aside2.getAttribute('data-compact'), null, 'the selected feature panel is expanded for interaction');
+  assert.equal(h.aside1.getAttribute('data-compact'), 'true', 'other panels remain compact');
+  destroy();
+});
+
+test('the 2D surface manager releases an active feature panel while its object owns the transform', () => {
+  const h = makeHarness();
+  const destroy = mountCenteredSurfaces(h.doc, h.view);
+  h.flushRaf();
+  const lensTransform = h.aside1.style.transform;
+  h.dispatchDoc({ type: 'matumbo:reality-lens-surface-attachment', detail: { panelId: h.aside1.id, attached: true } });
+  assert.equal(h.aside1.getAttribute('data-panel-space'), null, '2D transforms are removed while the panel is attached to its object');
+  h.mutate(h.aside1);
+  h.flushRaf();
+  assert.equal(h.aside1.style.transform, lensTransform, 'visibility mutations do not overwrite its 3D transform');
+  h.dispatchDoc({ type: 'matumbo:reality-lens-surface-attachment', detail: { panelId: h.aside1.id, attached: false } });
+  assert.equal(h.aside1.getAttribute('data-panel-space'), 'managed', 'ordinary panel handling resumes when it leaves the object');
+  destroy();
+});
+
+test('a Reality Lens surface attached before the panel manager starts remains expanded on its object', () => {
+  const h = makeHarness();
+  h.aside1.classList.add('reality-lens-feature-panel');
+  h.aside1.setAttribute('data-lens-surface-attached', 'true');
+  // Reproduce the direct-feature-link startup order: assembly attaches the
+  // live panel first, then the document-wide panel manager scans the page.
+  h.aside1.setAttribute('data-panel-space', 'managed');
+  h.aside1.setAttribute('data-compact', 'true');
+  const destroy = mountCenteredSurfaces(h.doc, h.view);
+
+  assert.equal(h.gripOf(h.aside1), null, 'an object-owned panel gets no floating-window grip');
+  assert.equal(h.aside1.getAttribute('data-panel-space'), null, 'the manager does not restore a 2D layer');
+  assert.equal(h.aside1.getAttribute('data-compact'), null, 'the live object contents stay visible');
+  assert.equal(h.aside1.style.position, undefined, 'the manager does not overwrite the object transform');
+
+  h.dispatchDoc({ type: 'matumbo:reality-lens-surface-attachment', detail: { panelId: h.aside1.id, attached: false } });
+  assert.ok(h.gripOf(h.aside1), 'the regular grip is added only after the panel leaves its object');
+  assert.equal(h.aside1.getAttribute('data-panel-space'), 'managed');
+  h.flushRaf();
+  assert.equal(h.aside1.style.position, 'fixed', 'ordinary panel placement resumes on detach');
+  destroy();
 });
 
 test('positions persist across mounts via the panel space store', async () => {

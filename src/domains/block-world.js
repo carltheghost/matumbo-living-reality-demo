@@ -120,7 +120,7 @@ const PORTAL_ROUTE_DEFINITIONS = [
     featureId: "agent",
     label: "Agent",
     surface: "agent-console",
-    description: "Enter the consolidated agent block: bots, design companion, advisory mesh, and guide.",
+    description: "Open the local Bot Plaza roster for advisory agents and renderer-only drafts.",
   },
   {
     id: "picture-matter",
@@ -190,7 +190,7 @@ const PORTAL_ROUTE_DEFINITIONS = [
     featureId: "social-mirror",
     label: "Social Mirror / Feed Ticker",
     surface: "social-mirror-console",
-    description: "Open the ambient social-feed pass-through: a slim ticker plus the full feed mirror.",
+    description: "Open the local feed mirror panel with feed, source, and about tabs.",
   },
 ];
 

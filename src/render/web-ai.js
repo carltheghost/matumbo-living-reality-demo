@@ -7,19 +7,15 @@
  * feature consoles.
  *
  * Design-law compliance:
- *  - glass look: translucent blue glass panel, cyan edges, backdrop blur
- *  - small by default: two tabs (WEB / AI HELP), every panel body scrolls
- *  - minimize collapses to a small translucent chip
- *  - draggable header; position remembered in localStorage
- *  - opens only on interaction (portal route / Mission Control)
+ *  - standalone mode keeps a compact, scrollable glass console
+ *  - Reality Lens reparents this same live DOM into the selected object's
+ *    Three.js CSS3D face; no second Web + AI cube or floating panel is made
+ *  - two tabs (WEB / AI HELP); the task note stays local until the user copies it
+ *  - minimize and drag apply only while the console is outside Reality Lens
  *  - mobile: full-width sheet at <=700px (390x844)
  *
- * 3D note (standing requirement): this console adds NO new 3D geometry and
- * uses no 3D library at all. The Web + AI portal cube itself is rendered by
- * the existing block-world layer with the repo's pinned three.js r179.1
- * glass recipe (translucent blue glass + glowing edges + connection lines
- * via the import map "three" -> ./vendor/three-r179.1/build/three.module.js).
- * All 3D in this feature therefore stays three.js r179.1.
+ * Reality Lens owns the 3D transform and form. This module owns only the
+ * Web/AI controls and explicit external handoff; sign-in is never captured.
  *
  * Top level is node-safe: document, window, and storage are only touched
  * inside createWebAiConsole(). The iframe is sandboxed WITHOUT
@@ -36,7 +32,7 @@ import {
   buildAiPrompt,
   classifyWebTarget,
   getWebAiAssistant,
-} from "../domains/web-ai.js?v=20260922-cache2";
+} from "../domains/web-ai.js?v=20260923-lens-return2";
 
 export { WEB_AI_CONSOLE_SOURCE };
 
@@ -136,9 +132,13 @@ function el(documentRoot, tag, className, text) {
 function openNewTab(windowRoot, url) {
   try {
     const opened = windowRoot && typeof windowRoot.open === "function"
-      ? windowRoot.open(url, "_blank", "noopener")
+      ? windowRoot.open(url, "_blank")
       : null;
-    return opened !== null && opened !== undefined;
+    if (opened && typeof opened === "object") {
+      try { opened.opener = null; } catch {}
+      return true;
+    }
+    return false;
   } catch {
     return false;
   }
@@ -181,13 +181,20 @@ export function createWebAiConsole({
     throw new Error("Web + AI console needs a document");
   }
   const store = storage || (windowRoot && windowRoot.localStorage) || null;
+  let sessionStore=null;
+  try{sessionStore=windowRoot?.sessionStorage??null;}catch{}
 
   const styleEl = doc.createElement("style");
   styleEl.setAttribute("data-web-ai-style", "true");
   styleEl.textContent = STYLE_TEXT;
   (doc.head || doc).appendChild(styleEl);
 
-  const state = { opened: false, minimized: false, tab: "web", url: "", note: "" };
+  const state = { opened: false, minimized: false, tab: "web", url: "", note: "", pendingExternalReturn: null };
+  try{
+    const receipt=JSON.parse(readStorage(sessionStore,WEB_AI_STORAGE_KEYS.lensReturn)||"null");
+    if(receipt&&typeof receipt.assistantId==="string"&&Number.isFinite(receipt.openedAt)&&Date.now()-receipt.openedAt<12*60*60*1000)state.pendingExternalReturn=receipt;
+    else writeStorage(sessionStore,WEB_AI_STORAGE_KEYS.lensReturn,"");
+  }catch{state.pendingExternalReturn=null;}
 
   // --- panel ---
   const panel = el(doc, "aside");
@@ -291,9 +298,13 @@ export function createWebAiConsole({
   handoffTryButton.type = "button";
   const handoffCopyButton = el(doc, "button", "web-ai-btn", "COPY NOTE + URL");
   handoffCopyButton.type = "button";
+  const returnToLensButton = el(doc, "button", "web-ai-btn primary", "RETURN TO THIS LENS OBJECT");
+  returnToLensButton.type = "button";
+  returnToLensButton.hidden = true;
   handoffActions.appendChild(handoffOpenButton);
   handoffActions.appendChild(handoffTryButton);
   handoffActions.appendChild(handoffCopyButton);
+  handoffActions.appendChild(returnToLensButton);
   handoffBox.appendChild(handoffText);
   handoffBox.appendChild(handoffActions);
   webSection.appendChild(handoffBox);
@@ -357,6 +368,7 @@ export function createWebAiConsole({
       tab: state.tab,
       url: state.url,
       noteLength: state.note.length,
+      pendingExternalReturn: Boolean(state.pendingExternalReturn),
       localOnly: true,
       simulation: true,
       externalNetwork: false,
@@ -381,11 +393,40 @@ export function createWebAiConsole({
     aiStatus.dataset.kind = kind || "info";
   }
 
+  function rememberExternalReturn(assistantId,method){
+    const receipt={assistantId:String(assistantId||"external-site"),openedAt:Date.now()};
+    state.pendingExternalReturn=receipt;
+    writeStorage(sessionStore,WEB_AI_STORAGE_KEYS.lensReturn,JSON.stringify(receipt));
+    returnToLensButton.hidden=true;
+    handoffBox.hidden=false;
+    handoffText.textContent="The external sign-in stays in its own tab. Reality Lens remains open here with your object and locally saved task note; switch back to this tab when you are ready.";
+    setAiStatus("External tab opened. This Reality Lens object stays here; sign-in is not connected to the Lens.","info");
+    publish("external-tab-open",method||"button",{assistantId:receipt.assistantId,returnInLens:true,authenticationConnected:false});
+  }
+
+  function showLensReturn(method="external-return"){
+    if(!state.pendingExternalReturn)return false;
+    setOpen(true,method);
+    setTab("web",method,true);
+    handoffBox.hidden=false;
+    handoffText.textContent="You are back in the Reality Lens. This same Web + AI object and your task note stayed in this tab. External registration is not linked to a Lens account.";
+    returnToLensButton.hidden=false;
+    setStatus("BACK IN THE LENS · the Web + AI object and task note are still here.","info");
+    publish("external-return",method,{assistantId:state.pendingExternalReturn.assistantId,returnedToSameTab:true,registrationVerified:false});
+    return true;
+  }
+
+  function observeExternalReturn(){
+    try{if(doc.visibilityState==="hidden")return;}catch{}
+    showLensReturn("external-return");
+  }
+
   function updatePromptPreview() {
     promptPreview.value = buildAiPrompt({ taskNote: state.note, pageUrl: state.url });
   }
 
   function applyStoredPosition() {
+    if (panel.hasAttribute("data-lens-surface-attached")) return;
     const pos = parsePosition(readStorage(store, WEB_AI_STORAGE_KEYS.position));
     if (!pos) return;
     const viewportWidth = windowRoot && Number.isFinite(windowRoot.innerWidth) ? windowRoot.innerWidth : 1024;
@@ -437,6 +478,7 @@ export function createWebAiConsole({
     if (!ok && typeof statusSetter === "function") {
       statusSetter("POP-UP BLOCKED — ALLOW POP-UPS FOR THIS PAGE, OR COPY THE URL MANUALLY.", "error");
     }
+    if(ok)rememberExternalReturn("external-site",method);
     return publish(actionName, method, { targetUrl: url, userNavigation: "new-tab", popupBlocked: !ok, externalNetwork: true });
   }
 
@@ -545,6 +587,15 @@ export function createWebAiConsole({
       publish("handoff-copy", "button", { copied: ok });
     });
   });
+  returnToLensButton.addEventListener("click", () => {
+    const assistantId=state.pendingExternalReturn?.assistantId??null;
+    state.pendingExternalReturn=null;
+    writeStorage(sessionStore,WEB_AI_STORAGE_KEYS.lensReturn,"");
+    returnToLensButton.hidden=true;
+    setTab("ai","lens-return");
+    setAiStatus("You are back in this same Lens object. Your task note remains saved locally; paste it into the external assistant yourself. No sign-in has been shared with this demo.","info");
+    publish("lens-return", "button", {assistantId,returnedToSameObject:true,authenticationConnected:false});
+  });
   noteInput.addEventListener("input", () => {
     state.note = noteInput.value;
     writeStorage(store, WEB_AI_STORAGE_KEYS.taskNote, state.note);
@@ -555,6 +606,8 @@ export function createWebAiConsole({
   minimizeButton.addEventListener("click", () => minimize("button"));
   closeButton.addEventListener("click", () => setOpen(false, "button"));
   chip.addEventListener("click", () => setOpen(true, "chip"));
+  windowRoot?.addEventListener?.("focus",observeExternalReturn);
+  doc.addEventListener?.("visibilitychange",observeExternalReturn);
 
   WEB_AI_ASSISTANTS.forEach((assistant) => {
     const card = el(doc, "article", "web-ai-assistant");
@@ -576,8 +629,9 @@ export function createWebAiConsole({
     openButton.type = "button";
     openButton.addEventListener("click", () => {
       const ok = openNewTab(windowRoot, assistant.url);
+      if(ok)rememberExternalReturn(assistant.id,"button");
       setAiStatus(
-        ok ? `OPENED ${assistant.name.toUpperCase()} IN A NEW TAB — PASTE THE COPIED PROMPT.` : "POP-UP BLOCKED — ALLOW POP-UPS, THEN RETRY.",
+        ok ? `OPENED ${assistant.name.toUpperCase()} IN A SEPARATE TAB — RETURN TO THIS SAME LENS OBJECT WHEN READY. SIGN-IN IS NOT LINKED TO THIS DEMO.` : "POP-UP BLOCKED — ALLOW POP-UPS, THEN RETRY.",
         ok ? "info" : "error",
       );
       publish("assistant-open", "button", {
@@ -596,6 +650,7 @@ export function createWebAiConsole({
   // --- drag the panel by its header; the position is remembered ---
   let drag = null;
   head.addEventListener("pointerdown", (event) => {
+    if (panel.hasAttribute("data-lens-surface-attached")) return;
     if (event.button !== 0) return;
     if (event.target && event.target.closest && event.target.closest("button")) return;
     const rect = panel.getBoundingClientRect();

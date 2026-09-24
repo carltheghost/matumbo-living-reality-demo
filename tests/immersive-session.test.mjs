@@ -34,6 +34,8 @@ class FakeObject {
     this.scale = new FakeVector3(1, 1, 1);
   }
   add(child) { this.children.push(child); child.parent = this; return child; }
+  addEventListener() {}
+  removeEventListener() {}
   remove(child) {
     this.children = this.children.filter((entry) => entry !== child);
     if (child.parent === this) child.parent = null;
@@ -88,9 +90,8 @@ function createHarness() {
     createElement: () => fakeElement(),
   };
 
-  const scene = {
-    background: { id: "background" },
-  };
+  const scene = new FakeObject();
+  scene.background = { id: "background" };
 
   const controllers = [new FakeObject(), new FakeObject()];
   const renderer = {
@@ -148,6 +149,37 @@ function createHarness() {
   };
 }
 
+test("XR entry does not claim device support before it is checked", async () => {
+  const harness = createHarness();
+  const session = createImmersiveSession({
+    THREE: FakeThree,
+    renderer: harness.renderer,
+    scene: harness.scene,
+    camera: harness.camera,
+    controls: harness.controls,
+    documentRoot: harness.documentRoot,
+    navigatorRoot: harness.navigatorRoot,
+  });
+  assert.equal(harness.body.children[0].children.at(-1).textContent,"Same world · XR checked when you enter");
+  await session.destroy();
+});
+
+test("XR entry reports when this browser has no WebXR API", async () => {
+  const harness = createHarness();
+  harness.navigatorRoot.xr.requestSession = undefined;
+  const session = createImmersiveSession({
+    THREE: FakeThree,
+    renderer: harness.renderer,
+    scene: harness.scene,
+    camera: harness.camera,
+    controls: harness.controls,
+    documentRoot: harness.documentRoot,
+    navigatorRoot: harness.navigatorRoot,
+  });
+  assert.equal(harness.body.children[0].children.at(-1).textContent,"Same world · XR unavailable in this browser");
+  await session.destroy();
+});
+
 test("shared immersive session starts AR on the canonical renderer and restores desktop state", async () => {
   const harness = createHarness();
   const statuses = [];
@@ -170,6 +202,10 @@ test("shared immersive session starts AR on the canonical renderer and restores 
   assert.equal(session.active, false);
   assert.equal(session.getSnapshot().controllerCount, 2);
 
+  const lensBackground = { id: "active Reality Lens background" };
+  harness.scene.background = lensBackground;
+  harness.renderer.setClearAlpha(0.73);
+
   const started = await session.start("immersive-ar");
   assert.equal(started, true);
   assert.equal(session.active, true);
@@ -188,6 +224,28 @@ test("shared immersive session starts AR on the canonical renderer and restores 
   await session.destroy();
   assert.equal(harness.ended, true);
   assert.equal(session.active, false);
-  assert.notEqual(harness.scene.background, null);
-  assert.equal(harness.renderer.getClearAlpha(), 1);
+  assert.equal(harness.scene.background, lensBackground);
+  assert.equal(harness.renderer.getClearAlpha(), 0.73);
+});
+
+test("reset without an XR attempt leaves the active Reality Lens presentation alone", async () => {
+  const harness = createHarness();
+  const session = createImmersiveSession({
+    THREE: FakeThree,
+    renderer: harness.renderer,
+    scene: harness.scene,
+    camera: harness.camera,
+    controls: harness.controls,
+    documentRoot: harness.documentRoot,
+    navigatorRoot: harness.navigatorRoot,
+  });
+  const lensBackground = { id: "current lens background" };
+  harness.scene.background = lensBackground;
+  harness.renderer.setClearAlpha(0.6);
+
+  session.reset();
+  await session.destroy();
+
+  assert.equal(harness.scene.background, lensBackground);
+  assert.equal(harness.renderer.getClearAlpha(), 0.6);
 });

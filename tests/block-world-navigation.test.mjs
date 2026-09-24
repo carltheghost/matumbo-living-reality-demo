@@ -86,15 +86,17 @@ test("portal route registry is finite, frozen, and local-only", () => {
     "contracts",
     "paycore",
     "t402",
-    "neural-mesh",
+    "agent",
     "picture-matter",
     "ledger",
     "gateway",
     "world-events",
+    "web-ai",
     "projections",
     "sports-events",
     "multi-sport-events",
     "reality-lens",
+    "social-mirror",
   ];
   assert.equal(BLOCK_WORLD_PORTAL_ROUTE_REGISTRY.length, expectedRoutes.length);
   assert.deepEqual(BLOCK_WORLD_PORTAL_ROUTE_REGISTRY.map((route) => route.id), expectedRoutes);
