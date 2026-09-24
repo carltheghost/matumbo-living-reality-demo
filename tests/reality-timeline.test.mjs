@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createRealityTimeline} from '../src/domains/reality-timeline.js';
+import {REALITY_TAB_GAP,realityTabRadius} from '../src/domains/reality-tab-layout.js';
+import {surfaceLayout} from '../src/domains/living-surface-layout-engine.js';
 const objects=[{id:'contracts',position:[0,0,0]},{id:'person',position:[45,45,45]}];
 test('observed time navigation retains object identities and cannot mutate present from history',()=>{
   let now=1000;const owner=createRealityTimeline({objects,clock:()=>now++});
@@ -74,4 +76,29 @@ test('drag destinations avoid collisions while size and shape changes stay in pl
   const resized=state.objects.find(object=>object.id==='contracts');
   assert.equal(resized.size,12);assert.equal(resized.shape,'cube');
   assert.deepEqual(resized.position,beforeResize,'changing the visible form must never teleport the object');
+});
+
+test('registered custom form is an object shape, with physical collision spacing and no profile in history',()=>{
+  const profile={body:{width:7,height:1.2,depth:.2},contour:'rounded-rectangle',
+    coverage:.9,cornerRadius:.12,frontDepth:.24};
+  const owner=createRealityTimeline({objects:[
+    {id:'contracts',position:[0,0,0],shape:'wide-archive',size:1},
+    {id:'person',position:[20,0,0],shape:'sphere',size:1},
+  ],shapeProfiles:{contracts:{'wide-archive':profile}}});
+  assert.equal(owner.getSnapshot().objects[0].shape,'wide-archive');
+  assert.throws(()=>owner.configure('person',{shape:'wide-archive'}),/supported tab forms/);
+  owner.move('contracts',[20,0,0]);
+  const [archive,person]=owner.getSnapshot().objects;
+  const physicalRadius=surfaceLayout({id:'contracts',shape:'wide-archive',profile}).radius;
+  const distance=Math.hypot(...archive.position.map((value,axis)=>value-person.position[axis]));
+  assert.ok(distance>=physicalRadius+realityTabRadius(person)+REALITY_TAB_GAP-.002,
+    'the custom body keeps its real width when moved beside another object');
+  owner.configure('contracts',{shape:'phone'});
+  assert.equal(owner.configure('contracts',{shape:'wide-archive'}).objects[0].shape,'wide-archive');
+  const exported=owner.exportHistory();
+  assert.ok(exported.includes('"wide-archive"'));
+  assert.ok(!exported.includes('"body"')&&!exported.includes('"coverage"'),
+    'history holds shape IDs, never renderer profile definitions');
+  assert.throws(()=>createRealityTimeline({objects:[{id:'person',position:[0,0,0]}],
+    shapeProfiles:{contracts:{'wide-archive':profile}}}),/unknown feature object/);
 });

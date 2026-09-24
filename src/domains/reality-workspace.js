@@ -1,12 +1,12 @@
-import {createRealityTimeline} from './reality-timeline.js?v=20260923-spatial-tabs15';
+import {createRealityTimeline} from './reality-timeline.js?v=20260924-wrapper-profiles1';
 import {createRealityGraph} from './side-living-reality.js';
 
 /**
  * Keep each navigable reality on its own local layout timeline while the graph
  * tracks parentage and explicit travel edges between those realities.
  */
-export function createRealityWorkspace({objects,selectedId,rootId='reality:root',rootLabel='Living Reality',clock,now}={}){
-  const timelineOptions={...(clock?{clock}:{})};
+export function createRealityWorkspace({objects,selectedId,rootId='reality:root',rootLabel='Living Reality',clock,now,shapeProfiles}={}){
+  const timelineOptions={...(clock?{clock}:{}),...(shapeProfiles?{shapeProfiles:structuredClone(shapeProfiles)}:{})};
   const rootTimeline=createRealityTimeline({objects,selectedId,...timelineOptions});
   const rootSnapshot=rootTimeline.getSnapshot();
   const initialState={objects:rootSnapshot.objects,selectedId:rootSnapshot.selectedId,layoutMode:rootSnapshot.mode};

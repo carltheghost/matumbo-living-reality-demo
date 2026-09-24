@@ -146,9 +146,25 @@ body.assembly-mode .reality-lens-feature-panel[data-object-shape=wave]:not([hidd
    Three.js object. This stage only hosts those faces; it is not another panel. */
 #reality-assembly .assembly-css3d-host{position:absolute;inset:0;z-index:1;overflow:visible;pointer-events:none}
 #reality-assembly .assembly-css3d-renderer{position:absolute!important;inset:0!important;overflow:visible!important;pointer-events:none!important}
+#reality-assembly.assembly-has-live-object-surface .assembly-selection-hint{display:none}
+/* If CSS3D fails after handoff, the original feature panel is restored as a
+   reachable native overlay rather than stranded inside an invisible host. */
+body.assembly-mode .assembly-native-surface-fallback:not([hidden]),body.assembly-mode [data-panel-space="managed"].assembly-native-surface-fallback:not([hidden]){position:fixed!important;left:50%!important;right:auto!important;top:110px!important;bottom:auto!important;transform:translateX(-50%)!important;width:min(520px,calc(100vw - 32px))!important;max-width:calc(100vw - 32px)!important;max-height:calc(100dvh - 280px)!important;min-width:0!important;overflow:auto!important;z-index:122!important;pointer-events:auto!important}
+@media(max-width:700px){body.assembly-mode .assembly-native-surface-fallback:not([hidden]),body.assembly-mode [data-panel-space="managed"].assembly-native-surface-fallback:not([hidden]){left:12px!important;top:120px!important;transform:none!important;width:calc(100vw - 24px)!important;max-height:calc(100dvh - 325px)!important}}
+/* One skin and one physical frame share the same 3D anchor. The existing
+   feature panel is its scrollable interior, never a second floating window. */
+#reality-assembly .assembly-living-front{position:absolute;display:block;box-sizing:border-box;pointer-events:none;overflow:visible;border:1px solid rgba(214,185,117,.62);border-radius:10px;background:radial-gradient(ellipse at 30% 12%,rgba(193,161,91,.19),transparent 58%),linear-gradient(145deg,#182523,#081116);box-shadow:inset 0 0 28px rgba(196,160,85,.13),0 0 18px rgba(199,162,83,.12);backface-visibility:hidden}
+#reality-assembly .assembly-living-front[data-contour=circle]{border-radius:50%;background:radial-gradient(circle at 35% 23%,#3a3828 0%,#171e1b 50%,#080e12 100%)}
+#reality-assembly .assembly-living-front[data-contour=cylinder]{border-radius:18% / 9%;background:linear-gradient(90deg,#0a1215,#24312c 14%,#14201d 50%,#24312c 86%,#0a1215)}
+#reality-assembly .assembly-living-front[data-contour=wave]{border-radius:17% 11% 16% 10% / 15% 20% 12% 18%;background:radial-gradient(ellipse at 24% 15%,#344038,#14211e 54%,#080e12)}
+body.assembly-mode #reality-assembly .assembly-living-front>.reality-lens-feature-panel[data-lens-surface-attached=true]{left:50%!important;right:auto!important;top:50%!important;bottom:auto!important;transform:translate(-50%,-50%)!important;max-width:none!important;max-height:none!important}
+#reality-assembly .assembly-living-front>.assembly-wrap-face[data-face=front]{left:50%;top:50%;transform:translate(-50%,-50%);max-width:none;max-height:none;border-radius:14px}
+/* The sphere's outer skin is circular, while its controls remain in an
+   accessible rounded viewport. Never clip the close button at the corners. */
+body.assembly-mode #reality-assembly .assembly-living-front[data-contour=circle]>.reality-lens-feature-panel[data-lens-surface-attached=true],body.assembly-mode #reality-assembly .assembly-living-front[data-contour=cylinder]>.reality-lens-feature-panel[data-lens-surface-attached=true],body.assembly-mode #reality-assembly .assembly-living-front[data-contour=wave]>.reality-lens-feature-panel[data-lens-surface-attached=true]{border-radius:16px!important}
 body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true]{position:absolute!important;inset:auto!important;left:auto!important;right:auto!important;top:auto!important;bottom:auto!important;margin:0!important;box-sizing:border-box!important;width:var(--lens-surface-width)!important;height:var(--lens-surface-height)!important;min-width:0!important;min-height:0!important;max-width:none!important;max-height:none!important;overflow:auto!important;overscroll-behavior:contain;scrollbar-width:thin;pointer-events:auto!important;z-index:auto!important;transform-origin:50% 50%!important;border:1px solid rgba(215,185,113,.78)!important;border-radius:13px!important;background:radial-gradient(ellipse at 18% 0%,rgba(185,153,89,.14),transparent 48%),linear-gradient(148deg,rgba(15,25,27,.985),rgba(4,11,16,.99))!important;box-shadow:inset 0 1px 0 rgba(244,225,177,.12),inset 0 0 28px rgba(188,150,73,.07),0 0 18px rgba(190,158,89,.12)!important;backdrop-filter:blur(13px)!important;isolation:isolate!important}
-/* The scroll track is part of the object membrane, not a bright browser rail. */
-body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true]{scrollbar-color:rgba(203,169,93,.76) rgba(5,14,19,.74)}
+/* Long feature content scrolls within the bounded object skin. */
+body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true]{overflow-x:hidden!important;scrollbar-color:rgba(203,169,93,.76) rgba(5,14,19,.74);touch-action:pan-y}
 body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true]::-webkit-scrollbar{width:8px;height:8px}
 body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true]::-webkit-scrollbar-track{background:rgba(4,12,18,.82);border-radius:999px}
 body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true]::-webkit-scrollbar-thumb{border:2px solid rgba(5,14,19,.84);border-radius:999px;background:linear-gradient(180deg,#e0bf71,#8d6833)}
@@ -157,16 +173,20 @@ body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surfa
 body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true]::before,body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true]::after{content:none!important;display:none!important}
 body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true][data-object-shape=phone]{border-radius:clamp(28px,8%,54px)!important}
 body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true][data-object-shape=square],body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true][data-object-shape=cube]{border-radius:8px!important}
-body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true][data-object-shape=sphere]{border-radius:50%!important;border-color:#d2b36c!important;background:radial-gradient(ellipse at 50% 8%,rgba(200,171,103,.18),transparent 48%),linear-gradient(155deg,rgba(30,29,20,.985),rgba(9,14,15,.99))!important;box-shadow:inset 0 0 36px rgba(215,184,111,.12),0 0 18px rgba(190,158,89,.16)!important}
-body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true][data-object-shape=cylinder]{border-radius:48% / 15%!important;padding:calc(var(--lens-surface-height)*.1) calc(var(--lens-surface-width)*.065)!important}
+body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true][data-object-shape=sphere]{border-radius:24% / 20%!important;padding:12px!important;border-color:#d2b36c!important;background:radial-gradient(ellipse at 50% 8%,rgba(200,171,103,.18),transparent 48%),linear-gradient(155deg,rgba(30,29,20,.985),rgba(9,14,15,.99))!important;box-shadow:inset 0 0 36px rgba(215,184,111,.12),0 0 18px rgba(190,158,89,.16)!important}
+body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true][data-object-shape=cylinder]{border-radius:18% / 9%!important}
 body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true][data-object-shape=wave]{border-radius:14% 10% 13% 9% / 12% 18% 11% 17%!important}
 body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true]>*{box-sizing:border-box;min-width:0;max-width:100%}
 #reality-assembly .assembly-wrap-face{position:absolute;display:flex;flex-direction:column;justify-content:center;gap:10px;box-sizing:border-box;padding:24px 30px;overflow:hidden;border:1px solid rgba(205,174,105,.72);border-radius:12px;background:linear-gradient(145deg,rgba(20,30,29,.97),rgba(5,13,18,.98));color:#e8ecdf;box-shadow:inset 0 0 26px rgba(188,150,73,.09),0 0 14px rgba(190,158,89,.12);font-family:system-ui,sans-serif;pointer-events:auto;backface-visibility:hidden}
-#reality-assembly .assembly-wrap-face>small{color:#c6a96d;font:700 12px/1.35 ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase}
-#reality-assembly .assembly-wrap-face h3,#reality-assembly .assembly-wrap-face h2{margin:0;color:#f0e6c8;font-size:28px;line-height:1.15;font-weight:550;letter-spacing:-.025em;overflow-wrap:anywhere}
-#reality-assembly .assembly-wrap-face p{margin:0;color:#b7c4b8;font-size:17px;line-height:1.55;overflow-wrap:anywhere}
+#reality-assembly .assembly-wrap-face{gap:7px;padding:12px 16px}
+#reality-assembly .assembly-wrap-face:not([data-face=front]){justify-content:flex-start;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#a78b54 #08131a}
 #reality-assembly .assembly-wrap-fallback{justify-content:flex-start;overflow:auto;scrollbar-width:thin;scrollbar-color:#ae8b4a #08111a}
 #reality-assembly .assembly-wrap-fallback>*{flex-shrink:0}
+#reality-assembly .assembly-wrap-face>small{color:#c6a96d;font:700 12px/1.35 ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase}
+#reality-assembly .assembly-wrap-face h3,#reality-assembly .assembly-wrap-face h2{margin:0;color:#f0e6c8;font-size:28px;line-height:1.15;font-weight:550;letter-spacing:-.025em;overflow-wrap:anywhere}
+#reality-assembly .assembly-wrap-face h3,#reality-assembly .assembly-wrap-face h2{font-size:22px}
+#reality-assembly .assembly-wrap-face p{margin:0;color:#b7c4b8;font-size:17px;line-height:1.55;overflow-wrap:anywhere}
+#reality-assembly .assembly-wrap-face p{font-size:14px;line-height:1.35}
 #reality-assembly .assembly-wrap-face .assembly-wrap-detail{padding-top:12px;border-top:1px solid rgba(197,169,104,.3);color:#d3bd86;font-size:13px;line-height:1.45}
 #reality-assembly .assembly-wrap-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
 #reality-assembly .assembly-wrap-face button{min-height:40px;padding:7px 11px;border-color:rgba(205,174,105,.48);color:#e4d5ad;background:rgba(111,82,34,.18);font-size:12px}
@@ -224,8 +244,8 @@ body.assembly-mode #web-ai-console.reality-lens-feature-panel[data-lens-surface-
 body.assembly-mode #reality-assembly.assembly-directory-open .assembly-directory{display:flex!important}
 #reality-assembly .assembly-inspector{z-index:8;padding:clamp(12px,2.2vw,24px);border-radius:24px;border-color:#8a7958;background:linear-gradient(150deg,rgba(15,29,35,.93),rgba(4,12,20,.94));box-shadow:inset 0 0 32px rgba(143,170,145,.09),0 24px 72px rgba(0,0,0,.56);backdrop-filter:blur(12px);scrollbar-color:#63736c transparent}
 #reality-assembly .assembly-inspector[data-shape=phone]{border-radius:38px}
-#reality-assembly .assembly-inspector[data-shape=sphere]{border-radius:48% / 38%;}
-#reality-assembly .assembly-inspector[data-shape=cylinder]{border-radius:44% / 26%;}
+#reality-assembly .assembly-inspector[data-shape=sphere]{border-radius:24px;}
+#reality-assembly .assembly-inspector[data-shape=cylinder]{border-radius:20px;}
 #reality-assembly .assembly-inspector[data-shape=wave]{border-radius:28px 42px 28px 42px}
 #reality-assembly .assembly-inspector h2{font-size:clamp(23px,2.1vw,36px);color:#e4e5d9}
 #reality-assembly .assembly-inspector p{font-size:clamp(11px,1vw,14px);line-height:1.55;color:#a7b7ad}

@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createRealityWorkspace} from '../src/domains/reality-workspace.js';
+import {REALITY_TAB_GAP,realityTabRadius} from '../src/domains/reality-tab-layout.js';
+import {surfaceLayout} from '../src/domains/living-surface-layout-engine.js';
 
 const objects=[
   {id:'block-world',position:[0,2,0],shape:'cube',size:1.6,anchor:true,locked:true},
@@ -84,4 +86,31 @@ test('a side can focus its own feature without changing the parent selection',()
   assert.equal(workspace.timeline,parentTimeline);
   assert.equal(workspace.timeline.getSnapshot().selectedId,'contracts');
   assert.throws(()=>workspace.fork({label:'Invalid focus',selectedId:'missing'}),/Unknown selected object/);
+});
+
+test('registered custom shapes survive side reality forks with private profiles and correct move spacing',()=>{
+  const profile={body:{width:6,height:1.4,depth:.25},contour:'rounded-rectangle',
+    coverage:.88,cornerRadius:.12,frontDepth:.29};
+  const registryProfile=structuredClone(profile);
+  const workspace=createRealityWorkspace({objects:[
+    {id:'contracts',position:[0,0,0],shape:'ledger-ribbon',size:1},
+    {id:'person',position:[18,0,0],shape:'sphere',size:1},
+  ],selectedId:'contracts',shapeProfiles:{contracts:{'ledger-ribbon':registryProfile}}});
+  registryProfile.body.width=0;
+  const parentTimeline=workspace.timeline,parentBefore=parentTimeline.getSnapshot();
+  const side=workspace.fork({label:'Custom shape side',selectedId:'contracts'});
+  assert.equal(side.state.objects[0].shape,'ledger-ribbon');
+  workspace.timeline.move('contracts',[18,0,0]);
+  const [custom,neighbor]=workspace.timeline.getSnapshot().objects;
+  assert.equal(custom.shape,'ledger-ribbon');
+  const distance=Math.hypot(...custom.position.map((value,index)=>value-neighbor.position[index]));
+  const customRadius=surfaceLayout({id:'contracts',shape:'ledger-ribbon',profile}).radius;
+  assert.ok(distance>=customRadius+realityTabRadius(neighbor)+REALITY_TAB_GAP-.002);
+  assert.ok(!workspace.timeline.exportHistory().includes('"body"'));
+  assert.ok(!JSON.stringify(workspace.getSnapshot()).includes('"coverage"'));
+  workspace.returnToParent();
+  assert.equal(workspace.timeline,parentTimeline);
+  assert.deepEqual(parentTimeline.getSnapshot(),parentBefore);
+  workspace.travel(side.id);
+  assert.equal(workspace.timeline.getSnapshot().objects[0].shape,'ledger-ribbon');
 });

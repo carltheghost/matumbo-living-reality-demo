@@ -3,14 +3,33 @@
  * explicitly user-authored proposals; replay can never write back to the present. */
 const copy=value=>JSON.parse(JSON.stringify(value));
 const freeze=value=>{if(value&&typeof value==='object'){Object.values(value).forEach(freeze);Object.freeze(value);}return value;};
-import {normalizeRealityTabShape,normalizeRealityTabSize,resolveRealityTabPosition} from './reality-tab-layout.js';
+import {normalizeRealityTabShape,normalizeRealityTabSize} from './reality-tab-layout.js';
+import {resolveLivingTabPosition,surfaceLayout} from './living-surface-layout-engine.js';
 const MAX_FRAMES=100,MAX_BRANCHES=12;
 function position(value){
   if(!Array.isArray(value)||value.length!==3||value.some(n=>!Number.isFinite(n)||Math.abs(n)>60))throw Error('Position must contain three finite coordinates within the workspace');
   return value.map(n=>Math.round(n*1000)/1000);
 }
-export function createRealityTimeline({objects,selectedId,clock=()=>Date.now()}={}){
+export function createRealityTimeline({objects,selectedId,clock=()=>Date.now(),shapeProfiles={}}={}){
   if(!Array.isArray(objects)||!objects.length||objects.length>80)throw Error('A bounded object registry is required');
+  if(!shapeProfiles||typeof shapeProfiles!=='object'||Array.isArray(shapeProfiles))
+    throw Error('Shape profiles must be a per-feature registry');
+  // Profiles are configuration, not observations. Frames and exports only hold
+  // each object's shape ID; the reusable dimensions stay outside local history.
+  const registry=new Map(Object.entries(shapeProfiles).map(([featureId,profiles])=>{
+    if(!profiles||typeof profiles!=='object'||Array.isArray(profiles))
+      throw Error('Shape profiles must be keyed by shape ID for each feature');
+    const forms=new Map(Object.entries(profiles).map(([shape,profile])=>{
+      if(!/^[a-z][a-z0-9-]{0,79}$/.test(shape))throw Error('Custom shape IDs must be lowercase feature-safe names');
+      const stable=freeze(copy(profile));
+      surfaceLayout({id:featureId,shape,profile:stable});
+      return [shape,stable];
+    }));
+    return [featureId,forms];
+  }));
+  const customProfile=(id,shape)=>registry.get(id)?.get(shape);
+  const moveProfiles=Object.fromEntries([...registry].map(([id,forms])=>[id,Object.fromEntries(forms)]));
+  const normalizeShape=(id,shape)=>customProfile(id,shape)?shape:normalizeRealityTabShape(shape);
   const ids=new Set();
   const initial=objects.map(object=>{
     if(typeof object.id!=='string'||!/^[a-z][a-z0-9-]{0,79}$/.test(object.id)||ids.has(object.id))throw Error('Object IDs must be unique existing feature references');
@@ -18,9 +37,10 @@ export function createRealityTimeline({objects,selectedId,clock=()=>Date.now()}=
     const anchor=object.anchor===true;
     if(object.locked!==undefined&&typeof object.locked!=='boolean')throw Error('Tab lock state must be boolean');
     if(object.open!==undefined&&typeof object.open!=='boolean')throw Error('Tab open state must be boolean');
-    return {id:object.id,position:position(object.position),shape:normalizeRealityTabShape(object.shape??(anchor?'cube':'rectangle')),
+    return {id:object.id,position:position(object.position),shape:normalizeShape(object.id,object.shape??(anchor?'cube':'rectangle')),
       size:normalizeRealityTabSize(object.size??(anchor?1.6:1)),locked:anchor||Boolean(object.locked),anchor,open:Boolean(object.open)};
   });
+  for(const featureId of registry.keys())if(!ids.has(featureId))throw Error('Shape profile references an unknown feature object');
   const initialSelection=selectedId??initial[0].id;
   if(!ids.has(initialSelection))throw Error('Unknown selected object');
   let present=initial,revision=0,lastTime=0,selected=initialSelection,frameCursor=null,branchId=null;
@@ -52,13 +72,14 @@ export function createRealityTimeline({objects,selectedId,clock=()=>Date.now()}=
   }
   function move(id,next){
     const object=editable(id),source=activeBranch()?.objects??present;
-    const safe=resolveRealityTabPosition(id,position(next),source);
+    const requested=position(next);
+    const safe=position(resolveLivingTabPosition(id,requested,source,{shapeProfiles:moveProfiles}));
     return mutate(id,{position:safe},`Moved ${id}`);
   }
   function configure(id,{shape,size}={}){
     const object=editable(id);
     const patch={};
-    if(shape!==undefined)patch.shape=normalizeRealityTabShape(shape);
+    if(shape!==undefined)patch.shape=normalizeShape(id,shape);
     if(size!==undefined)patch.size=normalizeRealityTabSize(size);
     if(!Object.keys(patch).length)return getSnapshot();
     // Form and size belong to the object: neither operation changes its

@@ -30,8 +30,14 @@ export function normalizeRealityTabSize(value){
 export function realityTabRadius(object){
   if(object.anchor)return 2.92;
   const form=REALITY_TAB_FORMS[object.shape]??REALITY_TAB_FORMS.rectangle;
-  const halfDiagonal=Math.hypot(form.width/2,form.height/2,form.depth/2);
-  return halfDiagonal*(Number.isFinite(object.size)?object.size:1);
+  // Curved shells fit inside their physical radius. A box diagonal would
+  // reserve empty corners around a sphere, especially at a large user size.
+  const radius=object.shape==='sphere'
+    ?Math.min(form.width,form.height,form.depth)/2
+    :object.shape==='cylinder'
+      ?Math.hypot(Math.min(form.width,form.depth)/2,form.height/2)
+      :Math.hypot(form.width/2,form.height/2,form.depth/2);
+  return radius*(Number.isFinite(object.size)?object.size:1);
 }
 
 /** Keep a user move or resize from intersecting another spatial tab. If the
