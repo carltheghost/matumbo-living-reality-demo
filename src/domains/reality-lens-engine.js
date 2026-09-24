@@ -25,7 +25,9 @@ const FEATURE_GROUPS = Object.freeze({
 const DEFAULT_PROFILE = Object.freeze({
   origin:Object.freeze([0,2,0]),
   axis:Object.freeze([54,36,164]),
-  funnel:Object.freeze({nearDepth:5,farDepth:36,nearRadius:3.2,farRadius:14.6,clusterRadius:4.6}),
+  // A little more air between neighbouring tabs makes the field readable
+  // without turning it into a distant, disconnected constellation.
+  funnel:Object.freeze({nearDepth:5,farDepth:36,nearRadius:4.35,farRadius:18.1,clusterRadius:5.85}),
   overview:Object.freeze({farDistance:160,fullDistance:64}),
   // A focus is a journey, not a permanent pile-up: surrounding objects first
   // recede, then leave the selected living surface clear at close approach.

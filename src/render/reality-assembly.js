@@ -1,6 +1,6 @@
 import {createRealityWorkspace} from '../domains/reality-workspace.js?v=20260923-spatial-tabs16';
 import {REALITY_TAB_FORMS,REALITY_TAB_SIZE_MIN,REALITY_TAB_SIZE_MAX,resolveRealityTabPosition} from '../domains/reality-tab-layout.js?v=20260923-spatial-tabs15';
-import {REALITY_LENS_GROUPS,realityLensEngine,resolveRealityLensGroup} from '../domains/reality-lens-engine.js?v=20260923-lens-engine6';
+import {REALITY_LENS_GROUPS,realityLensEngine,resolveRealityLensGroup} from '../domains/reality-lens-engine.js?v=20260923-lens-engine7';
 import {realityLensCopy,realityLensLabel,realityObjectSurfaceEngine} from '../domains/reality-object-engine.js?v=20260923-object-surface5';
 import {buildRealityAssemblyScene,LOD_FAR} from './reality-assembly-scene.js?v=20260923-spatial-tabs20';
 
@@ -92,9 +92,9 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   const spatial=buildRealityAssemblyScene({THREE,parent:scene,features:ordered.map((feature,i)=>({...feature,label:labelFor(feature),description:copyFor(feature.description),boundary:copyFor(feature.boundary),sources:(feature.sources??[]).map(copyFor),assemblyTier:'tab',lensGroup:positions[i]?.lensGroup??'worlds',initialTabShape:initialShapes.get(feature.id),initialPosition:positions[i]?.position})),targets,relationships});
   spatial.setActiveGroup(null);
   const featureMap=new Map(features.map(feature=>[feature.id,feature]));
-  const stylesheet=document.createElement('link');stylesheet.rel='stylesheet';stylesheet.href=`${new URL('./reality-assembly.css',import.meta.url).href}?v=20260923-spatial-tabs22`;document.head.append(stylesheet);
+  const stylesheet=document.createElement('link');stylesheet.rel='stylesheet';stylesheet.href=`${new URL('./reality-assembly.css',import.meta.url).href}?v=20260923-spatial-tabs25`;document.head.append(stylesheet);
   const root=document.createElement('section');root.id='reality-assembly';root.hidden=true;root.setAttribute('aria-label','Reality Lens spatial assembly');
-  root.innerHTML=`<header class="assembly-header"><a class="assembly-brand" href="?feature=reality-lens"><span aria-hidden="true">◇</span><div>maTumbo<small>People × planet × possibility</small></div></a><nav aria-label="Assembly navigation"><button data-home>Explore</button><button data-enter-person>Your space</button><button data-enter-contracts>Contracts</button><button data-grid>Block World</button></nav><button data-clean>Hide panels</button></header>
+  root.innerHTML=`<header class="assembly-header"><a class="assembly-brand" href="?feature=reality-lens"><span aria-hidden="true">◇</span><div>maTumbo<small>People × planet × possibility</small></div></a><nav aria-label="Assembly navigation"><button data-home>Explore</button><button data-enter-person>Your space</button><button data-enter-contracts>Contracts</button><button data-grid>Block World</button></nav><form class="assembly-quick-find" data-quick-find role="search"><label><span>Find object</span><input data-quick-search type="search" autocomplete="off" placeholder="Search YouTube, agents…" aria-label="Find a Reality Lens object"></label><button type="submit">Locate</button></form><button data-clean>Hide panels</button></header>
   <aside class="assembly-directory"><p class="assembly-eyebrow">Reality Lens Ω</p><h1>Many worlds.<br><em>One reality.</em></h1><p class="assembly-intro">Explore the same universe across space and depth.<br>Every window is a real, rearrangeable tab.</p><label class="assembly-search-label">Find a connected feature<input data-search placeholder="Search worlds, contracts…" type="search"></label><nav class="assembly-catalog" aria-label="Feature objects"></nav><p class="assembly-note">Designed 3D feature previews.<br>Only the selected feature opens its connected controls.</p></aside>
   <div class="assembly-labels" aria-label="Spatial feature labels"></div>
   <div class="assembly-world-label" data-world-label hidden>One quiet point · scroll, pinch, or move Travel to enter</div>
@@ -131,6 +131,8 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   find('.assembly-intro').innerHTML='Elige unum obiectum; appropinqua ut aperias.<br>Magnifica obiectum ad eius superficiem evolvendam.';
   find('.assembly-search-label').firstChild.textContent='Quaere obiectum ';
   find('[data-search]').placeholder='Quaere obiecta…';
+  find('[data-quick-find] label span').textContent='Invenire';
+  find('[data-quick-search]').placeholder='YouTube, agentia…';
   find('.assembly-catalog').setAttribute('aria-label','Reality Lens objecta');
   find('.assembly-directory .assembly-note').innerHTML='Tabulae locales · una identitas per obiectum.<br>Ingredere ut aperias verum instrumentum.';
   find('.assembly-header [data-home]').textContent='Explora';
@@ -449,8 +451,11 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     const visibleLabel=labelFor(feature),button=document.createElement('button');button.type='button';button.textContent=visibleLabel;button.onclick=guard(()=>{select(feature.id);if(interaction!=='move')enter(feature.id);if(root.classList.contains('assembly-directory-open'))setDirectory(false,{restoreFocus:true});});(domain?.children??find('.assembly-catalog')).append(button);catalog.set(feature.id,button);
     const label=document.createElement('button');label.type='button';label.className='assembly-node-label';label.textContent=visibleLabel;label.dataset.group=groupId;label.setAttribute('aria-label',`Aperi ${visibleLabel} · instrumentum`);label.onclick=guard(()=>{select(feature.id);if(interaction!=='move')enter(feature.id);});label.onpointerenter=()=>{hovered=feature.id;render();};label.onpointerleave=()=>{hovered=null;render();};find('.assembly-labels').append(label);labels.set(feature.id,label);
   }
-  find('[data-search]').oninput=event=>{
-    const query=event.target.value.toLowerCase().trim();
+  const catalogSearch=find('[data-search]'),quickSearch=find('[data-quick-search]');
+  const applySearch=queryValue=>{
+    const query=String(queryValue??'').toLowerCase().trim();
+    if(catalogSearch.value!==queryValue)catalogSearch.value=queryValue;
+    if(quickSearch.value!==queryValue)quickSearch.value=queryValue;
     for(const [id,button] of catalog){
       const groupId=resolveRealityLensGroup(id),record=catalogSections.get(groupId),featureMatch=`${featureMap.get(id).label} ${labelFor(featureMap.get(id))} ${id}`.toLowerCase().includes(query),groupMatch=Boolean(query&&record?.label.toLowerCase().includes(query));
       button.hidden=Boolean(query&&!featureMatch&&!groupMatch);
@@ -459,9 +464,20 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     for(const [groupId,record] of catalogSections){
       const anyVisible=[...catalog].some(([id,button])=>resolveRealityLensGroup(id)===groupId&&!button.hidden);
       record.section.hidden=Boolean(query&&!anyVisible);
-      if(!query)record.children.hidden=!record.open;
+      if(query&&anyVisible){record.open=true;record.children.hidden=false;record.header.setAttribute('aria-expanded','true');}
+      else if(!query)record.children.hidden=!record.open;
     }
   };
+  const selectSearchResult=()=>{
+    if(!quickSearch.value.trim()){setDirectory(true);catalogSearch.focus();return false;}
+    const first=[...catalog].find(([,button])=>!button.hidden)?.[0];
+    if(!first){say('Nullum obiectum inventum.');return false;}
+    select(first);setDirectory(false);enter(first);return true;
+  };
+  catalogSearch.oninput=event=>applySearch(event.target.value);
+  quickSearch.onfocus=()=>setDirectory(true);
+  quickSearch.oninput=event=>{setDirectory(true);applySearch(event.target.value);};
+  find('[data-quick-find]').onsubmit=event=>{event.preventDefault();selectSearchResult();};
   all('[data-home]').forEach(button=>button.onclick=overview);find('[data-focus]').onclick=focus;
   all('[data-open],[data-open-secondary]').forEach(button=>button.onclick=guard(toggle));
   find('[data-tab-shape]').onchange=guard(event=>{const object=currentObject();owner.configure(object.id,{shape:event.target.value});syncActiveReality();render();say('Tab reshaped. Its identity and feature connection stayed the same.');});

@@ -24,6 +24,14 @@ test('funnel layouts are deterministic while distinct objects get distinct slots
   assert.notDeepEqual(first.position,other.position);
 });
 
+test('the default field leaves a little breathing room between neighbouring tabs',()=>{
+  const left=realityLensEngine.placeInFunnel({id:'youtube',index:0,count:5,groupId:'experiences'});
+  const right=realityLensEngine.placeInFunnel({id:'nft-atelier',index:1,count:5,groupId:'experiences'});
+  const distance=Math.hypot(...left.position.map((value,index)=>value-right.position[index]));
+  assert.ok(distance>3.5,`neighbouring tabs should not touch (${distance})`);
+  assert.ok(realityLensEngine.profile.funnel.clusterRadius>5,'the default compact cluster has intentional breathing room');
+});
+
 test('the reusable funnel surface defines open rings that widen toward the lens mouth',()=>{
   const near=realityLensEngine.surfacePoint({depth:10,angle:0});
   const far=realityLensEngine.surfacePoint({depth:70,angle:0});
