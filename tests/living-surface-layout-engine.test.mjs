@@ -185,6 +185,15 @@ test('legacy map, projector and fitter read the same wrapper geometry',()=>{
   }
 });
 
+test('legacy map options still offset view faces without resizing the physical object',()=>{
+  const base=createLivingSurfaceMap('phone');
+  const adjusted=createLivingSurfaceMap('phone',{clearance:.08,depthRatio:.7});
+  assert.deepEqual(adjusted.body,base.body);
+  assert.ok(adjusted.primary.position[2]>base.primary.position[2]);
+  assert.ok(adjusted.faces.find(face=>face.id==='left').width>base.faces.find(face=>face.id==='left').width);
+  assert.ok(adjusted.faces.find(face=>face.id==='top').position[1]>base.faces.find(face=>face.id==='top').position[1]);
+});
+
 test('custom object profiles compose a new shape without a shape-specific branch',()=>{
   const profile={body:{width:2,height:1.5,depth:.2},contour:'rounded-rectangle',coverage:.88,
     cornerRadius:.22,frontDepth:.26};

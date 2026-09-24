@@ -68,14 +68,24 @@ export function createLivingSurfaceMap(shape='rectangle',options={}){
   const byId=new Map([layout.primarySurface,...layout.secondarySurfaces].map(face=>[face.id,face]));
   if(!byId.has('back'))byId.set('back',surface('back',layout.primarySurface.width*.72,
     layout.primarySurface.height*.72,[0,0,-layout.wrapper.frontDepth],[0,Math.PI,0],[0,0,-1]));
-  const top=()=>surface('top',w*.74,d*.74,[0,h/2+clearance,0],[-Math.PI/2,0,0],[0,1,0]);
-  const bottom=()=>surface('bottom',w*.74,d*.74,[0,-h/2-clearance,0],[Math.PI/2,0,0],[0,-1,0]);
+  const top=()=>surface('top',w*.74,d*.74,[0,h/2+OFFSET,0],[-Math.PI/2,0,0],[0,1,0]);
+  const bottom=()=>surface('bottom',w*.74,d*.74,[0,-h/2-OFFSET,0],[Math.PI/2,0,0],[0,-1,0]);
   if(!byId.has('top'))byId.set('top',top());
   if(!byId.has('bottom'))byId.set('bottom',bottom());
   const kind=layout.wrapper.contour==='circle'?'hemisphere':layout.wrapper.contour==='cylinder'?'arc':'face';
+  // Older map callers can request extra clearance or a different apparent
+  // planar depth. These are view offsets only; the physical wrapper stays the
+  // single source of the object's actual size and collision radius.
+  const virtualDepth=layout.wrapper.contour==='circle'||layout.wrapper.contour==='cylinder'?0:
+    Math.max(d,Math.min(w,h)*depthRatio)-Math.max(d,Math.min(w,h)*.42);
+  const clearanceOffset=clearance-OFFSET;
   const faces=FACE_IDS.map(id=>{
     const face=byId.get(id);
-    return makeFace(id,face.width,face.height,face.position,face.rotation,
+    const position=face.position.map((value,axis)=>value+(face.normal?.[axis]??0)*clearanceOffset+
+      (axis===2?(face.normal?.[2]??0)*virtualDepth/2:0));
+    const width=Math.max(.02,face.width+(['left','right'].includes(id)?virtualDepth*.82:0));
+    const height=Math.max(.02,face.height+(['top','bottom'].includes(id)?virtualDepth*.74:0));
+    return makeFace(id,width,height,position,face.rotation,
       {kind:id==='front'?kind:id==='back'?'back':'edge',
         curvature:(face.arcDegrees??0)*Math.PI/180,readable:id==='front'});
   });
