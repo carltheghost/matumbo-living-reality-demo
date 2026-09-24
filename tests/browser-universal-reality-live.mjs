@@ -71,7 +71,7 @@ try{
     }
     if(!ready){
       await page.screenshot({path:resolve(output,`${mode}-startup-failure.png`),fullPage:true});
-      throw new Error(`Reality Lens universal startup timeout: ${JSON.stringify(diagnostics)}`);
+      throw new Error(`Reality Lens universal startup timeout: ${JSON.stringify({diagnostics,pageErrors,consoleErrors,failedRequests})}`);
     }
     await page.waitForTimeout(1200);
 
