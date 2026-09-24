@@ -79,7 +79,7 @@ try{
       await page.waitForTimeout(500);
     }
     if(!ready){
-      await page.screenshot({path:resolve(output,`${mode}-startup-failure.png`),fullPage:true});
+      await page.screenshot({path:resolve(output,`${mode}-startup-failure.png`),fullPage:false,timeout:5000}).catch(()=>{});
       throw new Error(`Reality Lens universal startup timeout: ${JSON.stringify({diagnostics,pageErrors,consoleErrors,failedRequests})}`);
     }
     await page.waitForTimeout(1200);
