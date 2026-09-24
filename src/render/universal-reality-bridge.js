@@ -621,6 +621,9 @@ export function createUniversalRealityBridge({
 }={}){
   const records=new Map();
   let timer=0;
+  let batchTimer=0;
+  let syncing=false;
+  let resyncRequested=false;
   let destroyed=false;
   let projection=scope?.SIMFABRIC?.getProjection?.()??scope?.__SIMFABRIC_PROJECTION__??null;
   let lastSelected=null;
@@ -642,8 +645,65 @@ export function createUniversalRealityBridge({
     records.delete(featureId);
   }
 
+  function syncOne(owner,object,selectedId,liveIds){
+    const featureId=clean(object?.id);
+    if(!featureId||featureId==='reality-lens')return;
+    const featureObject=owner.getFeatureObject(featureId);
+    if(!featureObject?.root||!featureObject?.feature)return;
+    liveIds.add(featureId);
+
+    let record=records.get(featureId);
+    if(!record){
+      record=createRecord(featureObject,featureId,renderer);
+      records.set(featureId,record);
+    }else{
+      record.featureObject=featureObject;
+      if(record.group.parent!==featureObject.root)featureObject.root.add(record.group);
+    }
+
+    softenLegacySurface(featureObject.root,featureId,record.restore);
+    if(preserveFeature(featureId)){
+      record.group.visible=false;
+      record.feed=resolveRealFeatureFeed(featureId,scope);
+      return;
+    }
+
+    record.group.visible=true;
+    record.feed=resolveRealFeatureFeed(featureId,scope);
+    const entities=entitiesForFeature({
+      feature:featureObject.feature,
+      featureId,
+      projection,
+      selected:featureId===selectedId||featureId==='contract-atelier',
+      scope,
+    });
+    syncRecord(record,entities);
+  }
+
+  function finishSync(liveIds){
+    for(const id of [...records.keys()])if(!liveIds.has(id))removeRecord(id);
+    syncing=false;
+    batchTimer=0;
+    if(resyncRequested){
+      resyncRequested=false;
+      sync();
+    }
+  }
+
+  function runSyncBatch(work,index=0){
+    if(destroyed){syncing=false;batchTimer=0;return;}
+    const end=Math.min(index+2,work.objects.length);
+    for(let cursor=index;cursor<end;cursor++)syncOne(work.owner,work.objects[cursor],work.selectedId,work.liveIds);
+    if(end<work.objects.length){
+      batchTimer=scope?.setTimeout?.(()=>runSyncBatch(work,end),0)??0;
+      return;
+    }
+    finishSync(work.liveIds);
+  }
+
   function sync(){
     if(destroyed)return false;
+    if(syncing){resyncRequested=true;return true;}
     const owner=assembly();
     if(!owner?.getSnapshot||!owner?.getFeatureObject)return false;
     const snapshot=owner.getSnapshot();
@@ -651,41 +711,10 @@ export function createUniversalRealityBridge({
     lastSelected=selectedId??lastSelected;
     const objects=array(snapshot?.objects);
     const liveIds=new Set();
-
-    for(const object of objects){
-      const featureId=clean(object?.id);
-      if(!featureId||featureId==='reality-lens')continue;
-      const featureObject=owner.getFeatureObject(featureId);
-      if(!featureObject?.root||!featureObject?.feature)continue;
-      liveIds.add(featureId);
-
-      let record=records.get(featureId);
-      if(!record){
-        record=createRecord(featureObject,featureId,renderer);
-        records.set(featureId,record);
-      }else{
-        record.featureObject=featureObject;
-        if(record.group.parent!==featureObject.root)featureObject.root.add(record.group);
-      }
-
-      softenLegacySurface(featureObject.root,featureId,record.restore);
-      if(preserveFeature(featureId)){
-        record.group.visible=false;
-        continue;
-      }
-      record.group.visible=true;
-      record.feed=resolveRealFeatureFeed(featureId,scope);
-      const entities=entitiesForFeature({
-        feature:featureObject.feature,
-        featureId,
-        projection,
-        selected:featureId===selectedId||featureId==='contract-atelier',
-        scope,
-      });
-      syncRecord(record,entities);
-    }
-
-    for(const id of [...records.keys()])if(!liveIds.has(id))removeRecord(id);
+    syncing=true;
+    const work={owner,objects,selectedId,liveIds};
+    batchTimer=scope?.setTimeout?.(()=>runSyncBatch(work,0),0)??0;
+    if(!batchTimer)runSyncBatch(work,0);
     return true;
   }
 
@@ -721,6 +750,7 @@ export function createUniversalRealityBridge({
       return Object.freeze({
         source:BRIDGE_SOURCE,
         route:new URLSearchParams(scope?.location?.search??'').get('feature'),
+        syncing,
         selectedId:lastSelected,
         featureCount:records.size,
         universalObjectCount:[...records.values()].reduce((sum,record)=>sum+record.rendered.length,0),
@@ -749,6 +779,7 @@ export function createUniversalRealityBridge({
       if(destroyed)return;
       destroyed=true;
       if(timer)scope?.clearInterval?.(timer);
+      if(batchTimer)scope?.clearTimeout?.(batchTimer);
       scope?.removeEventListener?.('simfabric:projection',onProjection);
       for(const id of [...records.keys()])removeRecord(id);
       renderer.dispose();
@@ -767,7 +798,9 @@ function autoBoot(){
   const tryMount=()=>{
     if(window.__TUMBO_UNIVERSAL_OBJECTS__)return;
     if(window.__TUMBO_REALITY_ASSEMBLY__){
-      createUniversalRealityBridge({scope:window,documentRoot:document});
+      window.setTimeout(()=>{
+        if(!window.__TUMBO_UNIVERSAL_OBJECTS__)createUniversalRealityBridge({scope:window,documentRoot:document});
+      },0);
       return;
     }
     if(++attempts<160)window.setTimeout(tryMount,125);
