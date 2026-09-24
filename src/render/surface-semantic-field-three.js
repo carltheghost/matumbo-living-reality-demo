@@ -83,6 +83,27 @@ function canvasY(rect, size) {
   return (1 - rect.y - rect.h) * size;
 }
 
+function paintRegionShape(ctx, region, size, { fill = false, stroke = false } = {}) {
+  const triangles = Array.isArray(region?.trianglesUv) ? region.trianglesUv : [];
+  if (triangles.length) {
+    for (const tri of triangles) {
+      if (!Array.isArray(tri) || tri.length !== 3) continue;
+      ctx.beginPath();
+      ctx.moveTo(tri[0][0] * size, (1 - tri[0][1]) * size);
+      ctx.lineTo(tri[1][0] * size, (1 - tri[1][1]) * size);
+      ctx.lineTo(tri[2][0] * size, (1 - tri[2][1]) * size);
+      ctx.closePath();
+      if (fill) ctx.fill();
+      if (stroke) ctx.stroke();
+    }
+    return;
+  }
+  const r = region.rect;
+  const x = r.x * size, y = canvasY(r, size), w = r.w * size, h = r.h * size;
+  if (fill) ctx.fillRect(x, y, w, h);
+  if (stroke) ctx.strokeRect(x + 1, y + 1, Math.max(1, w - 2), Math.max(1, h - 2));
+}
+
 function drawAtlas(canvas, regions, slot, { palette, focusedRegionId, contact = 0, lod = 2, time = 0 } = {}) {
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
@@ -113,11 +134,11 @@ function drawAtlas(canvas, regions, slot, { palette, focusedRegionId, contact = 
     const accent = focused ? p.gold : p.cyan;
     const alpha = clamp(0.10 + region.priority * 0.11 + (focused ? 0.18 : 0) + contact * (0.08 + pulse * 0.06), 0.08, 0.46);
     ctx.fillStyle = accent.startsWith('#') ? hexToRgba(accent, alpha) : accent;
-    ctx.fillRect(x, y, w, h);
+    paintRegionShape(ctx, region, size, { fill: true });
     ctx.strokeStyle = accent;
     ctx.globalAlpha = focused ? 0.98 : 0.52 + contact * 0.26;
     ctx.lineWidth = Math.max(1, size / 512 * (focused ? 2.4 : 1.1));
-    ctx.strokeRect(x + 1, y + 1, Math.max(1, w - 2), Math.max(1, h - 2));
+    paintRegionShape(ctx, region, size, { stroke: true });
     ctx.globalAlpha = 1;
 
     if (lod === 0) {
@@ -159,7 +180,7 @@ function drawMasks(emissiveCanvas, roughnessCanvas, regions, slot, focusedRegion
       const r = region.rect, focused = region.id === focusedRegionId;
       const value = Math.round(clamp((focused ? .92 : .12 + region.priority * .16) + contact * .42) * 255);
       ctx.fillStyle = `rgb(${value},${value},${value})`;
-      ctx.fillRect(r.x * size, canvasY(r, size), r.w * size, r.h * size);
+      paintRegionShape(ctx, region, size, { fill: true });
     }
   }
   if (roughnessCanvas) {
@@ -170,7 +191,7 @@ function drawMasks(emissiveCanvas, roughnessCanvas, regions, slot, focusedRegion
       const r = region.rect, focused = region.id === focusedRegionId;
       const value = focused ? 78 : Math.round(145 - contact * 42);
       ctx.fillStyle = `rgb(${value},${value},${value})`;
-      ctx.fillRect(r.x * size, canvasY(r, size), r.w * size, r.h * size);
+      paintRegionShape(ctx, region, size, { fill: true });
     }
   }
 }
@@ -283,8 +304,12 @@ export class SurfaceObject {
   hitTest(intersection) {
     if (!intersection || intersection.object !== this.mesh || !intersection.uv) return null;
     const surfaceSlot = clamp(Number(intersection.face?.materialIndex ?? 0), 0, this.surfaceSlots - 1);
-    const region = resolveRegionAtUv(this.regions, intersection.uv, surfaceSlot);
-    return region ? { object:this, region, uv:intersection.uv.clone?.() ?? {...intersection.uv}, surfaceSlot, intersection } : null;
+    const faceIndex = Number(intersection.faceIndex);
+    const topologyRegion = Number.isInteger(faceIndex)
+      ? this.regions.find(region => Array.isArray(region.faceIndices) && region.faceIndices.includes(faceIndex))
+      : null;
+    const region = topologyRegion ?? resolveRegionAtUv(this.regions, intersection.uv, surfaceSlot);
+    return region ? { object:this, region, uv:intersection.uv.clone?.() ?? {...intersection.uv}, surfaceSlot, faceIndex, intersection } : null;
   }
 
   focus(regionId = null) {
