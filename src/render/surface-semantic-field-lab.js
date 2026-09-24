@@ -58,10 +58,18 @@ function irregularNoUv(){
   p.needsUpdate=true;g.computeVertexNormals();return g;
 }
 
+function adaptiveAtlasSize(){
+  const width=typeof innerWidth==='number'?innerWidth:1280;
+  const dpr=typeof devicePixelRatio==='number'?devicePixelRatio:1;
+  if(width<700)return 384;
+  if(width<1100||dpr>1.5)return 512;
+  return 768;
+}
+
 function makeObject(scene,{id,label,shape,geometry,position,rotation=[0,0,0],palette}){
   const mesh=new THREE.Mesh(geometry,new THREE.MeshBasicMaterial({color:0x08202b}));
   mesh.name=id;mesh.position.fromArray(position);mesh.rotation.set(...rotation);scene.add(mesh);
-  const ssf=new TopologySurfaceObject({id,mesh,shape,content:contentFor(id,label),palette,atlasSize:1024,enableDisplacement:true,topologyOptions:{seamAngle:Math.PI/7,curvatureThreshold:.02}});
+  const ssf=new TopologySurfaceObject({id,mesh,shape,content:contentFor(id,label),palette,atlasSize:adaptiveAtlasSize(),enableDisplacement:true,topologyOptions:{seamAngle:Math.PI/7,curvatureThreshold:.02}});
   return ssf;
 }
 
