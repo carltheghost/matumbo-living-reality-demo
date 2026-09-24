@@ -263,8 +263,8 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
         item.element.style.width=`${Math.round(transform.width*SURFACE_PIXELS_PER_UNIT)}px`;item.element.style.height=`${Math.round(transform.height*SURFACE_PIXELS_PER_UNIT)}px`;
         item.element.dataset.objectShape=shape;
         if(item.id==='front'&&record.livePanel){
-          record.livePanel.style.setProperty('--lens-surface-width',`${Math.round(face.width*SURFACE_PIXELS_PER_UNIT)}px`);
-          record.livePanel.style.setProperty('--lens-surface-height',`${Math.round(face.height*SURFACE_PIXELS_PER_UNIT)}px`);
+          record.livePanel.style.setProperty('--lens-surface-width',`${Math.round(transform.width*SURFACE_PIXELS_PER_UNIT)}px`);
+          record.livePanel.style.setProperty('--lens-surface-height',`${Math.round(transform.height*SURFACE_PIXELS_PER_UNIT)}px`);
         }
       });
     }
@@ -312,7 +312,9 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     if(!feature||!node||!object)return false;
     if(mountedSurface?.featureId===featureId&&mountedSurface.livePanel===panel)return true;
     clearFeatureSurface();
-    const livePanel=panel&&!panel.hidden?panel:null,fallback=!livePanel,front=livePanel??makeFallbackFront(feature,object),detail=readFeature(featureId),surface=realityObjectSurfaceEngine.describe({feature,object,stage:node.revealStage??0,summary:detail?.summary,readOnly:owner.getSnapshot().mode==='past'});
+    const livePanel=panel&&!panel.hidden?panel:null,fallback=!livePanel,front=livePanel??makeFallbackFront(feature,object),detail=readFeature(featureId);
+    const metrics=measureContent({title:labelFor(feature),lines:[copyFor(feature.description),copyFor(feature.boundary),...(feature.sources??[]).slice(0,4).map(copyFor),copyFor(detail?.summary??'')].filter(Boolean),actions:['Expand','Enter feature']});
+    const fitted=fitObjectToContent(metrics,{shape:object.shape??'rectangle'}),surface=realityObjectSurfaceEngine.describe({feature,object:{...object,width:fitted.width,height:fitted.height,depth:fitted.depth},stage:node.revealStage??0,summary:detail?.summary,readOnly:owner.getSnapshot().mode==='past'});
     const restore=livePanel?{parent:livePanel.parentNode,next:livePanel.nextSibling,style:livePanel.getAttribute('style'),shape:livePanel.getAttribute('data-object-shape'),lensAttached:livePanel.getAttribute('data-lens-surface-attached'),panelSpace:livePanel.getAttribute('data-panel-space'),compact:livePanel.getAttribute('data-compact'),hadLensClass:livePanel.classList.contains('reality-lens-feature-panel')} : null;
     if(livePanel){
       livePanel.classList.add('reality-lens-feature-panel');livePanel.dataset.lensSurfaceAttached='true';livePanel.dataset.objectShape=surface.shape;
