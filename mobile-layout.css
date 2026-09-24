@@ -1,0 +1,137 @@
+/* mobile-layout.css — coherent phone layout for the Living Reality demo.
+ *
+ * Every rule in this file lives inside a narrow-viewport media query
+ * (<=700px, fine-tuned <=420px). Desktop layout and behavior are
+ * intentionally untouched: nothing here applies above 700px.
+ *
+ * What it does on phones:
+ *  1. One slim top header (assembly header, compacted). The command deck's
+ *     top brand bar is hidden — it duplicates the header.
+ *  2. The bottom tab dock (.mcd-bottom) collapses to a single "Tabs" handle,
+ *     CLOSED BY DEFAULT, and expands on tap (everything closed by default,
+ *     materialize only on interaction).
+ *  3. The Aspectus toolbar and the deck inspector become bottom sheets that
+ *     open only via explicit VIEW / INSPECT toggles in the expanded dock.
+ *  4. Touch targets >=44px, readable type, no horizontal overflow.
+ */
+
+@media (max-width:700px){
+  /* ---------- global guards: no sideways scroll, calm overscroll ---------- */
+  html,body{overflow-x:hidden;max-width:100vw}
+  body{overscroll-behavior-y:none}
+
+  /* ---------- top: one slim header ---------- */
+  /* Deck top bar duplicates the assembly header brand + status: hide it. */
+  body #matumbo-command-deck .mcd-top{display:none}
+
+  /* Compact the assembly header to a single row: brand + search + toggles.
+     The 4 nav buttons (Explora / Meum spatium / Foedera / Materia) duplicate
+     the bottom tab dock destinations, so they collapse away on phones. */
+  body #reality-assembly .assembly-header{
+    top:8px;left:10px;right:10px;gap:8px;padding:0 0 8px;
+    align-items:center;flex-wrap:nowrap;
+  }
+  body #reality-assembly .assembly-header nav{display:none}
+  body #reality-assembly .assembly-brand{font-size:16px;gap:6px;flex:0 0 auto}
+  body #reality-assembly .assembly-brand>span{font-size:24px}
+  body #reality-assembly .assembly-brand small{display:none}
+  body #reality-assembly .assembly-quick-find{min-width:0;flex:1 1 auto}
+  body #reality-assembly .assembly-quick-find label{flex:1 1 auto;min-width:0}
+  body #reality-assembly .assembly-quick-find label span{display:none}
+  body #reality-assembly .assembly-quick-find input{width:100%;min-width:0;min-height:44px;font-size:14px}
+  body #reality-assembly .assembly-quick-find button{min-height:44px}
+  body #reality-assembly .assembly-header [data-clean],
+  body #reality-assembly .assembly-header [data-directory-toggle]{min-height:44px;min-width:44px;flex:0 0 auto}
+
+  /* Immersive XR buttons: tuck under the slim header, hide the status line. */
+  html body #immersive-toolbar{
+    top:60px!important;right:8px!important;left:auto!important;
+    max-width:calc(100vw - 16px);padding:4px!important;gap:4px!important;
+  }
+  html body.assembly-mode #immersive-toolbar{top:60px!important;right:8px!important}
+  html body #immersive-toolbar [role="status"]{display:none}
+  html body #immersive-toolbar button{min-height:40px;min-width:44px;font-size:11px}
+
+  /* ---------- bottom: ONE dock, closed by default ---------- */
+  /* Collapsed state: a single centered "Tabs" handle pill. Everything else
+     in the dock is hidden until the user taps the handle. */
+  body #matumbo-command-deck .mcd-bottom{
+    left:50%;right:auto;top:auto;bottom:calc(10px + env(safe-area-inset-bottom));
+    transform:translateX(-50%);padding:6px;border-radius:999px;
+    display:flex;align-items:center;gap:6px;max-width:calc(100vw - 20px);
+  }
+  body #matumbo-command-deck .mcd-bottom>button{display:none}
+  body #matumbo-command-deck .mcd-bottom>button[data-mobile-dock-handle]{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    min-height:48px;min-width:48px;padding:10px 20px;border-radius:999px;
+    font-size:12px;letter-spacing:.12em;text-transform:uppercase;text-align:center;
+  }
+  /* Expanded state: the full tab row slides up above the handle spot. */
+  body.mobile-dock-open #matumbo-command-deck .mcd-bottom{
+    left:8px;right:8px;transform:none;border-radius:16px;
+    flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;padding:8px;gap:6px;
+  }
+  body.mobile-dock-open #matumbo-command-deck .mcd-bottom>button{
+    display:inline-flex;align-items:center;justify-content:center;text-align:center;
+    flex:0 0 auto;min-height:48px;min-width:48px;padding:10px 12px;
+    font-size:10px;letter-spacing:.08em;
+  }
+
+  /* ---------- Aspectus toolbar: hidden sheet until VIEW is tapped ---------- */
+  body #reality-assembly .assembly-toolbar{display:none}
+  body.mobile-view-open #reality-assembly .assembly-toolbar{
+    display:flex;position:absolute;left:8px;right:8px;width:auto;transform:none;
+    top:auto;bottom:calc(74px + env(safe-area-inset-bottom));
+    flex-wrap:wrap;gap:8px;padding:10px;border-radius:14px;z-index:60;
+    max-height:34vh;overflow-y:auto;overscroll-behavior:contain;
+  }
+  body.mobile-view-open #reality-assembly .assembly-toolbar button{min-height:44px;font-size:11px}
+
+  /* ---------- Deck inspector: hidden sheet until INSPECT is tapped ---------- */
+  body #matumbo-command-deck .mcd-right{display:none}
+  body.mobile-inspect-open #matumbo-command-deck .mcd-right{
+    display:block;position:absolute;left:8px;right:8px;top:auto;
+    bottom:calc(74px + env(safe-area-inset-bottom));width:auto;max-width:none;
+    max-height:40vh;overflow-y:auto;overscroll-behavior:contain;z-index:60;
+    border-radius:14px;
+  }
+  body.mobile-inspect-open #matumbo-command-deck .mcd-right button{min-height:44px}
+  body.mobile-inspect-open #matumbo-command-deck .mcd-right .mcd-actions{grid-template-columns:1fr 1fr}
+
+  /* ---------- hints + status ride just above the collapsed handle ---------- */
+  body #reality-assembly .assembly-selection-hint{
+    bottom:calc(112px + env(safe-area-inset-bottom));font-size:11px;
+    width:calc(100% - 32px);max-width:420px;line-height:1.4;
+  }
+  body #reality-assembly .assembly-status{
+    bottom:calc(72px + env(safe-area-inset-bottom));left:12px;right:12px;
+    font-size:11px;white-space:normal;line-height:1.4;
+  }
+  body #hint{
+    bottom:calc(72px + env(safe-area-inset-bottom));font-size:11px;line-height:1.4;
+  }
+
+  /* ---------- selected-object inspector stays a compact sheet ---------- */
+  body #reality-assembly .assembly-inspector{
+    left:8px;right:8px;top:auto;width:auto;
+    bottom:calc(74px + env(safe-area-inset-bottom));max-height:36vh;
+  }
+
+  /* ---------- readable spatial labels, no overflow ---------- */
+  body #reality-assembly .assembly-node-label{font-size:10px;max-width:132px}
+
+  /* ---------- touch-sized chrome controls ---------- */
+  body #matumbo-command-deck button{min-height:44px;touch-action:manipulation}
+  body #reality-assembly button{touch-action:manipulation}
+}
+
+@media (max-width:420px){
+  body #reality-assembly .assembly-brand{font-size:14px}
+  body #reality-assembly .assembly-brand>span{font-size:20px}
+  body #reality-assembly .assembly-header{gap:6px;left:8px;right:8px}
+  body #reality-assembly .assembly-quick-find input{font-size:13px}
+  body #matumbo-command-deck .mcd-bottom>button[data-mobile-dock-handle]{padding:10px 16px;font-size:11px}
+  body #reality-assembly .assembly-selection-hint{font-size:10px}
+  html body #immersive-toolbar{top:56px!important}
+  html body.assembly-mode #immersive-toolbar{top:56px!important}
+}

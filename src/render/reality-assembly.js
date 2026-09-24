@@ -132,7 +132,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   const spatial=buildRealityAssemblyScene({THREE,parent:scene,features:ordered.map((feature,i)=>({...feature,label:labelFor(feature),description:copyFor(feature.description),boundary:copyFor(feature.boundary),sources:(feature.sources??[]).map(copyFor),assemblyTier:'tab',lensGroup:positions[i]?.lensGroup??'worlds',initialTabShape:initialShapes.get(feature.id),initialPosition:positions[i]?.position})),targets,relationships});
   spatial.setActiveGroup(null);
   const featureMap=new Map(features.map(feature=>[feature.id,feature]));
-  const stylesheet=document.createElement('link');stylesheet.rel='stylesheet';stylesheet.href=`${new URL('./reality-assembly.css',import.meta.url).href}?v=20260923-spatial-tabs27`;document.head.append(stylesheet);
+  const stylesheet=document.createElement('link');stylesheet.rel='stylesheet';stylesheet.href=`${new URL('./reality-assembly.css',import.meta.url).href}?v=20260924-aspectus1`;document.head.append(stylesheet);
   const root=document.createElement('section');root.id='reality-assembly';root.hidden=true;root.setAttribute('aria-label','Reality Lens spatial assembly');
   root.innerHTML=`<header class="assembly-header"><a class="assembly-brand" href="?feature=reality-lens"><span aria-hidden="true">◇</span><div>maTumbo<small>People × planet × possibility</small></div></a><nav aria-label="Assembly navigation"><button data-home>Explore</button><button data-enter-person>Your space</button><button data-enter-contracts>Contracts</button><button data-grid>Block World</button></nav><form class="assembly-quick-find" data-quick-find role="search"><label><span>Find object</span><input data-quick-search type="search" autocomplete="off" placeholder="Search YouTube, agents…" aria-label="Find a Reality Lens object"></label><button type="submit">Locate</button></form><button data-clean>Hide panels</button></header>
   <aside class="assembly-directory"><p class="assembly-eyebrow">Reality Lens Ω</p><h1>Many worlds.<br><em>One reality.</em></h1><p class="assembly-intro">Explore the same universe across space and depth.<br>Every window is a real, rearrangeable tab.</p><label class="assembly-search-label">Find a connected feature<input data-search placeholder="Search worlds, contracts…" type="search"></label><nav class="assembly-catalog" aria-label="Feature objects"></nav><p class="assembly-note">Designed 3D feature previews.<br>Only the selected feature opens its connected controls.</p></aside>
@@ -185,14 +185,14 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   find('.assembly-tab-controls h3').textContent='Mutabilitas';
   find('[data-anchor-note]').textContent='Instrumentum fixum.';
   find('[data-lock-toggle]').textContent='Fige';find('[data-focus]').textContent='Apropinqua';find('[data-side-reality]').textContent='Nova realitas';
-  find('[data-enter]').textContent='Ingredere ↗';find('[data-open]').textContent='Aperi';find('[data-open-secondary]').textContent='Aperi / claude';
+  find('[data-enter]').textContent='Ingredere ↗';find('[data-open]').textContent='Aperi';find('[data-open-secondary]').textContent='Expand / Close';
   all('.assembly-inspector h3')[1].textContent='Fontes eiusdem instrumenti';
-  find('.assembly-toolbar [data-home]').textContent='Initium';find('.assembly-toolbar [data-view="4d"]').textContent='4D · tempus';
+  find('.assembly-toolbar [data-home]').textContent='Home';find('.assembly-toolbar [data-view="4d"]').textContent='IV · tempus';find('.assembly-toolbar [data-view="3d"]').textContent='III';
   find('.assembly-toolbar .assembly-view .assembly-eyebrow').textContent='Aspectus';
-  find('[data-present]').textContent='Praesens';find('[data-export]').textContent='Exporta';
+  find('[data-present]').textContent='Present';find('[data-export]').textContent='Export';
   const readout=document.createElement('div');readout.className='assembly-size-readout';readout.innerHTML='<span>Magnitudo</span><strong data-size-readout>1.0×</strong><small>Scrolla super obiectum</small>';
   find('[data-tab-size]').closest('label').replaceWith(readout);find('.assembly-nudges').remove();
-  find('.assembly-travel').remove();find('[data-interaction="orbit"]').remove();find('[data-interaction="move"]').textContent='Disponde';
+  find('.assembly-travel').remove();find('[data-interaction="orbit"]').remove();find('[data-interaction="move"]').textContent='Arrange';
   find('[data-edit-note]').textContent='Trahe ad disponendum; Shift-trahe per profunditatem. Scrolla obiectum ad augendum.';
   all('.assembly-inspector dt').forEach((term,index)=>{term.textContent=['Identitas','Positio · x / y / z','Status','Fontes'][index]??term.textContent;});
   const objectSymbol=find('.assembly-object-symbol'),objectTitle=find('[data-title]'),objectDescription=find('[data-description]'),objectHero=document.createElement('div'),objectCopy=document.createElement('div'),stageBadge=document.createElement('span');
