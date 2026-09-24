@@ -79,7 +79,7 @@ try{
     assert.equal(universal.feed.available,true);
     assert.match(universal.feed.sourceName,/CONTRACT_/);
     assert.ok(universal.universalObjectCount>0);
-    await page.screenshot({path:resolve(output,`${mode}-reality-lens-contract-universal.png`),fullPage:true});
+    await page.screenshot({path:resolve(output,`${mode}-reality-lens-contract-universal.png`),fullPage:false,timeout:15000});
     assert.deepEqual(errors,[]);
     results.push({mode,completed,projection,universal,errors});
     await context.close();
