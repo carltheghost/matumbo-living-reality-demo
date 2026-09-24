@@ -53,7 +53,7 @@ try{
     const url=new URL(base);
     url.searchParams.set('feature','reality-lens');
     url.searchParams.set('proof',expectedBuild??'local');
-    await page.goto(url.href,{waitUntil:'domcontentloaded',timeout:60000});
+    await page.goto(url.href,{waitUntil:'commit',timeout:30000});
     const deadline=Date.now()+45000;
     let ready=false;
     let diagnostics=null;
