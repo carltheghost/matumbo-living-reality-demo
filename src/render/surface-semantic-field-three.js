@@ -50,10 +50,10 @@ function makeCanvas(size, canvasFactory = null) {
   return null;
 }
 
-function textureFromCanvas(canvas) {
+function textureFromCanvas(canvas, colorSpace = THREE.SRGBColorSpace) {
   if (!canvas) return null;
   const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.colorSpace = colorSpace;
   texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
   texture.minFilter = THREE.LinearMipmapLinearFilter;
   texture.magFilter = THREE.LinearFilter;
@@ -153,7 +153,12 @@ function drawAtlas(canvas, regions, slot, { palette, focusedRegionId, contact = 
     ctx.font = `700 ${Math.max(10, Math.round(size * .015))}px ui-monospace, SFMono-Regular, Menlo, monospace`;
     ctx.fillText(String(region.label).toUpperCase().slice(0, 28), x + pad, y + pad, Math.max(1, w - pad * 2));
 
-    if (lod >= 2) {
+    if (lod === 1) {
+      ctx.fillStyle = p.ink;
+      ctx.font = `650 ${Math.max(11, Math.round(size * .016))}px Inter, system-ui, sans-serif`;
+      const compact = String(region.value ?? '').trim().slice(0, 36);
+      if (compact) ctx.fillText(compact, x + pad, y + pad + size * .026, Math.max(1, w - pad * 2));
+    } else if (lod >= 2) {
       ctx.fillStyle = p.ink;
       ctx.font = `650 ${Math.max(13, Math.round(size * (focused ? .026 : .022)))}px Inter, system-ui, sans-serif`;
       const lines = wrapLines(ctx, String(region.value ?? ''), Math.max(1, w - pad * 2), lod >= 3 ? 4 : 2);
@@ -262,23 +267,48 @@ export class SurfaceObject {
     this.time = 0;
     this.canvases = [];
     this.materials = [];
+    this._regionListeners = new Set();
     this._baseEmissive = .46;
     this._lastRenderKey = '';
+    this._ownedGeometry = this.mesh.geometry;
 
     for (let slot = 0; slot < this.surfaceSlots; slot++) {
       const colorCanvas = makeCanvas(this.atlasSize,canvasFactory);
       const emissiveCanvas = makeCanvas(this.atlasSize,canvasFactory);
       const roughnessCanvas = makeCanvas(this.atlasSize,canvasFactory);
-      const map = textureFromCanvas(colorCanvas);
-      const emissiveMap = textureFromCanvas(emissiveCanvas);
-      const roughnessMap = textureFromCanvas(roughnessCanvas);
+      const map = textureFromCanvas(colorCanvas, THREE.SRGBColorSpace);
+      const emissiveMap = textureFromCanvas(emissiveCanvas, THREE.SRGBColorSpace);
+      const roughnessMap = textureFromCanvas(roughnessCanvas, THREE.NoColorSpace);
       const material = makeMaterial({map,emissiveMap,roughnessMap,accent:slot % 2 ? this.palette.gold : this.palette.cyan,enableDisplacement:enableDisplacement && geometryCanDisplace(this.mesh.geometry)});
       this.canvases.push({colorCanvas,emissiveCanvas,roughnessCanvas,map,emissiveMap,roughnessMap});
       this.materials.push(material);
     }
     this.mesh.material = this.materials.length === 1 ? this.materials[0] : this.materials;
     this.mesh.userData.ssf = this;
+    this._syncSkin();
     this.renderSkin(true);
+  }
+
+  _syncSkin() {
+    this.skin = Object.freeze({
+      ...this.skin,
+      regions: Object.freeze([...this.regions]),
+      state: Object.freeze({
+        focusedRegionId: this.focusedRegionId,
+        contact: this.contact,
+        lod: this.lod,
+      }),
+    });
+  }
+
+  _notifyRegionsChanged() {
+    for (const listener of this._regionListeners) listener(this);
+  }
+
+  subscribeRegions(listener) {
+    if (typeof listener !== 'function') return () => {};
+    this._regionListeners.add(listener);
+    return () => this._regionListeners.delete(listener);
   }
 
   renderSkin(force = false) {
@@ -309,13 +339,15 @@ export class SurfaceObject {
       ? this.regions.find(region => Array.isArray(region.faceIndices) && region.faceIndices.includes(faceIndex))
       : null;
     const region = topologyRegion ?? resolveRegionAtUv(this.regions, intersection.uv, surfaceSlot);
-    return region ? { object:this, region, uv:intersection.uv.clone?.() ?? {...intersection.uv}, surfaceSlot, faceIndex, intersection } : null;
+    if (!region || region.interactive === false) return null;
+    return { object:this, region, uv:intersection.uv.clone?.() ?? {...intersection.uv}, surfaceSlot, faceIndex, intersection };
   }
 
   focus(regionId = null) {
     const next = regionId && this.regions.some(r=>r.id===regionId) ? regionId : null;
     if (next === this.focusedRegionId) return;
     this.focusedRegionId = next;
+    this._syncSkin();
     this.renderSkin(true);
   }
 
@@ -326,7 +358,11 @@ export class SurfaceObject {
       changed = true;
       return Object.freeze({...region,...patch,rect:region.rect});
     });
-    if (changed) this.renderSkin(true);
+    if (changed) {
+      this._syncSkin();
+      this.renderSkin(true);
+      this._notifyRegionsChanged();
+    }
     return changed;
   }
 
@@ -340,7 +376,11 @@ export class SurfaceObject {
     const projectedPixels = viewportHeight * radius / (distance * Math.tan(THREE.MathUtils.degToRad(camera.fov ?? 60) / 2));
     const priority = Math.max(.2,...this.regions.map(r=>r.priority ?? .5));
     const next = semanticLod({projectedPixels,viewCosine:1,focused,priority,budget});
-    if (next !== this.lod) {this.lod=next;this.renderSkin(true);}
+    if (next !== this.lod) {
+      this.lod=next;
+      this._syncSkin();
+      this.renderSkin(true);
+    }
     return this.lod;
   }
 
@@ -348,6 +388,7 @@ export class SurfaceObject {
     const next = clamp(Number(value) || 0);
     if (Math.abs(next - this.contact) < .025) return;
     this.contact = next;
+    this._syncSkin();
     this.renderSkin(true);
   }
 
@@ -361,6 +402,8 @@ export class SurfaceObject {
       set.map?.dispose(); set.emissiveMap?.dispose(); set.roughnessMap?.dispose();
     }
     for (const material of this.materials) material.dispose();
+    this._ownedGeometry?.dispose?.();
+    this._regionListeners.clear();
   }
 }
 
@@ -396,8 +439,9 @@ function createA11yMirror(surfaceObjects, onAction) {
       root.append(button);
     }
   };
+  const unsubs = surfaceObjects.map(object => object.subscribeRegions?.(sync)).filter(Boolean);
   sync();
-  return {root,sync,dispose(){root.remove();}};
+  return {root,sync,dispose(){for(const unsub of unsubs)unsub?.();root.remove();}};
 }
 
 export function createSurfaceInteractionSystem({camera,domElement,surfaceObjects=[],onAction=null}={}) {
@@ -412,15 +456,20 @@ export function createSurfaceInteractionSystem({camera,domElement,surfaceObjects
     const rect = domElement.getBoundingClientRect();
     ndc.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
     raycaster.setFromCamera(ndc, camera);
-    const intersections = raycaster.intersectObjects(objects.map(o=>o.mesh), false);
-    for (const intersection of intersections) {
-      const owner = intersection.object.userData.ssf;
-      const hit = owner?.hitTest(intersection);
-      if (hit) return hit;
-    }
-    return null;
+    const nearest = raycaster.intersectObjects(objects.map(o=>o.mesh), false)[0] ?? null;
+    if (!nearest) return null;
+    const owner = nearest.object.userData.ssf;
+    return owner?.hitTest(nearest) ?? null;
+  };
+  let gesture = null;
+  const pointerDown = event => {
+    gesture = {pointerId:event.pointerId,x:event.clientX,y:event.clientY,moved:false};
   };
   const pointerMove = event => {
+    if (gesture?.pointerId === event.pointerId) {
+      const dx=event.clientX-gesture.x,dy=event.clientY-gesture.y;
+      if (dx*dx+dy*dy > 36) gesture.moved=true;
+    }
     const hit = locate(event);
     if (hovered?.object !== hit?.object || hovered?.region?.id !== hit?.region?.id) {
       hovered?.object?.focus(null);
@@ -429,26 +478,39 @@ export function createSurfaceInteractionSystem({camera,domElement,surfaceObjects
       domElement.style.cursor = hovered ? 'pointer' : 'grab';
     }
   };
-  const click = event => {
+  const pointerUp = event => {
+    const active = gesture;
+    gesture = null;
+    if (!active || active.pointerId !== event.pointerId || active.moved) return;
+    const dx=event.clientX-active.x,dy=event.clientY-active.y;
+    if (dx*dx+dy*dy > 36) return;
     const hit = locate(event);
     if (!hit) return;
     hit.object.focus(hit.region.id);
     onAction?.({...hit,source:'pointer'});
   };
+  const pointerCancel = () => { gesture=null; };
+  domElement.addEventListener('pointerdown',pointerDown);
   domElement.addEventListener('pointermove',pointerMove);
-  domElement.addEventListener('click',click);
+  domElement.addEventListener('pointerup',pointerUp);
+  domElement.addEventListener('pointercancel',pointerCancel);
 
   return {
     objects,raycaster,mirror,
     selectFromRay(origin,direction,{source='xr'}={}){
       raycaster.ray.origin.copy(origin);raycaster.ray.direction.copy(direction).normalize();
-      const intersections=raycaster.intersectObjects(objects.map(o=>o.mesh),false);
-      for(const intersection of intersections){
-        const owner=intersection.object.userData.ssf,hit=owner?.hitTest(intersection);
-        if(hit){owner.focus(hit.region.id);onAction?.({...hit,source});return hit;}
-      }
+      const nearest=raycaster.intersectObjects(objects.map(o=>o.mesh),false)[0]??null;
+      if(!nearest)return null;
+      const owner=nearest.object.userData.ssf,hit=owner?.hitTest(nearest);
+      if(hit){owner.focus(hit.region.id);onAction?.({...hit,source});return hit;}
       return null;
     },
-    dispose(){domElement.removeEventListener('pointermove',pointerMove);domElement.removeEventListener('click',click);mirror.dispose();}
+    dispose(){
+      domElement.removeEventListener('pointerdown',pointerDown);
+      domElement.removeEventListener('pointermove',pointerMove);
+      domElement.removeEventListener('pointerup',pointerUp);
+      domElement.removeEventListener('pointercancel',pointerCancel);
+      mirror.dispose();
+    }
   };
 }
