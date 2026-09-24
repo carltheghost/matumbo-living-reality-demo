@@ -104,7 +104,7 @@ function paintRegionShape(ctx, region, size, { fill = false, stroke = false } = 
   if (stroke) ctx.strokeRect(x + 1, y + 1, Math.max(1, w - 2), Math.max(1, h - 2));
 }
 
-function drawAtlas(canvas, regions, slot, { palette, focusedRegionId, contact = 0, lod = 2, time = 0 } = {}) {
+export function paintSemanticAtlas(canvas, regions, slot, { palette, focusedRegionId, contact = 0, lod = 2, time = 0 } = {}) {
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
   const size = canvas.width;
@@ -317,7 +317,7 @@ export class SurfaceObject {
     this._lastRenderKey = key;
     for (let slot = 0; slot < this.surfaceSlots; slot++) {
       const c = this.canvases[slot];
-      drawAtlas(c.colorCanvas, this.regions, slot, {palette:this.palette,focusedRegionId:this.focusedRegionId,contact:this.contact,lod:this.lod,time:this.time});
+      paintSemanticAtlas(c.colorCanvas, this.regions, slot, {palette:this.palette,focusedRegionId:this.focusedRegionId,contact:this.contact,lod:this.lod,time:this.time});
       drawMasks(c.emissiveCanvas,c.roughnessCanvas,this.regions,slot,this.focusedRegionId,this.contact);
       if (c.map) c.map.needsUpdate = true;
       if (c.emissiveMap) c.emissiveMap.needsUpdate = true;
@@ -422,17 +422,17 @@ export function surfaceContact(a, b, range = 1.4) {
   return strength;
 }
 
-function createA11yMirror(surfaceObjects, onAction) {
-  if (typeof document === 'undefined') return {root:null,sync(){},dispose(){}};
-  const root = document.createElement('section');
+function createA11yMirror(surfaceObjects, onAction, documentRoot = globalThis.document) {
+  if (!documentRoot?.createElement) return {root:null,sync(){},dispose(){}};
+  const root = documentRoot.createElement('section');
   root.id = 'ssf-accessibility-mirror';
   root.setAttribute('aria-label','Surface information controls');
   Object.assign(root.style,{position:'fixed',left:'-10000px',top:'0',width:'1px',height:'1px',overflow:'hidden'});
-  document.body.append(root);
+  documentRoot.body?.append?.(root);
   const sync = () => {
     root.replaceChildren();
     for (const object of surfaceObjects) for (const region of object.regions) if (region.interactive) {
-      const button = document.createElement('button');
+      const button = documentRoot.createElement('button');
       button.type='button';
       button.textContent=`${object.id}: ${region.label} ${region.value ?? ''}`;
       button.onclick=()=>{object.focus(region.id);onAction?.({object,region,source:'keyboard'});};
@@ -444,13 +444,13 @@ function createA11yMirror(surfaceObjects, onAction) {
   return {root,sync,dispose(){for(const unsub of unsubs)unsub?.();root.remove();}};
 }
 
-export function createSurfaceInteractionSystem({camera,domElement,surfaceObjects=[],onAction=null}={}) {
+export function createSurfaceInteractionSystem({camera,domElement,surfaceObjects=[],onAction=null,documentRoot=globalThis.document}={}) {
   if (!camera || !domElement) throw Error('SSF interaction requires camera and domElement');
   const objects = [...surfaceObjects];
   const raycaster = new THREE.Raycaster();
   const ndc = new THREE.Vector2();
   let hovered = null;
-  const mirror = createA11yMirror(objects,onAction);
+  const mirror = createA11yMirror(objects,onAction,documentRoot);
 
   const locate = event => {
     const rect = domElement.getBoundingClientRect();
