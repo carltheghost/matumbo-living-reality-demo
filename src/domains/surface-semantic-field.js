@@ -25,10 +25,13 @@ export function hashUnit(value) {
 }
 
 function normalizeRect(rect) {
-  const x = clamp(Number(rect?.x ?? 0));
-  const y = clamp(Number(rect?.y ?? 0));
-  const w = clamp(Number(rect?.w ?? 1), 0.001, 1 - x);
-  const h = clamp(Number(rect?.h ?? 1), 0.001, 1 - y);
+  const minimum = 0.001;
+  // Leave room for the minimum extent so normalization can never produce
+  // x + w > 1 or y + h > 1, even for authored/persisted edge rectangles.
+  const x = clamp(Number(rect?.x ?? 0), 0, 1 - minimum);
+  const y = clamp(Number(rect?.y ?? 0), 0, 1 - minimum);
+  const w = clamp(Number(rect?.w ?? 1), minimum, 1 - x);
+  const h = clamp(Number(rect?.h ?? 1), minimum, 1 - y);
   return { x: round6(x), y: round6(y), w: round6(w), h: round6(h) };
 }
 
@@ -93,7 +96,29 @@ export function createSemanticRegions({ shape = 'irregular', content = [], autho
   ];
 
   if (resolvedShape === 'cube' && slots >= 2) {
-    return items.map((item, i) => regionFromContent(item, i, { x: 0.08, y: 0.1, w: 0.84, h: 0.8 }, i % Math.min(6, slots)));
+    const faceCount = Math.min(6, slots);
+    const placements = new Array(items.length);
+    for (let slot = 0; slot < faceCount; slot++) {
+      const indices = items.map((_, i) => i).filter(i => i % faceCount === slot);
+      if (!indices.length) continue;
+      const { cols, rows } = bestGrid(indices.length, 1);
+      const band = { x: 0.08, y: 0.10, w: 0.84, h: 0.80 };
+      const gutter = 0.018;
+      const cellW = band.w / cols, cellH = band.h / rows;
+      indices.forEach((itemIndex, localIndex) => {
+        const col = localIndex % cols, row = Math.floor(localIndex / cols);
+        placements[itemIndex] = {
+          slot,
+          rect: {
+            x: band.x + col * cellW + gutter,
+            y: band.y + row * cellH + gutter,
+            w: Math.max(0.02, cellW - gutter * 2),
+            h: Math.max(0.02, cellH - gutter * 2),
+          },
+        };
+      });
+    }
+    return items.map((item, i) => regionFromContent(item, i, placements[i].rect, placements[i].slot));
   }
 
   const band = safeBandForShape(resolvedShape);
@@ -116,8 +141,10 @@ export function createSemanticRegions({ shape = 'irregular', content = [], autho
 
 export function resolveRegionAtUv(regions, uv, surfaceSlot = 0) {
   if (!uv || !Number.isFinite(uv.x) || !Number.isFinite(uv.y)) return null;
-  const u = uv.x - Math.floor(uv.x);
-  const v = uv.y - Math.floor(uv.y);
+  // Materials use ClampToEdgeWrapping, so hit addressing must use the same
+  // [0,1] domain rather than modulo wrapping to the opposite side.
+  const u = clamp(uv.x);
+  const v = clamp(uv.y);
   let best = null;
   for (const region of regions ?? []) {
     if ((region.surfaceSlot ?? 0) !== surfaceSlot) continue;
