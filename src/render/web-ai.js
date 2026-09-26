@@ -10,7 +10,7 @@
  *  - standalone mode keeps a compact, scrollable glass console
  *  - Reality Lens reparents this same live DOM into the selected object's
  *    Three.js CSS3D face; no second Web + AI cube or floating panel is made
- *  - two tabs (WEB / AI HELP); the task note stays local until the user copies it
+ *  - three tabs (WEB / AI HELP / COMPUTE); task notes and economic rehearsal state stay local
  *  - minimize and drag apply only while the console is outside Reality Lens
  *  - mobile: full-width sheet at <=700px (390x844)
  *
@@ -33,6 +33,25 @@ import {
   classifyWebTarget,
   getWebAiAssistant,
 } from "../domains/web-ai.js?v=20260923-lens-return2";
+import {
+  COMPUTE_EXCHANGE_BOUNDARY,
+  COMPUTE_PROVIDERS,
+  DEFAULT_REWARD_POLICY,
+  createComputeExchangeLedger,
+  normalizeUsageReceipt,
+  selectProviderRoute,
+} from "../domains/compute-exchange.js?v=20260925-compute2";
+import {
+  COMPUTE_ACCOUNT_BOUNDARY,
+  createComputeAccount,
+} from "../domains/compute-account.js?v=20260925-compute1";
+import {
+  CONTRIBUTION_VAULT_BOUNDARY,
+  CONTRIBUTION_SCOPES,
+  createContributionVault,
+} from "../domains/contribution-vault.js?v=20260925-compute1";
+import { createEconomicTimeline } from "../domains/economic-timeline.js?v=20260925-compute1";
+import { evaluateComputeEconomics } from "../domains/compute-economics-policy.js?v=20260925-compute1";
 
 export { WEB_AI_CONSOLE_SOURCE };
 
@@ -89,6 +108,36 @@ const STYLE_TEXT = `
 .web-ai-assistant strong{color:#e4fbff;font-size:12px;letter-spacing:.02em}
 .web-ai-assistant p{margin:0;color:#9ebbc5;font-size:9px;line-height:1.4}
 .web-ai-assistant-actions{display:flex;gap:6px;flex-wrap:wrap}
+.web-ai-economy-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
+.web-ai-metric{padding:9px;border:1px solid rgba(125,212,255,.17);border-radius:10px;background:rgba(7,26,35,.62)}
+.web-ai-metric b{display:block;color:#e8fbff;font-size:16px;font-variant-numeric:tabular-nums}
+.web-ai-metric span{display:block;margin-top:3px;color:#86aeb9;font-size:7px;letter-spacing:.11em;text-transform:uppercase}
+.web-ai-economy-flow{display:grid;gap:5px;padding:9px;border:1px solid rgba(125,212,255,.16);border-radius:10px;background:rgba(3,12,20,.55)}
+.web-ai-economy-flow div{padding:6px 7px;border-left:2px solid rgba(125,212,255,.42);background:rgba(42,137,167,.08);color:#b8d9e2;font-size:8px;line-height:1.35}
+.web-ai-economy-form{display:grid;gap:7px;padding:10px;border:1px solid rgba(255,210,122,.24);border-radius:10px;background:rgba(121,75,40,.08)}
+.web-ai-economy-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.web-ai-economy-form input,.web-ai-economy-form select{width:100%;box-sizing:border-box;padding:8px 9px;border:1px solid rgba(125,212,255,.22);border-radius:9px;background:rgba(3,12,20,.8);color:#dff9ff;font-size:9px;font-family:inherit}
+.web-ai-economy-check{display:flex;align-items:flex-start;gap:7px;color:#b9cfd6;font-size:8px;line-height:1.35}
+.web-ai-economy-providers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.web-ai-economy-provider{display:grid;gap:5px;padding:8px;border:1px solid rgba(125,212,255,.15);border-radius:9px;background:rgba(7,26,35,.55)}
+.web-ai-economy-provider strong{font-size:10px;color:#e4fbff}
+.web-ai-economy-provider span{font-size:7px;color:#789da8;line-height:1.35}
+.web-ai-economy-section{display:grid;gap:8px;padding:10px;border:1px solid rgba(125,212,255,.16);border-radius:11px;background:rgba(3,12,20,.45)}
+.web-ai-economy-title{display:flex;align-items:baseline;justify-content:space-between;gap:8px;color:#e7fbff;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.web-ai-economy-title span{color:#6f98a4;font-size:7px;font-weight:600}
+.web-ai-economy-actions{display:flex;gap:6px;flex-wrap:wrap}
+.web-ai-economy-statusline{font-size:8px;line-height:1.4;color:#a8c5ce}
+.web-ai-economy-timeline{display:grid;gap:5px;max-height:180px;overflow:auto}
+.web-ai-economy-event{display:grid;grid-template-columns:auto 1fr auto;gap:7px;padding:6px 7px;border:1px solid rgba(125,212,255,.1);border-radius:8px;background:rgba(7,26,35,.48);font-size:7px}
+.web-ai-economy-event b{color:#cceef6;font-variant-numeric:tabular-nums}
+.web-ai-economy-event span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#8eb0ba}
+.web-ai-economy-event code{color:#7fd4ff;font-size:7px}
+.web-ai-route-result{padding:8px;border:1px solid rgba(112,226,184,.2);border-radius:8px;background:rgba(46,154,113,.08);color:#bfead5;font-size:8px;line-height:1.4}
+.web-ai-route-quotes{display:grid;gap:6px}
+.web-ai-route-quote{display:grid;grid-template-columns:1.2fr .8fr .8fr;gap:6px;align-items:center}
+.web-ai-route-quote strong{font-size:8px;color:#cceef6}
+.web-ai-route-quote input{width:100%;box-sizing:border-box;padding:7px;border:1px solid rgba(125,212,255,.18);border-radius:8px;background:rgba(3,12,20,.8);color:#dff9ff;font-size:8px}
+@media (max-width:700px){.web-ai-economy-grid,.web-ai-economy-providers,.web-ai-economy-form-grid{grid-template-columns:1fr}.web-ai-route-quote{grid-template-columns:1fr 1fr 1fr}}
 .web-ai-boundary{padding:8px 15px 12px;color:#8fa6b1;font-size:8px;line-height:1.4;border-top:1px solid rgba(125,212,255,.1)}
 .web-ai-boundary strong{color:#c9a86a;font-size:7px;letter-spacing:.13em}
 #web-ai-chip{position:fixed;right:20px;bottom:86px;z-index:61;appearance:none;padding:9px 14px;border:1px solid rgba(125,212,255,.5);border-radius:999px;background:rgba(10,26,40,.72);color:#cfe9ff;font-size:11px;letter-spacing:.14em;font-weight:700;cursor:pointer;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
@@ -190,6 +239,10 @@ export function createWebAiConsole({
   (doc.head || doc).appendChild(styleEl);
 
   const state = { opened: false, minimized: false, tab: "web", url: "", note: "", pendingExternalReturn: null };
+  const computeLedger = createComputeExchangeLedger();
+  const computeAccount = createComputeAccount({ monthlyBudgetUsd: 100, perTaskBudgetUsd: 25 });
+  const contributionVault = createContributionVault();
+  const economicTimeline = createEconomicTimeline();
   try{
     const receipt=JSON.parse(readStorage(sessionStore,WEB_AI_STORAGE_KEYS.lensReturn)||"null");
     if(receipt&&typeof receipt.assistantId==="string"&&Number.isFinite(receipt.openedAt)&&Date.now()-receipt.openedAt<12*60*60*1000)state.pendingExternalReturn=receipt;
@@ -233,8 +286,13 @@ export function createWebAiConsole({
   aiTab.type = "button";
   aiTab.setAttribute("role", "tab");
   aiTab.dataset.tab = "ai";
+  const economyTab = el(doc, "button", "web-ai-tab", "COMPUTE");
+  economyTab.type = "button";
+  economyTab.setAttribute("role", "tab");
+  economyTab.dataset.tab = "economy";
   tabs.appendChild(webTab);
   tabs.appendChild(aiTab);
+  tabs.appendChild(economyTab);
   panel.appendChild(tabs);
 
   const body = el(doc, "div", "web-ai-body");
@@ -336,8 +394,251 @@ export function createWebAiConsole({
   const assistants = el(doc, "div", "web-ai-assistants");
   aiSection.appendChild(assistants);
 
+  // --- COMPUTE tab ---
+  const economySection = el(doc, "section");
+  economySection.dataset.panel = "economy";
+  economySection.setAttribute("role", "tabpanel");
+  economySection.hidden = true;
+
+  const economyIntro = el(doc, "div", "web-ai-status",
+    "ONE TASK · MANY MODELS · ONE RECEIPT TRAIL. RAW TOKENS ARE EVIDENCE; VERIFIED SPEND IS THE REWARD BASIS.");
+  economyIntro.dataset.kind = "info";
+  economySection.appendChild(economyIntro);
+
+  const metrics = el(doc, "div", "web-ai-economy-grid");
+  const balanceMetric = el(doc, "div", "web-ai-metric");
+  const balanceValue = el(doc, "b", null, "$0.00");
+  balanceMetric.append(balanceValue, el(doc, "span", null, "compute credits"));
+  const spendMetric = el(doc, "div", "web-ai-metric");
+  const spendValue = el(doc, "b", null, "$0.00");
+  spendMetric.append(spendValue, el(doc, "span", null, "verified spend"));
+  const tokenMetric = el(doc, "div", "web-ai-metric");
+  const tokenValue = el(doc, "b", null, "0");
+  tokenMetric.append(tokenValue, el(doc, "span", null, "model tokens"));
+  const rewardMetric = el(doc, "div", "web-ai-metric");
+  const rewardValue = el(doc, "b", null, "0");
+  rewardMetric.append(rewardValue, el(doc, "span", null, "TUMBO-SIM total"));
+  metrics.append(balanceMetric, spendMetric, tokenMetric, rewardMetric);
+  economySection.appendChild(metrics);
+
+  const rewardStatus = el(doc, "div", "web-ai-status",
+    `DEMO POLICY · ${DEFAULT_REWARD_POLICY.label}. The rate is configurable and is not a promise of real issuance or yield.`);
+  rewardStatus.dataset.kind = "warn";
+  economySection.appendChild(rewardStatus);
+
+  const accountSection = el(doc, "div", "web-ai-economy-section");
+  const accountTitle = el(doc, "div", "web-ai-economy-title", "COMPUTE WALLET");
+  accountTitle.appendChild(el(doc, "span", null, "demo credits · budget guardrails"));
+  accountSection.appendChild(accountTitle);
+  const accountGrid = el(doc, "div", "web-ai-economy-form-grid");
+  const fundInput = el(doc, "input");
+  fundInput.type = "number"; fundInput.min = "0.01"; fundInput.step = "0.01"; fundInput.value = "25";
+  fundInput.setAttribute("aria-label", "Demo compute credits to add");
+  const fundButton = el(doc, "button", "web-ai-btn primary", "ADD DEMO CREDITS");
+  fundButton.type = "button";
+  const monthlyBudgetInput = el(doc, "input");
+  monthlyBudgetInput.type = "number"; monthlyBudgetInput.min = "0.01"; monthlyBudgetInput.step = "1"; monthlyBudgetInput.value = "100";
+  monthlyBudgetInput.setAttribute("aria-label", "Monthly compute budget");
+  const perTaskBudgetInput = el(doc, "input");
+  perTaskBudgetInput.type = "number"; perTaskBudgetInput.min = "0.01"; perTaskBudgetInput.step = "1"; perTaskBudgetInput.value = "25";
+  perTaskBudgetInput.setAttribute("aria-label", "Per task compute budget");
+  accountGrid.append(fundInput, fundButton, monthlyBudgetInput, perTaskBudgetInput);
+  accountSection.appendChild(accountGrid);
+  const budgetButton = el(doc, "button", "web-ai-btn", "SAVE BUDGET GUARDRAILS");
+  budgetButton.type = "button";
+  accountSection.appendChild(budgetButton);
+  const accountStatus = el(doc, "div", "web-ai-economy-statusline", "Balance starts at $0. Add demo credits explicitly; no money is charged.");
+  accountSection.appendChild(accountStatus);
+  economySection.appendChild(accountSection);
+
+  const providerSection = el(doc, "div", "web-ai-economy-section");
+  const providerTitle = el(doc, "div", "web-ai-economy-title", "MODEL MARKET");
+  providerTitle.appendChild(el(doc, "span", null, "external providers + local lane"));
+  providerSection.appendChild(providerTitle);
+  const providerGrid = el(doc, "div", "web-ai-economy-providers");
+  providerSection.appendChild(providerGrid);
+  economySection.appendChild(providerSection);
+
+  const routeSection = el(doc, "div", "web-ai-economy-section");
+  const routeTitle = el(doc, "div", "web-ai-economy-title", "AUTO ROUTER");
+  routeTitle.appendChild(el(doc, "span", null, "you or future adapters provide quotes"));
+  routeSection.appendChild(routeTitle);
+  const routePolicyGrid = el(doc, "div", "web-ai-economy-form-grid");
+  const routePriority = el(doc, "select");
+  [["balanced","BALANCED"],["cost","LOWEST COST"],["latency","LOWEST LATENCY"]].forEach(([value,label]) => {
+    const option=el(doc,"option",null,label); option.value=value; routePriority.appendChild(option);
+  });
+  const routePrivacy = el(doc, "select");
+  [["provider-default","PROVIDER DEFAULT"],["local-only","LOCAL ONLY"]].forEach(([value,label]) => {
+    const option=el(doc,"option",null,label); option.value=value; routePrivacy.appendChild(option);
+  });
+  const routeMaxCost = el(doc, "input");
+  routeMaxCost.type="number"; routeMaxCost.min="0"; routeMaxCost.step="0.01"; routeMaxCost.value="25";
+  routeMaxCost.setAttribute("aria-label","Maximum estimated route cost");
+  const routeMaxLatency = el(doc, "input");
+  routeMaxLatency.type="number"; routeMaxLatency.min="0"; routeMaxLatency.step="1"; routeMaxLatency.value="10000";
+  routeMaxLatency.setAttribute("aria-label","Maximum route latency");
+  routePolicyGrid.append(routePriority, routePrivacy, routeMaxCost, routeMaxLatency);
+  routeSection.appendChild(routePolicyGrid);
+  const routeQuotes = el(doc, "div", "web-ai-route-quotes");
+  routeSection.appendChild(routeQuotes);
+  const routeButton = el(doc, "button", "web-ai-btn primary", "RANK ENTERED QUOTES");
+  routeButton.type = "button";
+  routeSection.appendChild(routeButton);
+  const routeResult = el(doc, "div", "web-ai-route-result", "Enter estimated cost + latency for any providers. Blank rows are ignored. Live pricing is not invented.");
+  routeSection.appendChild(routeResult);
+  economySection.appendChild(routeSection);
+
+  const form = el(doc, "div", "web-ai-economy-form");
+  form.appendChild(el(doc, "div", "web-ai-status",
+    "LOCAL RECEIPT LAB · use this to test the economic loop before live billing adapters exist."));
+  const formGrid = el(doc, "div", "web-ai-economy-form-grid");
+  const providerSelect = el(doc, "select");
+  providerSelect.setAttribute("aria-label", "Compute provider");
+  COMPUTE_PROVIDERS.forEach((provider) => {
+    const option = el(doc, "option", null, provider.name);
+    option.value = provider.id;
+    providerSelect.appendChild(option);
+  });
+  const modelInput = el(doc, "input");
+  modelInput.placeholder = "model name";
+  modelInput.value = "demo-model";
+  const inputTokensInput = el(doc, "input");
+  inputTokensInput.type = "number"; inputTokensInput.min = "0"; inputTokensInput.value = "750000";
+  inputTokensInput.setAttribute("aria-label", "Input tokens");
+  const outputTokensInput = el(doc, "input");
+  outputTokensInput.type = "number"; outputTokensInput.min = "0"; outputTokensInput.value = "250000";
+  outputTokensInput.setAttribute("aria-label", "Output tokens");
+  const spendInput = el(doc, "input");
+  spendInput.type = "number"; spendInput.min = "0"; spendInput.step = "0.01"; spendInput.value = "10";
+  spendInput.setAttribute("aria-label", "Provider reported cost in USD");
+  formGrid.append(providerSelect, modelInput, inputTokensInput, outputTokensInput, spendInput);
+  form.appendChild(formGrid);
+  const verifiedLabel = el(doc, "label", "web-ai-economy-check");
+  const verifiedInput = el(doc, "input");
+  verifiedInput.type = "checkbox";
+  verifiedInput.checked = true;
+  verifiedLabel.append(verifiedInput, doc.createTextNode("Simulate a provider-verified receipt. This checkbox has demo authority only; a live build must verify server-side."));
+  form.appendChild(verifiedLabel);
+  const recordButton = el(doc, "button", "web-ai-btn primary", "RECORD LOCAL USAGE →");
+  recordButton.type = "button";
+  form.appendChild(recordButton);
+  const economyStatus = el(doc, "div", "web-ai-status", "No usage receipts recorded in this page session.");
+  economyStatus.dataset.kind = "info";
+  form.appendChild(economyStatus);
+  economySection.appendChild(form);
+
+  const treasurySection = el(doc, "div", "web-ai-economy-section");
+  const treasuryTitle = el(doc, "div", "web-ai-economy-title", "PLAN + TREASURY LAB");
+  treasuryTitle.appendChild(el(doc, "span", null, "margin first · rewards/burn never from customer principal"));
+  treasurySection.appendChild(treasuryTitle);
+  const treasuryGrid = el(doc, "div", "web-ai-economy-form-grid");
+  const planRevenue = el(doc, "input");
+  planRevenue.type="number"; planRevenue.min="0"; planRevenue.step="0.01"; planRevenue.value="20";
+  planRevenue.setAttribute("aria-label","Demo customer revenue");
+  const planProviderCost = el(doc, "input");
+  planProviderCost.type="number"; planProviderCost.min="0"; planProviderCost.step="0.01"; planProviderCost.value="10";
+  planProviderCost.setAttribute("aria-label","Demo provider cost");
+  const planOpsCost = el(doc, "input");
+  planOpsCost.type="number"; planOpsCost.min="0"; planOpsCost.step="0.01"; planOpsCost.value="2";
+  planOpsCost.setAttribute("aria-label","Demo payment and operations cost");
+  const planRewardRate = el(doc, "input");
+  planRewardRate.type="number"; planRewardRate.min="0"; planRewardRate.max="1"; planRewardRate.step="0.01"; planRewardRate.value="0.15";
+  planRewardRate.setAttribute("aria-label","Reward budget rate");
+  const planReserveRate = el(doc, "input");
+  planReserveRate.type="number"; planReserveRate.min="0"; planReserveRate.max="1"; planReserveRate.step="0.01"; planReserveRate.value="0.5";
+  planReserveRate.setAttribute("aria-label","Treasury reserve rate");
+  const planBurnRate = el(doc, "input");
+  planBurnRate.type="number"; planBurnRate.min="0"; planBurnRate.max="1"; planBurnRate.step="0.01"; planBurnRate.value="0.1";
+  planBurnRate.setAttribute("aria-label","Future burn budget rate");
+  treasuryGrid.append(planRevenue, planProviderCost, planOpsCost, planRewardRate, planReserveRate, planBurnRate);
+  treasurySection.appendChild(treasuryGrid);
+  const treasuryButton = el(doc, "button", "web-ai-btn primary", "EVALUATE DEMO PLAN");
+  treasuryButton.type="button";
+  treasurySection.appendChild(treasuryButton);
+  const treasuryStatus = el(doc, "div", "web-ai-route-result", "Planning math only. A future burn budget is not a burn.");
+  treasurySection.appendChild(treasuryStatus);
+  economySection.appendChild(treasurySection);
+
+  const vaultSection = el(doc, "div", "web-ai-economy-section");
+  const vaultTitle = el(doc, "div", "web-ai-economy-title", "CONTRIBUTION VAULT");
+  vaultTitle.appendChild(el(doc, "span", null, "metadata-only · explicit consent"));
+  vaultSection.appendChild(vaultTitle);
+  const vaultGrid = el(doc, "div", "web-ai-economy-form-grid");
+  const vaultCategory = el(doc, "select");
+  ["prompt-pattern","evaluation-signal","public-dataset-note","tool-feedback","other"].forEach((value) => {
+    const option=el(doc,"option",null,value.replace(/-/g," ").toUpperCase()); option.value=value; vaultCategory.appendChild(option);
+  });
+  const vaultUnits = el(doc, "input");
+  vaultUnits.type="number"; vaultUnits.min="1"; vaultUnits.max="10000"; vaultUnits.value="100";
+  vaultUnits.setAttribute("aria-label","Contribution units");
+  const vaultPurpose = el(doc, "input");
+  vaultPurpose.placeholder="purpose metadata, not raw content";
+  vaultPurpose.setAttribute("aria-label","Contribution purpose");
+  const vaultRetention = el(doc, "input");
+  vaultRetention.type="number"; vaultRetention.min="1"; vaultRetention.max="3650"; vaultRetention.value="30";
+  vaultRetention.setAttribute("aria-label","Retention days");
+  const vaultScope = el(doc, "select");
+  CONTRIBUTION_SCOPES.forEach((value) => { const option=el(doc,"option",null,value.toUpperCase()); option.value=value; vaultScope.appendChild(option); });
+  vaultGrid.append(vaultCategory, vaultUnits, vaultPurpose, vaultRetention, vaultScope);
+  vaultSection.appendChild(vaultGrid);
+  const explicitConsentLabel = el(doc, "label", "web-ai-economy-check");
+  const explicitConsent = el(doc, "input");
+  explicitConsent.type="checkbox";
+  explicitConsentLabel.append(explicitConsent, doc.createTextNode("I explicitly authorize this metadata-only demo contribution. No raw conversation or file content is stored by this vault."));
+  vaultSection.appendChild(explicitConsentLabel);
+  const trainingLabel = el(doc, "label", "web-ai-economy-check");
+  const trainingConsent = el(doc, "input");
+  trainingConsent.type="checkbox";
+  trainingLabel.append(trainingConsent, doc.createTextNode("Allow training use in this consent rehearsal. Off by default."));
+  vaultSection.appendChild(trainingLabel);
+  const contributeButton = el(doc, "button", "web-ai-btn primary", "CREATE CONTRIBUTION RECEIPT");
+  contributeButton.type="button";
+  vaultSection.appendChild(contributeButton);
+  const vaultStatus = el(doc, "div", "web-ai-economy-statusline", "Nothing is shared automatically. Without explicit consent, a proposal can exist but earns no reward.");
+  vaultSection.appendChild(vaultStatus);
+  economySection.appendChild(vaultSection);
+
+  const earningsSection = el(doc, "div", "web-ai-economy-section");
+  const earningsTitle = el(doc, "div", "web-ai-economy-title", "EARNING CHANNELS");
+  earningsTitle.appendChild(el(doc, "span", null, "active + planned"));
+  earningsSection.appendChild(earningsTitle);
+  [
+    "ACTIVE DEMO · verified compute usage → TUMBO-SIM accrual",
+    "ACTIVE DEMO · explicit accepted contribution metadata → capped TUMBO-SIM accrual",
+    "PLANNED · provide self-hosted compute → metered provider reward",
+    "PLANNED · publish tools / agents → usage-linked creator reward",
+    "PLANNED · treasury / fee / burn rules → only after real settlement authority exists",
+  ].forEach((line) => earningsSection.appendChild(el(doc, "div", "web-ai-economy-statusline", line)));
+  economySection.appendChild(earningsSection);
+
+  const timelineSection = el(doc, "div", "web-ai-economy-section");
+  const timelineTitle = el(doc, "div", "web-ai-economy-title", "ECONOMIC TIMELINE");
+  timelineTitle.appendChild(el(doc, "span", null, "local ancestry · not cryptographic proof"));
+  timelineSection.appendChild(timelineTitle);
+  const timelineList = el(doc, "div", "web-ai-economy-timeline");
+  timelineSection.appendChild(timelineList);
+  economySection.appendChild(timelineSection);
+
+  const flow = el(doc, "div", "web-ai-economy-flow");
+  [
+    "01 · PROVIDER USAGE — model call + raw token evidence",
+    "02 · VERIFIED RECEIPT — provider-reported cost becomes normalization basis",
+    "03 · PAYCORE METER — account usage is measured",
+    "04 · T402 ROUTE — value path is declared",
+    "05 · REWARD ACCRUAL — configurable TUMBO-SIM loyalty accounting",
+    "06 · PRIME LEDGER / ECHOPROOF — receipt ancestry target",
+    "07 · REALITY LENS — the same transaction becomes a visible object",
+  ].forEach((row) => flow.appendChild(el(doc, "div", null, row)));
+  economySection.appendChild(flow);
+
+  const economyBoundary = el(doc, "div", "web-ai-status", `${COMPUTE_EXCHANGE_BOUNDARY} ${COMPUTE_ACCOUNT_BOUNDARY} ${CONTRIBUTION_VAULT_BOUNDARY}`);
+  economyBoundary.dataset.kind = "warn";
+  economySection.appendChild(economyBoundary);
+
   body.appendChild(webSection);
   body.appendChild(aiSection);
+  body.appendChild(economySection);
   panel.appendChild(body);
 
   const boundary = el(doc, "div", "web-ai-boundary");
@@ -439,12 +740,16 @@ export function createWebAiConsole({
   }
 
   function setTab(next, method, silent) {
-    state.tab = next === "ai" ? "ai" : "web";
+    state.tab = ["web", "ai", "economy"].includes(next) ? next : "web";
     const isWeb = state.tab === "web";
+    const isAi = state.tab === "ai";
+    const isEconomy = state.tab === "economy";
     webTab.setAttribute("aria-selected", String(isWeb));
-    aiTab.setAttribute("aria-selected", String(!isWeb));
+    aiTab.setAttribute("aria-selected", String(isAi));
+    economyTab.setAttribute("aria-selected", String(isEconomy));
     webSection.hidden = !isWeb;
-    aiSection.hidden = isWeb;
+    aiSection.hidden = !isAi;
+    economySection.hidden = !isEconomy;
     writeStorage(store, WEB_AI_STORAGE_KEYS.lastTab, state.tab);
     if (!silent) publish("tab", method || "api", { tab: state.tab });
   }
@@ -603,11 +908,322 @@ export function createWebAiConsole({
   });
   webTab.addEventListener("click", () => setTab("web", "button"));
   aiTab.addEventListener("click", () => setTab("ai", "button"));
+  economyTab.addEventListener("click", () => setTab("economy", "button"));
   minimizeButton.addEventListener("click", () => minimize("button"));
   closeButton.addEventListener("click", () => setOpen(false, "button"));
   chip.addEventListener("click", () => setOpen(true, "chip"));
   windowRoot?.addEventListener?.("focus",observeExternalReturn);
   doc.addEventListener?.("visibilitychange",observeExternalReturn);
+
+  function appendEconomicEvent(type, source, payload = {}) {
+    const event = economicTimeline.append({ type, source, payload });
+    renderEconomicTimeline();
+    return event;
+  }
+
+  function renderEconomicTimeline() {
+    if (!timelineList) return;
+    timelineList.replaceChildren();
+    const snapshot = economicTimeline.snapshot();
+    if (!snapshot.events.length) {
+      timelineList.appendChild(el(doc, "div", "web-ai-economy-statusline", "No economic events yet. The first demo credit, route decision, usage receipt or contribution will appear here."));
+      return;
+    }
+    snapshot.events.slice(-10).reverse().forEach((event) => {
+      const row = el(doc, "div", "web-ai-economy-event");
+      row.appendChild(el(doc, "b", null, `#${event.sequence}`));
+      row.appendChild(el(doc, "span", null, `${event.type} · ${event.source}`));
+      row.appendChild(el(doc, "code", null, event.checksum));
+      timelineList.appendChild(row);
+    });
+  }
+
+  function refreshEconomyMetrics() {
+    const exchange = computeLedger.snapshot();
+    const account = computeAccount.snapshot();
+    const vault = contributionVault.snapshot();
+    balanceValue.textContent = "$" + account.balanceUsd.toFixed(2);
+    spendValue.textContent = "$" + exchange.totals.verifiedSpendUsd.toFixed(2);
+    tokenValue.textContent = exchange.totals.totalTokens.toLocaleString();
+    const totalReward = exchange.totals.tumboSimReward + vault.totalRewardTumboSim;
+    rewardValue.textContent = totalReward.toFixed(4).replace(/\.?0+$/, "") || "0";
+    accountStatus.textContent = "$" + account.balanceUsd.toFixed(2) + " demo credits · $" + account.spentUsd.toFixed(2) + " spent · $" + account.remainingMonthlyBudgetUsd.toFixed(2) + " monthly budget remaining";
+    renderEconomicTimeline();
+    return { exchange, account, vault, timeline: economicTimeline.snapshot(), totalRewardTumboSim: totalReward };
+  }
+
+  let demoFundingSequence = 0;
+  fundButton.addEventListener("click", () => {
+    try {
+      const amountUsd = Number(fundInput.value);
+      const fundingId = `demo-fund-${Date.now()}-${++demoFundingSequence}`;
+      computeAccount.fundDemo({ fundingId, amountUsd, reason: "explicit-ui-demo-credit" });
+      appendEconomicEvent("credits.demo-funded", "compute-account", { fundingId, amountUsd });
+      accountStatus.textContent = "Added $" + amountUsd.toFixed(2) + " demo compute credits. No money was charged.";
+      refreshEconomyMetrics();
+      publish("compute-demo-funded", "button", { fundingId, amountUsd });
+    } catch (error) {
+      accountStatus.textContent = `Demo credit rejected: ${error?.message ?? "invalid amount"}.`;
+    }
+  });
+
+  budgetButton.addEventListener("click", () => {
+    try {
+      const budget = computeAccount.setBudget({
+        monthlyBudgetUsd: monthlyBudgetInput.value,
+        perTaskBudgetUsd: perTaskBudgetInput.value,
+      });
+      appendEconomicEvent("budget.updated", "compute-account", budget);
+      accountStatus.textContent = "Budget guardrails saved: $" + budget.monthlyBudgetUsd.toFixed(2) + " monthly / $" + budget.perTaskBudgetUsd.toFixed(2) + " per task.";
+      refreshEconomyMetrics();
+    } catch (error) {
+      accountStatus.textContent = `Budget rejected: ${error?.message ?? "invalid budget"}.`;
+    }
+  });
+
+  const quoteControls = new Map();
+  COMPUTE_PROVIDERS.forEach((provider) => {
+    const card = el(doc, "article", "web-ai-economy-provider");
+    card.appendChild(el(doc, "strong", null, provider.name));
+    card.appendChild(el(doc, "span", null, `capabilities · ${provider.capabilities.join(" · ")} · ${provider.executionMode} · live price requires adapter`));
+    const openButton = el(doc, "button", "web-ai-btn", provider.chatUrl ? "OPEN PROVIDER →" : "LOCAL ADAPTER REQUIRED");
+    openButton.type = "button";
+    openButton.disabled = !provider.chatUrl;
+    openButton.addEventListener("click", () => {
+      if (!provider.chatUrl) return;
+      const ok = openNewTab(windowRoot, provider.chatUrl);
+      if (ok) rememberExternalReturn(provider.id, "compute-provider");
+      economyStatus.textContent = ok
+        ? `Opened ${provider.name} in a separate tab. maTumbo did not share credentials or claim billing authority.`
+        : "Pop-up blocked. Allow pop-ups, then retry.";
+      economyStatus.dataset.kind = ok ? "info" : "error";
+      publish("compute-provider-open", "button", { providerId: provider.id, externalNetwork: true, popupBlocked: !ok });
+    });
+    card.appendChild(openButton);
+    providerGrid.appendChild(card);
+
+    const quoteRow = el(doc, "div", "web-ai-route-quote");
+    quoteRow.appendChild(el(doc, "strong", null, provider.name));
+    const cost = el(doc, "input");
+    cost.type="number"; cost.min="0"; cost.step="0.0001"; cost.placeholder="cost $";
+    cost.setAttribute("aria-label", `${provider.name} estimated cost`);
+    const latency = el(doc, "input");
+    latency.type="number"; latency.min="0"; latency.step="1"; latency.placeholder="latency ms";
+    latency.setAttribute("aria-label", `${provider.name} estimated latency`);
+    quoteRow.append(cost, latency);
+    routeQuotes.appendChild(quoteRow);
+    quoteControls.set(provider.id, { cost, latency });
+  });
+
+  routeButton.addEventListener("click", () => {
+    const quotes = [];
+    for (const [providerId, controls] of quoteControls) {
+      if (controls.cost.value === "") continue;
+      quotes.push({
+        providerId,
+        estimatedCostUsd: Number(controls.cost.value),
+        estimatedLatencyMs: controls.latency.value === "" ? Number.POSITIVE_INFINITY : Number(controls.latency.value),
+      });
+    }
+    const result = selectProviderRoute(quotes, {
+      priority: routePriority.value,
+      maxCostUsd: routeMaxCost.value === "" ? Number.POSITIVE_INFINITY : Number(routeMaxCost.value),
+      maxLatencyMs: routeMaxLatency.value === "" ? Number.POSITIVE_INFINITY : Number(routeMaxLatency.value),
+      requiredCapabilities: state.note ? ["chat"] : [],
+      privacy: routePrivacy.value,
+    });
+    if (!result.selected) {
+      routeResult.textContent = `No entered quote satisfies the policy. Rejected: ${result.rejected.map((row) => `${row.providerId}:${row.reason}`).join(", ") || "none entered"}.`;
+      appendEconomicEvent("route.no-match", "compute-router", { policy: result.policy, rejected: result.rejected });
+      publish("compute-route-no-match", "button", { policy: result.policy, rejected: result.rejected });
+      return;
+    }
+    routeResult.textContent = "Selected " + result.selected.providerName + " · estimated $" + result.selected.estimatedCostUsd.toFixed(4) + " · " + (Number.isFinite(result.selected.estimatedLatencyMs) ? result.selected.estimatedLatencyMs + " ms" : "latency unavailable") + " · policy " + result.policy.priority + ".";
+    appendEconomicEvent("route.selected", "compute-router", {
+      providerId: result.selected.providerId,
+      estimatedCostUsd: result.selected.estimatedCostUsd,
+      estimatedLatencyMs: result.selected.estimatedLatencyMs,
+      priority: result.policy.priority,
+      privacy: result.policy.privacy,
+    });
+    publish("compute-route-selected", "button", { selected: result.selected, policy: result.policy });
+  });
+
+  let localReceiptSequence = 0;
+  recordButton.addEventListener("click", () => {
+    const receiptId = `local-demo-${Date.now()}-${++localReceiptSequence}`;
+    const draftReceipt = {
+      receiptId,
+      providerId: providerSelect.value,
+      model: modelInput.value,
+      inputTokens: inputTokensInput.value,
+      outputTokens: outputTokensInput.value,
+      reportedCostUsd: spendInput.value,
+      verified: verifiedInput.checked,
+    };
+
+    let normalizedReceipt;
+    try {
+      normalizedReceipt = normalizeUsageReceipt(draftReceipt);
+    } catch (error) {
+      economyStatus.textContent = `Receipt rejected before debit: ${error?.message ?? "invalid input"}.`;
+      economyStatus.dataset.kind = "error";
+      publish("compute-usage-rejected", "button", { reason: String(error?.message ?? "invalid input") });
+      return;
+    }
+
+    if (normalizedReceipt.verified) {
+      let accountResult;
+      try {
+        accountResult = computeAccount.spendVerified({
+          spendId: receiptId,
+          providerId: normalizedReceipt.providerId,
+          amountUsd: normalizedReceipt.reportedCostUsd,
+        });
+      } catch (error) {
+        economyStatus.textContent = `Spend rejected: ${error?.message ?? "invalid amount"}.`;
+        economyStatus.dataset.kind = "error";
+        return;
+      }
+      if (!accountResult.accepted) {
+        economyStatus.textContent = `Spend blocked by compute wallet: ${accountResult.reason}. Add demo credits or change your budget guardrails.`;
+        economyStatus.dataset.kind = "warn";
+        appendEconomicEvent("usage.blocked", "compute-account", { receiptId, reason: accountResult.reason });
+        refreshEconomyMetrics();
+        return;
+      }
+      appendEconomicEvent("credits.spent", "compute-account", {
+        receiptId,
+        providerId: normalizedReceipt.providerId,
+        amountUsd: normalizedReceipt.reportedCostUsd,
+      });
+    }
+
+    let result;
+    try {
+      result = computeLedger.record(normalizedReceipt);
+    } catch (error) {
+      economyStatus.textContent = `Receipt rejected: ${error?.message ?? "invalid input"}.`;
+      economyStatus.dataset.kind = "error";
+      publish("compute-usage-rejected", "button", { reason: String(error?.message ?? "invalid input") });
+      return;
+    }
+
+    appendEconomicEvent("provider.usage", result.receipt.providerId, {
+      receiptId: result.receipt.receiptId,
+      model: result.receipt.model,
+      totalTokens: result.receipt.totalTokens,
+      reportedCostUsd: result.receipt.reportedCostUsd,
+      verified: result.receipt.verified,
+    });
+    appendEconomicEvent("prime-ledger.receipt-target", "prime-ledger-echoproof", {
+      receiptId: result.receipt.receiptId,
+      rewardTumboSim: result.reward.tumboSim,
+      proofStatus: "target-only-not-cryptographic",
+    });
+
+    const snapshot = refreshEconomyMetrics();
+    economyStatus.textContent = result.reward.eligible
+      ? `Recorded ${result.receipt.totalTokens.toLocaleString()} tokens · $${result.receipt.reportedCostUsd.toFixed(4)} verified spend · +${result.reward.tumboSim} TUMBO-SIM.`
+      : `Recorded ${result.receipt.totalTokens.toLocaleString()} tokens, but no reward accrued because the receipt is ${result.reward.reason}.`;
+    economyStatus.dataset.kind = result.reward.eligible ? "info" : "warn";
+    publish("compute-usage-recorded", "button", {
+      receiptId: result.receipt.receiptId,
+      providerId: result.receipt.providerId,
+      totalTokens: result.receipt.totalTokens,
+      reportedCostUsd: result.receipt.reportedCostUsd,
+      verified: result.receipt.verified,
+      tumboSimReward: result.reward.tumboSim,
+      economicLoop: result.economicLoop ?? [],
+      computeTotals: snapshot.exchange.totals,
+      account: snapshot.account,
+      vault: snapshot.vault,
+      timeline: snapshot.timeline,
+    });
+  });
+
+  treasuryButton.addEventListener("click", () => {
+    try {
+      const result = evaluateComputeEconomics({
+        customerRevenueUsd: planRevenue.value,
+        providerCostUsd: planProviderCost.value,
+        paymentOpsCostUsd: planOpsCost.value,
+        rewardBudgetRate: planRewardRate.value,
+        treasuryReserveRate: planReserveRate.value,
+        futureBurnBudgetRate: planBurnRate.value,
+      });
+      treasuryStatus.textContent = result.sustainable
+        ? "Positive margin $" + result.grossMarginUsd.toFixed(2) + " · reward budget $" + result.rewardBudgetUsd.toFixed(2) + " · treasury reserve $" + result.treasuryReserveUsd.toFixed(2) + " · future burn budget $" + result.futureBurnBudgetUsd.toFixed(2) + " · retained $" + result.retainedMarginUsd.toFixed(2) + ". No burn executed."
+        : "Unsustainable demo plan: margin $" + result.grossMarginUsd.toFixed(2) + ". Reward, treasury-distribution and future burn budgets are held at $0.";
+      appendEconomicEvent("economics.plan-evaluated", "compute-economics-policy", {
+        customerRevenueUsd: result.customerRevenueUsd,
+        providerCostUsd: result.providerCostUsd,
+        grossMarginUsd: result.grossMarginUsd,
+        rewardBudgetUsd: result.rewardBudgetUsd,
+        treasuryReserveUsd: result.treasuryReserveUsd,
+        futureBurnBudgetUsd: result.futureBurnBudgetUsd,
+        futureBurnExecuted: false,
+      });
+      publish("compute-plan-evaluated", "button", result);
+    } catch (error) {
+      treasuryStatus.textContent = `Plan rejected: ${error?.message ?? "invalid economics policy"}.`;
+    }
+  });
+
+  let contributionSequence = 0;
+  contributeButton.addEventListener("click", () => {
+    const contributionId = `local-contribution-${Date.now()}-${++contributionSequence}`;
+    try {
+      const proposal = contributionVault.propose({
+        contributionId,
+        category: vaultCategory.value,
+        units: vaultUnits.value,
+        purpose: vaultPurpose.value,
+        retentionDays: vaultRetention.value,
+      });
+      appendEconomicEvent("contribution.proposed", "contribution-vault", {
+        contributionId,
+        category: proposal.category,
+        units: proposal.units,
+      });
+
+      if (!explicitConsent.checked) {
+        vaultStatus.textContent = "Proposal created locally, but no consent was granted. No acceptance and no reward.";
+        refreshEconomyMetrics();
+        publish("contribution-proposed", "button", { contributionId, authorized: false });
+        return;
+      }
+
+      contributionVault.authorize(contributionId, {
+        scope: vaultScope.value,
+        allowTraining: trainingConsent.checked,
+        allowResearch: true,
+      });
+      appendEconomicEvent("contribution.authorized", "contribution-vault", {
+        contributionId,
+        scope: vaultScope.value,
+        allowTraining: trainingConsent.checked,
+      });
+      const accepted = contributionVault.accept(contributionId, { evidenceId: `local-evidence-${contributionId}` });
+      appendEconomicEvent("contribution.accepted", "contribution-vault", {
+        contributionId,
+        rewardTumboSim: accepted.record.rewardTumboSim,
+        rawContentStored: false,
+      });
+      vaultStatus.textContent = `Accepted metadata-only contribution · +${accepted.record.rewardTumboSim} TUMBO-SIM demo reward · raw content stored: NO.`;
+      refreshEconomyMetrics();
+      publish("contribution-accepted", "button", {
+        contributionId,
+        rewardTumboSim: accepted.record.rewardTumboSim,
+        consent: accepted.record.consent,
+        rawContentStored: false,
+      });
+    } catch (error) {
+      vaultStatus.textContent = `Contribution rejected: ${error?.message ?? "invalid contribution"}.`;
+    }
+  });
+
+  refreshEconomyMetrics();
 
   WEB_AI_ASSISTANTS.forEach((assistant) => {
     const card = el(doc, "article", "web-ai-assistant");
@@ -704,7 +1320,10 @@ export function createWebAiConsole({
     state.url = lastUrl;
   }
   updatePromptPreview();
-  setTab(readStorage(store, WEB_AI_STORAGE_KEYS.lastTab) === "ai" ? "ai" : "web", "init", true);
+  {
+    const savedTab = readStorage(store, WEB_AI_STORAGE_KEYS.lastTab);
+    setTab(["web", "ai", "economy"].includes(savedTab) ? savedTab : "web", "init", true);
+  }
   if (readStorage(store, WEB_AI_STORAGE_KEYS.minimized) === "1") {
     state.minimized = true;
     panel.hidden = true;
@@ -721,6 +1340,10 @@ export function createWebAiConsole({
       tab: state.tab,
       url: state.url,
       noteLength: state.note.length,
+      computeEconomy: computeLedger.snapshot(),
+      computeAccount: computeAccount.snapshot(),
+      contributionVault: contributionVault.snapshot(),
+      economicTimeline: economicTimeline.snapshot(),
       localOnly: true,
       simulation: true,
       externalNetwork: false,
@@ -738,6 +1361,54 @@ export function createWebAiConsole({
     toggle: (method = "api") => setOpen(!state.opened, method),
     minimize: (method = "api") => minimize(method),
     setTab: (tab, method = "api") => setTab(tab, method, false),
+    getComputeEconomySnapshot: () => Object.freeze({
+      exchange: computeLedger.snapshot(),
+      account: computeAccount.snapshot(),
+      vault: contributionVault.snapshot(),
+      timeline: economicTimeline.snapshot(),
+    }),
+    fundDemoComputeCredits: (amountUsd, method = "api") => {
+      const fundingId = `api-demo-fund-${Date.now()}-${++demoFundingSequence}`;
+      const snapshot = computeAccount.fundDemo({ fundingId, amountUsd, reason: method });
+      appendEconomicEvent("credits.demo-funded", "compute-account", { fundingId, amountUsd: Number(amountUsd) });
+      refreshEconomyMetrics();
+      publish("compute-demo-funded", method, { fundingId, amountUsd: Number(amountUsd) });
+      return snapshot;
+    },
+    recordComputeUsage: (receipt, method = "api") => {
+      const normalized = normalizeUsageReceipt(receipt);
+      if (normalized.verified === true) {
+        const debit = computeAccount.spendVerified({
+          spendId: normalized.receiptId,
+          providerId: normalized.providerId,
+          amountUsd: normalized.reportedCostUsd,
+        });
+        if (!debit.accepted) return Object.freeze({ accepted: false, reason: debit.reason, account: debit.snapshot });
+        appendEconomicEvent("credits.spent", "compute-account", {
+          receiptId: normalized.receiptId,
+          providerId: normalized.providerId,
+          amountUsd: normalized.reportedCostUsd,
+        });
+      }
+      const result = computeLedger.record(normalized);
+      appendEconomicEvent("provider.usage", result.receipt.providerId, {
+        receiptId: result.receipt.receiptId,
+        totalTokens: result.receipt.totalTokens,
+        reportedCostUsd: result.receipt.reportedCostUsd,
+        verified: result.receipt.verified,
+      });
+      refreshEconomyMetrics();
+      publish("compute-usage-recorded", method, {
+        receiptId: result.receipt.receiptId,
+        providerId: result.receipt.providerId,
+        totalTokens: result.receipt.totalTokens,
+        reportedCostUsd: result.receipt.reportedCostUsd,
+        verified: result.receipt.verified,
+        tumboSimReward: result.reward.tumboSim,
+        economicLoop: result.economicLoop ?? [],
+      });
+      return result;
+    },
     navigate: (url, method = "api") => {
       setOpen(true, method);
       openWebUrl(url, method);

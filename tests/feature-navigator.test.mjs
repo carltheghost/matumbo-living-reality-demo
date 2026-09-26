@@ -64,6 +64,14 @@ test("spatial inspector routes describe the feature they actually open", async (
   assert.deepEqual(FEATURE_SURFACE_ROUTES["web-ai"].map(([title]) => title), [
     "WEB TAB",
     "AI TAB",
+    "COMPUTE WALLET",
+    "MODEL MARKET",
+    "AUTO ROUTER",
+    "USAGE RECEIPT",
+    "PLAN + TREASURY LAB",
+    "CONTRIBUTION VAULT",
+    "ECONOMIC TIMELINE",
+    "WORLD PROJECTION",
     "TASK NOTE",
     "OPENING",
   ]);
