@@ -29,3 +29,22 @@ test("compute UI does not accept API keys, wallets, or pretend to perform settle
   assert.match(source, /live price requires adapter/);
   assert.match(source, /did not share credentials or claim billing authority/);
 });
+
+
+test("expanded compute surface includes wallet, router, consent vault and canonical world publication", async () => {
+  const source = await readFile(new URL("../src/render/web-ai.js", import.meta.url), "utf8");
+  assert.match(source, /COMPUTE WALLET/);
+  assert.match(source, /AUTO ROUTER/);
+  assert.match(source, /CONTRIBUTION VAULT/);
+  assert.match(source, /ECONOMIC TIMELINE/);
+  assert.match(source, /createComputeAccount/);
+  assert.match(source, /createContributionVault/);
+  assert.match(source, /createEconomicTimeline/);
+  assert.match(source, /selectProviderRoute/);
+
+  const main = await readFile(new URL("../src/main.js", import.meta.url), "utf8");
+  assert.match(main, /createComputeWorldContribution/);
+  assert.match(main, /function publishComputeEconomyWorld/);
+  assert.match(main, /simfabric:projection/);
+  assert.match(main, /getComputeEconomySnapshot/);
+});
