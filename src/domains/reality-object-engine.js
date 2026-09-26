@@ -75,7 +75,7 @@ export function createRealityObjectSurfaceEngine(){
   function focusFrame({shape='rectangle',size=1,approachScale=1,viewportWidth=1280,viewportHeight=900,fov=60,occupancy=.54,minDistance=7.4,maxDistance=190}={}){
     return livingSurfaceLayoutEngine.focusFrame({shape,size,approachScale,viewportWidth,viewportHeight,fov,occupancy,minDistance,maxDistance});
   }
-  return Object.freeze({describe,projectedBounds,fitPanel,focusFrame,wrapLayout,shouldShowFace,compose:livingSurfaceLayoutEngine.compose,readingFrame:livingSurfaceLayoutEngine.readingFrame,readingProjection:livingSurfaceLayoutEngine.readingProjection});
+  return Object.freeze({describe,projectedBounds,fitPanel,focusFrame,wrapLayout,shouldShowFace,compose:livingSurfaceLayoutEngine.compose,readingFrame:livingSurfaceLayoutEngine.readingFrame,readingProjection:livingSurfaceLayoutEngine.readingProjection,clipPath:livingSurfaceLayoutEngine.clipPath});
 }
 
 export const realityObjectSurfaceEngine=createRealityObjectSurfaceEngine();

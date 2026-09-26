@@ -56,15 +56,42 @@ function makeFace(id,width,height,position,rotation,{kind='plane',curvature=0,re
   });
 }
 
+const percent=value=>`${round(value)}%`;
+function waveSurfaceClipPath(steps=24){
+  const amplitude=.075,half=.5+amplitude,points=[];
+  for(let index=0;index<=steps;index++){
+    const t=index/steps,sine=Math.sin(t*Math.PI*4);
+    const y=(half-(.5+amplitude*sine))/(half*2)*100;
+    points.push(`${percent(t*100)} ${percent(y)}`);
+  }
+  for(let index=steps;index>=0;index--){
+    const t=index/steps,sine=Math.sin(t*Math.PI*4);
+    const y=(half-(-.5-amplitude*sine))/(half*2)*100;
+    points.push(`${percent(t*100)} ${percent(y)}`);
+  }
+  return `polygon(${points.join(',')})`;
+}
+
+/** CSS silhouette for the same physical body used by the Three.js tab. */
+export function livingSurfaceClipPath(shape='rectangle'){
+  const resolved=REALITY_TAB_FORMS[shape]?shape:'rectangle';
+  if(resolved==='wave')return waveSurfaceClipPath();
+  if(resolved==='sphere')return 'ellipse(50% 50% at 50% 50%)';
+  if(resolved==='cylinder')return 'inset(0 round 48% / 15%)';
+  if(resolved==='phone')return 'inset(0 round 9%)';
+  if(resolved==='square'||resolved==='cube')return 'inset(0 round 2.5%)';
+  return 'inset(0 round 7%)';
+}
+
 function planarSurfaceLayout(shape,{clearance=.018,depthRatio=.42}={}){
   const form=formFor(shape),width=form.width,height=form.height;
   const depth=form.depth;
   // Extruded forms are authored from z=0 to z=depth. The skin belongs to
   // that front wall, not to an invented thicker, disconnected box.
   const z=depth+clearance;
-  // Keep the primary silhouette true to the chosen tab form. A phone stays
-  // portrait and a wave stays wide even when its content becomes scrollable.
-  const frontWidth=width*.9,frontHeight=height*.9;
+  // The readable skin IS the front of the body, not a smaller browser card
+  // pasted inside it. A wave includes the crest/trough envelope of its mesh.
+  const frontWidth=width,frontHeight=shape==='wave'?height*1.15:height;
   return [
     makeFace('front',frontWidth,frontHeight,[0,0,z],[0,0,0],{kind:'front'}),
     makeFace('back',width*.82,height*.82,[0,0,-z],[0,Math.PI,0],{kind:'back',readable:false}),
@@ -333,6 +360,7 @@ export function createLivingSurfaceLayoutEngine(){
     readingFrame:readingFrameForLivingObject,
     compose:composeLivingSurface,
     readingProjection:livingReadingProjection,
+    clipPath:livingSurfaceClipPath,
     relax:relaxLivingRealityLayout,
   });
 }

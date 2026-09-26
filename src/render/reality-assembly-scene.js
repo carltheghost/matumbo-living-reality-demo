@@ -354,14 +354,13 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[],rela
       positions.needsUpdate=true;bodyGeometry.computeVertexNormals();
     }
     geometry.add(bodyGeometry);
-    const bodyMaterial=shapeName==='cube'?[shell,shell,shell,shell,artMaterial??shell,shell]:shell;
+    // Information belongs to the object. Planar extrusions use their own cap
+    // as the artwork surface instead of spawning a second PlaneGeometry card.
+    const bodyMaterial=shapeName==='cube'
+      ?[shell,shell,shell,shell,artMaterial??shell,shell]
+      :(!curved&&artMaterial?[artMaterial,shell]:shell);
     const body=new THREE.Mesh(bodyGeometry,bodyMaterial);body.userData.assemblyId=node.feature.id;body.name=`${node.feature.id}/spatial-tab/${shapeName}`;
     body.renderOrder=20;body.castShadow=false;body.receiveShadow=false;node.root.add(body);targets.push(body);selectable.add(body);tabSelectable.add(body);parts.push(body);
-    if(!curved&&shapeName!=='cube'&&art&&artMaterial){
-      const screenGeometry=new THREE.PlaneGeometry(width*.9,height*.88);geometry.add(screenGeometry);
-      const screen=new THREE.Mesh(screenGeometry,artMaterial);screen.position.z=depth+.025;screen.userData.assemblyId=node.feature.id;screen.name=`${node.feature.id}/spatial-tab/image`;
-      screen.renderOrder=21;node.root.add(screen);targets.push(screen);selectable.add(screen);tabSelectable.add(screen);parts.push(screen);
-    }
     const edgeGeometry=new THREE.EdgesGeometry(bodyGeometry,18);geometry.add(edgeGeometry);
     const edgeMaterial=new THREE.LineBasicMaterial({color:sphereForm?'#e4c878':node.accent.color,transparent:true,opacity:sphereForm?.82:.58,depthWrite:false,depthTest:true});materials.add(edgeMaterial);
     const edges=new THREE.LineSegments(edgeGeometry,edgeMaterial);edges.renderOrder=22;node.root.add(edges);parts.push(edges);
