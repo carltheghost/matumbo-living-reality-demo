@@ -35,3 +35,11 @@ test("economic timeline preserves deterministic local ancestry without claiming 
   assert.equal(timeline.snapshot().cryptographicProof, false);
   assert.equal(timeline.snapshot().verifiedLocalChain, true);
 });
+
+
+test("demo funding IDs are idempotent", () => {
+  const account = createComputeAccount();
+  account.fundDemo({ fundingId: "same", amountUsd: 10 });
+  account.fundDemo({ fundingId: "same", amountUsd: 10 });
+  assert.equal(account.snapshot().balanceUsd, 10);
+});
