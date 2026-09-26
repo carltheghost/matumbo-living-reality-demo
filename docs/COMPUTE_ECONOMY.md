@@ -32,6 +32,7 @@ Current provider handoff lanes include:
 - Google / Gemini
 - DeepSeek
 - Kimi
+- NVIDIA / NIM (build.nvidia.com) — one free `nvapi-` developer key (no credit card), OpenAI-compatible API at `integrate.api.nvidia.com/v1`; hosts DeepSeek, GLM, Kimi and 100+ open models, key read from `NVIDIA_API_KEY`
 - Local / self-hosted as an adapter lane
 
 External providers are currently links only. Local/self-hosted is represented as a lane but has no runtime adapter yet.

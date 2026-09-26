@@ -25,6 +25,7 @@ export const COMPUTE_PROVIDERS = Object.freeze([
   Object.freeze({ id: "google", name: "Google / Gemini", chatUrl: "https://gemini.google.com/", executionMode: "external", capabilities: Object.freeze(["chat","reasoning","code","vision"]) }),
   Object.freeze({ id: "deepseek", name: "DeepSeek", chatUrl: "https://chat.deepseek.com/", executionMode: "external", capabilities: Object.freeze(["chat","reasoning","code"]) }),
   Object.freeze({ id: "kimi", name: "Kimi", chatUrl: "https://www.kimi.com/en/", executionMode: "external", capabilities: Object.freeze(["chat","reasoning","code","research"]) }),
+  Object.freeze({ id: "nvidia", name: "NVIDIA / NIM", chatUrl: "https://build.nvidia.com/", executionMode: "external", capabilities: Object.freeze(["chat","reasoning","code","vision"]), apiBaseUrl: "https://integrate.api.nvidia.com/v1", apiKeyEnv: "NVIDIA_API_KEY", freeTier: true, models: Object.freeze(["deepseek-ai/deepseek-v4-flash", "z-ai/glm-5.3", "z-ai/glm-5.3-flash", "moonshotai/kimi-k3"]), rosterNote: "Free developer key, no credit card; hosted model roster rotates — adapter should refresh via GET /v1/models" }),
   Object.freeze({ id: "local", name: "Local / Self-hosted", chatUrl: null, executionMode: "local", capabilities: Object.freeze(["chat","reasoning","code","private"]) }),
 ]);
 
