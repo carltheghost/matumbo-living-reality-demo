@@ -3,6 +3,7 @@ import {REALITY_TAB_FORMS,REALITY_TAB_SIZE_MIN,REALITY_TAB_SIZE_MAX,resolveReali
 import {REALITY_LENS_GROUPS,realityLensEngine,resolveRealityLensGroup} from '../domains/reality-lens-engine.js?v=20260923-lens-engine9';
 import {realityLensCopy,realityLensLabel,realityObjectSurfaceEngine} from '../domains/reality-object-engine.js?v=20260923-object-surface6';
 import {buildRealityAssemblyScene,LOD_FAR} from './reality-assembly-scene.js?v=20260923-spatial-tabs21';
+import {createNativeInformationSurface} from './native-information-surface.js?v=20260926-native-skin1';
 
 // The lens contains only equal-status feature tabs; no center cube or anchor.
 export const CLEAN_LANDING_CAMERA={position:[36,25,110],target:[0,2,0],fov:60,mergeThreshold:LOD_FAR};
@@ -342,74 +343,97 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
       }
     });
   }
+  function restoreLivePanel(record){
+    if(!record?.livePanel||!record.restore)return;
+    const panel=record.livePanel,restore=record.restore;
+    if(!restore.hadLensClass)panel.classList.remove('reality-lens-feature-panel');
+    if(restore.shape===null)panel.removeAttribute('data-object-shape');else panel.setAttribute('data-object-shape',restore.shape);
+    if(restore.lensAttached===null)panel.removeAttribute('data-lens-surface-attached');else panel.setAttribute('data-lens-surface-attached',restore.lensAttached);
+    if(restore.nativeSource===null)panel.removeAttribute('data-native-surface-source');else panel.setAttribute('data-native-surface-source',restore.nativeSource);
+    if(restore.style===null)panel.removeAttribute('style');else panel.setAttribute('style',restore.style);
+    if(restore.panelSpace===null)panel.removeAttribute('data-panel-space');else panel.setAttribute('data-panel-space',restore.panelSpace);
+    if(restore.compact===null)panel.removeAttribute('data-compact');else panel.setAttribute('data-compact',restore.compact);
+    if(restore.noPanelDrag===null)panel.removeAttribute('data-no-panel-drag');else panel.setAttribute('data-no-panel-drag',restore.noPanelDrag);
+    if(restore.parent){if(restore.next?.parentNode===restore.parent)restore.parent.insertBefore(panel,restore.next);else restore.parent.append(panel);}
+    document.dispatchEvent(new CustomEvent('matumbo:reality-lens-surface-attachment',{detail:{panelId:panel.id,attached:false,native:false}}));
+  }
   function clearFeatureSurface(){
     const record=mountedSurface;if(!record)return false;mountedSurface=null;
+    const node=spatial.nodes.get(record.featureId);
+    if(record.mode==='native'){
+      record.observer?.disconnect?.();
+      record.native?.dispose?.();
+      if(node){
+        node.nativeInformationSurface=null;
+        node.surfaceReading=false;
+        node.surfaceStretch=[1,1,1];
+        if(node.indicator)node.indicator.visible=true;
+      }
+      restoreLivePanel(record);
+      root.classList.remove('assembly-has-live-object-surface','assembly-native-information');
+      return true;
+    }
     record.flowObserver?.disconnect();
     record.intro?.restore();
-    record.front.querySelectorAll('[data-surface-flow]').forEach(element=>element.removeAttribute('data-surface-flow'));
-    const node=spatial.nodes.get(record.featureId);if(node){node.surfaceReading=false;node.surfaceStretch=[1,1,1];if(node.indicator)node.indicator.visible=true;}
+    record.front?.querySelectorAll?.('[data-surface-flow]').forEach(element=>element.removeAttribute('data-surface-flow'));
+    if(node){node.surfaceReading=false;node.surfaceStretch=[1,1,1];if(node.indicator)node.indicator.visible=true;}
     record.metadata?.remove();
-    for(const surface of record.surfaces){surface.object3d?.removeFromParent();surface.element.remove();}
-    if(record.livePanel){
-      const panel=record.livePanel,restore=record.restore;
-      if(!restore.hadLensClass)panel.classList.remove('reality-lens-feature-panel');
-      if(restore.shape===null)panel.removeAttribute('data-object-shape');else panel.setAttribute('data-object-shape',restore.shape);
-      if(restore.lensAttached===null)panel.removeAttribute('data-lens-surface-attached');else panel.setAttribute('data-lens-surface-attached',restore.lensAttached);
-      if(restore.style===null)panel.removeAttribute('style');else panel.setAttribute('style',restore.style);
-      if(restore.panelSpace===null)panel.removeAttribute('data-panel-space');else panel.setAttribute('data-panel-space',restore.panelSpace);
-      if(restore.compact===null)panel.removeAttribute('data-compact');else panel.setAttribute('data-compact',restore.compact);
-      if(restore.noPanelDrag===null)panel.removeAttribute('data-no-panel-drag');else panel.setAttribute('data-no-panel-drag',restore.noPanelDrag);
-      if(restore.parent){if(restore.next?.parentNode===restore.parent)restore.parent.insertBefore(panel,restore.next);else restore.parent.append(panel);}
-      document.dispatchEvent(new CustomEvent('matumbo:reality-lens-surface-attachment',{detail:{panelId:panel.id,attached:false}}));
-    }
+    for(const surface of record.surfaces??[]){surface.object3d?.removeFromParent();surface.element?.remove?.();}
+    restoreLivePanel(record);
     root.classList.remove('assembly-has-live-object-surface');
-    if(record.fallback)record.front.remove();
+    if(record.fallback)record.front?.remove?.();
     return true;
   }
   function mountFeatureSurface(featureId,panel=null){
     const feature=featureMap.get(featureId),node=spatial.nodes.get(featureId),object=owner.getSnapshot().objects.find(item=>item.id===featureId);
-    if(!feature||!node||!object)return false;
-    if(mountedSurface?.featureId===featureId&&mountedSurface.livePanel===panel)return true;
+    if(!feature||!node||!object||!node.tabMesh)return false;
+    const livePanel=panel&&!panel.hidden?panel:null,detail=readFeature(featureId);
+    if(mountedSurface?.mode==='native'&&mountedSurface.featureId===featureId&&mountedSurface.livePanel===livePanel&&mountedSurface.native?.mesh===node.tabMesh){
+      mountedSurface.native.sync({panel:livePanel,summary:detail?.summary??feature.description});
+      return true;
+    }
     clearFeatureSurface();
-    const livePanel=panel&&!panel.hidden?panel:null,fallback=!livePanel,front=livePanel??makeFallbackFront(feature,object),detail=readFeature(featureId),surface=realityObjectSurfaceEngine.describe({feature,object,stage:node.revealStage??0,summary:detail?.summary,readOnly:owner.getSnapshot().mode==='past'});
-    const initialFace=realityObjectSurfaceEngine.wrapLayout(surface.shape)[0];
-    const restore=livePanel?{parent:livePanel.parentNode,next:livePanel.nextSibling,style:livePanel.getAttribute('style'),shape:livePanel.getAttribute('data-object-shape'),lensAttached:livePanel.getAttribute('data-lens-surface-attached'),panelSpace:livePanel.getAttribute('data-panel-space'),compact:livePanel.getAttribute('data-compact'),noPanelDrag:livePanel.getAttribute('data-no-panel-drag'),hadLensClass:livePanel.classList.contains('reality-lens-feature-panel')} : null;
+
+    const restore=livePanel?{
+      parent:livePanel.parentNode,next:livePanel.nextSibling,style:livePanel.getAttribute('style'),
+      shape:livePanel.getAttribute('data-object-shape'),lensAttached:livePanel.getAttribute('data-lens-surface-attached'),
+      nativeSource:livePanel.getAttribute('data-native-surface-source'),panelSpace:livePanel.getAttribute('data-panel-space'),
+      compact:livePanel.getAttribute('data-compact'),noPanelDrag:livePanel.getAttribute('data-no-panel-drag'),
+      hadLensClass:livePanel.classList.contains('reality-lens-feature-panel'),
+    }:null;
+
     if(livePanel){
-      livePanel.classList.add('reality-lens-feature-panel');livePanel.dataset.lensSurfaceAttached='true';livePanel.dataset.objectShape=surface.shape;
-      // The world rig owns movement. Legacy floating-panel capture must not
-      // steal native disclosure taps or scrolling from its attached skin.
+      // Keep the real console as the state/action owner, but remove it from
+      // visible layout. Its controls are sampled into semantic regions on the
+      // owning Three.js mesh; activating a mesh region invokes the real control.
+      livePanel.classList.add('reality-lens-feature-panel');
+      livePanel.dataset.lensSurfaceAttached='true';
+      livePanel.dataset.nativeSurfaceSource='true';
+      livePanel.dataset.objectShape=object.shape??node.shape;
       livePanel.dataset.noPanelDrag='true';
-      livePanel.style.position='absolute';livePanel.style.inset='auto';livePanel.style.left='auto';livePanel.style.right='auto';livePanel.style.top='auto';livePanel.style.bottom='auto';livePanel.style.margin='0';livePanel.style.transformOrigin='50% 50%';livePanel.style.setProperty('--lens-surface-width',`${Math.round(initialFace.width*SURFACE_PIXELS_PER_UNIT)}px`);livePanel.style.setProperty('--lens-surface-height',`${Math.round(initialFace.height*SURFACE_PIXELS_PER_UNIT)}px`);livePanel.style.setProperty('--lens-surface-clip',realityObjectSurfaceEngine.clipPath(surface.shape));
-      document.dispatchEvent(new CustomEvent('matumbo:reality-lens-surface-attachment',{detail:{panelId:livePanel.id,attached:true}}));
+      document.dispatchEvent(new CustomEvent('matumbo:reality-lens-surface-attachment',{detail:{panelId:livePanel.id,attached:true,native:true}}));
     }
-    // Provenance belongs to the same reading skin. Five extra browser cards
-    // wrapped round an object duplicated content and occluded the real UI.
-    const metadata=document.createElement('details');metadata.className='assembly-surface-provenance';
-    const summary=document.createElement('summary');summary.textContent='Object · sources & connections';metadata.append(summary);
-    const identity=document.createElement('p');identity.textContent=`${surface.label} · ${visibleId(feature.id)} · same world entity`;metadata.append(identity);
-    const provenance=document.createElement('p');provenance.textContent=surface.sourceRefs.join(' · ')||'No source references registered.';metadata.append(provenance);
-    const boundary=document.createElement('p');boundary.textContent=surface.boundary;metadata.append(boundary);
-    for(const id of (relationships[feature.id]??[]).filter(id=>featureMap.has(id)).slice(0,6)){
-      const link=document.createElement('button');link.type='button';link.textContent=labelFor(featureMap.get(id));link.onclick=()=>onNavigate?.(id,'reality-assembly');metadata.append(link);
-    }
-    front.append(metadata);
-    const surfaces=[{id:'front',element:front,object3d:null}];
-    mountedSurface={featureId,livePanel,restore,fallback,front,metadata,surfaces,objects:[],shape:null,composition:null,intro:livePanel?mountLivingSurfaceIntro(livePanel):null};
-    // Discover structure, not feature names. The algorithm therefore also
-    // handles older ID-styled consoles and future schema-generated controls.
-    const annotateFlow=()=>{
-      for(const element of front.querySelectorAll('*')){
-        if(element.hasAttribute('data-surface-flow'))continue;
-        const style=getComputedStyle(element);
-        if(style.display==='grid'||style.display==='inline-grid')element.dataset.surfaceFlow='grid';
-        else if((style.display==='flex'||style.display==='inline-flex')&&style.flexDirection==='row')element.dataset.surfaceFlow='row';
-      }
-    };
-    const flowObserver=new MutationObserver(changes=>{if(changes.some(change=>[...change.addedNodes].some(node=>node.nodeType===1)))annotateFlow();});
-    flowObserver.observe(front,{childList:true,subtree:true});mountedSurface.flowObserver=flowObserver;
-    requestAnimationFrame(()=>{if(mountedSurface?.front===front)annotateFlow();});
-    root.classList.add('assembly-has-live-object-surface');selectedSurface.hidden=true;materializeSurfaceObjects(mountedSurface);sizeAndPlaceSurface(mountedSurface);
-    if(css3dFailed)say('Accessible reading mode: the 3D surface renderer is unavailable. Your feature controls still work.');
+
+    const native=createNativeInformationSurface({
+      featureId,feature,mesh:node.tabMesh,shape:object.shape??node.shape,panel:livePanel,
+      summary:detail?.summary??feature.description,
+      atlasSize:innerWidth<700?512:768,
+      onNavigate:(id,method)=>onNavigate?.(id,method??'native-surface'),
+    });
+    node.nativeInformationSurface=native;
+    node.surfaceReading=true;
+    node.surfaceStretch=[1,1,1];
+    if(node.indicator)node.indicator.visible=false;
+
+    const observer=livePanel?new MutationObserver(()=>{
+      if(mountedSurface?.native===native)native.sync({panel:livePanel,summary:readFeature(featureId)?.summary??feature.description});
+    }):null;
+    observer?.observe(livePanel,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['value','checked','selected','aria-pressed','aria-expanded','data-state']});
+
+    mountedSurface={mode:'native',featureId,livePanel,restore,native,observer};
+    root.classList.add('assembly-has-live-object-surface','assembly-native-information');
+    selectedSurface.hidden=true;
+    root.classList.add('assembly-clean');
     return true;
   }
   function createSideReality(featureId){
@@ -670,7 +694,14 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   const release=guard(event=>{
     if(!active||!pointer||event.pointerId!==pointer.id)return;const previous=pointer;pointer=null;controls.enabled=true;
     if(previous.move){if(event.type==='pointerup'){owner.move(previous.objectId,previous.next);syncActiveReality();}render();say(event.type==='pointerup'?'Layout move recorded. Use 4D to inspect it through time.':'Move cancelled.');return;}
-    if(event.type==='pointerup'&&previous.objectId&&Math.hypot(event.clientX-previous.x,event.clientY-previous.y)<7){if(interaction!=='move')activateObjectTab(previous.objectId);else select(previous.objectId,{approach:false});}
+    if(event.type==='pointerup'&&previous.objectId&&Math.hypot(event.clientX-previous.x,event.clientY-previous.y)<7){
+      const hit=locate(event);
+      if(interaction!=='move'&&mountedSurface?.mode==='native'&&mountedSurface.featureId===previous.objectId&&mountedSurface.native?.activate(hit)){
+        mountedSurface.native.sync({panel:mountedSurface.livePanel,summary:readFeature(previous.objectId)?.summary??featureMap.get(previous.objectId)?.description});
+        render();return;
+      }
+      if(interaction!=='move')activateObjectTab(previous.objectId);else select(previous.objectId,{approach:false});
+    }
   });
   const keys=guard(event=>{
     if(active&&event.key==='Escape'&&root.classList.contains('assembly-directory-open')){setDirectory(false,{restoreFocus:true});event.preventDefault();return;}
@@ -707,7 +738,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   render();
   const selectionObserver=new MutationObserver(()=>{compactSelection.textContent=find('[data-title]').textContent;});selectionObserver.observe(find('[data-title]'),{childList:true});
   return {open,close,get active(){return active;},getSnapshot:snapshot,resolve:spatial.resolve,focusFeature(id){if(!featureMap.has(id))return false;if(!active)open({lensMode:true,featureId:id});else select(id);return true;},mountFeatureSurface,clearFeatureSurface,setInspectorVisible(visible){selectedSurface.hidden=!visible;root.classList.toggle('assembly-object-focused',Boolean(visible));root.classList.toggle('assembly-clean',!visible);find('[data-clean]').textContent=visible?'Celare':'Objectum';if(visible)render();},
-    getFeatureObject(id){const node=spatial.nodes.get(id);return node?{root:node.root,feature:featureMap.get(id),get shape(){return node.shape;}}:null;},
+    getFeatureObject(id){const node=spatial.nodes.get(id);return node?{root:node.root,feature:featureMap.get(id),get shape(){return node.shape;},get mesh(){return node.tabMesh;},get nativeInformationSurface(){return node.nativeInformationSurface??null;}}:null;},
     getPanelAnchor(featureId){
       const node=spatial.nodes.get(featureId),object=owner.getSnapshot().objects.find(item=>item.id===featureId);if(!node||!object)return null;
       const distance=Math.max(.45,camera.position.distanceTo(node.root.position));
@@ -726,8 +757,14 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
       if(focusTarget&&!renderer.xr.isPresenting){const blend=reducedMotion?1:1-Math.exp(-dt*6);controls.target.lerp(focusTarget,blend);camera.position.lerp(focusPosition,blend);if(camera.position.distanceTo(focusPosition)<.02){focusTarget=null;focusPosition=null;}}
       const cameraDistance=camera.position.distanceTo(controls.target);
       spatial.update(dt,time,{reducedMotion,cameraDistance,cameraPosition:camera.position});spatial.layer.updateMatrixWorld(true);camera.updateMatrixWorld();
-      cssSurfaceHost.hidden=Boolean(renderer.xr?.isPresenting);
-      if(mountedSurface&&!cssSurfaceHost.hidden){materializeSurfaceObjects(mountedSurface);sizeAndPlaceSurface(mountedSurface);css3dRenderer?.render(scene,camera);}
+      cssSurfaceHost.hidden=Boolean(renderer.xr?.isPresenting)||mountedSurface?.mode==='native';
+      if(mountedSurface?.mode==='native'){
+        const detail=readFeature(mountedSurface.featureId),feature=featureMap.get(mountedSurface.featureId);
+        mountedSurface.native.sync({panel:mountedSurface.livePanel,summary:detail?.summary??feature?.description});
+        mountedSurface.native.update({camera,viewportHeight:innerHeight,time:time*1000,budget:innerWidth<700?.72:1,focused:true});
+      }else if(mountedSurface&&!cssSurfaceHost.hidden){
+        materializeSurfaceObjects(mountedSurface);sizeAndPlaceSurface(mountedSurface);css3dRenderer?.render(scene,camera);
+      }
       onPanelFrame(owner.getSnapshot().selectedId);
       const overlaps=(a,b)=>a.left<b.right+4&&a.right>b.left-4&&a.top<b.bottom+4&&a.bottom>b.top-4;
       const occupied=[...all('.assembly-header,.assembly-directory,.assembly-inspector,.assembly-toolbar,.assembly-branches,.assembly-selection-hint,.assembly-world-label,.assembly-status'),...document.querySelectorAll('body.assembly-mode #immersive-toolbar')].filter(element=>!element.hidden&&getComputedStyle(element).display!=='none'&&getComputedStyle(element).visibility!=='hidden').map(element=>element.getBoundingClientRect());
