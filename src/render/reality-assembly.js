@@ -312,6 +312,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
         item.object3d?.scale.set(1/density,1/composition.pixelsPerUnitY,1/density);
         item.element.dataset.objectShape=shape;
         item.element.dataset.surfaceMode=composition.mode;
+        item.element.style.setProperty('--lens-surface-clip',realityObjectSurfaceEngine.clipPath(shape));
         item.element.style.setProperty('--surface-inset',`${composition.inset}px`);
         if(item.id==='front'&&record.livePanel){
           record.livePanel.style.setProperty('--lens-surface-width',`${Math.round(face.width*density)}px`);
@@ -377,7 +378,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
       // The world rig owns movement. Legacy floating-panel capture must not
       // steal native disclosure taps or scrolling from its attached skin.
       livePanel.dataset.noPanelDrag='true';
-      livePanel.style.position='absolute';livePanel.style.inset='auto';livePanel.style.left='auto';livePanel.style.right='auto';livePanel.style.top='auto';livePanel.style.bottom='auto';livePanel.style.margin='0';livePanel.style.transformOrigin='50% 50%';livePanel.style.setProperty('--lens-surface-width',`${Math.round(REALITY_TAB_FORMS[surface.shape].width*SURFACE_PIXELS_PER_UNIT)}px`);livePanel.style.setProperty('--lens-surface-height',`${Math.round(REALITY_TAB_FORMS[surface.shape].height*SURFACE_PIXELS_PER_UNIT)}px`);
+      livePanel.style.position='absolute';livePanel.style.inset='auto';livePanel.style.left='auto';livePanel.style.right='auto';livePanel.style.top='auto';livePanel.style.bottom='auto';livePanel.style.margin='0';livePanel.style.transformOrigin='50% 50%';livePanel.style.setProperty('--lens-surface-width',`${Math.round(REALITY_TAB_FORMS[surface.shape].width*SURFACE_PIXELS_PER_UNIT)}px`);livePanel.style.setProperty('--lens-surface-height',`${Math.round(REALITY_TAB_FORMS[surface.shape].height*SURFACE_PIXELS_PER_UNIT)}px`);livePanel.style.setProperty('--lens-surface-clip',realityObjectSurfaceEngine.clipPath(surface.shape));
       document.dispatchEvent(new CustomEvent('matumbo:reality-lens-surface-attachment',{detail:{panelId:livePanel.id,attached:true}}));
     }
     // Provenance belongs to the same reading skin. Five extra browser cards
