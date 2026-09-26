@@ -38,6 +38,7 @@ import {
   COMPUTE_PROVIDERS,
   DEFAULT_REWARD_POLICY,
   createComputeExchangeLedger,
+  normalizeUsageReceipt,
   selectProviderRoute,
 } from "../domains/compute-exchange.js?v=20260925-compute2";
 import {
@@ -50,6 +51,7 @@ import {
   createContributionVault,
 } from "../domains/contribution-vault.js?v=20260925-compute1";
 import { createEconomicTimeline } from "../domains/economic-timeline.js?v=20260925-compute1";
+import { evaluateComputeEconomics } from "../domains/compute-economics-policy.js?v=20260925-compute1";
 
 export { WEB_AI_CONSOLE_SOURCE };
 
@@ -525,6 +527,38 @@ export function createWebAiConsole({
   economyStatus.dataset.kind = "info";
   form.appendChild(economyStatus);
   economySection.appendChild(form);
+
+  const treasurySection = el(doc, "div", "web-ai-economy-section");
+  const treasuryTitle = el(doc, "div", "web-ai-economy-title", "PLAN + TREASURY LAB");
+  treasuryTitle.appendChild(el(doc, "span", null, "margin first · rewards/burn never from customer principal"));
+  treasurySection.appendChild(treasuryTitle);
+  const treasuryGrid = el(doc, "div", "web-ai-economy-form-grid");
+  const planRevenue = el(doc, "input");
+  planRevenue.type="number"; planRevenue.min="0"; planRevenue.step="0.01"; planRevenue.value="20";
+  planRevenue.setAttribute("aria-label","Demo customer revenue");
+  const planProviderCost = el(doc, "input");
+  planProviderCost.type="number"; planProviderCost.min="0"; planProviderCost.step="0.01"; planProviderCost.value="10";
+  planProviderCost.setAttribute("aria-label","Demo provider cost");
+  const planOpsCost = el(doc, "input");
+  planOpsCost.type="number"; planOpsCost.min="0"; planOpsCost.step="0.01"; planOpsCost.value="2";
+  planOpsCost.setAttribute("aria-label","Demo payment and operations cost");
+  const planRewardRate = el(doc, "input");
+  planRewardRate.type="number"; planRewardRate.min="0"; planRewardRate.max="1"; planRewardRate.step="0.01"; planRewardRate.value="0.15";
+  planRewardRate.setAttribute("aria-label","Reward budget rate");
+  const planReserveRate = el(doc, "input");
+  planReserveRate.type="number"; planReserveRate.min="0"; planReserveRate.max="1"; planReserveRate.step="0.01"; planReserveRate.value="0.5";
+  planReserveRate.setAttribute("aria-label","Treasury reserve rate");
+  const planBurnRate = el(doc, "input");
+  planBurnRate.type="number"; planBurnRate.min="0"; planBurnRate.max="1"; planBurnRate.step="0.01"; planBurnRate.value="0.1";
+  planBurnRate.setAttribute("aria-label","Future burn budget rate");
+  treasuryGrid.append(planRevenue, planProviderCost, planOpsCost, planRewardRate, planReserveRate, planBurnRate);
+  treasurySection.appendChild(treasuryGrid);
+  const treasuryButton = el(doc, "button", "web-ai-btn primary", "EVALUATE DEMO PLAN");
+  treasuryButton.type="button";
+  treasurySection.appendChild(treasuryButton);
+  const treasuryStatus = el(doc, "div", "web-ai-route-result", "Planning math only. A future burn budget is not a burn.");
+  treasurySection.appendChild(treasuryStatus);
+  economySection.appendChild(treasurySection);
 
   const vaultSection = el(doc, "div", "web-ai-economy-section");
   const vaultTitle = el(doc, "div", "web-ai-economy-title", "CONTRIBUTION VAULT");
@@ -1028,13 +1062,23 @@ export function createWebAiConsole({
       verified: verifiedInput.checked,
     };
 
-    if (draftReceipt.verified) {
+    let normalizedReceipt;
+    try {
+      normalizedReceipt = normalizeUsageReceipt(draftReceipt);
+    } catch (error) {
+      economyStatus.textContent = `Receipt rejected before debit: ${error?.message ?? "invalid input"}.`;
+      economyStatus.dataset.kind = "error";
+      publish("compute-usage-rejected", "button", { reason: String(error?.message ?? "invalid input") });
+      return;
+    }
+
+    if (normalizedReceipt.verified) {
       let accountResult;
       try {
         accountResult = computeAccount.spendVerified({
           spendId: receiptId,
-          providerId: draftReceipt.providerId,
-          amountUsd: draftReceipt.reportedCostUsd,
+          providerId: normalizedReceipt.providerId,
+          amountUsd: normalizedReceipt.reportedCostUsd,
         });
       } catch (error) {
         economyStatus.textContent = `Spend rejected: ${error?.message ?? "invalid amount"}.`;
@@ -1050,14 +1094,14 @@ export function createWebAiConsole({
       }
       appendEconomicEvent("credits.spent", "compute-account", {
         receiptId,
-        providerId: draftReceipt.providerId,
-        amountUsd: Number(draftReceipt.reportedCostUsd),
+        providerId: normalizedReceipt.providerId,
+        amountUsd: normalizedReceipt.reportedCostUsd,
       });
     }
 
     let result;
     try {
-      result = computeLedger.record(draftReceipt);
+      result = computeLedger.record(normalizedReceipt);
     } catch (error) {
       economyStatus.textContent = `Receipt rejected: ${error?.message ?? "invalid input"}.`;
       economyStatus.dataset.kind = "error";
@@ -1096,6 +1140,34 @@ export function createWebAiConsole({
       vault: snapshot.vault,
       timeline: snapshot.timeline,
     });
+  });
+
+  treasuryButton.addEventListener("click", () => {
+    try {
+      const result = evaluateComputeEconomics({
+        customerRevenueUsd: planRevenue.value,
+        providerCostUsd: planProviderCost.value,
+        paymentOpsCostUsd: planOpsCost.value,
+        rewardBudgetRate: planRewardRate.value,
+        treasuryReserveRate: planReserveRate.value,
+        futureBurnBudgetRate: planBurnRate.value,
+      });
+      treasuryStatus.textContent = result.sustainable
+        ? `Positive margin ${result.grossMarginUsd.toFixed(2)} · reward budget ${result.rewardBudgetUsd.toFixed(2)} · treasury reserve ${result.treasuryReserveUsd.toFixed(2)} · future burn budget ${result.futureBurnBudgetUsd.toFixed(2)} · retained ${result.retainedMarginUsd.toFixed(2)}. No burn executed.`
+        : `Unsustainable demo plan: margin ${result.grossMarginUsd.toFixed(2)}. Reward, treasury-distribution and future burn budgets are held at $0.`;
+      appendEconomicEvent("economics.plan-evaluated", "compute-economics-policy", {
+        customerRevenueUsd: result.customerRevenueUsd,
+        providerCostUsd: result.providerCostUsd,
+        grossMarginUsd: result.grossMarginUsd,
+        rewardBudgetUsd: result.rewardBudgetUsd,
+        treasuryReserveUsd: result.treasuryReserveUsd,
+        futureBurnBudgetUsd: result.futureBurnBudgetUsd,
+        futureBurnExecuted: false,
+      });
+      publish("compute-plan-evaluated", "button", result);
+    } catch (error) {
+      treasuryStatus.textContent = `Plan rejected: ${error?.message ?? "invalid economics policy"}.`;
+    }
   });
 
   let contributionSequence = 0;
@@ -1304,20 +1376,21 @@ export function createWebAiConsole({
       return snapshot;
     },
     recordComputeUsage: (receipt, method = "api") => {
-      if (receipt?.verified === true) {
+      const normalized = normalizeUsageReceipt(receipt);
+      if (normalized.verified === true) {
         const debit = computeAccount.spendVerified({
-          spendId: receipt.receiptId,
-          providerId: receipt.providerId,
-          amountUsd: receipt.reportedCostUsd,
+          spendId: normalized.receiptId,
+          providerId: normalized.providerId,
+          amountUsd: normalized.reportedCostUsd,
         });
         if (!debit.accepted) return Object.freeze({ accepted: false, reason: debit.reason, account: debit.snapshot });
         appendEconomicEvent("credits.spent", "compute-account", {
-          receiptId: receipt.receiptId,
-          providerId: receipt.providerId,
-          amountUsd: Number(receipt.reportedCostUsd),
+          receiptId: normalized.receiptId,
+          providerId: normalized.providerId,
+          amountUsd: normalized.reportedCostUsd,
         });
       }
-      const result = computeLedger.record(receipt);
+      const result = computeLedger.record(normalized);
       appendEconomicEvent("provider.usage", result.receipt.providerId, {
         receiptId: result.receipt.receiptId,
         totalTokens: result.receipt.totalTokens,
