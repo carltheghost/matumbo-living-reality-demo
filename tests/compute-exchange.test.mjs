@@ -5,6 +5,7 @@ import {
   estimateTumboSimReward,
   normalizeUsageReceipt,
   rankProviderQuotes,
+  selectProviderRoute,
 } from "../src/domains/compute-exchange.js";
 
 test("raw model-token volume alone never creates a reward", () => {
@@ -72,4 +73,19 @@ test("router can rank provider quotes by cost, latency, or balanced policy", () 
   assert.equal(rankProviderQuotes(quotes, { priority: "cost" })[0].providerId, "deepseek");
   assert.equal(rankProviderQuotes(quotes, { priority: "latency" })[0].providerId, "google");
   assert.equal(rankProviderQuotes(quotes, { priority: "balanced" }).length, 3);
+});
+
+
+test("policy router enforces caps, capabilities and local-only privacy", () => {
+  const route = selectProviderRoute([
+    { providerId: "openai", estimatedCostUsd: 0.6, estimatedLatencyMs: 700 },
+    { providerId: "local", estimatedCostUsd: 0.3, estimatedLatencyMs: 1100 },
+  ], {
+    priority: "cost",
+    maxCostUsd: 1,
+    requiredCapabilities: ["code"],
+    privacy: "local-only",
+  });
+  assert.equal(route.selected.providerId, "local");
+  assert.equal(route.rejected.some((row) => row.providerId === "openai" && row.reason === "privacy-local-only"), true);
 });
