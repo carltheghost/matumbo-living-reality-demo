@@ -106,6 +106,7 @@ import { createContractLedger } from './domains/contract-ledger.js?v=20260920-cf
 import { createBrowserContractAutomation, createBrowserContractWorkspace, createBrowserContractFlow, createUnavailableContractWorkspace } from './domains/contract-runtime.js';
 import { applyContractPublicEvidence } from './domains/contract-public-evidence.js';
 import { createContractWorldContribution } from './domains/contract-world-projection.js';
+import { COMPUTE_WORLD_SOURCE, createComputeWorldContribution } from './domains/compute-world-projection.js?v=20260925-compute1';
 import { createProjectionEnvelope } from './core/view-state.js';
 import { mountContractWorkbench } from './render/contract-workbench.js';
 import { createContractOrganism } from './render/contract-organism.js';
@@ -7741,15 +7742,40 @@ window.__TUMBO_FEATURE_NAVIGATOR__ = featureNavigator;
 featureNavigator.setProjection(livingRealityWorld);
 blockWorld?.setFeatureInventory?.(FEATURE_DEFINITIONS);
 featureNavigator.setDeviceProjection(deviceProjection);
+function publishComputeEconomyWorld(snapshot) {
+  if (!snapshot) return false;
+  const contribution = createComputeWorldContribution(snapshot);
+  livingRealityEnvelope = createProjectionEnvelope({
+    contributions: [
+      ...livingRealityWorld.contributions.filter((item) => item.source !== COMPUTE_WORLD_SOURCE),
+      contribution,
+    ],
+    projectedAt: contribution.updatedAt,
+  });
+  livingRealityWorld = livingRealityEnvelope.world;
+  window.__SIMFABRIC_PROJECTION__ = livingRealityWorld;
+  window.__SIMFABRIC_ENVELOPE__ = livingRealityEnvelope;
+  window.__SIMFABRIC_DEVICE_PROJECTION__ = createDeviceProjection(livingRealityEnvelope, devicePreferences);
+  window.dispatchEvent(new CustomEvent('simfabric:projection', { detail: livingRealityWorld }));
+  return true;
+}
+
 webAiConsole = createWebAiConsole({
   documentRoot: document,
   windowRoot: window,
-  onEvent: (event) => projectionBridge.emitIntent(
-    `projection.web-ai.${String(event?.action ?? 'interaction')}`,
-    WEB_AI_CONSOLE_SOURCE,
-    event,
-  ),
+  onEvent: (event) => {
+    const action = String(event?.action ?? 'interaction');
+    projectionBridge.emitIntent(
+      `projection.web-ai.${action}`,
+      WEB_AI_CONSOLE_SOURCE,
+      event,
+    );
+    if (action.startsWith('compute-') || action.startsWith('contribution-')) {
+      queueMicrotask(() => publishComputeEconomyWorld(webAiConsole?.getComputeEconomySnapshot?.()));
+    }
+  },
 });
+queueMicrotask(() => publishComputeEconomyWorld(webAiConsole?.getComputeEconomySnapshot?.()));
 socialMirrorConsole = createSocialMirrorConsole({
   documentRoot: document,
   onSelect: (snapshot) => projectionBridge.emitIntent(
