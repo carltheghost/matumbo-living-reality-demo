@@ -113,8 +113,8 @@ export const FEATURE_DEFINITIONS = Object.freeze([
     kicker: "watch · search · explore",
     focusOrganId: "media",
     sources: [],
-    description: "Open a YouTube object, search on YouTube, or paste a public video or playlist link to watch it in the Reality Lens surface.",
-    boundary: "The embedded player loads only after you submit a link. Playback is provided by YouTube; this feature uses no API key, account credentials, upload, or automatic playback.",
+    description: "Search for YouTube videos by title, creator, topic, or phrase and play a selected result directly on the YouTube Reality Lens object. Public video and playlist links still work too.",
+    boundary: "Search metadata is requested only after an explicit search from a public no-credential search endpoint; selected video IDs play through YouTube's privacy-enhanced embed. No account credentials, upload, wallet, or background playback is used.",
   }),
   Object.freeze({
     id: "paycore",
@@ -504,9 +504,9 @@ export const FEATURE_SURFACE_ROUTES = Object.freeze({
     Object.freeze(["INTENT → PROPOSAL", "no autonomous execution"]),
   ]),
   "youtube": Object.freeze([
-    Object.freeze(["SEARCH", "open YouTube search when you choose"]),
-    Object.freeze(["PLAYER", "paste a public video or playlist link"]),
-    Object.freeze(["EMBED", "official player · no API key · no autoplay"]),
+    Object.freeze(["SEARCH", "search by title, creator, topic, or phrase"]),
+    Object.freeze(["RESULTS", "pick a returned video on the same object"]),
+    Object.freeze(["PLAYER", "privacy-enhanced YouTube embed · links still supported"]),
   ]),
   "neural-mesh": Object.freeze([
     Object.freeze(["ADVISORY GRAPH", "inspect the current local mesh"]),

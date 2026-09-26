@@ -42,3 +42,22 @@ test('live feature controls inherit the owning body silhouette',async()=>{
   assert.match(assembly,/realityObjectSurfaceEngine\.clipPath\(shape\)/);
   assert.match(css,/clip-path:var\(--lens-surface-clip/);
 });
+
+
+test('attached controls are only an interaction skin; the Three.js body stays the visible tab',async()=>{
+  const [scene,css,assembly]=await Promise.all([
+    readFile(new URL('../src/render/reality-assembly-scene.js',import.meta.url),'utf8'),
+    readFile(new URL('../src/render/reality-assembly.css',import.meta.url),'utf8'),
+    readFile(new URL('../src/render/reality-assembly.js',import.meta.url),'utf8'),
+  ]);
+  assert.match(scene,/Native object-tab contract/);
+  assert.match(scene,/node\.artworkSuppressed!==reading/);
+  assert.match(scene,/node\.artMaterial\.map=reading\?null:node\.artTexture/);
+  assert.match(css,/Native object-tab contract/);
+  assert.match(css,/background:transparent!important/);
+  assert.match(css,/border:0!important/);
+  assert.match(css,/box-shadow:none!important/);
+  assert.match(assembly,/function activateObjectTab\(id\)/);
+  assert.match(assembly,/owner\.setOpen\(id,true\)/);
+  assert.match(assembly,/activateObjectTab\(previous\.objectId\)/);
+});
