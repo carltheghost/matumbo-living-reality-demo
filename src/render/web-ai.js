@@ -942,12 +942,12 @@ export function createWebAiConsole({
     const exchange = computeLedger.snapshot();
     const account = computeAccount.snapshot();
     const vault = contributionVault.snapshot();
-    balanceValue.textContent = `${account.balanceUsd.toFixed(2)}`;
-    spendValue.textContent = `${exchange.totals.verifiedSpendUsd.toFixed(2)}`;
+    balanceValue.textContent = "$" + account.balanceUsd.toFixed(2);
+    spendValue.textContent = "$" + exchange.totals.verifiedSpendUsd.toFixed(2);
     tokenValue.textContent = exchange.totals.totalTokens.toLocaleString();
     const totalReward = exchange.totals.tumboSimReward + vault.totalRewardTumboSim;
     rewardValue.textContent = totalReward.toFixed(4).replace(/\.?0+$/, "") || "0";
-    accountStatus.textContent = `${account.balanceUsd.toFixed(2)} demo credits · ${account.spentUsd.toFixed(2)} spent · ${account.remainingMonthlyBudgetUsd.toFixed(2)} monthly budget remaining`;
+    accountStatus.textContent = "$" + account.balanceUsd.toFixed(2) + " demo credits · $" + account.spentUsd.toFixed(2) + " spent · $" + account.remainingMonthlyBudgetUsd.toFixed(2) + " monthly budget remaining";
     renderEconomicTimeline();
     return { exchange, account, vault, timeline: economicTimeline.snapshot(), totalRewardTumboSim: totalReward };
   }
@@ -959,7 +959,7 @@ export function createWebAiConsole({
       const fundingId = `demo-fund-${Date.now()}-${++demoFundingSequence}`;
       computeAccount.fundDemo({ fundingId, amountUsd, reason: "explicit-ui-demo-credit" });
       appendEconomicEvent("credits.demo-funded", "compute-account", { fundingId, amountUsd });
-      accountStatus.textContent = `Added ${amountUsd.toFixed(2)} demo compute credits. No money was charged.`;
+      accountStatus.textContent = "Added $" + amountUsd.toFixed(2) + " demo compute credits. No money was charged.";
       refreshEconomyMetrics();
       publish("compute-demo-funded", "button", { fundingId, amountUsd });
     } catch (error) {
@@ -974,7 +974,7 @@ export function createWebAiConsole({
         perTaskBudgetUsd: perTaskBudgetInput.value,
       });
       appendEconomicEvent("budget.updated", "compute-account", budget);
-      accountStatus.textContent = `Budget guardrails saved: ${budget.monthlyBudgetUsd.toFixed(2)} monthly / ${budget.perTaskBudgetUsd.toFixed(2)} per task.`;
+      accountStatus.textContent = "Budget guardrails saved: $" + budget.monthlyBudgetUsd.toFixed(2) + " monthly / $" + budget.perTaskBudgetUsd.toFixed(2) + " per task.";
       refreshEconomyMetrics();
     } catch (error) {
       accountStatus.textContent = `Budget rejected: ${error?.message ?? "invalid budget"}.`;
@@ -1038,7 +1038,7 @@ export function createWebAiConsole({
       publish("compute-route-no-match", "button", { policy: result.policy, rejected: result.rejected });
       return;
     }
-    routeResult.textContent = `Selected ${result.selected.providerName} · estimated ${result.selected.estimatedCostUsd.toFixed(4)} · ${Number.isFinite(result.selected.estimatedLatencyMs) ? `${result.selected.estimatedLatencyMs} ms` : "latency unavailable"} · policy ${result.policy.priority}.`;
+    routeResult.textContent = "Selected " + result.selected.providerName + " · estimated $" + result.selected.estimatedCostUsd.toFixed(4) + " · " + (Number.isFinite(result.selected.estimatedLatencyMs) ? result.selected.estimatedLatencyMs + " ms" : "latency unavailable") + " · policy " + result.policy.priority + ".";
     appendEconomicEvent("route.selected", "compute-router", {
       providerId: result.selected.providerId,
       estimatedCostUsd: result.selected.estimatedCostUsd,
@@ -1153,8 +1153,8 @@ export function createWebAiConsole({
         futureBurnBudgetRate: planBurnRate.value,
       });
       treasuryStatus.textContent = result.sustainable
-        ? `Positive margin ${result.grossMarginUsd.toFixed(2)} · reward budget ${result.rewardBudgetUsd.toFixed(2)} · treasury reserve ${result.treasuryReserveUsd.toFixed(2)} · future burn budget ${result.futureBurnBudgetUsd.toFixed(2)} · retained ${result.retainedMarginUsd.toFixed(2)}. No burn executed.`
-        : `Unsustainable demo plan: margin ${result.grossMarginUsd.toFixed(2)}. Reward, treasury-distribution and future burn budgets are held at $0.`;
+        ? "Positive margin $" + result.grossMarginUsd.toFixed(2) + " · reward budget $" + result.rewardBudgetUsd.toFixed(2) + " · treasury reserve $" + result.treasuryReserveUsd.toFixed(2) + " · future burn budget $" + result.futureBurnBudgetUsd.toFixed(2) + " · retained $" + result.retainedMarginUsd.toFixed(2) + ". No burn executed."
+        : "Unsustainable demo plan: margin $" + result.grossMarginUsd.toFixed(2) + ". Reward, treasury-distribution and future burn budgets are held at $0.";
       appendEconomicEvent("economics.plan-evaluated", "compute-economics-policy", {
         customerRevenueUsd: result.customerRevenueUsd,
         providerCostUsd: result.providerCostUsd,
