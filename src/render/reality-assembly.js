@@ -557,6 +557,14 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     owner.move(object.id,next);syncActiveReality();render();
   }
   const enter=(id=owner.getSnapshot().selectedId)=>onNavigate?.(id);
+  function activateObjectTab(id){
+    select(id);
+    const state=owner.getSnapshot(),object=state.objects.find(item=>item.id===id);
+    if(object&&!object.open&&state.mode==='present'){
+      owner.setOpen(id,true);syncActiveReality();render();
+    }
+    enter(id);
+  }
   const spatialGroupLabels=new Map();
   for(const domain of REALITY_LENS_GROUPS){
     const members=groupMembers.get(domain.id)??[];if(!members.length)continue;
@@ -662,7 +670,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   const release=guard(event=>{
     if(!active||!pointer||event.pointerId!==pointer.id)return;const previous=pointer;pointer=null;controls.enabled=true;
     if(previous.move){if(event.type==='pointerup'){owner.move(previous.objectId,previous.next);syncActiveReality();}render();say(event.type==='pointerup'?'Layout move recorded. Use 4D to inspect it through time.':'Move cancelled.');return;}
-    if(event.type==='pointerup'&&previous.objectId&&Math.hypot(event.clientX-previous.x,event.clientY-previous.y)<7){select(previous.objectId);if(interaction!=='move')enter(previous.objectId);}
+    if(event.type==='pointerup'&&previous.objectId&&Math.hypot(event.clientX-previous.x,event.clientY-previous.y)<7){if(interaction!=='move')activateObjectTab(previous.objectId);else select(previous.objectId,{approach:false});}
   });
   const keys=guard(event=>{
     if(active&&event.key==='Escape'&&root.classList.contains('assembly-directory-open')){setDirectory(false,{restoreFocus:true});event.preventDefault();return;}
@@ -712,7 +720,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
       // panel settles over the selected object instead of beside the object.
       return {anchorX:centerX-width/2-24,anchorY:centerY,width,height,shape:object.shape??'rectangle',aspectRatio:fitted.aspectRatio};
     },
-    selectObject(object){const id=spatial.resolve(object);if(!id)return false;select(id);toggle();return true;},
+    selectObject(object){const id=spatial.resolve(object);if(!id)return false;activateObjectTab(id);return true;},
     update(dt,time){
       if(!active)return;
       if(focusTarget&&!renderer.xr.isPresenting){const blend=reducedMotion?1:1-Math.exp(-dt*6);controls.target.lerp(focusTarget,blend);camera.position.lerp(focusPosition,blend);if(camera.position.distanceTo(focusPosition)<.02){focusTarget=null;focusPosition=null;}}
