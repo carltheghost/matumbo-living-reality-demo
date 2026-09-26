@@ -5,7 +5,7 @@
  *  - the curated embed-vs-handoff policy (most publishers send
  *    X-Frame-Options / frame-ancestors headers that forbid framing),
  *  - the embed-friendly web presets and the known-blocked handoff presets,
- *  - the AI assistant link-out cards (Meta AI, ChatGPT, Grok),
+ *  - provider-neutral AI assistant link-out cards (ChatGPT, Claude, Gemini, DeepSeek, Kimi and others),
  *  - the local prompt composer that carries the user's task note over.
  *
  * Links only — NEVER credentials, API keys, tokens, or secrets. Nothing
