@@ -101,6 +101,14 @@ const WEB_AI_HANDOFF_HOSTS = Object.freeze([
   "chat.openai.com",
   "grok.com",
   "www.grok.com",
+  "claude.ai",
+  "www.claude.ai",
+  "gemini.google.com",
+  "chat.deepseek.com",
+  "deepseek.com",
+  "www.deepseek.com",
+  "kimi.com",
+  "www.kimi.com",
 ]);
 
 /**
@@ -172,6 +180,30 @@ export const WEB_AI_ASSISTANTS = Object.freeze([
     name: "Grok",
     url: "https://grok.com/",
     blurb: "xAI's assistant — bring your task note along.",
+  }),
+  Object.freeze({
+    id: "claude",
+    name: "Claude",
+    url: "https://claude.ai/",
+    blurb: "Anthropic's assistant — open it with the same maTumbo task note.",
+  }),
+  Object.freeze({
+    id: "gemini",
+    name: "Gemini",
+    url: "https://gemini.google.com/",
+    blurb: "Google's Gemini web app — use the same prompt handoff without sharing credentials.",
+  }),
+  Object.freeze({
+    id: "deepseek",
+    name: "DeepSeek",
+    url: "https://chat.deepseek.com/",
+    blurb: "DeepSeek chat — another provider surface for the same task.",
+  }),
+  Object.freeze({
+    id: "kimi",
+    name: "Kimi",
+    url: "https://www.kimi.com/en/",
+    blurb: "Kimi — carry the same task into Moonshot's assistant.",
   }),
 ]);
 
