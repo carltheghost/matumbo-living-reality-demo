@@ -7,9 +7,9 @@ const PLAYLIST_ID=/^[A-Za-z0-9_-]{10,120}$/;
  * because public mirrors can disappear without notice.
  */
 export const YOUTUBE_SEARCH_PROVIDERS=Object.freeze([
+  'https://api.piped.private.coffee',
+  'https://pipedapi.ducks.party',
   'https://pipedapi.kavin.rocks',
-  'https://pipedapi.leptons.xyz',
-  'https://pipedapi.nosebs.ru',
 ]);
 
 /** Accept only public YouTube video and playlist links or raw video IDs. */
@@ -66,22 +66,26 @@ export function normalizeYoutubeSearchResult(item){
  * Search public YouTube metadata without requiring the user to paste a link.
  * The first healthy public Piped endpoint wins. No credentials are sent.
  */
-export async function searchYoutubeVideos(query,{fetchFn=globalThis.fetch,providers=YOUTUBE_SEARCH_PROVIDERS,limit=8}={}){
+export async function searchYoutubeVideos(query,{fetchFn=globalThis.fetch,providers=YOUTUBE_SEARCH_PROVIDERS,limit=8,timeoutMs=8000}={}){
   const q=String(query??'').trim();
   if(!q)throw Error('Type something to search for.');
   if(typeof fetchFn!=='function')throw Error('Search is unavailable in this browser.');
   const candidates=(providers??[]).map(String).filter(value=>/^https:\/\//i.test(value));
+  const requestTimeout=Math.max(25,Math.min(30000,Number(timeoutMs)||8000));
   let lastError=null;
   for(const base of candidates){
+    const controller=typeof AbortController==='function'?new AbortController():null;
+    const timeoutId=controller?setTimeout(()=>controller.abort(),requestTimeout):null;
     try{
       const url=new URL('/search',base);url.searchParams.set('q',q);url.searchParams.set('filter','videos');
-      const response=await fetchFn(url.href,{method:'GET',headers:{Accept:'application/json'},credentials:'omit'});
+      const response=await fetchFn(url.href,{method:'GET',headers:{Accept:'application/json'},credentials:'omit',...(controller?{signal:controller.signal}:{})});
       if(!response?.ok){lastError=new Error(`Search provider returned ${response?.status??'an error'}.`);continue;}
       const payload=await response.json(),items=Array.isArray(payload?.items)?payload.items:Array.isArray(payload)?payload:[];
       const results=items.map(normalizeYoutubeSearchResult).filter(Boolean).slice(0,Math.max(1,Math.min(20,Number(limit)||8)));
       if(results.length)return Object.freeze({provider:new URL(base).hostname,results:Object.freeze(results)});
       lastError=new Error('Search returned no playable videos.');
-    }catch(error){lastError=error;}
+    }catch(error){lastError=error?.name==='AbortError'?new Error(`Search provider timed out after ${requestTimeout} ms.`):error;}
+    finally{if(timeoutId!==null)clearTimeout(timeoutId);}
   }
   throw lastError??new Error('YouTube search is temporarily unavailable.');
 }
