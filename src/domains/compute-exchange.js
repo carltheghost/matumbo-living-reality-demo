@@ -20,11 +20,12 @@ export const COMPUTE_EXCHANGE_BOUNDARY =
   "and TUMBO-SIM rewards are non-transferable demo accounting. No API key, wallet, custody, staking, settlement, mint, or burn is executed.";
 
 export const COMPUTE_PROVIDERS = Object.freeze([
-  Object.freeze({ id: "openai", name: "OpenAI / GPT", chatUrl: "https://chatgpt.com/", capabilities: Object.freeze(["chat","reasoning","code","vision"]) }),
-  Object.freeze({ id: "anthropic", name: "Anthropic / Claude", chatUrl: "https://claude.ai/", capabilities: Object.freeze(["chat","reasoning","code","vision"]) }),
-  Object.freeze({ id: "google", name: "Google / Gemini", chatUrl: "https://gemini.google.com/", capabilities: Object.freeze(["chat","reasoning","code","vision"]) }),
-  Object.freeze({ id: "deepseek", name: "DeepSeek", chatUrl: "https://chat.deepseek.com/", capabilities: Object.freeze(["chat","reasoning","code"]) }),
-  Object.freeze({ id: "kimi", name: "Kimi", chatUrl: "https://www.kimi.com/en/", capabilities: Object.freeze(["chat","reasoning","code","research"]) }),
+  Object.freeze({ id: "openai", name: "OpenAI / GPT", chatUrl: "https://chatgpt.com/", executionMode: "external", capabilities: Object.freeze(["chat","reasoning","code","vision"]) }),
+  Object.freeze({ id: "anthropic", name: "Anthropic / Claude", chatUrl: "https://claude.ai/", executionMode: "external", capabilities: Object.freeze(["chat","reasoning","code","vision"]) }),
+  Object.freeze({ id: "google", name: "Google / Gemini", chatUrl: "https://gemini.google.com/", executionMode: "external", capabilities: Object.freeze(["chat","reasoning","code","vision"]) }),
+  Object.freeze({ id: "deepseek", name: "DeepSeek", chatUrl: "https://chat.deepseek.com/", executionMode: "external", capabilities: Object.freeze(["chat","reasoning","code"]) }),
+  Object.freeze({ id: "kimi", name: "Kimi", chatUrl: "https://www.kimi.com/en/", executionMode: "external", capabilities: Object.freeze(["chat","reasoning","code","research"]) }),
+  Object.freeze({ id: "local", name: "Local / Self-hosted", chatUrl: null, executionMode: "local", capabilities: Object.freeze(["chat","reasoning","code","private"]) }),
 ]);
 
 export const DEFAULT_REWARD_POLICY = Object.freeze({
@@ -140,6 +141,76 @@ export function rankProviderQuotes(quotes = [], { priority = "balanced" } = {}) 
   return Object.freeze(scored.sort((a, b) => a.score - b.score || a.providerId.localeCompare(b.providerId)));
 }
 
+
+export function selectProviderRoute(quotes = [], {
+  priority = "balanced",
+  maxCostUsd = Number.POSITIVE_INFINITY,
+  maxLatencyMs = Number.POSITIVE_INFINITY,
+  allowedProviderIds = null,
+  requiredCapabilities = [],
+  privacy = "provider-default",
+} = {}) {
+  const allowed = Array.isArray(allowedProviderIds) && allowedProviderIds.length
+    ? new Set(allowedProviderIds.map(String))
+    : null;
+  const required = Array.isArray(requiredCapabilities) ? requiredCapabilities.map(String) : [];
+  const costCap = finiteNonNegative(maxCostUsd, Number.POSITIVE_INFINITY);
+  const latencyCap = finiteNonNegative(maxLatencyMs, Number.POSITIVE_INFINITY);
+  const rejected = [];
+  const eligible = [];
+
+  for (const quote of quotes) {
+    const provider = providerById(String(quote?.providerId ?? ""));
+    if (!provider) {
+      rejected.push(Object.freeze({ providerId: String(quote?.providerId ?? "unknown"), reason: "unknown-provider" }));
+      continue;
+    }
+    if (allowed && !allowed.has(provider.id)) {
+      rejected.push(Object.freeze({ providerId: provider.id, reason: "provider-not-allowed" }));
+      continue;
+    }
+    if (required.some((capability) => !provider.capabilities.includes(capability))) {
+      rejected.push(Object.freeze({ providerId: provider.id, reason: "missing-capability" }));
+      continue;
+    }
+    if (privacy === "local-only" && provider.executionMode !== "local") {
+      rejected.push(Object.freeze({ providerId: provider.id, reason: "privacy-local-only" }));
+      continue;
+    }
+    const estimatedCostUsd = finiteNonNegative(quote?.estimatedCostUsd, Number.POSITIVE_INFINITY);
+    const estimatedLatencyMs = finiteNonNegative(quote?.estimatedLatencyMs, Number.POSITIVE_INFINITY);
+    if (!Number.isFinite(estimatedCostUsd) || estimatedCostUsd > costCap) {
+      rejected.push(Object.freeze({ providerId: provider.id, reason: "cost-cap" }));
+      continue;
+    }
+    if (Number.isFinite(estimatedLatencyMs) && estimatedLatencyMs > latencyCap) {
+      rejected.push(Object.freeze({ providerId: provider.id, reason: "latency-cap" }));
+      continue;
+    }
+    eligible.push({
+      ...quote,
+      providerId: provider.id,
+      meetsCapability: true,
+      privacyMode: privacy,
+    });
+  }
+
+  const candidates = rankProviderQuotes(eligible, { priority });
+  return Object.freeze({
+    selected: candidates[0] ?? null,
+    candidates,
+    rejected: Object.freeze(rejected),
+    policy: Object.freeze({
+      priority,
+      maxCostUsd: costCap,
+      maxLatencyMs: latencyCap,
+      allowedProviderIds: allowed ? Object.freeze([...allowed]) : null,
+      requiredCapabilities: Object.freeze([...required]),
+      privacy,
+    }),
+  });
+}
+
 export function createComputeExchangeLedger({ rewardPolicy = DEFAULT_REWARD_POLICY } = {}) {
   const receipts = [];
   const ids = new Set();
@@ -231,5 +302,6 @@ export default Object.freeze({
   normalizeUsageReceipt,
   estimateTumboSimReward,
   rankProviderQuotes,
+  selectProviderRoute,
   createComputeExchangeLedger,
 });
