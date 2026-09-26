@@ -10,7 +10,7 @@
  *  - standalone mode keeps a compact, scrollable glass console
  *  - Reality Lens reparents this same live DOM into the selected object's
  *    Three.js CSS3D face; no second Web + AI cube or floating panel is made
- *  - two tabs (WEB / AI HELP); the task note stays local until the user copies it
+ *  - three tabs (WEB / AI HELP / COMPUTE); task notes and economic rehearsal state stay local
  *  - minimize and drag apply only while the console is outside Reality Lens
  *  - mobile: full-width sheet at <=700px (390x844)
  *
@@ -106,7 +106,7 @@ const STYLE_TEXT = `
 .web-ai-assistant strong{color:#e4fbff;font-size:12px;letter-spacing:.02em}
 .web-ai-assistant p{margin:0;color:#9ebbc5;font-size:9px;line-height:1.4}
 .web-ai-assistant-actions{display:flex;gap:6px;flex-wrap:wrap}
-.web-ai-economy-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+.web-ai-economy-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
 .web-ai-metric{padding:9px;border:1px solid rgba(125,212,255,.17);border-radius:10px;background:rgba(7,26,35,.62)}
 .web-ai-metric b{display:block;color:#e8fbff;font-size:16px;font-variant-numeric:tabular-nums}
 .web-ai-metric span{display:block;margin-top:3px;color:#86aeb9;font-size:7px;letter-spacing:.11em;text-transform:uppercase}
@@ -913,7 +913,7 @@ export function createWebAiConsole({
     tokenValue.textContent = exchange.totals.totalTokens.toLocaleString();
     const totalReward = exchange.totals.tumboSimReward + vault.totalRewardTumboSim;
     rewardValue.textContent = totalReward.toFixed(4).replace(/\.?0+$/, "") || "0";
-    accountStatus.textContent = `$ ${account.balanceUsd.toFixed(2)} demo credits · $ ${account.spentUsd.toFixed(2)} spent · $ ${account.remainingMonthlyBudgetUsd.toFixed(2)} monthly budget remaining`;
+    accountStatus.textContent = `${account.balanceUsd.toFixed(2)} demo credits · ${account.spentUsd.toFixed(2)} spent · ${account.remainingMonthlyBudgetUsd.toFixed(2)} monthly budget remaining`;
     renderEconomicTimeline();
     return { exchange, account, vault, timeline: economicTimeline.snapshot(), totalRewardTumboSim: totalReward };
   }
