@@ -29,7 +29,7 @@ function controlLabel(control,index){
   const id=control.id;
   if(id&&control.ownerDocument?.querySelector){
     try{
-      const explicit=control.ownerDocument.querySelector(`label[for="${CSS?.escape?CSS.escape(id):id.replace(/"/g,'')}"]`);
+      const explicit=control.ownerDocument.querySelector(`label[for="${globalThis.CSS?.escape?globalThis.CSS.escape(id):id.replace(/"/g,'')}"]`);
       const label=clean(explicit?.textContent);
       if(label)return label;
     }catch{}
@@ -283,7 +283,7 @@ export class NativeInformationSurface{
     }else{
       control.click?.();
     }
-    queueMicrotask?.(()=>this.sync({force:true}));
+    if(typeof globalThis.queueMicrotask==='function')globalThis.queueMicrotask(()=>this.sync({force:true}));else Promise.resolve().then(()=>this.sync({force:true}));
     return true;
   }
 
