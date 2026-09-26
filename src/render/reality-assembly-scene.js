@@ -367,13 +367,14 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[],rela
     const indicatorGeometry=new THREE.SphereGeometry(.09,12,10);geometry.add(indicatorGeometry);
     const indicatorMaterial=makeMaterial(node.locked?'#d1ae70':'#659b91',{emissive:node.locked?'#9e7134':'#316e68',emissiveIntensity:.72,metalness:.1,roughness:.4});
     const indicator=mesh(indicatorGeometry,indicatorMaterial,[width*.36,height*.36,depth*.52+.08],[1,1,1],node.root);indicator.name=`${node.feature.id}/tab-lock-state`;
-    node.formParts=[...parts,indicator];node.tabMesh=body;node.artMaterial=artMaterial;node.shellMaterial=shell;node.edgeMaterial=edgeMaterial;node.indicator=indicator;node.shape=shapeName;positionEmbeddedData(node);
+    node.formParts=[...parts,indicator];node.tabMesh=body;node.artMaterial=artMaterial;node.artTexture=art;node.shellMaterial=shell;node.edgeMaterial=edgeMaterial;node.indicator=indicator;node.shape=shapeName;positionEmbeddedData(node);
     applyTabDepthMode(node);
     prepareFadeMaterials(node);
     node.artMaterial=node.fadeMap.get(artMaterial)??artMaterial;
     node.shellMaterial=node.fadeMap.get(shell)??shell;
     node.edgeMaterial=node.fadeMap.get(edgeMaterial)??edgeMaterial;
     node.indicator.material=node.fadeMap.get(indicatorMaterial)??indicatorMaterial;
+    node.artworkSuppressed=false;
   }
 function applyTabDepthMode(node){
   for(const part of node.formParts??[]){
@@ -763,22 +764,32 @@ function applyTabDepthMode(node){
         const targetScale=reading?node.scale*node.size*realityLensEngine.profile.focus.maxScale:response.scale;
         const stretch=reading?(node.surfaceStretch??[1,1,1]):[1,1,1];
         node.root.scale.lerp(new THREE.Vector3(targetScale*stretch[0],targetScale*stretch[1],targetScale*stretch[2]),blend);
-        // Once a real feature panel is mounted on this object, its physical
-        // shell becomes a quiet perimeter. This avoids a duplicate bright
-        // wireframe fighting the readable, interactive face.
-        const cover= response.isSelected ? Math.max(0,Math.min(1,(response.focusStrength-.24)/.76)) : 0;
+        // Native object-tab contract: when controls are mounted, the Three.js
+        // body remains the visible tab. The DOM contributes interaction/text
+        // only; it must never replace the object with a second card.
+        const cover=response.isSelected?Math.max(0,Math.min(1,(response.focusStrength-.24)/.76)):0;
         const tuneSurface=(material,multiplier)=>{if(!material)return;const base=material.userData?.realityLensBaseOpacity??1;material.opacity=base*(1-cover*multiplier)*response.contextOpacity;};
-        tuneSurface(node.shellMaterial,.35);
-        // The frame is useful while approaching. At the readable stage it
-        // almost disappears, leaving the mounted panel as the object's face.
-        if(node.edgeMaterial){const base=node.edgeMaterial.userData?.realityLensBaseOpacity??1;node.edgeMaterial.opacity=base*(1-cover*.58)*response.contextOpacity;}
-        if(node.artMaterial){const base=node.artMaterial.userData?.realityLensBaseOpacity??1;node.artMaterial.opacity=base*(1-cover)*(1-cover)*response.contextOpacity;}
-        tuneSurface(node.indicator?.material,.55);
+        tuneSurface(node.shellMaterial,reading?0:.18);
+        if(node.edgeMaterial){const base=node.edgeMaterial.userData?.realityLensBaseOpacity??1;node.edgeMaterial.opacity=base*(reading?1:(1-cover*.18))*response.contextOpacity;}
+        if(node.artMaterial){
+          // Static preview typography disappears while the live controls are
+          // present, but the cap material itself stays opaque as the object's
+          // real front face.
+          if(node.artworkSuppressed!==reading){
+            node.artworkSuppressed=reading;
+            node.artMaterial.map=reading?null:node.artTexture;
+            node.artMaterial.color.set(reading?'#17383a':'#b99154');
+            node.artMaterial.needsUpdate=true;
+          }
+          const base=node.artMaterial.userData?.realityLensBaseOpacity??1;
+          node.artMaterial.opacity=base*(reading?1:(1-cover*.22))*response.contextOpacity;
+        }
+        tuneSurface(node.indicator?.material,.35);
         node.root.rotation.y=reducedMotion?0:Math.sin(time*.18+node.traits.phase)*.025;
         node.root.rotation.x=reducedMotion?0:Math.sin(time*.13+node.traits.phase)*.012;
         if(node.indicator){node.indicator.visible=!node.surfaceReading;const pulse=reducedMotion?1:.9+.1*Math.sin(time*.92+node.traits.phase);node.indicator.scale.setScalar(pulse);if(node.indicator.material?.emissiveIntensity!==undefined)node.indicator.material.emissiveIntensity=node.surfaceReading||reducedMotion?.28:.28+.18*(.5+.5*Math.sin(time*1.3+node.traits.phase));}
-        // At close focus the interactive panel is the living object. Its
-        // ornamental orbit layers return while travelling, not over its face.
+        // At close focus the object itself owns attention. The attached
+        // controls are only its interactive skin, not a replacement panel.
         const panelOwnsAttention=response.isSelected&&response.focusStrength>.6;
         node.liveContent.visible=node.revealStage>=1&&node.open>.05&&tabReveal>.18&&!panelOwnsAttention;
         node.liveContent.scale.setScalar(node.liveContent.visible ? .45+node.open*.55 : .001);
