@@ -1,0 +1,37 @@
+name: Native object tabs and YouTube search
+
+on:
+  pull_request:
+    paths:
+      - 'src/render/reality-assembly.js'
+      - 'src/render/reality-assembly-scene.js'
+      - 'src/render/reality-assembly.css'
+      - 'src/render/youtube-surface.js'
+      - 'src/render/feature-navigator.js'
+      - 'src/main.js'
+      - 'tests/object-is-tab-wrap.test.mjs'
+      - 'tests/youtube-surface.test.mjs'
+      - '.github/workflows/native-object-tabs-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax
+        run: |
+          node --check src/render/reality-assembly.js
+          node --check src/render/reality-assembly-scene.js
+          node --check src/render/youtube-surface.js
+          node --check src/render/feature-navigator.js
+          node --check src/main.js
+      - name: Focused regressions
+        run: node --test tests/object-is-tab-wrap.test.mjs tests/youtube-surface.test.mjs
