@@ -372,13 +372,14 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     if(mountedSurface?.featureId===featureId&&mountedSurface.livePanel===panel)return true;
     clearFeatureSurface();
     const livePanel=panel&&!panel.hidden?panel:null,fallback=!livePanel,front=livePanel??makeFallbackFront(feature,object),detail=readFeature(featureId),surface=realityObjectSurfaceEngine.describe({feature,object,stage:node.revealStage??0,summary:detail?.summary,readOnly:owner.getSnapshot().mode==='past'});
+    const initialFace=realityObjectSurfaceEngine.wrapLayout(surface.shape)[0];
     const restore=livePanel?{parent:livePanel.parentNode,next:livePanel.nextSibling,style:livePanel.getAttribute('style'),shape:livePanel.getAttribute('data-object-shape'),lensAttached:livePanel.getAttribute('data-lens-surface-attached'),panelSpace:livePanel.getAttribute('data-panel-space'),compact:livePanel.getAttribute('data-compact'),noPanelDrag:livePanel.getAttribute('data-no-panel-drag'),hadLensClass:livePanel.classList.contains('reality-lens-feature-panel')} : null;
     if(livePanel){
       livePanel.classList.add('reality-lens-feature-panel');livePanel.dataset.lensSurfaceAttached='true';livePanel.dataset.objectShape=surface.shape;
       // The world rig owns movement. Legacy floating-panel capture must not
       // steal native disclosure taps or scrolling from its attached skin.
       livePanel.dataset.noPanelDrag='true';
-      livePanel.style.position='absolute';livePanel.style.inset='auto';livePanel.style.left='auto';livePanel.style.right='auto';livePanel.style.top='auto';livePanel.style.bottom='auto';livePanel.style.margin='0';livePanel.style.transformOrigin='50% 50%';livePanel.style.setProperty('--lens-surface-width',`${Math.round(REALITY_TAB_FORMS[surface.shape].width*SURFACE_PIXELS_PER_UNIT)}px`);livePanel.style.setProperty('--lens-surface-height',`${Math.round(REALITY_TAB_FORMS[surface.shape].height*SURFACE_PIXELS_PER_UNIT)}px`);livePanel.style.setProperty('--lens-surface-clip',realityObjectSurfaceEngine.clipPath(surface.shape));
+      livePanel.style.position='absolute';livePanel.style.inset='auto';livePanel.style.left='auto';livePanel.style.right='auto';livePanel.style.top='auto';livePanel.style.bottom='auto';livePanel.style.margin='0';livePanel.style.transformOrigin='50% 50%';livePanel.style.setProperty('--lens-surface-width',`${Math.round(initialFace.width*SURFACE_PIXELS_PER_UNIT)}px`);livePanel.style.setProperty('--lens-surface-height',`${Math.round(initialFace.height*SURFACE_PIXELS_PER_UNIT)}px`);livePanel.style.setProperty('--lens-surface-clip',realityObjectSurfaceEngine.clipPath(surface.shape));
       document.dispatchEvent(new CustomEvent('matumbo:reality-lens-surface-attachment',{detail:{panelId:livePanel.id,attached:true}}));
     }
     // Provenance belongs to the same reading skin. Five extra browser cards
