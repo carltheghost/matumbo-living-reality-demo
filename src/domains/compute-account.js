@@ -34,6 +34,7 @@ export function createComputeAccount({
     monthlyBudgetUsd: positive(monthlyBudgetUsd, "Monthly budget"),
     perTaskBudgetUsd: positive(perTaskBudgetUsd, "Per-task budget"),
   });
+  const fundingIds = new Set();
   const spendIds = new Set();
   const events = [];
   let sequence = 0;
@@ -61,7 +62,9 @@ export function createComputeAccount({
   function fundDemo({ fundingId, amountUsd, reason = "manual-demo-credit" } = {}) {
     const id = String(fundingId ?? "").trim();
     if (!id) throw new Error("fundingId is required");
+    if (fundingIds.has(id)) return snapshot();
     const value = positive(amountUsd, "Demo credit");
+    fundingIds.add(id);
     balanceUsd = amount(balanceUsd + value);
     push("credits.demo-funded", { fundingId: id, amountUsd: value, reason: String(reason).slice(0, 120) });
     return snapshot();
