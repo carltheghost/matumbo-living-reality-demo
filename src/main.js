@@ -22,7 +22,7 @@ import { initMobilePanelManager } from './render/mobile-panel-manager.js?v=20260
 import { installMobileFreezeGuard } from './render/mobile-freeze-guard.js?v=20260922-mfg1';
 import { mountPhotoMascot } from './render/photo-mascot-mount.js?v=20260922-cache2';
 import { createPersonStudio } from './render/person-studio.js?v=20260918-avatar-chess';
-import { createRealityAssembly, CLEAN_LANDING_CAMERA } from './render/reality-assembly.js?v=20260924-aspectus1';
+import { createRealityAssembly, CLEAN_LANDING_CAMERA } from './render/reality-assembly.js?v=20260926-native-object-tab1';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { MANIPULATE_MODES } from './render/manipulate-controls.js?v=20260922-cache2';
@@ -135,7 +135,7 @@ import { POPULATION_CONTEXT_SOURCE, createUnavailablePopulationContext, fetchPop
 import { WEB_AI_CONSOLE_SOURCE, createWebAiConsole } from './render/web-ai.js?v=20260923-lens-return2';
 import { SOCIAL_MIRROR_CONSOLE_SOURCE } from './domains/social-mirror.js?v=20260922-cache2';
 import { createSocialMirrorConsole } from './render/social-mirror.js?v=20260923-reality-lens1';
-import { createYoutubeSurface } from './render/youtube-surface.js?v=20260923-youtube1';
+import { createYoutubeSurface } from './render/youtube-surface.js?v=20260926-search-play1';
 
 const runtimeStatus = globalThis.__MATUMBO_RUNTIME__;
 runtimeStatus?.setStage?.('projection', 'Preparing the canonical local world envelope…');
