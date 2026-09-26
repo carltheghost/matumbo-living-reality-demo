@@ -575,6 +575,7 @@ export const FEATURE_SURFACE_ROUTES = Object.freeze({
     Object.freeze(["MODEL MARKET", "external providers + local/self-hosted adapter lane"]),
     Object.freeze(["AUTO ROUTER", "cost · latency · privacy policy over entered/provider quotes"]),
     Object.freeze(["USAGE RECEIPT", "tokens + verified cost → PAYCORE/T402 reward rehearsal"]),
+    Object.freeze(["PLAN + TREASURY LAB", "positive-margin allocation · future burn budget never implies execution"]),
     Object.freeze(["CONTRIBUTION VAULT", "metadata-only proposal · explicit consent · capped demo reward"]),
     Object.freeze(["ECONOMIC TIMELINE", "local ancestry checksum · explicitly not cryptographic proof"]),
     Object.freeze(["WORLD PROJECTION", "wallet + receipts + contributions become SIMFABRIC entities"]),
