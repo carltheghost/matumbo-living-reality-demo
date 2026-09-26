@@ -37,6 +37,8 @@ test("expanded compute surface includes wallet, router, consent vault and canoni
   assert.match(source, /AUTO ROUTER/);
   assert.match(source, /CONTRIBUTION VAULT/);
   assert.match(source, /ECONOMIC TIMELINE/);
+  assert.match(source, /PLAN \+ TREASURY LAB/);
+  assert.match(source, /evaluateComputeEconomics/);
   assert.match(source, /createComputeAccount/);
   assert.match(source, /createContributionVault/);
   assert.match(source, /createEconomicTimeline/);
