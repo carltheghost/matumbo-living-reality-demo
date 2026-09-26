@@ -329,3 +329,32 @@ body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surfa
   body.assembly-mode #immersive-toolbar button{min-height:40px}
   #reality-assembly.assembly-directory-open .assembly-directory{inset:60px 14px 72px;width:auto}
 }
+
+
+/* Native object-tab contract.
+   The attached DOM is an interaction skin only. The Three.js object supplies
+   the visible body, contour, border and depth, so there is no second card
+   tucked inside or pasted over the object. */
+body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true]{
+  background:transparent!important;
+  border:0!important;
+  box-shadow:none!important;
+  backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+  outline:0!important;
+}
+body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true][data-object-shape=sphere],
+body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true][data-object-shape=cylinder],
+body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true][data-object-shape=wave],
+body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true][data-object-shape=phone],
+body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true][data-object-shape=square],
+body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true][data-object-shape=cube]{
+  background:transparent!important;
+  border:0!important;
+  box-shadow:none!important;
+}
+body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true]::before,
+body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true]::after{
+  content:none!important;
+  display:none!important;
+}
