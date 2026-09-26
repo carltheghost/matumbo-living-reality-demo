@@ -358,3 +358,37 @@ body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surfa
   content:none!important;
   display:none!important;
 }
+
+
+/* Surface Semantic Field integration.
+   The actual Three.js mesh is the readable interface. The existing feature
+   console remains mounted only as a logic/accessibility source so its tested
+   handlers and state are reused without drawing a second card over the object. */
+body.assembly-mode [data-native-surface-source=true]{
+  position:fixed!important;
+  left:-10000px!important;
+  top:0!important;
+  right:auto!important;
+  bottom:auto!important;
+  width:1px!important;
+  min-width:1px!important;
+  max-width:1px!important;
+  height:1px!important;
+  min-height:1px!important;
+  max-height:1px!important;
+  margin:0!important;
+  padding:0!important;
+  opacity:.001!important;
+  overflow:hidden!important;
+  clip-path:inset(50%)!important;
+  pointer-events:none!important;
+  box-shadow:none!important;
+  border:0!important;
+  background:transparent!important;
+  backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+  transform:none!important;
+}
+body.assembly-mode #reality-assembly.assembly-native-information .assembly-css3d-host{
+  display:none!important;
+}
