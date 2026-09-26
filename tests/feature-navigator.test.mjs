@@ -68,6 +68,7 @@ test("spatial inspector routes describe the feature they actually open", async (
     "MODEL MARKET",
     "AUTO ROUTER",
     "USAGE RECEIPT",
+    "PLAN + TREASURY LAB",
     "CONTRIBUTION VAULT",
     "ECONOMIC TIMELINE",
     "WORLD PROJECTION",
