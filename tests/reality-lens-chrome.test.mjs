@@ -34,7 +34,7 @@ test('runtime labels distinguish failed and pending renderers from ready 3D', ()
 test('the actual Pages build includes every root browser script, local CSS, and runtime assets', async () => {
   const output = await mkdtemp(join(tmpdir(), 'matumbo-pages-'));
   try {
-    execFileSync('bash', ['scripts/build-pages.sh', output], { cwd: new URL('..', import.meta.url) });
+    execFileSync(process.platform === 'win32' ? 'python' : 'python3', ['scripts/build_pages.py', output], { cwd: new URL('..', import.meta.url) });
     const html = await readFile(join(output, 'index.html'), 'utf8');
     for (const match of html.matchAll(/(?:src|href)="\.\/([^"?#]+\.(?:js|css))(?:\?[^" ]*)?"/g)) {
       assert.ok((await stat(join(output, match[1]))).size > 0, match[1] + ' must ship');

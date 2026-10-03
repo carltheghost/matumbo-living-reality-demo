@@ -1,0 +1,453 @@
+{
+  "labels": [
+    {
+      "label": "Explore Worlds & rooms · 4 features",
+      "hidden": false,
+      "rect": {
+        "x": 68.7578125,
+        "y": 312.796875,
+        "width": 379.890625,
+        "height": 250.3125,
+        "top": 312.796875,
+        "right": 448.6484375,
+        "bottom": 563.109375,
+        "left": 68.7578125
+      }
+    },
+    {
+      "label": "Explore Your space · 4 features",
+      "hidden": false,
+      "rect": {
+        "x": 549.3671875,
+        "y": 314.546875,
+        "width": 339.171875,
+        "height": 247.375,
+        "top": 314.546875,
+        "right": 888.5390625,
+        "bottom": 561.921875,
+        "left": 549.3671875
+      }
+    },
+    {
+      "label": "Explore Network & tools · 4 features",
+      "hidden": false,
+      "rect": {
+        "x": 1030.3203125,
+        "y": 314.484375,
+        "width": 305.515625,
+        "height": 248.65625,
+        "top": 314.484375,
+        "right": 1335.8359375,
+        "bottom": 563.140625,
+        "left": 1030.3203125
+      }
+    },
+    {
+      "label": "Explore Value & contracts · 8 features",
+      "hidden": false,
+      "rect": {
+        "x": 104.6640625,
+        "y": 667.84375,
+        "width": 304.890625,
+        "height": 258.3125,
+        "top": 667.84375,
+        "right": 409.5546875,
+        "bottom": 926.15625,
+        "left": 104.6640625
+      }
+    },
+    {
+      "label": "Explore Agents · 3 features",
+      "hidden": false,
+      "rect": {
+        "x": 551.2421875,
+        "y": 667.9921875,
+        "width": 339.546875,
+        "height": 256.421875,
+        "top": 667.9921875,
+        "right": 890.7890625,
+        "bottom": 924.4140625,
+        "left": 551.2421875
+      }
+    },
+    {
+      "label": "Explore Play, media & learning · 13 features",
+      "hidden": false,
+      "rect": {
+        "x": 991.46875,
+        "y": 684.78125,
+        "width": 379.1875,
+        "height": 225.3125,
+        "top": 684.78125,
+        "right": 1370.65625,
+        "bottom": 910.09375,
+        "left": 991.46875
+      }
+    }
+  ],
+  "firstPage": {
+    "url": "http://127.0.0.1:8082/",
+    "activeId": "reality-lens",
+    "active": true,
+    "space": "experiences",
+    "view": "space",
+    "selected": "block-world",
+    "page": {
+      "page": 0,
+      "pageCount": 3,
+      "pageSize": 6,
+      "total": 13,
+      "ids": [
+        "academy",
+        "world-events",
+        "multi-sport-events",
+        "reality-lens",
+        "youtube",
+        "picture-matter"
+      ]
+    },
+    "visibleIds": [
+      "academy",
+      "world-events",
+      "multi-sport-events",
+      "reality-lens",
+      "youtube",
+      "picture-matter"
+    ],
+    "studio": false,
+    "overflow": false
+  },
+  "secondPage": {
+    "url": "http://127.0.0.1:8082/",
+    "activeId": "reality-lens",
+    "active": true,
+    "space": "experiences",
+    "view": "space",
+    "selected": "block-world",
+    "page": {
+      "page": 1,
+      "pageCount": 3,
+      "pageSize": 6,
+      "total": 13,
+      "ids": [
+        "nft-atelier",
+        "white-paper",
+        "gesture-lens",
+        "sports-events",
+        "arena",
+        "chess"
+      ]
+    },
+    "visibleIds": [
+      "nft-atelier",
+      "white-paper",
+      "gesture-lens",
+      "sports-events",
+      "arena",
+      "chess"
+    ],
+    "studio": false,
+    "overflow": false
+  },
+  "lastPage": {
+    "url": "http://127.0.0.1:8082/",
+    "activeId": "reality-lens",
+    "active": true,
+    "space": "experiences",
+    "view": "space",
+    "selected": "block-world",
+    "page": {
+      "page": 2,
+      "pageCount": 3,
+      "pageSize": 6,
+      "total": 13,
+      "ids": [
+        "projections"
+      ]
+    },
+    "visibleIds": [
+      "projections"
+    ],
+    "studio": false,
+    "overflow": false
+  },
+  "previousPage": {
+    "url": "http://127.0.0.1:8082/",
+    "activeId": "reality-lens",
+    "active": true,
+    "space": "experiences",
+    "view": "space",
+    "selected": "block-world",
+    "page": {
+      "page": 1,
+      "pageCount": 3,
+      "pageSize": 6,
+      "total": 13,
+      "ids": [
+        "nft-atelier",
+        "white-paper",
+        "gesture-lens",
+        "sports-events",
+        "arena",
+        "chess"
+      ]
+    },
+    "visibleIds": [
+      "nft-atelier",
+      "white-paper",
+      "gesture-lens",
+      "sports-events",
+      "arena",
+      "chess"
+    ],
+    "studio": false,
+    "overflow": false
+  },
+  "phonePage": {
+    "url": "http://127.0.0.1:8082/",
+    "activeId": "reality-lens",
+    "active": true,
+    "space": "experiences",
+    "view": "space",
+    "selected": "block-world",
+    "page": {
+      "page": 1,
+      "pageCount": 4,
+      "pageSize": 4,
+      "total": 13,
+      "ids": [
+        "youtube",
+        "picture-matter",
+        "nft-atelier",
+        "white-paper"
+      ]
+    },
+    "visibleIds": [
+      "youtube",
+      "picture-matter",
+      "nft-atelier",
+      "white-paper"
+    ],
+    "studio": false,
+    "overflow": false
+  },
+  "deepFeature": {
+    "url": "http://127.0.0.1:8082/?feature=projections",
+    "activeId": "projections",
+    "active": true,
+    "space": "experiences",
+    "view": "feature",
+    "selected": "projections",
+    "page": {
+      "page": 3,
+      "pageCount": 4,
+      "pageSize": 4,
+      "total": 13,
+      "ids": [
+        "projections"
+      ]
+    },
+    "visibleIds": [
+      "projections"
+    ],
+    "studio": false,
+    "overflow": false
+  },
+  "deepFeatureBack": {
+    "url": "http://127.0.0.1:8082/?feature=reality-lens",
+    "activeId": "reality-lens",
+    "active": true,
+    "space": "experiences",
+    "view": "space",
+    "selected": "projections",
+    "page": {
+      "page": 3,
+      "pageCount": 4,
+      "pageSize": 4,
+      "total": 13,
+      "ids": [
+        "projections"
+      ]
+    },
+    "visibleIds": [
+      "projections"
+    ],
+    "studio": false,
+    "overflow": false
+  },
+  "historyChess": {
+    "url": "http://127.0.0.1:8082/?feature=chess",
+    "activeId": "chess",
+    "active": true,
+    "space": "experiences",
+    "view": "feature",
+    "selected": "chess",
+    "page": {
+      "page": 2,
+      "pageCount": 4,
+      "pageSize": 4,
+      "total": 13,
+      "ids": [
+        "gesture-lens",
+        "sports-events",
+        "arena",
+        "chess"
+      ]
+    },
+    "visibleIds": [
+      "chess"
+    ],
+    "studio": false,
+    "overflow": false
+  },
+  "historyYouTube": {
+    "url": "http://127.0.0.1:8082/?feature=youtube",
+    "activeId": "youtube",
+    "active": true,
+    "space": "experiences",
+    "view": "feature",
+    "selected": "youtube",
+    "page": {
+      "page": 1,
+      "pageCount": 4,
+      "pageSize": 4,
+      "total": 13,
+      "ids": [
+        "youtube",
+        "picture-matter",
+        "nft-atelier",
+        "white-paper"
+      ]
+    },
+    "visibleIds": [
+      "youtube"
+    ],
+    "studio": false,
+    "overflow": false
+  },
+  "back": {
+    "url": "http://127.0.0.1:8082/?feature=chess",
+    "activeId": "chess",
+    "active": true,
+    "space": "experiences",
+    "view": "feature",
+    "selected": "chess",
+    "page": {
+      "page": 2,
+      "pageCount": 4,
+      "pageSize": 4,
+      "total": 13,
+      "ids": [
+        "gesture-lens",
+        "sports-events",
+        "arena",
+        "chess"
+      ]
+    },
+    "visibleIds": [
+      "chess"
+    ],
+    "studio": false,
+    "overflow": false
+  },
+  "forward": {
+    "url": "http://127.0.0.1:8082/?feature=youtube",
+    "activeId": "youtube",
+    "active": true,
+    "space": "experiences",
+    "view": "feature",
+    "selected": "youtube",
+    "page": {
+      "page": 1,
+      "pageCount": 4,
+      "pageSize": 4,
+      "total": 13,
+      "ids": [
+        "youtube",
+        "picture-matter",
+        "nft-atelier",
+        "white-paper"
+      ]
+    },
+    "visibleIds": [
+      "youtube"
+    ],
+    "studio": false,
+    "overflow": false
+  },
+  "cleanRoute": {
+    "url": "http://127.0.0.1:8082/?feature=white-paper",
+    "activeId": "white-paper",
+    "active": true,
+    "space": "experiences",
+    "view": "feature",
+    "selected": "white-paper",
+    "page": {
+      "page": 1,
+      "pageCount": 4,
+      "pageSize": 4,
+      "total": 13,
+      "ids": [
+        "youtube",
+        "picture-matter",
+        "nft-atelier",
+        "white-paper"
+      ]
+    },
+    "visibleIds": [
+      "youtube",
+      "picture-matter",
+      "nft-atelier",
+      "white-paper"
+    ],
+    "studio": false,
+    "overflow": false
+  },
+  "person": {
+    "url": "http://127.0.0.1:8082/?feature=person",
+    "activeId": "person",
+    "active": false,
+    "space": "people",
+    "view": "feature",
+    "selected": "person",
+    "page": {
+      "page": 0,
+      "pageCount": 1,
+      "pageSize": 4,
+      "total": 4,
+      "ids": [
+        "person",
+        "social-mirror",
+        "luna-companion",
+        "wardrobe-atelier"
+      ]
+    },
+    "visibleIds": [
+      "youtube",
+      "picture-matter",
+      "nft-atelier",
+      "white-paper"
+    ],
+    "studio": true,
+    "overflow": false
+  },
+  "root": {
+    "url": "http://127.0.0.1:8082/?feature=reality-lens",
+    "activeId": "reality-lens",
+    "active": true,
+    "space": null,
+    "view": "gateway",
+    "selected": "person",
+    "page": {
+      "page": 0,
+      "pageCount": 1,
+      "pageSize": 4,
+      "total": 0,
+      "ids": []
+    },
+    "visibleIds": [],
+    "studio": false,
+    "overflow": false
+  },
+  "errors": []
+}

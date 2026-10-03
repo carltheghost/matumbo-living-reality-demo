@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createHandle } from '../src/domains/portal-sessions/opaque-handle.js';
+import { createHandle, revoke } from '../src/domains/portal-sessions/opaque-handle.js';
 import { enterPortal, returnToLens } from '../src/domains/portal-sessions/entry-return.js';
 
 function handle(serviceId = 'youtube', issuedAt = 100, ttlMs = 100) {
@@ -60,6 +60,22 @@ test('forged handle fails closed', () => {
     () => enterPortal(forged, 'https://www.icloud.com', 110),
     /invalid opaque portal handle/
   );
+});
+
+test('even an unchanged frozen copy is not an issued portal handle', () => {
+  const original = handle('clone');
+  const clone = Object.freeze({ ...original });
+  assert.throws(() => enterPortal(clone, 'https://example.com', 110), /invalid opaque portal handle/);
+  enterPortal(original, 'https://example.com', 110);
+  assert.throws(() => returnToLens(clone, 120), /invalid opaque portal handle/);
+  assert.equal(returnToLens(original, 120).sessionId, original.handleId);
+});
+
+test('revocation prevents entry with both the original and returned handle', () => {
+  const original = handle('revoked');
+  const revoked = revoke(original);
+  assert.throws(() => enterPortal(original, 'https://example.com', 110), /invalid opaque portal handle/);
+  assert.throws(() => enterPortal(revoked, 'https://example.com', 110), /invalid opaque portal handle/);
 });
 
 test('expired handle fails closed', () => {

@@ -360,6 +360,51 @@ body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surfa
 }
 
 /* Calm chrome: the spatial objects remain the working surface. */
+#reality-assembly .assembly-space-context{position:absolute;top:120px;left:50%;transform:translateX(-50%);width:min(900px,calc(100vw - 48px));text-align:center;pointer-events:none;z-index:3}
+#reality-assembly .assembly-space-context button{pointer-events:auto;position:absolute;left:0;top:6px;min-height:44px;font-size:14px}
+#reality-assembly .assembly-space-context p{color:#a3beca;font-size:14px;line-height:1.5;margin:9px 0}
+#reality-assembly .assembly-space-context [data-space-kicker]{font-size:10px;letter-spacing:.19em;color:#8ec3d2}
+#reality-assembly .assembly-space-context h1{font:400 clamp(24px,3vw,42px)/1.15 Georgia,serif;letter-spacing:-.025em;color:#e1eff0;margin:8px 0}
+#reality-assembly .assembly-space-pages{display:flex;align-items:center;justify-content:center;gap:14px;pointer-events:auto;color:#b8d1da;font-size:13px}
+#reality-assembly .assembly-space-pages button{position:static!important;min-width:44px;min-height:44px;margin:0!important}
+#reality-assembly .assembly-space-pages button:disabled{opacity:.3;cursor:default}
+#reality-assembly[data-space-view=feature] .assembly-space-context{top:103px;display:flex;align-items:flex-start;gap:20px;text-align:left}
+#reality-assembly[data-space-view=feature] .assembly-space-context button{position:static;flex-shrink:0}
+#reality-assembly[data-space-view=feature] .assembly-space-context h1{font-size:20px}
+#reality-assembly[data-space-view=feature] .assembly-space-context [data-space-copy]{display:none}
+#reality-assembly[data-space-view=feature] .assembly-space-context>div{display:none}
+#reality-assembly[data-space-view=space] .assembly-node-label{color:transparent!important;text-shadow:none!important;background:transparent!important;border-color:transparent!important;box-shadow:none!important}
+#reality-assembly[data-space-view=space] .assembly-node-label:focus-visible{outline:2px solid #9be2e5!important;outline-offset:14px}
+#reality-assembly .assembly-header nav{display:none}
+#reality-assembly .assembly-header{gap:12px;padding:10px 16px;background:rgba(5,17,27,.76);border:1px solid #284754;border-radius:16px;backdrop-filter:blur(16px)}
+#reality-assembly .assembly-header button{border-radius:9px}
+#reality-assembly .assembly-header button:disabled{opacity:.35;cursor:default}
+#reality-assembly .assembly-header #api-connections-trigger{position:static!important;inset:auto!important;transform:none!important;flex-shrink:0;min-height:44px;box-shadow:none}
+#reality-assembly .assembly-quick-find{margin-left:auto;min-width:220px}
+#reality-assembly .assembly-quick-find input{font-size:14px!important;min-width:130px}
+#reality-assembly .assembly-quick-find button{min-height:40px!important;font-size:13px!important}
+#reality-assembly .assembly-group-label{min-height:44px!important;font-size:14px!important;opacity:1;color:transparent!important;background:transparent!important;border-color:transparent!important;box-shadow:none!important;max-width:none!important;min-width:170px;width:170px;height:80px;text-shadow:none!important}
+#reality-assembly .assembly-group-label:focus-visible{outline:2px solid #9be2e5!important;outline-offset:18px}
+#reality-assembly .assembly-node-label{font-size:13px!important;min-height:44px!important;color:#c9dadd!important;opacity:.85;max-width:215px}
+#reality-assembly .assembly-selection-hint{bottom:32px!important;background:#0c1d2999;font-size:13px;max-width:calc(100vw - 36px)}
+#reality-assembly .assembly-status:empty{display:none}
+body.assembly-mode #immersive-toolbar{display:none!important}
+body.assembly-mode:has(#reality-assembly.assembly-tools-open) #immersive-toolbar{display:flex!important;top:auto!important;bottom:18px!important;right:18px!important;left:auto!important}
+@media(max-width:700px){
+  #reality-assembly .assembly-header{top:10px;gap:6px;padding:8px;flex-wrap:nowrap}
+  #reality-assembly .assembly-brand small{display:none}
+  #reality-assembly .assembly-brand{font-size:18px}
+  #reality-assembly .assembly-header [data-clean]{display:none}
+  #reality-assembly .assembly-header [data-view-tools],#reality-assembly .assembly-header [data-directory-toggle],#reality-assembly .assembly-header #api-connections-trigger{padding:8px;font-size:13px!important;min-height:44px!important}
+  #reality-assembly .assembly-space-context{top:86px;width:calc(100vw - 24px)}
+  #reality-assembly .assembly-space-context h1{font-size:27px}
+  #reality-assembly .assembly-space-context p{font-size:12px}
+  #reality-assembly .assembly-space-context button{position:static;margin-bottom:8px}
+  #reality-assembly[data-space-view=feature] .assembly-space-context{top:84px;gap:10px}
+  #reality-assembly[data-space-view=feature] .assembly-space-context [data-space-kicker]{display:none}
+  #reality-assembly[data-space-view=feature] .assembly-space-context h1{font-size:15px;margin:12px 0}
+  #reality-assembly .assembly-group-label{min-width:110px;width:110px;height:66px}
+}
 #reality-assembly .assembly-header [data-directory-toggle]{display:inline-flex!important;align-items:center;justify-content:center}
 #reality-assembly .assembly-header button{min-height:44px!important;font-size:14px}
 #reality-assembly.assembly-directory-open [data-directory-close]{display:inline-flex;align-items:center;justify-content:center;min-height:44px!important;font-size:14px!important}
@@ -372,6 +417,17 @@ body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surfa
 #reality-assembly .assembly-domain-features>button{min-height:44px;font-size:14px!important}
 #reality-assembly .assembly-toolbar button{min-height:44px!important;font-size:14px!important}
 #reality-assembly .assembly-search-empty{font-size:14px;color:#b9d2df;line-height:1.5}
+
+/* Details are content of the owning tab, never a second projected window. */
+body.assembly-mode #reality-assembly .assembly-inspector[data-object-tools=true]{display:block!important;position:static!important;inset:auto!important;width:auto!important;height:auto!important;min-width:0!important;max-width:none!important;max-height:none!important;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;backdrop-filter:none!important;overflow:visible!important}
+#reality-assembly .assembly-inspector[data-object-tools=true]>header,
+#reality-assembly .assembly-inspector[data-object-tools=true] .assembly-object-hero{display:none!important}
+#reality-assembly .assembly-object-tools{border-top:1px solid #639bbb44;margin-top:18px;padding-top:10px}
+#reality-assembly .assembly-object-tools>summary{cursor:pointer;min-height:44px;font-size:16px;color:#b7d7ea;list-style-position:inside}
+#reality-assembly .assembly-object-tools .assembly-tab-controls{background:transparent;border:0;padding:0}
+#reality-assembly .assembly-wrap-fallback{background:transparent!important;border:0!important;box-shadow:none!important;backdrop-filter:none!important}
+#reality-assembly :is(.assembly-node-label,.assembly-group-label)[data-native-target=true]{min-width:0!important;max-width:none!important;min-height:0!important;padding:0!important;background:transparent!important;border:0!important;color:transparent!important;box-shadow:none!important;text-shadow:none!important}
+#reality-assembly :is(.assembly-node-label,.assembly-group-label)[data-native-target=true]:focus-visible{outline:none!important;background:rgba(91,182,239,.07)!important;box-shadow:inset 0 0 0 3px #84d8f4!important}
 #reality-assembly.assembly-directory-open .assembly-css3d-host{visibility:hidden}
 #reality-assembly .assembly-header [data-view-tools][aria-expanded=true]{border-color:#84bed3;background:#163548}
 @media(min-width:701px){

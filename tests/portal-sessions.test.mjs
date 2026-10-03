@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createHandle, isExpired, revoke } from '../src/domains/portal-sessions/opaque-handle.js';
+import { createHandle, isExpired, revoke, isIssuedHandle, isHandleRevoked } from '../src/domains/portal-sessions/opaque-handle.js';
 import { createSession } from '../src/domains/portal-sessions/session.js';
 import { registerAdapter, resolve } from '../src/domains/portal-sessions/adapter-registry.js';
 import { checkSession } from '../src/domains/portal-sessions/health.js';
@@ -23,6 +23,25 @@ test('handle opacity: no credential-like fields or values', () => {
   assert.equal(Object.isFrozen(handle), true);
   assert.equal(isExpired(handle, 149), false);
   assert.equal(isExpired(handle, 150), true);
+});
+
+test('only issued handles can be revoked or create local sessions', () => {
+  const original = createHandle({serviceId:'issued',capabilities:['read'],issuedAt:100,ttlMs:100});
+  const forged = Object.freeze({...original});
+  assert.equal(isIssuedHandle(original),true);
+  assert.equal(isIssuedHandle(forged),false);
+  assert.throws(()=>revoke(forged),/invalid handle/);
+  assert.throws(()=>createSession(forged),/invalid session handle/);
+  const session = createSession(original);
+  session.activate(101);
+  assert.equal(checkSession(session,102).status,'healthy');
+  const revoked = revoke(original);
+  assert.equal(isIssuedHandle(revoked),true);
+  assert.equal(isHandleRevoked(original),true);
+  assert.equal(isHandleRevoked(revoked),true);
+  assert.equal(checkSession(session,103).status,'revoked','an existing session observes revocation of its original handle');
+  assert.equal(Object.isFrozen(revoked),true);
+  assert.equal(original.status,'active','original immutable metadata is not mutated');
 });
 
 test('lifecycle order and illegal transitions', () => {

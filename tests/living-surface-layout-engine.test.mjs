@@ -24,10 +24,10 @@ test('each Reality Lens form owns bounded outward-facing living surfaces',()=>{
   }
 });
 
-test('curved forms keep a compact readable skin instead of filling their whole body',()=>{
+test('curved forms use their real machined front instead of an inset panel',()=>{
   const cylinder=createLivingSurfaceMap('cylinder'),sphere=createLivingSurfaceMap('sphere');
   assert.ok(cylinder.primary.width<REALITY_TAB_FORMS.cylinder.width);
-  assert.ok(cylinder.primary.height<REALITY_TAB_FORMS.cylinder.height);
+  assert.equal(cylinder.primary.height,REALITY_TAB_FORMS.cylinder.height,'the cylinder front fills its physical cut from top to bottom');
   assert.equal(cylinder.primary.kind,'arc');
   assert.ok(cylinder.primary.position[2]<REALITY_TAB_FORMS.cylinder.radius,'cylinder skin lies on a cut body facet, not outside its tangent');
   assert.equal(sphere.primary.kind,'hemisphere');
@@ -72,7 +72,10 @@ test('phone orientation adapts the whole reading body without changing canonical
     assert.ok(composition.actualHeight<=frame.availableHeight+.5);
     assert.ok(Math.abs(composition.width-composition.actualWidth)<10);
     assert.ok(Math.abs(composition.height-composition.actualHeight)<10,'vertical glyph density compensates body stretch');
-    if(viewportWidth<700&&['wave','rectangle'].includes(shape))assert.ok(projection.stretch[1]>2,'wide forms unfold vertically as bodies');
+    if(viewportWidth<700&&['wave','rectangle'].includes(shape)){
+      assert.ok(projection.stretch[1]>1,'wide forms unfold vertically as bodies');
+      assert.ok(face.width*projection.stretch[0]/(face.height*projection.stretch[1])<=.78+.0001,'the real front, including wave crests, fits a portrait reader');
+    }
     if(viewportHeight<600&&shape==='phone')assert.ok(projection.stretch[0]>2,'landscape phone becomes a broad reading body');
     assert.ok(Object.isFrozen(projection.stretch));
   }

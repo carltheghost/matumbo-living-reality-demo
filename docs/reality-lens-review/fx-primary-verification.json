@@ -1,0 +1,149 @@
+{
+  "snapshot": {
+    "open": false,
+    "checking": false,
+    "sending": false,
+    "bridgeUrl": "http://127.0.0.1:8082",
+    "bridgeError": null,
+    "nvidia": {
+      "configured": false,
+      "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+      "verifiedAt": null,
+      "error": null,
+      "state": "key-needed"
+    },
+    "lastCheckAt": "2026-10-03T11:56:11.087Z",
+    "publicSources": [
+      {
+        "id": "weather",
+        "state": "available",
+        "summary": "14.7 °C · New York example · 2026-10-03T11:45",
+        "provider": "Open-Meteo",
+        "checkedAt": "2026-10-03T11:56:11.086Z",
+        "observedAt": null,
+        "latencyMs": 694,
+        "sourceUrl": "https://api.open-meteo.com/v1/forecast?latitude=40.71&longitude=-74.01&current=temperature_2m,weather_code&forecast_days=1",
+        "documentationUrl": "https://open-meteo.com/en/terms",
+        "fallbackUsed": false,
+        "primarySourceUrl": "https://api.open-meteo.com/v1/forecast?latitude=40.71&longitude=-74.01&current=temperature_2m,weather_code&forecast_days=1",
+        "primaryState": "available",
+        "attempts": [
+          {
+            "provider": "Open-Meteo",
+            "state": "available",
+            "sourceUrl": "https://api.open-meteo.com/v1/forecast?latitude=40.71&longitude=-74.01&current=temperature_2m,weather_code&forecast_days=1",
+            "checkedAt": "2026-10-03T11:56:11.086Z",
+            "observedAt": null,
+            "reason": null,
+            "httpStatus": 200
+          }
+        ],
+        "attributionUrl": null,
+        "attributionLabel": null
+      },
+      {
+        "id": "fx",
+        "state": "available",
+        "summary": "1 EUR = 0.85033 GBP · 2026-10-02 / 1 EUR = 1.1225 USD · 2026-10-02",
+        "provider": "Frankfurter · ECB",
+        "checkedAt": "2026-10-03T11:56:11.032Z",
+        "observedAt": "2026-10-02",
+        "latencyMs": 640,
+        "sourceUrl": "https://api.frankfurter.dev/v2/providers/ecb/rates?base=EUR&quotes=USD,GBP",
+        "documentationUrl": "https://frankfurter.dev/",
+        "fallbackUsed": false,
+        "primarySourceUrl": "https://api.frankfurter.dev/v2/providers/ecb/rates?base=EUR&quotes=USD,GBP",
+        "primaryState": "available",
+        "attempts": [
+          {
+            "provider": "Frankfurter · ECB",
+            "state": "available",
+            "sourceUrl": "https://api.frankfurter.dev/v2/providers/ecb/rates?base=EUR&quotes=USD,GBP",
+            "checkedAt": "2026-10-03T11:56:11.032Z",
+            "observedAt": "2026-10-02",
+            "reason": null,
+            "httpStatus": 200
+          }
+        ],
+        "attributionUrl": null,
+        "attributionLabel": null
+      },
+      {
+        "id": "earthquakes",
+        "state": "available",
+        "summary": "215 observations in the provider feed",
+        "provider": "USGS",
+        "checkedAt": "2026-10-03T11:56:11.029Z",
+        "observedAt": null,
+        "latencyMs": 637,
+        "sourceUrl": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson",
+        "documentationUrl": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/geojson.php",
+        "fallbackUsed": false,
+        "primarySourceUrl": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson",
+        "primaryState": "available",
+        "attempts": [
+          {
+            "provider": "USGS",
+            "state": "available",
+            "sourceUrl": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson",
+            "checkedAt": "2026-10-03T11:56:11.029Z",
+            "observedAt": null,
+            "reason": null,
+            "httpStatus": 200
+          }
+        ],
+        "attributionUrl": null,
+        "attributionLabel": null
+      },
+      {
+        "id": "tvl",
+        "state": "available",
+        "summary": "Aave TVL · $19,157,443,905",
+        "provider": "DeFiLlama",
+        "checkedAt": "2026-10-03T11:56:11.031Z",
+        "observedAt": null,
+        "latencyMs": 638,
+        "sourceUrl": "https://api.llama.fi/tvl/aave",
+        "documentationUrl": "https://api-docs.defillama.com/",
+        "fallbackUsed": false,
+        "primarySourceUrl": "https://api.llama.fi/tvl/aave",
+        "primaryState": "available",
+        "attempts": [
+          {
+            "provider": "DeFiLlama",
+            "state": "available",
+            "sourceUrl": "https://api.llama.fi/tvl/aave",
+            "checkedAt": "2026-10-03T11:56:11.031Z",
+            "observedAt": null,
+            "reason": null,
+            "httpStatus": 200
+          }
+        ],
+        "attributionUrl": null,
+        "attributionLabel": null
+      }
+    ],
+    "credentialsInBrowser": false,
+    "automaticInference": false,
+    "automaticCheckStarted": true
+  },
+  "simulatedPrimaryFailure": false,
+  "isolatedComponent": false,
+  "responses": [
+    {
+      "url": "https://api.frankfurter.dev/v2/providers/ecb/rates?base=EUR&quotes=USD,GBP",
+      "status": 200
+    }
+  ],
+  "publicRequests": [
+    "https://api.open-meteo.com/v1/forecast?latitude=40.71&longitude=-74.01&current=temperature_2m,weather_code&forecast_days=1",
+    "https://api.frankfurter.dev/v2/providers/ecb/rates?base=EUR&quotes=USD,GBP",
+    "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson",
+    "https://api.llama.fi/tvl/aave"
+  ],
+  "countsStable": true,
+  "attribution": [],
+  "content": "REALITY LENS\nLive connections\n\nPublic observations and an optional NVIDIA assistant, in one place.\n\n×\nCheck connections\nAuto-checked once · 4/4 public sources available · 7:56:11 AM\nNo API key needed\nWeather\nOpen-Meteo\nAvailable\n\n14.7 °C · New York example · 2026-10-03T11:45\n\nSource & terms\nExchange rates\nFrankfurter · ECB\nAvailable\n\n1 EUR = 0.85033 GBP · 2026-10-02 / 1 EUR = 1.1225 USD · 2026-10-02\n\nSource & terms\nEarthquake observations\nUSGS\nAvailable\n\n215 observations in the provider feed\n\nSource & terms\nProtocol TVL\nDeFiLlama\nAvailable\n\nAave TVL · $19,157,443,905\n\nSource & terms\n\nPublic connections check once automatically when this page loads. Check connections runs them again. If Frankfurter fails, exchange rates try one fixed alternate and identify its source. Weather uses a New York example; your device location is never requested. Values are observations, with provider terms and limits.\n\nNVIDIA assistant\nKey needed\n\nLocal bridge detected. Set NVIDIA_API_KEY in its server environment and restart it.\n\nModel · nvidia/nemotron-3-nano-omni-30b-a3b-reasoning\n\nConnect NVIDIA locally\nAsk for advice\nSend to NVIDIA\nOnly this prompt is sent, when you press Send.\nOpen existing source spaces\n\nAssistant replies are advisory text. Source checks and replies stay in this page session.",
+  "errors": [],
+  "screenshot": "C:\\Users\\carlg\\Documents\\Codex\\2026-10-03\\muse-pc-bridge-running-sharing-folder\\work\\fx-primary-phone.png"
+}

@@ -61,6 +61,22 @@ test('panel discovery collects asides plus overlay extras without duplicates', (
   assert.deepEqual(found, ['arena-games-console', 'intent-timeline', 'gesture-input-panel']);
 });
 
+test('panel discovery leaves scene-owned drawers and nested object surfaces to their controller', () => {
+  const assembly = {id:'reality-assembly'};
+  const host = {id:'css3d-host',parentNode:assembly};
+  const directory = {id:'assembly-directory',tagName:'ASIDE',parentNode:assembly};
+  const inspector = {id:'assembly-inspector',tagName:'ASIDE',parentNode:assembly};
+  const attached = {id:'contracts-markets-console',tagName:'ASIDE',parentNode:host};
+  const studio = {id:'person-studio'};
+  const studioInspector = {id:'studio-inspector',tagName:'ASIDE',parentNode:studio};
+  const ordinary = {id:'arena-games-console',tagName:'ASIDE'};
+  const doc = {
+    querySelectorAll:()=>[directory,inspector,attached,studioInspector,ordinary],
+    getElementById:id=>id==='hint'?{id:'hint',parentNode:assembly}:null,
+  };
+  assert.deepEqual(collectPanelDescriptors(doc).map(panel=>panel.id),['arena-games-console']);
+});
+
 test('panel titles prefer aria-label, then heading, then id', () => {
   assert.equal(panelTitle({ getAttribute: (k) => (k === 'aria-label' ? 'Mission Control feature navigator' : null), querySelector: () => null, id: 'feature-shell' }), 'Mission Control feature navigator');
   assert.equal(panelTitle({ getAttribute: () => null, querySelector: (s) => (s === 'h2, h3' ? { textContent: '  Intent Timeline ' } : null), id: 'intent-timeline' }), 'Intent Timeline');
@@ -209,7 +225,7 @@ function makeHarness({ narrow = false, shellOpen = true } = {}) {
     getComputedStyle: () => ({ display: 'block', visibility: 'visible' }),
   };
   return {
-    doc, view, rafQueue, moInstances, storage, aside1, aside2, shell, hint,
+    doc, view, rafQueue, moInstances, storage, aside1, aside2, shell, hint, asides,
     flushRaf() { while (rafQueue.length) rafQueue.shift()(); },
     mutate(target, attrs = {}) {
       for (const mo of moInstances) mo.cb([{ target }], mo);
@@ -219,6 +235,27 @@ function makeHarness({ narrow = false, shellOpen = true } = {}) {
     toggleOf(el) { const g = this.gripOf(el); return g ? g.children.find((c) => c.className === 'surface-grip-toggle') : null; },
   };
 }
+
+test('desktop manager never adds a grip or compact state to Assembly controls', () => {
+  const h = makeHarness();
+  const assembly = new FakeElement('section','reality-assembly');
+  const directory = new FakeElement('aside','assembly-directory');
+  const inspector = new FakeElement('aside','assembly-inspector');
+  const search = new FakeElement('input','assembly-search');
+  directory.appendChild(search);assembly.append(directory,inspector);h.doc.body.appendChild(assembly);
+  h.asides.push(directory,inspector);
+  const destroy = mountCenteredSurfaces(h.doc,h.view);
+  h.flushRaf();
+  for (const panel of [directory,inspector]) {
+    assert.equal(h.gripOf(panel),null);
+    assert.equal(panel.getAttribute('data-panel-space'),null);
+    assert.equal(panel.getAttribute('data-compact'),null);
+    assert.equal(panel.style.position,undefined);
+  }
+  assert.equal(directory.children[0],search,'search remains the original unwrapped control');
+  assert.ok(h.gripOf(h.aside1),'ordinary floating feature panels remain managed');
+  destroy();
+});
 
 test('desktop mount adds grips, places visible panels small, and leaves hidden panels alone', () => {
   const h = makeHarness();

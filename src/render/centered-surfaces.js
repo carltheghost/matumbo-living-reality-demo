@@ -62,12 +62,20 @@ export function composePanelTransform(x, y, z) {
 
 const EXTRA_PANEL_IDS = ['gesture-input-panel', 'media-preview', 'city-journey', 'hint'];
 
-/** Every floating panel/tab: all asides plus the non-aside overlays. */
+/** Scene controllers own their drawers, inspectors, and object surfaces. */
+function belongsToSceneController(el) {
+  for (let parent = el; parent; parent = parent.parentElement ?? parent.parentNode) {
+    if (parent.id === 'reality-assembly' || parent.id === 'person-studio') return true;
+  }
+  return false;
+}
+
+/** Floating panels plus overlays, excluding UI owned by a scene controller. */
 export function collectPanelDescriptors(documentRoot) {
   const out = [];
   const seen = new Set();
   const push = (el) => {
-    if (!el || seen.has(el)) return;
+    if (!el || seen.has(el) || belongsToSceneController(el)) return;
     seen.add(el);
     out.push({ id: el.id || '(panel)', el });
   };

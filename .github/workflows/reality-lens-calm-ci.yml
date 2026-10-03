@@ -1,0 +1,48 @@
+name: Reality Lens navigation and API connections
+
+on:
+  pull_request:
+    paths:
+      - 'src/main.js'
+      - 'src/render/reality-assembly*'
+      - 'src/render/api-connections*'
+      - 'src/render/centered-surfaces.js'
+      - 'src/render/feature-navigator.js'
+      - 'src/domains/provider-navigation.js'
+      - 'src/domains/reality-object-engine.js'
+      - 'src/domains/living-surface-layout-engine.js'
+      - 'scripts/build*'
+      - 'scripts/provider_bridge.py'
+      - 'scripts/public-preview.mjs'
+      - 'tests/*reality*'
+      - 'tests/api-connections.test.mjs'
+      - 'tests/object-tab-binding.test.mjs'
+      - 'tests/test_provider_bridge.py'
+      - '.github/workflows/reality-lens-calm-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Runtime syntax
+        run: |
+          node --check src/main.js
+          node --check src/render/reality-assembly.js
+          node --check src/render/reality-assembly-scene.js
+          node --check src/render/api-connections.js
+      - name: Navigation, surfaces, build and provider regressions
+        run: node --test tests/reality-assembly-scene.test.mjs tests/reality-lens-unified.test.mjs tests/reality-lens-chrome.test.mjs tests/reality-space-frame.test.mjs tests/object-is-tab-wrap.test.mjs tests/object-tab-binding.test.mjs tests/reality-object-engine.test.mjs tests/living-surface-layout-engine.test.mjs tests/living-surface-rig.test.mjs tests/centered-surfaces.test.mjs tests/feature-handoff.test.mjs tests/feature-navigator.test.mjs tests/public-preview.test.mjs tests/api-connections.test.mjs tests/portal-entry-return.test.mjs tests/portal-sessions.test.mjs tests/lens-intent-stream.test.mjs tests/chess-arena.test.mjs
+      - name: Real loopback HTTP bridge tests
+        run: python -m unittest discover -s tests -p test_provider_bridge.py

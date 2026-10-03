@@ -83,6 +83,31 @@ export function livingSurfaceClipPath(shape='rectangle'){
   return 'inset(0 round 7%)';
 }
 
+/** The native front contour also owns the CSS and pointer silhouettes. */
+export function livingSurfaceContour(shape='rectangle'){
+  const resolved=REALITY_TAB_FORMS[shape]?shape:'rectangle';
+  const face=createLivingSurfaceMap(resolved,{clearance:0}).primary,{width,height}=face,z=face.position[2],points=[];
+  if(resolved==='sphere'){
+    for(let i=0;i<64;i++){const angle=i/64*Math.PI*2;points.push([Math.cos(angle)*width/2,Math.sin(angle)*height/2,z]);}
+  }else if(resolved==='wave'){
+    const bodyHeight=height/1.15;
+    for(let i=0;i<=32;i++){const t=i/32;points.push([(t-.5)*width,bodyHeight*(.5+.075*Math.sin(t*Math.PI*4)),z]);}
+    for(let i=32;i>=0;i--){const t=i/32;points.push([(t-.5)*width,bodyHeight*(-.5-.075*Math.sin(t*Math.PI*4)),z]);}
+  }else{
+    const radius=resolved==='cylinder'||resolved==='cube'?0:Math.min(resolved==='phone'?.12:.09,width/2,height/2);
+    if(!radius)points.push([-width/2,-height/2,z],[width/2,-height/2,z],[width/2,height/2,z],[-width/2,height/2,z]);
+    else for(const [cx,cy,start] of [[width/2-radius,height/2-radius,0],[-width/2+radius,height/2-radius,Math.PI/2],[-width/2+radius,-height/2+radius,Math.PI],[width/2-radius,-height/2+radius,Math.PI*1.5]]){
+      for(let i=0;i<=8;i++){const angle=start+i/8*Math.PI/2;points.push([cx+Math.cos(angle)*radius,cy+Math.sin(angle)*radius,z]);}
+    }
+  }
+  return freeze(points.map(point=>point.map(round)));
+}
+
+export function livingContourClipPath(shape='rectangle'){
+  const face=createLivingSurfaceMap(shape,{clearance:0}).primary;
+  return `polygon(${livingSurfaceContour(shape).map(([x,y])=>`${percent((x/face.width+.5)*100)} ${percent((.5-y/face.height)*100)}`).join(',')})`;
+}
+
 function planarSurfaceLayout(shape,{clearance=.018,depthRatio=.42}={}){
   const form=formFor(shape),width=form.width,height=form.height;
   const depth=form.depth;
@@ -107,9 +132,8 @@ function cylinderSurfaceLayout({clearance=.018,depthRatio=.42}={}){
   const arc=Math.PI*.64;
   // A chord is deliberately smaller than the cylinder wall. The primary
   // reading face lives on the front arc rather than filling its whole height.
-  const aspect=form.width/form.height,maxHeight=height*.76;
-  const frontWidth=Math.min(form.width*.9,2*radius*Math.sin(arc/2)*.98,maxHeight*aspect);
-  const frontHeight=frontWidth/aspect;
+  const frontWidth=Math.min(form.width*.9,2*radius*Math.sin(arc/2)*.98);
+  const frontHeight=height;
   const sideWidth=Math.max(.42,frontWidth*.58),sideHeight=Math.min(height*.64,frontHeight*.82);
   const cap=Math.min(radius*1.26,frontWidth*.92);
   return [
@@ -139,7 +163,7 @@ function sphereSurfaceLayout({clearance=.018,depthRatio=.42}={}){
 
 function cubeSurfaceLayout({clearance=.018,depthRatio=.42}={}){
   const form=formFor('cube'),edge=Math.min(form.width,form.height,form.depth),half=edge/2+clearance;
-  const primary=edge*.88,side=edge*.7;
+  const primary=edge,side=edge*.7;
   return [
     makeFace('front',primary,primary,[0,0,half],[0,0,0],{kind:'face'}),
     makeFace('back',side,side,[0,0,-half],[0,Math.PI,0],{kind:'face',readable:false}),
@@ -361,6 +385,8 @@ export function createLivingSurfaceLayoutEngine(){
     compose:composeLivingSurface,
     readingProjection:livingReadingProjection,
     clipPath:livingSurfaceClipPath,
+    contour:livingSurfaceContour,
+    contourClipPath:livingContourClipPath,
     relax:relaxLivingRealityLayout,
   });
 }

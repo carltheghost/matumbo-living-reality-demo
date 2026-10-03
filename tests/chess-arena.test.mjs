@@ -9,6 +9,8 @@ import {
   CHESS_PIECE_HEIGHTS,
   CHESS_PIECE_RING_RADII,
   CHESS_ROLE_GLYPHS,
+  CHESS_ROLE_GLYPHS_WHITE,
+  CHESS_ROLE_GLYPHS_BLACK,
   buildArenaHall,
   createPieceBuilders,
   readArenaAvatarAppearance,

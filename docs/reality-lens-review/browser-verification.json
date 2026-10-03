@@ -1,0 +1,3062 @@
+{
+  "base": "http://127.0.0.1:8082/",
+  "webgl": true,
+  "root": {
+    "spaceId": null,
+    "spaceView": "gateway",
+    "selectedId": "block-world",
+    "assemblyActive": true,
+    "studioActive": false,
+    "activeId": "reality-lens",
+    "camera": {
+      "position": [
+        -8.881784197001252e-16,
+        2.868126991729179,
+        14.70768574848064
+      ],
+      "target": [
+        -8.881784197001252e-16,
+        2.868126991729178,
+        0
+      ]
+    },
+    "spatial": {
+      "geometryOnly": true,
+      "referenceImagesUsedAsTextures": false,
+      "funnelGuideVisible": false,
+      "gridVisible": false,
+      "nodeIds": [
+        "block-world",
+        "contracts",
+        "person",
+        "rooms",
+        "academy",
+        "world-events",
+        "multi-sport-events",
+        "asset-market",
+        "reality-lens",
+        "runtime-sync",
+        "migration",
+        "asset-token",
+        "launch-distribution",
+        "social-explorer",
+        "social-mirror",
+        "youtube",
+        "paycore",
+        "contract-atelier",
+        "ledger",
+        "t402",
+        "agent",
+        "neural-mesh",
+        "muse-agent",
+        "bot-plaza",
+        "luna-companion",
+        "picture-matter",
+        "nft-atelier",
+        "wardrobe-atelier",
+        "white-paper",
+        "gesture-lens",
+        "gateway",
+        "sports-events",
+        "arena",
+        "chess",
+        "web-ai",
+        "projections"
+      ],
+      "nodeCount": 36,
+      "tabCount": 36,
+      "visibleFeatureIds": [],
+      "visibleTabCount": 0,
+      "groupIds": [
+        "worlds",
+        "value",
+        "people",
+        "experiences",
+        "network",
+        "agents"
+      ],
+      "visibleGroupCount": 6,
+      "visibleGroupIds": [
+        "worlds",
+        "people",
+        "network",
+        "value",
+        "agents",
+        "experiences"
+      ],
+      "activeGroupId": null,
+      "calmMode": true,
+      "spaceView": "home",
+      "spacePage": {
+        "page": 0,
+        "pageCount": 1,
+        "pageSize": 6,
+        "total": 0,
+        "ids": []
+      },
+      "spaceBounds": {
+        "center": [
+          -8.881784197001252e-16,
+          0.9999999999999998,
+          0
+        ],
+        "radius": 11.62249483178717,
+        "width": 20.86479497255965,
+        "height": 9.909945915598577,
+        "depth": 2.604389978985222,
+        "count": 6,
+        "ids": [
+          "worlds",
+          "people",
+          "network",
+          "value",
+          "agents",
+          "experiences"
+        ]
+      },
+      "focusedId": null,
+      "focusStrength": 0,
+      "focusIsolated": false,
+      "focusDistance": null,
+      "selectedStage": 0,
+      "approachProgress": 1,
+      "anchorOpen": 0,
+      "edgeCount": 76,
+      "relationshipSource": "authored feature navigation graph",
+      "connectionsVisible": false,
+      "connectionPairs": [
+        [
+          "person",
+          "reality-lens"
+        ],
+        [
+          "block-world",
+          "reality-lens"
+        ],
+        [
+          "projections",
+          "reality-lens"
+        ],
+        [
+          "person",
+          "wardrobe-atelier"
+        ],
+        [
+          "agent",
+          "person"
+        ],
+        [
+          "arena",
+          "person"
+        ],
+        [
+          "rooms",
+          "social-explorer"
+        ],
+        [
+          "agent",
+          "rooms"
+        ],
+        [
+          "block-world",
+          "rooms"
+        ],
+        [
+          "block-world",
+          "projections"
+        ],
+        [
+          "block-world",
+          "migration"
+        ],
+        [
+          "block-world",
+          "runtime-sync"
+        ],
+        [
+          "projections",
+          "runtime-sync"
+        ],
+        [
+          "gateway",
+          "runtime-sync"
+        ],
+        [
+          "migration",
+          "runtime-sync"
+        ],
+        [
+          "migration",
+          "reality-lens"
+        ],
+        [
+          "asset-market",
+          "asset-token"
+        ],
+        [
+          "asset-token",
+          "launch-distribution"
+        ],
+        [
+          "asset-token",
+          "ledger"
+        ],
+        [
+          "asset-market",
+          "contracts"
+        ],
+        [
+          "asset-market",
+          "ledger"
+        ],
+        [
+          "asset-market",
+          "launch-distribution"
+        ],
+        [
+          "launch-distribution",
+          "white-paper"
+        ],
+        [
+          "agent",
+          "social-explorer"
+        ],
+        [
+          "social-explorer",
+          "social-mirror"
+        ],
+        [
+          "social-mirror",
+          "youtube"
+        ],
+        [
+          "rooms",
+          "social-mirror"
+        ],
+        [
+          "picture-matter",
+          "youtube"
+        ],
+        [
+          "reality-lens",
+          "youtube"
+        ],
+        [
+          "paycore",
+          "web-ai"
+        ],
+        [
+          "t402",
+          "web-ai"
+        ],
+        [
+          "ledger",
+          "web-ai"
+        ],
+        [
+          "gateway",
+          "web-ai"
+        ],
+        [
+          "ledger",
+          "paycore"
+        ],
+        [
+          "paycore",
+          "t402"
+        ],
+        [
+          "contracts",
+          "paycore"
+        ],
+        [
+          "contract-atelier",
+          "contracts"
+        ],
+        [
+          "contracts",
+          "ledger"
+        ],
+        [
+          "contract-atelier",
+          "paycore"
+        ],
+        [
+          "academy",
+          "contract-atelier"
+        ],
+        [
+          "ledger",
+          "t402"
+        ],
+        [
+          "gateway",
+          "t402"
+        ],
+        [
+          "agent",
+          "neural-mesh"
+        ],
+        [
+          "agent",
+          "muse-agent"
+        ],
+        [
+          "agent",
+          "bot-plaza"
+        ],
+        [
+          "agent",
+          "luna-companion"
+        ],
+        [
+          "bot-plaza",
+          "neural-mesh"
+        ],
+        [
+          "gateway",
+          "neural-mesh"
+        ],
+        [
+          "muse-agent",
+          "person"
+        ],
+        [
+          "muse-agent",
+          "picture-matter"
+        ],
+        [
+          "bot-plaza",
+          "luna-companion"
+        ],
+        [
+          "luna-companion",
+          "rooms"
+        ],
+        [
+          "arena",
+          "luna-companion"
+        ],
+        [
+          "nft-atelier",
+          "picture-matter"
+        ],
+        [
+          "picture-matter",
+          "white-paper"
+        ],
+        [
+          "picture-matter",
+          "reality-lens"
+        ],
+        [
+          "agent",
+          "nft-atelier"
+        ],
+        [
+          "asset-market",
+          "nft-atelier"
+        ],
+        [
+          "agent",
+          "wardrobe-atelier"
+        ],
+        [
+          "arena",
+          "wardrobe-atelier"
+        ],
+        [
+          "projections",
+          "white-paper"
+        ],
+        [
+          "reality-lens",
+          "white-paper"
+        ],
+        [
+          "academy",
+          "white-paper"
+        ],
+        [
+          "block-world",
+          "gesture-lens"
+        ],
+        [
+          "gesture-lens",
+          "person"
+        ],
+        [
+          "agent",
+          "gesture-lens"
+        ],
+        [
+          "gateway",
+          "world-events"
+        ],
+        [
+          "sports-events",
+          "world-events"
+        ],
+        [
+          "multi-sport-events",
+          "world-events"
+        ],
+        [
+          "multi-sport-events",
+          "sports-events"
+        ],
+        [
+          "arena",
+          "sports-events"
+        ],
+        [
+          "arena",
+          "multi-sport-events"
+        ],
+        [
+          "arena",
+          "chess"
+        ],
+        [
+          "chess",
+          "person"
+        ],
+        [
+          "academy",
+          "chess"
+        ],
+        [
+          "academy",
+          "arena"
+        ]
+      ],
+      "viewMode": "3d",
+      "selectedId": "block-world",
+      "historyMode": "present",
+      "designedArchitecture": true,
+      "equalAxisCubes": false,
+      "singleFixedAnchorCube": false,
+      "formerCenterIsMovableTab": true,
+      "lensMode": false,
+      "lod": "field"
+    },
+    "overflow": false,
+    "panels": []
+  },
+  "agents": {
+    "spaceId": "agents",
+    "spaceView": "space",
+    "selectedId": "block-world",
+    "assemblyActive": true,
+    "studioActive": false,
+    "activeId": "reality-lens",
+    "camera": {
+      "position": [
+        -3.9708200928716075e-18,
+        2.315421636970481,
+        10.356259584583162
+      ],
+      "target": [
+        -3.9708200928716075e-18,
+        2.3154216369704805,
+        0
+      ]
+    },
+    "spatial": {
+      "geometryOnly": true,
+      "referenceImagesUsedAsTextures": false,
+      "funnelGuideVisible": false,
+      "gridVisible": false,
+      "nodeIds": [
+        "block-world",
+        "contracts",
+        "person",
+        "rooms",
+        "academy",
+        "world-events",
+        "multi-sport-events",
+        "asset-market",
+        "reality-lens",
+        "runtime-sync",
+        "migration",
+        "asset-token",
+        "launch-distribution",
+        "social-explorer",
+        "social-mirror",
+        "youtube",
+        "paycore",
+        "contract-atelier",
+        "ledger",
+        "t402",
+        "agent",
+        "neural-mesh",
+        "muse-agent",
+        "bot-plaza",
+        "luna-companion",
+        "picture-matter",
+        "nft-atelier",
+        "wardrobe-atelier",
+        "white-paper",
+        "gesture-lens",
+        "gateway",
+        "sports-events",
+        "arena",
+        "chess",
+        "web-ai",
+        "projections"
+      ],
+      "nodeCount": 36,
+      "tabCount": 36,
+      "visibleFeatureIds": [
+        "agent",
+        "neural-mesh",
+        "muse-agent"
+      ],
+      "visibleTabCount": 3,
+      "groupIds": [
+        "worlds",
+        "value",
+        "people",
+        "experiences",
+        "network",
+        "agents"
+      ],
+      "visibleGroupCount": 0,
+      "visibleGroupIds": [],
+      "activeGroupId": "agents",
+      "calmMode": true,
+      "spaceView": "agents",
+      "spacePage": {
+        "page": 0,
+        "pageCount": 1,
+        "pageSize": 6,
+        "total": 3,
+        "ids": [
+          "agent",
+          "neural-mesh",
+          "muse-agent"
+        ]
+      },
+      "spaceBounds": {
+        "center": [
+          0,
+          1.0000000000000002,
+          0
+        ],
+        "radius": 7.468593709661813,
+        "width": 14.664000000000001,
+        "height": 2.8160000000000003,
+        "depth": 0.396,
+        "count": 3,
+        "ids": [
+          "agent",
+          "neural-mesh",
+          "muse-agent"
+        ]
+      },
+      "focusedId": null,
+      "focusStrength": 0,
+      "focusIsolated": false,
+      "focusDistance": null,
+      "selectedStage": 0,
+      "approachProgress": 1,
+      "anchorOpen": 0,
+      "edgeCount": 76,
+      "relationshipSource": "authored feature navigation graph",
+      "connectionsVisible": false,
+      "connectionPairs": [
+        [
+          "person",
+          "reality-lens"
+        ],
+        [
+          "block-world",
+          "reality-lens"
+        ],
+        [
+          "projections",
+          "reality-lens"
+        ],
+        [
+          "person",
+          "wardrobe-atelier"
+        ],
+        [
+          "agent",
+          "person"
+        ],
+        [
+          "arena",
+          "person"
+        ],
+        [
+          "rooms",
+          "social-explorer"
+        ],
+        [
+          "agent",
+          "rooms"
+        ],
+        [
+          "block-world",
+          "rooms"
+        ],
+        [
+          "block-world",
+          "projections"
+        ],
+        [
+          "block-world",
+          "migration"
+        ],
+        [
+          "block-world",
+          "runtime-sync"
+        ],
+        [
+          "projections",
+          "runtime-sync"
+        ],
+        [
+          "gateway",
+          "runtime-sync"
+        ],
+        [
+          "migration",
+          "runtime-sync"
+        ],
+        [
+          "migration",
+          "reality-lens"
+        ],
+        [
+          "asset-market",
+          "asset-token"
+        ],
+        [
+          "asset-token",
+          "launch-distribution"
+        ],
+        [
+          "asset-token",
+          "ledger"
+        ],
+        [
+          "asset-market",
+          "contracts"
+        ],
+        [
+          "asset-market",
+          "ledger"
+        ],
+        [
+          "asset-market",
+          "launch-distribution"
+        ],
+        [
+          "launch-distribution",
+          "white-paper"
+        ],
+        [
+          "agent",
+          "social-explorer"
+        ],
+        [
+          "social-explorer",
+          "social-mirror"
+        ],
+        [
+          "social-mirror",
+          "youtube"
+        ],
+        [
+          "rooms",
+          "social-mirror"
+        ],
+        [
+          "picture-matter",
+          "youtube"
+        ],
+        [
+          "reality-lens",
+          "youtube"
+        ],
+        [
+          "paycore",
+          "web-ai"
+        ],
+        [
+          "t402",
+          "web-ai"
+        ],
+        [
+          "ledger",
+          "web-ai"
+        ],
+        [
+          "gateway",
+          "web-ai"
+        ],
+        [
+          "ledger",
+          "paycore"
+        ],
+        [
+          "paycore",
+          "t402"
+        ],
+        [
+          "contracts",
+          "paycore"
+        ],
+        [
+          "contract-atelier",
+          "contracts"
+        ],
+        [
+          "contracts",
+          "ledger"
+        ],
+        [
+          "contract-atelier",
+          "paycore"
+        ],
+        [
+          "academy",
+          "contract-atelier"
+        ],
+        [
+          "ledger",
+          "t402"
+        ],
+        [
+          "gateway",
+          "t402"
+        ],
+        [
+          "agent",
+          "neural-mesh"
+        ],
+        [
+          "agent",
+          "muse-agent"
+        ],
+        [
+          "agent",
+          "bot-plaza"
+        ],
+        [
+          "agent",
+          "luna-companion"
+        ],
+        [
+          "bot-plaza",
+          "neural-mesh"
+        ],
+        [
+          "gateway",
+          "neural-mesh"
+        ],
+        [
+          "muse-agent",
+          "person"
+        ],
+        [
+          "muse-agent",
+          "picture-matter"
+        ],
+        [
+          "bot-plaza",
+          "luna-companion"
+        ],
+        [
+          "luna-companion",
+          "rooms"
+        ],
+        [
+          "arena",
+          "luna-companion"
+        ],
+        [
+          "nft-atelier",
+          "picture-matter"
+        ],
+        [
+          "picture-matter",
+          "white-paper"
+        ],
+        [
+          "picture-matter",
+          "reality-lens"
+        ],
+        [
+          "agent",
+          "nft-atelier"
+        ],
+        [
+          "asset-market",
+          "nft-atelier"
+        ],
+        [
+          "agent",
+          "wardrobe-atelier"
+        ],
+        [
+          "arena",
+          "wardrobe-atelier"
+        ],
+        [
+          "projections",
+          "white-paper"
+        ],
+        [
+          "reality-lens",
+          "white-paper"
+        ],
+        [
+          "academy",
+          "white-paper"
+        ],
+        [
+          "block-world",
+          "gesture-lens"
+        ],
+        [
+          "gesture-lens",
+          "person"
+        ],
+        [
+          "agent",
+          "gesture-lens"
+        ],
+        [
+          "gateway",
+          "world-events"
+        ],
+        [
+          "sports-events",
+          "world-events"
+        ],
+        [
+          "multi-sport-events",
+          "world-events"
+        ],
+        [
+          "multi-sport-events",
+          "sports-events"
+        ],
+        [
+          "arena",
+          "sports-events"
+        ],
+        [
+          "arena",
+          "multi-sport-events"
+        ],
+        [
+          "arena",
+          "chess"
+        ],
+        [
+          "chess",
+          "person"
+        ],
+        [
+          "academy",
+          "chess"
+        ],
+        [
+          "academy",
+          "arena"
+        ]
+      ],
+      "viewMode": "3d",
+      "selectedId": "block-world",
+      "historyMode": "present",
+      "designedArchitecture": true,
+      "equalAxisCubes": false,
+      "singleFixedAnchorCube": false,
+      "formerCenterIsMovableTab": true,
+      "lensMode": false,
+      "lod": "field"
+    },
+    "overflow": false,
+    "panels": []
+  },
+  "routes": [
+    {
+      "id": "block-world",
+      "activeId": "block-world",
+      "selectedId": "block-world",
+      "spaceView": "feature",
+      "panels": [
+        {
+          "id": "block-world-console",
+          "attached": "true",
+          "rect": {
+            "x": 343.1058654785156,
+            "y": 142.91012573242188,
+            "width": 661.873046875,
+            "height": 667.047607421875
+          }
+        }
+      ],
+      "errors": [],
+      "providerRequests": []
+    },
+    {
+      "id": "contracts",
+      "activeId": "contracts",
+      "selectedId": "contracts",
+      "spaceView": "feature",
+      "panels": [
+        {
+          "id": "contracts-markets-console",
+          "attached": "true",
+          "rect": {
+            "x": 76.57725524902344,
+            "y": 110.47603607177734,
+            "width": 1156.648193359375,
+            "height": 679.474609375
+          }
+        }
+      ],
+      "errors": [],
+      "providerRequests": []
+    },
+    {
+      "id": "person",
+      "activeId": "person",
+      "selectedId": "person",
+      "spaceView": "feature",
+      "panels": [],
+      "errors": [],
+      "providerRequests": []
+    },
+    {
+      "id": "rooms",
+      "activeId": "rooms",
+      "selectedId": "rooms",
+      "spaceView": "feature",
+      "panels": [
+        {
+          "id": "room-console",
+          "attached": "true",
+          "rect": {
+            "x": 528.2109985351562,
+            "y": 293.7451171875,
+            "width": 383.5780029296875,
+            "height": 382.22540283203125
+          }
+        }
+      ],
+      "errors": [],
+      "providerRequests": []
+    },
+    {
+      "id": "academy",
+      "activeId": "academy",
+      "selectedId": "academy",
+      "spaceView": "feature",
+      "panels": [
+        {
+          "id": "academy-console",
+          "attached": "true",
+          "rect": {
+            "x": 33.80746841430664,
+            "y": 109.641845703125,
+            "width": 1097.5594482421875,
+            "height": 762.388671875
+          }
+        }
+      ],
+      "errors": [],
+      "providerRequests": []
+    },
+    {
+      "id": "world-events",
+      "activeId": "world-events",
+      "selectedId": "world-events",
+      "spaceView": "feature",
+      "panels": [
+        {
+          "id": "world-events-console",
+          "attached": "true",
+          "rect": {
+            "x": 556.4960327148438,
+            "y": 114.62881469726562,
+            "width": 524.3818969726562,
+            "height": 748.6878662109375
+          }
+        }
+      ],
+      "errors": [],
+      "providerRequests": []
+    },
+    {
+      "id": "multi-sport-events",
+      "activeId": "multi-sport-events",
+      "selectedId": "multi-sport-events",
+      "spaceView": "feature",
+      "panels": [
+        {
+          "id": "multi-sport-events-console",
+          "attached": "true",
+          "rect": {
+            "x": 473.60382080078125,
+            "y": 137.7816925048828,
+            "width": 708.1653442382812,
+            "height": 710.450927734375
+          }
+        }
+      ],
+      "errors": [],
+      "providerRequests": []
+    },
+    {
+      "id": "asset-market",
+      "activeId": "asset-market",
+      "selectedId": "asset-market",
+      "spaceView": "feature",
+      "panels": [
+        {
+          "id": "asset-market-console",
+          "attached": "true",
+          "rect": {
+            "x": 227.661376953125,
+            "y": 142.9151611328125,
+            "width": 444.50384521484375,
+            "height": 686.453125
+          }
+        }
+      ],
+      "errors": [],
+      "providerRequests": []
+    },
+    {
+      "id": "reality-lens",
+      "activeId": "reality-lens",
+      "selectedId": "asset-market",
+      "spaceView": "gateway",
+      "panels": [],
+      "errors": [],
+      "providerRequests": []
+    },
+    {
+      "id": "runtime-sync",
+      "activeId": "runtime-sync",
+      "selectedId": "runtime-sync",
+      "spaceView": "feature",
+      "panels": [
+        {
+          "id": "block-world-runtime-sync-console",
+          "attached": "true",
+          "rect": {
+            "x": 493.2637023925781,
+            "y": 172.72132873535156,
+            "width": 615.491943359375,
+            "height": 627.9417724609375
+          }
+        }
+      ],
+      "errors": [],
+      "providerRequests": []
+    },
+    {
+      "id": "migration",
+      "activeId": "migration",
+      "selectedId": "migration",
+      "spaceView": "feature",
+      "panels": [
+        {
+          "id": "block-migration-console",
+          "attached": "true",
+          "rect": {
+            "x": -73.08819580078125,
+            "y": 206.214111328125,
+            "width": 1098.83642578125,
+            "height": 787.2696533203125
+          }
+        }
+      ],
+      "errors": [],
+      "providerRequests": []
+    },
+    {
+      "id": "asset-token",
+      "activeId": "asset-token",
+      "selectedId": "asset-token",
+      "spaceView": "feature",
+      "panels": [
+        {
+          "id": "asset-launch",
+          "attached": "true",
+          "rect": {
+            "x": 603.8871459960938,
+            "y": 17.664112091064453,
+            "width": 524.6438598632812,
+            "height": 761.8488159179688
+          }
+        }
+      ],
+      "errors": [],
+      "providerRequests": []
+    },
+    {
+      "id": "launch-distribution",
+      "activeId": "launch-distribution",
+      "selectedId": "launch-distribution",
+      "spaceView": "feature",
+      "panels": [
+        {
+          "id": "launch-console",
+          "attached": "true",
+          "rect": {
+            "x": 123.87763977050781,
+            "y": 221.4728240966797,
+            "width": 740.3916015625,
+            "height": 795.67919921875
+          }
+        }
+      ],
+      "errors": [],
+      "providerRequests": []
+    },
+    {
+      "id": "social-explorer",
+      "activeId": "social-explorer",
+      "selectedId": "social-explorer",
+      "spaceView": "feature",
+      "panels": [
+        {
+          "id": "social-explorer-console",
+          "attached": "true",
+          "rect": {
+            "x": 498.617919921875,
+            "y": 47.2520866394043,
+            "width": 428.0450439453125,
+            "height": 716.2155151367188
+          }
+        }
+      ],
+      "errors": [],
+      "providerRequests": []
+    },
+    {
+      "id": "social-mirror",
+      "activeId": "social-mirror",
+      "selectedId": "social-mirror",
+      "spaceView": "feature",
+      "panels": [
+        {
+          "id": "social-mirror-console",
+          "attached": "true",
+          "rect": {
+            "x": 255.80584716796875,
+            "y": 101.98484802246094,
+            "width": 1205.390380859375,
+            "height": 741.9385375976562
+          }
+        }
+      ],
+      "errors": [],
+      "providerRequests": []
+    },
+    {
+      "id": "youtube",
+      "activeId": "youtube",
+      "selectedId": "youtube",
+      "spaceView": "feature",
+      "panels": [
+        {
+          "id": "youtube-player-console",
+          "attached": "true",
+          "rect": {
+            "x": 361.3558044433594,
+            "y": 175.4435577392578,
+            "width": 726.29443359375,
+            "height": 718.0140991210938
+          }
+        }
+      ],
+      "errors": [],
+      "providerRequests": []
+    },
+    {
+      "id": "paycore",
+      "activeId": "paycore",
+      "selectedId": "paycore",
+      "spaceView": "feature",
+      "panels": [
+        {
+          "id": "paycore-console",
+          "attached": "true",
+          "rect": {
+            "x": 177.7478485107422,
+            "y": 125.01326751708984,
+            "width": 1076.152587890625,
+            "height": 718.8067016601562
+          }
+        }
+      ],
+      "errors": [],
+      "providerRequests": []
+    },
+    {
+      "id": "contract-atelier",
+      "activeId": "contract-atelier",
+      "selectedId": "contract-atelier",
+      "spaceView": "feature",
+      "panels": [
+        {
+          "id": "contract-atelier-console",
+          "attached": "true",
+          "rect": {
+            "x": 537.669189453125,
+            "y": 112.75502014160156,
+            "width": 502.4207763671875,
+            "height": 739.9390258789062
+          }
+        }
+      ],
+      "errors": [],
+      "providerRequests": []
+    },
+    {
+      "id": "ledger",
+      "activeId": "ledger",
+      "selectedId": "ledger",
+      "spaceView": "feature",
+      "panels": [
+        {
+          "id": "ledger-proof-console",
+          "attached": "true",
+          "rect": {
+            "x": 217.96139526367188,
+            "y": 41.117130279541016,
+            "width": 831.97021484375,
+            "height": 847.5826416015625
+          }
+        }
+      ],
+      "errors": [],
+      "providerRequests": []
+    },
+    {
+      "id": "t402",
+      "activeId": "t402",
+      "selectedId": "t402",
+      "spaceView": "feature",
+      "panels": [
+        {
+          "id": "t402-console",
+          "attached": "true",
+          "rect": {
+            "x": 597.8563232421875,
+            "y": 117.3353042602539,
+            "width": 410.306640625,
+            "height": 721.580078125
+          }
+        }
+      ],
+      "errors": [],
+      "providerRequests": []
+    },
+    {
+      "id": "agent",
+      "activeId": "agent",
+      "selectedId": "agent",
+      "spaceView": "feature",
+      "panels": [
+        {
+          "id": "bot-plaza-console",
+          "attached": "true",
+          "rect": {
+            "x": -1034.22021484375,
+            "y": 47.793861389160156,
+            "width": 1481.4033203125,
+            "height": 874.5357666015625
+          }
+        }
+      ],
+      "errors": [],
+      "providerRequests": []
+    },
+    {
+      "id": "neural-mesh",
+      "activeId": "neural-mesh",
+      "selectedId": "neural-mesh",
+      "spaceView": "feature",
+      "panels": [
+        {
+          "id": "neural-mesh-console",
+          "attached": "true",
+          "rect": {
+            "x": 413.134765625,
+            "y": 121.19876861572266,
+            "width": 714.02001953125,
+            "height": 722.2273559570312
+          }
+        }
+      ],
+      "errors": [],
+      "providerRequests": []
+    },
+    {
+      "id": "muse-agent",
+      "activeId": "muse-agent",
+      "selectedId": "muse-agent",
+      "spaceView": "feature",
+      "panels": [
+        {
+          "id": "muse-agent-console",
+          "attached": "true",
+          "rect": {
+            "x": 276.65252685546875,
+            "y": 105.34396362304688,
+            "width": 1083.79541015625,
+            "height": 755.274169921875
+          }
+        }
+      ],
+      "errors": [],
+      "providerRequests": []
+    },
+    {
+      "id": "bot-plaza",
+      "activeId": "bot-plaza",
+      "selectedId": "bot-plaza",
+      "spaceView": "feature",
+      "panels": [
+        {
+          "id": "bot-plaza-console",
+          "attached": "true",
+          "rect": {
+            "x": 432.5531005859375,
+            "y": 98.0487060546875,
+            "width": 504.9813232421875,
+            "height": 732.6276245117188
+          }
+        }
+      ],
+      "errors": [],
+      "providerRequests": []
+    },
+    {
+      "id": "luna-companion",
+      "activeId": "luna-companion",
+      "selectedId": "luna-companion",
+      "spaceView": "feature",
+      "panels": [
+        {
+          "id": "luna-companion-console",
+          "attached": "true",
+          "rect": {
+            "x": 537.0528564453125,
+            "y": 130.34658813476562,
+            "width": 666.6090087890625,
+            "height": 689.2401123046875
+          }
+        }
+      ],
+      "errors": [],
+      "providerRequests": []
+    },
+    {
+      "id": "picture-matter",
+      "activeId": "picture-matter",
+      "selectedId": "picture-matter",
+      "spaceView": "feature",
+      "panels": [
+        {
+          "id": "picture-matter-console",
+          "attached": "true",
+          "rect": {
+            "x": 518.310791015625,
+            "y": 344.63287353515625,
+            "width": 413.3966064453125,
+            "height": 685.0484008789062
+          }
+        }
+      ],
+      "errors": [],
+      "providerRequests": []
+    },
+    {
+      "id": "nft-atelier",
+      "activeId": "nft-atelier",
+      "selectedId": "nft-atelier",
+      "spaceView": "feature",
+      "panels": [
+        {
+          "id": "nft-atelier-console",
+          "attached": "true",
+          "rect": {
+            "x": -913.4144287109375,
+            "y": -1825.08251953125,
+            "width": 3927.91259765625,
+            "height": 2251.92626953125
+          }
+        }
+      ],
+      "errors": [],
+      "providerRequests": []
+    },
+    {
+      "id": "wardrobe-atelier",
+      "activeId": "wardrobe-atelier",
+      "selectedId": "wardrobe-atelier",
+      "spaceView": "feature",
+      "panels": [
+        {
+          "id": "wardrobe-atelier-console",
+          "attached": "true",
+          "rect": {
+            "x": 349.0540466308594,
+            "y": 148.52992248535156,
+            "width": 719.7662353515625,
+            "height": 720.51416015625
+          }
+        }
+      ],
+      "errors": [],
+      "providerRequests": []
+    },
+    {
+      "id": "white-paper",
+      "activeId": "white-paper",
+      "selectedId": "white-paper",
+      "spaceView": "feature",
+      "panels": [
+        {
+          "id": "white-paper-console",
+          "attached": "true",
+          "rect": {
+            "x": 224.4960479736328,
+            "y": 78.217041015625,
+            "width": 1093.713623046875,
+            "height": 738.0198974609375
+          }
+        }
+      ],
+      "errors": [],
+      "providerRequests": []
+    },
+    {
+      "id": "gesture-lens",
+      "activeId": "gesture-lens",
+      "selectedId": "gesture-lens",
+      "spaceView": "feature",
+      "panels": [
+        {
+          "id": "gesture-lens-console",
+          "attached": "true",
+          "rect": {
+            "x": 549.7193603515625,
+            "y": 108.81342315673828,
+            "width": 503.477294921875,
+            "height": 742.6788940429688
+          }
+        }
+      ],
+      "errors": [],
+      "providerRequests": []
+    },
+    {
+      "id": "gateway",
+      "activeId": "gateway",
+      "selectedId": "gateway",
+      "spaceView": "feature",
+      "panels": [
+        {
+          "id": "live-gateway-console",
+          "attached": "true",
+          "rect": {
+            "x": 382.1096496582031,
+            "y": 157.25767517089844,
+            "width": 670.9617919921875,
+            "height": 669.5213012695312
+          }
+        }
+      ],
+      "errors": [],
+      "providerRequests": []
+    },
+    {
+      "id": "sports-events",
+      "activeId": "sports-events",
+      "selectedId": "sports-events",
+      "spaceView": "feature",
+      "panels": [
+        {
+          "id": "sports-events-console",
+          "attached": "true",
+          "rect": {
+            "x": 6.568115711212158,
+            "y": 375.5094299316406,
+            "width": 454.1273193359375,
+            "height": 743.3416748046875
+          }
+        }
+      ],
+      "errors": [],
+      "providerRequests": []
+    },
+    {
+      "id": "arena",
+      "activeId": "arena",
+      "selectedId": "arena",
+      "spaceView": "feature",
+      "panels": [
+        {
+          "id": "arena-games-console",
+          "attached": "true",
+          "rect": {
+            "x": 311.36737060546875,
+            "y": 186.8811492919922,
+            "width": 1139.1162109375,
+            "height": 705.5563354492188
+          }
+        }
+      ],
+      "errors": [],
+      "providerRequests": []
+    },
+    {
+      "id": "chess",
+      "activeId": "chess",
+      "selectedId": "chess",
+      "spaceView": "feature",
+      "panels": [
+        {
+          "id": "chess-console",
+          "attached": "true",
+          "rect": {
+            "x": 934.3501586914062,
+            "y": 148.29039001464844,
+            "width": 729.3551635742188,
+            "height": 723.2008056640625
+          }
+        }
+      ],
+      "errors": [],
+      "providerRequests": []
+    },
+    {
+      "id": "web-ai",
+      "activeId": "web-ai",
+      "selectedId": "web-ai",
+      "spaceView": "feature",
+      "panels": [
+        {
+          "id": "web-ai-console",
+          "attached": "true",
+          "rect": {
+            "x": -128.8029327392578,
+            "y": 78.53827667236328,
+            "width": 1104.59912109375,
+            "height": 816.4081420898438
+          }
+        }
+      ],
+      "errors": [],
+      "providerRequests": []
+    },
+    {
+      "id": "projections",
+      "activeId": "projections",
+      "selectedId": "projections",
+      "spaceView": "feature",
+      "panels": [
+        {
+          "id": "device-projection-console",
+          "attached": "true",
+          "rect": {
+            "x": 498.8138122558594,
+            "y": 31.36180305480957,
+            "width": 548.7281494140625,
+            "height": 789.2174682617188
+          }
+        }
+      ],
+      "errors": [],
+      "providerRequests": []
+    }
+  ],
+  "backToSpace": {
+    "spaceId": "experiences",
+    "spaceView": "space",
+    "selectedId": "chess",
+    "assemblyActive": true,
+    "studioActive": false,
+    "activeId": "reality-lens",
+    "camera": {
+      "position": [
+        0.03741781149294261,
+        2.407798255054029,
+        11.239127454640482
+      ],
+      "target": [
+        0.03741781149294261,
+        2.40678197725885,
+        0
+      ]
+    },
+    "spatial": {
+      "geometryOnly": true,
+      "referenceImagesUsedAsTextures": false,
+      "funnelGuideVisible": false,
+      "gridVisible": false,
+      "nodeIds": [
+        "block-world",
+        "contracts",
+        "person",
+        "rooms",
+        "academy",
+        "world-events",
+        "multi-sport-events",
+        "asset-market",
+        "reality-lens",
+        "runtime-sync",
+        "migration",
+        "asset-token",
+        "launch-distribution",
+        "social-explorer",
+        "social-mirror",
+        "youtube",
+        "paycore",
+        "contract-atelier",
+        "ledger",
+        "t402",
+        "agent",
+        "neural-mesh",
+        "muse-agent",
+        "bot-plaza",
+        "luna-companion",
+        "picture-matter",
+        "nft-atelier",
+        "wardrobe-atelier",
+        "white-paper",
+        "gesture-lens",
+        "gateway",
+        "sports-events",
+        "arena",
+        "chess",
+        "web-ai",
+        "projections"
+      ],
+      "nodeCount": 36,
+      "tabCount": 36,
+      "visibleFeatureIds": [
+        "nft-atelier",
+        "white-paper",
+        "gesture-lens",
+        "sports-events",
+        "arena",
+        "chess"
+      ],
+      "visibleTabCount": 6,
+      "groupIds": [
+        "worlds",
+        "value",
+        "people",
+        "experiences",
+        "network",
+        "agents"
+      ],
+      "visibleGroupCount": 0,
+      "visibleGroupIds": [],
+      "activeGroupId": "experiences",
+      "calmMode": true,
+      "spaceView": "experiences",
+      "spacePage": {
+        "page": 1,
+        "pageCount": 3,
+        "pageSize": 6,
+        "total": 13,
+        "ids": [
+          "nft-atelier",
+          "white-paper",
+          "gesture-lens",
+          "sports-events",
+          "arena",
+          "chess"
+        ]
+      },
+      "spaceBounds": {
+        "center": [
+          -4.440892098500626e-16,
+          1,
+          0
+        ],
+        "radius": 8.707400989962505,
+        "width": 14.84,
+        "height": 8.608,
+        "depth": 2.9920000000000004,
+        "count": 6,
+        "ids": [
+          "nft-atelier",
+          "white-paper",
+          "gesture-lens",
+          "sports-events",
+          "arena",
+          "chess"
+        ]
+      },
+      "focusedId": null,
+      "focusStrength": 0,
+      "focusIsolated": false,
+      "focusDistance": null,
+      "selectedStage": 0,
+      "approachProgress": 1,
+      "anchorOpen": 0,
+      "edgeCount": 76,
+      "relationshipSource": "authored feature navigation graph",
+      "connectionsVisible": false,
+      "connectionPairs": [
+        [
+          "person",
+          "reality-lens"
+        ],
+        [
+          "block-world",
+          "reality-lens"
+        ],
+        [
+          "projections",
+          "reality-lens"
+        ],
+        [
+          "person",
+          "wardrobe-atelier"
+        ],
+        [
+          "agent",
+          "person"
+        ],
+        [
+          "arena",
+          "person"
+        ],
+        [
+          "rooms",
+          "social-explorer"
+        ],
+        [
+          "agent",
+          "rooms"
+        ],
+        [
+          "block-world",
+          "rooms"
+        ],
+        [
+          "block-world",
+          "projections"
+        ],
+        [
+          "block-world",
+          "migration"
+        ],
+        [
+          "block-world",
+          "runtime-sync"
+        ],
+        [
+          "projections",
+          "runtime-sync"
+        ],
+        [
+          "gateway",
+          "runtime-sync"
+        ],
+        [
+          "migration",
+          "runtime-sync"
+        ],
+        [
+          "migration",
+          "reality-lens"
+        ],
+        [
+          "asset-market",
+          "asset-token"
+        ],
+        [
+          "asset-token",
+          "launch-distribution"
+        ],
+        [
+          "asset-token",
+          "ledger"
+        ],
+        [
+          "asset-market",
+          "contracts"
+        ],
+        [
+          "asset-market",
+          "ledger"
+        ],
+        [
+          "asset-market",
+          "launch-distribution"
+        ],
+        [
+          "launch-distribution",
+          "white-paper"
+        ],
+        [
+          "agent",
+          "social-explorer"
+        ],
+        [
+          "social-explorer",
+          "social-mirror"
+        ],
+        [
+          "social-mirror",
+          "youtube"
+        ],
+        [
+          "rooms",
+          "social-mirror"
+        ],
+        [
+          "picture-matter",
+          "youtube"
+        ],
+        [
+          "reality-lens",
+          "youtube"
+        ],
+        [
+          "paycore",
+          "web-ai"
+        ],
+        [
+          "t402",
+          "web-ai"
+        ],
+        [
+          "ledger",
+          "web-ai"
+        ],
+        [
+          "gateway",
+          "web-ai"
+        ],
+        [
+          "ledger",
+          "paycore"
+        ],
+        [
+          "paycore",
+          "t402"
+        ],
+        [
+          "contracts",
+          "paycore"
+        ],
+        [
+          "contract-atelier",
+          "contracts"
+        ],
+        [
+          "contracts",
+          "ledger"
+        ],
+        [
+          "contract-atelier",
+          "paycore"
+        ],
+        [
+          "academy",
+          "contract-atelier"
+        ],
+        [
+          "ledger",
+          "t402"
+        ],
+        [
+          "gateway",
+          "t402"
+        ],
+        [
+          "agent",
+          "neural-mesh"
+        ],
+        [
+          "agent",
+          "muse-agent"
+        ],
+        [
+          "agent",
+          "bot-plaza"
+        ],
+        [
+          "agent",
+          "luna-companion"
+        ],
+        [
+          "bot-plaza",
+          "neural-mesh"
+        ],
+        [
+          "gateway",
+          "neural-mesh"
+        ],
+        [
+          "muse-agent",
+          "person"
+        ],
+        [
+          "muse-agent",
+          "picture-matter"
+        ],
+        [
+          "bot-plaza",
+          "luna-companion"
+        ],
+        [
+          "luna-companion",
+          "rooms"
+        ],
+        [
+          "arena",
+          "luna-companion"
+        ],
+        [
+          "nft-atelier",
+          "picture-matter"
+        ],
+        [
+          "picture-matter",
+          "white-paper"
+        ],
+        [
+          "picture-matter",
+          "reality-lens"
+        ],
+        [
+          "agent",
+          "nft-atelier"
+        ],
+        [
+          "asset-market",
+          "nft-atelier"
+        ],
+        [
+          "agent",
+          "wardrobe-atelier"
+        ],
+        [
+          "arena",
+          "wardrobe-atelier"
+        ],
+        [
+          "projections",
+          "white-paper"
+        ],
+        [
+          "reality-lens",
+          "white-paper"
+        ],
+        [
+          "academy",
+          "white-paper"
+        ],
+        [
+          "block-world",
+          "gesture-lens"
+        ],
+        [
+          "gesture-lens",
+          "person"
+        ],
+        [
+          "agent",
+          "gesture-lens"
+        ],
+        [
+          "gateway",
+          "world-events"
+        ],
+        [
+          "sports-events",
+          "world-events"
+        ],
+        [
+          "multi-sport-events",
+          "world-events"
+        ],
+        [
+          "multi-sport-events",
+          "sports-events"
+        ],
+        [
+          "arena",
+          "sports-events"
+        ],
+        [
+          "arena",
+          "multi-sport-events"
+        ],
+        [
+          "arena",
+          "chess"
+        ],
+        [
+          "chess",
+          "person"
+        ],
+        [
+          "academy",
+          "chess"
+        ],
+        [
+          "academy",
+          "arena"
+        ]
+      ],
+      "viewMode": "3d",
+      "selectedId": "chess",
+      "historyMode": "present",
+      "designedArchitecture": true,
+      "equalAxisCubes": false,
+      "singleFixedAnchorCube": false,
+      "formerCenterIsMovableTab": true,
+      "lensMode": true,
+      "lod": "field"
+    },
+    "overflow": false,
+    "panels": []
+  },
+  "backToRoot": {
+    "spaceId": null,
+    "spaceView": "gateway",
+    "selectedId": "chess",
+    "assemblyActive": true,
+    "studioActive": false,
+    "activeId": "reality-lens",
+    "camera": {
+      "position": [
+        0.00024035142257493235,
+        2.8637268726077822,
+        14.67404322295448
+      ],
+      "target": [
+        0.00024035142257493235,
+        2.8637203445986814,
+        0
+      ]
+    },
+    "spatial": {
+      "geometryOnly": true,
+      "referenceImagesUsedAsTextures": false,
+      "funnelGuideVisible": false,
+      "gridVisible": false,
+      "nodeIds": [
+        "block-world",
+        "contracts",
+        "person",
+        "rooms",
+        "academy",
+        "world-events",
+        "multi-sport-events",
+        "asset-market",
+        "reality-lens",
+        "runtime-sync",
+        "migration",
+        "asset-token",
+        "launch-distribution",
+        "social-explorer",
+        "social-mirror",
+        "youtube",
+        "paycore",
+        "contract-atelier",
+        "ledger",
+        "t402",
+        "agent",
+        "neural-mesh",
+        "muse-agent",
+        "bot-plaza",
+        "luna-companion",
+        "picture-matter",
+        "nft-atelier",
+        "wardrobe-atelier",
+        "white-paper",
+        "gesture-lens",
+        "gateway",
+        "sports-events",
+        "arena",
+        "chess",
+        "web-ai",
+        "projections"
+      ],
+      "nodeCount": 36,
+      "tabCount": 36,
+      "visibleFeatureIds": [],
+      "visibleTabCount": 0,
+      "groupIds": [
+        "worlds",
+        "value",
+        "people",
+        "experiences",
+        "network",
+        "agents"
+      ],
+      "visibleGroupCount": 6,
+      "visibleGroupIds": [
+        "worlds",
+        "people",
+        "network",
+        "value",
+        "agents",
+        "experiences"
+      ],
+      "activeGroupId": null,
+      "calmMode": true,
+      "spaceView": "home",
+      "spacePage": {
+        "page": 0,
+        "pageCount": 1,
+        "pageSize": 6,
+        "total": 0,
+        "ids": []
+      },
+      "spaceBounds": {
+        "center": [
+          -8.881784197001252e-16,
+          0.9999999999999998,
+          0
+        ],
+        "radius": 11.62249483178717,
+        "width": 20.86479497255965,
+        "height": 9.909945915598577,
+        "depth": 2.604389978985222,
+        "count": 6,
+        "ids": [
+          "worlds",
+          "people",
+          "network",
+          "value",
+          "agents",
+          "experiences"
+        ]
+      },
+      "focusedId": null,
+      "focusStrength": 0,
+      "focusIsolated": false,
+      "focusDistance": null,
+      "selectedStage": 0,
+      "approachProgress": 1,
+      "anchorOpen": 0,
+      "edgeCount": 76,
+      "relationshipSource": "authored feature navigation graph",
+      "connectionsVisible": false,
+      "connectionPairs": [
+        [
+          "person",
+          "reality-lens"
+        ],
+        [
+          "block-world",
+          "reality-lens"
+        ],
+        [
+          "projections",
+          "reality-lens"
+        ],
+        [
+          "person",
+          "wardrobe-atelier"
+        ],
+        [
+          "agent",
+          "person"
+        ],
+        [
+          "arena",
+          "person"
+        ],
+        [
+          "rooms",
+          "social-explorer"
+        ],
+        [
+          "agent",
+          "rooms"
+        ],
+        [
+          "block-world",
+          "rooms"
+        ],
+        [
+          "block-world",
+          "projections"
+        ],
+        [
+          "block-world",
+          "migration"
+        ],
+        [
+          "block-world",
+          "runtime-sync"
+        ],
+        [
+          "projections",
+          "runtime-sync"
+        ],
+        [
+          "gateway",
+          "runtime-sync"
+        ],
+        [
+          "migration",
+          "runtime-sync"
+        ],
+        [
+          "migration",
+          "reality-lens"
+        ],
+        [
+          "asset-market",
+          "asset-token"
+        ],
+        [
+          "asset-token",
+          "launch-distribution"
+        ],
+        [
+          "asset-token",
+          "ledger"
+        ],
+        [
+          "asset-market",
+          "contracts"
+        ],
+        [
+          "asset-market",
+          "ledger"
+        ],
+        [
+          "asset-market",
+          "launch-distribution"
+        ],
+        [
+          "launch-distribution",
+          "white-paper"
+        ],
+        [
+          "agent",
+          "social-explorer"
+        ],
+        [
+          "social-explorer",
+          "social-mirror"
+        ],
+        [
+          "social-mirror",
+          "youtube"
+        ],
+        [
+          "rooms",
+          "social-mirror"
+        ],
+        [
+          "picture-matter",
+          "youtube"
+        ],
+        [
+          "reality-lens",
+          "youtube"
+        ],
+        [
+          "paycore",
+          "web-ai"
+        ],
+        [
+          "t402",
+          "web-ai"
+        ],
+        [
+          "ledger",
+          "web-ai"
+        ],
+        [
+          "gateway",
+          "web-ai"
+        ],
+        [
+          "ledger",
+          "paycore"
+        ],
+        [
+          "paycore",
+          "t402"
+        ],
+        [
+          "contracts",
+          "paycore"
+        ],
+        [
+          "contract-atelier",
+          "contracts"
+        ],
+        [
+          "contracts",
+          "ledger"
+        ],
+        [
+          "contract-atelier",
+          "paycore"
+        ],
+        [
+          "academy",
+          "contract-atelier"
+        ],
+        [
+          "ledger",
+          "t402"
+        ],
+        [
+          "gateway",
+          "t402"
+        ],
+        [
+          "agent",
+          "neural-mesh"
+        ],
+        [
+          "agent",
+          "muse-agent"
+        ],
+        [
+          "agent",
+          "bot-plaza"
+        ],
+        [
+          "agent",
+          "luna-companion"
+        ],
+        [
+          "bot-plaza",
+          "neural-mesh"
+        ],
+        [
+          "gateway",
+          "neural-mesh"
+        ],
+        [
+          "muse-agent",
+          "person"
+        ],
+        [
+          "muse-agent",
+          "picture-matter"
+        ],
+        [
+          "bot-plaza",
+          "luna-companion"
+        ],
+        [
+          "luna-companion",
+          "rooms"
+        ],
+        [
+          "arena",
+          "luna-companion"
+        ],
+        [
+          "nft-atelier",
+          "picture-matter"
+        ],
+        [
+          "picture-matter",
+          "white-paper"
+        ],
+        [
+          "picture-matter",
+          "reality-lens"
+        ],
+        [
+          "agent",
+          "nft-atelier"
+        ],
+        [
+          "asset-market",
+          "nft-atelier"
+        ],
+        [
+          "agent",
+          "wardrobe-atelier"
+        ],
+        [
+          "arena",
+          "wardrobe-atelier"
+        ],
+        [
+          "projections",
+          "white-paper"
+        ],
+        [
+          "reality-lens",
+          "white-paper"
+        ],
+        [
+          "academy",
+          "white-paper"
+        ],
+        [
+          "block-world",
+          "gesture-lens"
+        ],
+        [
+          "gesture-lens",
+          "person"
+        ],
+        [
+          "agent",
+          "gesture-lens"
+        ],
+        [
+          "gateway",
+          "world-events"
+        ],
+        [
+          "sports-events",
+          "world-events"
+        ],
+        [
+          "multi-sport-events",
+          "world-events"
+        ],
+        [
+          "multi-sport-events",
+          "sports-events"
+        ],
+        [
+          "arena",
+          "sports-events"
+        ],
+        [
+          "arena",
+          "multi-sport-events"
+        ],
+        [
+          "arena",
+          "chess"
+        ],
+        [
+          "chess",
+          "person"
+        ],
+        [
+          "academy",
+          "chess"
+        ],
+        [
+          "academy",
+          "arena"
+        ]
+      ],
+      "viewMode": "3d",
+      "selectedId": "chess",
+      "historyMode": "present",
+      "designedArchitecture": true,
+      "equalAxisCubes": false,
+      "singleFixedAnchorCube": false,
+      "formerCenterIsMovableTab": true,
+      "lensMode": true,
+      "lod": "field"
+    },
+    "overflow": false,
+    "panels": []
+  },
+  "searchCount": 1,
+  "escapeCloses": true,
+  "phone": {
+    "spaceId": null,
+    "spaceView": "gateway",
+    "selectedId": "chess",
+    "assemblyActive": true,
+    "studioActive": false,
+    "activeId": "reality-lens",
+    "camera": {
+      "position": [
+        2.659896483695014e-7,
+        0.6973404636784871,
+        25.30408197807959
+      ],
+      "target": [
+        2.659896483695014e-7,
+        0.6973404564541403,
+        0
+      ]
+    },
+    "spatial": {
+      "geometryOnly": true,
+      "referenceImagesUsedAsTextures": false,
+      "funnelGuideVisible": false,
+      "gridVisible": false,
+      "nodeIds": [
+        "block-world",
+        "contracts",
+        "person",
+        "rooms",
+        "academy",
+        "world-events",
+        "multi-sport-events",
+        "asset-market",
+        "reality-lens",
+        "runtime-sync",
+        "migration",
+        "asset-token",
+        "launch-distribution",
+        "social-explorer",
+        "social-mirror",
+        "youtube",
+        "paycore",
+        "contract-atelier",
+        "ledger",
+        "t402",
+        "agent",
+        "neural-mesh",
+        "muse-agent",
+        "bot-plaza",
+        "luna-companion",
+        "picture-matter",
+        "nft-atelier",
+        "wardrobe-atelier",
+        "white-paper",
+        "gesture-lens",
+        "gateway",
+        "sports-events",
+        "arena",
+        "chess",
+        "web-ai",
+        "projections"
+      ],
+      "nodeCount": 36,
+      "tabCount": 36,
+      "visibleFeatureIds": [],
+      "visibleTabCount": 0,
+      "groupIds": [
+        "worlds",
+        "value",
+        "people",
+        "experiences",
+        "network",
+        "agents"
+      ],
+      "visibleGroupCount": 6,
+      "visibleGroupIds": [
+        "worlds",
+        "people",
+        "network",
+        "value",
+        "agents",
+        "experiences"
+      ],
+      "activeGroupId": null,
+      "calmMode": true,
+      "spaceView": "home",
+      "spacePage": {
+        "page": 0,
+        "pageCount": 1,
+        "pageSize": 4,
+        "total": 0,
+        "ids": []
+      },
+      "spaceBounds": {
+        "center": [
+          0,
+          1,
+          0
+        ],
+        "radius": 9.107205130942027,
+        "width": 12.191934493195516,
+        "height": 13.383440103434404,
+        "depth": 2.001250983670036,
+        "count": 6,
+        "ids": [
+          "worlds",
+          "people",
+          "network",
+          "value",
+          "agents",
+          "experiences"
+        ]
+      },
+      "focusedId": null,
+      "focusStrength": 0,
+      "focusIsolated": false,
+      "focusDistance": null,
+      "selectedStage": 0,
+      "approachProgress": 1,
+      "anchorOpen": 0,
+      "edgeCount": 76,
+      "relationshipSource": "authored feature navigation graph",
+      "connectionsVisible": false,
+      "connectionPairs": [
+        [
+          "person",
+          "reality-lens"
+        ],
+        [
+          "block-world",
+          "reality-lens"
+        ],
+        [
+          "projections",
+          "reality-lens"
+        ],
+        [
+          "person",
+          "wardrobe-atelier"
+        ],
+        [
+          "agent",
+          "person"
+        ],
+        [
+          "arena",
+          "person"
+        ],
+        [
+          "rooms",
+          "social-explorer"
+        ],
+        [
+          "agent",
+          "rooms"
+        ],
+        [
+          "block-world",
+          "rooms"
+        ],
+        [
+          "block-world",
+          "projections"
+        ],
+        [
+          "block-world",
+          "migration"
+        ],
+        [
+          "block-world",
+          "runtime-sync"
+        ],
+        [
+          "projections",
+          "runtime-sync"
+        ],
+        [
+          "gateway",
+          "runtime-sync"
+        ],
+        [
+          "migration",
+          "runtime-sync"
+        ],
+        [
+          "migration",
+          "reality-lens"
+        ],
+        [
+          "asset-market",
+          "asset-token"
+        ],
+        [
+          "asset-token",
+          "launch-distribution"
+        ],
+        [
+          "asset-token",
+          "ledger"
+        ],
+        [
+          "asset-market",
+          "contracts"
+        ],
+        [
+          "asset-market",
+          "ledger"
+        ],
+        [
+          "asset-market",
+          "launch-distribution"
+        ],
+        [
+          "launch-distribution",
+          "white-paper"
+        ],
+        [
+          "agent",
+          "social-explorer"
+        ],
+        [
+          "social-explorer",
+          "social-mirror"
+        ],
+        [
+          "social-mirror",
+          "youtube"
+        ],
+        [
+          "rooms",
+          "social-mirror"
+        ],
+        [
+          "picture-matter",
+          "youtube"
+        ],
+        [
+          "reality-lens",
+          "youtube"
+        ],
+        [
+          "paycore",
+          "web-ai"
+        ],
+        [
+          "t402",
+          "web-ai"
+        ],
+        [
+          "ledger",
+          "web-ai"
+        ],
+        [
+          "gateway",
+          "web-ai"
+        ],
+        [
+          "ledger",
+          "paycore"
+        ],
+        [
+          "paycore",
+          "t402"
+        ],
+        [
+          "contracts",
+          "paycore"
+        ],
+        [
+          "contract-atelier",
+          "contracts"
+        ],
+        [
+          "contracts",
+          "ledger"
+        ],
+        [
+          "contract-atelier",
+          "paycore"
+        ],
+        [
+          "academy",
+          "contract-atelier"
+        ],
+        [
+          "ledger",
+          "t402"
+        ],
+        [
+          "gateway",
+          "t402"
+        ],
+        [
+          "agent",
+          "neural-mesh"
+        ],
+        [
+          "agent",
+          "muse-agent"
+        ],
+        [
+          "agent",
+          "bot-plaza"
+        ],
+        [
+          "agent",
+          "luna-companion"
+        ],
+        [
+          "bot-plaza",
+          "neural-mesh"
+        ],
+        [
+          "gateway",
+          "neural-mesh"
+        ],
+        [
+          "muse-agent",
+          "person"
+        ],
+        [
+          "muse-agent",
+          "picture-matter"
+        ],
+        [
+          "bot-plaza",
+          "luna-companion"
+        ],
+        [
+          "luna-companion",
+          "rooms"
+        ],
+        [
+          "arena",
+          "luna-companion"
+        ],
+        [
+          "nft-atelier",
+          "picture-matter"
+        ],
+        [
+          "picture-matter",
+          "white-paper"
+        ],
+        [
+          "picture-matter",
+          "reality-lens"
+        ],
+        [
+          "agent",
+          "nft-atelier"
+        ],
+        [
+          "asset-market",
+          "nft-atelier"
+        ],
+        [
+          "agent",
+          "wardrobe-atelier"
+        ],
+        [
+          "arena",
+          "wardrobe-atelier"
+        ],
+        [
+          "projections",
+          "white-paper"
+        ],
+        [
+          "reality-lens",
+          "white-paper"
+        ],
+        [
+          "academy",
+          "white-paper"
+        ],
+        [
+          "block-world",
+          "gesture-lens"
+        ],
+        [
+          "gesture-lens",
+          "person"
+        ],
+        [
+          "agent",
+          "gesture-lens"
+        ],
+        [
+          "gateway",
+          "world-events"
+        ],
+        [
+          "sports-events",
+          "world-events"
+        ],
+        [
+          "multi-sport-events",
+          "world-events"
+        ],
+        [
+          "multi-sport-events",
+          "sports-events"
+        ],
+        [
+          "arena",
+          "sports-events"
+        ],
+        [
+          "arena",
+          "multi-sport-events"
+        ],
+        [
+          "arena",
+          "chess"
+        ],
+        [
+          "chess",
+          "person"
+        ],
+        [
+          "academy",
+          "chess"
+        ],
+        [
+          "academy",
+          "arena"
+        ]
+      ],
+      "viewMode": "3d",
+      "selectedId": "chess",
+      "historyMode": "present",
+      "designedArchitecture": true,
+      "equalAxisCubes": false,
+      "singleFixedAnchorCube": false,
+      "formerCenterIsMovableTab": true,
+      "lensMode": true,
+      "lod": "field"
+    },
+    "overflow": false,
+    "panels": []
+  },
+  "providers": {
+    "open": true,
+    "checking": false,
+    "sending": false,
+    "bridgeUrl": "http://127.0.0.1:8082",
+    "bridgeError": null,
+    "nvidia": {
+      "configured": false,
+      "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+      "verifiedAt": null,
+      "error": null,
+      "state": "key-needed"
+    },
+    "lastCheckAt": "2026-10-03T12:36:54.725Z",
+    "publicSources": [
+      {
+        "id": "weather",
+        "state": "available",
+        "summary": "15.8 °C · New York example · 2026-10-03T12:30",
+        "provider": "Open-Meteo",
+        "checkedAt": "2026-10-03T12:36:54.724Z",
+        "observedAt": null,
+        "latencyMs": 622,
+        "sourceUrl": "https://api.open-meteo.com/v1/forecast?latitude=40.71&longitude=-74.01&current=temperature_2m,weather_code&forecast_days=1",
+        "documentationUrl": "https://open-meteo.com/en/terms",
+        "fallbackUsed": false,
+        "primarySourceUrl": "https://api.open-meteo.com/v1/forecast?latitude=40.71&longitude=-74.01&current=temperature_2m,weather_code&forecast_days=1",
+        "primaryState": "available",
+        "attempts": [
+          {
+            "provider": "Open-Meteo",
+            "state": "available",
+            "sourceUrl": "https://api.open-meteo.com/v1/forecast?latitude=40.71&longitude=-74.01&current=temperature_2m,weather_code&forecast_days=1",
+            "checkedAt": "2026-10-03T12:36:54.724Z",
+            "observedAt": null,
+            "reason": null,
+            "httpStatus": 200
+          }
+        ],
+        "attributionUrl": null,
+        "attributionLabel": null
+      },
+      {
+        "id": "fx",
+        "state": "available",
+        "summary": "1 EUR = 0.85033 GBP · 2026-10-02 / 1 EUR = 1.1225 USD · 2026-10-02",
+        "provider": "Frankfurter · ECB",
+        "checkedAt": "2026-10-03T12:36:54.723Z",
+        "observedAt": "2026-10-02",
+        "latencyMs": 620,
+        "sourceUrl": "https://api.frankfurter.dev/v2/providers/ecb/rates?base=EUR&quotes=USD,GBP",
+        "documentationUrl": "https://frankfurter.dev/",
+        "fallbackUsed": false,
+        "primarySourceUrl": "https://api.frankfurter.dev/v2/providers/ecb/rates?base=EUR&quotes=USD,GBP",
+        "primaryState": "available",
+        "attempts": [
+          {
+            "provider": "Frankfurter · ECB",
+            "state": "available",
+            "sourceUrl": "https://api.frankfurter.dev/v2/providers/ecb/rates?base=EUR&quotes=USD,GBP",
+            "checkedAt": "2026-10-03T12:36:54.723Z",
+            "observedAt": "2026-10-02",
+            "reason": null,
+            "httpStatus": 200
+          }
+        ],
+        "attributionUrl": null,
+        "attributionLabel": null
+      },
+      {
+        "id": "earthquakes",
+        "state": "available",
+        "summary": "206 observations in the provider feed",
+        "provider": "USGS",
+        "checkedAt": "2026-10-03T12:36:54.722Z",
+        "observedAt": null,
+        "latencyMs": 619,
+        "sourceUrl": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson",
+        "documentationUrl": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/geojson.php",
+        "fallbackUsed": false,
+        "primarySourceUrl": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson",
+        "primaryState": "available",
+        "attempts": [
+          {
+            "provider": "USGS",
+            "state": "available",
+            "sourceUrl": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson",
+            "checkedAt": "2026-10-03T12:36:54.722Z",
+            "observedAt": null,
+            "reason": null,
+            "httpStatus": 200
+          }
+        ],
+        "attributionUrl": null,
+        "attributionLabel": null
+      },
+      {
+        "id": "tvl",
+        "state": "available",
+        "summary": "Aave TVL · $19,157,443,905",
+        "provider": "DeFiLlama",
+        "checkedAt": "2026-10-03T12:36:54.721Z",
+        "observedAt": null,
+        "latencyMs": 618,
+        "sourceUrl": "https://api.llama.fi/tvl/aave",
+        "documentationUrl": "https://api-docs.defillama.com/",
+        "fallbackUsed": false,
+        "primarySourceUrl": "https://api.llama.fi/tvl/aave",
+        "primaryState": "available",
+        "attempts": [
+          {
+            "provider": "DeFiLlama",
+            "state": "available",
+            "sourceUrl": "https://api.llama.fi/tvl/aave",
+            "checkedAt": "2026-10-03T12:36:54.721Z",
+            "observedAt": null,
+            "reason": null,
+            "httpStatus": 200
+          }
+        ],
+        "attributionUrl": null,
+        "attributionLabel": null
+      }
+    ],
+    "credentialsInBrowser": false,
+    "automaticInference": false,
+    "automaticCheckStarted": true
+  },
+  "errors": [],
+  "badResponses": [],
+  "remoteRequests": [
+    "https://api.open-meteo.com/v1/forecast?latitude=40.71&longitude=-74.01&current=temperature_2m,weather_code&forecast_days=1",
+    "https://api.frankfurter.dev/v2/providers/ecb/rates?base=EUR&quotes=USD,GBP",
+    "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson",
+    "https://api.llama.fi/tvl/aave",
+    "https://site.web.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard",
+    "https://site.web.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard",
+    "https://site.web.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard",
+    "https://api.elections.kalshi.com/trade-api/v2/markets",
+    "https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=500&offset=0"
+  ]
+}

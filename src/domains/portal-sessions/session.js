@@ -1,3 +1,5 @@
+import { isIssuedHandle, isHandleRevoked } from './opaque-handle.js';
+
 const STATES = Object.freeze(['created', 'active', 'idle', 'closing', 'closed']);
 const HEALTH_VIEW = Symbol('portal-session-health-view');
 
@@ -11,6 +13,7 @@ const ALLOWED = Object.freeze({
 
 function assertHandle(handle) {
   if (!handle || typeof handle !== 'object' ||
+      !isIssuedHandle(handle) ||
       typeof handle.handleId !== 'string' ||
       typeof handle.serviceId !== 'string' ||
       typeof handle.status !== 'string') {
@@ -81,7 +84,7 @@ export function createSession(handle, { onEvent } = {}) {
     [HEALTH_VIEW]() {
       return Object.freeze({
         handleId: handle.handleId,
-        handleStatus: handle.status,
+        handleStatus: isHandleRevoked(handle) ? 'revoked' : handle.status,
         expiresAt: handle.expiresAt,
         state,
         lastAt,

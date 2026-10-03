@@ -1,9 +1,10 @@
 import {REALITY_TAB_FORMS} from '../domains/reality-tab-layout.js?v=20260923-spatial-tabs16';
 import {REALITY_LENS_GROUPS,realityLensEngine,resolveRealityLensGroup} from '../domains/reality-lens-engine.js?v=20260923-lens-engine9';
-import {createLivingSurfaceMap} from '../domains/living-surface-layout-engine.js';
+import {realityObjectSurfaceEngine} from '../domains/reality-object-engine.js?v=20261003-calm7';
+import {lensSpaceLabel} from './reality-lens-chrome.js';
 
-/** Shape-changing, image-bearing feature tabs only; the former central cube is
- * now the same status and geometry as every other Reality Lens object. */
+/** Native volumetric fronts for feature objects and their space entries.
+ * Layout and materials remain projections over the existing identities. */
 function hashString(value){let h=2166136261;for(let i=0;i<value.length;i++){h^=value.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
 function traitRandom(seed){let state=(seed>>>0)||1;return ()=>{state=Math.imul(state^(state>>>15),2246822507);state=Math.imul(state^(state>>>13),3266489909);state^=state>>>16;return (state>>>0)/4294967296;};}
 /** Deterministic local color and motion traits. */
@@ -46,14 +47,36 @@ function roundedPanelShape(THREE,width,height,radius){
   shape.lineTo(x+r,y+height);shape.quadraticCurveTo(x,y+height,x,y+height-r);shape.lineTo(x,y+r);shape.quadraticCurveTo(x,y,x+r,y);
   return shape;
 }
-function wavePanelShape(THREE,width,height){
-  const shape=new THREE.Shape(),steps=28;
-  for(let i=0;i<=steps;i++){
-    const x=-width/2+width*i/steps,y=height/2+Math.sin(i/steps*Math.PI*4)*height*.075;
-    if(i===0)shape.moveTo(x,y);else shape.lineTo(x,y);
+/** The entry silhouette is the space's architecture, not a browser card.
+ * Keep a generous central reading area while making the actual solids distinct. */
+function spaceEntryShape(THREE,id,width,height){
+  const shape=new THREE.Shape(),x=width/2,y=height/2;
+  const polygon=points=>{points.forEach(([px,py],index)=>index?shape.lineTo(px,py):shape.moveTo(px,py));shape.closePath();return shape;};
+  if(id==='worlds')return polygon([[-x,-y],[x,-y],[x,y*.66],[x*.58,y*.66],[x*.58,y],[-x,y]]);
+  if(id==='people')return roundedPanelShape(THREE,width,height,.72);
+  if(id==='network')return polygon([[-x,-y],[x*.72,-y],[x,-y*.45],[x,y],[-x*.72,y],[-x,y*.45]]);
+  if(id==='value')return polygon([[-x,-y*.78],[-x*.84,-y],[x*.84,-y],[x,-y*.78],[x,y*.78],[x*.84,y],[-x*.84,y],[-x,y*.78]]);
+  if(id==='agents')return polygon([[-x,-y*.5],[-x*.78,-y],[x*.78,-y],[x,-y*.5],[x,y*.82],[x*.86,y],[-x*.86,y],[-x,y*.82]]);
+  if(id==='experiences'){
+    shape.moveTo(-x,-y*.84);shape.bezierCurveTo(-x*.28,-y*1.13,x*.28,-y*.57,x,-y*.84);
+    shape.lineTo(x,y*.84);shape.bezierCurveTo(x*.28,y*1.13,-x*.28,y*.57,-x,y*.84);shape.closePath();return shape;
   }
-  for(let i=steps;i>=0;i--){const x=-width/2+width*i/steps,y=-height/2+Math.sin(i/steps*Math.PI*4+Math.PI)*height*.075;shape.lineTo(x,y);}
-  shape.closePath();return shape;
+  return roundedPanelShape(THREE,width,height,.2);
+}
+/** Fit a texture to the cap only. The beveled shoulders retain real lighting. */
+function normalizeCapUVs(bodyGeometry){
+  const positions=bodyGeometry.getAttribute('position'),uv=bodyGeometry.getAttribute('uv'),capIndices=[];
+  let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+  for(const capGroup of bodyGeometry.groups.filter(group=>group.materialIndex===0))for(let offset=capGroup.start;offset<capGroup.start+capGroup.count;offset++){
+    const index=bodyGeometry.index?bodyGeometry.index.getX(offset):offset;capIndices.push(index);
+    minX=Math.min(minX,positions.getX(index));maxX=Math.max(maxX,positions.getX(index));minY=Math.min(minY,positions.getY(index));maxY=Math.max(maxY,positions.getY(index));
+  }
+  for(const index of capIndices)uv.setXY(index,(positions.getX(index)-minX)/(maxX-minX),(positions.getY(index)-minY)/(maxY-minY));
+  uv.needsUpdate=true;
+}
+function shapeFromSurfaceContour(THREE,contour){
+  const outline=new THREE.Shape();
+  contour.forEach(([x,y],index)=>index?outline.lineTo(x,y):outline.moveTo(x,y));outline.closePath();return outline;
 }
 function tabSurfaceDepth(node,x,y,extra=.012){
   const form=REALITY_TAB_FORMS[node.shape]??REALITY_TAB_FORMS.rectangle;
@@ -80,73 +103,61 @@ function positionEmbeddedData(node){
     object.position.set(x,y,tabSurfaceDepth(node,x,y,.05));object.scale.setScalar(.62);
   });
 }
-function drawFeatureArtwork(THREE,feature,color,shapeName){
-  const canvas=globalThis.document?.createElement?.('canvas');
-  if(!canvas)return null;
-  canvas.width=768;canvas.height=512;
+const SPACE_COPY=Object.freeze({
+  worlds:{label:'Worlds',description:'Build places and explore connected realities.'},
+  people:{label:'People',description:'Your identity, companions and shared spaces.'},
+  network:{label:'Network',description:'Explore the web and connect useful services.'},
+  value:{label:'Value',description:'Study assets, contracts and local value flows.'},
+  agents:{label:'Agents',description:'Work with assistants and your local bot team.'},
+  experiences:{label:'Experiences',description:'Play, learn, watch and follow live events.'},
+});
+
+/** A preview belongs to the body's cap. Keep only the information needed to
+ * choose it; source IDs, diagnostics and full details live inside the object. */
+function drawFeatureArtwork(THREE,feature,color,shapeName,{compact=false,surfaceAspect=null}={}){
+  const canvas=globalThis.document?.createElement?.('canvas');if(!canvas)return null;
+  const sphere=shapeName==='sphere',portrait=shapeName==='phone'||shapeName==='cylinder';canvas.width=portrait?512:768;
+  canvas.height=Math.round(canvas.width/(surfaceAspect??(sphere?1:portrait?.58:1.5)));
   const ctx=canvas.getContext('2d');if(!ctx)return null;
-  const hex=color?.getHexString?`#${color.getHexString()}`:'#52c8ed';
-  if(shapeName==='phone'){
-    canvas.width=512;canvas.height=896;
-    const portrait=canvas.getContext('2d'),margin=30,width=452;
-    portrait.beginPath();portrait.roundRect(8,8,496,880,44);portrait.clip();
-    const fill=portrait.createLinearGradient(0,0,512,896);fill.addColorStop(0,'#102538');fill.addColorStop(.5,'#07131f');fill.addColorStop(1,'#0d1b27');portrait.fillStyle=fill;portrait.fillRect(0,0,512,896);
-    portrait.fillStyle='#8ca99f';portrait.font='600 13px system-ui,sans-serif';portrait.letterSpacing='1.5px';portrait.fillText('REALITY LENS  /  SUPERFICIES VIVA',margin,48,width);
-    portrait.fillStyle=hex;portrait.fillRect(margin,68,width,2);
-    portrait.fillStyle='#dbe1d9';portrait.font='600 30px system-ui,sans-serif';portrait.letterSpacing='-.4px';portrait.fillText(String(feature.id==='block-world'?'Cubus centralis':feature.label??feature.id).replace(/\bworlds?\b/gi,'locus').slice(0,25),margin,123,width);
-    portrait.fillStyle='#94aaa1';portrait.font='600 12px ui-monospace,monospace';portrait.letterSpacing='.8px';portrait.fillText(String(feature.id??'').replace(/(^|-)world(?=-|$)/gi,'$1locus').toUpperCase().slice(0,36),margin,150,width);
-    portrait.fillStyle='#adbbb2';portrait.font='17px system-ui,sans-serif';portrait.letterSpacing='0px';
-    const wrapPortrait=(text,x,y,maxWidth,lineHeight,maxLines)=>{const words=String(text??'').replace(/\s+/g,' ').split(' ');let line='',lines=0;for(const word of words){const next=line?`${line} ${word}`:word;if(portrait.measureText(next).width>maxWidth&&line){portrait.fillText(line,x,y+lines*lineHeight);line=word;if(++lines>=maxLines)return;}else line=next;}if(line&&lines<maxLines)portrait.fillText(line,x,y+lines*lineHeight);};
-    wrapPortrait(String(feature.description??'Aperi hoc obiectum ad inspiciendum.').replace(/\bworlds?\b/gi,'loca'),margin,190,width,25,4);
-    portrait.strokeStyle='#526960';portrait.globalAlpha=.7;portrait.beginPath();portrait.moveTo(margin,308);portrait.lineTo(482,308);portrait.stroke();portrait.globalAlpha=1;
-    portrait.fillStyle='#c0a46f';portrait.font='600 12px ui-monospace,monospace';portrait.letterSpacing='1px';portrait.fillText('FONTES CONEXI  ·  IDEM ID',margin,342);
-    const refs=(feature.sources??[]).slice(0,5).map(source=>String(source).replace(/\bworlds?\b/gi,'loci')),chips=refs.length?refs:['SUPERFICIES LOCALIS'];
-    chips.forEach((source,index)=>{const y=360+index*55;portrait.fillStyle='#0b1c27';portrait.strokeStyle='rgba(139,166,143,.34)';portrait.beginPath();portrait.roundRect(margin,y,width,44,9);portrait.fill();portrait.stroke();portrait.fillStyle=index===0?'#c3a46a':'#6d9b94';portrait.fillRect(margin+13,y+19,7,7);portrait.fillStyle='#b8c4bb';portrait.font='500 13px ui-monospace,monospace';portrait.letterSpacing='.2px';portrait.fillText(String(source).slice(0,38),margin+31,y+27,width-42);});
-    const boundaryY=390+chips.length*55;portrait.fillStyle='#91a49a';portrait.font='15px system-ui,sans-serif';wrapPortrait(String(feature.boundary??'Aspectus localis.').replace(/\bworlds?\b/gi,'loca'),margin,boundaryY,width,21,5);
-    portrait.fillStyle='#c1a26b';portrait.fillRect(margin,839,72,2);portrait.fillStyle='#a3b0a5';portrait.font='600 11px ui-monospace,monospace';portrait.letterSpacing='.45px';portrait.fillText('CLICCA · MAGNIFICA · PERCURRE',margin,864,width);
-    const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=4;return texture;
-  }
-  const clipRound=(x,y,w,h,r)=>{
-    ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();ctx.clip();
+  const width=canvas.width,height=canvas.height,margin=sphere?128:portrait?40:feature.isSpaceEntry?56:48,contentWidth=width-margin*2;
+  const hex=color?.getHexString?`#${color.getHexString()}`:String(color??'#69bfd4');
+  // The geometry clips this texture. A second canvas silhouette would create
+  // inset borders that disagree with the physical body and interactive skin.
+  const background=ctx.createLinearGradient(0,0,width,height);background.addColorStop(0,'#153d60');background.addColorStop(.5,'#081d34');background.addColorStop(1,'#102e49');
+  ctx.fillStyle=background;ctx.fillRect(0,0,width,height);
+  // The grazing light is engraved into the real face. It adds material depth
+  // without a second plaque, floating icon, or particle layer.
+  const grazing=ctx.createLinearGradient(0,0,width,0);grazing.addColorStop(0,'rgba(93,183,255,.02)');grazing.addColorStop(.48,'rgba(133,209,255,.5)');grazing.addColorStop(1,'rgba(93,183,255,.02)');
+  ctx.fillStyle=grazing;ctx.fillRect(0,0,width,3);
+  ctx.fillStyle='rgba(69,158,220,.05)';ctx.beginPath();ctx.moveTo(width*.56,height);ctx.lineTo(width,height*.18);ctx.lineTo(width,height);ctx.closePath();ctx.fill();
+  ctx.fillStyle=hex;ctx.fillRect(margin,sphere?height*.21:portrait?68:48,feature.isSpaceEntry?74:58,5);
+  ctx.fillStyle='#a4c4cf';ctx.font=`600 ${portrait?19:20}px system-ui,sans-serif`;ctx.letterSpacing='1.2px';
+  if(!compact)ctx.fillText(feature.isSpaceEntry?'REALITY LENS':'LIVING WORLD',margin,sphere?height*.27:portrait?115:91,contentWidth);
+  ctx.letterSpacing='0px';
+  const wrap=(value,y,fontSize,lineHeight,maxLines)=>{
+    ctx.font=`600 ${fontSize}px system-ui,sans-serif`;
+    const words=String(value??'').replace(/\s+/g,' ').trim().split(' '),lines=[];let line='';
+    for(const word of words){const next=line?`${line} ${word}`:word;if(ctx.measureText(next).width>contentWidth&&line){lines.push(line);line=word;}else line=next;}
+    if(line)lines.push(line);
+    lines.slice(0,maxLines).forEach((text,index)=>{
+      let visible=text;
+      if(index===maxLines-1&&lines.length>maxLines){while(ctx.measureText(`${visible}…`).width>contentWidth&&visible.length)visible=visible.slice(0,-1);visible+='…';}
+      ctx.fillText(visible,margin,y+index*lineHeight,contentWidth);
+    });
+    return Math.min(lines.length,maxLines)*lineHeight;
   };
-  if(['phone','square','rectangle','cylinder'].includes(shapeName))clipRound(8,8,752,496,shapeName==='phone'?46:28);
-  else if(shapeName==='sphere'){ctx.beginPath();ctx.ellipse(384,256,378,248,0,0,Math.PI*2);ctx.clip();}
-  else if(shapeName==='wave'){
-    ctx.beginPath();for(let i=0;i<=96;i++){const x=8+i/96*752,y=18+Math.sin(i/96*Math.PI*4)*22;if(!i)ctx.moveTo(x,y);else ctx.lineTo(x,y);}
-    for(let i=96;i>=0;i--){const x=8+i/96*752,y=494+Math.sin(i/96*Math.PI*4+Math.PI)*22;ctx.lineTo(x,y);}ctx.closePath();ctx.clip();
-  }
-  const background=ctx.createLinearGradient(0,0,768,512);background.addColorStop(0,'rgba(12,34,50,.96)');background.addColorStop(.55,'rgba(5,15,27,.9)');background.addColorStop(1,'rgba(12,24,43,.82)');ctx.fillStyle=background;ctx.fillRect(0,0,768,512);
-  const glow=ctx.createLinearGradient(430,90,735,235);glow.addColorStop(0,hex+'36');glow.addColorStop(.55,hex+'12');glow.addColorStop(1,'transparent');ctx.fillStyle=glow;ctx.fillRect(390,60,378,250);
-  for(let i=0;i<34;i++){
-    const x=(i*137+31)%768,y=(i*89+17)%512,r=1+(i%3);
-    ctx.globalAlpha=.08+(i%5)*.025;ctx.fillStyle=i%4===0?'#c9ad72':'#6c9493';ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();
-  }
-  ctx.globalAlpha=1;ctx.fillStyle='rgba(5,15,27,.42)';ctx.strokeStyle=hex+'45';ctx.lineWidth=1;
-  ctx.beginPath();ctx.roundRect(548,116,150,90,10);ctx.fill();ctx.stroke();
-  const bars=[.38,.67,.48,.9,.58,.76,.42,.64,.86,.52,.73,.46];
-  bars.forEach((height,index)=>{ctx.fillStyle=index===7?'#c5a86c':'#628d87';ctx.globalAlpha=.36+(index%3)*.12;ctx.fillRect(562+index*10,190-height*56,4,height*56);});
-  ctx.globalAlpha=1;ctx.strokeStyle='rgba(179,161,119,.52)';ctx.beginPath();ctx.moveTo(560,194);ctx.lineTo(690,194);ctx.stroke();
-  ctx.fillStyle='#90b5a9';ctx.font='600 15px system-ui, sans-serif';ctx.letterSpacing='2.5px';ctx.fillText('REALITY LENS  /  SUPERFICIES VIVA',38,48);
-  ctx.fillStyle='#d1d9d1';ctx.font='600 34px system-ui, sans-serif';ctx.letterSpacing='-.4px';
-  const title=String(feature.id==='block-world'?'Cubus centralis':feature.label??feature.id).replace(/\bworlds?\b/gi,'locus').slice(0,30);ctx.fillText(title,38,116,640);
-  ctx.fillStyle='#899d98';ctx.font='600 11px ui-monospace, monospace';ctx.letterSpacing='1.1px';ctx.fillText(String(feature.id??'').replace(/(^|-)world(?=-|$)/gi,'$1locus').toUpperCase().slice(0,46),40,142,650);
-  ctx.fillStyle='#a9b9b2';ctx.font='16px system-ui, sans-serif';ctx.letterSpacing='0px';
-  const wrap=(value,x,y,width,lineHeight,maxLines)=>{const words=String(value??'').replace(/\s+/g,' ').split(' ');let line='',lines=0;for(const word of words){const next=line?`${line} ${word}`:word;if(ctx.measureText(next).width>width&&line){ctx.fillText(line,x,y+lines*lineHeight);line=word;if(++lines>=maxLines)return;}else line=next;}if(line&&lines<maxLines)ctx.fillText(line,x,y+lines*lineHeight);};
-  wrap(String(feature.description??'Aperi obiectum ad aspectum localem.').replace(/\bworlds?\b/gi,'loca'),40,176,665,23,2);
-  ctx.strokeStyle='#6d8175';ctx.globalAlpha=.55;ctx.beginPath();ctx.moveTo(40,232);ctx.lineTo(728,232);ctx.stroke();ctx.globalAlpha=1;
-  ctx.fillStyle='#b69b67';ctx.font='600 11px ui-monospace, monospace';ctx.letterSpacing='1.2px';ctx.fillText('FONTES CONEXI · IDEM ID',40,260);
-  const sources=(feature.sources??[]).slice(0,4).map(source=>String(source).replace(/\bworlds?\b/gi,'loci'));
-  const chips=sources.length?sources:['SUPERFICIES LOCALIS'];
-  chips.forEach((source,index)=>{
-    const x=index%2?394:40,y=278+Math.floor(index/2)*48,w=334,h=38;
-    ctx.fillStyle='rgba(9,23,31,.74)';ctx.strokeStyle='rgba(139,166,143,.32)';ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(x,y,w,h,8);ctx.fill();ctx.stroke();
-    ctx.fillStyle=index===0?'#c3a46a':'#6d9b94';ctx.beginPath();ctx.arc(x+15,y+19,3.2,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle='#aebbb1';ctx.font='500 13px ui-monospace, monospace';ctx.letterSpacing='.2px';ctx.fillText(String(source).slice(0,34),x+28,y+23,w-40);
-  });
-  ctx.fillStyle='#8fa19a';ctx.font='15px system-ui, sans-serif';ctx.letterSpacing='0px';
-  wrap(String(feature.boundary??'Aspectus localis.').replace(/\bworlds?\b/gi,'loca'),40,396,675,20,2);
-  ctx.fillStyle='#b49a67';ctx.fillRect(40,446,88,2);ctx.fillStyle='#96a79e';ctx.font='600 11px ui-monospace, monospace';ctx.letterSpacing='1px';
-  ctx.fillText('CLICCA · MAGNIFICA OBIECTUM · PERCURRE SPATIUM',40,474,690);
+  const title=feature.label??(feature.id==='block-world'?'Block World':String(feature.id??'World').replaceAll('-',' '));
+  ctx.fillStyle='#edf6ff';const titleY=Math.round(height*(sphere?.37:portrait?.25:.33));
+  const titleSize=compact?(portrait?76:feature.isSpaceEntry?92:84):(portrait?43:feature.isSpaceEntry?60:48);
+  const titleHeight=wrap(title,titleY,titleSize,Math.round(titleSize*1.22),compact&&portrait?3:2);
+  const actionY=sphere?height*.79:height-(portrait?105:70),actionSize=compact?(portrait||sphere?48:58):(portrait?27:28),dividerY=actionY-actionSize-16;
+  ctx.fillStyle='#aac6d2';
+  const description=String(feature.description??'Open this world to explore.').split(/(?<=[.!?])\s/)[0];
+  const descriptionY=titleY+titleHeight+30,descriptionLines=Math.max(0,Math.min(sphere?1:portrait?4:2,1+Math.floor((dividerY-24-descriptionY)/40)));
+  if(!compact&&descriptionLines)wrap(description,descriptionY,portrait?27:30,40,descriptionLines);
+  ctx.fillStyle=hex;ctx.fillRect(margin,dividerY,contentWidth,1);
+  ctx.fillStyle='#cceaff';ctx.font=`600 ${actionSize}px system-ui,sans-serif`;
+  ctx.fillText(feature.isSpaceEntry?(compact?`${feature.memberCount} worlds  →`:`Explore ${feature.memberCount} worlds  →`):'Open world  →',margin,actionY,contentWidth);
   const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=4;return texture;
 }
 export function buildRealityAssemblyScene({THREE,parent,features,targets=[],relationships={}}){
@@ -161,7 +172,7 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[],rela
   const layer=new THREE.Group();layer.name='Reality Assembly / shared feature projection';layer.visible=false;parent.add(layer);
   const geometry=new Set(),materials=new Set(),textures=new Set(),selectable=new Set(),nodes=new Map();
   const backdrop=createRealityLensBackdrop(THREE);textures.add(backdrop);
-  let approachBlend=0;
+  let approachBlend=0,previewCompact=Number(globalThis.innerWidth)<700;
   const makeMaterial=(color,extra={})=>{const value=new THREE.MeshStandardMaterial({color,metalness:.42,roughness:.53,...extra});materials.add(value);return value;};
   const gold=makeMaterial('#b89961',{metalness:.68,roughness:.28}),dark=makeMaterial('#14273c',{metalness:.32});
   const baseGlass=makeMaterial('#153954',{transparent:true,opacity:.5,depthWrite:false,roughness:.15,metalness:.1});
@@ -250,7 +261,8 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[],rela
   const starGeometry=new THREE.BufferGeometry().setAttribute('position',new THREE.Float32BufferAttribute(points,3));geometry.add(starGeometry);
   const starMaterial=new THREE.PointsMaterial({color:'#c5a768',size:.12,transparent:true,opacity:.38,sizeAttenuation:true});materials.add(starMaterial);layer.add(new THREE.Points(starGeometry,starMaterial));
   layer.add(new THREE.HemisphereLight('#96b2bf','#08101a',.72));
-  const warm=new THREE.DirectionalLight('#d7b66b',1.16);warm.position.set(-7,14,10);layer.add(warm);
+  const warm=new THREE.DirectionalLight('#c4e4ff',1.45);warm.position.set(-7,14,10);layer.add(warm);
+  const rim=new THREE.DirectionalLight('#51a6ff',1.3);rim.position.set(11,3,-6);layer.add(rim);
 
   // Empty compatibility group: Reality Lens never swaps in a giant far object.
   const worldBlock=group('world-block');worldBlock.visible=false;
@@ -321,6 +333,8 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[],rela
   const tabShapes=Object.keys(REALITY_TAB_FORMS),tabSelectable=new Set();
   function makeTabForm(node,shapeName){
     const form=REALITY_TAB_FORMS[shapeName]??REALITY_TAB_FORMS.rectangle;
+    const surfaceBinding=realityObjectSurfaceEngine.primarySurfaceBinding({featureId:node.feature.id,objectId:node.feature.id,shape:shapeName});
+    node.surfaceBinding=surfaceBinding;node.surfaceOutline=surfaceBinding.contour;node.root.userData.objectTabOwner=node.feature.id;node.root.userData.nativeOutline=surfaceBinding.contour;
     node.formParts?.forEach(part=>{
       part.removeFromParent();
       if(part.userData?.assemblyId){const targetIndex=targets.indexOf(part);if(targetIndex>=0)targets.splice(targetIndex,1);tabSelectable.delete(part);selectable.delete(part);}
@@ -331,27 +345,38 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[],rela
       }
     });
     const width=form.width,height=form.height,depth=form.depth;
-    const curved=['sphere','cylinder'].includes(shapeName),art=drawFeatureArtwork(THREE,node.feature,node.accent.color,shapeName);if(art)textures.add(art);
+    const curved=['sphere','cylinder'].includes(shapeName),art=drawFeatureArtwork(THREE,node.feature,node.accent.color,shapeName,{compact:previewCompact,surfaceAspect:surfaceBinding.informationFace.width/surfaceBinding.informationFace.height});if(art)textures.add(art);
     const sphereForm=shapeName==='sphere';
     const shell=makeMaterial(sphereForm?'#a8874c':'#0c1c2c',{metalness:sphereForm?.72:.45,roughness:sphereForm?.24:.3,transparent:true,opacity:sphereForm?.64:curved?.42:.76,emissive:sphereForm?'#715625':'#000000',emissiveIntensity:sphereForm?.38:0,depthWrite:false,side:THREE.DoubleSide});
-    const artMaterial=art?makeMaterial('#b99154',{map:art,metalness:.03,roughness:.52,transparent:true,opacity:.78,depthWrite:false,side:THREE.DoubleSide}):null;
+    const artMaterial=art?new THREE.MeshBasicMaterial({color:'#ffffff',map:art,transparent:true,opacity:1,alphaTest:.02,depthWrite:false,side:THREE.FrontSide}):null;
+    if(artMaterial)materials.add(artMaterial);
     const parts=[];
     let bodyGeometry;
     if(shapeName==='sphere')bodyGeometry=new THREE.SphereGeometry(Math.min(width,height,depth)/2,24,18);
     else if(shapeName==='cylinder')bodyGeometry=new THREE.CylinderGeometry(Math.min(width,depth)/2,Math.min(width,depth)/2,height,24,1,false);
     else if(shapeName==='cube')bodyGeometry=new THREE.BoxGeometry(width,height,depth);
     else{
-      const outline=shapeName==='wave'?wavePanelShape(THREE,width,height):roundedPanelShape(THREE,width,height,form.radius);
-      bodyGeometry=new THREE.ExtrudeGeometry(outline,{depth,bevelEnabled:true,bevelSegments:3,bevelSize:.035,bevelThickness:.035,curveSegments:10});
+      const outline=shapeFromSurfaceContour(THREE,surfaceBinding.contour),bevel=Math.min(.035,depth/3);
+      bodyGeometry=new THREE.ExtrudeGeometry(outline,{depth:depth-bevel*2,bevelEnabled:true,bevelSegments:3,bevelSize:bevel,bevelThickness:bevel,curveSegments:10});
+      // The shared information anchor is the physical front, including its
+      // bevel. Keep the whole native volume inside its declared depth.
+      bodyGeometry.translate(0,0,bevel);
     }
     if(curved){
       // A machined reading facet is part of this body. Clipping its front
       // vertices creates a flush cap instead of floating a browser plaque
       // beyond the sphere/cylinder's tangent. The rear silhouette remains.
-      const cap=createLivingSurfaceMap(shapeName).primary.position[2]-.018;
+      const cap=surfaceBinding.informationFace.position[2];
       const positions=bodyGeometry.getAttribute('position');
       for(let index=0;index<positions.count;index++)positions.setZ(index,Math.min(positions.getZ(index),cap));
       positions.needsUpdate=true;bodyGeometry.computeVertexNormals();
+    }else if(shapeName!=='cube'){
+      // ExtrudeGeometry's default cap UVs are world coordinates. Normalize
+      // them to this body, otherwise half the preview clamps to one edge of
+      // the texture and titles are cropped even though the canvas is correct.
+      // Bevel shoulders carry the shell material. Fit to the cap's actual
+      // bounds so they cannot crop the preview's left or right text margin.
+      normalizeCapUVs(bodyGeometry);
     }
     geometry.add(bodyGeometry);
     // Information belongs to the object. Planar extrusions use their own cap
@@ -361,6 +386,18 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[],rela
       :(!curved&&artMaterial?[artMaterial,shell]:shell);
     const body=new THREE.Mesh(bodyGeometry,bodyMaterial);body.userData.assemblyId=node.feature.id;body.name=`${node.feature.id}/spatial-tab/${shapeName}`;
     body.renderOrder=20;body.castShadow=false;body.receiveShadow=false;node.root.add(body);targets.push(body);selectable.add(body);tabSelectable.add(body);parts.push(body);
+    if(curved&&artMaterial){
+      // The curved volume's machined front needs its own closing cap. It sits
+      // on the same seam as the body and carries the entire reading surface.
+      const face=surfaceBinding.informationFace,outline=shapeFromSurfaceContour(THREE,surfaceBinding.contour);
+      const capGeometry=new THREE.ShapeGeometry(outline);geometry.add(capGeometry);
+      const cap=new THREE.Mesh(capGeometry,artMaterial);cap.name=`${node.feature.id}/native-reading-cap`;cap.position.z=face.position[2];cap.renderOrder=21;
+      // ShapeGeometry defaults to world-coordinate UVs. Fit the artwork to
+      // this real cap instead of wrapping it around the volume's shoulders.
+      const uv=capGeometry.getAttribute('uv'),positions=capGeometry.getAttribute('position');
+      for(let i=0;i<uv.count;i++)uv.setXY(i,positions.getX(i)/face.width+.5,positions.getY(i)/face.height+.5);
+      uv.needsUpdate=true;cap.userData.assemblyId=node.feature.id;node.root.add(cap);parts.push(cap);targets.push(cap);selectable.add(cap);tabSelectable.add(cap);
+    }
     const edgeGeometry=new THREE.EdgesGeometry(bodyGeometry,18);geometry.add(edgeGeometry);
     const edgeMaterial=new THREE.LineBasicMaterial({color:sphereForm?'#e4c878':node.accent.color,transparent:true,opacity:sphereForm?.82:.58,depthWrite:false,depthTest:true});materials.add(edgeMaterial);
     const edges=new THREE.LineSegments(edgeGeometry,edgeMaterial);edges.renderOrder=22;node.root.add(edges);parts.push(edges);
@@ -560,7 +597,7 @@ function applyTabDepthMode(node){
   // At the universe level, each semantic domain is one small navigable
   // constellation marker. Its feature tabs stay hidden until that domain is
   // opened, so the overview is not a wall of floating panels.
-  const groupParents=new Map(),groupCoreGeometry=new THREE.SphereGeometry(.36,18,14),groupRingGeometry=new THREE.TorusGeometry(.68,.018,6,42),groupInnerRingGeometry=new THREE.TorusGeometry(.44,.009,6,36);
+  const groupParents=new Map(),groupTargets=[],groupCoreGeometry=new THREE.SphereGeometry(.36,18,14),groupRingGeometry=new THREE.TorusGeometry(.68,.018,6,42),groupInnerRingGeometry=new THREE.TorusGeometry(.44,.009,6,36);
   geometry.add(groupCoreGeometry);geometry.add(groupRingGeometry);geometry.add(groupInnerRingGeometry);
   const groupColors={worlds:'#9ab7a7',people:'#b09acb',network:'#79b8c8',value:'#c0a66e',agents:'#91a2d0',experiences:'#83b8a0'};
   for(const domain of REALITY_LENS_GROUPS){
@@ -571,8 +608,24 @@ function applyTabDepthMode(node){
     const innerMaterial=new THREE.MeshBasicMaterial({color:'#d4c49a',transparent:true,opacity:.2,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide});materials.add(innerMaterial);
     const core=new THREE.Mesh(groupCoreGeometry,coreMaterial),ring=new THREE.Mesh(groupRingGeometry,ringMaterial),innerRing=new THREE.Mesh(groupInnerRingGeometry,innerMaterial);
     root.add(core,ring,innerRing);root.visible=false;root.frustumCulled=false;
+    const copy={...SPACE_COPY[domain.id],label:lensSpaceLabel(domain.id)};
+    const outline=spaceEntryShape(THREE,domain.id,5.6,3.9);
+    const entryGeometry=new THREE.ExtrudeGeometry(outline,{depth:1.12,bevelEnabled:true,bevelSegments:4,bevelSize:.075,bevelThickness:.075,curveSegments:24});
+    entryGeometry.translate(0,0,-.56);normalizeCapUVs(entryGeometry);geometry.add(entryGeometry);
+    entryGeometry.computeBoundingBox();
+    const previewFeature={id:domain.id,label:copy.label,description:copy.description,isSpaceEntry:true,memberCount:members.length};
+    const entryTexture=drawFeatureArtwork(THREE,previewFeature,color,`space-${domain.id}`,{compact:previewCompact,surfaceAspect:5.6/3.9});
+    if(entryTexture)textures.add(entryTexture);
+    const entryShell=new THREE.MeshPhysicalMaterial({color:'#123955',metalness:.42,roughness:.27,clearcoat:.65,clearcoatRoughness:.2,emissive:'#0b345c',emissiveIntensity:.24});materials.add(entryShell);
+    const entryFace=new THREE.MeshBasicMaterial({color:entryTexture?'#ffffff':color,map:entryTexture,side:THREE.FrontSide});materials.add(entryFace);
+    const entry=new THREE.Mesh(entryGeometry,[entryFace,entryShell]);entry.name=`reality-lens/space-entry/${domain.id}`;entry.userData.realityLensGroup=domain.id;entry.userData.spaceSilhouette=domain.id;entry.visible=false;entry.renderOrder=20;
+    entry.userData.nativeOutline=outline.getPoints(32).map(({x,y})=>[x,y,entryGeometry.boundingBox.max.z]);
+    const entryEdgeGeometry=new THREE.EdgesGeometry(entryGeometry,35);geometry.add(entryEdgeGeometry);
+    const entryEdgeMaterial=new THREE.LineBasicMaterial({color:'#79bcf0',transparent:true,opacity:.36,depthWrite:false});materials.add(entryEdgeMaterial);
+    const entryEdges=new THREE.LineSegments(entryEdgeGeometry,entryEdgeMaterial);entryEdges.visible=false;entryEdges.renderOrder=22;
+    root.add(entry,entryEdges);groupTargets.push(entry);
     const center=new THREE.Vector3();members.forEach(node=>center.add(node.position));center.multiplyScalar(1/members.length);root.position.copy(center);
-    groupParents.set(domain.id,{id:domain.id,root,core,ring,innerRing,members});
+    groupParents.set(domain.id,{id:domain.id,label:copy.label,previewFeature,root,core,ring,innerRing,entry,entryFace,entryEdges,members,spacePosition:new THREE.Vector3()});
   }
   // Render authored feature relationships, never guessed proximity edges.
   // Block World is a fixed spatial anchor, not a transport hub in the graph.
@@ -587,10 +640,98 @@ function applyTabDepthMode(node){
   const connectionMaterial=new THREE.LineBasicMaterial({color:'#36a6d3',transparent:true,opacity:.34});materials.add(connectionMaterial);
   const connections=new THREE.LineSegments(connectionGeometry,connectionMaterial);connections.frustumCulled=false;layer.add(connections);
   let selected=null,hovered=null,mode='3d',viewState=null,focusId=null,activeFocusStrength=0,activeFocusDistance=Infinity,activeFocusIsolated=false,activeGroupId='*';
+  let calmMode=false,spaceViewport={width:1280,height:800};
+  const compactPositions=new Map(),spaceBounds=new Map(),spacePages=new Map();
+  const previewScale=2.2;
+  function getSpacePage(groupId=activeGroupId){
+    const members=groupParents.get(groupId)?.members??[],pageSize=spaceViewport.width<700?4:6,total=members.length,pageCount=Math.max(1,Math.ceil(total/pageSize));
+    const page=Math.max(0,Math.min(pageCount-1,spacePages.get(groupId)??0));
+    return {page,pageCount,pageSize,total,ids:members.slice(page*pageSize,(page+1)*pageSize).map(node=>node.feature.id)};
+  }
+  function boundsFor(items){
+    if(!items.length)return {center:[0,1,0],radius:1,width:2,height:2,depth:1,count:0,ids:[]};
+    const min=[Infinity,Infinity,Infinity],max=[-Infinity,-Infinity,-Infinity];
+    for(const item of items)for(let axis=0;axis<3;axis++){min[axis]=Math.min(min[axis],item.position[axis]-item.size[axis]/2);max[axis]=Math.max(max[axis],item.position[axis]+item.size[axis]/2);}
+    const size=max.map((value,axis)=>value-min[axis]),center=min.map((value,axis)=>(value+max[axis])/2);
+    return {center,radius:Math.hypot(...size)/2,width:size[0],height:size[1],depth:size[2],count:items.length,ids:items.map(item=>item.id)};
+  }
+  function arrangeRows(items,maxColumns,gap){
+    const columns=Math.min(maxColumns,Math.max(1,items.length)),rows=Math.ceil(items.length/columns),columnWidths=Array(columns).fill(0),rowHeights=Array(rows).fill(0);
+    items.forEach((item,index)=>{columnWidths[index%columns]=Math.max(columnWidths[index%columns],item.size[0]);rowHeights[Math.floor(index/columns)]=Math.max(rowHeights[Math.floor(index/columns)],item.size[1]);});
+    const width=columnWidths.reduce((sum,value)=>sum+value,0)+gap*(columns-1),height=rowHeights.reduce((sum,value)=>sum+value,0)+gap*(rows-1);
+    return items.map((item,index)=>{
+      const column=index%columns,row=Math.floor(index/columns),x=-width/2+columnWidths.slice(0,column).reduce((sum,value)=>sum+value,0)+gap*column+columnWidths[column]/2;
+      const y=1+height/2-rowHeights.slice(0,row).reduce((sum,value)=>sum+value,0)-gap*row-rowHeights[row]/2;
+      return {...item,position:[x,y,0]};
+    });
+  }
+  function refreshSpaceLayout(){
+    const columns=spaceViewport.width<700?2:3;
+    // Compute each entry's envelope from its actual beveled solid. Include
+    // the full range of the tiny orientation drift so framing never guesses.
+    const entries=arrangeRows([...groupParents.values()].map(marker=>{
+      const half=[0,0,0],angle=spaceViewport.width<700?.09:.2;
+      for(const yaw of [angle-.007,angle+.007]){
+        const rotation=new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(.045,yaw,0));
+        const bodyBounds=marker.entry.geometry.boundingBox.clone().applyMatrix4(rotation);
+        for(const [axis,key] of ['x','y','z'].entries())half[axis]=Math.max(half[axis],Math.abs(bodyBounds.min[key]),Math.abs(bodyBounds.max[key]));
+      }
+      return {id:marker.id,size:half.map(value=>value*2)};
+    }),columns,spaceViewport.width<700?.5:1.6);
+    entries.forEach(item=>groupParents.get(item.id).spacePosition.set(...item.position));spaceBounds.set(null,boundsFor(entries));
+    compactPositions.clear();
+    for(const marker of groupParents.values()){
+      const page=getSpacePage(marker.id);spacePages.set(marker.id,page.page);
+      const members=marker.members.slice(page.page*page.pageSize,(page.page+1)*page.pageSize);
+      const items=arrangeRows(members.map(node=>{const form=REALITY_TAB_FORMS[node.shape]??REALITY_TAB_FORMS.rectangle,scale=(node.size??1)*(node.scale??1)*previewScale;return {id:node.feature.id,size:[form.width*scale,form.height*scale,form.depth*scale]};}),columns,1.7);
+      items.forEach(item=>compactPositions.set(item.id,new THREE.Vector3(...item.position)));spaceBounds.set(marker.id,boundsFor(items));
+    }
+  }
+  function getObjectPosition(id){
+    const node=nodes.get(id);if(!node)return null;
+    return calmMode&&activeGroupId!=='*'&&compactPositions.has(id)?compactPositions.get(id):node.position;
+  }
   function setActiveGroup(groupId=null){
     if(groupId!==null&&groupId!=='*'&&!groupParents.has(groupId))throw Error(`Unknown Reality Lens domain: ${groupId}`);
     activeGroupId=groupId;
   }
+  /** Calm navigation is additive. '*' restores the saved full assembly;
+   * null shows entry bodies, and a domain ID opens only its own objects. */
+  function setSpaceView(groupId=null){
+    setActiveGroup(groupId);calmMode=groupId!=='*';refreshSpaceLayout();
+    if(focusId&&groupId!==nodes.get(focusId)?.lensGroup)focusId=null;
+  }
+  function setSpaceViewport({width,height}={}){
+    if(!Number.isFinite(width)||width<=0||!Number.isFinite(height)||height<=0)throw Error('Reality Lens space viewport must have positive finite dimensions');
+    spaceViewport={width,height};
+    const compact=width<700;
+    if(compact!==previewCompact){
+      previewCompact=compact;
+      for(const node of nodes.values())if(node.isTab)makeTabForm(node,node.shape);
+      for(const marker of groupParents.values()){
+        const material=marker.entryFace,oldTexture=material.map;
+        const texture=drawFeatureArtwork(THREE,marker.previewFeature,groupColors[marker.id],`space-${marker.id}`,{compact:previewCompact,surfaceAspect:5.6/3.9});
+        if(texture)textures.add(texture);material.map=texture;material.needsUpdate=true;
+        if(oldTexture){textures.delete(oldTexture);oldTexture.dispose();}
+      }
+    }
+    if(focusId&&activeGroupId===nodes.get(focusId)?.lensGroup){const index=groupParents.get(activeGroupId).members.findIndex(node=>node.feature.id===focusId);spacePages.set(activeGroupId,Math.floor(index/(width<700?4:6)));}
+    refreshSpaceLayout();
+  }
+  function setSpacePage(page){
+    if(!Number.isFinite(page))throw Error('Reality Lens space page must be a finite number');
+    if(!groupParents.has(activeGroupId))return getSpacePage();
+    const info=getSpacePage();spacePages.set(activeGroupId,Math.max(0,Math.min(info.pageCount-1,Math.trunc(page))));
+    focusId=null;refreshSpaceLayout();return getSpacePage();
+  }
+  function focus(id){
+    focusId=nodes.has(id)?id:null;
+    if(calmMode&&focusId&&activeGroupId===nodes.get(focusId)?.lensGroup){
+      const info=getSpacePage(),index=groupParents.get(activeGroupId).members.findIndex(node=>node.feature.id===focusId),page=Math.floor(index/info.pageSize);
+      if(page!==info.page){spacePages.set(activeGroupId,page);refreshSpaceLayout();}
+    }
+  }
+  refreshSpaceLayout();
   const projectedPosition=new THREE.Vector3(),scatterDirection=new THREE.Vector3();
   function apply(snapshot,{viewMode='3d',hoveredId=null}={}){
     viewState=snapshot;selected=snapshot.selectedId;hovered=hoveredId;mode=viewMode;
@@ -611,6 +752,7 @@ function applyTabDepthMode(node){
       }
     });
     connectionMaterial.color.set(snapshot.mode==='proposed'?'#b194ed':snapshot.mode==='past'?'#9a9fae':'#36a6d3');
+    if(calmMode)refreshSpaceLayout();
   }
   function updateRetiredGiantLod(dt,time,{reducedMotion=false,cameraDistance=0,cameraPosition=null}={}){
     const blend=reducedMotion?1:1-Math.exp(-dt*9);
@@ -720,28 +862,29 @@ function applyTabDepthMode(node){
   function update(dt,time,{reducedMotion=false,cameraDistance=0,cameraPosition=null}={}){
     const blend=reducedMotion?1:1-Math.exp(-dt*9);
     const focalNode=nodes.get(focusId),focusScale=Math.max(1,focalNode?.size??1);
-    const targetProgress=realityLensEngine.overviewProgress(cameraDistance/focusScale);
+    const targetProgress=calmMode?1:realityLensEngine.overviewProgress(cameraDistance/focusScale);
     approachBlend+=(targetProgress-approachBlend)*blend;
     worldBlock.visible=false;
     const activeRelation=(nodes.get(selected)?.isTab||nodes.get(hovered)?.isTab)===true;
-    connections.visible=edges.length>0&&approachBlend>.3&&activeRelation&&cameraDistance>24&&!focusId;
+    connections.visible=!calmMode&&edges.length>0&&approachBlend>.3&&activeRelation&&cameraDistance>24&&!focusId;
     connectionMaterial.opacity=.26*approachBlend;
-    const focusDistance=cameraPosition&&focalNode?cameraPosition.distanceTo(focalNode.position):cameraDistance;
+    const focusDistance=cameraPosition&&focalNode?cameraPosition.distanceTo(getObjectPosition(focusId)):cameraDistance;
     const focusResponse=realityLensEngine.objectResponse({id:focusId,selectedId:focusId,distance:focusDistance,focusScale});
     activeFocusStrength=focusResponse.focusStrength;activeFocusDistance=focusId?focusDistance:Infinity;
     const focusIsolated=Boolean(focusId&&focusResponse.isolationReached);activeFocusIsolated=focusIsolated;
     // The funnel is a guide while travelling, not another object layered on
     // top of the feature. Clear it as the user arrives at a focused tab.
-    funnelGuide.visible=approachBlend>.035&&!focusIsolated;
+    funnelGuide.visible=!calmMode&&approachBlend>.035&&!focusIsolated;
     funnelGuideMaterial.opacity=(.035+approachBlend*.075)*(1-activeFocusStrength);
     const buffer=connectionGeometry.attributes.position;
+    const pageFeatureIds=calmMode?new Set(getSpacePage().ids):null;
     for(const [id,node] of nodes){
       const groupOrder=['worlds','people','network','value','agents','experiences'].indexOf(node.lensGroup);
       const delay=node.isTab?Math.max(0,groupOrder)*.055+(node.revealOrder%3)*.012:0;
       const tabReveal=node.isTab?(node.feature.id==='block-world'?1:Math.max(0,Math.min(1,(approachBlend-delay)/Math.max(.2,1-delay)))):1;
       node.tabReveal=node.isTab?tabReveal:1;
       const level=id===selected?1:id===hovered?.55:0;
-      projectedPosition.copy(node.position);
+      projectedPosition.copy(getObjectPosition(id));
       node.root.position.lerp(projectedPosition,blend);
       const nodeDistance=cameraPosition?cameraPosition.distanceTo(node.root.position):cameraDistance;
       const physicalStage=realityLensEngine.stageAt(nodeDistance/Math.max(1,node.size??1));
@@ -749,9 +892,9 @@ function applyTabDepthMode(node){
       node.revealProgress=node.goalOpen>=.99?1:physicalStage.progress;
       const stageOpen=[0,.28,.56,.82][node.revealStage]+node.revealProgress*.16;
       node.open+=(Math.max(node.goalOpen,stageOpen)-node.open)*blend;
-      const response=realityLensEngine.objectResponse({id,selectedId:focusId,distance:focusDistance,focusScale,baseScale:node.scale??1,size:node.size??1,tabReveal});
+      const response=realityLensEngine.objectResponse({id,selectedId:focusId,distance:focusDistance,focusScale,baseScale:(node.scale??1)*(calmMode&&!focusId?previewScale:1),size:node.size??1,tabReveal});
       if(node.lastContextOpacity===undefined||Math.abs(node.lastContextOpacity-response.contextOpacity)>.008){setNodeOpacity(node,response.contextOpacity);node.lastContextOpacity=response.contextOpacity;}
-      const groupMatches=activeGroupId==='*'||(node.isTab&&node.lensGroup===activeGroupId);
+      const groupMatches=activeGroupId==='*'||((calmMode||node.isTab)&&node.lensGroup===activeGroupId&&(!calmMode||pageFeatureIds.has(id)));
       // Context remains available while approaching, then genuinely clears so
       // the selected object can be read and used as the Lens working surface.
       node.root.visible=(!node.isTab||tabReveal>.008)&&!response.contextHidden&&response.contextOpacity>.05&&groupMatches;
@@ -778,26 +921,30 @@ function applyTabDepthMode(node){
           if(node.artworkSuppressed!==reading){
             node.artworkSuppressed=reading;
             node.artMaterial.map=reading?null:node.artTexture;
-            node.artMaterial.color.set(reading?'#17383a':'#b99154');
+            node.artMaterial.color.set(reading?'#0d2b48':'#ffffff');
             node.artMaterial.needsUpdate=true;
           }
           const base=node.artMaterial.userData?.realityLensBaseOpacity??1;
           node.artMaterial.opacity=base*(reading?1:(1-cover*.22))*response.contextOpacity;
+          // Opaque information fronts occlude the rear shoulders and their
+          // edge loops. Leaving them depthless let shell geometry paint over
+          // the first letters when an object was viewed off-centre.
+          node.artMaterial.depthWrite=node.artMaterial.opacity>.99;
         }
         tuneSurface(node.indicator?.material,.35);
-        node.root.rotation.y=reducedMotion?0:Math.sin(time*.18+node.traits.phase)*.025;
-        node.root.rotation.x=reducedMotion?0:Math.sin(time*.13+node.traits.phase)*.012;
-        if(node.indicator){node.indicator.visible=!node.surfaceReading;const pulse=reducedMotion?1:.9+.1*Math.sin(time*.92+node.traits.phase);node.indicator.scale.setScalar(pulse);if(node.indicator.material?.emissiveIntensity!==undefined)node.indicator.material.emissiveIntensity=node.surfaceReading||reducedMotion?.28:.28+.18*(.5+.5*Math.sin(time*1.3+node.traits.phase));}
+        node.root.rotation.y=reducedMotion||calmMode?0:Math.sin(time*.18+node.traits.phase)*.025;
+        node.root.rotation.x=reducedMotion||calmMode?0:Math.sin(time*.13+node.traits.phase)*.012;
+        if(node.indicator){node.indicator.visible=!node.surfaceReading&&!calmMode;const pulse=reducedMotion?1:.9+.1*Math.sin(time*.92+node.traits.phase);node.indicator.scale.setScalar(pulse);if(node.indicator.material?.emissiveIntensity!==undefined)node.indicator.material.emissiveIntensity=node.surfaceReading||reducedMotion?.28:.28+.18*(.5+.5*Math.sin(time*1.3+node.traits.phase));}
         // At close focus the object itself owns attention. The attached
         // controls are only its interactive skin, not a replacement panel.
         const panelOwnsAttention=response.isSelected&&response.focusStrength>.6;
-        node.liveContent.visible=node.revealStage>=1&&node.open>.05&&tabReveal>.18&&!panelOwnsAttention;
+        node.liveContent.visible=!calmMode&&node.revealStage>=1&&node.open>.05&&tabReveal>.18&&!panelOwnsAttention;
         node.liveContent.scale.setScalar(node.liveContent.visible ? .45+node.open*.55 : .001);
         // Sources are available in the approach layers; a close living panel
         // already contains its own data and should not grow floating badges.
-        node.sourceLayer.visible=node.revealStage>=2&&!panelOwnsAttention;
+        node.sourceLayer.visible=!calmMode&&node.revealStage>=2&&!panelOwnsAttention;
         node.sourceLayer.scale.setScalar(node.sourceLayer.visible ? .74+node.revealProgress*.26 : .001);
-        node.nestedLayer.visible=node.revealStage>=3&&!panelOwnsAttention;
+        node.nestedLayer.visible=!calmMode&&node.revealStage>=3&&!panelOwnsAttention;
         node.nestedLayer.scale.setScalar(node.nestedLayer.visible ? .72+node.revealProgress*.28 : .001);
         continue;
       }
@@ -839,10 +986,16 @@ function applyTabDepthMode(node){
     }
     for(const [groupIndex,domain] of REALITY_LENS_GROUPS.entries()){
       const marker=groupParents.get(domain.id);if(!marker)continue;
-      const center=new THREE.Vector3();marker.members.forEach(node=>center.add(node.root.position));center.multiplyScalar(1/marker.members.length);
+      const center=new THREE.Vector3();
+      if(calmMode)center.copy(marker.spacePosition);
+      else{marker.members.forEach(node=>center.add(node.root.position));center.multiplyScalar(1/marker.members.length);}
       marker.root.position.lerp(center,blend);
+      const motion=calmMode&&!reducedMotion?Math.sin(time*.24+groupIndex)*.007:0;
+      marker.root.rotation.set(calmMode?.045:0,calmMode?(groupIndex%2?-1:1)*(spaceViewport.width<700?.09:.2)+motion:0,0);
       const expanded=activeGroupId===domain.id;
-      marker.root.visible=activeGroupId!=='*'&&!expanded&&approachBlend>.08&&!focusIsolated;
+      marker.root.visible=calmMode?activeGroupId===null:activeGroupId!=='*'&&!expanded&&approachBlend>.08&&!focusIsolated;
+      marker.entry.visible=calmMode;marker.entryEdges.visible=calmMode;
+      marker.core.visible=!calmMode;marker.ring.visible=!calmMode;marker.innerRing.visible=!calmMode;
       const focusAlpha=activeGroupId===null?.9:.58;
       marker.ring.material.opacity=(.2+.18*Math.sin(time*.7+groupIndex)) * approachBlend * focusAlpha;
       marker.innerRing.material.opacity=(.14+.07*Math.sin(time+groupIndex*.5)) * approachBlend * focusAlpha;
@@ -859,14 +1012,18 @@ function applyTabDepthMode(node){
         buffer.setXYZ(i*2+1,shown?b.root.position.x:0,shown?b.root.position.y:-1000,shown?b.root.position.z:0);
       });buffer.needsUpdate=true;
     }
-    grid.material.opacity=approachBlend>.25?(mode==='4d'?.07:.022):0;
+    // Zero opacity still writes line depth in Three.js. Hide the guide itself
+    // so it cannot cut dark seams through the native information fronts.
+    grid.visible=!calmMode&&approachBlend>.25&&!focusIsolated;
+    grid.material.opacity=grid.visible?(mode==='4d'?.07:.022):0;
+    starMaterial.opacity=calmMode?.18:.38;
   }
   function getSnapshot(){
     const lod=approachBlend<.04?'nucleus':approachBlend<.98?'unfolding':'field';
     const groupIds=[...new Set([...nodes.values()].map(node=>node.lensGroup).filter(Boolean))];
     const formerCenter=nodes.get('block-world');
-    return {geometryOnly:true,referenceImagesUsedAsTextures:false,funnelGuideVisible:funnelGuide.visible,nodeIds:[...nodes.keys()],nodeCount:nodes.size,tabCount:[...nodes.values()].filter(node=>node.isTab).length,visibleFeatureIds:[...nodes.values()].filter(node=>node.isTab&&node.root.visible).map(node=>node.feature.id),visibleTabCount:[...nodes.values()].filter(node=>node.isTab&&node.root.visible&&node.tabReveal>.35&&node.contextOpacity>.05).length,groupIds,visibleGroupCount:[...groupParents.values()].filter(marker=>marker.root.visible).length,activeGroupId,focusedId:focusId,focusStrength:Number(activeFocusStrength.toFixed(3)),focusIsolated:activeFocusIsolated,focusDistance:Number.isFinite(activeFocusDistance)?Number(activeFocusDistance.toFixed(2)):null,selectedStage:nodes.get(focusId)?.revealStage??0,approachProgress:Number(approachBlend.toFixed(3)),anchorOpen:formerCenter?.isTab?0:Number((formerCenter?.open??0).toFixed(3)),edgeCount:edges.length,relationshipSource:'authored feature navigation graph',connectionsVisible:connections.visible,connectionPairs:edges.map(pair=>[...pair]),viewMode:mode,selectedId:selected,historyMode:viewState?.mode??'present',designedArchitecture:true,equalAxisCubes:false,singleFixedAnchorCube:[...nodes.values()].some(node=>!node.isTab&&node.feature.id==='block-world'),formerCenterIsMovableTab:formerCenter?.isTab===true,lensMode,lod};
+    return {geometryOnly:true,referenceImagesUsedAsTextures:false,funnelGuideVisible:funnelGuide.visible,gridVisible:grid.visible,nodeIds:[...nodes.keys()],nodeCount:nodes.size,tabCount:[...nodes.values()].filter(node=>node.isTab).length,visibleFeatureIds:[...nodes.values()].filter(node=>node.isTab&&node.root.visible).map(node=>node.feature.id),visibleTabCount:[...nodes.values()].filter(node=>node.isTab&&node.root.visible&&node.tabReveal>.35&&node.contextOpacity>.05).length,groupIds,visibleGroupCount:[...groupParents.values()].filter(marker=>marker.root.visible).length,visibleGroupIds:[...groupParents.values()].filter(marker=>marker.root.visible).map(marker=>marker.id),activeGroupId,calmMode,spaceView:calmMode?(activeGroupId??'home'):'assembly',spacePage:getSpacePage(),spaceBounds:spaceBounds.get(activeGroupId)??null,focusedId:focusId,focusStrength:Number(activeFocusStrength.toFixed(3)),focusIsolated:activeFocusIsolated,focusDistance:Number.isFinite(activeFocusDistance)?Number(activeFocusDistance.toFixed(2)):null,selectedStage:nodes.get(focusId)?.revealStage??0,approachProgress:Number(approachBlend.toFixed(3)),anchorOpen:formerCenter?.isTab?0:Number((formerCenter?.open??0).toFixed(3)),edgeCount:edges.length,relationshipSource:'authored feature navigation graph',connectionsVisible:connections.visible,connectionPairs:edges.map(pair=>[...pair]),viewMode:mode,selectedId:selected,historyMode:viewState?.mode??'present',designedArchitecture:true,equalAxisCubes:false,singleFixedAnchorCube:[...nodes.values()].some(node=>!node.isTab&&node.feature.id==='block-world'),formerCenterIsMovableTab:formerCenter?.isTab===true,lensMode,lod};
   }
-  return {layer,nodes,groupParents,worldBlock,backdrop,apply,update,getSnapshot,setLensMode,setActiveGroup,getGroupPosition:id=>groupParents.get(id)?.root.position??null,focus:id=>{focusId=nodes.has(id)?id:null;},resolve:object=>object?.userData?.assemblyId??null,
-    destroy(){selectable.forEach(object=>{const i=targets.indexOf(object);if(i>=0)targets.splice(i,1);});geometry.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());textures.forEach(t=>t.dispose());layer.removeFromParent();}};
+  return {layer,nodes,groupParents,groupTargets,worldBlock,backdrop,apply,update,getSnapshot,setLensMode,setActiveGroup,setSpaceView,setSpaceViewport,setSpacePage,getSpacePage,getObjectPosition,getSpaceBounds:id=>spaceBounds.get(id??null)??null,getGroupPosition:id=>{const marker=groupParents.get(id);return marker?(calmMode?marker.spacePosition:marker.root.position):null;},focus,resolve:object=>object?.userData?.assemblyId??null,resolveGroup:object=>object?.userData?.realityLensGroup??null,
+    destroy(){selectable.forEach(object=>{const i=targets.indexOf(object);if(i>=0)targets.splice(i,1);});groupTargets.length=0;geometry.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());textures.forEach(t=>t.dispose());layer.removeFromParent();}};
 }

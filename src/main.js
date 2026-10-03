@@ -4,7 +4,7 @@ import {mountCityJourney,resolveCityRoute} from './render/city-journey.js?v=2026
 if(resolveCityRoute(location.search).status==='rejected'){
   const safeUrl=new URL(location.href);safeUrl.search='?feature=reality-lens';history.replaceState(null,'',safeUrl);
 }
-import { mountCenteredSurfaces } from './render/centered-surfaces.js?v=20260923-reality-lens-controls4';
+import { mountCenteredSurfaces } from './render/centered-surfaces.js?v=20261003-calm7';
 import { createImmersiveSession } from './render/immersive-session.js?v=20260923-xr-status3';
 import { createMediaPreview } from './render/media-preview.js?v=20260922-cache2';
 import { mountTokenTicker } from './render/token-ticker.js?v=20260920-ticker1';
@@ -22,7 +22,9 @@ import { initMobilePanelManager } from './render/mobile-panel-manager.js?v=20260
 import { installMobileFreezeGuard } from './render/mobile-freeze-guard.js?v=20260922-mfg1';
 import { mountPhotoMascot } from './render/photo-mascot-mount.js?v=20260922-cache2';
 import { createPersonStudio } from './render/person-studio.js?v=20260918-avatar-chess';
-import { createRealityAssembly, CLEAN_LANDING_CAMERA } from './render/reality-assembly.js?v=20261003-calm6';
+import { createRealityAssembly, CLEAN_LANDING_CAMERA } from './render/reality-assembly.js?v=20261003-calm7';
+import { mountApiConnections } from './render/api-connections.js';
+import { featureSelectionMayRefreshProvider } from './domains/provider-navigation.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { MANIPULATE_MODES } from './render/manipulate-controls.js?v=20260922-cache2';
@@ -35,7 +37,7 @@ import { createDeviceProjection, readBrowserProjectionPreferences } from './proj
 import { createDistributionExplorer } from './render/distribution-explorer.js?v=20260922-cache2';
 import { createLaunchDistributionRehearsal } from './domains/distribution-registry.js?v=20260828-distribution163';
 import { createPersonOrganisms } from './render/person-organisms.js?v=20260922-cache2';
-import { FEATURE_DEFINITIONS, FEATURE_HANDOFF_LINKS, createFeatureNavigator } from './render/feature-navigator.js?v=20260923-spatial-tabs18';
+import { FEATURE_DEFINITIONS, FEATURE_HANDOFF_LINKS, createFeatureNavigator } from './render/feature-navigator.js?v=20261003-calm7';
 import { createCubeDive } from './render/cube-dive.js?v=20260919-dive';
 import { resolveHandoffHop, resolveHopVessel, resolveNestedDiveTargets } from './domains/cube-dive.js?v=20260919-dive';
 import { createLaunchConsole, validateLaunchCohortRoute, validateLaunchCohortCompareRoute } from './render/launch-console.js?v=20260922-cache2';
@@ -6786,6 +6788,7 @@ const REALITY_ASSEMBLY_FEATURE_PANEL_IDS = Object.freeze({
   'picture-matter': 'picture-matter-console',
   'nft-atelier': 'nft-atelier-console',
   'wardrobe-atelier': 'wardrobe-atelier-console',
+  'white-paper': 'white-paper-console',
   'gesture-lens': 'gesture-lens-console',
   gateway: 'live-gateway-console',
   'world-events': 'world-events-console',
@@ -6833,17 +6836,14 @@ featureNavigator = createFeatureNavigator({
     if (['asset-token', 'agent', 'social-mirror', 'web-ai'].includes(feature?.id)) {
       closeFeatureConsolesExcept(feature.id);
     }
-    const genericUserSelection = method === 'button'
-      || method === 'keyboard'
-      || method === 'feature-navigator'
-      || method === 'feature-block';
+    const genericUserSelection = ['button','keyboard','feature-navigator','feature-block','reality-assembly','handoff','future-option','white-paper'].includes(String(method));
     // Selecting a feature is a local navigation action. Provider reads belong
     // to explicit panel/live routes or a visible refresh control, never to a
     // generic feature handoff (including URL/popstate restoration).
-    const genericNoAutoRefresh = ['button', 'keyboard', 'feature-navigator', 'feature-block', 'url', 'launch-kit-route', 'popstate', 'reality-assembly'].includes(String(method));
+    const genericNoAutoRefresh = !featureSelectionMayRefreshProvider(method);
     if (genericUserSelection && globalThis.history?.pushState && globalThis.location) {
       const route = new URL(globalThis.location.href);
-      ['panel','draft','contract','record','graph','journey','live','city'].forEach((key) => route.searchParams.delete(key));
+      ['panel','person','node','draft','localDraft','draftSource','contract','record','graph','journey','live','city'].forEach((key) => route.searchParams.delete(key));
       route.searchParams.set('feature', feature.id);
       globalThis.history.pushState({ feature: feature.id }, '', route.href);
       globalThis.dispatchEvent(new Event('city-journey:route-left'));
@@ -6963,6 +6963,7 @@ featureNavigator = createFeatureNavigator({
       sportsEventsConsole?.close();
       setRealityLens('detail', `feature:${method}`);
       if (!new URLSearchParams(location.search).has('person')) {
+        realityAssembly?.close();
         personStudio?.open();
         featureNavigator?.close();
       }
@@ -7998,7 +7999,7 @@ if (personRouteQuery.get('panel') === 'person') {
 // the Gateway URL handoff now that Mission Control can be closed reliably,
 // issuing the single public World Pulse refresh from the final route state.
 if (new URLSearchParams(globalThis.location?.search ?? '').get('feature') === 'gateway') {
-  openLivePublicStatus('url', true);
+  openLivePublicStatus('url', false);
 }
 const socialLaunchQuery = new URLSearchParams(globalThis.location?.search ?? '');
 const requestedSocialMode = socialLaunchQuery.get('mode');
@@ -8262,18 +8263,21 @@ applyContractsRoute('url');
 globalThis.addEventListener?.('popstate', () => {
   const query = new URLSearchParams(globalThis.location?.search ?? '');
   if (query.get('feature') === 'block-world') {
-    featureNavigator?.select?.('block-world', 'popstate');
+    featureNavigator?.select?.('block-world', 'popstate', { updateLocation: false });
     const cohortId = globalThis.__TUMBO_LAST_DISTRIBUTION_COHORT__;
     if (cohortId) setTimeout(() => blockWorld?.focusDistributionCohort?.(cohortId), 0);
   } else if (query.get('panel') === 'contracts' || query.has(CONTRACTS_MARKETS_DRAFT_ROUTE_PARAM) || query.has(CONTRACTS_MARKETS_CONTRACT_ROUTE_PARAM) || query.has(CONTRACTS_MARKETS_GRAPH_ROUTE_PARAM) || (query.get('feature') === 'contracts' && query.get('live') === 'protocols')) {
     applyContractsRoute('popstate');
   } else if (query.get('panel') === 'sports-events') {
     const sourceReturn = parseSportsSourceReturnRoute(query);
-    openSportsEvents('popstate', sourceReturn.strict ? sourceReturn.valid : true, {
+    openSportsEvents('popstate', false, {
       recordId: sourceReturn.requestedRecordId ?? query.get('record'),
       sourceReturn: sourceReturn.strict,
       reason: sourceReturn.reason,
     });
+  } else if (FEATURE_DEFINITIONS.some(feature => feature.id === query.get('feature')) || (!query.get('feature') && !query.get('panel'))) {
+    featureNavigator?.select?.(query.get('feature') || 'reality-lens', 'popstate', { updateLocation: false });
+    featureNavigator?.close();
   }
 });
 if (new URLSearchParams(globalThis.location?.search ?? '').get('panel') === 'asset-market') {
@@ -9049,6 +9053,9 @@ function animate(){
   if(window.__TUMBO_FREEZE_GUARD__?.getPaused())return;
   window.__TUMBO_FREEZE_GUARD__?.notifyFrame(rawDt*1000);
   if(realityAssembly?.active){
+    // Feature handoffs can restore the legacy floor while the Lens stays
+    // active. Keep this presentation boundary after every such restoration.
+    grid.visible=false;blockWorldHorizonRings.forEach(object=>{object.visible=false;});
     realityAssembly.update(dt,t);
     if(!renderer.xr.isPresenting)controls.update();
     if(isMobile || renderer.xr.isPresenting || scene.userData?.__mf_postDisabled)renderer.render(scene,camera);else composer.render();
@@ -9200,13 +9207,19 @@ personStudio=createPersonStudio({THREE,renderer,scene,camera,controls,world,targ
   onIntent:(type,detail)=>projectionBridge.emitIntent(type,'person-studio',detail),
 });
 window.__TUMBO_PERSON_STUDIO__=personStudio;
+let realityAssemblyFloorVisibility=null;
 realityAssembly=createRealityAssembly({THREE,renderer,scene,camera,controls,world,targets:raycastTargets,features:FEATURE_DEFINITIONS,relationships:FEATURE_HANDOFF_LINKS,reducedMotion,environmentTexture:personStudio.getEnvironmentTexture(),
   onNavigate:(id)=>{featureNavigator.select(id,'reality-assembly',{updateLocation:false});featureNavigator.close();},
   onFrame:()=>{cameraTween=0;cameraPositionTween=0;},
   // The Lens owns the visual field while a feature is being inspected. Bot
   // presences remain registered and return on exit; they do not float over a
   // selected object's own interactive surface.
-  onActiveChange:(active)=>botPresence?.setVisible?.(!active),
+  onActiveChange:(active)=>{
+    botPresence?.setVisible?.(!active);
+    // The original world's floor must not cut across Lens object surfaces.
+    if(active){realityAssemblyFloorVisibility=[grid,...blockWorldHorizonRings].map(object=>({object,visible:object.visible}));realityAssemblyFloorVisibility.forEach(({object})=>{object.visible=false;});}
+    else if(realityAssemblyFloorVisibility){realityAssemblyFloorVisibility.forEach(({object,visible})=>{object.visible=visible;});realityAssemblyFloorVisibility=null;}
+  },
   onPanelFrame:(id)=>{if(id&&id===featureNavigator?.getSnapshot?.().activeId)exposeRealityAssemblyFeaturePanel(id);},
   readFeature:(id)=>{
     if(id==='contract-atelier'){const contracts=contractWorldSnapshot?.contracts??[];return {summary:`${contracts.length} saved contracts · ${contracts.filter(item=>item.status==='active').length} armed · ${contracts.reduce((total,item)=>total+item.receipts.length,0)} local receipts. Conditions, approvals and history belong to the same world entity.`};}
@@ -9217,6 +9230,10 @@ realityAssembly=createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   },
 });
 window.__TUMBO_REALITY_ASSEMBLY__=realityAssembly;
+const apiConnections=mountApiConnections({autoCheck:true,onOpen:()=>realityAssembly.closePanels(),onOpenFeature:id=>{featureNavigator.select(id,'button');featureNavigator.close();}});
+window.__TUMBO_API_CONNECTIONS__=apiConnections;
+document.querySelector('#reality-assembly .assembly-header').append(document.getElementById('api-connections-trigger'));
+document.querySelector('#reality-assembly').addEventListener('click',event=>{if(!event.target.closest('#api-connections-trigger'))apiConnections.close();});
 document.addEventListener('person-studio:enter-vr',()=>immersiveSession.start('immersive-vr'));
 if(featureNavigator.getSnapshot().activeId==='person'&&!new URLSearchParams(location.search).has('person'))personStudio.open();
 // The clean landing is owned by Reality Assembly itself. Do not make its
@@ -9230,14 +9247,7 @@ const cleanRealityLanding = !new URLSearchParams(globalThis.location?.search ?? 
 if (cleanRealityLanding) {
   featureNavigator.close();
   realityAssembly.open();
-  // Approved start composition (Tumbo 2026-09-20): ONE single clean glass cube
-  // on load, nothing else in the 3D scene. Park the camera beyond the assembly
-  // merge threshold (LOD_FAR=160) and settle the merge before first paint, so
-  // the boot frame shows only the merged world-block. Zero the in-flight
-  // camera tweens from bootstrap so the first frames cannot drift back toward
-  // the constellation; the user springs the world open by moving/zooming in.
-  camera.position.set(CLEAN_LANDING_CAMERA.position[0], CLEAN_LANDING_CAMERA.position[1], CLEAN_LANDING_CAMERA.position[2]);
-  controls.target.set(CLEAN_LANDING_CAMERA.target[0], CLEAN_LANDING_CAMERA.target[1], CLEAN_LANDING_CAMERA.target[2]);
+  // Reality Assembly frames its six calm spaces for the actual viewport.
   desiredCameraPosition.copy(camera.position);
   desiredTarget.copy(controls.target);
   cameraPositionTween = 0;
@@ -9247,8 +9257,10 @@ if (cleanRealityLanding) {
 } else if (new URLSearchParams(globalThis.location?.search ?? '').has('feature')) {
   const featureId = featureNavigator.getSnapshot().activeId;
   setBlockWorldPresentation(false);
-  realityAssembly.open({ lensMode: true, featureId });
-  if (featureId && exposeRealityAssemblyFeaturePanel(featureId)) realityAssembly.setInspectorVisible(false);
+  if (featureId !== 'person' || !personStudio.active) {
+    realityAssembly.open({ lensMode: true, featureId });
+    if (featureId && exposeRealityAssemblyFeaturePanel(featureId)) realityAssembly.setInspectorVisible(false);
+  }
 } else if(featureNavigator.getSnapshot().activeId==='reality-lens') {
   realityAssembly.open({lensMode:true});
 }
@@ -9302,6 +9314,7 @@ addEventListener('pagehide',()=>{
   mediaPreview.destroy();
   immersiveSession.destroy();
   personStudio.destroy();
+  apiConnections.destroy();
   realityAssembly.destroy();
   cityJourney.destroy();
   persistentUserBlocks?.destroy?.();

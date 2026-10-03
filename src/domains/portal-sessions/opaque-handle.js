@@ -1,6 +1,10 @@
 let handleCounter = 0;
 
-const HEX = /^[0-9a-f]+$/i;
+const HANDLE_ID = /^h_[0-9a-f]{8}$/i;
+// Object membership is local to this page session. A frozen clone or guessed
+// identifier does not become an issued handle, and revocation also covers the
+// original immutable object and any session already holding it.
+const issuedHandles = new WeakMap();
 
 function fnv1a(input) {
   let hash = 0x811c9dc5;
@@ -35,15 +39,27 @@ export function createHandle({ serviceId, capabilities, issuedAt, ttlMs }) {
 
   handleCounter += 1;
   const handleId = `h_${fnv1a(`${serviceId}${issuedAt}${handleCounter}`)}`;
-  return Object.freeze({
+  const expiresAt = issuedAt + ttlMs;
+  assertFiniteNumber(expiresAt, 'expiresAt');
+  const handle = Object.freeze({
     schemaVersion: 1,
     handleId,
     serviceId,
     capabilities: Object.freeze([...capabilities]),
     issuedAt,
-    expiresAt: issuedAt + ttlMs,
+    expiresAt,
     status: 'active'
   });
+  issuedHandles.set(handle, { revoked: false });
+  return handle;
+}
+
+export function isIssuedHandle(handle) {
+  return Boolean(handle && typeof handle === 'object' && issuedHandles.has(handle));
+}
+
+export function isHandleRevoked(handle) {
+  return issuedHandles.get(handle)?.revoked === true;
 }
 
 export function isExpired(handle, now) {
@@ -51,14 +67,17 @@ export function isExpired(handle, now) {
     throw new TypeError('handle must be an object');
   }
   assertFiniteNumber(now, 'now');
+  assertFiniteNumber(handle.expiresAt, 'expiresAt');
   return now >= handle.expiresAt;
 }
 
 export function revoke(handle) {
-  if (!handle || typeof handle !== 'object' || !HEX.test(String(handle.handleId ?? ''))) {
+  if (!isIssuedHandle(handle) || !HANDLE_ID.test(handle.handleId)) {
     throw new TypeError('invalid handle');
   }
-  return Object.freeze({
+  const record = issuedHandles.get(handle);
+  record.revoked = true;
+  const revoked = Object.freeze({
     schemaVersion: 1,
     handleId: handle.handleId,
     serviceId: handle.serviceId,
@@ -67,4 +86,6 @@ export function revoke(handle) {
     expiresAt: handle.expiresAt,
     status: 'revoked'
   });
+  issuedHandles.set(revoked, record);
+  return revoked;
 }

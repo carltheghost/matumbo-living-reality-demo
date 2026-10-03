@@ -1,80 +1,100 @@
-# Reality Lens cleanup and review
+# Reality Lens: calm spaces, native objects and real API connections
 
-Reviewed on 3 October 2026 against commit `9760fa7493e8a0e1f7864f08c86c2ae0a1181815`.
+Reviewed and implemented on October 3, 2026 in the existing draft [PR #70](https://github.com/carltheghost/matumbo-living-reality-demo/pull/70), branch `fix/reality-lens-calm-2026-10-03`. The starting PR commit was `f9789c9922baf69a8fa912884ae2e55ee123f72a`, based on main `9760fa7493e8a0e1f7864f08c86c2ae0a1181815`. The changes remain a draft and have not been merged or deployed.
 
-The main problem was competing navigation: the legacy Mission Control, newer command deck, inspector, launch panel, and bottom controls appeared together. The cleanup gives the world one navigation system, six searchable spaces, and controls that open when requested.
+The new default is six readable 3D space bodies, followed by a bounded group of feature objects, followed by the selected feature's own attached controls. Search reaches every one of the 36 canonical feature IDs. The same feature owners, saved local layouts, simulation boundaries and TabEngine dock remain in use.
 
-Sources: [original maTumbo demo](https://carltheghost.github.io/matumbo-living-reality-demo/) and [Muse Reality Lens reference](https://muse.ai/s/reality-lens-pxj61xkxvpxhgrd). Both were inspected through their public browser interfaces. The Muse Arena view inspired the focused-space interaction and explicit return path. Its observed view was descriptive; this review does not establish that its warriors or games are implemented.
+The six entry bodies have actual beveled silhouettes: a stepped portal, capsule, clipped prism, vault, shield and flowing slab. They own their native front materials. This is procedural Three.js geometry, with no claim of imported sculpted assets.
 
-## Findings and implemented fixes
+The existing object engine now supplies one entity ID, one body-local contour, one physical information face and one interactive front. Geometry caps, preview aspect ratios, CSS clipping and projected hit regions consume that same contour. All seven body forms keep their identity when reshaped. The sphere's old rectangular cap is corrected to its circular section; the cylinder's front fills its complete physical cut. Invisible hit buttons follow the actual contour and never move into an empty screen pocket. The old detached Details inspector is moved into the owning front as Object tools, with no separate background, border or shadow.
 
-| Priority | Problem observed | Result in this change |
-| --- | --- | --- |
-| High | Two feature menus compete and overlap other panels. | One active directory; legacy controls stay hidden and keyboard-inert while the calm chrome is mounted. The Assembly uses its own Spaces control. |
-| High | The command deck says READY after the renderer fails. | Runtime status distinguishes loading, ready, and unavailable. Failure shows a usable description directory and an expandable diagnosis. |
-| High | A feature can appear active even when no canonical navigator is available. | Activation dispatches to the existing navigator only when ready. Directory mode explicitly says that the selected feature is not running. |
-| High | The selected-object Open feature handler receives a click event as its feature ID. | The handler calls `enter()` without the event, preserving the selected ID. Browser checks confirmed `youtube` reaches the navigation callback. |
-| High | GitHub Pages omits the root mobile JavaScript and runtime assets. | A shared static build includes root JS, HTML, CSS, vendor, source, and assets. Its output is tested; development files are excluded. |
-| Medium | All 36 tiles and advanced operations are exposed at once. | Six collapsed spaces; search reveals matching features; only one group expands during ordinary browsing. |
-| Medium | Quick search steals focus after typing. | Quick search retains focus and Enter navigates to its result. Empty searches show useful feedback. |
-| Medium | Phone View controls belong to a command deck hidden during Assembly mode. | An Assembly View button opens the actual 3D, arrangement, and history controls. |
-| Medium | History branches overlap the phone view toolbar. | Branch placement follows the measured toolbar height, with a verified 12-pixel gap at 390 × 844. |
-| Medium | Spaces, object details, and advanced controls can compete. | Opening one closes the others. Escape dismisses the open controls, including from search. |
-| Medium | Main labels use cryptic Latin and small touch targets. | Main navigation and object instructions use English; primary buttons are at least 44 pixels tall. |
-| Medium | New Branch / 4D command-deck buttons only change descriptive text. | These misleading duplicate operations are removed. Actual Assembly side realities and observed history remain available through their existing owners. |
+The [Muse reference](https://muse.ai/s/reality-lens-pxj61xkxvpxhgrd) was inspected in a rendered browser. It informed the focused space and return path. The [public maTumbo page](https://carltheghost.github.io/matumbo-living-reality-demo/) returned HTTP 200; its remote WebGL view timed out during the initial browser visit. Visual comparisons below use the exact starting PR served locally, with its real WebGL renderer, rather than claiming a new public deployment.
 
-## Evidence
+## Visible result
 
-The browser used for this review cannot create a WebGL context. The before and after root screenshots therefore compare the same renderer-unavailable condition. This is a browser limitation, not evidence that the public demo is unavailable for everyone.
+![Six calm space objects on desktop](after-desktop-spaces.png)
 
-### Original root
+![An opened Agents space with its three native object surfaces](after-agents-space.png)
 
-![Original root with overlapping menus and an incorrect READY label](before-home.jpg)
+![Readable six-space phone view](after-phone-spaces.png)
 
-### Updated root, directory mode
+![Chess controls attached to its selected Reality Lens object](after-chess.png)
 
-![Updated root showing six spaces and an honest unavailable status](after-directory-mode.jpg)
+## Review and repairs
 
-### Updated phone layout
+| Problem | Result |
+| --- | --- |
+| A large field exposes all features, connectors and competing controls together. | The default shows six space bodies; opening one hides the other groups. Larger spaces page through at most six objects on desktop or four on phone. The optional All objects view preserves the earlier full assembly. |
+| Labels are small or visually separate from their objects; rear edges ghost through text. | Titles and summaries are rendered onto the geometry's own front/cap material. Correct cap UVs, front-face rendering and opaque reading fronts preserve legibility. Phone fronts use larger titles and counts. |
+| Separate contour generators make controls and clickable areas disagree with the body. | One shared physical contour drives all seven native caps, clip paths and projected hit regions. Native artifact tests check the cap geometry and seam; mounted browser tests reshape the same live entity through all seven forms. |
+| Details can reopen a second styled inspector over the selected object. | Shape, size, state, provenance and related-feature tools are inside the same reading skin. The independent screen-positioning path is removed. |
+| The old world floor cuts lines through the new objects. | The Lens hides the legacy floor and horizon rings, including after feature handoffs restore world presentation. |
+| Camera framing wastes phone space and overlaps the page controls. | Framing fits both dimensions, aligns phone objects below the heading, and reserves extra height for the pager. Resizing keeps the focused object on its containing page. |
+| A generic panel manager collapses the Spaces drawer or adds unrelated grips. | It excludes the Assembly and Person Studio, and preserves attached live surfaces. Spaces search now remains usable. |
+| Person Studio and Reality Lens both own camera animation. | Person handoff closes the Assembly; returning to Lens restores the six-space view. |
+| Back/Forward restores only a subset of feature IDs; old draft/person parameters leak into ordinary navigation. | All registered feature routes and the root restore without writing another history entry or refreshing a provider. Ordinary selection clears stale route context. |
+| White Paper opens without its native surface mapping. | The selected White Paper surface now attaches through the existing owner. |
+| Replay can appear available when a feature has no handler. | Replay is offered only for registered replay handlers and reports pending, failure or success honestly. |
+| Normal feature navigation silently refreshes providers. | A single shared policy keeps navigation local; explicit refresh/live routes authorize reads. The new automatic Connections batch is deliberate and separately bounded. |
+| Static previews omit assets or can serve unrelated files. | The cross-platform Python Pages builder includes deployable root scripts and assets. Preview and bridge servers restrict file serving to supported browser resources. |
+| Forged or copied portal handles can survive validation. | Issued handles use registry membership; copied/forged handles are rejected, and revocation is observed by existing sessions. |
+| Hand taps do not share the selection path. | Hand taps now select; grabs still move. |
 
-The actual index page runs inside a 390 × 844 iframe. Its document width and scroll width both measured 390 pixels; no horizontal page overflow was observed. This checks responsive CSS, not a physical phone or touch hardware.
+## Public APIs and NVIDIA
 
-![Actual index at phone width in directory mode](after-phone.jpg)
+Connections checks one batch automatically when the page loads. Its four public groups are Open-Meteo weather, Frankfurter/ECB exchange rates, USGS earthquakes, and DeFiLlama Aave TVL. The natural browser run returned real HTTP 200 data for all four. It sends no location request and labels the weather as a New York example. Opening or closing Connections does not repeat the batch; Check connections requests another batch.
 
-### Assembly controls
+FX has one fixed alternate: ExchangeRate-API. It is used only after the primary fails and retains the original failure, responding provider, source timestamp and required attribution. A separate mounted-component test deliberately simulated only Frankfurter HTTP 403; the alternate request was live and returned HTTP 200. This does not mean Frankfurter failed in the final natural browser run. [ExchangeRate-API's official open-access terms](https://www.exchangerate-api.com/docs/free).
 
-These fixtures instantiate the actual Assembly controller and Three.js scene data with a test canvas. They do not render 3D and are excluded from the Pages artifact. The empty scene area is intentional and must not be interpreted as the production world appearance.
+The existing seven source surfaces remain accessible through Connections: World Pulse, tennis, market evidence, protocol TVL, multisport, Bluesky and Wikimedia. Their own provider refresh and provenance behavior remains with their feature owners. This is a reviewed catalog of useful adapters, not a claim that every free API on the internet has been implemented or verified.
 
-![Assembly desktop Spaces drawer, all six groups visible](assembly-desktop-spaces.jpg)
+NVIDIA's current [Nemotron 3 Nano Omni catalog entry](https://build.nvidia.com/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning) lists a free prototype endpoint. External calls require an owner account and developer API key, as described in the [official quickstart](https://docs.api.nvidia.com/nim/docs/api-quickstart). The Python bridge automatically discovers configuration, keeps the key in its server environment, and calls the fixed NVIDIA endpoint only after Send. It binds to loopback, restricts origins and files, rejects redirects, bounds requests and returns advisory text only.
 
-![Assembly phone history controls with separated branch and view panels](assembly-phone-history.jpg)
+**Verified current state: local bridge detected; NVIDIA Key needed.** No live authenticated NVIDIA answer has been verified. Configuration is not labeled as successful inference, and no API key is put in browser code, storage, the archive or this report. [Secure setup and provider details](../API_CONNECTIONS.md).
 
-### Muse reference
-
-![Muse Arena with a focused space and explicit return controls](muse-arena.jpg)
+![Connections with honest NVIDIA state on phone](after-phone-connections.png)
 
 ## Verification
 
-| Check | Result |
+| Check | Evidence |
 | --- | --- |
-| Focused navigation, responsive layout, bridge, directory, and actual Pages build tests | 55 passed, 0 failed |
-| Full suite before changes | 1,767 tests; 1,716 passed; 51 failed |
-| Full suite after changes | 1,771 tests; 1,720 passed; 51 failed |
-| Comparison of failing test names | Same 51 failures; no new failures |
-| JavaScript syntax, shell syntax, and `git diff --check` | Passed |
-| Browser interactions | Search match and no-results states, selected-feature callback, retained quick-search focus, Escape, closed initial controls, mobile View/history, mutually exclusive panels |
+| Focused JavaScript checks | 140 passed, 0 failed; real geometry, binding and contour, layout, surfaces, navigation, replay, Pages artifact, preview restrictions, provider parsing, portal validation and input parity. |
+| Python HTTP bridge checks | 18 passed, 0 failed; real ephemeral loopback server with a fake upstream requester. This verifies bridge behavior, not NVIDIA authentication. |
+| Full exact starting PR on this Windows host | 1,771 tests: 1,717 passed, 54 failed. |
+| Final full suite on this same host | 1,814 tests: 1,768 passed, 46 failed. All remaining failure names are in the baseline; no added failing names. |
+| Mounted WebGL browser | Real Three.js renderer using Chromium software WebGL/SwiftShader, at 1440 × 1000 and 390 × 844. This is not a hardware GPU performance benchmark. |
+| Every canonical feature | All 36 selected through the real navigator; active ID matched; no runtime exceptions. All owned panels opened, Person entered its separate Studio, and Reality Lens returned to the root. |
+| Navigation interactions | Search finds YouTube; Escape closes search; feature → space → root returns; desktop paging 6 → 6 → 1; phone pages at most 4; direct feature focus retains its page; browser Back/Forward restores Chess/YouTube; stale person route is cleared; Person Studio and Lens do not remain active together. |
+| Native-body interactions | Actual object click opens Agent; changing its select control cycles through all seven forms with the same owning root and exactly one front. Details remains static inside that front; computed skin background is transparent, border is zero and shadow is none. Phone scrolling and landscape preserve ownership. A click outside the vault contour does not open it. |
+| Automatic public reads | Four real groups available; NVIDIA Key needed; zero inference requests; no extra reads from reopening Connections or ordinary feature selections. |
+| Browser errors | Zero page errors and no failed responses in the final natural full-world run. |
+| Static release | Rebuilt from final source; required root scripts, CSS, vendor and assets included; package extraction/replay is recorded in the delivery status. |
+| Git/CI | Syntax and diff checks passed. CI results are recorded separately against the pushed commit; the full inherited suite remains failing. |
 
-Focused command:
+The earlier quoted 51 failures and lack of WebGL came from a different environment. They are superseded here by the exact baseline rerun and the mounted software-WebGL evidence. The eight fewer failures include behavioral repairs and test/build portability or geometry-contract corrections; they should not be counted as eight independent product bugs fixed. Old tests that expected an inset cylinder front or a fixed stretch multiplier were updated to the explicit native-front requirement and bounded portrait projection.
 
-```sh
-node --test tests/reality-lens-chrome.test.mjs tests/mobile-layout.test.mjs tests/mobile-panel-manager.test.mjs tests/feature-navigator.test.mjs tests/reality-lens-engine.test.mjs tests/universal-reality-bridge.test.mjs
+[Remaining failure inventory](remaining-test-failures.txt) includes inherited avatar/photo-mascot, contract, token/export, projection and source-pattern checks. All 36 route checks prove opening and rendering, not the complete internal behavior of every feature, hardware gestures, WebXR, accounts, signing or settlement. Older panel aliases such as multi-sport/market/sync are not fully hydrated by browser history; the canonical feature routes are covered.
+
+The repository continuity/task packet files referenced by AGENTS.md are absent in this public checkout. The isolated branch and explicit user scope were used; the other governed/dirty Reality Lens repositories were preserved. AGENTS.md requires a reviewable diff and prohibits merging one's own branch. This PR remains draft.
+
+## Reproduce
+
+From the source repository or extracted source package:
+
+```powershell
+py -3 scripts/provider_bridge.py
 ```
 
-The [unchanged failure inventory](unchanged-test-failures.txt) records the pre-existing failing tests. The full suite is not green. GPU rendering, visual geometry, touch gestures on hardware, and each feature's provider-specific end-to-end behavior remain unverified in this environment. This is a navigation and presentation repair, not certification of every underlying feature.
+Open `http://127.0.0.1:8082/`. Public connections work without an NVIDIA key. For NVIDIA, follow the masked environment setup in API_CONNECTIONS.md, restart the server and send one prompt. A Python 3.10+ runtime is required; the server and builder use only the standard library.
 
-No ledger, wallet, identity, signing, settlement, or external execution authority is added. Existing scene geometry and the right-side TabEngine dock are not changed by this patch.
+```powershell
+node --test tests/reality-assembly-scene.test.mjs tests/reality-lens-unified.test.mjs tests/reality-lens-chrome.test.mjs tests/reality-space-frame.test.mjs tests/object-is-tab-wrap.test.mjs tests/object-tab-binding.test.mjs tests/reality-object-engine.test.mjs tests/living-surface-layout-engine.test.mjs tests/living-surface-rig.test.mjs tests/centered-surfaces.test.mjs tests/feature-handoff.test.mjs tests/feature-navigator.test.mjs tests/public-preview.test.mjs tests/api-connections.test.mjs tests/portal-entry-return.test.mjs tests/portal-sessions.test.mjs tests/lens-intent-stream.test.mjs tests/chess-arena.test.mjs
+py -3 -m unittest discover -s tests -p test_provider_bridge.py
+node --test tests/*.test.mjs
+py -3 scripts/build_pages.py work/new-static-build
+```
 
-The repository's `AGENTS.md` was followed for the isolated branch and evidence. Its referenced continuity files and task packet are absent from the baseline checkout. It states: “Submit a diff and evidence; never merge your own branch.” This change is delivered for review; deployment occurs through the existing Pages workflow after merge.
+The full test command currently exits with failures listed above. Build into a new empty folder. The static artifact can be hosted directly; it does not include the Python bridge or secrets.
 
 ## Complete canonical feature inventory
 

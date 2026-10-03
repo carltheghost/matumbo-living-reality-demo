@@ -370,6 +370,18 @@ export const FEATURE_FUTURE_OPTIONS = Object.freeze([
 
 const FEATURE_BY_ID = new Map(FEATURE_DEFINITIONS.map((feature) => [feature.id, feature]));
 
+// Only owners with a real replay operation expose this action. Navigation,
+// provider handoffs, and the Person Studio have no replay operation to claim.
+export const FEATURE_REPLAY_IDS = Object.freeze([
+  "asset-token", "asset-market", "launch-distribution", "social-explorer",
+  "rooms", "block-world", "migration", "sports-events", "multi-sport-events",
+  "arena", "academy", "contracts", "paycore", "t402", "neural-mesh",
+  "picture-matter", "nft-atelier", "muse-agent", "bot-plaza", "contract-atelier",
+  "luna-companion", "wardrobe-atelier", "white-paper", "gesture-lens", "ledger",
+  "gateway", "world-events", "projections",
+]);
+const FEATURE_REPLAY_ID_SET = new Set(FEATURE_REPLAY_IDS);
+
 // Infinite-handoff graph (2026-09-18): every feature links onward to a few
 // related features so one interaction always pushes into the next. Rendered
 // as the KEEP GOING strip in the feature detail; every id must resolve.
@@ -862,30 +874,36 @@ export function createFeatureNavigator({
       globalThis.setTimeout?.(() => { focusAction.textContent = "FOCUS IN WORLD"; }, 1200);
     });
     actionBar.appendChild(focusAction);
-    const action = documentRoot.createElement("button");
-    action.type = "button";
-    action.className = "feature-action";
-    action.textContent = feature.id === "asset-token"
-      ? "REPLAY LAUNCH PREVIEW"
-      : feature.id === "social-explorer"
-        ? "REPLAY SOCIAL REHEARSAL"
-        : "REPLAY LOCAL VIEW";
-    action.addEventListener("click", () => {
-      onIntent?.(feature, "replay");
+    if (FEATURE_REPLAY_ID_SET.has(feature.id) && typeof onIntent === "function") {
+      const action = documentRoot.createElement("button");
+      action.type = "button";
+      action.className = "feature-action";
       action.textContent = feature.id === "asset-token"
-        ? "LAUNCH PREVIEW REPLAYED"
+        ? "REPLAY LAUNCH PREVIEW"
         : feature.id === "social-explorer"
-          ? "SOCIAL REHEARSAL REPLAYED"
-          : "LOCAL VIEW REPLAYED";
-      globalThis.setTimeout?.(() => {
-        action.textContent = feature.id === "asset-token"
-          ? "REPLAY LAUNCH PREVIEW"
-          : feature.id === "social-explorer"
-            ? "REPLAY SOCIAL REHEARSAL"
-            : "REPLAY LOCAL VIEW";
-      }, 1200);
-    });
-    actionBar.appendChild(action);
+          ? "REPLAY SOCIAL REHEARSAL"
+          : "REPLAY LOCAL VIEW";
+      const defaultActionLabel = action.textContent;
+      action.addEventListener("click", async () => {
+        action.disabled = true;
+        action.textContent = "REPLAYING…";
+        try {
+          const result = await onIntent(feature, "replay");
+          if (result === false) throw new Error("Replay unavailable");
+          action.textContent = feature.id === "asset-token"
+            ? "LAUNCH PREVIEW REPLAYED"
+            : feature.id === "social-explorer"
+              ? "SOCIAL REHEARSAL REPLAYED"
+              : "LOCAL VIEW REPLAYED";
+        } catch {
+          action.textContent = "REPLAY UNAVAILABLE · TRY AGAIN";
+        } finally {
+          action.disabled = false;
+        }
+        globalThis.setTimeout?.(() => { action.textContent = defaultActionLabel; }, 1200);
+      });
+      actionBar.appendChild(action);
+    }
     detail.appendChild(actionBar);
 
     // KEEP GOING (2026-09-18): the infinite-handoff strip. Every feature

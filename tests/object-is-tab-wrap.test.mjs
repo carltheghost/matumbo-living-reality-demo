@@ -39,7 +39,8 @@ test('live feature controls inherit the owning body silhouette',async()=>{
     readFile(new URL('../src/render/reality-assembly.css',import.meta.url),'utf8'),
   ]);
   assert.match(assembly,/--lens-surface-clip/);
-  assert.match(assembly,/realityObjectSurfaceEngine\.clipPath\(shape\)/);
+  assert.match(assembly,/primarySurfaceBinding\(\{featureId:feature\.id,objectId:data\.id,shape\}\)/);
+  assert.match(assembly,/setProperty\('--lens-surface-clip',binding\.clipPath\)/);
   assert.match(css,/clip-path:var\(--lens-surface-clip/);
 });
 
