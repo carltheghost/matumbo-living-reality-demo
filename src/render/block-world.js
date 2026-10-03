@@ -12,18 +12,18 @@ import {
   createBlockWorldNavigationDraft,
   createBlockWorldPlaceDraft,
   inspectBlockWorldBlock,
-} from "../domains/block-world.js?v=20260922-cache2";
-import { previewBlockMigrationSnapshot } from "../domains/block-migration.js?v=20260922-cache2";
+} from "../domains/block-world.js?v=20261003-complete8";
+import { previewBlockMigrationSnapshot } from "../domains/block-migration.js?v=20261003-complete8";
 import {
   CUBE_DIVE_DOUBLE_TAP_DISTANCE_PX,
   CUBE_DIVE_DOUBLE_TAP_WINDOW_MS,
   resolveDiveBinding,
-} from "../domains/cube-dive.js?v=20260922-cache2";
+} from "../domains/cube-dive.js?v=20261003-complete8";
 import {
   MANIPULATE_MODE_LABELS,
   MANIPULATE_MODES,
   createManipulateControls,
-} from "./manipulate-controls.js?v=20260922-cache2";
+} from "./manipulate-controls.js?v=20261003-complete8";
 
 const freeze = (value) => Object.freeze(value);
 
@@ -2575,8 +2575,11 @@ export function createBlockWorldLayer({
       ["WORLD", ["reality-lens", "person", "wardrobe-atelier", "rooms", "block-world", "runtime-sync", "migration", "social-explorer", "projections"]],
       ["VALUE", ["asset-token", "asset-market", "launch-distribution", "paycore", "contracts", "contract-atelier", "ledger", "t402"]],
       ["EVIDENCE", ["gateway", "world-events", "sports-events", "multi-sport-events", "picture-matter", "nft-atelier", "white-paper"]],
-      ["NETWORK + AGENTS + PLAY", ["agent", "neural-mesh", "muse-agent", "bot-plaza", "luna-companion", "arena", "academy", "gesture-lens", "web-ai", "social-mirror", "chess"]],
+      ["NETWORK + AGENTS + PLAY", ["agent", "neural-mesh", "muse-agent", "bot-plaza", "luna-companion", "arena", "academy", "gesture-lens", "web-ai", "social-mirror", "chess", "youtube"]],
     ];
+    // New registered features must remain reachable before a curated group is assigned.
+    const groupedIds = new Set(groups.flatMap(([, ids]) => ids));
+    groups.at(-1)[1].push(...featureInventory.filter(feature => !groupedIds.has(feature.id)).map(feature => feature.id));
     groups.forEach(([groupName, ids]) => {
       const members = featureInventory.filter((feature) => ids.includes(feature.id));
       if (!members.length) return;

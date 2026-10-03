@@ -30,7 +30,20 @@ export function clampSurface(x, y, width, height, viewportWidth, viewportHeight)
 
 export const PANEL_DEPTH_MIN = -800;
 export const PANEL_DEPTH_MAX = 500;
+export const PANEL_WIDTH_MIN = 260;
+export const PANEL_HEIGHT_MIN = 160;
 const PANEL_PERSPECTIVE = 1400;
+
+export function clampSurfaceSize(width, height, viewportWidth, viewportHeight) {
+  const maxWidth = Math.max(1, Number(viewportWidth) - 24 || PANEL_WIDTH_MIN);
+  const maxHeight = Math.max(1, Number(viewportHeight) - 54 || PANEL_HEIGHT_MIN);
+  const safe = (value, minimum, maximum) => Math.max(Math.min(minimum, maximum), Math.min(Number(value) || minimum, maximum));
+  return {width:safe(width,PANEL_WIDTH_MIN,maxWidth),height:safe(height,PANEL_HEIGHT_MIN,maxHeight)};
+}
+
+export function normalizePanelArrangement(value) {
+  return ['left','right','top','bottom','front','back'].includes(value) ? value : 'free';
+}
 
 /** Depth axis in px: positive = toward the viewer (closer), negative = away. */
 export function clampDepth(z) {
@@ -66,6 +79,7 @@ const EXTRA_PANEL_IDS = ['gesture-input-panel', 'media-preview', 'city-journey',
 function belongsToSceneController(el) {
   for (let parent = el; parent; parent = parent.parentElement ?? parent.parentNode) {
     if (parent.id === 'reality-assembly' || parent.id === 'person-studio') return true;
+    if(parent.getAttribute?.('data-object-tools')==='true')return true;
   }
   return false;
 }
@@ -125,11 +139,12 @@ export function isPanelVisible(el, view) {
 /* Per-panel persisted space (best-effort local storage).              */
 /* ------------------------------------------------------------------ */
 
-const STORE_KEY = 'matumbo.panelSpace.v1';
+const STORE_KEY = 'matumbo.panelSpace.v2';
+const LEGACY_STORE_KEY = 'matumbo.panelSpace.v1';
 
 function readStore(view) {
   try {
-    const raw = view && view.localStorage ? view.localStorage.getItem(STORE_KEY) : null;
+    const raw = view && view.localStorage ? view.localStorage.getItem(STORE_KEY) ?? view.localStorage.getItem(LEGACY_STORE_KEY) : null;
     if (!raw) return {};
     const data = JSON.parse(raw);
     return data && typeof data === 'object' ? data : {};
@@ -138,7 +153,11 @@ function readStore(view) {
 
 function writeStore(view, data) {
   try {
-    if (view && view.localStorage) view.localStorage.setItem(STORE_KEY, JSON.stringify(data));
+    if (view && view.localStorage) {
+      view.localStorage.setItem(STORE_KEY, JSON.stringify(data));
+      // Keep v1 readers compatible during migration; all values remain local presentation data.
+      view.localStorage.setItem(LEGACY_STORE_KEY, JSON.stringify(data));
+    }
   } catch { /* private mode etc: positions simply do not persist */ }
 }
 
@@ -156,6 +175,14 @@ const PANEL_SPACE_CSS = `
 .surface-grip-depth{flex:none;opacity:.55;font-size:10px;white-space:nowrap}
 .surface-grip-action{flex:none;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#8fd8f2;border:1px solid rgba(120,180,220,.35);border-radius:6px;padding:3px 8px;white-space:nowrap}
 .surface-grip-center{flex:none;color:inherit;background:#15283b;border:1px solid #68859e;border-radius:6px;padding:5px 9px;cursor:pointer;font-size:11px}
+.surface-arrange{max-width:96px;color:inherit;background:#15283b;border:1px solid #68859e;border-radius:6px;padding:5px}
+.surface-resize{display:none;position:absolute;width:24px;height:24px;padding:0;border:0;background:transparent;touch-action:none;z-index:2}
+[data-panel-space]:not([data-compact="true"])>.surface-resize{display:block}
+.surface-resize:focus-visible{outline:2px solid #8fd8f2;background:#15283b}
+.surface-resize[data-edge="n"]{top:0;left:calc(50% - 12px);cursor:n-resize}.surface-resize[data-edge="s"]{bottom:0;left:calc(50% - 12px);cursor:s-resize}
+.surface-resize[data-edge="w"]{left:0;top:calc(50% - 12px);cursor:w-resize}.surface-resize[data-edge="e"]{right:0;top:calc(50% - 12px);cursor:e-resize}
+.surface-resize[data-edge="nw"]{left:0;top:0;cursor:nw-resize}.surface-resize[data-edge="ne"]{right:0;top:0;cursor:ne-resize}
+.surface-resize[data-edge="sw"]{left:0;bottom:0;cursor:sw-resize}.surface-resize[data-edge="se"]{right:0;bottom:0;cursor:se-resize}
 [data-panel-space]{transform-origin:0 0;transition-property:opacity !important}
 [data-panel-space][data-compact="true"]{width:auto !important;max-width:min(340px,calc(100vw - 16px)) !important}
 [data-panel-space][data-compact="true"] > :not(.surface-grip){display:none !important}
@@ -188,17 +215,29 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
     const { x, y, z } = rec.state;
     rec.el.style.transform = composePanelTransform(x, y, z);
     rec.el.style.filter = z === 0 ? '' : `brightness(${depthBrightness(z).toFixed(3)})`;
+    if (rec.state.width && rec.state.height) {
+      rec.el.style.width = `${rec.state.width}px`;
+      rec.el.style.height = `${rec.state.height}px`;
+    }
+    if (rec.state.order) rec.el.style.zIndex = String(rec.state.order);
+  }
+
+  function saveContext(ctx) {
+    const data = {...ctx.store};
+    for (const rec of ctx.recs) {
+      if (rec.placed && !rec.spatialAttached) data[rec.id] = {...rec.state,
+        x:Math.round(rec.state.x),y:Math.round(rec.state.y),z:Math.round(rec.state.z),
+        compact:rec.el.getAttribute('data-compact') === 'true'};
+    }
+    ctx.store = data;
+    writeStore(view,data);
   }
 
   function persistSoon(ctx) {
     if (ctx.saveTimer) return;
     ctx.saveTimer = setTimeout(() => {
       ctx.saveTimer = 0;
-      const data = {};
-      for (const rec of ctx.recs) {
-        if (rec.placed) data[rec.id] = { x: Math.round(rec.state.x), y: Math.round(rec.state.y), z: Math.round(rec.state.z) };
-      }
-      writeStore(view, data);
+      saveContext(ctx);
     }, 250);
   }
 
@@ -255,9 +294,14 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
     st.right = 'auto'; st.bottom = 'auto'; st.margin = '0px';
     rec.placed = true;
     const p = clampSurface(Number.isFinite(sx) ? sx : r.left, Number.isFinite(sy) ? sy : r.top, r.width, r.height, v.w, v.h);
-    rec.state = { x: p.x, y: p.y, z: clampDepth(saved.z || 0) };
+    const size = rec.compactible ? clampSurfaceSize(saved.width || r.width,saved.height || r.height,v.w,v.h)
+      : rec.isHint ? {} : {width:Number(saved.width)||r.width,height:Number(saved.height)||r.height};
+    rec.state = { x: p.x, y: p.y, z: clampDepth(saved.z || 0),...size,
+      order:Number.isFinite(saved.order)?saved.order:0,arrangement:normalizePanelArrangement(saved.arrangement) };
+    ctx.frontOrder = Math.max(ctx.frontOrder,rec.state.order);
+    if(rec.arrangeEl)rec.arrangeEl.value=rec.state.arrangement;
     applyTransform(rec);
-    if (rec.compactible) setCompact(rec, true, null); // small by default; interaction materializes
+    if (rec.compactible) setCompact(rec, saved.compact !== false, null);
     el.classList.add('panel-space-appearing');
     setTimeout(() => el.classList.remove('panel-space-appearing'), 260);
     persistSoon(ctx);
@@ -387,7 +431,24 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
     center.className = 'surface-grip-center';
     center.textContent = 'Center panel';
     center.title = 'Return this panel to its designed position';
-    grip.append(toggle, center);
+    const arrange = documentRoot.createElement('select');arrange.className='surface-arrange';
+    arrange.setAttribute('aria-label',`Arrange ${title}`);
+    for (const value of ['free','left','right','top','bottom','front','back']) {
+      const option=documentRoot.createElement('option');option.value=value;option.textContent=value[0].toUpperCase()+value.slice(1);arrange.append(option);
+    }
+    arrange.addEventListener('change',()=>{
+      if(rec.spatialAttached||!rec.placed)return;
+      const value=normalizePanelArrangement(arrange.value),v=viewport(),r=rec.el.getBoundingClientRect();
+      rec.state.arrangement=value;
+      if(value==='front'||value==='back')rec.state.z=value==='front'?250:-400;
+      else if(value!=='free'){
+        const p=clampSurface(value==='left'?8:value==='right'?v.w-r.width-8:rec.state.x,
+          value==='top'?8:value==='bottom'?v.h-r.height-42:rec.state.y,r.width,r.height,v.w,v.h);
+        rec.state.x=p.x;rec.state.y=p.y;
+      }
+      applyTransform(rec);persistSoon(ctx);
+    });
+    grip.append(toggle, arrange, center);
     const summary = el.tagName === 'DETAILS' ? el.querySelector('summary') : null;
     if (summary && summary.parentNode === el) summary.after(grip);
     else if (typeof el.prepend === 'function') el.prepend(grip);
@@ -397,6 +458,36 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
     rec.grip = grip;
     rec.toggleBtn = toggle;
     rec.actionEl = action;
+    rec.arrangeEl = arrange;
+    rec.resizeHandles = [];
+    for(const edge of ['n','s','e','w','ne','nw','se','sw']){
+      const handle=documentRoot.createElement('button');handle.type='button';handle.className='surface-resize';
+      handle.setAttribute('data-edge',edge);handle.setAttribute('aria-label',`Resize ${title} ${edge}`);
+      let start=null;
+      const resize=(dx,dy)=>{
+        if(rec.spatialAttached||!rec.placed||!start)return;
+        const v=viewport(),scale=depthScale(start.z);
+        const size=clampSurfaceSize(start.width+(edge.includes('e')?dx/scale:edge.includes('w')?-dx/scale:0),
+          start.height+(edge.includes('s')?dy/scale:edge.includes('n')?-dy/scale:0),v.w/scale,v.h/scale);
+        const x=start.x+(edge.includes('w')?(start.width-size.width)*scale:0);
+        const y=start.y+(edge.includes('n')?(start.height-size.height)*scale:0);
+        const p=clampSurface(x,y,size.width*scale,size.height*scale,v.w,v.h);
+        Object.assign(rec.state,size,p,{arrangement:'free'});applyTransform(rec);persistSoon(ctx);
+      };
+      handle.addEventListener('pointerdown',event=>{
+        if(rec.spatialAttached||!rec.placed||event.button>0)return;
+        event.preventDefault();start={...rec.state,clientX:event.clientX,clientY:event.clientY,pointerId:event.pointerId};
+        try{handle.setPointerCapture(event.pointerId);}catch{}
+      });
+      handle.addEventListener('pointermove',event=>{if(start&&event.pointerId===start.pointerId)resize(event.clientX-start.clientX,event.clientY-start.clientY);});
+      const end=()=>{start=null;};handle.addEventListener('pointerup',end);handle.addEventListener('pointercancel',end);
+      handle.addEventListener('keydown',event=>{
+        if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key))return;
+        event.preventDefault();start={...rec.state};const step=event.shiftKey?48:16;
+        resize(event.key==='ArrowLeft'?-step:event.key==='ArrowRight'?step:0,event.key==='ArrowUp'?-step:event.key==='ArrowDown'?step:0);start=null;
+      });
+      el.append(handle);rec.resizeHandles.push(handle);
+    }
   }
 
   function setupPanel(desc, ctx) {
@@ -429,6 +520,13 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
     }
     ctx.recs.push(rec);
     ctx.byEl.set(el, rec);
+    ctx.frontOrder=Math.max(ctx.frontOrder,Number.parseInt(el.style?.zIndex,10)||0);
+    rec.bringToFront=()=>{
+      if(rec.spatialAttached||!rec.placed)return;
+      rec.state.order=++ctx.frontOrder;applyTransform(rec);persistSoon(ctx);
+    };
+    el.addEventListener('pointerdown',rec.bringToFront);
+    el.addEventListener('focusin',rec.bringToFront);
     if (rec.wasVisible && !rec.spatialAttached) requestPlace(rec, ctx);
     return rec;
   }
@@ -440,7 +538,7 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
     (documentRoot.head || documentRoot).appendChild(styleEl);
 
     const ctx = {
-      recs: [], byEl: new Map(), store: readStore(view), saveTimer: 0, styleEl,
+      recs: [], byEl: new Map(), store: readStore(view), saveTimer: 0, styleEl,frontOrder:200,
     };
     for (const desc of collectPanelDescriptors(documentRoot)) {
       try { setupPanel(desc, ctx); } catch { /* one bad panel never breaks the field */ }
@@ -449,6 +547,11 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
     const onMutations = (mutations) => {
       let reconcileAll = false;
       for (const m of mutations || []) {
+        if(m.type==='childList'){
+          for(const desc of collectPanelDescriptors(documentRoot))if(!ctx.byEl.has(desc.el)){
+            try{setupPanel(desc,ctx);}catch{}
+          }
+        }
         const t = m.target;
         if (!t) continue;
         if (t === documentRoot.body || t === documentRoot.documentElement) { reconcileAll = true; continue; }
@@ -496,7 +599,9 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
     const onRealityLensAttachment = (event) => {
       const rec = ctx.recs.find((candidate) => candidate.id === String(event?.detail?.panelId ?? ''));
       if (!rec) return;
+      if(event?.detail?.attached===true&&!rec.spatialAttached)saveContext(ctx);
       rec.spatialAttached = event?.detail?.attached === true;
+      for(const control of [rec.grip,...(rec.resizeHandles??[])])if(control)control.hidden=rec.spatialAttached;
       if (rec.spatialAttached) {
         rec.el.removeAttribute('data-panel-space');
         rec.el.removeAttribute('data-compact');
@@ -515,7 +620,7 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
     if (MO && documentRoot.documentElement) {
       observer = new MO(onMutations);
       observer.observe(documentRoot.documentElement, {
-        subtree: true, attributes: true, attributeFilter: ['hidden', 'open', 'class', 'style'],
+        subtree: true, childList:true, attributes: true, attributeFilter: ['hidden', 'open', 'class', 'style'],
       });
     }
 
@@ -534,14 +639,18 @@ export function mountCenteredSurfaces(documentRoot = document, view = window) {
 
     return function teardown() {
       if (observer) observer.disconnect();
+      saveContext(ctx);
       documentRoot.removeEventListener?.('matumbo:reality-lens-materialize', onMaterializeRealityLensPanel);
       documentRoot.removeEventListener?.('matumbo:reality-lens-surface-attachment', onRealityLensAttachment);
       if (typeof view.removeEventListener === 'function') view.removeEventListener('resize', onResize);
       if (ctx.saveTimer) { clearTimeout(ctx.saveTimer); ctx.saveTimer = 0; }
       for (const rec of ctx.recs) {
+        rec.el.removeEventListener?.('pointerdown',rec.bringToFront);
+        rec.el.removeEventListener?.('focusin',rec.bringToFront);
+        rec.grip?.remove?.();
+        for(const handle of rec.resizeHandles??[])handle.remove?.();
         if (rec.spatialAttached) continue;
         try {
-          if (rec.grip && rec.grip.remove) rec.grip.remove();
           rec.el.removeAttribute('data-panel-space');
           rec.el.removeAttribute('data-compact');
           rec.el.classList.remove('panel-space-appearing');

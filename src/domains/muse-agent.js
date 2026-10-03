@@ -17,7 +17,7 @@
  *   hologram tint); image designs are copy-ready briefs.
  */
 
-import { STUDIO_OUTFITS, STUDIO_ROOMS, STUDIO_COMPANIONS } from "./person-studio.js?v=20260922-cache2";
+import { STUDIO_OUTFITS, STUDIO_ROOMS, STUDIO_COMPANIONS } from "./person-studio.js?v=20261003-complete8";
 
 export const MUSE_AGENT_SCHEMA_VERSION = 1;
 export const MUSE_AGENT_SOURCE = "muse-agent";

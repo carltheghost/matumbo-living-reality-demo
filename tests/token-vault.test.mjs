@@ -6,6 +6,9 @@
 // the vault integrity invariant, input validation, and receipt-chain proof.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createTokenEngine } from '../src/domains/token.js';
+import { createTokenFacade } from '../src/domains/token-facade.js';
+import { attachTokenTransfers } from '../src/domains/token-transfers.js';
 import {
   createTokenVaultLedger,
   attachTokenVault,
@@ -24,7 +27,7 @@ import {
   PositionNotFoundError,
   PositionStateError,
   LockNotMaturedError,
-} from '../src/domains/token.js';
+} from '../src/domains/token-vault.js';
 
 let keyN = 0;
 const key = () => `test-key-${++keyN}`;
@@ -49,8 +52,8 @@ test('boots with conservation, an empty vault, and a funded rewards reserve', ()
   assert.equal(v.assertVaultIntegrity(), true);
   assert.equal(v.assertConservation(), true);
   const totals = v.conservationTotals();
-  assert.equal(totals.TUMBO, TOKEN_VAULT_SUPPLY_FLUFF);
-  assert.equal(totals.sMIMAS, TOKEN_VAULT_SUPPLY_FLUFF);
+  assert.equal(totals.TUMBO, TOKEN_VAULT_SUPPLY_FLUFF.TUMBO);
+  assert.equal(totals.sMIMAS, TOKEN_VAULT_SUPPLY_FLUFF.sMIMAS);
   assert.ok(v.rewardsReserveOf('TUMBO') > 0);
   assert.ok(v.rewardsReserveOf('sMIMAS') > 0);
   assert.equal(v.balance('u:alice', 'TUMBO'), 5_000_000);
@@ -274,7 +277,7 @@ test('receipt hash chain verifies end to end', () => {
   const rs = v.receipts();
   assert.ok(rs.length >= 4);
   for (let i = 1; i < rs.length; i++) assert.equal(rs[i].proof.prevHash, rs[i - 1].proof.hash);
-  assert.equal(rs[0].proof.prevHash, 'GENESIS');
+  assert.equal(rs[0].proof.prevHash, 'genesis');
 });
 
 test('facade adapter exposes the shared TumboToken contract without clobbering', () => {
@@ -292,14 +295,47 @@ test('facade adapter exposes the shared TumboToken contract without clobbering',
   facade.tokenVault.stake({ from: 'u:alice', asset: 'TUMBO', amountFluff: 500, idempotencyKey: key() });
   assert.deepEqual(seen, ['stake']);
   off();
-  // does not clobber pre-installed fields
-  const keep = { ledger: { tag: 'other' }, balance: () => 42, fmt: () => 'x', on: () => 7 };
+  // Preserve a real existing owner and its methods, not a rival balance facade.
+  const keep = Object.freeze({ ...createTokenFacade(facade.engine), custom: 2 });
   const f2 = attachTokenVault(keep, {});
-  assert.equal(f2.ledger.tag, 'other');
-  assert.equal(f2.balance(), 42);
-  assert.equal(f2.fmt(), 'x');
-  assert.equal(f2.on(), 7);
-  assert.ok(f2.tokenVault);
+  assert.equal(f2.ledger, keep.ledger);
+  assert.equal(f2.balance, keep.balance);
+  assert.equal(f2.fmt, keep.fmt);
+  assert.equal(f2.on, keep.on);
+  assert.equal(f2.engine, facade.engine);
+  assert.equal(f2.tokenVault, keep.tokenVault);
+  assert.equal(f2.custom, 2);
+  keep.dispose();
+});
+
+test('bare vault attachment exposes its exact owner for shared transfer and vault operations', () => {
+  const facade = attachTokenVault(null, { initialGrants: [grant('u:alice', 'TUMBO', 1000)] });
+  assert.equal(facade.engine, facade.tokenVault.engine);
+  assert.equal(facade.ledger, facade.engine.ledger);
+  assert.equal(Object.isFrozen(facade), true);
+  const transfers = attachTokenTransfers(facade);
+  transfers.send({ from: 'u:alice', to: 'u:bob', asset: 'TUMBO', amountFluff: 100, idempotencyKey: 'bare:send' });
+  facade.tokenVault.stake({ from: 'u:alice', amountFluff: 200, idempotencyKey: 'bare:stake' });
+  assert.equal(transfers.engine, facade.engine);
+  assert.equal(transfers.tokenTransfers.ledger, facade.engine.ledger);
+  assert.equal(transfers.balance('u:alice', 'TUMBO'), 700);
+  assert.equal(facade.balance('u:bob', 'TUMBO'), 100);
+  assert.equal(facade.engine.balance('sys:vault', 'TUMBO'), 200);
+  assert.equal(facade.tokenVault.assertConservation(), true);
+  assert.equal(facade.engine.ledger.verifyChain().ok, true);
+  assert.throws(() => { facade.engine = createTokenEngine(); }, TypeError);
+});
+
+test('vault attachment rejects conflicting or unidentified financial owners before mutation', () => {
+  const first = createTokenEngine(), second = createTokenEngine(), base = createTokenFacade(first);
+  const otherVault = createTokenVaultLedger({ engine: second });
+  const counts = [first.ledger.journalCount(), second.ledger.journalCount()];
+  assert.throws(() => attachTokenVault(base, { engine: second }), /must match/);
+  assert.throws(() => attachTokenVault({ ...base, tokenVault: otherVault }), /must match/);
+  assert.throws(() => attachTokenVault({ ledger: {}, balance: () => 42 }), /identify.*canonical QuoteEngine/);
+  assert.deepEqual([first.ledger.journalCount(), second.ledger.journalCount()], counts);
+  assert.equal(base.engine, first);
+  base.dispose();
 });
 
 test('formatting and parsing round-trip exactly', () => {

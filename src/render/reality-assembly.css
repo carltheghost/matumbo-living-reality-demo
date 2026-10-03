@@ -425,11 +425,58 @@ body.assembly-mode #reality-assembly .assembly-inspector[data-object-tools=true]
 #reality-assembly .assembly-object-tools{border-top:1px solid #639bbb44;margin-top:18px;padding-top:10px}
 #reality-assembly .assembly-object-tools>summary{cursor:pointer;min-height:44px;font-size:16px;color:#b7d7ea;list-style-position:inside}
 #reality-assembly .assembly-object-tools .assembly-tab-controls{background:transparent;border:0;padding:0}
+/* Keep interactive content inside the real wave contour. Its deepest crests
+   cut away 13% of the top and bottom; pixel padding clipped close buttons and
+   the last rows. The owning body retains its full silhouette and scrolls. */
+body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true][data-object-shape=wave]{
+  --surface-safe-edge:max(24px,calc(var(--lens-surface-height)*.145));
+  padding:var(--surface-safe-edge) var(--surface-inset,16px)!important;
+  scroll-padding-block:var(--surface-safe-edge);
+}
+/* A native Web + AI face owns one scroll flow. The older fixed console's
+   flexible inner viewport could shrink below its content under the shared
+   surface rules, letting boundary text cover its address and presets. */
+body.assembly-mode #reality-assembly #web-ai-console.reality-lens-feature-panel[data-lens-surface-attached=true] .web-ai-body{
+  flex:0 0 auto!important;overflow:visible;min-height:auto;
+}
+body.assembly-mode #reality-assembly #web-ai-console.reality-lens-feature-panel[data-lens-surface-attached=true] .web-ai-head-actions{
+  display:flex!important;flex:0 0 auto!important;flex-wrap:wrap!important;gap:8px;
+}
+body.assembly-mode #reality-assembly #web-ai-console.reality-lens-feature-panel[data-lens-surface-attached=true] .web-ai-head-actions>button{
+  position:static!important;inset:auto!important;transform:none!important;flex:0 0 48px!important;
+}
+/* Collapsing a desktop grid also removes its explicit child placements.
+   Keeping grid-column:2 created an implicit second column and squeezed a
+   contract form's labels to one character beside its toolbar. */
+body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true][data-compact=true] [data-surface-flow=grid]{
+  grid-template-columns:minmax(0,1fr)!important;grid-auto-flow:row!important;
+}
+body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true][data-compact=true] [data-surface-flow=grid]>*{
+  grid-column:auto!important;grid-row:auto!important;min-width:0!important;max-width:100%;
+}
+body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true] select{
+  white-space:nowrap!important;text-overflow:ellipsis;
+}
+/* CSS3D writes the body's current transform on every frame. A legacy panel
+   entrance transition continually chased that transform and left its skin
+   visibly larger than the body while the camera travelled. */
+body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surface-attached=true],
+#reality-assembly .assembly-wrap-fallback{
+  transition:none!important;animation:none!important;
+}
 #reality-assembly .assembly-wrap-fallback{background:transparent!important;border:0!important;box-shadow:none!important;backdrop-filter:none!important}
 #reality-assembly :is(.assembly-node-label,.assembly-group-label)[data-native-target=true]{min-width:0!important;max-width:none!important;min-height:0!important;padding:0!important;background:transparent!important;border:0!important;color:transparent!important;box-shadow:none!important;text-shadow:none!important}
 #reality-assembly :is(.assembly-node-label,.assembly-group-label)[data-native-target=true]:focus-visible{outline:none!important;background:rgba(91,182,239,.07)!important;box-shadow:inset 0 0 0 3px #84d8f4!important}
 #reality-assembly.assembly-directory-open .assembly-css3d-host{visibility:hidden}
 #reality-assembly .assembly-header [data-view-tools][aria-expanded=true]{border-color:#84bed3;background:#163548}
+/* Applied design preferences are available on reload before the editor opens.
+   Native bodies retain their readable dark surface on light world palettes. */
+body.ourplace-designed .assembly-header{border-color:var(--ourplace-accent)}
+body.ourplace-designed #reality-assembly .assembly-primary{border-color:var(--ourplace-accent)}
+#reality-assembly[data-creator-navigation=minimal] .assembly-header nav{display:none}
+#reality-assembly[data-creator-navigation=search] .assembly-selection-hint{display:none}
+#reality-assembly[data-creator-density=spacious] .assembly-catalog{gap:10px}
+#reality-assembly[data-creator-density=compact] .assembly-catalog{gap:2px}
 @media(min-width:701px){
   #reality-assembly.assembly-directory-open .assembly-directory{left:18px;top:94px;bottom:90px;width:360px;max-width:calc(100vw - 36px);padding:18px;border:1px solid var(--line);border-radius:14px;background:#071522f5;overflow:auto;gap:8px}
   #reality-assembly .assembly-catalog{flex:1;min-height:70px;align-content:start}

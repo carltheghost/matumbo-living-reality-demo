@@ -44,8 +44,8 @@ import {
   ensureTumboTokenFacade,
   REVERSE_WINDOW_TICKS,
   ASSETS,
-} from "../domains/token.js?v=20260922-cache2";
-import { runTokenLifecycleSelfTest } from "./token-lifecycle-selftest.js?v=20260922-cache2";
+} from "../domains/token.js?v=20261003-complete8";
+import { runTokenLifecycleSelfTest } from "./token-lifecycle-selftest.js?v=20261003-complete8";
 
 const POS_KEY = "tumbo:token-lifecycle:cube-positions";
 const MAX_CUBES = 30;

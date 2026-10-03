@@ -138,7 +138,7 @@ test("the World Gateway route opens the public status console, not the legacy fi
   assert.match(main, /feature\.id === 'gateway'[\s\S]{0,1200}featureNavigator !== null/);
   assert.doesNotMatch(main, /feature\.id === 'gateway'[\s\S]{0,1200}worldEventsConsole\?\.open\(\)/);
   assert.doesNotMatch(main, /feature\.id === 'gateway'[\s\S]{0,1200}worldEventsConsole\?\.refresh/);
-  assert.match(main, /get\('feature'\) === 'gateway'[\s\S]{0,300}openLivePublicStatus\('url', true\)/);
+  assert.match(main, /get\('feature'\) === 'gateway'[\s\S]{0,300}openLivePublicStatus\('url', false\)/);
 });
 
 test("Tennis Evidence is mounted as a real public read over the cube-only field", async () => {

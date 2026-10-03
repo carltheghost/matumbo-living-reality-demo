@@ -1,4 +1,4 @@
-import {livingSurfaceLayoutEngine} from './living-surface-layout-engine.js?v=20261003-calm7';
+import {livingSurfaceLayoutEngine} from './living-surface-layout-engine.js?v=20261003-complete8';
 
 const STAGE_NAMES=Object.freeze(['Signum','Identitas','Fontes','Interior']);
 const LATIN_LABELS=Object.freeze({

@@ -22,8 +22,8 @@
  * only when needed, simulated TUMBO points only, projection only.
  */
 
-import { createPhotoMascotPresence } from "./photo-mascot-presence.js?v=20260922-cache2";
-import { preloadPhotos } from "./photo-mascot-set.js?v=20260922-cache2";
+import { createPhotoMascotPresence } from "./photo-mascot-presence.js?v=20261003-complete8";
+import { preloadPhotos } from "./photo-mascot-set.js?v=20261003-complete8";
 
 const TAG = "[photo-mascot-mount]";
 const BUTTON_LABEL = "MASCOT";
@@ -132,10 +132,12 @@ async function mountInner({ scene, camera, hudRoot, onOpenPanel, canvas, tick })
 
   // ---- HUD toggle button ----
   let button = null;
+  let buttonOpen = null;
   const canUseHud = !!doc && !!hudRoot && typeof hudRoot.appendChild === "function";
 
   function syncButton(open) {
-    if (!button) return;
+    if (!button || buttonOpen === !!open) return;
+    buttonOpen = !!open;
     try {
       button.setAttribute("aria-pressed", open ? "true" : "false");
       if (button.classList && typeof button.classList.toggle === "function") {
@@ -148,9 +150,10 @@ async function mountInner({ scene, camera, hudRoot, onOpenPanel, canvas, tick })
 
   let openedOnce = false;
   let toggling = false;
+  let unmounted = false;
 
   async function handleToggle() {
-    if (toggling) return;
+    if (toggling || unmounted) return;
     toggling = true;
     try {
       const isOpen = typeof presence.isOpen === "function" ? !!presence.isOpen() : false;
@@ -169,14 +172,16 @@ async function mountInner({ scene, camera, hudRoot, onOpenPanel, canvas, tick })
       }
       if (!openedOnce) {
         openedOnce = true;
-        await ensurePhotos(); // lazy: preloads on first open only
+        // Materialize the selected mascot immediately. A stalled optional
+        // preload must never hold the open button indefinitely.
+        void ensurePhotos(); // lazy: starts on first open only
       }
       if (typeof presence.open === "function") {
         await presence.open();
       } else if (typeof presence.toggle === "function") {
         await presence.toggle();
       }
-      syncButton(true);
+      if (!unmounted) syncButton(typeof presence.isOpen === "function" ? presence.isOpen() : true);
     } catch (err) {
       warn(`toggle failed (${describeError(err)}).`);
     } finally {
@@ -214,7 +219,6 @@ async function mountInner({ scene, camera, hudRoot, onOpenPanel, canvas, tick })
     try {
       const look = event && event.detail && event.detail.look;
       if (typeof look !== "string" || !look) return;
-      if (typeof presence.isOpen !== "function" || !presence.isOpen()) return;
       if (typeof presence.setLook !== "function") return;
       Promise.resolve(presence.setLook(look)).catch((err) => {
         warn(`setLook failed (${describeError(err)}).`);
@@ -270,6 +274,9 @@ async function mountInner({ scene, camera, hudRoot, onOpenPanel, canvas, tick })
   function step(t, dt) {
     try {
       presence.update(t, dt);
+      // Escape and the in-scene close control can close the presence without
+      // the HUD toggle. Keep its pressed state truthful on the next frame.
+      if (typeof presence.isOpen === "function") syncButton(presence.isOpen());
     } catch (err) {
       warn(`presence.update threw (${describeError(err)}).`);
     }
@@ -306,7 +313,6 @@ async function mountInner({ scene, camera, hudRoot, onOpenPanel, canvas, tick })
   }
 
   // ---- Teardown ----
-  let unmounted = false;
   function unmount() {
     if (unmounted) return;
     unmounted = true;

@@ -1,3 +1,5 @@
+HISTORICAL BASELINE RECORD: superseded by the passing complete suite in review.md. Retained as earlier audit evidence.
+
 Remaining failures on the same Windows host; all names match the starting PR baseline.
 
 question builders carry complete meaning for a live model

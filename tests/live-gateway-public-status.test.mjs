@@ -442,7 +442,11 @@ test("opt-in auto-refresh runs one immediate seven-source tick and cancels on st
   assert.deepEqual(calls.map(({ surfaceId }) => surfaceId), LIVE_GATEWAY_PUBLIC_SURFACES.map((surface) => surface.id));
   assert.equal(calls.every(({ active }) => active === true), true);
   assert.equal(afterTick.publicRefreshAutoIntervalMs, LIVE_GATEWAY_PUBLIC_AUTO_REFRESH_INTERVAL_MS);
-  assert.ok(Math.abs((afterTick.publicRefreshAutoNextAt - afterTick.publicRefreshAutoLastTickAt) - LIVE_GATEWAY_PUBLIC_AUTO_REFRESH_INTERVAL_MS) <= 100, "next tick stays within the fixed 30-second cadence");
+  // The timer is scheduled after the completed batch. Provider latency and
+  // a busy test host must not be mistaken for an earlier/faster polling tick.
+  const observedAt = Date.now();
+  assert.ok(afterTick.publicRefreshAutoNextAt >= afterTick.publicRefreshAutoLastTickAt + LIVE_GATEWAY_PUBLIC_AUTO_REFRESH_INTERVAL_MS, "next batch cannot poll faster than the 30-second interval");
+  assert.ok(afterTick.publicRefreshAutoNextAt <= observedAt + LIVE_GATEWAY_PUBLIC_AUTO_REFRESH_INTERVAL_MS, "completed batch schedules a new 30-second timer");
   assert.match(afterTick.publicRefreshMessage, /AUTO-REFRESH ON/);
   assert.match(afterTick.publicRefreshMessage, /FIXED CADENCE 30S/);
   assert.equal(documentRoot.getElementById("live-gateway-public-actions").children[1].textContent, "Stop auto-refresh · 30s");
@@ -537,7 +541,7 @@ test("public status bridge is static-mounted, host-wired, and renderer-only", as
   assert.match(main, /syncPublicSourceStatus\?\.\('picture-matter'/);
   assert.match(main, /onPublicRefresh:/);
   assert.match(main, /includeLegacyFixture:\s*false/);
-  assert.match(main, /20260901-provider-docs/);
+  assert.match(main, /from ['"]\.\/render\/live-gateway\.js\?v=[^'"]+['"]/);
   assert.doesNotMatch(source, /\bfetch\s*\(/i);
   assert.doesNotMatch(source, /new\s+WebSocket/i);
   assert.doesNotMatch(source, /localStorage|sessionStorage|indexedDB/i);

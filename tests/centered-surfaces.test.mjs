@@ -70,8 +70,9 @@ test('panel discovery leaves scene-owned drawers and nested object surfaces to t
   const studio = {id:'person-studio'};
   const studioInspector = {id:'studio-inspector',tagName:'ASIDE',parentNode:studio};
   const ordinary = {id:'arena-games-console',tagName:'ASIDE'};
+  const movingTools = {id:'',tagName:'ASIDE',getAttribute:name=>name==='data-object-tools'?'true':null};
   const doc = {
-    querySelectorAll:()=>[directory,inspector,attached,studioInspector,ordinary],
+    querySelectorAll:()=>[directory,inspector,attached,studioInspector,movingTools,ordinary],
     getElementById:id=>id==='hint'?{id:'hint',parentNode:assembly}:null,
   };
   assert.deepEqual(collectPanelDescriptors(doc).map(panel=>panel.id),['arena-games-console']);
@@ -416,4 +417,28 @@ test('expanded panels are capped at 80vw/80vh so the world stays visible', () =>
   assert.ok(styleEl, 'panel space style injected');
   assert.match(styleEl.textContent, /max-width:min\(80vw/, 'expanded width capped at 80vw');
   assert.match(styleEl.textContent, /max-height:80vh/, 'expanded height capped at 80vh');
+});
+
+test('keyboard resizing persists independent dimensions and survives immediate teardown',()=>{
+  const h=makeHarness();const destroy=mountCenteredSurfaces(h.doc,h.view);h.flushRaf();
+  h.toggleOf(h.aside1).dispatch('click');
+  const handles=h.aside1.children.filter(el=>el.className==='surface-resize');
+  assert.equal(handles.length,8);
+  const east=handles.find(el=>el.getAttribute('data-edge')==='e');
+  east.dispatch('keydown',{key:'ArrowRight',shiftKey:false});
+  assert.equal(h.aside1.style.width,'436px');
+  assert.equal(h.aside1.style.height,'500px');
+  destroy();
+  const saved=JSON.parse(h.storage.get('matumbo.panelSpace.v2'))['arena-games-console'];
+  assert.equal(saved.width,436);assert.equal(saved.height,500);assert.equal(saved.compact,false);
+  assert.equal(h.aside1.children.some(el=>el.className==='surface-resize'),false);
+});
+
+test('viewport teardown removes managed controls without changing an attached object skin',()=>{
+  const h=makeHarness();const destroy=mountCenteredSurfaces(h.doc,h.view);h.flushRaf();
+  h.aside1.style.transform='native-object-transform';
+  h.dispatchDoc('matumbo:reality-lens-surface-attachment',{detail:{panelId:h.aside1.id,attached:true}});
+  destroy();
+  assert.equal(h.aside1.style.transform,'native-object-transform');
+  assert.equal(h.aside1.children.some(el=>el.className==='surface-resize'||el.className==='surface-grip'),false);
 });

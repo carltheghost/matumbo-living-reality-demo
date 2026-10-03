@@ -39,9 +39,9 @@
  */
 
 import * as THREE from "three";
-import { buildPhotoMascot } from "./photo-mascot.js?v=20260922-cache2";
-import { createMascotMotion, MASCOT_STATES } from "../domains/mascot-motion.js?v=20260922-cache2";
-import { getMascotLook, getPhoto, setMascotLook, preloadPhotos } from "./photo-mascot-set.js?v=20260922-cache2";
+import { buildPhotoMascot } from "./photo-mascot.js?v=20261003-complete8";
+import { createMascotMotion, MASCOT_STATES } from "../domains/mascot-motion.js?v=20261003-complete8";
+import { getMascotLook, getPhoto, setMascotLook, preloadPhotos } from "./photo-mascot-set.js?v=20261003-complete8";
 
 const STORAGE_KEY = "tumbo-mascot-presence-pos";
 const MOBILE_QUERY = "(max-width: 700px)";
@@ -153,8 +153,8 @@ export function createPhotoMascotPresence(options) {
     cs.position = "fixed";
     cs.zIndex = "40";
     cs.display = "none";
-    cs.width = "28px";
-    cs.height = "28px";
+    cs.width = "44px";
+    cs.height = "44px";
     cs.borderRadius = "9999px";
     cs.border = "1px solid rgba(255,255,255,0.25)";
     cs.background = "rgba(10,10,14,0.72)";
@@ -415,7 +415,7 @@ export function createPhotoMascotPresence(options) {
       // Non-fatal.
     }
     try {
-      const photo = getPhoto(look);
+      const photo = getPhoto(getMascotLook());
       if (photo && mascot && typeof mascot.setLook === "function") {
         mascot.setLook(photo.src); // look id -> photo texture URL
       }

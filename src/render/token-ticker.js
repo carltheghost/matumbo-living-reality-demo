@@ -58,7 +58,8 @@ export function reversalWindowInfo(receiptTick, currentTick, windowTicks = FALLB
   const elapsed = ct - rt;
   if (elapsed < 0) return { eligible: false, ticksLeft: 0 };
   const ticksLeft = wt - elapsed;
-  return { eligible: ticksLeft > 0, ticksLeft: Math.max(0, Math.floor(ticksLeft)) };
+  // The canonical engine permits reversal at exactly windowTicks old.
+  return { eligible: ticksLeft >= 0, ticksLeft: Math.max(0, Math.floor(ticksLeft)) };
 }
 
 /** Shorten a chain hash for display (first 10 hex chars). Pure. */
@@ -131,7 +132,7 @@ export async function resolveTokenFacade() {
     if (typeof window !== 'undefined' && window.TumboToken) return window.TumboToken;
   } catch { /* ignore */ }
   try {
-    const mod = await import('../domains/token.js?v=20260922-cache2');
+    const mod = await import('../domains/token.js?v=20261003-complete8');
     if (mod && typeof mod.ensureTumboTokenFacade === 'function') {
       return mod.ensureTumboTokenFacade({ seed: true });
     }
@@ -309,7 +310,7 @@ export function mountTokenTicker({ documentRoot = (typeof document !== 'undefine
   try {
     const link = documentRoot.createElement('link');
     link.rel = 'stylesheet';
-    link.href = new URL('./token-ticker.css', import.meta.url).href;
+    link.href = new URL('./token-ticker.css?v=20261003-complete8', import.meta.url).href;
     documentRoot.head.append(link);
   } catch { /* CSS is cosmetic; never break the panel */ }
 
@@ -369,7 +370,7 @@ export function mountTokenTicker({ documentRoot = (typeof document !== 'undefine
       }
       facade = found;
       try {
-        const mod = await import('../domains/token.js?v=20260922-cache2');
+        const mod = await import('../domains/token.js?v=20261003-complete8');
         if (mod && Number.isFinite(Number(mod.REVERSE_WINDOW_TICKS))) {
           windowTicks = Number(mod.REVERSE_WINDOW_TICKS);
         }

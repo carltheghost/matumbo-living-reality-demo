@@ -149,6 +149,22 @@ test("feature inventory renders one non-empty actionable block per enabled featu
   assert.equal(layer.getSnapshot().draft.blocks.length, createBlockWorldContribution().blocks.length);
 });
 
+test("new registered features remain reachable without a hardcoded cluster update", () => {
+  const documentRoot = makeDocument();
+  const navigated = [];
+  const layer = createBlockWorldLayer({documentRoot, projection:createBlockWorldContribution(),
+    onFeatureNavigate:(id)=>navigated.push(id)});
+  const future = {id:'future-reader',label:'Future reader',description:'A newly registered local reader.'};
+  layer.setFeatureInventory([...FEATURE_DEFINITIONS,future]);
+  const rail = documentRoot.getElementById('block-world-console').children.find(child=>child.id==='block-world-feature-rail');
+  const buttons = rail.children.slice(1).flatMap(cluster=>cluster.children[1].children);
+  assert.equal(buttons.length,FEATURE_DEFINITIONS.length+1);
+  const target = buttons.find(button=>button.dataset.featureId===future.id);
+  assert.ok(target,'a valid new feature should have a visible directory control');
+  target.listeners.get('click')();
+  assert.deepEqual(navigated,[future.id]);
+});
+
 test("directory keeps selected and hovered cubes reachable beyond the capped rows", () => {
   const base = createBlockWorldContribution();
   const documentRoot = makeDocument();

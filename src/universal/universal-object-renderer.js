@@ -1,10 +1,10 @@
 import * as THREE from "../../vendor/three-r179.1/build/three.module.js";
-import { TopologySurfaceObject } from "../render/topology-surface-object.js";
+import { TopologySurfaceObject } from "../render/topology-surface-object.js?v=20261003-complete8";
 import {
   entitySemanticContent,
   geometryFamilyForKind,
   normalizeUniversalEntity,
-} from "./universal-entity.js";
+} from "./universal-entity.js?v=20261003-complete8";
 
 const FAMILY_SHAPE = Object.freeze({
   "contract-shell": "capsule",

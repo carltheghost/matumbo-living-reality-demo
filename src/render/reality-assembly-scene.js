@@ -1,7 +1,7 @@
-import {REALITY_TAB_FORMS} from '../domains/reality-tab-layout.js?v=20260923-spatial-tabs16';
-import {REALITY_LENS_GROUPS,realityLensEngine,resolveRealityLensGroup} from '../domains/reality-lens-engine.js?v=20260923-lens-engine9';
-import {realityObjectSurfaceEngine} from '../domains/reality-object-engine.js?v=20261003-calm7';
-import {lensSpaceLabel} from './reality-lens-chrome.js';
+import {REALITY_TAB_FORMS} from '../domains/reality-tab-layout.js?v=20261003-complete8';
+import {REALITY_LENS_GROUPS,realityLensEngine,resolveRealityLensGroup} from '../domains/reality-lens-engine.js?v=20261003-complete8';
+import {realityObjectSurfaceEngine} from '../domains/reality-object-engine.js?v=20261003-complete8';
+import {lensSpaceLabel} from './reality-lens-chrome.js?v=20261003-complete8';
 
 /** Native volumetric fronts for feature objects and their space entries.
  * Layout and materials remain projections over the existing identities. */
@@ -640,7 +640,7 @@ function applyTabDepthMode(node){
   const connectionMaterial=new THREE.LineBasicMaterial({color:'#36a6d3',transparent:true,opacity:.34});materials.add(connectionMaterial);
   const connections=new THREE.LineSegments(connectionGeometry,connectionMaterial);connections.frustumCulled=false;layer.add(connections);
   let selected=null,hovered=null,mode='3d',viewState=null,focusId=null,activeFocusStrength=0,activeFocusDistance=Infinity,activeFocusIsolated=false,activeGroupId='*';
-  let calmMode=false,spaceViewport={width:1280,height:800};
+  let calmMode=false,spaceViewport={width:1280,height:800},creatorAppearance=null;
   const compactPositions=new Map(),spaceBounds=new Map(),spacePages=new Map();
   const previewScale=2.2;
   function getSpacePage(groupId=activeGroupId){
@@ -666,7 +666,8 @@ function applyTabDepthMode(node){
     });
   }
   function refreshSpaceLayout(){
-    const columns=spaceViewport.width<700?2:3;
+    const columns=creatorAppearance?.layout==='focus'?1:creatorAppearance?.layout==='flow'?1:spaceViewport.width<700?2:creatorAppearance?.layout==='grid'?4:3;
+    const creatorGap=creatorAppearance?.density==='compact'?.8:creatorAppearance?.density==='spacious'?2.8:1.7;
     // Compute each entry's envelope from its actual beveled solid. Include
     // the full range of the tiny orientation drift so framing never guesses.
     const entries=arrangeRows([...groupParents.values()].map(marker=>{
@@ -677,13 +678,13 @@ function applyTabDepthMode(node){
         for(const [axis,key] of ['x','y','z'].entries())half[axis]=Math.max(half[axis],Math.abs(bodyBounds.min[key]),Math.abs(bodyBounds.max[key]));
       }
       return {id:marker.id,size:half.map(value=>value*2)};
-    }),columns,spaceViewport.width<700?.5:1.6);
+    }),columns,creatorAppearance?(creatorGap*.7):(spaceViewport.width<700?.5:1.6));
     entries.forEach(item=>groupParents.get(item.id).spacePosition.set(...item.position));spaceBounds.set(null,boundsFor(entries));
     compactPositions.clear();
     for(const marker of groupParents.values()){
       const page=getSpacePage(marker.id);spacePages.set(marker.id,page.page);
       const members=marker.members.slice(page.page*page.pageSize,(page.page+1)*page.pageSize);
-      const items=arrangeRows(members.map(node=>{const form=REALITY_TAB_FORMS[node.shape]??REALITY_TAB_FORMS.rectangle,scale=(node.size??1)*(node.scale??1)*previewScale;return {id:node.feature.id,size:[form.width*scale,form.height*scale,form.depth*scale]};}),columns,1.7);
+      const items=arrangeRows(members.map(node=>{const form=REALITY_TAB_FORMS[node.shape]??REALITY_TAB_FORMS.rectangle,scale=(node.size??1)*(node.scale??1)*previewScale;return {id:node.feature.id,size:[form.width*scale,form.height*scale,form.depth*scale]};}),columns,creatorGap);
       items.forEach(item=>compactPositions.set(item.id,new THREE.Vector3(...item.position)));spaceBounds.set(marker.id,boundsFor(items));
     }
   }
@@ -732,6 +733,21 @@ function applyTabDepthMode(node){
     }
   }
   refreshSpaceLayout();
+  function tintCreatorMaterial(material,color){
+    if(!material?.color?.set)return;
+    material.userData??={};
+    if(color===null&&!material.userData.creatorOriginalColor)return;
+    if(!material.userData.creatorOriginalColor)material.userData.creatorOriginalColor=`#${material.color.getHexString()}`;
+    material.color.set(color??material.userData.creatorOriginalColor);
+  }
+  function applyCreatorAppearance(){
+    for(const node of nodes.values()){
+      const objectColor=creatorAppearance?.objects?.find(item=>item.id===node.feature?.id)?.color;
+      tintCreatorMaterial(node.edgeMaterial,objectColor??creatorAppearance?.palette?.accent??null);
+    }
+    for(const marker of groupParents.values())tintCreatorMaterial(marker.entryEdges?.material,creatorAppearance?.palette?.accent??null);
+  }
+  function setCreatorAppearance(descriptor=null){creatorAppearance=descriptor;refreshSpaceLayout();applyCreatorAppearance();return getSnapshot();}
   const projectedPosition=new THREE.Vector3(),scatterDirection=new THREE.Vector3();
   function apply(snapshot,{viewMode='3d',hoveredId=null}={}){
     viewState=snapshot;selected=snapshot.selectedId;hovered=hoveredId;mode=viewMode;
@@ -753,6 +769,7 @@ function applyTabDepthMode(node){
     });
     connectionMaterial.color.set(snapshot.mode==='proposed'?'#b194ed':snapshot.mode==='past'?'#9a9fae':'#36a6d3');
     if(calmMode)refreshSpaceLayout();
+    applyCreatorAppearance();
   }
   function updateRetiredGiantLod(dt,time,{reducedMotion=false,cameraDistance=0,cameraPosition=null}={}){
     const blend=reducedMotion?1:1-Math.exp(-dt*9);
@@ -1024,6 +1041,6 @@ function applyTabDepthMode(node){
     const formerCenter=nodes.get('block-world');
     return {geometryOnly:true,referenceImagesUsedAsTextures:false,funnelGuideVisible:funnelGuide.visible,gridVisible:grid.visible,nodeIds:[...nodes.keys()],nodeCount:nodes.size,tabCount:[...nodes.values()].filter(node=>node.isTab).length,visibleFeatureIds:[...nodes.values()].filter(node=>node.isTab&&node.root.visible).map(node=>node.feature.id),visibleTabCount:[...nodes.values()].filter(node=>node.isTab&&node.root.visible&&node.tabReveal>.35&&node.contextOpacity>.05).length,groupIds,visibleGroupCount:[...groupParents.values()].filter(marker=>marker.root.visible).length,visibleGroupIds:[...groupParents.values()].filter(marker=>marker.root.visible).map(marker=>marker.id),activeGroupId,calmMode,spaceView:calmMode?(activeGroupId??'home'):'assembly',spacePage:getSpacePage(),spaceBounds:spaceBounds.get(activeGroupId)??null,focusedId:focusId,focusStrength:Number(activeFocusStrength.toFixed(3)),focusIsolated:activeFocusIsolated,focusDistance:Number.isFinite(activeFocusDistance)?Number(activeFocusDistance.toFixed(2)):null,selectedStage:nodes.get(focusId)?.revealStage??0,approachProgress:Number(approachBlend.toFixed(3)),anchorOpen:formerCenter?.isTab?0:Number((formerCenter?.open??0).toFixed(3)),edgeCount:edges.length,relationshipSource:'authored feature navigation graph',connectionsVisible:connections.visible,connectionPairs:edges.map(pair=>[...pair]),viewMode:mode,selectedId:selected,historyMode:viewState?.mode??'present',designedArchitecture:true,equalAxisCubes:false,singleFixedAnchorCube:[...nodes.values()].some(node=>!node.isTab&&node.feature.id==='block-world'),formerCenterIsMovableTab:formerCenter?.isTab===true,lensMode,lod};
   }
-  return {layer,nodes,groupParents,groupTargets,worldBlock,backdrop,apply,update,getSnapshot,setLensMode,setActiveGroup,setSpaceView,setSpaceViewport,setSpacePage,getSpacePage,getObjectPosition,getSpaceBounds:id=>spaceBounds.get(id??null)??null,getGroupPosition:id=>{const marker=groupParents.get(id);return marker?(calmMode?marker.spacePosition:marker.root.position):null;},focus,resolve:object=>object?.userData?.assemblyId??null,resolveGroup:object=>object?.userData?.realityLensGroup??null,
+  return {layer,nodes,groupParents,groupTargets,worldBlock,backdrop,apply,update,getSnapshot,setCreatorAppearance,setLensMode,setActiveGroup,setSpaceView,setSpaceViewport,setSpacePage,getSpacePage,getObjectPosition,getSpaceBounds:id=>spaceBounds.get(id??null)??null,getGroupPosition:id=>{const marker=groupParents.get(id);return marker?(calmMode?marker.spacePosition:marker.root.position):null;},focus,resolve:object=>object?.userData?.assemblyId??null,resolveGroup:object=>object?.userData?.realityLensGroup??null,
     destroy(){selectable.forEach(object=>{const i=targets.indexOf(object);if(i>=0)targets.splice(i,1);});groupTargets.length=0;geometry.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());textures.forEach(t=>t.dispose());layer.removeFromParent();}};
 }

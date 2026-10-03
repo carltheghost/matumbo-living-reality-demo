@@ -416,6 +416,56 @@ test("HUD button toggles the presence and notifies onOpenPanel", async () => {
   }
 });
 
+test("opening never waits for optional photo preloads to finish", async () => {
+  const originalImage = globalThis.Image;
+  globalThis.Image = class StalledImage { set src(_value) {} };
+  const hudRoot = makeHudRoot();
+  const handle = await mountPhotoMascot({ scene: {}, camera: {}, hudRoot })();
+  try {
+    hudRoot.children[0].click();
+    await waitFor(() => handle.presence.isOpen());
+    assert.equal(hudRoot.children[0].getAttribute("aria-pressed"), "true");
+  } finally {
+    handle.unmount();
+    globalThis.Image = originalImage;
+  }
+});
+
+test("an external close updates the HUD pressed state on the next frame", async () => {
+  const hudRoot = makeHudRoot();
+  const handle = await mountPhotoMascot({ scene: {}, camera: {}, hudRoot })();
+  try {
+    hudRoot.children[0].click();
+    await waitFor(() => handle.presence.isOpen());
+    handle.presence.close();
+    handle.tick(1, 0.016);
+    assert.equal(hudRoot.children[0].getAttribute("aria-pressed"), "false");
+  } finally {
+    handle.unmount();
+  }
+});
+
+test("a selected look reaches a closed mascot without eager photo preloading", async () => {
+  const originalWindow = globalThis.window;
+  const listeners = new Map();
+  globalThis.window = {
+    addEventListener(type, listener) { listeners.set(type, listener); },
+    removeEventListener(type) { listeners.delete(type); },
+  };
+  const handle = await mountPhotoMascot({ scene: {}, camera: {}, hudRoot: makeHudRoot() })();
+  try {
+    listeners.get("tumbo:mascot-look")({ detail: { look: "hat" } });
+    assert.deepEqual(callsOf(handle.presence, "setLook"), [["setLook", "hat"]]);
+    assert.equal(handle.presence.isOpen(), false);
+    assert.equal(imageConstructions, 0);
+  } finally {
+    handle.unmount();
+    assert.equal(listeners.size, 0);
+    if (originalWindow === undefined) delete globalThis.window;
+    else globalThis.window = originalWindow;
+  }
+});
+
 test("pointermove over the canvas feeds setTilt with normalized coords", async () => {
   const hudRoot = makeHudRoot();
   const canvas = makeStubCanvas(800, 600);

@@ -1,4 +1,4 @@
-name: Reality Lens navigation and API connections
+name: Reality Lens complete tests and local package
 
 on:
   pull_request:
@@ -6,6 +6,9 @@ on:
       - 'index.html'
       - 'src/main.js'
       - 'src/render/reality-assembly*'
+      - 'src/render/ourplace-*'
+      - 'src/render/web-ai.js'
+      - 'src/domains/**'
       - 'src/render/api-connections*'
       - 'src/render/centered-surfaces.js'
       - 'src/render/feature-navigator.js'
@@ -16,6 +19,8 @@ on:
       - 'src/domains/living-surface-layout-engine.js'
       - 'scripts/build*'
       - 'scripts/provider_bridge.py'
+      - 'scripts/*demo*'
+      - 'scripts/run_tests.py'
       - 'scripts/public-preview.mjs'
       - 'tests/**'
       - '.github/workflows/reality-lens-calm-ci.yml'
@@ -26,8 +31,12 @@ permissions:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -42,7 +51,10 @@ jobs:
           node --check src/render/reality-assembly.js
           node --check src/render/reality-assembly-scene.js
           node --check src/render/api-connections.js
-      - name: Navigation, surfaces, build and provider regressions
-        run: node --test tests/reality-assembly-scene.test.mjs tests/reality-lens-unified.test.mjs tests/reality-lens-chrome.test.mjs tests/reality-space-frame.test.mjs tests/object-is-tab-wrap.test.mjs tests/object-tab-binding.test.mjs tests/reality-object-engine.test.mjs tests/living-surface-layout-engine.test.mjs tests/living-surface-rig.test.mjs tests/centered-surfaces.test.mjs tests/feature-handoff.test.mjs tests/feature-navigator.test.mjs tests/public-preview.test.mjs tests/api-connections.test.mjs tests/portal-entry-return.test.mjs tests/portal-sessions.test.mjs tests/lens-intent-stream.test.mjs tests/chess-arena.test.mjs
-      - name: Real loopback HTTP bridge tests
-        run: python -m unittest discover -s tests -p test_provider_bridge.py
+          node --check src/render/ourplace-economy.js
+          node --check src/render/ourplace-finance.js
+          node --check src/domains/economic-runtime.js
+      - name: Complete JavaScript suite
+        run: python scripts/run_tests.py
+      - name: Loopback bridge and deterministic extracted package tests
+        run: python -m unittest discover -s tests -p "test_*.py"

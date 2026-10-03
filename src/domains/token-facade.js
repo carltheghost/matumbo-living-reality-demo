@@ -1,140 +1,66 @@
-// token-facade.js — window.TumboToken: browser-facing facade over TumboLedger.
-// Part of the TUMBO-SIM ledger core (src/domains).
-//
-// A shared event layer so every token zone (guide tips, BotPay, arena stakes,
-// vault deposits, ...) emits identical events and offers the same query/execute
-// surface. Wraps a TumboLedger instance; the ledger itself stays DOM-free.
-//
-// Events (document CustomEvent "tumbo:token", detail { type, ... }):
-//   { type: "receipt", txId, action, hash, logicalTick }                — every settled action
-//   { type: "balance-changed", account, asset, balance, delta, txId }   — per touched account×asset
-//
-// Facade API (also exposed as window.TumboToken by token-boot.js):
-//   { ledger, balance(account, asset?), fmt(fluff), quote(args),
-//     execute(action, args), on(evt, cb) }
-//   execute() requires args.idem (LedgerError MISSING_IDEM otherwise).
-//   "deliver" routes to deliverCreate; confirm delivery via action "confirm"
-//   (deliverConfirm).
-//
-// Event model: the facade subscribes once to ledger.onCommit() and announces
-// every settled commit as exactly one event wave (balance-changed events, then
-// the receipt). Idempotent replays never emit — _commitInner returns before
-// _emitCommit when the idem key was already seen — so there is no second wave
-// to suppress. Direct ledger commits (bypassing execute) emit the same wave.
-import { LedgerError, fmtTumbo } from "./token.js?v=20260922-cache2";
-
-export const TOKEN_EVENT = "tumbo:token";
-
-function doc() { return typeof document !== "undefined" ? document : null; }
-
-function emit(detail) {
-  const d = doc();
-  if (!d) return;
-  d.dispatchEvent(new CustomEvent(TOKEN_EVENT, { detail }));
-}
-
-// Aggregate receipt entries into unique account×asset pairs with net deltas.
-function touchedPairs(entries) {
-  const map = new Map();
-  for (const e of entries || []) {
-    const k = `${e.account}\0${e.asset}`;
-    const p = map.get(k) || { account: e.account, asset: e.asset, delta: 0 };
-    p.delta += Number(e.delta);
-    map.set(k, p);
-  }
-  return [...map.values()];
-}
-
-// Per-action routing. Each handler receives (ledger, args) and returns the
-// ledger result (a sealed receipt, or a wrapper like { receipt, stakeId }).
-// Extra args (e.g. a facade-required idem on gate-only methods) are ignored
-// by the ledger methods that do not need them.
-const EXECUTE = {
-  send:       (L, a) => L.send(a),
-  tip:        (L, a) => L.tip(a),
-  receive:    (L, a) => L.receive(a),
-  cancel:     (L, a) => L.cancel(a),
-  deliver:    (L, a) => L.deliverCreate(a),   // create the delivery intent
-  confirm:    (L, a) => L.deliverConfirm(a),  // recipient confirms delivery
-  reverse:    (L, a) => L.reverse(a),
-  exchange:   (L, a) => L.exchange(a),
-  buy:        (L, a) => L.buy(a),
-  sell:       (L, a) => L.sell(a),
-  stake:      (L, a) => L.stake(a),
-  unstake:    (L, a) => L.unstake(a),
-  slash:      (L, a) => L.slash(a),
-  deposit:    (L, a) => L.deposit(a),
-  withdraw:   (L, a) => L.withdraw(a),
-  lock:       (L, a) => L.lock(a),
-  unlock:     (L, a) => L.unlock(a),
-  save:       (L, a) => L.save(a),
-  payreq:     (L, a) => L.payreq(a),
-  faucetDrip: (L, a) => L.faucetDrip(a),
-  grantPop:   (L, a) => L.grantPop(a),
-};
-
-export function createTokenFacade(ledger) {
-  const subscribers = new Set();
-
-  function notify(detail) {
-    emit(detail);
-    for (const cb of [...subscribers]) { try { cb(detail); } catch { /* listener errors stay local */ } }
-  }
-
-  // Emit one "receipt" event plus one "balance-changed" event per unique
-  // touched account×asset. Balance events go first so listeners can act on the
-  // receipt knowing balances are already final.
-  function dispatchReceipt(receipt) {
-    for (const p of touchedPairs(receipt.entries || [])) {
-      notify({
-        type: "balance-changed",
-        account: p.account, asset: p.asset,
-        balance: ledger.balance(p.account, p.asset),
-        delta: p.delta, txId: receipt.txId, action: receipt.action,
-      });
+/** Local browser API over the canonical QuoteEngine; no second balance store. */
+import { TumboUserLedger, fmt } from './token.js?v=20261003-complete8';
+import { activityForEngine, TokenError } from './token-activity.js?v=20261003-complete8';
+import { attachTokenVault } from './token-vault.js?v=20261003-complete8';
+export const TOKEN_EVENT = 'tumbo:token';
+export function createTokenFacade(owner) {
+  const engine = typeof owner?.quote === 'function' && typeof owner?.execute === 'function' && owner?.ledger?.post ? owner : owner?.engine ?? owner?._engine;
+  if (typeof engine?.ledger?.onCommit !== 'function' || typeof engine?.execute !== 'function' || typeof engine?.on !== 'function') throw new TypeError('facade requires the canonical QuoteEngine API');
+  const wallet = owner?._engine === engine && typeof owner?.send === 'function' ? owner : new TumboUserLedger(engine);
+  const activity = activityForEngine(engine), vault = attachTokenVault({ engine }).tokenVault;
+  const listeners = new Map([['receipt', new Set()], ['balance-changed', new Set()]]);
+  const notify = (type, detail) => {
+    for (const callback of [...listeners.get(type)]) {
+      try { callback({ type, ...detail }); } catch { /* observers cannot unwind a settlement */ }
     }
-    notify({
-      type: "receipt",
-      txId: receipt.txId, action: receipt.action,
-      hash: receipt.hash, logicalTick: receipt.logicalTick,
-      meta: receipt.meta ? { ...receipt.meta } : {},
-    });
-  }
-
-  // Single subscription: every settled commit emits exactly one wave, whether
-  // it arrived via execute() or a direct ledger call. The receipt handed to
-  // onCommit is always the sealed receipt — wrapper-returning actions
-  // (stake/deposit/lock/withdraw) cannot produce a malformed wave.
-  ledger.onCommit(dispatchReceipt);
-
-  const api = {
-    ledger,
-    balance: (account, asset = "TUMBO") => ledger.balance(account, asset),
-    fmt: (fluff) => fmtTumbo(fluff),
-    quote: (args) => ledger.quote(args),
-    execute(action, args = {}) {
-      const handler = EXECUTE[action];
-      if (!handler) throw new LedgerError("UNKNOWN_ACTION", String(action));
-      if (!args.idem) throw new LedgerError("MISSING_IDEM", "execute requires args.idem");
-      return handler(ledger, args);
-    },
-    on(evt, cb) {
-      // "receipt" / "balance-changed": in-process subscription (works without a DOM).
-      // "tumbo:token": document-level CustomEvent subscription.
-      if (evt === "receipt" || evt === "balance-changed") {
-        const wrapped = (detail) => { if (detail.type === evt) cb(detail); };
-        subscribers.add(wrapped);
-        return () => { subscribers.delete(wrapped); };
-      }
-      const d = doc();
-      if (d && evt === TOKEN_EVENT) {
-        const h = (e) => cb(e.detail);
-        d.addEventListener(TOKEN_EVENT, h);
-        return () => d.removeEventListener(TOKEN_EVENT, h);
-      }
-      throw new LedgerError("UNKNOWN_EVENT", String(evt));
-    },
   };
-
-  return api;
+  // Engine owns document events; this adapts only the in-process channel.
+  const off = engine.on('receipt', ({ receipt }) => {
+    const journal = engine.ledger._journals.find(row => row.id === receipt.id) ?? receipt;
+    const pairs = new Map();
+    for (const leg of journal.postings ?? []) {
+      const key = `${leg.account}|${leg.asset}`;
+      const pair = pairs.get(key) ?? { account: leg.account, asset: leg.asset, delta: 0 };
+      pair.delta += leg.amount; pairs.set(key, pair);
+    }
+    for (const pair of pairs.values()) if (pair.delta) notify('balance-changed', {
+      ...pair, balance: engine.balance(pair.account, pair.asset), txId: journal.id, action: journal.action,
+    });
+    notify('receipt', { receipt, txId: journal.id, action: journal.action, hash: journal.hash, logicalTick: journal.tick });
+  });
+  const keyOf = args => {
+    const key = args.idempotencyKey ?? args.idem;
+    if (typeof key !== 'string' || !key.trim()) throw new TokenError('execute requires a client idempotencyKey', 'MISSING_IDEM');
+    return key;
+  };
+  return Object.freeze({
+    engine, ledger: wallet, tokenVault: vault,
+    balance: (account, asset = 'TUMBO') => wallet.balance(account, asset), fmt,
+    quote: args => engine.quote(args),
+    execute(action, args = {}) {
+      if (action && typeof action === 'object') return engine.execute(action, args);
+      const key = keyOf(args);
+      if (action === 'send' || action === 'tip') return activity.act(action, {
+        from: args.from, to: args.to, asset: args.asset ?? 'TUMBO', amount: args.amountFluff, memo: args.memo ?? '',
+      }, key);
+      if (['stake', 'deposit', 'lock', 'save'].includes(action)) return vault[action]({
+        ...args, from: args.from ?? args.owner, idempotencyKey: key,
+      });
+      if (['unstake', 'withdraw'].includes(action)) return vault[action]({ ...args, idempotencyKey: key });
+      if (action === 'faucet') return engine.faucet(args.to, args.asset ?? 'TUMBO', args.amountFluff, { idempotencyKey: key });
+      if (['exchange', 'buy', 'sell'].includes(action)) return engine.execute(args.quote, { idempotencyKey: key });
+      if (action === 'reverse') return engine.reverse(args);
+      if (action === 'cancel') return engine.cancelQuote(args.quoteId, { idempotencyKey: key });
+      throw new TokenError(`unsupported current token action ${String(action)}`, 'UNKNOWN_ACTION');
+    },
+    on(event, callback) {
+      if (!listeners.has(event) || typeof callback !== 'function') throw new TokenError('unknown event or invalid listener', 'UNKNOWN_EVENT');
+      listeners.get(event).add(callback); return () => listeners.get(event).delete(callback);
+    },
+    reverse: input => engine.reverse(input), cancel: (id, options) => engine.cancelQuote(id, options),
+    faucet: (...args) => engine.faucet(...args),
+    verifyReceipt: key => engine.ledger.verifyReceipt(key), verifyChain: () => engine.ledger.verifyChain(),
+    journalHistory: filters => engine.journalHistory(filters), tick: () => engine.ledger.tick,
+    dispose() { off(); for (const set of listeners.values()) set.clear(); },
+  });
 }

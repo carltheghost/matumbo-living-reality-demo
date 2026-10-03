@@ -1,4 +1,4 @@
-import { validateProjectionContribution } from "../core/world-state.js";
+import { validateProjectionContribution } from "../core/world-state.js?v=20261003-complete8";
 
 export const COMPUTE_WORLD_SOURCE = "compute-economy-world";
 

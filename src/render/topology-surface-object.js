@@ -1,9 +1,9 @@
-import { SurfaceObject } from './surface-semantic-field-three.js';
+import { SurfaceObject } from './surface-semantic-field-three.js?v=20261003-complete8';
 import {
   analyzeTopology,
   semanticPatchesFromTopology,
   topologySummary,
-} from '../domains/topology-semantic-field.js';
+} from '../domains/topology-semantic-field.js?v=20261003-complete8';
 
 /**
  * TopologySurfaceObject

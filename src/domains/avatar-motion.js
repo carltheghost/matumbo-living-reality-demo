@@ -2,15 +2,14 @@
  *
  * Extracted from the Person Studio presence (src/render/person-studio-scene.js):
  * the avatar never stands statue-still. Everything structural floats — a gentle
- * vertical bob, a slow sway-turn, a breathing glow pulse. Chess pieces ARE the
- * same avatar, so they speak the same motion language instead of standing
- * frozen on the board.
+ * vertical bob, a slow sway-turn, a breathing glow pulse. Callers may reuse
+ * these offsets without replacing the current avatar or standard chess pieces.
  *
  * Pure math only: no THREE, no DOM, no network. Deterministic per (time, seed)
  * so every presence can be desynchronized by seed while staying reproducible.
  * Frozen under `reducedMotion`, mirroring the studio's accessibility contract.
  *
- * Projection only: this describes how a hologram moves. It grants no identity,
+ * Projection only: this describes local animation. It grants no identity,
  * wallet, ledger, signing, settlement, or authority of any kind.
  */
 

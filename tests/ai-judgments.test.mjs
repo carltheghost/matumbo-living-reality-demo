@@ -246,7 +246,9 @@ test("question builders carry complete meaning for a live model", () => {
 
   const readiness = proposalReadinessQuestion();
   assert.equal(readiness.kind, "score");
-  assert.ok(readiness.criteria["1.0"].includes("pending"));
+  assert.equal(readiness.criteria.length, 2);
+  assert.ok(readiness.criteria[1].includes("pending"));
+  assert.ok(readiness.criteria[0].includes("not reviewable"));
 
   assert.deepEqual(JUDGMENT_PROVIDERS, ["mock", "heuristic", "http"]);
   assert.equal(intentLabel("propose_contract"), "proposing a contract for your review");

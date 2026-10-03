@@ -18,7 +18,7 @@
  * value movement.
  */
 
-import { contentHash } from "./events.js?v=20260922-cache2";
+import { contentHash } from "./events.js?v=20261003-complete8";
 
 export const DEMO_STAMP = "Local Demo Proof";
 

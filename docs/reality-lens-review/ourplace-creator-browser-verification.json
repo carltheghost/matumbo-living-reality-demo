@@ -1,0 +1,778 @@
+{
+  "source": "current working tree",
+  "capability": "Actual Chromium software WebGL / native CSS3D fronts; no microphone transcript fabricated",
+  "runs": [
+    {
+      "device": "desktop",
+      "url": "http://127.0.0.1:8082/",
+      "steps": [
+        {
+          "action": "fund-token",
+          "status": "Choose one flow. Changes and receipts remain inspectable."
+        },
+        {
+          "action": "fund-credits",
+          "status": "Choose one flow. Changes and receipts remain inspectable."
+        },
+        {
+          "action": "fund-rewards",
+          "status": "Choose one flow. Changes and receipts remain inspectable."
+        },
+        {
+          "action": "design-voice",
+          "status": "Listening for one design request. Your browser controls microphone permission and may use its speech service. The transcript is previewed only; applying still requires your click."
+        },
+        {
+          "action": "design-preview",
+          "status": "Review 1 unsupported clause(s). Only the listed supported changes can apply; no tool, agent or payment executes from a sentence."
+        },
+        {
+          "action": "design-apply",
+          "status": "Design applied to the actual objects. Palette, arrangement and motion updated."
+        },
+        {
+          "action": "design-publish",
+          "status": "Published in this local catalog with a version, license and attribution. Download its reviewed package to share it."
+        },
+        {
+          "action": "design-adopt",
+          "status": "Observed local adoption: 0.01 TUMBO-SIM entitlement across 1 credited creator(s). Payout still requires funded settlement."
+        },
+        {
+          "action": "design-preview",
+          "status": "Preview ready. Applying changes requires your click."
+        },
+        {
+          "action": "design-apply",
+          "status": "Design applied to the actual objects. Palette, arrangement and motion updated."
+        },
+        {
+          "action": "design-publish",
+          "status": "Published in this local catalog with a version, license and attribution. Download its reviewed package to share it."
+        },
+        {
+          "action": "design-adopt",
+          "status": "Observed local adoption: 0.01 TUMBO-SIM entitlement across 2 credited creator(s). Payout still requires funded settlement."
+        },
+        {
+          "action": "design-adopt",
+          "status": "This local adoption was already recorded. No additional entitlement."
+        },
+        {
+          "action": "creator-settle",
+          "status": "0.02 TUMBO-SIM paid from the reward pool in canonical receipt rcpt_musoyjl0_9_4a0a4eba."
+        },
+        {
+          "action": "design-export",
+          "status": "Reviewed design package downloaded. It includes licensed lineage and excludes private conversations."
+        },
+        {
+          "action": "design-preview",
+          "status": "Preview ready. Applying changes requires your click."
+        },
+        {
+          "action": "design-apply",
+          "status": "Preview is unknown or stale"
+        },
+        {
+          "action": "design-preview",
+          "status": "Preview ready. Applying changes requires your click."
+        },
+        {
+          "action": "design-apply",
+          "status": "Design applied to the actual objects. Palette, arrangement and motion updated."
+        },
+        {
+          "action": "design-import-preview",
+          "status": "Integrity checked; author identity is unverified. Review and apply the design. Imported claims cannot authorize a creator payout."
+        },
+        {
+          "action": "design-apply",
+          "status": "Design applied to the actual objects. Palette, arrangement and motion updated."
+        },
+        {
+          "action": "design-publish",
+          "status": "This design has shared or unverified origin. Its declared licensed attribution is preserved; it cannot be republished as a fresh local author or create reward authority. Use Start fresh design to reset both appearance and origin."
+        },
+        {
+          "action": "design-publish",
+          "status": "This design has shared or unverified origin. Its declared licensed attribution is preserved; it cannot be republished as a fresh local author or create reward authority. Use Start fresh design to reset both appearance and origin."
+        },
+        {
+          "action": "design-preview",
+          "status": "Preview ready. Applying changes requires your click."
+        },
+        {
+          "action": "design-apply",
+          "status": "Design applied to the actual objects. Palette, arrangement and motion updated."
+        },
+        {
+          "action": "design-publish",
+          "status": "This design has shared or unverified origin. Its declared licensed attribution is preserved; it cannot be republished as a fresh local author or create reward authority. Use Start fresh design to reset both appearance and origin."
+        },
+        {
+          "action": "design-fresh",
+          "status": "Default design restored with fresh origin. Undo retains the previous licensed attribution."
+        },
+        {
+          "action": "design-undo",
+          "status": "Previous design and attribution restored."
+        },
+        {
+          "action": "contribution-propose",
+          "status": "Metadata proposal created. It has no consent, acceptance or payout yet."
+        },
+        {
+          "action": "contribution-authorize",
+          "status": "Check explicit metadata consent before authorizing"
+        },
+        {
+          "action": "contribution-accept",
+          "status": "Metadata not accepted: explicit-consent-required."
+        },
+        {
+          "action": "contribution-authorize",
+          "status": "Checked metadata scope authorized locally. No upload or training ran. Review acceptance as a separate step."
+        },
+        {
+          "action": "contribution-accept",
+          "status": "0.01 TUMBO-SIM contribution entitlement recorded. Funding and an explicit claim are still required."
+        },
+        {
+          "action": "contribution-claim",
+          "status": "0.01 TUMBO-SIM transferred to u:you from the funded pool. Canonical receipt rcpt_musoz461_i_688b6c17."
+        },
+        {
+          "action": "contribution-claim",
+          "status": "Evidence already received its funded reward"
+        },
+        {
+          "action": "contribution-revoke",
+          "status": "Metadata consent revoked. Further acceptance or reward claims are blocked; a completed canonical payment remains in the history."
+        },
+        {
+          "action": "contribution-propose",
+          "status": "Metadata proposal created. It has no consent, acceptance or payout yet."
+        },
+        {
+          "action": "contribution-authorize",
+          "status": "Checked metadata scope authorized locally. No upload or training ran. Review acceptance as a separate step."
+        },
+        {
+          "action": "contribution-accept",
+          "status": "0.01 TUMBO-SIM contribution entitlement recorded. Funding and an explicit claim are still required."
+        },
+        {
+          "action": "contribution-revoke",
+          "status": "Metadata consent revoked. Further acceptance or reward claims are blocked; a completed canonical payment remains in the history."
+        },
+        {
+          "action": "contribution-claim",
+          "status": "Active accepted metadata consent is required"
+        },
+        {
+          "action": "compute-run",
+          "status": "Local tool completed. Credits remain reserved until reconciliation or cancellation."
+        },
+        {
+          "action": "compute-run",
+          "status": "An existing task is selected. Resolve it or explicitly select Start a new task before running another."
+        },
+        {
+          "action": "compute-reconcile",
+          "status": "$0.02 demo charge settled; unused reservation released. Live billing remains unverified."
+        },
+        {
+          "action": "compute-claim",
+          "status": "0.002 TUMBO-SIM transferred from the funded reward pool. Receipt rcpt_musozhsn_j_4eb08286."
+        },
+        {
+          "action": "shared-usage-claim",
+          "status": "0.002 TUMBO-SIM transferred to u:you from the funded reward pool. Canonical receipt rcpt_musozozb_k_475fc123."
+        },
+        {
+          "action": "shared-usage-claim",
+          "status": "Evidence already received its funded reward"
+        },
+        {
+          "action": "proof-verify",
+          "status": "Canonical chain valid · supply conserved · SHA-256 Merkle-sum root computed locally. No external anchor."
+        }
+      ],
+      "errors": [],
+      "speechRecognitionAvailable": true,
+      "speechStatus": "Listening for one design request. Your browser controls microphone permission and may use its speech service. The transcript is previewed only; applying still requires your click.",
+      "appearance": {
+        "palette": {
+          "accent": "#39b9ff",
+          "background": "#07111f"
+        },
+        "layout": "grid",
+        "density": "compact",
+        "motion": "reduced",
+        "navigation": "guided",
+        "surface": null,
+        "objects": [],
+        "steps": []
+      },
+      "attribution": {
+        "designs": [
+          {
+            "key": "design:1791050048095:9fa0fa33-047c-4bca-a120-4f58888e8345@1",
+            "creator": "u:you",
+            "parents": []
+          },
+          {
+            "key": "design:1791050053010:a1450666-dee5-4849-81ed-45d998ec32f9@1",
+            "creator": "u:visitor",
+            "parents": [
+              "design:1791050048095:9fa0fa33-047c-4bca-a120-4f58888e8345@1"
+            ]
+          }
+        ],
+        "entitlements": [
+          {
+            "id": "ent:apply:140a8501606e18505e49460978c811de:u:you",
+            "usageId": "apply:140a8501606e18505e49460978c811de",
+            "designKey": "design:1791050048095:9fa0fa33-047c-4bca-a120-4f58888e8345@1",
+            "creator": "u:you",
+            "period": "2026-10-03",
+            "amountFluff": 10,
+            "asset": "TUMBO",
+            "state": "paid",
+            "receiptHash": "17bcc852ad48f9cf",
+            "planId": "creator-plan:1791050055586:e7785c6c-fdb5-44ab-b0ff-0c7f59dc1f18"
+          },
+          {
+            "id": "ent:apply:e3ebe17a6f2732a75baf9b6326d50cc3:u:visitor",
+            "usageId": "apply:e3ebe17a6f2732a75baf9b6326d50cc3",
+            "designKey": "design:1791050053010:a1450666-dee5-4849-81ed-45d998ec32f9@1",
+            "creator": "u:visitor",
+            "period": "2026-10-03",
+            "amountFluff": 5,
+            "asset": "TUMBO",
+            "state": "paid",
+            "receiptHash": "17bcc852ad48f9cf",
+            "planId": "creator-plan:1791050055586:e7785c6c-fdb5-44ab-b0ff-0c7f59dc1f18"
+          },
+          {
+            "id": "ent:apply:e3ebe17a6f2732a75baf9b6326d50cc3:u:you",
+            "usageId": "apply:e3ebe17a6f2732a75baf9b6326d50cc3",
+            "designKey": "design:1791050053010:a1450666-dee5-4849-81ed-45d998ec32f9@1",
+            "creator": "u:you",
+            "period": "2026-10-03",
+            "amountFluff": 5,
+            "asset": "TUMBO",
+            "state": "paid",
+            "receiptHash": "17bcc852ad48f9cf",
+            "planId": "creator-plan:1791050055586:e7785c6c-fdb5-44ab-b0ff-0c7f59dc1f18"
+          }
+        ],
+        "balances": {
+          "u:you": 185515,
+          "u:visitor": 5
+        },
+        "conserved": true
+      },
+      "package": {
+        "filename": "ourplace-desktop-reviewed-design.json",
+        "rootKey": "design:1791050053010:a1450666-dee5-4849-81ed-45d998ec32f9@1",
+        "lineageCount": 2,
+        "packetHash": "a81fe050ef5280b721b0a2e207f4221df08b3aae4c64854f10e24bddad5efef9",
+        "privateUsageIncluded": false
+      },
+      "restoredSharedOrigin": {
+        "kind": "shared-package",
+        "rootKey": "design:1791050053010:a1450666-dee5-4849-81ed-45d998ec32f9@1",
+        "packetHash": "a81fe050ef5280b721b0a2e207f4221df08b3aae4c64854f10e24bddad5efef9",
+        "attribution": [
+          {
+            "key": "design:1791050053010:a1450666-dee5-4849-81ed-45d998ec32f9@1",
+            "creator": "u:visitor",
+            "license": "attribution"
+          },
+          {
+            "key": "design:1791050048095:9fa0fa33-047c-4bca-a120-4f58888e8345@1",
+            "creator": "u:you",
+            "license": "attribution"
+          }
+        ]
+      },
+      "contributions": [
+        {
+          "state": "revoked",
+          "claimed": true,
+          "rawContentStored": false
+        },
+        {
+          "state": "revoked",
+          "claimed": false,
+          "rawContentStored": false
+        }
+      ],
+      "continuedJob": {
+        "jobId": "job:1791050088561:86b40082-8cb6-45a6-b19e-0a4ad6628502",
+        "selectedAfterReload": true,
+        "reconciledAndFunded": true
+      },
+      "sharedUsage": {
+        "receiptId": "local-demo-1791050103784-1",
+        "claim": {
+          "amountFluff": 2,
+          "beneficiary": "u:you",
+          "claimId": "compute:local-demo-1791050103784-1",
+          "externalBillingVerified": false,
+          "period": "2026-10-03",
+          "provenance": "local-rehearsal-evidence",
+          "receiptId": "rcpt_musozozb_k_475fc123",
+          "receiptKey": "economic:shared-usage-claim:1791050109239:bede9b90-f456-447d-9174-facc5dc5bf91:settlement"
+        },
+        "receipt": {
+          "schemaVersion": 2,
+          "receiptId": "local-demo-1791050103784-1",
+          "providerId": "openai",
+          "providerName": "OpenAI / GPT",
+          "model": "demo-model",
+          "inputTokens": 750000,
+          "outputTokens": 250000,
+          "totalTokens": 1000000,
+          "reportedCostUsd": 0.02,
+          "verified": true,
+          "latencyMs": 0,
+          "source": "local-demo-receipt",
+          "verificationBasis": "declared-local-rehearsal",
+          "billingVerified": false,
+          "simulation": true,
+          "jobId": "",
+          "quoteId": ""
+        }
+      },
+      "tabs": {
+        "columns": 3,
+        "roving": 1,
+        "minHeight": 48.2840576171875
+      },
+      "final": {
+        "conserved": true,
+        "chainValid": true,
+        "journals": 12,
+        "claims": 3,
+        "overflow": false
+      },
+      "passed": true
+    },
+    {
+      "device": "phone",
+      "url": "http://127.0.0.1:8082/",
+      "steps": [
+        {
+          "action": "fund-token",
+          "status": "Choose one flow. Changes and receipts remain inspectable."
+        },
+        {
+          "action": "fund-credits",
+          "status": "Choose one flow. Changes and receipts remain inspectable."
+        },
+        {
+          "action": "fund-rewards",
+          "status": "Choose one flow. Changes and receipts remain inspectable."
+        },
+        {
+          "action": "design-voice",
+          "status": "Listening for one design request. Your browser controls microphone permission and may use its speech service. The transcript is previewed only; applying still requires your click."
+        },
+        {
+          "action": "design-preview",
+          "status": "Review 1 unsupported clause(s). Only the listed supported changes can apply; no tool, agent or payment executes from a sentence."
+        },
+        {
+          "action": "design-apply",
+          "status": "Design applied to the actual objects. Palette, arrangement and motion updated."
+        },
+        {
+          "action": "design-publish",
+          "status": "Published in this local catalog with a version, license and attribution. Download its reviewed package to share it."
+        },
+        {
+          "action": "design-adopt",
+          "status": "Observed local adoption: 0.01 TUMBO-SIM entitlement across 1 credited creator(s). Payout still requires funded settlement."
+        },
+        {
+          "action": "design-preview",
+          "status": "Preview ready. Applying changes requires your click."
+        },
+        {
+          "action": "design-apply",
+          "status": "Design applied to the actual objects. Palette, arrangement and motion updated."
+        },
+        {
+          "action": "design-publish",
+          "status": "Published in this local catalog with a version, license and attribution. Download its reviewed package to share it."
+        },
+        {
+          "action": "design-adopt",
+          "status": "Observed local adoption: 0.01 TUMBO-SIM entitlement across 2 credited creator(s). Payout still requires funded settlement."
+        },
+        {
+          "action": "design-adopt",
+          "status": "This local adoption was already recorded. No additional entitlement."
+        },
+        {
+          "action": "creator-settle",
+          "status": "0.02 TUMBO-SIM paid from the reward pool in canonical receipt rcpt_musp562k_9_a29b9eec."
+        },
+        {
+          "action": "design-export",
+          "status": "Reviewed design package downloaded. It includes licensed lineage and excludes private conversations."
+        },
+        {
+          "action": "design-preview",
+          "status": "Preview ready. Applying changes requires your click."
+        },
+        {
+          "action": "design-apply",
+          "status": "Preview is unknown or stale"
+        },
+        {
+          "action": "design-preview",
+          "status": "Preview ready. Applying changes requires your click."
+        },
+        {
+          "action": "design-apply",
+          "status": "Design applied to the actual objects. Palette, arrangement and motion updated."
+        },
+        {
+          "action": "design-import-preview",
+          "status": "Integrity checked; author identity is unverified. Review and apply the design. Imported claims cannot authorize a creator payout."
+        },
+        {
+          "action": "design-apply",
+          "status": "Design applied to the actual objects. Palette, arrangement and motion updated."
+        },
+        {
+          "action": "design-publish",
+          "status": "This design has shared or unverified origin. Its declared licensed attribution is preserved; it cannot be republished as a fresh local author or create reward authority. Use Start fresh design to reset both appearance and origin."
+        },
+        {
+          "action": "design-publish",
+          "status": "This design has shared or unverified origin. Its declared licensed attribution is preserved; it cannot be republished as a fresh local author or create reward authority. Use Start fresh design to reset both appearance and origin."
+        },
+        {
+          "action": "design-preview",
+          "status": "Preview ready. Applying changes requires your click."
+        },
+        {
+          "action": "design-apply",
+          "status": "Design applied to the actual objects. Palette, arrangement and motion updated."
+        },
+        {
+          "action": "design-publish",
+          "status": "This design has shared or unverified origin. Its declared licensed attribution is preserved; it cannot be republished as a fresh local author or create reward authority. Use Start fresh design to reset both appearance and origin."
+        },
+        {
+          "action": "design-fresh",
+          "status": "Default design restored with fresh origin. Undo retains the previous licensed attribution."
+        },
+        {
+          "action": "design-undo",
+          "status": "Previous design and attribution restored."
+        },
+        {
+          "action": "contribution-propose",
+          "status": "Metadata proposal created. It has no consent, acceptance or payout yet."
+        },
+        {
+          "action": "contribution-authorize",
+          "status": "Check explicit metadata consent before authorizing"
+        },
+        {
+          "action": "contribution-accept",
+          "status": "Metadata not accepted: explicit-consent-required."
+        },
+        {
+          "action": "contribution-authorize",
+          "status": "Checked metadata scope authorized locally. No upload or training ran. Review acceptance as a separate step."
+        },
+        {
+          "action": "contribution-accept",
+          "status": "0.01 TUMBO-SIM contribution entitlement recorded. Funding and an explicit claim are still required."
+        },
+        {
+          "action": "contribution-claim",
+          "status": "0.01 TUMBO-SIM transferred to u:you from the funded pool. Canonical receipt rcpt_musp5gs2_i_dcf46b62."
+        },
+        {
+          "action": "contribution-claim",
+          "status": "Evidence already received its funded reward"
+        },
+        {
+          "action": "contribution-revoke",
+          "status": "Metadata consent revoked. Further acceptance or reward claims are blocked; a completed canonical payment remains in the history."
+        },
+        {
+          "action": "contribution-propose",
+          "status": "Metadata proposal created. It has no consent, acceptance or payout yet."
+        },
+        {
+          "action": "contribution-authorize",
+          "status": "Checked metadata scope authorized locally. No upload or training ran. Review acceptance as a separate step."
+        },
+        {
+          "action": "contribution-accept",
+          "status": "0.01 TUMBO-SIM contribution entitlement recorded. Funding and an explicit claim are still required."
+        },
+        {
+          "action": "contribution-revoke",
+          "status": "Metadata consent revoked. Further acceptance or reward claims are blocked; a completed canonical payment remains in the history."
+        },
+        {
+          "action": "contribution-claim",
+          "status": "Active accepted metadata consent is required"
+        },
+        {
+          "action": "compute-run",
+          "status": "Local tool completed. Credits remain reserved until reconciliation or cancellation."
+        },
+        {
+          "action": "compute-run",
+          "status": "An existing task is selected. Resolve it or explicitly select Start a new task before running another."
+        },
+        {
+          "action": "compute-reconcile",
+          "status": "$0.02 demo charge settled; unused reservation released. Live billing remains unverified."
+        },
+        {
+          "action": "compute-claim",
+          "status": "0.002 TUMBO-SIM transferred from the funded reward pool. Receipt rcpt_musp5t6d_j_5f751708."
+        },
+        {
+          "action": "shared-usage-claim",
+          "status": "0.002 TUMBO-SIM transferred to u:you from the funded reward pool. Canonical receipt rcpt_musp60cf_k_6d29999c."
+        },
+        {
+          "action": "shared-usage-claim",
+          "status": "Evidence already received its funded reward"
+        },
+        {
+          "action": "proof-verify",
+          "status": "Canonical chain valid · supply conserved · SHA-256 Merkle-sum root computed locally. No external anchor."
+        }
+      ],
+      "errors": [],
+      "speechRecognitionAvailable": true,
+      "speechStatus": "Listening for one design request. Your browser controls microphone permission and may use its speech service. The transcript is previewed only; applying still requires your click.",
+      "appearance": {
+        "palette": {
+          "accent": "#39b9ff",
+          "background": "#07111f"
+        },
+        "layout": "grid",
+        "density": "compact",
+        "motion": "reduced",
+        "navigation": "guided",
+        "surface": null,
+        "objects": [],
+        "steps": []
+      },
+      "attribution": {
+        "designs": [
+          {
+            "key": "design:1791050360292:728b2334-ae2f-4300-8f29-562e31c3b708@1",
+            "creator": "u:you",
+            "parents": []
+          },
+          {
+            "key": "design:1791050363199:f27efcf2-a9d9-41d4-b047-809c686c829b@1",
+            "creator": "u:visitor",
+            "parents": [
+              "design:1791050360292:728b2334-ae2f-4300-8f29-562e31c3b708@1"
+            ]
+          }
+        ],
+        "entitlements": [
+          {
+            "id": "ent:apply:218065ccbfe846e3f1ad12beeae7651d:u:you",
+            "usageId": "apply:218065ccbfe846e3f1ad12beeae7651d",
+            "designKey": "design:1791050360292:728b2334-ae2f-4300-8f29-562e31c3b708@1",
+            "creator": "u:you",
+            "period": "2026-10-03",
+            "amountFluff": 10,
+            "asset": "TUMBO",
+            "state": "paid",
+            "receiptHash": "9b93926bc605f98f",
+            "planId": "creator-plan:1791050364667:71afb24f-c4b5-4e19-b529-6c9369f9c38e"
+          },
+          {
+            "id": "ent:apply:5bbb56e598884dfee4e011191424403c:u:visitor",
+            "usageId": "apply:5bbb56e598884dfee4e011191424403c",
+            "designKey": "design:1791050363199:f27efcf2-a9d9-41d4-b047-809c686c829b@1",
+            "creator": "u:visitor",
+            "period": "2026-10-03",
+            "amountFluff": 5,
+            "asset": "TUMBO",
+            "state": "paid",
+            "receiptHash": "9b93926bc605f98f",
+            "planId": "creator-plan:1791050364667:71afb24f-c4b5-4e19-b529-6c9369f9c38e"
+          },
+          {
+            "id": "ent:apply:5bbb56e598884dfee4e011191424403c:u:you",
+            "usageId": "apply:5bbb56e598884dfee4e011191424403c",
+            "designKey": "design:1791050363199:f27efcf2-a9d9-41d4-b047-809c686c829b@1",
+            "creator": "u:you",
+            "period": "2026-10-03",
+            "amountFluff": 5,
+            "asset": "TUMBO",
+            "state": "paid",
+            "receiptHash": "9b93926bc605f98f",
+            "planId": "creator-plan:1791050364667:71afb24f-c4b5-4e19-b529-6c9369f9c38e"
+          }
+        ],
+        "balances": {
+          "u:you": 185515,
+          "u:visitor": 5
+        },
+        "conserved": true
+      },
+      "package": {
+        "filename": "ourplace-phone-reviewed-design.json",
+        "rootKey": "design:1791050363199:f27efcf2-a9d9-41d4-b047-809c686c829b@1",
+        "lineageCount": 2,
+        "packetHash": "2a46dacb1f8b585efaefe9f4e689d652084c55c9004117098d3b3fa6acaf1b48",
+        "privateUsageIncluded": false
+      },
+      "restoredSharedOrigin": {
+        "kind": "shared-package",
+        "rootKey": "design:1791050363199:f27efcf2-a9d9-41d4-b047-809c686c829b@1",
+        "packetHash": "2a46dacb1f8b585efaefe9f4e689d652084c55c9004117098d3b3fa6acaf1b48",
+        "attribution": [
+          {
+            "key": "design:1791050363199:f27efcf2-a9d9-41d4-b047-809c686c829b@1",
+            "creator": "u:visitor",
+            "license": "attribution"
+          },
+          {
+            "key": "design:1791050360292:728b2334-ae2f-4300-8f29-562e31c3b708@1",
+            "creator": "u:you",
+            "license": "attribution"
+          }
+        ]
+      },
+      "contributions": [
+        {
+          "state": "revoked",
+          "claimed": true,
+          "rawContentStored": false
+        },
+        {
+          "state": "revoked",
+          "claimed": false,
+          "rawContentStored": false
+        }
+      ],
+      "continuedJob": {
+        "jobId": "job:1791050381390:146bb45d-d8af-4f1b-8dfa-2cd796ad5d3f",
+        "selectedAfterReload": true,
+        "reconciledAndFunded": true
+      },
+      "sharedUsage": {
+        "receiptId": "local-demo-1791050401661-1",
+        "claim": {
+          "amountFluff": 2,
+          "beneficiary": "u:you",
+          "claimId": "compute:local-demo-1791050401661-1",
+          "externalBillingVerified": false,
+          "period": "2026-10-03",
+          "provenance": "local-rehearsal-evidence",
+          "receiptId": "rcpt_musp60cf_k_6d29999c",
+          "receiptKey": "economic:shared-usage-claim:1791050403902:5ce1407d-015d-4930-8e34-594f0707baee:settlement"
+        },
+        "receipt": {
+          "schemaVersion": 2,
+          "receiptId": "local-demo-1791050401661-1",
+          "providerId": "openai",
+          "providerName": "OpenAI / GPT",
+          "model": "demo-model",
+          "inputTokens": 750000,
+          "outputTokens": 250000,
+          "totalTokens": 1000000,
+          "reportedCostUsd": 0.02,
+          "verified": true,
+          "latencyMs": 0,
+          "source": "local-demo-receipt",
+          "verificationBasis": "declared-local-rehearsal",
+          "billingVerified": false,
+          "simulation": true,
+          "jobId": "",
+          "quoteId": ""
+        }
+      },
+      "tabs": {
+        "columns": 2,
+        "roving": 1,
+        "minHeight": 49.524383544921875
+      },
+      "final": {
+        "conserved": true,
+        "chainValid": true,
+        "journals": 12,
+        "claims": 3,
+        "overflow": false
+      },
+      "passed": true
+    }
+  ],
+  "timelineCapacity": {
+    "fixture": "disposable full 4000-event shared observation timeline",
+    "url": "http://127.0.0.1:8082/",
+    "errors": [],
+    "before": {
+      "timeline": 4000,
+      "usages": 0,
+      "spends": 0,
+      "availableUsd": 25
+    },
+    "after": {
+      "timeline": 4000,
+      "timelineChainValid": true,
+      "usages": 1,
+      "spends": 1,
+      "availableUsd": 24.98,
+      "receipt": {
+        "schemaVersion": 2,
+        "receiptId": "local-demo-1791050418753-1",
+        "providerId": "openai",
+        "providerName": "OpenAI / GPT",
+        "model": "demo-model",
+        "inputTokens": 750000,
+        "outputTokens": 250000,
+        "totalTokens": 1000000,
+        "reportedCostUsd": 0.02,
+        "verified": true,
+        "latencyMs": 0,
+        "source": "local-demo-receipt",
+        "verificationBasis": "declared-local-rehearsal",
+        "billingVerified": false,
+        "simulation": true,
+        "jobId": "",
+        "quoteId": ""
+      },
+      "spend": {
+        "request": {
+          "spendId": "local-demo-1791050418753-1",
+          "providerId": "openai",
+          "taskId": "local-demo-1791050418753-1",
+          "units": 2000000,
+          "period": "2026-10"
+        },
+        "spendId": "local-demo-1791050418753-1",
+        "providerId": "openai",
+        "taskId": "local-demo-1791050418753-1",
+        "units": 2000000,
+        "period": "2026-10",
+        "refundedUnits": 0
+      }
+    },
+    "notice": "Timeline projection unavailable: Economic timeline is full; export before continuing. Export its history; inspect accounting receipts in Ourplace.",
+    "passed": true
+  }
+}

@@ -25,13 +25,13 @@
  *
  * Node-safe: THREE and the DOM are only touched inside createTokenBlock().
  */
-import { createDoubleTapDetector } from './double-tap.js?v=20260922-cache2';
+import { createDoubleTapDetector } from './double-tap.js?v=20261003-complete8';
 import {
   makeGlassCubeMaterial,
   makeGlowMarker,
   makeConnectionLines,
   glassTintFor,
-} from './glass-style.js?v=20260922-cache2';
+} from './glass-style.js?v=20261003-complete8';
 import {
   TUMBO_TOKEN_EVENT,
   TUMBO_TOKEN_ASSET,
@@ -41,7 +41,7 @@ import {
   tumboSimToFluff,
   newIdempotencyKey,
   getTumboTokenFacade,
-} from '../domains/token.js?v=20260922-cache2';
+} from '../domains/token.js?v=20261003-complete8';
 
 export const TOKEN_BLOCK_CONSOLE_SOURCE = 'tumbo-token-block';
 const TOKEN_BLOCK_ID = 'tumbo-token';

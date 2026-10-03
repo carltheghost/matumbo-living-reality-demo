@@ -17,19 +17,19 @@ export const FLUFF_PER_TUMBO = 1000;
  * Total TUMBO supply in fluff (safe integer). Internal conservation anchor
  * only — never quoted publicly; the user has not chosen a public figure.
  */
-export const TOKEN_TOTAL_SUPPLY = 1_000_000_000_000;
+export const TOKEN_TOTAL_SUPPLY = 10_000_000_000;
 
 /** Total sMIMAS supply in fluff (safe integer). Internal only. */
 export const SMIMAS_TOTAL_SUPPLY = 100_000_000_000;
 
 /** TUMBO float allocated to the simulated market maker, in fluff. */
-export const MARKET_TUMBO_FLOAT = 10_000_000_000;
+export const MARKET_TUMBO_FLOAT = 1_000_000_000;
 
 /** sMIMAS float allocated to the simulated market maker, in fluff. */
-export const MARKET_SMIMAS_FLOAT = 10_000_000_000;
+export const MARKET_SMIMAS_FLOAT = SMIMAS_TOTAL_SUPPLY;
 
 /** Faucet bootstrap allocation, in fluff. */
-export const FAUCET_BOOTSTRAP_FLUFF = 1_000_000_000;
+export const FAUCET_BOOTSTRAP_FLUFF = 500_000_000;
 
 /** Reverse window, in ledger ticks. */
 export const REVERSE_WINDOW_TICKS = 1000;
@@ -37,14 +37,17 @@ export const REVERSE_WINDOW_TICKS = 1000;
 /** Void tithe on market ops, in basis points (10 bps = 0.1%). */
 export const VOID_TITHE_BPS = 10;
 
-/** Quote time-to-live, in ledger ticks. */
+/** Legacy reference constant; canonical quotes use QUOTE_TTL_MS below. */
 export const QUOTE_TTL_TICKS = 50;
 
 /** Supporter ribbon cap. Ribbons are free, non-transferable, non-monetized. */
 export const RIBBON_CAP = 5000;
 
-/** Fixed simulated market rate: 1 TUMBO = 100 sMIMAS (exact rational). */
-export const MARKET_RATE = Object.freeze({ num: 100, den: 1 });
+/** Fixed simulated market rate: 1 TUMBO = 10 sMIMAS (exact rational). */
+export const MARKET_RATE = Object.freeze({ num: 10, den: 1 });
+
+/** Canonical exchange quotes use wall-clock expiry; ticks govern reversals. */
+export const QUOTE_TTL_MS = 60_000;
 
 export const ASSETS = Object.freeze({
   TUMBO: Object.freeze({

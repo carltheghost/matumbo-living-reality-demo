@@ -142,7 +142,7 @@ function makeLineMaterial(color, opacity = BASE_OPACITY * 0.7) {
  * MediaPipe x/y are 0..1 (origin top-left). Three.js NDC is -1..1
  * with y flipped.
  */
-function landmarkToWorld(lm, camera, target) {
+function landmarkToWorld(lm, camera, target, cameraPosition) {
   const ndcX = lm.x * 2 - 1;
   const ndcY = -(lm.y * 2 - 1); // flip Y
   // Unproject a point on the near plane, then place it at fixed depth
@@ -150,11 +150,9 @@ function landmarkToWorld(lm, camera, target) {
   const vec = target || new THREE.Vector3();
   vec.set(ndcX, ndcY, 0.5).unproject(camera);
   // Direction from camera to the unprojected point
-  const dir = vec.sub(camera.position).normalize();
-  // Place at comfortable depth
-  return target
-    ? target.copy(camera.position).addScaledVector(dir, HAND_DEPTH)
-    : camera.position.clone().addScaledVector(dir, HAND_DEPTH);
+  // Keep the direction in this vector until the final addition. Copying the
+  // camera position into `target` first would overwrite the aliased direction.
+  return vec.sub(cameraPosition).normalize().multiplyScalar(HAND_DEPTH).add(cameraPosition);
 }
 // ─── Per-hand state object ──────────────────────────────────────────────────
 function createHandState(handedness, scene) {
@@ -214,7 +212,9 @@ function createHandState(handedness, scene) {
     present: false,       // currently receiving data
     lastSeen: 0,          // performance.now()
     opacity: 0,           // current group opacity 0..1
-    pinchActive: false
+    lastOpacity: 0,       // opacity when the most recent packet was received
+    pinchActive: false,
+    initialized: false
   };
 }
 function disposeHandState(state, scene) {
@@ -243,6 +243,8 @@ export function createHandPresence(scene, camera) {
   /** @type {Map<string, ReturnType<typeof createHandState>>} */
   const hands = new Map();
   let visible = true;
+  let disposed = false;
+  const cameraPosition = new THREE.Vector3();
   let lastNow = performance.now();
   function ensureHand(handedness) {
     if (!hands.has(handedness)) {
@@ -255,29 +257,37 @@ export function createHandPresence(scene, camera) {
    * @param {object} [pinchState] – optional pinch info keyed by side
    */
   function update(handList = [], pinchState = {}) {
-    if (!visible) return;
+    if (disposed || !visible) return;
+    const pinches = pinchState && typeof pinchState === 'object' ? pinchState : {};
+    // Hand projections and the camera must share world coordinates, including
+    // when the camera belongs to a moved/rotated XR or navigation rig.
+    camera.getWorldPosition(cameraPosition);
     const now = performance.now();
     const dt = Math.min(64, now - lastNow); // clamp for stability
     lastNow = now;
     // Mark all existing hands as not present this frame
     for (const h of hands.values()) h.present = false;
     // Process incoming hands
-    for (const raw of handList) {
-      if (!raw || !raw.landmarks || raw.landmarks.length < 21) continue;
+    for (const raw of Array.isArray(handList) ? handList : []) {
+      if (!raw || !Array.isArray(raw.landmarks) || raw.landmarks.length < 21) continue;
+      if (!raw.landmarks.slice(0, 21).every(lm => lm && Number.isFinite(lm.x) && Number.isFinite(lm.y))) continue;
       const side = raw.handedness === 'Left' ? 'Left' : 'Right';
       const state = ensureHand(side);
       state.present = true;
       state.lastSeen = now;
+      state.opacity = Math.min(1, state.opacity + dt / 120);
+      state.lastOpacity = state.opacity;
       // Pinch lookup (flexible shape)
-      const pinch = pinchState[side.toLowerCase()] ||
-                    pinchState[side] ||
-                    (side === 'Left' ? pinchState.left : pinchState.right) ||
+      const pinch = pinches[side.toLowerCase()] ||
+                    pinches[side] ||
+                    (side === 'Left' ? pinches.left : pinches.right) ||
                     {};
       state.pinchActive = !!(pinch.active || pinch.isPinching);
       // Smooth + place joints
       for (let i = 0; i < 21; i++) {
-        const world = landmarkToWorld(raw.landmarks[i], camera, state.tmp);
-        state.smoothed[i].lerp(world, SMOOTH);
+        const world = landmarkToWorld(raw.landmarks[i], camera, state.tmp, cameraPosition);
+        if (!state.initialized) state.smoothed[i].copy(world);
+        else state.smoothed[i].lerp(world, SMOOTH);
         const mesh = state.joints[i];
         mesh.position.copy(state.smoothed[i]);
         mesh.visible = true;
@@ -285,16 +295,19 @@ export function createHandPresence(scene, camera) {
         if (state.pinchActive && (i === THUMB_TIP || i === INDEX_TIP)) {
           const pulse = 1 + PINCH_PULSE * (0.5 + 0.5 * Math.sin(now * 0.012));
           mesh.scale.setScalar(pulse);
-          mesh.material.opacity = Math.min(1, BASE_OPACITY * 1.4 * pulse);
+          mesh.userData.handBaseOpacity = Math.min(1, BASE_OPACITY * 1.4 * pulse);
+          mesh.material.opacity = mesh.userData.handBaseOpacity * state.opacity;
         } else {
           mesh.scale.setScalar(1);
           // restore base opacity (fingertips brighter)
           let base = BASE_OPACITY;
           if (TIP_INDICES.has(i)) base *= 1.15;
           if (i === INDEX_TIP) base *= 1.35;
+          mesh.userData.handBaseOpacity = base;
           mesh.material.opacity = base * state.opacity;
         }
       }
+      state.initialized = true;
       // Skeleton lines
       const posAttr = state.lineGeo.attributes.position;
       const arr = posAttr.array;
@@ -326,8 +339,8 @@ export function createHandPresence(scene, camera) {
     // Fade / hide lost hands
     for (const state of hands.values()) {
       if (state.present) {
-        // fade in quickly
-        state.opacity = Math.min(1, state.opacity + dt / 120);
+        // Opacity was applied before rendering the latest tracking packet.
+        continue;
       } else {
         const age = now - state.lastSeen;
         if (age > FADE_MS) {
@@ -337,21 +350,22 @@ export function createHandPresence(scene, camera) {
           state.lines.visible = false;
           state.pinchLine.visible = false;
         } else {
-          state.opacity = 1 - age / FADE_MS;
+          state.opacity = state.lastOpacity * (1 - age / FADE_MS);
           // keep geometry visible while fading
           for (const m of state.joints) {
             m.visible = true;
-            m.material.opacity *= state.opacity; // already set above, scale further
+            m.material.opacity = (m.userData.handBaseOpacity ?? BASE_OPACITY) * state.opacity;
           }
           state.lineMat.opacity = (BASE_OPACITY * 0.7) * state.opacity;
           if (state.pinchLine.visible) {
-            state.pinchMat.opacity *= state.opacity;
+            state.pinchMat.opacity = (0.7 + 0.3 * Math.sin(now * 0.014)) * state.opacity;
           }
         }
       }
     }
   }
   function setVisible(v) {
+    if (disposed) return;
     visible = !!v;
     if (!visible) {
       for (const state of hands.values()) {
@@ -363,6 +377,8 @@ export function createHandPresence(scene, camera) {
     }
   }
   function dispose() {
+    if (disposed) return;
+    disposed = true;
     for (const state of hands.values()) {
       disposeHandState(state, scene);
     }

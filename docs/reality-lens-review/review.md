@@ -1,104 +1,113 @@
-# Reality Lens: calm spaces, native objects and real API connections
+# Reality Lens: complete cleanup and functional repair
 
-Reviewed and implemented on October 3, 2026 in the existing draft [PR #70](https://github.com/carltheghost/matumbo-living-reality-demo/pull/70), branch `fix/reality-lens-calm-2026-10-03`. The starting PR commit was `f9789c9922baf69a8fa912884ae2e55ee123f72a`, based on main `9760fa7493e8a0e1f7864f08c86c2ae0a1181815`. The changes remain a draft and have not been merged or deployed.
+## Ourplace creator and economic expansion — verified 2026-10-03T18:01:13.702308+00:00
 
-The new default is six readable 3D space bodies, followed by a bounded group of feature objects, followed by the selected feature's own attached controls. Search reaches every one of the 36 canonical feature IDs. The same feature owners, saved local layouts, simulation boundaries and TabEngine dock remain in use.
+Ourplace implements the requested describe → preview → apply → share → use/remix → attribute → funded reward loop in the existing Asset Token object. All six design categories are supported: layout, object, tool, agent, workflow and experience. Voice is a user-triggered browser capability; typed bounded instructions work without it. This is a functioning local rehearsal with separately identified unavailable production adapters.
 
-The six entry bodies have actual beveled silhouettes: a stepped portal, capsule, clipped prism, vault, shield and flowing slab. They own their native front materials. This is procedural Three.js geometry, with no claim of imported sculpted assets.
+- Actual design application changes object shapes, palette, arrangement, density, navigation preference and motion. Manual changes to unrelated object forms survive applying and undoing a design. Preview staleness rejects geometry changes before application.
+- Local publication records immutable versions and licenses. JSON share downloads carry descriptors and reviewed licensed ancestry. Imported origin survives edits, undo and reload; unverified imported authors cannot become local payout authority. A legacy changed design without provenance remains usable but requires an explicit fresh session before publishing.
+- Applying a registered design as another test participant records a local observation. Self-use, ancestor self-use and repeated actor/design/day/session evidence cannot farm another reward. A funded payout allocates exact integer shares among distinct ancestry creators; duplicate settlement does not debit again. This does not prove a public audience or identity.
+- One existing canonical TUMBO engine owns all value. Compute reservations, actual deterministic local-tool results, simulated usage reconciliation, unused-credit release and guarded funded claims share that owner. Contribution consent records bounded metadata, provider scope, retention, acceptance and revocation.
+- Services reserve and split payment atomically, with approved compensating refunds. Manually matched reserved spot orders support partial fills and cancellation. Collateral loans use lender-owned funds, fresh two-source local valuation, repayment/default/liquidation and visible residual debt. Prediction contracts support evidence proposals, challenges, two explicit approval roles and exact parimutuel settlement/INVALID refunds.
+- SHA-256 command ancestry and amount-bearing Merkle-sum proofs commit balances and obligations; the existing canonical receipt integrity chain remains separately labeled. There is no external proof anchor, custody, signing or production settlement authority.
+- Paired restore validates canonical journal ownership and compute/consent/refund protection before adopting history. Rehearsal time must match its recorded commands. New canonical writes and failed adoption observations cannot exceed the supported export history. A full timeline leaves compute debit and usage paired, and displays a projection notice.
 
-The existing object engine now supplies one entity ID, one body-local contour, one physical information face and one interactive front. Geometry caps, preview aspect ratios, CSS clipping and projected hit regions consume that same contour. All seven body forms keep their identity when reshaped. The sphere's old rectangular cap is corrected to its circular section; the cylinder's front fills its complete physical cut. Invisible hit buttons follow the actual contour and never move into an empty screen pocket. The old detached Details inspector is moved into the owning front as Object tools, with no separate background, border or shadow.
+Actual current-source browser acceptance passed on desktop and phone: both core creator/compute/proof flows, both extended creator/remix/share/import/reload flows, both financial suites, and both native design-effect/shortcut checks. The financial suites contain 101 desktop and 101 phone hit-tested interactions, with 5 and 5 persisted reload comparisons. A disposable context filled the shared timeline to its 4,000-event limit, then clicked WebAI usage recording and verified the matching debit, usage receipt, valid unchanged timeline and visible projection notice. Microphone speech, hardware GPUs, physical phones and XR were not simulated into acceptance.
 
-The [Muse reference](https://muse.ai/s/reality-lens-pxj61xkxvpxhgrd) was inspected in a rendered browser. It informed the focused space and return path. The [public maTumbo page](https://carltheghost.github.io/matumbo-living-reality-demo/) returned HTTP 200; its remote WebGL view timed out during the initial browser visit. Visual comparisons below use the exact starting PR served locally, with its real WebGL renderer, rather than claiming a new public deployment.
+[Complete Ourplace usage and architecture guide](OURPLACE_ECONOMY.md) · [Acceptance totals](economic-acceptance.json) · [Creator interactions](ourplace-creator-browser-verification.json) · [Financial desktop](desktop-ourplace-finance.json) · [Financial phone](phone-ourplace-finance.json) · [Paired replay](economic-runtime-paired-verification.json) · [Capacity probes](economic-runtime-capacity-probe.json)
 
-## Visible result
+![Actual applied white background and wave object with native Ourplace controls](ourplace-desktop-light-wave.png)
 
-![Six calm space objects on desktop](after-desktop-spaces.png)
+![Phone native economic proof controls](ourplace-phone-proof.png)
 
-![An opened Agents space with its three native object surfaces](after-agents-space.png)
+October 3, 2026. Work continues in draft [PR #70](https://github.com/carltheghost/matumbo-living-reality-demo/pull/70), branch `fix/reality-lens-calm-2026-10-03`, in the existing public repository. The starting PR was `f9789c9922baf69a8fa912884ae2e55ee123f72a`; main was `9760fa7493e8a0e1f7864f08c86c2ae0a1181815`. This report supersedes the earlier 55-check review and the intermediate pass that still had 46 inherited test failures. Public deployment remains separate from this draft.
 
-![Readable six-space phone view](after-phone-spaces.png)
+The default opens six readable space objects. A space exposes a bounded group of features; selecting a feature attaches its existing controls to the owning physical object front. Search reaches all 36 canonical IDs. The earlier all-objects assembly remains available as an optional view. Phone pages contain at most four objects; desktop pages contain at most six.
 
-![Chess controls attached to its selected Reality Lens object](after-chess.png)
+The [Muse reference](https://muse.ai/s/reality-lens-pxj61xkxvpxhgrd) was inspected in a rendered browser and informed the focused space and return path. The [public maTumbo page](https://carltheghost.github.io/matumbo-living-reality-demo/) returned HTTP 200, but its remote WebGL visit timed out during the initial comparison. Comparisons and acceptance here use actual local Three.js rendering of the starting and repaired branches. They do not establish a new public deployment.
 
-## Review and repairs
+## Visible result and object ownership
 
-| Problem | Result |
+![Six space objects on desktop](after-desktop-spaces.png)
+
+![Six-space phone view](after-phone-spaces.png)
+
+![YouTube search results and the actual selected player](youtube-real-result-embed.png)
+
+![Person Studio with the preserved physical avatar](person-phone-avatar-clean.png)
+
+The entry bodies are procedural beveled Three.js geometry: stepped portal, capsule, clipped prism, vault, shield and flowing slab. They are not imported sculpted assets. The object engine supplies one entity ID, body-local contour, physical information face and interactive front. The seven editable forms are phone, square, rectangle, sphere, cylinder, cube and wave. Geometry caps, CSS clipping and projected hit regions consume the same contour. Shape, size, state, provenance and related-feature tools sit inside that front.
+
+## What was repaired
+
+| Area | Concrete resulting behavior |
 | --- | --- |
-| A large field exposes all features, connectors and competing controls together. | The default shows six space bodies; opening one hides the other groups. Larger spaces page through at most six objects on desktop or four on phone. The optional All objects view preserves the earlier full assembly. |
-| Labels are small or visually separate from their objects; rear edges ghost through text. | Titles and summaries are rendered onto the geometry's own front/cap material. Correct cap UVs, front-face rendering and opaque reading fronts preserve legibility. Phone fronts use larger titles and counts. |
-| Separate contour generators make controls and clickable areas disagree with the body. | One shared physical contour drives all seven native caps, clip paths and projected hit regions. Native artifact tests check the cap geometry and seam; mounted browser tests reshape the same live entity through all seven forms. |
-| Details can reopen a second styled inspector over the selected object. | Shape, size, state, provenance and related-feature tools are inside the same reading skin. The independent screen-positioning path is removed. |
-| The old world floor cuts lines through the new objects. | The Lens hides the legacy floor and horizon rings, including after feature handoffs restore world presentation. |
-| Camera framing wastes phone space and overlaps the page controls. | Framing fits both dimensions, aligns phone objects below the heading, and reserves extra height for the pager. Resizing keeps the focused object on its containing page. |
-| A generic panel manager collapses the Spaces drawer or adds unrelated grips. | It excludes the Assembly and Person Studio, and preserves attached live surfaces. Spaces search now remains usable. |
-| Person Studio and Reality Lens both own camera animation. | Person handoff closes the Assembly; returning to Lens restores the six-space view. |
-| Back/Forward restores only a subset of feature IDs; old draft/person parameters leak into ordinary navigation. | All registered feature routes and the root restore without writing another history entry or refreshing a provider. Ordinary selection clears stale route context. |
-| White Paper opens without its native surface mapping. | The selected White Paper surface now attaches through the existing owner. |
-| Replay can appear available when a feature has no handler. | Replay is offered only for registered replay handlers and reports pending, failure or success honestly. |
-| Normal feature navigation silently refreshes providers. | A single shared policy keeps navigation local; explicit refresh/live routes authorize reads. The new automatic Connections batch is deliberate and separately bounded. |
-| Static previews omit assets or can serve unrelated files. | The cross-platform Python Pages builder includes deployable root scripts and assets. Preview and bridge servers restrict file serving to supported browser resources. |
-| Forged or copied portal handles can survive validation. | Issued handles use registry membership; copied/forged handles are rejected, and revocation is observed by existing sessions. |
-| Hand taps do not share the selection path. | Hand taps now select; grabs still move. |
+| Landing and navigation | Six spaces replace the initial 36-feature field. Search, phone paging, space return and browser history retain canonical feature ownership. Person Studio takes and returns camera ownership cleanly. Optional controls start closed. |
+| Surface geometry | Shared contours fix the sphere/cylinder front boundaries and reject clicks outside a body. Object tools remain part of the same front. Stable inspector references prevent hover transitions from throwing after those controls move into CSS3D. |
+| Clickable layout | Wave fronts reserve space inside their curved edges so close buttons and lower controls are reachable. Web + AI uses one scroll flow and separates overlapping header buttons. Native fronts remain transparent and unframed. |
+| Auxiliary panels | Pointer and keyboard resizing, eight handles, arrangement, depth/front order and versioned persistence work for auxiliary surfaces. The manager excludes native feature surfaces and detached Object tools; it discovers later auxiliary panels. |
+| Asset Token | Balances, receipts, transfers, vault and activity load from explicit controls inside the existing Asset Token object. Their sections start collapsed. No transfer/vault/activity chips or miniature renderer loops appear on startup. |
+| Transfers | One canonical QuoteEngine owns balances, supply, receipts and escrow. Send/receive/tip/burn, hold/settle/cancel and explicit TUMBO demo funding use its journals. Replay last transfer captures the original successful payload and key, so a fresh form key or later amount edit cannot cause a second debit. |
+| Vault and lifecycle | Stake/lock/deposit/savings positions use that same engine. Shared vault integrity checks owned coverage. Withdrawal preserves ownership; store reload rebuilds balances from validated journals. Vault WebGL failure has working Close/Escape controls, and Escape closes only the top view while preserving the feature below. |
+| Quotes, receipts and BotPay | Issued quote membership, engine ownership, expiry, exact amounts, idempotent payloads, chain integrity, immutable challenges, spend limits and failed-operation rollback are tested. No competing balance or proof chain was reinstated. BotPay registration is unfunded by default. |
+| Contract Atelier | Existing modes remain supported. Local algorithmic house/pool accounting, position selling, simulated-role approval and completion paths are repaired. The mounted workflow creates a contract, gathers both local approvals, attaches evidence and completes with one simulated receipt. |
+| Person and input | The physical Agent Smith avatar is preserved. Profile portraits remain profile UI. All five phone tabs and the Show/Hide controls work. Hand joints use real world coordinates and camera depth; asynchronous photo textures and disposal do not leave stale objects. Synthetic hand packets are explicitly test input. |
+| Media and bots | In-object YouTube search uses bounded public-provider failover, cancellation and stale-response cleanup. Selecting a real result leaves one player. Bot proposal expiry/replay paths do not duplicate rows. |
+| Module ownership | First-party caches use one current version. Token adapters recognize the complete canonical API across module URLs. Portal tests use the same versioned issuer/session graph as the browser; foreign issuers, copied handles and foreign sessions still fail closed. Private WeakMap/Symbol capabilities were preserved. |
+| Launch and delivery | A Windows launcher verifies the exact loopback service, repository fingerprint, listener ancestry, process creation time and instance before reuse or stop. Static packaging is deterministic, excludes server/key files and includes per-file hashes. Cross-platform CI runs the complete JS and Python suites. |
 
-## Public APIs and NVIDIA
+## Verified tests and actual interactions
 
-Connections checks one batch automatically when the page loads. Its four public groups are Open-Meteo weather, Frankfurter/ECB exchange rates, USGS earthquakes, and DeFiLlama Aave TVL. The natural browser run returned real HTTP 200 data for all four. It sends no location request and labels the weather as a New York example. Opening or closing Connections does not repeat the batch; Check connections requests another batch.
+The final complete JavaScript run on this Windows checkout passed **2,197 tests, zero failures, zero skips**. The complete Python run passed **20 tests**. The earlier cleanup phase passed 2,052 JavaScript tests before the economic expansion. Windows launch tests use actual ephemeral listeners to prove launch, reuse, ownership-safe stop, tampered-record refusal and foreign-listener refusal. Python tests cover the real loopback HTTP service with a fake upstream requester and deterministic archive/extraction integrity.
 
-FX has one fixed alternate: ExchangeRate-API. It is used only after the primary fails and retains the original failure, responding provider, source timestamp and required attribution. A separate mounted-component test deliberately simulated only Frankfurter HTTP 403; the alternate request was live and returned HTTP 200. This does not mean Frankfurter failed in the final natural browser run. [ExchangeRate-API's official open-access terms](https://www.exchangerate-api.com/docs/free).
+The exact starting PR had 1,771 tests, 1,717 passes and 54 failures on this host. The current clean suite includes functional repairs, expanded regression coverage, malformed-test corrections and migrations from retired APIs/source assumptions to the accepted architecture. A repaired source-pattern assertion or migrated old API test is not an independent product bug. The canonical supply/rates and private portal authority were preserved; tests were not skipped to obtain the passing result.
 
-The existing seven source surfaces remain accessible through Connections: World Pulse, tennis, market evidence, protocol TVL, multisport, Bluesky and Wikimedia. Their own provider refresh and provenance behavior remains with their feature owners. This is a reviewed catalog of useful adapters, not a claim that every free API on the internet has been implemented or verified.
+Browser evidence uses the real pinned Three.js renderer in Chromium with software WebGL/SwiftShader at 1440 × 1000 and 390 × 844. It is not a hardware GPU benchmark or a phone-device/WebXR acceptance test. All 36 canonical routes were opened at both sizes, with zero page exceptions, no visible legacy-panel leaks and no document overflow. Search and return controls were exercised throughout. Stable control-center hit testing additionally found and drove the wave/Web AI layout repairs.
 
-NVIDIA's current [Nemotron 3 Nano Omni catalog entry](https://build.nvidia.com/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning) lists a free prototype endpoint. External calls require an owner account and developer API key, as described in the [official quickstart](https://docs.api.nvidia.com/nim/docs/api-quickstart). The Python bridge automatically discovers configuration, keeps the key in its server environment, and calls the fixed NVIDIA endpoint only after Send. It binds to loopback, restricts origins and files, rejects redirects, bounds requests and returns advisory text only.
+Actual workflows include adding and inspecting a Block World draft cube; completing an Academy lesson with 30 local XP; entering/leaving Rooms; Neural Mesh replay; the complete local Contract Atelier approval/evidence/completion flow; and pointer-clicked chess `e2 → e4`, producing SAN `e4` and Black's turn. Chess coordinates were observed through Three's renderer/camera tooling; board state was not injected.
 
-**Verified current state: local bridge detected; NVIDIA Key needed.** No live authenticated NVIDIA answer has been verified. Configuration is not labeled as successful inference, and no API key is put in browser code, storage, the archive or this report. [Secure setup and provider details](../API_CONNECTIONS.md).
+Asset Token browser checks on desktop and phone exercise demo funding, send, replay after editing the amount, held-delivery settle/cancel, stake/unstake, vault Close/Escape, local activity check-in/drip, common engine identity, receipt-chain integrity and the absence of floating chips. The vault failure path deliberately denies WebGL only to the next optional renderer after the main world has rendered; that controlled failure is separate from the natural software-WebGL run. Auxiliary resizing/arrangement/persistence is exercised through a clearly labeled temporary fixture using the real panel manager.
 
-![Connections with honest NVIDIA state on phone](after-phone-connections.png)
+The media check performed a natural public search for `threejs tutorial`, returned eight real results, selected `Q7AOvWpIVHU` and observed the player's video time advance from 18.770635 to 20.777485 seconds. Both desktop and phone retained one iframe on the owning front. Provider availability can change.
 
-## Verification
+Evidence files: [full route/control audit](usability-audit.json), [token workflows](token-tools-verification.json), [panel controls](panel-controls-verification.json), [media workflows](media-workflow-verification.json), [avatar/input proof](avatar-input-browser-verification.json), [domain review](domain-repair-review.md). CI and release identity are recorded separately against the final committed source and extracted artifacts; this report does not substitute for those records.
 
-| Check | Evidence |
-| --- | --- |
-| Focused JavaScript checks | 140 passed, 0 failed; real geometry, binding and contour, layout, surfaces, navigation, replay, Pages artifact, preview restrictions, provider parsing, portal validation and input parity. |
-| Python HTTP bridge checks | 18 passed, 0 failed; real ephemeral loopback server with a fake upstream requester. This verifies bridge behavior, not NVIDIA authentication. |
-| Full exact starting PR on this Windows host | 1,771 tests: 1,717 passed, 54 failed. |
-| Final full suite on this same host | 1,814 tests: 1,768 passed, 46 failed. All remaining failure names are in the baseline; no added failing names. |
-| Mounted WebGL browser | Real Three.js renderer using Chromium software WebGL/SwiftShader, at 1440 × 1000 and 390 × 844. This is not a hardware GPU performance benchmark. |
-| Every canonical feature | All 36 selected through the real navigator; active ID matched; no runtime exceptions. All owned panels opened, Person entered its separate Studio, and Reality Lens returned to the root. |
-| Navigation interactions | Search finds YouTube; Escape closes search; feature → space → root returns; desktop paging 6 → 6 → 1; phone pages at most 4; direct feature focus retains its page; browser Back/Forward restores Chess/YouTube; stale person route is cleared; Person Studio and Lens do not remain active together. |
-| Native-body interactions | Actual object click opens Agent; changing its select control cycles through all seven forms with the same owning root and exactly one front. Details remains static inside that front; computed skin background is transparent, border is zero and shadow is none. Phone scrolling and landscape preserve ownership. A click outside the vault contour does not open it. |
-| Automatic public reads | Four real groups available; NVIDIA Key needed; zero inference requests; no extra reads from reopening Connections or ordinary feature selections. |
-| Browser errors | Zero page errors and no failed responses in the final natural full-world run. |
-| Static release | Rebuilt from final source; required root scripts, CSS, vendor and assets included; package extraction/replay is recorded in the delivery status. |
-| Git/CI | Syntax and diff checks passed. CI results are recorded separately against the pushed commit; the full inherited suite remains failing. |
+## Public connections and NVIDIA
 
-The earlier quoted 51 failures and lack of WebGL came from a different environment. They are superseded here by the exact baseline rerun and the mounted software-WebGL evidence. The eight fewer failures include behavioral repairs and test/build portability or geometry-contract corrections; they should not be counted as eight independent product bugs fixed. Old tests that expected an inset cylinder front or a fixed stretch multiplier were updated to the explicit native-front requirement and bounded portrait projection.
+One explicitly enabled, bounded public batch runs on page load: Open-Meteo's labeled New York weather example, Frankfurter/ECB EUR rates, USGS earthquakes and DeFiLlama Aave TVL. Reopening Connections or selecting an ordinary feature does not repeat the batch. Check connections requests another batch. FX has one fixed ExchangeRate-API alternate after a primary failure, retaining the original error, responding provider, timestamp and attribution.
 
-[Remaining failure inventory](remaining-test-failures.txt) includes inherited avatar/photo-mascot, contract, token/export, projection and source-pattern checks. All 36 route checks prove opening and rendering, not the complete internal behavior of every feature, hardware gestures, WebXR, accounts, signing or settlement. Older panel aliases such as multi-sport/market/sync are not fully hydrated by browser history; the canonical feature routes are covered.
+An earlier natural browser run returned live data for all four groups. A separate controlled check simulated only Frankfurter HTTP 403 and used a live alternate response. Those observations do not guarantee future provider/CORS availability. The existing seven public evidence surfaces remain available through their owners and explicit refresh controls. The reviewed adapter catalog is not universal coverage of every free API.
 
-The repository continuity/task packet files referenced by AGENTS.md are absent in this public checkout. The isolated branch and explicit user scope were used; the other governed/dirty Reality Lens repositories were preserved. AGENTS.md requires a reviewable diff and prohibits merging one's own branch. This PR remains draft.
+The local Python bridge is detected. **NVIDIA currently reports Key needed; no authenticated inference was verified.** It keeps a server-environment key outside browser code/storage, binds to loopback, fixes its upstream endpoint and bounds prompt, output, timeout, concurrency and local request rate. Send is the inference trigger. Configuration is distinct from a successful cloud answer. [Setup, limits and primary provider sources](../API_CONNECTIONS.md).
 
 ## Reproduce
 
-From the source repository or extracted source package:
+From the source repository or extracted source archive on Windows:
 
 ```powershell
-py -3 scripts/provider_bridge.py
+./run_local.bat
 ```
 
-Open `http://127.0.0.1:8082/`. Public connections work without an NVIDIA key. For NVIDIA, follow the masked environment setup in API_CONNECTIONS.md, restart the server and send one prompt. A Python 3.10+ runtime is required; the server and builder use only the standard library.
+The launcher verifies and opens `http://127.0.0.1:8082/`. To verify independently or stop only its owned process:
 
 ```powershell
-node --test tests/reality-assembly-scene.test.mjs tests/reality-lens-unified.test.mjs tests/reality-lens-chrome.test.mjs tests/reality-space-frame.test.mjs tests/object-is-tab-wrap.test.mjs tests/object-tab-binding.test.mjs tests/reality-object-engine.test.mjs tests/living-surface-layout-engine.test.mjs tests/living-surface-rig.test.mjs tests/centered-surfaces.test.mjs tests/feature-handoff.test.mjs tests/feature-navigator.test.mjs tests/public-preview.test.mjs tests/api-connections.test.mjs tests/portal-entry-return.test.mjs tests/portal-sessions.test.mjs tests/lens-intent-stream.test.mjs tests/chess-arena.test.mjs
-py -3 -m unittest discover -s tests -p test_provider_bridge.py
-node --test tests/*.test.mjs
-py -3 scripts/build_pages.py work/new-static-build
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-demo-launch.ps1
+./run_local.bat stop
 ```
 
-The full test command currently exits with failures listed above. Build into a new empty folder. The static artifact can be hosted directly; it does not include the Python bridge or secrets.
+Python 3.10+ and Node 22+ are sufficient for the documented checks; runtime/build tools use Python's standard library:
+
+```powershell
+py -3 scripts/run_tests.py
+py -3 -m unittest discover -s tests -p "test_*.py"
+py -3 scripts/package_demo.py --help
+```
+
+Build a static distribution into a fresh output directory. It can be hosted as static files and excludes the Python bridge and secrets. The source archive includes the launcher, tests and scripts. Public deployment is still unmerged. AGENTS.md's rule, "Submit a diff and evidence; never merge your own branch," remains in force, and the user also prohibits merging without explicit authorization. The other governed/dirty checkouts were preserved.
 
 ## Complete canonical feature inventory
 
-All 36 canonical feature IDs appear exactly once in the shared directory. Names and grouping remain backed by the existing registry and Reality Lens group resolver. The legacy static HTML counts 37 links because it also includes a separate Launch Kit utility; available utility launchers remain accessible as tools.
+All 36 canonical feature IDs appear exactly once in the shared directory. Names and grouping remain backed by the existing registry and Reality Lens group resolver. The separate Launch Kit utility remains accessible as a tool.
 
 | Space | Feature | Canonical ID |
 | --- | --- | --- |

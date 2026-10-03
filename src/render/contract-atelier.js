@@ -4,7 +4,7 @@ import {
   CONTRACT_ATELIER_STAKE_UNIT,
   createContractAtelier,
   describeContractLogic,
-} from "../domains/contract-atelier.js?v=20260922-cache2";
+} from "../domains/contract-atelier.js?v=20261003-complete8";
 import {
   OUTCOME_CONTRACTS_BOUNDARY,
   OUTCOME_CONTRACTS_NO_VALUE,
@@ -12,12 +12,12 @@ import {
   OUTCOME_RESULT_VOID,
   OUTCOME_STAKE_UNIT,
   createOutcomeContracts,
-} from "../domains/outcome-contracts.js?v=20260922-cache2";
+} from "../domains/outcome-contracts.js?v=20261003-complete8";
 // Display order for "Contracts for your review": readiness-ranked by the
 // TypeSafe judgment integration. Order only — approve/edit/dismiss behavior
 // is untouched. Import is additive; bot-plaza.js has no renderer imports,
 // so there is no cycle.
-import { rankProposalsForReview } from "../domains/bot-plaza.js?v=20260922-cache2";
+import { rankProposalsForReview } from "../domains/bot-plaza.js?v=20261003-complete8";
 
 export { CONTRACT_ATELIER_CONSOLE_SOURCE };
 export const CONTRACT_ATELIER_RENDER_SOURCE = CONTRACT_ATELIER_CONSOLE_SOURCE;
@@ -120,6 +120,20 @@ export function createContractAtelierConsole({
   }
 
   const studio = atelier ?? createContractAtelier();
+  if (![...(typeInput.options ?? typeInput.children ?? [])].some(option => option.value === 'yes_no')) {
+    const option = element(documentRoot, 'option', null, 'YES / NO · algorithmic house');
+    option.value = 'yes_no'; typeInput.append(option);
+  }
+  const houseModeInput = element(documentRoot, 'select', 'contract-atelier-select-input');
+  houseModeInput.id = 'contract-atelier-house-mode';
+  houseModeInput.setAttribute('aria-label', 'Algorithmic house ownership');
+  for (const [value, label] of [['single', 'Single house'], ['pool', 'House pool']]) {
+    const option = element(documentRoot, 'option', null, label); option.value = value; houseModeInput.append(option);
+  }
+  houseModeInput.value = 'single';
+  houseModeInput.hidden = typeInput.value !== 'yes_no';
+  typeInput.addEventListener('change', () => { houseModeInput.hidden = typeInput.value !== 'yes_no'; });
+  createButton.parentElement?.append(houseModeInput);
   let opened = panel.hidden !== true;
   let selectedId = null;
 
@@ -155,6 +169,7 @@ export function createContractAtelierConsole({
     if (action === "select" || action === "create" || action === "stake" || action === "resolve"
       || action === "outcome-select" || action === "outcome-create" || action === "outcome-join"
       || action === "outcome-grade" || action === "outcome-claim" || action === "outcome-transfer"
+      || action === 'house' || action === 'sell'
       || action === "review-approve" || action === "review-edit" || action === "review-dismiss") onSelect?.(next);
     if (action === "replay") onReplay?.(next);
     if (action === "reset") onReset?.(next);
@@ -189,6 +204,42 @@ export function createContractAtelierConsole({
     }
 
     if (contract.status === "open") {
+      if (contract.type === 'yes_no') {
+        const houseBox = element(documentRoot, 'div', 'contract-atelier-box');
+        houseBox.append(element(documentRoot, 'div', 'contract-atelier-section-label', 'HOUSE FUNDING · REHEARSAL CREDITS'));
+        houseBox.append(kvRow(documentRoot, 'CAPITAL', `${contract.houseCapital} · maximum loss ${(contract.liquidityB * Math.log(2)).toFixed(2)}`));
+        contract.houseContributors.forEach(row => houseBox.append(kvRow(documentRoot, row.provider, `${row.capital} credits · ${(row.shares * 100).toFixed(1)}%`)));
+        if (!contract.positions.length && (contract.houseMode === 'pool' || !contract.houseContributors.length)) {
+          const name = element(documentRoot, 'input', 'contract-atelier-text-input');
+          name.placeholder = 'House contributor name'; name.setAttribute('aria-label', 'House contributor name');
+          const capital = element(documentRoot, 'input', 'contract-atelier-text-input');
+          capital.type = 'number'; capital.min = '0.01'; capital.step = '0.01'; capital.placeholder = 'Simulated capital'; capital.setAttribute('aria-label', 'Simulated house capital');
+          const button = element(documentRoot, 'button', 'contract-atelier-action', contract.houseMode === 'pool' ? 'Join house pool' : 'Register house');
+          button.type = 'button';
+          button.addEventListener('click', () => {
+            try {
+              studio[contract.houseMode === 'pool' ? 'joinHousePool' : 'registerHouse']({ contractId: contract.id, participant: name.value, capital: capital.value });
+              statusEl.textContent = 'HOUSE FUNDED · SIMULATED ONLY';
+            } catch (error) { statusEl.textContent = `HOUSE BLOCKED · ${error.message}`; }
+            render(); publish('house', 'button');
+          });
+          houseBox.append(name, capital, button);
+        }
+        card.append(houseBox);
+        for (const position of contract.positions.filter(row => row.shares > 0)) {
+          const saleBox = element(documentRoot, 'div', 'contract-atelier-box');
+          saleBox.append(kvRow(documentRoot, position.participant, `${position.side} · ${position.shares} simulated shares`));
+          const shares = element(documentRoot, 'input', 'contract-atelier-text-input');
+          shares.type = 'number'; shares.min = '0.01'; shares.max = String(position.shares); shares.step = '0.01'; shares.value = String(position.shares); shares.setAttribute('aria-label', `Shares to sell from ${position.participant}'s ${position.side} position`);
+          const sell = element(documentRoot, 'button', 'contract-atelier-action', 'Sell shares (simulated)'); sell.type = 'button';
+          sell.addEventListener('click', () => {
+            try { const result = studio.sellPosition({ contractId: contract.id, positionId: position.id, participant: position.participant, shares: shares.value }); statusEl.textContent = `SOLD · ${result.proceeds} REHEARSAL CREDITS`; }
+            catch (error) { statusEl.textContent = `SELL BLOCKED · ${error.message}`; }
+            render(); publish('sell', 'button');
+          });
+          saleBox.append(shares, sell); card.append(saleBox);
+        }
+      }
       const stakeBox = element(documentRoot, "div", "contract-atelier-box");
       stakeBox.append(element(documentRoot, "div", "contract-atelier-section-label", "PLACE A REHEARSAL STAKE"));
       const sideSelect = element(documentRoot, "select", "contract-atelier-select-input");
@@ -203,12 +254,15 @@ export function createContractAtelierConsole({
       amountInput.type = "number";
       amountInput.min = "1";
       amountInput.placeholder = `Amount (${CONTRACT_ATELIER_STAKE_UNIT})`;
+      const participantInput = element(documentRoot, 'input', 'contract-atelier-text-input');
+      participantInput.placeholder = 'Participant name'; participantInput.setAttribute('aria-label', 'Participant name');
+      participantInput.value = 'local-player';
       const stakeButton = element(documentRoot, "button", "contract-atelier-action", "Stake (fictional)");
       stakeButton.type = "button";
       stakeButton.id = "contract-atelier-stake";
       stakeButton.addEventListener("click", () => {
         try {
-          studio.placeStake({ contractId: contract.id, side: sideSelect.value, amount: amountInput.value });
+          studio.placeStake({ contractId: contract.id, side: sideSelect.value, amount: amountInput.value, participant: participantInput.value });
           statusEl.textContent = `STAKED · ${sideSelect.value} · FICTIONAL ONLY`;
           amountInput.value = "";
         } catch (error) {
@@ -217,7 +271,7 @@ export function createContractAtelierConsole({
         render();
         publish("stake", "button");
       });
-      stakeBox.append(sideSelect, amountInput, stakeButton);
+      stakeBox.append(sideSelect, ...(contract.type === 'yes_no' ? [participantInput] : []), amountInput, stakeButton);
       card.append(stakeBox);
 
       const resolveBox = element(documentRoot, "div", "contract-atelier-box");
@@ -274,7 +328,7 @@ export function createContractAtelierConsole({
 
   function render() {
     const state = studio.getSnapshot();
-    statusEl.textContent = `${state.open} OPEN · ${state.resolved} RESOLVED · ${CONTRACT_ATELIER_STAKE_UNIT.toUpperCase()} ONLY`;
+    if (!statusEl.textContent) statusEl.textContent = `${state.open} OPEN · ${state.resolved} RESOLVED · ${CONTRACT_ATELIER_STAKE_UNIT.toUpperCase()} ONLY`;
     listEl.replaceChildren();
     studio.list().forEach((contract) => {
       const button = element(documentRoot, "button", "contract-atelier-item");
@@ -324,6 +378,7 @@ export function createContractAtelierConsole({
         title: titleInput.value,
         logic: buildLogic(logicKindInput.value, propAInput.value, propBInput.value, propCInput.value),
         outcomes: parsedOutcomes.length ? parsedOutcomes : null,
+        houseMode: houseModeInput.value,
       });
       selectedId = contract.id;
       titleInput.value = "";
@@ -638,7 +693,7 @@ export function createContractAtelierConsole({
 
   function readReviewQueue() {
     if (!proposalQueue) return { pending: [], decided: [] };
-    const nowMs = Date.now();
+    const nowMs = proposalQueue.getNowMs?.() ?? Date.now();
     const all = proposalQueue.getProposals();
     const pending = all.filter((proposal) => proposal.status === "pending" && !isEffectivelyExpired(proposal, nowMs));
     // Readiness-ranked display order only (deterministic heuristic; nothing
@@ -657,6 +712,7 @@ export function createContractAtelierConsole({
   }
 
   function approveProposal(proposal) {
+    let notificationError = null;
     try {
       if(typeof approveContractProposal==='function') {
         approveContractProposal(proposal);
@@ -668,13 +724,17 @@ export function createContractAtelierConsole({
         creator: `bot:${proposal.botName}`,
         status: "open",
       });
-      // Legacy hosts retain their callback; never suppress a failed binding.
-      if (typeof onContractApproved === "function") {
-        onContractApproved({ contract, proposal });
-      }
+      // The book now exists. Finish the queue transition before optional
+      // observer hooks so a hook failure cannot invite a duplicate approval.
       proposalQueue.setProposalStatus(proposal.id, "approved", { by: "user" });
+      if (typeof onContractApproved === "function") {
+        try { onContractApproved({ contract, proposal }); }
+        catch (error) { notificationError = error; }
       }
-      statusEl.textContent = `APPROVED · BOOK OPENED · "${String(proposal.eventLabel).toUpperCase().slice(0, 44)}" · SIMULATED ONLY`;
+      }
+      statusEl.textContent = notificationError
+        ? `APPROVED · BOOK OPENED · HOOK FAILED: ${String(notificationError?.message ?? notificationError).toUpperCase().slice(0, 60)} · SIMULATED ONLY`
+        : `APPROVED · BOOK OPENED · "${String(proposal.eventLabel).toUpperCase().slice(0, 44)}" · SIMULATED ONLY`;
     } catch (error) {
       // The draft stays pending so Tumbo can fix it and approve again.
       statusEl.textContent = `APPROVE BLOCKED · ${String(error?.message ?? error).toUpperCase().slice(0, 80)}`;
@@ -835,7 +895,7 @@ export function createContractAtelierConsole({
     if (decided.length) {
       const details = element(documentRoot, "details", "contract-atelier-review-decided");
       details.append(element(documentRoot, "summary", null, `DECIDED · ${decided.length}`));
-      const nowMs = Date.now();
+      const nowMs = proposalQueue.getNowMs?.() ?? Date.now();
       decided.forEach((proposal) => {
         const label = proposal.status === "pending" && isEffectivelyExpired(proposal, nowMs)
           ? "EXPIRED" : String(proposal.status).toUpperCase();

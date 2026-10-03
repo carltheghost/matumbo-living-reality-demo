@@ -17,7 +17,7 @@
  *   execution exists anywhere in this module.
  */
 
-import { createMuseAgent, designFromPrompt } from "./muse-agent.js?v=20260922-cache2";
+import { createMuseAgent, designFromPrompt } from "./muse-agent.js?v=20261003-complete8";
 
 export const BOT_PLAZA_SCHEMA_VERSION = 1;
 export const BOT_PLAZA_SOURCE = "bot-plaza";
@@ -642,6 +642,8 @@ export function createProposalQueue({ storage = null, now = null } = {}) {
 
   function updateProposal(id, patch, { by } = {}) {
     if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new TypeError("patch must be an object");
+    // Expiry is a queue invariant, including writes made without a preceding read.
+    sweepExpired();
     const index = indexOf(id);
     if (index < 0) throw new TypeError("unknown proposal id");
     const current = proposals[index];
@@ -680,6 +682,7 @@ export function createProposalQueue({ storage = null, now = null } = {}) {
     if (!BOT_PROPOSAL_FINAL_STATUSES.has(wanted) || wanted === "expired") {
       throw new TypeError('status must be "approved" or "dismissed"');
     }
+    sweepExpired();
     const index = indexOf(id);
     if (index < 0) throw new TypeError("unknown proposal id");
     const current = proposals[index];
@@ -748,6 +751,7 @@ export function createProposalQueue({ storage = null, now = null } = {}) {
 
   return freeze({
     submitProposal,
+    getNowMs: () => proposalNowMs(now),
     getProposals,
     getProposal,
     updateProposal,

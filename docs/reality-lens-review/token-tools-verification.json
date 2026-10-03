@@ -1,0 +1,561 @@
+{
+  "capability": "Chromium software WebGL; optional vault failure is separately injected",
+  "runs": [
+    {
+      "name": "desktop",
+      "activityFirst": false,
+      "initial": {
+        "chips": 0,
+        "transfer": false
+      },
+      "shared": {
+        "transfers": true,
+        "vault": true,
+        "front": "true",
+        "facadeKeys": [
+          "ledger",
+          "balance",
+          "fmt",
+          "on",
+          "quote",
+          "execute",
+          "faucet",
+          "reverse",
+          "cancel",
+          "verifyReceipt",
+          "verifyChain",
+          "journalHistory",
+          "tick",
+          "engine",
+          "tokenVault",
+          "tokenTransfers",
+          "send",
+          "receive",
+          "tip",
+          "burn",
+          "deliverHold",
+          "deliverSettle",
+          "deliverCancel",
+          "fundDemo",
+          "receipts",
+          "deliverIntents",
+          "__tokenTransferDetach"
+        ]
+      },
+      "ownerAfterActivity": true,
+      "operations": [
+        "canonical faucet",
+        "send",
+        "idempotent replay after editing amount",
+        "deliver settle",
+        "deliver cancel",
+        "stake",
+        "unstake",
+        "injected vault WebGL fallback Close",
+        "vault Escape",
+        "local activity check-in",
+        "local activity drip"
+      ],
+      "end": {
+        "chips": 0,
+        "overflow": false,
+        "frontCount": 1,
+        "engineChain": {
+          "ok": true,
+          "count": 27,
+          "tip": "a19f4f50b3f542aa"
+        },
+        "liveObject": {
+          "entityId": "asset-token",
+          "bodyId": "asset-token",
+          "shape": "cylinder",
+          "coordinateSpace": "owning-body-local",
+          "informationFace": {
+            "id": "front",
+            "width": 1.1253,
+            "height": 1.64,
+            "position": [
+              0,
+              0,
+              0.3819
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ],
+            "kind": "arc",
+            "curvature": 2.0106,
+            "readable": true
+          },
+          "interactionFace": {
+            "id": "front",
+            "width": 1.1253,
+            "height": 1.64,
+            "position": [
+              0,
+              0,
+              0.3839
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ],
+            "kind": "arc",
+            "curvature": 2.0106,
+            "readable": true
+          },
+          "contour": [
+            [
+              -0.5626,
+              -0.82,
+              0.3819
+            ],
+            [
+              0.5627,
+              -0.82,
+              0.3819
+            ],
+            [
+              0.5627,
+              0.82,
+              0.3819
+            ],
+            [
+              -0.5626,
+              0.82,
+              0.3819
+            ]
+          ],
+          "clipPath": "polygon(0.0044% 100%,100.0044% 100%,100.0044% 0%,0.0044% 0%)",
+          "interactiveFaceCount": 1,
+          "interactionClearance": 0.002,
+          "separatePanelFrame": false,
+          "bodyMutation": false,
+          "interactiveSurfaceCount": 1,
+          "ownedByBody": true,
+          "panelId": "asset-launch"
+        }
+      },
+      "errors": []
+    },
+    {
+      "name": "desktop",
+      "activityFirst": true,
+      "initial": {
+        "chips": 0,
+        "transfer": false
+      },
+      "shared": {
+        "transfers": true,
+        "vault": true,
+        "front": "true",
+        "facadeKeys": [
+          "ledger",
+          "balance",
+          "fmt",
+          "on",
+          "quote",
+          "execute",
+          "faucet",
+          "reverse",
+          "cancel",
+          "verifyReceipt",
+          "verifyChain",
+          "journalHistory",
+          "tick",
+          "engine",
+          "tokenVault",
+          "tokenTransfers",
+          "send",
+          "receive",
+          "tip",
+          "burn",
+          "deliverHold",
+          "deliverSettle",
+          "deliverCancel",
+          "fundDemo",
+          "receipts",
+          "deliverIntents",
+          "__tokenTransferDetach"
+        ]
+      },
+      "ownerAfterActivity": true,
+      "operations": [
+        "canonical faucet",
+        "send",
+        "idempotent replay after editing amount",
+        "deliver settle",
+        "deliver cancel",
+        "stake",
+        "unstake",
+        "injected vault WebGL fallback Close",
+        "vault Escape",
+        "local activity check-in",
+        "local activity drip"
+      ],
+      "end": {
+        "chips": 0,
+        "overflow": false,
+        "frontCount": 1,
+        "engineChain": {
+          "ok": true,
+          "count": 27,
+          "tip": "e58e7f9fdd0bd5ea"
+        },
+        "liveObject": {
+          "entityId": "asset-token",
+          "bodyId": "asset-token",
+          "shape": "cylinder",
+          "coordinateSpace": "owning-body-local",
+          "informationFace": {
+            "id": "front",
+            "width": 1.1253,
+            "height": 1.64,
+            "position": [
+              0,
+              0,
+              0.3819
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ],
+            "kind": "arc",
+            "curvature": 2.0106,
+            "readable": true
+          },
+          "interactionFace": {
+            "id": "front",
+            "width": 1.1253,
+            "height": 1.64,
+            "position": [
+              0,
+              0,
+              0.3839
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ],
+            "kind": "arc",
+            "curvature": 2.0106,
+            "readable": true
+          },
+          "contour": [
+            [
+              -0.5626,
+              -0.82,
+              0.3819
+            ],
+            [
+              0.5627,
+              -0.82,
+              0.3819
+            ],
+            [
+              0.5627,
+              0.82,
+              0.3819
+            ],
+            [
+              -0.5626,
+              0.82,
+              0.3819
+            ]
+          ],
+          "clipPath": "polygon(0.0044% 100%,100.0044% 100%,100.0044% 0%,0.0044% 0%)",
+          "interactiveFaceCount": 1,
+          "interactionClearance": 0.002,
+          "separatePanelFrame": false,
+          "bodyMutation": false,
+          "interactiveSurfaceCount": 1,
+          "ownedByBody": true,
+          "panelId": "asset-launch"
+        }
+      },
+      "errors": []
+    },
+    {
+      "name": "phone",
+      "activityFirst": false,
+      "initial": {
+        "chips": 0,
+        "transfer": false
+      },
+      "shared": {
+        "transfers": true,
+        "vault": true,
+        "front": "true",
+        "facadeKeys": [
+          "ledger",
+          "balance",
+          "fmt",
+          "on",
+          "quote",
+          "execute",
+          "faucet",
+          "reverse",
+          "cancel",
+          "verifyReceipt",
+          "verifyChain",
+          "journalHistory",
+          "tick",
+          "engine",
+          "tokenVault",
+          "tokenTransfers",
+          "send",
+          "receive",
+          "tip",
+          "burn",
+          "deliverHold",
+          "deliverSettle",
+          "deliverCancel",
+          "fundDemo",
+          "receipts",
+          "deliverIntents",
+          "__tokenTransferDetach"
+        ]
+      },
+      "ownerAfterActivity": true,
+      "operations": [
+        "canonical faucet",
+        "send",
+        "idempotent replay after editing amount",
+        "deliver settle",
+        "deliver cancel",
+        "stake",
+        "unstake",
+        "injected vault WebGL fallback Close",
+        "vault Escape",
+        "local activity check-in",
+        "local activity drip"
+      ],
+      "end": {
+        "chips": 0,
+        "overflow": false,
+        "frontCount": 1,
+        "engineChain": {
+          "ok": true,
+          "count": 27,
+          "tip": "38134264bf9b3483"
+        },
+        "liveObject": {
+          "entityId": "asset-token",
+          "bodyId": "asset-token",
+          "shape": "cylinder",
+          "coordinateSpace": "owning-body-local",
+          "informationFace": {
+            "id": "front",
+            "width": 1.1253,
+            "height": 1.64,
+            "position": [
+              0,
+              0,
+              0.3819
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ],
+            "kind": "arc",
+            "curvature": 2.0106,
+            "readable": true
+          },
+          "interactionFace": {
+            "id": "front",
+            "width": 1.1253,
+            "height": 1.64,
+            "position": [
+              0,
+              0,
+              0.3839
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ],
+            "kind": "arc",
+            "curvature": 2.0106,
+            "readable": true
+          },
+          "contour": [
+            [
+              -0.5626,
+              -0.82,
+              0.3819
+            ],
+            [
+              0.5627,
+              -0.82,
+              0.3819
+            ],
+            [
+              0.5627,
+              0.82,
+              0.3819
+            ],
+            [
+              -0.5626,
+              0.82,
+              0.3819
+            ]
+          ],
+          "clipPath": "polygon(0.0044% 100%,100.0044% 100%,100.0044% 0%,0.0044% 0%)",
+          "interactiveFaceCount": 1,
+          "interactionClearance": 0.002,
+          "separatePanelFrame": false,
+          "bodyMutation": false,
+          "interactiveSurfaceCount": 1,
+          "ownedByBody": true,
+          "panelId": "asset-launch"
+        }
+      },
+      "errors": []
+    },
+    {
+      "name": "phone",
+      "activityFirst": true,
+      "initial": {
+        "chips": 0,
+        "transfer": false
+      },
+      "shared": {
+        "transfers": true,
+        "vault": true,
+        "front": "true",
+        "facadeKeys": [
+          "ledger",
+          "balance",
+          "fmt",
+          "on",
+          "quote",
+          "execute",
+          "faucet",
+          "reverse",
+          "cancel",
+          "verifyReceipt",
+          "verifyChain",
+          "journalHistory",
+          "tick",
+          "engine",
+          "tokenVault",
+          "tokenTransfers",
+          "send",
+          "receive",
+          "tip",
+          "burn",
+          "deliverHold",
+          "deliverSettle",
+          "deliverCancel",
+          "fundDemo",
+          "receipts",
+          "deliverIntents",
+          "__tokenTransferDetach"
+        ]
+      },
+      "ownerAfterActivity": true,
+      "operations": [
+        "canonical faucet",
+        "send",
+        "idempotent replay after editing amount",
+        "deliver settle",
+        "deliver cancel",
+        "stake",
+        "unstake",
+        "injected vault WebGL fallback Close",
+        "vault Escape",
+        "local activity check-in",
+        "local activity drip"
+      ],
+      "end": {
+        "chips": 0,
+        "overflow": false,
+        "frontCount": 1,
+        "engineChain": {
+          "ok": true,
+          "count": 27,
+          "tip": "e5f4c31c126af241"
+        },
+        "liveObject": {
+          "entityId": "asset-token",
+          "bodyId": "asset-token",
+          "shape": "cylinder",
+          "coordinateSpace": "owning-body-local",
+          "informationFace": {
+            "id": "front",
+            "width": 1.1253,
+            "height": 1.64,
+            "position": [
+              0,
+              0,
+              0.3819
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ],
+            "kind": "arc",
+            "curvature": 2.0106,
+            "readable": true
+          },
+          "interactionFace": {
+            "id": "front",
+            "width": 1.1253,
+            "height": 1.64,
+            "position": [
+              0,
+              0,
+              0.3839
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ],
+            "kind": "arc",
+            "curvature": 2.0106,
+            "readable": true
+          },
+          "contour": [
+            [
+              -0.5626,
+              -0.82,
+              0.3819
+            ],
+            [
+              0.5627,
+              -0.82,
+              0.3819
+            ],
+            [
+              0.5627,
+              0.82,
+              0.3819
+            ],
+            [
+              -0.5626,
+              0.82,
+              0.3819
+            ]
+          ],
+          "clipPath": "polygon(0.0044% 100%,100.0044% 100%,100.0044% 0%,0.0044% 0%)",
+          "interactiveFaceCount": 1,
+          "interactionClearance": 0.002,
+          "separatePanelFrame": false,
+          "bodyMutation": false,
+          "interactiveSurfaceCount": 1,
+          "ownedByBody": true,
+          "panelId": "asset-launch"
+        }
+      },
+      "errors": []
+    }
+  ]
+}

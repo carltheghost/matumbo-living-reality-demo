@@ -6,7 +6,7 @@
  * authorized backend. Call tick while open and on return; a closed browser does
  * not execute JavaScript. No arbitrary code, URLs, network or real-money actions.
  */
-import { planGrading } from './outcome-contracts.js';
+import { planGrading } from './outcome-contracts.js?v=20261003-complete8';
 
 export const CONTRACT_AUTOMATION_VERSION = 1;
 export const CONTRACT_AUTOMATION_STORAGE_KEY = 'matumbo.contract-automation.v1';

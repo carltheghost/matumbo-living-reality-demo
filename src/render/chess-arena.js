@@ -15,13 +15,13 @@
  * ledger, no signing, no settlement.
  */
 import * as THREE from 'three';
-import {createChessArenaState,applyChessArenaMove} from '../domains/chess-arena.js?v=20260918-avatar-chess';
-import {chooseAiMove,CHESS_AI_DIFFICULTIES,resolveAiDifficulty} from '../domains/chess-ai.js?v=20260918-avatar-chess';
-import {avatarIdlePose,avatarGlide,AVATAR_MOTION} from '../domains/avatar-motion.js?v=20260918-avatar-chess';
-import {AVATAR_FACE_STORAGE_KEY} from '../domains/avatar-style.js?v=20260918-avatar-chess';
-import {PERSON_STUDIO_STORAGE_KEY} from '../domains/person-studio.js?v=20260922-cache2';
-import {buildArenaHall,createPieceBuilders,readArenaAvatarAppearance,squarePosition,CHESS_ROLE_GLYPHS} from './chess-arena-pieces.js?v=20260918-avatar-chess';
-import {isCompactViewport,resolvePixelRatioCap,shouldRunSecondaryLoop} from './render-perf.js?v=20260922-cache2';
+import {createChessArenaState,applyChessArenaMove} from '../domains/chess-arena.js?v=20261003-complete8';
+import {chooseAiMove,CHESS_AI_DIFFICULTIES,resolveAiDifficulty} from '../domains/chess-ai.js?v=20261003-complete8';
+import {avatarIdlePose,avatarGlide,AVATAR_MOTION} from '../domains/avatar-motion.js?v=20261003-complete8';
+import {AVATAR_FACE_STORAGE_KEY} from '../domains/avatar-style.js?v=20261003-complete8';
+import {PERSON_STUDIO_STORAGE_KEY} from '../domains/person-studio.js?v=20261003-complete8';
+import {buildArenaHall,createPieceBuilders,readArenaAvatarAppearance,squarePosition,CHESS_ROLE_GLYPHS} from './chess-arena-pieces.js?v=20261003-complete8';
+import {isCompactViewport,resolvePixelRatioCap,shouldRunSecondaryLoop} from './render-perf.js?v=20261003-complete8';
 
 const pieceName={p:'Pawn',n:'Knight',b:'Bishop',r:'Rook',q:'Queen',k:'King'};
 const sideName={w:'White',b:'Black'};

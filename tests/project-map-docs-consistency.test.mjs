@@ -28,13 +28,13 @@ test("project-map documents track current source-of-truth state without frozen h
   const current = documents["docs/CURRENT_STATE.md"];
 
   assert.match(launchKit, /Launch Kit/);
-  assert.match(integration, /INTEGRATION MATRIX/);
+  assert.match(integration, /INTEGRATION MATRIX/i);
   assert.match(current, /Current|current/);
 
   // Historical packet receipts may remain in dated documents. The consistency
   // test intentionally does not freeze suite counts, route counts, or packet ids.
   assert.match(documents["docs/DEVICE_PROJECTION.md"], /GAZE LOCK/);
-  assert.match(documents["docs/DEVICE_PROJECTION.md"], /Grab → one-step Hold → Place\\/Release/);
+  assert.match(documents["docs/DEVICE_PROJECTION.md"], /Grab → one-step Hold → Place\/Release/);
   assert.match(documents["docs/BLOCK_WORLD_MIGRATION.md"], /finite 19-destination registry/);
   assert.match(documents["docs/BLOCK_WORLD_MIGRATION.md"], /3-D \/ 4-D \/ 5-D/);
   assert.match(documents["docs/LIVE_GATEWAY_EVIDENCE.md"], /seven per-surface controls/);

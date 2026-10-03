@@ -1,5 +1,5 @@
-import {createRealityTimeline} from './reality-timeline.js?v=20260923-spatial-tabs15';
-import {createRealityGraph} from './side-living-reality.js';
+import {createRealityTimeline} from './reality-timeline.js?v=20261003-complete8';
+import {createRealityGraph} from './side-living-reality.js?v=20261003-complete8';
 
 /**
  * Keep each navigable reality on its own local layout timeline while the graph

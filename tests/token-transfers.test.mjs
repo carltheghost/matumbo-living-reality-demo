@@ -15,6 +15,10 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createTokenEngine, CONFIG } from '../src/domains/token.js';
+import { createTokenEngine as createVersionedEngine } from '../src/domains/token.js?v=20261003-complete8';
+import { createTokenFacade } from '../src/domains/token-facade.js';
+import { serializeTokenEngine, loadTokenEngine } from '../src/domains/token-store.js';
 
 import {
   createTokenTransferLedger,
@@ -38,14 +42,13 @@ const T = (sim) => sim * FLUFF_PER_TUMBO_SIM;
 
 function fundedLedger() {
   const ledger = createTokenTransferLedger();
-  ledger.send({
-    from: "sys:faucet", to: "u:alice", asset: "TUMBO",
-    amountFluff: T(1000), idempotencyKey: "fund-alice-tumbo", actor: "system",
-  });
-  ledger.send({
-    from: "sys:faucet", to: "u:alice", asset: "sMIMAS",
-    amountFluff: T(500), idempotencyKey: "fund-alice-smimas", actor: "system",
-  });
+  ledger.fundDemo({ to: "u:alice", amountFluff: T(1000), idempotencyKey: "fund-alice-tumbo" });
+  // Explicit fixture funding for cross-asset tests. The UI cannot debit the
+  // market account; ordinary sMIMAS acquisition uses canonical quotes.
+  ledger.engine.ledger.post([
+    { account: 'sys:market', asset: 'sMIMAS', amount: -T(500) },
+    { account: 'u:alice', asset: 'sMIMAS', amount: T(500) },
+  ], { idempotencyKey: 'fixture:smimas', action: 'fixture-funding', authority: 'internal' });
   return ledger;
 }
 
@@ -85,6 +88,8 @@ test("parseSimToFluff parses decimals exactly, never via float", () => {
   assert.throws(() => parseSimToFluff("-1"), TokenTransferError);
   assert.throws(() => parseSimToFluff("abc"), TokenTransferError);
   assert.throws(() => parseSimToFluff(""), TokenTransferError);
+  assert.equal(parseSimToFluff('9007199254740.991'), Number.MAX_SAFE_INTEGER);
+  assert.throws(() => parseSimToFluff('9007199254740.992'), TokenTransferError);
 });
 
 // ---- boot + conservation --------------------------------------------------
@@ -95,7 +100,8 @@ test("a fresh ledger conserves the configured supply per asset", () => {
   for (const asset of TOKEN_TRANSFER_ASSETS) {
     assert.equal(ledger.totalSupply(asset), TOKEN_TRANSFER_SUPPLY_FLUFF[asset]);
   }
-  assert.equal(ledger.journalCount(), 0);
+  assert.equal(ledger.journalCount(), 4, 'canonical genesis is journaled');
+  assert.equal(ledger.engine.ledger, ledger.ledger);
   assert.deepEqual(ledger.receipts(), []);
 });
 
@@ -113,7 +119,7 @@ test("send moves funds and journals exactly zero per asset", () => {
   assert.equal(ledger.balance("u:bob", "TUMBO"), T(250));
   assert.equal(ledger.journalCount(), journalsBefore + 1);
   const journal = ledger.journals().at(-1);
-  const sum = journal.legs.reduce((total, leg) => total + leg.delta, 0);
+  const sum = journal.postings.reduce((total, leg) => total + leg.amount, 0);
   assert.equal(sum, 0);
   assert.equal(ledger.assertConservation(), true);
 });
@@ -132,7 +138,7 @@ test("replay-safety: the same idempotency key twice yields one journal and the o
   assert.deepEqual(second, first);
   assert.equal(second.receiptId, first.receiptId);
   assert.equal(ledger.journalCount(), journalsBefore + 1);
-  assert.equal(ledger.receipts().length, journalsBefore + 1);
+  assert.equal(ledger.receipts().length, journalsBefore + 1 - 4, 'receipt view omits genesis');
   assert.equal(ledger.balance("u:alice", "TUMBO"), T(900));
   assert.equal(ledger.balance("u:bob", "TUMBO"), T(100));
 });
@@ -329,21 +335,21 @@ test("every journal sums to exactly zero and conservation holds after mixed acti
   ledger.tip({ from: "u:bob", to: "u:carol", asset: "TUMBO", amountFluff: T(10), idempotencyKey: "mix-2" });
   const hold = ledger.deliverHold({ from: "u:alice", to: "u:bob", asset: "sMIMAS", amountFluff: T(50), idempotencyKey: "mix-3" });
   ledger.deliverSettle({ intentId: hold.intentId, idempotencyKey: "mix-4" });
-  ledger.receive({ from: "sys:faucet", to: "u:dave", asset: "TUMBO", amountFluff: T(5), idempotencyKey: "mix-5" });
+  ledger.fundDemo({ to: "u:dave", amountFluff: T(5), idempotencyKey: "mix-5" });
   ledger.burn({ from: "u:carol", asset: "TUMBO", amountFluff: T(2), idempotencyKey: "mix-6" });
   for (const journal of ledger.journals()) {
-    const sum = journal.legs.reduce((total, leg) => total + leg.delta, 0);
-    assert.equal(sum, 0, `journal ${journal.journalId} must sum to zero`);
+    const sums = new Map();
+    for (const leg of journal.postings) sums.set(leg.asset, (sums.get(leg.asset) ?? 0) + leg.amount);
+    assert.equal([...sums.values()].every(sum => sum === 0), true, `journal ${journal.id} must sum to zero per asset`);
   }
   for (const asset of TOKEN_TRANSFER_ASSETS) {
     let total = 0;
     const seen = new Set();
     for (const journal of ledger.journals()) {
-      if (journal.asset !== asset) continue;
-      for (const leg of journal.legs) {
-        if (seen.has(leg.acct)) continue;
-        seen.add(leg.acct);
-        total += ledger.balance(leg.acct, asset);
+      for (const leg of journal.postings) {
+        if (leg.asset !== asset || leg.account === 'sys:issuance' || seen.has(leg.account)) continue;
+        seen.add(leg.account);
+        total += ledger.balance(leg.account, asset);
       }
     }
     for (const acct of ["sys:treasury", "sys:faucet", "sys:escrow", "sys:vault", "sys:void", "sys:market"]) {
@@ -362,12 +368,12 @@ test("receipts are hash-chained and recompute cleanly", () => {
   const ledger = fundedLedger();
   const r1 = ledger.send({ from: "u:alice", to: "u:bob", asset: "TUMBO", amountFluff: T(10), idempotencyKey: "rcpt-1" });
   const r2 = ledger.tip({ from: "u:bob", to: "u:carol", asset: "TUMBO", amountFluff: T(3), idempotencyKey: "rcpt-2" });
-  assert.equal(r1.sequence, 2);
-  assert.equal(r2.sequence, 3);
-  assert.equal(r2.beforeHash === r1.afterHash, false);
+  assert.equal(r1.sequence, r1.tick - 1);
+  assert.equal(r2.sequence, r1.sequence + 1);
+  assert.equal(r2.prevHash, r1.hash, 'chain linkage is the canonical receipt linkage');
   const v1 = ledger.verifyReceipt(r1.receiptId);
   assert.equal(v1.ok, true);
-  assert.deepEqual(Object.keys(v1.checks).sort(), ["afterHash", "beforeHash", "linkage", "payloadHash", "sequence"]);
+  assert.deepEqual(Object.keys(v1.checks).sort(), ['balanced-postings', 'canonical-record', 'hash', 'prevHash-link', 'tick-order']);
   for (const check of Object.values(v1.checks)) assert.equal(check, true);
   assert.equal(ledger.verifyReceipt(r2.receiptId).ok, true);
   assert.equal(ledger.verifyChain(), true);
@@ -383,10 +389,10 @@ test("receipts carry the idempotency reference and touched accounts", () => {
   });
   assert.equal(receipt.reference, "rcpt-accounts-1");
   assert.deepEqual([...receipt.accounts].sort(), ["u:alice", "u:bob"]);
-  assert.ok(receipt.journalId.startsWith("journal:"));
-  assert.ok(typeof receipt.beforeHash === "string" && receipt.beforeHash.length === 64);
-  assert.ok(typeof receipt.afterHash === "string" && receipt.afterHash.length === 64);
-  assert.ok(typeof receipt.payloadHash === "string" && receipt.payloadHash.length === 64);
+  assert.equal(receipt.journalId, receipt.id);
+  assert.match(receipt.hash, /^[0-9a-f]{16}$/);
+  assert.match(receipt.prevHash, /^[0-9a-f]{16}$/);
+  assert.equal(ledger.engine.ledger.verifyReceipt(receipt.id).ok, true);
 });
 
 // ---- events ----------------------------------------------------------------------
@@ -412,24 +418,227 @@ test("attachTokenTransfers provides the contract-shaped facade without a DOM", (
   assert.equal(typeof facade.balance, "function");
   assert.equal(typeof facade.fmt, "function");
   assert.equal(typeof facade.on, "function");
-  assert.equal(facade.balance("sys:faucet", "TUMBO"), TOKEN_TRANSFER_SUPPLY_FLUFF.TUMBO / 4);
-  assert.equal(facade.fmt(1234), "1.234 TUMBO-SIM");
+  assert.equal(facade.balance("sys:faucet", "TUMBO"), CONFIG.faucetTumbo);
+  assert.equal(facade.fmt(1234), '1.234 TUMBO-SIM');
   const events = [];
   const off = facade.on("receipt", (detail) => events.push(detail));
-  const receipt = facade.send({
-    from: "sys:faucet", to: "u:erin", asset: "TUMBO",
+  const receipt = facade.fundDemo({
+    to: "u:erin",
     amountFluff: T(20), idempotencyKey: "facade-1",
   });
   assert.equal(events.length, 1);
-  assert.equal(events[0].receipt.receiptId, receipt.receiptId);
+  assert.equal(events[0].receipt.id, receipt.receiptId);
   off();
   assert.equal(facade.tokenTransfers.balance("u:erin", "TUMBO"), T(20));
+  facade.dispose();
 });
 
-test("attachTokenTransfers never clobbers an existing facade surface", () => {
-  const existing = { balance: () => 42, custom: true };
+test("attachTokenTransfers layers a frozen canonical facade without clobbering it", () => {
+  const engine = createTokenEngine(), base = createTokenFacade(engine);
+  const existing = Object.freeze({ ...base, custom: true });
   const facade = attachTokenTransfers(existing);
-  assert.equal(facade.balance("u:x", "TUMBO"), 42);
+  assert.notEqual(facade, existing);
+  assert.equal(facade.balance, existing.balance);
+  assert.equal(facade.balance("u:x", "TUMBO"), 0);
   assert.equal(facade.custom, true);
   assert.equal(typeof facade.send, "function");
+  assert.equal(existing.tokenTransfers, undefined);
+  assert.equal(facade.tokenTransfers.engine, engine);
+  assert.equal(facade.engine, engine);
+  assert.equal(Object.isFrozen(facade), true);
+  base.dispose();
+});
+
+test('plain and cache-versioned engine owners retain one ledger through transfer attachment', () => {
+  for (const createEngine of [createTokenEngine, createVersionedEngine]) {
+    const engine = createEngine(), base = createTokenFacade(engine), layered = attachTokenTransfers(base, { engine });
+    const ledger = createTokenTransferLedger({ engine: { _engine: engine } });
+    layered.fundDemo({ to: 'u:alice', amountFluff: 100, idempotencyKey: 'version:fund' });
+    const receipt = ledger.send({ from: 'u:alice', to: 'u:bob', asset: 'TUMBO', amountFluff: 10, idempotencyKey: 'version:send' });
+    assert.equal(layered.engine, engine); assert.equal(ledger.ledger, engine.ledger);
+    assert.equal(base.balance('u:alice', 'TUMBO'), 90);
+    assert.equal(layered.tokenTransfers.balance('u:bob', 'TUMBO'), 10);
+    assert.equal(engine.ledger.verifyReceipt(receipt.id).ok, true);
+    assert.equal(ledger.send({ from: 'u:alice', to: 'u:bob', asset: 'TUMBO', amountFluff: 10, idempotencyKey: 'version:send' }).id, receipt.id);
+    assert.equal(attachTokenTransfers(layered), layered);
+    base.dispose();
+  }
+});
+
+test('transfer constructors reject incomplete owner contracts without touching balances or browser ownership', () => {
+  const engine = createTokenEngine(), count = engine.ledger.journalCount(), previous = globalThis.window;
+  const partial = Object.create(engine); partial.faucet = undefined;
+  try {
+    const marker = {}; globalThis.window = { TumboToken: marker };
+    for (const owner of [{ ledger: engine.ledger, balance: engine.balance }, { engine: partial }]) {
+      assert.throws(() => createTokenTransferLedger({ engine: owner }), /canonical QuoteEngine/);
+      assert.throws(() => attachTokenTransfers(owner), /canonical QuoteEngine/);
+      assert.throws(() => attachTokenTransfers(null, { engine: owner }), /canonical QuoteEngine/);
+    }
+    assert.equal(globalThis.window.TumboToken, marker);
+    assert.equal(engine.ledger.journalCount(), count);
+    assert.equal(engine.balance('u:alice', 'TUMBO'), 0);
+  } finally { if (previous === undefined) delete globalThis.window; else globalThis.window = previous; }
+});
+
+function state(ledger) {
+  return { count: ledger.journalCount(), tick: ledger.engine.ledger.tick, receipts: ledger.receipts(),
+    accounts: ledger.engine.ledger.accounts().map(row => ({ ...row, balance: ledger.balance(row.account, row.asset) })), intents: ledger.intents() };
+}
+function assertCode(fn, code) { assert.throws(fn, error => error.code === code); }
+
+test('ordinary transfers cannot debit system balances or fabricate faucet sMIMAS', () => {
+  const ledger = fundedLedger(), before = state(ledger);
+  for (const from of ['sys:faucet', 'sys:treasury', 'sys:market', 'sys:escrow', 'sys:vault']) {
+    for (const action of ['send', 'receive', 'tip', 'deliverHold', 'burn']) assertCode(() => ledger[action]({
+      from, to: 'u:thief', asset: 'TUMBO', amountFluff: 1, actor: 'system', idempotencyKey: `${from}:${action}`,
+    }), 'SYSTEM_DEBIT');
+  }
+  assertCode(() => ledger.send({ from: 'sys:void', to: 'u:thief', asset: 'TUMBO', amountFluff: 1, idempotencyKey: 'void-debit' }), 'VOID_DEBIT');
+  assert.throws(() => ledger.send({ from: 'u:alice', to: 'sys:void', asset: 'TUMBO', amountFluff: 1, idempotencyKey: 'fake-burn' }), TokenTransferError);
+  assert.throws(() => ledger.fundDemo({ to: 'u:thief', asset: 'sMIMAS', amountFluff: 1, idempotencyKey: 'fake-smimas' }), TokenTransferError);
+  assert.deepEqual(state(ledger), before);
+});
+
+test('reusing a send key with different action, recipient, amount, memo, or actor fails atomically', () => {
+  const ledger = fundedLedger(), args = { from: 'u:alice', to: 'u:bob', asset: 'TUMBO', amountFluff: 10, idempotencyKey: 'bound-send' };
+  const receipt = ledger.send(args), before = state(ledger);
+  for (const change of [{ to: 'u:carol' }, { amountFluff: 11 }, { memo: 'changed' }, { actor: 'u:bob' }, { asset: 'sMIMAS' }]) {
+    assertCode(() => ledger.send({ ...args, ...change }), 'IDEM_MISMATCH');
+  }
+  assertCode(() => ledger.tip(args), 'IDEM_MISMATCH');
+  assert.equal(ledger.send(args), receipt); assert.deepEqual(state(ledger), before);
+});
+
+test('hold idempotency binds the intended recipient, rather than only the escrow posting', () => {
+  const ledger = fundedLedger(), args = { from: 'u:alice', to: 'u:bob', asset: 'TUMBO', amountFluff: 10, idempotencyKey: 'bound-hold' };
+  const receipt = ledger.deliverHold(args), before = state(ledger);
+  assert.equal(receipt.links.recipient, 'u:bob');
+  assertCode(() => ledger.deliverHold({ ...args, to: 'u:carol' }), 'IDEM_MISMATCH');
+  assert.deepEqual(state(ledger), before); assert.equal(ledger.getIntent(receipt.intentId).to, 'u:bob');
+});
+
+test('settlement keys cannot replay a different intent and cancel retries bind reason/memo', () => {
+  const ledger = fundedLedger();
+  const first = ledger.deliverHold({ from: 'u:alice', to: 'u:bob', asset: 'TUMBO', amountFluff: 10, idempotencyKey: 'first-intent' });
+  const second = ledger.deliverHold({ from: 'u:alice', to: 'u:carol', asset: 'TUMBO', amountFluff: 10, idempotencyKey: 'second-intent' });
+  const settled = ledger.deliverSettle({ intentId: first.intentId, idempotencyKey: 'bound-settle' });
+  const before = state(ledger);
+  assertCode(() => ledger.deliverSettle({ intentId: second.intentId, idempotencyKey: 'bound-settle' }), 'IDEM_MISMATCH');
+  assert.deepEqual(state(ledger), before); assert.equal(ledger.getIntent(second.intentId).status, 'held');
+  assert.equal(ledger.deliverSettle({ intentId: first.intentId, idempotencyKey: 'bound-settle' }), settled);
+  const args = { intentId: second.intentId, idempotencyKey: 'bound-cancel', reason: 'change of plan', memo: 'local' };
+  const cancelled = ledger.deliverCancel(args), after = state(ledger);
+  assert.equal(ledger.deliverCancel(args), cancelled);
+  assertCode(() => ledger.deliverCancel({ ...args, reason: 'different' }), 'IDEM_MISMATCH');
+  assert.deepEqual(state(ledger), after);
+});
+
+test('second adapters and canonical snapshot reloads reconstruct held and closed intents without another ledger', () => {
+  const ledger = fundedLedger(), hold = ledger.deliverHold({ from: 'u:alice', to: 'u:bob', asset: 'TUMBO', amountFluff: 10, idempotencyKey: 'reload-hold' });
+  const sibling = createTokenTransferLedger({ engine: ledger.engine });
+  assert.equal(sibling.ledger, ledger.ledger); assert.deepEqual(sibling.getIntent(hold.intentId), ledger.getIntent(hold.intentId));
+  const restored = loadTokenEngine(serializeTokenEngine(ledger.engine)), adapter = createTokenTransferLedger({ engine: restored });
+  assert.deepEqual(adapter.getIntent(hold.intentId), ledger.getIntent(hold.intentId));
+  const settled = adapter.deliverSettle({ intentId: hold.intentId, idempotencyKey: 'reload-settle' });
+  assert.equal(restored.balance('u:bob', 'TUMBO'), 10); assert.equal(adapter.balance('sys:escrow', 'TUMBO'), 0);
+  const restoredAgain = loadTokenEngine(serializeTokenEngine(restored)), again = createTokenTransferLedger({ engine: restoredAgain });
+  assert.equal(again.getIntent(hold.intentId).status, 'settled');
+  const tick = restoredAgain.ledger.tick;
+  assert.equal(again.deliverSettle({ intentId: hold.intentId, idempotencyKey: 'reload-settle' }).id, settled.id);
+  assert.equal(restoredAgain.ledger.tick, tick); assert.equal(again.assertConservation(), true);
+});
+
+test('reentrant settlement sees the canonical closed intent and cannot drain another hold', () => {
+  const ledger = fundedLedger();
+  const hold = ledger.deliverHold({ from: 'u:alice', to: 'u:bob', asset: 'TUMBO', amountFluff: 10, idempotencyKey: 'reentry-hold' });
+  const other = ledger.deliverHold({ from: 'u:alice', to: 'u:carol', asset: 'TUMBO', amountFluff: 10, idempotencyKey: 'reentry-other' });
+  const attempts = [];
+  const off = ledger.engine.ledger.onCommit(row => { if (row.links?.phase === 'settle') {
+    try { ledger.deliverSettle({ intentId: hold.intentId, idempotencyKey: 'reentry-again' }); } catch (error) { attempts.push(error.code); }
+  } });
+  ledger.deliverSettle({ intentId: hold.intentId, idempotencyKey: 'reentry-settle' }); off();
+  assert.deepEqual(attempts, ['INTENT_STATE']); assert.equal(ledger.balance('u:bob', 'TUMBO'), 10);
+  assert.equal(ledger.balance('sys:escrow', 'TUMBO'), 10); assert.equal(ledger.getIntent(other.intentId).status, 'held');
+});
+
+test('a reversed hold cannot consume another intent, and reversing settlement restores a held intent', () => {
+  const ledger = fundedLedger();
+  const first = ledger.deliverHold({ from: 'u:alice', to: 'u:bob', asset: 'TUMBO', amountFluff: 10, idempotencyKey: 'reverse-hold' });
+  const second = ledger.deliverHold({ from: 'u:alice', to: 'u:carol', asset: 'TUMBO', amountFluff: 10, idempotencyKey: 'reverse-other' });
+  ledger.engine.reverse({ journalId: first.id });
+  const before = state(ledger); assert.equal(ledger.getIntent(first.intentId).status, 'reversed');
+  assert.throws(() => ledger.deliverSettle({ intentId: first.intentId, idempotencyKey: 'after-reverse-hold' }), IntentStateError);
+  assert.deepEqual(state(ledger), before);
+  const settled = ledger.deliverSettle({ intentId: second.intentId, idempotencyKey: 'reverse-settle' });
+  ledger.engine.reverse({ journalId: settled.id });
+  assert.equal(ledger.getIntent(second.intentId).status, 'held'); assert.equal(ledger.balance('sys:escrow', 'TUMBO'), 10);
+  ledger.deliverCancel({ intentId: second.intentId, idempotencyKey: 'cancel-reversed-settle' });
+  assert.equal(ledger.balance('sys:escrow', 'TUMBO'), 0); assert.equal(ledger.assertConservation(), true);
+});
+
+test('underfunded escrow cannot settle one intent by consuming another held reservation', () => {
+  const ledger = fundedLedger();
+  const first = ledger.deliverHold({ from: 'u:alice', to: 'u:bob', asset: 'TUMBO', amountFluff: 10, idempotencyKey: 'cover-first' });
+  ledger.deliverHold({ from: 'u:alice', to: 'u:carol', asset: 'TUMBO', amountFluff: 10, idempotencyKey: 'cover-second' });
+  // Simulate an independently authorized local owner moving escrow. The
+  // transfer adapter must detect that its reservations are no longer covered.
+  ledger.engine.ledger.post([
+    { account: 'sys:escrow', asset: 'TUMBO', amount: -10 }, { account: 'u:external', asset: 'TUMBO', amount: 10 },
+  ], { idempotencyKey: 'fixture:escrow-withdrawal', action: 'fixture', authority: 'internal' });
+  const before = state(ledger);
+  assert.throws(() => ledger.deliverSettle({ intentId: first.intentId, idempotencyKey: 'cover-settle' }), InsufficientFundsError);
+  assert.throws(() => ledger.deliverCancel({ intentId: first.intentId, idempotencyKey: 'cover-cancel' }), InsufficientFundsError);
+  assert.deepEqual(state(ledger), before);
+});
+
+test('canonical receipt aliases cannot hide tampering and corrupt chains block mutations', () => {
+  const ledger = fundedLedger(), receipt = ledger.send({ from: 'u:alice', to: 'u:bob', asset: 'TUMBO', amountFluff: 10, idempotencyKey: 'verify-bound' });
+  assert.equal(ledger.verifyReceipt(receipt).ok, true);
+  assert.equal(ledger.verifyReceipt({ ...receipt, summary: 'forged title' }).ok, false);
+  assert.equal(ledger.verifyReceipt({ ...receipt, postings: [{ account: 'u:bob', asset: 'TUMBO', amount: 1000 }] }).ok, false);
+  const index = ledger.engine.ledger._journals.findIndex(row => row.id === receipt.id);
+  ledger.engine.ledger._journals[index] = { ...ledger.engine.ledger._journals[index], memo: 'tampered' };
+  assert.equal(ledger.verifyReceipt(receipt.id).ok, false);
+  const count = ledger.journalCount();
+  assertCode(() => ledger.send({ from: 'u:alice', to: 'u:bob', asset: 'TUMBO', amountFluff: 1, idempotencyKey: 'invalid-chain-send' }), 'INVALID_CHAIN');
+  assertCode(() => ledger.fundDemo({ to: 'u:alice', amountFluff: 1, idempotencyKey: 'invalid-chain-fund' }), 'INVALID_CHAIN');
+  assert.equal(ledger.journalCount(), count);
+});
+
+test('layered facade shares engine balances/events across canonical operations and attaches once', () => {
+  const engine = createTokenEngine(), base = createTokenFacade(engine), layered = attachTokenTransfers(base), seen = [];
+  assert.equal(layered.engine, base.engine); assert.equal(layered.tokenTransfers.ledger, engine.ledger);
+  assert.equal(attachTokenTransfers(layered), layered);
+  const off = base.on('receipt', event => seen.push(event));
+  layered.fundDemo({ to: 'u:alice', amountFluff: 100, idempotencyKey: 'layer:fund' });
+  layered.send({ from: 'u:alice', to: 'u:bob', asset: 'TUMBO', amountFluff: 10, idempotencyKey: 'layer:send' });
+  base.execute('send', { from: 'u:bob', to: 'u:carol', amountFluff: 5, idempotencyKey: 'layer:base-send' });
+  assert.equal(seen.length, 3); assert.equal(base.balance('u:alice', 'TUMBO'), 90);
+  assert.equal(layered.tokenTransfers.balance('u:carol', 'TUMBO'), 5);
+  assert.equal(layered.tokenTransfers.receipts().some(row => row.id === seen[2].receipt.id), true);
+  off(); base.dispose();
+});
+
+test('attachment replaces only the matching browser facade and rejects missing/conflicting owners', () => {
+  const engine = createTokenEngine(), base = createTokenFacade(engine), previous = globalThis.window;
+  try {
+    globalThis.window = { TumboToken: base };
+    const layered = attachTokenTransfers(base);
+    assert.equal(globalThis.window.TumboToken, layered); assert.equal(base.tokenTransfers, undefined);
+    assert.equal(attachTokenTransfers(layered), layered);
+    assert.throws(() => attachTokenTransfers(base, { engine: createTokenEngine() }), /must match/);
+    assert.throws(() => attachTokenTransfers({ balance: () => 42 }), /canonical QuoteEngine/);
+    assert.throws(() => createTokenTransferLedger({ engine: {} }), /canonical QuoteEngine/);
+  } finally { if (previous === undefined) delete globalThis.window; else globalThis.window = previous; base.dispose(); }
+});
+
+test('demo funding is explicit, TUMBO-only, bound to the canonical client key, and atomic on exhaustion', () => {
+  const engine = createTokenEngine({ ...CONFIG, faucetTumbo: 10 }), ledger = createTokenTransferLedger({ engine });
+  const args = { to: 'u:alice', amountFluff: 10, idempotencyKey: 'last-funding' };
+  const receipt = ledger.fundDemo(args), before = state(ledger);
+  assert.equal(ledger.fundDemo(args).id, receipt.id); assert.deepEqual(state(ledger), before);
+  assertCode(() => ledger.fundDemo({ ...args, to: 'u:bob' }), 'IDEM_MISMATCH');
+  assert.throws(() => ledger.fundDemo({ to: 'u:bob', amountFluff: 1, idempotencyKey: 'empty-faucet' }), /insufficient funds/);
+  assert.deepEqual(state(ledger), before); assert.equal(ledger.balance('u:bob', 'TUMBO'), 0);
 });

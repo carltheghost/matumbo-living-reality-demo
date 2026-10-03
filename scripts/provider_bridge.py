@@ -8,6 +8,7 @@ Run: py -3 scripts/provider_bridge.py
 from __future__ import annotations
 
 import argparse
+import hashlib
 from collections import deque
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -17,6 +18,7 @@ from pathlib import Path
 import re
 import threading
 import time
+import uuid
 from urllib.error import HTTPError, URLError
 from urllib.parse import unquote, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
@@ -230,6 +232,20 @@ def static_path(root, raw_path):
 def create_server(root, port=8082, state=None):
     root = Path(root).resolve()
     state = state or ProviderState(os.environ.get("NVIDIA_API_KEY", ""), os.environ.get("NVIDIA_MODEL", DEFAULT_MODEL))
+    root_fingerprint = hashlib.sha256(str(root).replace('\\', '/').lower().rstrip('/').encode('utf-8')).hexdigest()
+    instance_id = uuid.uuid4().hex
+
+    def health():
+        # The launcher can prove checkout and process identity without publishing local paths.
+        navigator = root / 'src' / 'render' / 'feature-navigator.js'
+        text = navigator.read_text(encoding='utf-8') if navigator.is_file() else ''
+        definitions = text.split('FEATURE_DEFINITIONS', 1)[-1].split(']);', 1)[0]
+        feature_count = len(re.findall(r'^\s+id:\s*["\'][^"\']+["\']', definitions, re.M))
+        return {'service':'matumbo-provider-bridge','version':1,'instanceId':instance_id,
+            'rootFingerprint':root_fingerprint,'featureCount':feature_count,
+            'healthy':(root / 'index.html').is_file() and (root / 'src' / 'main.js').is_file(),
+            'localOnly':True,'credentialsInBrowser':False,'externalDeployment':False,
+            'storage':'browser-local-projection','checkedAt':utc_now()}
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "maTumboBridge/1"
@@ -280,7 +296,7 @@ def create_server(root, port=8082, state=None):
 
         def do_OPTIONS(self):
             if self.permitted():
-                if urlsplit(self.path).path not in ("/api/providers", "/api/nvidia/chat"):
+                if urlsplit(self.path).path not in ("/api/providers", "/api/health", "/api/nvidia/chat"):
                     return self.send_json(404, {"error": {"message": "Not found."}})
                 self.send_data(204, b"")
 
@@ -293,6 +309,8 @@ def create_server(root, port=8082, state=None):
             route = urlsplit(self.path)
             if route.path == "/api/providers" and not route.query:
                 return self.send_json(200, state.status())
+            if route.path == "/api/health" and not route.query:
+                return self.send_json(200, health())
             file = static_path(root, route.path)
             if not file:
                 return self.send_json(404, {"error": {"code": "not_found", "message": "Not found."}})

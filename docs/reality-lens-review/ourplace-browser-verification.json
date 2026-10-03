@@ -1,0 +1,162 @@
+{
+  "source": "current working tree",
+  "capability": "actual Chromium software WebGL and CSS3D input",
+  "runs": [
+    {
+      "device": "desktop",
+      "url": "http://127.0.0.1:8082/",
+      "steps": [
+        {
+          "action": "fund-token",
+          "status": "Choose one flow. Changes and receipts remain inspectable."
+        },
+        {
+          "action": "fund-credits",
+          "status": "Choose one flow. Changes and receipts remain inspectable."
+        },
+        {
+          "action": "fund-rewards",
+          "status": "Choose one flow. Changes and receipts remain inspectable."
+        },
+        {
+          "action": "design-preview",
+          "status": "Preview ready. Applying changes requires your click."
+        },
+        {
+          "action": "design-apply",
+          "status": "Design applied to the actual objects. Palette, arrangement and motion updated."
+        },
+        {
+          "action": "design-publish",
+          "status": "Published in this local catalog with a version, license and attribution. Download its reviewed package to share it."
+        },
+        {
+          "action": "design-adopt",
+          "status": "Observed local adoption: 0.01 TUMBO-SIM entitlement across 1 credited creator(s). Payout still requires funded settlement."
+        },
+        {
+          "action": "design-adopt",
+          "status": "This local adoption was already recorded. No additional entitlement."
+        },
+        {
+          "action": "creator-settle",
+          "status": "0.01 TUMBO-SIM paid from the reward pool in canonical receipt rcpt_musnvgq8_9_c4c74c68."
+        },
+        {
+          "action": "compute-run",
+          "status": "Local tool completed. Credits remain reserved until reconciliation or cancellation."
+        },
+        {
+          "action": "compute-reconcile",
+          "status": "$0.02 demo charge settled; unused reservation released. Live billing remains unverified."
+        },
+        {
+          "action": "compute-claim",
+          "status": "0.002 TUMBO-SIM transferred from the funded reward pool. Receipt rcpt_musnvvae_a_1ae80154."
+        },
+        {
+          "action": "proof-verify",
+          "status": "Canonical chain valid · supply conserved · SHA-256 Merkle-sum root computed locally. No external anchor."
+        }
+      ],
+      "errors": [],
+      "paidCreatorEntitlements": 1,
+      "beforeReload": {
+        "root": "78b7327a1e68cdaf6226703d076b8a3a00897d440cb2b33615b05e839a22b1de",
+        "conserved": true,
+        "events": "687a0df04608d5169c41fb7699ce45e45df816c632027cbc397459b1a1804f5f",
+        "journals": 10,
+        "owned": true,
+        "fronts": 1,
+        "paidClaims": 1
+      },
+      "afterReload": {
+        "root": "78b7327a1e68cdaf6226703d076b8a3a00897d440cb2b33615b05e839a22b1de",
+        "events": "687a0df04608d5169c41fb7699ce45e45df816c632027cbc397459b1a1804f5f",
+        "journals": 10,
+        "restoreStatus": "restored-validated-local-bundle",
+        "design": "grid"
+      },
+      "overflow": false,
+      "passed": true
+    },
+    {
+      "device": "phone",
+      "url": "http://127.0.0.1:8082/",
+      "steps": [
+        {
+          "action": "fund-token",
+          "status": "Choose one flow. Changes and receipts remain inspectable."
+        },
+        {
+          "action": "fund-credits",
+          "status": "Choose one flow. Changes and receipts remain inspectable."
+        },
+        {
+          "action": "fund-rewards",
+          "status": "Choose one flow. Changes and receipts remain inspectable."
+        },
+        {
+          "action": "design-preview",
+          "status": "Preview ready. Applying changes requires your click."
+        },
+        {
+          "action": "design-apply",
+          "status": "Design applied to the actual objects. Palette, arrangement and motion updated."
+        },
+        {
+          "action": "design-publish",
+          "status": "Published in this local catalog with a version, license and attribution. Download its reviewed package to share it."
+        },
+        {
+          "action": "design-adopt",
+          "status": "Observed local adoption: 0.01 TUMBO-SIM entitlement across 1 credited creator(s). Payout still requires funded settlement."
+        },
+        {
+          "action": "design-adopt",
+          "status": "This local adoption was already recorded. No additional entitlement."
+        },
+        {
+          "action": "creator-settle",
+          "status": "0.01 TUMBO-SIM paid from the reward pool in canonical receipt rcpt_musnxq5o_9_c6c30de5."
+        },
+        {
+          "action": "compute-run",
+          "status": "Local tool completed. Credits remain reserved until reconciliation or cancellation."
+        },
+        {
+          "action": "compute-reconcile",
+          "status": "$0.02 demo charge settled; unused reservation released. Live billing remains unverified."
+        },
+        {
+          "action": "compute-claim",
+          "status": "0.002 TUMBO-SIM transferred from the funded reward pool. Receipt rcpt_musnxuoh_a_b01df2bf."
+        },
+        {
+          "action": "proof-verify",
+          "status": "Canonical chain valid · supply conserved · SHA-256 Merkle-sum root computed locally. No external anchor."
+        }
+      ],
+      "errors": [],
+      "paidCreatorEntitlements": 1,
+      "beforeReload": {
+        "root": "78b7327a1e68cdaf6226703d076b8a3a00897d440cb2b33615b05e839a22b1de",
+        "conserved": true,
+        "events": "f48c2aacb3dc36435d4afa7c14c147c7443e0a9c5f72451b70a954a5261c54a3",
+        "journals": 10,
+        "owned": true,
+        "fronts": 1,
+        "paidClaims": 1
+      },
+      "afterReload": {
+        "root": "78b7327a1e68cdaf6226703d076b8a3a00897d440cb2b33615b05e839a22b1de",
+        "events": "f48c2aacb3dc36435d4afa7c14c147c7443e0a9c5f72451b70a954a5261c54a3",
+        "journals": 10,
+        "restoreStatus": "restored-validated-local-bundle",
+        "design": "grid"
+      },
+      "overflow": false,
+      "passed": true
+    }
+  ]
+}

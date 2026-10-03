@@ -104,7 +104,7 @@ test('live index loads the universal bridge after main and the bridge is Reality
     readFile(new URL('../src/render/universal-reality-bridge.js',import.meta.url),'utf8'),
   ]);
   const mainIndex=html.indexOf('./src/main.js?v=');
-  const bridgeIndex=html.indexOf('./src/render/universal-reality-bridge.js?v=20260924-universal-live1');
+  const bridgeIndex=html.indexOf('./src/render/universal-reality-bridge.js?v=');
   assert.ok(mainIndex>=0);
   assert.ok(bridgeIndex>mainIndex);
   assert.match(bridge,/params\.get\('feature'\)!==ROUTE_FEATURE/);

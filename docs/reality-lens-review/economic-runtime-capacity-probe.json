@@ -1,0 +1,13 @@
+{
+  "nativeJournalCount": 3000,
+  "nativePostingBlocked": "Canonical local history is full; export before starting a new rehearsal",
+  "nativeReplayNoNewJournal": true,
+  "nativeExportChars": 2967417,
+  "nativeExportable": true,
+  "rejectedAdoptions": 4001,
+  "retainedRejectedObservations": 0,
+  "adoptionExportChars": 5608,
+  "adoptionExportable": true,
+  "unrecordedClockStatus": "stored-history-rejected: Rehearsal clock differs from its command history",
+  "rejectedClockOffset": 0
+}

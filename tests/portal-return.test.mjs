@@ -174,7 +174,8 @@ test("portal handoffs retain the cube substrate while destination consoles stay 
   assert.match(source, /desiredCameraPosition\.copy\(sourceTarget\)\.add/);
   assert.match(source, /function restorePortalCubeReadout\(method = 'portal'\)/);
   assert.match(source, /if \(!portalCubeSubstrateActive\) showBlockReadout\(nextBlock(?:, 'hover')?\);/);
-  assert.match(source, /if \(preserveCubeSubstrate\) \{[\s\S]*restorePortalCubeReadout\(method\);[\s\S]*return;/);
+  assert.match(source, /if \(preserveCubeSubstrate && !enteredFromRealityAssembly\) \{[\s\S]*restorePortalCubeReadout\(method\);[\s\S]*return;/);
+  assert.match(source, /if \(enteredFromRealityAssembly\) \{[\s\S]*exposeRealityAssemblyFeaturePanel\(feature.id\)/);
   assert.match(source, /const organ = organs\.find\(\(candidate\) => candidate\.id === feature\.focusOrganId\);\s*if \(organ\) focusOrgan\(organ, `feature:\$\{method\}`\);/);
   assert.match(source, /contracts:\s*\(\)\s*=>\s*contractsMarkets\?\.open/);
   assert.match(source, /paycore:\s*\(\)\s*=>\s*paycoreConsole\?\.open/);

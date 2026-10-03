@@ -571,6 +571,20 @@ test("expired proposals are auto-marked on read and on load", () => {
   assert.equal(later.getProposals({ status: "expired" }).length, 1);
 });
 
+test("expiry prevents approving or extending a proposal without a preceding read", () => {
+  let clock = "2026-09-18T12:00:00.000Z";
+  const queue = createProposalQueue({ now: () => clock, storage: fakeStorage() });
+  const first = queue.submitProposal({ botId: "scout" }, validProposal({ expiresAt: "2026-09-18T13:00:00.000Z" }));
+  const second = queue.submitProposal({ botId: "scout" }, validProposal({ expiresAt: "2026-09-18T13:00:00.000Z" }));
+  clock = "2026-09-18T13:00:00.000Z";
+  assert.throws(() => queue.setProposalStatus(first.id, "approved"), /only pending/);
+  assert.throws(() => queue.updateProposal(second.id, { expiresAt: "2026-09-20T13:00:00.000Z" }), /only pending/);
+  assert.equal(queue.getProposal(first.id).status, "expired");
+  assert.equal(queue.getProposal(second.id).status, "expired");
+  assert.equal(queue.getProposal(first.id).history.some(entry => entry.status === "approved"), false);
+  assert.equal(queue.getNowMs(), Date.parse(clock));
+});
+
 test("proposal queue persists across restarts (round-trip)", () => {
   const storage = fakeStorage();
   const first = createProposalQueue({ storage, now });
@@ -812,7 +826,23 @@ test("bot plaza console renders contract proposals in the drafts section", () =>
   assert.match(text, /User said Rivals at home\./);
   assert.match(text, /Muse Agent/);
   assert.match(text, /expires in/);
+  assert.match(text, /expires in 3d 0h/);
   assert.match(text, /Review in Contract Atelier → Contracts for your review/);
+});
+
+test("expiring a rendered proposal shows one row using the queue clock", () => {
+  let clock = FIXED_NOW;
+  const documentRoot = makeDocument();
+  const { registry } = registryWith();
+  const queue = createProposalQueue({ now: () => clock, storage: fakeStorage() });
+  const runtime = createBotRuntime({ registry, proposalQueue: queue, now: () => clock });
+  queue.submitProposal({ botId: "scout", botName: "Scout" }, validProposal({ expiresAt: "2026-09-18T13:00:00.000Z" }));
+  const console = createBotPlazaConsole({ documentRoot, registry, runtime });
+  clock = "2026-09-18T13:00:00.000Z";
+  console.open();
+  const rows = documentRoot.getElementById("bot-plaza-drafts").children.filter(node => node.className?.includes("bot-plaza-proposal-row"));
+  assert.equal(rows.length, 1);
+  assert.match(rows[0].children[0].textContent, /PROPOSAL · EXPIRED/);
 });
 
 test("atelier template picker pre-fills the contract scout", () => {

@@ -1,9 +1,9 @@
-import {STUDIO_MODEL,STUDIO_OUTFITS,STUDIO_ROOMS} from '../domains/person-studio.js?v=20260922-cache2';
-import {buildAgentSmithRig} from './agent-smith-rig.js?v=20260920-agent-smith';
+import {STUDIO_MODEL,STUDIO_OUTFITS,STUDIO_ROOMS} from '../domains/person-studio.js?v=20261003-complete8';
+import {buildAgentSmithRig} from './agent-smith-rig.js?v=20261003-complete8';
 
-/** AI-built likeness: Tumbo's approved avatar bust portrait (cinematic teal/violet
- *  rim light) drives the camera-facing hologram; the procedural rig stays as
- *  interaction targets. */
+/** Procedural, articulated Agent Smith in floorless Reality Lens space.
+ *  The visible rig owns the interaction targets; no portrait billboard hides
+ *  its geometry. Identity approval belongs to the Person Studio owner. */
 export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,avatarTextureUrl='assets/avatar/fluffy-body-template.webp'}) {
   const layer=new THREE.Group();layer.name='PERSON Ω / open lens space';parent.add(layer);layer.visible=false;
   const materials=new Set(),geometries=new Set(),selectable=[];
@@ -94,7 +94,7 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
 
   // Clothing display objects are clickable, connected to the same wardrobe owner.
   const garmentDisplays=[];
-  for(let i=0;i<3;i++){
+  for(let i=0;i<STUDIO_OUTFITS.length;i++){
     const item=STUDIO_OUTFITS[i],g=group(`Wardrobe display / ${item.name}`,[2.5+i*.78,1.8,-3.25]);
     // Turn the plain rotating cubes into miniature floating fashion vitrines.
     const displayBack=box(.60,1.30,.045,dark,[0,.02,-.16],g);
@@ -276,10 +276,9 @@ export function buildPersonStudioScene({THREE,parent,targets=[],compact=false,av
     companion.rotation.y=reducedMotion?0:Math.sin(time*.8)*.14;
     wings.forEach((wing,i)=>{wing.rotation.z=(i===0?-1:1)*(.55+(form==='bird'&&!reducedMotion?Math.sin(time*5)*.35:0));});
   }
-  function getSnapshot(){return {source:'person-studio-scene',modelId:STUDIO_MODEL.id,visible:layer.visible,referenceLook:'agent-smith-v1',outfitId:outfit,roomId:room,companionForm:form,jointNames:Object.keys(joints),meshCount:geometries.size,identityHeadGeometry:smith.headMesh.geometry.uuid,geometryOnly:false,referenceImagesUsedAsTextures:false,avatarHologramUrl:null,avatarHologramPresent:false,avatarHologramTint:avatarHologramTint};}
-  // Avatar faces now dress the chess pieces; Agent Smith keeps his own
-  // reference look, so this is a compatibility no-op that reports the
-  // current URL. Presentation only.
+  function getSnapshot(){return {source:'person-studio-scene',modelId:STUDIO_MODEL.id,visible:layer.visible,referenceLook:'agent-smith-v1',outfitId:outfit,roomId:room,companionForm:form,jointNames:Object.keys(joints),meshCount:geometries.size,identityHeadGeometry:smith.headMesh.geometry.uuid,geometryOnly:true,referenceImagesUsedAsTextures:false,avatarHologramUrl:null,avatarHologramPresent:false,avatarHologramTint:avatarHologramTint};}
+  // Compatibility with older face-selection callers: store their presentation
+  // choice without replacing the visible rig or its approved geometry.
   function setAvatarFace(url){
     if(typeof url!=='string'||!url.length)return avatarTextureUrl;
     avatarTextureUrl=url;

@@ -205,3 +205,82 @@ test("dispose removes the instance meshes from its scene", () => {
     );
   }
 });
+
+test("repeated disposal cannot release another instance's shared geometry", () => {
+  const sceneOne = makeScene();
+  const sceneTwo = makeScene();
+  const one = createHandPresence(sceneOne, camera);
+  const two = createHandPresence(sceneTwo, camera);
+  one.update([makeHand()]);
+  two.update([makeHand()]);
+  const shared = jointMeshes(sceneTwo)[0].geometry;
+  let disposals = 0;
+  shared.addEventListener("dispose", () => { disposals += 1; });
+  one.dispose();
+  one.dispose();
+  assert.equal(disposals, 0, "the live second instance owns the geometry");
+  const added = sceneOne.added.length;
+  one.setVisible(true);
+  one.update([makeHand()]);
+  assert.equal(sceneOne.added.length, added, "disposed instances stay inert");
+  two.dispose();
+  assert.equal(disposals, 1, "the final owner releases geometry exactly once");
+});
+
+test("first tracked frame uses the camera's world position inside a parent rig", () => {
+  const rig = new THREE.Group();
+  const trackedCamera = makeCamera();
+  rig.position.set(3, 4, 5);
+  rig.rotation.y = 0.6;
+  rig.add(trackedCamera);
+  rig.updateMatrixWorld(true);
+  const scene = makeScene();
+  const presence = createHandPresence(scene, trackedCamera);
+  presence.update([makeHand()]);
+  const joint = jointMeshes(scene)[0];
+  const origin = trackedCamera.getWorldPosition(new THREE.Vector3());
+  assert.ok(Math.abs(joint.position.distanceTo(origin) - 0.55) < 1e-6);
+  const ndc = joint.position.clone().project(trackedCamera);
+  assert.ok(Math.abs(ndc.x + 0.4) < 1e-6, "landmark x=0.3 projects correctly");
+  assert.ok(Math.abs(ndc.y) < 1e-6, "landmark y=0.5 projects correctly");
+  presence.dispose();
+});
+
+test("partial or nonfinite tracking packets do not poison the hand transforms", () => {
+  const scene = makeScene();
+  const presence = createHandPresence(scene, camera);
+  presence.update([makeHand()]);
+  const broken = makeHand();
+  broken.landmarks[8] = { x: NaN, y: 0.5 };
+  assert.doesNotThrow(() => presence.update([broken]));
+  assert.doesNotThrow(() => presence.update([{ landmarks: { length: 21 } }]));
+  assert.doesNotThrow(() => presence.update({}));
+  assert.doesNotThrow(() => presence.update([makeHand()], null));
+  for (const joint of jointMeshes(scene)) {
+    assert.ok(joint.position.toArray().every(Number.isFinite));
+  }
+  presence.dispose();
+});
+
+test("lost-hand fading depends on elapsed time rather than frame count", () => {
+  const originalPerformance = globalThis.performance;
+  let time = 0;
+  globalThis.performance = { now: () => time };
+  const scene = makeScene();
+  const presence = createHandPresence(scene, camera);
+  try {
+    time = 60; presence.update([makeHand()]);
+    time = 120; presence.update([makeHand()]);
+    const joint = jointMeshes(scene)[0];
+    assert.ok(Math.abs(joint.material.opacity - 0.85) < 1e-6);
+    time = 180; presence.update([]);
+    assert.ok(Math.abs(joint.material.opacity - 0.85 * 0.8) < 1e-6);
+    time = 240; presence.update([]);
+    assert.ok(Math.abs(joint.material.opacity - 0.85 * 0.6) < 1e-6);
+    time = 421; presence.update([]);
+    assert.equal(joint.visible, false);
+  } finally {
+    presence.dispose();
+    globalThis.performance = originalPerformance;
+  }
+});

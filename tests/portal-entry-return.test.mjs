@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createHandle, revoke } from '../src/domains/portal-sessions/opaque-handle.js';
-import { enterPortal, returnToLens } from '../src/domains/portal-sessions/entry-return.js';
+// The issuer's private registry belongs to the mounted canonical URL graph.
+import { createHandle, revoke } from '../src/domains/portal-sessions/opaque-handle.js?v=20261003-complete8';
+import { createHandle as createForeignHandle } from '../src/domains/portal-sessions/opaque-handle.js?issuer=foreign';
+import { enterPortal, returnToLens } from '../src/domains/portal-sessions/entry-return.js?v=20261003-complete8';
 
 function handle(serviceId = 'youtube', issuedAt = 100, ttlMs = 100) {
   return createHandle({
@@ -60,6 +62,12 @@ test('forged handle fails closed', () => {
     () => enterPortal(forged, 'https://www.icloud.com', 110),
     /invalid opaque portal handle/
   );
+});
+
+test('a handle from a different module URL issuer is not a canonical issued capability', () => {
+  const foreign = createForeignHandle({ serviceId: 'foreign', capabilities: ['read'], issuedAt: 100, ttlMs: 100 });
+  assert.throws(() => enterPortal(foreign, 'https://example.com', 110), /invalid opaque portal handle/);
+  assert.throws(() => returnToLens(foreign, 120), /invalid opaque portal handle/);
 });
 
 test('even an unchanged frozen copy is not an issued portal handle', () => {

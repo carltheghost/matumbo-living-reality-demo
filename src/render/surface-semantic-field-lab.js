@@ -1,9 +1,9 @@
 import * as THREE from '../../vendor/three-r179.1/build/three.module.js';
 import { OrbitControls } from '../../vendor/three-r179.1/examples/jsm/controls/OrbitControls.js';
 import { mergeGeometries } from '../../vendor/three-r179.1/examples/jsm/utils/BufferGeometryUtils.js';
-import { createSurfaceInteractionSystem, surfaceContact } from './surface-semantic-field-three.js';
-import { TopologySurfaceObject } from './topology-surface-object.js';
-import { breedTraits } from '../domains/surface-semantic-field.js';
+import { createSurfaceInteractionSystem, surfaceContact } from './surface-semantic-field-three.js?v=20261003-complete8';
+import { TopologySurfaceObject } from './topology-surface-object.js?v=20261003-complete8';
+import { breedTraits } from '../domains/surface-semantic-field.js?v=20261003-complete8';
 
 const CYAN='#55e8ff', GOLD='#d9ae60';
 

@@ -8,8 +8,8 @@ test('chess arena defines its public refreshAppearance hook before returning it'
   const exported=source.indexOf('refreshAppearance,');
   assert.ok(definition>=0,'refreshAppearance definition must exist');
   assert.ok(exported>definition,'return object must reference the defined hook');
-  assert.doesNotMatch(source,/return\s*\{[\s\S]*?refreshAppearance,\s*destroy:/);
-  assert.match(source,/const view=documentRoot\.defaultView\?\.\?null;[\s\S]{0,500}function refreshAppearance\(\)/);
+  assert.match(source.slice(exported),/^refreshAppearance,\s*destroy:/);
+  assert.match(source,/const view=documentRoot\.defaultView\?\?null;[\s\S]{0,500}function refreshAppearance\(\)/);
 });
 
 test('chess arena cleans up appearance-change listeners',async()=>{

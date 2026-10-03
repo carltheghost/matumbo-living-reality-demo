@@ -19,7 +19,7 @@ import {
   CUBE_DIVE_EXIT_DURATION_MS,
   CUBE_DIVE_HOP_DURATION_MS,
   CUBE_DIVE_BOUNDARY,
-} from "../domains/cube-dive.js?v=20260922-cache2";
+} from "../domains/cube-dive.js?v=20261003-complete8";
 
 const PHASES = Object.freeze({
   APPROACH: "approach",

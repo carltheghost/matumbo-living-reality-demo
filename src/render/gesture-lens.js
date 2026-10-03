@@ -28,7 +28,7 @@ import {
   createGestureLens,
   pointerSampleToFrame,
   syntheticHand,
-} from "../domains/gesture-lens.js?v=20260922-cache2";
+} from "../domains/gesture-lens.js?v=20261003-complete8";
 
 export {
   GESTURE_LENS_BOUNDARY,

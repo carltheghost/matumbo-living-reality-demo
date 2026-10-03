@@ -2,9 +2,10 @@
 from pathlib import Path
 import argparse
 import shutil
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
-MARKER = '<script type="module">import("./src/render/reality-25-bridge.js?v=20260922-directional3").catch((error)=>{try{console.warn("[reality25] optional surface degraded:",error);}catch{}});</script>'
+MARKER = '<script type="module">import("./src/render/reality-25-bridge.js?v=20261003-complete8").catch((error)=>{try{console.warn("[reality25] optional surface degraded:",error);}catch{}});</script>'
 
 
 def build(destination):
@@ -30,7 +31,7 @@ def build(destination):
             count += 1
     page = destination / "index.html"
     html = page.read_text(encoding="utf-8")
-    if MARKER not in html:
+    if not re.search(r'''import\(["']\./src/render/reality-25-bridge\.js(?:\?[^"']*)?["']\)''',html):
         html = html.replace("</body>", MARKER + "</body>")
         page.write_text(html, encoding="utf-8")
     (destination / "health.txt").write_text("maTumbo Living Reality deployment\n", encoding="utf-8")

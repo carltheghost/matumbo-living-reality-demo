@@ -20,7 +20,8 @@ test("plain launch-distribution panel route opens the complete local registry", 
   assert.match(routeBlock, /if \(launchDistributionPopulationRoute\) \{[\s\S]*refreshPopulationContext\?\.\('url'\)/);
   assert.equal((routeBlock.match(/refreshPopulationContext/g) ?? []).length, 1, "population context has one URL-triggered refresh call");
   assert.match(docs, /panel=launch-distribution/);
-  assert.match(docs, /plain .*panel route|complete .*registry/i);
+  assert.match(docs, /local Launch Registry/);
+  assert.match(docs, /feature=launch-distribution/);
 });
 
 test("launch-distribution compare route is canonical-only and fail-closed", async () => {

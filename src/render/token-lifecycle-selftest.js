@@ -19,10 +19,10 @@ import {
   ReverseWindowExpiredError,
   CancelRejectedError,
   JournalNotFoundError,
-} from "../domains/token.js?v=20260922-cache2";
+} from "../domains/token.js?v=20261003-complete8";
 
 /**
- * @param {() => import("../domains/token.js").QuoteEngine} engineFactory
+ * @param {() => import("../domains/token.js?v=20261003-complete8").QuoteEngine} engineFactory
  */
 export function runTokenLifecycleSelfTest(engineFactory) {
   const rows = [];

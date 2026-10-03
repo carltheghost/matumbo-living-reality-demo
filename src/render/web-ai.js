@@ -32,7 +32,7 @@ import {
   buildAiPrompt,
   classifyWebTarget,
   getWebAiAssistant,
-} from "../domains/web-ai.js?v=20260923-lens-return2";
+} from "../domains/web-ai.js?v=20261003-complete8";
 import {
   COMPUTE_EXCHANGE_BOUNDARY,
   COMPUTE_PROVIDERS,
@@ -40,18 +40,18 @@ import {
   createComputeExchangeLedger,
   normalizeUsageReceipt,
   selectProviderRoute,
-} from "../domains/compute-exchange.js?v=20260925-compute2";
+} from "../domains/compute-exchange.js?v=20261003-complete8";
 import {
   COMPUTE_ACCOUNT_BOUNDARY,
   createComputeAccount,
-} from "../domains/compute-account.js?v=20260925-compute1";
+} from "../domains/compute-account.js?v=20261003-complete8";
 import {
   CONTRIBUTION_VAULT_BOUNDARY,
   CONTRIBUTION_SCOPES,
   createContributionVault,
-} from "../domains/contribution-vault.js?v=20260925-compute1";
-import { createEconomicTimeline } from "../domains/economic-timeline.js?v=20260925-compute1";
-import { evaluateComputeEconomics } from "../domains/compute-economics-policy.js?v=20260925-compute1";
+} from "../domains/contribution-vault.js?v=20261003-complete8";
+import { createEconomicTimeline } from "../domains/economic-timeline.js?v=20261003-complete8";
+import { evaluateComputeEconomics } from "../domains/compute-economics-policy.js?v=20261003-complete8";
 
 export { WEB_AI_CONSOLE_SOURCE };
 
@@ -224,6 +224,7 @@ export function createWebAiConsole({
   windowRoot = globalThis.window,
   storage = null,
   onEvent = null,
+  economicRuntime = null,
 } = {}) {
   const doc = documentRoot;
   if (!doc || typeof doc.createElement !== "function") {
@@ -239,10 +240,10 @@ export function createWebAiConsole({
   (doc.head || doc).appendChild(styleEl);
 
   const state = { opened: false, minimized: false, tab: "web", url: "", note: "", pendingExternalReturn: null };
-  const computeLedger = createComputeExchangeLedger();
-  const computeAccount = createComputeAccount({ monthlyBudgetUsd: 100, perTaskBudgetUsd: 25 });
-  const contributionVault = createContributionVault();
-  const economicTimeline = createEconomicTimeline();
+  const computeLedger = economicRuntime?.exchange ?? createComputeExchangeLedger();
+  const computeAccount = economicRuntime?.account ?? createComputeAccount({ monthlyBudgetUsd: 100, perTaskBudgetUsd: 25 });
+  const contributionVault = economicRuntime?.vault ?? createContributionVault();
+  const economicTimeline = economicRuntime?.timeline ?? createEconomicTimeline();
   try{
     const receipt=JSON.parse(readStorage(sessionStore,WEB_AI_STORAGE_KEYS.lensReturn)||"null");
     if(receipt&&typeof receipt.assistantId==="string"&&Number.isFinite(receipt.openedAt)&&Date.now()-receipt.openedAt<12*60*60*1000)state.pendingExternalReturn=receipt;
@@ -417,7 +418,7 @@ export function createWebAiConsole({
   tokenMetric.append(tokenValue, el(doc, "span", null, "model tokens"));
   const rewardMetric = el(doc, "div", "web-ai-metric");
   const rewardValue = el(doc, "b", null, "0");
-  rewardMetric.append(rewardValue, el(doc, "span", null, "TUMBO-SIM total"));
+  rewardMetric.append(rewardValue, el(doc, "span", null, "TUMBO-SIM eligible basis · awaiting funded claim"));
   metrics.append(balanceMetric, spendMetric, tokenMetric, rewardMetric);
   economySection.appendChild(metrics);
 
@@ -604,11 +605,11 @@ export function createWebAiConsole({
   earningsTitle.appendChild(el(doc, "span", null, "active + planned"));
   earningsSection.appendChild(earningsTitle);
   [
-    "ACTIVE DEMO · verified compute usage → TUMBO-SIM accrual",
-    "ACTIVE DEMO · explicit accepted contribution metadata → capped TUMBO-SIM accrual",
+    "LOCAL REHEARSAL · settled simulated usage → eligible basis; claim from a funded Ourplace pool",
+    "LOCAL REHEARSAL · accepted consent metadata → capped entitlement; claim from a funded Ourplace pool",
     "PLANNED · provide self-hosted compute → metered provider reward",
-    "PLANNED · publish tools / agents → usage-linked creator reward",
-    "PLANNED · treasury / fee / burn rules → only after real settlement authority exists",
+    "LOCAL REHEARSAL · Ourplace designs, tools, agents and workflows → adoption and remix attribution",
+    "LOCAL REHEARSAL · explicit purpose funding, service splits and reserve burn; external settlement unavailable",
   ].forEach((line) => earningsSection.appendChild(el(doc, "div", "web-ai-economy-statusline", line)));
   economySection.appendChild(earningsSection);
 
@@ -617,6 +618,9 @@ export function createWebAiConsole({
   timelineTitle.appendChild(el(doc, "span", null, "local ancestry · not cryptographic proof"));
   timelineSection.appendChild(timelineTitle);
   const timelineList = el(doc, "div", "web-ai-economy-timeline");
+  const timelineNotice = el(doc, "div", "web-ai-economy-statusline", "");
+  timelineNotice.setAttribute('role', 'status'); timelineNotice.hidden = true;
+  timelineSection.appendChild(timelineNotice);
   timelineSection.appendChild(timelineList);
   economySection.appendChild(timelineSection);
 
@@ -916,8 +920,13 @@ export function createWebAiConsole({
   doc.addEventListener?.("visibilitychange",observeExternalReturn);
 
   function appendEconomicEvent(type, source, payload = {}) {
-    const event = economicTimeline.append({ type, source, payload });
-    renderEconomicTimeline();
+    const finiteMetadata=value=>Array.isArray(value)?value.map(finiteMetadata):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).map(([key,item])=>[key,finiteMetadata(item)])):typeof value==='number'&&!Number.isFinite(value)?null:value;
+    // A bounded observation view cannot interrupt an already committed credit
+    // debit or prevent its paired usage receipt from being recorded.
+    let event = null;
+    try { event = economicTimeline.append({ type, source, payload: finiteMetadata(payload) }); }
+    catch (error) { timelineNotice.hidden = false; timelineNotice.textContent = `Timeline projection unavailable: ${error.message}. Export its history; inspect accounting receipts in Ourplace.`; }
+    finally { economicRuntime?.changed?.(); renderEconomicTimeline(); }
     return event;
   }
 
@@ -1065,6 +1074,8 @@ export function createWebAiConsole({
     let normalizedReceipt;
     try {
       normalizedReceipt = normalizeUsageReceipt(draftReceipt);
+      const ready = computeLedger.preflightReceipt(normalizedReceipt);
+      if (!ready.accepted) { economyStatus.textContent='Receipt already recorded; no new credit debit or reward.'; return; }
     } catch (error) {
       economyStatus.textContent = `Receipt rejected before debit: ${error?.message ?? "invalid input"}.`;
       economyStatus.dataset.kind = "error";
@@ -1124,7 +1135,7 @@ export function createWebAiConsole({
 
     const snapshot = refreshEconomyMetrics();
     economyStatus.textContent = result.reward.eligible
-      ? `Recorded ${result.receipt.totalTokens.toLocaleString()} tokens · $${result.receipt.reportedCostUsd.toFixed(4)} verified spend · +${result.reward.tumboSim} TUMBO-SIM.`
+      ? `Recorded ${result.receipt.totalTokens.toLocaleString()} tokens · $${result.receipt.reportedCostUsd.toFixed(4)} simulated cost · ${result.reward.tumboSim} TUMBO-SIM incentive basis. Claim from a funded pool in Ourplace; no token payout occurred here.`
       : `Recorded ${result.receipt.totalTokens.toLocaleString()} tokens, but no reward accrued because the receipt is ${result.reward.reason}.`;
     economyStatus.dataset.kind = result.reward.eligible ? "info" : "warn";
     publish("compute-usage-recorded", "button", {
@@ -1196,6 +1207,7 @@ export function createWebAiConsole({
 
       contributionVault.authorize(contributionId, {
         scope: vaultScope.value,
+        ...(vaultScope.value === 'provider-specific' ? { providerId: providerSelect.value } : {}),
         allowTraining: trainingConsent.checked,
         allowResearch: true,
       });
@@ -1204,13 +1216,14 @@ export function createWebAiConsole({
         scope: vaultScope.value,
         allowTraining: trainingConsent.checked,
       });
-      const accepted = contributionVault.accept(contributionId, { evidenceId: `local-evidence-${contributionId}` });
+      const accepted = contributionVault.accept(contributionId, { evidenceId: `local-evidence-${contributionId}`,
+        ...(vaultScope.value === 'provider-specific' ? { providerId: providerSelect.value } : {}) });
       appendEconomicEvent("contribution.accepted", "contribution-vault", {
         contributionId,
         rewardTumboSim: accepted.record.rewardTumboSim,
         rawContentStored: false,
       });
-      vaultStatus.textContent = `Accepted metadata-only contribution · +${accepted.record.rewardTumboSim} TUMBO-SIM demo reward · raw content stored: NO.`;
+      vaultStatus.textContent = `Accepted metadata-only contribution · ${accepted.record.rewardTumboSim} TUMBO-SIM entitlement awaiting a funded claim · raw content stored: NO.`;
       refreshEconomyMetrics();
       publish("contribution-accepted", "button", {
         contributionId,
@@ -1377,6 +1390,8 @@ export function createWebAiConsole({
     },
     recordComputeUsage: (receipt, method = "api") => {
       const normalized = normalizeUsageReceipt(receipt);
+      const ready = computeLedger.preflightReceipt(normalized);
+      if (!ready.accepted) return ready;
       if (normalized.verified === true) {
         const debit = computeAccount.spendVerified({
           spendId: normalized.receiptId,
@@ -1421,6 +1436,7 @@ export function createWebAiConsole({
       return publish("set-note", method);
     },
     getSnapshot,
+    refreshEconomicMetrics: refreshEconomyMetrics,
     getState: () => ({ ...state }),
   });
 }

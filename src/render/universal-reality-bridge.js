@@ -1,10 +1,10 @@
 import * as THREE from '../../vendor/three-r179.1/build/three.module.js';
-import { createUniversalObjectRenderer } from '../universal/universal-object-renderer.js';
+import { createUniversalObjectRenderer } from '../universal/universal-object-renderer.js?v=20261003-complete8';
 import {
   featureToCompanionEntities,
   featureToPrimaryEntity,
   normalizeUniversalEntity,
-} from '../universal/universal-entity.js';
+} from '../universal/universal-entity.js?v=20261003-complete8';
 
 const BRIDGE_SOURCE='matumbo-universal-reality-bridge';
 const ROUTE_FEATURE='reality-lens';

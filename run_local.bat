@@ -1,12 +1,6 @@
 @echo off
-cd /d "%~dp0"
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\launch-demo.ps1" -OpenBrowser
-if errorlevel 1 (
-  echo.
-  echo The demo launcher reported an error. See the message above.
+if /I "%~1"=="stop" (
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\stop-demo.ps1" %2 %3
+) else (
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\launch-demo.ps1" -OpenBrowser %*
 )
-echo.
-echo Keep this window available for the local launch instructions.
-echo Stop only launcher-owned processes with:
-echo   powershell -ExecutionPolicy Bypass -File ".\scripts\stop-demo.ps1"
-pause

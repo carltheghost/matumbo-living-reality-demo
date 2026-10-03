@@ -1,3 +1,5 @@
+HISTORICAL BASELINE RECORD: superseded by the passing complete suite in review.md. Retained as earlier audit evidence.
+
 3D room has actual humanoid joints and stable identity geometry across wardrobe/room/motion changes
 HUD button toggles the presence and notifies onOpenPanel
 Windows launcher exposes a verified static URL and optional memory API

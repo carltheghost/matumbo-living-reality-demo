@@ -7,7 +7,7 @@ import {
   getAcademyLesson,
   resetAcademy,
   selectAcademyLesson,
-} from "../domains/academy.js?v=20260922-cache2";
+} from "../domains/academy.js?v=20261003-complete8";
 
 export { ACADEMY_CONSOLE_SOURCE };
 

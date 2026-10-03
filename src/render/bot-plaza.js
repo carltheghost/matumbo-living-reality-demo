@@ -10,7 +10,7 @@ import {
   createBotRuntime,
   getAtelierTemplate,
   validateAtelierRule,
-} from "../domains/bot-plaza.js?v=20260922-cache2";
+} from "../domains/bot-plaza.js?v=20261003-complete8";
 
 export { BOT_PLAZA_BOUNDARY, BOT_PLAZA_CONSOLE_SOURCE };
 export const BOT_PLAZA_RENDER_SOURCE = BOT_PLAZA_CONSOLE_SOURCE;
@@ -351,7 +351,8 @@ export function createBotPlazaConsole({
 
   function formatExpiry(proposal) {
     if (proposal.status !== "pending") return null;
-    const ms = Date.parse(proposal.expiresAt) - Date.now();
+    // The queue owns proposal time; a host may provide a simulation clock.
+    const ms = Date.parse(proposal.expiresAt) - (proposalQueue?.getNowMs?.() ?? Date.now());
     if (!Number.isFinite(ms) || ms <= 0) return "expiring now";
     const hours = Math.floor(ms / 3600000);
     const minutes = Math.floor((ms % 3600000) / 60000);
@@ -361,6 +362,9 @@ export function createBotPlazaConsole({
   }
 
   function renderDrafts() {
+    // Reading may expire entries and notify subscribers. Resolve that first,
+    // then replace the DOM so a nested notification cannot duplicate rows.
+    const proposals = proposalQueue ? proposalQueue.getProposals().slice().reverse() : [];
     draftsEl.replaceChildren();
     const drafts = botRuntime.getDrafts().slice().reverse();
     for (const draft of drafts) {
@@ -370,7 +374,6 @@ export function createBotPlazaConsole({
       row.append(element(documentRoot, "div", null, draft.body));
       draftsEl.append(row);
     }
-    const proposals = proposalQueue ? proposalQueue.getProposals().slice().reverse() : [];
     if (proposals.length) {
       draftsEl.append(element(documentRoot, "div", "bot-plaza-subtitle", "Contract proposals · brought to you by your bots"));
     }

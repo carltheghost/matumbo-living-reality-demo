@@ -341,8 +341,14 @@ test("launch and distribution integration stays local with the vendored Three.js
   assert.doesNotMatch(html, /\b(?:fetch|XMLHttpRequest|WebSocket|EventSource|sendBeacon)\s*(?:\(|\.)/);
   const urls = [...html.matchAll(/https?:\/\/[^"'\s]+/g)].map(([url]) => url);
   assert.deepEqual(urls, [], "the app shell must not require an external CDN to boot");
-  assert.match(html, /"three"\s*:\s*"\.\/vendor\/three-r179\.1\/build\/three\.module\.js"/);
-  assert.match(html, /"three\/addons\/"\s*:\s*"\.\/vendor\/three-r179\.1\/examples\/jsm\/"/);
+  const importMap=JSON.parse(html.match(/<script type="importmap">\s*([\s\S]*?)\s*<\/script>/)[1]);
+  const base='http://127.0.0.1:8082/';
+  const three=new URL(importMap.imports.three,base);
+  const addons=new URL(importMap.imports['three/addons/'],base);
+  assert.equal(three.origin,new URL(base).origin);
+  assert.equal(three.pathname,'/vendor/three-r179.1/build/three.module.js');
+  assert.equal(addons.origin,new URL(base).origin);
+  assert.equal(addons.pathname,'/vendor/three-r179.1/examples/jsm/');
 });
 
 test("renderer bridge only emits frozen local simulation intents", async () => {

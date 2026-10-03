@@ -1,0 +1,678 @@
+{
+  "owner": {
+    "liveObject": {
+      "entityId": "youtube",
+      "bodyId": "youtube",
+      "shape": "square",
+      "coordinateSpace": "owning-body-local",
+      "informationFace": {
+        "id": "front",
+        "width": 1.28,
+        "height": 1.28,
+        "position": [
+          0,
+          0,
+          0.14
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "kind": "front",
+        "curvature": 0,
+        "readable": true
+      },
+      "interactionFace": {
+        "id": "front",
+        "width": 1.28,
+        "height": 1.28,
+        "position": [
+          0,
+          0,
+          0.142
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "kind": "front",
+        "curvature": 0,
+        "readable": true
+      },
+      "contour": [
+        [
+          0.64,
+          0.55,
+          0.14
+        ],
+        [
+          0.6383,
+          0.5676,
+          0.14
+        ],
+        [
+          0.6331,
+          0.5844,
+          0.14
+        ],
+        [
+          0.6248,
+          0.6,
+          0.14
+        ],
+        [
+          0.6136,
+          0.6136,
+          0.14
+        ],
+        [
+          0.6,
+          0.6248,
+          0.14
+        ],
+        [
+          0.5844,
+          0.6331,
+          0.14
+        ],
+        [
+          0.5676,
+          0.6383,
+          0.14
+        ],
+        [
+          0.55,
+          0.64,
+          0.14
+        ],
+        [
+          -0.55,
+          0.64,
+          0.14
+        ],
+        [
+          -0.5676,
+          0.6383,
+          0.14
+        ],
+        [
+          -0.5844,
+          0.6331,
+          0.14
+        ],
+        [
+          -0.6,
+          0.6248,
+          0.14
+        ],
+        [
+          -0.6136,
+          0.6136,
+          0.14
+        ],
+        [
+          -0.6248,
+          0.6,
+          0.14
+        ],
+        [
+          -0.6331,
+          0.5844,
+          0.14
+        ],
+        [
+          -0.6383,
+          0.5676,
+          0.14
+        ],
+        [
+          -0.64,
+          0.55,
+          0.14
+        ],
+        [
+          -0.64,
+          -0.55,
+          0.14
+        ],
+        [
+          -0.6383,
+          -0.5676,
+          0.14
+        ],
+        [
+          -0.6331,
+          -0.5844,
+          0.14
+        ],
+        [
+          -0.6248,
+          -0.6,
+          0.14
+        ],
+        [
+          -0.6136,
+          -0.6136,
+          0.14
+        ],
+        [
+          -0.6,
+          -0.6248,
+          0.14
+        ],
+        [
+          -0.5844,
+          -0.6331,
+          0.14
+        ],
+        [
+          -0.5676,
+          -0.6383,
+          0.14
+        ],
+        [
+          -0.55,
+          -0.64,
+          0.14
+        ],
+        [
+          0.55,
+          -0.64,
+          0.14
+        ],
+        [
+          0.5676,
+          -0.6383,
+          0.14
+        ],
+        [
+          0.5844,
+          -0.6331,
+          0.14
+        ],
+        [
+          0.6,
+          -0.6248,
+          0.14
+        ],
+        [
+          0.6136,
+          -0.6136,
+          0.14
+        ],
+        [
+          0.6248,
+          -0.6,
+          0.14
+        ],
+        [
+          0.6331,
+          -0.5844,
+          0.14
+        ],
+        [
+          0.6383,
+          -0.5676,
+          0.14
+        ],
+        [
+          0.64,
+          -0.55,
+          0.14
+        ]
+      ],
+      "clipPath": "polygon(100% 7.0313%,99.8672% 5.6563%,99.4609% 4.3437%,98.8125% 3.125%,97.9375% 2.0625%,96.875% 1.1875%,95.6563% 0.5391%,94.3438% 0.1328%,92.9688% 0%,7.0313% 0%,5.6563% 0.1328%,4.3437% 0.5391%,3.125% 1.1875%,2.0625% 2.0625%,1.1875% 3.125%,0.5391% 4.3437%,0.1328% 5.6563%,0% 7.0313%,0% 92.9688%,0.1328% 94.3438%,0.5391% 95.6563%,1.1875% 96.875%,2.0625% 97.9375%,3.125% 98.8125%,4.3437% 99.4609%,5.6563% 99.8672%,7.0313% 100%,92.9688% 100%,94.3438% 99.8672%,95.6563% 99.4609%,96.875% 98.8125%,97.9375% 97.9375%,98.8125% 96.875%,99.4609% 95.6563%,99.8672% 94.3438%,100% 92.9688%)",
+      "interactiveFaceCount": 1,
+      "interactionClearance": 0.002,
+      "separatePanelFrame": false,
+      "bodyMutation": false,
+      "interactiveSurfaceCount": 1,
+      "ownedByBody": true,
+      "panelId": "youtube-player-console"
+    },
+    "attached": "true"
+  },
+  "liveSearch": {
+    "elapsedMs": 4707,
+    "snapshot": {
+      "open": true,
+      "target": null,
+      "query": "three js tutorial",
+      "searchProvider": "pipedapi.ducks.party",
+      "resultCount": 8,
+      "searching": false,
+      "externalProvider": "youtube",
+      "searchInObject": true,
+      "apiKeyRequired": false,
+      "autoplayOnlyAfterUserAction": true
+    },
+    "status": "8 video results via pipedapi.ducks.party. Pick one to open the player on this object.",
+    "providerResponses": [
+      {
+        "url": "https://pipedapi.ducks.party/search?q=three+js+tutorial&filter=videos",
+        "status": 200
+      }
+    ]
+  },
+  "liveSelection": {
+    "snapshot": {
+      "open": true,
+      "target": {
+        "type": "video",
+        "id": "Q7AOvWpIVHU"
+      },
+      "query": "three js tutorial",
+      "searchProvider": "pipedapi.ducks.party",
+      "resultCount": 8,
+      "searching": false,
+      "externalProvider": "youtube",
+      "searchInObject": true,
+      "apiKeyRequired": false,
+      "autoplayOnlyAfterUserAction": true
+    },
+    "src": "https://www.youtube-nocookie.com/embed/Q7AOvWpIVHU?playsinline=1&rel=0&controls=1&autoplay=1",
+    "resultsHidden": true,
+    "watchHref": "https://www.youtube.com/watch?v=Q7AOvWpIVHU",
+    "embedBody": "",
+    "video": {
+      "currentTime": 18.770635,
+      "paused": false,
+      "readyState": 4
+    },
+    "videoLater": {
+      "currentTime": 20.777485,
+      "paused": false,
+      "readyState": 4
+    },
+    "playbackVerified": true
+  },
+  "controlled": {
+    "snapshot": {
+      "open": true,
+      "target": {
+        "type": "video",
+        "id": "M7lc1UVf-VE"
+      },
+      "query": "controlled geometry",
+      "searchProvider": "pipedapi.ducks.party",
+      "resultCount": 1,
+      "searching": false,
+      "externalProvider": "youtube",
+      "searchInObject": true,
+      "apiKeyRequired": false,
+      "autoplayOnlyAfterUserAction": true
+    },
+    "iframeCount": 1,
+    "src": "https://www.youtube-nocookie.com/embed/M7lc1UVf-VE?playsinline=1&rel=0&controls=1&autoplay=1",
+    "status": "Video selected: Controlled search result. YouTube controls playback."
+  },
+  "embedBody": "",
+  "embedRequests": [
+    {
+      "url": "https://www.youtube-nocookie.com/api/stats/qoe",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "url": "https://www.youtube-nocookie.com/api/stats/playback",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "url": "https://www.youtube-nocookie.com/ptracking",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "url": "https://www.youtube-nocookie.com/api/stats/watchtime",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "url": "https://www.youtube-nocookie.com/api/stats/qoe",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "url": "https://www.youtube-nocookie.com/api/stats/watchtime",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "url": "https://www.youtube-nocookie.com/youtubei/v1/log_event",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "url": "https://www.youtube-nocookie.com/api/stats/qoe",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "url": "https://www.youtube-nocookie.com/api/stats/watchtime",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "url": "https://www.youtube-nocookie.com/api/stats/qoe",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "url": "https://www.youtube-nocookie.com/api/stats/playback",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "url": "https://www.youtube-nocookie.com/ptracking",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "url": "https://www.youtube-nocookie.com/api/stats/watchtime",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "url": "https://www.youtube-nocookie.com/api/stats/qoe",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "url": "https://www.youtube-nocookie.com/youtubei/v1/log_event",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "url": "https://www.youtube-nocookie.com/api/stats/qoe",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "url": "https://rr4---sn-jvhj5nu-cvney.googlevideo.com/videoplayback",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "url": "https://www.youtube-nocookie.com/youtubei/v1/log_event",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "url": "https://www.youtube-nocookie.com/youtubei/v1/log_event",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "url": "https://www.youtube-nocookie.com/api/stats/qoe",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "url": "https://www.youtube-nocookie.com/embed/aqz-KE-bpKQ",
+      "failure": "net::ERR_ABORTED"
+    }
+  ],
+  "stale": {
+    "snapshot": {
+      "open": true,
+      "target": {
+        "type": "video",
+        "id": "aqz-KE-bpKQ"
+      },
+      "query": "",
+      "searchProvider": null,
+      "resultCount": 0,
+      "searching": false,
+      "externalProvider": "youtube",
+      "searchInObject": true,
+      "apiKeyRequired": false,
+      "autoplayOnlyAfterUserAction": true
+    },
+    "status": "Video selected. YouTube controls playback.",
+    "results": 0,
+    "disabled": false
+  },
+  "closed": {
+    "snapshot": {
+      "open": false,
+      "target": {
+        "type": "video",
+        "id": "aqz-KE-bpKQ"
+      },
+      "query": "cancel on close",
+      "searchProvider": null,
+      "resultCount": 0,
+      "searching": false,
+      "externalProvider": "youtube",
+      "searchInObject": true,
+      "apiKeyRequired": false,
+      "autoplayOnlyAfterUserAction": true
+    },
+    "src": "about:blank",
+    "status": "Search cancelled. Your selected video is retained."
+  },
+  "reopened": {
+    "src": "https://www.youtube-nocookie.com/embed/aqz-KE-bpKQ?playsinline=1&rel=0&controls=1",
+    "iframeCount": 1
+  },
+  "phone": {
+    "overflow": false,
+    "owner": {
+      "entityId": "youtube",
+      "bodyId": "youtube",
+      "shape": "square",
+      "coordinateSpace": "owning-body-local",
+      "informationFace": {
+        "id": "front",
+        "width": 1.28,
+        "height": 1.28,
+        "position": [
+          0,
+          0,
+          0.14
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "kind": "front",
+        "curvature": 0,
+        "readable": true
+      },
+      "interactionFace": {
+        "id": "front",
+        "width": 1.28,
+        "height": 1.28,
+        "position": [
+          0,
+          0,
+          0.142
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "kind": "front",
+        "curvature": 0,
+        "readable": true
+      },
+      "contour": [
+        [
+          0.64,
+          0.55,
+          0.14
+        ],
+        [
+          0.6383,
+          0.5676,
+          0.14
+        ],
+        [
+          0.6331,
+          0.5844,
+          0.14
+        ],
+        [
+          0.6248,
+          0.6,
+          0.14
+        ],
+        [
+          0.6136,
+          0.6136,
+          0.14
+        ],
+        [
+          0.6,
+          0.6248,
+          0.14
+        ],
+        [
+          0.5844,
+          0.6331,
+          0.14
+        ],
+        [
+          0.5676,
+          0.6383,
+          0.14
+        ],
+        [
+          0.55,
+          0.64,
+          0.14
+        ],
+        [
+          -0.55,
+          0.64,
+          0.14
+        ],
+        [
+          -0.5676,
+          0.6383,
+          0.14
+        ],
+        [
+          -0.5844,
+          0.6331,
+          0.14
+        ],
+        [
+          -0.6,
+          0.6248,
+          0.14
+        ],
+        [
+          -0.6136,
+          0.6136,
+          0.14
+        ],
+        [
+          -0.6248,
+          0.6,
+          0.14
+        ],
+        [
+          -0.6331,
+          0.5844,
+          0.14
+        ],
+        [
+          -0.6383,
+          0.5676,
+          0.14
+        ],
+        [
+          -0.64,
+          0.55,
+          0.14
+        ],
+        [
+          -0.64,
+          -0.55,
+          0.14
+        ],
+        [
+          -0.6383,
+          -0.5676,
+          0.14
+        ],
+        [
+          -0.6331,
+          -0.5844,
+          0.14
+        ],
+        [
+          -0.6248,
+          -0.6,
+          0.14
+        ],
+        [
+          -0.6136,
+          -0.6136,
+          0.14
+        ],
+        [
+          -0.6,
+          -0.6248,
+          0.14
+        ],
+        [
+          -0.5844,
+          -0.6331,
+          0.14
+        ],
+        [
+          -0.5676,
+          -0.6383,
+          0.14
+        ],
+        [
+          -0.55,
+          -0.64,
+          0.14
+        ],
+        [
+          0.55,
+          -0.64,
+          0.14
+        ],
+        [
+          0.5676,
+          -0.6383,
+          0.14
+        ],
+        [
+          0.5844,
+          -0.6331,
+          0.14
+        ],
+        [
+          0.6,
+          -0.6248,
+          0.14
+        ],
+        [
+          0.6136,
+          -0.6136,
+          0.14
+        ],
+        [
+          0.6248,
+          -0.6,
+          0.14
+        ],
+        [
+          0.6331,
+          -0.5844,
+          0.14
+        ],
+        [
+          0.6383,
+          -0.5676,
+          0.14
+        ],
+        [
+          0.64,
+          -0.55,
+          0.14
+        ]
+      ],
+      "clipPath": "polygon(100% 7.0313%,99.8672% 5.6563%,99.4609% 4.3437%,98.8125% 3.125%,97.9375% 2.0625%,96.875% 1.1875%,95.6563% 0.5391%,94.3438% 0.1328%,92.9688% 0%,7.0313% 0%,5.6563% 0.1328%,4.3437% 0.5391%,3.125% 1.1875%,2.0625% 2.0625%,1.1875% 3.125%,0.5391% 4.3437%,0.1328% 5.6563%,0% 7.0313%,0% 92.9688%,0.1328% 94.3438%,0.5391% 95.6563%,1.1875% 96.875%,2.0625% 97.9375%,3.125% 98.8125%,4.3437% 99.4609%,5.6563% 99.8672%,7.0313% 100%,92.9688% 100%,94.3438% 99.8672%,95.6563% 99.4609%,96.875% 98.8125%,97.9375% 97.9375%,98.8125% 96.875%,99.4609% 95.6563%,99.8672% 94.3438%,100% 92.9688%)",
+      "interactiveFaceCount": 1,
+      "interactionClearance": 0.002,
+      "separatePanelFrame": false,
+      "bodyMutation": false,
+      "interactiveSurfaceCount": 1,
+      "ownedByBody": true,
+      "panelId": "youtube-player-console"
+    }
+  },
+  "errors": [],
+  "notes": "Controlled search metadata is explicitly a fixture. Natural search and selected-video playback are separate: playbackVerified requires two increasing video currentTime samples while unpaused. A loaded embed alone is insufficient. Aborted telemetry occurs while changing or closing the one iframe."
+}

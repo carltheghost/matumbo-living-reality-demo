@@ -23,8 +23,9 @@ import {
   SCORE_RIBBON_BONUS,
   LEADERBOARD_SIZE,
   RIBBON_CAP,
-} from "./token-config.js?v=20260922-cache2";
-import { TumboLedger, TokenError, mulDivFloor } from "./token.js?v=20260922-cache2";
+} from "./token-config.js?v=20261003-complete8";
+import { mulDivFloor } from "./token.js?v=20261003-complete8";
+import { TokenActivityLedger, TokenError } from './token-activity.js?v=20261003-complete8';
 
 export const GAMIFICATION_VERSION = 1;
 export const GAMIFICATION_SOURCE = "tumbo-token-gamification";
@@ -242,7 +243,7 @@ export function replayHunger(receipts) {
   for (const receipt of receipts ?? []) {
     if (!receipt || typeof receipt !== "object") continue;
     const tick =
-      Number.isSafeInteger(receipt.tick) && receipt.tick >= 0 ? receipt.tick : 0;
+      Number.isSafeInteger(receipt.gameplayTick ?? receipt.tick) && (receipt.gameplayTick ?? receipt.tick) >= 0 ? (receipt.gameplayTick ?? receipt.tick) : 0;
     if (receipt.action === "hunger-tick") {
       const account = receipt.refs?.account ?? receipt.actor;
       if (typeof account !== "string" || account === "") continue;
@@ -271,7 +272,7 @@ export function replayHunger(receipts) {
 
 export class TokenGamification {
   constructor({ ledger = null } = {}) {
-    this._ledger = ledger instanceof TumboLedger ? ledger : new TumboLedger();
+    this._ledger = ledger?.engine?.ledger && typeof ledger?.receipts === 'function' && typeof ledger?.act === 'function' ? ledger : new TokenActivityLedger();
     this._state = replayHunger(this._ledger.receipts());
     this._unsub = this._ledger.on("receipt", (receipt) =>
       this._noteReceipt(receipt),
@@ -292,8 +293,8 @@ export class TokenGamification {
   _noteReceipt(receipt) {
     if (!receipt || typeof receipt !== "object") return;
     const tick =
-      Number.isSafeInteger(receipt.tick) && receipt.tick >= 0
-        ? receipt.tick
+      Number.isSafeInteger(receipt.gameplayTick ?? receipt.tick) && (receipt.gameplayTick ?? receipt.tick) >= 0
+        ? (receipt.gameplayTick ?? receipt.tick)
         : this._ledger.tick;
     if (receipt.action === "hunger-tick") {
       const account = receipt.refs?.account ?? receipt.actor;
@@ -474,8 +475,8 @@ function attempt(fn) {
  * Simulation only.
  */
 export function seedDemoBurrow(ledger) {
-  if (!(ledger instanceof TumboLedger)) {
-    throw new TokenError("seedDemoBurrow needs a TumboLedger", "INVALID_PARAM");
+  if (!ledger?.engine?.ledger || typeof ledger?.act !== 'function') {
+    throw new TokenError("seedDemoBurrow needs the unified token activity adapter", "INVALID_PARAM");
   }
   const seeded = [];
   for (const bot of DEMO_BOTS) {

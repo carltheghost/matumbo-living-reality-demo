@@ -1,29 +1,21 @@
-/** Miniature articulated Tumbo chibi rig — the chess piece body.
+/** Legacy articulated Tumbo chibi rig — available for explicit module use.
  *
  * Pure builders: takes the THREE namespace plus the shared geometry cache
  * and material set from the piece foundry, so all 32 pieces share draw
  * state. Never imports 'three' itself; testable in node against the
  * vendored build.
  *
- * The rig mirrors the Person Studio avatar's reference look (Packet 230)
- * simplified for board scale: big chibi head, fluffy earmuffs, black hoodie
+ * This historical builder is not mounted by Person Studio or the Chess Arena.
+ * Their current avatar and standard chess pieces retain their own geometry.
+ * The optional rig has a big chibi head, fluffy earmuffs, black hoodie
  * with drawstrings, brown furry paws, fluffy tail, locs, eyeliner, beauty
  * mark, goatee. Joints are named Groups; updateTumboChibiRig() drives the
- * shared avatar motion language (src/domains/avatar-motion.js).
+ * existing avatar idle motion, with local optional gesture overlays.
  *
  * Projection only: local simulation, no identity authority, no wallet.
  */
-import {
-  AVATAR_GREET,
-  AVATAR_CELEBRATE,
-  avatarBlink,
-  avatarBowPose,
-  avatarIdlePose,
-  avatarJumpPose,
-  avatarSpinPose,
-  avatarWalkPhase,
-  avatarWavePose,
-} from '../domains/avatar-motion.js?v=20260922-cache2';
+import { avatarIdlePose } from '../domains/avatar-motion.js?v=20261003-complete8';
+import { blinkDip } from '../domains/mascot-motion.js?v=20261003-complete8';
 
 /** Base height of the rig in arena units before per-role scaling. */
 export const CHIBI_RIG_BASE_HEIGHT = 1.7;
@@ -31,17 +23,16 @@ export const CHIBI_RIG_BASE_HEIGHT = 1.7;
 /** Celebration/select modes the rig can play, with their durations. */
 export const CHIBI_RIG_MODES = Object.freeze({
   idle: 0,
-  wave: AVATAR_GREET.durations.wave,
-  hop: AVATAR_CELEBRATE.hop,
+  wave: 1.4,
+  hop: 0.8,
   walk: 0, // persists while the piece travels
-  bow: AVATAR_CELEBRATE.bow,
-  spin: AVATAR_CELEBRATE.spin,
+  bow: 1.6,
+  spin: 1.2,
 });
 
 /** Shared geometry cache for chibi rigs: every rig built from one cache
- *  shares draw state. Lives in the rig module so the chess foundry and the
- *  Person Studio build from the same source instead of forking the geometry
- *  language. Never imports 'three' itself; testable in node. */
+ *  shares draw state. Callers own this cache and release it after their rigs.
+ *  Never imports 'three' itself; testable in node. */
 export function createTumboGeometryCache(THREE) {
   if (!THREE) throw new Error('createTumboGeometryCache needs the THREE namespace');
   const cache = new Map();
@@ -345,59 +336,62 @@ export function buildTumboChibiRig(THREE, G, M, { seed = 0, faceDecalUrl = null,
  *  Frozen under reducedMotion: idle only, overlays become no-ops. */
 export function updateTumboChibiRig(THREE, rig, { time, seed = rig.seed, reducedMotion = false, mode = 'idle', modeT = 0 } = {}) {
   if (!Number.isFinite(time)) throw Error('updateTumboChibiRig needs a finite time');
+  if (!Number.isFinite(modeT)) throw Error('updateTumboChibiRig needs a finite modeT');
+  const phaseSeed = Number.isFinite(Number(seed)) ? Number(seed) : 0;
   const { joints, rest, blinkBalls, tail } = rig;
   for (const [name, j] of Object.entries(joints)) j.quaternion.copy(rest[name]);
   const q = (x, y, z) => qFromEuler(THREE, x, y, z);
   const mul = (j, e) => j.quaternion.multiply(e);
 
-  const idle = avatarIdlePose({ time, seed, reducedMotion });
+  const idle = avatarIdlePose({ time, seed: phaseSeed, reducedMotion });
+  // Timed gestures leave the rig at rest at either endpoint. No external
+  // gesture API exists in avatar-motion; keep this optional consumer local.
+  const duration = CHIBI_RIG_MODES[mode];
+  const progress = duration > 0 ? Math.min(1, Math.max(0, modeT / duration)) : 0;
+  const gesture = progress > 0 && progress < 1 ? Math.sin(Math.PI * progress) : 0;
   let lift = 0;
   let turn = 0;
 
   if (!reducedMotion) {
     // Breathing torso.
-    const breath = Math.sin(time * 1.4 + seed);
+    const breath = Math.sin(time * 1.4 + phaseSeed);
     joints.spine.scale.set(1 - 0.006 * breath, 1 + 0.012 * breath, 1 - 0.006 * breath);
     // Idle head drift.
-    mul(joints.head, q(Math.sin(time * 0.7 + 1 + seed) * 0.04, Math.sin(time * 0.5 + seed) * 0.06, 0));
+    mul(joints.head, q(Math.sin(time * 0.7 + 1 + phaseSeed) * 0.04, Math.sin(time * 0.5 + phaseSeed) * 0.06, 0));
     // Tail wag.
-    tail.rotation.y = Math.sin(time * 2.2 + seed) * 0.16;
-    tail.rotation.x = Math.sin(time * 1.7 + 1 + seed) * 0.08;
+    tail.rotation.y = Math.sin(time * 2.2 + phaseSeed) * 0.16;
+    tail.rotation.x = Math.sin(time * 1.7 + 1 + phaseSeed) * 0.08;
 
     if (mode === 'wave') {
-      const w = avatarWavePose({ t: modeT / AVATAR_GREET.durations.wave });
-      mul(joints.armRight, q(0, 0, w.armRaise));
-      mul(joints.handRight, q(0, 0, w.handWave));
-      mul(joints.head, q(0, 0, w.headTilt));
-      lift += w.bounce * 0.10;
+      mul(joints.armRight, q(0, 0, 1.1 * gesture));
+      mul(joints.handRight, q(0, 0, Math.sin(progress * Math.PI * 6) * 0.45 * gesture));
+      mul(joints.head, q(0, 0, 0.08 * gesture));
+      lift += gesture * 0.025;
     } else if (mode === 'hop') {
-      const j = avatarJumpPose({ t: modeT / AVATAR_CELEBRATE.hop });
-      lift += j.lift * 0.45;
-      mul(joints.armLeft, q(0, 0, -1.1 * j.lift));
-      mul(joints.armRight, q(0, 0, 1.1 * j.lift));
+      lift += gesture * 0.45;
+      mul(joints.armLeft, q(0, 0, -1.1 * gesture));
+      mul(joints.armRight, q(0, 0, 1.1 * gesture));
     } else if (mode === 'walk') {
-      const wp = avatarWalkPhase({ time });
-      const swing = 0.55;
-      mul(joints.legLeft, q(wp.legL * swing, 0, 0));
-      mul(joints.legRight, q(wp.legR * swing, 0, 0));
-      mul(joints.armLeft, q(wp.armL * swing * 0.7, 0, 0));
-      mul(joints.armRight, q(wp.armR * swing * 0.7, 0, 0));
-      lift += Math.abs(wp.legL) * 0.035;
+      const stride = Math.sin(time * 7 + phaseSeed);
+      const swing = stride * 0.55;
+      mul(joints.legLeft, q(swing, 0, 0));
+      mul(joints.legRight, q(-swing, 0, 0));
+      mul(joints.armLeft, q(-swing * 0.7, 0, 0));
+      mul(joints.armRight, q(swing * 0.7, 0, 0));
+      lift += Math.abs(stride) * 0.035;
       mul(joints.spine, q(0.08, 0, 0)); // slight forward lean
     } else if (mode === 'bow') {
-      const b = avatarBowPose({ t: modeT / AVATAR_CELEBRATE.bow });
-      mul(joints.spine, q(b.torsoPitch, 0, 0));
-      mul(joints.head, q(b.headDip, 0, 0));
-      mul(joints.armLeft, q(0, 0, -b.armSweep));
-      mul(joints.armRight, q(0, 0, b.armSweep));
-      mul(joints.legLeft, q(-b.kneeDip, 0, 0));
-      mul(joints.legRight, q(-b.kneeDip, 0, 0));
+      mul(joints.spine, q(0.65 * gesture, 0, 0));
+      mul(joints.head, q(0.18 * gesture, 0, 0));
+      mul(joints.armLeft, q(0, 0, -0.25 * gesture));
+      mul(joints.armRight, q(0, 0, 0.25 * gesture));
+      mul(joints.legLeft, q(-0.10 * gesture, 0, 0));
+      mul(joints.legRight, q(-0.10 * gesture, 0, 0));
     } else if (mode === 'spin') {
-      const s = avatarSpinPose({ t: modeT / AVATAR_CELEBRATE.spin });
-      turn = s.turn;
-      lift += s.hop * 0.16;
-      mul(joints.armLeft, q(0, 0, -0.7 * Math.sin(Math.PI * Math.min(1, modeT / AVATAR_CELEBRATE.spin))));
-      mul(joints.armRight, q(0, 0, 0.7 * Math.sin(Math.PI * Math.min(1, modeT / AVATAR_CELEBRATE.spin))));
+      turn = progress * Math.PI * 2;
+      lift += gesture * 0.16;
+      mul(joints.armLeft, q(0, 0, -0.7 * gesture));
+      mul(joints.armRight, q(0, 0, 0.7 * gesture));
     }
   } else {
     joints.spine.scale.set(1, 1, 1);
@@ -405,7 +399,7 @@ export function updateTumboChibiRig(THREE, rig, { time, seed = rig.seed, reduced
   }
 
   // Blink: scale the eye whites' Y.
-  const openness = avatarBlink({ time, seed, reducedMotion });
+  const openness = reducedMotion ? 1 : 1 - blinkDip(time + phaseSeed);
   for (const eye of blinkBalls) eye.scale.y = eye.userData.baseScaleY * openness;
 
   return Object.freeze({ bobY: idle.bobY, swayY: idle.swayY, glow: idle.glow, lift, turn });

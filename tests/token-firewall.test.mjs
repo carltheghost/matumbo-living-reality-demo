@@ -148,7 +148,7 @@ describe("system-account firewall", () => {
     const wallet = new TumboUserLedger(eng);
     eng.faucet("u:alice", "TUMBO", 50_000_000, { idempotencyKey: "fw:flow-faucet" });
     const lock = wallet.lock({ acct: "alice", asset: "TUMBO-SIM", amountFluff: 1_000_000, label: "test lock" });
-    assert.equal(eng.balance("sys:escrow", "TUMBO"), 1_000_000, "escrow credited by lock");
+    assert.equal(eng.balance("sys:vault", "TUMBO"), 1_000_000, "vault credited by lock");
     const released = wallet.unlock(lock.id);
     assert.equal(released.status, "released");
     assert.equal(eng.balance("sys:escrow", "TUMBO"), 0, "escrow released by unlock");
