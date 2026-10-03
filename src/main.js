@@ -18,7 +18,7 @@ import { mountApiConnections } from './render/api-connections.js?v=20261003-comp
 import { engine as canonicalEconomicEngine } from './domains/token.js?v=20261003-complete8';
 import { createEconomicRuntime } from './domains/economic-runtime.js?v=20261003-complete8';
 import { ECONOMIC_WORLD_SOURCE, createEconomicWorldContribution } from './domains/economic-world-projection.js?v=20261003-complete8';
-import { mountOurplaceEconomy } from './render/ourplace-economy.js?v=20261003-complete8';
+import { mountOurplaceEconomy } from './render/ourplace-economy.js?v=20261003-studio1';
 import { featureSelectionMayRefreshProvider } from './domains/provider-navigation.js?v=20261003-complete8';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
