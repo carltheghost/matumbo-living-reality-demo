@@ -3,21 +3,21 @@ name: Reality Lens navigation and API connections
 on:
   pull_request:
     paths:
+      - 'index.html'
       - 'src/main.js'
       - 'src/render/reality-assembly*'
       - 'src/render/api-connections*'
       - 'src/render/centered-surfaces.js'
       - 'src/render/feature-navigator.js'
+      - 'src/render/lens-intent-stream.js'
+      - 'src/domains/portal-sessions/**'
       - 'src/domains/provider-navigation.js'
       - 'src/domains/reality-object-engine.js'
       - 'src/domains/living-surface-layout-engine.js'
       - 'scripts/build*'
       - 'scripts/provider_bridge.py'
       - 'scripts/public-preview.mjs'
-      - 'tests/*reality*'
-      - 'tests/api-connections.test.mjs'
-      - 'tests/object-tab-binding.test.mjs'
-      - 'tests/test_provider_bridge.py'
+      - 'tests/**'
       - '.github/workflows/reality-lens-calm-ci.yml'
   workflow_dispatch:
 
