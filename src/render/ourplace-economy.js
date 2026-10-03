@@ -15,6 +15,8 @@ import {
 import {
   wireOurplaceFinance
 } from './ourplace-finance.js?v=20261003-complete8';
+import { mountOurplaceStudio } from './ourplace-studio.js?v=20261003-studio1';
+import { mountCreatorAssetInspector } from './creator-asset-inspector.js?v=20261003-studio1';
 
 /** Native content for the existing TUMBO body: one task and one tab at a time. */
 export function mountOurplaceEconomy({
@@ -42,6 +44,8 @@ export function mountOurplaceEconomy({
     lastJobId = null,
     selectedPublishedKey = null;
   let finance = null,
+    studio = null,
+    assetInspector = null,
     recognition = null,
     disposed = false,
     reviewedSharedJson = null,
@@ -59,12 +63,14 @@ export function mountOurplaceEconomy({
     #ourplace-economy [aria-selected=true],#ourplace-economy .ourplace-primary{background:#103452;border-color:var(--accent)}
     #ourplace-economy .ourplace-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
     #ourplace-economy .ourplace-pane{display:grid;gap:14px}#ourplace-economy .ourplace-field{display:grid;gap:5px}
+    #ourplace-economy.ourplace-studio-mode>:is(h2,p,small,details,.ourplace-summary,.ourplace-tabs,.ourplace-status){display:none!important}
     #ourplace-economy .ourplace-actions{display:flex;gap:8px;flex-wrap:wrap}#ourplace-economy .ourplace-actions>*{flex:1 1 140px}
     #ourplace-economy .ourplace-status{padding:10px;border-left:3px solid var(--accent);background:#071321;color:#bdd5ec;overflow-wrap:anywhere;white-space:pre-wrap}
     #ourplace-economy .ourplace-summary{padding:10px;border:1px solid #29405a;border-radius:10px;display:grid;gap:6px}
     #ourplace-economy small{color:#9db3c9}#ourplace-economy details>summary{cursor:pointer;min-height:44px;padding:10px 0}
     #ourplace-economy pre{font:12px/1.5 ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere;background:#040c16;padding:12px;border-radius:8px;max-height:260px;overflow:auto}
     #reality-assembly #ourplace-economy .ourplace-tabs{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:6px!important}
+    #reality-assembly #ourplace-economy.ourplace-studio-mode>.ourplace-tabs{display:none!important}
     @media(max-width:700px){#reality-assembly #ourplace-economy .ourplace-tabs,#ourplace-economy .ourplace-tabs{grid-template-columns:repeat(2,minmax(0,1fr))!important}#ourplace-economy{font-size:13px}}
   `;
   root.append(style);
@@ -188,6 +194,7 @@ export function mountOurplaceEconomy({
       'data-ourplace-tab': id
     });
     control.addEventListener('click', () => {
+      root.classList.toggle('ourplace-studio-mode', id === 'creator' && !studioHost.hidden);
       for (const [name, child] of panes) {
         child.hidden = name !== id;
         tabButtons.get(name).setAttribute('aria-selected', String(name === id));
@@ -238,7 +245,44 @@ export function mountOurplaceEconomy({
     parent.append(wrap);
     return node;
   }
-  const creatorPane = panes.get('creator');
+  const creatorSurface = panes.get('creator');
+  const creatorPane = create('div', undefined, { class: 'ourplace-pane' });
+  const studioHost = create('div');
+  studioHost.hidden = true;
+  const studioButton = create('button', 'Sources & production studio', {
+    type: 'button', 'data-ourplace-action': 'studio-open',
+    'aria-expanded': 'false', 'aria-controls': 'ourplace-studio-host'
+  });
+  studioHost.id = 'ourplace-studio-host';
+  creatorSurface.append(studioButton, creatorPane, studioHost);
+  studioButton.addEventListener('click', () => {
+    if (!studio) studio = mountOurplaceStudio({
+      host: studioHost, documentRoot: doc, windowRoot,
+      getActor: () => actor.value,
+      getDesign: () => runtime.designSession.snapshot(),
+      onBack: () => {
+        root.classList.remove('ourplace-studio-mode');
+        studioHost.hidden = true;
+        creatorPane.hidden = false;
+        studioButton.hidden = false;
+        studioButton.setAttribute('aria-expanded', 'false');
+        studioButton.focus();
+      }
+    });
+    if (!assetInspector) assetInspector = mountCreatorAssetInspector({
+      host: studioHost, documentRoot: doc, windowRoot, getActor: () => actor.value
+    });
+    creatorPane.hidden = true;
+    root.classList.add('ourplace-studio-mode');
+    studioButton.hidden = true;
+    studioHost.hidden = false;
+    studioButton.setAttribute('aria-expanded', 'true');
+    studio.refresh();
+    const heading = studioHost.querySelector('h2, h3');
+    heading?.setAttribute('tabindex', '-1');
+    heading?.focus({ preventScroll: true });
+    heading?.scrollIntoView({ block: 'start' });
+  });
   creatorPane.append(create('h3', 'Talk to your place'), create('small', 'Try: blue; background navy; compact; grid; reduced motion; selected object wave. Review before applying.'));
   const request = field(creatorPane, 'What should change?', 'textarea', 'blue; background navy; compact; grid; reduced motion', {
     'data-design-request': '',
@@ -899,6 +943,8 @@ export function mountOurplaceEconomy({
       onNavigate?.(step.target);
     }, `step-${step.id}`);
     finance?.refresh();
+    studio?.refresh();
+    assetInspector?.refresh();
   }
   actor.addEventListener('change', refresh);
   jobCatalog.addEventListener('change', () => {
@@ -930,6 +976,8 @@ export function mountOurplaceEconomy({
       disposed = true;
       recognition?.abort();
       finance?.dispose();
+      studio?.dispose();
+      assetInspector?.dispose();
       off();
       root.remove();
     }
