@@ -447,8 +447,9 @@ export function createDesignSession({
 export function parseSharedCreatorDesign(serialized) {
   if (typeof serialized !== 'string' || serialized.length > 850000) fail('Shared design packet is too large');
   const packet = JSON.parse(serialized);
-  fields(packet, ['format', 'rootKey', 'designs', 'packetHash'], 'shared design packet');
-  if (packet.format !== 'matumbo-reviewed-design-v1' || !Array.isArray(packet.designs) || !packet.designs.length || packet.designs.length > 64) fail('Unsupported shared design packet');
+  const derivative = packet?.format === 'matumbo-unverified-derivative-v1';
+  fields(packet, ['format', 'rootKey', 'designs', 'packetHash', ...(derivative ? ['derivation'] : [])], 'shared design packet');
+  if ((!derivative && packet.format !== 'matumbo-reviewed-design-v1') || !Array.isArray(packet.designs) || !packet.designs.length || packet.designs.length > 64) fail('Unsupported shared design packet');
   const {
     packetHash,
     ...body
@@ -472,37 +473,112 @@ export function parseSharedCreatorDesign(serialized) {
       title: text(input.title, 'Shared title', 100),
       descriptor,
       descriptorHash: input.descriptorHash,
-      parents: input.parents.map(parent => text(parent, 'Parent key')),
+      parents: input.parents.map(parent => text(parent, 'Parent key', 132)),
       license: one(input.license, CREATOR_LICENSES, 'shared license')
     }));
   }
   const active = new Set();
-  const visited = new Set();
+  const heights = new Map();
 
-  function walk(key, depth = 0) {
-    if (depth > 12 || active.has(key) || !byKey.has(key)) fail('Shared attribution graph is incomplete or cyclic');
-    if (visited.has(key)) return;
+  function walk(key) {
+    if (active.has(key) || !byKey.has(key)) fail('Shared attribution graph is incomplete or cyclic');
+    if (heights.has(key)) return heights.get(key);
     active.add(key);
     const design = byKey.get(key);
+    let height = 0;
     for (const parent of design.parents) {
-      walk(parent, depth + 1);
+      height = Math.max(height, walk(parent) + 1);
+      if (height > 12) fail('Shared attribution graph exceeds 12 levels');
       if (byKey.get(parent).license === 'attribution-sharealike' && design.license !== 'attribution-sharealike') fail('Shared license does not preserve parent terms');
     }
     active.delete(key);
-    visited.add(key);
+    heights.set(key, height);
+    return height;
   }
   walk(packet.rootKey);
-  if (visited.size !== byKey.size) fail('Shared packet contains unrelated designs');
+  if (heights.size !== byKey.size) fail('Shared packet contains unrelated designs');
+  let derivation = null;
+  if (derivative) {
+    fields(packet.derivation, ['sourceRootKey', 'sourcePacketHash', 'declaredLocalAuthor', 'authorIdentityVerified', 'externalPublicationVerified', 'catalogRegistered', 'moneyAuthorized'], 'derivation');
+    const root = byKey.get(packet.rootKey), source = byKey.get(packet.derivation.sourceRootKey);
+    if (!source || !same(root.parents, [source.key]) || root.id === source.id || [...byKey.values()].some(row => row.key !== root.key && row.id === root.id)) fail('Derivative must have a new design ID and preserve its source ancestry');
+    if (same(root.descriptor, source.descriptor)) fail('Derivative descriptor must contain an applied edit');
+    if (!/^[a-f0-9]{64}$/.test(packet.derivation.sourcePacketHash ?? '') || identity(packet.derivation.declaredLocalAuthor) !== root.creator) fail('Invalid derivative source or declared local author');
+    for (const field of ['authorIdentityVerified', 'externalPublicationVerified', 'catalogRegistered', 'moneyAuthorized'])
+      if (packet.derivation[field] !== false) fail('Portable derivatives cannot claim identity, publication, catalog or money authority');
+    // The current packet checksum protects its data. Its historical source hash
+    // remains a declaration; it is not an external identity or publication proof.
+    derivation = clone(packet.derivation);
+  }
   return deepFreeze({
     root: byKey.get(packet.rootKey),
     designs: [...byKey.values()],
     packetHash,
+    derivation,
     integrityVerified: true,
     authorIdentityVerified: false,
     externalPublicationVerified: false,
     requiresExplicitReview: true,
     moneyAuthorized: false
   });
+}
+
+/**
+ * Export applied edits as an unverified derivative without registering a design,
+ * crediting an entitlement, changing session origin or invoking a runtime owner.
+ */
+export function exportSharedCreatorDerivative(input = {}) {
+  fields(input, ['serialized', 'descriptor', 'provenance', 'id', 'creator', 'category', 'title', 'license', 'explicit'], 'derivative export');
+  if (input.explicit !== true) fail('Explicit derivative review is required', 'CREATOR_AUTH_REQUIRED');
+  const source = parseSharedCreatorDesign(input.serialized);
+  const provenance = normalizeDesignProvenance(input.provenance);
+  const expectedProvenance = normalizeDesignProvenance({
+    kind: 'shared-package',
+    rootKey: source.root.key,
+    packetHash: source.packetHash,
+    attribution: source.designs.map(({ key, creator, license }) => ({ key, creator, license }))
+  });
+  // Attribution order is not authority. Compare the complete keyed ancestry so
+  // restored sessions cannot remove credits or graft a different reviewed file.
+  const ordered = rows => [...rows].sort((a, b) => a.key.localeCompare(b.key));
+  if (provenance.kind !== 'shared-package' || provenance.rootKey !== expectedProvenance.rootKey || provenance.packetHash !== expectedProvenance.packetHash || !same(ordered(provenance.attribution), ordered(expectedProvenance.attribution))) fail('Review the original package matching the current shared session and its full attribution');
+  const descriptor = normalizeDesignDescriptor(input.descriptor);
+  if (same(descriptor, source.root.descriptor)) fail('Apply an edit to the imported descriptor before exporting a derivative');
+  const designId = id(input.id, 'Derivative design ID');
+  if (source.designs.some(row => row.id === designId)) fail('Derivative design ID collides with licensed ancestry');
+  const license = one(input.license, CREATOR_LICENSES, 'derivative license');
+  if (source.designs.some(row => row.license === 'attribution-sharealike') && license !== 'attribution-sharealike') fail('Parent share-alike license must be preserved');
+  const creator = identity(input.creator);
+  const root = {
+    id: designId,
+    version: 1,
+    key: `${designId}@1`,
+    creator,
+    category: one(input.category, CREATOR_CATEGORIES, 'derivative category'),
+    title: text(input.title, 'Derivative title', 100),
+    descriptor,
+    descriptorHash: hash(descriptor),
+    parents: [source.root.key],
+    license
+  };
+  const body = {
+    format: 'matumbo-unverified-derivative-v1',
+    rootKey: root.key,
+    designs: [root, ...source.designs],
+    derivation: {
+      sourceRootKey: source.root.key,
+      sourcePacketHash: source.packetHash,
+      declaredLocalAuthor: creator,
+      authorIdentityVerified: false,
+      externalPublicationVerified: false,
+      catalogRegistered: false,
+      moneyAuthorized: false
+    }
+  };
+  const serialized = JSON.stringify({ ...body, packetHash: hash(body) });
+  // Reuse the import gate for total size, ancestry count/depth and license rules.
+  parseSharedCreatorDesign(serialized);
+  return serialized;
 }
 
 /**

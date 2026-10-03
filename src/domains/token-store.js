@@ -1,5 +1,5 @@
 /** Local canonical-engine snapshots. Hashes detect corruption, not signatures. */
-import { createTokenEngine, TokenLedger, CONFIG } from './token.js?v=20261003-complete8';
+import { createTokenEngine, TokenLedger, CONFIG, MARKET_MAKER, VOID_ACCOUNT, REVERSE_WINDOW_TICKS } from './token.js?v=20261003-complete8';
 export const TOKEN_STORAGE_KEY = 'tumbo.token.engine.v2';
 const ownerEngine = owner => typeof owner?.quote === 'function' && typeof owner?.execute === 'function' && owner?.ledger?.post ? owner : owner?.engine ?? owner?._engine;
 export function serializeTokenEngine(owner) {
@@ -27,11 +27,23 @@ export function loadTokenEngine(raw, { config = CONFIG } = {}) {
   const economicCustody = restored.claimEconomicCustody();
   restored.openAccount('sys:issuance', 'TUMBO', { allowNegative: true });
   restored.openAccount('sys:issuance', 'sMIMAS', { allowNegative: true });
-  const requests = new Map(data.requests), ids = new Set();
+  const requests = new Map(data.requests), ids = new Map();
   if (requests.size !== data.requests.length || requests.size !== data.journals.length) throw new Error('snapshot request index does not match journals');
   for (const [index, row] of data.journals.entries()) {
     if (!row || row.tick !== index + 1 || typeof row.id !== 'string' || ids.has(row.id) || restored._receipts.has(row.idempotencyKey)) throw new Error('invalid token journal order or identity');
-    ids.add(row.id);
+    if (row.action === 'reverse') {
+      const original = restored._receipts.get(row.links?.reversesKey);
+      if (!original || ids.get(row.links?.reverses)?.id !== original.id || row.idempotencyKey !== `reverse:${original.idempotencyKey}`) throw new Error('reversal target differs from its canonical journal');
+      // Old generic reversals could claw back an economic payout while retaining
+      // its fulfilled/paid domain record. Reject before exposing the candidate.
+      if (original.links?.economicKernel === true) throw new Error('economic journal reversal bypasses its owning domain; paired history cannot be adopted');
+      if (['genesis', 'reverse', 'cancel'].includes(original.action) || row.tick - 1 - original.tick > REVERSE_WINDOW_TICKS) throw new Error('reversal violates its canonical lifecycle rules');
+      // A valid checksum cannot make unrelated value movements a compensation.
+      // Bind the actual legs, preserving the engine's non-debitable Void tithe.
+      const expected = original.postings.map(leg => ({ account: leg.account === VOID_ACCOUNT && leg.amount > 0 ? MARKET_MAKER : leg.account, asset: leg.asset, amount: -leg.amount }));
+      if (JSON.stringify(row.postings) !== JSON.stringify(expected)) throw new Error('reversal postings differ from its canonical compensation');
+    }
+    ids.set(row.id, row);
     const request = JSON.parse(requests.get(row.idempotencyKey) ?? 'null');
     if (!request || JSON.stringify(request.postings) !== JSON.stringify(row.postings) || request.action !== row.action || request.memo !== row.memo || JSON.stringify(request.links ?? null) !== JSON.stringify(row.links ?? null)) throw new Error('journal request does not match receipt');
     if (index < baseline.length && (row.action !== 'genesis' || row.idempotencyKey !== baseline[index].idempotencyKey || JSON.stringify(row.postings) !== JSON.stringify(baseline[index].postings))) throw new Error('snapshot genesis differs from canonical supply');

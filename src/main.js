@@ -4544,6 +4544,11 @@ ourplaceButton.addEventListener('click',()=>{
       applyDesign:descriptor=>realityAssembly?.applyCreatorDesign?.(descriptor),onNavigate:id=>featureNavigator?.select(id,'creator-step')});
     ourplaceHost.hidden=!ourplaceHost.hidden;ourplaceButton.setAttribute('aria-expanded',String(!ourplaceHost.hidden));
     ourplaceButton.textContent=ourplaceHost.hidden?'Open Ourplace · create, share & earn':'Close Ourplace';ourplaceController.refresh();
+    if(!ourplaceHost.hidden){
+      const heading=ourplaceController.root.querySelector('h2');
+      heading?.setAttribute('tabindex','-1');heading?.focus({preventScroll:true});
+      heading?.scrollIntoView({block:'start',behavior:'instant'});
+    }
   }catch(error){assetLaunchStatus.textContent=`Ourplace could not open: ${error.message}`;}
 });
 function openOurplaceFlow(tab){

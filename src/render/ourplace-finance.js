@@ -11,6 +11,52 @@ function fluff(value) {
   if (result > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error('Amount exceeds the exact local range');
   return Number(result);
 }
+const amount = (value, asset = 'TUMBO') => {
+  const n = BigInt(value);
+  return `${n / 1000n}.${String(n % 1000n).padStart(3, '0')} ${asset === 'TUMBO' ? 'TUMBO-SIM' : `${asset} (demo)`}`;
+};
+const deadline = value => {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? `${value} ms since rehearsal epoch` : `${date.toISOString()} (rehearsal UTC)`;
+};
+
+/** Read-only explanations follow the selected record, including after reload. */
+export function describeFinanceRecord(collection, row, now) {
+  const prefix = `${row.status} · record ${row.id}. `;
+  if (collection === 'payments') {
+    const total = amount(row.amountFluff, row.asset), roles = `Payer ${row.payer}; provider ${row.provider}; creator ${row.creator}. `;
+    if (row.status === 'requested') return prefix + roles + (now >= row.expiresAt ? 'Request expired; cancel it. No funds were reserved.' : `Awaiting payer authorization for ${total}; no funds reserved yet.`);
+    if (row.status === 'authorized') return prefix + roles + `${total} held for this service. ` + (now >= row.expiresAt ? 'Authorization expired; the payer can cancel to release the reserve.' : 'The provider can deliver, or the payer can cancel to release the reserve.');
+    if (row.status === 'fulfilled') return prefix + `Delivery paid creator ${amount(row.creatorFluff, row.asset)}, provider ${amount(row.providerFluff, row.asset)}, operations ${amount(row.treasuryFluff, row.asset)}. ` + (now > row.refundUntil ? 'Refund window closed.' : `Refund review is available until ${deadline(row.refundUntil)}.`);
+    if (row.status === 'refund-requested') {
+      const payees = [[row.creator,row.creatorFluff],[row.provider,row.providerFluff],[row.treasury,row.treasuryFluff]].filter(([,n]) => n > 0);
+      const approved = payees.filter(([who]) => row.refundApprovals.includes(who)).length;
+      return prefix + `${total} refund to ${row.payer}: ${approved}/${payees.length} affected payees approved. ` + (now > row.refundUntil ? 'Refund window closed; this request cannot be committed.' : 'Approval does not reserve payee funds; all payees must still cover their share when the payer commits.');
+    }
+    return prefix + (row.status === 'refunded' ? `${total} returned to ${row.payer}.` : row.authorizedAt !== undefined ? `Service cancelled; its reserve was released to ${row.payer}.` : 'Service cancelled before authorization; no funds were reserved.');
+  }
+  if (collection === 'orders') {
+    const token = row.side === 'BUY' ? row.quoteAsset : row.baseAsset;
+    return prefix + `${row.side} owner ${row.owner}; ${row.remainingLots} lots remain; ${amount(row.reservedFluff, token)} held. ` + (row.status === 'open' ? now >= row.expiresAt ? 'Order expired; cancel to release the reservation.' : `Limit ${row.priceNumeratorFluff}/${row.priceDenominatorLots} quote fluff per lot; match compatible orders or cancel.` : 'No open reservation remains.');
+  }
+  if (collection === 'offers') return prefix + `Lender ${row.lender}; ${amount(row.availableFluff, row.asset)} capital reserved in this offer. ` + (row.status === 'open' ? now >= row.expiresAt ? 'Offer expired; withdraw unused capital. Existing borrower debts stay separate.' : `Maximum LTV ${row.maxLtvBps / 100}%; unused capital can be withdrawn. Existing borrower debts stay separate.` : 'Existing borrower debts stay separate from the withdrawn or exhausted offer.');
+  if (collection === 'loans') {
+    const roles = `Borrower ${row.borrower}; lender ${row.lender}. `;
+    const debt = `${amount(row.remainingDebtFluff, row.asset)} debt remains`;
+    if (row.liquidatedAt !== undefined) return prefix + roles + `Collateral transferred in kind at a local fixture valuation. ${amount(row.seizedCollateralFluff, row.collateralAsset)} seized; ${amount(row.returnedCollateralFluff, row.collateralAsset)} returned. ${row.remainingDebtFluff ? `${debt}, unsecured` : 'No debt remains'}; this is not cash recovery.`;
+    if (row.status === 'repaid') return prefix + roles + 'Debt repaid; no collateral remains held.';
+    return prefix + roles + `${debt}; ${amount(row.heldCollateralFluff, row.collateralAsset)} collateral held. Due ${deadline(row.dueAt)}. ` + (row.status === 'defaulted' ? 'Guarded liquidation or repayment can continue.' : 'Repayment releases collateral when the full debt is paid.');
+  }
+  if (collection === 'markets') {
+    if (row.status === 'finalized') return prefix + `${row.outcome}: ${amount(row.stakePoolFluff, row.asset)} ${row.refunded ? 'refunded to stake owners' : 'distributed by exact parimutuel payout'}. No stake liability remains.`;
+    const roles = `Resolver ${row.resolver}; reviewer ${row.reviewer} are named local roles. `;
+    const held = `${amount(row.stakePoolFluff, row.asset)} stakes held. `;
+    if (row.status === 'proposed') return prefix + held + `${row.proposal.outcome} proposal ${row.proposal.id}: ${row.proposal.approvals.length}/2 exact-proposal approvals. Challenge window ends ${deadline(row.proposal.challengeUntil)}. ` + roles;
+    if (row.status === 'challenged') return prefix + held + 'Evidence challenged; the resolver must make a replacement proposal. ' + roles;
+    return prefix + held + (now >= row.resolutionAt ? 'Resolution evidence can now be proposed. ' : `Staking closes ${deadline(row.closeAt)}; resolution opens ${deadline(row.resolutionAt)}. `) + roles;
+  }
+  return prefix;
+}
 /** Explicit local roles make the policy transitions inspectable without implying authentication. */
 export function wireOurplaceFinance(ui) {
   const {
@@ -36,7 +82,8 @@ export function wireOurplaceFinance(ui) {
   let currentSnapshot = f.snapshot();
   const pickers = [],
     actions = [],
-    rules = new Map();
+    rules = new Map(),
+    resultViews = new Map();
   const button = (parent, label, action, name, options) => {
     const node = baseButton(parent, label, () => {
       try {
@@ -83,13 +130,13 @@ export function wireOurplaceFinance(ui) {
       }), create('option', newLabel, {
         value: 'new'
       }));
-      for (const item of all) node.append(create('option', `${item.id.slice(0, 8)} · ${item.status} · ${item.owner ?? item.payer ?? item.lender ?? item.creator ?? item.borrower}`, {
+      for (const item of all) node.append(create('option', `${item.id.slice(0, 8)} · ${item.status} · ${collection === 'loans' ? `borrower ${item.borrower}` : item.owner ?? item.payer ?? item.lender ?? item.creator}`, {
         value: item.id
       }));
       node.value = selected;
       const record = all.find(item => item.id === selected) ?? null;
       assign(record);
-      info.textContent = record ? `${label}: ${record.id} · ${record.status}${record.remainingLots !== undefined ? ` · ${record.remainingLots} lots reserved at ${record.priceNumeratorFluff}/${record.priceDenominatorLots} quote fluff per lot` : ''}${record.remainingDebtFluff !== undefined ? ` · remaining debt ${record.remainingDebtFluff / 1000} ${record.asset}-SIM · borrower ${record.borrower}` : ''}${record.proposal ? ` · current proposal ${record.proposal.id} · ${record.proposal.approvals.length}/2 approvals` : ''}` : selected === 'new' ? newLabel : 'Several records may be available. Choose one explicitly to continue.';
+      info.textContent = record ? describeFinanceRecord(collection, record, runtime.now()) : selected === 'new' ? `${newLabel}. Creating it records explicit local terms; review the required roles before reserving funds.` : 'Several records may be available. Choose one explicitly to continue.';
     }
     const control = {
       node,
@@ -119,11 +166,19 @@ export function wireOurplaceFinance(ui) {
     pickers.push(control);
     return control;
   }
-  const show = value => {
-    status.textContent = JSON.stringify(value, null, 2);
+  const show = (value, message) => {
+    const collection = value.payer ? 'payments' : value.remainingDebtFluff !== undefined ? 'loans' : value.availableFluff !== undefined ? 'offers' : value.side ? 'orders' : value.question ? 'markets' : null;
+    const matchedOrder = value.buyOrderId ? currentSnapshot.orders.find(row => row.id === value.buyOrderId) : null;
+    const pane = collection === 'payments' ? 'services' : ['loans','offers'].includes(collection) ? 'credit' : 'markets';
+    const view = resultViews.get(pane);
+    if (view) {
+      view.details.hidden = false;
+      view.record.textContent = JSON.stringify(value, null, 2);
+    }
+    status.textContent = message ?? (collection ? describeFinanceRecord(collection, value, runtime.now()) : matchedOrder ? `${value.lots} reserved lots matched locally: ${amount(value.baseFluff, matchedOrder.baseAsset)} exchanged for ${amount(value.quoteFluff, matchedOrder.quoteAsset)}. Inspect the result and the remaining order reservations.` : 'Local asset conversion recorded. Inspect its canonical result and balances.');
   };
   const services = panes.get('services');
-  services.append(create('small', 'A local service splits payment 30% creator / 60% provider / 10% operations. The payer reserves funds; delivery releases them once.'));
+  services.append(create('small', 'A local service splits payment 30% creator / 60% provider / 10% operations. The payer reserves funds; delivery releases them once. Buttons rehearse the named record roles in this browser; they do not authenticate independent people.'));
   const paymentPicker = picker(services, 'payments', 'Service request', 'New service request', row => ['requested', 'authorized', 'refund-requested'].includes(row.status), row => {
     paymentId = row?.id ?? null;
   });
@@ -204,7 +259,7 @@ export function wireOurplaceFinance(ui) {
     idempotencyKey: key('service-refund')
   })), 'service-refund');
   const markets = panes.get('markets');
-  markets.append(create('small', 'The local order book reserves real canonical demo balances. Prices are explicit user offers; they are separate from a forecast probability.'));
+  markets.append(create('small', 'The local order book reserves canonical demo balances. Buy and sell buttons rehearse You and Visitor; conversion uses the selected participant. Prices are explicit offers, separate from a forecast probability.'));
   button(markets, 'Convert 20 demo TUMBO → sMIMAS for selected participant', () => {
     const engine = runtime.kernel.engine,
       q = engine.quote({
@@ -360,7 +415,7 @@ export function wireOurplaceFinance(ui) {
     proposalId,
     idempotencyKey: key('prediction-approve-resolver')
   })), 'prediction-approve-resolver');
-  button(predictions, 'Approve exact proposal · independent reviewer', () => show(f.predictionApprove({
+  button(predictions, 'Approve exact proposal · reviewer role', () => show(f.predictionApprove({
     actor: marketPicker.requireRow().reviewer,
     marketId,
     proposalId,
@@ -380,7 +435,7 @@ export function wireOurplaceFinance(ui) {
     idempotencyKey: key('prediction-finalize')
   })), 'prediction-finalize');
   const credit = panes.get('credit');
-  credit.append(create('small', 'A lender explicitly escrows their own capital. A different borrower locks collateral. Customer custody and prediction collateral cannot fund this offer.'));
+  credit.append(create('small', 'You offers lender capital; Visitor borrows and locks collateral. Later buttons rehearse the selected record roles. Customer custody and prediction collateral cannot fund this offer. These local roles are not authenticated identities.'));
   const offerPicker = picker(credit, 'offers', 'Capital offer', 'New lender capital offer', row => row.status === 'open', row => {
     offerId = row?.id ?? null;
   });
@@ -391,7 +446,7 @@ export function wireOurplaceFinance(ui) {
     'data-oracle-price': '',
     inputmode: 'decimal'
   });
-  button(credit, 'Record two independent local oracle roles', () => {
+  button(credit, 'Record two named local oracle fixtures', () => {
     for (const [source, observer] of [
         ['local-a', 'u:oracle-a'],
         ['local-b', 'u:oracle-b']
@@ -491,6 +546,17 @@ export function wireOurplaceFinance(ui) {
     idempotencyKey: key('loan-liquidate')
   })), 'loan-liquidate');
   advance(panes.get('proof'));
+  for (const name of ['services', 'markets', 'credit']) {
+    const details = create('details'), record = create('pre', '', {
+      'data-finance-result': name,
+      tabindex: '0',
+      'aria-label': 'Last local finance result record'
+    });
+    details.hidden = true;
+    details.append(create('summary', 'Inspect last local finance result record'), record);
+    panes.get(name).append(details);
+    resultViews.set(name, { details, record });
+  }
   rules.set('service-request', () => paymentPicker.isNew());
   rules.set('service-authorize', () => paymentPicker.row()?.status === 'requested' && runtime.now() < paymentPicker.row().expiresAt);
   rules.set('service-fulfill', () => paymentPicker.row()?.status === 'authorized' && runtime.now() < paymentPicker.row().expiresAt);

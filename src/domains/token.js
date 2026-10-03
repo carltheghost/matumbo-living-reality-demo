@@ -829,6 +829,14 @@ export class QuoteEngine {
         `lifecycle journals cannot be reversed (journal ${original.id} is a ${original.action})`
       );
     }
+    // Economic domains own their compensation rules and paired command history.
+    // Negating a payout here could bypass approvals and leave a fulfilled or
+    // paid domain record attached to balances that no longer reflect its receipt.
+    if (original.links?.economicKernel === true) {
+      throw new QuoteError(
+        `economic journal ${original.id} cannot use a generic reversal; use its owning domain refund or cancellation flow`
+      );
+    }
     const rkey = `reverse:${original.idempotencyKey}`;
     const replayed = this.ledger._receipts.get(rkey);
     if (replayed) return replayed;

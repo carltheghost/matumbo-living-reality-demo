@@ -1,6 +1,7 @@
 import {
   CREATOR_CATEGORIES,
-  parseSharedCreatorDesign
+  parseSharedCreatorDesign,
+  exportSharedCreatorDerivative
 } from '../domains/creator-economy.js?v=20261003-complete8';
 import {
   economicDigest
@@ -44,6 +45,7 @@ export function mountOurplaceEconomy({
     recognition = null,
     disposed = false,
     reviewedSharedJson = null,
+    reviewedDerivative = null,
     jobSelectionInitialized = false;
   const sessionId = key('session');
   const style = create('style');
@@ -364,7 +366,7 @@ export function mountOurplaceEconomy({
   const license = select(creatorPane, 'License', [
     ['attribution', 'Attribution'],
     ['attribution-sharealike', 'Attribution + share alike']
-  ]);
+  ], { 'data-design-license': '' });
   const parentDesign = select(creatorPane, 'Remix parent', [
     ['', 'Start a fresh design']
   ], {
@@ -509,6 +511,54 @@ export function mountOurplaceEconomy({
     download('ourplace-shared-design.json', reviewedSharedJson);
     status.textContent = 'Original reviewed package downloaded with its declared licensed attribution. External authors remain unverified.';
   }, 'design-import-export');
+  importDetails.append(create('small', 'After applying an edit, review the current design below as an unverified derivative. Your selected local identity is its declared author. Every licensed ancestor stays attached; this download creates no catalog entry, verified identity or rewards. Use the design name, category and license above.'));
+  const derivativeReview = create('pre', 'Apply an imported design, edit it, then review the derivative before downloading.', {
+    'data-design-derivative-review': ''
+  });
+  importDetails.append(derivativeReview);
+  function derivativeInput(designId) {
+    if (!reviewedSharedJson) throw new Error('Review the original shared package first');
+    const session = runtime.designSession.snapshot();
+    return {
+      serialized: reviewedSharedJson,
+      descriptor: session.descriptor,
+      provenance: session.provenance,
+      id: designId,
+      creator: actor.value,
+      category: category.value,
+      title: title.value,
+      license: license.value,
+      explicit: true
+    };
+  }
+  button(importDetails, 'Review edited derivative', () => {
+    reviewedDerivative = null;
+    const designId = key('derivative');
+    const serialized = exportSharedCreatorDerivative(derivativeInput(designId));
+    const packet = parseSharedCreatorDesign(serialized);
+    reviewedDerivative = { designId, serialized };
+    derivativeReview.textContent = JSON.stringify({
+      title: packet.root.title,
+      declaredLocalAuthor: packet.root.creator,
+      authorIdentityVerified: false,
+      externalPublicationVerified: false,
+      catalogRegistered: false,
+      moneyAuthorized: false,
+      license: packet.root.license,
+      attribution: packet.designs.map(({ key, creator, license }) => ({ key, creator, license })),
+      descriptor: packet.root.descriptor
+    }, null, 2);
+    status.textContent = 'Review this current applied descriptor, declared local author and full licensed ancestry. Downloading creates only an unverified portable derivative.';
+  }, 'design-derivative-preview');
+  button(importDetails, 'Download reviewed derivative', () => {
+    if (!reviewedDerivative) throw new Error('Review the edited derivative first');
+    // Rebuild from the current session and form values so a later edit, source
+    // review, identity selection or license change cannot export stale approval.
+    const serialized = exportSharedCreatorDerivative(derivativeInput(reviewedDerivative.designId));
+    if (serialized !== reviewedDerivative.serialized) throw new Error('The current design, author, license or source changed. Review the derivative again before downloading.');
+    download('ourplace-unverified-derivative.json', serialized);
+    status.textContent = `Unverified derivative downloaded with declared local author ${actor.value} and full licensed ancestry. Session origin is preserved; no catalog entry, entitlement or payout was created.`;
+  }, 'design-derivative-export');
   const steps = create('div', undefined, {
     'data-design-steps': ''
   });

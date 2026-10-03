@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createTokenEngine } from '../src/domains/token.js?v=20261003-complete8';
 import { createEconomicKernel } from '../src/domains/economic-kernel.js?v=20261003-complete8';
+import { createEconomicRuntime } from '../src/domains/economic-runtime.js?v=20261003-complete8';
+import { mountOurplaceEconomy } from '../src/render/ourplace-economy.js?v=20261003-complete8';
 import {
   CREATOR_CATEGORIES, DEFAULT_DESIGN_DESCRIPTOR, normalizeDesignDescriptor,
-  parseCreatorDesignRequest, parseSharedCreatorDesign, createDesignSession, createCreatorEconomy,
+  parseCreatorDesignRequest, parseSharedCreatorDesign, exportSharedCreatorDerivative, createDesignSession, createCreatorEconomy,
 } from '../src/domains/creator-economy.js?v=20261003-complete8';
 
 function fixture(options = {}) {
@@ -31,6 +33,63 @@ function fixture(options = {}) {
     return economy.recordUsage(input);
   }
   return { engine, kernel, postCreator, economy, observations, design, use };
+}
+
+function sealSharedPacket(packet) {
+  const canonical = value => value === null || typeof value !== 'object' ? JSON.stringify(value) : Array.isArray(value) ? `[${value.map(canonical).join(',')}]` : `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonical(value[key])}`).join(',')}}`;
+  const { packetHash: _old, ...body } = packet;
+  return JSON.stringify({ ...body, packetHash: createHash('sha256').update(canonical(body).replace(/[\u007f-\uffff]/g, char => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`)).digest('hex') });
+}
+
+function sharedProvenance(packet) {
+  return { kind: 'shared-package', rootKey: packet.root.key, packetHash: packet.packetHash, attribution: packet.designs.map(({ key, creator, license }) => ({ key, creator, license })) };
+}
+
+function derivativeFixture() {
+  const f = fixture();
+  f.design({ id: 'licensed-source', license: 'attribution-sharealike' });
+  f.design({ id: 'imported-remix', creator: 'u:bob', parents: ['licensed-source@1'], license: 'attribution-sharealike' });
+  const serialized = f.economy.exportDesign('imported-remix@1');
+  const source = parseSharedCreatorDesign(serialized), session = createDesignSession();
+  session.apply({ proposalId: session.preview(source.root.descriptor, { provenance: sharedProvenance(source) }).proposalId, explicit: true });
+  session.apply({ proposalId: session.preview('purple and grid and spacious').proposalId, explicit: true });
+  const input = { serialized, descriptor: session.snapshot().descriptor, provenance: session.snapshot().provenance, id: 'local-derivative', creator: 'u:carol', category: 'layout', title: 'My edited place', license: 'attribution-sharealike', explicit: true };
+  return { ...f, session, source, serialized, input };
+}
+
+// Synthetic event/download harness checks review authorization and real domain
+// state without asserting browser geometry, rendering or a disk download.
+function creatorUiFixture() {
+  const nodes = [], downloads = [], blobs = new Map();
+  class FormNode {
+    constructor(tag) { this.tag = tag; this.attrs = {}; this.children = []; this.listeners = new Map(); this.textContent = ''; this.value = ''; this.disabled = false; nodes.push(this); }
+    setAttribute(name, value) { this.attrs[name] = value; if (name === 'value') this.value = value; }
+    append(...children) {
+      if (this.tag === 'select' && !this.children.length && children.length) this.value = children[0].value;
+      this.children.push(...children); for (const child of children) child.parent = this;
+    }
+    replaceChildren(...children) { this.children = []; this.append(...children); }
+    addEventListener(name, listener) { this.listeners.set(name, listener); }
+    async click() {
+      if (this.attrs.download) downloads.push({ name: this.attrs.download, serialized: blobs.get(this.attrs.href) });
+      return this.listeners.get('click')?.();
+    }
+    remove() { if (this.parent) this.parent.children = this.parent.children.filter(child => child !== this); }
+    focus() {}
+  }
+  const engine = createTokenEngine(), runtime = createEconomicRuntime({ engine, storage: null, clock: () => Date.UTC(2026, 9, 3) });
+  const body = new FormNode('body'), documentRoot = { body, createElement: tag => new FormNode(tag) };
+  const windowRoot = {
+    Blob: class { constructor(parts) { this.serialized = parts.join(''); } },
+    URL: { createObjectURL(blob) { const url = `blob:test-${blobs.size}`; blobs.set(url, blob.serialized); return url; }, revokeObjectURL() {} }
+  };
+  const controller = mountOurplaceEconomy({ host: body, runtime, documentRoot, windowRoot, applyDesign: () => ({ applied: true }) });
+  return {
+    runtime, engine, controller, downloads, journals: engine.ledger.journalCount(),
+    field: attr => nodes.find(node => Object.hasOwn(node.attrs, attr)),
+    click: name => nodes.find(node => node.attrs['data-ourplace-action'] === name).click(),
+    dispose() { controller.dispose(); runtime.dispose(); }
+  };
 }
 
 test('a conversational request previews changes without applying or authorizing money', () => {
@@ -448,4 +507,177 @@ test('legacy sessions preserve appearance but quarantine changed designs with un
   const session = createDesignSession(), legacy = { schemaVersion: 1, original: DEFAULT_DESIGN_DESCRIPTOR, current: { ...DEFAULT_DESIGN_DESCRIPTOR, layout: 'grid' }, previous: [DEFAULT_DESIGN_DESCRIPTOR] };
   session.restore(JSON.stringify(legacy)); assert.equal(session.snapshot().descriptor.layout, 'grid'); assert.equal(session.snapshot().provenance.kind, 'legacy-unverified'); assert.equal(session.snapshot().publicationEligible, false);
   session.undo(); assert.equal(session.snapshot().provenance.kind, 'fresh'); assert.equal(session.snapshot().publicationEligible, true);
+});
+
+test('edited imported designs export a new unverified root with unchanged complete licensed ancestry and no economic effects', () => {
+  const f = derivativeFixture(), before = f.economy.snapshot(), sessionBefore = f.session.snapshot(), journals = f.engine.ledger.journalCount();
+  const serialized = exportSharedCreatorDerivative(f.input), raw = JSON.parse(serialized), packet = parseSharedCreatorDesign(serialized);
+  assert.equal(raw.format, 'matumbo-unverified-derivative-v1');
+  assert.equal(packet.root.key, 'local-derivative@1');
+  assert.equal(packet.root.creator, 'u:carol');
+  assert.deepEqual(packet.root.parents, [f.source.root.key]);
+  assert.deepEqual(packet.root.descriptor, sessionBefore.descriptor);
+  assert.notEqual(packet.root.descriptorHash, f.source.root.descriptorHash);
+  assert.deepEqual(packet.designs.slice(1), f.source.designs);
+  assert.equal(packet.derivation.sourcePacketHash, f.source.packetHash);
+  assert.equal(packet.derivation.declaredLocalAuthor, 'u:carol');
+  for (const authority of ['authorIdentityVerified', 'externalPublicationVerified', 'catalogRegistered', 'moneyAuthorized']) assert.equal(packet.derivation[authority], false);
+  assert.equal(packet.authorIdentityVerified, false); assert.equal(packet.externalPublicationVerified, false); assert.equal(packet.moneyAuthorized, false);
+  assert.equal(packet.requiresExplicitReview, true); assert.equal(packet.integrityVerified, true);
+  assert.deepEqual(f.economy.snapshot(), before); assert.deepEqual(f.session.snapshot(), sessionBefore);
+  assert.equal(f.engine.ledger.journalCount(), journals);
+  assert.equal(f.economy.exportDesign('imported-remix@1'), f.serialized);
+  assert.equal(f.session.snapshot().publicationEligible, false);
+  assert.throws(() => { packet.designs[1].license = 'attribution'; }, TypeError);
+});
+
+test('an exported derivative can be imported, reloaded, edited and exported again while both authors and all licenses survive', () => {
+  const f = derivativeFixture(), firstJson = exportSharedCreatorDerivative(f.input), first = parseSharedCreatorDesign(firstJson), next = createDesignSession();
+  next.apply({ proposalId: next.preview(first.root.descriptor, { provenance: sharedProvenance(first) }).proposalId, explicit: true });
+  const reloaded = createDesignSession(); reloaded.restore(next.serialize());
+  reloaded.apply({ proposalId: reloaded.preview('green and flow').proposalId, explicit: true });
+  const second = parseSharedCreatorDesign(exportSharedCreatorDerivative({ ...f.input, serialized: firstJson, descriptor: reloaded.snapshot().descriptor, provenance: reloaded.snapshot().provenance, id: 'second-derivative', creator: 'u:dana' }));
+  assert.deepEqual(second.root.parents, ['local-derivative@1']);
+  assert.deepEqual(second.designs.slice(1), first.designs);
+  assert.equal(second.designs.length, 4);
+  assert.equal(second.derivation.sourcePacketHash, first.packetHash);
+  assert.equal(reloaded.snapshot().publicationEligible, false);
+  reloaded.undo(); assert.deepEqual(reloaded.snapshot().provenance, sharedProvenance(first));
+  assert.deepEqual(reloaded.snapshot().descriptor, first.root.descriptor);
+});
+
+test('derivative export requires explicit review, an applied descriptor edit and the exact complete shared session origin', () => {
+  const f = derivativeFixture(), before = f.session.snapshot();
+  assert.throws(() => exportSharedCreatorDerivative({ ...f.input, explicit: false }), /Explicit derivative review/);
+  assert.throws(() => exportSharedCreatorDerivative({ ...f.input, descriptor: f.source.root.descriptor, title: 'A renamed original' }), /Apply an edit/);
+  for (const provenance of [
+    { kind: 'fresh' },
+    { kind: 'legacy-unverified' },
+    { kind: 'local-design', rootKey: f.source.root.key },
+    { ...f.input.provenance, packetHash: 'a'.repeat(64) },
+    { ...f.input.provenance, rootKey: 'licensed-source@1' },
+    { ...f.input.provenance, attribution: [f.input.provenance.attribution[0]] },
+    { ...f.input.provenance, attribution: f.input.provenance.attribution.map(row => ({ ...row, creator: 'u:thief' })) },
+    { ...f.input.provenance, attribution: f.input.provenance.attribution.map(row => ({ ...row, license: 'attribution' })) },
+  ]) assert.throws(() => exportSharedCreatorDerivative({ ...f.input, provenance }), /matching the current shared session/);
+  // An order change preserves the complete keyed licensed ancestry.
+  assert.doesNotThrow(() => exportSharedCreatorDerivative({ ...f.input, provenance: { ...f.input.provenance, attribution: [...f.input.provenance.attribution].reverse() } }));
+  assert.deepEqual(f.session.snapshot(), before);
+});
+
+test('portable derivatives reject ancestry ID collisions, weakened licenses, unsafe descriptors and authority fields', () => {
+  const f = derivativeFixture();
+  for (const id of ['licensed-source', 'imported-remix']) assert.throws(() => exportSharedCreatorDerivative({ ...f.input, id }), /collides/);
+  assert.throws(() => exportSharedCreatorDerivative({ ...f.input, license: 'attribution' }), /share-alike/);
+  assert.throws(() => exportSharedCreatorDerivative({ ...f.input, license: 'private' }), /Unsupported derivative license/);
+  assert.throws(() => exportSharedCreatorDerivative({ ...f.input, creator: 'sys:treasury' }), /canonical/);
+  assert.throws(() => exportSharedCreatorDerivative({ ...f.input, descriptor: { ...f.input.descriptor, script: 'arbitrary code' } }), /Unsupported descriptor/);
+  assert.throws(() => exportSharedCreatorDerivative({ ...f.input, descriptor: { steps: [{ id: 'run', action: 'inspect', target: 'https://external.example', label: 'Execute' }] } }), /unsupported characters|local IDs/);
+  assert.throws(() => exportSharedCreatorDerivative({ ...f.input, catalogRegistered: true }), /Unsupported derivative export/);
+  const original = JSON.parse(exportSharedCreatorDerivative(f.input));
+  for (const authority of ['authorIdentityVerified', 'externalPublicationVerified', 'catalogRegistered', 'moneyAuthorized']) {
+    const forged = structuredClone(original); forged.derivation[authority] = true;
+    assert.throws(() => parseSharedCreatorDesign(sealSharedPacket(forged)), /cannot claim/);
+  }
+  const forgedAuthor = structuredClone(original); forgedAuthor.derivation.declaredLocalAuthor = 'u:thief';
+  assert.throws(() => parseSharedCreatorDesign(sealSharedPacket(forgedAuthor)), /declared local author/);
+  const removedParent = structuredClone(original); removedParent.designs[0].parents = ['licensed-source@1']; removedParent.designs.splice(1, 1);
+  assert.throws(() => parseSharedCreatorDesign(sealSharedPacket(removedParent)), /source ancestry/);
+  const code = structuredClone(original); code.designs[0].descriptor.code = 'execute';
+  assert.throws(() => parseSharedCreatorDesign(sealSharedPacket(code)), /Unsupported descriptor/);
+});
+
+test('attribution-only imports can choose either supported derivative license and new roots do not reuse ancestor IDs', () => {
+  const f = fixture(); f.design();
+  const serialized = f.economy.exportDesign('design@1'), source = parseSharedCreatorDesign(serialized);
+  for (const license of ['attribution', 'attribution-sharealike']) {
+    const packet = parseSharedCreatorDesign(exportSharedCreatorDerivative({ serialized, descriptor: { ...source.root.descriptor, layout: 'grid' }, provenance: sharedProvenance(source), id: `new-${license}`, creator: 'u:bob', title: 'Edited', category: 'layout', license, explicit: true }));
+    assert.equal(packet.root.license, license);
+    assert.deepEqual(packet.designs.slice(1), source.designs);
+  }
+});
+
+test('derivative packets preserve the 64-design and 12-edge DAG limits including reused deep branches', () => {
+  const f = fixture(); f.design();
+  const template = JSON.parse(f.economy.exportDesign('design@1')).designs[0];
+  const treeRows = Array.from({ length: 64 }, (_, index) => ({ ...template, id: `node-${index}`, key: `node-${index}@1`, parents: Array.from({ length: 8 }, (_, child) => index * 8 + child + 1).filter(child => child < 64).map(child => `node-${child}@1`) }));
+  const serialized = sealSharedPacket({ format: 'matumbo-reviewed-design-v1', rootKey: 'node-0@1', designs: treeRows });
+  const source = parseSharedCreatorDesign(serialized);
+  assert.equal(source.designs.length, 64);
+  const input = { serialized, descriptor: { ...source.root.descriptor, layout: 'grid' }, provenance: sharedProvenance(source), id: 'overflow', creator: 'u:bob', title: 'Edited', category: 'layout', license: 'attribution', explicit: true };
+  assert.throws(() => exportSharedCreatorDerivative(input), /Unsupported shared design packet/);
+  const chain = Array.from({ length: 13 }, (_, index) => ({ ...template, id: `chain-${index}`, key: `chain-${index}@1`, parents: index ? [`chain-${index - 1}@1`] : [] }));
+  const maxDepthJson = sealSharedPacket({ format: 'matumbo-reviewed-design-v1', rootKey: 'chain-12@1', designs: chain });
+  const maxDepth = parseSharedCreatorDesign(maxDepthJson);
+  assert.throws(() => exportSharedCreatorDerivative({ ...input, serialized: maxDepthJson, provenance: sharedProvenance(maxDepth) }), /exceeds 12 levels/);
+  // Visiting the reused chain first via a short edge cannot hide a longer path.
+  const hiddenDeep = [...chain, { ...template, id: 'too-deep', key: 'too-deep@1', parents: ['chain-0@1', 'chain-12@1'] }];
+  assert.throws(() => parseSharedCreatorDesign(sealSharedPacket({ format: 'matumbo-reviewed-design-v1', rootKey: 'too-deep@1', designs: hiddenDeep })), /exceeds 12 levels/);
+  assert.throws(() => exportSharedCreatorDerivative({ ...input, serialized: ' '.repeat(850001) }), /too large/);
+});
+
+test('creator UI rejects stale author, title, category, license and applied-descriptor reviews before any derivative download', async () => {
+  const f = derivativeFixture(), ui = creatorUiFixture();
+  try {
+    ui.field('data-design-import').value = f.serialized;
+    await ui.click('design-import-preview'); await ui.click('design-apply');
+    ui.field('data-design-request').value = 'purple and grid';
+    await ui.click('design-preview'); await ui.click('design-apply');
+    ui.field('data-design-license').value = 'attribution-sharealike';
+    const changes = [
+      ['data-ourplace-actor', 'u:visitor'],
+      ['data-design-title', 'Changed after review'],
+      ['data-design-category', 'experience'],
+      ['data-design-license', 'attribution'],
+    ];
+    for (const [attribute, value] of changes) {
+      await ui.click('design-derivative-preview');
+      assert.match(ui.controller.status.textContent, /Review this current applied descriptor/);
+      const field = ui.field(attribute), old = field.value; field.value = value;
+      await ui.click('design-derivative-export');
+      assert.match(ui.controller.status.textContent, /changed|share-alike/);
+      assert.equal(ui.downloads.length, 0);
+      field.value = old;
+    }
+    await ui.click('design-derivative-preview');
+    ui.field('data-design-request').value = 'green and flow';
+    await ui.click('design-preview'); await ui.click('design-apply');
+    await ui.click('design-derivative-export');
+    assert.match(ui.controller.status.textContent, /changed/); assert.equal(ui.downloads.length, 0);
+    await ui.click('design-derivative-preview'); await ui.click('design-derivative-export');
+    assert.equal(ui.downloads.length, 1);
+    const packet = parseSharedCreatorDesign(ui.downloads[0].serialized);
+    assert.equal(packet.root.creator, 'u:you'); assert.equal(packet.root.descriptor.layout, 'flow');
+    assert.equal(packet.root.descriptor.palette.accent, '#56d6aa');
+    assert.deepEqual(packet.designs.slice(1), f.source.designs);
+    assert.equal(packet.moneyAuthorized, false);
+    assert.deepEqual(ui.runtime.designSession.snapshot().provenance, sharedProvenance(f.source));
+    assert.equal(ui.runtime.designSession.snapshot().publicationEligible, false);
+    assert.equal(ui.runtime.creator.snapshot().designs.length, 0); assert.equal(ui.runtime.creator.snapshot().entitlements.length, 0);
+    assert.equal(ui.engine.ledger.journalCount(), ui.journals);
+  } finally { ui.dispose(); }
+});
+
+test('creator UI retains original-packet download and import publication guard while requiring a matching source and actual edit', async () => {
+  const f = derivativeFixture(), ui = creatorUiFixture();
+  try {
+    await ui.click('design-derivative-export'); assert.match(ui.controller.status.textContent, /Review the edited derivative first/);
+    ui.field('data-design-import').value = f.serialized;
+    await ui.click('design-import-preview'); await ui.click('design-apply');
+    ui.field('data-design-license').value = 'attribution-sharealike';
+    await ui.click('design-derivative-preview'); assert.match(ui.controller.status.textContent, /Apply an edit/);
+    await ui.click('design-publish'); assert.match(ui.controller.status.textContent, /shared or unverified origin/);
+    assert.equal(ui.runtime.creator.snapshot().designs.length, 0);
+    await ui.click('design-import-export');
+    assert.deepEqual(ui.downloads, [{ name: 'ourplace-shared-design.json', serialized: f.serialized }]);
+    ui.field('data-design-request').value = 'grid';
+    await ui.click('design-preview'); await ui.click('design-apply');
+    await ui.click('design-derivative-preview');
+    const differentSource = f.economy.exportDesign('licensed-source@1');
+    ui.field('data-design-import').value = differentSource; await ui.click('design-import-preview');
+    // Reviewing another source must not graft it onto the already applied origin.
+    await ui.click('design-derivative-export'); assert.match(ui.controller.status.textContent, /matching the current shared session/);
+    assert.equal(ui.downloads.length, 1); assert.equal(ui.engine.ledger.journalCount(), ui.journals);
+    assert.equal(ui.runtime.creator.snapshot().entitlements.length, 0);
+  } finally { ui.dispose(); }
 });

@@ -392,3 +392,48 @@ test('accepted timeline events at the exact shared metadata bounds export and re
   source.runtime.dispose();
   restored.runtime.dispose();
 });
+
+function assertDomainReversalBlocked(f, receipt) {
+  const before = f.runtime.exportState();
+  for (const lookup of [{ journalId: receipt.id }, { idempotencyKey: receipt.idempotencyKey }]) {
+    assert.throws(() => f.engine.reverse({ ...lookup, actor: 'u:you' }), /owning domain refund or cancellation/);
+    assert.equal(f.runtime.exportState(), before, 'rejected generic reversal must preserve balances and all paired domain history');
+  }
+}
+
+test('paid compute and consent incentives retain their domain ownership across generic reversal attempts and reload', () => {
+  const source = paidFixture();
+  const restored = fixture(source.runtime.exportState());
+  for (const f of [source, restored]) {
+    const payments = f.engine.ledger._journals.filter(row => row.action === 'economic:incentive.claim');
+    assert.equal(payments.length, 2);
+    for (const receipt of payments) assertDomainReversalBlocked(f, receipt);
+    assert.equal(f.runtime.compute.snapshot().claims.length, 2);
+    assert.equal(f.runtime.kernel.proof().conserved, true);
+    f.runtime.dispose();
+  }
+});
+
+test('a paid creator entitlement cannot be generically reversed or paid again after paired reload', () => {
+  const source = fixture();
+  source.engine.faucet('u:you', 'TUMBO', 1000, { idempotencyKey: 'fund' });
+  source.runtime.kernel.fundPool({ from: 'u:you', purpose: 'rewards', amountFluff: 100, idempotencyKey: 'pool' });
+  const descriptor = source.runtime.designSession.preview('blue; grid').descriptor;
+  const design = source.runtime.creator.registerDesign({ id: 'protected-creator-design', version: 1, creator: 'u:creator', category: 'layout', title: 'A reviewed design', descriptor, parents: [], privacy: 'public', idempotencyKey: 'register' });
+  source.runtime.creator.publish({ key: design.key, creator: 'u:creator', license: 'attribution', explicit: true, idempotencyKey: 'publish' });
+  source.runtime.observeAdoption({ designKey: design.key, actor: 'u:visitor', sessionId: 'qualified-use', descriptorHash: design.descriptorHash });
+  source.runtime.planCreatorPayout({ planId: 'protected-plan', idempotencyKey: 'plan' });
+  source.runtime.settleCreatorPlan({ planId: 'protected-plan', idempotencyKey: 'settle' });
+  const restored = fixture(source.runtime.exportState());
+  for (const f of [source, restored]) {
+    const receipt = f.engine.ledger._journals.find(row => row.action === 'economic:creator.settle');
+    assert.ok(receipt);
+    assertDomainReversalBlocked(f, receipt);
+    const before = f.runtime.exportState();
+    assert.equal(f.runtime.settleCreatorPlan({ planId: 'protected-plan', idempotencyKey: 'settle' }).state, 'paid');
+    assert.equal(f.runtime.exportState(), before);
+    assert.equal(f.engine.balance('u:creator', 'TUMBO'), 10);
+    assert.equal(f.runtime.creator.snapshot().entitlements[0].state, 'paid');
+    f.runtime.dispose();
+  }
+});

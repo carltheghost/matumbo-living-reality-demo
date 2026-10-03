@@ -319,3 +319,143 @@ test('remainder allocation conserves every funded pool across uneven stake distr
     assert.equal(result.payouts.reduce((n, p) => n + p.amountFluff, 0), a + b + 7); assert.equal(fx.engine.balance(m.escrow, 'TUMBO'), 0); assert.equal(fx.kernel.proof().conserved, true);
   }
 });
+
+test('generic token reversal cannot claw back delivered service splits outside approved finance refunds', () => {
+  const fx = fixture(), f = fx.finance, p = payment(f);
+  f.paymentAuthorize({ actor: 'u:payer', paymentId: p.id, idempotencyKey: 'authorize' });
+  const delivered = f.paymentFulfill({ actor: 'u:provider', paymentId: p.id, evidence: 'Delivered local fixture', idempotencyKey: 'deliver' });
+  assertAtomicRejection(fx, () => fx.engine.reverse({ idempotencyKey: delivered.receiptKey, actor: 'u:payer' }), /economic|owning domain/i);
+  assert.equal(fx.engine.balance(p.escrow, 'TUMBO'), 0);
+  assert.equal(fx.engine.balance('u:creator', 'TUMBO'), 100071);
+  f.paymentRefundRequest({ actor: 'u:payer', paymentId: p.id, reason: 'Agreed local return', idempotencyKey: 'request-refund' });
+  for (const who of ['creator', 'provider', 'treasury'])
+    f.paymentRefundApprove({ actor: `u:${who}`, paymentId: p.id, idempotencyKey: `approve:${who}` });
+  assert.equal(f.paymentRefund({ actor: 'u:payer', paymentId: p.id, idempotencyKey: 'refund' }).status, 'refunded');
+  assert.equal(fx.engine.balance('u:payer', 'TUMBO'), 100000);
+});
+
+test('generic token reversal cannot return filled assets while leaving spot reservations partially consumed', () => {
+  const fx = fixture(), f = fx.finance, sell = order(f, 'SELL', 'sell'), buy = order(f, 'BUY', 'buy');
+  const fill = f.orderMatch({ actor: 'u:buyer', buyOrderId: buy.id, sellOrderId: sell.id, lots: 2, idempotencyKey: 'match' });
+  assertAtomicRejection(fx, () => fx.engine.reverse({ journalId: fill.receiptId, actor: 'u:seller' }), /economic|owning domain/i);
+  assert.equal(fx.engine.balance('u:buyer', 'sMIMAS'), 20);
+  assert.equal(fx.engine.balance(buy.escrow, 'TUMBO'), 10);
+  assert.equal(fx.engine.balance(sell.escrow, 'sMIMAS'), 40);
+  f.orderCancel({ actor: 'u:buyer', orderId: buy.id, idempotencyKey: 'cancel-buy' });
+  f.orderCancel({ actor: 'u:seller', orderId: sell.id, idempotencyKey: 'cancel-sell' });
+  assert.equal(fx.engine.balance('u:buyer', 'TUMBO'), 99996);
+});
+
+test('generic token reversal cannot erase a debt repayment or recreate discharged collateral', () => {
+  const fx = fixture(), f = fx.finance; observe(f); const o = offer(f);
+  const loan = f.loanBorrow({ actor: 'u:borrower', offerId: o.id, principalFluff: 100, collateralFluff: 100, idempotencyKey: 'borrow' });
+  const partial = f.loanRepay({ actor: 'u:borrower', loanId: loan.id, amountFluff: 50, idempotencyKey: 'repay-part' });
+  // A partial repayment has no purpose debit, so escrow-only firewall checks cannot protect it.
+  assertAtomicRejection(fx, () => fx.engine.reverse({ idempotencyKey: partial.receiptKey, actor: 'u:borrower' }), /economic|owning domain/i);
+  assert.equal(f.snapshot().loans[0].remainingDebtFluff, 60);
+  const final = f.loanRepay({ actor: 'u:borrower', loanId: loan.id, amountFluff: 60, idempotencyKey: 'repay-full' });
+  assertAtomicRejection(fx, () => fx.engine.reverse({ idempotencyKey: final.receiptKey, actor: 'u:lender' }), /economic|owning domain/i);
+  assert.equal(f.snapshot().loans[0].status, 'repaid');
+  assert.equal(fx.engine.balance(loan.escrow, 'sMIMAS'), 0);
+});
+
+test('generic token reversal cannot revoke a finalized prediction payout while keeping its terminal outcome', () => {
+  const fx = fixture(), f = fx.finance, m = market(f);
+  stake(f, m, 'u:alice', 'YES', 3, 'yes'); stake(f, m, 'u:bob', 'NO', 5, 'no');
+  fx.setTime(START + 2000); const p = propose(f, m); approvals(f, p); fx.setTime(START + 3000);
+  const finalized = f.predictionFinalize({ actor: 'u:creator', marketId: m.id, proposalId: p.proposal.id, idempotencyKey: 'finalize' });
+  assertAtomicRejection(fx, () => fx.engine.reverse({ idempotencyKey: finalized.receiptKey, actor: 'u:bob' }), /economic|owning domain/i);
+  assert.equal(fx.engine.balance('u:alice', 'TUMBO'), 100005);
+  assert.equal(fx.engine.balance(m.escrow, 'TUMBO'), 0);
+  assert.equal(f.snapshot().markets[0].status, 'finalized');
+});
+
+test('ledger observers cannot cancel reserves or challenge a proposal while its finance settlement commits', () => {
+  const fx = fixture(), f = fx.finance, sell = order(f, 'SELL', 'sell'), buy = order(f, 'BUY', 'buy'), attempts = [];
+  const offFill = fx.engine.ledger.onCommit(receipt => {
+    if (receipt.action !== 'economic:finance.order.match') return;
+    try { f.orderCancel({ actor: 'u:buyer', orderId: buy.id, idempotencyKey: 'observer-cancel' }); }
+    catch (error) { attempts.push(error.message); }
+  });
+  const count = fx.engine.ledger.journalCount();
+  f.orderMatch({ actor: 'u:buyer', buyOrderId: buy.id, sellOrderId: sell.id, lots: 2, idempotencyKey: 'match' });
+  offFill();
+  assert.equal(fx.engine.ledger.journalCount(), count + 1);
+  assert.equal(attempts.length, 1); assert.match(attempts[0], /re-enter/);
+  assert.equal(f.snapshot().orders.find(row => row.id === buy.id).remainingLots, 4);
+  assert.equal(f.snapshot().obligations.every(row => row.covered !== false), true);
+  const m = market(f); stake(f, m, 'u:alice', 'YES', 3, 'yes');
+  fx.setTime(START + 2000); const p = propose(f, m); approvals(f, p); fx.setTime(START + 3000);
+  const offPayout = fx.engine.ledger.onCommit(receipt => {
+    if (receipt.action !== 'economic:finance.prediction.finalize') return;
+    try { f.predictionChallenge({ actor: 'u:alice', marketId: m.id, proposalId: p.proposal.id, reason: 'Observer challenge', idempotencyKey: 'observer-challenge' }); }
+    catch (error) { attempts.push(error.message); }
+  });
+  f.predictionFinalize({ actor: 'u:creator', marketId: m.id, proposalId: p.proposal.id, idempotencyKey: 'finalize' });
+  offPayout();
+  assert.equal(attempts.length, 2); assert.match(attempts[1], /re-enter/);
+  assert.equal(f.snapshot().markets[0].status, 'finalized');
+  assert.equal(fx.engine.balance(m.escrow, 'TUMBO'), 0);
+});
+
+test('a valid finance history prefix cannot erase a payout while retaining its newer paired canonical journal', () => {
+  const fx = fixture(), f = fx.finance, m = market(f);
+  stake(f, m, 'u:alice', 'YES', 3, 'yes'); stake(f, m, 'u:bob', 'NO', 5, 'no');
+  fx.setTime(START + 2000); const p = propose(f, m); approvals(f, p); fx.setTime(START + 3000);
+  const prefix = fx.kernel.exportState();
+  f.predictionFinalize({ actor: 'u:creator', marketId: m.id, proposalId: p.proposal.id, idempotencyKey: 'finalize' });
+  const engine = loadTokenEngine(serializeTokenEngine(fx.engine)), kernel = createEconomicKernel({ engine, clock: () => 0 }), finance = createEconomicFinance(kernel);
+  const count = engine.ledger.journalCount();
+  assert.throws(() => kernel.restore(prefix), /missing its domain command/);
+  assert.equal(engine.ledger.journalCount(), count);
+  assert.equal(finance.snapshot().markets.length, 0);
+  assert.equal(kernel.snapshot().commandCount, 0);
+  assert.equal(engine.balance('u:alice', 'TUMBO'), 100005);
+});
+
+test('paired finance replay rejects historical generic reversals of economics-owned journals', () => {
+  const fx = fixture(), f = fx.finance, p = payment(f);
+  f.paymentAuthorize({ actor: 'u:payer', paymentId: p.id, idempotencyKey: 'authorize' });
+  const delivered = f.paymentFulfill({ actor: 'u:provider', paymentId: p.id, evidence: 'Delivered local fixture', idempotencyKey: 'deliver' });
+  const original = fx.engine.ledger._receipts.get(delivered.receiptKey);
+  // Explicit legacy fixture: reconstruct the pre-repair reversal's exact public
+  // journal and registry shape. The finance command stream has no compensation.
+  fx.engine.ledger.post(original.postings.map(leg => ({ ...leg, amount: -leg.amount })), {
+    idempotencyKey: `reverse:${original.idempotencyKey}`, action: 'reverse',
+    memo: `reversal of ${original.id} (${original.action})`, authority: 'internal',
+    links: { reverses: original.id, reversesKey: original.idempotencyKey, actor: 'u:payer' }
+  });
+  fx.engine._reversedJournalKeys.add(original.idempotencyKey);
+  const tokenHistory = serializeTokenEngine(fx.engine), domainHistory = fx.kernel.exportState();
+  assert.throws(() => {
+    const engine = loadTokenEngine(tokenHistory), kernel = createEconomicKernel({ engine, clock: () => 0 });
+    createEconomicFinance(kernel);
+    kernel.restore(domainHistory);
+  }, /economic|owning domain/i);
+});
+
+test('repeated partial fills and cancellation conserve both assets for either resting price across rational limits', () => {
+  for (const restingSide of ['BUY', 'SELL']) for (let denominator = 1; denominator <= 4; denominator += 1) for (let numerator = 1; numerator <= 5; numerator += 1) {
+    const fx = fixture(), f = fx.finance, lots = 2 * denominator + 1;
+    const overrides = { lots, lotSizeFluff: 3, priceDenominatorLots: denominator };
+    const place = side => order(f, side, side, { ...overrides, priceNumeratorFluff: side === 'BUY' ? numerator + denominator : numerator });
+    const first = place(restingSide), second = place(restingSide === 'BUY' ? 'SELL' : 'BUY');
+    const buy = restingSide === 'BUY' ? first : second, sell = restingSide === 'SELL' ? first : second;
+    const buyerStart = fx.engine.balance('u:buyer', 'TUMBO') + buy.reservedFluff;
+    const sellerStart = fx.engine.balance('u:seller', 'sMIMAS') + sell.reservedFluff;
+    const quotePerFill = restingSide === 'BUY' ? numerator + denominator : numerator;
+    for (let fill = 0; fill < 2; fill += 1) {
+      const result = f.orderMatch({ actor: fill ? 'u:seller' : 'u:buyer', buyOrderId: buy.id, sellOrderId: sell.id, lots: denominator, idempotencyKey: `fill:${fill}` });
+      assert.equal(result.quoteFluff, quotePerFill);
+      assert.equal(f.snapshot().obligations.every(row => row.covered !== false), true);
+    }
+    f.orderCancel({ actor: 'u:buyer', orderId: buy.id, idempotencyKey: 'cancel-buy' });
+    f.orderCancel({ actor: 'u:seller', orderId: sell.id, idempotencyKey: 'cancel-sell' });
+    assert.equal(fx.engine.balance('u:buyer', 'TUMBO'), buyerStart - 2 * quotePerFill);
+    assert.equal(fx.engine.balance('u:buyer', 'sMIMAS'), 6 * denominator);
+    assert.equal(fx.engine.balance('u:seller', 'sMIMAS'), sellerStart - 6 * denominator);
+    assert.equal(fx.engine.balance(buy.escrow, 'TUMBO'), 0);
+    assert.equal(fx.engine.balance(sell.escrow, 'sMIMAS'), 0);
+    assert.equal(fx.kernel.proof().conserved, true);
+  }
+});
