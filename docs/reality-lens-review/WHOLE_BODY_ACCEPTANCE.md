@@ -6,7 +6,7 @@ Five volumetric families now organize six useful home spaces. Bodies open their 
 
 ## Verified local result
 
-- **2,289 / 2,289 JavaScript tests**, across 104 suites, and **20 / 20 Python tests**. Zero failures, skips or cancelled tests. Runtime, test and script hashes stayed unchanged during the final suite.
+- **2,292 / 2,292 JavaScript tests**, across 104 suites, and **20 / 20 Python tests** after the native media repair. Zero failures, skips or cancelled tests. Runtime, test and script hashes stayed unchanged during the final suite.
 - **20 / 20 physical mouse/keyboard checks** at 1440 × 1000 desktop and 390 × 844 phone viewports. All five families executed an original control once. Typing, Escape, the same input/value across shape changes, body turning without accidental activation, a real checkbox and original chess canvas input passed. The first chess move was **e2 → e4** on both viewports.
 - **12 / 12 navigation checks** across both viewports: full home geometry fits, the torus hole rejects clicks, bodies enter their actual space/feature, canonical breadcrumbs and URLs agree, Back/Forward and cold reload preserve the space, and Home returns cleanly. No page errors.
 - **36 / 36 canonical routes mounted on each viewport** through the read-only navigation handoff. Person keeps its dedicated owner. This establishes mounting and ownership, not every workflow or external service.
@@ -28,7 +28,7 @@ Cold space reload formerly started an older universal renderer over the canonica
 
 These are Chromium software-WebGL checks, including a phone-sized viewport. Physical phones, hardware GPU performance, multitouch, AR and XR were not verified. Two-pointer gesture-pad controls remain available through **Text view**.
 
-The actual YouTube player stayed at currentTime 0 / readyState 0 during the run. Search and player continuity passed; streaming playback is **unverified**. The cross-origin iframe remains one planar browser player because its pixels cannot become a curved CanvasTexture.
+The initial whole-body run left the YouTube player at currentTime 0 / readyState 0, so it did not establish streaming playback. The subsequent [native media repair and acceptance](NATIVE_MEDIA_ACCEPTANCE.md) now proves real playback, matching reading-slot geometry and the same iframe/browsing context through Text/Object switching, all five shapes and phone resizing. This is proof for the tested public video, not every video or provider condition. The cross-origin iframe remains one planar browser player because its pixels cannot become a curved CanvasTexture.
 
 NVIDIA remains **key needed** until an owner supplies a valid server-side credential. Bounded public connection checks retain their existing authority rules; this does not claim universal coverage of free APIs or authenticated inference. TUMBO-SIM and the economic engine remain local simulations.
 

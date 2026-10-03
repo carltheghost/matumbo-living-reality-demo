@@ -72,6 +72,19 @@ body.assembly-mode #reality-assembly.assembly-accessible-text .reality-surface-s
   max-height:calc(100dvh - 150px)!important;overflow:auto!important;background:#071725!important;padding:24px!important;
   border:1px solid #65b8e0!important;border-radius:14px!important;z-index:500!important;
 }
+.reality-text-view-world{visibility:hidden!important;pointer-events:none!important}
+#reality-assembly.assembly-accessible-text{--surface-reading-top:160px}
+body.assembly-mode #reality-assembly.assembly-accessible-text .reality-surface-semantic-owner.reality-lens-feature-panel[data-lens-surface-attached=true]{
+  position:fixed!important;left:50%!important;right:auto!important;top:var(--surface-reading-top)!important;bottom:auto!important;
+  transform:translateX(-50%)!important;width:min(760px,calc(100vw - 28px))!important;min-width:0!important;max-width:min(760px,calc(100vw - 28px))!important;
+  height:auto!important;min-height:0!important;max-height:calc(100dvh - var(--surface-reading-top) - 50px)!important;
+  box-sizing:border-box!important;overflow:auto!important;clip-path:none!important;border-radius:14px!important;padding:24px!important;
+  background:#071725!important;border:1px solid #65b8e0!important;box-shadow:0 18px 54px #0008!important;z-index:500!important;
+}
+#reality-assembly .assembly-native-media-slot{display:none!important}
+#reality-assembly.assembly-accessible-text .assembly-native-media-slot:not([hidden]){display:block!important;width:100%;aspect-ratio:16/9;flex-shrink:0!important}
+#reality-assembly.assembly-accessible-text .assembly-css3d-renderer{z-index:501!important}
+@media(max-width:700px){#reality-assembly.assembly-accessible-text{--surface-reading-top:200px}}
 .reality-surface-native-editor{background:#091d2c!important;color:#f0faff!important;border:2px solid #79d5ff!important;border-radius:8px!important;padding:10px!important;font:17px/1.4 system-ui!important;box-shadow:0 8px 32px #000b!important;box-sizing:border-box!important;clip-path:none!important}
 #reality-assembly .assembly-surface-help{display:none;position:fixed;bottom:18px;left:50%;transform:translateX(-50%);color:#a8c9da;font-size:13px;pointer-events:none;white-space:nowrap}
 #reality-assembly.assembly-has-live-object-surface .assembly-surface-help{display:block}

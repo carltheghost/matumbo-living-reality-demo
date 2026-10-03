@@ -24,6 +24,7 @@ The six spaces use five volumetric families. Phone, square, rectangle and wave r
 3. Drag the body to turn it; tap a painted control to operate its original action.
 4. Scroll over the body, or use its Previous/Next controls, to browse longer content. Arrow keys turn a focused body; Page Up/Page Down browse content.
 5. Text entry uses the original native input so selection, typing, IME and browser pickers remain available. **Text view** exposes the original accessible feature when a conventional reading flow is useful.
+   Text view hides the painted world and gives the original document a readable background. Its native YouTube player stays mounted once and is projected into a reserved reading slot, including during scrolling and phone resizing.
 6. The breadcrumb path returns to the current space or Home. Space addresses can be reloaded and browser Back/Forward restores the hierarchy.
 
 ## Geometry and state ownership
@@ -47,6 +48,8 @@ This is a semantic surface renderer, not a complete browser screenshot engine. T
 The body forwards one active pointer gesture at a time. Controls that require two simultaneous pointers, such as the gesture pad's two-hand spread, remain available through Text view. Single-pointer desktop and phone-viewport checks do not establish physical multitouch, AR or XR support.
 
 YouTube's cross-origin iframe cannot be sampled into a CanvasTexture. Its search/results/actions remain surface content, while one real player remains an explicitly planar browser media area attached to the object. Rotation and shape changes must not create another player. Other inaccessible cross-origin media also remains browser content, rather than being presented as captured curved video. A permitted HTMLVideoElement can support VideoTexture, but that is a different media source.
+
+The blank player enters its stable browser parent before first play. Selecting a video enables eager loading, including when the object is turned away. Text/Object switching changes the same player's projection rather than moving its iframe or changing its source. Native reading layout responds to scroll, edits and resize even if the expensive world loop is paused by its freeze guard. [Native media acceptance](reality-lens-review/NATIVE_MEDIA_ACCEPTANCE.md) records actual playback and original iframe/window continuity on desktop and phone viewports.
 
 The renderer remains a projection. Existing public source checks and the optional server-side NVIDIA bridge keep their existing authority boundaries. Public connections are a bounded automatic batch. NVIDIA still requires a valid owner-provided credential; a configured route or a free prototype offering does not prove successful authenticated inference. This change neither merges the draft PR nor publishes GitHub Pages.
 

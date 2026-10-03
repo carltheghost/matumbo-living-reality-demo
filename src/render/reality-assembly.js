@@ -33,6 +33,21 @@ export function turnLivingSurfaceTowardCamera(objectRoot,cameraPosition){
   objectRoot.lookAt(cameraPosition);objectRoot.updateMatrixWorld(true);
 }
 
+/** Keep a mounted native player at a reading slot without moving its iframe. */
+export function placeNativeMediaAtRect({THREE,object,camera,rect,width,height,distance=10}){
+  if(!camera?.isPerspectiveCamera||!object||!rect||![rect.left,rect.top,rect.width,rect.height,width,height,distance].every(Number.isFinite)||rect.width<=0||rect.height<=0||width<=0||height<=0||distance<=camera.near)return false;
+  camera.updateMatrixWorld();object.parent?.updateWorldMatrix(true,false);
+  const unitsPerPixel=2*distance*Math.tan((camera.getEffectiveFOV?.()??camera.fov)*Math.PI/360)/height;
+  const rotation=camera.getWorldQuaternion(new THREE.Quaternion());
+  const right=new THREE.Vector3(1,0,0).applyQuaternion(rotation),up=new THREE.Vector3(0,1,0).applyQuaternion(rotation),forward=new THREE.Vector3(0,0,-1).applyQuaternion(rotation);
+  const position=camera.getWorldPosition(new THREE.Vector3()).addScaledVector(forward,distance)
+    .addScaledVector(right,(rect.left+rect.width/2-width/2)*unitsPerPixel)
+    .addScaledVector(up,(height/2-rect.top-rect.height/2)*unitsPerPixel);
+  const matrix=new THREE.Matrix4().compose(position,rotation,new THREE.Vector3().setScalar(unitsPerPixel));
+  if(object.parent)matrix.premultiply(object.parent.matrixWorld.clone().invert());
+  matrix.decompose(object.position,object.quaternion,object.scale);object.updateMatrixWorld(true);return true;
+}
+
 /** Disclose only an outer static overview, never contract terms/evidence. */
 export function mountLivingSurfaceIntro(panel){
   const header=panel.querySelector(':scope > header, :scope > [id$="-head"]');
@@ -174,7 +189,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   const cssSurfaceHost=document.createElement('div');cssSurfaceHost.className='assembly-css3d-host';cssSurfaceHost.setAttribute('aria-label','Interactive surfaces attached to selected object');root.prepend(cssSurfaceHost);
   document.body.append(root);
   let css3dRenderer=null,CSS3DObject=null,mountedSurface=null,css3dFailed=false,destroyed=false;
-  const resizeCss3d=()=>{if(!css3dRenderer)return;css3dRenderer.setSize(innerWidth,innerHeight);if(active&&mountedSurface)focus();};
+  const resizeCss3d=()=>{if(!css3dRenderer)return;css3dRenderer.setSize(innerWidth,innerHeight);if(active&&mountedSurface){focus();syncNativeMedia(mountedSurface,true);}};
   import('three/addons/renderers/CSS3DRenderer.js').then(module=>{
     if(destroyed)return;
     CSS3DObject=module.CSS3DObject;
@@ -243,7 +258,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   find('[data-fold-inspector]').setAttribute('aria-label','Minimize selected object details');
   find('[data-tab-shape]').setAttribute('aria-label','Change object shape');
   const textView=document.createElement('button');textView.type='button';textView.textContent='Text view';textView.dataset.surfaceTextView='';textView.setAttribute('aria-pressed','false');
-  textView.onclick=()=>{const shown=root.classList.toggle('assembly-accessible-text');textView.setAttribute('aria-pressed',String(shown));textView.textContent=shown?'Object view':'Text view';if(mountedSurface){const skin=mountedSurface.front;for(const [key,value] of Object.entries(shown?{left:'50%',top:'100px',transform:'translateX(-50%)',width:'min(760px, calc(100vw - 28px))','max-height':'calc(100dvh - 150px)',overflow:'auto'}:{left:'-12000px',top:'0',transform:'none',width:'760px','max-height':'none',overflow:'visible'}))skin.style.setProperty(key,value,'important');}};find('.assembly-header').append(textView);
+  textView.onclick=()=>{const shown=root.classList.toggle('assembly-accessible-text');renderer.domElement.classList.toggle('reality-text-view-world',shown);textView.setAttribute('aria-pressed',String(shown));textView.textContent=shown?'Object view':'Text view';if(mountedSurface){const skin=mountedSurface.front;for(const [key,value] of Object.entries(shown?{left:'50%',top:'var(--surface-reading-top,160px)',transform:'translateX(-50%)',width:'min(760px, calc(100vw - 28px))','max-height':'calc(100dvh - var(--surface-reading-top,160px) - 50px)',overflow:'auto'}:{left:'-12000px',top:'0',transform:'none',width:'760px','max-height':'none',overflow:'visible'}))skin.style.setProperty(key,value,'important');syncNativeMedia(mountedSurface,true);}};find('.assembly-header').append(textView);
   const surfaceHelp=document.createElement('p');surfaceHelp.className='assembly-surface-help';surfaceHelp.textContent='Drag to turn · tap the surface · scroll to browse';root.append(surfaceHelp);
 
   find('[data-lock-toggle]').setAttribute('aria-label','Lock or unlock this object');
@@ -366,10 +381,11 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
       const frame=record.front.querySelector('iframe[data-yt-frame]');
       if(frame){
         const parent=frame.parentNode,next=frame.nextSibling,style=frame.getAttribute('style');
+        const slot=document.createElement('div');slot.className='assembly-native-media-slot';slot.setAttribute('aria-hidden','true');slot.hidden=true;parent.insertBefore(slot,frame);
         const notice=document.createElement('p');notice.dataset.surfaceMediaNotice='true';notice.textContent='YouTube video uses one native browser area. Rotate this body for search, results and controls.';parent.insertBefore(notice,frame);
         const object3d=new CSS3DObject(frame);node.root.add(object3d);
         for(const [key,value] of Object.entries({width:'640px',height:'360px',border:'0',background:'#020810','backface-visibility':'hidden','pointer-events':'auto'}))frame.style.setProperty(key,value,'important');
-        record.media={frame,parent,next,style,object3d,notice};
+        record.media={frame,parent,next,style,object3d,notice,slot,layout:'object'};
       }
     }
   }
@@ -379,17 +395,44 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     record.controller?.sync();record.binding=node.surfaceBinding??record.binding;record.objects=[node.tabMesh];
     record.shape=node.shape;node.surfaceStretch=[1,1,1];root.dataset.readingProjection='mesh-360';
     if(record.media){
-      const {object3d,frame}=record.media,form=REALITY_TAB_FORMS[node.shape];
+      const {object3d,frame,slot}=record.media,form=REALITY_TAB_FORMS[node.shape],textMode=root.classList.contains('assembly-accessible-text');
+      const hasSource=frame.getAttribute('src')!=='about:blank';
+      if(slot.hidden===hasSource)slot.hidden=!hasSource;
+      frame.style.visibility=hasSource?'visible':'hidden';
+      // Mount the blank iframe in its stable CSS3D parent before first play.
+      // Deferring that DOM move until selection recreates its browsing context.
+      if(!hasSource){object3d.visible=true;return;}
+      // A deliberate play selection must load even while the body is turned
+      // away. Loading lazy media from an offscreen original owner can stall it.
+      if(hasSource&&frame.loading!=='eager')frame.loading='eager';
+      if(textMode){
+        const rect=slot.getBoundingClientRect(),reader=record.front.getBoundingClientRect();
+        const clip={top:Math.max(0,reader.top-rect.top,-rect.top),right:Math.max(0,rect.right-reader.right,rect.right-innerWidth),bottom:Math.max(0,rect.bottom-reader.bottom,rect.bottom-innerHeight),left:Math.max(0,reader.left-rect.left,-rect.left)};
+        object3d.visible=hasSource&&clip.top+clip.bottom<rect.height&&clip.left+clip.right<rect.width&&placeNativeMediaAtRect({THREE,object:object3d,camera,rect,width:innerWidth,height:innerHeight});
+        for(const [key,value] of Object.entries({width:`${rect.width}px`,height:`${rect.height}px`,'min-height':'0','clip-path':`inset(${clip.top}px ${clip.right}px ${clip.bottom}px ${clip.left}px)`}))frame.style.setProperty(key,value,'important');
+        record.media.layout='text';return;
+      }
+      if(record.media.layout!=='object'){
+        for(const [key,value] of Object.entries({width:'640px',height:'360px','min-height':'0','clip-path':'none'}))frame.style.setProperty(key,value,'important');
+        record.media.layout='object';
+      }
       object3d.scale.setScalar(form.width*.82/640);object3d.position.set(0,0,form.depth/2+.004);object3d.rotation.set(0,0,0);object3d.updateMatrixWorld(true);
       const facing=new THREE.Vector3(0,0,1).applyQuaternion(node.root.getWorldQuaternion(new THREE.Quaternion()));
       const toward=camera.getWorldPosition(new THREE.Vector3()).sub(object3d.getWorldPosition(new THREE.Vector3())).normalize();
-      object3d.visible=frame.getAttribute('src')!=='about:blank'&&facing.dot(toward)>.08;
+      object3d.visible=hasSource&&facing.dot(toward)>.08;
     }
+  }
+  // Native reading layout must respond even when the expensive world renderer
+  // is paused by the freeze guard. This only updates projection and DOM ink.
+  function syncNativeMedia(record,force=false){
+    if(!record?.media||record!==mountedSurface||(!force&&!root.classList.contains('assembly-accessible-text')))return;
+    camera.updateMatrixWorld();sizeAndPlaceSurface(record);css3dRenderer?.render(scene,camera);
   }
   function clearFeatureSurface(){
     const record=mountedSurface;if(!record)return false;mountedSurface=null;
     record.controller?.dispose();record.front.classList.remove('reality-surface-semantic-owner');
-    if(record.media){const {frame,parent,next,style,object3d,notice}=record.media;object3d.removeFromParent();if(next?.parentNode===parent)parent.insertBefore(frame,next);else parent.append(frame);if(style===null)frame.removeAttribute('style');else frame.setAttribute('style',style);notice.remove();}
+    if(record.media){const {frame,parent,next,style,object3d,notice,slot}=record.media;object3d.removeFromParent();if(next?.parentNode===parent)parent.insertBefore(frame,next);else parent.append(frame);if(style===null)frame.removeAttribute('style');else frame.setAttribute('style',style);notice.remove();slot.remove();}
+    renderer.domElement.classList.remove('reality-text-view-world');
     root.classList.remove('assembly-accessible-text');textView.setAttribute('aria-pressed','false');textView.textContent='Text view';
     if(record.tools){
       record.toolsRestore.parent.append(selectedSurface);record.tools.remove();selectedSurface.removeAttribute('data-object-tools');
@@ -397,6 +440,8 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
       selectedSurface.hidden=true;
     }
     record.flowObserver?.disconnect();
+    if(record.onNativeScroll)record.front.removeEventListener('scroll',record.onNativeScroll);
+    if(record.onNativeEdit)for(const event of ['click','input','change','toggle'])record.front.removeEventListener(event,record.onNativeEdit,true);
     record.intro?.restore();
     record.front.querySelectorAll('[data-surface-flow]').forEach(element=>element.removeAttribute('data-surface-flow'));
     const node=spatial.nodes.get(record.featureId);if(node){node.surfaceReading=false;node.surfaceStretch=[1,1,1];if(node.indicator)node.indicator.visible=true;}
@@ -452,6 +497,11 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     tools.addEventListener('toggle',()=>{if(mountedSurface?.tools===tools){selectedSurface.hidden=false;find('[data-clean]').textContent=tools.open?'Close details':'Details';}});
     const surfaces=[{id:'front',element:front,object3d:null}];
     mountedSurface={featureId,binding,livePanel,restore,fallback,front,metadata,tools,toolsRestore,surfaces,objects:[],shape:null,composition:null,intro:livePanel?mountLivingSurfaceIntro(livePanel):null};
+    const nativeRecord=mountedSurface;
+    nativeRecord.onNativeScroll=()=>syncNativeMedia(nativeRecord);
+    nativeRecord.onNativeEdit=()=>requestAnimationFrame(()=>syncNativeMedia(nativeRecord));
+    front.addEventListener('scroll',nativeRecord.onNativeScroll,{passive:true});
+    for(const event of ['click','input','change','toggle'])front.addEventListener(event,nativeRecord.onNativeEdit,true);
     // Discover structure, not feature names. The algorithm therefore also
     // handles older ID-styled consoles and future schema-generated controls.
     const annotateFlow=()=>{
