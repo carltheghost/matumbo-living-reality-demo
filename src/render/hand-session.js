@@ -26,14 +26,14 @@
  * without a documentRoot is a graceful no-op returning false.
  */
 
-import { createHandLens, handDepthDelta } from "../domains/hand-lens.js?v=20261003-complete8";
-import { createHandGestures } from "../domains/hand-gestures.js?v=20261003-complete8";
-import { createAirTyping } from "../domains/air-typing.js?v=20261003-complete8";
-import { createHandCamera } from "./hand-camera.js?v=20261003-complete8";
-import { createAirKeyboard } from "./air-keyboard.js?v=20261003-complete8";
-import { createArGlassesMode } from "./ar-glasses-mode.js?v=20261003-complete8";
-import { createHandPerf } from "./hand-perf.js?v=20261003-complete8";
-import { createHandGrab } from "./hand-grab.js?v=20261003-complete8";
+import { createHandLens, handDepthDelta } from "../domains/hand-lens.js?v=20261003-skin360";
+import { createHandGestures } from "../domains/hand-gestures.js?v=20261003-skin360";
+import { createAirTyping } from "../domains/air-typing.js?v=20261003-skin360";
+import { createHandCamera } from "./hand-camera.js?v=20261003-skin360";
+import { createAirKeyboard } from "./air-keyboard.js?v=20261003-skin360";
+import { createArGlassesMode } from "./ar-glasses-mode.js?v=20261003-skin360";
+import { createHandPerf } from "./hand-perf.js?v=20261003-skin360";
+import { createHandGrab } from "./hand-grab.js?v=20261003-skin360";
 
 // hand-presence.js statically imports three.js (browser-vendored via
 // importmap). It is imported lazily inside mount() — the only place presence
@@ -42,7 +42,7 @@ import { createHandGrab } from "./hand-grab.js?v=20261003-complete8";
 let presenceFactoryPromise = null;
 function loadPresenceFactory() {
   if (!presenceFactoryPromise) {
-    presenceFactoryPromise = import("./hand-presence.js?v=20261003-complete8").then(
+    presenceFactoryPromise = import("./hand-presence.js?v=20261003-skin360").then(
       (module) => module.createHandPresence,
     );
   }

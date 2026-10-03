@@ -1,5 +1,5 @@
 /** Local canonical-engine snapshots. Hashes detect corruption, not signatures. */
-import { createTokenEngine, TokenLedger, CONFIG, MARKET_MAKER, VOID_ACCOUNT, REVERSE_WINDOW_TICKS } from './token.js?v=20261003-complete8';
+import { createTokenEngine, TokenLedger, CONFIG, MARKET_MAKER, VOID_ACCOUNT, REVERSE_WINDOW_TICKS } from './token.js?v=20261003-skin360';
 export const TOKEN_STORAGE_KEY = 'tumbo.token.engine.v2';
 const ownerEngine = owner => typeof owner?.quote === 'function' && typeof owner?.execute === 'function' && owner?.ledger?.post ? owner : owner?.engine ?? owner?._engine;
 export function serializeTokenEngine(owner) {

@@ -1,7 +1,7 @@
 /** Optional local token boot. The mounted app keeps its shared canonical owner. */
-import { engine as sharedEngine } from './token.js?v=20261003-complete8';
-import { createTokenFacade } from './token-facade.js?v=20261003-complete8';
-import { LedgerStore } from './token-store.js?v=20261003-complete8';
+import { engine as sharedEngine } from './token.js?v=20261003-skin360';
+import { createTokenFacade } from './token-facade.js?v=20261003-skin360';
+import { LedgerStore } from './token-store.js?v=20261003-skin360';
 const booted = new WeakMap();
 export function bootToken({ persist = true, engine = null, install = true } = {}) {
   // Never replace a mounted owner with an unrelated historical prototype.

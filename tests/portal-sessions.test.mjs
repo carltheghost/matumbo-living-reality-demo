@@ -2,12 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 // Private handle membership and health symbols must share the browser's graph.
-import { createHandle, isExpired, revoke, isIssuedHandle, isHandleRevoked } from '../src/domains/portal-sessions/opaque-handle.js?v=20261003-complete8';
+import { createHandle, isExpired, revoke, isIssuedHandle, isHandleRevoked } from '../src/domains/portal-sessions/opaque-handle.js?v=20261003-skin360';
 import { createHandle as createForeignHandle } from '../src/domains/portal-sessions/opaque-handle.js?issuer=foreign';
-import { createSession } from '../src/domains/portal-sessions/session.js?v=20261003-complete8';
+import { createSession } from '../src/domains/portal-sessions/session.js?v=20261003-skin360';
 import { createSession as createForeignSession } from '../src/domains/portal-sessions/session.js?session=foreign';
-import { registerAdapter, resolve } from '../src/domains/portal-sessions/adapter-registry.js?v=20261003-complete8';
-import { checkSession } from '../src/domains/portal-sessions/health.js?v=20261003-complete8';
+import { registerAdapter, resolve } from '../src/domains/portal-sessions/adapter-registry.js?v=20261003-skin360';
+import { checkSession } from '../src/domains/portal-sessions/health.js?v=20261003-skin360';
 
 test('handle opacity: no credential-like fields or values', () => {
   const handle = createHandle({

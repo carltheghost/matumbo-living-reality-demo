@@ -13,7 +13,7 @@ import {
   toCoreAccount,
   mulDivFloor,
   fmt,
-} from "../domains/token.js?v=20261003-complete8";
+} from "../domains/token.js?v=20261003-skin360";
 
 export const TOKEN_TRADE_CONSOLE_SOURCE = "token-trade-console";
 export const TOKEN_TRADE_BOUNDARY = 'Local simulated points only. No real money, chain, custody, or external settlement.';

@@ -1,6 +1,6 @@
 /** Reusable presentation rules for Reality Lens objects. This module is pure:
  * it positions and stages local view objects without changing feature state. */
-import {livingSurfaceLayoutEngine} from './living-surface-layout-engine.js?v=20261003-complete8';
+import {livingSurfaceLayoutEngine} from './living-surface-layout-engine.js?v=20261003-skin360';
 
 export const REALITY_LENS_GROUPS = Object.freeze([
   Object.freeze({id:'worlds',label:'Loca',depth:8}),

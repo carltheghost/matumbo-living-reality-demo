@@ -13,7 +13,7 @@
  * exist here — simulation-only.
  */
 
-import { Currency } from "./money.js?v=20261003-complete8";
+import { Currency } from "./money.js?v=20261003-skin360";
 
 export const MAJOR_CRYPTOS = Object.freeze({
   BTC: new Currency("BTC", 8),

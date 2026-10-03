@@ -1,14 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { createTokenEngine } from '../src/domains/token.js?v=20261003-complete8';
-import { createEconomicKernel } from '../src/domains/economic-kernel.js?v=20261003-complete8';
-import { createEconomicRuntime } from '../src/domains/economic-runtime.js?v=20261003-complete8';
-import { mountOurplaceEconomy } from '../src/render/ourplace-economy.js?v=20261003-complete8';
+import { createTokenEngine } from '../src/domains/token.js?v=20261003-skin360';
+import { createEconomicKernel } from '../src/domains/economic-kernel.js?v=20261003-skin360';
+import { createEconomicRuntime } from '../src/domains/economic-runtime.js?v=20261003-skin360';
+import { mountOurplaceEconomy } from '../src/render/ourplace-economy.js?v=20261003-skin360';
 import {
   CREATOR_CATEGORIES, DEFAULT_DESIGN_DESCRIPTOR, normalizeDesignDescriptor,
   parseCreatorDesignRequest, parseSharedCreatorDesign, exportSharedCreatorDerivative, createDesignSession, createCreatorEconomy,
-} from '../src/domains/creator-economy.js?v=20261003-complete8';
+} from '../src/domains/creator-economy.js?v=20261003-skin360';
 
 function fixture(options = {}) {
   const observations = new Map();

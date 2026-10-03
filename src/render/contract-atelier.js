@@ -4,7 +4,7 @@ import {
   CONTRACT_ATELIER_STAKE_UNIT,
   createContractAtelier,
   describeContractLogic,
-} from "../domains/contract-atelier.js?v=20261003-complete8";
+} from "../domains/contract-atelier.js?v=20261003-skin360";
 import {
   OUTCOME_CONTRACTS_BOUNDARY,
   OUTCOME_CONTRACTS_NO_VALUE,
@@ -12,12 +12,12 @@ import {
   OUTCOME_RESULT_VOID,
   OUTCOME_STAKE_UNIT,
   createOutcomeContracts,
-} from "../domains/outcome-contracts.js?v=20261003-complete8";
+} from "../domains/outcome-contracts.js?v=20261003-skin360";
 // Display order for "Contracts for your review": readiness-ranked by the
 // TypeSafe judgment integration. Order only — approve/edit/dismiss behavior
 // is untouched. Import is additive; bot-plaza.js has no renderer imports,
 // so there is no cycle.
-import { rankProposalsForReview } from "../domains/bot-plaza.js?v=20261003-complete8";
+import { rankProposalsForReview } from "../domains/bot-plaza.js?v=20261003-skin360";
 
 export { CONTRACT_ATELIER_CONSOLE_SOURCE };
 export const CONTRACT_ATELIER_RENDER_SOURCE = CONTRACT_ATELIER_CONSOLE_SOURCE;

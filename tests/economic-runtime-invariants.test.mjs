@@ -2,21 +2,21 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createTokenEngine
-} from '../src/domains/token.js?v=20261003-complete8';
+} from '../src/domains/token.js?v=20261003-skin360';
 import {
   createEconomicRuntime,
   ECONOMIC_STORAGE_KEY
-} from '../src/domains/economic-runtime.js?v=20261003-complete8';
+} from '../src/domains/economic-runtime.js?v=20261003-skin360';
 import {
   economicDigest
-} from '../src/domains/economic-kernel.js?v=20261003-complete8';
+} from '../src/domains/economic-kernel.js?v=20261003-skin360';
 import {
   runLocalComputeTool
-} from '../src/domains/compute-jobs.js?v=20261003-complete8';
+} from '../src/domains/compute-jobs.js?v=20261003-skin360';
 import {
   economicChecksum,
   stableEconomicString
-} from '../src/domains/economic-timeline.js?v=20261003-complete8';
+} from '../src/domains/economic-timeline.js?v=20261003-skin360';
 
 const at = Date.UTC(2026, 9, 3);
 

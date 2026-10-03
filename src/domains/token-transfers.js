@@ -4,9 +4,9 @@
  * Receipt aliases support the older console; they do not create another proof
  * chain or grant wallet, signing, custody or external settlement capabilities.
  */
-import { createTokenEngine, CONFIG, ASSETS, assertAccount, assertAsset, isUserAccount } from './token.js?v=20261003-complete8';
-import { FLUFF_PER_TUMBO as FLUFF_PER_TUMBO_SIM } from './token-config.js?v=20261003-complete8';
-import { createTokenFacade } from './token-facade.js?v=20261003-complete8';
+import { createTokenEngine, CONFIG, ASSETS, assertAccount, assertAsset, isUserAccount } from './token.js?v=20261003-skin360';
+import { FLUFF_PER_TUMBO as FLUFF_PER_TUMBO_SIM } from './token-config.js?v=20261003-skin360';
+import { createTokenFacade } from './token-facade.js?v=20261003-skin360';
 export { FLUFF_PER_TUMBO_SIM };
 export const TOKEN_TRANSFER_ASSETS = ASSETS;
 export const TOKEN_TRANSFER_SUPPLY_FLUFF = CONFIG.supply;

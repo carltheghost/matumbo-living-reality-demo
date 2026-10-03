@@ -7,7 +7,7 @@
 import {
   createTokenBuyConsole,
   createTokenSellConsole,
-} from "./token-trade.js?v=20261003-complete8";
+} from "./token-trade.js?v=20261003-skin360";
 
 const FEATURES = Object.freeze([
   Object.freeze({

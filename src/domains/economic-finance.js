@@ -8,7 +8,7 @@ import {
   economicJson,
   economicDigest,
   ECONOMIC_POOLS
-} from './economic-kernel.js?v=20261003-complete8';
+} from './economic-kernel.js?v=20261003-skin360';
 
 export const ECONOMIC_FINANCE_SOURCE = 'matumbo-economic-finance';
 const ASSETS = new Set(['TUMBO', 'sMIMAS']);

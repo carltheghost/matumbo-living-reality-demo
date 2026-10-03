@@ -1,6 +1,6 @@
 # maTumbo Living Reality / Reality Lens
 
-An interactive 3D prototype organized into six spaces. Open a space, choose an object, and use that object's front as its feature surface. Search finds the same canonical feature identity; optional controls stay closed until needed.
+An interactive 3D prototype organized into six spaces and five recognizable bodies: cube, sphere, cylinder, triangular prism and torus. Open a body on Home, choose a feature, and turn its object to read and operate the information across its surfaces. Search and navigation keep the same canonical feature identity; optional controls stay closed until needed.
 
 The world includes local rooms, personal avatar/wardrobe tools, standard chess and game rehearsals, advisory agents, YouTube search and playback, public-source observations, and simulated contracts and points. The renderer is a projection of local domain state. TUMBO-SIM is a local simulation; this prototype does not issue assets, operate wallets, sign, custody, trade, or settle real value.
 
@@ -33,8 +33,9 @@ For another port, use `.\run_local.bat -StaticPort 8085` and `.\run_local.bat st
 ## Use Reality Lens
 
 - Choose **Worlds & rooms**, **Your space**, **Network & tools**, **Value & contracts**, **Agents**, or **Play, media & learning**. Busy spaces page through six objects on desktop or four on a compact phone viewport.
-- Use **Find / Locate** to open a feature by name. The back control returns from an object to its space, then to the six-space landing.
-- **Details** opens inside the selected object's front. **View** exposes camera and optional device controls. **Connections** shows source status and the optional assistant.
+- Use **Find / Locate** to open a feature by name. Breadcrumbs and browser Back return from an object to its space, then Home. Space URLs support reload and browser Back/Forward.
+- Drag a body to turn it; tap a painted control to use its original action. Scroll or use the surface's **Previous / Next** controls for longer content. The focused body also supports arrow keys and Page Up/Page Down.
+- **Details** adds information to the selected body's surfaces. Text fields use the original native input; **Text view** exposes the original accessible feature. **View** exposes camera and optional device controls. **Connections** shows source status and the optional assistant.
 - In **YouTube**, search by title, creator, or topic and select a result to use the in-object player. Search cancellation, direct video/playlist links, and a single-player lifecycle remain available. Individual videos and public search providers can be unavailable.
 - **Your space / Person Ω** opens the local avatar room. Appearance approval and camera permission are separate actions. Physical-device camera/gesture behavior and XR hardware support require their own verification.
 - **Value & contracts / Asset Token / Ourplace** lets you describe, review and apply a design to the actual world, publish a licensed local version, download a share package and trace adoption/remix rewards. Its tabs also expose shared compute budgets, consent rewards, service payments, reserved orders, collateral credit, prediction contracts and receipts. See [Ourplace economy](docs/OURPLACE_ECONOMY.md) for the full loop and exact local boundaries.
@@ -51,7 +52,7 @@ NVIDIA inference is optional and uses the local bridge. **Key needed** means no 
 
 ## Development and delivery
 
-The browser uses pinned, vendored Three.js **0.179.1**, vanilla JavaScript, CSS3D surfaces, and WebGL. Node's test runner exercises the JavaScript domains; Python's standard library serves and packages the prototype. Some optional widgets and public providers still need network access.
+The browser uses pinned, vendored Three.js **0.179.1**, vanilla JavaScript and WebGL. Live document content becomes canvas textures on the actual mesh, and triangle UV hits operate the original controls. Canvas features retain their proportions and receive a dedicated reading surface. One native YouTube iframe uses CSS3D placement because cross-origin player pixels cannot be copied onto curved geometry. See [the whole-body surface engine](docs/REALITY_SURFACES_360.md) for geometry, ownership and media boundaries. Node's test runner exercises the JavaScript domains; Python's standard library serves and packages the prototype. Some optional widgets and public providers still need network access.
 
 ```powershell
 # Complete JavaScript and Python suites (Node 22+ and Python 3.10+).

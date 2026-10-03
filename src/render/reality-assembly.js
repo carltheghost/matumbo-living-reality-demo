@@ -1,10 +1,11 @@
-import {createRealityWorkspace} from '../domains/reality-workspace.js?v=20261003-complete8';
-import {REALITY_TAB_FORMS,REALITY_TAB_SIZE_MIN,REALITY_TAB_SIZE_MAX,resolveRealityTabPosition} from '../domains/reality-tab-layout.js?v=20261003-complete8';
-import {REALITY_LENS_GROUPS,realityLensEngine,resolveRealityLensGroup} from '../domains/reality-lens-engine.js?v=20261003-complete8';
-import {realityLensLabel,realityObjectSurfaceEngine} from '../domains/reality-object-engine.js?v=20261003-complete8';
-import {lensSpaceLabel} from './reality-lens-chrome.js?v=20261003-complete8';
-import {buildRealityAssemblyScene,LOD_FAR} from './reality-assembly-scene.js?v=20261003-complete8';
-import {normalizeDesignDescriptor} from '../domains/creator-economy.js?v=20261003-complete8';
+import {createRealitySurfaceController} from './reality-surface-controller.js?v=20261003-skin360';
+import {createRealityWorkspace} from '../domains/reality-workspace.js?v=20261003-skin360';
+import {REALITY_TAB_FORMS,REALITY_TAB_SIZE_MIN,REALITY_TAB_SIZE_MAX,resolveRealityTabPosition} from '../domains/reality-tab-layout.js?v=20261003-skin360';
+import {REALITY_LENS_GROUPS,realityLensEngine,resolveRealityLensGroup} from '../domains/reality-lens-engine.js?v=20261003-skin360';
+import {realityLensLabel,realityObjectSurfaceEngine} from '../domains/reality-object-engine.js?v=20261003-skin360';
+import {lensSpaceLabel} from './reality-lens-chrome.js?v=20261003-skin360';
+import {buildRealityAssemblyScene,LOD_FAR} from './reality-assembly-scene.js?v=20261003-skin360';
+import {normalizeDesignDescriptor} from '../domains/creator-economy.js?v=20261003-skin360';
 
 // The lens contains only equal-status feature tabs; no center cube or anchor.
 export const CLEAN_LANDING_CAMERA={position:[36,25,110],target:[0,2,0],fov:60,mergeThreshold:LOD_FAR};
@@ -12,15 +13,17 @@ export const CLEAN_LANDING_CAMERA={position:[36,25,110],target:[0,2,0],fov:60,me
 /** Fit a space inside the available viewport, including phone chrome. */
 export function frameRealitySpace({bounds,width,height,fov=60,topInset=null}){
   const phone=width<700,safeTop=topInset??(phone?220:270),safeBottom=50;
-  const safeWidth=Math.max(160,width-(phone?24:64)),safeHeight=Math.max(180,height-(phone?safeTop+safeBottom:260));
+  const safeWidth=Math.max(160,width-(phone?24:64)),safeHeight=Math.max(1,height-safeTop-safeBottom);
   const tangent=Math.tan(fov*Math.PI/360),aspect=width/height;
-  const distance=Math.max(8,(bounds.height/2)/(tangent*safeHeight/height),(bounds.width/2)/(tangent*aspect*safeWidth/width))*(phone?1.04:1.12);
+  // Fit the nearest extent of deep bodies, rather than their center plane.
+  const readingDistance=Math.max(8,(bounds.height/2)/(tangent*safeHeight/height),(bounds.width/2)/(tangent*aspect*safeWidth/width))*(phone?1.06:1.08);
+  const distance=readingDistance+Math.max(0,bounds.depth??0)/2;
   // The camera looks above the space center to leave room for its heading.
   const center=bounds.center??[0,1,0];
-  const projectedHeight=bounds.height/(2*distance*tangent)*height;
+  const projectedHeight=bounds.height/(2*readingDistance*tangent)*height;
   // Width-limited phone layouts start below the heading instead of leaving a
   // large empty band between the heading and the first objects.
-  const verticalOffset=phone?(safeTop+projectedHeight/2-height/2)/height*2*distance*tangent:(safeTop-safeBottom)/height*distance*tangent;
+  const verticalOffset=phone?(safeTop+projectedHeight/2-height/2)/height*2*readingDistance*tangent:(safeTop-safeBottom)/height*readingDistance*tangent;
   return {target:[center[0],center[1]+verticalOffset,center[2]],distance};
 }
 
@@ -105,18 +108,18 @@ export function computeLabelSafeBand(chromeRects,viewportHeight){
   return {safeTop,safeBottom};
 }
 
-export function createRealityAssembly({THREE,renderer,scene,camera,controls,world,targets,features,relationships={},onNavigate,onFrame,onPanelFrame=()=>{},onActiveChange=()=>{},readFeature=()=>null,environmentTexture=null,reducedMotion=false}){
+export function createRealityAssembly({THREE,renderer,scene,camera,controls,world,targets,features,relationships={},onNavigate,onSpaceNavigate=()=>{},onFrame,onPanelFrame=()=>{},onActiveChange=()=>{},readFeature=()=>null,environmentTexture=null,reducedMotion=false}){
   // Initial density only; the optical composer sizes a reading skin from
   // its actual projection. Geometry owns the surface; text never gets scaled
   // down to fit an arbitrary desktop raster.
   const SURFACE_PIXELS_PER_UNIT=160;
-  const shapeLabels={phone:'Phone',square:'Square',rectangle:'Rectangle',sphere:'Sphere',cylinder:'Cylinder',cube:'Cube',wave:'Wave'};
+  const shapeLabels=Object.fromEntries(Object.entries(REALITY_TAB_FORMS).map(([id,form])=>[id,form.label]));
   const shapeOptions=Object.entries(REALITY_TAB_FORMS).map(([id])=>`<option value="${id}">${shapeLabels[id]??id}</option>`).join('');
   const primary=['block-world','contracts','person','rooms','academy','world-events','multi-sport-events','asset-market'];
   const ordered=[...features].sort((a,b)=>{const aIndex=primary.indexOf(a.id),bIndex=primary.indexOf(b.id);return (aIndex<0?100:aIndex)-(bIndex<0?100:bIndex);});
   // Feature windows sit in six semantic clusters along a widening spatial
   // funnel. The former central cube is now an ordinary spherical feature tab.
-  const defaultForms=['sphere','phone','rectangle','square','wave','cylinder'];
+  const defaultForms={worlds:'cube',people:'sphere',network:'cube',value:'cylinder',agents:'torus',experiences:'triangular-prism'};
   const groupMembers=new Map();
   for(const feature of ordered){
     const groupId=resolveRealityLensGroup(feature.id),members=groupMembers.get(groupId)??[];
@@ -133,7 +136,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
       id:feature.id,
       position,
       lensGroup:groupId,
-      shape:defaultForms[i%defaultForms.length],size:1,
+      shape:defaultForms[groupId]??'cube',size:1,
     };
   });
   // Start with the authored Lens sequence, then gently resolve only real
@@ -156,7 +159,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   spatial.setSpaceView?.(null);
   spatial.setActiveGroup(null);
   const featureMap=new Map(features.map(feature=>[feature.id,feature]));
-  const stylesheet=document.createElement('link');stylesheet.rel='stylesheet';stylesheet.href=`${new URL('./reality-assembly.css?v=20261003-complete8',import.meta.url).href}?v=20261003-calm7`;document.head.append(stylesheet);
+  const stylesheet=document.createElement('link');stylesheet.rel='stylesheet';stylesheet.href=new URL('./reality-assembly.css?v=20261003-skin360',import.meta.url).href;document.head.append(stylesheet);
   const root=document.createElement('section');root.id='reality-assembly';root.hidden=true;root.setAttribute('aria-label','Reality Lens spatial assembly');
   root.innerHTML=`<header class="assembly-header"><a class="assembly-brand" href="?feature=reality-lens"><span aria-hidden="true">◇</span><div>maTumbo<small>People × planet × possibility</small></div></a><nav aria-label="Assembly navigation"><button data-home>Explore</button><button data-enter-person>Your space</button><button data-enter-contracts>Contracts</button><button data-grid>Block World</button></nav><form class="assembly-quick-find" data-quick-find role="search"><label><span>Find object</span><input data-quick-search type="search" autocomplete="off" placeholder="Search YouTube, agents…" aria-label="Find a Reality Lens object"></label><button type="submit">Locate</button></form><button data-clean>Hide panels</button></header>
   <aside class="assembly-directory"><p class="assembly-eyebrow">Reality Lens Ω</p><h1>Many worlds.<br><em>One reality.</em></h1><p class="assembly-intro">Explore the same universe across space and depth.<br>Every window is a real, rearrangeable tab.</p><label class="assembly-search-label">Find a connected feature<input data-search placeholder="Search worlds, contracts…" type="search"></label><nav class="assembly-catalog" aria-label="Feature objects"></nav><p class="assembly-note">Designed 3D feature previews.<br>Only the selected feature opens its connected controls.</p></aside>
@@ -239,6 +242,10 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   find('.assembly-inspector').setAttribute('aria-label','Selected object details');
   find('[data-fold-inspector]').setAttribute('aria-label','Minimize selected object details');
   find('[data-tab-shape]').setAttribute('aria-label','Change object shape');
+  const textView=document.createElement('button');textView.type='button';textView.textContent='Text view';textView.dataset.surfaceTextView='';textView.setAttribute('aria-pressed','false');
+  textView.onclick=()=>{const shown=root.classList.toggle('assembly-accessible-text');textView.setAttribute('aria-pressed',String(shown));textView.textContent=shown?'Object view':'Text view';if(mountedSurface){const skin=mountedSurface.front;for(const [key,value] of Object.entries(shown?{left:'50%',top:'100px',transform:'translateX(-50%)',width:'min(760px, calc(100vw - 28px))','max-height':'calc(100dvh - 150px)',overflow:'auto'}:{left:'-12000px',top:'0',transform:'none',width:'760px','max-height':'none',overflow:'visible'}))skin.style.setProperty(key,value,'important');}};find('.assembly-header').append(textView);
+  const surfaceHelp=document.createElement('p');surfaceHelp.className='assembly-surface-help';surfaceHelp.textContent='Drag to turn · tap the surface · scroll to browse';root.append(surfaceHelp);
+
   find('[data-lock-toggle]').setAttribute('aria-label','Lock or unlock this object');
   find('[data-enter]').setAttribute('aria-label','Open the selected feature');
   find('[data-directory-toggle]').setAttribute('aria-label','Find a feature');
@@ -252,15 +259,23 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   const emptySearch=document.createElement('p');emptySearch.className='assembly-search-empty';emptySearch.textContent='No matching features. Try another name.';emptySearch.hidden=true;find('.assembly-catalog').after(emptySearch);
   const contextBar=document.createElement('div');contextBar.className='assembly-space-context';
   contextBar.innerHTML='<button type="button" data-space-back hidden>← Back to spaces</button><div><p data-space-kicker>YOUR CONNECTED UNIVERSE</p><h1 data-space-title>A little space for everything.</h1><p data-space-copy>Choose a world. Open an object. Keep your place.</p><nav class="assembly-space-pages" aria-label="Objects in this space" hidden><button type="button" data-space-prev aria-label="Previous objects">←</button><span data-space-page-count></span><button type="button" data-space-next aria-label="Next objects">→</button></nav></div>';
-  root.append(contextBar);
+  const breadcrumbs=document.createElement('nav');breadcrumbs.className='assembly-breadcrumbs';breadcrumbs.setAttribute('aria-label','Your place in Reality Lens');
+  breadcrumbs.innerHTML='<button type="button" data-crumb-home>Home</button><span aria-hidden="true">/</span><button type="button" data-crumb-space hidden></button><span data-crumb-divider aria-hidden="true" hidden>/</span><strong data-crumb-feature></strong>';
+  contextBar.prepend(breadcrumbs);root.append(contextBar);
+  find('.assembly-brand').onclick=event=>{event.preventDefault();onNavigate?.('reality-lens');overview();};
+  find('[data-crumb-home]').onclick=()=>{onNavigate?.('reality-lens');overview();};
+  find('[data-crumb-space]').onclick=()=>{if(activeLensGroup&&activeLensGroup!=='*')exploreGroup(activeLensGroup);};
   const allObjects=document.createElement('button');allObjects.type='button';allObjects.textContent='All objects';allObjects.dataset.allObjects='';find('.assembly-tools').append(allObjects);
   const updateSpaceContext=(groupId,featureId=null)=>{
     const groupLabel=groupId&&groupId!=='*'?lensSpaceLabel(groupId):null;
     root.dataset.spaceView=featureId?'feature':groupId==='*'?'all':groupId?'space':'gateway';
+    breadcrumbs.hidden=!groupId&&!featureId;find('[data-crumb-space]').hidden=!groupLabel;find('[data-crumb-space]').textContent=groupLabel??'';find('[data-crumb-space]').disabled=!featureId;find('[data-crumb-divider]').hidden=!featureId;find('[data-crumb-feature]').textContent=featureId?labelFor(featureMap.get(featureId)):'';
     find('[data-space-kicker]').textContent=featureId?(groupLabel??'REALITY LENS'):groupLabel?'YOUR CONNECTED UNIVERSE':'REALITY LENS';
     find('[data-space-title]').textContent=featureId?labelFor(featureMap.get(featureId)):groupLabel??(groupId==='*'?'Your whole universe.':'A little space for everything.');
     find('[data-space-copy]').textContent=featureId?'Your object is open. Its space stays where you left it.':groupLabel?`${groupMembers.get(groupId)?.length??0} objects · choose one to open.`:groupId==='*'?'The full assembly. Use Spaces to return to a quieter view.':'Choose a world. Open an object. Keep your place.';
-    find('[data-space-back]').hidden=!groupId&&!featureId;
+    // Breadcrumbs own the visible return path. Keep the existing back action
+    // for Escape without a second button covering Home at the same position.
+    find('[data-space-back]').hidden=true;
     find('[data-space-back]').textContent=featureId&&groupLabel?`← ${groupLabel}`:'← Back to spaces';
     find('[data-clean]').disabled=!featureId&&groupId!=='*';
     updateSpacePages();
@@ -323,29 +338,10 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   const say=message=>{find('[data-status]').textContent=copyFor(message);};
   const guard=fn=>(...args)=>{try{return fn(...args);}catch(error){say(error.message);return null;}};
   const currentObject=()=>owner.getSnapshot().objects.find(object=>object.id===owner.getSnapshot().selectedId);
-  function snapshot(){const record=mountedSurface,node=record&&spatial.nodes.get(record.featureId);return {...owner.getSnapshot(),active,viewMode,interaction,spaceId:activeLensGroup,spaceView:root.dataset.spaceView,camera:{position:camera.position.toArray(),target:controls.target.toArray()},spatial:spatial.getSnapshot(),liveObject:record?{...record.binding,interactiveSurfaceCount:record.objects.length,ownedByBody:record.objects.every(object=>object.parent===node?.root),panelId:record.livePanel?.id??null}:null,layoutDiagnostics:initialLayout.diagnostics,reality:workspace.getSnapshot()};}
+  function snapshot(){const record=mountedSurface,node=record&&spatial.nodes.get(record.featureId);return {...owner.getSnapshot(),active,viewMode,interaction,spaceId:activeLensGroup,spaceView:root.dataset.spaceView,camera:{position:camera.position.toArray(),target:controls.target.toArray(),fov:camera.fov,aspect:camera.aspect,near:camera.near,far:camera.far},spatial:spatial.getSnapshot(),liveObject:record?{...(record.controller?.snapshot()??record.binding),panelId:record.livePanel?.id??null}:null,layoutDiagnostics:initialLayout.diagnostics,reality:workspace.getSnapshot()};}
   function describeSurface(options){
     const surface=realityObjectSurfaceEngine.describe(options),feature=options.feature;
     return {...surface,label:labelFor(feature),description:copyFor(feature.description),boundary:copyFor(feature.boundary),summary:copyFor(options.summary||'Open this object to use its connected feature.'),stageLabel:['Overview','Identity','Sources','Details'][options.stage??0],state:options.object.locked?'Locked':options.object.open?'Open':'Ready to open',sourceRefs:(feature.sources??[]).map(copyFor)};
-  }
-  function faceText(face,feature,surface,detail){
-    if(face==='back')return {eyebrow:'CONTINUITY · SAME FEATURE',title:surface.label,body:surface.description||surface.summary,detail:surface.boundary};
-    if(face==='left')return {eyebrow:'STATE · LOCAL',title:surface.state,body:detail?.summary||'State comes from the local feature.',detail:`Shape ${shapeLabels[surface.shape]??surface.shape} · ${surface.size.toFixed(1)}×`};
-    if(face==='right')return {eyebrow:'CONNECTIONS · FEATURES',title:'Nearby features',body:surface.summary,detail:(relationships[feature.id]??[]).slice(0,4).map(id=>featureMap.has(id)?labelFor(featureMap.get(id)):id).join(' · ')||'No local connections defined yet.'};
-    if(face==='top')return {eyebrow:'IDENTITY · SURFACE',title:visibleId(feature.id),body:`${surface.label} · ${shapeLabels[surface.shape]??surface.shape}`,detail:`${surface.sourceCount} connected sources`};
-    return {eyebrow:'SOURCES · SCOPE',title:`${surface.sourceCount} source references`,body:surface.sourceRefs.slice(0,3).join(' · ')||'No source references registered.',detail:surface.boundary};
-  }
-  function buildFaceElement(face,feature,surface,detail){
-    const page=document.createElement('article');page.className='assembly-wrap-face';page.dataset.face=face;page.dataset.objectShape=surface.shape;
-    const copy=faceText(face,feature,surface,detail),eyebrow=document.createElement('small'),title=document.createElement('h3'),body=document.createElement('p'),detailLine=document.createElement('p');
-    eyebrow.textContent=copy.eyebrow;title.textContent=copy.title;body.textContent=copy.body;detailLine.className='assembly-wrap-detail';detailLine.textContent=copy.detail;
-    page.append(eyebrow,title,body,detailLine);
-    if(face==='right'){
-      const related=(relationships[feature.id]??[]).filter(id=>featureMap.has(id)).slice(0,4),actions=document.createElement('div');actions.className='assembly-wrap-actions';
-      related.forEach(id=>{const button=document.createElement('button');button.type='button';button.textContent=labelFor(featureMap.get(id));button.addEventListener('click',()=>onNavigate?.(id,'reality-assembly'));actions.append(button);});
-      if(related.length)page.append(actions);
-    }
-    return page;
   }
   function makeFallbackFront(feature,object){
     const surface=describeSurface({feature,object,stage:spatial.nodes.get(feature.id)?.revealStage??0,summary:readFeature(feature.id)?.summary});
@@ -355,85 +351,46 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     page.append(eyebrow,title,body,detail,button);return page;
   }
   function materializeSurfaceObjects(record){
-    if(css3dFailed&&record){
-      cssSurfaceHost.dataset.surfaceFallback='true';if(record.front.parentNode!==cssSurfaceHost)cssSurfaceHost.append(record.front);
-      record.front.setAttribute('aria-label','Accessible reading mode: 3D surface renderer unavailable');
-      return;
-    }
-    if(!CSS3DObject||!record||record.objects.length)return;
+    if(!record)return;
     const node=spatial.nodes.get(record.featureId);if(!node)return;
-    node.surfaceReading=true;
-    for(const surface of record.surfaces){
-      const object3d=new CSS3DObject(surface.element);object3d.name=`Reality Lens live surface · ${record.featureId} · ${surface.id}`;
-      object3d.scale.setScalar(1/SURFACE_PIXELS_PER_UNIT);node.root.add(object3d);surface.object3d=object3d;
+    if(!record.controller){
+      record.front.classList.add('reality-surface-semantic-owner');
+      for(const [key,value] of Object.entries({position:'fixed',left:'-12000px',top:'0',right:'auto',bottom:'auto',width:'760px',height:'auto','max-height':'none','max-width':'760px',transform:'none','clip-path':'none',overflow:'visible',contain:'none','container-type':'normal','backdrop-filter':'none',filter:'none',perspective:'none','transform-style':'flat',isolation:'auto'}))record.front.style.setProperty(key,value,'important');
+      cssSurfaceHost.append(record.front);
+      record.controller=createRealitySurfaceController({THREE,node,element:record.front,feature:featureMap.get(record.featureId),renderer,camera,controls,onStatus:say});
+      record.objects=[node.tabMesh];
     }
-    record.objects=record.surfaces.map(surface=>surface.object3d);record.shape=null;
+    // Cross-origin browser video is an explicit planar media exception. Keep
+    // one player, attached once, while search and actions live on mesh UVs.
+    if(CSS3DObject&&!record.media){
+      const frame=record.front.querySelector('iframe[data-yt-frame]');
+      if(frame){
+        const parent=frame.parentNode,next=frame.nextSibling,style=frame.getAttribute('style');
+        const notice=document.createElement('p');notice.dataset.surfaceMediaNotice='true';notice.textContent='YouTube video uses one native browser area. Rotate this body for search, results and controls.';parent.insertBefore(notice,frame);
+        const object3d=new CSS3DObject(frame);node.root.add(object3d);
+        for(const [key,value] of Object.entries({width:'640px',height:'360px',border:'0',background:'#020810','backface-visibility':'hidden','pointer-events':'auto'}))frame.style.setProperty(key,value,'important');
+        record.media={frame,parent,next,style,object3d,notice};
+      }
+    }
   }
   function sizeAndPlaceSurface(record){
-    if(!record||!CSS3DObject)return;
-    const node=spatial.nodes.get(record.featureId),feature=featureMap.get(record.featureId),data=owner.getSnapshot().objects.find(item=>item.id===record.featureId);
-    if(!node||!feature||!data)return;
-    const shape=data.shape??'rectangle',binding=realityObjectSurfaceEngine.primarySurfaceBinding({featureId:feature.id,objectId:data.id,shape}),layout=[binding.interactionFace],detail=readFeature(record.featureId),stage=spatial.nodes.get(record.featureId)?.revealStage??0;
-    record.binding=binding;
-    const surface=describeSurface({feature,object:data,stage,summary:detail?.summary,readOnly:owner.getSnapshot().mode==='past'});
-    const cameraWorld=camera.getWorldPosition(new THREE.Vector3()),lensState=spatial.getSnapshot();
-    // Turn the entire object, including its volume, seams and interaction
-    // skin. A disconnected camera-facing panel would violate ownership.
-    turnLivingSurfaceTowardCamera(node.root,cameraWorld);camera.updateMatrixWorld();
-    const primary=layout[0],facePoint=node.root.localToWorld(new THREE.Vector3(...primary.position));
-    const projection=realityObjectSurfaceEngine.readingProjection({shape,viewportWidth:innerWidth,viewportHeight:innerHeight});
-    node.surfaceStretch=projection.stretch;
-    root.dataset.readingProjection=projection.mode;
-    record.intro?.setCompact(projection.mode!=='desktop');
-    const composition=realityObjectSurfaceEngine.compose({shape,worldScale:node.root.scale.x,verticalScale:node.root.scale.y,distance:Math.max(.1,cameraWorld.distanceTo(facePoint)),viewportWidth:innerWidth,viewportHeight:innerHeight,fov:camera.fov});
-    const densityChanged=!record.composition||Math.abs(composition.pixelsPerUnit-record.composition.pixelsPerUnit)/record.composition.pixelsPerUnit>.04||Math.abs(composition.pixelsPerUnitY-record.composition.pixelsPerUnitY)/record.composition.pixelsPerUnitY>.04;
-    if(record.shape!==shape||densityChanged){
-      record.shape=shape;
-      record.composition=composition;
-      record.surfaces.forEach(item=>{
-        const face=layout.find(candidate=>candidate.id===item.id);if(!face)return;
-        const density=composition.pixelsPerUnit;
-        // The owning face controls its exact physical size. Legacy widgets
-        // can inject more-specific !important viewport widths; allowing one
-        // to win stretches its CSS3D skin beyond the actual body geometry.
-        // clearFeatureSurface restores the original inline style on detach.
-        const surfaceWidth=`${Math.round(face.width*density)}px`,surfaceHeight=`${Math.round(face.height*composition.pixelsPerUnitY)}px`;
-        for(const [property,value] of [['width',surfaceWidth],['height',surfaceHeight],['min-width','0px'],['min-height','0px'],['max-width',surfaceWidth],['max-height',surfaceHeight]])item.element.style.setProperty(property,value,'important');
-        item.object3d?.scale.set(1/density,1/composition.pixelsPerUnitY,1/density);
-        item.element.dataset.objectShape=shape;
-        item.element.dataset.surfaceMode=composition.mode;
-        item.element.style.setProperty('--lens-surface-clip',binding.clipPath);
-        item.element.style.setProperty('--surface-inset',`${composition.inset}px`);
-        if(item.id==='front'&&record.livePanel){
-          record.livePanel.style.setProperty('--lens-surface-width',`${Math.round(face.width*density)}px`);
-          record.livePanel.style.setProperty('--lens-surface-height',`${Math.round(face.height*composition.pixelsPerUnitY)}px`);
-          record.livePanel.dataset.compact=String(composition.columns===1);
-        }
-      });
+    if(!record)return;
+    const node=spatial.nodes.get(record.featureId);if(!node)return;
+    record.controller?.sync();record.binding=node.surfaceBinding??record.binding;record.objects=[node.tabMesh];
+    record.shape=node.shape;node.surfaceStretch=[1,1,1];root.dataset.readingProjection='mesh-360';
+    if(record.media){
+      const {object3d,frame}=record.media,form=REALITY_TAB_FORMS[node.shape];
+      object3d.scale.setScalar(form.width*.82/640);object3d.position.set(0,0,form.depth/2+.004);object3d.rotation.set(0,0,0);object3d.updateMatrixWorld(true);
+      const facing=new THREE.Vector3(0,0,1).applyQuaternion(node.root.getWorldQuaternion(new THREE.Quaternion()));
+      const toward=camera.getWorldPosition(new THREE.Vector3()).sub(object3d.getWorldPosition(new THREE.Vector3())).normalize();
+      object3d.visible=frame.getAttribute('src')!=='about:blank'&&facing.dot(toward)>.08;
     }
-    record.surfaces.forEach(item=>{
-      const face=layout.find(candidate=>candidate.id===item.id),object3d=item.object3d;if(!face||!object3d)return;
-      object3d.position.set(...face.position);object3d.rotation.set(...face.rotation);object3d.updateMatrixWorld(true);
-      const faceWorld=object3d.getWorldPosition(new THREE.Vector3()),normal=new THREE.Vector3(0,0,1).applyQuaternion(object3d.getWorldQuaternion(new THREE.Quaternion())).normalize();
-      const towardCamera=cameraWorld.clone().sub(faceWorld).normalize(),facesCamera=normal.dot(towardCamera)>.06;
-      object3d.visible=realityObjectSurfaceEngine.shouldShowFace({faceId:item.id,facesCamera,focusIsolated:lensState.focusIsolated,focusedId:lensState.focusedId,featureId:record.featureId,stage:node.revealStage??0,objectVisible:node.root.visible});
-      if(item.id!=='front'){
-        item.element.style.opacity=String(.58+.42*Math.min(1,node.open??0));
-        const copy=faceText(item.id,feature,surface,detail),[eyebrow,title,body,detailLine]=item.element.children;
-        if(eyebrow?.textContent!==copy.eyebrow)eyebrow.textContent=copy.eyebrow;
-        if(title?.textContent!==copy.title)title.textContent=copy.title;
-        if(body?.textContent!==copy.body)body.textContent=copy.body;
-        if(detailLine?.textContent!==copy.detail)detailLine.textContent=copy.detail;
-      }
-      if(item.id==='front'&&record.fallback){
-        const title=item.element.querySelector('h2'),body=item.element.querySelector('p'),text=surface.description||surface.summary;
-        if(title&&title.textContent!==surface.label)title.textContent=surface.label;
-        if(body&&body.textContent!==text)body.textContent=text;
-      }
-    });
   }
   function clearFeatureSurface(){
     const record=mountedSurface;if(!record)return false;mountedSurface=null;
+    record.controller?.dispose();record.front.classList.remove('reality-surface-semantic-owner');
+    if(record.media){const {frame,parent,next,style,object3d,notice}=record.media;object3d.removeFromParent();if(next?.parentNode===parent)parent.insertBefore(frame,next);else parent.append(frame);if(style===null)frame.removeAttribute('style');else frame.setAttribute('style',style);notice.remove();}
+    root.classList.remove('assembly-accessible-text');textView.setAttribute('aria-pressed','false');textView.textContent='Text view';
     if(record.tools){
       record.toolsRestore.parent.append(selectedSurface);record.tools.remove();selectedSurface.removeAttribute('data-object-tools');
       if(record.toolsRestore.style===null)selectedSurface.removeAttribute('style');else selectedSurface.setAttribute('style',record.toolsRestore.style);
@@ -508,8 +465,8 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     const flowObserver=new MutationObserver(changes=>{if(changes.some(change=>[...change.addedNodes].some(node=>node.nodeType===1)))annotateFlow();});
     flowObserver.observe(front,{childList:true,subtree:true});mountedSurface.flowObserver=flowObserver;
     requestAnimationFrame(()=>{if(mountedSurface?.front===front)annotateFlow();});
-    root.classList.add('assembly-has-live-object-surface');selectedSurface.hidden=true;materializeSurfaceObjects(mountedSurface);sizeAndPlaceSurface(mountedSurface);
-    if(css3dFailed)say('Accessible reading mode: the 3D surface renderer is unavailable. Your feature controls still work.');
+    root.classList.add('assembly-has-live-object-surface');selectedSurface.hidden=false;materializeSurfaceObjects(mountedSurface);sizeAndPlaceSurface(mountedSurface);
+    say('Drag the object to turn it. Tap its controls. Scroll for more contents. Text view provides the original accessible controls.');
     return true;
   }
   function createSideReality(featureId){
@@ -614,12 +571,12 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     const frame=frameRealitySpace({bounds,width:innerWidth,height:innerHeight,fov:camera.fov,topInset:pagedPhone?300:null});
     focusTarget=new THREE.Vector3(...frame.target);focusPosition=focusTarget.clone().add(new THREE.Vector3(0,0,frame.distance));onFrame?.();
   }
-  function exploreGroup(groupId,{closeDirectory=true}={}){
+  function exploreGroup(groupId,{closeDirectory=true,updateLocation=true}={}){
     const record=catalogSections.get(groupId);if(!record)return;
     clearFeatureSurface();activeLensGroup=groupId;spatial.focus(null);spatial.setSpaceView?.(groupId);spatial.setActiveGroup(groupId);updateSpaceContext(groupId);frameSpace(groupId);
     if(closeDirectory)setDirectory(false);
     if(root.classList.contains('assembly-directory-open')){record.children.hidden=false;record.header.setAttribute('aria-expanded','true');record.section.scrollIntoView?.({block:'nearest'});}
-    render();say(`${record.label} · choose an object to open.`);
+    if(updateLocation)onSpaceNavigate(groupId);render();say(`${record.label} · choose an object to open.`);
   }
   function toggle(){const object=currentObject(),nextOpen=!object.open;
     if(nextOpen){
@@ -638,8 +595,8 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     // Camera distance follows the actual body volume and focus scale. A user
     // can intentionally enlarge an object, but a large cylinder no longer
     // turns into an accidental full-screen tube when selected.
-    const projection=realityObjectSurfaceEngine.readingProjection({shape:object.shape??'rectangle',viewportWidth:innerWidth,viewportHeight:innerHeight});
-    if(node)node.surfaceStretch=projection.stretch;
+    const projection={...realityObjectSurfaceEngine.readingProjection({shape:object.shape??'rectangle',viewportWidth:innerWidth,viewportHeight:innerHeight}),stretch:[1,1,1]};
+    if(node)node.surfaceStretch=[1,1,1];
     root.dataset.readingProjection=projection.mode;
     const frame=realityObjectSurfaceEngine.readingFrame({
       shape:object.shape??'rectangle',size:object.size??1,
@@ -663,7 +620,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     frameSpace(null);
     onFrame?.();
   }
-  find('[data-space-back]').onclick=()=>{const groupId=activeLensGroup,wasFeature=root.dataset.spaceView==='feature';onNavigate?.('reality-lens');if(wasFeature&&groupId&&groupId!=='*')exploreGroup(groupId);else overview();};
+  find('[data-space-back]').onclick=()=>{const groupId=activeLensGroup,wasFeature=root.dataset.spaceView==='feature';if(wasFeature&&groupId&&groupId!=='*')exploreGroup(groupId);else{onNavigate?.('reality-lens');overview();}};
   allObjects.onclick=()=>{clearFeatureSurface();activeLensGroup='*';spatial.setSpaceView?.('*');spatial.setActiveGroup('*');spatial.focus(null);setViewTools(false);updateSpaceContext('*');focusTarget=new THREE.Vector3(...CLEAN_LANDING_CAMERA.target);focusPosition=new THREE.Vector3(...CLEAN_LANDING_CAMERA.position);onFrame?.();render();};
   const reframeSpace=()=>{if(!active)return;if(root.dataset.spaceView==='feature')focus();else if(activeLensGroup!=='*')frameSpace(activeLensGroup);};window.addEventListener('resize',reframeSpace);
   function setMode(mode){viewMode=mode;all('[data-view]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.view===mode)));render();}
@@ -684,13 +641,19 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   }
   const spatialGroupLabels=new Map();
   function placeNativeTarget(label,object,contour){
+    if(!contour?.length&&object.geometry){
+      object.geometry.computeBoundingBox();const {min,max}=object.geometry.boundingBox;
+      contour=[[min.x,min.y,max.z],[max.x,min.y,max.z],[max.x,max.y,max.z],[min.x,max.y,max.z]];
+    }
     if(!contour?.length){label.hidden=true;return;}
     const points=contour.map(point=>object.localToWorld(new THREE.Vector3(...point)).project(camera).toArray());
     const region=realityObjectSurfaceEngine.hitRegion({points,viewportWidth:innerWidth,viewportHeight:innerHeight});
     label.hidden=!region.visible;if(!region.visible)return;
     label.dataset.nativeTarget='true';label.style.left=`${region.left+region.width/2}px`;label.style.top=`${region.top+region.height/2}px`;
     label.style.width=`${region.width}px`;label.style.height=`${region.height}px`;label.style.clipPath=region.clipPath;
-    label.style.pointerEvents=interaction==='move'?'none':'';
+    // DOM labels supply keyboard focus. Physical taps always use mesh picking,
+    // including home-space torus holes and triangular silhouettes.
+    label.style.pointerEvents=interaction==='move'||object.userData?.objectTabOwner||object.userData?.realityLensGroup?'none':'';
   }
   for(const domain of REALITY_LENS_GROUPS){
     const members=groupMembers.get(domain.id)??[];if(!members.length)continue;
@@ -760,6 +723,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   const locate=event=>{const rect=renderer.domElement.getBoundingClientRect();point.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);ray.setFromCamera(point,camera);return ray.intersectObjects([...targets,...(spatial.groupTargets??[])],false).find(hit=>{const group=spatial.resolveGroup?.(hit.object);if(group)return spatial.groupParents.get(group)?.root.visible&&hit.object.visible;const id=spatial.resolve(hit.object);return id&&spatial.nodes.get(id)?.root.visible&&hit.object.visible;})??null;};
   const resizeOnScroll=guard(event=>{
     if(!active||event.ctrlKey||event.target?.closest?.('.assembly-inspector'))return;
+    if(interaction!=='move'&&mountedSurface?.controller?.wheel(event))return;
     const overFeatureSurface=event.target?.closest?.('.reality-lens-feature-panel[data-lens-surface-attached=true],.assembly-wrap-face');
     if(overFeatureSurface&&!event.shiftKey)return;
     const hit=locate(event),id=spatial.resolve(hit?.object),object=id&&owner.getSnapshot().objects.find(item=>item.id===id);
@@ -774,6 +738,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   });
   const down=guard(event=>{
     if(!active||event.button!==0)return;
+    if(interaction!=='move'&&mountedSurface?.controller?.down(event))return;
     const hit=locate(event),id=spatial.resolve(hit?.object);pointer={id:event.pointerId,x:event.clientX,y:event.clientY,objectId:id,groupId:spatial.resolveGroup?.(hit?.object),move:false};
     if(interaction==='move'&&id&&owner.getSnapshot().mode!=='past'){
       select(id,{approach:false});const object=currentObject();
@@ -789,7 +754,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   });
   cssSurfaceHost.addEventListener('pointerdown',downOnObjectSurface,true);
   const move=guard(event=>{
-    if(!active)return;const hit=locate(event);
+    if(!active)return;if(mountedSurface?.controller?.move(event))return;const hit=locate(event);
     if(pointer?.move&&pointer.id===event.pointerId){
       if(ray.ray.intersectPlane(dragPlane,dragPoint)){
         const delta=dragPoint.clone().sub(pointer.hit),proposed=new THREE.Vector3(...pointer.origin).add(delta);
@@ -802,18 +767,20 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     const id=spatial.resolve(hit?.object);if(id!==hovered){hovered=id;render();find('[data-hover-label]').textContent=id?`${labelFor(featureMap.get(id))} · tap to open`:'Drag the field to orbit · tap an object to open';}
   });
   const release=guard(event=>{
+    if(active&&mountedSurface?.controller?.up(event))return;
     if(!active||!pointer||event.pointerId!==pointer.id)return;const previous=pointer;pointer=null;controls.enabled=true;
     if(previous.move){if(event.type==='pointerup'){owner.move(previous.objectId,previous.next);syncActiveReality();}render();say(event.type==='pointerup'?'Layout move recorded. Use 4D to inspect it through time.':'Move cancelled.');return;}
     if(event.type==='pointerup'&&previous.groupId&&Math.hypot(event.clientX-previous.x,event.clientY-previous.y)<7){exploreGroup(previous.groupId);return;}
     if(event.type==='pointerup'&&previous.objectId&&Math.hypot(event.clientX-previous.x,event.clientY-previous.y)<7){if(interaction!=='move')activateObjectTab(previous.objectId);else select(previous.objectId,{approach:false});}
   });
   const keys=guard(event=>{
+    if(active&&mountedSurface?.controller?.key(event))return;
     if(active&&event.key==='Escape'&&!toolbar.hidden){setViewTools(false,{restoreFocus:true});event.preventDefault();return;}
     if(active&&event.key.toLowerCase()==='f'&&!event.ctrlKey&&!event.metaKey&&!event.altKey&&!event.repeat&&!/input|textarea|select/i.test(event.target?.tagName)&&!event.target?.isContentEditable){setDirectory(directory.hidden,{restoreFocus:true});event.preventDefault();return;}
     if(active&&event.key==='Escape'&&root.classList.contains('assembly-directory-open')){setDirectory(false,{restoreFocus:true});event.preventDefault();return;}
     if(!active||/input|textarea|select/i.test(event.target?.tagName))return;
     if(event.target?.closest?.('button,a,summary,[contenteditable="true"]')&&event.key==='Enter')return;
-    if(event.key==='Escape'){if(root.dataset.spaceView==='feature')find('[data-space-back]').click();else overview();return;}
+    if(event.key==='Escape'){if(root.dataset.spaceView==='feature')find('[data-space-back]').click();else{onNavigate?.('reality-lens');overview();}return;}
     if(event.key==='Enter'){enter();event.preventDefault();return;}
     if(interaction!=='move')return;
     const nudges={ArrowLeft:['x',-.5],ArrowRight:['x',.5],ArrowUp:['y',.5],ArrowDown:['y',-.5],PageUp:['z',.5],PageDown:['z',-.5]},nudge=nudges[event.key];
@@ -873,6 +840,9 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
       return {applied:true,descriptor,uninstalledObjects:unknown.map(item=>item.id),stepsRequireExplicitInteraction:true,simulation:true};
     },
     getCreatorDesign(){return creatorDesign;},
+    getSpaceObject(id){return spatial.groupParents.get(id)?.entry??null;},
+    getSurfaceController(){return mountedSurface?.controller??null;},
+
     getFeatureObject(id){const node=spatial.nodes.get(id);return node?{root:node.root,feature:featureMap.get(id),get shape(){return node.shape;}}:null;},
     getPanelAnchor(featureId){
       const node=spatial.nodes.get(featureId),object=owner.getSnapshot().objects.find(item=>item.id===featureId);if(!node||!object)return null;

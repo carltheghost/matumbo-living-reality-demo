@@ -1,48 +1,48 @@
 import * as THREE from 'three';
-import {mountCityJourney,resolveCityRoute} from './render/city-journey.js?v=20261003-complete8';
+import {mountCityJourney,resolveCityRoute} from './render/city-journey.js?v=20261003-skin360';
 // Reject mixed/unknown City URLs before legacy route bootstrap can act on them.
 if(resolveCityRoute(location.search).status==='rejected'){
   const safeUrl=new URL(location.href);safeUrl.search='?feature=reality-lens';history.replaceState(null,'',safeUrl);
 }
-import { mountCenteredSurfaces } from './render/centered-surfaces.js?v=20261003-complete8';
-import { createImmersiveSession } from './render/immersive-session.js?v=20261003-complete8';
-import { createMediaPreview } from './render/media-preview.js?v=20261003-complete8';
-import { mountTokenTicker } from './render/token-ticker.js?v=20261003-complete8';
+import { mountCenteredSurfaces } from './render/centered-surfaces.js?v=20261003-skin360';
+import { createImmersiveSession } from './render/immersive-session.js?v=20261003-skin360';
+import { createMediaPreview } from './render/media-preview.js?v=20261003-skin360';
+import { mountTokenTicker } from './render/token-ticker.js?v=20261003-skin360';
 // Balances, vault and transfers load only from their Asset Token controls.
-import { initMobilePanelManager } from './render/mobile-panel-manager.js?v=20261003-complete8';
-import { installMobileFreezeGuard } from './render/mobile-freeze-guard.js?v=20261003-complete8';
-import { mountPhotoMascot } from './render/photo-mascot-mount.js?v=20261003-complete8';
-import { createPersonStudio } from './render/person-studio.js?v=20261003-complete8';
-import { createRealityAssembly, CLEAN_LANDING_CAMERA } from './render/reality-assembly.js?v=20261003-complete8';
-import { mountApiConnections } from './render/api-connections.js?v=20261003-complete8';
-import { engine as canonicalEconomicEngine } from './domains/token.js?v=20261003-complete8';
-import { createEconomicRuntime } from './domains/economic-runtime.js?v=20261003-complete8';
-import { ECONOMIC_WORLD_SOURCE, createEconomicWorldContribution } from './domains/economic-world-projection.js?v=20261003-complete8';
-import { mountOurplaceEconomy } from './render/ourplace-economy.js?v=20261003-complete8';
-import { featureSelectionMayRefreshProvider } from './domains/provider-navigation.js?v=20261003-complete8';
+import { initMobilePanelManager } from './render/mobile-panel-manager.js?v=20261003-skin360';
+import { installMobileFreezeGuard } from './render/mobile-freeze-guard.js?v=20261003-skin360';
+import { mountPhotoMascot } from './render/photo-mascot-mount.js?v=20261003-skin360';
+import { createPersonStudio } from './render/person-studio.js?v=20261003-skin360';
+import { createRealityAssembly, CLEAN_LANDING_CAMERA } from './render/reality-assembly.js?v=20261003-skin360';
+import { mountApiConnections } from './render/api-connections.js?v=20261003-skin360';
+import { engine as canonicalEconomicEngine } from './domains/token.js?v=20261003-skin360';
+import { createEconomicRuntime } from './domains/economic-runtime.js?v=20261003-skin360';
+import { ECONOMIC_WORLD_SOURCE, createEconomicWorldContribution } from './domains/economic-world-projection.js?v=20261003-skin360';
+import { mountOurplaceEconomy } from './render/ourplace-economy.js?v=20261003-skin360';
+import { featureSelectionMayRefreshProvider } from './domains/provider-navigation.js?v=20261003-skin360';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
-import { MANIPULATE_MODES } from './render/manipulate-controls.js?v=20261003-complete8';
+import { MANIPULATE_MODES } from './render/manipulate-controls.js?v=20261003-skin360';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { createLivingRealityProjection } from './core/demo-projection.js?v=20261003-complete8';
-import { resolveDefaultFeature } from './core/default-landing.js?v=20261003-complete8';
-import { createDeviceProjection, readBrowserProjectionPreferences } from './projections/device-projection.js?v=20261003-complete8';
-import { createDistributionExplorer } from './render/distribution-explorer.js?v=20261003-complete8';
-import { createLaunchDistributionRehearsal } from './domains/distribution-registry.js?v=20261003-complete8';
-import { createPersonOrganisms } from './render/person-organisms.js?v=20261003-complete8';
-import { FEATURE_DEFINITIONS, FEATURE_HANDOFF_LINKS, createFeatureNavigator } from './render/feature-navigator.js?v=20261003-complete8';
-import { createCubeDive } from './render/cube-dive.js?v=20261003-complete8';
-import { resolveHandoffHop, resolveHopVessel, resolveNestedDiveTargets } from './domains/cube-dive.js?v=20261003-complete8';
-import { createLaunchConsole, validateLaunchCohortRoute, validateLaunchCohortCompareRoute } from './render/launch-console.js?v=20261003-complete8';
-import { LAUNCH_RECEIPT_CONSOLE_SOURCE, createLaunchReceiptConsole } from './render/launch-receipt.js?v=20261003-complete8';
-import { createSocialExplorerConsole } from './render/social-explorer.js?v=20261003-complete8';
-import { SOCIAL_PULSE_SOURCE, createUnavailableSocialPulse, fetchSocialPulse } from './domains/social-pulse.js?v=20261003-complete8';
-import { LAUNCH_KIT_CONSOLE_SOURCE, createLaunchKitConsole } from './render/launch-kit.js?v=20261003-complete8';
-import { createRoomSpaces } from './render/room-spaces.js?v=20261003-complete8';
-import { CAMERA_INPUT_SOURCE, createCameraInput } from './render/camera-input.js?v=20261003-complete8';
-import { GESTURE_INPUT_SOURCE, createGestureInput } from './render/gesture-input.js?v=20261003-complete8';
+import { createLivingRealityProjection } from './core/demo-projection.js?v=20261003-skin360';
+import { resolveDefaultFeature } from './core/default-landing.js?v=20261003-skin360';
+import { createDeviceProjection, readBrowserProjectionPreferences } from './projections/device-projection.js?v=20261003-skin360';
+import { createDistributionExplorer } from './render/distribution-explorer.js?v=20261003-skin360';
+import { createLaunchDistributionRehearsal } from './domains/distribution-registry.js?v=20261003-skin360';
+import { createPersonOrganisms } from './render/person-organisms.js?v=20261003-skin360';
+import { FEATURE_DEFINITIONS, FEATURE_HANDOFF_LINKS, createFeatureNavigator } from './render/feature-navigator.js?v=20261003-skin360';
+import { createCubeDive } from './render/cube-dive.js?v=20261003-skin360';
+import { resolveHandoffHop, resolveHopVessel, resolveNestedDiveTargets } from './domains/cube-dive.js?v=20261003-skin360';
+import { createLaunchConsole, validateLaunchCohortRoute, validateLaunchCohortCompareRoute } from './render/launch-console.js?v=20261003-skin360';
+import { LAUNCH_RECEIPT_CONSOLE_SOURCE, createLaunchReceiptConsole } from './render/launch-receipt.js?v=20261003-skin360';
+import { createSocialExplorerConsole } from './render/social-explorer.js?v=20261003-skin360';
+import { SOCIAL_PULSE_SOURCE, createUnavailableSocialPulse, fetchSocialPulse } from './domains/social-pulse.js?v=20261003-skin360';
+import { LAUNCH_KIT_CONSOLE_SOURCE, createLaunchKitConsole } from './render/launch-kit.js?v=20261003-skin360';
+import { createRoomSpaces } from './render/room-spaces.js?v=20261003-skin360';
+import { CAMERA_INPUT_SOURCE, createCameraInput } from './render/camera-input.js?v=20261003-skin360';
+import { GESTURE_INPUT_SOURCE, createGestureInput } from './render/gesture-input.js?v=20261003-skin360';
 import {
   GAZE_HAND_COUPLING_SOURCE,
   GAZE_HAND_COUPLING_BOUNDARY,
@@ -53,23 +53,23 @@ import {
   isFreshGazeHandLock,
   normalizeGazeHandPoint,
   resolveGazeHandAction,
-} from './render/gaze-hand-coupling.js?v=20261003-complete8';
-import { createProjectionBridge } from './render/projection-bridge.js?v=20261003-complete8';
-import { createIntentTimeline } from './render/intent-timeline.js?v=20261003-complete8';
-import { createBlockWorldLayer } from './render/block-world.js?v=20261003-complete8';
-import { createProjectionSession } from './render/projection-session.js?v=20261003-complete8';
-import { applyBlockWorldFocusMode } from './render/block-world-focus.js?v=20261003-complete8';
-import { createBlockWorldQuickActions } from './render/cube-quick-actions.js?v=20261003-complete8';
-import { PORTAL_RETURN_SOURCE, createPortalReturnHandoff } from './render/portal-return.js?v=20261003-complete8';
-import { BLOCK_MIGRATION_SOURCE, resolveBlockMigrationHandback } from './domains/block-migration.js?v=20261003-complete8';
-import { createBlockMigrationConsole } from './render/block-migration.js?v=20261003-complete8';
-import { MIGRATION_SNAPSHOT_CONSOLE_SOURCE, createMigrationSnapshotConsole } from './render/migration-snapshot.js?v=20261003-complete8';
-import { BLOCK_WORLD_SNAPSHOT_CONSOLE_SOURCE, createBlockWorldSnapshotConsole } from './render/block-world-snapshot.js?v=20261003-complete8';
-import { BLOCK_WORLD_RUNTIME_SYNC_SOURCE, createBlockWorldRuntimeSync } from './render/block-world-runtime-sync.js?v=20261003-complete8';
-import { ARENA_GAMES_SOURCE, ARENA_GAMES_CONSOLE_SOURCE } from './domains/arena-games.js?v=20261003-complete8';
-import { createArenaGamesConsole } from './render/arena-games.js?v=20261003-complete8';
-import { mountChessArena } from './render/chess-arena.js?v=20261003-complete8';
-import { ACADEMY_CONSOLE_SOURCE, createAcademyConsole } from './render/academy.js?v=20261003-complete8';
+} from './render/gaze-hand-coupling.js?v=20261003-skin360';
+import { createProjectionBridge } from './render/projection-bridge.js?v=20261003-skin360';
+import { createIntentTimeline } from './render/intent-timeline.js?v=20261003-skin360';
+import { createBlockWorldLayer } from './render/block-world.js?v=20261003-skin360';
+import { createProjectionSession } from './render/projection-session.js?v=20261003-skin360';
+import { applyBlockWorldFocusMode } from './render/block-world-focus.js?v=20261003-skin360';
+import { createBlockWorldQuickActions } from './render/cube-quick-actions.js?v=20261003-skin360';
+import { PORTAL_RETURN_SOURCE, createPortalReturnHandoff } from './render/portal-return.js?v=20261003-skin360';
+import { BLOCK_MIGRATION_SOURCE, resolveBlockMigrationHandback } from './domains/block-migration.js?v=20261003-skin360';
+import { createBlockMigrationConsole } from './render/block-migration.js?v=20261003-skin360';
+import { MIGRATION_SNAPSHOT_CONSOLE_SOURCE, createMigrationSnapshotConsole } from './render/migration-snapshot.js?v=20261003-skin360';
+import { BLOCK_WORLD_SNAPSHOT_CONSOLE_SOURCE, createBlockWorldSnapshotConsole } from './render/block-world-snapshot.js?v=20261003-skin360';
+import { BLOCK_WORLD_RUNTIME_SYNC_SOURCE, createBlockWorldRuntimeSync } from './render/block-world-runtime-sync.js?v=20261003-skin360';
+import { ARENA_GAMES_SOURCE, ARENA_GAMES_CONSOLE_SOURCE } from './domains/arena-games.js?v=20261003-skin360';
+import { createArenaGamesConsole } from './render/arena-games.js?v=20261003-skin360';
+import { mountChessArena } from './render/chess-arena.js?v=20261003-skin360';
+import { ACADEMY_CONSOLE_SOURCE, createAcademyConsole } from './render/academy.js?v=20261003-skin360';
 import {
   CONTRACTS_MARKETS_SOURCE,
   CONTRACTS_MARKETS_CONTRACT_ROUTE_PARAM,
@@ -80,60 +80,60 @@ import {
   CONTRACTS_MARKETS_SOURCE_RETURN_JOURNEY,
   validateContractsMarketsGraphRoute,
   validateContractDraftRouteState,
-} from './domains/contracts-markets.js?v=20261003-complete8';
-import { CONTRACTS_MARKETS_CONSOLE_SOURCE, createContractsMarketsConsole } from './render/contracts-markets.js?v=20261003-complete8';
-import { createUnavailableProtocolEvidence, fetchProtocolEvidence } from './domains/protocol-evidence.js?v=20261003-complete8';
-import { PROTOCOL_EVIDENCE_CONSOLE_SOURCE, createProtocolEvidenceRail } from './render/protocol-evidence.js?v=20261003-complete8';
-import { PAYCORE_SOURCE } from './domains/paycore.js?v=20261003-complete8';
-import { PAYCORE_CONSOLE_SOURCE, createPaycoreConsole } from './render/paycore.js?v=20261003-complete8';
-import { T402_SOURCE } from './domains/t402.js?v=20261003-complete8';
-import { T402_CONSOLE_SOURCE, createT402Console } from './render/t402.js?v=20261003-complete8';
-import { NEURAL_MESH_SOURCE } from './domains/neural-mesh.js?v=20261003-complete8';
-import { NEURAL_MESH_CONSOLE_SOURCE, createNeuralMeshConsole } from './render/neural-mesh.js?v=20261003-complete8';
-import { MATTER_FORGE_SOURCE } from './domains/matter-forge.js?v=20261003-complete8';
-import { PICTURE_MATTER_METADATA_SOURCE, createUnavailablePictureMatterMetadata, fetchPictureMatterMetadata } from './domains/picture-matter-metadata.js?v=20261003-complete8';
-import { PICTURE_MATTER_CONSOLE_SOURCE, createPictureMatterConsole } from './render/picture-matter.js?v=20261003-complete8';
-import { NFT_ATELIER_CONSOLE_SOURCE, createNftAtelierConsole } from './render/nft-atelier.js?v=20261003-complete8';
-import { FROZEN_RELICS_CONSOLE_SOURCE, createFrozenRelicsConsole } from './render/frozen-relics.js?v=20261003-complete8';
-import { MUSE_AGENT_CONSOLE_SOURCE, createMuseAgentConsole } from './render/muse-agent.js?v=20261003-complete8';
-import { BOT_PLAZA_CONSOLE_SOURCE, createBotPlazaConsole } from './render/bot-plaza.js?v=20261003-complete8';
-import { createBotRegistry, createBotRuntime } from './domains/bot-plaza.js?v=20261003-complete8';
-import { createProposalQueue } from './domains/bot-plaza.js?v=20261003-complete8';
-import { createContractLedger } from './domains/contract-ledger.js?v=20261003-complete8';
-import { createBrowserContractAutomation, createBrowserContractWorkspace, createBrowserContractFlow, createUnavailableContractWorkspace } from './domains/contract-runtime.js?v=20261003-complete8';
-import { applyContractPublicEvidence } from './domains/contract-public-evidence.js?v=20261003-complete8';
-import { createContractWorldContribution } from './domains/contract-world-projection.js?v=20261003-complete8';
-import { COMPUTE_WORLD_SOURCE, createComputeWorldContribution } from './domains/compute-world-projection.js?v=20261003-complete8';
-import { createProjectionEnvelope } from './core/view-state.js?v=20261003-complete8';
-import { mountContractWorkbench } from './render/contract-workbench.js?v=20261003-complete8';
-import { createContractOrganism } from './render/contract-organism.js?v=20261003-complete8';
-import { mountBotPresence } from './render/bot-presence.js?v=20261003-complete8';
-import { CONTRACT_ATELIER_CONSOLE_SOURCE, createContractAtelierConsole } from './render/contract-atelier.js?v=20261003-complete8';
-import { LUNA_CONSOLE_SOURCE, createLunaCompanionConsole } from './render/luna-companion.js?v=20261003-complete8';
-import { WARDROBE_ATELIER_CONSOLE_SOURCE, createWardrobeAtelierConsole } from './render/wardrobe-atelier.js?v=20261003-complete8';
-import { WHITE_PAPER_CONSOLE_SOURCE, createWhitePaperConsole } from './render/white-paper.js?v=20261003-complete8';
-import { GESTURE_LENS_CONSOLE_SOURCE, createGestureLensConsole } from './render/gesture-lens.js?v=20261003-complete8';
-import { createHandLensSession } from './render/hand-session.js?v=20261003-complete8';
-import { createStoryModeConsole } from './render/story-mode.js?v=20261003-complete8';
-import { LEDGER_PROOF_SOURCE } from './domains/ledger-proof.js?v=20261003-complete8';
-import { LEDGER_PROOF_CONSOLE_SOURCE, createLedgerProofConsole } from './render/ledger-proof.js?v=20261003-complete8';
-import { LIVE_GATEWAY_SOURCE } from './domains/live-gateway.js?v=20261003-complete8';
-import { LIVE_GATEWAY_CONSOLE_SOURCE, createLiveGatewayConsole } from './render/live-gateway.js?v=20261003-complete8';
-import { WORLD_EVENTS_CONSOLE_SOURCE } from './render/world-events.js?v=20261003-complete8';
-import { createUnavailableWorldEvents, fetchWorldEvents } from './domains/world-events.js?v=20261003-complete8';
-import { createWorldEventsConsole } from './render/world-events.js?v=20261003-complete8';
-import { SPORTS_EVENTS_CONSOLE_SOURCE, createSportsEventsConsole } from './render/sports-events.js?v=20261003-complete8';
-import { createUnavailableSportsEvents, fetchSportsEventDetail, fetchSportsEvents } from './domains/sports-events.js?v=20261003-complete8';
-import { MULTI_SPORT_EVENTS_CONSOLE_SOURCE, createMultiSportEventsConsole } from './render/multi-sport-events.js?v=20261003-complete8';
-import { createUnavailableMultiSportEvents, fetchMultiSportEventDetail, fetchMultiSportEvents } from './domains/multi-sport-events.js?v=20261003-complete8';
-import { DEVICE_PROJECTION_CONSOLE_SOURCE, createDeviceProjectionConsole } from './render/device-projection.js?v=20261003-complete8';
-import { ASSET_MARKET_CONSOLE_SOURCE, createAssetMarketConsole } from './render/asset-market.js?v=20261003-complete8';
-import { createUnavailableAssetMarketEvidence, fetchAssetMarketEvidence } from './domains/asset-market.js?v=20261003-complete8';
-import { POPULATION_CONTEXT_SOURCE, createUnavailablePopulationContext, fetchPopulationContext } from './domains/population-context.js?v=20261003-complete8';
-import { WEB_AI_CONSOLE_SOURCE, createWebAiConsole } from './render/web-ai.js?v=20261003-complete8';
-import { SOCIAL_MIRROR_CONSOLE_SOURCE } from './domains/social-mirror.js?v=20261003-complete8';
-import { createSocialMirrorConsole } from './render/social-mirror.js?v=20261003-complete8';
-import { createYoutubeSurface } from './render/youtube-surface.js?v=20261003-complete8';
+} from './domains/contracts-markets.js?v=20261003-skin360';
+import { CONTRACTS_MARKETS_CONSOLE_SOURCE, createContractsMarketsConsole } from './render/contracts-markets.js?v=20261003-skin360';
+import { createUnavailableProtocolEvidence, fetchProtocolEvidence } from './domains/protocol-evidence.js?v=20261003-skin360';
+import { PROTOCOL_EVIDENCE_CONSOLE_SOURCE, createProtocolEvidenceRail } from './render/protocol-evidence.js?v=20261003-skin360';
+import { PAYCORE_SOURCE } from './domains/paycore.js?v=20261003-skin360';
+import { PAYCORE_CONSOLE_SOURCE, createPaycoreConsole } from './render/paycore.js?v=20261003-skin360';
+import { T402_SOURCE } from './domains/t402.js?v=20261003-skin360';
+import { T402_CONSOLE_SOURCE, createT402Console } from './render/t402.js?v=20261003-skin360';
+import { NEURAL_MESH_SOURCE } from './domains/neural-mesh.js?v=20261003-skin360';
+import { NEURAL_MESH_CONSOLE_SOURCE, createNeuralMeshConsole } from './render/neural-mesh.js?v=20261003-skin360';
+import { MATTER_FORGE_SOURCE } from './domains/matter-forge.js?v=20261003-skin360';
+import { PICTURE_MATTER_METADATA_SOURCE, createUnavailablePictureMatterMetadata, fetchPictureMatterMetadata } from './domains/picture-matter-metadata.js?v=20261003-skin360';
+import { PICTURE_MATTER_CONSOLE_SOURCE, createPictureMatterConsole } from './render/picture-matter.js?v=20261003-skin360';
+import { NFT_ATELIER_CONSOLE_SOURCE, createNftAtelierConsole } from './render/nft-atelier.js?v=20261003-skin360';
+import { FROZEN_RELICS_CONSOLE_SOURCE, createFrozenRelicsConsole } from './render/frozen-relics.js?v=20261003-skin360';
+import { MUSE_AGENT_CONSOLE_SOURCE, createMuseAgentConsole } from './render/muse-agent.js?v=20261003-skin360';
+import { BOT_PLAZA_CONSOLE_SOURCE, createBotPlazaConsole } from './render/bot-plaza.js?v=20261003-skin360';
+import { createBotRegistry, createBotRuntime } from './domains/bot-plaza.js?v=20261003-skin360';
+import { createProposalQueue } from './domains/bot-plaza.js?v=20261003-skin360';
+import { createContractLedger } from './domains/contract-ledger.js?v=20261003-skin360';
+import { createBrowserContractAutomation, createBrowserContractWorkspace, createBrowserContractFlow, createUnavailableContractWorkspace } from './domains/contract-runtime.js?v=20261003-skin360';
+import { applyContractPublicEvidence } from './domains/contract-public-evidence.js?v=20261003-skin360';
+import { createContractWorldContribution } from './domains/contract-world-projection.js?v=20261003-skin360';
+import { COMPUTE_WORLD_SOURCE, createComputeWorldContribution } from './domains/compute-world-projection.js?v=20261003-skin360';
+import { createProjectionEnvelope } from './core/view-state.js?v=20261003-skin360';
+import { mountContractWorkbench } from './render/contract-workbench.js?v=20261003-skin360';
+import { createContractOrganism } from './render/contract-organism.js?v=20261003-skin360';
+import { mountBotPresence } from './render/bot-presence.js?v=20261003-skin360';
+import { CONTRACT_ATELIER_CONSOLE_SOURCE, createContractAtelierConsole } from './render/contract-atelier.js?v=20261003-skin360';
+import { LUNA_CONSOLE_SOURCE, createLunaCompanionConsole } from './render/luna-companion.js?v=20261003-skin360';
+import { WARDROBE_ATELIER_CONSOLE_SOURCE, createWardrobeAtelierConsole } from './render/wardrobe-atelier.js?v=20261003-skin360';
+import { WHITE_PAPER_CONSOLE_SOURCE, createWhitePaperConsole } from './render/white-paper.js?v=20261003-skin360';
+import { GESTURE_LENS_CONSOLE_SOURCE, createGestureLensConsole } from './render/gesture-lens.js?v=20261003-skin360';
+import { createHandLensSession } from './render/hand-session.js?v=20261003-skin360';
+import { createStoryModeConsole } from './render/story-mode.js?v=20261003-skin360';
+import { LEDGER_PROOF_SOURCE } from './domains/ledger-proof.js?v=20261003-skin360';
+import { LEDGER_PROOF_CONSOLE_SOURCE, createLedgerProofConsole } from './render/ledger-proof.js?v=20261003-skin360';
+import { LIVE_GATEWAY_SOURCE } from './domains/live-gateway.js?v=20261003-skin360';
+import { LIVE_GATEWAY_CONSOLE_SOURCE, createLiveGatewayConsole } from './render/live-gateway.js?v=20261003-skin360';
+import { WORLD_EVENTS_CONSOLE_SOURCE } from './render/world-events.js?v=20261003-skin360';
+import { createUnavailableWorldEvents, fetchWorldEvents } from './domains/world-events.js?v=20261003-skin360';
+import { createWorldEventsConsole } from './render/world-events.js?v=20261003-skin360';
+import { SPORTS_EVENTS_CONSOLE_SOURCE, createSportsEventsConsole } from './render/sports-events.js?v=20261003-skin360';
+import { createUnavailableSportsEvents, fetchSportsEventDetail, fetchSportsEvents } from './domains/sports-events.js?v=20261003-skin360';
+import { MULTI_SPORT_EVENTS_CONSOLE_SOURCE, createMultiSportEventsConsole } from './render/multi-sport-events.js?v=20261003-skin360';
+import { createUnavailableMultiSportEvents, fetchMultiSportEventDetail, fetchMultiSportEvents } from './domains/multi-sport-events.js?v=20261003-skin360';
+import { DEVICE_PROJECTION_CONSOLE_SOURCE, createDeviceProjectionConsole } from './render/device-projection.js?v=20261003-skin360';
+import { ASSET_MARKET_CONSOLE_SOURCE, createAssetMarketConsole } from './render/asset-market.js?v=20261003-skin360';
+import { createUnavailableAssetMarketEvidence, fetchAssetMarketEvidence } from './domains/asset-market.js?v=20261003-skin360';
+import { POPULATION_CONTEXT_SOURCE, createUnavailablePopulationContext, fetchPopulationContext } from './domains/population-context.js?v=20261003-skin360';
+import { WEB_AI_CONSOLE_SOURCE, createWebAiConsole } from './render/web-ai.js?v=20261003-skin360';
+import { SOCIAL_MIRROR_CONSOLE_SOURCE } from './domains/social-mirror.js?v=20261003-skin360';
+import { createSocialMirrorConsole } from './render/social-mirror.js?v=20261003-skin360';
+import { createYoutubeSurface } from './render/youtube-surface.js?v=20261003-skin360';
 
 const runtimeStatus = globalThis.__MATUMBO_RUNTIME__;
 runtimeStatus?.setStage?.('projection', 'Preparing the canonical local world envelope…');
@@ -3513,7 +3513,7 @@ for(const [label,status] of [['Market and relic storage',contractWorkspace.getPe
   }
 }
 const contractStyle = document.createElement('link');
-contractStyle.rel = 'stylesheet'; contractStyle.href = new URL('./render/contract-workbench.css?v=20261003-complete8', import.meta.url).href;
+contractStyle.rel = 'stylesheet'; contractStyle.href = new URL('./render/contract-workbench.css?v=20261003-skin360', import.meta.url).href;
 document.head.append(contractStyle);
 let contractAutomation = null;
 let contractWorkbench = null;
@@ -4565,10 +4565,10 @@ tokenToolsButton.addEventListener('click',async()=>{
     if(!tokenToolsLoad)tokenToolsLoad=(async()=>{
       // Establish the single default owner before either self-mounting adapter
       // runs. Import completion order must never choose a second balance owner.
-      const { ensureTumboTokenFacade }=await import('./domains/token.js?v=20261003-complete8');
+      const { ensureTumboTokenFacade }=await import('./domains/token.js?v=20261003-skin360');
       ensureTumboTokenFacade();
-      const imports=await Promise.allSettled([import('./domains/token-vault-ui.js?v=20261003-complete8'),
-        import('./domains/token-transfers-ui.js?v=20261003-complete8')]);
+      const imports=await Promise.allSettled([import('./domains/token-vault-ui.js?v=20261003-skin360'),
+        import('./domains/token-transfers-ui.js?v=20261003-skin360')]);
       for(const chip of document.querySelectorAll('.tv-chip,.tv-peek,#token-transfer-chip,.tt-chip-peek'))chip.style.display='none';
       const failed=imports.find(result=>result.status==='rejected');
       if(failed){for(const panel of document.querySelectorAll('.tv-panel,#token-transfer-console'))panel.hidden=true;throw failed.reason;}
@@ -4615,7 +4615,7 @@ assetLaunchPanel?.append(tokenActivityButton);
 // The optional activity tools share this feature's existing object front.
 // Their standalone cube and chip stay hidden in the calmer Lens layout.
 async function ensureTokenActivity() {
-  if(!tokenGamificationLoad)tokenGamificationLoad=import('./render/token-gamification.js?v=20261003-complete8')
+  if(!tokenGamificationLoad)tokenGamificationLoad=import('./render/token-gamification.js?v=20261003-skin360')
     .then(({mountTokenGamification})=>{
       tokenGamificationController=mountTokenGamification({three:THREE,scene,world,camera,renderer,controls,documentRoot:document});
       tokenGamificationController.setVisible(false);
@@ -5329,7 +5329,7 @@ function openGatewayTentacles3D() {
   if (gatewayTentacles3D) { try { gatewayTentacles3D.open(); } catch {} return; }
   if (gatewayTentacles3DLoading) return;
   gatewayTentacles3DLoading = true;
-  import('./render/gateway-tentacles.js?v=20261003-complete8').then((mod) => {
+  import('./render/gateway-tentacles.js?v=20261003-skin360').then((mod) => {
     try {
       gatewayTentacles3D = mod.mountGatewayTentacles({
         three: THREE, parent: world, camera, documentRoot: document,
@@ -5348,7 +5348,7 @@ function openConstellationOverview3D() {
   if (constellationOverview3D) { try { constellationOverview3D.open(); } catch {} return; }
   if (constellationOverview3DLoading) return;
   constellationOverview3DLoading = true;
-  import('./render/constellation-overview.js?v=20261003-complete8').then((mod) => {
+  import('./render/constellation-overview.js?v=20261003-skin360').then((mod) => {
     try {
       constellationOverview3D = mod.mountConstellationOverview({
         three: THREE, parent: world, camera, documentRoot: document,
@@ -6924,6 +6924,10 @@ const REALITY_ASSEMBLY_FEATURE_PANEL_IDS = Object.freeze({
 });
 
 function exposeRealityAssemblyFeaturePanel(featureId) {
+  // Home and space routes have no selected feature document to materialize.
+  // In particular, cold explicit Lens URLs must not build a fallback owner
+  // and immediately tear it down during space restoration.
+  if(featureId==='reality-lens')return false;
   const panel = document.getElementById(REALITY_ASSEMBLY_FEATURE_PANEL_IDS[featureId] ?? '');
   return realityAssembly?.mountFeatureSurface?.(featureId, panel && !panel.hidden ? panel : null) ?? false;
 }
@@ -6972,7 +6976,7 @@ featureNavigator = createFeatureNavigator({
     const genericNoAutoRefresh = !featureSelectionMayRefreshProvider(method);
     if (genericUserSelection && globalThis.history?.pushState && globalThis.location) {
       const route = new URL(globalThis.location.href);
-      ['panel','person','node','draft','localDraft','draftSource','contract','record','graph','journey','live','city'].forEach((key) => route.searchParams.delete(key));
+      ['panel','person','node','draft','localDraft','draftSource','contract','record','graph','journey','live','city','space'].forEach((key) => route.searchParams.delete(key));
       route.searchParams.set('feature', feature.id);
       globalThis.history.pushState({ feature: feature.id }, '', route.href);
       globalThis.dispatchEvent(new Event('city-journey:route-left'));
@@ -8428,6 +8432,7 @@ globalThis.addEventListener?.('popstate', () => {
   } else if (FEATURE_DEFINITIONS.some(feature => feature.id === query.get('feature')) || (!query.get('feature') && !query.get('panel'))) {
     featureNavigator?.select?.(query.get('feature') || 'reality-lens', 'popstate', { updateLocation: false });
     featureNavigator?.close();
+    if((query.get('feature')||'reality-lens')==='reality-lens'&&query.get('space'))realityAssembly?.openSpace?.(query.get('space'),{updateLocation:false});
   }
 });
 if (new URLSearchParams(globalThis.location?.search ?? '').get('panel') === 'asset-market') {
@@ -9360,6 +9365,11 @@ window.__TUMBO_PERSON_STUDIO__=personStudio;
 let realityAssemblyFloorVisibility=null;
 realityAssembly=createRealityAssembly({THREE,renderer,scene,camera,controls,world,targets:raycastTargets,features:FEATURE_DEFINITIONS,relationships:FEATURE_HANDOFF_LINKS,reducedMotion,environmentTexture:personStudio.getEnvironmentTexture(),
   onNavigate:(id)=>{featureNavigator.select(id,'reality-assembly',{updateLocation:false});featureNavigator.close();},
+  onSpaceNavigate:(space)=>{
+    featureNavigator.setActive('reality-lens','space');
+    const route=new URL(location.href);route.search='';route.hash='';route.searchParams.set('feature','reality-lens');route.searchParams.set('space',space);
+    if(route.href!==location.href)history.pushState({feature:'reality-lens',space},'',route.href);
+  },
   onFrame:()=>{cameraTween=0;cameraPositionTween=0;},
   // The Lens owns the visual field while a feature is being inspected. Bot
   // presences remain registered and return on exit; they do not float over a
@@ -9414,6 +9424,7 @@ if (cleanRealityLanding) {
 } else if(featureNavigator.getSnapshot().activeId==='reality-lens') {
   realityAssembly.open({lensMode:true});
 }
+if(new URLSearchParams(location.search).get('feature')==='reality-lens'&&new URLSearchParams(location.search).get('space'))realityAssembly.openSpace(new URLSearchParams(location.search).get('space'),{updateLocation:false});
 if(economicRuntime?.designSession.snapshot().undoDepth){
   try{realityAssembly.applyCreatorDesign(economicRuntime.designSession.snapshot().descriptor);}
   catch(error){assetLaunchStatus.textContent=`Stored design needs review: ${error.message}`;}
@@ -9429,7 +9440,7 @@ window.__TUMBO_MOBILE_PANEL_MANAGER__ = mobilePanelManager;
 // phone/desktop/AR viewports. Panels are registered in place; the dock never
 // moves, renames, or restyles them. Guarded dynamic import: a tab-dock failure
 // degrades to "no dock" and can never break the world boot.
-import("./render/tab-registry.js?v=20261003-complete8")
+import("./render/tab-registry.js?v=20261003-skin360")
   .then(({ initTabDock }) => {
     try {
       window.__TUMBO_TAB_DOCK__ = initTabDock({ documentRoot: document, windowRoot: window });
@@ -9447,7 +9458,7 @@ mountCenteredSurfaces();
 // Persistent user-created app blocks live outside feature navigation.
 // Changing feature/scene never closes, recenters, or recreates these blocks.
 let persistentUserBlocks = null;
-import("./render/persistent-user-blocks.js?v=20261003-complete8")
+import("./render/persistent-user-blocks.js?v=20261003-skin360")
   .then(({ createPersistentUserBlocks }) => {
     try {
       persistentUserBlocks = createPersistentUserBlocks({

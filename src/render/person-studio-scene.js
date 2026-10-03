@@ -1,5 +1,5 @@
-import {STUDIO_MODEL,STUDIO_OUTFITS,STUDIO_ROOMS} from '../domains/person-studio.js?v=20261003-complete8';
-import {buildAgentSmithRig} from './agent-smith-rig.js?v=20261003-complete8';
+import {STUDIO_MODEL,STUDIO_OUTFITS,STUDIO_ROOMS} from '../domains/person-studio.js?v=20261003-skin360';
+import {buildAgentSmithRig} from './agent-smith-rig.js?v=20261003-skin360';
 
 /** Procedural, articulated Agent Smith in floorless Reality Lens space.
  *  The visible rig owns the interaction targets; no portrait billboard hides

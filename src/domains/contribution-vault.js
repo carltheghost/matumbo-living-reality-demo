@@ -1,12 +1,12 @@
 /** Explicit consent and immutable acceptance metadata; no raw content or uploads. */
 import {
   COMPUTE_PROVIDERS
-} from './compute-exchange.js?v=20261003-complete8';
+} from './compute-exchange.js?v=20261003-skin360';
 import {
   economicChecksum,
   sealEconomicMetadata,
   stableEconomicString
-} from './economic-timeline.js?v=20261003-complete8';
+} from './economic-timeline.js?v=20261003-skin360';
 export const CONTRIBUTION_VAULT_SCHEMA_VERSION = 2;
 export const CONTRIBUTION_VAULT_SOURCE = 'matumbo-contribution-vault';
 export const CONTRIBUTION_VAULT_BOUNDARY = 'Metadata-only local consent rehearsal. It stores no raw conversation or file content and performs no upload, sale, training transfer, or real reward issuance.';

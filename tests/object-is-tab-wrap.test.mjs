@@ -30,18 +30,23 @@ test('Reality Lens renderer has no detached spatial-tab image card',async()=>{
   const scene=await readFile(new URL('../src/render/reality-assembly-scene.js',import.meta.url),'utf8');
   assert.doesNotMatch(scene,/spatial-tab\/image/);
   assert.doesNotMatch(scene,/new THREE\.PlaneGeometry\(width\*\.9,height\*\.88\)/);
-  assert.match(scene,/!curved&&artMaterial\?\[artMaterial,shell\]:shell/,'planar artwork is assigned to the body cap');
+  assert.match(scene,/surfaceGeometry=createRealitySurfaceGeometry\(THREE,shapeName\),bodyGeometry=surfaceGeometry\.geometry/);
+  assert.match(scene,/bodyMaterial=surfaceGeometry\.charts\.map\(\(\)=>artMaterial\?\?shell\)/,'every chart belongs to the actual body');
+  assert.match(scene,/body=new THREE\.Mesh\(bodyGeometry,bodyMaterial\)/);
+  assert.match(scene,/node\.tabMesh=body/,'the whole body remains the owning interactive mesh');
 });
 
-test('live feature controls inherit the owning body silhouette',async()=>{
-  const [assembly,css]=await Promise.all([
+test('live feature controls bind their canonical owner directly to the whole body mesh',async()=>{
+  const [assembly,controller]=await Promise.all([
     readFile(new URL('../src/render/reality-assembly.js',import.meta.url),'utf8'),
-    readFile(new URL('../src/render/reality-assembly.css',import.meta.url),'utf8'),
+    readFile(new URL('../src/render/reality-surface-controller.js',import.meta.url),'utf8'),
   ]);
-  assert.match(assembly,/--lens-surface-clip/);
-  assert.match(assembly,/primarySurfaceBinding\(\{featureId:feature\.id,objectId:data\.id,shape\}\)/);
-  assert.match(assembly,/setProperty\('--lens-surface-clip',binding\.clipPath\)/);
-  assert.match(css,/clip-path:var\(--lens-surface-clip/);
+  assert.match(assembly,/createRealitySurfaceController\(\{THREE,node,element:record\.front,feature:featureMap\.get\(record\.featureId\)/);
+  assert.match(controller,/createRealitySurfaceDocument\(\{element,feature,/,'the original element supplies the live controls');
+  assert.match(controller,/mesh\.material=atlas\.materials;mesh\.userData\.fullSurfaceOwner=feature\.id/);
+  assert.match(controller,/ray\.intersectObject\(mesh,false\)/,'picking follows body triangles');
+  assert.match(controller,/semantic\.getElement\(actionId\)/,'interaction resolves to the original owner');
+  assert.doesNotMatch(controller,/new THREE\.(?:Mesh|PlaneGeometry)|new CSS3DObject|cloneNode\(/,'no second card or cloned control owner');
 });
 
 

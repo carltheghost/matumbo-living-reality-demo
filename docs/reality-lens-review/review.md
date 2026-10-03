@@ -1,5 +1,21 @@
 # Reality Lens: complete cleanup and functional repair
 
+## Whole-body objects and meaningful home navigation — 2026-10-03
+
+[Current whole-body acceptance, screenshots and exact local results](WHOLE_BODY_ACCEPTANCE.md).
+
+Tumbo's latest direction is implemented in the existing Reality Lens: the object itself holds the information and controls, with five distinct volumetric families. The six home spaces use cubes for Worlds and Network, a sphere for Your space, a cylinder for Value & contracts, a torus for Agents, and a triangular prism for Play, media & learning. The previous front-only projection described later in this historical report is superseded by this section and [the current engine guide](../REALITY_SURFACES_360.md).
+
+The selected feature keeps one original DOM/controller owner. Current text, values, buttons, native controls and supported canvas content become textures on the body's actual triangle charts. Nearest-triangle UV picking reaches the original action; there is no duplicate feature state. Cylinder caps, the back of the body, prism ends and the torus's inner surface all belong to closed geometry. The torus has a real empty center, and clicking that empty center does not enter Agents. The four legacy phone, square, rectangle and wave forms remain supported alongside the five volumetric families.
+
+Home bodies open their actual spaces. Feature selection preserves its canonical identity, and the breadcrumb path returns to its space or Home. Space URLs preserve this hierarchy across reload and browser history. An older City history listener now leaves explicit space routes to the Reality Lens owner. Names on the curved home bodies are painted directly into their existing mesh textures and enlarged for phone readability.
+
+Dragging a selected body turns it. Surface actions operate the existing feature; Previous/Next and wheel input browse longer content. Native text entry uses the same input, preserves typed values across body changes, and Escape finishes editing without closing the feature. Keyboard focus reveals the appropriate chart/page. Text view provides the original accessible feature flow. Canvas content receives a dedicated readable chart and keeps its source aspect ratio; the pointer region follows the fitted pixels rather than their letterboxing. Disposing an active gesture sends one cancellation, releases capture and restores camera controls.
+
+YouTube retains one actual cross-origin browser player attached to the object. Its search and result controls use the surface engine. This player is explicitly planar: the browser does not expose its pixels as a curved texture. Domain simulations, authored avatar assets, provider authority and the canonical economic owner remain unchanged.
+
+This section records implementation scope. Current test, rendered interaction, package and exact-commit CI evidence is listed in the accompanying release acceptance report; the older totals below describe their original commits. Browser verification uses software WebGL at desktop and phone-sized viewports, not a physical phone, hardware GPU, AR or XR device. NVIDIA remains key-needed until an owner supplies a valid server-side credential. No merge or public Pages deployment is implied.
+
 ## Ultra review follow-up — 2026-10-03
 
 Three separately assigned agents ran at ultra reasoning for creator sharing, adversarial economic correctness and desktop/phone usability. Independent review of the other agents' changes produced additional concrete repairs. Root integrated the work in the existing PR branch.

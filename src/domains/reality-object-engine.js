@@ -1,4 +1,4 @@
-import {livingSurfaceLayoutEngine} from './living-surface-layout-engine.js?v=20261003-complete8';
+import {livingSurfaceLayoutEngine} from './living-surface-layout-engine.js?v=20261003-skin360';
 
 const STAGE_NAMES=Object.freeze(['Signum','Identitas','Fontes','Interior']);
 const LATIN_LABELS=Object.freeze({
@@ -39,6 +39,13 @@ export function projectSurfaceHitRegion({points,viewportWidth,viewportHeight}={}
  * object. It describes what the object may show; it never grants feature,
  * provider, wallet, or tool authority. */
 export function createRealityObjectSurfaceEngine(){
+  function fullSurfaceBinding({featureId,objectId,shape,charts}={}){
+    if(!featureId||featureId!==objectId)throw Error('A mesh surface must retain its owning feature identity');
+    if(!Array.isArray(charts)||!charts.length||charts.some((chart,index)=>chart.index!==index||!chart.id))throw Error('A mesh surface needs complete indexed UV charts');
+    return freeze({entityId:featureId,bodyId:objectId,shape,coordinateSpace:'owning-mesh-uv',
+      charts:charts.map(({id,label,index})=>({id,label,index})),interactiveFaceCount:charts.length,
+      canonicalOwners:1,coverage:'entire-closed-body',separatePanelFrame:false,bodyMutation:false});
+  }
   /** One body, one information front, one interactive skin. Both renderers
    * consume the same local anchors; neither may invent a second panel frame. */
   function primarySurfaceBinding({featureId,objectId,shape='rectangle'}={}){
@@ -100,7 +107,7 @@ export function createRealityObjectSurfaceEngine(){
   function focusFrame({shape='rectangle',size=1,approachScale=1,viewportWidth=1280,viewportHeight=900,fov=60,occupancy=.54,minDistance=7.4,maxDistance=190}={}){
     return livingSurfaceLayoutEngine.focusFrame({shape,size,approachScale,viewportWidth,viewportHeight,fov,occupancy,minDistance,maxDistance});
   }
-  return Object.freeze({describe,primarySurfaceBinding,hitRegion:projectSurfaceHitRegion,projectedBounds,fitPanel,focusFrame,wrapLayout,shouldShowFace,compose:livingSurfaceLayoutEngine.compose,readingFrame:livingSurfaceLayoutEngine.readingFrame,readingProjection:livingSurfaceLayoutEngine.readingProjection,clipPath:livingSurfaceLayoutEngine.contourClipPath});
+  return Object.freeze({describe,fullSurfaceBinding,primarySurfaceBinding,hitRegion:projectSurfaceHitRegion,projectedBounds,fitPanel,focusFrame,wrapLayout,shouldShowFace,compose:livingSurfaceLayoutEngine.compose,readingFrame:livingSurfaceLayoutEngine.readingFrame,readingProjection:livingSurfaceLayoutEngine.readingProjection,clipPath:livingSurfaceLayoutEngine.contourClipPath});
 }
 
 export const realityObjectSurfaceEngine=createRealityObjectSurfaceEngine();

@@ -5,7 +5,7 @@ import shutil
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
-MARKER = '<script type="module">import("./src/render/reality-25-bridge.js?v=20261003-complete8").catch((error)=>{try{console.warn("[reality25] optional surface degraded:",error);}catch{}});</script>'
+MARKER = '<script type="module">import("./src/render/reality-25-bridge.js?v=20261003-skin360").catch((error)=>{try{console.warn("[reality25] optional surface degraded:",error);}catch{}});</script>'
 
 
 def build(destination):

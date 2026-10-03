@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createTokenEngine, TumboUserLedger, CONFIG } from '../src/domains/token.js';
-import { createTokenEngine as createVersionedEngine } from '../src/domains/token.js?v=20261003-complete8';
+import { createTokenEngine as createVersionedEngine } from '../src/domains/token.js?v=20261003-skin360';
 import { createTokenFacade } from '../src/domains/token-facade.js';
 import { serializeTokenEngine, loadTokenEngine } from '../src/domains/token-store.js';
 import { BotPay, Pay402, BOT_CHALLENGE_TTL_TICKS, BOT_SPEND_CAP_FLUFF } from '../src/domains/token-botpay.js';

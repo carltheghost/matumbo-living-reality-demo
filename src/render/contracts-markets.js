@@ -1,4 +1,4 @@
-import { mountMarketBuilder } from './market-builder.js?v=20261003-complete8';
+import { mountMarketBuilder } from './market-builder.js?v=20261003-skin360';
 import {
   CONTRACTS_MARKETS_DRAFT_ROUTE_VERSION,
   CONTRACTS_MARKETS_DRAFT_ROUTE_MAX_LENGTH,
@@ -14,7 +14,7 @@ import {
   createContractPoolRehearsal,
   createContractsMarketsGraph,
   validateContractDraftRouteState,
-} from "../domains/contracts-markets.js?v=20261003-complete8";
+} from "../domains/contracts-markets.js?v=20261003-skin360";
 
 export const CONTRACTS_MARKETS_CONSOLE_SOURCE = "contracts-markets-console";
 export const CONTRACTS_MARKETS_RENDER_SOURCE = CONTRACTS_MARKETS_CONSOLE_SOURCE;

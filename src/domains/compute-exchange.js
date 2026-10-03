@@ -15,12 +15,12 @@
 import {
   toComputeUnits,
   fromComputeUnits
-} from "./compute-account.js?v=20261003-complete8";
+} from "./compute-account.js?v=20261003-skin360";
 import {
   sealEconomicMetadata,
   stableEconomicString,
   economicChecksum
-} from "./economic-timeline.js?v=20261003-complete8";
+} from "./economic-timeline.js?v=20261003-skin360";
 export const COMPUTE_EXCHANGE_SCHEMA_VERSION = 2;
 export const COMPUTE_EXCHANGE_SOURCE = "matumbo-compute-exchange";
 

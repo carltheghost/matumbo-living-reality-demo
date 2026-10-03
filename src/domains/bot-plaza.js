@@ -17,7 +17,7 @@
  *   execution exists anywhere in this module.
  */
 
-import { createMuseAgent, designFromPrompt } from "./muse-agent.js?v=20261003-complete8";
+import { createMuseAgent, designFromPrompt } from "./muse-agent.js?v=20261003-skin360";
 
 export const BOT_PLAZA_SCHEMA_VERSION = 1;
 export const BOT_PLAZA_SOURCE = "bot-plaza";

@@ -1,4 +1,4 @@
-import { resolveRealityLensGroup } from '../domains/reality-lens-engine.js?v=20261003-complete8';
+import { resolveRealityLensGroup } from '../domains/reality-lens-engine.js?v=20261003-skin360';
 
 // These are views over the existing feature registry, not new feature owners.
 export const LENS_SPACES = Object.freeze([

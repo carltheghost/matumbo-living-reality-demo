@@ -14,8 +14,8 @@
  *
  * Projection only: local simulation, no identity authority, no wallet.
  */
-import { avatarIdlePose } from '../domains/avatar-motion.js?v=20261003-complete8';
-import { blinkDip } from '../domains/mascot-motion.js?v=20261003-complete8';
+import { avatarIdlePose } from '../domains/avatar-motion.js?v=20261003-skin360';
+import { blinkDip } from '../domains/mascot-motion.js?v=20261003-skin360';
 
 /** Base height of the rig in arena units before per-role scaling. */
 export const CHIBI_RIG_BASE_HEIGHT = 1.7;

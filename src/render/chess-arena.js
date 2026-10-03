@@ -15,13 +15,13 @@
  * ledger, no signing, no settlement.
  */
 import * as THREE from 'three';
-import {createChessArenaState,applyChessArenaMove} from '../domains/chess-arena.js?v=20261003-complete8';
-import {chooseAiMove,CHESS_AI_DIFFICULTIES,resolveAiDifficulty} from '../domains/chess-ai.js?v=20261003-complete8';
-import {avatarIdlePose,avatarGlide,AVATAR_MOTION} from '../domains/avatar-motion.js?v=20261003-complete8';
-import {AVATAR_FACE_STORAGE_KEY} from '../domains/avatar-style.js?v=20261003-complete8';
-import {PERSON_STUDIO_STORAGE_KEY} from '../domains/person-studio.js?v=20261003-complete8';
-import {buildArenaHall,createPieceBuilders,readArenaAvatarAppearance,squarePosition,CHESS_ROLE_GLYPHS} from './chess-arena-pieces.js?v=20261003-complete8';
-import {isCompactViewport,resolvePixelRatioCap,shouldRunSecondaryLoop} from './render-perf.js?v=20261003-complete8';
+import {createChessArenaState,applyChessArenaMove} from '../domains/chess-arena.js?v=20261003-skin360';
+import {chooseAiMove,CHESS_AI_DIFFICULTIES,resolveAiDifficulty} from '../domains/chess-ai.js?v=20261003-skin360';
+import {avatarIdlePose,avatarGlide,AVATAR_MOTION} from '../domains/avatar-motion.js?v=20261003-skin360';
+import {AVATAR_FACE_STORAGE_KEY} from '../domains/avatar-style.js?v=20261003-skin360';
+import {PERSON_STUDIO_STORAGE_KEY} from '../domains/person-studio.js?v=20261003-skin360';
+import {buildArenaHall,createPieceBuilders,readArenaAvatarAppearance,squarePosition,CHESS_ROLE_GLYPHS,isVisibleChessIntersection} from './chess-arena-pieces.js?v=20261003-skin360';
+import {isCompactViewport,resolvePixelRatioCap,shouldRunSecondaryLoop} from './render-perf.js?v=20261003-skin360';
 
 const pieceName={p:'Pawn',n:'Knight',b:'Bishop',r:'Rook',q:'Queen',k:'King'};
 const sideName={w:'White',b:'Black'};
@@ -38,6 +38,7 @@ export function mountChessArena({documentRoot=document,host}){
 .chess-arena-runtime{margin-top:12px;padding:12px;border:1px solid rgba(154,92,255,.45);border-radius:12px;background:linear-gradient(160deg,rgba(8,6,18,.98),rgba(8,14,26,.96));color:#eaf4ff}
 .chess-arena-stage{height:440px;position:relative;border-radius:9px;overflow:hidden;background:radial-gradient(ellipse at 50% 125%,#1c1132 0%,#05070c 62%)}
 .chess-arena-canvas{width:100%;height:100%;display:block;touch-action:none;cursor:pointer}
+.reality-surface-semantic-owner .chess-arena-stage{aspect-ratio:4/3;height:auto;min-height:0}
 .chess-arena-avatar-badge{position:absolute;top:10px;left:10px;max-width:70%;padding:6px 12px;border-radius:999px;border:1px solid rgba(47,232,212,.5);background:rgba(4,10,14,.72);color:#9df2e6;font-size:12px;letter-spacing:.04em;pointer-events:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .chess-arena-thinking{position:absolute;top:10px;right:10px;padding:6px 12px;border-radius:999px;border:1px solid rgba(255,210,106,.55);background:rgba(20,12,4,.78);color:#ffd26a;font-size:12px;letter-spacing:.06em;pointer-events:none;animation:chess-arena-pulse 1.1s ease-in-out infinite}
 .chess-arena-thinking[hidden]{display:none}
@@ -416,6 +417,7 @@ export function mountChessArena({documentRoot=document,host}){
     raycaster.setFromCamera(pointerNDC,camera);
     const hits=raycaster.intersectObjects([pieces,hall.group],true);
     for(const hit of hits){
+      if(!isVisibleChessIntersection(hit))continue;
       let object=hit.object;
       while(object){
         if(object.userData&&typeof object.userData.square==='string')return object.userData.square;
@@ -484,7 +486,9 @@ export function mountChessArena({documentRoot=document,host}){
   documentRoot.addEventListener?.('person-studio:avatar-changed',onAvatarFaceChanged);
 
   // Orbit on drag, board tap on tap: a press that barely moves is a move.
-  let yaw=0,pitch=-0.45,dist=13,drag=null,downInfo=null;
+  // Start high enough to see the pawn rank past the taller back-rank artwork.
+  // A spherical orbit also keeps pitch meaningful at every zoom distance.
+  let yaw=0,pitch=1.0,dist=14,drag=null,downInfo=null;
   const canvas=renderer.domElement;
   canvas.addEventListener('pointerdown',(e)=>{
     downInfo={x:e.clientX,y:e.clientY,t:performance.now(),moved:false};
@@ -495,7 +499,7 @@ export function mountChessArena({documentRoot=document,host}){
     if(!drag||!downInfo)return;
     if(Math.abs(e.clientX-downInfo.x)+Math.abs(e.clientY-downInfo.y)>7)downInfo.moved=true;
     yaw+=(e.clientX-drag.x)*0.008;
-    pitch=Math.max(-1.2,Math.min(0.2,pitch+(e.clientY-drag.y)*0.006));
+    pitch=Math.max(.32,Math.min(1.45,pitch+(e.clientY-drag.y)*0.006));
     drag={x:e.clientX,y:e.clientY};
     draw();
   });
@@ -506,18 +510,23 @@ export function mountChessArena({documentRoot=document,host}){
   };
   canvas.addEventListener('pointerup',endPointer);
   canvas.addEventListener('pointercancel',()=>{drag=null;downInfo=null;});
-  canvas.addEventListener('wheel',(e)=>{e.preventDefault();dist=Math.max(8,Math.min(24,dist+e.deltaY*0.01));draw();},{passive:false});
+  canvas.addEventListener('wheel',(e)=>{e.preventDefault();dist=Math.max(8,Math.min(32,dist+e.deltaY*0.01));draw();},{passive:false});
 
   const draw=()=>{
-    const w=stage.clientWidth,h=stage.clientHeight;
-    if(!w||!h)return;
-    renderer.setSize(w,h,false);
+    // The same owner can be projected offscreen onto an object. Retain usable
+    // dimensions there, and avoid resetting its drawing buffer every capture.
+    const w=stage.clientWidth||canvas.clientWidth||800,h=stage.clientHeight||canvas.clientHeight||600;
+    const current=renderer.getSize(new THREE.Vector2());
+    if(current.x!==w||current.y!==h)renderer.setSize(w,h,false);
     camera.aspect=w/h;
-    camera.position.set(Math.sin(yaw)*dist,Math.sin(pitch)*dist+10,Math.cos(yaw)*dist+9);
+    camera.updateProjectionMatrix();
+    camera.position.set(Math.sin(yaw)*Math.cos(pitch)*dist,Math.sin(pitch)*dist+.6,Math.cos(yaw)*Math.cos(pitch)*dist);
     camera.lookAt(0,0.6,0);
     renderer.render(scene,camera);
   };
   const ro=new ResizeObserver(draw);ro.observe(stage);
+  const captureSurface=()=>draw();
+  canvas.addEventListener('matumbo:surface-capture',captureSurface);
 
   /** Continuous idle loop: every champion breathes the avatar motion language
    *  — bob, sway-turn, glow-ring pulse — while the camera orbits or glides run.
@@ -581,11 +590,19 @@ export function mountChessArena({documentRoot=document,host}){
 
   return {
     getSnapshot,
+    // Read-only projection uses the exact camera that paints the source board.
+    projectSquare:(square,height=.6)=>{
+      draw();camera.updateMatrixWorld();
+      const [x,y,z]=squarePosition(square);
+      const point=new THREE.Vector3(x,y+height,z).project(camera);
+      return {x:(point.x+1)/2,y:(1-point.y)/2,visible:point.z>-1&&point.z<1};
+    },
     refreshAppearance,
     destroy:()=>{
       alive=false;
       stopMotionLoop();
       ro.disconnect();
+      canvas.removeEventListener('matumbo:surface-capture',captureSurface);
       view?.removeEventListener?.('storage',onStorage);
       documentRoot.removeEventListener?.('person-studio:avatar-changed',onAvatarFaceChanged);
       view?.removeEventListener?.('visibilitychange',onMotionVisibilityChange);

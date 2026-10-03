@@ -1,7 +1,7 @@
-import {createPersonStudioOwner,STUDIO_OUTFITS,STUDIO_ROOMS,STUDIO_COMPANIONS} from '../domains/person-studio.js?v=20261003-complete8';
-import {buildPersonStudioScene} from './person-studio-scene.js?v=20261003-complete8';
-import {AVATAR_FACE_CHOICES,AVATAR_FACE_MAX_DIM,AVATAR_FLUFFY_BODY_TEMPLATE_URL,avatarFaceChoiceToMascotLook,buildChibi,loadAvatarFaceChoice,resolveAvatarFaceUrl,saveAvatarFace,saveAvatarFaceChoice} from '../domains/avatar-style.js?v=20261003-complete8';
-import {setMascotLook} from './photo-mascot-set.js?v=20261003-complete8';
+import {createPersonStudioOwner,STUDIO_OUTFITS,STUDIO_ROOMS,STUDIO_COMPANIONS} from '../domains/person-studio.js?v=20261003-skin360';
+import {buildPersonStudioScene} from './person-studio-scene.js?v=20261003-skin360';
+import {AVATAR_FACE_CHOICES,AVATAR_FACE_MAX_DIM,AVATAR_FLUFFY_BODY_TEMPLATE_URL,avatarFaceChoiceToMascotLook,buildChibi,loadAvatarFaceChoice,resolveAvatarFaceUrl,saveAvatarFace,saveAvatarFaceChoice} from '../domains/avatar-style.js?v=20261003-skin360';
+import {setMascotLook} from './photo-mascot-set.js?v=20261003-skin360';
 
 export function createPersonStudio({THREE,renderer,scene,camera,controls,world,targets,documentRoot=document,onNavigate,onFrame,onIntent,reducedMotion=false}) {
   let storage=null;try{storage=globalThis.localStorage;}catch{}
@@ -17,7 +17,7 @@ export function createPersonStudio({THREE,renderer,scene,camera,controls,world,t
   }
   const pmrem=new THREE.PMREMGenerator(renderer);const environmentTarget=pmrem.fromScene(environmentScene,.04);pmrem.dispose();
   [envRoom,...envLights].forEach(m=>{m.geometry.dispose();m.material.dispose();});
-  const stylesheet=documentRoot.createElement('link');stylesheet.rel='stylesheet';stylesheet.href=new URL('./person-studio.css?v=20261003-complete8',import.meta.url).href;documentRoot.head.append(stylesheet);
+  const stylesheet=documentRoot.createElement('link');stylesheet.rel='stylesheet';stylesheet.href=new URL('./person-studio.css?v=20261003-skin360',import.meta.url).href;documentRoot.head.append(stylesheet);
   const root=documentRoot.createElement('section');root.id='person-studio';root.hidden=true;root.setAttribute('aria-label','PERSON Ω personal room');
   root.innerHTML=`
     <header class="studio-topbar">

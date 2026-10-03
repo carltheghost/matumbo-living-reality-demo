@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 // The issuer's private registry belongs to the mounted canonical URL graph.
-import { createHandle, revoke } from '../src/domains/portal-sessions/opaque-handle.js?v=20261003-complete8';
+import { createHandle, revoke } from '../src/domains/portal-sessions/opaque-handle.js?v=20261003-skin360';
 import { createHandle as createForeignHandle } from '../src/domains/portal-sessions/opaque-handle.js?issuer=foreign';
-import { enterPortal, returnToLens } from '../src/domains/portal-sessions/entry-return.js?v=20261003-complete8';
+import { enterPortal, returnToLens } from '../src/domains/portal-sessions/entry-return.js?v=20261003-skin360';
 
 function handle(serviceId = 'youtube', issuedAt = 100, ttlMs = 100) {
   return createHandle({

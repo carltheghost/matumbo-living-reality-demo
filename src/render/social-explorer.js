@@ -21,7 +21,7 @@ import {
   resetSocialExplorerFlow,
   resetSocialExplorerLaunchPlan,
   selectSocialExplorerLaunchMode,
-} from "../domains/social-explorer.js?v=20261003-complete8";
+} from "../domains/social-explorer.js?v=20261003-skin360";
 
 export const SOCIAL_EXPLORER_CONSOLE_SOURCE = "social-explorer-rehearsal";
 export const DEFAULT_SOCIAL_EXPLORER_ID = "social-explorer:demo";

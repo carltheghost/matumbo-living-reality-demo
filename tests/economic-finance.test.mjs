@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createTokenEngine } from '../src/domains/token.js?v=20261003-complete8';
-import { serializeTokenEngine, loadTokenEngine } from '../src/domains/token-store.js?v=20261003-complete8';
-import { createEconomicKernel, ECONOMIC_POOLS } from '../src/domains/economic-kernel.js?v=20261003-complete8';
-import { createEconomicFinance } from '../src/domains/economic-finance.js?v=20261003-complete8';
+import { createTokenEngine } from '../src/domains/token.js?v=20261003-skin360';
+import { serializeTokenEngine, loadTokenEngine } from '../src/domains/token-store.js?v=20261003-skin360';
+import { createEconomicKernel, ECONOMIC_POOLS } from '../src/domains/economic-kernel.js?v=20261003-skin360';
+import { createEconomicFinance } from '../src/domains/economic-finance.js?v=20261003-skin360';
 
 const START = 1791040000000, YEAR = 365 * 24 * 60 * 60 * 1000;
 function fixture() {

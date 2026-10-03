@@ -3,7 +3,7 @@ import {
   economicChecksum,
   sealEconomicMetadata,
   stableEconomicString
-} from './economic-timeline.js?v=20261003-complete8';
+} from './economic-timeline.js?v=20261003-skin360';
 export const COMPUTE_ACCOUNT_SCHEMA_VERSION = 2;
 export const COMPUTE_ACCOUNT_SOURCE = 'matumbo-compute-account';
 export const COMPUTE_ACCOUNT_BOUNDARY = 'Local demo-credit accounting only. No card charge, bank transfer, wallet, custody, settlement, subscription billing, or real balance exists.';

@@ -5,7 +5,7 @@
  */
 import {
   sha256Hex
-} from './token-sha256.js?v=20261003-complete8';
+} from './token-sha256.js?v=20261003-skin360';
 
 export const ECONOMIC_KERNEL_SOURCE = 'matumbo-economic-kernel';
 export const ECONOMIC_KERNEL_FORMAT = 'matumbo-economic-kernel-v1';

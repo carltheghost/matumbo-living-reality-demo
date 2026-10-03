@@ -6,7 +6,7 @@ import {
   serializeBlockWorldSnapshot,
   validateBlockWorldSnapshot,
   applyBlockWorldSnapshot,
-} from "../domains/block-world-snapshot.js?v=20261003-complete8";
+} from "../domains/block-world-snapshot.js?v=20261003-skin360";
 
 export const BLOCK_WORLD_SNAPSHOT_CONSOLE_SOURCE = "block-world-snapshot-console";
 export const BLOCK_WORLD_SNAPSHOT_RENDER_SOURCE = BLOCK_WORLD_SNAPSHOT_CONSOLE_SOURCE;

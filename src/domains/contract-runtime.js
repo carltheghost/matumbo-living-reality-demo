@@ -1,8 +1,8 @@
-import {createContractAutomation} from './contract-automation.js?v=20261003-complete8';
-import {createPersistentContractWorkspace} from './outcome-persistence.js?v=20261003-complete8';
-import {createContractFlow} from './contract-flow.js?v=20261003-complete8';
-import {createFrozenRelics} from './frozen-relics.js?v=20261003-complete8';
-import {createOutcomeContracts} from './outcome-contracts.js?v=20261003-complete8';
+import {createContractAutomation} from './contract-automation.js?v=20261003-skin360';
+import {createPersistentContractWorkspace} from './outcome-persistence.js?v=20261003-skin360';
+import {createContractFlow} from './contract-flow.js?v=20261003-skin360';
+import {createFrozenRelics} from './frozen-relics.js?v=20261003-skin360';
+import {createOutcomeContracts} from './outcome-contracts.js?v=20261003-skin360';
 
 /** Storage access belongs to the domain boundary, never the renderer. An
  * unavailable store fails visibly rather than silently losing contract history. */

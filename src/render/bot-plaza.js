@@ -10,7 +10,7 @@ import {
   createBotRuntime,
   getAtelierTemplate,
   validateAtelierRule,
-} from "../domains/bot-plaza.js?v=20261003-complete8";
+} from "../domains/bot-plaza.js?v=20261003-skin360";
 
 export { BOT_PLAZA_BOUNDARY, BOT_PLAZA_CONSOLE_SOURCE };
 export const BOT_PLAZA_RENDER_SOURCE = BOT_PLAZA_CONSOLE_SOURCE;

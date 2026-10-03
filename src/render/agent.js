@@ -196,6 +196,7 @@ export function createAgentBlock({
       if (hits.length) selectSection(hits[0].object.userData.sectionId, "cube");
     });
 
+    renderer.domElement.addEventListener('matumbo:surface-capture',()=>renderer.render(scene3d,camera3d));
     highlightSelected();
     if (reducedMotion) {
       renderer.render(scene3d, camera3d);

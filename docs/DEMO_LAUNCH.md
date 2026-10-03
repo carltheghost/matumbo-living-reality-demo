@@ -72,7 +72,7 @@ Use an extracted static package as `work/static-preview` and open `http://127.0.
 
 ## First use and recovery
 
-The landing is **Reality Lens / Reality Assembly**, organized into six spaces. Choose a space, then open a feature object. Busy spaces show six objects per desktop page or four per compact phone page. **Find / Locate** searches the canonical identities; the back control returns object → containing space → landing. **Details** is attached to the object front, while **View** and **Connections** expose optional controls on request. Person Ω opens the personal room through the same navigator.
+The landing is **Reality Lens / Reality Assembly**, organized into six spaces using five bodies: cube, sphere, cylinder, triangular prism and torus. Choose a space, then open a feature object. Busy spaces show six objects per desktop page or four per compact phone page. **Find / Locate** searches the canonical identities; breadcrumbs and browser Back return object → containing space → Home. Drag a body to turn it, tap its painted controls, and use surface **Previous / Next** to browse longer content. **Details** adds information to the same body's surfaces. **Text view** exposes the original accessible feature. **View** and **Connections** expose optional controls on request. Person Ω opens the personal room through the same navigator. See [whole-body surfaces](REALITY_SURFACES_360.md) for interaction and media boundaries.
 
 The page uses the vendored Three.js 0.179.1 module; the core renderer does not depend on a Three.js CDN. WebGL is required for the full 3D view. If startup or WebGL fails, the page reports an unavailable renderer and preserves an accessible feature fallback. Check the reported failure, use a current WebGL-capable browser, and reload. A successful HTTP probe alone does not prove the 3D world is working.
 
@@ -167,7 +167,7 @@ The ZIP is browser-only and excludes the Python server, credentials, repository 
 
 ## Architecture and history
 
-Current controls preserve the project's local simulation/projection boundary. Domain records own their state; the 3D world and CSS3D faces render it. Public reads do not become trades, cryptographic proofs, membership, or financial authority. Optional advisory AI has no wallet, signing, settlement, or external execution tools.
+Current controls preserve the project's local simulation/projection boundary. Domain records own their state; the 3D world and mesh surface textures render it. The cross-origin YouTube player remains one planar native browser surface. Public reads do not become trades, cryptographic proofs, membership, or financial authority. Optional advisory AI has no wallet, signing, settlement, or external execution tools.
 
 For deeper feature history and architecture, see [Block World and migration](BLOCK_WORLD_MIGRATION.md), [contract flow](CONTRACT_FLOW.md), [Person embodiment](PERSON_EMBODIMENT.md), [public source evidence](LIVE_GATEWAY_EVIDENCE.md), [device projection](DEVICE_PROJECTION.md), and [Merge4 snapshot adapter](MERGE4_SNAPSHOT_ADAPTER.md). Packet receipts may contain earlier routes, geometry, fixture descriptions, or test counts; use current source and fresh evidence for acceptance.
 

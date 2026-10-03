@@ -19,7 +19,7 @@ import {
   CUBE_DIVE_EXIT_DURATION_MS,
   CUBE_DIVE_HOP_DURATION_MS,
   CUBE_DIVE_BOUNDARY,
-} from "../domains/cube-dive.js?v=20261003-complete8";
+} from "../domains/cube-dive.js?v=20261003-skin360";
 
 const PHASES = Object.freeze({
   APPROACH: "approach",

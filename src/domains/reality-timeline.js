@@ -3,7 +3,7 @@
  * explicitly user-authored proposals; replay can never write back to the present. */
 const copy=value=>JSON.parse(JSON.stringify(value));
 const freeze=value=>{if(value&&typeof value==='object'){Object.values(value).forEach(freeze);Object.freeze(value);}return value;};
-import {normalizeRealityTabShape,normalizeRealityTabSize,resolveRealityTabPosition} from './reality-tab-layout.js?v=20261003-complete8';
+import {normalizeRealityTabShape,normalizeRealityTabSize,resolveRealityTabPosition} from './reality-tab-layout.js?v=20261003-skin360';
 const MAX_FRAMES=100,MAX_BRANCHES=12;
 function position(value){
   if(!Array.isArray(value)||value.length!==3||value.some(n=>!Number.isFinite(n)||Math.abs(n)>60))throw Error('Position must contain three finite coordinates within the workspace');

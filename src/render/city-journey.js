@@ -1,4 +1,4 @@
-import {FEATURE_DEFINITIONS} from './feature-navigator.js?v=20261003-complete8';
+import {FEATURE_DEFINITIONS} from './feature-navigator.js?v=20261003-skin360';
 export const CITY_DISTRICTS=Object.freeze([
   ['finance','Finance','paycore'],['academy','Academy','academy'],['t402','T402','t402'],
   ['contracts','Contracts','contracts'],['arena','Arena','arena'],['rooms','Rooms','rooms'],['receipt','Receipt evidence','ledger'],
@@ -11,7 +11,7 @@ export function resolveCityRoute(search){
   const district=CITY_DISTRICTS.find(item=>item.id===params.get('city'));
   if(!district||params.get('feature')!==district.feature)return {status:'rejected'};
   // Do not combine this local route with provider, draft or executable handoffs.
-  if(['panel','live','draft','contract','record','journey'].some(key=>params.has(key)))return {status:'rejected'};
+  if(['panel','live','draft','contract','record','journey','space'].some(key=>params.has(key)))return {status:'rejected'};
   return {status:'valid',district};
 }
 
@@ -41,7 +41,7 @@ export function mountCityJourney({navigate,documentRoot=document,windowRoot=wind
       else if(event?.type==='popstate'){
         const params=new URLSearchParams(windowRoot.location.search);
         // Specialized handoffs retain their existing handlers; restore only plain feature URLs.
-        if(!['panel','live','draft','contract','record','journey','person'].some(key=>params.has(key))){
+        if(!['panel','live','draft','contract','record','journey','person','space'].some(key=>params.has(key))){
           const id=params.getAll('feature').length===1?params.get('feature'):null;
           navigate(FEATURE_DEFINITIONS.some(feature=>feature.id===id)?id:'reality-lens');details.open=false;
         }

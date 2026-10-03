@@ -34,7 +34,7 @@
 // 1. The ONE config constant: supply, market float, tithe, TTL, price.
 // ---------------------------------------------------------------------------
 
-import { TOKEN_TOTAL_SUPPLY, SMIMAS_TOTAL_SUPPLY, MARKET_TUMBO_FLOAT, FAUCET_BOOTSTRAP_FLUFF, VOID_TITHE_BPS, QUOTE_TTL_MS, MARKET_RATE } from './token-config.js?v=20261003-complete8';
+import { TOKEN_TOTAL_SUPPLY, SMIMAS_TOTAL_SUPPLY, MARKET_TUMBO_FLOAT, FAUCET_BOOTSTRAP_FLUFF, VOID_TITHE_BPS, QUOTE_TTL_MS, MARKET_RATE } from './token-config.js?v=20261003-skin360';
 
 export const CONFIG = Object.freeze({
   /** Total issued supply, in integer fluff (1 TUMBO-SIM = 1000 fluff). */

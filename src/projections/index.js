@@ -6,4 +6,4 @@ export {
   createDeviceProjection,
   createDeviceProjectionMetadata,
   readBrowserProjectionPreferences,
-} from "./device-projection.js?v=20261003-complete8";
+} from "./device-projection.js?v=20261003-skin360";

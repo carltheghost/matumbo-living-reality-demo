@@ -24,7 +24,7 @@ test('Reality Lens has a generated deep-space backdrop rather than a black void'
   texture.dispose();
 });
 
-test('far zoom leaves only the small gold centre tab; approaching unfolds the spatial field',()=>{
+test('far zoom leaves only the small centre tab; approaching unfolds the spatial field',()=>{
   const {scene,parent}=build();
   scene.apply(snapshot(objects()),{viewMode:'3d'});
   scene.update(.1,0,{reducedMotion:true,cameraDistance:200});
@@ -35,7 +35,8 @@ test('far zoom leaves only the small gold centre tab; approaching unfolds the sp
   assert.equal(scene.worldBlock.children.length,0);
   const centerTab=scene.nodes.get('block-world');
   assert.equal(centerTab.root.visible,true);assert.equal(centerTab.isTab,true);assert.equal(centerTab.core,undefined);assert.equal(centerTab.shape,'sphere');
-  assert.equal(centerTab.shellMaterial.color.getHexString(),'a8874c');
+  assert.equal(centerTab.surfaceCharts.length,6,'the distant sphere retains its six real exterior charts');
+  assert.equal(centerTab.edgeMaterial.color.getHexString(),'e4c878','the established gold edge identity remains visible');
   for(const [id,node] of scene.nodes)if(node.isTab&&id!=='block-world')assert.equal(node.root.visible,false,id);
   scene.update(.1,0,{reducedMotion:true,cameraDistance:110});
   assert.equal(scene.getSnapshot().lod,'unfolding');
@@ -109,7 +110,7 @@ test('every feature including the former centre is a movable tab with local cont
   const node=scene.nodes.get('person');
   assert.ok(node.open>.9);
   assert.equal(node.isTab,true);
-  assert.ok(['phone','square','rectangle','sphere','cylinder','cube','wave'].includes(node.shape));
+  assert.ok(REALITY_TAB_FORM_IDS.includes(node.shape));
   assert.equal(node.liveContent.visible,true);
   const formerCenter=scene.nodes.get('block-world');
   assert.equal(formerCenter.isTab,true);assert.equal(formerCenter.shape,'sphere');assert.equal(formerCenter.core,undefined);
@@ -178,7 +179,10 @@ test('each supported tab form rebuilds the same selectable feature object',()=>{
     const tab=scene.nodes.get('contracts');
     assert.equal(tab.shape,shape);assert.equal(tab.tabMesh.name,`contracts/spatial-tab/${shape}`);
     assert.ok(Math.abs(tab.root.scale.x-1.25)<.001,`${shape} keeps its configured size`);
-    if(['sphere','cylinder'].includes(shape))assert.equal(tab.tabMesh.material,tab.shellMaterial,`${shape} stays readable instead of wrapping feature text around a curved surface`);
+    assert.equal(tab.tabMesh.geometry.userData.realityShape,shape);
+    assert.equal(tab.tabMesh.material.length,tab.surfaceCharts.length,`${shape} maps its complete body through explicit chart materials`);
+    assert.deepEqual(tab.tabMesh.geometry.groups.map(group=>group.materialIndex),tab.surfaceCharts.map(chart=>chart.index));
+    assert.ok(!tab.formParts.some(part=>part.name.includes('reading-cap')));
     assert.equal(tab.core,undefined);assert.equal(tab.faces,undefined);
     assert.ok(targets.every(object=>scene.resolve(object)),`${shape} ray targets keep their feature ids`);
   }

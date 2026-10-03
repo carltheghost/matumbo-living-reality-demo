@@ -58,6 +58,25 @@ body.assembly-mode #immersive-toolbar{display:flex!important;top:72px!important;
   #reality-assembly [data-fold-inspector]{min-width:44px;min-height:44px}
   .assembly-inspector-folded .assembly-inspector{max-height:72px;padding:7px 12px;bottom:207px}
 }
+
+/* Semantic source stays real and focusable; visible ink is on the body mesh.
+   No opacity, transform or clipping here: native focused inputs retain IME. */
+body.assembly-mode #reality-assembly .reality-surface-semantic-owner{
+  position:fixed!important;left:-12000px!important;right:auto!important;top:0!important;bottom:auto!important;
+  width:760px!important;min-width:0!important;max-width:760px!important;height:auto!important;max-height:none!important;
+  transform:none!important;clip-path:none!important;contain:none!important;filter:none!important;backdrop-filter:none!important;
+  overflow:visible!important;opacity:1!important;visibility:visible!important;pointer-events:auto!important;
+}
+body.assembly-mode #reality-assembly.assembly-accessible-text .reality-surface-semantic-owner{
+  left:50%!important;top:100px!important;transform:translateX(-50%)!important;width:min(760px,calc(100vw - 28px))!important;
+  max-height:calc(100dvh - 150px)!important;overflow:auto!important;background:#071725!important;padding:24px!important;
+  border:1px solid #65b8e0!important;border-radius:14px!important;z-index:500!important;
+}
+.reality-surface-native-editor{background:#091d2c!important;color:#f0faff!important;border:2px solid #79d5ff!important;border-radius:8px!important;padding:10px!important;font:17px/1.4 system-ui!important;box-shadow:0 8px 32px #000b!important;box-sizing:border-box!important;clip-path:none!important}
+#reality-assembly .assembly-surface-help{display:none;position:fixed;bottom:18px;left:50%;transform:translateX(-50%);color:#a8c9da;font-size:13px;pointer-events:none;white-space:nowrap}
+#reality-assembly.assembly-has-live-object-surface .assembly-surface-help{display:block}
+#reality-assembly:not(.assembly-has-live-object-surface) [data-surface-text-view]{display:none}
+@media(max-width:700px){#reality-assembly .assembly-header [data-surface-text-view]{padding:7px;font-size:12px}#reality-assembly .assembly-surface-help{font-size:11px;bottom:22px}}
 @media(max-width:700px){
   #reality-assembly [data-directory-toggle]{display:block;min-height:44px;font-size:10px}
   #reality-assembly.assembly-directory-open .assembly-directory{display:flex;pointer-events:auto;position:absolute;inset:120px 13px 88px;width:auto;padding:16px;background:#061320;border:1px solid #52839d;border-radius:10px;z-index:500;box-shadow:0 10px 40px #000b}
@@ -495,3 +514,19 @@ body.ourplace-designed #reality-assembly .assembly-primary{border-color:var(--ou
   body.assembly-mode #reality-assembly.assembly-tools-open .assembly-toolbar{display:flex;bottom:calc(74px + env(safe-area-inset-bottom));left:10px;right:10px;max-height:34dvh;overflow:auto;transform:none;width:auto;flex-wrap:wrap}
   #reality-assembly.assembly-tools-open .assembly-branches{bottom:calc(86px + var(--assembly-toolbar-height,184px) + env(safe-area-inset-bottom));left:10px;right:10px;max-height:28dvh;overflow:auto}
 }
+/* The address follows the spatial hierarchy and remains usable on a phone. */
+#reality-assembly .assembly-breadcrumbs{display:flex;align-items:center;gap:9px;pointer-events:auto;justify-content:flex-start;margin:0 0 12px;max-width:100%;font-size:13px;color:#8aa7bc}
+#reality-assembly .assembly-breadcrumbs button{position:static!important;padding:6px 10px!important;min-height:36px!important;margin:0!important;font-size:13px!important}
+#reality-assembly .assembly-breadcrumbs strong{color:#def4fc;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#reality-assembly[data-space-view=feature] .assembly-space-context{display:block!important}
+#reality-assembly[data-space-view=feature] [data-space-back]{display:none!important}
+#reality-assembly.assembly-has-live-object-surface .assembly-selection-hint{display:none}
+#reality-assembly.assembly-has-live-object-surface .assembly-status{bottom:47px!important}
+@media(max-width:700px){
+ #reality-assembly .assembly-space-context{top:120px!important}
+ #reality-assembly .assembly-breadcrumbs{gap:5px;font-size:11px;margin-bottom:6px}
+ #reality-assembly .assembly-breadcrumbs button{font-size:11px!important;padding:5px 7px!important}
+ #reality-assembly .assembly-header{min-height:74px;align-content:center}
+}
+body.assembly-mode #reality-assembly .reality-surface-semantic-owner::before,
+body.assembly-mode #reality-assembly .reality-surface-semantic-owner::after{display:none!important}

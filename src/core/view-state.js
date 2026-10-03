@@ -2,7 +2,7 @@ import {
   SAMPLE_CONTRIBUTIONS,
   SAMPLE_UPDATED_AT,
   assembleWorldState,
-} from "./world-state.js?v=20261003-complete8";
+} from "./world-state.js?v=20261003-skin360";
 
 export const PROJECTION_ENVELOPE_SCHEMA_VERSION = 1;
 

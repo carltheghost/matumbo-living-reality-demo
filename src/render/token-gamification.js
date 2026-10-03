@@ -16,13 +16,13 @@
  */
 
 import * as THREE from "three";
-import { ensureTumboTokenFacade, formatSimAmount as fmtFluff } from "../domains/token.js?v=20261003-complete8";
-import { activityForEngine } from '../domains/token-activity.js?v=20261003-complete8';
+import { ensureTumboTokenFacade, formatSimAmount as fmtFluff } from "../domains/token.js?v=20261003-skin360";
+import { activityForEngine } from '../domains/token-activity.js?v=20261003-skin360';
 import {
   HUNGER_MAX,
   RIBBON_CAP,
   LEADERBOARD_SIZE,
-} from "../domains/token-config.js?v=20261003-complete8";
+} from "../domains/token-config.js?v=20261003-skin360";
 import {
   GAMIFICATION_VERSION,
   SIM_BOUNDARY_NOTE,
@@ -30,7 +30,7 @@ import {
   createTokenGamification,
   seedDemoBurrow,
   presenceDayKey,
-} from "../domains/token-gamification.js?v=20261003-complete8";
+} from "../domains/token-gamification.js?v=20261003-skin360";
 
 export const TOKEN_GAMIFICATION_CONSOLE_SOURCE = "token-gamification-console";
 export const TOKEN_GAMIFICATION_VERSION = GAMIFICATION_VERSION;

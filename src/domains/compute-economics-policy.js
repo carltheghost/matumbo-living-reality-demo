@@ -11,7 +11,7 @@ import {
   toComputeUnits,
   fromComputeUnits,
   COMPUTE_UNITS_PER_USD
-} from "./compute-account.js?v=20261003-complete8";
+} from "./compute-account.js?v=20261003-skin360";
 
 function money(value, label) {
   const number = Number(value);

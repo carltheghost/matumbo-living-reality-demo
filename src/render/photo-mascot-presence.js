@@ -39,9 +39,9 @@
  */
 
 import * as THREE from "three";
-import { buildPhotoMascot } from "./photo-mascot.js?v=20261003-complete8";
-import { createMascotMotion, MASCOT_STATES } from "../domains/mascot-motion.js?v=20261003-complete8";
-import { getMascotLook, getPhoto, setMascotLook, preloadPhotos } from "./photo-mascot-set.js?v=20261003-complete8";
+import { buildPhotoMascot } from "./photo-mascot.js?v=20261003-skin360";
+import { createMascotMotion, MASCOT_STATES } from "../domains/mascot-motion.js?v=20261003-skin360";
+import { getMascotLook, getPhoto, setMascotLook, preloadPhotos } from "./photo-mascot-set.js?v=20261003-skin360";
 
 const STORAGE_KEY = "tumbo-mascot-presence-pos";
 const MOBILE_QUERY = "(max-width: 700px)";

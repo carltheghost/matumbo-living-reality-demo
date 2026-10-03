@@ -1,5 +1,5 @@
-import { FEATURE_DEFINITIONS } from './feature-navigator.js?v=20261003-complete8';
-import { LENS_SPACES, lensDirectory, lensRuntimeStatus } from './reality-lens-chrome.js?v=20261003-complete8';
+import { FEATURE_DEFINITIONS } from './feature-navigator.js?v=20261003-skin360';
+import { LENS_SPACES, lensDirectory, lensRuntimeStatus } from './reality-lens-chrome.js?v=20261003-skin360';
 
 const STYLE = `
 #matumbo-command-deck{position:fixed;inset:0;z-index:110;pointer-events:none;color:#e2f0f7;font:14px/1.5 system-ui,sans-serif;--mcd-line:rgba(133,196,218,.24)}

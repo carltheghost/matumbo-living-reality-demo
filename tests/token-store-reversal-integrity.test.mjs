@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createTokenEngine, receiptChainHash, VOID_ACCOUNT, MARKET_MAKER, REVERSE_WINDOW_TICKS } from '../src/domains/token.js?v=20261003-complete8';
-import { serializeTokenEngine, loadTokenEngine } from '../src/domains/token-store.js?v=20261003-complete8';
-import { createEconomicKernel } from '../src/domains/economic-kernel.js?v=20261003-complete8';
+import { createTokenEngine, receiptChainHash, VOID_ACCOUNT, MARKET_MAKER, REVERSE_WINDOW_TICKS } from '../src/domains/token.js?v=20261003-skin360';
+import { serializeTokenEngine, loadTokenEngine } from '../src/domains/token-store.js?v=20261003-skin360';
+import { createEconomicKernel } from '../src/domains/economic-kernel.js?v=20261003-skin360';
 
 function fixture() {
   const engine = createTokenEngine();

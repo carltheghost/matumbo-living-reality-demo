@@ -2,19 +2,19 @@ import {
   CREATOR_CATEGORIES,
   parseSharedCreatorDesign,
   exportSharedCreatorDerivative
-} from '../domains/creator-economy.js?v=20261003-complete8';
+} from '../domains/creator-economy.js?v=20261003-skin360';
 import {
   economicDigest
-} from '../domains/economic-kernel.js?v=20261003-complete8';
+} from '../domains/economic-kernel.js?v=20261003-skin360';
 import {
   runLocalComputeTool
-} from '../domains/compute-jobs.js?v=20261003-complete8';
+} from '../domains/compute-jobs.js?v=20261003-skin360';
 import {
   COMPUTE_PROVIDERS
-} from '../domains/compute-exchange.js?v=20261003-complete8';
+} from '../domains/compute-exchange.js?v=20261003-skin360';
 import {
   wireOurplaceFinance
-} from './ourplace-finance.js?v=20261003-complete8';
+} from './ourplace-finance.js?v=20261003-skin360';
 
 /** Native content for the existing TUMBO body: one task and one tab at a time. */
 export function mountOurplaceEconomy({

@@ -1,4 +1,4 @@
-import { isExpired, isIssuedHandle, isHandleRevoked } from './opaque-handle.js?v=20261003-complete8';
+import { isExpired, isIssuedHandle, isHandleRevoked } from './opaque-handle.js?v=20261003-skin360';
 
 const sessions = new WeakMap();
 const HANDLE_ID = /^h_[0-9a-f]{8}$/i;

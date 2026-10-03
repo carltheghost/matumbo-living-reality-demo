@@ -8,7 +8,7 @@ import {
   createArenaGamesContribution,
   replayArenaGame,
   resetArenaGame,
-} from "../domains/arena-games.js?v=20261003-complete8";
+} from "../domains/arena-games.js?v=20261003-skin360";
 
 const freeze = (value) => Object.freeze(value);
 

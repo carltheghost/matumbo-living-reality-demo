@@ -3,8 +3,8 @@
  * QuoteEngine owns every balance and receipt. Tokens and open challenges stay
  * in memory; they are local capabilities, not network authentication/signing.
  */
-import { assertAccount, assertFluff, newId } from './token.js?v=20261003-complete8';
-import { FLUFF_PER_TUMBO } from './token-config.js?v=20261003-complete8';
+import { assertAccount, assertFluff, newId } from './token.js?v=20261003-skin360';
+import { FLUFF_PER_TUMBO } from './token-config.js?v=20261003-skin360';
 
 export const DEFAULT_PRICING = Object.freeze({
   'cube.spawn': 50,

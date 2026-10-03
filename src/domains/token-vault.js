@@ -1,6 +1,6 @@
 /** Vault positions and savings pockets over the unified local token ledger. */
-import { createTokenEngine, assertAccount, assertAsset, assertFluff, CONFIG, mulDivFloor, fmt, fnv1a64Hex } from './token.js?v=20261003-complete8';
-import { sha256Hex } from './token-sha256.js?v=20261003-complete8';
+import { createTokenEngine, assertAccount, assertAsset, assertFluff, CONFIG, mulDivFloor, fmt, fnv1a64Hex } from './token.js?v=20261003-skin360';
+import { sha256Hex } from './token-sha256.js?v=20261003-skin360';
 export { mulDivFloor };
 export const sha256HexAscii = sha256Hex;
 export const TOKEN_VAULT_SUPPLY_FLUFF = CONFIG.supply;

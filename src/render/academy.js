@@ -7,7 +7,7 @@ import {
   getAcademyLesson,
   resetAcademy,
   selectAcademyLesson,
-} from "../domains/academy.js?v=20261003-complete8";
+} from "../domains/academy.js?v=20261003-skin360";
 
 export { ACADEMY_CONSOLE_SOURCE };
 

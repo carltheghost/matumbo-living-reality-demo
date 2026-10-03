@@ -23,9 +23,9 @@ import {
   SCORE_RIBBON_BONUS,
   LEADERBOARD_SIZE,
   RIBBON_CAP,
-} from "./token-config.js?v=20261003-complete8";
-import { mulDivFloor } from "./token.js?v=20261003-complete8";
-import { TokenActivityLedger, TokenError } from './token-activity.js?v=20261003-complete8';
+} from "./token-config.js?v=20261003-skin360";
+import { mulDivFloor } from "./token.js?v=20261003-skin360";
+import { TokenActivityLedger, TokenError } from './token-activity.js?v=20261003-skin360';
 
 export const GAMIFICATION_VERSION = 1;
 export const GAMIFICATION_SOURCE = "tumbo-token-gamification";

@@ -1,5 +1,5 @@
 import * as THREE from 'three?v=20260922-cache2';
-import {isCompactViewport,resolvePixelRatioCap} from './render-perf.js?v=20261003-complete8';
+import {isCompactViewport,resolvePixelRatioCap} from './render-perf.js?v=20261003-skin360';
 
 /** Geometry is a view, never the authority for contract records. */
 export function mountMarketConstellation({host,onSelect}) {
@@ -38,7 +38,9 @@ export function mountMarketConstellation({host,onSelect}) {
   renderer.domElement.addEventListener('pointerup',e=>{if(!pointer)return;const moved=Math.hypot(e.clientX-pointer.x,e.clientY-pointer.y);pointer=null;if(moved>5)return;const rect=renderer.domElement.getBoundingClientRect();raycaster.setFromCamera(new THREE.Vector2((e.clientX-rect.left)/rect.width*2-1,1-(e.clientY-rect.top)/rect.height*2),camera);const hit=raycaster.intersectObjects(meshes,false)[0];if(hit)onSelect(hit.object.userData.id);});
   renderer.domElement.addEventListener('pointercancel',()=>{pointer=null;});
   renderer.domElement.addEventListener('wheel',e=>{e.preventDefault();distance=Math.max(3,Math.min(200,distance+e.deltaY*.01));draw();},{passive:false});
+  const captureSurface=()=>renderer.render(scene,camera);
+  renderer.domElement.addEventListener('matumbo:surface-capture',captureSurface);
   const observer=new ResizeObserver(draw);observer.observe(host);draw();
-  addEventListener('pagehide',()=>{observer.disconnect();dispose();renderer.dispose();},{once:true});
+  addEventListener('pagehide',()=>{observer.disconnect();renderer.domElement.removeEventListener('matumbo:surface-capture',captureSurface);dispose();renderer.dispose();},{once:true});
   return {update,setVisible(value){visible=value;draw();},getSnapshot(){const bounds=renderer.domElement.getBoundingClientRect();return {ids:meshes.map(m=>m.userData.id),targets:meshes.map(mesh=>{const point=mesh.position.clone().project(camera);return {id:mesh.userData.id,x:bounds.left+(point.x+1)*bounds.width/2,y:bounds.top+(1-point.y)*bounds.height/2};})};}};
 }

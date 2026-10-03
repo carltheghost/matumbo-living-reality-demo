@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createTokenEngine, TumboUserLedger, seedDemoWallet } from '../src/domains/token.js?v=20261003-complete8';
-import { serializeTokenEngine, loadTokenEngine } from '../src/domains/token-store.js?v=20261003-complete8';
-import { createEconomicRuntime, ECONOMIC_STORAGE_KEY } from '../src/domains/economic-runtime.js?v=20261003-complete8';
-import { createEconomicKernel, economicDigest, ECONOMIC_POOLS } from '../src/domains/economic-kernel.js?v=20261003-complete8';
-import { createTokenTransferLedger } from '../src/domains/token-transfers.js?v=20261003-complete8';
-import { createTokenFacade } from '../src/domains/token-facade.js?v=20261003-complete8';
-import { createEconomicWorldContribution } from '../src/domains/economic-world-projection.js?v=20261003-complete8';
+import { createTokenEngine, TumboUserLedger, seedDemoWallet } from '../src/domains/token.js?v=20261003-skin360';
+import { serializeTokenEngine, loadTokenEngine } from '../src/domains/token-store.js?v=20261003-skin360';
+import { createEconomicRuntime, ECONOMIC_STORAGE_KEY } from '../src/domains/economic-runtime.js?v=20261003-skin360';
+import { createEconomicKernel, economicDigest, ECONOMIC_POOLS } from '../src/domains/economic-kernel.js?v=20261003-skin360';
+import { createTokenTransferLedger } from '../src/domains/token-transfers.js?v=20261003-skin360';
+import { createTokenFacade } from '../src/domains/token-facade.js?v=20261003-skin360';
+import { createEconomicWorldContribution } from '../src/domains/economic-world-projection.js?v=20261003-skin360';
 const at = Date.UTC(2026, 9, 3);
 const storage = () => { const rows = new Map(); return { getItem: key => rows.get(key) ?? null, setItem: (key, value) => rows.set(key, value) }; };
 function fixture(store = storage()) {

@@ -32,7 +32,7 @@ import {
   buildAiPrompt,
   classifyWebTarget,
   getWebAiAssistant,
-} from "../domains/web-ai.js?v=20261003-complete8";
+} from "../domains/web-ai.js?v=20261003-skin360";
 import {
   COMPUTE_EXCHANGE_BOUNDARY,
   COMPUTE_PROVIDERS,
@@ -40,18 +40,18 @@ import {
   createComputeExchangeLedger,
   normalizeUsageReceipt,
   selectProviderRoute,
-} from "../domains/compute-exchange.js?v=20261003-complete8";
+} from "../domains/compute-exchange.js?v=20261003-skin360";
 import {
   COMPUTE_ACCOUNT_BOUNDARY,
   createComputeAccount,
-} from "../domains/compute-account.js?v=20261003-complete8";
+} from "../domains/compute-account.js?v=20261003-skin360";
 import {
   CONTRIBUTION_VAULT_BOUNDARY,
   CONTRIBUTION_SCOPES,
   createContributionVault,
-} from "../domains/contribution-vault.js?v=20261003-complete8";
-import { createEconomicTimeline } from "../domains/economic-timeline.js?v=20261003-complete8";
-import { evaluateComputeEconomics } from "../domains/compute-economics-policy.js?v=20261003-complete8";
+} from "../domains/contribution-vault.js?v=20261003-skin360";
+import { createEconomicTimeline } from "../domains/economic-timeline.js?v=20261003-skin360";
+import { evaluateComputeEconomics } from "../domains/compute-economics-policy.js?v=20261003-skin360";
 
 export { WEB_AI_CONSOLE_SOURCE };
 

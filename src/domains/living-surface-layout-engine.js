@@ -1,4 +1,4 @@
-import {REALITY_TAB_FORMS, realityTabRadius} from './reality-tab-layout.js?v=20261003-complete8';
+import {REALITY_TAB_FORMS, realityTabRadius} from './reality-tab-layout.js?v=20261003-skin360';
 
 /**
  * Geometry and layout rules for Reality Lens living objects.

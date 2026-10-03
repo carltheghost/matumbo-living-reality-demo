@@ -158,7 +158,7 @@ export function mountApiConnections({ documentRoot = globalThis.document, window
   if (previous) return null;
   const stylesheet = element(documentRoot, 'link');
   stylesheet.rel = 'stylesheet';
-  stylesheet.href = new URL('./api-connections.css?v=20261003-complete8', import.meta.url).href;
+  stylesheet.href = new URL('./api-connections.css?v=20261003-skin360', import.meta.url).href;
   documentRoot.head?.appendChild(stylesheet);
   const trigger = element(documentRoot, 'button', 'api-connections-trigger', 'Connections');
   trigger.id = 'api-connections-trigger'; trigger.type = 'button';

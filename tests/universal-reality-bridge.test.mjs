@@ -7,8 +7,14 @@ import {
   entitiesForFeature,
   inferProjectionEntityKind,
   projectionEntitiesForFeature,
+  shouldAutoMountUniversalBridge,
 } from '../src/render/universal-reality-bridge.js';
 import { createUniversalObjectRenderer } from '../src/universal/universal-object-renderer.js';
+
+test('canonical Home and space reloads retain their owner; the legacy bridge requires explicit selection',()=>{
+  for(const route of ['', '?feature=reality-lens', '?feature=reality-lens&space=agents', '?feature=agent&surface=universal'])assert.equal(shouldAutoMountUniversalBridge(route),false,route);
+  assert.equal(shouldAutoMountUniversalBridge('?feature=reality-lens&surface=universal'),true);
+});
 
 test('contract records become contract + Covenant Slip + contractor anatomy',()=>{
   const contract={
@@ -107,7 +113,7 @@ test('live index loads the universal bridge after main and the bridge is Reality
   const bridgeIndex=html.indexOf('./src/render/universal-reality-bridge.js?v=');
   assert.ok(mainIndex>=0);
   assert.ok(bridgeIndex>mainIndex);
-  assert.match(bridge,/params\.get\('feature'\)!==ROUTE_FEATURE/);
+  assert.match(bridge,/if\(!shouldAutoMountUniversalBridge\(window\.location\.search\)\)return/);
   assert.match(bridge,/__TUMBO_REALITY_ASSEMBLY__/);
   assert.match(bridge,/__TUMBO_CONTRACT_LEDGER__/);
   assert.match(bridge,/__TUMBO_CONTRACT_ATELIER__/);

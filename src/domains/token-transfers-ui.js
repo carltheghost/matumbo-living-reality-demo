@@ -15,11 +15,11 @@ import {
   makeGlassCube,
   addGlassLighting,
   glassTintFor,
-} from "../render/glass-style.js?v=20261003-complete8";
+} from "../render/glass-style.js?v=20261003-skin360";
 import {
   attachTokenTransfers,
   FLUFF_PER_TUMBO_SIM,
-} from "./token-transfers.js?v=20261003-complete8";
+} from "./token-transfers.js?v=20261003-skin360";
 
 export const TOKEN_TRANSFER_UI_VERSION = "20260922-token-transfers-cube3";
 export const TOKEN_TRANSFER_UI_SOURCE = "tumbo-token-transfer-console";

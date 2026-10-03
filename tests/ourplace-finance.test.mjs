@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createTokenEngine } from '../src/domains/token.js?v=20261003-complete8';
-import { createEconomicKernel, ECONOMIC_POOLS } from '../src/domains/economic-kernel.js?v=20261003-complete8';
-import { createEconomicFinance } from '../src/domains/economic-finance.js?v=20261003-complete8';
-import { wireOurplaceFinance } from '../src/render/ourplace-finance.js?v=20261003-complete8';
+import { createTokenEngine } from '../src/domains/token.js?v=20261003-skin360';
+import { createEconomicKernel, ECONOMIC_POOLS } from '../src/domains/economic-kernel.js?v=20261003-skin360';
+import { createEconomicFinance } from '../src/domains/economic-finance.js?v=20261003-skin360';
+import { wireOurplaceFinance } from '../src/render/ourplace-finance.js?v=20261003-skin360';
 
 // Synthetic form/event harness verifies domain continuation logic, not browser layout.
 class FormNode {

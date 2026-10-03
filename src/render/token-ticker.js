@@ -132,7 +132,7 @@ export async function resolveTokenFacade() {
     if (typeof window !== 'undefined' && window.TumboToken) return window.TumboToken;
   } catch { /* ignore */ }
   try {
-    const mod = await import('../domains/token.js?v=20261003-complete8');
+    const mod = await import('../domains/token.js?v=20261003-skin360');
     if (mod && typeof mod.ensureTumboTokenFacade === 'function') {
       return mod.ensureTumboTokenFacade({ seed: true });
     }
@@ -310,7 +310,7 @@ export function mountTokenTicker({ documentRoot = (typeof document !== 'undefine
   try {
     const link = documentRoot.createElement('link');
     link.rel = 'stylesheet';
-    link.href = new URL('./token-ticker.css?v=20261003-complete8', import.meta.url).href;
+    link.href = new URL('./token-ticker.css?v=20261003-skin360', import.meta.url).href;
     documentRoot.head.append(link);
   } catch { /* CSS is cosmetic; never break the panel */ }
 
@@ -370,7 +370,7 @@ export function mountTokenTicker({ documentRoot = (typeof document !== 'undefine
       }
       facade = found;
       try {
-        const mod = await import('../domains/token.js?v=20261003-complete8');
+        const mod = await import('../domains/token.js?v=20261003-skin360');
         if (mod && Number.isFinite(Number(mod.REVERSE_WINDOW_TICKS))) {
           windowTicks = Number(mod.REVERSE_WINDOW_TICKS);
         }

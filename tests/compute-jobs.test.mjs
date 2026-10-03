@@ -2,25 +2,25 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createTokenEngine
-} from '../src/domains/token.js?v=20261003-complete8';
+} from '../src/domains/token.js?v=20261003-skin360';
 import {
   createEconomicKernel,
   economicDigest,
   ECONOMIC_POOLS
-} from '../src/domains/economic-kernel.js?v=20261003-complete8';
+} from '../src/domains/economic-kernel.js?v=20261003-skin360';
 import {
   createComputeJobs,
   runLocalComputeTool
-} from '../src/domains/compute-jobs.js?v=20261003-complete8';
+} from '../src/domains/compute-jobs.js?v=20261003-skin360';
 import {
   createComputeAccount
-} from '../src/domains/compute-account.js?v=20261003-complete8';
+} from '../src/domains/compute-account.js?v=20261003-skin360';
 import {
   createComputeExchangeLedger
-} from '../src/domains/compute-exchange.js?v=20261003-complete8';
+} from '../src/domains/compute-exchange.js?v=20261003-skin360';
 import {
   createContributionVault
-} from '../src/domains/contribution-vault.js?v=20261003-complete8';
+} from '../src/domains/contribution-vault.js?v=20261003-skin360';
 const at = Date.UTC(2026, 9, 3);
 
 function fixture() {

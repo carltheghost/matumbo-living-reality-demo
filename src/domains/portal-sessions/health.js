@@ -1,5 +1,5 @@
-import { isExpired } from './opaque-handle.js?v=20261003-complete8';
-import { sessionHealthView } from './session.js?v=20261003-complete8';
+import { isExpired } from './opaque-handle.js?v=20261003-skin360';
+import { sessionHealthView } from './session.js?v=20261003-skin360';
 
 const NEXT_CHECK_MS = 1000;
 

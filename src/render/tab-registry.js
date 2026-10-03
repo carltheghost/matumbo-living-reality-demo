@@ -26,8 +26,8 @@
  * dock" and can never red-banner the boot.
  */
 
-import { TabEngine } from './tab-engine.js?v=20261003-complete8';
-import { initTabAR } from './tab-ar-tabs.js?v=20261003-complete8';
+import { TabEngine } from './tab-engine.js?v=20261003-skin360';
+import { initTabAR } from './tab-ar-tabs.js?v=20261003-skin360';
 
 const NARROW_QUERY = '(max-width:700px)';
 

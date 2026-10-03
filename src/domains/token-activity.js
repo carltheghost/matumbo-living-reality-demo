@@ -1,6 +1,6 @@
 /** Local activity adapter. All financial postings use the unified QuoteEngine. */
-import { createTokenEngine, assertAccount, isUserAccount, assertAsset, assertFluff } from './token.js?v=20261003-complete8';
-import { FAUCET_DRIP_FLUFF, RIBBON_CAP } from './token-config.js?v=20261003-complete8';
+import { createTokenEngine, assertAccount, isUserAccount, assertAsset, assertFluff } from './token.js?v=20261003-skin360';
+import { FAUCET_DRIP_FLUFF, RIBBON_CAP } from './token-config.js?v=20261003-skin360';
 
 export class TokenError extends Error {
   constructor(message, code = 'INVALID_PARAM') { super(message); this.name = 'TokenError'; this.code = code; }

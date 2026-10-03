@@ -1,4 +1,4 @@
-import { isIssuedHandle, isHandleRevoked } from './opaque-handle.js?v=20261003-complete8';
+import { isIssuedHandle, isHandleRevoked } from './opaque-handle.js?v=20261003-skin360';
 
 const STATES = Object.freeze(['created', 'active', 'idle', 'closing', 'closed']);
 const HEALTH_VIEW = Symbol('portal-session-health-view');

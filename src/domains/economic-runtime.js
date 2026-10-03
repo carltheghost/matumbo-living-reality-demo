@@ -4,33 +4,33 @@ import {
   economicJson,
   economicDigest,
   ECONOMIC_POOLS
-} from './economic-kernel.js?v=20261003-complete8';
+} from './economic-kernel.js?v=20261003-skin360';
 import {
   createEconomicFinance
-} from './economic-finance.js?v=20261003-complete8';
+} from './economic-finance.js?v=20261003-skin360';
 import {
   createComputeJobs
-} from './compute-jobs.js?v=20261003-complete8';
+} from './compute-jobs.js?v=20261003-skin360';
 import {
   createComputeAccount
-} from './compute-account.js?v=20261003-complete8';
+} from './compute-account.js?v=20261003-skin360';
 import {
   createComputeExchangeLedger
-} from './compute-exchange.js?v=20261003-complete8';
+} from './compute-exchange.js?v=20261003-skin360';
 import {
   createContributionVault
-} from './contribution-vault.js?v=20261003-complete8';
+} from './contribution-vault.js?v=20261003-skin360';
 import {
   createEconomicTimeline
-} from './economic-timeline.js?v=20261003-complete8';
+} from './economic-timeline.js?v=20261003-skin360';
 import {
   createCreatorEconomy,
   createDesignSession
-} from './creator-economy.js?v=20261003-complete8';
+} from './creator-economy.js?v=20261003-skin360';
 import {
   serializeTokenEngine,
   loadTokenEngine
-} from './token-store.js?v=20261003-complete8';
+} from './token-store.js?v=20261003-skin360';
 
 export const ECONOMIC_STORAGE_KEY = 'matumbo.ourplace.economic-runtime.v1';
 const CORE_FIELDS = ['ledger', '_receipts', '_issuedQuotes', '_issuedQuoteIds', '_executedQuoteIds', '_cancelledQuoteIds', '_reversedJournalKeys', 'botPricing'];

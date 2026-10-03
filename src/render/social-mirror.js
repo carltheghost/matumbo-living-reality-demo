@@ -30,7 +30,7 @@ import {
   SOCIAL_MIRROR_TABS,
   createSocialMirrorProjection,
   getSocialMirrorTickerItems,
-} from "../domains/social-mirror.js?v=20261003-complete8";
+} from "../domains/social-mirror.js?v=20261003-skin360";
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];

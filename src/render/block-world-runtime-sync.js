@@ -3,7 +3,7 @@ import {
   createBlockWorldSnapshot,
   serializeBlockWorldSnapshot,
   validateBlockWorldSnapshot,
-} from "../domains/block-world-snapshot.js?v=20261003-complete8";
+} from "../domains/block-world-snapshot.js?v=20261003-skin360";
 
 export const BLOCK_WORLD_RUNTIME_SYNC_SOURCE = "block-world-runtime-sync";
 export const BLOCK_WORLD_RUNTIME_DEFAULT_ENDPOINT = "http://localhost:8091";

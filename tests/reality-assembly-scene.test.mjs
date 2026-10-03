@@ -2,19 +2,25 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from '../vendor/three-r179.1/build/three.module.js';
 import {buildRealityAssemblyScene} from '../src/render/reality-assembly-scene.js';
-import {createLivingSurfaceMap} from '../src/domains/living-surface-layout-engine.js';
+import {REALITY_TAB_FORMS,REALITY_TAB_FORM_IDS} from '../src/domains/reality-tab-layout.js';
 
-test('curved living objects have a flush readable facet backed by their actual volume',()=>{
+test('curved scene bodies retain their whole geometry and independently mapped exterior charts',()=>{
   for(const shape of ['sphere','cylinder']){
     const parent=new THREE.Scene(),targets=[],feature={id:'agent',assemblyTier:'tab',sources:[]};
     const scene=buildRealityAssemblyScene({THREE,parent,features:[feature],targets});
     scene.apply({selectedId:'agent',mode:'present',objects:[{id:'agent',position:[0,0,0],shape,size:1,locked:false,open:true}]});
-    const node=scene.nodes.get('agent'),face=createLivingSurfaceMap(shape).primary;
+    const node=scene.nodes.get('agent'),form=REALITY_TAB_FORMS[shape];
     node.tabMesh.geometry.computeBoundingBox();
     const bounds=node.tabMesh.geometry.boundingBox;
-    assert.ok(Math.abs(bounds.max.z-(face.position[2]-.018))<.00001,'skin and machined cap share the same seam');
-    assert.ok(bounds.min.z<-.5,'rear volume is retained');
-    assert.ok(bounds.max.x-bounds.min.x>face.width,'shoulders remain around the reading skin');
+    assert.ok(Math.abs(bounds.max.z-form.depth/2)<.00001,'front geometry is not clamped to a flat reading facet');
+    assert.ok(Math.abs(bounds.min.z+form.depth/2)<.00001,'full rear geometry is retained');
+    assert.equal(node.surfaceCharts.length,6);
+    assert.equal(node.tabMesh.geometry.groups.length,6);
+    assert.ok(!node.formParts.some(part=>part.name.includes('reading-cap')),'no separate cap substitutes for the curved surface');
+    const positions=node.tabMesh.geometry.getAttribute('position');
+    if(shape==='sphere')for(let i=0;i<positions.count;i++)assert.ok(Math.abs(Math.hypot(positions.getX(i),positions.getY(i),positions.getZ(i))-form.width/2)<.00001);
+    assert.equal(node.tabMesh.parent,node.root);
+    assert.ok(targets.includes(node.tabMesh));
     scene.destroy();
   }
 });
@@ -144,16 +150,17 @@ test('calm home exposes six real selectable space bodies while clearing feature 
   assert.ok(targets.every(target=>scene.resolve(target)), 'space targets preserve the feature-only identity API');
   for(const entry of scene.groupTargets){
     const groupId=scene.resolveGroup(entry),marker=scene.groupParents.get(groupId);
-    assert.ok(entry.isMesh&&entry.geometry.type==='ExtrudeGeometry','the entry itself is a beveled volumetric body');
+    assert.ok(entry.isMesh&&entry.geometry.isBufferGeometry,'the entry itself is the whole mapped volumetric body');
     assert.equal(marker.root.visible,true);
     assert.equal(marker.core.visible,false);
     assert.equal(marker.ring.visible,false);
     assert.equal(marker.innerRing.visible,false);
     assert.equal(scene.resolve(entry),null,'a space entry does not pretend to be a feature');
     assert.equal(entry.material[0].isMeshBasicMaterial,true,'the actual front stays legible without scene lighting');
-    assert.equal(entry.material[1].isMeshPhysicalMaterial,true,'the body shoulders carry actual lit depth');
+    assert.equal(entry.material.length,entry.geometry.groups.length,'every native chart has its own information material');
+    assert.equal(entry.material[1].isMeshBasicMaterial,true,'curved sides remain readable independently of scene lighting');
     assert.equal(entry.material[1].transparent,false);
-    assert.equal(entry.userData.spaceSilhouette,groupId);
+    assert.equal(entry.userData.spaceSilhouette,{worlds:'cube',people:'sphere',network:'cube',value:'cylinder',agents:'torus',experiences:'triangular-prism'}[groupId]);
   }
   scene.destroy();assert.equal(scene.groupTargets.length,0);assert.equal(targets.length,0);assert.equal(parent.children.length,0);
 });
@@ -195,12 +202,13 @@ test('space bounds include entire entry bodies and phone reflow uses two columns
   assert.equal(phoneColumns.size,2);
   assert.ok(phone.width<desktop.width);
   assert.ok(phone.height>desktop.height);
+  scene.update(.1,0,{reducedMotion:true,cameraDistance:50});scene.layer.updateMatrixWorld(true);
   for(const marker of scene.groupParents.values()){
-    const position=scene.getGroupPosition(marker.id);
-    assert.ok(position.x-2.8>=phone.center[0]-phone.width/2-.001);
-    assert.ok(position.x+2.8<=phone.center[0]+phone.width/2+.001);
-    assert.ok(position.y-1.95>=phone.center[1]-phone.height/2-.001);
-    assert.ok(position.y+1.95<=phone.center[1]+phone.height/2+.001);
+    const physicalBounds=new THREE.Box3().setFromObject(marker.entry);
+    assert.ok(physicalBounds.min.x>=phone.center[0]-phone.width/2-.001);
+    assert.ok(physicalBounds.max.x<=phone.center[0]+phone.width/2+.001);
+    assert.ok(physicalBounds.min.y>=phone.center[1]-phone.height/2-.001);
+    assert.ok(physicalBounds.max.y<=phone.center[1]+phone.height/2+.001);
   }
   assert.throws(()=>scene.setSpaceViewport({width:0,height:800}),/positive finite/);
   assert.throws(()=>scene.setSpaceView('unknown-space'),/Unknown Reality Lens domain/);
@@ -254,67 +262,73 @@ test('busy spaces paginate six desktop or four phone bodies and remember each sp
   scene.destroy();assert.equal(targets.length,0);assert.equal(parent.children.length,0);
 });
 
-test('body previews use readable English and omit diagnostic IDs while curved bodies get a flush native cap',()=>{
+test('body previews preserve readable copy while every complete shape owns mapped selectable charts',()=>{
   const previousDocument=globalThis.document,text=[],draws=[];
-  const context={beginPath(){},roundRect(){},clip(){},ellipse(){},moveTo(){},lineTo(){},closePath(){},fill(){},fillRect(){},createLinearGradient(){return {addColorStop(){}};},measureText(value){return {width:String(value).length*18};},fillText(value){text.push(String(value));draws.push({value:String(value),font:this.font});}};
+  const context={getImageData(x,y,width,height){return {data:new Uint8ClampedArray(width*height*4)};},putImageData(){},beginPath(){},roundRect(){},clip(){},ellipse(){},moveTo(){},lineTo(){},closePath(){},fill(){},fillRect(){},createLinearGradient(){return {addColorStop(){}};},measureText(value){return {width:String(value).length*18};},fillText(value){text.push(String(value));draws.push({value:String(value),font:this.font});}};
   globalThis.document={createElement(){return {width:0,height:0,getContext(){return context;}};}};
   try{
     const parent=new THREE.Scene(),targets=[],scene=buildRealityAssemblyScene({THREE,parent,features:[{id:'agent',label:'My assistant',description:'Help with useful tasks. More detail stays inside.',sources:['INTERNAL-SOURCE-REFERENCE']}],targets});
     scene.apply({selectedId:'agent',mode:'present',objects:[{id:'agent',position:[0,0,0],shape:'sphere',size:1,open:false}]});
     scene.setSpaceView('agents');scene.update(.1,0,{reducedMotion:true,cameraDistance:30});
-    const node=scene.nodes.get('agent'),cap=node.formParts.find(part=>part.name==='agent/native-reading-cap'),face=createLivingSurfaceMap('sphere').primary;
-    assert.ok(cap&&cap.geometry.type==='ShapeGeometry');
-    assert.ok(Math.abs(cap.position.z-(face.position[2]-.018))<.0002,'cap closes the existing machined body seam');
-    assert.equal(cap.material,node.artMaterial);
-    assert.equal(cap.material.isMeshBasicMaterial,true);
-    assert.equal(cap.material.side,THREE.FrontSide,'rear cap typography cannot ghost through the reading front');
-    assert.equal(cap.material.depthWrite,true,'the information front occludes rear shell geometry');
-    assert.ok(cap.material.map.isCanvasTexture);
+    const node=scene.nodes.get('agent');
     assert.equal(node.root.userData.objectTabOwner,'agent');
-    assert.equal(node.surfaceBinding.bodyId,'agent');
-    assert.deepEqual(cap.position.toArray(),node.surfaceBinding.informationFace.position);
-    const capPositions=cap.geometry.getAttribute('position');
-    for(let index=0;index<capPositions.count;index++)assert.ok((capPositions.getX(index)/(face.width/2))**2+(capPositions.getY(index)/(face.height/2))**2<=1.001,'the sphere cap follows its circular physical section within contour rounding');
     assert.ok(text.some(value=>value.includes('My assistant')));
     assert.ok(text.includes('Help with useful tasks.'));
     assert.ok(text.some(value=>value.includes('Open world')));
     assert.ok(text.some(value=>value==='Agents'));
     assert.ok(!text.some(value=>/INTERNAL-SOURCE-REFERENCE|SUPERFICIES|FONTES|CLICCA/.test(value)));
-    assert.ok(targets.every(target=>scene.resolve(target)==='agent'));
-    for(const shape of ['rectangle','phone','wave']){
+    for(const shape of REALITY_TAB_FORM_IDS){
+      const oldBody=node.tabMesh;
       scene.apply({selectedId:'agent',mode:'present',objects:[{id:'agent',position:[0,0,0],shape,size:1,open:false}]});
-      const uv=node.tabMesh.geometry.getAttribute('uv');let minU=1,maxU=0,minV=1,maxV=0;
-      for(const capGroup of node.tabMesh.geometry.groups.filter(group=>group.materialIndex===0))for(let index=capGroup.start;index<capGroup.start+capGroup.count;index++){minU=Math.min(minU,uv.getX(index));maxU=Math.max(maxU,uv.getX(index));minV=Math.min(minV,uv.getY(index));maxV=Math.max(maxV,uv.getY(index));}
-      assert.ok(minU>=-.0001&&maxU<=1.0001&&minV>=-.0001&&maxV<=1.0001,`${shape} artwork covers its own cap instead of clamping world-coordinate UVs`);
-      assert.ok(maxU-minU>.99&&maxV-minV>.99,`${shape} uses the complete texture`);
-    }
-    for(const shape of ['rectangle','phone','wave','square','cube','sphere','cylinder']){
-      scene.apply({selectedId:'agent',mode:'present',objects:[{id:'agent',position:[0,0,0],shape,size:1,open:false}]});
-      const binding=node.surfaceBinding;
-      assert.equal(binding.entityId,binding.bodyId);
-      assert.equal(binding.shape,shape);
-      assert.deepEqual(node.surfaceOutline,binding.contour,'geometry and hit testing share one native contour');
-      const nativeCap=node.formParts.find(part=>part.name==='agent/native-reading-cap');
-      const nativeGeometry=nativeCap?.geometry??node.tabMesh.geometry;nativeGeometry.computeBoundingBox();
-      const physicalZ=nativeCap?nativeCap.position.z:nativeGeometry.boundingBox.max.z;
-      assert.ok(Math.abs(physicalZ-binding.informationFace.position[2])<.0002,`${shape} real front and interaction anchor occupy the same physical seam`);
-      const image=node.artTexture.image;
-      assert.ok(Math.abs(image.width/image.height-binding.informationFace.width/binding.informationFace.height)<.002,`${shape} front typography preserves its physical aspect`);
-      if(nativeCap){
-        const positions=nativeCap.geometry.getAttribute('position');
-        for(let index=0;index<positions.count;index++)assert.ok(binding.contour.some(([x,y])=>Math.abs(x-positions.getX(index))<.0001&&Math.abs(y-positions.getY(index))<.0001),'the curved cap closes the same contour used by its interactive skin');
+      scene.update(.1,0,{reducedMotion:true,cameraDistance:30});scene.layer.updateMatrixWorld(true);
+      const geometry=node.tabMesh.geometry,uv=geometry.getAttribute('uv');
+      assert.equal(geometry.userData.realityShape,shape);
+      assert.equal(node.tabMesh.parent,node.root);
+      assert.equal(node.root.userData.objectTabOwner,'agent');
+      assert.ok(targets.includes(node.tabMesh));
+      if(oldBody!==node.tabMesh)assert.ok(!targets.includes(oldBody),'replaced bodies cannot remain phantom hit targets');
+      assert.ok(targets.every(target=>scene.resolve(target)==='agent'));
+      assert.equal(node.surfaceCharts.length,geometry.groups.length);
+      assert.equal(node.tabMesh.material.length,node.surfaceCharts.length);
+      for(const group of geometry.groups){
+        const material=node.tabMesh.material[group.materialIndex];
+        assert.ok(material.map?.isCanvasTexture,`${shape} chart carries the body preview`);
+        assert.equal(material.map,node.artTexture,'preview text belongs directly to each mapped body chart');
+        assert.equal(material.side,THREE.FrontSide,'hidden back faces cannot project reversed typography through the body');
+        for(let i=group.start;i<group.start+group.count;i++)assert.ok(uv.getX(i)>=-.0001&&uv.getX(i)<=1.0001&&uv.getY(i)>=-.0001&&uv.getY(i)<=1.0001);
       }
+      assert.ok(!node.formParts.some(part=>part.name.includes('reading-cap')));
+      const form=REALITY_TAB_FORMS[shape],x=shape==='torus'?form.width/2-form.depth/2:0;
+      const origin=node.tabMesh.localToWorld(new THREE.Vector3(x,0,4));
+      const direction=new THREE.Vector3(0,0,-1).applyQuaternion(node.tabMesh.getWorldQuaternion(new THREE.Quaternion()));
+      const hits=new THREE.Raycaster(origin,direction).intersectObject(node.tabMesh,false);
+      assert.ok(hits.length,`${shape} native body is raycastable`);
+      assert.equal(scene.resolve(hits[0].object),'agent');
+      assert.ok(node.surfaceCharts[hits[0].face.materialIndex],`${shape} actual hit resolves a chart`);
+      if(shape==='torus')assert.equal(new THREE.Raycaster(node.tabMesh.localToWorld(new THREE.Vector3(0,0,4)),direction).intersectObject(node.tabMesh,false).length,0,'the torus hole remains empty in the mounted scene');
     }
     scene.apply({selectedId:'agent',mode:'present',objects:[{id:'agent',position:[0,0,0],shape:'wave',size:1,open:false}]});
     draws.length=0;scene.setSpaceViewport({width:390,height:844});
-    assert.ok(draws.some(draw=>draw.value==='My assistant'&&draw.font.includes('84px')),'phone gallery titles use readable larger artwork type');
+    assert.ok(draws.some(draw=>draw.value==='My assistant'&&draw.font.includes('84px')),'phone gallery titles retain readable larger typography');
     assert.ok(!draws.some(draw=>draw.value==='Help with useful tasks.'),'small previews reserve their surface for title and action');
-    assert.ok(!scene.groupParents.get('agents').entry.children.some(child=>child.isMesh),'entry typography belongs to its cap without a second decorative plaque');
+    assert.ok(!scene.groupParents.get('agents').entry.children.some(child=>child.isMesh),'entry typography belongs to its own body');
     scene.destroy();assert.equal(parent.children.length,0);assert.equal(targets.length,0);
   }finally{globalThis.document=previousDocument;}
 });
 
-test('six entry architectures have distinct physical silhouettes and bounded native fronts',()=>{
+test('an active 360 surface preserves deliberate object orientation as the scene updates',()=>{
+  const parent=new THREE.Scene(),targets=[],scene=buildRealityAssemblyScene({THREE,parent,features:[{id:'agent',assemblyTier:'tab'}],targets});
+  for(const shape of ['cube','sphere','cylinder','triangular-prism','torus']){
+    scene.apply({selectedId:'agent',mode:'present',objects:[{id:'agent',position:[0,0,0],shape,size:1,open:true}]});
+    const node=scene.nodes.get('agent');node.surface360=true;node.root.rotation.set(.27,.64,-.13);
+    const rotation=node.root.quaternion.clone();
+    scene.update(.1,13,{reducedMotion:false,cameraDistance:6,cameraPosition:new THREE.Vector3(2,3,6)});
+    assert.ok(node.root.quaternion.angleTo(rotation)<1e-7,`${shape} is not forced back toward the camera`);
+  }
+  scene.destroy();assert.equal(targets.length,0);
+});
+
+test('six home spaces expose five complete volumetric families with mapped sides and accurate bounds',()=>{
   const {scene}=spaceScene();scene.setSpaceView(null);scene.setSpaceViewport({width:1440,height:1000});
   scene.update(.1,0,{reducedMotion:true,cameraDistance:50});scene.layer.updateMatrixWorld(true);
   const signatures=new Set(),bounds=scene.getSpaceBounds(null);
@@ -322,8 +336,9 @@ test('six entry architectures have distinct physical silhouettes and bounded nat
     const entry=marker.entry,positions=entry.geometry.getAttribute('position');
     signatures.add([...positions.array].map(value=>Math.round(value*1000)).join(','));
     entry.geometry.computeBoundingBox();
-    assert.ok(entry.geometry.boundingBox.max.z-entry.geometry.boundingBox.min.z>1.2,'the entry is a solid with visible shoulder depth');
-    assert.equal(entry.material[0],marker.entryFace,'the information is the body cap material');
+    assert.ok(entry.geometry.boundingBox.max.z-entry.geometry.boundingBox.min.z>.5,'each entry has actual volume');
+    assert.ok(entry.material.includes(marker.entryFace),'the information is a material of the body itself');
+    assert.equal(entry.material.length,entry.geometry.groups.length);
     assert.equal(marker.entryFace.side,THREE.FrontSide);
     assert.equal(marker.entryFace.depthWrite,true);
     const physicalBounds=new THREE.Box3().setFromObject(entry);
@@ -334,6 +349,10 @@ test('six entry architectures have distinct physical silhouettes and bounded nat
     assert.ok(physicalBounds.min.z>=bounds.center[2]-bounds.depth/2-.001);
     assert.ok(physicalBounds.max.z<=bounds.center[2]+bounds.depth/2+.001);
   }
-  assert.equal(signatures.size,6,'space identity changes actual geometry, not just labels');
+  assert.equal(signatures.size,5,'home visibly includes cube, sphere, cylinder, triangular prism and torus');
+  const torus=scene.groupParents.get('agents').entry;
+  const origin=torus.localToWorld(new THREE.Vector3(0,0,8));
+  const direction=new THREE.Vector3(0,0,-1).applyQuaternion(torus.getWorldQuaternion(new THREE.Quaternion()));
+  assert.equal(new THREE.Raycaster(origin,direction).intersectObject(torus,false).length,0,'the home torus hole remains empty and cannot open the space');
   scene.destroy();
 });

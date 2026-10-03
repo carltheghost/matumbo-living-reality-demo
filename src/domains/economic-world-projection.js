@@ -1,6 +1,6 @@
 import {
   validateProjectionContribution
-} from '../core/world-state.js?v=20261003-complete8';
+} from '../core/world-state.js?v=20261003-skin360';
 export const ECONOMIC_WORLD_SOURCE = 'ourplace-economic-world';
 /** Aggregate observations only. This contribution has no economic action API. */
 export function createEconomicWorldContribution(snapshot, updatedAt = new Date().toISOString()) {

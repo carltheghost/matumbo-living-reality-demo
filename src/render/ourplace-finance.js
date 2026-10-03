@@ -1,9 +1,9 @@
 import {
   ECONOMIC_POOLS
-} from '../domains/economic-kernel.js?v=20261003-complete8';
+} from '../domains/economic-kernel.js?v=20261003-skin360';
 import {
   runLocalComputeTool
-} from '../domains/compute-jobs.js?v=20261003-complete8';
+} from '../domains/compute-jobs.js?v=20261003-skin360';
 
 function fluff(value) {
   if (!/^\d+(?:\.\d{0,3})?$/.test(String(value))) throw new Error('Enter a non-negative amount with at most three decimal places');

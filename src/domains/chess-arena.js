@@ -1,4 +1,4 @@
-import { Chess } from '../vendor/chess-1.4.0/chess.js?v=20261003-complete8';
+import { Chess } from '../vendor/chess-1.4.0/chess.js?v=20261003-skin360';
 
 export const CHESS_ARENA_SOURCE = 'chess-arena';
 export const CHESS_ARENA_START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';

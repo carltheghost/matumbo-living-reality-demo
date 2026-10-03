@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { createTokenEngine } from '../src/domains/token.js?v=20261003-complete8';
-import { serializeTokenEngine, loadTokenEngine } from '../src/domains/token-store.js?v=20261003-complete8';
-import { sha256Hex } from '../src/domains/token-sha256.js?v=20261003-complete8';
-import { createEconomicKernel, ECONOMIC_POOLS, economicJson, economicDigest } from '../src/domains/economic-kernel.js?v=20261003-complete8';
+import { createTokenEngine } from '../src/domains/token.js?v=20261003-skin360';
+import { serializeTokenEngine, loadTokenEngine } from '../src/domains/token-store.js?v=20261003-skin360';
+import { sha256Hex } from '../src/domains/token-sha256.js?v=20261003-skin360';
+import { createEconomicKernel, ECONOMIC_POOLS, economicJson, economicDigest } from '../src/domains/economic-kernel.js?v=20261003-skin360';
 function fixture() {
   const engine = createTokenEngine();
   engine.faucet('u:you', 'TUMBO', 100000, { idempotencyKey: 'test-fund' });

@@ -1,7 +1,7 @@
 /** Local browser API over the canonical QuoteEngine; no second balance store. */
-import { TumboUserLedger, fmt } from './token.js?v=20261003-complete8';
-import { activityForEngine, TokenError } from './token-activity.js?v=20261003-complete8';
-import { attachTokenVault } from './token-vault.js?v=20261003-complete8';
+import { TumboUserLedger, fmt } from './token.js?v=20261003-skin360';
+import { activityForEngine, TokenError } from './token-activity.js?v=20261003-skin360';
+import { attachTokenVault } from './token-vault.js?v=20261003-skin360';
 export const TOKEN_EVENT = 'tumbo:token';
 export function createTokenFacade(owner) {
   const engine = typeof owner?.quote === 'function' && typeof owner?.execute === 'function' && owner?.ledger?.post ? owner : owner?.engine ?? owner?._engine;

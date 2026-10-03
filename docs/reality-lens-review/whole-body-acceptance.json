@@ -1,0 +1,329 @@
+{
+  "generatedAt": "2026-10-03T21:45:14.762464+00:00",
+  "build": "20261003-skin360",
+  "localValidation": {
+    "javascript": {
+      "tests": 2289,
+      "suites": 104,
+      "pass": 2289,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "todo": 0
+    },
+    "python": 20,
+    "runtimeChangedDuringSuite": []
+  },
+  "physicalMouseKeyboard": {
+    "desktop": {
+      "checks": [
+        {
+          "name": "exactly-one-original-button-cube",
+          "pass": true
+        },
+        {
+          "name": "exactly-one-original-button-sphere",
+          "pass": true
+        },
+        {
+          "name": "exactly-one-original-button-cylinder",
+          "pass": true
+        },
+        {
+          "name": "exactly-one-original-button-triangular-prism",
+          "pass": true
+        },
+        {
+          "name": "exactly-one-original-button-torus",
+          "pass": true
+        },
+        {
+          "name": "original-text-native-editor",
+          "pass": true
+        },
+        {
+          "name": "physical-drag-turns-object-without-activating-control",
+          "pass": true
+        },
+        {
+          "name": "original-checkbox",
+          "pass": true
+        },
+        {
+          "name": "on-object-chess-atlas-pixels",
+          "pass": true
+        },
+        {
+          "name": "original-chess-e2-e4-physical-canvas-taps",
+          "pass": true
+        }
+      ],
+      "sourceHashes": {
+        "reality-surface-document.js": "f623dd2f495a1a723bc8a53b0fc24655bd86cea29a6b40b1f38e83dd3c1076cd",
+        "reality-surface-controller.js": "f9b4a00506cfbb380fd80d48a6bf48b3a455e97a062696eea85c6a5bdd8bc9d5",
+        "reality-surface-atlas.js": "4774be29e62cc49cbd2e90ff6a348719f9d1b0430eabd847df99ecf6304734b8",
+        "reality-assembly.js": "b6fbc8911532078719bc15bb53157b85804bd69cd58d7fb5f570f02d43561642",
+        "chess-arena.js": "c543a1e692746d560c473633ebb571540dc32f66e7fec5f13286fbfd9212ce1f"
+      },
+      "chessFirstMove": "e4"
+    },
+    "phone": {
+      "checks": [
+        {
+          "name": "exactly-one-original-button-cube",
+          "pass": true
+        },
+        {
+          "name": "exactly-one-original-button-sphere",
+          "pass": true
+        },
+        {
+          "name": "exactly-one-original-button-cylinder",
+          "pass": true
+        },
+        {
+          "name": "exactly-one-original-button-triangular-prism",
+          "pass": true
+        },
+        {
+          "name": "exactly-one-original-button-torus",
+          "pass": true
+        },
+        {
+          "name": "original-text-native-editor",
+          "pass": true
+        },
+        {
+          "name": "physical-drag-turns-object-without-activating-control",
+          "pass": true
+        },
+        {
+          "name": "original-checkbox",
+          "pass": true
+        },
+        {
+          "name": "on-object-chess-atlas-pixels",
+          "pass": true
+        },
+        {
+          "name": "original-chess-e2-e4-physical-canvas-taps",
+          "pass": true
+        }
+      ],
+      "sourceHashes": {
+        "reality-surface-document.js": "f623dd2f495a1a723bc8a53b0fc24655bd86cea29a6b40b1f38e83dd3c1076cd",
+        "reality-surface-controller.js": "f9b4a00506cfbb380fd80d48a6bf48b3a455e97a062696eea85c6a5bdd8bc9d5",
+        "reality-surface-atlas.js": "4774be29e62cc49cbd2e90ff6a348719f9d1b0430eabd847df99ecf6304734b8",
+        "reality-assembly.js": "b6fbc8911532078719bc15bb53157b85804bd69cd58d7fb5f570f02d43561642",
+        "chess-arena.js": "c543a1e692746d560c473633ebb571540dc32f66e7fec5f13286fbfd9212ce1f"
+      },
+      "chessFirstMove": "e4"
+    }
+  },
+  "navigation": [
+    {
+      "device": "desktop",
+      "evidence": "navigation-route-inventory-desktop-navigation.json",
+      "checks": [
+        {
+          "name": "all-home-vertices-fit-with-eight-pixel-margin",
+          "pass": true
+        },
+        {
+          "name": "physical-torus-hole-does-not-open-space",
+          "pass": true
+        },
+        {
+          "name": "physical-home-body-opens-agents-space",
+          "pass": true
+        },
+        {
+          "name": "physical-feature-body-opens-canonical-agent",
+          "pass": true
+        },
+        {
+          "name": "breadcrumb-space-back-forward-reload-home",
+          "pass": true
+        },
+        {
+          "name": "no-navigation-page-errors",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "device": "phone",
+      "evidence": "navigation-route-inventory-navigation.json",
+      "checks": [
+        {
+          "name": "all-home-vertices-fit-with-eight-pixel-margin",
+          "pass": true
+        },
+        {
+          "name": "physical-torus-hole-does-not-open-space",
+          "pass": true
+        },
+        {
+          "name": "physical-home-body-opens-agents-space",
+          "pass": true
+        },
+        {
+          "name": "physical-feature-body-opens-canonical-agent",
+          "pass": true
+        },
+        {
+          "name": "breadcrumb-space-back-forward-reload-home",
+          "pass": true
+        },
+        {
+          "name": "no-navigation-page-errors",
+          "pass": true
+        }
+      ]
+    }
+  ],
+  "readOnlyRouteInventory": [
+    {
+      "device": "desktop",
+      "routes": [
+        "block-world",
+        "contracts",
+        "person",
+        "rooms",
+        "academy",
+        "world-events",
+        "multi-sport-events",
+        "asset-market",
+        "reality-lens",
+        "runtime-sync",
+        "migration",
+        "asset-token",
+        "launch-distribution",
+        "social-explorer",
+        "social-mirror",
+        "youtube",
+        "paycore",
+        "contract-atelier",
+        "ledger",
+        "t402",
+        "agent",
+        "neural-mesh",
+        "muse-agent",
+        "bot-plaza",
+        "luna-companion",
+        "picture-matter",
+        "nft-atelier",
+        "wardrobe-atelier",
+        "white-paper",
+        "gesture-lens",
+        "gateway",
+        "sports-events",
+        "arena",
+        "chess",
+        "web-ai",
+        "projections"
+      ],
+      "pageErrors": []
+    },
+    {
+      "device": "phone",
+      "routes": [
+        "block-world",
+        "contracts",
+        "person",
+        "rooms",
+        "academy",
+        "world-events",
+        "multi-sport-events",
+        "asset-market",
+        "reality-lens",
+        "runtime-sync",
+        "migration",
+        "asset-token",
+        "launch-distribution",
+        "social-explorer",
+        "social-mirror",
+        "youtube",
+        "paycore",
+        "contract-atelier",
+        "ledger",
+        "t402",
+        "agent",
+        "neural-mesh",
+        "muse-agent",
+        "bot-plaza",
+        "luna-companion",
+        "picture-matter",
+        "nft-atelier",
+        "wardrobe-atelier",
+        "white-paper",
+        "gesture-lens",
+        "gateway",
+        "sports-events",
+        "arena",
+        "chess",
+        "web-ai",
+        "projections"
+      ],
+      "pageErrors": []
+    }
+  ],
+  "youtube": {
+    "checks": [
+      {
+        "name": "live-public-search-through-original-form",
+        "pass": true
+      },
+      {
+        "name": "surface-result-selects-one-original-player",
+        "pass": true
+      },
+      {
+        "name": "rotation-and-five-shapes-keep-player-identity-and-source",
+        "pass": true
+      },
+      {
+        "name": "results-toggle-still-works-after-shape-change",
+        "pass": true
+      }
+    ],
+    "liveResults": 8,
+    "controlledFixture": false,
+    "samePhonePlayer": {
+      "samePlayer": true,
+      "iframeCount": 1,
+      "overflow": false
+    },
+    "playback": {
+      "first": {
+        "time": 0,
+        "paused": false,
+        "readyState": 0,
+        "networkState": 2,
+        "error": null
+      },
+      "second": {
+        "time": 0,
+        "paused": false,
+        "readyState": 0,
+        "networkState": 2,
+        "error": null
+      },
+      "verified": false
+    },
+    "sourceHashes": {
+      "reality-surface-document.js": "f623dd2f495a1a723bc8a53b0fc24655bd86cea29a6b40b1f38e83dd3c1076cd",
+      "reality-surface-controller.js": "f9b4a00506cfbb380fd80d48a6bf48b3a455e97a062696eea85c6a5bdd8bc9d5",
+      "reality-surface-atlas.js": "4774be29e62cc49cbd2e90ff6a348719f9d1b0430eabd847df99ecf6304734b8",
+      "reality-assembly.js": "b6fbc8911532078719bc15bb53157b85804bd69cd58d7fb5f570f02d43561642",
+      "youtube-surface.js": "f5fe240f87fd908fff462b4006b503e190dd4eee07934f0bd3ca385b555cb803"
+    }
+  },
+  "limits": [
+    "Software WebGL and phone-sized viewport; not physical-device GPU or XR acceptance.",
+    "YouTube stream remained buffering; playback is not verified.",
+    "Two simultaneous pointer gestures use the original Text view.",
+    "NVIDIA authenticated inference requires an owner-provided server key.",
+    "No merge or public deployment."
+  ]
+}

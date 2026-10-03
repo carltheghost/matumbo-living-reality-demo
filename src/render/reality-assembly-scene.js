@@ -1,7 +1,9 @@
-import {REALITY_TAB_FORMS} from '../domains/reality-tab-layout.js?v=20261003-complete8';
-import {REALITY_LENS_GROUPS,realityLensEngine,resolveRealityLensGroup} from '../domains/reality-lens-engine.js?v=20261003-complete8';
-import {realityObjectSurfaceEngine} from '../domains/reality-object-engine.js?v=20261003-complete8';
-import {lensSpaceLabel} from './reality-lens-chrome.js?v=20261003-complete8';
+import {createRealitySurfaceGeometry} from './reality-surface-geometry.js?v=20261003-skin360';
+import {REALITY_TAB_FORMS} from '../domains/reality-tab-layout.js?v=20261003-skin360';
+import {REALITY_LENS_GROUPS,realityLensEngine,resolveRealityLensGroup} from '../domains/reality-lens-engine.js?v=20261003-skin360';
+import {realityObjectSurfaceEngine} from '../domains/reality-object-engine.js?v=20261003-skin360';
+import {lensSpaceLabel} from './reality-lens-chrome.js?v=20261003-skin360';
+import {createRealityHomeSurface} from './reality-home-surfaces.js?v=20261003-skin360';
 
 /** Native volumetric fronts for feature objects and their space entries.
  * Layout and materials remain projections over the existing identities. */
@@ -214,15 +216,15 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[],rela
       const mapMaterial=material=>{
         if(material.userData?.realityLensFadeOwner===node.feature.id){node.fadeMaterials.add(material);return material;}
         if(node.fadeMap.has(material))return node.fadeMap.get(material);
-        const faded=material.clone();faded.userData={...faded.userData,realityLensFadeOwner:node.feature.id,realityLensBaseOpacity:material.opacity??1,realityLensFadeSource:material};
-        faded.transparent=true;faded.depthWrite=false;faded.needsUpdate=true;materials.add(faded);node.fadeMaterials.add(faded);node.fadeMap.set(material,faded);return faded;
+        const faded=material.clone();faded.userData={...faded.userData,realityLensFadeOwner:node.feature.id,realityLensBaseOpacity:material.opacity??1,realityLensBaseDepthWrite:material.depthWrite,realityLensFadeSource:material};
+        faded.transparent=true;faded.depthWrite=material.depthWrite;faded.needsUpdate=true;materials.add(faded);node.fadeMaterials.add(faded);node.fadeMap.set(material,faded);return faded;
       };
       child.material=Array.isArray(child.material)?child.material.map(mapMaterial):mapMaterial(child.material);
     });
   }
   function setNodeOpacity(node,opacity){
     const alpha=Math.max(0,Math.min(1,opacity));node.contextOpacity=alpha;
-    for(const material of node.fadeMaterials??[])material.opacity=(material.userData.realityLensBaseOpacity??1)*alpha;
+    for(const material of node.fadeMaterials??[]){material.opacity=(material.userData.realityLensBaseOpacity??1)*alpha;material.depthWrite=Boolean(material.userData.realityLensBaseDepthWrite&&material.opacity>.99);}
   }
   function frame(size,owner,material){
     const edgeGeometry=new THREE.EdgesGeometry(new THREE.BoxGeometry(size,size,size));geometry.add(edgeGeometry);
@@ -335,69 +337,32 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[],rela
     const form=REALITY_TAB_FORMS[shapeName]??REALITY_TAB_FORMS.rectangle;
     const surfaceBinding=realityObjectSurfaceEngine.primarySurfaceBinding({featureId:node.feature.id,objectId:node.feature.id,shape:shapeName});
     node.surfaceBinding=surfaceBinding;node.surfaceOutline=surfaceBinding.contour;node.root.userData.objectTabOwner=node.feature.id;node.root.userData.nativeOutline=surfaceBinding.contour;
+    const retiredMaterials=new Set([node.shellMaterial,node.artMaterial].filter(Boolean)),retiredMaps=new Set();
     node.formParts?.forEach(part=>{
       part.removeFromParent();
       if(part.userData?.assemblyId){const targetIndex=targets.indexOf(part);if(targetIndex>=0)targets.splice(targetIndex,1);tabSelectable.delete(part);selectable.delete(part);}
       if(part.geometry){geometry.delete(part.geometry);part.geometry.dispose();}
-      for(const material of (Array.isArray(part.material)?part.material:[part.material]))if(material){
-        if(material.map){textures.delete(material.map);material.map.dispose();}
-        materials.delete(material);node.fadeMaterials?.delete(material);node.fadeMap?.delete(material.userData?.realityLensFadeSource);material.dispose();
-      }
+      for(const material of (Array.isArray(part.material)?part.material:[part.material]))if(material&&!material.userData?.realitySurfaceOwned)retiredMaterials.add(material);
     });
+    for(const material of [...retiredMaterials])if(material.userData?.realityLensFadeSource)retiredMaterials.add(material.userData.realityLensFadeSource);
+    for(const material of retiredMaterials){
+      if(material.map)retiredMaps.add(material.map);
+      materials.delete(material);node.fadeMaterials?.delete(material);node.fadeMap?.delete(material.userData?.realityLensFadeSource??material);material.dispose();
+    }
+    for(const map of retiredMaps){textures.delete(map);map.dispose();}
     const width=form.width,height=form.height,depth=form.depth;
-    const curved=['sphere','cylinder'].includes(shapeName),art=drawFeatureArtwork(THREE,node.feature,node.accent.color,shapeName,{compact:previewCompact,surfaceAspect:surfaceBinding.informationFace.width/surfaceBinding.informationFace.height});if(art)textures.add(art);
     const sphereForm=shapeName==='sphere';
-    const shell=makeMaterial(sphereForm?'#a8874c':'#0c1c2c',{metalness:sphereForm?.72:.45,roughness:sphereForm?.24:.3,transparent:true,opacity:sphereForm?.64:curved?.42:.76,emissive:sphereForm?'#715625':'#000000',emissiveIntensity:sphereForm?.38:0,depthWrite:false,side:THREE.DoubleSide});
-    const artMaterial=art?new THREE.MeshBasicMaterial({color:'#ffffff',map:art,transparent:true,opacity:1,alphaTest:.02,depthWrite:false,side:THREE.FrontSide}):null;
+    const art=drawFeatureArtwork(THREE,node.feature,node.accent.color,shapeName,{compact:previewCompact,surfaceAspect:width/height});if(art)textures.add(art);
+    const shell=makeMaterial('#0c1c2c',{metalness:.2,roughness:.55,transparent:false,opacity:1,depthWrite:true,side:THREE.FrontSide});
+    const artMaterial=art?new THREE.MeshBasicMaterial({color:'#ffffff',map:art,transparent:false,depthWrite:true,side:THREE.FrontSide}):null;
     if(artMaterial)materials.add(artMaterial);
-    const parts=[];
-    let bodyGeometry;
-    if(shapeName==='sphere')bodyGeometry=new THREE.SphereGeometry(Math.min(width,height,depth)/2,24,18);
-    else if(shapeName==='cylinder')bodyGeometry=new THREE.CylinderGeometry(Math.min(width,depth)/2,Math.min(width,depth)/2,height,24,1,false);
-    else if(shapeName==='cube')bodyGeometry=new THREE.BoxGeometry(width,height,depth);
-    else{
-      const outline=shapeFromSurfaceContour(THREE,surfaceBinding.contour),bevel=Math.min(.035,depth/3);
-      bodyGeometry=new THREE.ExtrudeGeometry(outline,{depth:depth-bevel*2,bevelEnabled:true,bevelSegments:3,bevelSize:bevel,bevelThickness:bevel,curveSegments:10});
-      // The shared information anchor is the physical front, including its
-      // bevel. Keep the whole native volume inside its declared depth.
-      bodyGeometry.translate(0,0,bevel);
-    }
-    if(curved){
-      // A machined reading facet is part of this body. Clipping its front
-      // vertices creates a flush cap instead of floating a browser plaque
-      // beyond the sphere/cylinder's tangent. The rear silhouette remains.
-      const cap=surfaceBinding.informationFace.position[2];
-      const positions=bodyGeometry.getAttribute('position');
-      for(let index=0;index<positions.count;index++)positions.setZ(index,Math.min(positions.getZ(index),cap));
-      positions.needsUpdate=true;bodyGeometry.computeVertexNormals();
-    }else if(shapeName!=='cube'){
-      // ExtrudeGeometry's default cap UVs are world coordinates. Normalize
-      // them to this body, otherwise half the preview clamps to one edge of
-      // the texture and titles are cropped even though the canvas is correct.
-      // Bevel shoulders carry the shell material. Fit to the cap's actual
-      // bounds so they cannot crop the preview's left or right text margin.
-      normalizeCapUVs(bodyGeometry);
-    }
-    geometry.add(bodyGeometry);
-    // Information belongs to the object. Planar extrusions use their own cap
-    // as the artwork surface instead of spawning a second PlaneGeometry card.
-    const bodyMaterial=shapeName==='cube'
-      ?[shell,shell,shell,shell,artMaterial??shell,shell]
-      :(!curved&&artMaterial?[artMaterial,shell]:shell);
+    const parts=[],surfaceGeometry=createRealitySurfaceGeometry(THREE,shapeName),bodyGeometry=surfaceGeometry.geometry;
+    node.surfaceCharts=surfaceGeometry.charts;node.surfaceBinding=realityObjectSurfaceEngine.fullSurfaceBinding({featureId:node.feature.id,objectId:node.feature.id,shape:shapeName,charts:node.surfaceCharts});geometry.add(bodyGeometry);
+    // Every exterior triangle is part of this information-bearing body.
+    // The active owner's UV atlas replaces these overview materials in place.
+    const bodyMaterial=surfaceGeometry.charts.map(()=>artMaterial??shell);
     const body=new THREE.Mesh(bodyGeometry,bodyMaterial);body.userData.assemblyId=node.feature.id;body.name=`${node.feature.id}/spatial-tab/${shapeName}`;
     body.renderOrder=20;body.castShadow=false;body.receiveShadow=false;node.root.add(body);targets.push(body);selectable.add(body);tabSelectable.add(body);parts.push(body);
-    if(curved&&artMaterial){
-      // The curved volume's machined front needs its own closing cap. It sits
-      // on the same seam as the body and carries the entire reading surface.
-      const face=surfaceBinding.informationFace,outline=shapeFromSurfaceContour(THREE,surfaceBinding.contour);
-      const capGeometry=new THREE.ShapeGeometry(outline);geometry.add(capGeometry);
-      const cap=new THREE.Mesh(capGeometry,artMaterial);cap.name=`${node.feature.id}/native-reading-cap`;cap.position.z=face.position[2];cap.renderOrder=21;
-      // ShapeGeometry defaults to world-coordinate UVs. Fit the artwork to
-      // this real cap instead of wrapping it around the volume's shoulders.
-      const uv=capGeometry.getAttribute('uv'),positions=capGeometry.getAttribute('position');
-      for(let i=0;i<uv.count;i++)uv.setXY(i,positions.getX(i)/face.width+.5,positions.getY(i)/face.height+.5);
-      uv.needsUpdate=true;cap.userData.assemblyId=node.feature.id;node.root.add(cap);parts.push(cap);targets.push(cap);selectable.add(cap);tabSelectable.add(cap);
-    }
     const edgeGeometry=new THREE.EdgesGeometry(bodyGeometry,18);geometry.add(edgeGeometry);
     const edgeMaterial=new THREE.LineBasicMaterial({color:sphereForm?'#e4c878':node.accent.color,transparent:true,opacity:sphereForm?.82:.58,depthWrite:false,depthTest:true});materials.add(edgeMaterial);
     const edges=new THREE.LineSegments(edgeGeometry,edgeMaterial);edges.renderOrder=22;node.root.add(edges);parts.push(edges);
@@ -416,7 +381,7 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[],rela
 function applyTabDepthMode(node){
   for(const part of node.formParts??[]){
     const list=Array.isArray(part.material)?part.material:[part.material];
-    for(const material of list){if(material&&'depthTest'in material){material.depthTest=true;material.depthWrite=false;material.needsUpdate=true;}}
+    for(const material of list){if(material&&'depthTest'in material){material.depthTest=true;material.depthWrite=part===node.tabMesh;material.needsUpdate=true;}}
     }
     for(const part of node.formParts??[])part.renderOrder=part===node.tabMesh?20:22;
     if(node.root)node.root.renderOrder=18;
@@ -609,23 +574,18 @@ function applyTabDepthMode(node){
     const core=new THREE.Mesh(groupCoreGeometry,coreMaterial),ring=new THREE.Mesh(groupRingGeometry,ringMaterial),innerRing=new THREE.Mesh(groupInnerRingGeometry,innerMaterial);
     root.add(core,ring,innerRing);root.visible=false;root.frustumCulled=false;
     const copy={...SPACE_COPY[domain.id],label:lensSpaceLabel(domain.id)};
-    const outline=spaceEntryShape(THREE,domain.id,5.6,3.9);
-    const entryGeometry=new THREE.ExtrudeGeometry(outline,{depth:1.12,bevelEnabled:true,bevelSegments:4,bevelSize:.075,bevelThickness:.075,curveSegments:24});
-    entryGeometry.translate(0,0,-.56);normalizeCapUVs(entryGeometry);geometry.add(entryGeometry);
-    entryGeometry.computeBoundingBox();
     const previewFeature={id:domain.id,label:copy.label,description:copy.description,isSpaceEntry:true,memberCount:members.length};
-    const entryTexture=drawFeatureArtwork(THREE,previewFeature,color,`space-${domain.id}`,{compact:previewCompact,surfaceAspect:5.6/3.9});
-    if(entryTexture)textures.add(entryTexture);
-    const entryShell=new THREE.MeshPhysicalMaterial({color:'#123955',metalness:.42,roughness:.27,clearcoat:.65,clearcoatRoughness:.2,emissive:'#0b345c',emissiveIntensity:.24});materials.add(entryShell);
-    const entryFace=new THREE.MeshBasicMaterial({color:entryTexture?'#ffffff':color,map:entryTexture,side:THREE.FrontSide});materials.add(entryFace);
-    const entry=new THREE.Mesh(entryGeometry,[entryFace,entryShell]);entry.name=`reality-lens/space-entry/${domain.id}`;entry.userData.realityLensGroup=domain.id;entry.userData.spaceSilhouette=domain.id;entry.visible=false;entry.renderOrder=20;
-    entry.userData.nativeOutline=outline.getPoints(32).map(({x,y})=>[x,y,entryGeometry.boundingBox.max.z]);
+    const homeSurface=createRealityHomeSurface({THREE,id:domain.id,label:copy.label,description:copy.description,members});
+    const entryGeometry=homeSurface.geometry;geometry.add(entryGeometry);
+    for(const material of homeSurface.materials){materials.add(material);if(material.map)textures.add(material.map);}
+    const entryFace=homeSurface.materials[homeSurface.charts.findIndex(chart=>chart.id==='front')]??homeSurface.materials[0];
+    const entry=new THREE.Mesh(entryGeometry,homeSurface.materials);entry.name=`reality-lens/space-entry/${domain.id}`;entry.userData.realityLensGroup=domain.id;entry.userData.spaceSilhouette=homeSurface.shape;entry.userData.homeSurfaceShape=homeSurface.shape;entry.userData.surfaceCharts=homeSurface.charts;entry.visible=false;entry.renderOrder=20;
     const entryEdgeGeometry=new THREE.EdgesGeometry(entryGeometry,35);geometry.add(entryEdgeGeometry);
-    const entryEdgeMaterial=new THREE.LineBasicMaterial({color:'#79bcf0',transparent:true,opacity:.36,depthWrite:false});materials.add(entryEdgeMaterial);
+    const entryEdgeMaterial=new THREE.LineBasicMaterial({color:homeSurface.accent,transparent:true,opacity:.3,depthWrite:false});materials.add(entryEdgeMaterial);
     const entryEdges=new THREE.LineSegments(entryEdgeGeometry,entryEdgeMaterial);entryEdges.visible=false;entryEdges.renderOrder=22;
     root.add(entry,entryEdges);groupTargets.push(entry);
     const center=new THREE.Vector3();members.forEach(node=>center.add(node.position));center.multiplyScalar(1/members.length);root.position.copy(center);
-    groupParents.set(domain.id,{id:domain.id,label:copy.label,previewFeature,root,core,ring,innerRing,entry,entryFace,entryEdges,members,spacePosition:new THREE.Vector3()});
+    groupParents.set(domain.id,{id:domain.id,label:copy.label,previewFeature,homeSurface,root,core,ring,innerRing,entry,entryFace,entryEdges,members,spacePosition:new THREE.Vector3()});
   }
   // Render authored feature relationships, never guessed proximity edges.
   // Block World is a fixed spatial anchor, not a transport hub in the graph.
@@ -710,6 +670,7 @@ function applyTabDepthMode(node){
       previewCompact=compact;
       for(const node of nodes.values())if(node.isTab)makeTabForm(node,node.shape);
       for(const marker of groupParents.values()){
+        if(marker.homeSurface)continue; // Native home atlases are resolution independent; retain all body charts.
         const material=marker.entryFace,oldTexture=material.map;
         const texture=drawFeatureArtwork(THREE,marker.previewFeature,groupColors[marker.id],`space-${marker.id}`,{compact:previewCompact,surfaceAspect:5.6/3.9});
         if(texture)textures.add(texture);material.map=texture;material.needsUpdate=true;
@@ -931,7 +892,7 @@ function applyTabDepthMode(node){
         const tuneSurface=(material,multiplier)=>{if(!material)return;const base=material.userData?.realityLensBaseOpacity??1;material.opacity=base*(1-cover*multiplier)*response.contextOpacity;};
         tuneSurface(node.shellMaterial,reading?0:.18);
         if(node.edgeMaterial){const base=node.edgeMaterial.userData?.realityLensBaseOpacity??1;node.edgeMaterial.opacity=base*(reading?1:(1-cover*.18))*response.contextOpacity;}
-        if(node.artMaterial){
+        if(node.artMaterial&&!node.surface360){
           // Static preview typography disappears while the live controls are
           // present, but the cap material itself stays opaque as the object's
           // real front face.
@@ -949,8 +910,10 @@ function applyTabDepthMode(node){
           node.artMaterial.depthWrite=node.artMaterial.opacity>.99;
         }
         tuneSurface(node.indicator?.material,.35);
-        node.root.rotation.y=reducedMotion||calmMode?0:Math.sin(time*.18+node.traits.phase)*.025;
-        node.root.rotation.x=reducedMotion||calmMode?0:Math.sin(time*.13+node.traits.phase)*.012;
+        if(!node.surface360){
+          node.root.rotation.y=reducedMotion||calmMode?0:Math.sin(time*.18+node.traits.phase)*.025;
+          node.root.rotation.x=reducedMotion||calmMode?0:Math.sin(time*.13+node.traits.phase)*.012;
+        }
         if(node.indicator){node.indicator.visible=!node.surfaceReading&&!calmMode;const pulse=reducedMotion?1:.9+.1*Math.sin(time*.92+node.traits.phase);node.indicator.scale.setScalar(pulse);if(node.indicator.material?.emissiveIntensity!==undefined)node.indicator.material.emissiveIntensity=node.surfaceReading||reducedMotion?.28:.28+.18*(.5+.5*Math.sin(time*1.3+node.traits.phase));}
         // At close focus the object itself owns attention. The attached
         // controls are only its interactive skin, not a replacement panel.

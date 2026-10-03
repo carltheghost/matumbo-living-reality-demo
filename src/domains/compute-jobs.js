@@ -3,17 +3,17 @@ import {
   COMPUTE_PROVIDERS,
   normalizeUsageReceipt,
   estimateTumboSimReward
-} from './compute-exchange.js?v=20261003-complete8';
+} from './compute-exchange.js?v=20261003-skin360';
 import {
   toComputeUnits
-} from './compute-account.js?v=20261003-complete8';
+} from './compute-account.js?v=20261003-skin360';
 import {
   ECONOMIC_POOLS,
   economicActor,
   economicInteger,
   economicJson,
   economicDigest
-} from './economic-kernel.js?v=20261003-complete8';
+} from './economic-kernel.js?v=20261003-skin360';
 const safeId = (value, name = 'identity', maximum = 120) => {
   if (typeof value !== 'string' || !/^[A-Za-z0-9_.:-]+$/.test(value) || value.length > maximum) throw new TypeError(`A bounded ${name} of at most ${maximum} characters is required`);
   return value;

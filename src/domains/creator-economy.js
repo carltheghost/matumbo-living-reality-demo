@@ -7,7 +7,8 @@
  */
 import {
   sha256Hex
-} from './token-sha256.js?v=20261003-complete8';
+} from './token-sha256.js?v=20261003-skin360';
+import {REALITY_TAB_FORM_IDS} from './reality-tab-layout.js?v=20261003-skin360';
 
 export const CREATOR_ECONOMY_SCHEMA_VERSION = 1;
 export const CREATOR_CATEGORIES = Object.freeze(['layout', 'object', 'tool', 'agent', 'workflow', 'experience']);
@@ -153,7 +154,7 @@ export function normalizeDesignDescriptor(input = DEFAULT_DESIGN_DESCRIPTOR) {
     fields(input.surface, ['scope', 'shape'], 'surface');
     surface = {
       scope: one(input.surface.scope ?? 'selected', ['selected', 'all'], 'surface scope'),
-      shape: one(input.surface.shape, ['phone', 'square', 'rectangle', 'sphere', 'cylinder', 'cube', 'wave'], 'surface shape')
+      shape: one(input.surface.shape, REALITY_TAB_FORM_IDS, 'surface shape')
     };
   }
   const result = {
@@ -175,7 +176,7 @@ export function normalizeDesignDescriptor(input = DEFAULT_DESIGN_DESCRIPTOR) {
         id: objectId,
         kind: one(object.kind, ['surface', 'tool', 'agent', 'workflow', 'experience'], 'object kind'),
         label: text(object.label, 'Object label', 80),
-        shape: one(object.shape ?? 'rectangle', ['phone', 'square', 'rectangle', 'sphere', 'cylinder', 'cube', 'wave'], 'shape'),
+        shape: one(object.shape ?? 'rectangle', REALITY_TAB_FORM_IDS, 'shape'),
         color: color(object.color ?? '#39b9ff')
       };
     }),
@@ -230,10 +231,11 @@ export function parseCreatorDesignRequest(request, base = DEFAULT_DESIGN_DESCRIP
     } else if ((match = clause.match(/^(?:navigation\s+(?:to\s+)?)?(guided|search|minimal)$/))) {
       descriptor.navigation = match[1];
       supported.push('navigation');
-    } else if ((match = clause.match(/^(?:(selected|all)\s+)?(?:objects?|surfaces?|shape)\s+(?:(?:to|a)\s+)?(phone|square|rectangle|sphere|cylinder|cube|wave)$/))) {
+    } else if ((match = clause.match(/^(?:(selected|all)\s+)?(?:objects?|surfaces?|shape)\s+(?:(?:to|a)\s+)?([a-z]+(?:[ -][a-z]+)?)$/))
+        && REALITY_TAB_FORM_IDS.includes(match[2].replace(/\s+/g, '-'))) {
       descriptor.surface = {
         scope: match[1] ?? 'selected',
-        shape: match[2]
+        shape: match[2].replace(/\s+/g, '-')
       };
       supported.push('surface');
     } else unsupported.push(clause);

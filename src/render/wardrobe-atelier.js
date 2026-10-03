@@ -3,7 +3,7 @@ import {
   WARDROBE_ATELIER_CONSOLE_SOURCE,
   WARDROBE_ERROR_IMMUTABLE,
   createWardrobeAtelier,
-} from "../domains/wardrobe-atelier.js?v=20261003-complete8";
+} from "../domains/wardrobe-atelier.js?v=20261003-skin360";
 
 export { WARDROBE_ATELIER_CONSOLE_SOURCE };
 export const WARDROBE_RENDER_SOURCE = WARDROBE_ATELIER_CONSOLE_SOURCE;

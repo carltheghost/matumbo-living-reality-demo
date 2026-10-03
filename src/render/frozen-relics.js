@@ -3,7 +3,7 @@ import {
   FROZEN_RELICS_CONSOLE_SOURCE,
   FROZEN_RELICS_FORM,
   createFrozenRelics,
-} from "../domains/frozen-relics.js?v=20261003-complete8";
+} from "../domains/frozen-relics.js?v=20261003-skin360";
 
 export { FROZEN_RELICS_CONSOLE_SOURCE };
 export const FROZEN_RELICS_RENDER_SOURCE = FROZEN_RELICS_CONSOLE_SOURCE;
