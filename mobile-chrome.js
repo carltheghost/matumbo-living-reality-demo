@@ -9,7 +9,7 @@ const DOCK_SELECTOR = '#matumbo-command-deck .mcd-bottom';
 
 function mount() {
   const dock = document.querySelector(DOCK_SELECTOR);
-  if (!dock || dock.dataset.mobileChrome) return; // idempotent
+  if (!dock || dock.dataset.lensChrome === 'calm' || dock.dataset.mobileChrome) return; // idempotent; the calm deck owns its phone controls
   dock.dataset.mobileChrome = '1';
 
   const handle = document.createElement('button');

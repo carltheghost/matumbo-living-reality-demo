@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reality Lens controls check</title>
+<link rel="stylesheet" href="../../mobile-layout.css">
+<style>html,body{margin:0;background:#030911;color:#dce9f3;font:16px system-ui}canvas{position:fixed;inset:0}.qa-status{position:fixed;top:100px;left:50%;transform:translateX(-50%);max-width:400px;z-index:120;padding:8px;background:#08192b}button{font:inherit}</style>
+<canvas id="qa-canvas" aria-label="UI-only test canvas"></canvas>
+<p class="qa-status" role="status">UI check only · the 3D renderer is not used.</p>
+<script type="importmap">{"imports":{"three":"../../vendor/three-r179.1/build/three.module.js","three/addons/":"../../vendor/three-r179.1/examples/jsm/"}}</script>
+<script type="module">
+  import * as THREE from '../../vendor/three-r179.1/build/three.module.js';
+  import { createRealityAssembly } from '../../src/render/reality-assembly.js?v=20261003-calm6';
+  import { FEATURE_DEFINITIONS } from '../../src/render/feature-navigator.js';
+  const scene=new THREE.Scene(), world=new THREE.Group(), camera=new THREE.PerspectiveCamera(60,innerWidth/innerHeight,.1,1000);
+  scene.add(world);
+  const controls={target:new THREE.Vector3(),minDistance:.45,maxDistance:220,enabled:true,update(){}};
+  const assembly=createRealityAssembly({THREE,renderer:{domElement:document.getElementById('qa-canvas')},scene,camera,controls,world,targets:[],features:FEATURE_DEFINITIONS,onNavigate:id=>{document.querySelector('.qa-status').textContent='Feature navigation: '+id;}});
+  assembly.open();
+</script>
+</html>

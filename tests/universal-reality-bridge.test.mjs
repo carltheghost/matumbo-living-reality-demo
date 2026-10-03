@@ -103,7 +103,7 @@ test('live index loads the universal bridge after main and the bridge is Reality
     readFile(new URL('../index.html',import.meta.url),'utf8'),
     readFile(new URL('../src/render/universal-reality-bridge.js',import.meta.url),'utf8'),
   ]);
-  const mainIndex=html.indexOf('./src/main.js?v=20260924-aspectus1');
+  const mainIndex=html.indexOf('./src/main.js?v=');
   const bridgeIndex=html.indexOf('./src/render/universal-reality-bridge.js?v=20260924-universal-live1');
   assert.ok(mainIndex>=0);
   assert.ok(bridgeIndex>mainIndex);

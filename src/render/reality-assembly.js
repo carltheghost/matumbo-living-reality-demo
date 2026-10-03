@@ -1,7 +1,8 @@
 import {createRealityWorkspace} from '../domains/reality-workspace.js?v=20260923-spatial-tabs16';
 import {REALITY_TAB_FORMS,REALITY_TAB_SIZE_MIN,REALITY_TAB_SIZE_MAX,resolveRealityTabPosition} from '../domains/reality-tab-layout.js?v=20260923-spatial-tabs16';
 import {REALITY_LENS_GROUPS,realityLensEngine,resolveRealityLensGroup} from '../domains/reality-lens-engine.js?v=20260923-lens-engine9';
-import {realityLensCopy,realityLensLabel,realityObjectSurfaceEngine} from '../domains/reality-object-engine.js?v=20260923-object-surface6';
+import {realityLensLabel,realityObjectSurfaceEngine} from '../domains/reality-object-engine.js?v=20260923-object-surface6';
+import {lensSpaceLabel} from './reality-lens-chrome.js?v=20261003-calm6';
 import {buildRealityAssemblyScene,LOD_FAR} from './reality-assembly-scene.js?v=20260923-spatial-tabs21';
 
 // The lens contains only equal-status feature tabs; no center cube or anchor.
@@ -93,8 +94,8 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   // its actual projection. Geometry owns the surface; text never gets scaled
   // down to fit an arbitrary desktop raster.
   const SURFACE_PIXELS_PER_UNIT=160;
-  const latinShapes={phone:'Telephonum',square:'Quadratum',rectangle:'Rectangulum',sphere:'Sphaera',cylinder:'Cylindrus',cube:'Cubus',wave:'Unda'};
-  const shapeOptions=Object.entries(REALITY_TAB_FORMS).map(([id])=>`<option value="${id}">${latinShapes[id]??id}</option>`).join('');
+  const shapeLabels={phone:'Phone',square:'Square',rectangle:'Rectangle',sphere:'Sphere',cylinder:'Cylinder',cube:'Cube',wave:'Wave'};
+  const shapeOptions=Object.entries(REALITY_TAB_FORMS).map(([id])=>`<option value="${id}">${shapeLabels[id]??id}</option>`).join('');
   const primary=['block-world','contracts','person','rooms','academy','world-events','multi-sport-events','asset-market'];
   const ordered=[...features].sort((a,b)=>{const aIndex=primary.indexOf(a.id),bIndex=primary.indexOf(b.id);return (aIndex<0?100:aIndex)-(bIndex<0?100:bIndex);});
   // Feature windows sit in six semantic clusters along a widening spatial
@@ -106,9 +107,9 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     members.push(feature);groupMembers.set(groupId,members);
   }
   const groupOffsets=new Map([...groupMembers].map(([groupId,members])=>[groupId,new Map(members.map((feature,index)=>[feature.id,index]))]));
-  const labelFor=feature=>realityLensLabel(feature);
-  const copyFor=value=>realityLensCopy(value);
-  const visibleId=id=>id==='block-world'?'materia':String(id).replace(/(^|-)world(?=-|$)/gi,'$1locus');
+  const labelFor=feature=>feature?.label??realityLensLabel(feature);
+  const copyFor=value=>String(value??'');
+  const visibleId=id=>String(id);
   const placedPositions=ordered.map((feature,i)=>{
     const groupId=resolveRealityLensGroup(feature.id),members=groupMembers.get(groupId)??[feature],index=groupOffsets.get(groupId)?.get(feature.id)??0;
     const {position}=realityLensEngine.placeInFunnel({id:feature.id,index,count:members.length,groupId});
@@ -132,7 +133,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   const spatial=buildRealityAssemblyScene({THREE,parent:scene,features:ordered.map((feature,i)=>({...feature,label:labelFor(feature),description:copyFor(feature.description),boundary:copyFor(feature.boundary),sources:(feature.sources??[]).map(copyFor),assemblyTier:'tab',lensGroup:positions[i]?.lensGroup??'worlds',initialTabShape:initialShapes.get(feature.id),initialPosition:positions[i]?.position})),targets,relationships});
   spatial.setActiveGroup(null);
   const featureMap=new Map(features.map(feature=>[feature.id,feature]));
-  const stylesheet=document.createElement('link');stylesheet.rel='stylesheet';stylesheet.href=`${new URL('./reality-assembly.css',import.meta.url).href}?v=20260924-aspectus1`;document.head.append(stylesheet);
+  const stylesheet=document.createElement('link');stylesheet.rel='stylesheet';stylesheet.href=`${new URL('./reality-assembly.css',import.meta.url).href}?v=20261003-calm6`;document.head.append(stylesheet);
   const root=document.createElement('section');root.id='reality-assembly';root.hidden=true;root.setAttribute('aria-label','Reality Lens spatial assembly');
   root.innerHTML=`<header class="assembly-header"><a class="assembly-brand" href="?feature=reality-lens"><span aria-hidden="true">◇</span><div>maTumbo<small>People × planet × possibility</small></div></a><nav aria-label="Assembly navigation"><button data-home>Explore</button><button data-enter-person>Your space</button><button data-enter-contracts>Contracts</button><button data-grid>Block World</button></nav><form class="assembly-quick-find" data-quick-find role="search"><label><span>Find object</span><input data-quick-search type="search" autocomplete="off" placeholder="Search YouTube, agents…" aria-label="Find a Reality Lens object"></label><button type="submit">Locate</button></form><button data-clean>Hide panels</button></header>
   <aside class="assembly-directory"><p class="assembly-eyebrow">Reality Lens Ω</p><h1>Many worlds.<br><em>One reality.</em></h1><p class="assembly-intro">Explore the same universe across space and depth.<br>Every window is a real, rearrangeable tab.</p><label class="assembly-search-label">Find a connected feature<input data-search placeholder="Search worlds, contracts…" type="search"></label><nav class="assembly-catalog" aria-label="Feature objects"></nav><p class="assembly-note">Designed 3D feature previews.<br>Only the selected feature opens its connected controls.</p></aside>
@@ -162,52 +163,69 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   root.addEventListener('focusin',event=>{lastAssemblyFocus=event.target;});
   const all=selector=>[...root.querySelectorAll(selector)],find=selector=>root.querySelector(selector);
   const directory=find('.assembly-directory');directory.id='assembly-feature-directory';
-  const directoryToggle=document.createElement('button');directoryToggle.type='button';directoryToggle.dataset.directoryToggle='';directoryToggle.textContent='Invenire';directoryToggle.setAttribute('aria-label','Find an object');directoryToggle.setAttribute('aria-controls',directory.id);directoryToggle.setAttribute('aria-expanded','false');find('.assembly-header').append(directoryToggle);
-  const directoryClose=document.createElement('button');directoryClose.type='button';directoryClose.dataset.directoryClose='';directoryClose.textContent='Claude';directory.prepend(directoryClose);
+  const directoryToggle=document.createElement('button');directoryToggle.type='button';directoryToggle.dataset.directoryToggle='';directoryToggle.textContent='Spaces';directoryToggle.setAttribute('aria-label','Find an object');directoryToggle.setAttribute('aria-controls',directory.id);directoryToggle.setAttribute('aria-expanded','false');find('.assembly-header').append(directoryToggle);
+  const directoryClose=document.createElement('button');directoryClose.type='button';directoryClose.dataset.directoryClose='';directoryClose.textContent='Close';directory.prepend(directoryClose);
   const selectedSurface=find('.assembly-inspector');selectedSurface.hidden=true;
-  find('.assembly-brand small').textContent='Homines · natura · possibilitas';
-  find('.assembly-directory .assembly-eyebrow').textContent='Oculus Realitatis Ω';
-  find('.assembly-directory h1').innerHTML='Plura loca.<br><em>Una realitas.</em>';
-  find('.assembly-intro').innerHTML='Elige unum obiectum; appropinqua ut aperias.<br>Magnifica obiectum ad eius superficiem evolvendam.';
-  find('.assembly-search-label').firstChild.textContent='Quaere obiectum ';
-  find('[data-search]').placeholder='Quaere obiecta…';
-  find('[data-quick-find] label span').textContent='Invenire';
-  find('[data-quick-search]').placeholder='YouTube, agentia…';
-  find('.assembly-catalog').setAttribute('aria-label','Reality Lens objecta');
-  find('.assembly-directory .assembly-note').innerHTML='Tabulae locales · una identitas per obiectum.<br>Ingredere ut aperias verum instrumentum.';
-  find('.assembly-header [data-home]').textContent='Explora';
-  find('[data-enter-person]').textContent='Meum spatium';find('[data-enter-contracts]').textContent='Foedera';find('[data-grid]').textContent='Cubus';
-  find('[data-enter-person]').setAttribute('aria-label','Meum spatium');find('[data-enter-contracts]').setAttribute('aria-label','Foedera');find('[data-grid]').textContent='Materia';find('[data-grid]').setAttribute('aria-label','Materia');
-  find('[data-clean]').textContent='Objectum';find('[data-clean]').setAttribute('aria-label','Ostende vel cela superficiem electam');
-  find('[data-world-label]').textContent='Unum punctum · scrolla vel preme ut accedas';
-  find('[data-hover-label]').textContent='Spatium: iter · obiectum: magnitudo · clic: ingredere';
-  find('.assembly-inspector .assembly-eyebrow').textContent='Oculus Realitatis · instrumentum apertum';
-  find('.assembly-tab-controls h3').textContent='Mutabilitas';
-  find('[data-anchor-note]').textContent='Instrumentum fixum.';
-  find('[data-lock-toggle]').textContent='Fige';find('[data-focus]').textContent='Apropinqua';find('[data-side-reality]').textContent='Nova realitas';
-  find('[data-enter]').textContent='Ingredere ↗';find('[data-open]').textContent='Aperi';find('[data-open-secondary]').textContent='Expand / Close';
-  all('.assembly-inspector h3')[1].textContent='Fontes eiusdem instrumenti';
-  find('.assembly-toolbar [data-home]').textContent='Home';find('.assembly-toolbar [data-view="4d"]').textContent='IV · tempus';find('.assembly-toolbar [data-view="3d"]').textContent='III';
-  find('.assembly-toolbar .assembly-view .assembly-eyebrow').textContent='Aspectus';
+  find('.assembly-brand small').textContent='Reality Lens Ω';
+  find('.assembly-directory .assembly-eyebrow').textContent='Spaces';
+  find('.assembly-directory h1').innerHTML='One space<br><em>at a time.</em>';
+  find('.assembly-intro').innerHTML='Choose a space, then open a feature.<br>The other objects stay where you left them.';
+  find('.assembly-search-label').firstChild.textContent='Find a feature ';
+  find('[data-search]').placeholder='YouTube, chess, contracts…';
+  find('[data-quick-find] label span').textContent='Find';
+  find('[data-quick-search]').placeholder='YouTube, agents…';
+  find('.assembly-catalog').setAttribute('aria-label','Reality Lens feature spaces');
+  find('.assembly-directory .assembly-note').innerHTML='Each feature keeps its own state.<br>Open one when you need it.';
+  find('.assembly-header [data-home]').textContent='Overview';
+  find('[data-enter-person]').textContent='Your space';find('[data-enter-contracts]').textContent='Contracts';find('[data-grid]').textContent='Block World';
+  find('[data-enter-person]').setAttribute('aria-label','Your space');find('[data-enter-contracts]').setAttribute('aria-label','Contracts');find('[data-grid]').textContent='Block World';find('[data-grid]').setAttribute('aria-label','Block World');
+  find('[data-clean]').textContent='Details';find('[data-clean]').setAttribute('aria-label','Show or hide selected object details');
+  find('[data-world-label]').textContent='Your world · scroll or pinch to explore';
+  find('[data-hover-label]').textContent='Drag the field to orbit · tap an object to open';
+  find('.assembly-inspector .assembly-eyebrow').textContent='Selected object';
+  find('.assembly-tab-controls h3').textContent='Shape & movement';
+  find('[data-anchor-note]').textContent='This object is fixed in place.';
+  find('[data-lock-toggle]').textContent='Lock';find('[data-focus]').textContent='Approach';find('[data-side-reality]').textContent='New side reality';
+  find('[data-enter]').textContent='Open feature';find('[data-open]').textContent='Expand';find('[data-open-secondary]').textContent='Expand / Close';
+  all('.assembly-inspector h3')[1].textContent='Connected sources';
+  find('.assembly-toolbar [data-home]').textContent='Home';find('.assembly-toolbar [data-view="4d"]').textContent='4D · history';find('.assembly-toolbar [data-view="3d"]').textContent='3D';
+  find('.assembly-toolbar .assembly-view .assembly-eyebrow').textContent='View';
   find('[data-present]').textContent='Present';find('[data-export]').textContent='Export';
-  const readout=document.createElement('div');readout.className='assembly-size-readout';readout.innerHTML='<span>Magnitudo</span><strong data-size-readout>1.0×</strong><small>Scrolla super obiectum</small>';
+  const readout=document.createElement('div');readout.className='assembly-size-readout';readout.innerHTML='<span>Size</span><strong data-size-readout>1.0×</strong><small>Scroll over the object to resize</small>';
   find('[data-tab-size]').closest('label').replaceWith(readout);find('.assembly-nudges').remove();
   find('.assembly-travel').remove();find('[data-interaction="orbit"]').remove();find('[data-interaction="move"]').textContent='Arrange';
-  find('[data-edit-note]').textContent='Trahe ad disponendum; Shift-trahe per profunditatem. Scrolla obiectum ad augendum.';
-  all('.assembly-inspector dt').forEach((term,index)=>{term.textContent=['Identitas','Positio · x / y / z','Status','Fontes'][index]??term.textContent;});
+  find('[data-edit-note]').textContent='Drag to arrange. Hold Shift to move through depth. Scroll over an object to resize.';
+  all('.assembly-inspector dt').forEach((term,index)=>{term.textContent=['Feature','Position · x / y / z','State','Sources'][index]??term.textContent;});
   const objectSymbol=find('.assembly-object-symbol'),objectTitle=find('[data-title]'),objectDescription=find('[data-description]'),objectHero=document.createElement('div'),objectCopy=document.createElement('div'),stageBadge=document.createElement('span');
   objectHero.className='assembly-object-hero';objectCopy.className='assembly-object-copy';stageBadge.className='assembly-stage-badge';stageBadge.dataset.stageBadge='';
   objectCopy.append(stageBadge,objectTitle,objectDescription);objectHero.append(objectSymbol,objectCopy);find('.assembly-inspector-body').prepend(objectHero);
-  find('.assembly-inspector').setAttribute('aria-label','Superficies interactivum obiecti');
-  find('[data-fold-inspector]').setAttribute('aria-label','Minue hanc superficiem');
-  find('[data-tab-shape]').setAttribute('aria-label','Muta formam obiecti');
-  find('[data-lock-toggle]').setAttribute('aria-label','Fige vel libera hoc obiectum');
-  find('[data-enter]').setAttribute('aria-label','Ingredere in verum instrumentum');
-  find('[data-directory-toggle]').setAttribute('aria-label','Invenire instrumentum');
-  function setDirectory(open,{restoreFocus=false}={}){
+  find('.assembly-inspector').setAttribute('aria-label','Selected object details');
+  find('[data-fold-inspector]').setAttribute('aria-label','Minimize selected object details');
+  find('[data-tab-shape]').setAttribute('aria-label','Change object shape');
+  find('[data-lock-toggle]').setAttribute('aria-label','Lock or unlock this object');
+  find('[data-enter]').setAttribute('aria-label','Open the selected feature');
+  find('[data-directory-toggle]').setAttribute('aria-label','Find a feature');
+  directory.hidden=true;
+  const toolbar=find('.assembly-toolbar');toolbar.id='assembly-view-controls';toolbar.hidden=true;
+  const toolbarSizeObserver=new ResizeObserver(()=>{
+    root.style.setProperty('--assembly-toolbar-height',`${Math.ceil(toolbar.getBoundingClientRect().height)}px`);
+  });
+  toolbarSizeObserver.observe(toolbar);
+  const viewToggle=document.createElement('button');viewToggle.type='button';viewToggle.textContent='View';viewToggle.dataset.viewTools='';viewToggle.setAttribute('aria-controls',toolbar.id);viewToggle.setAttribute('aria-expanded','false');find('.assembly-header').append(viewToggle);
+  const emptySearch=document.createElement('p');emptySearch.className='assembly-search-empty';emptySearch.textContent='No matching features. Try another name.';emptySearch.hidden=true;find('.assembly-catalog').after(emptySearch);
+  function setViewTools(open,{restoreFocus=false}={}){
+    toolbar.hidden=!open;viewToggle.setAttribute('aria-expanded',String(open));
+    root.classList.toggle('assembly-tools-open',open);document.body.classList.toggle('mobile-view-open',open);
+    if(open){setDirectory(false);selectedSurface.hidden=true;root.classList.add('assembly-clean');root.classList.remove('assembly-object-focused');find('[data-clean]').textContent='Details';}
+    find('.assembly-branches').hidden=!open||viewMode!=='4d';
+    if(restoreFocus)viewToggle.focus({preventScroll:true});
+  }
+  viewToggle.onclick=()=>setViewTools(toolbar.hidden,{restoreFocus:true});
+  function setDirectory(open,{restoreFocus=false,focusSearch=true}={}){
+    directory.hidden=!open;
     root.classList.toggle('assembly-directory-open',open);directoryToggle.setAttribute('aria-expanded',String(open));
-     if(open){root.classList.remove('assembly-clean','assembly-object-focused');find('[data-search]').focus();}
-    else if(restoreFocus)directoryToggle.focus();
+    if(open){setViewTools(false);selectedSurface.hidden=true;root.classList.remove('assembly-clean','assembly-object-focused');find('[data-clean]').textContent='Details';if(focusSearch)find('[data-search]').focus();}
+    else if(restoreFocus)directoryToggle.focus({preventScroll:true});
   }
   directoryToggle.onclick=()=>setDirectory(!root.classList.contains('assembly-directory-open'),{restoreFocus:true});directoryClose.onclick=()=>setDirectory(false,{restoreFocus:true});
   const resizeFocus=()=>{
@@ -226,13 +244,14 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     const members=groupMembers.get(domain.id)??[];if(!members.length)continue;
     const section=document.createElement('section');section.className='assembly-catalog-group';section.dataset.domain=domain.id;
     const header=document.createElement('button');header.type='button';header.className='assembly-domain-toggle';header.setAttribute('aria-expanded','false');
-    const title=document.createElement('span');title.textContent=domain.label;
+    const title=document.createElement('span');title.textContent=lensSpaceLabel(domain.id);
     const count=document.createElement('small');count.textContent=String(members.length);
     header.append(title,count);
     const children=document.createElement('div');children.className='assembly-domain-features';children.hidden=true;
     section.append(header,children);find('.assembly-catalog').append(section);
-    const record={section,header,children,label:domain.label,open:false};catalogSections.set(domain.id,record);
+    const record={section,header,children,label:lensSpaceLabel(domain.id),open:false};catalogSections.set(domain.id,record);
     header.onclick=()=>{
+      for(const other of catalogSections.values())if(other!==record){other.open=false;other.children.hidden=true;other.header.setAttribute('aria-expanded','false');}
       record.open=!record.open;children.hidden=!record.open;header.setAttribute('aria-expanded',String(record.open));
       if(record.open){activeLensGroup=domain.id;spatial.setActiveGroup(domain.id);}
       else if(activeLensGroup===domain.id){activeLensGroup=null;spatial.setActiveGroup(null);}
@@ -245,11 +264,11 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   const currentObject=()=>owner.getSnapshot().objects.find(object=>object.id===owner.getSnapshot().selectedId);
   function snapshot(){return {...owner.getSnapshot(),active,viewMode,interaction,camera:{position:camera.position.toArray(),target:controls.target.toArray()},spatial:spatial.getSnapshot(),layoutDiagnostics:initialLayout.diagnostics,reality:workspace.getSnapshot()};}
   function faceText(face,feature,surface,detail){
-    if(face==='back')return {eyebrow:'CONTINUATIO · IDEM INSTRUMENTUM',title:surface.label,body:surface.description||surface.summary,detail:surface.boundary};
-    if(face==='left')return {eyebrow:'STATUS · LOCALIS',title:surface.state,body:detail?.summary||'Status ex instrumento locali, non ex titulo decorativo.',detail:`Forma ${latinShapes[surface.shape]??surface.shape} · ${surface.size.toFixed(1)}×`};
-    if(face==='right')return {eyebrow:'CONEXIONES · INSTRUMENTA',title:'Instrumenta propinqua',body:surface.summary,detail:(relationships[feature.id]??[]).slice(0,4).map(id=>featureMap.has(id)?labelFor(featureMap.get(id)):id).join(' · ')||'Nullae nexus locales adhuc definiti.'};
-    if(face==='top')return {eyebrow:'IDENTITAS · SUPERFICIES',title:visibleId(feature.id),body:`${surface.label} · ${latinShapes[surface.shape]??surface.shape}`,detail:`${surface.sourceCount} fontes conexi`};
-    return {eyebrow:'PROVENIENTIA · LIMES',title:`${surface.sourceCount} source references`,body:surface.sourceRefs.slice(0,3).join(' · ')||'No source references registered.',detail:surface.boundary};
+    if(face==='back')return {eyebrow:'CONTINUITY · SAME FEATURE',title:surface.label,body:surface.description||surface.summary,detail:surface.boundary};
+    if(face==='left')return {eyebrow:'STATE · LOCAL',title:surface.state,body:detail?.summary||'State comes from the local feature.',detail:`Shape ${shapeLabels[surface.shape]??surface.shape} · ${surface.size.toFixed(1)}×`};
+    if(face==='right')return {eyebrow:'CONNECTIONS · FEATURES',title:'Nearby features',body:surface.summary,detail:(relationships[feature.id]??[]).slice(0,4).map(id=>featureMap.has(id)?labelFor(featureMap.get(id)):id).join(' · ')||'No local connections defined yet.'};
+    if(face==='top')return {eyebrow:'IDENTITY · SURFACE',title:visibleId(feature.id),body:`${surface.label} · ${shapeLabels[surface.shape]??surface.shape}`,detail:`${surface.sourceCount} connected sources`};
+    return {eyebrow:'SOURCES · SCOPE',title:`${surface.sourceCount} source references`,body:surface.sourceRefs.slice(0,3).join(' · ')||'No source references registered.',detail:surface.boundary};
   }
   function buildFaceElement(face,feature,surface,detail){
     const page=document.createElement('article');page.className='assembly-wrap-face';page.dataset.face=face;page.dataset.objectShape=surface.shape;
@@ -267,7 +286,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     const surface=realityObjectSurfaceEngine.describe({feature,object,stage:spatial.nodes.get(feature.id)?.revealStage??0,summary:readFeature(feature.id)?.summary});
     const page=document.createElement('article');page.className='assembly-wrap-face assembly-wrap-fallback';page.dataset.face='front';page.dataset.objectShape=surface.shape;
     const eyebrow=document.createElement('small'),title=document.createElement('h2'),body=document.createElement('p'),detail=document.createElement('p'),button=document.createElement('button');
-    eyebrow.textContent='SUPERFICIES VIVA · REALITAS LENS';title.textContent=surface.label;body.textContent=surface.description||surface.summary;detail.textContent=surface.boundary;button.type='button';button.textContent='APERIRE HIC';button.addEventListener('click',()=>onNavigate?.(feature.id,'reality-assembly'));
+    eyebrow.textContent='LIVING SURFACE · REALITY LENS';title.textContent=surface.label;body.textContent=surface.description||surface.summary;detail.textContent=surface.boundary;button.type='button';button.textContent='OPEN HERE';button.addEventListener('click',()=>onNavigate?.(feature.id,'reality-assembly'));
     page.append(eyebrow,title,body,detail,button);return page;
   }
   function materializeSurfaceObjects(record){
@@ -441,14 +460,14 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     if(workspace.activeId!==id)workspace.travel(id);
     owner=workspace.timeline;
     if(renderNow)render();
-    if(announce)say(`${labelFor(featureMap.get(featureId))} · realitas lateralis independens; prior integra manet.`);
+    if(announce)say(`${labelFor(featureMap.get(featureId))} · independent side reality; the previous reality keeps its state.`);
   }
   function returnToParentReality({announce=true,renderNow=true}={}){
     const current=workspace.getCurrentNode(),parent=current.parentId?workspace.getNode(current.parentId):null;
     if(!workspace.returnToParent())return false;
     owner=workspace.timeline;
     if(renderNow)render();
-    if(announce)say('Ad realitatem priorem rediit; status lateralis manet.');
+    if(announce)say('Returned to the parent reality. The side reality keeps its state.');
     return true;
   }
   function syncActiveReality(){
@@ -459,36 +478,36 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     spatial.apply(state,{viewMode,hoveredId:hovered});
     const detail=readFeature(feature.id),surface=realityObjectSurfaceEngine.describe({feature,object,stage:spatial.getSnapshot().selectedStage,summary:detail?.summary,readOnly:state.mode==='past'});
     find('[data-title]').textContent=labelFor(feature);find('[data-description]').textContent=copyFor(surface.description);
-    find('[data-stage-badge]').textContent=`${surface.stageLabel} · ${latinShapes[surface.shape]??surface.shape}`;
+    find('[data-stage-badge]').textContent=`${['Overview','Identity','Sources','Details'][surface.stage]} · ${shapeLabels[surface.shape]??surface.shape}`;
     objectSymbol.textContent=({phone:'▯',square:'▦',rectangle:'▭',sphere:'◉',cylinder:'◍',cube:'⬡',wave:'∿'})[surface.shape]??'◇';
     find('[data-object-id]').textContent=visibleId(feature.id);find('[data-coordinate]').textContent=surface.positionLabel;
-    find('[data-open-state]').textContent=surface.state;
+    find('[data-open-state]').textContent=object.anchor?'Fixed':object.locked?'Locked':object.open?'Open':'Closed';
     const anchor=object.anchor===true,immutable=object.locked===true,editingDisabled=anchor||immutable||state.mode==='past';
     find('[data-anchor-note]').hidden=!anchor;
     const shapeInput=find('[data-tab-shape]');shapeInput.value=object.shape;shapeInput.disabled=!surface.controls.canReshape||editingDisabled;
-    find('[data-size-readout]').textContent=`${object.size.toFixed(1)}× · ${immutable?'Immutabilis':'Mutabilis'}`;
-    const lockButton=find('[data-lock-toggle]');lockButton.textContent=immutable?'Muta':'Fige';lockButton.disabled=!surface.controls.canLock||state.mode==='past';
-    find('[data-lock-state]').textContent=anchor?'Fixum':immutable?'Immutabilis':'Mutabilis';
-    find('[data-edit-note]').textContent=anchor?'Instrumentum fixum manet.':state.mode==='past'?'Historia sola legitur · redi ad Praesens.':immutable?'Libera instrumentum ut formam vel situm mutare possis.':'Trahe ad disponendum · Shift-trahe per profunditatem · super obiectum volve ad augendum.';
+    find('[data-size-readout]').textContent=`${object.size.toFixed(1)}× · ${immutable?'Locked':'Movable'}`;
+    const lockButton=find('[data-lock-toggle]');lockButton.textContent=immutable?'Unlock':'Lock';lockButton.disabled=!surface.controls.canLock||state.mode==='past';
+    find('[data-lock-state]').textContent=anchor?'Fixed':immutable?'Locked':'Movable';
+    find('[data-edit-note]').textContent=anchor?'This object stays fixed in place.':state.mode==='past'?'History is read-only. Return to Present to edit.':immutable?'Unlock the object to change its shape or position.':'Drag to arrange · hold Shift for depth · scroll over the object to resize.';
     const activeReality=workspace.getCurrentNode();
-    find('[data-mode]').textContent=state.mode==='past'?'Praeteritum · sola lectio':state.mode==='proposed'?'Propositum · non vivum':'Praesens · localis';
+    find('[data-mode]').textContent=state.mode==='past'?'History · read-only':state.mode==='proposed'?'Proposed layout':'Present · local';
     find('[data-source-count]').textContent=String(surface.sourceCount);find('[data-boundary]').textContent=surface.boundary;
     const sourceContainer=find('[data-sources]');sourceContainer.replaceChildren();
-    for(const source of surface.sourceRefs.length?surface.sourceRefs:['Navigatio instrumentorum']){const code=document.createElement('code');code.textContent=copyFor(source);sourceContainer.append(code);}
-    find('[data-source-detail]').textContent=surface.summary;
-    all('[data-open],[data-open-secondary]').forEach(button=>{button.disabled=state.mode==='past';});find('[data-open]').textContent=object.open?'Claude':'Aperi';
+    for(const source of surface.sourceRefs.length?surface.sourceRefs:['Feature navigator']){const code=document.createElement('code');code.textContent=copyFor(source);sourceContainer.append(code);}
+    find('[data-source-detail]').textContent=detail?.summary||feature.description;
+    all('[data-open],[data-open-secondary]').forEach(button=>{button.disabled=state.mode==='past';});find('[data-open]').textContent=object.open?'Close':'Expand';
     const sideId=sideRealityByFeature.get(sideRealityKey(workspace.activeId,state.selectedId));
     const sideButton=find('[data-side-reality]');
     const sameFeatureSide=activeReality.kind==='side'&&activeReality.state?.featureId===state.selectedId;
     const parentReality=activeReality.parentId?workspace.getNode(activeReality.parentId):null;
-    sideButton.textContent=sameFeatureSide?`Redi · ${parentReality?.label??'realitas prior'}`:sideId?`Ingredere · ${labelFor(feature)}`:'Nova realitas';
+    sideButton.textContent=sameFeatureSide?`Return to ${parentReality?.label??'parent reality'}`:sideId?`Enter ${labelFor(feature)}`:'New side reality';
     sideButton.disabled=state.mode==='past';
     find('[data-object-id]').textContent=visibleId(feature.id)+' · '+activeReality.id;
     for(const [id,button] of catalog)button.setAttribute('aria-current',String(id===state.selectedId));
     for(const [id,label] of labels){label.classList.toggle('is-selected',id===state.selectedId);label.classList.toggle('is-hovered',id===hovered);}
     const slider=find('[data-time]');slider.max=String(state.frames.length-1);slider.value=String(state.mode==='past'?state.frames.findIndex(frame=>frame.revision===state.frameCursor):state.frames.length-1);
     const frame=state.frames[Number(slider.value)];find('[data-time-label]').textContent=state.mode==='proposed'?'User-proposed branch':`${new Date(frame.observedAt).toLocaleTimeString()} · ${frame.action}`;
-    find('.assembly-branches').hidden=viewMode!=='4d';find('.assembly-timeline').classList.toggle('is-expanded',viewMode==='4d');
+    find('.assembly-branches').hidden=toolbar.hidden||viewMode!=='4d';find('.assembly-timeline').hidden=viewMode!=='4d';find('[data-export]').hidden=viewMode!=='4d';find('.assembly-timeline').classList.toggle('is-expanded',viewMode==='4d');
     const branchSelect=find('[data-branch-select]');branchSelect.replaceChildren(new Option('Present','present'));
     state.branches.forEach(branch=>branchSelect.add(new Option(branch.label,branch.id)));branchSelect.value=state.branchId??'present';
     root.dataset.previewDirty=String(state.revision>0||state.branches.length>0);
@@ -502,13 +521,13 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     selectedSurface.hidden=!revealInspector;
     root.classList.toggle('assembly-object-focused',revealInspector);
     root.classList.toggle('assembly-clean',!revealInspector);
-    find('[data-clean]').textContent=revealInspector?'Celare':'Objectum';
-    render();say(`${labelFor(featureMap.get(id))} · superficiem vivam aperire.`);
+    find('[data-clean]').textContent=revealInspector?'Close details':'Details';
+    render();say(`${labelFor(featureMap.get(id))} selected.`);
   }
   function exploreGroup(groupId){
     const record=catalogSections.get(groupId);if(!record)return;
     activeLensGroup=groupId;spatial.setActiveGroup(groupId);
-    if(root.classList.contains('assembly-directory-open')){record.open=true;record.children.hidden=false;record.header.setAttribute('aria-expanded','true');record.section.scrollIntoView?.({block:'nearest'});}
+    if(root.classList.contains('assembly-directory-open')){record.children.hidden=false;record.header.setAttribute('aria-expanded','true');record.section.scrollIntoView?.({block:'nearest'});}
     render();say(`${record.label} · tabulam spatialem elige.`);
   }
   function toggle(){const object=currentObject(),nextOpen=!object.open;
@@ -521,7 +540,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
       const activeReality=workspace.getCurrentNode();
       if(activeReality.kind==='side'&&activeReality.state?.featureId===object.id)returnToParentReality({announce:false,renderNow:false});
     }
-    render();say(`${labelFor(featureMap.get(object.id))} · ${nextOpen?'apertum':'clausum'} · eadem identitas.`);
+    render();say(`${labelFor(featureMap.get(object.id))} · ${nextOpen?'open':'closed'} · same feature identity.`);
   }
   function focus(){
     const object=currentObject(),mobile=innerWidth<700,position=new THREE.Vector3(...object.position),node=spatial.nodes.get(object.id);
@@ -542,6 +561,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     focusTarget=position.clone().add(opticalOffset);focusPosition=position.clone().add(outward).add(opticalOffset);spatial.focus(object.id);onFrame?.();
   }
   function overview(){
+    setDirectory(false);setViewTools(false);selectedSurface.hidden=true;root.classList.add('assembly-clean');root.classList.remove('assembly-object-focused');find('[data-clean]').textContent='Details';
     activeLensGroup=null;
     spatial.setActiveGroup(null);
     focusTarget=new THREE.Vector3(...CLEAN_LANDING_CAMERA.target);
@@ -550,9 +570,9 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     onFrame?.();
   }
   function setMode(mode){viewMode=mode;all('[data-view]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.view===mode)));render();}
-  function setInteraction(next){interaction=next;all('[data-interaction]').forEach(button=>{button.setAttribute('aria-pressed',String(button.dataset.interaction===next));button.textContent=next==='move'?'Fini disponere':'Disponde';});say(next==='move'?'Trahe obiectum; Shift-trahe per profunditatem.':'Trahe ad circumferentiam · scrolla ad iter.');}
+  function setInteraction(next){interaction=next;all('[data-interaction]').forEach(button=>{button.setAttribute('aria-pressed',String(button.dataset.interaction===next));button.textContent=next==='move'?'Finish arranging':'Arrange';});say(next==='move'?'Drag an object. Hold Shift to move through depth.':'Drag the field to orbit. Scroll to travel.');}
   function moveBy(axis,steps){
-    const object=currentObject();if(object.anchor||object.locked)throw Error(object.anchor?'Objectum fixum est.':'Primum hoc instrumentum libera.');
+    const object=currentObject();if(object.anchor||object.locked)throw Error(object.anchor?'This object is fixed in place.':'Unlock this object first.');
     const axisIndex={x:0,y:1,z:2}[axis],next=[...object.position];next[axisIndex]=Math.max(-60,Math.min(60,next[axisIndex]+steps));
     owner.move(object.id,next);syncActiveReality();render();
   }
@@ -568,14 +588,14 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   const spatialGroupLabels=new Map();
   for(const domain of REALITY_LENS_GROUPS){
     const members=groupMembers.get(domain.id)??[];if(!members.length)continue;
-    const label=document.createElement('button');label.type='button';label.className='assembly-group-label';label.textContent=`${domain.label} · ${members.length}`;label.setAttribute('aria-label',`Explora ${domain.label} · ${members.length} instrumenta`);
+    const label=document.createElement('button');label.type='button';label.className='assembly-group-label';label.textContent=`${lensSpaceLabel(domain.id)} · ${members.length}`;label.setAttribute('aria-label',`Explore ${lensSpaceLabel(domain.id)} · ${members.length} features`);
     label.onclick=()=>exploreGroup(domain.id);
     find('.assembly-labels').append(label);spatialGroupLabels.set(domain.id,label);
   }
   for(const feature of ordered){
     const groupId=resolveRealityLensGroup(feature.id),domain=catalogSections.get(groupId);
     const visibleLabel=labelFor(feature),button=document.createElement('button');button.type='button';button.textContent=visibleLabel;button.onclick=guard(()=>{select(feature.id);if(interaction!=='move')enter(feature.id);if(root.classList.contains('assembly-directory-open'))setDirectory(false,{restoreFocus:true});});(domain?.children??find('.assembly-catalog')).append(button);catalog.set(feature.id,button);
-    const label=document.createElement('button');label.type='button';label.className='assembly-node-label';label.textContent=visibleLabel;label.dataset.group=groupId;label.setAttribute('aria-label',`Aperi ${visibleLabel} · instrumentum`);label.onclick=guard(()=>{select(feature.id);if(interaction!=='move')enter(feature.id);});label.onpointerenter=()=>{hovered=feature.id;render();};label.onpointerleave=()=>{hovered=null;render();};find('.assembly-labels').append(label);labels.set(feature.id,label);
+    const label=document.createElement('button');label.type='button';label.className='assembly-node-label';label.textContent=visibleLabel;label.dataset.group=groupId;label.setAttribute('aria-label',`Open ${visibleLabel}`);label.onclick=guard(()=>{select(feature.id);if(interaction!=='move')enter(feature.id);});label.onpointerenter=()=>{hovered=feature.id;render();};label.onpointerleave=()=>{hovered=null;render();};find('.assembly-labels').append(label);labels.set(feature.id,label);
   }
   const catalogSearch=find('[data-search]'),quickSearch=find('[data-quick-search]');
   const applySearch=queryValue=>{
@@ -590,26 +610,27 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     for(const [groupId,record] of catalogSections){
       const anyVisible=[...catalog].some(([id,button])=>resolveRealityLensGroup(id)===groupId&&!button.hidden);
       record.section.hidden=Boolean(query&&!anyVisible);
-      if(query&&anyVisible){record.open=true;record.children.hidden=false;record.header.setAttribute('aria-expanded','true');}
-      else if(!query)record.children.hidden=!record.open;
+      if(query&&anyVisible){record.children.hidden=false;record.header.setAttribute('aria-expanded','true');}
+      else if(!query){record.children.hidden=!record.open;record.header.setAttribute('aria-expanded',String(record.open));}
     }
+    emptySearch.hidden=[...catalog.values()].some(button=>!button.hidden);
   };
   const selectSearchResult=()=>{
     if(!quickSearch.value.trim()){setDirectory(true);catalogSearch.focus();return false;}
     const first=[...catalog].find(([,button])=>!button.hidden)?.[0];
-    if(!first){say('Nullum obiectum inventum.');return false;}
+    if(!first){say('No matching features. Try another name.');return false;}
     select(first);setDirectory(false);enter(first);return true;
   };
   catalogSearch.oninput=event=>applySearch(event.target.value);
-  quickSearch.onfocus=()=>setDirectory(true);
-  quickSearch.oninput=event=>{setDirectory(true);applySearch(event.target.value);};
+  quickSearch.onfocus=()=>setDirectory(true,{focusSearch:false});
+  quickSearch.oninput=event=>{setDirectory(true,{focusSearch:false});applySearch(event.target.value);};
   find('[data-quick-find]').onsubmit=event=>{event.preventDefault();selectSearchResult();};
-  all('[data-home]').forEach(button=>button.onclick=overview);find('[data-focus]').onclick=focus;
+  all('[data-home]').forEach(button=>button.onclick=()=>{enter('reality-lens');overview();});find('[data-focus]').onclick=focus;
   all('[data-open],[data-open-secondary]').forEach(button=>button.onclick=guard(toggle));
   find('[data-tab-shape]').onchange=guard(event=>{const object=currentObject();owner.configure(object.id,{shape:event.target.value});syncActiveReality();render();if(mountedSurface)focus();say('Tab reshaped. Its identity and feature connection stayed the same.');});
-  find('[data-lock-toggle]').onclick=guard(()=>{const object=currentObject();owner.setLocked(object.id,!object.locked);syncActiveReality();render();say(object.locked?'Mutabile · obiectum apertum ad motum.':'Immutabile · positio et forma fixa.');});
+  find('[data-lock-toggle]').onclick=guard(()=>{const object=currentObject();owner.setLocked(object.id,!object.locked);syncActiveReality();render();say(object.locked?'Object unlocked. You can move it.':'Object locked. Shape and position stay fixed.');});
   find('[data-side-reality]').onclick=guard(()=>{const id=owner.getSnapshot().selectedId,current=workspace.getCurrentNode();if(current.kind==='side'&&current.state?.featureId===id)returnToParentReality();else enterSideReality(id);});
-  find('[data-enter]').onclick=enter;
+  find('[data-enter]').onclick=()=>enter();
   find('[data-enter-person]').onclick=()=>onNavigate?.('person');find('[data-enter-contracts]').onclick=()=>onNavigate?.('contracts');find('[data-grid]').onclick=()=>onNavigate?.('block-world');
   all('[data-view]').forEach(button=>button.onclick=()=>setMode(button.dataset.view));all('[data-interaction]').forEach(button=>button.onclick=()=>setInteraction(interaction==='move'?'orbit':'move'));
   find('[data-present]').onclick=()=>{owner.goTo('present');render();say('Returned to the unchanged present layout.');};
@@ -617,7 +638,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   find('[data-branch-form]').onsubmit=guard(event=>{event.preventDefault();owner.propose(find('#assembly-branch-name').value);find('#assembly-branch-name').value='';render();say('Proposed branch created from the inspected frame. The present remains unchanged.');});
   find('[data-branch-select]').onchange=guard(event=>{if(event.target.value==='present')owner.goTo('present');else owner.viewBranch(event.target.value);render();});
   find('[data-export]').onclick=()=>{const url=URL.createObjectURL(new Blob([owner.exportHistory()],{type:'application/json'})),anchor=document.createElement('a');anchor.href=url;anchor.download='matumbo-local-layout-history.json';anchor.click();setTimeout(()=>URL.revokeObjectURL(url),1000);say('Exported local layout history; no account, market or wallet state is included.');};
-  find('[data-clean]').onclick=()=>{selectedSurface.hidden=!selectedSurface.hidden;root.classList.toggle('assembly-object-focused',!selectedSurface.hidden);if(!selectedSurface.hidden)root.classList.remove('assembly-clean');else root.classList.add('assembly-clean');find('[data-clean]').textContent=selectedSurface.hidden?'Objectum':'Celare';if(!selectedSurface.hidden)render();};
+  find('[data-clean]').onclick=()=>{setDirectory(false);setViewTools(false);selectedSurface.hidden=!selectedSurface.hidden;root.classList.toggle('assembly-object-focused',!selectedSurface.hidden);if(!selectedSurface.hidden)root.classList.remove('assembly-clean');else root.classList.add('assembly-clean');find('[data-clean]').textContent=selectedSurface.hidden?'Details':'Close details';if(!selectedSurface.hidden)render();};
   const inspectorBody=find('.assembly-inspector-body');inspectorBody.id='assembly-inspector-content';
   const inspectorToggle=find('[data-fold-inspector]');inspectorToggle.setAttribute('aria-controls',inspectorBody.id);inspectorToggle.setAttribute('aria-expanded','true');
   const compactSelection=document.createElement('span');compactSelection.className='assembly-compact-selection';compactSelection.hidden=true;find('.assembly-inspector header').append(compactSelection);
@@ -636,14 +657,14 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     if(Math.abs(next-object.size)<.005)return;
     event.preventDefault();event.stopPropagation();event.stopImmediatePropagation();
     owner.configure(id,{size:next});syncActiveReality();render();
-    say(`${labelFor(featureMap.get(id))} · ${next.toFixed(1)}× · magnitudo mutata.`);
+    say(`${labelFor(featureMap.get(id))} · ${next.toFixed(1)}× · size updated.`);
   });
   const down=guard(event=>{
     if(!active||event.button!==0)return;
     const hit=locate(event),id=spatial.resolve(hit?.object);pointer={id:event.pointerId,x:event.clientX,y:event.clientY,objectId:id,move:false};
     if(interaction==='move'&&id&&owner.getSnapshot().mode!=='past'){
       select(id,{approach:false});const object=currentObject();
-      if(object.anchor||object.locked){say(object.anchor?'Objectum fixum est.':'Instrumentum immutabile est; prius libera.');return;}
+      if(object.anchor||object.locked){say(object.anchor?'This object is fixed in place.':'Unlock this object before moving it.');return;}
       camera.getWorldDirection(dragNormal);dragPlane.setFromNormalAndCoplanarPoint(dragNormal,new THREE.Vector3(...object.position));
       if(ray.ray.intersectPlane(dragPlane,dragPoint)){pointer.move=true;pointer.origin=object.position;pointer.hit=dragPoint.clone();pointer.next=object.position;pointer.startY=event.clientY;pointer.cameraForward=dragNormal.clone();controls.enabled=false;renderer.domElement.setPointerCapture(event.pointerId);event.stopImmediatePropagation();event.preventDefault();}
     }
@@ -665,7 +686,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
         spatial.apply({...state,objects:state.objects.map(object=>object.id===pointer.objectId?{...object,position:safePosition}:object)},{viewMode,hoveredId:pointer.objectId});
       }return;
     }
-    const id=spatial.resolve(hit?.object);if(id!==hovered){hovered=id;render();find('[data-hover-label]').textContent=id?`${labelFor(featureMap.get(id))} · clicca ut instrumentum aperias`:'Spatium: iter · obiectum: magnitudo · clic: ingredere';}
+    const id=spatial.resolve(hit?.object);if(id!==hovered){hovered=id;render();find('[data-hover-label]').textContent=id?`${labelFor(featureMap.get(id))} · tap to open`:'Drag the field to orbit · tap an object to open';}
   });
   const release=guard(event=>{
     if(!active||!pointer||event.pointerId!==pointer.id)return;const previous=pointer;pointer=null;controls.enabled=true;
@@ -673,6 +694,8 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     if(event.type==='pointerup'&&previous.objectId&&Math.hypot(event.clientX-previous.x,event.clientY-previous.y)<7){if(interaction!=='move')activateObjectTab(previous.objectId);else select(previous.objectId,{approach:false});}
   });
   const keys=guard(event=>{
+    if(active&&event.key==='Escape'&&!toolbar.hidden){setViewTools(false,{restoreFocus:true});event.preventDefault();return;}
+    if(active&&event.key.toLowerCase()==='f'&&!event.ctrlKey&&!event.metaKey&&!event.altKey&&!event.repeat&&!/input|textarea|select/i.test(event.target?.tagName)&&!event.target?.isContentEditable){setDirectory(directory.hidden,{restoreFocus:true});event.preventDefault();return;}
     if(active&&event.key==='Escape'&&root.classList.contains('assembly-directory-open')){setDirectory(false,{restoreFocus:true});event.preventDefault();return;}
     if(!active||/input|textarea|select/i.test(event.target?.tagName))return;
     if(event.target?.closest?.('button,a,summary,[contenteditable="true"]')&&event.key==='Enter')return;
@@ -691,7 +714,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     // The user materializes the directory / inspector with the header
     // toggles ("Objectum", "Invenire", inspector fold); nothing
     // auto-opens large over the 3D view.
-    root.classList.add('assembly-clean');find('[data-clean]').textContent='Objectum';selectedSurface.hidden=true;
+    root.classList.add('assembly-clean');find('[data-clean]').textContent='Details';selectedSurface.hidden=true;setDirectory(false);setViewTools(false);
     activeLensMode=Boolean(lensMode);spatial.setLensMode(activeLensMode);spatial.layer.visible=true;world.visible=false;scene.fog=activeLensMode?null:new THREE.FogExp2('#030911',.009);if(activeLensMode)scene.background=spatial.backdrop;document.body.classList.add('assembly-mode');
     scene.environment=environmentTexture;
     camera.fov=CLEAN_LANDING_CAMERA.fov;camera.updateProjectionMatrix();controls.minDistance=.45;controls.maxDistance=220;
@@ -699,14 +722,14 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     camera.position.copy(focusPosition);controls.target.copy(focusTarget);focusPosition=null;focusTarget=null;controls.update();render();
   }
   function close(){
-    if(!active)return;setDirectory(false);active=false;onActiveChange(false);pointer=null;controls.enabled=true;root.hidden=true;spatial.layer.visible=false;document.body.classList.remove('assembly-mode');
+    if(!active)return;setDirectory(false);setViewTools(false);active=false;onActiveChange(false);pointer=null;controls.enabled=true;root.hidden=true;spatial.layer.visible=false;document.body.classList.remove('assembly-mode');
     clearFeatureSurface();
     spatial.setLensMode(false);activeLensMode=false;
     if(saved){camera.position.copy(saved.position);controls.target.copy(saved.target);camera.fov=saved.fov;camera.updateProjectionMatrix();controls.minDistance=saved.min;controls.maxDistance=saved.max;world.visible=saved.worldVisible;scene.fog=saved.fog;scene.environment=saved.environment;scene.background=saved.background;saved=null;}
   }
   render();
   const selectionObserver=new MutationObserver(()=>{compactSelection.textContent=find('[data-title]').textContent;});selectionObserver.observe(find('[data-title]'),{childList:true});
-  return {open,close,get active(){return active;},getSnapshot:snapshot,resolve:spatial.resolve,focusFeature(id){if(!featureMap.has(id))return false;if(!active)open({lensMode:true,featureId:id});else select(id);return true;},mountFeatureSurface,clearFeatureSurface,setInspectorVisible(visible){selectedSurface.hidden=!visible;root.classList.toggle('assembly-object-focused',Boolean(visible));root.classList.toggle('assembly-clean',!visible);find('[data-clean]').textContent=visible?'Celare':'Objectum';if(visible)render();},
+  return {open,close,get active(){return active;},getSnapshot:snapshot,resolve:spatial.resolve,focusFeature(id){if(!featureMap.has(id))return false;if(!active)open({lensMode:true,featureId:id});else select(id);return true;},mountFeatureSurface,clearFeatureSurface,setInspectorVisible(visible){selectedSurface.hidden=!visible;root.classList.toggle('assembly-object-focused',Boolean(visible));root.classList.toggle('assembly-clean',!visible);find('[data-clean]').textContent=visible?'Close details':'Details';if(visible)render();},
     getFeatureObject(id){const node=spatial.nodes.get(id);return node?{root:node.root,feature:featureMap.get(id),get shape(){return node.shape;}}:null;},
     getPanelAnchor(featureId){
       const node=spatial.nodes.get(featureId),object=owner.getSnapshot().objects.find(item=>item.id===featureId);if(!node||!object)return null;
@@ -806,5 +829,5 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
       }
       }
     },
-    destroy(){close();destroyed=true;clearFeatureSurface();window.removeEventListener('resize',resizeCss3d);window.removeEventListener('resize',resizeFocus);selectionObserver.disconnect();spatial.destroy();root.remove();stylesheet.remove();cssSurfaceHost.removeEventListener('pointerdown',downOnObjectSurface,true);canvas.removeEventListener('pointerdown',down,true);canvas.removeEventListener('pointermove',move);canvas.removeEventListener('pointerup',release);canvas.removeEventListener('pointercancel',release);canvas.removeEventListener('wheel',resizeOnScroll,true);root.removeEventListener('wheel',resizeOnScroll,true);document.removeEventListener('keydown',keys);}};
+    destroy(){close();destroyed=true;clearFeatureSurface();window.removeEventListener('resize',resizeCss3d);window.removeEventListener('resize',resizeFocus);selectionObserver.disconnect();toolbarSizeObserver.disconnect();spatial.destroy();root.remove();stylesheet.remove();cssSurfaceHost.removeEventListener('pointerdown',downOnObjectSurface,true);canvas.removeEventListener('pointerdown',down,true);canvas.removeEventListener('pointermove',move);canvas.removeEventListener('pointerup',release);canvas.removeEventListener('pointercancel',release);canvas.removeEventListener('wheel',resizeOnScroll,true);root.removeEventListener('wheel',resizeOnScroll,true);document.removeEventListener('keydown',keys);}};
 }

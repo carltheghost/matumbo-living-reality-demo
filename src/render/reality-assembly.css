@@ -358,3 +358,37 @@ body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surfa
   content:none!important;
   display:none!important;
 }
+
+/* Calm chrome: the spatial objects remain the working surface. */
+#reality-assembly .assembly-header [data-directory-toggle]{display:inline-flex!important;align-items:center;justify-content:center}
+#reality-assembly .assembly-header button{min-height:44px!important;font-size:14px}
+#reality-assembly.assembly-directory-open [data-directory-close]{display:inline-flex;align-items:center;justify-content:center;min-height:44px!important;font-size:14px!important}
+#reality-assembly .assembly-directory .assembly-intro,
+#reality-assembly .assembly-search-label,
+#reality-assembly .assembly-catalog button{font-size:14px!important;line-height:1.5}
+#reality-assembly .assembly-directory .assembly-note{font-size:13px!important}
+#reality-assembly .assembly-search-label input{min-height:44px;font-size:16px}
+#reality-assembly .assembly-domain-toggle{font-size:14px!important;min-height:44px!important}
+#reality-assembly .assembly-domain-features>button{min-height:44px;font-size:14px!important}
+#reality-assembly .assembly-toolbar button{min-height:44px!important;font-size:14px!important}
+#reality-assembly .assembly-search-empty{font-size:14px;color:#b9d2df;line-height:1.5}
+#reality-assembly.assembly-directory-open .assembly-css3d-host{visibility:hidden}
+#reality-assembly .assembly-header [data-view-tools][aria-expanded=true]{border-color:#84bed3;background:#163548}
+@media(min-width:701px){
+  #reality-assembly.assembly-directory-open .assembly-directory{left:18px;top:94px;bottom:90px;width:360px;max-width:calc(100vw - 36px);padding:18px;border:1px solid var(--line);border-radius:14px;background:#071522f5;overflow:auto;gap:8px}
+  #reality-assembly .assembly-catalog{flex:1;min-height:70px;align-content:start}
+}
+@media(min-width:701px) and (max-width:1100px){
+  #reality-assembly .assembly-header nav,#reality-assembly .assembly-quick-find{display:none}
+}
+@media(max-width:700px){
+  #reality-assembly .assembly-header{gap:5px;left:10px;right:10px;max-width:calc(100vw - 20px)}
+  #reality-assembly .assembly-header [data-clean],
+  #reality-assembly .assembly-header [data-directory-toggle],
+  #reality-assembly .assembly-header [data-view-tools]{padding:8px 9px;font-size:14px!important}
+  #reality-assembly .assembly-header [data-clean]{max-width:92px;white-space:normal}
+  #reality-assembly .assembly-header .assembly-brand{font-size:16px}
+  #reality-assembly .assembly-header .assembly-brand>span{display:none}
+  body.assembly-mode #reality-assembly.assembly-tools-open .assembly-toolbar{display:flex;bottom:calc(74px + env(safe-area-inset-bottom));left:10px;right:10px;max-height:34dvh;overflow:auto;transform:none;width:auto;flex-wrap:wrap}
+  #reality-assembly.assembly-tools-open .assembly-branches{bottom:calc(86px + var(--assembly-toolbar-height,184px) + env(safe-area-inset-bottom));left:10px;right:10px;max-height:28dvh;overflow:auto}
+}
