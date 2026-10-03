@@ -58,6 +58,8 @@ The entry bodies are procedural beveled Three.js geometry: stepped portal, capsu
 
 ## Verified tests and actual interactions
 
+The first Windows CI run exposed two source-character-distance checks that counted CRLF differently from LF. Their source reads now normalize platform line endings while preserving every assertion. All four integration checks also pass against eight real CRLF fixture files. This is test portability, not an additional product-behavior repair.
+
 The final complete JavaScript run on this Windows checkout passed **2,197 tests, zero failures, zero skips**. The complete Python run passed **20 tests**. The earlier cleanup phase passed 2,052 JavaScript tests before the economic expansion. Windows launch tests use actual ephemeral listeners to prove launch, reuse, ownership-safe stop, tampered-record refusal and foreign-listener refusal. Python tests cover the real loopback HTTP service with a fake upstream requester and deterministic archive/extraction integrity.
 
 The exact starting PR had 1,771 tests, 1,717 passes and 54 failures on this host. The current clean suite includes functional repairs, expanded regression coverage, malformed-test corrections and migrations from retired APIs/source assumptions to the accepted architecture. A repaired source-pattern assertion or migrated old API test is not an independent product bug. The canonical supply/rates and private portal authority were preserved; tests were not skipped to obtain the passing result.

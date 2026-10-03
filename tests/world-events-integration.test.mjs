@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile as readTextFile } from "node:fs/promises";
 import { test } from "node:test";
+
+// Source contracts count code characters consistently on LF and CRLF checkouts.
+const readFile = async (...args) => (await readTextFile(...args)).replace(/\r\n?/g, "\n");
 
 test("World Pulse is mounted as a real-source route over the cube-only field", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
