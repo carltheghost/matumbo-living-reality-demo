@@ -7115,6 +7115,10 @@ featureNavigator = createFeatureNavigator({
       // The Asset Token already has a bounded local allocation preview. Its
       // route reveals that existing surface without adding a wallet, network
       // read, transfer path, or separate synthetic token object.
+      // The phone panel keeper may have hidden this class-driven legacy aside
+      // while another route was open. Reopen the original owner before Lens
+      // attaches it, just as the other feature consoles do in their open().
+      if(assetLaunchPanel){assetLaunchPanel.hidden=false;assetLaunchPanel.removeAttribute('aria-hidden');}
     } else if (feature.id === 'launch-distribution') {
       // Keep the right-side consoles mutually exclusive so a feature click
       // never leaves two opaque panels stacked over the world.  The feature
