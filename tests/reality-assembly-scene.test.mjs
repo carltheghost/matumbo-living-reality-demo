@@ -215,6 +215,38 @@ test('space bounds include entire entry bodies and phone reflow uses two columns
   scene.destroy();
 });
 
+test('four Network tools balance into two rows without overriding creator layouts or saved objects',()=>{
+  const features=['gateway','web-ai','social-explorer','bot-plaza'].map(id=>({id,label:id,lensGroup:'network',sources:[]}));
+  const targets=[],parent=new THREE.Scene(),scene=buildRealityAssemblyScene({THREE,parent,features,targets});
+  const shapes=['cube','sphere','rectangle','cylinder'];
+  const objects=features.map((feature,index)=>({id:feature.id,position:[index*8,2,-index*5],shape:shapes[index],size:1,open:false}));
+  scene.apply({selectedId:'gateway',mode:'present',objects});scene.setSpaceView('network');
+  const gridSize=()=>{
+    const points=features.map(feature=>scene.getObjectPosition(feature.id));
+    return [new Set(points.map(point=>point.x)).size,new Set(points.map(point=>point.y)).size];
+  };
+  for(const width of [1280,390]){
+    scene.setSpaceViewport({width,height:844});
+    assert.deepEqual(gridSize(),[2,2],`four tools use a balanced layout at ${width}px`);
+    assert.deepEqual(scene.getSpaceBounds('network').ids,features.map(feature=>feature.id));
+  }
+  scene.setSpaceViewport({width:1280,height:844});
+  scene.setCreatorAppearance({layout:'grid'});assert.deepEqual(gridSize(),[4,1]);
+  for(const layout of ['focus','flow']){
+    scene.setCreatorAppearance({layout});assert.deepEqual(gridSize(),[1,4]);
+  }
+  scene.setCreatorAppearance({density:'compact'});assert.deepEqual(gridSize(),[2,2],'density alone does not change the balanced arrangement');
+  scene.setCreatorAppearance(null);assert.deepEqual(gridSize(),[2,2]);
+  for(const object of objects){
+    const node=scene.nodes.get(object.id);
+    assert.equal(node.feature,features.find(feature=>feature.id===object.id));
+    assert.equal(node.shape,object.shape);
+    assert.deepEqual(node.position.toArray(),object.position,'the presentation never changes saved placement');
+    assert.equal(scene.resolve(node.tabMesh),object.id,'each tool retains its original picking identity');
+  }
+  scene.destroy();assert.equal(targets.length,0);assert.equal(parent.children.length,0);
+});
+
 test('focused space camera distances use the compact body position and preserve isolation',()=>{
   const {scene}=spaceScene();
   scene.setSpaceView('value');scene.focus('contracts');

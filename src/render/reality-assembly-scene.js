@@ -114,10 +114,20 @@ const SPACE_COPY=Object.freeze({
   experiences:{label:'Experiences',description:'Play, learn, watch and follow live events.'},
 });
 
+// Short choosing-a-tool copy belongs to the body preview. The original feature
+// record and its complete description continue to own the opened surface.
+const NETWORK_PREVIEWS=Object.freeze({
+  gateway:{label:'World Gateway',kicker:'PUBLIC SOURCES',description:'Public sources, with evidence.'},
+  'web-ai':{label:'Web + AI',kicker:'BROWSE + ASK',description:'Browse and choose an AI assistant.'},
+  'social-explorer':{label:'Social Explorer',kicker:'LOCAL DISCOVERY',description:'Fictional places and shared ideas.'},
+  'bot-plaza':{label:'Bot Plaza',kicker:'LOCAL BOT TEAM',description:'Local bots, skills and drafts.'},
+});
+
 /** A preview belongs to the body's cap. Keep only the information needed to
  * choose it; source IDs, diagnostics and full details live inside the object. */
 function drawFeatureArtwork(THREE,feature,color,shapeName,{compact=false,surfaceAspect=null}={}){
   const canvas=globalThis.document?.createElement?.('canvas');if(!canvas)return null;
+  const networkPreview=NETWORK_PREVIEWS[feature.id];
   const sphere=shapeName==='sphere',portrait=shapeName==='phone'||shapeName==='cylinder';canvas.width=portrait?512:768;
   canvas.height=Math.round(canvas.width/(surfaceAspect??(sphere?1:portrait?.58:1.5)));
   const ctx=canvas.getContext('2d');if(!ctx)return null;
@@ -133,8 +143,8 @@ function drawFeatureArtwork(THREE,feature,color,shapeName,{compact=false,surface
   ctx.fillStyle=grazing;ctx.fillRect(0,0,width,3);
   ctx.fillStyle='rgba(69,158,220,.05)';ctx.beginPath();ctx.moveTo(width*.56,height);ctx.lineTo(width,height*.18);ctx.lineTo(width,height);ctx.closePath();ctx.fill();
   ctx.fillStyle=hex;ctx.fillRect(margin,sphere?height*.21:portrait?68:48,feature.isSpaceEntry?74:58,5);
-  ctx.fillStyle='#a4c4cf';ctx.font=`600 ${portrait?19:20}px system-ui,sans-serif`;ctx.letterSpacing='1.2px';
-  if(!compact)ctx.fillText(feature.isSpaceEntry?'REALITY LENS':'LIVING WORLD',margin,sphere?height*.27:portrait?115:91,contentWidth);
+  ctx.fillStyle='#a4c4cf';ctx.font=`600 ${networkPreview?(compact?30:26):portrait?19:20}px system-ui,sans-serif`;ctx.letterSpacing='1.2px';
+  if(!compact||networkPreview)ctx.fillText(networkPreview?.kicker??(feature.isSpaceEntry?'REALITY LENS':'LIVING WORLD'),margin,sphere?height*.27:portrait?115:91,contentWidth);
   ctx.letterSpacing='0px';
   const wrap=(value,y,fontSize,lineHeight,maxLines)=>{
     ctx.font=`600 ${fontSize}px system-ui,sans-serif`;
@@ -148,18 +158,19 @@ function drawFeatureArtwork(THREE,feature,color,shapeName,{compact=false,surface
     });
     return Math.min(lines.length,maxLines)*lineHeight;
   };
-  const title=feature.label??(feature.id==='block-world'?'Block World':String(feature.id??'World').replaceAll('-',' '));
-  ctx.fillStyle='#edf6ff';const titleY=Math.round(height*(sphere?.37:portrait?.25:.33));
-  const titleSize=compact?(portrait?76:feature.isSpaceEntry?92:84):(portrait?43:feature.isSpaceEntry?60:48);
+  const title=networkPreview?.label??feature.label??(feature.id==='block-world'?'Block World':String(feature.id??'World').replaceAll('-',' '));
+  ctx.fillStyle='#edf6ff';const titleY=Math.round(height*(sphere?.37:portrait?.25:networkPreview?.28:.33));
+  const titleSize=compact?(portrait?76:feature.isSpaceEntry?92:84):(portrait?43:feature.isSpaceEntry?60:networkPreview?76:48);
   const titleHeight=wrap(title,titleY,titleSize,Math.round(titleSize*1.22),compact&&portrait?3:2);
-  const actionY=sphere?height*.79:height-(portrait?105:70),actionSize=compact?(portrait||sphere?48:58):(portrait?27:28),dividerY=actionY-actionSize-16;
+  const actionY=sphere?height*.79:height-(portrait?105:70),actionSize=compact?(portrait||sphere?48:58):(networkPreview?48:portrait?27:28),dividerY=actionY-actionSize-16;
   ctx.fillStyle='#aac6d2';
-  const description=String(feature.description??'Open this world to explore.').split(/(?<=[.!?])\s/)[0];
-  const descriptionY=titleY+titleHeight+30,descriptionLines=Math.max(0,Math.min(sphere?1:portrait?4:2,1+Math.floor((dividerY-24-descriptionY)/40)));
-  if(!compact&&descriptionLines)wrap(description,descriptionY,portrait?27:30,40,descriptionLines);
+  const description=String(networkPreview?.description??feature.description??'Open this world to explore.').split(/(?<=[.!?])\s/)[0];
+  const descriptionLineHeight=networkPreview?58:40;
+  const descriptionY=titleY+titleHeight+30,descriptionLines=Math.max(0,Math.min(sphere?1:portrait?4:2,1+Math.floor((dividerY-24-descriptionY)/descriptionLineHeight)));
+  if((!compact||networkPreview)&&descriptionLines)wrap(description,descriptionY,portrait?27:networkPreview?48:30,descriptionLineHeight,descriptionLines);
   ctx.fillStyle=hex;ctx.fillRect(margin,dividerY,contentWidth,1);
   ctx.fillStyle='#cceaff';ctx.font=`600 ${actionSize}px system-ui,sans-serif`;
-  ctx.fillText(feature.isSpaceEntry?(compact?`${feature.memberCount} worlds  →`:`Explore ${feature.memberCount} worlds  →`):'Open world  →',margin,actionY,contentWidth);
+  ctx.fillText(feature.isSpaceEntry?(compact?`${feature.memberCount} worlds  →`:`Explore ${feature.memberCount} worlds  →`):networkPreview?'Open tool  →':'Open world  →',margin,actionY,contentWidth);
   const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=4;return texture;
 }
 export function buildRealityAssemblyScene({THREE,parent,features,targets=[],relationships={}}){
@@ -644,7 +655,11 @@ function applyTabDepthMode(node){
     for(const marker of groupParents.values()){
       const page=getSpacePage(marker.id);spacePages.set(marker.id,page.page);
       const members=marker.members.slice(page.page*page.pageSize,(page.page+1)*page.pageSize);
-      const items=arrangeRows(members.map(node=>{const form=REALITY_TAB_FORMS[node.shape]??REALITY_TAB_FORMS.rectangle,scale=(node.size??1)*(node.scale??1)*previewScale;return {id:node.feature.id,size:[form.width*scale,form.height*scale,form.depth*scale]};}),columns,creatorGap);
+      // Four tools form a balanced square by default. Explicit creator layout
+      // choices still control their arrangement, and saved positions stay intact.
+      const memberColumns=marker.id==='network'&&members.length===4&&!['focus','flow','grid'].includes(creatorAppearance?.layout)?2:columns;
+      const memberGap=marker.id==='network'&&!creatorAppearance?1.0:creatorGap;
+      const items=arrangeRows(members.map(node=>{const form=REALITY_TAB_FORMS[node.shape]??REALITY_TAB_FORMS.rectangle,scale=(node.size??1)*(node.scale??1)*previewScale;return {id:node.feature.id,size:[form.width*scale,form.height*scale,form.depth*scale]};}),memberColumns,memberGap);
       items.forEach(item=>compactPositions.set(item.id,new THREE.Vector3(...item.position)));spaceBounds.set(marker.id,boundsFor(items));
     }
   }

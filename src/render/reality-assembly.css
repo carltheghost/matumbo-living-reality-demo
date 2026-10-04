@@ -420,6 +420,9 @@ body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surfa
 #reality-assembly .assembly-node-label{font-size:13px!important;min-height:44px!important;color:#c9dadd!important;opacity:.85;max-width:215px}
 #reality-assembly .assembly-selection-hint{bottom:32px!important;background:#0c1d2999;font-size:13px;max-width:calc(100vw - 36px)}
 #reality-assembly .assembly-status:empty{display:none}
+/* Calm navigation announcements have their own line below the gesture hint. */
+#reality-assembly[data-space-view=space] .assembly-status,
+#reality-assembly[data-space-view=gateway] .assembly-status{bottom:8px!important;margin:0;line-height:14px;max-height:14px;white-space:nowrap}
 body.assembly-mode #immersive-toolbar{display:none!important}
 body.assembly-mode:has(#reality-assembly.assembly-tools-open) #immersive-toolbar{display:flex!important;top:auto!important;bottom:18px!important;right:18px!important;left:auto!important}
 @media(max-width:700px){

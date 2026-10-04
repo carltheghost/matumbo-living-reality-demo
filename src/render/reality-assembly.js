@@ -11,8 +11,8 @@ import {normalizeDesignDescriptor} from '../domains/creator-economy.js?v=2026100
 export const CLEAN_LANDING_CAMERA={position:[36,25,110],target:[0,2,0],fov:60,mergeThreshold:LOD_FAR};
 
 /** Fit a space inside the available viewport, including phone chrome. */
-export function frameRealitySpace({bounds,width,height,fov=60,topInset=null}){
-  const phone=width<700,safeTop=topInset??(phone?220:270),safeBottom=50;
+export function frameRealitySpace({bounds,width,height,fov=60,topInset=null,bottomInset=50}){
+  const phone=width<700,safeTop=topInset??(phone?220:270),safeBottom=bottomInset;
   const safeWidth=Math.max(160,width-(phone?24:64)),safeHeight=Math.max(1,height-safeTop-safeBottom);
   const tangent=Math.tan(fov*Math.PI/360),aspect=width/height;
   // Fit the nearest extent of deep bodies, rather than their center plane.
@@ -287,7 +287,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     breadcrumbs.hidden=!groupId&&!featureId;find('[data-crumb-space]').hidden=!groupLabel;find('[data-crumb-space]').textContent=groupLabel??'';find('[data-crumb-space]').disabled=!featureId;find('[data-crumb-divider]').hidden=!featureId;find('[data-crumb-feature]').textContent=featureId?labelFor(featureMap.get(featureId)):'';
     find('[data-space-kicker]').textContent=featureId?(groupLabel??'REALITY LENS'):groupLabel?'YOUR CONNECTED UNIVERSE':'REALITY LENS';
     find('[data-space-title]').textContent=featureId?labelFor(featureMap.get(featureId)):groupLabel??(groupId==='*'?'Your whole universe.':'A little space for everything.');
-    find('[data-space-copy]').textContent=featureId?'Your object is open. Its space stays where you left it.':groupLabel?`${groupMembers.get(groupId)?.length??0} objects · choose one to open.`:groupId==='*'?'The full assembly. Use Spaces to return to a quieter view.':'Choose a world. Open an object. Keep your place.';
+    find('[data-space-copy]').textContent=featureId?'Your object is open. Its space stays where you left it.':groupLabel?`${groupMembers.get(groupId)?.length??0} ${groupId==='network'?'tools':'objects'} · choose one to open.`:groupId==='*'?'The full assembly. Use Spaces to return to a quieter view.':'Choose a world. Open an object. Keep your place.';
     // Breadcrumbs own the visible return path. Keep the existing back action
     // for Escape without a second button covering Home at the same position.
     find('[data-space-back]').hidden=true;
@@ -614,11 +614,19 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     find('[data-clean]').textContent=revealInspector?'Close details':'Details';
     render();say(`${labelFor(featureMap.get(id))} selected.`);
   }
+  let framedSpaceInsets=null;
+  function measureSpaceInsets(){
+    const heading=contextBar.getBoundingClientRect(),hint=find('.assembly-selection-hint').getBoundingClientRect();
+    return {topInset:Math.max(innerWidth<700?220:270,heading.height>0?heading.bottom+22:0),
+      bottomInset:Math.max(50,hint.height>0?innerHeight-hint.top+18:0)};
+  }
   function frameSpace(groupId){
     spatial.setSpaceViewport?.({width:innerWidth,height:innerHeight});
     const bounds=spatial.getSpaceBounds?.(groupId);if(!bounds)return;updateSpacePages();
-    const pagedPhone=innerWidth<700&&root.dataset.spaceView==='space'&&spatial.getSpacePage?.().pageCount>1;
-    const frame=frameRealitySpace({bounds,width:innerWidth,height:innerHeight,fov:camera.fov,topInset:pagedPhone?300:null});
+    // Reserve the measured heading, breadcrumb and pager, including wrapped
+    // phone copy. A fixed 220px band allowed the bodies to cover the heading.
+    framedSpaceInsets=measureSpaceInsets();
+    const frame=frameRealitySpace({bounds,width:innerWidth,height:innerHeight,fov:camera.fov,...framedSpaceInsets});
     focusTarget=new THREE.Vector3(...frame.target);focusPosition=focusTarget.clone().add(new THREE.Vector3(0,0,frame.distance));onFrame?.();
   }
   function exploreGroup(groupId,{closeDirectory=true,updateLocation=true}={}){
@@ -673,6 +681,14 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   find('[data-space-back]').onclick=()=>{const groupId=activeLensGroup,wasFeature=root.dataset.spaceView==='feature';if(wasFeature&&groupId&&groupId!=='*')exploreGroup(groupId);else{onNavigate?.('reality-lens');overview();}};
   allObjects.onclick=()=>{clearFeatureSurface();activeLensGroup='*';spatial.setSpaceView?.('*');spatial.setActiveGroup('*');spatial.focus(null);setViewTools(false);updateSpaceContext('*');focusTarget=new THREE.Vector3(...CLEAN_LANDING_CAMERA.target);focusPosition=new THREE.Vector3(...CLEAN_LANDING_CAMERA.position);onFrame?.();render();};
   const reframeSpace=()=>{if(!active)return;if(root.dataset.spaceView==='feature')focus();else if(activeLensGroup!=='*')frameSpace(activeLensGroup);};window.addEventListener('resize',reframeSpace);
+  const spaceChromeObserver=new ResizeObserver(()=>{
+    if(!active||activeLensGroup==='*'||root.dataset.spaceView==='feature')return;
+    const next=measureSpaceInsets();
+    // Hover copy can change only the hint's width. That must not recenter an
+    // intentionally orbited camera when the reserved vertical space is equal.
+    if(!framedSpaceInsets||Math.abs(next.topInset-framedSpaceInsets.topInset)>1||Math.abs(next.bottomInset-framedSpaceInsets.bottomInset)>1)frameSpace(activeLensGroup);
+  });
+  spaceChromeObserver.observe(contextBar);spaceChromeObserver.observe(find('.assembly-selection-hint'));
   function setMode(mode){viewMode=mode;all('[data-view]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.view===mode)));render();}
   function setInteraction(next){interaction=next;all('[data-interaction]').forEach(button=>{button.setAttribute('aria-pressed',String(button.dataset.interaction===next));button.textContent=next==='move'?'Finish arranging':'Arrange';});say(next==='move'?'Drag an object. Hold Shift to move through depth.':'Drag the field to orbit. Scroll to travel.');}
   function moveBy(axis,steps){
@@ -986,5 +1002,5 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
       }
       }
     },
-    destroy(){close();destroyed=true;clearFeatureSurface();window.removeEventListener('resize',resizeCss3d);window.removeEventListener('resize',resizeFocus);window.removeEventListener('resize',reframeSpace);selectionObserver.disconnect();toolbarSizeObserver.disconnect();spatial.destroy();root.remove();stylesheet.remove();cssSurfaceHost.removeEventListener('pointerdown',downOnObjectSurface,true);canvas.removeEventListener('pointerdown',down,true);canvas.removeEventListener('pointermove',move);canvas.removeEventListener('pointerup',release);canvas.removeEventListener('pointercancel',release);canvas.removeEventListener('wheel',resizeOnScroll,true);root.removeEventListener('wheel',resizeOnScroll,true);document.removeEventListener('keydown',keys);}};
+    destroy(){close();destroyed=true;clearFeatureSurface();window.removeEventListener('resize',resizeCss3d);window.removeEventListener('resize',resizeFocus);window.removeEventListener('resize',reframeSpace);selectionObserver.disconnect();toolbarSizeObserver.disconnect();spaceChromeObserver.disconnect();spatial.destroy();root.remove();stylesheet.remove();cssSurfaceHost.removeEventListener('pointerdown',downOnObjectSurface,true);canvas.removeEventListener('pointerdown',down,true);canvas.removeEventListener('pointermove',move);canvas.removeEventListener('pointerup',release);canvas.removeEventListener('pointercancel',release);canvas.removeEventListener('wheel',resizeOnScroll,true);root.removeEventListener('wheel',resizeOnScroll,true);document.removeEventListener('keydown',keys);}};
 }

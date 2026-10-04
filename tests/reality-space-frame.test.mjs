@@ -29,6 +29,21 @@ test('paged phone spaces leave room for the heading and page controls',()=>{
   assert.ok(projectedCenter+projectedHeight/2<=height-50);
 });
 
+test('measured multiline headings and footer hints cannot overlap a framed volume',()=>{
+  for(const [width,height,topInset,bottomInset] of [[390,844,285,80],[640,839,278,80],[1440,1000,305,84]]){
+    const bounds={center:[0,1,0],width:13,height:10,depth:4};
+    const frame=frameRealitySpace({bounds,width,height,topInset,bottomInset});
+    const camera=new THREE.PerspectiveCamera(60,width/height,.01,1000);
+    camera.position.set(frame.target[0],frame.target[1],frame.target[2]+frame.distance);camera.lookAt(new THREE.Vector3(...frame.target));camera.updateMatrixWorld(true);
+    for(const x of [-1,1])for(const y of [-1,1])for(const z of [-1,1]){
+      const point=new THREE.Vector3(x*bounds.width/2,1+y*bounds.height/2,z*bounds.depth/2).project(camera);
+      const screenY=(1-point.y)*height/2;
+      assert.ok(screenY>=topInset-1e-6,`${width}px body clears the measured heading`);
+      assert.ok(screenY<=height-bottomInset+1e-6,`${width}px body clears the measured footer`);
+    }
+  }
+});
+
 for(const [width,height] of [[1440,1000],[390,844]]){
   for(const [bodyWidth,bodyHeight] of [[9,13],[15,9]]){
     test(`real camera keeps the entire ${bodyWidth}×${bodyHeight}×4 volume inside ${width}×${height} chrome`,()=>{

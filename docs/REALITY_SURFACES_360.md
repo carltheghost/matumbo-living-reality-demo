@@ -17,6 +17,8 @@ The former flattened sphere/cylinder front and continuous camera-facing rotation
 
 Every Home space has its own volumetric family. Network's eight-faced diamond replaces the second Home cube. Its title spans the real triangular faces and the whole body enters the same Network space. Existing Network feature objects retain their saved/default shape. Phone, square, rectangle and wave remain supported alternate shapes, including old saved Ourplace descriptors. Selecting a shape changes presentation, never its feature identity or financial authority.
 
+Network uses a balanced four-tool layout, concise purpose text and larger body actions. Its Home diamond maps each directional facet independently, preventing stretched side lettering. Camera framing measures the heading and footer, while hover-only label width changes preserve a deliberate orbit. [Network polish acceptance](reality-lens-review/NETWORK_TOOLS_ACCEPTANCE.md).
+
 ## Use it
 
 1. Open a body on Home to enter its space. Its surface previews actual member features.

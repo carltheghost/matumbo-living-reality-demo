@@ -1,0 +1,706 @@
+{
+  "status": "passed",
+  "verifiedAt": "2026-10-04T06:35:15.090701+00:00",
+  "baseCommit": "9ec69273b9319609af526fd4fa720391b4113f9f",
+  "scope": "Network diamond side-face mapping and surface design; balanced tool previews; measured chrome and hover-stable framing",
+  "sourceHashes": {
+    "reality-home-surfaces.js": "eb503c749392d66f8d99e4530f86335d4176bad22faf2473ef5e3dc7937b80c0",
+    "reality-assembly.js": "20f40784403b0b80cc1e969493d14910ccfc35a6fa0232533040ed956eff7fed",
+    "reality-assembly-scene.js": "057426a61509f2a2b65b32dcde7c237b241dc4d2d193ed5cf438c1016558c475",
+    "reality-assembly.css": "e9948ecb563a4086535c4ff2cb1cbd13fad6f67bec69878f3228f0dcf2dec6d0"
+  },
+  "focusedTests": {
+    "passed": 53,
+    "failed": 0,
+    "skipped": 0,
+    "files": [
+      "reality-home-surfaces",
+      "reality-space-frame",
+      "reality-assembly-scene",
+      "reality-surface-geometry",
+      "reality-assembly-unified",
+      "reality-surface-controller",
+      "reality-native-media-layout"
+    ]
+  },
+  "browserChecks": {
+    "passed": 36,
+    "failed": 0,
+    "runs": [
+      {
+        "viewport": {
+          "width": 1440,
+          "height": 1000
+        },
+        "checks": [
+          {
+            "name": "all-home-vertices-fit-with-eight-pixel-margin",
+            "passed": true
+          },
+          {
+            "name": "all-eight-diamond-facets-preserve-horizontal-letter-shapes",
+            "passed": true
+          },
+          {
+            "name": "physical-torus-hole-does-not-open-space",
+            "passed": true
+          },
+          {
+            "name": "physical-home-body-opens-network-space",
+            "passed": true
+          },
+          {
+            "name": "network-tools-clear-real-heading-and-footer",
+            "passed": true
+          },
+          {
+            "name": "hover-keeps-an-intentionally-orbited-camera",
+            "passed": true
+          },
+          {
+            "name": "physical-network-tool-social-explorer",
+            "passed": true
+          },
+          {
+            "name": "physical-network-tool-bot-plaza",
+            "passed": true
+          },
+          {
+            "name": "physical-network-tool-web-ai",
+            "passed": true
+          },
+          {
+            "name": "physical-feature-body-opens-canonical-gateway",
+            "passed": true
+          },
+          {
+            "name": "breadcrumb-space-back-forward-reload-home",
+            "passed": true
+          },
+          {
+            "name": "no-navigation-page-errors",
+            "passed": true
+          }
+        ],
+        "tools": [
+          {
+            "id": "social-explorer",
+            "url": "http://127.0.0.1:8082/?feature=social-explorer",
+            "panelId": "social-explorer-console",
+            "canonicalOwners": 1,
+            "physicalBodyClick": true
+          },
+          {
+            "id": "bot-plaza",
+            "url": "http://127.0.0.1:8082/?feature=bot-plaza",
+            "panelId": "bot-plaza-console",
+            "canonicalOwners": 1,
+            "physicalBodyClick": true
+          },
+          {
+            "id": "web-ai",
+            "url": "http://127.0.0.1:8082/?feature=web-ai",
+            "panelId": "web-ai-console",
+            "canonicalOwners": 1,
+            "physicalBodyClick": true
+          },
+          {
+            "id": "gateway",
+            "url": "http://127.0.0.1:8082/?feature=gateway",
+            "panelId": "live-gateway-console",
+            "canonicalOwners": 1,
+            "physicalBodyClick": true
+          }
+        ],
+        "facetInk": [
+          {
+            "index": 0,
+            "w": 651,
+            "h": 403,
+            "maxTransitions": 30,
+            "brightPixels": 13212
+          },
+          {
+            "index": 1,
+            "w": 521,
+            "h": 504,
+            "maxTransitions": 30,
+            "brightPixels": 13424
+          },
+          {
+            "index": 2,
+            "w": 651,
+            "h": 403,
+            "maxTransitions": 30,
+            "brightPixels": 13212
+          },
+          {
+            "index": 3,
+            "w": 521,
+            "h": 504,
+            "maxTransitions": 30,
+            "brightPixels": 13424
+          },
+          {
+            "index": 4,
+            "w": 651,
+            "h": 403,
+            "maxTransitions": 24,
+            "brightPixels": 8717
+          },
+          {
+            "index": 5,
+            "w": 521,
+            "h": 504,
+            "maxTransitions": 24,
+            "brightPixels": 8661
+          },
+          {
+            "index": 6,
+            "w": 651,
+            "h": 403,
+            "maxTransitions": 24,
+            "brightPixels": 8717
+          },
+          {
+            "index": 7,
+            "w": 521,
+            "h": 504,
+            "maxTransitions": 24,
+            "brightPixels": 8661
+          }
+        ],
+        "hoverCamera": {
+          "before": {
+            "position": [
+              -3.8874408745251756,
+              3.019196678545646,
+              11.967686135844675
+            ],
+            "target": [
+              3.997114180562085e-18,
+              2.3863284638786433,
+              0
+            ],
+            "fov": 60,
+            "aspect": 1.44,
+            "near": 0.1,
+            "far": 220
+          },
+          "after": {
+            "position": [
+              -3.888320817816459,
+              3.019345100722389,
+              11.967392419878614
+            ],
+            "target": [
+              3.997114180562085e-18,
+              2.3863284638786433,
+              0
+            ],
+            "fov": 60,
+            "aspect": 1.44,
+            "near": 0.1,
+            "far": 220
+          }
+        },
+        "pageErrors": []
+      },
+      {
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "checks": [
+          {
+            "name": "all-home-vertices-fit-with-eight-pixel-margin",
+            "passed": true
+          },
+          {
+            "name": "all-eight-diamond-facets-preserve-horizontal-letter-shapes",
+            "passed": true
+          },
+          {
+            "name": "physical-torus-hole-does-not-open-space",
+            "passed": true
+          },
+          {
+            "name": "physical-home-body-opens-network-space",
+            "passed": true
+          },
+          {
+            "name": "network-tools-clear-real-heading-and-footer",
+            "passed": true
+          },
+          {
+            "name": "hover-keeps-an-intentionally-orbited-camera",
+            "passed": true
+          },
+          {
+            "name": "physical-network-tool-social-explorer",
+            "passed": true
+          },
+          {
+            "name": "physical-network-tool-bot-plaza",
+            "passed": true
+          },
+          {
+            "name": "physical-network-tool-web-ai",
+            "passed": true
+          },
+          {
+            "name": "physical-feature-body-opens-canonical-gateway",
+            "passed": true
+          },
+          {
+            "name": "breadcrumb-space-back-forward-reload-home",
+            "passed": true
+          },
+          {
+            "name": "no-navigation-page-errors",
+            "passed": true
+          }
+        ],
+        "tools": [
+          {
+            "id": "social-explorer",
+            "url": "http://127.0.0.1:8082/?feature=social-explorer",
+            "panelId": "social-explorer-console",
+            "canonicalOwners": 1,
+            "physicalBodyClick": true
+          },
+          {
+            "id": "bot-plaza",
+            "url": "http://127.0.0.1:8082/?feature=bot-plaza",
+            "panelId": "bot-plaza-console",
+            "canonicalOwners": 1,
+            "physicalBodyClick": true
+          },
+          {
+            "id": "web-ai",
+            "url": "http://127.0.0.1:8082/?feature=web-ai",
+            "panelId": "web-ai-console",
+            "canonicalOwners": 1,
+            "physicalBodyClick": true
+          },
+          {
+            "id": "gateway",
+            "url": "http://127.0.0.1:8082/?feature=gateway",
+            "panelId": "live-gateway-console",
+            "canonicalOwners": 1,
+            "physicalBodyClick": true
+          }
+        ],
+        "facetInk": [
+          {
+            "index": 0,
+            "w": 651,
+            "h": 403,
+            "maxTransitions": 30,
+            "brightPixels": 13212
+          },
+          {
+            "index": 1,
+            "w": 521,
+            "h": 504,
+            "maxTransitions": 30,
+            "brightPixels": 13424
+          },
+          {
+            "index": 2,
+            "w": 651,
+            "h": 403,
+            "maxTransitions": 30,
+            "brightPixels": 13212
+          },
+          {
+            "index": 3,
+            "w": 521,
+            "h": 504,
+            "maxTransitions": 30,
+            "brightPixels": 13424
+          },
+          {
+            "index": 4,
+            "w": 651,
+            "h": 403,
+            "maxTransitions": 24,
+            "brightPixels": 8717
+          },
+          {
+            "index": 5,
+            "w": 521,
+            "h": 504,
+            "maxTransitions": 24,
+            "brightPixels": 8661
+          },
+          {
+            "index": 6,
+            "w": 651,
+            "h": 403,
+            "maxTransitions": 24,
+            "brightPixels": 8717
+          },
+          {
+            "index": 7,
+            "w": 521,
+            "h": 504,
+            "maxTransitions": 24,
+            "brightPixels": 8661
+          }
+        ],
+        "hoverCamera": {
+          "before": {
+            "position": [
+              -6.143607648528283,
+              2.6138928485384416,
+              15.736175204526521
+            ],
+            "target": [
+              -1.629748103793755e-18,
+              1.6066546990067205,
+              0
+            ],
+            "fov": 60,
+            "aspect": 0.46208530805687204,
+            "near": 0.1,
+            "far": 220
+          },
+          "after": {
+            "position": [
+              -6.14379170314512,
+              2.6139245802947872,
+              15.736101314845989
+            ],
+            "target": [
+              -1.629748103793755e-18,
+              1.6066546990067205,
+              0
+            ],
+            "fov": 60,
+            "aspect": 0.46208530805687204,
+            "near": 0.1,
+            "far": 220
+          }
+        },
+        "pageErrors": []
+      },
+      {
+        "viewport": {
+          "width": 640,
+          "height": 839
+        },
+        "checks": [
+          {
+            "name": "all-home-vertices-fit-with-eight-pixel-margin",
+            "passed": true
+          },
+          {
+            "name": "all-eight-diamond-facets-preserve-horizontal-letter-shapes",
+            "passed": true
+          },
+          {
+            "name": "physical-torus-hole-does-not-open-space",
+            "passed": true
+          },
+          {
+            "name": "physical-home-body-opens-network-space",
+            "passed": true
+          },
+          {
+            "name": "network-tools-clear-real-heading-and-footer",
+            "passed": true
+          },
+          {
+            "name": "hover-keeps-an-intentionally-orbited-camera",
+            "passed": true
+          },
+          {
+            "name": "physical-network-tool-social-explorer",
+            "passed": true
+          },
+          {
+            "name": "physical-network-tool-bot-plaza",
+            "passed": true
+          },
+          {
+            "name": "physical-network-tool-web-ai",
+            "passed": true
+          },
+          {
+            "name": "physical-feature-body-opens-canonical-gateway",
+            "passed": true
+          },
+          {
+            "name": "breadcrumb-space-back-forward-reload-home",
+            "passed": true
+          },
+          {
+            "name": "no-navigation-page-errors",
+            "passed": true
+          }
+        ],
+        "tools": [
+          {
+            "id": "social-explorer",
+            "url": "http://127.0.0.1:8082/?feature=social-explorer",
+            "panelId": "social-explorer-console",
+            "canonicalOwners": 1,
+            "physicalBodyClick": true
+          },
+          {
+            "id": "bot-plaza",
+            "url": "http://127.0.0.1:8082/?feature=bot-plaza",
+            "panelId": "bot-plaza-console",
+            "canonicalOwners": 1,
+            "physicalBodyClick": true
+          },
+          {
+            "id": "web-ai",
+            "url": "http://127.0.0.1:8082/?feature=web-ai",
+            "panelId": "web-ai-console",
+            "canonicalOwners": 1,
+            "physicalBodyClick": true
+          },
+          {
+            "id": "gateway",
+            "url": "http://127.0.0.1:8082/?feature=gateway",
+            "panelId": "live-gateway-console",
+            "canonicalOwners": 1,
+            "physicalBodyClick": true
+          }
+        ],
+        "facetInk": [
+          {
+            "index": 0,
+            "w": 651,
+            "h": 403,
+            "maxTransitions": 30,
+            "brightPixels": 13212
+          },
+          {
+            "index": 1,
+            "w": 521,
+            "h": 504,
+            "maxTransitions": 30,
+            "brightPixels": 13424
+          },
+          {
+            "index": 2,
+            "w": 651,
+            "h": 403,
+            "maxTransitions": 30,
+            "brightPixels": 13212
+          },
+          {
+            "index": 3,
+            "w": 521,
+            "h": 504,
+            "maxTransitions": 30,
+            "brightPixels": 13424
+          },
+          {
+            "index": 4,
+            "w": 651,
+            "h": 403,
+            "maxTransitions": 24,
+            "brightPixels": 8717
+          },
+          {
+            "index": 5,
+            "w": 521,
+            "h": 504,
+            "maxTransitions": 24,
+            "brightPixels": 8661
+          },
+          {
+            "index": 6,
+            "w": 651,
+            "h": 403,
+            "maxTransitions": 24,
+            "brightPixels": 8717
+          },
+          {
+            "index": 7,
+            "w": 521,
+            "h": 504,
+            "maxTransitions": 24,
+            "brightPixels": 8661
+          }
+        ],
+        "hoverCamera": {
+          "before": {
+            "position": [
+              -4.809617646240599,
+              3.1570490527892536,
+              12.239336821579498
+            ],
+            "target": [
+              -1.0157481812140508e-18,
+              2.3682869720757425,
+              0
+            ],
+            "fov": 60,
+            "aspect": 0.7628128724672228,
+            "near": 0.1,
+            "far": 220
+          },
+          "after": {
+            "position": [
+              -4.809839473648118,
+              3.1570873317152017,
+              12.239247182136705
+            ],
+            "target": [
+              -1.0157481812140508e-18,
+              2.3682869720757425,
+              0
+            ],
+            "fov": 60,
+            "aspect": 0.7628128724672228,
+            "near": 0.1,
+            "far": 220
+          }
+        },
+        "pageErrors": []
+      }
+    ]
+  },
+  "finalCssChecks": {
+    "passed": 3,
+    "failed": 0,
+    "runs": [
+      {
+        "viewport": {
+          "width": 1440,
+          "height": 1000
+        },
+        "chrome": {
+          "heading": {
+            "x": 270,
+            "y": 120,
+            "width": 900,
+            "height": 159.296875,
+            "top": 120,
+            "right": 1170,
+            "bottom": 279.296875,
+            "left": 270
+          },
+          "hint": {
+            "x": 563.828125,
+            "y": 934.5,
+            "width": 312.34375,
+            "height": 33.5,
+            "top": 934.5,
+            "right": 876.171875,
+            "bottom": 968,
+            "left": 563.828125
+          },
+          "status": {
+            "x": 26,
+            "y": 978,
+            "width": 1388,
+            "height": 14,
+            "top": 978,
+            "right": 1414,
+            "bottom": 992,
+            "left": 26
+          },
+          "statusVisible": true,
+          "overflow": false
+        }
+      },
+      {
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "chrome": {
+          "heading": {
+            "x": 12,
+            "y": 120,
+            "width": 366,
+            "height": 136.046875,
+            "top": 120,
+            "right": 378,
+            "bottom": 256.046875,
+            "left": 12
+          },
+          "hint": {
+            "x": 16,
+            "y": 784,
+            "width": 358,
+            "height": 28,
+            "top": 784,
+            "right": 374,
+            "bottom": 812,
+            "left": 16
+          },
+          "status": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "statusVisible": false,
+          "overflow": false
+        }
+      },
+      {
+        "viewport": {
+          "width": 640,
+          "height": 839
+        },
+        "chrome": {
+          "heading": {
+            "x": 12,
+            "y": 120,
+            "width": 616,
+            "height": 136.046875,
+            "top": 120,
+            "right": 628,
+            "bottom": 256.046875,
+            "left": 12
+          },
+          "hint": {
+            "x": 110,
+            "y": 777.609375,
+            "width": 420,
+            "height": 29.390625,
+            "top": 777.609375,
+            "right": 530,
+            "bottom": 807,
+            "left": 110
+          },
+          "status": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "statusVisible": false,
+          "overflow": false
+        }
+      }
+    ]
+  },
+  "independentReview": {
+    "blockingFindings": 0,
+    "observerHoverIssueCorrected": true,
+    "footerOverlapCorrected": true
+  },
+  "limits": {
+    "softwareWebGL": true,
+    "physicalDevice": false,
+    "publicDeployment": false,
+    "merge": false
+  }
+}

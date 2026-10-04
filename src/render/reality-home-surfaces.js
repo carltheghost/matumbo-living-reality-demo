@@ -1,6 +1,5 @@
 import {createRealitySurfaceGeometry} from './reality-surface-geometry.js?v=20261003-skin360';
 import {createRealitySurfaceAtlas} from './reality-surface-atlas.js?v=20261003-skin360';
-import {REALITY_TAB_FORMS} from '../domains/reality-tab-layout.js?v=20261003-skin360';
 
 /** Each of the six existing spaces has a different physical family. */
 export const REALITY_HOME_SHAPES = Object.freeze({
@@ -65,27 +64,41 @@ function paintTorusHeading(ctx, canvas, chart, document, accent) {
   ctx.putImageData(paint,0,0);
 }
 
-/** Project one large title through the diamond's actual facet UVs. It reads
- * across adjacent faces instead of repeating tiny labels on eight triangles. */
+/** A pair of triangular facets carries one complete title in each direction.
+ * Use each facet's horizontal axis: projecting every side through world X
+ * collapses the left/right faces into stretched columns of letters. */
 function paintDiamondHeading(ctx,canvas,chart,document,accent){
   const source=globalThis.document.createElement('canvas');source.width=source.height=768;
-  const title=source.getContext('2d'),side=768;
+  const title=source.getContext('2d'),side=768,upper=chart.id.startsWith('upper');
+  const wash=ctx.createLinearGradient(0,0,0,canvas.height);
+  wash.addColorStop(0,upper?'#102b45':'#061426');wash.addColorStop(1,upper?'#174c69':'#103955');
+  ctx.fillStyle=wash;ctx.fillRect(0,0,canvas.width,canvas.height);
+  // Four connected points are engraved into the material, with no added
+  // floating object or hit target. They give the space a recognizable mark.
+  const points=[[.5,.135],[.39,.22],[.61,.22],[.5,.275]];
+  const connect=(a,b)=>{
+    const dx=b[0]-a[0],dy=b[1]-a[1],length=Math.hypot(dx,dy),nx=-dy/length*.0018,ny=dx/length*.0018;
+    title.beginPath();title.moveTo((a[0]+nx)*side,(a[1]+ny)*side);title.lineTo((b[0]+nx)*side,(b[1]+ny)*side);
+    title.lineTo((b[0]-nx)*side,(b[1]-ny)*side);title.lineTo((a[0]-nx)*side,(a[1]-ny)*side);title.closePath();title.fill();
+  };
+  title.fillStyle='#3b95b4';for(const [a,b] of [[0,1],[0,2],[1,3],[2,3],[1,2]])connect(points[a],points[b]);
+  for(const [index,point] of points.entries()){
+    title.fillStyle=index===0?'#d7f8ff':accent;title.beginPath();title.ellipse(point[0]*side,point[1]*side,7,7,0,0,Math.PI*2);title.fill();
+  }
   title.textAlign='center';title.textBaseline='top';title.fillStyle='#f0f8ff';
-  title.font='700 94px system-ui, -apple-system, "Segoe UI", sans-serif';
-  title.fillText('Network',side/2,side*.33,side*.63);
-  title.font='700 83px system-ui, -apple-system, "Segoe UI", sans-serif';
-  title.fillText('& tools',side/2,side*.47,side*.64);
-  title.fillStyle=accent;title.font='600 34px system-ui, -apple-system, "Segoe UI", sans-serif';
-  title.fillText(`${document.features.length} OBJECTS`,side/2,side*.63,side*.5);
-  title.fillText('OPEN SPACE',side/2,side*.70,side*.48);
+  title.font='700 107px system-ui, -apple-system, "Segoe UI", sans-serif';
+  title.fillText('Network',side/2,side*.32,side*.64);
+  // Each line clears the equator instead of bending a word over the seam.
+  title.font='700 96px system-ui, -apple-system, "Segoe UI", sans-serif';
+  title.fillText('& tools',side/2,side*.525,side*.64);
+  title.fillStyle=accent;title.font='600 43px system-ui, -apple-system, "Segoe UI", sans-serif';
+  title.fillText(`${document.features.length} TOOLS · OPEN →`,side/2,side*.71,side*.48);
   const pixels=title.getImageData(0,0,side,side).data,paint=ctx.getImageData(0,0,canvas.width,canvas.height);
-  const form=REALITY_TAB_FORMS.octahedron,section=Number(chart.id.split('-')[1]),upper=chart.id.startsWith('upper');
-  const rim=[-form.width/2,form.width/2,form.width/2,-form.width/2],a=rim[section],b=rim[(section+1)%4],facing=section<2?1:-1;
   for(let y=0;y<canvas.height;y++){
     const v=1-(y+.5)/canvas.height,sy=Math.floor((.5-(upper?1:-1)*v*.5)*side);
     for(let x=0;x<canvas.width;x++){
       const u=(x+.5)/canvas.width,wa=1-u-v*.5,wb=u-v*.5;if(wa<0||wb<0)continue;
-      const sx=Math.max(0,Math.min(side-1,Math.floor((.5+facing*(wa*a+wb*b)/form.width)*side)));
+      const sx=Math.min(side-1,Math.floor(u*side));
       const from=(sy*side+sx)*4,alpha=pixels[from+3]/255;if(!alpha)continue;
       const to=(y*canvas.width+x)*4;
       for(let channel=0;channel<3;channel++)paint.data[to+channel]=pixels[from+channel]*alpha+paint.data[to+channel]*(1-alpha);
