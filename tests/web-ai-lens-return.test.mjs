@@ -6,7 +6,8 @@ import {buildAiPrompt,WEB_AI_BOUNDARY,WEB_AI_STORAGE_KEYS} from '../src/domains/
 test('assistant handoff describes the current object-first Lens rather than the obsolete cube scene',()=>{
   const prompt=buildAiPrompt({taskNote:'Continue the Reality Lens UI'});
   assert.match(prompt,/live interfaces attached to mutable 3D objects/);
-  assert.match(prompt,/no provider OAuth or sign-in bridge/);
+  assert.match(prompt,/link-out does not connect the provider account/);
+  assert.match(prompt,/separate local connection that requires explicit authorization/);
   assert.match(prompt,/Task note: Continue the Reality Lens UI/);
   assert.doesNotMatch(prompt,/static three\.js world of translucent blue glass cubes/);
 });

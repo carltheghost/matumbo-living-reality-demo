@@ -164,7 +164,8 @@ class BridgeHTTPTests(unittest.TestCase):
         (self.root / ".env").write_text("never-publish-this", encoding="utf-8")
         (self.root / "package.json").write_text("{}", encoding="utf-8")
         self.state = bridge.ProviderState("unit-test-secret", requester=reply)
-        self.server = bridge.create_server(self.root, port=0, state=self.state)
+        self.server = bridge.create_server(self.root, port=0, state=self.state,
+            gpt_state=bridge.gpt_bridge.GPTState(store=bridge.gpt_bridge.MemoryStore()))
         self.worker = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.worker.start()
         self.base = f"http://127.0.0.1:{self.server.server_port}"

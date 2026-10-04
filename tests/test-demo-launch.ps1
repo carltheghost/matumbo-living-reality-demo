@@ -20,7 +20,18 @@ try {
     try { & (Join-Path $repositoryRoot 'scripts\stop-demo.ps1') -StaticPort $port } catch { $refused=$true }
     if (-not $refused) { throw 'Stop did not reject a changed process identity.' }
     & (Join-Path $repositoryRoot 'scripts\verify-demo-launch.ps1') -StaticPort $port | Out-Null
-    $originalRecord | Set-Content -LiteralPath $statePath -Encoding UTF8
+    # Equivalent six/seven-digit ISO timestamp representations must preserve
+    # identity, including when newer PowerShell converts JSON dates to DateTime.
+    $reformatted = $originalRecord | ConvertFrom-Json
+    if ($reformatted.creationTime -is [DateTime]) {
+        $createdUtc = $reformatted.creationTime.ToUniversalTime()
+    } else {
+        $createdUtc = [DateTimeOffset]::Parse([string]$reformatted.creationTime,
+            [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::AssumeUniversal).UtcDateTime
+    }
+    $reformatted.creationTime = $createdUtc.ToString("yyyy-MM-dd'T'HH:mm:ss.FFFFFFF'Z'", [Globalization.CultureInfo]::InvariantCulture)
+    $reformatted | ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding UTF8
     & (Join-Path $repositoryRoot 'scripts\stop-demo.ps1') -StaticPort $port | Out-Null
     if (Test-Path -LiteralPath $statePath) { throw 'Owned stop did not remove its record.' }
     if (-not $ownedProcess.WaitForExit(5000)) { throw 'The recorded owned process did not exit after stop.' }
@@ -39,7 +50,11 @@ try {
         try { & (Join-Path $repositoryRoot 'scripts\launch-demo.ps1') -StaticPort $foreignPort | Out-Null } catch { $refused=$true }
         $foreignStateAfter=if (Test-Path -LiteralPath $foreignStatePath) { Get-Content -LiteralPath $foreignStatePath -Raw } else { $null }
         $foreignOwners=@(Get-NetTCPConnection -State Listen -LocalPort $foreignPort -ErrorAction SilentlyContinue | Where-Object OwningProcess -eq $PID)
-        if (-not $refused -or -not $foreign.Server.IsBound -or $foreignOwners.Count -ne 1) { throw 'Foreign listener was not preserved.' }
+        # Verify the actual OS listener and owner. Some PowerShell 7 hosts return
+        # null for the Socket.IsBound property after the intentional HTTP timeout.
+        if (-not $refused -or $foreignOwners.Count -ne 1) {
+            throw "Foreign listener was not preserved (refused=$refused, matchingOwners=$($foreignOwners.Count))."
+        }
         if ($foreignStateAfter -cne $foreignStateBefore) { throw 'Refusing a foreign listener changed process ownership.' }
     } finally { $foreign.Stop() }
     Write-Output "Owned bridge PID $($launchState.pid) exited and port $port has no listener; foreign fixture port $foreignPort was preserved without changing its ownership record."

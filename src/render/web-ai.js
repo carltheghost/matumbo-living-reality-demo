@@ -10,7 +10,7 @@
  *  - standalone mode keeps a compact, scrollable glass console
  *  - Reality Lens reparents this same live DOM into the selected object's
  *    Three.js CSS3D face; no second Web + AI cube or floating panel is made
- *  - three tabs (WEB / AI HELP / COMPUTE); task notes and economic rehearsal state stay local
+ *  - four tabs (MY GPT / WEB / AI HELP / COMPUTE); one shared object owner
  *  - minimize and drag apply only while the console is outside Reality Lens
  *  - mobile: full-width sheet at <=700px (390x844)
  *
@@ -52,6 +52,7 @@ import {
 } from "../domains/contribution-vault.js?v=20261003-skin360";
 import { createEconomicTimeline } from "../domains/economic-timeline.js?v=20261003-skin360";
 import { evaluateComputeEconomics } from "../domains/compute-economics-policy.js?v=20261003-skin360";
+import { mountMyGpt } from "./my-gpt.js?v=20261003-skin360";
 
 export { WEB_AI_CONSOLE_SOURCE };
 
@@ -76,6 +77,13 @@ const STYLE_TEXT = `
 .web-ai-tab:hover,.web-ai-tab:focus-visible{border-color:rgba(199,246,255,.6);outline:none}
 .web-ai-body{overflow-y:auto;overflow-x:hidden;padding:2px 15px 12px;display:flex;flex-direction:column;gap:10px;min-height:0;scrollbar-width:thin}
 .web-ai-body>section{display:flex;flex-direction:column;gap:10px;min-height:0}
+.web-ai-body>section[hidden]{display:none}
+.web-ai-head{order:0}.web-ai-tabs{order:1}.web-ai-body{order:2}.web-ai-boundary{order:3}
+#web-ai-console.reality-surface-semantic-owner>.assembly-object-tools{order:4}
+#web-ai-console.reality-surface-semantic-owner>.assembly-surface-provenance{order:5}
+#web-ai-console.reality-surface-semantic-owner>.web-ai-body{overflow:visible;flex:none}
+#web-ai-console.reality-surface-semantic-owner[data-web-ai-tab="gpt"]>.web-ai-head{display:none!important}
+#web-ai-console.reality-surface-semantic-owner .web-ai-tab{min-width:0;min-height:40px;padding:8px 4px!important;font-size:12px!important;letter-spacing:.02em!important;white-space:nowrap!important;word-break:normal!important}
 .web-ai-field{display:grid;gap:5px}
 .web-ai-field>span{color:#8fd8f0;font-size:8px;font-weight:750;letter-spacing:.14em;text-transform:uppercase}
 .web-ai-note,.web-ai-prompt{width:100%;box-sizing:border-box;resize:vertical;min-height:44px;padding:8px 9px;border:1px solid rgba(125,212,255,.22);border-radius:9px;background:rgba(3,12,20,.8);color:#dff9ff;font-size:10px;line-height:1.45;font-family:inherit}
@@ -239,7 +247,7 @@ export function createWebAiConsole({
   styleEl.textContent = STYLE_TEXT;
   (doc.head || doc).appendChild(styleEl);
 
-  const state = { opened: false, minimized: false, tab: "web", url: "", note: "", pendingExternalReturn: null };
+  const state = { opened: false, minimized: false, tab: "gpt", url: "", note: "", pendingExternalReturn: null };
   const computeLedger = economicRuntime?.exchange ?? createComputeExchangeLedger();
   const computeAccount = economicRuntime?.account ?? createComputeAccount({ monthlyBudgetUsd: 100, perTaskBudgetUsd: 25 });
   const contributionVault = economicRuntime?.vault ?? createContributionVault();
@@ -260,7 +268,7 @@ export function createWebAiConsole({
   const headCopy = el(doc, "div");
   headCopy.appendChild(el(doc, "div", "eyebrow", "WEB + AI · LOCAL PROJECTION"));
   headCopy.appendChild(el(doc, "h2", null, "Web + AI"));
-  headCopy.appendChild(el(doc, "p", null, "Surf the web from inside the world — or hand your task to an AI assistant."));
+  headCopy.appendChild(el(doc, "p", null, "Your GPT, web tools and compute — in this same living object."));
   const headActions = el(doc, "div", "web-ai-head-actions");
   const minimizeButton = el(doc, "button", "web-ai-iconbtn", "–");
   minimizeButton.type = "button";
@@ -279,6 +287,10 @@ export function createWebAiConsole({
   const tabs = el(doc, "div", "web-ai-tabs");
   tabs.setAttribute("role", "tablist");
   tabs.setAttribute("aria-label", "Web + AI sections");
+  const gptTab = el(doc, "button", "web-ai-tab", "MY GPT");
+  gptTab.type = "button";
+  gptTab.setAttribute("role", "tab");
+  gptTab.dataset.tab = "gpt";
   const webTab = el(doc, "button", "web-ai-tab", "WEB");
   webTab.type = "button";
   webTab.setAttribute("role", "tab");
@@ -291,12 +303,18 @@ export function createWebAiConsole({
   economyTab.type = "button";
   economyTab.setAttribute("role", "tab");
   economyTab.dataset.tab = "economy";
+  tabs.appendChild(gptTab);
   tabs.appendChild(webTab);
   tabs.appendChild(aiTab);
   tabs.appendChild(economyTab);
   panel.appendChild(tabs);
 
   const body = el(doc, "div", "web-ai-body");
+  const gptSection = el(doc, "section");
+  gptSection.dataset.panel = "gpt";
+  gptSection.setAttribute("role", "tabpanel");
+  gptSection.setAttribute("aria-label", "My GPT");
+  const myGpt = mountMyGpt({ documentRoot: doc, windowRoot, storage: store, host: gptSection });
 
   // --- WEB tab ---
   const webSection = el(doc, "section");
@@ -640,6 +658,7 @@ export function createWebAiConsole({
   economyBoundary.dataset.kind = "warn";
   economySection.appendChild(economyBoundary);
 
+  body.appendChild(gptSection);
   body.appendChild(webSection);
   body.appendChild(aiSection);
   body.appendChild(economySection);
@@ -744,16 +763,26 @@ export function createWebAiConsole({
   }
 
   function setTab(next, method, silent) {
-    state.tab = ["web", "ai", "economy"].includes(next) ? next : "web";
+    state.tab = ["gpt", "web", "ai", "economy"].includes(next) ? next : "gpt";
+    panel.dataset.webAiTab = state.tab;
+    const isGpt = state.tab === "gpt";
     const isWeb = state.tab === "web";
     const isAi = state.tab === "ai";
     const isEconomy = state.tab === "economy";
+    gptTab.setAttribute("aria-selected", String(isGpt));
     webTab.setAttribute("aria-selected", String(isWeb));
     aiTab.setAttribute("aria-selected", String(isAi));
     economyTab.setAttribute("aria-selected", String(isEconomy));
+    gptSection.hidden = !isGpt;
+    myGpt.setActive(isGpt);
     webSection.hidden = !isWeb;
     aiSection.hidden = !isAi;
     economySection.hidden = !isEconomy;
+    boundary.hidden = isGpt;
+    // The object's semantic painter reads DOM order; Text view retains the
+    // familiar header/tabs layout through the flex order in STYLE_TEXT.
+    panel.insertBefore(body, isGpt ? head : boundary);
+    if (isGpt && state.opened) myGpt.activate();
     writeStorage(store, WEB_AI_STORAGE_KEYS.lastTab, state.tab);
     if (!silent) publish("tab", method || "api", { tab: state.tab });
   }
@@ -766,6 +795,7 @@ export function createWebAiConsole({
       chip.hidden = true;
       applyStoredPosition();
       writeStorage(store, WEB_AI_STORAGE_KEYS.minimized, "0");
+      if (state.tab === "gpt") myGpt.activate();
     } else {
       panel.hidden = true;
       chip.hidden = true;
@@ -910,6 +940,7 @@ export function createWebAiConsole({
     writeStorage(store, WEB_AI_STORAGE_KEYS.taskNote, state.note);
     updatePromptPreview();
   });
+  gptTab.addEventListener("click", () => setTab("gpt", "button"));
   webTab.addEventListener("click", () => setTab("web", "button"));
   aiTab.addEventListener("click", () => setTab("ai", "button"));
   economyTab.addEventListener("click", () => setTab("economy", "button"));
@@ -1335,7 +1366,21 @@ export function createWebAiConsole({
   updatePromptPreview();
   {
     const savedTab = readStorage(store, WEB_AI_STORAGE_KEYS.lastTab);
-    setTab(["web", "ai", "economy"].includes(savedTab) ? savedTab : "web", "init", true);
+    let completedSignIn = false;
+    let failedSignIn = false;
+    try {
+      const currentUrl = new URL(windowRoot.location.href);
+      completedSignIn = currentUrl.searchParams.get("gpt_connected") === "1";
+      failedSignIn = currentUrl.searchParams.has("gpt_error");
+      if (completedSignIn || failedSignIn) {
+        currentUrl.searchParams.delete("gpt_connected");
+        currentUrl.searchParams.delete("gpt_error");
+        windowRoot.history?.replaceState?.(windowRoot.history.state, "", currentUrl.href);
+      }
+    } catch {}
+    setTab(completedSignIn || failedSignIn ? "gpt" : ["gpt", "web", "ai", "economy"].includes(savedTab) ? savedTab : "gpt", "init", true);
+    if (completedSignIn) myGpt.completeSignIn();
+    else if (failedSignIn) myGpt.refresh();
   }
   if (readStorage(store, WEB_AI_STORAGE_KEYS.minimized) === "1") {
     state.minimized = true;
@@ -1374,6 +1419,7 @@ export function createWebAiConsole({
     toggle: (method = "api") => setOpen(!state.opened, method),
     minimize: (method = "api") => minimize(method),
     setTab: (tab, method = "api") => setTab(tab, method, false),
+    getGptSnapshot: () => myGpt.snapshot(),
     getComputeEconomySnapshot: () => Object.freeze({
       exchange: computeLedger.snapshot(),
       account: computeAccount.snapshot(),
@@ -1426,6 +1472,7 @@ export function createWebAiConsole({
     },
     navigate: (url, method = "api") => {
       setOpen(true, method);
+      setTab("web", method);
       openWebUrl(url, method);
     },
     setNote: (note, method = "api") => {

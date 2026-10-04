@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 from collections import deque
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -22,6 +23,11 @@ import uuid
 from urllib.error import HTTPError, URLError
 from urllib.parse import unquote, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
+
+# Load the sibling module even when tests import this file directly by path.
+_gpt_spec = importlib.util.spec_from_file_location("matumbo_gpt_bridge", Path(__file__).with_name("gpt_bridge.py"))
+gpt_bridge = importlib.util.module_from_spec(_gpt_spec)
+_gpt_spec.loader.exec_module(gpt_bridge)
 
 UPSTREAM = "https://integrate.api.nvidia.com/v1/chat/completions"
 DEFAULT_MODEL = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
@@ -229,9 +235,10 @@ def static_path(root, raw_path):
         return None
 
 
-def create_server(root, port=8082, state=None):
+def create_server(root, port=8082, state=None, gpt_state=None):
     root = Path(root).resolve()
     state = state or ProviderState(os.environ.get("NVIDIA_API_KEY", ""), os.environ.get("NVIDIA_MODEL", DEFAULT_MODEL))
+    gpt_state = gpt_state or gpt_bridge.GPTState(os.environ.get("OPENAI_API_KEY", ""), os.environ.get("OPENAI_MODEL", gpt_bridge.DEFAULT_MODEL))
     root_fingerprint = hashlib.sha256(str(root).replace('\\', '/').lower().rstrip('/').encode('utf-8')).hexdigest()
     instance_id = uuid.uuid4().hex
 
@@ -266,6 +273,17 @@ def create_server(root, port=8082, state=None):
             self.connection.settimeout(10)
             return True
 
+        def gpt_permitted(self, mutation=False):
+            # GPT credentials are usable only from this exact local page origin.
+            expected = "http://" + self.headers.get("Host", "")
+            origin = self.headers.get("Origin")
+            if ((origin and origin != expected) or
+                    (self.headers.get("Sec-Fetch-Site") == "cross-site") or
+                    (mutation and (origin != expected or self.headers.get("X-Matumbo-Gpt") != "1"))):
+                self.send_json(403, {"error": {"code": "local_page_required", "message": "Open the local Reality Lens page to use GPT account access."}})
+                return False
+            return True
+
         def send_data(self, status, body, content_type="application/json", retry_after=None):
             self.send_response(status)
             self.send_header("Content-Type", content_type + ("; charset=utf-8" if content_type.startswith("text/") or content_type == "application/json" else ""))
@@ -276,10 +294,11 @@ def create_server(root, port=8082, state=None):
             self.send_header("X-Frame-Options", "DENY")
             self.send_header("Vary", "Origin")
             origin = self.headers.get("Origin")
-            if origin and allowed_origin(origin, self.server.server_port):
+            is_gpt = urlsplit(self.path).path.startswith("/api/gpt/")
+            if origin and allowed_origin(origin, self.server.server_port) and (not is_gpt or origin == "http://" + self.headers.get("Host", "")):
                 self.send_header("Access-Control-Allow-Origin", origin)
                 self.send_header("Access-Control-Allow-Methods", "GET, HEAD, POST, OPTIONS")
-                self.send_header("Access-Control-Allow-Headers", "Content-Type")
+                self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Matumbo-Gpt" if is_gpt else "Content-Type")
                 if self.headers.get("Access-Control-Request-Private-Network") == "true":
                     self.send_header("Access-Control-Allow-Private-Network", "true")
             if retry_after:
@@ -296,7 +315,10 @@ def create_server(root, port=8082, state=None):
 
         def do_OPTIONS(self):
             if self.permitted():
-                if urlsplit(self.path).path not in ("/api/providers", "/api/health", "/api/nvidia/chat"):
+                route = urlsplit(self.path).path
+                if route.startswith("/api/gpt/") and not self.gpt_permitted():
+                    return
+                if route not in ("/api/providers", "/api/health", "/api/nvidia/chat", "/api/gpt/status", "/api/gpt/models", "/api/gpt/chat", "/api/gpt/sign-in", "/api/gpt/disconnect"):
                     return self.send_json(404, {"error": {"message": "Not found."}})
                 self.send_data(204, b"")
 
@@ -307,6 +329,36 @@ def create_server(root, port=8082, state=None):
             if not self.permitted():
                 return
             route = urlsplit(self.path)
+            if route.path.startswith("/api/gpt/"):
+                if route.path != "/api/gpt/callback" and not self.gpt_permitted():
+                    return
+                try:
+                    if route.path == "/api/gpt/status" and not route.query:
+                        return self.send_json(200, gpt_state.status())
+                    if route.path == "/api/gpt/models" and not route.query:
+                        return self.send_json(200, gpt_state.models())
+                    if route.path == "/api/gpt/callback" and self.command == "GET":
+                        gpt_state.callback(route.query)
+                        # Replace the code-bearing address before rendering any app assets.
+                        self.send_response(303)
+                        self.send_header("Location", "/?feature=web-ai&gpt_connected=1")
+                        self.send_header("Content-Length", "0")
+                        self.send_header("Cache-Control", "no-store")
+                        self.send_header("Referrer-Policy", "no-referrer")
+                        return self.end_headers()
+                    return self.send_json(404, {"error": {"code": "not_found", "message": "Not found."}})
+                except gpt_bridge.GPTError as error:
+                    if route.path == "/api/gpt/callback":
+                        gpt_state.errors["chatgpt"] = error.public()
+                        self.send_response(303)
+                        self.send_header("Location", "/?feature=web-ai&gpt_error=" + error.code)
+                        self.send_header("Content-Length", "0")
+                        self.send_header("Cache-Control", "no-store")
+                        self.send_header("Referrer-Policy", "no-referrer")
+                        return self.end_headers()
+                    return self.send_json(error.status, {"error": error.public()}, error.retry_after)
+                except (OSError, ValueError):
+                    return self.send_json(503, {"error": {"code": "credential_storage_unavailable", "message": "Protected local GPT account storage could not be read."}})
             if route.path == "/api/providers" and not route.query:
                 return self.send_json(200, state.status())
             if route.path == "/api/health" and not route.query:
@@ -322,20 +374,33 @@ def create_server(root, port=8082, state=None):
         def do_POST(self):
             if not self.permitted():
                 return
-            if self.path != "/api/nvidia/chat":
+            gpt_routes = {"/api/gpt/sign-in", "/api/gpt/disconnect", "/api/gpt/chat"}
+            is_gpt = self.path in gpt_routes
+            if is_gpt and not self.gpt_permitted(mutation=True):
+                return
+            if self.path != "/api/nvidia/chat" and not is_gpt:
                 return self.send_json(404, {"error": {"code": "not_found", "message": "Not found."}})
             if self.headers.get("Content-Type", "").split(";")[0].strip().lower() != "application/json":
                 return self.send_json(415, {"error": {"code": "json_required", "message": "JSON content required."}})
             try:
                 length = int(self.headers.get("Content-Length", "0"))
-                if length <= 0 or length > MAX_BODY_BYTES or self.headers.get("Transfer-Encoding"):
+                if length <= 0 or length > (gpt_bridge.MAX_BODY_BYTES if is_gpt else MAX_BODY_BYTES) or self.headers.get("Transfer-Encoding"):
                     raise BridgeError(413, "invalid_body_length", "Request body is missing or too large.")
                 raw = self.rfile.read(length)
                 if len(raw) != length:
                     raise BridgeError(400, "incomplete_body", "Request body is incomplete.")
                 value = json.loads(raw.decode("utf-8"))
-                result = state.chat(value)
+                if self.path == "/api/gpt/sign-in":
+                    result = gpt_state.sign_in(value, self.server.server_port)
+                elif self.path == "/api/gpt/disconnect":
+                    result = gpt_state.disconnect(value)
+                elif self.path == "/api/gpt/chat":
+                    result = gpt_state.chat(value)
+                else:
+                    result = state.chat(value)
                 self.send_json(200, result)
+            except gpt_bridge.GPTError as error:
+                self.send_json(error.status, {"error": error.public()}, error.retry_after)
             except BridgeError as error:
                 self.send_json(error.status, {"error": {"code": error.code, "message": error.message}}, error.retry_after)
             except (ValueError, UnicodeError):

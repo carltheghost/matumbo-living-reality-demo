@@ -1,0 +1,73 @@
+{
+  "started": "2026-10-04T15:54:31.590Z",
+  "base": "http://127.0.0.1:8082/?feature=web-ai",
+  "liveInference": false,
+  "runs": [
+    {
+      "name": "desktop",
+      "checks": [
+        {
+          "label": "signed-out live bridge, one object owner, no automatic input or inference",
+          "credentialStorage": "windows_dpapi"
+        },
+        {
+          "label": "physical object setup shortcut invokes original disclosure"
+        },
+        {
+          "label": "assistant creation and selection use original controls"
+        },
+        {
+          "label": "ChatGPT selected branch imports visible text locally"
+        },
+        {
+          "label": "downloaded JSON backup contains profiles and exact visible branch"
+        },
+        {
+          "label": "reload retains selected assistant/history and blocks disconnected send"
+        },
+        {
+          "label": "explicit Send sends only selected context and displayed account; mocked response renders",
+          "transport": "intercepted test fixture; no upstream request"
+        },
+        {
+          "label": "no JavaScript page errors or horizontal overflow"
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "phone",
+      "checks": [
+        {
+          "label": "signed-out live bridge, one object owner, no automatic input or inference",
+          "credentialStorage": "windows_dpapi"
+        },
+        {
+          "label": "physical object setup shortcut invokes original disclosure"
+        },
+        {
+          "label": "assistant creation and selection use original controls"
+        },
+        {
+          "label": "ChatGPT selected branch imports visible text locally"
+        },
+        {
+          "label": "downloaded JSON backup contains profiles and exact visible branch"
+        },
+        {
+          "label": "reload retains selected assistant/history and blocks disconnected send"
+        },
+        {
+          "label": "explicit Send sends only selected context and displayed account; mocked response renders",
+          "transport": "intercepted test fixture; no upstream request"
+        },
+        {
+          "label": "no JavaScript page errors or horizontal overflow"
+        }
+      ],
+      "errors": []
+    }
+  ],
+  "completed": "2026-10-04T15:55:14.066Z",
+  "passed": true
+}

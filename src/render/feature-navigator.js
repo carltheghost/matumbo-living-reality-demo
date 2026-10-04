@@ -314,8 +314,8 @@ export const FEATURE_DEFINITIONS = Object.freeze([
     kicker: "browse + ask",
     focusOrganId: "arena",
     sources: [],
-    description: "Browse the open web, hand one task to ChatGPT, Claude, Gemini, DeepSeek, Kimi and other assistants, or open the local Compute tab to meter cross-provider usage and rehearse the maTumbo reward loop.",
-    boundary: "Provider handoffs remain separate tabs and the Compute economy is local simulation. No credentials, API keys, wallet authority, provider billing verification, token issuance, settlement, staking, or burn is performed.",
+    description: "My GPT: chat inside your object using a connected ChatGPT plan or OpenAI API, keep custom assistant instructions and selected history locally, browse the web, or open other assistants.",
+    boundary: "My GPT needs the local server and explicit account connection. Credentials stay server-side; selected context is sent only on Send. Saved GPT links open ChatGPT; original GPT configuration and conversations are not automatically synced. Compute credits remain local simulation.",
   }),
   Object.freeze({
     id: "academy",
@@ -581,6 +581,7 @@ export const FEATURE_SURFACE_ROUTES = Object.freeze({
     Object.freeze(["DATA GRADE", "field completeness only · research"]),
   ]),
   "web-ai": Object.freeze([
+    Object.freeze(["MY GPT", "ChatGPT plan or OpenAI API · local assistants and selected conversation history"]),
     Object.freeze(["WEB TAB", "sandboxed frame for framing-friendly sites · new-tab handoff otherwise"]),
     Object.freeze(["AI TAB", "ChatGPT · Claude · Gemini · DeepSeek · Kimi + other handoffs"]),
     Object.freeze(["COMPUTE WALLET", "demo credits · monthly + per-task budget guardrails"]),

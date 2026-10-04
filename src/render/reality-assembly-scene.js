@@ -118,7 +118,7 @@ const SPACE_COPY=Object.freeze({
 // record and its complete description continue to own the opened surface.
 const NETWORK_PREVIEWS=Object.freeze({
   gateway:{label:'World Gateway',kicker:'PUBLIC SOURCES',description:'Public sources, with evidence.'},
-  'web-ai':{label:'Web + AI',kicker:'BROWSE + ASK',description:'Browse and choose an AI assistant.'},
+  'web-ai':{label:'Web + AI',kicker:'MY GPT + WEB',description:'Your GPT chat, assistants and history.'},
   'social-explorer':{label:'Social Explorer',kicker:'LOCAL DISCOVERY',description:'Fictional places and shared ideas.'},
   'bot-plaza':{label:'Bot Plaza',kicker:'LOCAL BOT TEAM',description:'Local bots, skills and drafts.'},
 });

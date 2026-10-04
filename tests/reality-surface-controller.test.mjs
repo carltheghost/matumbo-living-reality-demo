@@ -123,6 +123,42 @@ test('bringing a chart into view preserves its reading-up direction at an obliqu
   }
 });
 
+test('initial native focus stays front-facing through the camera approach without overriding later rotation',()=>{
+  const f=fixture('cube');
+  try{
+    // The mounted object starts far from the camera's current target. Focus
+    // enters its real control before the assembly camera approaches the body.
+    f.node.root.position.set(20,4,2);f.node.root.updateMatrixWorld(true);
+    f.button.dispatchEvent({type:'focusin'});
+    const focusedRotation=f.node.root.quaternion.clone();
+    const chart=f.controller.atlas.snapshot().charts.find(item=>item.regions.some(region=>region.actionId?.startsWith('original:')));
+    const region=chart.regions.find(item=>item.actionId?.startsWith('original:')),uv=uvOf(region);
+    const target=new THREE.Vector3(),destination=f.node.root.position.clone(),cameraDestination=destination.clone().add(new THREE.Vector3(0,0,4));
+    for(let frame=0;frame<80;frame++){
+      target.lerp(destination,.2);f.camera.position.lerp(cameraDestination,.2);
+      f.camera.lookAt(target);f.camera.updateMatrixWorld();f.controller.sync();
+    }
+    const point=f.controller.surfacePoint(chart.index,uv);
+    const worldNormal=point.normal.clone().applyMatrix3(new THREE.Matrix3().getNormalMatrix(f.node.tabMesh.matrixWorld)).normalize();
+    const viewNormal=f.camera.getWorldDirection(new THREE.Vector3()).negate();
+    assert.ok(worldNormal.dot(viewNormal)>.999,'the originally focused chart faces the settled camera');
+    assert.ok(focusedRotation.angleTo(f.node.root.quaternion)<1e-7,'alignment is one focus action, not recurring camera tracking');
+
+    // Pointer/key rotation remains the user's choice after opening.
+    f.controller.key({target:f.canvas,key:'ArrowRight',preventDefault(){},stopImmediatePropagation(){}});
+    const deliberateRotation=f.node.root.quaternion.clone();f.controller.sync();
+    assert.ok(focusedRotation.angleTo(deliberateRotation)>.2);
+    assert.ok(deliberateRotation.angleTo(f.node.root.quaternion)<1e-7);
+
+    // A subsequent native focus still brings its chart into the new view.
+    f.camera.position.copy(destination).add(new THREE.Vector3(3,2,5));f.camera.lookAt(destination);f.camera.updateMatrixWorld();
+    f.button.dispatchEvent({type:'focusin'});
+    const refocused=f.controller.surfacePoint(chart.index,uv);
+    const refocusedNormal=refocused.normal.clone().applyMatrix3(new THREE.Matrix3().getNormalMatrix(f.node.tabMesh.matrixWorld)).normalize();
+    assert.ok(refocusedNormal.dot(f.camera.getWorldDirection(new THREE.Vector3()).negate())>.999);
+  }finally{f.dispose();}
+});
+
 test('drag rotation does not activate controls and disposal restores original body materials',()=>{
   const f=fixture();
   try {

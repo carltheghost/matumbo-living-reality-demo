@@ -63,6 +63,7 @@ test("spatial inspector routes describe the feature they actually open", async (
     "DATA GRADE",
   ]);
   assert.deepEqual(FEATURE_SURFACE_ROUTES["web-ai"].map(([title]) => title), [
+    "MY GPT",
     "WEB TAB",
     "AI TAB",
     "COMPUTE WALLET",

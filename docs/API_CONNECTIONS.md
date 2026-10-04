@@ -1,5 +1,7 @@
 # Reality Lens API connections
 
+**My GPT:** Web + AI now includes a separate local ChatGPT-plan/OpenAI conversation service, assistant profiles and selected history import/export. It shares this loopback server while retaining distinct authentication and explicit Send controls. [My GPT setup, limits and privacy](MY_GPT.md). The NVIDIA-specific status and endpoints below retain their existing contract.
+
 The Connections control groups bounded public reads and an optional NVIDIA assistant. Reality Lens explicitly enables **one automatic public connection check on page load**, matching the request for automatic connections. That bounded batch checks four source groups and discovers the local bridge's configuration. FX tries one fixed alternate only if Frankfurter fails, so a batch makes four or five public reads. **Check connections** runs another batch on request. There are no repeating polls. The bridge's status read does not call NVIDIA; **Send to NVIDIA** is the only inference trigger.
 
 The reusable `mountApiConnections()` library keeps `autoCheck:false` by default. On loopback it can discover same-origin configuration once without public reads; on public Pages it sends no request until the visitor checks. The site's bootstrap enables `autoCheck:true` deliberately. Automatic connection checks do not change the older seven source surfaces' own refresh rules.

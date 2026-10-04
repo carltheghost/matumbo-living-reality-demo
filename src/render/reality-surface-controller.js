@@ -88,7 +88,10 @@ export function createRealitySurfaceController({THREE,node,element,feature,rende
   }
   function orientChart(chartIndex,uv=[.5,.5]){
     const point=surfacePoint(chartIndex,uv);if(!point)return false;
-    const outward=camera.getWorldPosition(new THREE.Vector3()).sub(node.root.getWorldPosition(new THREE.Vector3())).normalize();
+    // Focus can arrive before the camera has translated to this object. Use
+    // the camera's reading plane, not its temporary bearing to the body;
+    // otherwise the retained rotation can face away once the approach ends.
+    const outward=camera.getWorldDirection(new THREE.Vector3()).negate();
     const desiredUp=new THREE.Vector3(0,1,0).applyQuaternion(camera.getWorldQuaternion(new THREE.Quaternion()));
     if(node.root.parent){const inverse=node.root.parent.getWorldQuaternion(new THREE.Quaternion()).invert();outward.applyQuaternion(inverse);desiredUp.applyQuaternion(inverse);}
     const rotation=new THREE.Quaternion().setFromUnitVectors(point.normal,outward);
