@@ -1,9 +1,10 @@
 import {createRealitySurfaceGeometry} from './reality-surface-geometry.js?v=20261003-skin360';
 import {createRealitySurfaceAtlas} from './reality-surface-atlas.js?v=20261003-skin360';
+import {REALITY_TAB_FORMS} from '../domains/reality-tab-layout.js?v=20261003-skin360';
 
-/** Six existing spaces, five immediately different physical families. */
+/** Each of the six existing spaces has a different physical family. */
 export const REALITY_HOME_SHAPES = Object.freeze({
-  worlds: 'cube', people: 'sphere', network: 'cube', value: 'cylinder', agents: 'torus', experiences: 'triangular-prism',
+  worlds: 'cube', people: 'sphere', network: 'octahedron', value: 'cylinder', agents: 'torus', experiences: 'triangular-prism',
 });
 const ACCENTS = Object.freeze({worlds:'#6bbaff', people:'#b4baff', network:'#77d1de', value:'#9dd2f2', agents:'#6fe1ee', experiences:'#9ab4ff'});
 const clean = value => String(value ?? '').replace(/\s+/g, ' ').trim();
@@ -64,6 +65,35 @@ function paintTorusHeading(ctx, canvas, chart, document, accent) {
   ctx.putImageData(paint,0,0);
 }
 
+/** Project one large title through the diamond's actual facet UVs. It reads
+ * across adjacent faces instead of repeating tiny labels on eight triangles. */
+function paintDiamondHeading(ctx,canvas,chart,document,accent){
+  const source=globalThis.document.createElement('canvas');source.width=source.height=768;
+  const title=source.getContext('2d'),side=768;
+  title.textAlign='center';title.textBaseline='top';title.fillStyle='#f0f8ff';
+  title.font='700 94px system-ui, -apple-system, "Segoe UI", sans-serif';
+  title.fillText('Network',side/2,side*.33,side*.63);
+  title.font='700 83px system-ui, -apple-system, "Segoe UI", sans-serif';
+  title.fillText('& tools',side/2,side*.47,side*.64);
+  title.fillStyle=accent;title.font='600 34px system-ui, -apple-system, "Segoe UI", sans-serif';
+  title.fillText(`${document.features.length} OBJECTS`,side/2,side*.63,side*.5);
+  title.fillText('OPEN SPACE',side/2,side*.70,side*.48);
+  const pixels=title.getImageData(0,0,side,side).data,paint=ctx.getImageData(0,0,canvas.width,canvas.height);
+  const form=REALITY_TAB_FORMS.octahedron,section=Number(chart.id.split('-')[1]),upper=chart.id.startsWith('upper');
+  const rim=[-form.width/2,form.width/2,form.width/2,-form.width/2],a=rim[section],b=rim[(section+1)%4],facing=section<2?1:-1;
+  for(let y=0;y<canvas.height;y++){
+    const v=1-(y+.5)/canvas.height,sy=Math.floor((.5-(upper?1:-1)*v*.5)*side);
+    for(let x=0;x<canvas.width;x++){
+      const u=(x+.5)/canvas.width,wa=1-u-v*.5,wb=u-v*.5;if(wa<0||wb<0)continue;
+      const sx=Math.max(0,Math.min(side-1,Math.floor((.5+facing*(wa*a+wb*b)/form.width)*side)));
+      const from=(sy*side+sx)*4,alpha=pixels[from+3]/255;if(!alpha)continue;
+      const to=(y*canvas.width+x)*4;
+      for(let channel=0;channel<3;channel++)paint.data[to+channel]=pixels[from+channel]*alpha+paint.data[to+channel]*(1-alpha);
+    }
+  }
+  ctx.putImageData(paint,0,0);
+}
+
 /** Large home typography is authored directly into the same material canvases.
  * The feature atlas supplies their allocation and disposal contract, while the
  * home document has one whole-body navigation action and never has pagination. */
@@ -81,6 +111,9 @@ function paintHome(materials, charts, document, accent) {
     ctx.textAlign='left';ctx.textBaseline='top';
     if(chart.shape==='torus'){
       paintTorusHeading(ctx,canvas,chart,document,accent);texture.needsUpdate=true;return;
+    }
+    if(chart.shape==='octahedron'){
+      paintDiamondHeading(ctx,canvas,chart,document,accent);texture.needsUpdate=true;return;
     }
     const shortHeading=chart.shape==='triangular-prism'?['Play &','media']:chart.shape==='cylinder'?['Value &','contracts']:null;
     if(shortHeading){

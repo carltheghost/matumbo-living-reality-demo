@@ -16,8 +16,11 @@ test('home previews preserve real membership and expose exactly one meaningful s
   document.activate('open-space:experiences');assert.deepEqual(calls,['experiences']);
 });
 
-test('the home factory makes five whole shape families and scales real geometry for layout',()=>{
-  assert.equal(new Set(Object.values(REALITY_HOME_SHAPES)).size,5);
+test('each home space has a distinct whole body and scales real geometry for layout',()=>{
+  assert.equal(new Set(Object.values(REALITY_HOME_SHAPES)).size,6);
+  assert.equal(Object.values(REALITY_HOME_SHAPES).filter(shape=>shape==='cube').length,1);
+  assert.equal(REALITY_HOME_SHAPES.worlds,'cube');
+  assert.equal(REALITY_HOME_SHAPES.network,'octahedron');
   for(const id of Object.keys(REALITY_HOME_SHAPES)){
     const home=createRealityHomeSurface({THREE,id,label:id,members:[],height:3.9});
     const bounds=home.geometry.boundingBox;

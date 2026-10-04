@@ -14,8 +14,8 @@ function hit(body,origin,direction){
 }
 
 test('every retained and new shape is a closed consistently-wound body with complete chart coverage',()=>{
-  const counts={cube:6,sphere:6,cylinder:6,'triangular-prism':5,torus:8,phone:3,square:3,rectangle:3,wave:3};
-  assert.equal(REALITY_TAB_FORM_IDS.length,9);
+  const counts={cube:6,sphere:6,cylinder:6,'triangular-prism':5,torus:8,octahedron:8,phone:3,square:3,rectangle:3,wave:3};
+  assert.equal(REALITY_TAB_FORM_IDS.length,10);
   for(const shape of REALITY_TAB_FORM_IDS){
     const {geometry,charts}=createRealitySurfaceGeometry(THREE,shape),p=geometry.getAttribute('position'),uv=geometry.getAttribute('uv'),n=geometry.getAttribute('normal');
     assert.equal(charts.length,counts[shape]);assert.equal(geometry.groups.length,charts.length);
@@ -104,4 +104,18 @@ test('triangular prism has two triangular ends, three side charts and no rectang
 
 test('unsupported body geometry fails before silently selecting a fallback shape',()=>{
   assert.throws(()=>createRealitySurfaceGeometry(THREE,'unknown-shape'),/supported tab forms/);
+});
+
+test('diamond has eight independently reachable facets and its empty corners cannot select a cube-shaped target',()=>{
+  const body=createRealitySurfaceGeometry(THREE,'octahedron'),normal=body.geometry.getAttribute('normal');
+  for(const group of body.geometry.groups){
+    const center=trianglePoints(body.geometry,group.start).map(point=>new THREE.Vector3(...point)).reduce((sum,point)=>sum.add(point),new THREE.Vector3()).multiplyScalar(1/3);
+    const outward=new THREE.Vector3().fromBufferAttribute(normal,group.start);
+    const hits=hit(body,center.clone().addScaledVector(outward,4).toArray(),outward.clone().negate().toArray());
+    assert.equal(hits[0]?.face.materialIndex,group.materialIndex,'each exposed facet reaches its own actual chart');
+    assert.ok(Math.abs(hits[0].uv.x-.5)<1e-5&&Math.abs(hits[0].uv.y-1/3)<1e-5);
+  }
+  const form=REALITY_TAB_FORMS.octahedron;
+  for(const x of [-1,1])for(const y of [-1,1])assert.equal(hit(body,[x*form.width*.4,y*form.height*.4,4],[0,0,-1]).length,0,'outside diamond silhouette stays empty');
+  body.geometry.dispose();
 });

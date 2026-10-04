@@ -55,7 +55,7 @@ function aimAt(f,chart,uv) {
   return f.controller.surfacePoint(chart,uv);
 }
 
-test('all nine whole-body geometries route a painted action through actual triangle UVs to the original control',()=>{
+test('all supported whole-body geometries route a painted action through actual triangle UVs to the original control',()=>{
   for(const shape of REALITY_TAB_FORM_IDS){
     const f=fixture(shape);
     try {

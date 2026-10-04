@@ -1,0 +1,53 @@
+{
+  "status": "passed",
+  "verifiedAt": "2026-10-04T05:54:49.567473+00:00",
+  "baseCommit": "a9b7665215d677a56d80f0dd2a8386a9603ee8c1",
+  "scope": "Network Home cube replaced by an eight-faced diamond; existing feature defaults retained",
+  "sourceHashes": {
+    "src/domains/reality-tab-layout.js": "e3b33328994e2d827f5870ef604ff0981a09a06062d9a7e0954c713fd162527e",
+    "src/render/reality-home-surfaces.js": "ddba1b318ab233694974b74fa48daa2146944c89733dbd98a890f533d35928f8",
+    "src/render/reality-surface-geometry.js": "89b850056b1e1e94c7ceabdd3a2395825931bc3368d03c2b2c53b981e56dba02"
+  },
+  "tests": {
+    "passed": 110,
+    "failed": 0,
+    "skipped": 0,
+    "files": 10
+  },
+  "browser": {
+    "passed": 12,
+    "failed": 0,
+    "viewports": [
+      {
+        "width": 1440,
+        "height": 1000
+      },
+      {
+        "width": 390,
+        "height": 844
+      }
+    ],
+    "pageErrors": 0,
+    "softwareWebGL": true,
+    "physicalDevice": false,
+    "evidence": "home-diamond-navigation.json"
+  },
+  "homeShapes": {
+    "worlds": "cube",
+    "people": "sphere",
+    "network": "octahedron",
+    "value": "cylinder",
+    "agents": "torus",
+    "experiences": "triangular-prism"
+  },
+  "independentReview": {
+    "mode": "read-only source and diff review",
+    "blockingFindings": 0,
+    "independentTestExecution": false
+  },
+  "release": {
+    "mergePerformed": false,
+    "publicDeploymentPerformed": false,
+    "olderDownloadCommit": "a9b7665215d677a56d80f0dd2a8386a9603ee8c1"
+  }
+}

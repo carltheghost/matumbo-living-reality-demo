@@ -1,5 +1,7 @@
 # Whole-body Reality Lens acceptance
 
+This record retains the five-family baseline. The subsequent [Home diamond acceptance](HOME_DIAMOND_ACCEPTANCE.md) replaces Network's duplicate cube and verifies six distinct Home bodies.
+
 Five volumetric families now organize six useful home spaces. Bodies open their spaces, feature controls retain their original state owner, and live information covers the actual geometry's UV charts. This supersedes the earlier front-only projection.
 
 ![Six home spaces and five body families](whole-body-home-desktop.png)

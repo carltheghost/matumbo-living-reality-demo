@@ -10,6 +10,7 @@ export const REALITY_TAB_FORMS=Object.freeze({
   wave:Object.freeze({label:'Wave',width:1.92,height:1.12,depth:.18,radius:.98}),
   'triangular-prism':Object.freeze({label:'Triangular prism',width:1.6,height:1.5,depth:1.24,radius:.8}),
   torus:Object.freeze({label:'Torus',width:1.84,height:1.84,depth:.56,radius:.92}),
+  octahedron:Object.freeze({label:'Diamond',width:1.86,height:1.86,depth:1.36,radius:.93}),
 });
 export const REALITY_TAB_FORM_IDS=Object.freeze(Object.keys(REALITY_TAB_FORMS));
 export const REALITY_TAB_SIZE_MIN=.35;

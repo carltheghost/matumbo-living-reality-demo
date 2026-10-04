@@ -89,6 +89,19 @@ export function createRealitySurfaceGeometry(THREE, shape) {
         }
       });
     }
+  }else if(shape==='octahedron'){
+    // Four equator vertices join two points: eight real triangular facets,
+    // each with its own readable chart and no rectangular picking shell.
+    const rim=[[-form.width/2,0,form.depth/2],[form.width/2,0,form.depth/2],[form.width/2,0,-form.depth/2],[-form.width/2,0,-form.depth/2]];
+    for(const upper of [true,false])for(let section=0;section<4;section++){
+      const apex=[0,(upper?1:-1)*form.height/2,0],a=rim[section],b=rim[(section+1)%4];
+      const width=Math.hypot(...a.map((value,axis)=>value-b[axis]));
+      const height=Math.hypot(...apex.map((value,axis)=>value-(a[axis]+b[axis])/2));
+      group(chart(`${upper?'upper':'lower'}-${section}`,`${upper?'Upper':'Lower'} facet ${section+1}`,width,height,triangle),()=>{
+        if(upper)emit(apex,a,b,[.5,1],[0,0],[1,0]);
+        else emit(apex,b,a,[.5,1],[1,0],[0,0]);
+      });
+    }
   }else if(shape==='torus'){
     const tube=form.depth/2,major=Math.min(form.width,form.height)/2-tube;
     for(let section=0;section<4;section++)for(let half=0;half<2;half++){

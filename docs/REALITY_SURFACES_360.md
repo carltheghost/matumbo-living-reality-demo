@@ -4,18 +4,18 @@ This engine implements Tumbo's request for information and controls across a com
 
 The former flattened sphere/cylinder front and continuous camera-facing rotation are superseded. Whole objects can now be turned deliberately. The body remains the same entity during rotation, paging, editing and shape changes.
 
-## Five recognizable families
+## Six recognizable families
 
 | Home space | Body | What it holds |
 | --- | --- | --- |
 | Worlds | Cube | The existing world and spatial features |
 | People | Sphere | Existing people, rooms and social features |
-| Network | Cube | Existing network and connection features |
+| Network | Diamond (octahedron) | Existing network and connection features |
 | Value & contracts | Cylinder | Existing token, contract and value features |
 | Agents | Torus | Existing agent features |
 | Experiences | Triangular prism | Existing media, play and creative features |
 
-The six spaces use five volumetric families. Phone, square, rectangle and wave remain supported alternate shapes, including old saved Ourplace descriptors. Selecting a shape changes presentation, never its feature identity or financial authority.
+Every Home space has its own volumetric family. Network's eight-faced diamond replaces the second Home cube. Its title spans the real triangular faces and the whole body enters the same Network space. Existing Network feature objects retain their saved/default shape. Phone, square, rectangle and wave remain supported alternate shapes, including old saved Ourplace descriptors. Selecting a shape changes presentation, never its feature identity or financial authority.
 
 ## Use it
 
@@ -29,7 +29,7 @@ The six spaces use five volumetric families. Phone, square, rectangle and wave r
 
 ## Geometry and state ownership
 
-`reality-surface-geometry.js` supplies closed bodies, material groups and local UV charts. Cube and sphere have six charts; the sphere projects subdivided box faces onto a true radius. The cylinder has four continuous wall sectors plus its two circular caps. The prism has three sides and two triangular ends. The torus has eight connected curved charts and a real empty center. Every exterior triangle has a chart; no flat reading cap closes a curved body.
+`reality-surface-geometry.js` supplies closed bodies, material groups and local UV charts. Cube and sphere have six charts; the sphere projects subdivided box faces onto a true radius. The diamond has eight triangular facets, each with a chart. The cylinder has four continuous wall sectors plus its two circular caps. The prism has three sides and two triangular ends. The torus has eight connected curved charts and a real empty center. Every exterior triangle has a chart; no flat reading cap closes a curved body.
 
 `reality-surface-document.js` reads live values, text and actions from the original visible feature tree. Hidden controls and closed details remain hidden. Stable action IDs refer to original nodes, with guards for disconnected, disabled and stale controls. No feature controller is cloned. Pointer-driven canvases forward UV-derived coordinates to the existing canvas handlers.
 

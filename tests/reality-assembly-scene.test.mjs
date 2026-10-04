@@ -160,7 +160,7 @@ test('calm home exposes six real selectable space bodies while clearing feature 
     assert.equal(entry.material.length,entry.geometry.groups.length,'every native chart has its own information material');
     assert.equal(entry.material[1].isMeshBasicMaterial,true,'curved sides remain readable independently of scene lighting');
     assert.equal(entry.material[1].transparent,false);
-    assert.equal(entry.userData.spaceSilhouette,{worlds:'cube',people:'sphere',network:'cube',value:'cylinder',agents:'torus',experiences:'triangular-prism'}[groupId]);
+    assert.equal(entry.userData.spaceSilhouette,{worlds:'cube',people:'sphere',network:'octahedron',value:'cylinder',agents:'torus',experiences:'triangular-prism'}[groupId]);
   }
   scene.destroy();assert.equal(scene.groupTargets.length,0);assert.equal(targets.length,0);assert.equal(parent.children.length,0);
 });
@@ -328,7 +328,7 @@ test('an active 360 surface preserves deliberate object orientation as the scene
   scene.destroy();assert.equal(targets.length,0);
 });
 
-test('six home spaces expose five complete volumetric families with mapped sides and accurate bounds',()=>{
+test('six home spaces expose six complete volumetric families with mapped sides and accurate bounds',()=>{
   const {scene}=spaceScene();scene.setSpaceView(null);scene.setSpaceViewport({width:1440,height:1000});
   scene.update(.1,0,{reducedMotion:true,cameraDistance:50});scene.layer.updateMatrixWorld(true);
   const signatures=new Set(),bounds=scene.getSpaceBounds(null);
@@ -349,7 +349,7 @@ test('six home spaces expose five complete volumetric families with mapped sides
     assert.ok(physicalBounds.min.z>=bounds.center[2]-bounds.depth/2-.001);
     assert.ok(physicalBounds.max.z<=bounds.center[2]+bounds.depth/2+.001);
   }
-  assert.equal(signatures.size,5,'home visibly includes cube, sphere, cylinder, triangular prism and torus');
+  assert.equal(signatures.size,6,'home visibly includes cube, sphere, diamond, cylinder, triangular prism and torus');
   const torus=scene.groupParents.get('agents').entry;
   const origin=torus.localToWorld(new THREE.Vector3(0,0,8));
   const direction=new THREE.Vector3(0,0,-1).applyQuaternion(torus.getWorldQuaternion(new THREE.Quaternion()));

@@ -16,8 +16,8 @@ test('old and new shape descriptors survive serialized design sessions unchanged
   }
 });
 
-test('creator shape commands support both prism spellings and torus while rejecting unknown forms',()=>{
-  for(const [request,shape] of [['all objects triangular prism','triangular-prism'],['all objects triangular-prism','triangular-prism'],['selected surface torus','torus']]){
+test('creator shape commands support both prism spellings, torus and octahedron while rejecting unknown forms',()=>{
+  for(const [request,shape] of [['all objects triangular prism','triangular-prism'],['all objects triangular-prism','triangular-prism'],['selected surface torus','torus'],['selected surface octahedron','octahedron']]){
     const parsed=parseCreatorDesignRequest(request);assert.equal(parsed.descriptor.surface.shape,shape);assert.deepEqual(parsed.unsupported,[]);
   }
   assert.deepEqual(parseCreatorDesignRequest('shape nonexistent').supported,[]);

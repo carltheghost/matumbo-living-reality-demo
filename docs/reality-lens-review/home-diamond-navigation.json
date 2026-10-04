@@ -1,0 +1,5159 @@
+{
+  "started": "2026-10-04T05:52:17.405Z",
+  "base": "http://127.0.0.1:8082/",
+  "source": "current working tree; fresh browser contexts; actual mesh vertices and physical mouse navigation",
+  "runs": [
+    {
+      "name": "desktop",
+      "mode": "navigation",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "freshContext": true,
+      "checks": [
+        {
+          "name": "all-home-vertices-fit-with-eight-pixel-margin",
+          "pass": true,
+          "geometry": [
+            {
+              "id": "worlds",
+              "shape": "cube",
+              "visible": true,
+              "vertexCount": 36,
+              "outside": 0,
+              "bounds": {
+                "left": 218.4275237578373,
+                "right": 494.0865716969078,
+                "top": 308.64893417997786,
+                "bottom": 558.5574578410744,
+                "minDepth": 0.9860440738075351,
+                "maxDepth": 0.989935653298525
+              }
+            },
+            {
+              "id": "people",
+              "shape": "sphere",
+              "visible": true,
+              "vertexCount": 9216,
+              "outside": 0,
+              "bounds": {
+                "left": 609.4941634076152,
+                "right": 824.0390491463136,
+                "top": 329.7328760437625,
+                "bottom": 544.9159678017012,
+                "minDepth": 0.986515876277028,
+                "maxDepth": 0.9896635209093165
+              }
+            },
+            {
+              "id": "network",
+              "shape": "octahedron",
+              "visible": true,
+              "vertexCount": 24,
+              "outside": 0,
+              "bounds": {
+                "left": 926.608606040466,
+                "right": 1210.9391622889727,
+                "top": 330.874153383548,
+                "bottom": 544.4830883271243,
+                "minDepth": 0.986673241630989,
+                "maxDepth": 0.9895655408851903
+              }
+            },
+            {
+              "id": "value",
+              "shape": "cylinder",
+              "visible": true,
+              "vertexCount": 1920,
+              "outside": 0,
+              "bounds": {
+                "left": 275.23564325537507,
+                "right": 470.35696904234374,
+                "top": 626.5955279336516,
+                "bottom": 898.0428326841021,
+                "minDepth": 0.9867624374477583,
+                "maxDepth": 0.9895082560658024
+              }
+            },
+            {
+              "id": "agents",
+              "shape": "torus",
+              "visible": true,
+              "vertexCount": 12288,
+              "outside": 0,
+              "bounds": {
+                "left": 609.6590319846476,
+                "right": 820.4742893520942,
+                "top": 642.881272590357,
+                "bottom": 857.269703903095,
+                "minDepth": 0.9875572433077001,
+                "maxDepth": 0.9889337463555465
+              }
+            },
+            {
+              "id": "experiences",
+              "shape": "triangular-prism",
+              "visible": true,
+              "vertexCount": 24,
+              "outside": 0,
+              "bounds": {
+                "left": 937.8594935800764,
+                "right": 1212.5602364868741,
+                "top": 626.9683728542919,
+                "bottom": 910.1466500042714,
+                "minDepth": 0.9865487426820714,
+                "maxDepth": 0.9897535576668959
+              }
+            }
+          ]
+        },
+        {
+          "name": "physical-torus-hole-does-not-open-space",
+          "pass": true,
+          "point": {
+            "x": 716.8435768431392,
+            "y": 749.2345661735641,
+            "z": 0.9882829182055197,
+            "mesh": "reality-lens/space-entry/agents",
+            "firstHit": null,
+            "targetHits": 0,
+            "elementAtPoint": "CANVAS"
+          },
+          "before": {
+            "url": "http://127.0.0.1:8082/",
+            "activeId": "reality-lens",
+            "active": true,
+            "space": null,
+            "view": "gateway",
+            "selected": "block-world",
+            "camera": {
+              "position": [
+                8.881784197001252e-16,
+                2.7086677456879498,
+                15.846797291924306
+              ],
+              "target": [
+                8.881784197001252e-16,
+                2.708667745687949,
+                0
+              ],
+              "fov": 60,
+              "aspect": 1.44,
+              "near": 0.1,
+              "far": 220
+            },
+            "live": null,
+            "person": false,
+            "visibleIds": [],
+            "overflow": false,
+            "crumbs": [
+              {
+                "text": "Home",
+                "hidden": true,
+                "disabled": false
+              },
+              {
+                "text": "",
+                "hidden": true,
+                "disabled": true
+              },
+              {
+                "text": "",
+                "hidden": true,
+                "disabled": false
+              }
+            ]
+          },
+          "after": {
+            "url": "http://127.0.0.1:8082/",
+            "activeId": "reality-lens",
+            "active": true,
+            "space": null,
+            "view": "gateway",
+            "selected": "block-world",
+            "camera": {
+              "position": [
+                8.881784197001252e-16,
+                2.7086677456879498,
+                15.846797291924306
+              ],
+              "target": [
+                8.881784197001252e-16,
+                2.708667745687949,
+                0
+              ],
+              "fov": 60,
+              "aspect": 1.44,
+              "near": 0.1,
+              "far": 220
+            },
+            "live": null,
+            "person": false,
+            "visibleIds": [],
+            "overflow": false,
+            "crumbs": [
+              {
+                "text": "Home",
+                "hidden": true,
+                "disabled": false
+              },
+              {
+                "text": "",
+                "hidden": true,
+                "disabled": true
+              },
+              {
+                "text": "",
+                "hidden": true,
+                "disabled": false
+              }
+            ]
+          }
+        },
+        {
+          "name": "physical-home-body-opens-network-space",
+          "pass": true,
+          "point": {
+            "x": 1091.4155800407873,
+            "y": 474.6013521189813,
+            "z": 0.9875218777931826,
+            "area": 22605.488773344397,
+            "firstHit": {
+              "name": "reality-lens/space-entry/network",
+              "groupId": "network",
+              "featureId": null,
+              "distance": 16.268408456594738,
+              "materialIndex": 4,
+              "uv": [
+                0.49999999999999956,
+                0.3333333333333299
+              ]
+            },
+            "mesh": "reality-lens/space-entry/network",
+            "elementAtPoint": "CANVAS"
+          },
+          "after": {
+            "url": "http://127.0.0.1:8082/?feature=reality-lens&space=network",
+            "activeId": "reality-lens",
+            "active": true,
+            "space": "network",
+            "view": "space",
+            "selected": "block-world",
+            "camera": {
+              "position": [
+                5.142671265286227e-18,
+                2.3904158057707314,
+                12.51350598718412
+              ],
+              "target": [
+                5.142671265286227e-18,
+                2.3904158057707305,
+                0
+              ],
+              "fov": 60,
+              "aspect": 1.44,
+              "near": 0.1,
+              "far": 220
+            },
+            "live": null,
+            "person": false,
+            "visibleIds": [
+              "social-explorer",
+              "bot-plaza",
+              "gateway",
+              "web-ai"
+            ],
+            "overflow": false,
+            "crumbs": [
+              {
+                "text": "Home",
+                "hidden": false,
+                "disabled": false
+              },
+              {
+                "text": "Network & tools",
+                "hidden": false,
+                "disabled": true
+              },
+              {
+                "text": "",
+                "hidden": false,
+                "disabled": false
+              }
+            ]
+          }
+        },
+        {
+          "name": "physical-feature-body-opens-canonical-gateway",
+          "pass": true,
+          "point": {
+            "x": 1060.2998628168186,
+            "y": 378.04157657567134,
+            "z": 0.9826388710605488,
+            "area": 61028.90709096973,
+            "firstHit": {
+              "name": "gateway/spatial-tab/cube",
+              "groupId": null,
+              "featureId": "gateway",
+              "distance": 11.867295397541467,
+              "materialIndex": 4,
+              "uv": [
+                0.33333333333333426,
+                0.6666666666666666
+              ]
+            },
+            "mesh": "gateway/spatial-tab/cube",
+            "elementAtPoint": "CANVAS"
+          },
+          "after": {
+            "url": "http://127.0.0.1:8082/?feature=gateway",
+            "activeId": "gateway",
+            "active": true,
+            "space": "network",
+            "view": "feature",
+            "selected": "gateway",
+            "camera": {
+              "position": [
+                4.813330825046193,
+                3.300287501451875,
+                6.346952166290226
+              ],
+              "target": [
+                4.813330825046193,
+                3.3002875014518747,
+                0
+              ],
+              "fov": 60,
+              "aspect": 1.44,
+              "near": 0.1,
+              "far": 220
+            },
+            "live": {
+              "engine": "mesh-uv-360",
+              "entityId": "gateway",
+              "bodyId": "gateway",
+              "coordinateSpace": "owning-mesh-uv",
+              "separatePanelFrame": false,
+              "canonicalOwners": 1,
+              "interactiveSurfaceCount": 6,
+              "ownedByBody": true,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "document": {
+                "featureId": "gateway",
+                "revision": 2,
+                "disposed": false,
+                "blockCount": 82,
+                "actionCount": 38,
+                "originalElementId": "live-gateway-console",
+                "canonicalOwners": 1,
+                "clonedFeatureCount": 0,
+                "kinds": [
+                  "text",
+                  "heading",
+                  "button",
+                  "link",
+                  "summary"
+                ]
+              },
+              "atlas": {
+                "page": 0,
+                "pageCount": 4,
+                "revision": 1,
+                "disposed": false,
+                "blockCount": 82,
+                "focusActionId": null,
+                "textureCount": 6,
+                "canonicalFeatureId": "gateway",
+                "charts": [
+                  {
+                    "index": 0,
+                    "id": "right",
+                    "label": "Right",
+                    "width": 768,
+                    "height": 768,
+                    "bounds": {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.67
+                    },
+                    "blocks": [
+                      {
+                        "blockId": "gateway:surface:5",
+                        "part": 0,
+                        "kind": "text",
+                        "lineCount": 8
+                      },
+                      {
+                        "blockId": "gateway:surface:6",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:7",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      }
+                    ],
+                    "regions": [
+                      {
+                        "x": 0.055,
+                        "y": 0.5423958333333333,
+                        "width": 0.89,
+                        "height": 0.092578125,
+                        "actionId": "gateway:surface:6:action",
+                        "blockId": "gateway:surface:6",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh all public sources",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.645390625,
+                        "width": 0.89,
+                        "height": 0.092578125,
+                        "actionId": "gateway:surface:7:action",
+                        "blockId": "gateway:surface:7",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Start auto-refresh · 30s",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.9126200000000001,
+                        "width": 0.41829999999999995,
+                        "height": 0.055380000000000006,
+                        "actionId": "@atlas:previous",
+                        "kind": "navigation",
+                        "label": "previous",
+                        "disabled": true
+                      },
+                      {
+                        "x": 0.5267000000000001,
+                        "y": 0.9126200000000001,
+                        "width": 0.41829999999999995,
+                        "height": 0.055380000000000006,
+                        "actionId": "@atlas:next",
+                        "kind": "navigation",
+                        "label": "next",
+                        "disabled": false
+                      }
+                    ]
+                  },
+                  {
+                    "index": 1,
+                    "id": "left",
+                    "label": "Left",
+                    "width": 768,
+                    "height": 768,
+                    "bounds": {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.67
+                    },
+                    "blocks": [
+                      {
+                        "blockId": "gateway:surface:8",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:9",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:10",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:11",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:12",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:13",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      }
+                    ],
+                    "regions": [
+                      {
+                        "x": 0.055,
+                        "y": 0.17,
+                        "width": 0.89,
+                        "height": 0.092578125,
+                        "actionId": "gateway:surface:8:action",
+                        "blockId": "gateway:surface:8",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh World Pulse",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.2729947916666667,
+                        "width": 0.89,
+                        "height": 0.092578125,
+                        "actionId": "gateway:surface:9:action",
+                        "blockId": "gateway:surface:9",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh Tennis",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.3759895833333333,
+                        "width": 0.89,
+                        "height": 0.092578125,
+                        "actionId": "gateway:surface:10:action",
+                        "blockId": "gateway:surface:10",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh Asset Market",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.478984375,
+                        "width": 0.89,
+                        "height": 0.092578125,
+                        "actionId": "gateway:surface:11:action",
+                        "blockId": "gateway:surface:11",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh Protocol TVL",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.5819791666666667,
+                        "width": 0.89,
+                        "height": 0.092578125,
+                        "actionId": "gateway:surface:12:action",
+                        "blockId": "gateway:surface:12",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh Multi-Sport Scoreboards",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.6849739583333334,
+                        "width": 0.89,
+                        "height": 0.092578125,
+                        "actionId": "gateway:surface:13:action",
+                        "blockId": "gateway:surface:13",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh Social Pulse",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.9126200000000001,
+                        "width": 0.41829999999999995,
+                        "height": 0.055380000000000006,
+                        "actionId": "@atlas:previous",
+                        "kind": "navigation",
+                        "label": "previous",
+                        "disabled": true
+                      },
+                      {
+                        "x": 0.5267000000000001,
+                        "y": 0.9126200000000001,
+                        "width": 0.41829999999999995,
+                        "height": 0.055380000000000006,
+                        "actionId": "@atlas:next",
+                        "kind": "navigation",
+                        "label": "next",
+                        "disabled": false
+                      }
+                    ]
+                  },
+                  {
+                    "index": 2,
+                    "id": "top",
+                    "label": "Top",
+                    "width": 768,
+                    "height": 768,
+                    "bounds": {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.67
+                    },
+                    "blocks": [
+                      {
+                        "blockId": "gateway:surface:14",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:15:text",
+                        "part": 0,
+                        "kind": "text",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:16:text",
+                        "part": 0,
+                        "kind": "text",
+                        "lineCount": 4
+                      },
+                      {
+                        "blockId": "gateway:surface:17",
+                        "part": 0,
+                        "kind": "link",
+                        "lineCount": 2
+                      }
+                    ],
+                    "regions": [
+                      {
+                        "x": 0.055,
+                        "y": 0.17,
+                        "width": 0.89,
+                        "height": 0.092578125,
+                        "actionId": "gateway:surface:14:action",
+                        "blockId": "gateway:surface:14",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh Picture Metadata",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.5343880208333333,
+                        "width": 0.89,
+                        "height": 0.13828125,
+                        "actionId": "gateway:surface:17:action",
+                        "blockId": "gateway:surface:17",
+                        "kind": "link",
+                        "inputType": "",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "OPEN PUBLIC SOURCE · https://api.gdeltproject.org/api/v2/doc/doc",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.9126200000000001,
+                        "width": 0.41829999999999995,
+                        "height": 0.055380000000000006,
+                        "actionId": "@atlas:previous",
+                        "kind": "navigation",
+                        "label": "previous",
+                        "disabled": true
+                      },
+                      {
+                        "x": 0.5267000000000001,
+                        "y": 0.9126200000000001,
+                        "width": 0.41829999999999995,
+                        "height": 0.055380000000000006,
+                        "actionId": "@atlas:next",
+                        "kind": "navigation",
+                        "label": "next",
+                        "disabled": false
+                      }
+                    ]
+                  },
+                  {
+                    "index": 3,
+                    "id": "bottom",
+                    "label": "Bottom",
+                    "width": 768,
+                    "height": 768,
+                    "bounds": {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.67
+                    },
+                    "blocks": [
+                      {
+                        "blockId": "gateway:surface:18",
+                        "part": 0,
+                        "kind": "link",
+                        "lineCount": 3
+                      },
+                      {
+                        "blockId": "gateway:surface:19:text",
+                        "part": 0,
+                        "kind": "text",
+                        "lineCount": 2
+                      },
+                      {
+                        "blockId": "gateway:surface:20:text",
+                        "part": 0,
+                        "kind": "text",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:21:text",
+                        "part": 0,
+                        "kind": "text",
+                        "lineCount": 4
+                      }
+                    ],
+                    "regions": [
+                      {
+                        "x": 0.055,
+                        "y": 0.17,
+                        "width": 0.89,
+                        "height": 0.183984375,
+                        "actionId": "gateway:surface:18:action",
+                        "blockId": "gateway:surface:18",
+                        "kind": "link",
+                        "inputType": "",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "OPEN PROVIDER DOCS · https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.9126200000000001,
+                        "width": 0.41829999999999995,
+                        "height": 0.055380000000000006,
+                        "actionId": "@atlas:previous",
+                        "kind": "navigation",
+                        "label": "previous",
+                        "disabled": true
+                      },
+                      {
+                        "x": 0.5267000000000001,
+                        "y": 0.9126200000000001,
+                        "width": 0.41829999999999995,
+                        "height": 0.055380000000000006,
+                        "actionId": "@atlas:next",
+                        "kind": "navigation",
+                        "label": "next",
+                        "disabled": false
+                      }
+                    ]
+                  },
+                  {
+                    "index": 4,
+                    "id": "front",
+                    "label": "Front",
+                    "width": 768,
+                    "height": 768,
+                    "bounds": {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.67
+                    },
+                    "blocks": [
+                      {
+                        "blockId": "gateway:surface:1:text",
+                        "part": 0,
+                        "kind": "text",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:2",
+                        "part": 0,
+                        "kind": "heading",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:3",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:4",
+                        "part": 0,
+                        "kind": "heading",
+                        "lineCount": 1
+                      }
+                    ],
+                    "regions": [
+                      {
+                        "x": 0.055,
+                        "y": 0.30834635416666667,
+                        "width": 0.89,
+                        "height": 0.092578125,
+                        "actionId": "gateway:surface:3:action",
+                        "blockId": "gateway:surface:3",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Close public source status console",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.9126200000000001,
+                        "width": 0.41829999999999995,
+                        "height": 0.055380000000000006,
+                        "actionId": "@atlas:previous",
+                        "kind": "navigation",
+                        "label": "previous",
+                        "disabled": true
+                      },
+                      {
+                        "x": 0.5267000000000001,
+                        "y": 0.9126200000000001,
+                        "width": 0.41829999999999995,
+                        "height": 0.055380000000000006,
+                        "actionId": "@atlas:next",
+                        "kind": "navigation",
+                        "label": "next",
+                        "disabled": false
+                      }
+                    ]
+                  },
+                  {
+                    "index": 5,
+                    "id": "back",
+                    "label": "Back",
+                    "width": 768,
+                    "height": 768,
+                    "bounds": {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.67
+                    },
+                    "blocks": [
+                      {
+                        "blockId": "gateway:surface:22",
+                        "part": 0,
+                        "kind": "link",
+                        "lineCount": 2
+                      },
+                      {
+                        "blockId": "gateway:surface:23",
+                        "part": 0,
+                        "kind": "link",
+                        "lineCount": 3
+                      },
+                      {
+                        "blockId": "gateway:surface:24:text",
+                        "part": 0,
+                        "kind": "text",
+                        "lineCount": 2
+                      },
+                      {
+                        "blockId": "gateway:surface:25:text",
+                        "part": 0,
+                        "kind": "text",
+                        "lineCount": 4
+                      }
+                    ],
+                    "regions": [
+                      {
+                        "x": 0.055,
+                        "y": 0.17,
+                        "width": 0.89,
+                        "height": 0.13828125,
+                        "actionId": "gateway:surface:22:action",
+                        "blockId": "gateway:surface:22",
+                        "kind": "link",
+                        "inputType": "",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "OPEN PUBLIC SOURCE · https://api.unhcr.org/population/v1/population/",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.31869791666666664,
+                        "width": 0.89,
+                        "height": 0.183984375,
+                        "actionId": "gateway:surface:23:action",
+                        "blockId": "gateway:surface:23",
+                        "kind": "link",
+                        "inputType": "",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "OPEN PROVIDER DOCS · https://www.unhcr.org/refugee-statistics/insights/explainers/forcibly-displaced-api.html",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.9126200000000001,
+                        "width": 0.41829999999999995,
+                        "height": 0.055380000000000006,
+                        "actionId": "@atlas:previous",
+                        "kind": "navigation",
+                        "label": "previous",
+                        "disabled": true
+                      },
+                      {
+                        "x": 0.5267000000000001,
+                        "y": 0.9126200000000001,
+                        "width": 0.41829999999999995,
+                        "height": 0.055380000000000006,
+                        "actionId": "@atlas:next",
+                        "kind": "navigation",
+                        "label": "next",
+                        "disabled": false
+                      }
+                    ]
+                  }
+                ]
+              },
+              "mediaPixelMode": "native-embed-only",
+              "panelId": "live-gateway-console"
+            },
+            "person": false,
+            "visibleIds": [
+              "gateway"
+            ],
+            "overflow": false,
+            "crumbs": [
+              {
+                "text": "Home",
+                "hidden": false,
+                "disabled": false
+              },
+              {
+                "text": "Network & tools",
+                "hidden": false,
+                "disabled": false
+              },
+              {
+                "text": "World Gateway / Evidence",
+                "hidden": false,
+                "disabled": false
+              }
+            ]
+          }
+        },
+        {
+          "name": "breadcrumb-space-back-forward-reload-home",
+          "pass": true,
+          "space": {
+            "url": "http://127.0.0.1:8082/?feature=reality-lens&space=network",
+            "activeId": "reality-lens",
+            "active": true,
+            "space": "network",
+            "view": "space",
+            "selected": "gateway",
+            "camera": {
+              "position": [
+                0.011009346597255687,
+                2.3906477068314933,
+                12.480033265478188
+              ],
+              "target": [
+                0.011009346597255687,
+                2.3906477068314924,
+                0
+              ],
+              "fov": 60,
+              "aspect": 1.44,
+              "near": 0.1,
+              "far": 220
+            },
+            "live": null,
+            "person": false,
+            "visibleIds": [
+              "social-explorer",
+              "bot-plaza",
+              "gateway",
+              "web-ai"
+            ],
+            "overflow": false,
+            "crumbs": [
+              {
+                "text": "Home",
+                "hidden": false,
+                "disabled": false
+              },
+              {
+                "text": "Network & tools",
+                "hidden": false,
+                "disabled": true
+              },
+              {
+                "text": "",
+                "hidden": false,
+                "disabled": false
+              }
+            ]
+          },
+          "back": {
+            "url": "http://127.0.0.1:8082/?feature=gateway",
+            "activeId": "gateway",
+            "active": true,
+            "space": "network",
+            "view": "feature",
+            "selected": "gateway",
+            "camera": {
+              "position": [
+                4.813866224766778,
+                3.3003848153972988,
+                6.346225464100194
+              ],
+              "target": [
+                4.813866224766778,
+                3.3003848153972983,
+                0
+              ],
+              "fov": 60,
+              "aspect": 1.44,
+              "near": 0.1,
+              "far": 220
+            },
+            "live": {
+              "engine": "mesh-uv-360",
+              "entityId": "gateway",
+              "bodyId": "gateway",
+              "coordinateSpace": "owning-mesh-uv",
+              "separatePanelFrame": false,
+              "canonicalOwners": 1,
+              "interactiveSurfaceCount": 6,
+              "ownedByBody": true,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "document": {
+                "featureId": "gateway",
+                "revision": 2,
+                "disposed": false,
+                "blockCount": 82,
+                "actionCount": 38,
+                "originalElementId": "live-gateway-console",
+                "canonicalOwners": 1,
+                "clonedFeatureCount": 0,
+                "kinds": [
+                  "text",
+                  "heading",
+                  "button",
+                  "link",
+                  "summary"
+                ]
+              },
+              "atlas": {
+                "page": 0,
+                "pageCount": 4,
+                "revision": 1,
+                "disposed": false,
+                "blockCount": 82,
+                "focusActionId": null,
+                "textureCount": 6,
+                "canonicalFeatureId": "gateway",
+                "charts": [
+                  {
+                    "index": 0,
+                    "id": "right",
+                    "label": "Right",
+                    "width": 768,
+                    "height": 768,
+                    "bounds": {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.67
+                    },
+                    "blocks": [
+                      {
+                        "blockId": "gateway:surface:5",
+                        "part": 0,
+                        "kind": "text",
+                        "lineCount": 8
+                      },
+                      {
+                        "blockId": "gateway:surface:6",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:7",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      }
+                    ],
+                    "regions": [
+                      {
+                        "x": 0.055,
+                        "y": 0.5423958333333333,
+                        "width": 0.89,
+                        "height": 0.092578125,
+                        "actionId": "gateway:surface:6:action",
+                        "blockId": "gateway:surface:6",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh all public sources",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.645390625,
+                        "width": 0.89,
+                        "height": 0.092578125,
+                        "actionId": "gateway:surface:7:action",
+                        "blockId": "gateway:surface:7",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Start auto-refresh · 30s",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.9126200000000001,
+                        "width": 0.41829999999999995,
+                        "height": 0.055380000000000006,
+                        "actionId": "@atlas:previous",
+                        "kind": "navigation",
+                        "label": "previous",
+                        "disabled": true
+                      },
+                      {
+                        "x": 0.5267000000000001,
+                        "y": 0.9126200000000001,
+                        "width": 0.41829999999999995,
+                        "height": 0.055380000000000006,
+                        "actionId": "@atlas:next",
+                        "kind": "navigation",
+                        "label": "next",
+                        "disabled": false
+                      }
+                    ]
+                  },
+                  {
+                    "index": 1,
+                    "id": "left",
+                    "label": "Left",
+                    "width": 768,
+                    "height": 768,
+                    "bounds": {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.67
+                    },
+                    "blocks": [
+                      {
+                        "blockId": "gateway:surface:8",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:9",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:10",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:11",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:12",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:13",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      }
+                    ],
+                    "regions": [
+                      {
+                        "x": 0.055,
+                        "y": 0.17,
+                        "width": 0.89,
+                        "height": 0.092578125,
+                        "actionId": "gateway:surface:8:action",
+                        "blockId": "gateway:surface:8",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh World Pulse",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.2729947916666667,
+                        "width": 0.89,
+                        "height": 0.092578125,
+                        "actionId": "gateway:surface:9:action",
+                        "blockId": "gateway:surface:9",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh Tennis",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.3759895833333333,
+                        "width": 0.89,
+                        "height": 0.092578125,
+                        "actionId": "gateway:surface:10:action",
+                        "blockId": "gateway:surface:10",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh Asset Market",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.478984375,
+                        "width": 0.89,
+                        "height": 0.092578125,
+                        "actionId": "gateway:surface:11:action",
+                        "blockId": "gateway:surface:11",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh Protocol TVL",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.5819791666666667,
+                        "width": 0.89,
+                        "height": 0.092578125,
+                        "actionId": "gateway:surface:12:action",
+                        "blockId": "gateway:surface:12",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh Multi-Sport Scoreboards",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.6849739583333334,
+                        "width": 0.89,
+                        "height": 0.092578125,
+                        "actionId": "gateway:surface:13:action",
+                        "blockId": "gateway:surface:13",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh Social Pulse",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.9126200000000001,
+                        "width": 0.41829999999999995,
+                        "height": 0.055380000000000006,
+                        "actionId": "@atlas:previous",
+                        "kind": "navigation",
+                        "label": "previous",
+                        "disabled": true
+                      },
+                      {
+                        "x": 0.5267000000000001,
+                        "y": 0.9126200000000001,
+                        "width": 0.41829999999999995,
+                        "height": 0.055380000000000006,
+                        "actionId": "@atlas:next",
+                        "kind": "navigation",
+                        "label": "next",
+                        "disabled": false
+                      }
+                    ]
+                  },
+                  {
+                    "index": 2,
+                    "id": "top",
+                    "label": "Top",
+                    "width": 768,
+                    "height": 768,
+                    "bounds": {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.67
+                    },
+                    "blocks": [
+                      {
+                        "blockId": "gateway:surface:14",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:15:text",
+                        "part": 0,
+                        "kind": "text",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:16:text",
+                        "part": 0,
+                        "kind": "text",
+                        "lineCount": 4
+                      },
+                      {
+                        "blockId": "gateway:surface:17",
+                        "part": 0,
+                        "kind": "link",
+                        "lineCount": 2
+                      }
+                    ],
+                    "regions": [
+                      {
+                        "x": 0.055,
+                        "y": 0.17,
+                        "width": 0.89,
+                        "height": 0.092578125,
+                        "actionId": "gateway:surface:14:action",
+                        "blockId": "gateway:surface:14",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh Picture Metadata",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.5343880208333333,
+                        "width": 0.89,
+                        "height": 0.13828125,
+                        "actionId": "gateway:surface:17:action",
+                        "blockId": "gateway:surface:17",
+                        "kind": "link",
+                        "inputType": "",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "OPEN PUBLIC SOURCE · https://api.gdeltproject.org/api/v2/doc/doc",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.9126200000000001,
+                        "width": 0.41829999999999995,
+                        "height": 0.055380000000000006,
+                        "actionId": "@atlas:previous",
+                        "kind": "navigation",
+                        "label": "previous",
+                        "disabled": true
+                      },
+                      {
+                        "x": 0.5267000000000001,
+                        "y": 0.9126200000000001,
+                        "width": 0.41829999999999995,
+                        "height": 0.055380000000000006,
+                        "actionId": "@atlas:next",
+                        "kind": "navigation",
+                        "label": "next",
+                        "disabled": false
+                      }
+                    ]
+                  },
+                  {
+                    "index": 3,
+                    "id": "bottom",
+                    "label": "Bottom",
+                    "width": 768,
+                    "height": 768,
+                    "bounds": {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.67
+                    },
+                    "blocks": [
+                      {
+                        "blockId": "gateway:surface:18",
+                        "part": 0,
+                        "kind": "link",
+                        "lineCount": 3
+                      },
+                      {
+                        "blockId": "gateway:surface:19:text",
+                        "part": 0,
+                        "kind": "text",
+                        "lineCount": 2
+                      },
+                      {
+                        "blockId": "gateway:surface:20:text",
+                        "part": 0,
+                        "kind": "text",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:21:text",
+                        "part": 0,
+                        "kind": "text",
+                        "lineCount": 4
+                      }
+                    ],
+                    "regions": [
+                      {
+                        "x": 0.055,
+                        "y": 0.17,
+                        "width": 0.89,
+                        "height": 0.183984375,
+                        "actionId": "gateway:surface:18:action",
+                        "blockId": "gateway:surface:18",
+                        "kind": "link",
+                        "inputType": "",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "OPEN PROVIDER DOCS · https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.9126200000000001,
+                        "width": 0.41829999999999995,
+                        "height": 0.055380000000000006,
+                        "actionId": "@atlas:previous",
+                        "kind": "navigation",
+                        "label": "previous",
+                        "disabled": true
+                      },
+                      {
+                        "x": 0.5267000000000001,
+                        "y": 0.9126200000000001,
+                        "width": 0.41829999999999995,
+                        "height": 0.055380000000000006,
+                        "actionId": "@atlas:next",
+                        "kind": "navigation",
+                        "label": "next",
+                        "disabled": false
+                      }
+                    ]
+                  },
+                  {
+                    "index": 4,
+                    "id": "front",
+                    "label": "Front",
+                    "width": 768,
+                    "height": 768,
+                    "bounds": {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.67
+                    },
+                    "blocks": [
+                      {
+                        "blockId": "gateway:surface:1:text",
+                        "part": 0,
+                        "kind": "text",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:2",
+                        "part": 0,
+                        "kind": "heading",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:3",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:4",
+                        "part": 0,
+                        "kind": "heading",
+                        "lineCount": 1
+                      }
+                    ],
+                    "regions": [
+                      {
+                        "x": 0.055,
+                        "y": 0.30834635416666667,
+                        "width": 0.89,
+                        "height": 0.092578125,
+                        "actionId": "gateway:surface:3:action",
+                        "blockId": "gateway:surface:3",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Close public source status console",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.9126200000000001,
+                        "width": 0.41829999999999995,
+                        "height": 0.055380000000000006,
+                        "actionId": "@atlas:previous",
+                        "kind": "navigation",
+                        "label": "previous",
+                        "disabled": true
+                      },
+                      {
+                        "x": 0.5267000000000001,
+                        "y": 0.9126200000000001,
+                        "width": 0.41829999999999995,
+                        "height": 0.055380000000000006,
+                        "actionId": "@atlas:next",
+                        "kind": "navigation",
+                        "label": "next",
+                        "disabled": false
+                      }
+                    ]
+                  },
+                  {
+                    "index": 5,
+                    "id": "back",
+                    "label": "Back",
+                    "width": 768,
+                    "height": 768,
+                    "bounds": {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.67
+                    },
+                    "blocks": [
+                      {
+                        "blockId": "gateway:surface:22",
+                        "part": 0,
+                        "kind": "link",
+                        "lineCount": 2
+                      },
+                      {
+                        "blockId": "gateway:surface:23",
+                        "part": 0,
+                        "kind": "link",
+                        "lineCount": 3
+                      },
+                      {
+                        "blockId": "gateway:surface:24:text",
+                        "part": 0,
+                        "kind": "text",
+                        "lineCount": 2
+                      },
+                      {
+                        "blockId": "gateway:surface:25:text",
+                        "part": 0,
+                        "kind": "text",
+                        "lineCount": 4
+                      }
+                    ],
+                    "regions": [
+                      {
+                        "x": 0.055,
+                        "y": 0.17,
+                        "width": 0.89,
+                        "height": 0.13828125,
+                        "actionId": "gateway:surface:22:action",
+                        "blockId": "gateway:surface:22",
+                        "kind": "link",
+                        "inputType": "",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "OPEN PUBLIC SOURCE · https://api.unhcr.org/population/v1/population/",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.31869791666666664,
+                        "width": 0.89,
+                        "height": 0.183984375,
+                        "actionId": "gateway:surface:23:action",
+                        "blockId": "gateway:surface:23",
+                        "kind": "link",
+                        "inputType": "",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "OPEN PROVIDER DOCS · https://www.unhcr.org/refugee-statistics/insights/explainers/forcibly-displaced-api.html",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.9126200000000001,
+                        "width": 0.41829999999999995,
+                        "height": 0.055380000000000006,
+                        "actionId": "@atlas:previous",
+                        "kind": "navigation",
+                        "label": "previous",
+                        "disabled": true
+                      },
+                      {
+                        "x": 0.5267000000000001,
+                        "y": 0.9126200000000001,
+                        "width": 0.41829999999999995,
+                        "height": 0.055380000000000006,
+                        "actionId": "@atlas:next",
+                        "kind": "navigation",
+                        "label": "next",
+                        "disabled": false
+                      }
+                    ]
+                  }
+                ]
+              },
+              "mediaPixelMode": "native-embed-only",
+              "panelId": "live-gateway-console"
+            },
+            "person": false,
+            "visibleIds": [
+              "gateway"
+            ],
+            "overflow": false,
+            "crumbs": [
+              {
+                "text": "Home",
+                "hidden": false,
+                "disabled": false
+              },
+              {
+                "text": "Network & tools",
+                "hidden": false,
+                "disabled": false
+              },
+              {
+                "text": "World Gateway / Evidence",
+                "hidden": false,
+                "disabled": false
+              }
+            ]
+          },
+          "forward": {
+            "url": "http://127.0.0.1:8082/?feature=reality-lens&space=network",
+            "activeId": "reality-lens",
+            "active": true,
+            "space": "network",
+            "view": "space",
+            "selected": "gateway",
+            "camera": {
+              "position": [
+                0.011558901457960706,
+                2.390751791845079,
+                12.479331321702984
+              ],
+              "target": [
+                0.011558901457960706,
+                2.3907517918450782,
+                0
+              ],
+              "fov": 60,
+              "aspect": 1.44,
+              "near": 0.1,
+              "far": 220
+            },
+            "live": null,
+            "person": false,
+            "visibleIds": [
+              "social-explorer",
+              "bot-plaza",
+              "gateway",
+              "web-ai"
+            ],
+            "overflow": false,
+            "crumbs": [
+              {
+                "text": "Home",
+                "hidden": false,
+                "disabled": false
+              },
+              {
+                "text": "Network & tools",
+                "hidden": false,
+                "disabled": true
+              },
+              {
+                "text": "",
+                "hidden": false,
+                "disabled": false
+              }
+            ]
+          },
+          "reload": {
+            "url": "http://127.0.0.1:8082/?feature=reality-lens&space=network",
+            "activeId": "reality-lens",
+            "active": true,
+            "space": "network",
+            "view": "space",
+            "selected": "block-world",
+            "camera": {
+              "position": [
+                5.038823619149439e-18,
+                2.3903783783903596,
+                12.513113982153182
+              ],
+              "target": [
+                5.038823619149439e-18,
+                2.3903783783903587,
+                0
+              ],
+              "fov": 60,
+              "aspect": 1.44,
+              "near": 0.1,
+              "far": 220
+            },
+            "live": null,
+            "person": false,
+            "visibleIds": [
+              "social-explorer",
+              "bot-plaza",
+              "gateway",
+              "web-ai"
+            ],
+            "overflow": false,
+            "crumbs": [
+              {
+                "text": "Home",
+                "hidden": false,
+                "disabled": false
+              },
+              {
+                "text": "Network & tools",
+                "hidden": false,
+                "disabled": true
+              },
+              {
+                "text": "",
+                "hidden": false,
+                "disabled": false
+              }
+            ]
+          },
+          "home": {
+            "url": "http://127.0.0.1:8082/?feature=reality-lens",
+            "activeId": "reality-lens",
+            "active": true,
+            "space": null,
+            "view": "gateway",
+            "selected": "block-world",
+            "camera": {
+              "position": [
+                8.833191737039485e-16,
+                2.7069164412050233,
+                15.828454566326435
+              ],
+              "target": [
+                8.833191737039485e-16,
+                2.7069164412050224,
+                0
+              ],
+              "fov": 60,
+              "aspect": 1.44,
+              "near": 0.1,
+              "far": 220
+            },
+            "live": null,
+            "person": false,
+            "visibleIds": [],
+            "overflow": false,
+            "crumbs": [
+              {
+                "text": "Home",
+                "hidden": true,
+                "disabled": false
+              },
+              {
+                "text": "",
+                "hidden": true,
+                "disabled": true
+              },
+              {
+                "text": "",
+                "hidden": true,
+                "disabled": false
+              }
+            ]
+          }
+        },
+        {
+          "name": "no-navigation-page-errors",
+          "pass": true,
+          "errors": []
+        }
+      ],
+      "errors": [],
+      "failedRequests": [
+        {
+          "check": "bootstrap",
+          "url": "https://api.elections.kalshi.com/trade-api/v2/markets",
+          "reason": "net::ERR_FAILED"
+        },
+        {
+          "check": "breadcrumb-space-back-forward-reload-home",
+          "url": "https://api.elections.kalshi.com/trade-api/v2/markets",
+          "reason": "net::ERR_FAILED"
+        }
+      ],
+      "initial": {
+        "url": "http://127.0.0.1:8082/",
+        "activeId": "reality-lens",
+        "active": true,
+        "space": null,
+        "view": "gateway",
+        "selected": "block-world",
+        "camera": {
+          "position": [
+            8.881784197001252e-16,
+            2.7086677456879498,
+            15.846797291924306
+          ],
+          "target": [
+            8.881784197001252e-16,
+            2.708667745687949,
+            0
+          ],
+          "fov": 60,
+          "aspect": 1.44,
+          "near": 0.1,
+          "far": 220
+        },
+        "live": null,
+        "person": false,
+        "visibleIds": [],
+        "overflow": false,
+        "crumbs": [
+          {
+            "text": "Home",
+            "hidden": true,
+            "disabled": false
+          },
+          {
+            "text": "",
+            "hidden": true,
+            "disabled": true
+          },
+          {
+            "text": "",
+            "hidden": true,
+            "disabled": false
+          }
+        ]
+      },
+      "currentCheck": "no-navigation-page-errors",
+      "homeGeometry": [
+        {
+          "id": "worlds",
+          "shape": "cube",
+          "visible": true,
+          "vertexCount": 36,
+          "outside": 0,
+          "bounds": {
+            "left": 218.4275237578373,
+            "right": 494.0865716969078,
+            "top": 308.64893417997786,
+            "bottom": 558.5574578410744,
+            "minDepth": 0.9860440738075351,
+            "maxDepth": 0.989935653298525
+          }
+        },
+        {
+          "id": "people",
+          "shape": "sphere",
+          "visible": true,
+          "vertexCount": 9216,
+          "outside": 0,
+          "bounds": {
+            "left": 609.4941634076152,
+            "right": 824.0390491463136,
+            "top": 329.7328760437625,
+            "bottom": 544.9159678017012,
+            "minDepth": 0.986515876277028,
+            "maxDepth": 0.9896635209093165
+          }
+        },
+        {
+          "id": "network",
+          "shape": "octahedron",
+          "visible": true,
+          "vertexCount": 24,
+          "outside": 0,
+          "bounds": {
+            "left": 926.608606040466,
+            "right": 1210.9391622889727,
+            "top": 330.874153383548,
+            "bottom": 544.4830883271243,
+            "minDepth": 0.986673241630989,
+            "maxDepth": 0.9895655408851903
+          }
+        },
+        {
+          "id": "value",
+          "shape": "cylinder",
+          "visible": true,
+          "vertexCount": 1920,
+          "outside": 0,
+          "bounds": {
+            "left": 275.23564325537507,
+            "right": 470.35696904234374,
+            "top": 626.5955279336516,
+            "bottom": 898.0428326841021,
+            "minDepth": 0.9867624374477583,
+            "maxDepth": 0.9895082560658024
+          }
+        },
+        {
+          "id": "agents",
+          "shape": "torus",
+          "visible": true,
+          "vertexCount": 12288,
+          "outside": 0,
+          "bounds": {
+            "left": 609.6590319846476,
+            "right": 820.4742893520942,
+            "top": 642.881272590357,
+            "bottom": 857.269703903095,
+            "minDepth": 0.9875572433077001,
+            "maxDepth": 0.9889337463555465
+          }
+        },
+        {
+          "id": "experiences",
+          "shape": "triangular-prism",
+          "visible": true,
+          "vertexCount": 24,
+          "outside": 0,
+          "bounds": {
+            "left": 937.8594935800764,
+            "right": 1212.5602364868741,
+            "top": 626.9683728542919,
+            "bottom": 910.1466500042714,
+            "minDepth": 0.9865487426820714,
+            "maxDepth": 0.9897535576668959
+          }
+        }
+      ],
+      "historyStages": [
+        {
+          "stage": "after-breadcrumb",
+          "state": {
+            "url": "http://127.0.0.1:8082/?feature=reality-lens&space=network",
+            "activeId": "reality-lens",
+            "active": true,
+            "space": "network",
+            "view": "space",
+            "selected": "gateway",
+            "camera": {
+              "position": [
+                0.011009346597255687,
+                2.3906477068314933,
+                12.480033265478188
+              ],
+              "target": [
+                0.011009346597255687,
+                2.3906477068314924,
+                0
+              ],
+              "fov": 60,
+              "aspect": 1.44,
+              "near": 0.1,
+              "far": 220
+            },
+            "live": null,
+            "person": false,
+            "visibleIds": [
+              "social-explorer",
+              "bot-plaza",
+              "gateway",
+              "web-ai"
+            ],
+            "overflow": false,
+            "crumbs": [
+              {
+                "text": "Home",
+                "hidden": false,
+                "disabled": false
+              },
+              {
+                "text": "Network & tools",
+                "hidden": false,
+                "disabled": true
+              },
+              {
+                "text": "",
+                "hidden": false,
+                "disabled": false
+              }
+            ]
+          }
+        },
+        {
+          "stage": "after-back",
+          "state": {
+            "url": "http://127.0.0.1:8082/?feature=gateway",
+            "activeId": "gateway",
+            "active": true,
+            "space": "network",
+            "view": "feature",
+            "selected": "gateway",
+            "camera": {
+              "position": [
+                4.813866224766778,
+                3.3003848153972988,
+                6.346225464100194
+              ],
+              "target": [
+                4.813866224766778,
+                3.3003848153972983,
+                0
+              ],
+              "fov": 60,
+              "aspect": 1.44,
+              "near": 0.1,
+              "far": 220
+            },
+            "live": {
+              "engine": "mesh-uv-360",
+              "entityId": "gateway",
+              "bodyId": "gateway",
+              "coordinateSpace": "owning-mesh-uv",
+              "separatePanelFrame": false,
+              "canonicalOwners": 1,
+              "interactiveSurfaceCount": 6,
+              "ownedByBody": true,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "document": {
+                "featureId": "gateway",
+                "revision": 2,
+                "disposed": false,
+                "blockCount": 82,
+                "actionCount": 38,
+                "originalElementId": "live-gateway-console",
+                "canonicalOwners": 1,
+                "clonedFeatureCount": 0,
+                "kinds": [
+                  "text",
+                  "heading",
+                  "button",
+                  "link",
+                  "summary"
+                ]
+              },
+              "atlas": {
+                "page": 0,
+                "pageCount": 4,
+                "revision": 1,
+                "disposed": false,
+                "blockCount": 82,
+                "focusActionId": null,
+                "textureCount": 6,
+                "canonicalFeatureId": "gateway",
+                "charts": [
+                  {
+                    "index": 0,
+                    "id": "right",
+                    "label": "Right",
+                    "width": 768,
+                    "height": 768,
+                    "bounds": {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.67
+                    },
+                    "blocks": [
+                      {
+                        "blockId": "gateway:surface:5",
+                        "part": 0,
+                        "kind": "text",
+                        "lineCount": 8
+                      },
+                      {
+                        "blockId": "gateway:surface:6",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:7",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      }
+                    ],
+                    "regions": [
+                      {
+                        "x": 0.055,
+                        "y": 0.5423958333333333,
+                        "width": 0.89,
+                        "height": 0.092578125,
+                        "actionId": "gateway:surface:6:action",
+                        "blockId": "gateway:surface:6",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh all public sources",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.645390625,
+                        "width": 0.89,
+                        "height": 0.092578125,
+                        "actionId": "gateway:surface:7:action",
+                        "blockId": "gateway:surface:7",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Start auto-refresh · 30s",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.9126200000000001,
+                        "width": 0.41829999999999995,
+                        "height": 0.055380000000000006,
+                        "actionId": "@atlas:previous",
+                        "kind": "navigation",
+                        "label": "previous",
+                        "disabled": true
+                      },
+                      {
+                        "x": 0.5267000000000001,
+                        "y": 0.9126200000000001,
+                        "width": 0.41829999999999995,
+                        "height": 0.055380000000000006,
+                        "actionId": "@atlas:next",
+                        "kind": "navigation",
+                        "label": "next",
+                        "disabled": false
+                      }
+                    ]
+                  },
+                  {
+                    "index": 1,
+                    "id": "left",
+                    "label": "Left",
+                    "width": 768,
+                    "height": 768,
+                    "bounds": {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.67
+                    },
+                    "blocks": [
+                      {
+                        "blockId": "gateway:surface:8",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:9",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:10",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:11",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:12",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:13",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      }
+                    ],
+                    "regions": [
+                      {
+                        "x": 0.055,
+                        "y": 0.17,
+                        "width": 0.89,
+                        "height": 0.092578125,
+                        "actionId": "gateway:surface:8:action",
+                        "blockId": "gateway:surface:8",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh World Pulse",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.2729947916666667,
+                        "width": 0.89,
+                        "height": 0.092578125,
+                        "actionId": "gateway:surface:9:action",
+                        "blockId": "gateway:surface:9",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh Tennis",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.3759895833333333,
+                        "width": 0.89,
+                        "height": 0.092578125,
+                        "actionId": "gateway:surface:10:action",
+                        "blockId": "gateway:surface:10",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh Asset Market",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.478984375,
+                        "width": 0.89,
+                        "height": 0.092578125,
+                        "actionId": "gateway:surface:11:action",
+                        "blockId": "gateway:surface:11",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh Protocol TVL",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.5819791666666667,
+                        "width": 0.89,
+                        "height": 0.092578125,
+                        "actionId": "gateway:surface:12:action",
+                        "blockId": "gateway:surface:12",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh Multi-Sport Scoreboards",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.6849739583333334,
+                        "width": 0.89,
+                        "height": 0.092578125,
+                        "actionId": "gateway:surface:13:action",
+                        "blockId": "gateway:surface:13",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh Social Pulse",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.9126200000000001,
+                        "width": 0.41829999999999995,
+                        "height": 0.055380000000000006,
+                        "actionId": "@atlas:previous",
+                        "kind": "navigation",
+                        "label": "previous",
+                        "disabled": true
+                      },
+                      {
+                        "x": 0.5267000000000001,
+                        "y": 0.9126200000000001,
+                        "width": 0.41829999999999995,
+                        "height": 0.055380000000000006,
+                        "actionId": "@atlas:next",
+                        "kind": "navigation",
+                        "label": "next",
+                        "disabled": false
+                      }
+                    ]
+                  },
+                  {
+                    "index": 2,
+                    "id": "top",
+                    "label": "Top",
+                    "width": 768,
+                    "height": 768,
+                    "bounds": {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.67
+                    },
+                    "blocks": [
+                      {
+                        "blockId": "gateway:surface:14",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:15:text",
+                        "part": 0,
+                        "kind": "text",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:16:text",
+                        "part": 0,
+                        "kind": "text",
+                        "lineCount": 4
+                      },
+                      {
+                        "blockId": "gateway:surface:17",
+                        "part": 0,
+                        "kind": "link",
+                        "lineCount": 2
+                      }
+                    ],
+                    "regions": [
+                      {
+                        "x": 0.055,
+                        "y": 0.17,
+                        "width": 0.89,
+                        "height": 0.092578125,
+                        "actionId": "gateway:surface:14:action",
+                        "blockId": "gateway:surface:14",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh Picture Metadata",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.5343880208333333,
+                        "width": 0.89,
+                        "height": 0.13828125,
+                        "actionId": "gateway:surface:17:action",
+                        "blockId": "gateway:surface:17",
+                        "kind": "link",
+                        "inputType": "",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "OPEN PUBLIC SOURCE · https://api.gdeltproject.org/api/v2/doc/doc",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.9126200000000001,
+                        "width": 0.41829999999999995,
+                        "height": 0.055380000000000006,
+                        "actionId": "@atlas:previous",
+                        "kind": "navigation",
+                        "label": "previous",
+                        "disabled": true
+                      },
+                      {
+                        "x": 0.5267000000000001,
+                        "y": 0.9126200000000001,
+                        "width": 0.41829999999999995,
+                        "height": 0.055380000000000006,
+                        "actionId": "@atlas:next",
+                        "kind": "navigation",
+                        "label": "next",
+                        "disabled": false
+                      }
+                    ]
+                  },
+                  {
+                    "index": 3,
+                    "id": "bottom",
+                    "label": "Bottom",
+                    "width": 768,
+                    "height": 768,
+                    "bounds": {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.67
+                    },
+                    "blocks": [
+                      {
+                        "blockId": "gateway:surface:18",
+                        "part": 0,
+                        "kind": "link",
+                        "lineCount": 3
+                      },
+                      {
+                        "blockId": "gateway:surface:19:text",
+                        "part": 0,
+                        "kind": "text",
+                        "lineCount": 2
+                      },
+                      {
+                        "blockId": "gateway:surface:20:text",
+                        "part": 0,
+                        "kind": "text",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:21:text",
+                        "part": 0,
+                        "kind": "text",
+                        "lineCount": 4
+                      }
+                    ],
+                    "regions": [
+                      {
+                        "x": 0.055,
+                        "y": 0.17,
+                        "width": 0.89,
+                        "height": 0.183984375,
+                        "actionId": "gateway:surface:18:action",
+                        "blockId": "gateway:surface:18",
+                        "kind": "link",
+                        "inputType": "",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "OPEN PROVIDER DOCS · https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.9126200000000001,
+                        "width": 0.41829999999999995,
+                        "height": 0.055380000000000006,
+                        "actionId": "@atlas:previous",
+                        "kind": "navigation",
+                        "label": "previous",
+                        "disabled": true
+                      },
+                      {
+                        "x": 0.5267000000000001,
+                        "y": 0.9126200000000001,
+                        "width": 0.41829999999999995,
+                        "height": 0.055380000000000006,
+                        "actionId": "@atlas:next",
+                        "kind": "navigation",
+                        "label": "next",
+                        "disabled": false
+                      }
+                    ]
+                  },
+                  {
+                    "index": 4,
+                    "id": "front",
+                    "label": "Front",
+                    "width": 768,
+                    "height": 768,
+                    "bounds": {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.67
+                    },
+                    "blocks": [
+                      {
+                        "blockId": "gateway:surface:1:text",
+                        "part": 0,
+                        "kind": "text",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:2",
+                        "part": 0,
+                        "kind": "heading",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:3",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:4",
+                        "part": 0,
+                        "kind": "heading",
+                        "lineCount": 1
+                      }
+                    ],
+                    "regions": [
+                      {
+                        "x": 0.055,
+                        "y": 0.30834635416666667,
+                        "width": 0.89,
+                        "height": 0.092578125,
+                        "actionId": "gateway:surface:3:action",
+                        "blockId": "gateway:surface:3",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Close public source status console",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.9126200000000001,
+                        "width": 0.41829999999999995,
+                        "height": 0.055380000000000006,
+                        "actionId": "@atlas:previous",
+                        "kind": "navigation",
+                        "label": "previous",
+                        "disabled": true
+                      },
+                      {
+                        "x": 0.5267000000000001,
+                        "y": 0.9126200000000001,
+                        "width": 0.41829999999999995,
+                        "height": 0.055380000000000006,
+                        "actionId": "@atlas:next",
+                        "kind": "navigation",
+                        "label": "next",
+                        "disabled": false
+                      }
+                    ]
+                  },
+                  {
+                    "index": 5,
+                    "id": "back",
+                    "label": "Back",
+                    "width": 768,
+                    "height": 768,
+                    "bounds": {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.67
+                    },
+                    "blocks": [
+                      {
+                        "blockId": "gateway:surface:22",
+                        "part": 0,
+                        "kind": "link",
+                        "lineCount": 2
+                      },
+                      {
+                        "blockId": "gateway:surface:23",
+                        "part": 0,
+                        "kind": "link",
+                        "lineCount": 3
+                      },
+                      {
+                        "blockId": "gateway:surface:24:text",
+                        "part": 0,
+                        "kind": "text",
+                        "lineCount": 2
+                      },
+                      {
+                        "blockId": "gateway:surface:25:text",
+                        "part": 0,
+                        "kind": "text",
+                        "lineCount": 4
+                      }
+                    ],
+                    "regions": [
+                      {
+                        "x": 0.055,
+                        "y": 0.17,
+                        "width": 0.89,
+                        "height": 0.13828125,
+                        "actionId": "gateway:surface:22:action",
+                        "blockId": "gateway:surface:22",
+                        "kind": "link",
+                        "inputType": "",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "OPEN PUBLIC SOURCE · https://api.unhcr.org/population/v1/population/",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.31869791666666664,
+                        "width": 0.89,
+                        "height": 0.183984375,
+                        "actionId": "gateway:surface:23:action",
+                        "blockId": "gateway:surface:23",
+                        "kind": "link",
+                        "inputType": "",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "OPEN PROVIDER DOCS · https://www.unhcr.org/refugee-statistics/insights/explainers/forcibly-displaced-api.html",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.9126200000000001,
+                        "width": 0.41829999999999995,
+                        "height": 0.055380000000000006,
+                        "actionId": "@atlas:previous",
+                        "kind": "navigation",
+                        "label": "previous",
+                        "disabled": true
+                      },
+                      {
+                        "x": 0.5267000000000001,
+                        "y": 0.9126200000000001,
+                        "width": 0.41829999999999995,
+                        "height": 0.055380000000000006,
+                        "actionId": "@atlas:next",
+                        "kind": "navigation",
+                        "label": "next",
+                        "disabled": false
+                      }
+                    ]
+                  }
+                ]
+              },
+              "mediaPixelMode": "native-embed-only",
+              "panelId": "live-gateway-console"
+            },
+            "person": false,
+            "visibleIds": [
+              "gateway"
+            ],
+            "overflow": false,
+            "crumbs": [
+              {
+                "text": "Home",
+                "hidden": false,
+                "disabled": false
+              },
+              {
+                "text": "Network & tools",
+                "hidden": false,
+                "disabled": false
+              },
+              {
+                "text": "World Gateway / Evidence",
+                "hidden": false,
+                "disabled": false
+              }
+            ]
+          }
+        },
+        {
+          "stage": "after-forward",
+          "state": {
+            "url": "http://127.0.0.1:8082/?feature=reality-lens&space=network",
+            "activeId": "reality-lens",
+            "active": true,
+            "space": "network",
+            "view": "space",
+            "selected": "gateway",
+            "camera": {
+              "position": [
+                0.011558901457960706,
+                2.390751791845079,
+                12.479331321702984
+              ],
+              "target": [
+                0.011558901457960706,
+                2.3907517918450782,
+                0
+              ],
+              "fov": 60,
+              "aspect": 1.44,
+              "near": 0.1,
+              "far": 220
+            },
+            "live": null,
+            "person": false,
+            "visibleIds": [
+              "social-explorer",
+              "bot-plaza",
+              "gateway",
+              "web-ai"
+            ],
+            "overflow": false,
+            "crumbs": [
+              {
+                "text": "Home",
+                "hidden": false,
+                "disabled": false
+              },
+              {
+                "text": "Network & tools",
+                "hidden": false,
+                "disabled": true
+              },
+              {
+                "text": "",
+                "hidden": false,
+                "disabled": false
+              }
+            ]
+          }
+        },
+        {
+          "stage": "after-reload",
+          "state": {
+            "url": "http://127.0.0.1:8082/?feature=reality-lens&space=network",
+            "activeId": "reality-lens",
+            "active": true,
+            "space": "network",
+            "view": "space",
+            "selected": "block-world",
+            "camera": {
+              "position": [
+                5.038823619149439e-18,
+                2.3903783783903596,
+                12.513113982153182
+              ],
+              "target": [
+                5.038823619149439e-18,
+                2.3903783783903587,
+                0
+              ],
+              "fov": 60,
+              "aspect": 1.44,
+              "near": 0.1,
+              "far": 220
+            },
+            "live": null,
+            "person": false,
+            "visibleIds": [
+              "social-explorer",
+              "bot-plaza",
+              "gateway",
+              "web-ai"
+            ],
+            "overflow": false,
+            "crumbs": [
+              {
+                "text": "Home",
+                "hidden": false,
+                "disabled": false
+              },
+              {
+                "text": "Network & tools",
+                "hidden": false,
+                "disabled": true
+              },
+              {
+                "text": "",
+                "hidden": false,
+                "disabled": false
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "phone",
+      "mode": "navigation",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "freshContext": true,
+      "checks": [
+        {
+          "name": "all-home-vertices-fit-with-eight-pixel-margin",
+          "pass": true,
+          "geometry": [
+            {
+              "id": "worlds",
+              "shape": "cube",
+              "visible": true,
+              "vertexCount": 36,
+              "outside": 0,
+              "bounds": {
+                "left": 36.223639798216624,
+                "right": 182.07300442100217,
+                "top": 227.2467699248796,
+                "bottom": 376.3881184171419,
+                "minDepth": 0.9906530191541911,
+                "maxDepth": 0.9925457418658311
+              }
+            },
+            {
+              "id": "people",
+              "shape": "sphere",
+              "visible": true,
+              "vertexCount": 9216,
+              "outside": 0,
+              "bounds": {
+                "left": 209.57206816994355,
+                "right": 342.03873661517247,
+                "top": 241.89094744667517,
+                "bottom": 375.15365906580126,
+                "minDepth": 0.9907884477949528,
+                "maxDepth": 0.9924534728229626
+              }
+            },
+            {
+              "id": "network",
+              "shape": "octahedron",
+              "visible": true,
+              "vertexCount": 24,
+              "outside": 0,
+              "bounds": {
+                "left": 39.374964447864485,
+                "right": 180.72471960372084,
+                "top": 397.59352629188146,
+                "bottom": 528.3962987369823,
+                "minDepth": 0.9909614794560707,
+                "maxDepth": 0.9923287761601026
+              }
+            },
+            {
+              "id": "value",
+              "shape": "cylinder",
+              "visible": true,
+              "vertexCount": 1920,
+              "outside": 0,
+              "bounds": {
+                "left": 220.5785855175327,
+                "right": 331.0043428270343,
+                "top": 397.0022867560488,
+                "bottom": 539.5433618301497,
+                "minDepth": 0.9909114647124148,
+                "maxDepth": 0.9923656417950002
+              }
+            },
+            {
+              "id": "agents",
+              "shape": "torus",
+              "visible": true,
+              "vertexCount": 12288,
+              "outside": 0,
+              "bounds": {
+                "left": 45.042803087898314,
+                "right": 177.18931992104197,
+                "top": 551.1054063848213,
+                "bottom": 682.7067247424123,
+                "minDepth": 0.9913799991693243,
+                "maxDepth": 0.9919909220643923
+              }
+            },
+            {
+              "id": "experiences",
+              "shape": "triangular-prism",
+              "visible": true,
+              "vertexCount": 24,
+              "outside": 0,
+              "bounds": {
+                "left": 200.56823462307668,
+                "right": 351.9979465493715,
+                "top": 540.3739526214381,
+                "bottom": 707.4510422851366,
+                "minDepth": 0.9909062673830085,
+                "maxDepth": 0.9924329058377586
+              }
+            }
+          ]
+        },
+        {
+          "name": "physical-torus-hole-does-not-open-space",
+          "pass": true,
+          "point": {
+            "x": 111.65091829543822,
+            "y": 616.6304419810217,
+            "z": 0.9916955768093388,
+            "mesh": "reality-lens/space-entry/agents",
+            "firstHit": null,
+            "targetHits": 0,
+            "elementAtPoint": "CANVAS"
+          },
+          "before": {
+            "url": "http://127.0.0.1:8082/",
+            "activeId": "reality-lens",
+            "active": true,
+            "space": null,
+            "view": "gateway",
+            "selected": "block-world",
+            "camera": {
+              "position": [
+                -4.440892098500626e-16,
+                2.2112603916488545,
+                21.716141769560465
+              ],
+              "target": [
+                -4.440892098500626e-16,
+                2.211260391648853,
+                0
+              ],
+              "fov": 60,
+              "aspect": 0.46208530805687204,
+              "near": 0.1,
+              "far": 220
+            },
+            "live": null,
+            "person": false,
+            "visibleIds": [],
+            "overflow": false,
+            "crumbs": [
+              {
+                "text": "Home",
+                "hidden": true,
+                "disabled": false
+              },
+              {
+                "text": "",
+                "hidden": true,
+                "disabled": true
+              },
+              {
+                "text": "",
+                "hidden": true,
+                "disabled": false
+              }
+            ]
+          },
+          "after": {
+            "url": "http://127.0.0.1:8082/",
+            "activeId": "reality-lens",
+            "active": true,
+            "space": null,
+            "view": "gateway",
+            "selected": "block-world",
+            "camera": {
+              "position": [
+                -4.440892098500626e-16,
+                2.2112603916488545,
+                21.716141769560465
+              ],
+              "target": [
+                -4.440892098500626e-16,
+                2.211260391648853,
+                0
+              ],
+              "fov": 60,
+              "aspect": 0.46208530805687204,
+              "near": 0.1,
+              "far": 220
+            },
+            "live": null,
+            "person": false,
+            "visibleIds": [],
+            "overflow": false,
+            "crumbs": [
+              {
+                "text": "Home",
+                "hidden": true,
+                "disabled": false
+              },
+              {
+                "text": "",
+                "hidden": true,
+                "disabled": true
+              },
+              {
+                "text": "",
+                "hidden": true,
+                "disabled": false
+              }
+            ]
+          }
+        },
+        {
+          "name": "physical-home-body-opens-network-space",
+          "pass": true,
+          "point": {
+            "x": 110.88815072181727,
+            "y": 443.815310589628,
+            "z": 0.99126263569806,
+            "area": 10013.266939264071,
+            "firstHit": {
+              "name": "reality-lens/space-entry/network",
+              "groupId": "network",
+              "featureId": null,
+              "distance": 20.887602382454762,
+              "materialIndex": 0,
+              "uv": [
+                0.5000000000000023,
+                0.33333333333333187
+              ]
+            },
+            "mesh": "reality-lens/space-entry/network",
+            "elementAtPoint": "CANVAS"
+          },
+          "after": {
+            "url": "http://127.0.0.1:8082/?feature=reality-lens&space=network",
+            "activeId": "reality-lens",
+            "active": true,
+            "space": "network",
+            "view": "space",
+            "selected": "block-world",
+            "camera": {
+              "position": [
+                -2.215826486048692e-18,
+                0.33361849948234634,
+                18.403635892475464
+              ],
+              "target": [
+                -2.215826486048692e-18,
+                0.33361849948234523,
+                0
+              ],
+              "fov": 60,
+              "aspect": 0.46208530805687204,
+              "near": 0.1,
+              "far": 220
+            },
+            "live": null,
+            "person": false,
+            "visibleIds": [
+              "social-explorer",
+              "bot-plaza",
+              "gateway",
+              "web-ai"
+            ],
+            "overflow": false,
+            "crumbs": [
+              {
+                "text": "Home",
+                "hidden": false,
+                "disabled": false
+              },
+              {
+                "text": "Network & tools",
+                "hidden": false,
+                "disabled": true
+              },
+              {
+                "text": "",
+                "hidden": false,
+                "disabled": false
+              }
+            ]
+          }
+        },
+        {
+          "name": "physical-feature-body-opens-canonical-gateway",
+          "pass": true,
+          "point": {
+            "x": 67.72254548822971,
+            "y": 475.1628002611496,
+            "z": 0.9890287732824328,
+            "area": 18382.282944178376,
+            "firstHit": {
+              "name": "gateway/spatial-tab/cube",
+              "groupId": null,
+              "featureId": "gateway",
+              "distance": 17.138895871565303,
+              "materialIndex": 4,
+              "uv": [
+                0.33333333333333676,
+                0.6666666666666683
+              ]
+            },
+            "mesh": "gateway/spatial-tab/cube",
+            "elementAtPoint": "CANVAS"
+          },
+          "after": {
+            "url": "http://127.0.0.1:8082/?feature=gateway",
+            "activeId": "gateway",
+            "active": true,
+            "space": "network",
+            "view": "feature",
+            "selected": "gateway",
+            "camera": {
+              "position": [
+                -2.407217269786446,
+                -1.435418463973906,
+                9.860069311571953
+              ],
+              "target": [
+                -2.407217269786446,
+                -1.4354184639739067,
+                0
+              ],
+              "fov": 60,
+              "aspect": 0.46208530805687204,
+              "near": 0.1,
+              "far": 220
+            },
+            "live": {
+              "engine": "mesh-uv-360",
+              "entityId": "gateway",
+              "bodyId": "gateway",
+              "coordinateSpace": "owning-mesh-uv",
+              "separatePanelFrame": false,
+              "canonicalOwners": 1,
+              "interactiveSurfaceCount": 6,
+              "ownedByBody": true,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "document": {
+                "featureId": "gateway",
+                "revision": 2,
+                "disposed": false,
+                "blockCount": 82,
+                "actionCount": 38,
+                "originalElementId": "live-gateway-console",
+                "canonicalOwners": 1,
+                "clonedFeatureCount": 0,
+                "kinds": [
+                  "text",
+                  "heading",
+                  "button",
+                  "link",
+                  "summary"
+                ]
+              },
+              "atlas": {
+                "page": 0,
+                "pageCount": 11,
+                "revision": 1,
+                "disposed": false,
+                "blockCount": 82,
+                "focusActionId": null,
+                "textureCount": 6,
+                "canonicalFeatureId": "gateway",
+                "charts": [
+                  {
+                    "index": 0,
+                    "id": "right",
+                    "label": "Right",
+                    "width": 768,
+                    "height": 768,
+                    "bounds": {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.67
+                    },
+                    "blocks": [
+                      {
+                        "blockId": "gateway:surface:4",
+                        "part": 0,
+                        "kind": "heading",
+                        "lineCount": 2
+                      }
+                    ],
+                    "regions": [
+                      {
+                        "x": 0.055,
+                        "y": 0.873854,
+                        "width": 0.41829999999999995,
+                        "height": 0.09414600000000001,
+                        "actionId": "@atlas:previous",
+                        "kind": "navigation",
+                        "label": "previous",
+                        "disabled": true
+                      },
+                      {
+                        "x": 0.5267000000000001,
+                        "y": 0.873854,
+                        "width": 0.41829999999999995,
+                        "height": 0.09414600000000001,
+                        "actionId": "@atlas:next",
+                        "kind": "navigation",
+                        "label": "next",
+                        "disabled": false
+                      }
+                    ]
+                  },
+                  {
+                    "index": 1,
+                    "id": "left",
+                    "label": "Left",
+                    "width": 768,
+                    "height": 768,
+                    "bounds": {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.67
+                    },
+                    "blocks": [
+                      {
+                        "blockId": "gateway:surface:5",
+                        "part": 0,
+                        "kind": "text",
+                        "lineCount": 8
+                      }
+                    ],
+                    "regions": [
+                      {
+                        "x": 0.055,
+                        "y": 0.873854,
+                        "width": 0.41829999999999995,
+                        "height": 0.09414600000000001,
+                        "actionId": "@atlas:previous",
+                        "kind": "navigation",
+                        "label": "previous",
+                        "disabled": true
+                      },
+                      {
+                        "x": 0.5267000000000001,
+                        "y": 0.873854,
+                        "width": 0.41829999999999995,
+                        "height": 0.09414600000000001,
+                        "actionId": "@atlas:next",
+                        "kind": "navigation",
+                        "label": "next",
+                        "disabled": false
+                      }
+                    ]
+                  },
+                  {
+                    "index": 2,
+                    "id": "top",
+                    "label": "Top",
+                    "width": 768,
+                    "height": 768,
+                    "bounds": {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.67
+                    },
+                    "blocks": [
+                      {
+                        "blockId": "gateway:surface:5",
+                        "part": 1,
+                        "kind": "text",
+                        "lineCount": 5
+                      },
+                      {
+                        "blockId": "gateway:surface:6",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      }
+                    ],
+                    "regions": [
+                      {
+                        "x": 0.055,
+                        "y": 0.5789518229166667,
+                        "width": 0.89,
+                        "height": 0.16467447916666667,
+                        "actionId": "gateway:surface:6:action",
+                        "blockId": "gateway:surface:6",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh all public sources",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.873854,
+                        "width": 0.41829999999999995,
+                        "height": 0.09414600000000001,
+                        "actionId": "@atlas:previous",
+                        "kind": "navigation",
+                        "label": "previous",
+                        "disabled": true
+                      },
+                      {
+                        "x": 0.5267000000000001,
+                        "y": 0.873854,
+                        "width": 0.41829999999999995,
+                        "height": 0.09414600000000001,
+                        "actionId": "@atlas:next",
+                        "kind": "navigation",
+                        "label": "next",
+                        "disabled": false
+                      }
+                    ]
+                  },
+                  {
+                    "index": 3,
+                    "id": "bottom",
+                    "label": "Bottom",
+                    "width": 768,
+                    "height": 768,
+                    "bounds": {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.67
+                    },
+                    "blocks": [
+                      {
+                        "blockId": "gateway:surface:7",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:8",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:9",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      }
+                    ],
+                    "regions": [
+                      {
+                        "x": 0.055,
+                        "y": 0.17,
+                        "width": 0.89,
+                        "height": 0.16467447916666667,
+                        "actionId": "gateway:surface:7:action",
+                        "blockId": "gateway:surface:7",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Start auto-refresh · 30s",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.3450911458333333,
+                        "width": 0.89,
+                        "height": 0.16467447916666667,
+                        "actionId": "gateway:surface:8:action",
+                        "blockId": "gateway:surface:8",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh World Pulse",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.5201822916666666,
+                        "width": 0.89,
+                        "height": 0.16467447916666667,
+                        "actionId": "gateway:surface:9:action",
+                        "blockId": "gateway:surface:9",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh Tennis",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.873854,
+                        "width": 0.41829999999999995,
+                        "height": 0.09414600000000001,
+                        "actionId": "@atlas:previous",
+                        "kind": "navigation",
+                        "label": "previous",
+                        "disabled": true
+                      },
+                      {
+                        "x": 0.5267000000000001,
+                        "y": 0.873854,
+                        "width": 0.41829999999999995,
+                        "height": 0.09414600000000001,
+                        "actionId": "@atlas:next",
+                        "kind": "navigation",
+                        "label": "next",
+                        "disabled": false
+                      }
+                    ]
+                  },
+                  {
+                    "index": 4,
+                    "id": "front",
+                    "label": "Front",
+                    "width": 768,
+                    "height": 768,
+                    "bounds": {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.67
+                    },
+                    "blocks": [
+                      {
+                        "blockId": "gateway:surface:1:text",
+                        "part": 0,
+                        "kind": "text",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:2",
+                        "part": 0,
+                        "kind": "heading",
+                        "lineCount": 2
+                      },
+                      {
+                        "blockId": "gateway:surface:3",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 2
+                      }
+                    ],
+                    "regions": [
+                      {
+                        "x": 0.055,
+                        "y": 0.4948372395833333,
+                        "width": 0.89,
+                        "height": 0.2423697916666667,
+                        "actionId": "gateway:surface:3:action",
+                        "blockId": "gateway:surface:3",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Close public source status console",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.873854,
+                        "width": 0.41829999999999995,
+                        "height": 0.09414600000000001,
+                        "actionId": "@atlas:previous",
+                        "kind": "navigation",
+                        "label": "previous",
+                        "disabled": true
+                      },
+                      {
+                        "x": 0.5267000000000001,
+                        "y": 0.873854,
+                        "width": 0.41829999999999995,
+                        "height": 0.09414600000000001,
+                        "actionId": "@atlas:next",
+                        "kind": "navigation",
+                        "label": "next",
+                        "disabled": false
+                      }
+                    ]
+                  },
+                  {
+                    "index": 5,
+                    "id": "back",
+                    "label": "Back",
+                    "width": 768,
+                    "height": 768,
+                    "bounds": {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.67
+                    },
+                    "blocks": [
+                      {
+                        "blockId": "gateway:surface:10",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:11",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:12",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 2
+                      }
+                    ],
+                    "regions": [
+                      {
+                        "x": 0.055,
+                        "y": 0.17,
+                        "width": 0.89,
+                        "height": 0.16467447916666667,
+                        "actionId": "gateway:surface:10:action",
+                        "blockId": "gateway:surface:10",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh Asset Market",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.3450911458333333,
+                        "width": 0.89,
+                        "height": 0.16467447916666667,
+                        "actionId": "gateway:surface:11:action",
+                        "blockId": "gateway:surface:11",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh Protocol TVL",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.5201822916666666,
+                        "width": 0.89,
+                        "height": 0.2423697916666667,
+                        "actionId": "gateway:surface:12:action",
+                        "blockId": "gateway:surface:12",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh Multi-Sport Scoreboards",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.873854,
+                        "width": 0.41829999999999995,
+                        "height": 0.09414600000000001,
+                        "actionId": "@atlas:previous",
+                        "kind": "navigation",
+                        "label": "previous",
+                        "disabled": true
+                      },
+                      {
+                        "x": 0.5267000000000001,
+                        "y": 0.873854,
+                        "width": 0.41829999999999995,
+                        "height": 0.09414600000000001,
+                        "actionId": "@atlas:next",
+                        "kind": "navigation",
+                        "label": "next",
+                        "disabled": false
+                      }
+                    ]
+                  }
+                ]
+              },
+              "mediaPixelMode": "native-embed-only",
+              "panelId": "live-gateway-console"
+            },
+            "person": false,
+            "visibleIds": [
+              "social-explorer",
+              "bot-plaza",
+              "gateway",
+              "web-ai"
+            ],
+            "overflow": false,
+            "crumbs": [
+              {
+                "text": "Home",
+                "hidden": false,
+                "disabled": false
+              },
+              {
+                "text": "Network & tools",
+                "hidden": false,
+                "disabled": false
+              },
+              {
+                "text": "World Gateway / Evidence",
+                "hidden": false,
+                "disabled": false
+              }
+            ]
+          }
+        },
+        {
+          "name": "breadcrumb-space-back-forward-reload-home",
+          "pass": true,
+          "space": {
+            "url": "http://127.0.0.1:8082/?feature=reality-lens&space=network",
+            "activeId": "reality-lens",
+            "active": true,
+            "space": "network",
+            "view": "space",
+            "selected": "gateway",
+            "camera": {
+              "position": [
+                -0.004892124657956635,
+                0.3206268092020364,
+                18.369695830137278
+              ],
+              "target": [
+                -0.004892124657956635,
+                0.3206268092020353,
+                0
+              ],
+              "fov": 60,
+              "aspect": 0.46208530805687204,
+              "near": 0.1,
+              "far": 220
+            },
+            "live": null,
+            "person": false,
+            "visibleIds": [
+              "social-explorer",
+              "bot-plaza",
+              "gateway",
+              "web-ai"
+            ],
+            "overflow": false,
+            "crumbs": [
+              {
+                "text": "Home",
+                "hidden": false,
+                "disabled": false
+              },
+              {
+                "text": "Network & tools",
+                "hidden": false,
+                "disabled": true
+              },
+              {
+                "text": "",
+                "hidden": false,
+                "disabled": false
+              }
+            ]
+          },
+          "back": {
+            "url": "http://127.0.0.1:8082/?feature=gateway",
+            "activeId": "gateway",
+            "active": true,
+            "space": "network",
+            "view": "feature",
+            "selected": "gateway",
+            "camera": {
+              "position": [
+                -2.40680559931486,
+                -1.435136209120109,
+                9.861494617719881
+              ],
+              "target": [
+                -2.40680559931486,
+                -1.4351362091201096,
+                0
+              ],
+              "fov": 60,
+              "aspect": 0.46208530805687204,
+              "near": 0.1,
+              "far": 220
+            },
+            "live": {
+              "engine": "mesh-uv-360",
+              "entityId": "gateway",
+              "bodyId": "gateway",
+              "coordinateSpace": "owning-mesh-uv",
+              "separatePanelFrame": false,
+              "canonicalOwners": 1,
+              "interactiveSurfaceCount": 6,
+              "ownedByBody": true,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "document": {
+                "featureId": "gateway",
+                "revision": 2,
+                "disposed": false,
+                "blockCount": 82,
+                "actionCount": 38,
+                "originalElementId": "live-gateway-console",
+                "canonicalOwners": 1,
+                "clonedFeatureCount": 0,
+                "kinds": [
+                  "text",
+                  "heading",
+                  "button",
+                  "link",
+                  "summary"
+                ]
+              },
+              "atlas": {
+                "page": 0,
+                "pageCount": 11,
+                "revision": 1,
+                "disposed": false,
+                "blockCount": 82,
+                "focusActionId": null,
+                "textureCount": 6,
+                "canonicalFeatureId": "gateway",
+                "charts": [
+                  {
+                    "index": 0,
+                    "id": "right",
+                    "label": "Right",
+                    "width": 768,
+                    "height": 768,
+                    "bounds": {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.67
+                    },
+                    "blocks": [
+                      {
+                        "blockId": "gateway:surface:4",
+                        "part": 0,
+                        "kind": "heading",
+                        "lineCount": 2
+                      }
+                    ],
+                    "regions": [
+                      {
+                        "x": 0.055,
+                        "y": 0.873854,
+                        "width": 0.41829999999999995,
+                        "height": 0.09414600000000001,
+                        "actionId": "@atlas:previous",
+                        "kind": "navigation",
+                        "label": "previous",
+                        "disabled": true
+                      },
+                      {
+                        "x": 0.5267000000000001,
+                        "y": 0.873854,
+                        "width": 0.41829999999999995,
+                        "height": 0.09414600000000001,
+                        "actionId": "@atlas:next",
+                        "kind": "navigation",
+                        "label": "next",
+                        "disabled": false
+                      }
+                    ]
+                  },
+                  {
+                    "index": 1,
+                    "id": "left",
+                    "label": "Left",
+                    "width": 768,
+                    "height": 768,
+                    "bounds": {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.67
+                    },
+                    "blocks": [
+                      {
+                        "blockId": "gateway:surface:5",
+                        "part": 0,
+                        "kind": "text",
+                        "lineCount": 8
+                      }
+                    ],
+                    "regions": [
+                      {
+                        "x": 0.055,
+                        "y": 0.873854,
+                        "width": 0.41829999999999995,
+                        "height": 0.09414600000000001,
+                        "actionId": "@atlas:previous",
+                        "kind": "navigation",
+                        "label": "previous",
+                        "disabled": true
+                      },
+                      {
+                        "x": 0.5267000000000001,
+                        "y": 0.873854,
+                        "width": 0.41829999999999995,
+                        "height": 0.09414600000000001,
+                        "actionId": "@atlas:next",
+                        "kind": "navigation",
+                        "label": "next",
+                        "disabled": false
+                      }
+                    ]
+                  },
+                  {
+                    "index": 2,
+                    "id": "top",
+                    "label": "Top",
+                    "width": 768,
+                    "height": 768,
+                    "bounds": {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.67
+                    },
+                    "blocks": [
+                      {
+                        "blockId": "gateway:surface:5",
+                        "part": 1,
+                        "kind": "text",
+                        "lineCount": 5
+                      },
+                      {
+                        "blockId": "gateway:surface:6",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      }
+                    ],
+                    "regions": [
+                      {
+                        "x": 0.055,
+                        "y": 0.5789518229166667,
+                        "width": 0.89,
+                        "height": 0.16467447916666667,
+                        "actionId": "gateway:surface:6:action",
+                        "blockId": "gateway:surface:6",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh all public sources",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.873854,
+                        "width": 0.41829999999999995,
+                        "height": 0.09414600000000001,
+                        "actionId": "@atlas:previous",
+                        "kind": "navigation",
+                        "label": "previous",
+                        "disabled": true
+                      },
+                      {
+                        "x": 0.5267000000000001,
+                        "y": 0.873854,
+                        "width": 0.41829999999999995,
+                        "height": 0.09414600000000001,
+                        "actionId": "@atlas:next",
+                        "kind": "navigation",
+                        "label": "next",
+                        "disabled": false
+                      }
+                    ]
+                  },
+                  {
+                    "index": 3,
+                    "id": "bottom",
+                    "label": "Bottom",
+                    "width": 768,
+                    "height": 768,
+                    "bounds": {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.67
+                    },
+                    "blocks": [
+                      {
+                        "blockId": "gateway:surface:7",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:8",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:9",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      }
+                    ],
+                    "regions": [
+                      {
+                        "x": 0.055,
+                        "y": 0.17,
+                        "width": 0.89,
+                        "height": 0.16467447916666667,
+                        "actionId": "gateway:surface:7:action",
+                        "blockId": "gateway:surface:7",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Start auto-refresh · 30s",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.3450911458333333,
+                        "width": 0.89,
+                        "height": 0.16467447916666667,
+                        "actionId": "gateway:surface:8:action",
+                        "blockId": "gateway:surface:8",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh World Pulse",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.5201822916666666,
+                        "width": 0.89,
+                        "height": 0.16467447916666667,
+                        "actionId": "gateway:surface:9:action",
+                        "blockId": "gateway:surface:9",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh Tennis",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.873854,
+                        "width": 0.41829999999999995,
+                        "height": 0.09414600000000001,
+                        "actionId": "@atlas:previous",
+                        "kind": "navigation",
+                        "label": "previous",
+                        "disabled": true
+                      },
+                      {
+                        "x": 0.5267000000000001,
+                        "y": 0.873854,
+                        "width": 0.41829999999999995,
+                        "height": 0.09414600000000001,
+                        "actionId": "@atlas:next",
+                        "kind": "navigation",
+                        "label": "next",
+                        "disabled": false
+                      }
+                    ]
+                  },
+                  {
+                    "index": 4,
+                    "id": "front",
+                    "label": "Front",
+                    "width": 768,
+                    "height": 768,
+                    "bounds": {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.67
+                    },
+                    "blocks": [
+                      {
+                        "blockId": "gateway:surface:1:text",
+                        "part": 0,
+                        "kind": "text",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:2",
+                        "part": 0,
+                        "kind": "heading",
+                        "lineCount": 2
+                      },
+                      {
+                        "blockId": "gateway:surface:3",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 2
+                      }
+                    ],
+                    "regions": [
+                      {
+                        "x": 0.055,
+                        "y": 0.4948372395833333,
+                        "width": 0.89,
+                        "height": 0.2423697916666667,
+                        "actionId": "gateway:surface:3:action",
+                        "blockId": "gateway:surface:3",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Close public source status console",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.873854,
+                        "width": 0.41829999999999995,
+                        "height": 0.09414600000000001,
+                        "actionId": "@atlas:previous",
+                        "kind": "navigation",
+                        "label": "previous",
+                        "disabled": true
+                      },
+                      {
+                        "x": 0.5267000000000001,
+                        "y": 0.873854,
+                        "width": 0.41829999999999995,
+                        "height": 0.09414600000000001,
+                        "actionId": "@atlas:next",
+                        "kind": "navigation",
+                        "label": "next",
+                        "disabled": false
+                      }
+                    ]
+                  },
+                  {
+                    "index": 5,
+                    "id": "back",
+                    "label": "Back",
+                    "width": 768,
+                    "height": 768,
+                    "bounds": {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.67
+                    },
+                    "blocks": [
+                      {
+                        "blockId": "gateway:surface:10",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:11",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:12",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 2
+                      }
+                    ],
+                    "regions": [
+                      {
+                        "x": 0.055,
+                        "y": 0.17,
+                        "width": 0.89,
+                        "height": 0.16467447916666667,
+                        "actionId": "gateway:surface:10:action",
+                        "blockId": "gateway:surface:10",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh Asset Market",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.3450911458333333,
+                        "width": 0.89,
+                        "height": 0.16467447916666667,
+                        "actionId": "gateway:surface:11:action",
+                        "blockId": "gateway:surface:11",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh Protocol TVL",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.5201822916666666,
+                        "width": 0.89,
+                        "height": 0.2423697916666667,
+                        "actionId": "gateway:surface:12:action",
+                        "blockId": "gateway:surface:12",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh Multi-Sport Scoreboards",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.873854,
+                        "width": 0.41829999999999995,
+                        "height": 0.09414600000000001,
+                        "actionId": "@atlas:previous",
+                        "kind": "navigation",
+                        "label": "previous",
+                        "disabled": true
+                      },
+                      {
+                        "x": 0.5267000000000001,
+                        "y": 0.873854,
+                        "width": 0.41829999999999995,
+                        "height": 0.09414600000000001,
+                        "actionId": "@atlas:next",
+                        "kind": "navigation",
+                        "label": "next",
+                        "disabled": false
+                      }
+                    ]
+                  }
+                ]
+              },
+              "mediaPixelMode": "native-embed-only",
+              "panelId": "live-gateway-console"
+            },
+            "person": false,
+            "visibleIds": [
+              "social-explorer",
+              "bot-plaza",
+              "gateway",
+              "web-ai"
+            ],
+            "overflow": false,
+            "crumbs": [
+              {
+                "text": "Home",
+                "hidden": false,
+                "disabled": false
+              },
+              {
+                "text": "Network & tools",
+                "hidden": false,
+                "disabled": false
+              },
+              {
+                "text": "World Gateway / Evidence",
+                "hidden": false,
+                "disabled": false
+              }
+            ]
+          },
+          "forward": {
+            "url": "http://127.0.0.1:8082/?feature=reality-lens&space=network",
+            "activeId": "reality-lens",
+            "active": true,
+            "space": "network",
+            "view": "space",
+            "selected": "gateway",
+            "camera": {
+              "position": [
+                -0.005016114699565251,
+                0.32053613638527856,
+                18.369256558279766
+              ],
+              "target": [
+                -0.005016114699565251,
+                0.32053613638527745,
+                0
+              ],
+              "fov": 60,
+              "aspect": 0.46208530805687204,
+              "near": 0.1,
+              "far": 220
+            },
+            "live": null,
+            "person": false,
+            "visibleIds": [
+              "social-explorer",
+              "bot-plaza",
+              "gateway",
+              "web-ai"
+            ],
+            "overflow": false,
+            "crumbs": [
+              {
+                "text": "Home",
+                "hidden": false,
+                "disabled": false
+              },
+              {
+                "text": "Network & tools",
+                "hidden": false,
+                "disabled": true
+              },
+              {
+                "text": "",
+                "hidden": false,
+                "disabled": false
+              }
+            ]
+          },
+          "reload": {
+            "url": "http://127.0.0.1:8082/?feature=reality-lens&space=network",
+            "activeId": "reality-lens",
+            "active": true,
+            "space": "network",
+            "view": "space",
+            "selected": "block-world",
+            "camera": {
+              "position": [
+                -2.239887105634769e-18,
+                0.3337207396918433,
+                18.403816263022293
+              ],
+              "target": [
+                -2.239887105634769e-18,
+                0.3337207396918422,
+                0
+              ],
+              "fov": 60,
+              "aspect": 0.46208530805687204,
+              "near": 0.1,
+              "far": 220
+            },
+            "live": null,
+            "person": false,
+            "visibleIds": [
+              "social-explorer",
+              "bot-plaza",
+              "gateway",
+              "web-ai"
+            ],
+            "overflow": false,
+            "crumbs": [
+              {
+                "text": "Home",
+                "hidden": false,
+                "disabled": false
+              },
+              {
+                "text": "Network & tools",
+                "hidden": false,
+                "disabled": true
+              },
+              {
+                "text": "",
+                "hidden": false,
+                "disabled": false
+              }
+            ]
+          },
+          "home": {
+            "url": "http://127.0.0.1:8082/?feature=reality-lens",
+            "activeId": "reality-lens",
+            "active": true,
+            "space": null,
+            "view": "gateway",
+            "selected": "block-world",
+            "camera": {
+              "position": [
+                -4.4198409731786606e-16,
+                2.2023151878257923,
+                21.700360783655093
+              ],
+              "target": [
+                -4.4198409731786606e-16,
+                2.202315187825791,
+                0
+              ],
+              "fov": 60,
+              "aspect": 0.46208530805687204,
+              "near": 0.1,
+              "far": 220
+            },
+            "live": null,
+            "person": false,
+            "visibleIds": [],
+            "overflow": false,
+            "crumbs": [
+              {
+                "text": "Home",
+                "hidden": true,
+                "disabled": false
+              },
+              {
+                "text": "",
+                "hidden": true,
+                "disabled": true
+              },
+              {
+                "text": "",
+                "hidden": true,
+                "disabled": false
+              }
+            ]
+          }
+        },
+        {
+          "name": "no-navigation-page-errors",
+          "pass": true,
+          "errors": []
+        }
+      ],
+      "errors": [],
+      "failedRequests": [
+        {
+          "check": "bootstrap",
+          "url": "https://api.elections.kalshi.com/trade-api/v2/markets",
+          "reason": "net::ERR_FAILED"
+        },
+        {
+          "check": "breadcrumb-space-back-forward-reload-home",
+          "url": "https://api.elections.kalshi.com/trade-api/v2/markets",
+          "reason": "net::ERR_FAILED"
+        }
+      ],
+      "initial": {
+        "url": "http://127.0.0.1:8082/",
+        "activeId": "reality-lens",
+        "active": true,
+        "space": null,
+        "view": "gateway",
+        "selected": "block-world",
+        "camera": {
+          "position": [
+            -4.440892098500626e-16,
+            2.2112603916488545,
+            21.716141769560465
+          ],
+          "target": [
+            -4.440892098500626e-16,
+            2.211260391648853,
+            0
+          ],
+          "fov": 60,
+          "aspect": 0.46208530805687204,
+          "near": 0.1,
+          "far": 220
+        },
+        "live": null,
+        "person": false,
+        "visibleIds": [],
+        "overflow": false,
+        "crumbs": [
+          {
+            "text": "Home",
+            "hidden": true,
+            "disabled": false
+          },
+          {
+            "text": "",
+            "hidden": true,
+            "disabled": true
+          },
+          {
+            "text": "",
+            "hidden": true,
+            "disabled": false
+          }
+        ]
+      },
+      "currentCheck": "no-navigation-page-errors",
+      "homeGeometry": [
+        {
+          "id": "worlds",
+          "shape": "cube",
+          "visible": true,
+          "vertexCount": 36,
+          "outside": 0,
+          "bounds": {
+            "left": 36.223639798216624,
+            "right": 182.07300442100217,
+            "top": 227.2467699248796,
+            "bottom": 376.3881184171419,
+            "minDepth": 0.9906530191541911,
+            "maxDepth": 0.9925457418658311
+          }
+        },
+        {
+          "id": "people",
+          "shape": "sphere",
+          "visible": true,
+          "vertexCount": 9216,
+          "outside": 0,
+          "bounds": {
+            "left": 209.57206816994355,
+            "right": 342.03873661517247,
+            "top": 241.89094744667517,
+            "bottom": 375.15365906580126,
+            "minDepth": 0.9907884477949528,
+            "maxDepth": 0.9924534728229626
+          }
+        },
+        {
+          "id": "network",
+          "shape": "octahedron",
+          "visible": true,
+          "vertexCount": 24,
+          "outside": 0,
+          "bounds": {
+            "left": 39.374964447864485,
+            "right": 180.72471960372084,
+            "top": 397.59352629188146,
+            "bottom": 528.3962987369823,
+            "minDepth": 0.9909614794560707,
+            "maxDepth": 0.9923287761601026
+          }
+        },
+        {
+          "id": "value",
+          "shape": "cylinder",
+          "visible": true,
+          "vertexCount": 1920,
+          "outside": 0,
+          "bounds": {
+            "left": 220.5785855175327,
+            "right": 331.0043428270343,
+            "top": 397.0022867560488,
+            "bottom": 539.5433618301497,
+            "minDepth": 0.9909114647124148,
+            "maxDepth": 0.9923656417950002
+          }
+        },
+        {
+          "id": "agents",
+          "shape": "torus",
+          "visible": true,
+          "vertexCount": 12288,
+          "outside": 0,
+          "bounds": {
+            "left": 45.042803087898314,
+            "right": 177.18931992104197,
+            "top": 551.1054063848213,
+            "bottom": 682.7067247424123,
+            "minDepth": 0.9913799991693243,
+            "maxDepth": 0.9919909220643923
+          }
+        },
+        {
+          "id": "experiences",
+          "shape": "triangular-prism",
+          "visible": true,
+          "vertexCount": 24,
+          "outside": 0,
+          "bounds": {
+            "left": 200.56823462307668,
+            "right": 351.9979465493715,
+            "top": 540.3739526214381,
+            "bottom": 707.4510422851366,
+            "minDepth": 0.9909062673830085,
+            "maxDepth": 0.9924329058377586
+          }
+        }
+      ],
+      "historyStages": [
+        {
+          "stage": "after-breadcrumb",
+          "state": {
+            "url": "http://127.0.0.1:8082/?feature=reality-lens&space=network",
+            "activeId": "reality-lens",
+            "active": true,
+            "space": "network",
+            "view": "space",
+            "selected": "gateway",
+            "camera": {
+              "position": [
+                -0.004892124657956635,
+                0.3206268092020364,
+                18.369695830137278
+              ],
+              "target": [
+                -0.004892124657956635,
+                0.3206268092020353,
+                0
+              ],
+              "fov": 60,
+              "aspect": 0.46208530805687204,
+              "near": 0.1,
+              "far": 220
+            },
+            "live": null,
+            "person": false,
+            "visibleIds": [
+              "social-explorer",
+              "bot-plaza",
+              "gateway",
+              "web-ai"
+            ],
+            "overflow": false,
+            "crumbs": [
+              {
+                "text": "Home",
+                "hidden": false,
+                "disabled": false
+              },
+              {
+                "text": "Network & tools",
+                "hidden": false,
+                "disabled": true
+              },
+              {
+                "text": "",
+                "hidden": false,
+                "disabled": false
+              }
+            ]
+          }
+        },
+        {
+          "stage": "after-back",
+          "state": {
+            "url": "http://127.0.0.1:8082/?feature=gateway",
+            "activeId": "gateway",
+            "active": true,
+            "space": "network",
+            "view": "feature",
+            "selected": "gateway",
+            "camera": {
+              "position": [
+                -2.40680559931486,
+                -1.435136209120109,
+                9.861494617719881
+              ],
+              "target": [
+                -2.40680559931486,
+                -1.4351362091201096,
+                0
+              ],
+              "fov": 60,
+              "aspect": 0.46208530805687204,
+              "near": 0.1,
+              "far": 220
+            },
+            "live": {
+              "engine": "mesh-uv-360",
+              "entityId": "gateway",
+              "bodyId": "gateway",
+              "coordinateSpace": "owning-mesh-uv",
+              "separatePanelFrame": false,
+              "canonicalOwners": 1,
+              "interactiveSurfaceCount": 6,
+              "ownedByBody": true,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "document": {
+                "featureId": "gateway",
+                "revision": 2,
+                "disposed": false,
+                "blockCount": 82,
+                "actionCount": 38,
+                "originalElementId": "live-gateway-console",
+                "canonicalOwners": 1,
+                "clonedFeatureCount": 0,
+                "kinds": [
+                  "text",
+                  "heading",
+                  "button",
+                  "link",
+                  "summary"
+                ]
+              },
+              "atlas": {
+                "page": 0,
+                "pageCount": 11,
+                "revision": 1,
+                "disposed": false,
+                "blockCount": 82,
+                "focusActionId": null,
+                "textureCount": 6,
+                "canonicalFeatureId": "gateway",
+                "charts": [
+                  {
+                    "index": 0,
+                    "id": "right",
+                    "label": "Right",
+                    "width": 768,
+                    "height": 768,
+                    "bounds": {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.67
+                    },
+                    "blocks": [
+                      {
+                        "blockId": "gateway:surface:4",
+                        "part": 0,
+                        "kind": "heading",
+                        "lineCount": 2
+                      }
+                    ],
+                    "regions": [
+                      {
+                        "x": 0.055,
+                        "y": 0.873854,
+                        "width": 0.41829999999999995,
+                        "height": 0.09414600000000001,
+                        "actionId": "@atlas:previous",
+                        "kind": "navigation",
+                        "label": "previous",
+                        "disabled": true
+                      },
+                      {
+                        "x": 0.5267000000000001,
+                        "y": 0.873854,
+                        "width": 0.41829999999999995,
+                        "height": 0.09414600000000001,
+                        "actionId": "@atlas:next",
+                        "kind": "navigation",
+                        "label": "next",
+                        "disabled": false
+                      }
+                    ]
+                  },
+                  {
+                    "index": 1,
+                    "id": "left",
+                    "label": "Left",
+                    "width": 768,
+                    "height": 768,
+                    "bounds": {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.67
+                    },
+                    "blocks": [
+                      {
+                        "blockId": "gateway:surface:5",
+                        "part": 0,
+                        "kind": "text",
+                        "lineCount": 8
+                      }
+                    ],
+                    "regions": [
+                      {
+                        "x": 0.055,
+                        "y": 0.873854,
+                        "width": 0.41829999999999995,
+                        "height": 0.09414600000000001,
+                        "actionId": "@atlas:previous",
+                        "kind": "navigation",
+                        "label": "previous",
+                        "disabled": true
+                      },
+                      {
+                        "x": 0.5267000000000001,
+                        "y": 0.873854,
+                        "width": 0.41829999999999995,
+                        "height": 0.09414600000000001,
+                        "actionId": "@atlas:next",
+                        "kind": "navigation",
+                        "label": "next",
+                        "disabled": false
+                      }
+                    ]
+                  },
+                  {
+                    "index": 2,
+                    "id": "top",
+                    "label": "Top",
+                    "width": 768,
+                    "height": 768,
+                    "bounds": {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.67
+                    },
+                    "blocks": [
+                      {
+                        "blockId": "gateway:surface:5",
+                        "part": 1,
+                        "kind": "text",
+                        "lineCount": 5
+                      },
+                      {
+                        "blockId": "gateway:surface:6",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      }
+                    ],
+                    "regions": [
+                      {
+                        "x": 0.055,
+                        "y": 0.5789518229166667,
+                        "width": 0.89,
+                        "height": 0.16467447916666667,
+                        "actionId": "gateway:surface:6:action",
+                        "blockId": "gateway:surface:6",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh all public sources",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.873854,
+                        "width": 0.41829999999999995,
+                        "height": 0.09414600000000001,
+                        "actionId": "@atlas:previous",
+                        "kind": "navigation",
+                        "label": "previous",
+                        "disabled": true
+                      },
+                      {
+                        "x": 0.5267000000000001,
+                        "y": 0.873854,
+                        "width": 0.41829999999999995,
+                        "height": 0.09414600000000001,
+                        "actionId": "@atlas:next",
+                        "kind": "navigation",
+                        "label": "next",
+                        "disabled": false
+                      }
+                    ]
+                  },
+                  {
+                    "index": 3,
+                    "id": "bottom",
+                    "label": "Bottom",
+                    "width": 768,
+                    "height": 768,
+                    "bounds": {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.67
+                    },
+                    "blocks": [
+                      {
+                        "blockId": "gateway:surface:7",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:8",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:9",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      }
+                    ],
+                    "regions": [
+                      {
+                        "x": 0.055,
+                        "y": 0.17,
+                        "width": 0.89,
+                        "height": 0.16467447916666667,
+                        "actionId": "gateway:surface:7:action",
+                        "blockId": "gateway:surface:7",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Start auto-refresh · 30s",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.3450911458333333,
+                        "width": 0.89,
+                        "height": 0.16467447916666667,
+                        "actionId": "gateway:surface:8:action",
+                        "blockId": "gateway:surface:8",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh World Pulse",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.5201822916666666,
+                        "width": 0.89,
+                        "height": 0.16467447916666667,
+                        "actionId": "gateway:surface:9:action",
+                        "blockId": "gateway:surface:9",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh Tennis",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.873854,
+                        "width": 0.41829999999999995,
+                        "height": 0.09414600000000001,
+                        "actionId": "@atlas:previous",
+                        "kind": "navigation",
+                        "label": "previous",
+                        "disabled": true
+                      },
+                      {
+                        "x": 0.5267000000000001,
+                        "y": 0.873854,
+                        "width": 0.41829999999999995,
+                        "height": 0.09414600000000001,
+                        "actionId": "@atlas:next",
+                        "kind": "navigation",
+                        "label": "next",
+                        "disabled": false
+                      }
+                    ]
+                  },
+                  {
+                    "index": 4,
+                    "id": "front",
+                    "label": "Front",
+                    "width": 768,
+                    "height": 768,
+                    "bounds": {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.67
+                    },
+                    "blocks": [
+                      {
+                        "blockId": "gateway:surface:1:text",
+                        "part": 0,
+                        "kind": "text",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:2",
+                        "part": 0,
+                        "kind": "heading",
+                        "lineCount": 2
+                      },
+                      {
+                        "blockId": "gateway:surface:3",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 2
+                      }
+                    ],
+                    "regions": [
+                      {
+                        "x": 0.055,
+                        "y": 0.4948372395833333,
+                        "width": 0.89,
+                        "height": 0.2423697916666667,
+                        "actionId": "gateway:surface:3:action",
+                        "blockId": "gateway:surface:3",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Close public source status console",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.873854,
+                        "width": 0.41829999999999995,
+                        "height": 0.09414600000000001,
+                        "actionId": "@atlas:previous",
+                        "kind": "navigation",
+                        "label": "previous",
+                        "disabled": true
+                      },
+                      {
+                        "x": 0.5267000000000001,
+                        "y": 0.873854,
+                        "width": 0.41829999999999995,
+                        "height": 0.09414600000000001,
+                        "actionId": "@atlas:next",
+                        "kind": "navigation",
+                        "label": "next",
+                        "disabled": false
+                      }
+                    ]
+                  },
+                  {
+                    "index": 5,
+                    "id": "back",
+                    "label": "Back",
+                    "width": 768,
+                    "height": 768,
+                    "bounds": {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.67
+                    },
+                    "blocks": [
+                      {
+                        "blockId": "gateway:surface:10",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:11",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 1
+                      },
+                      {
+                        "blockId": "gateway:surface:12",
+                        "part": 0,
+                        "kind": "button",
+                        "lineCount": 2
+                      }
+                    ],
+                    "regions": [
+                      {
+                        "x": 0.055,
+                        "y": 0.17,
+                        "width": 0.89,
+                        "height": 0.16467447916666667,
+                        "actionId": "gateway:surface:10:action",
+                        "blockId": "gateway:surface:10",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh Asset Market",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.3450911458333333,
+                        "width": 0.89,
+                        "height": 0.16467447916666667,
+                        "actionId": "gateway:surface:11:action",
+                        "blockId": "gateway:surface:11",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh Protocol TVL",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.5201822916666666,
+                        "width": 0.89,
+                        "height": 0.2423697916666667,
+                        "actionId": "gateway:surface:12:action",
+                        "blockId": "gateway:surface:12",
+                        "kind": "button",
+                        "inputType": "button",
+                        "pointerSurface": false,
+                        "focused": false,
+                        "label": "Refresh Multi-Sport Scoreboards",
+                        "disabled": false
+                      },
+                      {
+                        "x": 0.055,
+                        "y": 0.873854,
+                        "width": 0.41829999999999995,
+                        "height": 0.09414600000000001,
+                        "actionId": "@atlas:previous",
+                        "kind": "navigation",
+                        "label": "previous",
+                        "disabled": true
+                      },
+                      {
+                        "x": 0.5267000000000001,
+                        "y": 0.873854,
+                        "width": 0.41829999999999995,
+                        "height": 0.09414600000000001,
+                        "actionId": "@atlas:next",
+                        "kind": "navigation",
+                        "label": "next",
+                        "disabled": false
+                      }
+                    ]
+                  }
+                ]
+              },
+              "mediaPixelMode": "native-embed-only",
+              "panelId": "live-gateway-console"
+            },
+            "person": false,
+            "visibleIds": [
+              "social-explorer",
+              "bot-plaza",
+              "gateway",
+              "web-ai"
+            ],
+            "overflow": false,
+            "crumbs": [
+              {
+                "text": "Home",
+                "hidden": false,
+                "disabled": false
+              },
+              {
+                "text": "Network & tools",
+                "hidden": false,
+                "disabled": false
+              },
+              {
+                "text": "World Gateway / Evidence",
+                "hidden": false,
+                "disabled": false
+              }
+            ]
+          }
+        },
+        {
+          "stage": "after-forward",
+          "state": {
+            "url": "http://127.0.0.1:8082/?feature=reality-lens&space=network",
+            "activeId": "reality-lens",
+            "active": true,
+            "space": "network",
+            "view": "space",
+            "selected": "gateway",
+            "camera": {
+              "position": [
+                -0.005016114699565251,
+                0.32053613638527856,
+                18.369256558279766
+              ],
+              "target": [
+                -0.005016114699565251,
+                0.32053613638527745,
+                0
+              ],
+              "fov": 60,
+              "aspect": 0.46208530805687204,
+              "near": 0.1,
+              "far": 220
+            },
+            "live": null,
+            "person": false,
+            "visibleIds": [
+              "social-explorer",
+              "bot-plaza",
+              "gateway",
+              "web-ai"
+            ],
+            "overflow": false,
+            "crumbs": [
+              {
+                "text": "Home",
+                "hidden": false,
+                "disabled": false
+              },
+              {
+                "text": "Network & tools",
+                "hidden": false,
+                "disabled": true
+              },
+              {
+                "text": "",
+                "hidden": false,
+                "disabled": false
+              }
+            ]
+          }
+        },
+        {
+          "stage": "after-reload",
+          "state": {
+            "url": "http://127.0.0.1:8082/?feature=reality-lens&space=network",
+            "activeId": "reality-lens",
+            "active": true,
+            "space": "network",
+            "view": "space",
+            "selected": "block-world",
+            "camera": {
+              "position": [
+                -2.239887105634769e-18,
+                0.3337207396918433,
+                18.403816263022293
+              ],
+              "target": [
+                -2.239887105634769e-18,
+                0.3337207396918422,
+                0
+              ],
+              "fov": 60,
+              "aspect": 0.46208530805687204,
+              "near": 0.1,
+              "far": 220
+            },
+            "live": null,
+            "person": false,
+            "visibleIds": [
+              "social-explorer",
+              "bot-plaza",
+              "gateway",
+              "web-ai"
+            ],
+            "overflow": false,
+            "crumbs": [
+              {
+                "text": "Home",
+                "hidden": false,
+                "disabled": false
+              },
+              {
+                "text": "Network & tools",
+                "hidden": false,
+                "disabled": true
+              },
+              {
+                "text": "",
+                "hidden": false,
+                "disabled": false
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "finished": "2026-10-04T05:53:13.467Z"
+}

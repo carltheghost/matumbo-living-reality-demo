@@ -1,6 +1,6 @@
 # maTumbo Living Reality / Reality Lens
 
-An interactive 3D prototype organized into six spaces and five recognizable bodies: cube, sphere, cylinder, triangular prism and torus. Open a body on Home, choose a feature, and turn its object to read and operate the information across its surfaces. Search and navigation keep the same canonical feature identity; optional controls stay closed until needed.
+An interactive 3D prototype organized into six spaces and six recognizable bodies: cube, sphere, diamond, cylinder, triangular prism and torus. Open a body on Home, choose a feature, and turn its object to read and operate the information across its surfaces. Search and navigation keep the same canonical feature identity; optional controls stay closed until needed.
 
 The world includes local rooms, personal avatar/wardrobe tools, standard chess and game rehearsals, advisory agents, YouTube search and playback, public-source observations, and simulated contracts and points. The renderer is a projection of local domain state. TUMBO-SIM is a local simulation; this prototype does not issue assets, operate wallets, sign, custody, trade, or settle real value.
 
