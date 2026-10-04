@@ -29,10 +29,12 @@ function traitRow(documentRoot, trait, value) {
 
 export function createNftAtelierConsole({
   documentRoot = globalThis.document,
+  windowRoot = globalThis.window ?? globalThis,
   atelier = null,
   onSelect = null,
   onReplay = null,
   onReset = null,
+  onChange = null,
 } = {}) {
   const panel = documentRoot?.getElementById?.("nft-atelier-console");
   const closeButton = documentRoot?.getElementById?.("nft-atelier-close");
@@ -54,6 +56,26 @@ export function createNftAtelierConsole({
   const studio = atelier ?? createNftAtelier();
   let opened = panel.hidden !== true;
   let selectedId = null;
+  let feedback = "";
+  const backupControls = element(documentRoot, "details", "nft-atelier-backup");
+  backupControls.append(element(documentRoot, "summary", "nft-atelier-section-label", "Save or restore your local collection"));
+  backupControls.append(element(documentRoot, "p", "nft-atelier-empty", "Export before replacing or resetting a collection. A backup includes your designs and locally burned records. Import replaces the local collection after validation; it does not create a chain asset."));
+  const backupInput = element(documentRoot, "textarea", "nft-atelier-text-input");
+  backupInput.setAttribute("aria-label", "Atelier backup JSON");
+  backupInput.setAttribute("placeholder", "Paste an exported Atelier JSON backup here");
+  backupInput.setAttribute("rows", "5");
+  backupInput.setAttribute("maxlength", "500000");
+  backupInput.setAttribute("style", "width:100%;max-width:100%;min-height:130px;box-sizing:border-box;padding:12px;border:1px solid rgba(255,209,102,.3);border-radius:8px;background:#081521;color:#e7d9b4;font:12px/1.5 ui-monospace,monospace;resize:vertical");
+  backupInput.dataset.nftBackup = "true";
+  const exportButton = element(documentRoot, "button", "nft-atelier-action", "Export collection backup");
+  const importButton = element(documentRoot, "button", "nft-atelier-action", "Replace collection from backup");
+  exportButton.type = importButton.type = "button";
+  exportButton.dataset.nftExport = "true";
+  importButton.dataset.nftImport = "true";
+  backupControls.append(exportButton, backupInput, importButton);
+  panel.append(backupControls);
+
+  function setFeedback(message) { feedback = String(message); render(); }
 
   function snapshot(action = "read", method = "api") {
     return deepFreeze({
@@ -65,7 +87,7 @@ export function createNftAtelierConsole({
       atelier: studio.getSnapshot(),
       localOnly: true,
       simulation: true,
-      persistence: false,
+      persistence: studio.getSnapshot().persistence?.mode === "browser",
       wallet: false,
       chain: false,
       transfer: false,
@@ -80,6 +102,7 @@ export function createNftAtelierConsole({
     if (action === "select") onSelect?.(next);
     if (action === "replay") onReplay?.(next);
     if (action === "reset") onReset?.(next);
+    if (["mint", "burn", "reset", "import"].includes(action)) onChange?.(studio.createContribution(), next);
     return next;
   }
 
@@ -90,7 +113,8 @@ export function createNftAtelierConsole({
       detailEl.append(element(documentRoot, "div", "nft-atelier-empty", "Select a piece to inspect its fictional provenance."));
       return;
     }
-    const view = studio.inspect(piece.id);
+    // Rendering is a read. Inspection is recorded once for a deliberate selection.
+    const view = studio.inspect(piece.id, { record: false });
     const card = element(documentRoot, "div", "nft-atelier-card");
     card.append(element(documentRoot, "div", "nft-atelier-card-id", piece.id));
     card.append(element(documentRoot, "strong", "nft-atelier-card-name", piece.name));
@@ -109,8 +133,8 @@ export function createNftAtelierConsole({
     burnButton.type = "button";
     burnButton.disabled = piece.burned;
     burnButton.addEventListener("click", () => {
-      studio.burn(piece.id);
-      statusEl.textContent = `BURNED · ${piece.name.toUpperCase()} VOIDED IN THIS SESSION`;
+      try { studio.burn(piece.id); feedback = `Burned locally: ${piece.name}. The voided design remains in your backup.`; }
+      catch (error) { feedback = `Burn blocked: ${error?.message ?? error}`; }
       render();
       publish("burn", "button");
     });
@@ -120,7 +144,11 @@ export function createNftAtelierConsole({
 
   function render() {
     const state = studio.getSnapshot();
-    statusEl.textContent = `${state.minted} PIECES · ${state.burned} BURNED · LOCAL SESSION ONLY`;
+    const saving = state.persistence ?? { mode: "memory", status: "session-only", error: null };
+    const storageLabel = saving.mode === "browser" && ["saved", "restored"].includes(saving.status)
+      ? "SAVED IN THIS BROWSER" : saving.status === "held" ? "SAVED COLLECTION HELD" : "IN MEMORY · EXPORT TO KEEP";
+    statusEl.textContent = `${feedback ? `${feedback} · ` : ""}${state.minted} PIECES · ${state.burned} BURNED · ${storageLabel}${saving.error ? ` · ${saving.error}` : ""}`;
+    statusEl.setAttribute("role", "status");
     galleryEl.replaceChildren();
     if (!state.minted) {
       galleryEl.append(element(documentRoot, "div", "nft-atelier-empty", "The atelier is empty. Mint a fictional piece below."));
@@ -137,6 +165,8 @@ export function createNftAtelierConsole({
       );
       button.addEventListener("click", () => {
         selectedId = piece.id;
+        try { studio.inspect(piece.id); feedback = `Inspecting ${piece.name}. Fictional provenance only.`; }
+        catch (error) { feedback = `Inspecting ${piece.name} without editing history: ${error?.message ?? error}`; }
         render();
         publish("select", "button");
       });
@@ -171,9 +201,9 @@ export function createNftAtelierConsole({
       selectedId = piece.id;
       nameInput.value = "";
       descriptionInput.value = "";
-      statusEl.textContent = `MINTED · ${piece.name.toUpperCase()} · FICTIONAL ONLY`;
+      feedback = `Created ${piece.name}. Fictional collectible only.`;
     } catch (error) {
-      statusEl.textContent = `MINT BLOCKED · ${String(error?.message ?? error).toUpperCase().slice(0, 80)}`;
+      feedback = `Create blocked: ${error?.message ?? error}`;
     }
     render();
     publish("mint", "button");
@@ -181,28 +211,56 @@ export function createNftAtelierConsole({
 
   closeButton.addEventListener("click", () => setOpen(false, "button"));
   resetButton.addEventListener("click", () => {
-    studio.reset();
-    selectedId = null;
-    statusEl.textContent = "ATELIER RESET · STARTER SET RESTORED · LOCAL SESSION";
+    try { studio.reset(); selectedId = null; feedback = "Atelier reset. Starter designs restored."; }
+    catch (error) { feedback = `Reset blocked: ${error?.message ?? error}`; }
     render();
     publish("reset", "button");
+  });
+  exportButton.addEventListener("click", () => {
+    try {
+      const raw = studio.exportState();
+      backupInput.value = raw;
+      backupControls.open = true;
+      if (windowRoot.Blob && windowRoot.URL?.createObjectURL) {
+        const url = windowRoot.URL.createObjectURL(new windowRoot.Blob([raw], { type: "application/json" }));
+        const link = element(documentRoot, "a");
+        link.href = url;
+        link.download = "matumbo-atelier-collection.json";
+        link.click();
+        windowRoot.setTimeout?.(() => windowRoot.URL.revokeObjectURL(url), 1000);
+      }
+      setFeedback("Collection backup generated. Save the JSON download or copy the backup text.");
+      publish("export", "button");
+    } catch (error) { setFeedback(`Export blocked: ${error?.message ?? error}`); }
+  });
+  importButton.addEventListener("click", () => {
+    try {
+      studio.importState(backupInput.value);
+      selectedId = null;
+      setFeedback("Collection restored from validated local backup.");
+      publish("import", "button");
+    } catch (error) { setFeedback(`Import blocked: ${error?.message ?? error}`); }
   });
   render();
 
   return Object.freeze({
     open: (method = "api") => setOpen(true, method),
     close: (method = "api") => setOpen(false, method),
-    reset: (method = "api") => { studio.reset(); selectedId = null; render(); return publish("reset", method); },
-    select: (pieceId, method = "api") => { selectedId = pieceId; render(); return publish("select", method); },
+    reset: (method = "api") => { studio.reset(); selectedId = null; feedback = "Atelier reset. Starter designs restored."; render(); return publish("reset", method); },
+    select: (pieceId, method = "api") => { if (!studio.get(pieceId)) return null; studio.inspect(pieceId); selectedId = pieceId; feedback = ""; render(); return publish("select", method); },
     mint: (input, method = "api") => {
       const piece = studio.mint(input);
       selectedId = piece.id;
+      feedback = `Created ${piece.name}. Fictional collectible only.`;
       render();
       return publish("mint", method);
     },
-    burn: (pieceId, method = "api") => { studio.burn(pieceId); render(); return publish("burn", method); },
+    burn: (pieceId, method = "api") => { studio.burn(pieceId); feedback = "Design burned locally; its record remains in your backup."; render(); return publish("burn", method); },
+    exportState: () => studio.exportState(),
+    importState: (raw, method = "api") => { studio.importState(raw); selectedId = null; feedback = "Collection restored from validated local backup."; render(); return publish("import", method); },
     replay: (method = "api") => publish("replay", method),
     getSnapshot: () => snapshot(),
+    createContribution: () => studio.createContribution(),
     boundary: NFT_ATELIER_BOUNDARY,
   });
 }

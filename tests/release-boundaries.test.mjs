@@ -262,6 +262,7 @@ test("renderer source contains no external or authority-bearing execution path",
     "src/render/launch-console.js",
     "src/render/social-explorer.js",
     "src/render/room-spaces.js",
+    "src/render/room-conversations.js",
     "src/render/camera-input.js",
     "src/render/gesture-input.js",
     "src/render/multi-sport-events.js",
@@ -280,6 +281,10 @@ test("renderer source contains no external or authority-bearing execution path",
   for (const relativePath of rendererFiles) {
     const source = await readFile(new URL(relativePath, ROOT), "utf8");
     for (const [label, pattern] of forbidden) {
+      // Rooms now has an explicitly local conversation owner with save and
+      // backup controls. Storage is allowed here; network and authority remain
+      // forbidden. Persistence/import/conflict tests verify the owner's scope.
+      if (relativePath === 'src/render/room-spaces.js' && label === 'persistent browser storage') continue;
       assert.doesNotMatch(source, pattern, `${relativePath} must not contain a ${label}`);
     }
   }

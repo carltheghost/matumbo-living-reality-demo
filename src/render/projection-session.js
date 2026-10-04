@@ -1012,6 +1012,15 @@ function mountedSurfaceSlice(surfaceSnapshots) {
         : typeof value?.summary?.reason === "string" ? value.summary.reason : null,
       localOnly: value?.localOnly === true || value?.externalNetwork === false,
       simulation: value?.simulation === true,
+      persistence: typeof value?.persistence === 'string' ? value.persistence : value?.persistence === true,
+      // Aggregate connection readiness only. Never copy personal chat content,
+      // assistant notes, room messages, credentials, or provider account IDs.
+      personalChat: isRecord(value?.personalChat) ? {
+        provider: typeof value.personalChat.provider === 'string' ? value.personalChat.provider : null,
+        connected: value.personalChat.connected === true,
+        pending: value.personalChat.pending === true,
+        state: typeof value.personalChat.state === 'string' ? value.personalChat.state : 'unavailable',
+      } : null,
     };
   });
   return surfaces;
@@ -1245,6 +1254,11 @@ export function createProjectionSession({
     );
     const canonicalProjection = projectionIdentity(projection, envelope, blockWorldSnapshot);
     const surfaces = mountedSurfaceSlice(surfaceSnapshots);
+    // The mounted owner covers every registered route, including personal
+    // chat and dedicated 3D rooms. Prefer it over the older partial route map.
+    if (Object.prototype.hasOwnProperty.call(surfaces, activeFeature.id)) {
+      activeFeature.surfaceOpen = surfaces[activeFeature.id].opened;
+    }
     const snapshot = {
       schemaVersion: PROJECTION_SESSION_SCHEMA_VERSION,
       source: PROJECTION_SESSION_SOURCE,

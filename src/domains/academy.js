@@ -4,6 +4,7 @@ export const ACADEMY_SCHEMA_VERSION = 1;
 export const ACADEMY_SOURCE = "financial-academy";
 export const ACADEMY_CONSOLE_SOURCE = "financial-academy-console";
 export const ACADEMY_UPDATED_AT = "2025-01-01T00:00:00.000Z";
+export const ACADEMY_MAX_ANSWERS = 256;
 export const ACADEMY_BOUNDARY =
   "Academy is a local educational rehearsal. Progress and XP exist only in this page session; there is no credential, financial advice, wallet, reward token, persistence, or external authority.";
 
@@ -91,6 +92,7 @@ export function createAcademyState(selectedLessonId = ACADEMY_LESSONS[0].id) {
     attempts: {},
     xp: 0,
     trace: [],
+    answerLog: [],
     localOnly: true,
     simulation: true,
     persistence: false,
@@ -112,6 +114,7 @@ export function answerAcademyLesson(state, optionIndex) {
   if (!Number.isInteger(optionIndex) || optionIndex < 0 || optionIndex >= lesson.options.length) {
     throw new RangeError("Academy answer option is out of range");
   }
+  if ((state.answerLog?.length ?? 0) >= ACADEMY_MAX_ANSWERS) throw new RangeError("This session has reached 256 answers; reset progress to start a new rehearsal");
   const priorAttempts = Number(state.attempts?.[lesson.id] ?? 0);
   const nextAttempts = priorAttempts + 1;
   const correct = optionIndex === lesson.correctOption;
@@ -121,7 +124,7 @@ export function answerAcademyLesson(state, optionIndex) {
     ? [...state.completedLessonIds, lesson.id].sort((a, b) => LESSON_BY_ID.get(a).order - LESSON_BY_ID.get(b).order)
     : [...state.completedLessonIds];
   const entry = freeze({
-    seq: state.trace.length + 1,
+    seq: Object.values(state.attempts).reduce((total, attempts) => total + attempts, 0) + 1,
     lessonId: lesson.id,
     optionIndex,
     correct,
@@ -136,7 +139,26 @@ export function answerAcademyLesson(state, optionIndex) {
     attempts: { ...state.attempts, [lesson.id]: nextAttempts },
     xp: state.xp + award,
     trace: [...state.trace, entry].slice(-24),
+    answerLog: [...(state.answerLog ?? []), { lessonId: lesson.id, optionIndex }],
   });
+}
+
+/** Re-run the entire recorded session, not just the last visible trace rows. */
+export function replayAcademy(state) {
+  if (!Array.isArray(state?.answerLog)) throw new TypeError("Academy replay needs a recorded answer log");
+  let replayed = createAcademyState();
+  for (const answer of state.answerLog) {
+    replayed = selectAcademyLesson(replayed, answer.lessonId);
+    replayed = answerAcademyLesson(replayed, answer.optionIndex);
+  }
+  return selectAcademyLesson(replayed, state.selectedLessonId);
+}
+
+export function nextAcademyLesson(state) {
+  const currentIndex = ACADEMY_LESSONS.findIndex(lesson => lesson.id === state.selectedLessonId);
+  const ordered = [...ACADEMY_LESSONS.slice(currentIndex + 1), ...ACADEMY_LESSONS.slice(0, currentIndex + 1)];
+  const next = ordered.find(lesson => !state.completedLessonIds.includes(lesson.id));
+  return next ? selectAcademyLesson(state, next.id) : state;
 }
 
 export function resetAcademy() {

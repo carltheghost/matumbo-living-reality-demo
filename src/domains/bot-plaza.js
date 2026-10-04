@@ -1047,15 +1047,31 @@ function writeStored(storage, state) {
   }
 }
 
-export function createBotRegistry({ storage = null, now = null } = {}) {
+/** Factories come from trusted shipped modules, never JSON/script URLs. A
+ * changed factory version rests until its capabilities are reviewed again. */
+export function createBotRegistry({ storage = null, now = null, pluginFactories = {} } = {}) {
   const store = storage ?? (() => { try { return globalThis.localStorage; } catch { return null; } })();
   const bots = new Map(); // id -> { record, plugin }
   const stored = readStored(store);
+  const factories = new Map();
+  const heldPlugins = new Map();
+  const startupIssues = [];
+  const muse = createMuseAgentBotPlugin();
+  factories.set(muse.id, muse);
+  if (!pluginFactories || typeof pluginFactories !== 'object' || Array.isArray(pluginFactories)) throw new TypeError('Plugin factories must be a trusted module map');
+  for (const [id, entry] of Object.entries(pluginFactories).slice(0, BOT_PLAZA_MAX_BOTS)) {
+    try {
+      if (id === muse.id || !BOT_ID_PATTERN.test(id) || !entry || typeof entry.create !== 'function' || typeof entry.version !== 'string') throw new TypeError('Invalid shipped plugin factory');
+      const plugin = validateBotPlugin(entry.create());
+      if (plugin.id !== id || plugin.version !== entry.version) throw new TypeError('Factory ID/version must match its plugin');
+      factories.set(id, plugin);
+    } catch (error) { startupIssues.push({ id: safeText(id).slice(0, 32), reason: 'factory-error', message: `Plugin ${safeText(id).slice(0, 32)} was not loaded: ${safeText(error?.message).slice(0, 120)}` }); }
+  }
 
   function persist() {
     writeStored(store, {
       schemaVersion: BOT_PLAZA_SCHEMA_VERSION,
-      bots: [...bots.values()].map(({ record }) => record).filter((record) => record.persisted),
+      bots: [...bots.values()].map(({ record }) => record).filter((record) => record.persisted).concat([...heldPlugins.values()]),
     });
   }
 
@@ -1075,11 +1091,23 @@ export function createBotRegistry({ storage = null, now = null } = {}) {
       atelierData: atelierData ? freeze(atelierData) : null,
     });
   }
+  // Reserve the built-in slot before restoring user modules. Its saved rest
+  // state and approvals are still applied below, exactly as before.
+  bots.set(muse.id, { record: recordOf(muse, { kind: 'builtin', approvedCapabilities: ['world.announce', 'world.message-bots'], enabled: true, persisted: true }), plugin: muse });
 
   function install(plugin, { kind = "plugin", approvedCapabilities = [], enabled = true, persisted = true, atelierData = null } = {}) {
-    const valid = validateBotPlugin(plugin);
+    let valid = validateBotPlugin(plugin);
     if (bots.size >= BOT_PLAZA_MAX_BOTS && !bots.has(valid.id)) throw new TypeError("bot plaza is full");
     if (!["builtin", "atelier", "plugin"].includes(kind)) throw new TypeError("unknown bot kind");
+    if ((valid.id === muse.id) !== (kind === 'builtin')) throw new TypeError('The Muse built-in identity is reserved');
+    let restorable = factories.get(valid.id);
+    if (kind === 'atelier' && atelierData) restorable = compileAtelierBot(atelierData);
+    const canRestore = restorable?.id === valid.id && restorable?.version === valid.version;
+    // A persisted install always uses the trusted factory's actual callbacks.
+    // Unknown callback code works for this session and never claims restart.
+    if (persisted && canRestore) valid = restorable;
+    persisted = persisted !== false && canRestore;
+    heldPlugins.delete(valid.id);
     bots.set(valid.id, { record: recordOf(valid, { kind, approvedCapabilities, enabled, persisted, atelierData }), plugin: valid });
     persist();
     return getBot(valid.id);
@@ -1151,7 +1179,7 @@ export function createBotRegistry({ storage = null, now = null } = {}) {
   // bots recompile from stored data. Session-only plugins are not restored.
   if (stored) {
     try {
-      for (const record of stored.bots.slice(0, BOT_PLAZA_MAX_BOTS)) {
+      for (const record of stored.bots.slice(0, BOT_PLAZA_MAX_BOTS * 2)) {
         if (!record || typeof record.id !== "string") continue;
         try {
           if (record.kind === "builtin" && record.id === "muse-agent") {
@@ -1160,6 +1188,18 @@ export function createBotRegistry({ storage = null, now = null } = {}) {
           } else if (record.kind === "atelier" && record.atelierData) {
             const plugin = compileAtelierBot({ ...record.atelierData, capabilities: record.atelierData.capabilities ?? [] });
             bots.set(plugin.id, { record: recordOf(plugin, { kind: "atelier", approvedCapabilities: record.approvedCapabilities ?? [], enabled: record.enabled !== false, persisted: true, atelierData: record.atelierData }), plugin });
+          } else if (record.kind === 'plugin') {
+            if (record.id === muse.id) continue;
+            const plugin = factories.get(record.id);
+            if (plugin && bots.size < BOT_PLAZA_MAX_BOTS) {
+              const sameVersion = record.version === plugin.version;
+              bots.set(plugin.id, { record: recordOf(plugin, { kind: 'plugin', approvedCapabilities: sameVersion && Array.isArray(record.approvedCapabilities) ? record.approvedCapabilities : [], enabled: sameVersion && record.enabled !== false, persisted: true }), plugin });
+              if (!sameVersion) startupIssues.push({ id: plugin.id, reason: 'version-changed', message: `${plugin.name} changed version and is resting. Review its powers before waking it.` });
+            } else {
+              const metadata = validateBotPlugin({ ...record, capabilities: record.declaredCapabilities ?? [], onMessage: () => null, onEvent: null });
+              heldPlugins.set(metadata.id, recordOf(metadata, { kind: 'plugin', approvedCapabilities: Array.isArray(record.approvedCapabilities) ? record.approvedCapabilities : [], enabled: record.enabled !== false, persisted: true }));
+              startupIssues.push({ id: metadata.id, reason: plugin ? 'capacity' : 'factory-unavailable', message: plugin ? `${metadata.name} could not start because the plaza is full. Its saved settings are held.` : `${metadata.name} is unavailable. Its saved settings are held until its shipped module returns.` });
+            }
           }
         } catch {
           // A bot that no longer compiles is skipped, never fatal.
@@ -1173,6 +1213,14 @@ export function createBotRegistry({ storage = null, now = null } = {}) {
   if (!bots.has("muse-agent")) {
     install(createMuseAgentBotPlugin(), { kind: "builtin", approvedCapabilities: ["world.announce", "world.message-bots"], enabled: true, persisted: true });
   }
+  for (const [id, plugin] of factories) {
+    if (id === muse.id || bots.has(id)) continue;
+    if (bots.size >= BOT_PLAZA_MAX_BOTS) { startupIssues.push({ id, reason: 'capacity', message: `${plugin.name} could not start because the plaza is full.` }); continue; }
+    // Newly shipped plugins join automatically, with no action powers granted.
+    bots.set(id, { record: recordOf(plugin, { kind: 'plugin', approvedCapabilities: [], enabled: true, persisted: true }), plugin });
+    heldPlugins.delete(id);
+  }
+  if (!stored || Object.keys(pluginFactories).length || startupIssues.some(issue => issue.reason === 'version-changed')) persist();
 
   return freeze({
     install,
@@ -1184,6 +1232,7 @@ export function createBotRegistry({ storage = null, now = null } = {}) {
     getPlugin,
     listBots,
     listEnabled,
+    getStartupIssues: () => freeze(startupIssues.map(issue => ({ ...issue }))),
     source: BOT_PLAZA_SOURCE,
   });
 }

@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from '../vendor/three-r179.1/build/three.module.js';
-import {createChessArenaState,applyChessArenaMove} from '../src/domains/chess-arena.js';
+import {createChessArenaState,applyChessArenaMove,undoChessArenaMove} from '../src/domains/chess-arena.js';
+import {chooseAiMove} from '../src/domains/chess-ai.js';
 import {
   AVATAR_CHIBI_FALLBACK_URL,
   CHESS_ARENA_PIECE_TYPES,
@@ -32,6 +33,35 @@ test('legal moves update one shared state and illegal moves do not',()=>{
 test('checkmate state remains terminal',()=>{
   let state=createChessArenaState();for(const [from,to] of [['f2','f3'],['e7','e5'],['g2','g4'],['d8','h4']])state=applyChessArenaMove(state,from,to).state;
   assert.equal(state.checkmate,true);assert.equal(state.gameOver,true);
+});
+
+test('threefold repetition ends the local match and cannot be played through',()=>{
+  let state=createChessArenaState();
+  for(let repeat=0;repeat<2;repeat++)for(const [from,to] of [['g1','f3'],['g8','f6'],['f3','g1'],['f6','g8']])state=applyChessArenaMove(state,from,to).state;
+  assert.equal(state.draw,true);
+  assert.equal(state.drawReason,'threefold repetition');
+  assert.equal(state.gameOver,true);
+  assert.equal(state.legalMoves.length,0);
+  assert.equal(chooseAiMove(state),null);
+  const denied=applyChessArenaMove(state,'e2','e4');
+  assert.equal(denied.accepted,false);assert.equal(denied.state,state);
+  const previous=undoChessArenaMove(state);
+  assert.equal(previous.gameOver,false);assert.equal(previous.history.length,7);
+  assert.equal(applyChessArenaMove(previous,'f6','g8').state.drawReason,'threefold repetition');
+});
+
+test('takebacks restore captures, castling and promotion from the actual starting position',()=>{
+  const fixtures=[
+    ['r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1','e1','g1','q'],
+    ['4k3/8/8/8/8/8/4r3/4K2R w K - 0 1','e1','e2','q'],
+    ['4k3/P7/8/8/8/8/8/4K3 w - - 0 1','a7','a8','n'],
+  ];
+  for(const [fen,from,to,promotion] of fixtures){
+    const start=createChessArenaState(fen);
+    const result=applyChessArenaMove(start,from,to,promotion);
+    assert.equal(result.accepted,true,fen);
+    assert.deepEqual(undoChessArenaMove(result.state),start);
+  }
 });
 
 const nullStorage=()=>({getItem:()=>null});

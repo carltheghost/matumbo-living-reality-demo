@@ -442,6 +442,8 @@ export function mountMyGpt({ documentRoot = globalThis.document, windowRoot = gl
     setActive(active) { if (active) title.setAttribute('data-autofocus', 'true'); else title.removeAttribute('data-autofocus'); },
     activate() { if (!activated) return refresh(); return Promise.resolve(bridge); },
     completeSignIn() { return refresh().then(() => { if (chatgptReady()) return loadModels(); return null; }); },
+    // Readiness can be observed without copying any assistant notes or chat.
+    readiness() { return { provider, connected: ready(), pending: Boolean(chatController), state: bridge?.[provider]?.state ?? 'unavailable', persistence: 'local-browser' }; },
     snapshot() { return { provider, connected: ready(), pending: Boolean(chatController), workspace: workspace.snapshot() }; },
     destroy() {
       if (destroyed) return;

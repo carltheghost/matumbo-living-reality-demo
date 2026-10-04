@@ -13,7 +13,7 @@ import {
   createWardrobeAtelierContribution,
   hashWardrobeAtelierSeed,
 } from "../src/domains/wardrobe-atelier.js";
-import { createWardrobeAtelierConsole } from "../src/render/wardrobe-atelier.js";
+import { createWardrobeAtelierConsole, WARDROBE_STORAGE_KEY } from "../src/render/wardrobe-atelier.js";
 import { createLivingRealityProjection } from "../src/core/demo-projection.js";
 
 const FIXED_NOW = "2026-09-18T12:00:00.000Z";
@@ -314,9 +314,10 @@ function fakeDocument(missing = []) {
     textContent: "",
     hidden: true,
     disabled: false,
+    listeners: new Map(),
     append(...nodes) { this.children.push(...nodes); return this; },
     replaceChildren() { this.children = []; },
-    addEventListener() {},
+    addEventListener(type, listener) { this.listeners.set(type, listener); },
     setAttribute() {},
   });
   const byId = new Map(ids.map((id) => [id, makeEl(id)]));
@@ -405,4 +406,168 @@ test("null clock uses the wall clock instead of the 1970 epoch", () => {
   assert.ok(!outfit.createdAt.startsWith("1970-01-01"), "createdAt must not be the unix epoch");
   const year = Number(outfit.createdAt.slice(0, 4));
   assert.ok(year >= 2026, "createdAt must be the wall clock");
+});
+
+test("wardrobe import validates every record before changing the gallery", () => {
+  const studio = atelier();
+  const custom = studio.createOutfit({ name: "Keep my design" });studio.equipOutfit(custom.id);
+  const backup = studio.exportState(), before = studio.getSnapshot();
+  const mutations = [
+    state => { state.outfits.at(-1).id = "bad"; },
+    state => { state.outfits.pop();state.equippedId = custom.id; },
+    state => { state.outfits[0].name = "Fake starter"; },
+    state => { state.outfits.at(-1).studioOutfitId = "ivory"; },
+    state => { state.outfits.shift(); },
+    state => { state.outfits.push(state.outfits.at(-1)); },
+    state => { state.equippedId = "wdr:deadbeef"; },
+  ];
+  for (const mutate of mutations) {
+    const invalid = structuredClone(backup);mutate(invalid);
+    assert.throws(() => studio.importState(invalid));
+    assert.deepEqual(studio.getSnapshot(), before, "bad backup must leave every existing outfit and selection intact");
+  }
+});
+
+test("import from a different seed keeps current starter identity and Person mapping", () => {
+  const studio = atelier(), foreign = createWardrobeAtelier({ seed: "another-browser", now: () => "2026-09-19T00:00:00Z" });
+  const idsBefore = studio.listOutfits().map(outfit => outfit.id);
+  foreign.equipOutfit(starterId(foreign, "cobalt"));
+  const design = foreign.createOutfit({ name: "Foreign design" });
+  studio.importState(foreign.exportState());
+  assert.deepEqual(studio.listOutfits().filter(outfit => outfit.origin === "starter").map(outfit => outfit.id), idsBefore);
+  assert.equal(studio.getEquipped().studioOutfitId, "cobalt");
+  assert.equal(studio.getEquipped().id, starterId(studio, "cobalt"));
+  assert.ok(studio.getOutfit(design.id));assert.ok(studio.verifyIntegrity().ok);
+});
+
+test("customized long names produce self-importable bounded backups and outfit limits refuse additions", () => {
+  const studio = atelier(), original = studio.createOutfit({ name: "x".repeat(48) });
+  assert.equal(studio.customizeOutfit(original.id).name.length, 48);
+  studio.importState(studio.exportState());
+  while (studio.listOutfits().length < 256) studio.createOutfit({ name: "Another design" });
+  assert.throws(() => studio.createOutfit({ name: "Too many" }), /256 outfits/);
+  assert.throws(() => studio.customizeOutfit(original.id), /256 outfits/);
+});
+
+function memoryStorage() {
+  const values = new Map();
+  return { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), values };
+}
+
+test("wardrobe saves custom designs and selected/equipped look and reloads the exact local workspace", () => {
+  const storage = memoryStorage();
+  const studio = atelier(), api = createWardrobeAtelierConsole({ documentRoot: fakeDocument(), atelier: studio, storage });
+  api.create({ name: "Persistent design", palette: "#123456 / #abcdef" });api.equip();
+  const selectedId = api.getSnapshot().selectedId;
+  assert.equal(api.getSnapshot().persistence, true);
+  const callbacks = [], restored = createWardrobeAtelierConsole({ documentRoot: fakeDocument(), atelier: atelier(), storage, onEquip: (outfit, snapshot, event) => callbacks.push({ outfit, event }) });
+  assert.equal(restored.getSnapshot().selectedId, selectedId);
+  assert.equal(restored.getSnapshot().atelier.equippedId, selectedId);
+  restored.open();assert.equal(callbacks.length, 1);
+  assert.equal(callbacks[0].outfit.name, "Persistent design");
+  assert.deepEqual(restored.exportBackup().atelier.outfits, api.exportBackup().atelier.outfits);
+});
+
+test("a stale wardrobe tab refuses writes until explicit reload of the newer saved state", () => {
+  const storage = memoryStorage(), docB = fakeDocument();
+  const a = createWardrobeAtelierConsole({ documentRoot: fakeDocument(), atelier: atelier(), storage });
+  const b = createWardrobeAtelierConsole({ documentRoot: docB, atelier: atelier(), storage });
+  a.create({ name: "Newer design" });
+  const newer = storage.getItem(WARDROBE_STORAGE_KEY);
+  assert.equal(b.create({ name: "Stale design" }), null);
+  assert.equal(b.getSnapshot().atelier.outfitCount, 4);
+  assert.equal(storage.getItem(WARDROBE_STORAGE_KEY), newer);
+  assert.match(docB.__byId.get("wardrobe-atelier-status").textContent, /newer wardrobe.*another tab/);
+  b.reloadSaved();b.create({ name: "After reload" });
+  assert.equal(b.getSnapshot().atelier.outfitCount, 6);
+  assert.equal(b.getSnapshot().persistence, true);
+});
+
+test("wardrobe storage failures retain designs and say unsaved; corrupt stored state is preserved until explicit replacement", () => {
+  const documentRoot = fakeDocument();
+  const api = createWardrobeAtelierConsole({ documentRoot, atelier: atelier(), storage: { getItem: () => null, setItem: () => { throw new Error("Quota exceeded"); } } });
+  api.create({ name: "In memory" });
+  assert.equal(api.getSnapshot().atelier.outfitCount, 5);assert.equal(api.getSnapshot().persistence, false);
+  assert.match(documentRoot.__byId.get("wardrobe-atelier-status").textContent, /NOT SAVED.*Quota exceeded/);
+  const storage = memoryStorage();storage.setItem(WARDROBE_STORAGE_KEY, "broken saved data");
+  const broken = createWardrobeAtelierConsole({ documentRoot: fakeDocument(), atelier: atelier(), storage });
+  broken.create({ name: "Preserve in memory" });
+  assert.equal(storage.getItem(WARDROBE_STORAGE_KEY), "broken saved data");
+  assert.equal(broken.getSnapshot().persistence, false);
+  broken.importBackup(api.exportBackup());
+  assert.equal(broken.getSnapshot().persistence, true);
+  assert.equal(JSON.parse(storage.getItem(WARDROBE_STORAGE_KEY)).atelier.outfits.at(-1).name, "In memory");
+});
+
+test("wardrobe create/delete failures remain visible and fallback deletion updates the Person consumer", () => {
+  const documentRoot = fakeDocument(), callbacks = [], studio = atelier();
+  const api = createWardrobeAtelierConsole({ documentRoot, atelier: studio, storage: null, onEquip: (outfit, snapshot, event) => callbacks.push({ outfit, event }) });
+  documentRoot.__byId.get("wardrobe-atelier-create").listeners.get("click")();
+  assert.match(documentRoot.__byId.get("wardrobe-atelier-status").textContent, /DESIGN BLOCKED/);
+  api.delete(starterId(studio, "obsidian"));
+  assert.match(documentRoot.__byId.get("wardrobe-atelier-status").textContent, /CANNOT DELETE/);
+  api.create({ name: "Delete wearing design" });api.equip();api.delete();
+  assert.equal(callbacks.at(-1).outfit.studioOutfitId, "obsidian");
+  assert.equal(callbacks.at(-1).event.reason, "delete-fallback");
+  api.reset();assert.equal(callbacks.at(-1).outfit.studioOutfitId, "obsidian");
+});
+
+test("oversized or malformed JSON backups do not replace existing designs or storage", () => {
+  const storage = memoryStorage(), api = createWardrobeAtelierConsole({ documentRoot: fakeDocument(), atelier: atelier(), storage });
+  api.create({ name: "Preserve me" });
+  const before = api.getSnapshot().atelier, raw = storage.getItem(WARDROBE_STORAGE_KEY);
+  assert.throws(() => api.importBackup("x".repeat(524289)), /512 KiB/);
+  assert.throws(() => api.importBackup("bad JSON"));
+  assert.deepEqual(api.getSnapshot().atelier, before);
+  assert.equal(storage.getItem(WARDROBE_STORAGE_KEY), raw);
+});
+
+test("Unicode at field and aggregate capacity always produces a portable UTF-8 backup", () => {
+  const studio = atelier(), input = { name: "七".repeat(48), description: "七".repeat(280), motif: "七".repeat(48), pieces: Array(8).fill("七".repeat(48)) };
+  let rejected = false;
+  for (let index = 0; index < 252; index++) {
+    const before = studio.getSnapshot();
+    try { studio.createOutfit(input); }
+    catch (error) { assert.match(error.message, /512 KiB/);assert.deepEqual(studio.getSnapshot(), before);rejected = true;break; }
+  }
+  assert.equal(rejected, true, "UTF-8 capacity should fill before the outfit count when fields contain three-byte characters");
+  const api = createWardrobeAtelierConsole({ documentRoot: fakeDocument(), atelier: studio, storage: null });
+  const raw = JSON.stringify(api.exportBackup());
+  assert.ok(new TextEncoder().encode(raw).length <= 524288);
+  const restored = createWardrobeAtelierConsole({ documentRoot: fakeDocument(), atelier: atelier(), storage: null });
+  restored.importBackup(raw);
+  assert.deepEqual(restored.exportBackup().atelier.outfits, api.exportBackup().atelier.outfits);
+});
+
+test("Wardrobe exposes one immutable source contribution and updates it on local mutations", () => {
+  const contributions = [], api = createWardrobeAtelierConsole({ documentRoot: fakeDocument(), atelier: atelier(), storage: null, onChange: contribution => contributions.push(contribution) });
+  api.create({ name: "Projection design" });
+  assert.equal(contributions.at(-1).entities.length, 5);
+  assert.equal(contributions.at(-1).source, WARDROBE_ATELIER_SOURCE);
+  assert.ok(Object.isFrozen(contributions.at(-1)));
+  assert.deepEqual(api.createContribution(), contributions.at(-1));
+  api.reset();assert.equal(contributions.at(-1).entities.length, 4);
+});
+
+test("restored starter retries Person sync after readiness without changing wardrobe history or a fresh default", () => {
+  const storage = memoryStorage(), saved = createWardrobeAtelierConsole({ documentRoot: fakeDocument(), atelier: atelier(), storage });
+  saved.equip(starterId(atelier(), "cobalt"));
+  const callbacks = [];
+  let personReady = false;
+  const restored = createWardrobeAtelierConsole({ documentRoot: fakeDocument(), atelier: atelier(), storage,
+    onEquip: (outfit, snapshot, event) => { callbacks.push({ outfit, snapshot, event });return personReady; } });
+  const before = restored.getSnapshot().atelier, raw = storage.getItem(WARDROBE_STORAGE_KEY);
+  restored.open();
+  assert.equal(callbacks.length, 1);
+  assert.equal(callbacks[0].outfit.studioOutfitId, "cobalt");
+  personReady = true;
+  assert.equal(restored.syncEquipped("person-ready"), true);
+  assert.equal(callbacks.length, 2);
+  assert.equal(callbacks[1].snapshot.method, "person-ready");
+  assert.equal(callbacks[1].event, null);
+  assert.deepEqual(restored.getSnapshot().atelier, before, "readiness retries must not create equip history");
+  assert.equal(storage.getItem(WARDROBE_STORAGE_KEY), raw);
+  assert.equal(restored.syncEquipped("person-ready"), false, "accepted sync runs only once");
+  const fresh = createWardrobeAtelierConsole({ documentRoot: fakeDocument(), atelier: atelier(), storage: null, onEquip: () => { throw new Error("untouched default must not override Person"); } });
+  assert.equal(fresh.syncEquipped("person-ready"), false);
 });

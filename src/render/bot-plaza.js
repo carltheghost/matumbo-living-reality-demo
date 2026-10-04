@@ -209,7 +209,7 @@ export function createBotPlazaConsole({
       const meta = element(documentRoot, "span", "bot-plaza-bot-meta");
       meta.append(element(documentRoot, "strong", null, bot.name));
       meta.append(element(documentRoot, "span", "bot-plaza-bot-sub",
-        `${bot.kind === "builtin" ? "built-in" : bot.kind} · ${bot.enabled ? "in the plaza" : "resting"} · ${bot.approvedCapabilities.length} approved ${bot.approvedCapabilities.length === 1 ? "power" : "powers"}`));
+        `${bot.kind === "builtin" ? "built-in" : bot.kind} · ${bot.enabled ? "in the plaza" : "resting"} · ${bot.kind === 'plugin' ? bot.persisted ? 'shipped startup module' : 'this session only' : bot.kind === 'builtin' ? 'available at startup' : 'local rules'} · ${bot.approvedCapabilities.length} approved ${bot.approvedCapabilities.length === 1 ? "power" : "powers"}`));
       card.append(meta);
       card.addEventListener("click", () => {
         selectedBotId = bot.id;
@@ -311,7 +311,7 @@ export function createBotPlazaConsole({
         renderAll();
       });
       controls.append(toggle);
-      if (bot.kind !== "builtin") {
+      if (bot.kind !== "builtin" && !(bot.kind === 'plugin' && bot.persisted)) {
         const remove = element(documentRoot, "button", "bot-plaza-mini danger", "remove bot");
         remove.type = "button";
         remove.addEventListener("click", () => {
@@ -322,7 +322,7 @@ export function createBotPlazaConsole({
         });
         controls.append(remove);
       } else {
-        controls.append(element(documentRoot, "span", "bot-plaza-bot-sub", "built-in · cannot be removed"));
+        controls.append(element(documentRoot, "span", "bot-plaza-bot-sub", "bundled · use rest to disable"));
       }
       wrap.append(controls);
       capsEl.append(wrap);
@@ -409,7 +409,8 @@ export function createBotPlazaConsole({
     renderJournal();
     renderDrafts();
     const enabled = botRegistry.listEnabled().length;
-    setStatus(`PLAZA OPEN · ${enabled} ${enabled === 1 ? "bot" : "bots"} present · 100% local · no network`);
+    const startup = botRegistry.getStartupIssues?.() ?? [];
+    setStatus(`PLAZA OPEN · ${enabled} ${enabled === 1 ? "bot" : "bots"} present · 100% local · no network${startup.length ? ` · ${startup.slice(0, 2).map(issue => issue.message).join(' ')}` : ''}`);
   }
 
   function send() {

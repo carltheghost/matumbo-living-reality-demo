@@ -531,9 +531,20 @@ export function wireOurplaceFinance(ui) {
     idempotencyKey: key('loan-offer-cancel')
   })), 'loan-offer-cancel');
   const defaultReview = create('details');
-  defaultReview.append(create('summary', 'Review margin default and liquidation'));
+  defaultReview.append(create('summary', 'Review repayment deadline, margin default and liquidation'));
   credit.append(defaultReview);
   defaultReview.append(create('small', 'Change the explicit fixture valuation above and record fresh observations before attempting a margin action. Stale or conflicting observations block it. Collateral realization is a local in-kind transfer.'));
+  button(defaultReview, 'Advance rehearsal clock by 1 hour', () => {
+    runtime.advanceClock({ deltaMs: 3600000, explicit: true, idempotencyKey: key('clock-hour') });
+    status.textContent = `Local rehearsal clock: ${new Date(runtime.now()).toISOString()}. Real system time and canonical quote expiry were not changed. Refresh the two oracle fixtures before liquidation.`;
+    refreshFinance();
+  }, 'clock-advance-hour');
+  button(defaultReview, 'Mark overdue repayment default · lender', () => show(f.loanDefault({
+    actor: loanPicker.requireRow().lender,
+    loanId,
+    reason: 'maturity',
+    idempotencyKey: key('loan-maturity-default')
+  })), 'loan-maturity-default');
   button(defaultReview, 'Mark proven margin default · lender', () => show(f.loanDefault({
     actor: loanPicker.requireRow().lender,
     loanId,
@@ -612,6 +623,7 @@ export function wireOurplaceFinance(ui) {
   });
   rules.set('loan-offer-cancel', () => offerPicker.row()?.status === 'open');
   rules.set('loan-default', () => loanPicker.row()?.status === 'active');
+  rules.set('loan-maturity-default', () => loanPicker.row()?.status === 'active' && runtime.now() >= loanPicker.row().dueAt);
   rules.set('loan-liquidate', () => loanPicker.row()?.status === 'defaulted');
   let orderSelection = '',
     loanSelection = null,

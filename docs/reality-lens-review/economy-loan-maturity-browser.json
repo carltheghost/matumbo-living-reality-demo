@@ -1,0 +1,21 @@
+{
+  "started": "2026-10-04T16:37:56.931Z",
+  "scope": "Visible Ourplace overdue-loan continuation; isolated local fixture actors and prices",
+  "checks": [
+    "loan uses finite canonical lender funding and visitor collateral through original controls",
+    "repayment deadline default is disabled before maturity",
+    "explicit one-hour rehearsal step unlocks actual overdue-loan review",
+    "stale oracle fixtures block liquidation without ledger effects",
+    "fresh fixture liquidation conserves collateral and canonical supply"
+  ],
+  "errors": [],
+  "result": {
+    "loanId": "f6c31df509bcde8bb2809afe",
+    "status": "repaid",
+    "defaultReason": "maturity",
+    "proofConserved": true,
+    "chainValid": true
+  },
+  "passed": true,
+  "finished": "2026-10-04T16:38:04.585Z"
+}

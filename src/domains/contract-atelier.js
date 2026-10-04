@@ -8,7 +8,8 @@
  * everyone else). Contracts resolve through a small logic constructor:
  * TRUE/FALSE on one condition, AND, OR, or IF/ELSE branches.
  *
- * Everything is a page-session rehearsal. Stakes are fictional "rehearsal
+ * Everything is a local rehearsal; the manual browser owner may persist a
+ * replayable JSON journal. Stakes are fictional "rehearsal
  * credits" with zero real value. There is no wallet, no chain, no custody,
  * no settlement, no wagering, no real money, and no external publication.
  * IDs are deterministic so the same seed always rebuilds the same atelier;
@@ -33,7 +34,7 @@ export const CONTRACT_ATELIER_TOPICS = Object.freeze(["sports", "politics", "wea
 export const CONTRACT_ATELIER_LOGIC_KINDS = Object.freeze(["condition", "and", "or", "if_else"]);
 
 export const CONTRACT_ATELIER_BOUNDARY =
-  "Contract Atelier is a fictional local rehearsal. Anyone may open a pool, binary, or multi-outcome contract as house or player and stake rehearsal credits, but every stake is simulated: no wallet, no chain, no custody, no settlement, no wagering, and no real money exists here. Resolutions are rehearsal outcomes only; nothing staked has value outside this page session.";
+  "Contract Atelier is a fictional local rehearsal. Manual contracts can be saved in this browser or a replayable JSON backup. Anyone may open a pool, binary, or multi-outcome contract as house or player and stake rehearsal credits, but every stake is simulated: no wallet, no chain, no custody, no external settlement, no wagering, and no real money exists here. Resolutions are rehearsal outcomes only; local records and stakes have no external value.";
 
 /** Fictional unit label carried on every stake so no real-money reading is possible. */
 export const CONTRACT_ATELIER_NO_VALUE = "Stakes are rehearsal credits with zero real value.";

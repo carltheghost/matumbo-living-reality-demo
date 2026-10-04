@@ -6,6 +6,7 @@ import {realityLensLabel,realityObjectSurfaceEngine} from '../domains/reality-ob
 import {lensSpaceLabel} from './reality-lens-chrome.js?v=20261003-skin360';
 import {buildRealityAssemblyScene,LOD_FAR} from './reality-assembly-scene.js?v=20261003-skin360';
 import {normalizeDesignDescriptor} from '../domains/creator-economy.js?v=20261003-skin360';
+import {mountOrbitNavigation} from './orbit-navigation.js';
 
 // The lens contains only equal-status feature tabs; no center cube or anchor.
 export const CLEAN_LANDING_CAMERA={position:[36,25,110],target:[0,2,0],fov:60,mergeThreshold:LOD_FAR};
@@ -352,6 +353,10 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   const ray=new THREE.Raycaster(),point=new THREE.Vector2(),screenPoint=new THREE.Vector3(),labelRight=new THREE.Vector3(),dragPlane=new THREE.Plane(),dragPoint=new THREE.Vector3(),dragNormal=new THREE.Vector3();
   const say=message=>{find('[data-status]').textContent=copyFor(message);};
   const guard=fn=>(...args)=>{try{return fn(...args);}catch(error){say(error.message);return null;}};
+  const orbitNavigation=mountOrbitNavigation({host:toolbar,
+    readCamera:()=>({position:camera.position.toArray(),target:controls.target.toArray(),minDistance:Math.max(3,controls.minDistance??3),maxDistance:controls.maxDistance??220}),
+    onChange:next=>{if(!active)return;focusTarget=null;focusPosition=null;mountedSurface?.controller?.holdRotation?.();camera.position.fromArray(next.position);controls.target.fromArray(next.target);controls.update();onFrame?.();},
+  });
   const currentObject=()=>owner.getSnapshot().objects.find(object=>object.id===owner.getSnapshot().selectedId);
   function snapshot(){const record=mountedSurface,node=record&&spatial.nodes.get(record.featureId);return {...owner.getSnapshot(),active,viewMode,interaction,spaceId:activeLensGroup,spaceView:root.dataset.spaceView,camera:{position:camera.position.toArray(),target:controls.target.toArray(),fov:camera.fov,aspect:camera.aspect,near:camera.near,far:camera.far},spatial:spatial.getSnapshot(),liveObject:record?{...(record.controller?.snapshot()??record.binding),panelId:record.livePanel?.id??null}:null,layoutDiagnostics:initialLayout.diagnostics,reality:workspace.getSnapshot()};}
   function describeSurface(options){
@@ -788,7 +793,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   inspectorToggle.onclick=()=>foldInspector(!inspectorFolded);
   const locate=event=>{const rect=renderer.domElement.getBoundingClientRect();point.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);ray.setFromCamera(point,camera);return ray.intersectObjects([...targets,...(spatial.groupTargets??[])],false).find(hit=>{const group=spatial.resolveGroup?.(hit.object);if(group)return spatial.groupParents.get(group)?.root.visible&&hit.object.visible;const id=spatial.resolve(hit.object);return id&&spatial.nodes.get(id)?.root.visible&&hit.object.visible;})??null;};
   const resizeOnScroll=guard(event=>{
-    if(!active||event.ctrlKey||event.target?.closest?.('.assembly-inspector'))return;
+    if(!active||event.ctrlKey||event.target?.closest?.('.assembly-inspector,[data-orbit-dial]'))return;
     if(interaction!=='move'&&mountedSurface?.controller?.wheel(event))return;
     const overFeatureSurface=event.target?.closest?.('.reality-lens-feature-panel[data-lens-surface-attached=true],.assembly-wrap-face');
     if(overFeatureSurface&&!event.shiftKey)return;
@@ -842,6 +847,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   const keys=guard(event=>{
     if(active&&mountedSurface?.controller?.key(event))return;
     if(active&&event.key==='Escape'&&!toolbar.hidden){setViewTools(false,{restoreFocus:true});event.preventDefault();return;}
+    if(event.target?.closest?.('[data-orbit-dial]'))return;
     if(active&&event.key.toLowerCase()==='f'&&!event.ctrlKey&&!event.metaKey&&!event.altKey&&!event.repeat&&!/input|textarea|select/i.test(event.target?.tagName)&&!event.target?.isContentEditable){setDirectory(directory.hidden,{restoreFocus:true});event.preventDefault();return;}
     if(active&&event.key==='Escape'&&root.classList.contains('assembly-directory-open')){setDirectory(false,{restoreFocus:true});event.preventDefault();return;}
     if(!active||/input|textarea|select/i.test(event.target?.tagName))return;
@@ -933,6 +939,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
       cssSurfaceHost.hidden=Boolean(renderer.xr?.isPresenting);
       if(mountedSurface&&!cssSurfaceHost.hidden){materializeSurfaceObjects(mountedSurface);sizeAndPlaceSurface(mountedSurface);css3dRenderer?.render(scene,camera);}
       if(root.dataset.spaceView==='feature')onPanelFrame(owner.getSnapshot().selectedId);
+      if(!toolbar.hidden)orbitNavigation.update();
       const overlaps=(a,b)=>a.left<b.right+4&&a.right>b.left-4&&a.top<b.bottom+4&&a.bottom>b.top-4;
       const occupied=[...all('.assembly-header,.assembly-directory,.assembly-inspector,.assembly-toolbar,.assembly-branches,.assembly-space-context,.assembly-selection-hint,.assembly-world-label,.assembly-status'),...document.querySelectorAll('body.assembly-mode #immersive-toolbar')].filter(element=>!element.hidden&&getComputedStyle(element).display!=='none'&&getComputedStyle(element).visibility!=='hidden').map(element=>element.getBoundingClientRect());
     const selectedId=owner.getSnapshot().selectedId;
@@ -1002,5 +1009,5 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
       }
       }
     },
-    destroy(){close();destroyed=true;clearFeatureSurface();window.removeEventListener('resize',resizeCss3d);window.removeEventListener('resize',resizeFocus);window.removeEventListener('resize',reframeSpace);selectionObserver.disconnect();toolbarSizeObserver.disconnect();spaceChromeObserver.disconnect();spatial.destroy();root.remove();stylesheet.remove();cssSurfaceHost.removeEventListener('pointerdown',downOnObjectSurface,true);canvas.removeEventListener('pointerdown',down,true);canvas.removeEventListener('pointermove',move);canvas.removeEventListener('pointerup',release);canvas.removeEventListener('pointercancel',release);canvas.removeEventListener('wheel',resizeOnScroll,true);root.removeEventListener('wheel',resizeOnScroll,true);document.removeEventListener('keydown',keys);}};
+    destroy(){close();destroyed=true;orbitNavigation.destroy();clearFeatureSurface();window.removeEventListener('resize',resizeCss3d);window.removeEventListener('resize',resizeFocus);window.removeEventListener('resize',reframeSpace);selectionObserver.disconnect();toolbarSizeObserver.disconnect();spaceChromeObserver.disconnect();spatial.destroy();root.remove();stylesheet.remove();cssSurfaceHost.removeEventListener('pointerdown',downOnObjectSurface,true);canvas.removeEventListener('pointerdown',down,true);canvas.removeEventListener('pointermove',move);canvas.removeEventListener('pointerup',release);canvas.removeEventListener('pointercancel',release);canvas.removeEventListener('wheel',resizeOnScroll,true);root.removeEventListener('wheel',resizeOnScroll,true);document.removeEventListener('keydown',keys);}};
 }

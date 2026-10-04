@@ -189,14 +189,19 @@ export function createArenaGamesConsole({
   function renderCurrent() {
     const current = state();
     const mode = modeFrom(summary, selectedModeId);
-    currentEl.textContent = `${mode?.label ?? current.modeLabel} · ${current.status.toUpperCase()} · ${JSON.stringify(current.values)}`;
+    const detail = current.modeId === "nebula-rally"
+      ? `Sector ${current.values.progress}/${current.values.target} · Energy ${current.values.energy}/3`
+      : current.modeId === "chrono-grid"
+        ? `Cell (${current.values.position.join(", ")}) → (${current.values.target.join(", ")}) · Stability ${current.values.stability}/3`
+        : `Rival shield ${current.values.rivalShield}/6 · Charge ${current.values.charge}/4 · Your shield ${current.values.shield}/${current.values.maxShield}`;
+    currentEl.textContent = `${mode?.label ?? current.modeLabel} · ${detail}`;
     if (turnEl) turnEl.textContent = `${current.turn} / ${mode?.maxTurns ?? "—"}`;
     if (hashEl) hashEl.textContent = `${current.headHash} · ${ARENA_GAMES_HASH_ALGORITHM_LABEL}`;
     statusEl.textContent = current.status === "complete"
-      ? `COMPLETE · ${current.turn} TURN${current.turn === 1 ? "" : "S"} · REPLAY OR RESET LOCALLY`
+      ? `${current.outcome === "won" ? "OBJECTIVE REACHED" : "OUT OF TURNS"} · ${current.turn} TURN${current.turn === 1 ? "" : "S"} · REPLAY OR RESET LOCALLY`
       : current.rejectedActionCount
-        ? `READY · ${current.rejectedActionCount} REJECTED ACTION${current.rejectedActionCount === 1 ? "" : "S"} SURFACED · LOCAL ONLY`
-        : `READY · ${current.turn} TURN${current.turn === 1 ? "" : "S"} · LOCAL ONLY`;
+        ? `${current.status.toUpperCase()} · ${current.rejectedActionCount} REJECTED ACTION${current.rejectedActionCount === 1 ? "" : "S"} SURFACED · LOCAL ONLY`
+        : `${current.status.toUpperCase()} · ${current.turn} TURN${current.turn === 1 ? "" : "S"} · LOCAL ONLY`;
     if (boundaryEl) boundaryEl.textContent = summary.boundary;
     replayButton.disabled = current.events.length === 0;
     resetButton.disabled = current.events.length === 0;
@@ -238,7 +243,7 @@ export function createArenaGamesConsole({
     const current = state();
     const result = applyArenaGameAction(current, actionId);
     sessions.set(selectedModeId, result.state);
-    pushTrace({ actionId: result.actionId, accepted: result.accepted, reason: result.reason, hash: result.event.hash });
+    pushTrace({ actionId: result.actionId, accepted: result.accepted, reason: result.reason, hash: result.event?.hash ?? result.state.headHash });
     render();
     const snapshot = deepFreeze({
       source: ARENA_GAMES_CONSOLE_SOURCE,
@@ -262,7 +267,9 @@ export function createArenaGamesConsole({
   function replay(method = "button") {
     const current = state();
     const actionIds = current.events.map((event) => event.actionId);
-    const result = replayArenaGame(selectedModeId, actionIds);
+    let result;
+    try { result = replayArenaGame(selectedModeId, actionIds); }
+    catch (error) { statusEl.textContent = `REPLAY BLOCKED · ${error.message}`;return null; }
     sessions.set(selectedModeId, result.state);
     pushTrace({ actionId: "replay", accepted: true, hash: result.headHash });
     render();

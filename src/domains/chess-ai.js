@@ -15,6 +15,7 @@
  * Projection only.
  */
 import {Chess} from '../vendor/chess-1.4.0/chess.js?v=20261003-skin360';
+import {restoreChessArenaGame} from './chess-arena.js?v=20261003-skin360';
 
 export const CHESS_AI_SOURCE = 'chess-ai-local';
 
@@ -212,7 +213,7 @@ export function chooseAiMove(state, {difficulty = 'medium', random = Math.random
   }
   const budget = Number.isFinite(timeBudgetMs) && timeBudgetMs >= 0 ? timeBudgetMs : config.timeBudgetMs;
   const deadline = Date.now() + budget;
-  const game = new Chess(state.fen);
+  const game = restoreChessArenaGame(state);
   const searcher = createSearcher(game, deadline);
   const jitterOf = () => (random() * 2 - 1) * (config.jitter || 0);
   const rootMoves = orderedMoves(game);

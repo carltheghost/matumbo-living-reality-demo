@@ -1,0 +1,29 @@
+{
+  "started": "2026-10-04T16:36:07.167Z",
+  "runs": [
+    {
+      "name": "desktop",
+      "checks": [
+        "Orbital Duel wins with original controls, replays all 42 events including 33 rejected inputs, and resets",
+        "Academy completes four lessons with Next, rebuilds answers and XP, resets",
+        "3D board accepts physical e2-e4 and Take back cancels a pending glide",
+        "Local AI replies and Take back restores the whole human turn",
+        "No page errors or horizontal overflow"
+      ],
+      "errors": []
+    },
+    {
+      "name": "phone",
+      "checks": [
+        "Orbital Duel wins with original controls, replays all 42 events including 33 rejected inputs, and resets",
+        "Academy completes four lessons with Next, rebuilds answers and XP, resets",
+        "3D board accepts physical e2-e4 and Take back cancels a pending glide",
+        "Local AI replies and Take back restores the whole human turn",
+        "No page errors or horizontal overflow"
+      ],
+      "errors": []
+    }
+  ],
+  "passed": true,
+  "completed": "2026-10-04T16:37:12.155Z"
+}

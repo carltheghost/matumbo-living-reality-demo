@@ -1,0 +1,94 @@
+{
+  "started": "2026-10-04T16:26:52.519Z",
+  "base": "http://127.0.0.1:8082/",
+  "runs": [
+    {
+      "device": "desktop",
+      "checks": [
+        {
+          "label": "empty NFT creation retains actionable validation feedback"
+        },
+        {
+          "label": "authored NFT saves through actual form controls"
+        },
+        {
+          "label": "NFT JSON download preserves authored details"
+        },
+        {
+          "label": "NFT authoring survives browser reload"
+        },
+        {
+          "label": "bad NFT replacement is blocked without erasing designs"
+        },
+        {
+          "label": "valid NFT backup imports through original controls"
+        },
+        {
+          "label": "manual contract authored and saved through actual form"
+        },
+        {
+          "label": "manual stake and logic resolution execute through original engine"
+        },
+        {
+          "label": "manual contract JSON download contains replayable commands"
+        },
+        {
+          "label": "manual stake and resolution replay after browser reload"
+        },
+        {
+          "label": "manual backup restores through original controls"
+        },
+        {
+          "label": "local authoring has one object owner, no overflow, page errors or inference requests"
+        }
+      ],
+      "errors": [],
+      "providerRequests": []
+    },
+    {
+      "device": "phone",
+      "checks": [
+        {
+          "label": "empty NFT creation retains actionable validation feedback"
+        },
+        {
+          "label": "authored NFT saves through actual form controls"
+        },
+        {
+          "label": "NFT JSON download preserves authored details"
+        },
+        {
+          "label": "NFT authoring survives browser reload"
+        },
+        {
+          "label": "bad NFT replacement is blocked without erasing designs"
+        },
+        {
+          "label": "valid NFT backup imports through original controls"
+        },
+        {
+          "label": "manual contract authored and saved through actual form"
+        },
+        {
+          "label": "manual stake and logic resolution execute through original engine"
+        },
+        {
+          "label": "manual contract JSON download contains replayable commands"
+        },
+        {
+          "label": "manual stake and resolution replay after browser reload"
+        },
+        {
+          "label": "manual backup restores through original controls"
+        },
+        {
+          "label": "local authoring has one object owner, no overflow, page errors or inference requests"
+        }
+      ],
+      "errors": [],
+      "providerRequests": []
+    }
+  ],
+  "authority": "isolated local fictional authoring; no provider, wallet, chain or real-money action",
+  "finished": "2026-10-04T16:28:03.920Z"
+}

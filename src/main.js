@@ -98,6 +98,7 @@ import { FROZEN_RELICS_CONSOLE_SOURCE, createFrozenRelicsConsole } from './rende
 import { MUSE_AGENT_CONSOLE_SOURCE, createMuseAgentConsole } from './render/muse-agent.js?v=20261003-skin360';
 import { BOT_PLAZA_CONSOLE_SOURCE, createBotPlazaConsole } from './render/bot-plaza.js?v=20261003-skin360';
 import { createBotRegistry, createBotRuntime } from './domains/bot-plaza.js?v=20261003-skin360';
+import { LENS_BOT_FACTORIES } from './domains/lens-bot-plugins.js';
 import { createProposalQueue } from './domains/bot-plaza.js?v=20261003-skin360';
 import { createContractLedger } from './domains/contract-ledger.js?v=20261003-skin360';
 import { createBrowserContractAutomation, createBrowserContractWorkspace, createBrowserContractFlow, createUnavailableContractWorkspace } from './domains/contract-runtime.js?v=20261003-skin360';
@@ -3075,6 +3076,7 @@ catch(error) { contractWorkspace=createUnavailableContractWorkspace(error); }
 frozenRelicsVault = contractWorkspace.vault;
 window.__TUMBO_CONTRACT_WORKSPACE__=contractWorkspace;
 nftAtelierConsole = createNftAtelierConsole({
+  onChange: publishAuthoringProjection,
   documentRoot: document,
   onSelect: (snapshot) => {
     const organ = organs.find((candidate) => candidate.id === 'proof');
@@ -3234,7 +3236,7 @@ window.__TUMBO_MUSE_AGENT__ = museAgentConsole;
 // inside per-bot approved capabilities. 100% browser-local: no network, no
 // tokens, no OAuth, no external bot APIs. The Muse Agent plugin ships as the
 // built-in default bot.
-botPlazaRegistry = createBotRegistry();
+botPlazaRegistry = createBotRegistry({ pluginFactories: LENS_BOT_FACTORIES });
 // Contract mission part 3b: one shared bot-proposal queue and one shared
 // outcome desk. Bots bring outcome contracts to the queue; the Contract
 // Atelier console reviews them, and APPROVE opens the book on this desk.
@@ -3442,6 +3444,7 @@ catch(error) {
 window.__TUMBO_CONTRACT_LEDGER__ = contractLifecycleLedger;
 window.__TUMBO_CONTRACT_FLOW__ = contractFlow;
 contractAtelierConsole = createContractAtelierConsole({
+  onChange: publishAuthoringProjection,
   documentRoot: document,
   // Award NFTs from outcome contracts are minted as Frozen Relics from the
   // shared vault: the claim freezes in the relic core, its life keeps growing.
@@ -3698,13 +3701,18 @@ window.__TUMBO_LUNA__ = lunaCompanionConsole;
 // outfit id also dress the 3D person. No marketplace, ownership, purchase,
 // transfer, or external publication exists.
 wardrobeAtelierConsole = createWardrobeAtelierConsole({
+  onChange: publishAuthoringProjection,
   atelier: null, // The console creates its own seeded fictional wardrobe.
   onEquip: (outfit, snapshot, event) => {
     // Sync the 3D person appearance when the wardrobe outfit maps to a
     // person-studio outfit id; wardrobe-only looks stay in the atelier.
     const studioOutfitId = outfit?.studioOutfitId ?? event?.studioOutfitId ?? null;
+    let appliedToPerson = true;
     if (studioOutfitId) {
-      try { personStudio?.chooseOutfit?.(studioOutfitId); } catch {}
+      appliedToPerson = false;
+      if (personStudio && !personStudio.getSnapshot().loading) {
+        try { personStudio.chooseOutfit(studioOutfitId); appliedToPerson = true; } catch {}
+      }
     }
     projectionBridge.emitIntent('projection.wardrobe-equip', WARDROBE_ATELIER_CONSOLE_SOURCE, Object.freeze({
       action: 'equip',
@@ -3717,6 +3725,7 @@ wardrobeAtelierConsole = createWardrobeAtelierConsole({
       network: false,
       executable: false,
     }));
+    return appliedToPerson;
   },
   onReplay: (snapshot) => projectionBridge.emitIntent('projection.replay-wardrobe-atelier', WARDROBE_ATELIER_CONSOLE_SOURCE, Object.freeze({
     action: snapshot.action,
@@ -3745,7 +3754,7 @@ window.__TUMBO_WARDROBE__ = wardrobeAtelierConsole;
 // click; the paper changes no world state.
 whitePaperConsole = createWhitePaperConsole({
   documentRoot: document,
-  getEnvelope: () => livingRealityWorld,
+  getEnvelope: () => livingRealityEnvelope,
   getFeatures: () => FEATURE_DEFINITIONS,
   onSelect: (featureId, snapshot) => {
     featureNavigator?.select(featureId, 'white-paper');
@@ -7898,6 +7907,19 @@ function publishComputeEconomyWorld(snapshot) {
   return true;
 }
 
+// These engines own their authoring records. Replace only their renderer-safe
+// contribution; never copy private room/chat content or change economic state.
+function publishAuthoringProjection(contribution){
+  if(!contribution || !['nft-atelier','contract-atelier','wardrobe-atelier'].includes(contribution.source))return;
+  queueMicrotask(()=>{
+    livingRealityEnvelope=createProjectionEnvelope({contributions:[...livingRealityWorld.contributions.filter(item=>item.source!==contribution.source),contribution],projectedAt:contribution.updatedAt});
+    livingRealityWorld=livingRealityEnvelope.world;
+    window.__SIMFABRIC_PROJECTION__=livingRealityWorld;window.__SIMFABRIC_ENVELOPE__=livingRealityEnvelope;
+    window.__SIMFABRIC_DEVICE_PROJECTION__=createDeviceProjection(livingRealityEnvelope,devicePreferences);
+    window.dispatchEvent(new CustomEvent('simfabric:projection',{detail:livingRealityWorld}));
+  });
+}
+
 function publishEconomicWorld(snapshot){
   if(!snapshot)return;
   const contribution=createEconomicWorldContribution(snapshot);
@@ -7947,6 +7969,10 @@ youtubeSurface = createYoutubeSurface({documentRoot:document});
 window.__TUMBO_YOUTUBE_SURFACE__ = youtubeSurface;
 window.__TUMBO_WEB_AI__ = webAiConsole;
 window.__TUMBO_SOCIAL_MIRROR__ = socialMirrorConsole;
+// Restored local collections must appear in the same envelope as new edits.
+for(const authoringConsole of [nftAtelierConsole,contractAtelierConsole,wardrobeAtelierConsole]){
+  publishAuthoringProjection(authoringConsole?.createContribution?.());
+}
 // The navigator reads `feature` during construction, before this assigned
 // reference exists. Replay a direct feature handoff now that route surfaces
 // can close Mission Control and expose their controls. `url` is explicitly
@@ -8073,25 +8099,23 @@ projectionSession = createProjectionSession({
   getSurfaceSnapshots: () => ({
     rooms: roomSpaces?.getSnapshot?.(),
     person: {
-      source: 'person-organisms',
-      opened: featureNavigator?.getSnapshot?.()?.activeId === 'person',
-      selectedId: realityLensPersonId ?? null,
-      lensMode: realityLensMode,
-      profileCount: Number.isInteger(personOrganisms?.count) ? personOrganisms.count : 0,
-      fictional: true,
+      source: 'person-studio',
+      opened: personStudio?.active === true,
+      selectedId: personStudio?.getSnapshot?.().avatar?.identity.personId ?? null,
+      status: personStudio?.getSnapshot?.().approved ? 'approved-local-avatar' : 'review-avatar',
+      fictional: false,
       localOnly: true,
-      simulation: true,
+      simulation: false,
       externalNetwork: false,
       externalTransfer: false,
-      persistence: false,
+      persistence: 'explicit-local-save',
       executable: false,
     },
     "reality-lens": {
-      source: 'person-organisms',
-      opened: featureNavigator?.getSnapshot?.()?.activeId === 'reality-lens',
-      selectedId: realityLensPersonId ?? null,
-      lensMode: realityLensMode,
-      profileCount: Number.isInteger(personOrganisms?.count) ? personOrganisms.count : 0,
+      source: 'reality-assembly',
+      opened: globalThis.__TUMBO_REALITY_ASSEMBLY__?.active === true,
+      selectedId: globalThis.__TUMBO_REALITY_ASSEMBLY__?.getSnapshot?.().selectedId ?? null,
+      status: globalThis.__TUMBO_REALITY_ASSEMBLY__?.getSnapshot?.().spaceView ?? 'mounting',
       fictional: true,
       localOnly: true,
       simulation: true,
@@ -8105,17 +8129,27 @@ projectionSession = createProjectionSession({
     "runtime-sync": blockWorldRuntimeSync?.getSnapshot?.(),
     "block-world-snapshot": blockWorldSnapshot?.getSnapshot?.(),
     arena: arenaGames?.getSnapshot?.(),
+    chess: { ...chessArena?.getSnapshot?.(), source: 'chess-arena', opened: chessConsole?.hidden === false, localOnly: true, simulation: false },
     academy: academyConsole?.getSnapshot?.(),
+    "block-world": blockWorld?.getSnapshot?.(),
+    "asset-token": { source: 'asset-token-console', opened: document.getElementById('asset-launch')?.hidden === false && !document.getElementById('asset-launch')?.closest('[hidden]'), localOnly: true, simulation: true },
+    contracts: contractsMarkets?.getSnapshot?.(),
+    agent: { ...botPlazaConsole?.getSnapshot?.(), localOnly: true, simulation: true, persistence: 'local-browser' },
     paycore: paycoreConsole?.getSnapshot?.(),
     t402: t402Console?.getSnapshot?.(),
     "neural-mesh": neuralMeshConsole?.getSnapshot?.(),
     "picture-matter": pictureMatterConsole?.getSnapshot?.(),
     "nft-atelier": nftAtelierConsole?.getSnapshot?.(),
     "muse-agent": museAgentConsole?.getSnapshot?.(),
-    "bot-plaza": botPlazaConsole?.getSnapshot?.(),
+    "bot-plaza": { ...botPlazaConsole?.getSnapshot?.(), localOnly: true, simulation: true, persistence: 'local-browser' },
     "contract-atelier": {...contractAtelierConsole?.getSnapshot?.(),automation:contractAutomation?.snapshot?.(),automationError:contractAutomationError},
     "luna-companion": lunaCompanionConsole?.getSnapshot?.(),
     "wardrobe-atelier": wardrobeAtelierConsole?.getSnapshot?.(),
+    "white-paper": whitePaperConsole?.getSnapshot?.(),
+    "gesture-lens": gestureLensConsole?.getSnapshot?.(),
+    youtube: { ...youtubeSurface?.getSnapshot?.(), source: 'youtube-surface', externalSource: true, localOnly: false, simulation: false },
+    "social-mirror": socialMirrorConsole?.getSnapshot?.(),
+    "web-ai": { ...webAiConsole?.getSnapshot?.(), status: webAiConsole?.getSnapshot?.().personalChat?.state ?? 'unavailable', externalSource: true, localOnly: !webAiConsole?.getSnapshot?.().personalChat?.connected, externalNetwork: webAiConsole?.getSnapshot?.().personalChat?.connected === true, persistence: 'local-browser' },
     ledger: ledgerProofConsole?.getSnapshot?.(),
     gateway: liveGatewayConsole?.getSnapshot?.(),
     "protocol-evidence": protocolEvidence?.getSnapshot?.(),
@@ -9366,6 +9400,8 @@ personStudio=createPersonStudio({THREE,renderer,scene,camera,controls,world,targ
   onIntent:(type,detail)=>projectionBridge.emitIntent(type,'person-studio',detail),
 });
 window.__TUMBO_PERSON_STUDIO__=personStudio;
+// Restore the Person owner before retrying an explicitly saved wardrobe look.
+personStudio.ready.then(()=>wardrobeAtelierConsole?.syncEquipped?.('person-ready'));
 let realityAssemblyFloorVisibility=null;
 realityAssembly=createRealityAssembly({THREE,renderer,scene,camera,controls,world,targets:raycastTargets,features:FEATURE_DEFINITIONS,relationships:FEATURE_HANDOFF_LINKS,reducedMotion,environmentTexture:personStudio.getEnvironmentTexture(),
   onNavigate:(id)=>{featureNavigator.select(id,'reality-assembly',{updateLocation:false});featureNavigator.close();},
@@ -9390,7 +9426,7 @@ realityAssembly=createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     if(id==='person'){const state=personStudio.getSnapshot();return {summary:state.approved?'Approved local avatar and saved wardrobe are connected. No cloud account is implied.':'Reference-built local avatar is available for explicit approval.'};}
     if(id==='multi-sport-events'){const state=multiSportEventsConsole?.getSnapshot();return {summary:state?.summary?.records?.length?`${state.summary.records.length} public records currently loaded. Open Sports for timestamps and source evidence.`:'No public sports records loaded in this session. Open Sports and explicitly refresh a provider.'};}
     if(id==='world-events'){const state=worldEventsConsole?.getSnapshot();return {summary:state?.summary?.records?.length?`${state.summary.records.length} provider observations loaded; inspect their provenance in World Pulse.`:'Open World Pulse to request current source observations. The designed city geometry is not a real-world measurement.'};}
-    return {summary:'This cube points to the existing feature owner. Inspect that feature for its local state, capability gates and provider evidence.'};
+    return {summary:'This object opens the existing feature owner. Inspect that space for its local state, available controls and source evidence.'};
   },
 });
 window.__TUMBO_REALITY_ASSEMBLY__=realityAssembly;

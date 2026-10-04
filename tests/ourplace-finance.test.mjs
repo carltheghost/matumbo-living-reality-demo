@@ -135,3 +135,21 @@ test('an offer at its exact expiry explains withdrawal while blocking another bo
   assert.match(ui.info('offers').textContent,/20\.000 TUMBO-SIM capital reserved.*Offer expired; withdraw unused capital/);assert.equal(ui.actions.get('loan-borrow').node.disabled,true);assert.equal(ui.actions.get('loan-offer-cancel').node.disabled,false);
   assert.throws(()=>ui.click('loan-borrow'),/expired/);assert.equal(fx.finance.snapshot().loans.length,0);ui.click('loan-offer-cancel');assert.equal(fx.engine.balance('u:you','TUMBO'),100000);ui.controller.dispose();
 });
+
+test('repayment deadline default is reachable only when overdue, then liquidates through fresh oracle guards', () => {
+  const fx=fixture(),ui=fx.mount();ui.click('oracle-record');ui.click('loan-offer');ui.click('loan-borrow');
+  assert.equal(ui.actions.get('loan-maturity-default').node.disabled,true);
+  const before=fx.kernel.snapshot().commandCount;
+  assert.throws(()=>ui.click('loan-maturity-default'),/has not reached/);
+  assert.equal(fx.kernel.snapshot().commandCount,before);
+  ui.click('clock-advance-hour');assert.equal(ui.actions.get('loan-maturity-default').node.disabled,false);
+  ui.click('loan-maturity-default');assert.equal(fx.finance.snapshot().loans[0].defaultReason,'maturity');
+  assert.throws(()=>ui.click('loan-liquidate'),/stale|fresh/);
+  assert.equal(fx.finance.snapshot().loans[0].status,'defaulted');
+  ui.click('oracle-record');ui.click('loan-liquidate');
+  const loan=fx.finance.snapshot().loans[0];assert.equal(loan.status,'repaid');assert.equal(loan.remainingDebtFluff,0);
+  assert.equal(loan.seizedCollateralFluff+loan.returnedCollateralFluff,loan.collateralFluff);
+  assert.equal(fx.kernel.proof().conserved,true);
+  assert.equal(fx.finance.snapshot().obligations.filter(row=>Object.hasOwn(row,'covered')).every(row=>row.covered),true);
+  ui.controller.dispose();
+});

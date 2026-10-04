@@ -133,6 +133,60 @@ test("registry persists bots across restarts (round-trip)", () => {
   assert.ok(log.some((entry) => entry.from === helper.id && entry.text === "Hi you!"));
 });
 
+test('one-off callback plugins are honestly session-only and are never serialized as executable code', () => {
+  const storage = fakeStorage(), registry = createBotRegistry({ storage, now });
+  const installed = registry.install(echoPlugin(), { persisted: true, approvedCapabilities: ['world.announce'] });
+  assert.equal(installed.persisted, false);
+  const runtime = createBotRuntime({ registry, now }); runtime.tellBot(installed.id, 'hello');
+  assert.ok(runtime.getBus().getLog().some(entry => entry.text === 'echo: hello'));
+  assert.equal(createBotRegistry({ storage, now }).getBot(installed.id), null);
+});
+
+test('trusted shipped plugin factories join automatically and retain only explicitly approved powers on reload', () => {
+  const storage = fakeStorage();
+  const pluginFactories = { 'echo-bot': { version: '1.0.0', create: () => echoPlugin() } };
+  const first = createBotRegistry({ storage, now, pluginFactories });
+  assert.equal(first.getBot('echo-bot').enabled, true); assert.equal(first.getBot('echo-bot').persisted, true);
+  assert.deepEqual(first.getBot('echo-bot').approvedCapabilities, []);
+  first.approveCapabilities('echo-bot', ['world.announce']); first.setEnabled('echo-bot', false);
+  const second = createBotRegistry({ storage, now, pluginFactories });
+  assert.deepEqual(second.getBot('echo-bot').approvedCapabilities, ['world.announce']); assert.equal(second.getBot('echo-bot').enabled, false);
+  assert.equal(second.getStartupIssues().length, 0);
+});
+
+test('factory declaration changes drop removed powers and a new version rests with no inherited approvals', () => {
+  const storage = fakeStorage();
+  const first = createBotRegistry({ storage, now, pluginFactories: { 'echo-bot': { version: '1.0.0', create: () => echoPlugin() } } });
+  first.approveCapabilities('echo-bot', ['world.announce', 'world.message-bots']);
+  const narrowed = createBotRegistry({ storage, now, pluginFactories: { 'echo-bot': { version: '1.0.0', create: () => echoPlugin({ capabilities: ['world.announce'] }) } } });
+  assert.deepEqual(narrowed.getBot('echo-bot').approvedCapabilities, ['world.announce']);
+  const changed = createBotRegistry({ storage, now, pluginFactories: { 'echo-bot': { version: '2.0.0', create: () => echoPlugin({ version: '2.0.0', capabilities: ['world.announce', 'world.launch-feature'] }) } } });
+  assert.deepEqual(changed.getBot('echo-bot').approvedCapabilities, []); assert.equal(changed.getBot('echo-bot').enabled, false);
+  assert.equal(changed.getStartupIssues()[0].reason, 'version-changed');
+});
+
+test('removed shipped factories keep saved settings without executing absent code and restore when code returns', () => {
+  const storage = fakeStorage(), pluginFactories = { 'echo-bot': { version: '1.0.0', create: () => echoPlugin() } };
+  const first = createBotRegistry({ storage, now, pluginFactories }); first.approveCapabilities('echo-bot', ['world.announce']); first.setEnabled('echo-bot', false);
+  const absent = createBotRegistry({ storage, now });
+  assert.equal(absent.getPlugin('echo-bot'), null); assert.equal(absent.getStartupIssues()[0].reason, 'factory-unavailable');
+  absent.setEnabled('muse-agent', false); // A separate settings write must not discard the held record.
+  const returned = createBotRegistry({ storage, now, pluginFactories });
+  assert.equal(returned.getBot('echo-bot').enabled, false); assert.deepEqual(returned.getBot('echo-bot').approvedCapabilities, ['world.announce']);
+});
+
+test('persisted installation uses known factory callbacks and refuses invalid factory identities or scripts', () => {
+  const storage = fakeStorage(), pluginFactories = { 'echo-bot': { version: '1.0.0', create: () => echoPlugin() } };
+  const registry = createBotRegistry({ storage, now, pluginFactories });
+  registry.install(echoPlugin({ onMessage: () => 'unregistered replacement' }));
+  const runtime = createBotRuntime({ registry, now }); runtime.tellBot('echo-bot', 'hello');
+  assert.ok(runtime.getBus().getLog().some(entry => entry.text === 'echo: hello'));
+  assert.equal(runtime.getBus().getLog().some(entry => entry.text === 'unregistered replacement'), false);
+  const rejected = createBotRegistry({ storage: fakeStorage(), now, pluginFactories: { 'echo-bot': { version: '1.0.0', create: 'https://example.com/plugin.js' }, bad: { version: '1.0.0', create: () => echoPlugin() } } });
+  assert.equal(rejected.listBots().length, 1); assert.equal(rejected.getStartupIssues().length, 2);
+  assert.throws(() => registry.install(echoPlugin({ id: 'muse-agent' })), /reserved/);
+});
+
 // ---------------------------------------------------------------------------
 // Message routing: user→bot and bot→bot
 // ---------------------------------------------------------------------------

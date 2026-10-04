@@ -213,6 +213,7 @@ export function createPersonStudio({THREE,renderer,scene,camera,controls,world,t
   };
   renderer.domElement.addEventListener('pointerdown',pointerDown);renderer.domElement.addEventListener('pointerup',pointerUp);renderer.domElement.addEventListener('pointercancel',pointerCancel);
   return {open,close,get active(){return active;},resolve:spatial.resolve,selectObject,
+    ready:owner.ready,
     chooseOutfit:(id)=>owner.chooseOutfit(id),
     setHologramTint:(tint,opacity)=>spatial.setHologramTint?.(tint,opacity),
     getEnvironmentTexture:()=>environmentTarget.texture,

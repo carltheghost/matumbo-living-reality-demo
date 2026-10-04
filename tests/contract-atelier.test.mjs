@@ -375,3 +375,14 @@ test("mounted multi contract shows a resolve hint about logic-satisfying facts",
     && /logic/i.test(String(el.textContent || "")));
   assert.ok(hints.length >= 1, "resolve hint element is present in the mounted console");
 });
+
+test("resetting manual atelier preserves the shared approved outcome desk", () => {
+  const doc = interactiveDocument();
+  let resets = 0;
+  const shared = {getSnapshot:()=>({}),list:()=>[],listNfts:()=>[],reset:()=>{resets++;}};
+  const controller = createContractAtelierConsole({documentRoot:doc,atelier:atelier("manual-reset"),outcomeDesk:shared});
+  doc.byId("contract-atelier-reset").click();
+  controller.reset();
+  assert.equal(resets,0,"manual reset must not erase another domain's approved books and awards");
+  assert.match(doc.byId("contract-atelier-status").textContent,/SHARED APPROVED BOOKS AND AWARDS PRESERVED/);
+});

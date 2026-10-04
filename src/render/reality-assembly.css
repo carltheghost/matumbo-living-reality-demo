@@ -546,3 +546,16 @@ body.ourplace-designed #reality-assembly .assembly-primary{border-color:var(--ou
 }
 body.assembly-mode #reality-assembly .reality-surface-semantic-owner::before,
 body.assembly-mode #reality-assembly .reality-surface-semantic-owner::after{display:none!important}
+
+/* Optional navigation remains inside View, preserving the quiet home screen. */
+#reality-assembly .assembly-orbit-navigation{display:flex;align-items:center;gap:12px;min-width:0;padding:8px;border-left:1px solid #8fc9e333}
+#reality-assembly .assembly-orbit-navigation>div:last-child{display:grid;gap:5px;min-width:0}
+#reality-assembly .assembly-orbit-navigation strong{font-size:12px;color:#def4fc}
+#reality-assembly .assembly-orbit-navigation small{font-size:10px;color:#9ab8c9;white-space:normal}
+#reality-assembly .assembly-orbit-dial{display:grid;place-items:center;flex:0 0 60px;width:60px;height:60px;border-radius:50%;border:1px solid #83d5de88;background:radial-gradient(circle,#164758,#081b29);touch-action:none;cursor:grab;box-shadow:inset 0 0 0 7px #081b2977}
+#reality-assembly .assembly-orbit-dial:active{cursor:grabbing}
+#reality-assembly .assembly-orbit-dial:focus-visible{outline:2px solid #a7efff;outline-offset:3px}
+#reality-assembly .assembly-orbit-dial span{font-size:32px;line-height:1;color:#a7e6ee;user-select:none}
+#reality-assembly .assembly-orbit-actions{display:flex;gap:5px}
+#reality-assembly .assembly-orbit-actions button{min-width:32px;min-height:32px;padding:3px 7px;font-size:16px!important}
+@media(max-width:700px){#reality-assembly .assembly-orbit-navigation{flex-basis:100%;border-left:0;border-top:1px solid #8fc9e333}}

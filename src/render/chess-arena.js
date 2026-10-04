@@ -15,7 +15,7 @@
  * ledger, no signing, no settlement.
  */
 import * as THREE from 'three';
-import {createChessArenaState,applyChessArenaMove} from '../domains/chess-arena.js?v=20261003-skin360';
+import {createChessArenaState,applyChessArenaMove,undoChessArenaMove} from '../domains/chess-arena.js?v=20261003-skin360';
 import {chooseAiMove,CHESS_AI_DIFFICULTIES,resolveAiDifficulty} from '../domains/chess-ai.js?v=20261003-skin360';
 import {avatarIdlePose,avatarGlide,AVATAR_MOTION} from '../domains/avatar-motion.js?v=20261003-skin360';
 import {AVATAR_FACE_STORAGE_KEY} from '../domains/avatar-style.js?v=20261003-skin360';
@@ -80,8 +80,9 @@ export function mountChessArena({documentRoot=document,host}){
   for(const key of Object.keys(CHESS_AI_DIFFICULTIES)){const opt=documentRoot.createElement('option');opt.value=key;opt.textContent=CHESS_AI_DIFFICULTIES[key].label;diffSelect.append(opt);}
   diffLabel.append(diffSelect);
   const newBtn=documentRoot.createElement('button');newBtn.type='button';newBtn.textContent='New game';
+  const undoBtn=documentRoot.createElement('button');undoBtn.type='button';undoBtn.textContent='Take back';undoBtn.setAttribute('aria-label','Take back your last turn');
   const resignBtn=documentRoot.createElement('button');resignBtn.type='button';resignBtn.textContent='Resign';resignBtn.className='chess-arena-resign';
-  controls.append(modeLabel,diffLabel,newBtn,resignBtn);
+  controls.append(modeLabel,diffLabel,newBtn,undoBtn,resignBtn);
   const promotion=documentRoot.createElement('div');promotion.className='chess-arena-promotion';promotion.hidden=true;
   const promoLabel=documentRoot.createElement('span');promoLabel.textContent='Promote to:';promotion.append(promoLabel);
   chip.append(status,controls,promotion);
@@ -105,6 +106,7 @@ export function mountChessArena({documentRoot=document,host}){
   let pendingPromotion=null;
   let alive=true;
   let aiGeneration=0; // invalidates stale AI timeouts across newGame()
+  let animationGeneration=0; // old glides cannot mutate a rebuilt board
   let activeGlides=0; // concurrent glide animations (castling moves two pieces)
   const gliding=new Set(); // meshes currently traveling; the idle loop leaves them alone
   const reducedMotion=!!(documentRoot.defaultView?.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches);
@@ -182,7 +184,8 @@ export function mountChessArena({documentRoot=document,host}){
   }
 
   function buildAllPieces(){
-    for(const [,group] of meshes){pieces.remove(group);releasePiece(group);}
+    // Captured figures can still be shrinking after leaving the square map.
+    for(const group of [...pieces.children]){pieces.remove(group);releasePiece(group);}
     meshes.clear();
     for(const row of state.board)for(const piece of row){
       if(!piece)continue;
@@ -203,13 +206,16 @@ export function mountChessArena({documentRoot=document,host}){
     if(resigned){
       text=`${sideName[resigned]} resigned · ${sideName[resigned==='w'?'b':'w']} wins`;
     }else if(state.gameOver){
-      text=state.checkmate?`CHECKMATE · ${state.turn==='w'?'Black':'White'} wins`:'DRAW · match complete';
+      text=state.checkmate?`CHECKMATE · ${state.turn==='w'?'Black':'White'} wins`:`DRAW · ${state.drawReason ?? 'match complete'}`;
     }else{
       text=`${state.check?'CHECK · ':''}${turnName} to move`;
       if(sanLog.length)text+=` · ${sanLog[sanLog.length-1]}`;
     }
     if(aiThinking)text+=' · AI thinking…';
     status.textContent=text;
+    undoBtn.disabled=!state.history.some(move=>mode==='local'||move.color===humanSide());
+    resignBtn.disabled=state.gameOver||!!resigned||aiThinking;
+    diffSelect.disabled=mode==='local';
     describeBadge();
   }
 
@@ -255,12 +261,13 @@ export function mountChessArena({documentRoot=document,host}){
     const from=[fx,baseY,fz];
     const to=[tx,baseY,tz];
     const start=performance.now();
+    const generation=animationGeneration;
     const duration=AVATAR_MOTION.moveDurationMs;
     const seed=mesh.userData.motionSeed??0;
     activeGlides++;
     gliding.add(mesh);
     const tick=(now)=>{
-      if(!alive)return;
+      if(!alive||generation!==animationGeneration)return;
       const t=Math.min(1,(now-start)/duration);
       const p=avatarGlide({from,to,t,arc});
       mesh.position.set(p.x,p.y,p.z);
@@ -277,8 +284,9 @@ export function mountChessArena({documentRoot=document,host}){
 
   function shrinkOut(group,onDone){
     const start=performance.now();
+    const generation=animationGeneration;
     const tick=(now)=>{
-      if(!alive)return;
+      if(!alive||generation!==animationGeneration)return;
       const t=Math.min(1,(now-start)/260);
       group.scale.setScalar(Math.max(0.001,1-t));
       if(t<1){requestAnimationFrame(tick);return;}
@@ -444,6 +452,7 @@ export function mountChessArena({documentRoot=document,host}){
 
   function newGame(){
     aiGeneration++; // strand any in-flight AI timeout from the old game
+    animationGeneration++;
     hidePromotionPicker();
     clearSelection();
     resigned=null;selected=null;aiThinking=false;activeGlides=0;gliding.clear();
@@ -455,11 +464,25 @@ export function mountChessArena({documentRoot=document,host}){
     maybeAiMove();
   }
 
+  function takeBack(){
+    if(undoBtn.disabled||!alive)return false;
+    aiGeneration++;animationGeneration++;
+    hidePromotionPicker();clearSelection();
+    aiThinking=false;thinking.hidden=true;resigned=null;activeGlides=0;gliding.clear();
+    state=undoChessArenaMove(state);
+    const human=humanSide();
+    if(human&&state.turn!==human&&state.history.length)state=undoChessArenaMove(state);
+    sanLog.splice(0,sanLog.length,...state.history.map(move=>move.san));
+    buildAllPieces();renderMoveList();refreshStatus();maybeAiMove();
+    return true;
+  }
+
   modeSelect.value=mode;
   diffSelect.value=difficulty;
   modeSelect.addEventListener('change',()=>{mode=MODES[modeSelect.value]?modeSelect.value:'white';newGame();});
   diffSelect.addEventListener('change',()=>{difficulty=resolveAiDifficulty(diffSelect.value).id;refreshStatus();});
   newBtn.addEventListener('click',newGame);
+  undoBtn.addEventListener('click',takeBack);
   resignBtn.addEventListener('click',()=>{
     if(state.gameOver||resigned||aiThinking||!alive)return;
     resigned=mode==='local'?state.turn:humanSide();
@@ -470,12 +493,14 @@ export function mountChessArena({documentRoot=document,host}){
   const view=documentRoot.defaultView??null;
   function getSnapshot(){return {state,selected,appearance,mode,difficulty,resigned,aiThinking,sanLog:[...sanLog]};}
   function refreshAppearance(){
+    animationGeneration++;activeGlides=0;gliding.clear();
     const next=readArenaAvatarAppearance({storage:globalThis.localStorage??null});
     builders.dispose();
     builders=createPieceBuilders(THREE,next);
     appearance=next;
     buildAllPieces();
     refreshStatus();
+    maybeAiMove();
     return getSnapshot();
   }
   const onStorage=(event)=>{
@@ -608,7 +633,7 @@ export function mountChessArena({documentRoot=document,host}){
       view?.removeEventListener?.('visibilitychange',onMotionVisibilityChange);
       motionVisibilityObserver?.disconnect?.();motionVisibilityObserver=null;
       hall.dispose();
-      for(const [,group] of meshes){pieces.remove(group);releasePiece(group);}
+      for(const group of [...pieces.children]){pieces.remove(group);releasePiece(group);}
       meshes.clear();
       builders.dispose();
       renderer.dispose();
