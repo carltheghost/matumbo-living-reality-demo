@@ -9424,13 +9424,29 @@ realityAssembly=createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   readFeature:(id)=>{
     if(id==='contract-atelier'){const contracts=contractWorldSnapshot?.contracts??[];return {summary:`${contracts.length} saved contracts · ${contracts.filter(item=>item.status==='active').length} armed · ${contracts.reduce((total,item)=>total+item.receipts.length,0)} local receipts. Conditions, approvals and history belong to the same world entity.`};}
     if(id==='person'){const state=personStudio.getSnapshot();return {summary:state.approved?'Approved local avatar and saved wardrobe are connected. No cloud account is implied.':'Reference-built local avatar is available for explicit approval.'};}
+    if(id==='bot-plaza'){const bots=botPlazaRegistry.listBots();return {summary:`${bots.filter(bot=>bot.enabled).length} of ${bots.length} local bots enabled. Lens Guide and Plan Helper are scripted helpers; manage them in Bot Plaza.`};}
+    if(id==='web-ai'){const state=webAiConsole.getSnapshot().personalChat;return {summary:`My GPT: ${state?.state??'unavailable'}. Connections shows ChatGPT, OpenAI API and NVIDIA readiness; account setup belongs to this object.`};}
+    if(id==='gateway'){return {summary:'Inspect existing public feeds, their observation dates and provider states. Connections offers individual public source retries and a local reference-rate calculator.'};}
     if(id==='multi-sport-events'){const state=multiSportEventsConsole?.getSnapshot();return {summary:state?.summary?.records?.length?`${state.summary.records.length} public records currently loaded. Open Sports for timestamps and source evidence.`:'No public sports records loaded in this session. Open Sports and explicitly refresh a provider.'};}
     if(id==='world-events'){const state=worldEventsConsole?.getSnapshot();return {summary:state?.summary?.records?.length?`${state.summary.records.length} provider observations loaded; inspect their provenance in World Pulse.`:'Open World Pulse to request current source observations. The designed city geometry is not a real-world measurement.'};}
     return {summary:'This object opens the existing feature owner. Inspect that space for its local state, available controls and source evidence.'};
   },
 });
 window.__TUMBO_REALITY_ASSEMBLY__=realityAssembly;
-const apiConnections=mountApiConnections({autoCheck:true,onOpen:()=>realityAssembly.closePanels(),onOpenFeature:id=>{featureNavigator.select(id,'button');featureNavigator.close();}});
+const apiConnections=mountApiConnections({
+  autoCheck:true,
+  getLocalTools:()=>botPlazaRegistry.listBots(),
+  onOpen:()=>realityAssembly.closePanels(),
+  onOpenFeature:(id,options={})=>{
+    // Changing a provider/helper within the open object preserves its text
+    // view, geometry and camera. Only a different owner needs navigation.
+    const mounted=realityAssembly.getSnapshot().liveObject;
+    if(featureNavigator.getSnapshot().activeId!==id||mounted?.entityId!==id||mounted.panelId!==REALITY_ASSEMBLY_FEATURE_PANEL_IDS[id])featureNavigator.select(id,'button');
+    featureNavigator.close();
+    if(id==='web-ai'&&options.provider)webAiConsole.openGptProvider(options.provider);
+    if(id==='bot-plaza'&&options.botId)botPlazaConsole.openWithBot(options.botId);
+  },
+});
 window.__TUMBO_API_CONNECTIONS__=apiConnections;
 document.querySelector('#reality-assembly .assembly-header').append(document.getElementById('api-connections-trigger'));
 document.querySelector('#reality-assembly').addEventListener('click',event=>{if(!event.target.closest('#api-connections-trigger'))apiConnections.close();});

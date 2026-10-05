@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mountMyGpt } from '../src/render/my-gpt.js';
+import { mountMyGpt, GPT_REQUEST_TIMEOUT_MS } from '../src/render/my-gpt.js';
 import { createWebAiConsole } from '../src/render/web-ai.js';
 import { GPT_STORAGE_KEY } from '../src/domains/my-gpt.js';
 import { WEB_AI_STORAGE_KEYS } from '../src/domains/web-ai.js';
@@ -37,6 +37,7 @@ function namedButton(root, name) { const item = walk(root).find(item => item.tag
 function classNode(root, name) { const item = walk(root).find(item => item.className === name); assert.ok(item, `Missing class ${name}`); return item; }
 function response(data, status = 200) { return { ok: status < 400, status, async json() { return data; } }; }
 function deferred() { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; }
+function flushRequests() { return new Promise(resolve => setImmediate(resolve)); }
 function status({ chatgpt = {}, openai = {}, ...extra } = {}) {
   return { service: 'matumbo-gpt-bridge', version: 1, credentialsInBrowser: false,
     chatgpt: { state: 'signed_in', planUsage: true, activeAccountId: 'oaiapp_example', accounts: [{ id: 'oaiapp_example', label: 'Tumbo', active: true }], ...chatgpt },
@@ -71,6 +72,26 @@ test('mount is local and opening or refreshing never automatically sends a chat'
   context.api.destroy();
   await context.win.fire('focus');
   assert.equal(context.requests.length, 2);
+});
+
+test('owner provider selection updates My GPT locally and accepts only supported providers', () => {
+  const context = setup();
+  assert.equal(context.api.selectProvider('openai'), true);
+  assert.equal(context.api.snapshot().provider, 'openai');
+  assert.equal(namedButton(context.host, 'OpenAI API').getAttribute('aria-pressed'), 'true');
+  assert.equal(namedButton(context.host, 'ChatGPT plan').getAttribute('aria-pressed'), 'false');
+  assert.equal(context.requests.length, 0);
+  for (const provider of ['nvidia', '', null, 'OpenAI', {}, undefined]) {
+    assert.throws(() => context.api.selectProvider(provider), /Choose ChatGPT plan or OpenAI API/);
+    assert.equal(context.api.snapshot().provider, 'openai');
+  }
+  assert.equal(context.api.selectProvider('chatgpt'), true);
+  assert.equal(context.api.snapshot().provider, 'chatgpt');
+  assert.equal(context.requests.length, 0);
+  context.api.destroy();
+  assert.equal(context.api.selectProvider('openai'), false);
+  assert.equal(context.api.snapshot().provider, 'chatgpt');
+  assert.equal(context.requests.length, 0);
 });
 
 test('bridge calls fail closed on public origins and on a mismatched service contract', async () => {
@@ -186,16 +207,171 @@ test('missing model catalog gates ChatGPT Send and local dependency guidance is 
   context.api.destroy();
 });
 
-test('Stop waiting aborts locally without claiming that provider processing was cancelled', async () => {
+test('Stop waiting settles an uncooperative fetch without claiming that provider processing was cancelled', { timeout: 1_000 }, async () => {
   const pending = deferred();
   const context = setup({ fetcher: path => path === '/api/gpt/chat' ? pending.promise : response(status()) });
   await context.api.refresh(); const sent = promptAndSend(context); await new Promise(resolve => setImmediate(resolve));
   await namedButton(context.host, 'Stop waiting').click();
+  await sent;
   assert.match(context.host.textContent, /provider may continue processing/);
+  assert.doesNotMatch(context.host.textContent, /timed out|Stopped waiting after/);
   assert.equal(context.requests[1].options.signal.aborted, true);
-  pending.resolve(response({ provider: 'chatgpt', content: 'Late', model: 'plan-model' })); await sent;
+  assert.equal(context.api.snapshot().pending, false);
+  pending.resolve(response({ provider: 'chatgpt', content: 'Late', model: 'plan-model' })); await flushRequests();
+  assert.equal(context.api.snapshot().workspace.conversations[0].messages.length, 1);
   context.api.destroy();
 });
+
+for (const stalledStage of ['fetch', 'body']) {
+  test(`status deadline settles a stalled ${stalledStage}, ignores its late data and restores refresh`, async t => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const pending = deferred(); let first = true;
+    const context = setup({ fetcher: () => {
+      if (!first) return response(status());
+      first = false;
+      return stalledStage === 'fetch' ? pending.promise : { ...response(null), json: () => pending.promise };
+    } });
+    t.after(() => context.api.destroy());
+    const checking = context.api.refresh(); await flushRequests();
+    t.mock.timers.tick(GPT_REQUEST_TIMEOUT_MS['/api/gpt/status'] - 1); await flushRequests();
+    assert.equal(namedButton(context.host, 'Refresh status').disabled, true);
+    t.mock.timers.tick(1); assert.equal(await checking, null);
+    assert.equal(context.requests[0].options.signal.aborted, true);
+    assert.equal(namedButton(context.host, 'Refresh status').disabled, false);
+    assert.equal(context.api.snapshot().connected, false);
+    assert.match(classNode(context.host, 'my-gpt-notice').textContent, /Connection status timed out after 15 seconds/);
+    assert.equal(classNode(context.host, 'my-gpt-notice').dataset.kind, 'error');
+    pending.resolve(stalledStage === 'fetch' ? response(status()) : status()); await flushRequests();
+    assert.equal(context.api.snapshot().connected, false);
+    assert.match(classNode(context.host, 'my-gpt-notice').textContent, /timed out/);
+    await context.api.refresh();
+    assert.equal(context.api.snapshot().connected, true);
+    // Successful work releases its deadline; advancing time must not abort it.
+    t.mock.timers.tick(GPT_REQUEST_TIMEOUT_MS['/api/gpt/status']); await flushRequests();
+    assert.equal(context.requests[1].options.signal.aborted, false);
+    assert.match(classNode(context.host, 'my-gpt-notice').textContent, /Ready to send/);
+  });
+}
+
+test('replacing status settles an aborted uncooperative fetch and preserves the latest readiness', { timeout: 1_000 }, async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const pending = deferred(); let first = true;
+  const context = setup({ fetcher: () => { if (!first) return response(status()); first = false; return pending.promise; } });
+  t.after(() => context.api.destroy());
+  const previous = context.api.refresh(); await flushRequests();
+  await context.api.refresh(); assert.equal(await previous, null);
+  assert.equal(context.requests[0].options.signal.aborted, true);
+  assert.equal(context.api.snapshot().connected, true);
+  assert.equal(namedButton(context.host, 'Refresh status').disabled, false);
+  t.mock.timers.tick(GPT_REQUEST_TIMEOUT_MS['/api/gpt/status']); await flushRequests();
+  assert.equal(context.requests[1].options.signal.aborted, false);
+  assert.match(classNode(context.host, 'my-gpt-notice').textContent, /Ready to send/);
+  pending.resolve(response(status({ credentialsInBrowser: true }))); await flushRequests();
+  assert.equal(context.api.snapshot().connected, true);
+});
+
+test('model loading times out, retains the current catalog and allows another load', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const pending = deferred(); let firstModels = true;
+  const context = setup({ fetcher: path => {
+    if (path !== '/api/gpt/models') return response(status());
+    if (!firstModels) return response({ models: [{ id: 'retry-model', provider: 'chatgpt' }] });
+    firstModels = false; return pending.promise;
+  } });
+  t.after(() => context.api.destroy()); await context.api.refresh();
+  const loading = namedButton(context.host, 'Load available models').click(); await flushRequests();
+  assert.equal(namedButton(context.host, 'Load available models').disabled, true);
+  t.mock.timers.tick(GPT_REQUEST_TIMEOUT_MS['/api/gpt/models']); await loading;
+  assert.equal(namedButton(context.host, 'Load available models').disabled, false);
+  assert.equal(label(context.host, 'Model').value, 'plan-model');
+  assert.equal(context.requests[1].options.signal.aborted, true);
+  assert.match(classNode(context.host, 'my-gpt-notice').textContent, /Loading models timed out after 180 seconds/);
+  pending.resolve(response({ models: [{ id: 'late-model', provider: 'chatgpt' }] })); await flushRequests();
+  assert.equal(label(context.host, 'Model').value, 'plan-model');
+  await namedButton(context.host, 'Load available models').click();
+  assert.equal(label(context.host, 'Model').value, 'retry-model');
+  t.mock.timers.tick(GPT_REQUEST_TIMEOUT_MS['/api/gpt/models']); await flushRequests();
+  assert.equal(context.requests[0].options.signal.aborted, false);
+  assert.equal(context.requests[2].options.signal.aborted, false);
+});
+
+test('sign-in initiation timeout closes the reserved tab and permits a new explicit attempt', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const pending = deferred(); let firstSignIn = true;
+  const authorization = { authorizationUrl: 'https://auth.openai.com/api/accounts/authorize?state=retry-only' };
+  const context = setup({ fetcher: path => {
+    if (path !== '/api/gpt/sign-in') return response(status());
+    if (!firstSignIn) return response(authorization);
+    firstSignIn = false; return pending.promise;
+  } });
+  t.after(() => context.api.destroy()); await context.api.refresh();
+  const connecting = namedButton(context.host, 'Continue with ChatGPT').click(); await flushRequests();
+  assert.equal(namedButton(context.host, 'Continue with ChatGPT').disabled, true);
+  t.mock.timers.tick(GPT_REQUEST_TIMEOUT_MS['/api/gpt/sign-in']); await connecting;
+  assert.equal(context.opened[0].closed, true);
+  assert.equal(context.opened[0].location.href, 'about:blank');
+  assert.equal(namedButton(context.host, 'Continue with ChatGPT').disabled, false);
+  assert.equal(context.requests[1].options.signal.aborted, true);
+  assert.match(classNode(context.host, 'my-gpt-notice').textContent, /Sign-in setup timed out after 30 seconds/);
+  pending.resolve(response(authorization)); await flushRequests();
+  assert.equal(context.opened[0].location.href, 'about:blank');
+  assert.equal(walk(context.host).find(item => item.tagName === 'A' && item.textContent === 'Open ChatGPT authorization →').hidden, true);
+  await namedButton(context.host, 'Continue with ChatGPT').click();
+  assert.equal(context.opened[1].location.href, authorization.authorizationUrl);
+  assert.equal(context.opened[1].closed, false);
+});
+
+test('disconnect timeout releases account controls without claiming revocation or disconnection', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const pending = deferred();
+  const context = setup({ fetcher: path => path === '/api/gpt/disconnect' ? pending.promise : response(status()) });
+  t.after(() => context.api.destroy()); await context.api.refresh();
+  const disconnecting = namedButton(context.host, 'Disconnect ChatGPT').click(); await flushRequests();
+  t.mock.timers.tick(GPT_REQUEST_TIMEOUT_MS['/api/gpt/disconnect']); await disconnecting;
+  assert.equal(namedButton(context.host, 'Disconnect ChatGPT').disabled, false);
+  assert.equal(label(context.host, 'ChatGPT account').disabled, false);
+  assert.equal(context.requests[1].options.signal.aborted, true);
+  assert.match(classNode(context.host, 'my-gpt-notice').textContent, /Disconnection and remote revocation are not confirmed/);
+  pending.resolve(response({ disconnected: true, remoteRevocationConfirmed: true, message: 'Signed out.' })); await flushRequests();
+  assert.equal(context.requests.length, 2);
+  assert.match(classNode(context.host, 'my-gpt-notice').textContent, /not confirmed/);
+});
+
+for (const stalledStage of ['fetch', 'body']) {
+  test(`chat deadline settles a stalled ${stalledStage}, preserves the prompt and ignores a late answer`, async t => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const pending = deferred(); let firstChat = true;
+    const context = setup({ fetcher: path => {
+      if (path !== '/api/gpt/chat') return response(status());
+      if (!firstChat) return response({ provider: 'chatgpt', model: 'plan-model', content: 'A new answer' });
+      firstChat = false;
+      return stalledStage === 'fetch' ? pending.promise : { ...response(null), json: () => pending.promise };
+    } });
+    t.after(() => context.api.destroy()); await context.api.refresh();
+    const sent = promptAndSend(context, 'Keep my timed-out question'); await flushRequests();
+    t.mock.timers.tick(GPT_REQUEST_TIMEOUT_MS['/api/gpt/chat'] - 1); await flushRequests();
+    assert.equal(context.api.snapshot().pending, true);
+    t.mock.timers.tick(1); await sent;
+    assert.equal(context.api.snapshot().pending, false);
+    assert.equal(namedButton(context.host, 'Stop waiting').hidden, true);
+    assert.equal(namedButton(context.host, 'Send message').textContent, 'Send message');
+    assert.equal(classNode(context.host, 'my-gpt-messages').getAttribute('aria-busy'), 'false');
+    assert.equal(context.requests[1].options.signal.aborted, true);
+    assert.match(classNode(context.host, 'my-gpt-notice').textContent, /Stopped waiting after 240 seconds/);
+    assert.match(classNode(context.host, 'my-gpt-notice').textContent, /provider may continue processing/i);
+    assert.equal(classNode(context.host, 'my-gpt-notice').dataset.kind, 'error');
+    assert.equal(classNode(context.host, 'my-gpt-state').textContent, 'Signed in');
+    const lateAnswer = { provider: 'chatgpt', model: 'plan-model', content: 'A late answer' };
+    pending.resolve(stalledStage === 'fetch' ? response(lateAnswer) : lateAnswer); await flushRequests();
+    assert.deepEqual(context.api.snapshot().workspace.conversations[0].messages, [{ role: 'user', content: 'Keep my timed-out question' }]);
+    assert.doesNotMatch(context.host.textContent, /A late answer/);
+    await promptAndSend(context, 'A new question');
+    assert.equal(context.api.snapshot().workspace.conversations[0].messages.at(-1).content, 'A new answer');
+    t.mock.timers.tick(GPT_REQUEST_TIMEOUT_MS['/api/gpt/chat']); await flushRequests();
+    assert.equal(context.requests[2].options.signal.aborted, false);
+    assert.match(classNode(context.host, 'my-gpt-notice').textContent, /Reply received/);
+  });
+}
 
 test('disconnect preserves a warning when remote revocation cannot be confirmed', async () => {
   const context = setup({ fetcher: path => response(path === '/api/gpt/disconnect' ? { remoteRevocationConfirmed: false, message: 'Local credentials removed. OpenAI revocation could not be confirmed.' } : status()) });
@@ -266,4 +442,13 @@ test('OAuth callback selects My GPT over a saved Web tab and consumes the callba
   assert.equal(consoleApi.getState().tab, 'gpt');
   assert.equal(new URL(context.win.location.href).searchParams.has('gpt_connected'), false);
   assert.deepEqual(context.requests.map(item => item.path), ['/api/gpt/status', '/api/gpt/models']);
+});
+
+test('shared provider link and explicit owner handoff select the requested GPT mode over a saved web tab', () => {
+  const context = setup({ href: 'http://127.0.0.1:8082/?feature=web-ai&gpt-provider=openai' }); context.api.destroy();
+  context.storage.setItem(WEB_AI_STORAGE_KEYS.lastTab, 'web');
+  const consoleApi = createWebAiConsole({ documentRoot: context.doc, windowRoot: context.win, storage: context.storage });
+  assert.equal(consoleApi.getState().tab, 'gpt'); assert.equal(consoleApi.getGptSnapshot().provider, 'openai'); assert.equal(context.requests.length, 0);
+  consoleApi.openGptProvider('chatgpt'); assert.equal(consoleApi.getGptSnapshot().provider, 'chatgpt'); assert.equal(consoleApi.getState().opened, true);
+  assert.throws(() => consoleApi.openGptProvider('unknown')); assert.equal(consoleApi.getGptSnapshot().provider, 'chatgpt');
 });

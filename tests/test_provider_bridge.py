@@ -1,13 +1,17 @@
 """Boundary and HTTP integration checks for the loopback NVIDIA bridge."""
 import importlib.util
+from concurrent.futures import ThreadPoolExecutor
+import http.client
+import io
 import json
 from pathlib import Path
+import queue
 import tempfile
 import threading
 import unittest
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 SPEC = importlib.util.spec_from_file_location("provider_bridge", Path(__file__).parents[1] / "scripts" / "provider_bridge.py")
 bridge = importlib.util.module_from_spec(SPEC)
@@ -16,6 +20,45 @@ SPEC.loader.exec_module(bridge)
 
 def reply(prompt, key, model):
     return {"choices": [{"message": {"content": "Advisory reply."}}], "usage": {"total_tokens": 12, "secret": "hidden", "completion_tokens": -1}}
+
+
+class RejectedBodyDrainTests(unittest.TestCase):
+    def test_only_declared_bytes_are_discarded_without_parsing(self):
+        stream = io.BytesIO(b"not-json-next-request")
+        connection = Mock()
+        connection.gettimeout.return_value = None
+        bridge.discard_rejected_body(stream, connection, {"Content-Length": "8"})
+        self.assertEqual(stream.tell(), 8)
+        self.assertEqual(stream.read(), b"-next-request")
+        self.assertIsNone(connection.settimeout.call_args.args[0])
+
+    def test_total_deadline_bounds_slow_trickles_and_restores_socket_timeout(self):
+        stream, connection = Mock(), Mock()
+        stream.read1.return_value = b"x"
+        connection.gettimeout.return_value = 10
+        with patch.object(bridge.time, "monotonic", side_effect=[0, 8, 9.5, 10.1]):
+            bridge.discard_rejected_body(stream, connection, {"Content-Length": "3"})
+        self.assertEqual(stream.read1.call_count, 2)
+        self.assertEqual([call.args[0] for call in connection.settimeout.call_args_list], [2, .5, 10])
+
+    def test_ambiguous_invalid_or_oversized_framing_is_not_drained(self):
+        for headers in [{}, {"Content-Length": "invalid"}, {"Content-Length": "-1"},
+                        {"Content-Length": str(bridge.MAX_REJECTED_BODY_DRAIN_BYTES + 1)},
+                        {"Content-Length": "2", "Transfer-Encoding": "chunked"}]:
+            with self.subTest(headers=headers):
+                stream, connection = Mock(), Mock()
+                bridge.discard_rejected_body(stream, connection, headers)
+                stream.read1.assert_not_called()
+                connection.gettimeout.assert_not_called()
+
+    def test_sender_timeout_does_not_replace_the_rejection_or_extend_its_budget(self):
+        stream, connection = Mock(), Mock()
+        stream.read1.side_effect = TimeoutError()
+        connection.gettimeout.return_value = .1
+        with patch.object(bridge.time, "monotonic", side_effect=[0, .025]):
+            bridge.discard_rejected_body(stream, connection, {"Content-Length": "2"})
+        self.assertAlmostEqual(connection.settimeout.call_args_list[0].args[0], .075)
+        self.assertEqual(connection.settimeout.call_args.args[0], .1)
 
 
 class ProviderStateTests(unittest.TestCase):
@@ -191,6 +234,42 @@ class BridgeHTTPTests(unittest.TestCase):
         self.assertEqual(json.loads(raw)["service"], "matumbo-provider-bridge")
         self.assertNotIn(b"unit-test-secret", raw)
         self.assertEqual(headers["Cache-Control"], "no-store")
+
+    def test_pending_local_module_burst_fits_the_accept_queue(self):
+        self.assertEqual(self.server.server_address[0], "127.0.0.1")
+        self.assertEqual(self.server.request_queue_size, 128)
+        dispatch_entered, release_dispatch = threading.Event(), threading.Event()
+        connected = queue.Queue()
+        original_dispatch = self.server.process_request
+
+        def paused_dispatch(request, address):
+            dispatch_entered.set()
+            release_dispatch.wait(5)
+            return original_dispatch(request, address)
+
+        def request_asset(_):
+            client = http.client.HTTPConnection("127.0.0.1", self.server.server_port, timeout=5)
+            try:
+                client.request("GET", "/src/app.js")
+                connected.put(True)
+                response = client.getresponse()
+                return response.status, response.read()
+            finally:
+                client.close()
+
+        # Pause accepting after the first connection. All 32 clients must connect
+        # and send before dispatch resumes, exercising the OS pending queue.
+        with patch.object(self.server, "process_request", side_effect=paused_dispatch):
+            with ThreadPoolExecutor(max_workers=32) as clients:
+                pending = [clients.submit(request_asset, index) for index in range(32)]
+                try:
+                    self.assertTrue(dispatch_entered.wait(2))
+                    for _ in range(32):
+                        self.assertTrue(connected.get(timeout=2))
+                finally:
+                    release_dispatch.set()
+                results = [future.result(timeout=5) for future in pending]
+        self.assertEqual(results, [(200, b"export const ok=true;")] * 32)
 
     def test_health_proves_instance_and_root_without_paths_credentials_or_false_readiness(self):
         status, _, raw = self.request('/api/health')

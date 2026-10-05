@@ -1369,17 +1369,22 @@ export function createWebAiConsole({
     const savedTab = readStorage(store, WEB_AI_STORAGE_KEYS.lastTab);
     let completedSignIn = false;
     let failedSignIn = false;
+    let requestedGptProvider = null;
     try {
       const currentUrl = new URL(windowRoot.location.href);
       completedSignIn = currentUrl.searchParams.get("gpt_connected") === "1";
       failedSignIn = currentUrl.searchParams.has("gpt_error");
+      const provider = currentUrl.searchParams.get('gpt-provider');
+      if (['chatgpt', 'openai'].includes(provider)) requestedGptProvider = provider;
       if (completedSignIn || failedSignIn) {
         currentUrl.searchParams.delete("gpt_connected");
         currentUrl.searchParams.delete("gpt_error");
         windowRoot.history?.replaceState?.(windowRoot.history.state, "", currentUrl.href);
       }
     } catch {}
-    setTab(completedSignIn || failedSignIn ? "gpt" : ["gpt", "web", "ai", "economy"].includes(savedTab) ? savedTab : "gpt", "init", true);
+    if (completedSignIn || failedSignIn) myGpt.selectProvider('chatgpt');
+    else if (requestedGptProvider) myGpt.selectProvider(requestedGptProvider);
+    setTab(completedSignIn || failedSignIn || requestedGptProvider ? "gpt" : ["gpt", "web", "ai", "economy"].includes(savedTab) ? savedTab : "gpt", "init", true);
     if (completedSignIn) myGpt.completeSignIn();
     else if (failedSignIn) myGpt.refresh();
   }
@@ -1422,6 +1427,11 @@ export function createWebAiConsole({
     minimize: (method = "api") => minimize(method),
     setTab: (tab, method = "api") => setTab(tab, method, false),
     getGptSnapshot: () => myGpt.snapshot(),
+    openGptProvider: (provider, method = 'connections') => {
+      myGpt.selectProvider(provider);
+      setTab('gpt', method, false);
+      setOpen(true, method);
+    },
     getComputeEconomySnapshot: () => Object.freeze({
       exchange: computeLedger.snapshot(),
       account: computeAccount.snapshot(),

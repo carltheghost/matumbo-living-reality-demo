@@ -7,6 +7,11 @@ device-dependent features retain their established boundaries.
 
 ## Completed engine repairs
 
+- **Network & tools:** one Connections surface now observes ChatGPT, OpenAI
+  API, NVIDIA and the two trusted local helpers, with direct owner handoffs,
+  individual public-source retries and local reference currency calculations.
+  Requests have deadlines and Stop waiting; readiness remains distinct from a
+  verified cloud reply. [Network completion evidence](reality-lens-review/NETWORK_TOOLS_COMPLETION.md).
 - **Rooms:** a separate bounded conversation owner now provides local room
   creation, membership entry/leave, messages, deletion, browser restore and
   atomic merging of backups. The existing canonical room/cipher contributions

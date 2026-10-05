@@ -1,8 +1,20 @@
 .api-connections-trigger{position:fixed;right:22px;bottom:22px;z-index:110;display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(130,210,232,.28);border-radius:999px;background:rgba(8,23,34,.92);color:#d9eff4;padding:10px 15px;font:600 12px/1.3 system-ui,sans-serif;cursor:pointer;box-shadow:0 6px 24px #0003;backdrop-filter:blur(12px)}
 .api-connections-trigger::before{content:"";width:7px;height:7px;border-radius:50%;background:#81c5d8;box-shadow:0 0 8px #81c5d840}
 .api-connections-trigger:hover{border-color:#81c5d8}
+.api-connections-panel [hidden]{display:none!important}
+.api-connections-public>summary{cursor:pointer;color:#d5eaf2;font-size:14px;font-weight:600;min-height:44px;display:list-item;list-style-position:inside;padding:10px 0}
+.api-connections-row>.api-connections-button{margin-top:8px;min-height:40px}
+.api-connections-converter{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px 0 0;margin:12px 0 0;border:0;border-top:1px solid #b3d6e020;min-width:0}
+.api-connections-converter legend{font-size:12px;color:#d2e7ef;padding-top:8px}
+.api-connections-converter label{display:grid;gap:4px;font-size:11px;color:#a8c6d4;min-width:0}
+.api-connections-converter label:first-of-type,.api-connections-converter>button,.api-connections-converter>p{grid-column:1/-1}
+.api-connections-converter input,.api-connections-converter select{width:100%;min-width:0;min-height:44px;border:1px solid #81c5d845;border-radius:9px;background:#081725;color:#e7f4f8;padding:9px;font:inherit;color-scheme:dark}
+.api-connections-converter input:focus-visible,.api-connections-converter select:focus-visible{outline:2px solid #9edfea;outline-offset:2px}
+.api-connections-row[data-state=enabled] .api-connections-badge,.api-connections-badge[data-state=signed_in]{color:#9bdfc5;border-color:#9bdfc536;background:#9bdfc50a}
+@media(max-width:640px){.api-connections-panel button{min-height:44px}.api-connections-close{min-width:44px}.api-connections-rowtop{flex-wrap:wrap}.api-connections-badge{white-space:normal}}
 .api-connections-trigger:focus-visible,.api-connections-panel button:focus-visible,.api-connections-panel a:focus-visible,.api-connections-panel summary:focus-visible{outline:2px solid #9edfea;outline-offset:3px}
-.api-connections-panel{position:fixed;right:20px;top:82px;bottom:78px;z-index:115;width:min(480px,calc(100vw - 40px));display:flex;flex-direction:column;overflow:hidden;color:#e3eff2;background:linear-gradient(150deg,rgba(10,25,37,.99),rgba(5,14,23,.99));border:1px solid #81c5d83b;border-radius:22px;box-shadow:0 24px 100px #0007;font:13px/1.5 system-ui,sans-serif;isolation:isolate}
+/* Original feature Text views use layer 120; this temporary drawer must clear them. */
+.api-connections-panel{position:fixed;right:20px;top:82px;bottom:78px;z-index:160;width:min(480px,calc(100vw - 40px));display:flex;flex-direction:column;overflow:hidden;color:#e3eff2;background:linear-gradient(150deg,rgba(10,25,37,.99),rgba(5,14,23,.99));border:1px solid #81c5d83b;border-radius:22px;box-shadow:0 24px 100px #0007;font:13px/1.5 system-ui,sans-serif;isolation:isolate}
 .api-connections-panel[hidden]{display:none!important}
 .api-connections-panel *{box-sizing:border-box}
 .api-connections-head{display:flex;justify-content:space-between;align-items:flex-start;gap:15px;padding:23px 24px 18px;border-bottom:1px solid #ffffff0c}

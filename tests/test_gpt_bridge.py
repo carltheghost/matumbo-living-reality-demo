@@ -4,6 +4,7 @@ Security tests intentionally require requirements-gpt.txt rather than skipping J
 """
 import base64
 import hashlib
+import http.client
 import importlib.util
 import io
 import json
@@ -559,10 +560,41 @@ class HTTPTests(unittest.TestCase):
     def test_exact_local_origin_custom_header_and_host_required(self):
         for headers in ({"Origin": "https://carltheghost.github.io"}, {"Origin": "http://127.0.0.1:8080"},
                         {"Origin": None}, {"X-Matumbo-Gpt": None}, {"Host": "evil.test"}, {"Sec-Fetch-Site": "cross-site"}):
-            self.assertEqual(self.request("/api/gpt/sign-in", "POST", {}, headers=headers)[0], 403)
+            with self.subTest(headers=headers):
+                self.assertEqual(self.request("/api/gpt/sign-in", "POST", {}, headers=headers)[0], 403)
         status, headers, _ = self.request("/api/gpt/status", headers={"Origin": "https://carltheghost.github.io"})
         self.assertEqual(status, 403)
         self.assertIsNone(headers.get("Access-Control-Allow-Origin"))
+        self.assertFalse(self.transport.calls)
+        self.assertFalse(self.transport.inferences)
+        self.assertFalse(self.state.pending)
+
+    def test_delayed_rejected_post_body_delivers_403_without_auth_or_inference(self):
+        draining = threading.Event()
+        original_discard = bridge.discard_rejected_body
+
+        def observed_discard(*args):
+            draining.set()
+            return original_discard(*args)
+
+        client = http.client.HTTPConnection("127.0.0.1", self.server.server_port, timeout=3)
+        try:
+            with patch.object(bridge, "discard_rejected_body", side_effect=observed_discard):
+                client.putrequest("POST", "/api/gpt/sign-in")
+                client.putheader("Origin", "https://carltheghost.github.io")
+                client.putheader("Content-Type", "application/json")
+                client.putheader("Content-Length", "2")
+                client.endheaders()
+                self.assertTrue(draining.wait(2))
+                client.send(b"{}")
+                response = client.getresponse()
+                self.assertEqual(response.status, 403)
+                self.assertEqual(json.loads(response.read())["error"]["code"], "local_page_required")
+        finally:
+            client.close()
+        self.assertFalse(self.transport.calls)
+        self.assertFalse(self.transport.inferences)
+        self.assertFalse(self.state.pending)
 
     def test_post_routes_body_bounds_and_no_tokens_in_auth_url(self):
         status, _, raw = self.request("/api/gpt/sign-in", "POST", {})

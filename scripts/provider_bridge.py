@@ -32,6 +32,8 @@ _gpt_spec.loader.exec_module(gpt_bridge)
 UPSTREAM = "https://integrate.api.nvidia.com/v1/chat/completions"
 DEFAULT_MODEL = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
 MAX_BODY_BYTES = 20_000
+BODY_TIMEOUT_SECONDS = 10
+MAX_REJECTED_BODY_DRAIN_BYTES = 256 * 1024
 MAX_PROMPT_LENGTH = 4_000
 MAX_RESPONSE_BYTES = 1_000_000
 REQUEST_TIMEOUT_SECONDS = 45
@@ -53,6 +55,50 @@ STATIC_TYPES = {
     ".mp3": "audio/mpeg", ".ogg": "audio/ogg", ".wav": "audio/wav",
     ".mp4": "video/mp4", ".webm": "video/webm",
 }
+
+
+class LoopbackThreadingHTTPServer(ThreadingHTTPServer):
+    # Browser module graphs can create a burst of pending local connections.
+    # Binding and per-request authority checks remain in create_server/Handler.
+    request_queue_size = 128
+
+
+def discard_rejected_body(stream, connection, headers):
+    """Discard a bounded framed body before closing an early error response.
+
+    Closing with unread POST bytes can reset the response on Windows. This never
+    parses or accepts rejected data, and a single total deadline bounds trickles.
+    Ambiguous framing or very large bodies are closed without draining.
+    """
+    if headers.get("Transfer-Encoding"):
+        return
+    try:
+        remaining_bytes = int(headers.get("Content-Length", "0"))
+    except (TypeError, ValueError):
+        return
+    if not 0 < remaining_bytes <= MAX_REJECTED_BODY_DRAIN_BYTES:
+        return
+    previous_timeout = connection.gettimeout()
+    budget = min(BODY_TIMEOUT_SECONDS, previous_timeout) if previous_timeout is not None else BODY_TIMEOUT_SECONDS
+    deadline = time.monotonic() + budget
+    try:
+        while remaining_bytes:
+            remaining_seconds = deadline - time.monotonic()
+            if remaining_seconds <= 0:
+                return
+            connection.settimeout(remaining_seconds)
+            chunk = stream.read1(min(8192, remaining_bytes))
+            if not chunk:
+                return
+            remaining_bytes -= len(chunk)
+    except OSError:
+        # A rejected request is still rejected when its sender disconnects or stalls.
+        pass
+    finally:
+        try:
+            connection.settimeout(previous_timeout)
+        except OSError:
+            pass
 
 
 def utc_now():
@@ -270,7 +316,7 @@ def create_server(root, port=8082, state=None, gpt_state=None):
             if origin and not allowed_origin(origin, self.server.server_port):
                 self.send_json(403, {"error": {"code": "origin_rejected", "message": "This page origin is not permitted."}})
                 return False
-            self.connection.settimeout(10)
+            self.connection.settimeout(BODY_TIMEOUT_SECONDS)
             return True
 
         def gpt_permitted(self, mutation=False):
@@ -285,6 +331,9 @@ def create_server(root, port=8082, state=None, gpt_state=None):
             return True
 
         def send_data(self, status, body, content_type="application/json", retry_after=None):
+            if self.command == "POST" and status >= 400 and not getattr(self, "_body_read_started", False):
+                self._body_read_started = True
+                discard_rejected_body(self.rfile, self.connection, self.headers)
             self.send_response(status)
             self.send_header("Content-Type", content_type + ("; charset=utf-8" if content_type.startswith("text/") or content_type == "application/json" else ""))
             self.send_header("Content-Length", str(len(body)))
@@ -307,7 +356,7 @@ def create_server(root, port=8082, state=None, gpt_state=None):
             if self.command != "HEAD":
                 try:
                     self.wfile.write(body)
-                except (BrokenPipeError, ConnectionResetError):
+                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
                     pass
 
         def send_json(self, status, value, retry_after=None):
@@ -372,6 +421,8 @@ def create_server(root, port=8082, state=None, gpt_state=None):
                 self.send_json(404, {"error": {"code": "not_found", "message": "Not found."}})
 
         def do_POST(self):
+            self._body_read_started = False
+            self.connection.settimeout(BODY_TIMEOUT_SECONDS)
             if not self.permitted():
                 return
             gpt_routes = {"/api/gpt/sign-in", "/api/gpt/disconnect", "/api/gpt/chat"}
@@ -386,6 +437,7 @@ def create_server(root, port=8082, state=None, gpt_state=None):
                 length = int(self.headers.get("Content-Length", "0"))
                 if length <= 0 or length > (gpt_bridge.MAX_BODY_BYTES if is_gpt else MAX_BODY_BYTES) or self.headers.get("Transfer-Encoding"):
                     raise BridgeError(413, "invalid_body_length", "Request body is missing or too large.")
+                self._body_read_started = True
                 raw = self.rfile.read(length)
                 if len(raw) != length:
                     raise BridgeError(400, "incomplete_body", "Request body is incomplete.")
@@ -408,7 +460,7 @@ def create_server(root, port=8082, state=None, gpt_state=None):
             except (TimeoutError, OSError):
                 self.send_json(408, {"error": {"code": "request_timeout", "message": "Request body timed out."}})
 
-    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    server = LoopbackThreadingHTTPServer(("127.0.0.1", port), Handler)
     server.daemon_threads = True
     return server
 

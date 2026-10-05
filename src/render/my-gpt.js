@@ -14,6 +14,26 @@ const STYLE = `
 `;
 const CHATGPT_READY_STATES = new Set(['signed_in', 'verified']);
 const OPENAI_READY_STATES = new Set(['configured', 'verified']);
+// Local status/sign-in are quick operations. Account models, revocation and chat
+// can include several 45-second upstream waits and a 90-second answer stream.
+export const GPT_REQUEST_TIMEOUT_MS = Object.freeze({
+  '/api/gpt/status': 15_000,
+  '/api/gpt/sign-in': 30_000,
+  '/api/gpt/models': 180_000,
+  '/api/gpt/disconnect': 150_000,
+  '/api/gpt/chat': 240_000,
+});
+const REQUEST_TIMEOUT_MESSAGES = Object.freeze({
+  '/api/gpt/status': 'Connection status timed out after 15 seconds. Refresh status to try again.',
+  '/api/gpt/sign-in': 'Sign-in setup timed out after 30 seconds. The bridge may still be processing. Refresh status before starting sign-in again.',
+  '/api/gpt/models': 'Loading models timed out after 180 seconds. The bridge may still be processing. You can try loading again.',
+  '/api/gpt/disconnect': 'Disconnect timed out after 150 seconds. Disconnection and remote revocation are not confirmed. Refresh status before trying again.',
+  '/api/gpt/chat': 'Stopped waiting after 240 seconds. Your message remains in local history. The provider may continue processing this request.',
+});
+
+function requestError(name, message) {
+  const error = new Error(message); error.name = name; return error;
+}
 
 function node(doc, tag, className, text) {
   const element = doc.createElement(tag);
@@ -279,13 +299,40 @@ export function mountMyGpt({ documentRoot = globalThis.document, windowRoot = gl
   async function request(path, { method = 'GET', body, signal } = {}) {
     if (!localOrigin(windowRoot)) throw new Error('Open this app on your PC at localhost to use the local GPT bridge.');
     if (!fetcher) throw new Error('The local GPT bridge is unavailable in this browser.');
-    const response = await fetcher(path, { method, credentials: 'same-origin', redirect: 'error', cache: 'no-store', signal,
-      headers: body === undefined ? { Accept: 'application/json' } : { Accept: 'application/json', 'Content-Type': 'application/json', 'X-Matumbo-Gpt': '1' },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
-    let data;
-    try { data = await response.json(); } catch { throw new Error('The local GPT bridge returned an unreadable response. Start the GPT bridge server for this app.'); }
-    if (!response.ok) throw new Error(typeof data?.error === 'string' ? data.error : data?.error?.message || `Local GPT bridge request failed (${response.status}).`);
-    return data;
+    const timeoutMs = GPT_REQUEST_TIMEOUT_MS[path];
+    if (!timeoutMs) throw new Error('The requested local GPT operation is not supported.');
+    const controller = new AbortController();
+    let timer, onAbort;
+    // Settle waiting ourselves: abort alone cannot bound an uncooperative fetch
+    // or a response body that never finishes. The same deadline covers both.
+    const stopped = new Promise((_, reject) => {
+      const stopWaiting = error => { reject(error); controller.abort(error); };
+      onAbort = () => stopWaiting(requestError('AbortError', 'Stopped waiting for the local GPT bridge.'));
+      if (signal?.aborted) { onAbort(); return; }
+      signal?.addEventListener('abort', onAbort, { once: true });
+      timer = setTimeout(() => stopWaiting(requestError('TimeoutError', REQUEST_TIMEOUT_MESSAGES[path])), timeoutMs);
+    });
+    const fetchData = async () => {
+      if (controller.signal.aborted) throw controller.signal.reason;
+      const response = await fetcher(path, { method, credentials: 'same-origin', redirect: 'error', cache: 'no-store', signal: controller.signal,
+        headers: body === undefined ? { Accept: 'application/json' } : { Accept: 'application/json', 'Content-Type': 'application/json', 'X-Matumbo-Gpt': '1' },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+      if (controller.signal.aborted) throw controller.signal.reason;
+      let data;
+      try { data = await response.json(); }
+      catch {
+        if (controller.signal.aborted) throw controller.signal.reason;
+        throw new Error('The local GPT bridge returned an unreadable response. Start the GPT bridge server for this app.');
+      }
+      if (controller.signal.aborted) throw controller.signal.reason;
+      if (!response.ok) throw new Error(typeof data?.error === 'string' ? data.error : data?.error?.message || `Local GPT bridge request failed (${response.status}).`);
+      return data;
+    };
+    try { return await Promise.race([stopped, fetchData()]); }
+    finally {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+    }
   }
   async function refresh() {
     if (destroyed) return null;
@@ -439,6 +486,11 @@ export function mountMyGpt({ documentRoot = globalThis.document, windowRoot = gl
   renderWorkspace(); renderAccounts(); renderModels(); controls();
   return Object.freeze({
     refresh,
+    selectProvider(next) {
+      if (!['chatgpt', 'openai'].includes(next)) throw new Error('Choose ChatGPT plan or OpenAI API.');
+      if (destroyed) return false;
+      chooseProvider(next); return true;
+    },
     setActive(active) { if (active) title.setAttribute('data-autofocus', 'true'); else title.removeAttribute('data-autofocus'); },
     activate() { if (!activated) return refresh(); return Promise.resolve(bridge); },
     completeSignIn() { return refresh().then(() => { if (chatgptReady()) return loadModels(); return null; }); },

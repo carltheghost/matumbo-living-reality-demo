@@ -1,4 +1,5 @@
 /** Quiet, inspectable API connections. Never accepts a browser API key. */
+import { normalizeGptConnectionStatus, NETWORK_LOCAL_PLUGINS, REFERENCE_CURRENCIES, convertReferenceAmount } from '../domains/network-tools.js';
 export const API_BRIDGE_DEFAULT_URL = 'http://127.0.0.1:8082';
 export const API_CONNECTIONS_TIMEOUT_MS = 9_000;
 export const API_CONNECTIONS_FX_FALLBACK = Object.freeze({
@@ -36,7 +37,7 @@ export const API_CONNECTIONS_PROBES = Object.freeze([
     fallback: API_CONNECTIONS_FX_FALLBACK,
     observedAt(data) {
       const date = Array.isArray(data) ? data.find(row => row?.base === 'EUR' && ['USD', 'GBP'].includes(row.quote))?.date : null;
-      if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date))) throw new Error('Reference-rate update date is missing.');
+      if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date) throw new Error('Reference-rate update date is missing or invalid.');
       return date;
     },
     summarize(data) {
@@ -66,6 +67,8 @@ export const API_CONNECTIONS_EXISTING = Object.freeze([
   Object.freeze({ feature: 'sports-events', label: 'Tennis & sports evidence', description: 'Public ESPN feeds · coverage varies' }),
   Object.freeze({ feature: 'asset-market', label: 'Asset market evidence', description: 'CoinGecko public reads · provider limits apply' }),
   Object.freeze({ feature: 'social-explorer', label: 'Social & image sources', description: 'Bluesky author feed and Wikimedia metadata in their own spaces' }),
+  Object.freeze({ feature: 'web-ai', label: 'My GPT / Web + AI', description: 'ChatGPT account, OpenAI API and saved local conversations' }),
+  Object.freeze({ feature: 'bot-plaza', label: 'Bot Plaza / local plugins', description: 'Lens Guide, Plan Helper and your saved local bots' }),
 ]);
 
 export function resolveApiBridgeUrl(location) {
@@ -92,11 +95,17 @@ async function readJson(fetchImpl, url, { signal, method = 'GET', body, timeoutM
   if (typeof fetchImpl !== 'function') throw new Error('Browser fetch is unavailable.');
   const controller = new AbortController();
   const abort = () => controller.abort();
-  if (signal?.aborted) abort();
+  if (signal?.aborted) throw new Error('Connection check cancelled.');
   signal?.addEventListener('abort', abort, { once: true });
+  // Bound both fetch and JSON decoding, even if a transport ignores abort.
+  let rejectAbort;
+  const interrupted = new Promise((_, reject) => { rejectAbort = reject; });
+  const onAbort = () => rejectAbort(new Error(signal?.aborted ? 'Connection check cancelled.' : 'Provider request timed out.'));
+  controller.signal.addEventListener('abort', onAbort, { once: true });
   const timeout = setTimeout(abort, timeoutMs);
   try {
-    const response = await fetchImpl(url, { method, signal: controller.signal, credentials: 'omit', cache: 'no-store', referrerPolicy: 'no-referrer',
+    return await Promise.race([interrupted, (async () => {
+    const response = await fetchImpl(url, { method, signal: controller.signal, credentials: 'omit', cache: 'no-store', referrerPolicy: 'no-referrer', redirect: 'error',
       headers: body ? { 'Content-Type': 'application/json', Accept: 'application/json' } : { Accept: 'application/json' },
       ...(body ? { body: JSON.stringify(body) } : {}) });
     let data;
@@ -106,16 +115,18 @@ async function readJson(fetchImpl, url, { signal, method = 'GET', body, timeoutM
       const error = new Error(message); error.status = response?.status ?? null; throw error;
     }
     return await response.json();
+    })()]);
   } catch (error) {
     if (controller.signal.aborted) throw new Error(signal?.aborted ? 'Connection check cancelled.' : 'Provider request timed out.');
     throw error;
   } finally {
     clearTimeout(timeout);
+    controller.signal.removeEventListener('abort', onAbort);
     signal?.removeEventListener('abort', abort);
   }
 }
 
-export async function checkApiConnection(probe, { fetchImpl = globalThis.fetch, signal } = {}) {
+export async function checkApiConnection(probe, { fetchImpl = globalThis.fetch, signal, timeoutMs = API_CONNECTIONS_TIMEOUT_MS } = {}) {
   const startedAt = Date.now();
   const attempts = [];
   // Only FX has one reviewed alternate. Never retry a provider or follow a
@@ -124,12 +135,22 @@ export async function checkApiConnection(probe, { fetchImpl = globalThis.fetch, 
   for (const [index, candidate] of candidates.entries()) {
     if (index && signal?.aborted) break;
     try {
-      const data = await readJson(fetchImpl, candidate.url, { signal });
+      const data = await readJson(fetchImpl, candidate.url, { signal, timeoutMs });
       const summary = candidate.summarize(data);
       const observedAt = candidate.observedAt?.(data) ?? null;
       const checkedAt = new Date().toISOString();
       attempts.push(Object.freeze({ provider: candidate.provider, state: 'available', sourceUrl: candidate.url, checkedAt, observedAt, reason: null, httpStatus: 200 }));
-      return Object.freeze({ id: probe.id, state: 'available', summary, provider: candidate.provider,
+      let observation = null;
+      if (probe.id === 'fx') {
+        const rates = { EUR: 1 };
+        if (index) { rates.USD = data.rates.USD; rates.GBP = data.rates.GBP; }
+        else for (const currency of ['USD', 'GBP']) {
+          const matches = data.filter(row => row?.base === 'EUR' && row.quote === currency && row.date === observedAt);
+          if (matches.length === 1 && typeof matches[0].rate === 'number' && Number.isFinite(matches[0].rate) && matches[0].rate > 0) rates[currency] = matches[0].rate;
+        }
+        observation = Object.freeze({ state: 'available', base: 'EUR', rates: Object.freeze(rates), observedAt, provider: candidate.provider, sourceUrl: candidate.url });
+      }
+      return Object.freeze({ id: probe.id, state: 'available', summary, provider: candidate.provider, observation,
         checkedAt, observedAt, latencyMs: Date.now() - startedAt, sourceUrl: candidate.url, documentationUrl: candidate.docs,
         fallbackUsed: index > 0, primarySourceUrl: probe.url, primaryState: attempts[0].state,
         attempts: Object.freeze(attempts), attributionUrl: candidate.attributionUrl ?? null, attributionLabel: candidate.attributionLabel ?? null });
@@ -152,7 +173,7 @@ function element(documentRoot, tag, className, text) {
   return node;
 }
 
-export function mountApiConnections({ documentRoot = globalThis.document, windowRoot = globalThis.window, fetchImpl = globalThis.fetch, onOpenFeature = null, onOpen = null, autoCheck = false } = {}) {
+export function mountApiConnections({ documentRoot = globalThis.document, windowRoot = globalThis.window, fetchImpl = globalThis.fetch, onOpenFeature = null, onOpen = null, autoCheck = false, getLocalTools = null } = {}) {
   if (!documentRoot?.body) return null;
   const previous = documentRoot.getElementById('api-connections-panel');
   if (previous) return null;
@@ -170,19 +191,55 @@ export function mountApiConnections({ documentRoot = globalThis.document, window
   const head = element(documentRoot, 'div', 'api-connections-head');
   const titleBlock = element(documentRoot, 'div');
   titleBlock.appendChild(element(documentRoot, 'span', 'api-connections-eyebrow', 'REALITY LENS'));
-  const title = element(documentRoot, 'h2', '', 'Live connections'); title.id = 'api-connections-title';
+  const title = element(documentRoot, 'h2', '', 'Connections & tools'); title.id = 'api-connections-title';
   titleBlock.appendChild(title);
-  titleBlock.appendChild(element(documentRoot, 'p', '', 'Public observations and an optional NVIDIA assistant, in one place.'));
+  titleBlock.appendChild(element(documentRoot, 'p', '', 'Your assistants, local helpers and public sources. Choose a tool; see what it needs.'));
   const closeButton = element(documentRoot, 'button', 'api-connections-close', '×'); closeButton.type = 'button'; closeButton.setAttribute('aria-label', 'Close connections');
   head.append(titleBlock, closeButton); panel.appendChild(head);
   const body = element(documentRoot, 'div', 'api-connections-body'); panel.appendChild(body);
   const checkBar = element(documentRoot, 'div', 'api-connections-checkbar');
   const checkButton = element(documentRoot, 'button', 'api-connections-button primary', 'Check connections'); checkButton.type = 'button';
   const checkStatus = element(documentRoot, 'span', 'api-connections-status', 'No public requests yet.'); checkStatus.setAttribute('role', 'status');
-  checkBar.append(checkButton, checkStatus); body.appendChild(checkBar);
+  const cancelButton = element(documentRoot, 'button', 'api-connections-button', 'Stop waiting'); cancelButton.type = 'button'; cancelButton.hidden = true;
+  checkBar.append(checkButton, cancelButton, checkStatus); body.appendChild(checkBar);
+  function openFeature(id, options = {}) {
+    close();
+    if (typeof onOpenFeature === 'function') onOpenFeature(id, options);
+    else if (windowRoot?.location) { const target = new URL(windowRoot.location.href); target.searchParams.set('feature', id); if (options.provider) target.searchParams.set('gpt-provider', options.provider); windowRoot.location.href = target.href; }
+  }
+  const assistantSection = element(documentRoot, 'section', 'api-connections-section');
+  assistantSection.appendChild(element(documentRoot, 'h3', '', 'My GPT'));
+  const assistantRows = new Map();
+  for (const [id, label, note] of [['chatgpt', 'Your ChatGPT account', 'Sign in and choose a model in My GPT.'], ['openai', 'OpenAI API', 'Separate API connection and billing.']]) {
+    const row = element(documentRoot, 'article', 'api-connections-row'); row.dataset.provider = id;
+    const top = element(documentRoot, 'div', 'api-connections-rowtop');
+    const badge = element(documentRoot, 'span', 'api-connections-badge', 'Not checked');
+    top.append(element(documentRoot, 'strong', '', label), badge);
+    const detail = element(documentRoot, 'p', '', note);
+    const action = element(documentRoot, 'button', 'api-connections-button', id === 'chatgpt' ? 'Open My GPT' : 'Open API setup'); action.type = 'button';
+    action.addEventListener('click', () => openFeature('web-ai', { provider: id }));
+    row.append(top, detail, action); assistantSection.appendChild(row); assistantRows.set(id, { row, badge, detail, action });
+  }
+  const bridgeNote = element(documentRoot, 'p', 'api-connections-note'); bridgeNote.setAttribute('role', 'status');
+  const refreshTools = element(documentRoot, 'button', 'api-connections-button', 'Refresh assistant status'); refreshTools.type = 'button';
+  assistantSection.append(bridgeNote, refreshTools); body.appendChild(assistantSection);
+  const localSection = element(documentRoot, 'section', 'api-connections-section');
+  localSection.appendChild(element(documentRoot, 'h3', '', 'Local helpers'));
+  const localRows = new Map();
+  for (const plugin of NETWORK_LOCAL_PLUGINS) {
+    const row = element(documentRoot, 'article', 'api-connections-row'); row.dataset.plugin = plugin.id;
+    const top = element(documentRoot, 'div', 'api-connections-rowtop'), badge = element(documentRoot, 'span', 'api-connections-badge');
+    top.append(element(documentRoot, 'strong', '', plugin.name), badge);
+    const detail = element(documentRoot, 'p', '', plugin.description);
+    const action = element(documentRoot, 'button', 'api-connections-button', 'Open in Bot Plaza'); action.type = 'button';
+    action.addEventListener('click', () => openFeature('bot-plaza', { botId: plugin.id }));
+    row.append(top, detail, action); localSection.appendChild(row); localRows.set(plugin.id, { row, badge });
+  }
+  localSection.appendChild(element(documentRoot, 'p', 'api-connections-note', 'Scripted helpers run locally. Manage your other saved bots and approvals in Bot Plaza.'));
+  body.appendChild(localSection);
   const rows = new Map();
-  const noKey = element(documentRoot, 'section', 'api-connections-section');
-  noKey.appendChild(element(documentRoot, 'h3', '', 'No API key needed'));
+  const noKey = element(documentRoot, 'details', 'api-connections-section api-connections-public');
+  const publicSummary = element(documentRoot, 'summary', '', 'Public sources · no API key needed'); noKey.appendChild(publicSummary);
   const sourceList = element(documentRoot, 'div', 'api-connections-list'); noKey.appendChild(sourceList);
   for (const probe of API_CONNECTIONS_PROBES) {
     const row = element(documentRoot, 'article', 'api-connections-row'); row.dataset.state = 'unchecked';
@@ -193,8 +250,34 @@ export function mountApiConnections({ documentRoot = globalThis.document, window
     const badge = element(documentRoot, 'span', 'api-connections-badge', 'Not checked'); top.append(names, badge);
     const detail = element(documentRoot, 'p', '', probe.note);
     const link = element(documentRoot, 'a', 'api-connections-source', 'Source & terms'); link.href = probe.docs; link.target = '_blank'; link.rel = 'noopener noreferrer';
-    row.append(top, detail, link); sourceList.appendChild(row); rows.set(probe.id, { row, badge, detail, providerName, link, result: null });
+    const retry = element(documentRoot, 'button', 'api-connections-button', `Check ${probe.label}`); retry.type = 'button';
+    retry.addEventListener('click', () => checkSource(probe.id));
+    row.append(top, detail, link, retry); sourceList.appendChild(row); rows.set(probe.id, { row, badge, detail, providerName, link, retry, result: null });
   }
+  const converter = element(documentRoot, 'fieldset', 'api-connections-converter');
+  converter.appendChild(element(documentRoot, 'legend', '', 'Reference currency calculator'));
+  const amountLabel = element(documentRoot, 'label', '', 'Amount'); amountLabel.htmlFor = 'network-fx-amount';
+  const amount = element(documentRoot, 'input'); amount.id = 'network-fx-amount'; amount.type = 'number'; amount.min = '0'; amount.max = '1000000000000'; amount.step = 'any'; amount.value = '100';
+  amountLabel.appendChild(amount); converter.appendChild(amountLabel);
+  const selectCurrency = (id, text, value) => {
+    const label = element(documentRoot, 'label', '', text); label.htmlFor = id;
+    const select = element(documentRoot, 'select'); select.id = id;
+    select.setAttribute('aria-label', text);
+    for (const code of REFERENCE_CURRENCIES) { const option = element(documentRoot, 'option', '', code); option.value = code; select.appendChild(option); }
+    select.value = value; label.appendChild(select); converter.appendChild(label); return select;
+  };
+  const from = selectCurrency('network-fx-from', 'From', 'EUR'), to = selectCurrency('network-fx-to', 'To', 'USD');
+  const convert = element(documentRoot, 'button', 'api-connections-button', 'Convert reference amount'); convert.type = 'button'; convert.disabled = true;
+  const conversion = element(documentRoot, 'p', 'api-connections-conversion', 'Check exchange rates to use this calculator.'); conversion.setAttribute('role', 'status');
+  converter.append(convert, conversion, element(documentRoot, 'p', 'api-connections-note', 'Daily reference estimate; excludes fees and spreads. No trade or payment is made. Conversion stays on this device.'));
+  rows.get('fx').row.appendChild(converter);
+  convert.addEventListener('click', () => {
+    try {
+      const value = amount.value.trim();
+      const quote = convertReferenceAmount({ amount: value ? Number(value) : NaN, from: from.value, to: to.value, observation: rows.get('fx').result?.observation });
+      conversion.textContent = `${quote.amount.toLocaleString()} ${quote.from} ≈ ${quote.converted.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${quote.to} · ${quote.provider} · ${quote.observedAt}`;
+    } catch (error) { conversion.textContent = error.message; }
+  });
   noKey.appendChild(element(documentRoot, 'p', 'api-connections-note', `${autoCheck ? 'Public connections check once automatically when this page loads. Check connections runs them again. ' : 'One check reads four fixed public endpoints. '}If Frankfurter fails, exchange rates try one fixed alternate and identify its source. Weather uses a New York example; your device location is never requested. Values are observations, with provider terms and limits.`));
   body.appendChild(noKey);
 
@@ -223,21 +306,43 @@ export function mountApiConnections({ documentRoot = globalThis.document, window
   for (const entry of API_CONNECTIONS_EXISTING) {
     const button = element(documentRoot, 'button', 'api-connections-feature'); button.type = 'button';
     button.append(element(documentRoot, 'strong', '', entry.label), element(documentRoot, 'span', '', entry.description));
-    button.addEventListener('click', () => {
-      close();
-      if (typeof onOpenFeature === 'function') onOpenFeature(entry.feature);
-      else if (windowRoot?.location) {
-        const target = new URL(windowRoot.location.href); target.searchParams.set('feature', entry.feature); windowRoot.location.href = target.href;
-      }
-    }); existing.appendChild(button);
+    button.addEventListener('click', () => openFeature(entry.feature)); existing.appendChild(button);
   }
   body.appendChild(existing);
   panel.appendChild(element(documentRoot, 'p', 'api-connections-footer', 'Assistant replies are advisory text. Source checks and replies stay in this page session.'));
   documentRoot.body.append(trigger, panel);
 
-  let destroyed = false, checking = false, sending = false, bridgeUrl = null, bridgeError = null, nvidia = null, lastCheckAt = null, automaticCheckStarted = false;
+  let destroyed = false, checking = false, sending = false, bridgeUrl = null, bridgeError = null, nvidia = null, gpt = null, gptError = null, localTools = [], lastCheckAt = null, automaticCheckStarted = false;
   let checkController = null, sendController = null, discoveryController = null;
   let focusBeforeOpen = null;
+  function renderTools() {
+    if (destroyed) return;
+    const labels = { dependency_needed: 'Dependency needed', signed_out: 'Signed out', reauth_required: 'Sign in again', plan_disabled: 'Permission needed', signed_in: 'Signed in · untested', configured: 'Configured · untested', key_needed: 'Key needed', verified: 'Reply verified', error: 'Provider error' };
+    for (const [id, nodes] of assistantRows) {
+      const provider = gpt?.[id];
+      nodes.row.dataset.state = provider?.state ?? 'unavailable'; nodes.badge.dataset.state = provider?.state ?? 'unavailable';
+      nodes.badge.textContent = provider ? labels[provider.state] : 'Bridge unavailable';
+      nodes.detail.textContent = !provider ? `My GPT status unavailable${gptError ? `: ${gptError}` : '. Check the local bridge.'}`
+        : provider.error ? provider.error : provider.verifiedAt ? `Last successful reply: ${new Date(provider.verifiedAt).toLocaleString()}. Open My GPT to continue.`
+        : id === 'openai' ? provider.ready ? 'API credential configured. An explicit successful reply verifies the connection.' : 'API credential needed in the local bridge. Open My GPT for connection details.'
+        : provider.state === 'dependency_needed' ? 'The local bridge needs its ChatGPT sign-in dependency. Open My GPT for details.'
+        : provider.state === 'plan_disabled' ? 'Authorize ChatGPT plan use in My GPT before sending.'
+        : provider.ready ? 'Account connected. Choose a model and send explicitly in My GPT.' : 'Open My GPT to sign in on this PC and choose a model.';
+    }
+    bridgeNote.textContent = gpt ? `Credential storage: ${gpt.credentialStorage === 'windows_dpapi' ? 'Windows protected storage' : gpt.credentialStorage}.${gpt.storageWarning ? ` ${gpt.storageWarning}` : ''} Status checks never send prompts.` : 'Local status checks never sign in or send prompts.';
+    try { localTools = typeof getLocalTools === 'function' ? getLocalTools() : []; } catch { localTools = []; }
+    if (!Array.isArray(localTools)) localTools = [];
+    localTools = NETWORK_LOCAL_PLUGINS.map(plugin => {
+      const live = localTools.find(item => item?.id === plugin.id);
+      const state = !live ? 'not-installed' : live.enabled === true ? 'enabled' : 'resting';
+      const nodes = localRows.get(plugin.id); nodes.row.dataset.state = state; nodes.badge.dataset.state = state;
+      nodes.badge.textContent = state === 'enabled' ? 'Enabled · local' : state === 'resting' ? 'Resting · local' : 'Not installed';
+      return Object.freeze({ ...plugin, state });
+    });
+    refreshTools.disabled = checking || sending;
+    cancelButton.hidden = !checking && !sending;
+    for (const nodes of rows.values()) nodes.retry.disabled = checking || sending;
+  }
   function renderNvidia() {
     if (destroyed) return;
     const labels = { 'key-needed': 'Key needed', configured: 'Configured · untested', verified: 'Answer verified', error: 'Provider error' };
@@ -250,6 +355,7 @@ export function mountApiConnections({ documentRoot = globalThis.document, window
     else nvidiaStatus.textContent = 'Local bridge detected and key configured. NVIDIA availability has not been tested; Send makes the first cloud request.';
     modelText.hidden = !nvidia; modelText.textContent = nvidia ? `Model · ${nvidia.model}` : '';
     send.disabled = checking || sending || !nvidia?.configured || !bridgeUrl;
+    renderTools();
   }
   async function detectBridge({ allowLoopback = false, signal } = {}) {
     const local = resolveApiBridgeUrl(windowRoot?.location);
@@ -262,30 +368,49 @@ export function mountApiConnections({ documentRoot = globalThis.document, window
         // A local health reply must have the same budget as the public probes.
         const data = await readJson(fetchImpl, `${candidate}/api/providers`, { signal, timeoutMs: API_CONNECTIONS_TIMEOUT_MS });
         if (destroyed || signal?.aborted) return false;
-        nvidia = normalizeNvidiaStatus(data); bridgeUrl = candidate; bridgeError = null; renderNvidia(); return true;
+        nvidia = normalizeNvidiaStatus(data); bridgeUrl = candidate; bridgeError = null;
+        try {
+          const status = await readJson(fetchImpl, `${candidate}/api/gpt/status`, { signal });
+          if (destroyed || signal?.aborted) return false;
+          gpt = normalizeGptConnectionStatus(status); gptError = null;
+        } catch (error) {
+          if (destroyed || signal?.aborted) return false;
+          gpt = null; gptError = String(error?.message ?? 'My GPT status failed.').slice(0, 240);
+        }
+        renderNvidia(); return true;
       } catch (error) { lastError = String(error?.message ?? 'Status request failed.').slice(0, 240); }
     }
-    if (candidates.length && !destroyed && !signal?.aborted) { bridgeUrl = null; bridgeError = lastError; nvidia = null; renderNvidia(); }
+    if (candidates.length && !destroyed && !signal?.aborted) { bridgeUrl = null; bridgeError = lastError; nvidia = null; gpt = null; gptError = lastError; renderNvidia(); }
     return false;
   }
-  async function checkConnections({ automatic = false } = {}) {
+  function renderSource(probe, result) {
+    const nodes = rows.get(probe.id);
+    nodes.row.dataset.state = result?.state ?? 'unchecked'; nodes.badge.textContent = !result ? 'Not checked' : result.state === 'available' ? result.fallbackUsed ? 'Available · alternate' : 'Available' : 'Unavailable';
+    nodes.providerName.textContent = result?.provider ?? probe.provider;
+    nodes.detail.textContent = !result ? probe.note : result.fallbackUsed && result.state === 'available'
+      ? `${result.summary} · ${result.attempts[0].provider} unavailable: ${result.attempts[0].reason}` : result.summary;
+    nodes.link.href = result?.attributionUrl ?? result?.documentationUrl ?? probe.docs;
+    nodes.link.textContent = result?.attributionLabel ?? 'Source & terms';
+    if (probe.id === 'fx') {
+      convert.disabled = !result?.observation;
+      conversion.textContent = result?.observation ? 'Choose an amount and currencies. These rates are used locally.' : 'Check exchange rates to use this calculator.';
+    }
+  }
+  async function checkConnections({ automatic = false, sourceId = null, bridgeOnly = false } = {}) {
     if (destroyed || checking || sending) return null;
+    if (sourceId && !API_CONNECTIONS_PROBES.some(probe => probe.id === sourceId)) return null;
     checking = true; checkButton.disabled = true; checkButton.textContent = 'Checking…'; checkStatus.textContent = 'Checking public sources and the local bridge…';
     send.disabled = true;
+    renderTools();
     discoveryController?.abort(); checkController = new AbortController();
     const signal = checkController.signal;
-    const bridgePromise = detectBridge({ allowLoopback: true, signal });
-    const results = await Promise.all(API_CONNECTIONS_PROBES.map(async probe => {
+    const bridgePromise = sourceId ? Promise.resolve() : detectBridge({ allowLoopback: true, signal });
+    const probes = bridgeOnly ? [] : API_CONNECTIONS_PROBES.filter(probe => !sourceId || probe.id === sourceId);
+    const results = await Promise.all(probes.map(async probe => {
       const nodes = rows.get(probe.id); nodes.row.dataset.state = 'checking'; nodes.badge.textContent = 'Checking…';
       const result = await checkApiConnection(probe, { fetchImpl, signal });
       if (!destroyed && !signal.aborted) {
-        nodes.result = result; nodes.row.dataset.state = result.state;
-        nodes.badge.textContent = result.state === 'available' ? result.fallbackUsed ? 'Available · alternate' : 'Available' : 'Unavailable';
-        nodes.providerName.textContent = result.provider;
-        nodes.detail.textContent = result.fallbackUsed && result.state === 'available'
-          ? `${result.summary} · ${result.attempts[0].provider} unavailable: ${result.attempts[0].reason}` : result.summary;
-        nodes.link.href = result.attributionUrl ?? result.documentationUrl ?? probe.docs;
-        nodes.link.textContent = result.attributionLabel ?? 'Source & terms';
+        nodes.result = result; renderSource(probe, result);
       }
       return result;
     }));
@@ -296,15 +421,23 @@ export function mountApiConnections({ documentRoot = globalThis.document, window
     if (!signal.aborted) {
       lastCheckAt = new Date().toISOString();
       const available = results.filter(result => result.state === 'available').length;
-      checkStatus.textContent = `${automatic ? 'Auto-checked once · ' : ''}${available}/${results.length} public sources available · ${new Date(lastCheckAt).toLocaleTimeString()}`;
-    } else checkStatus.textContent = 'Connection check cancelled.';
+      checkStatus.textContent = bridgeOnly ? 'Assistant status refreshed. No prompts sent.' : `${automatic ? 'Auto-checked once · ' : ''}${available}/${results.length} checked public sources available · ${new Date(lastCheckAt).toLocaleTimeString()}`;
+      const total = [...rows.values()].filter(nodes => nodes.result?.state === 'available').length;
+      publicSummary.textContent = `Public sources · ${total}/${rows.size} available`;
+    } else {
+      checkStatus.textContent = 'Connection check cancelled.';
+      for (const probe of probes) renderSource(probe, rows.get(probe.id).result);
+    }
     return results;
   }
+  function checkSource(id) { return checkConnections({ sourceId: id }); }
+  function cancel() { checkController?.abort(); sendController?.abort(); discoveryController?.abort(); }
   async function sendPrompt() {
     const text = prompt.value.trim();
     if (destroyed || sending || checking || !nvidia?.configured || !bridgeUrl) return;
     if (!text) { answer.hidden = false; answer.textContent = 'Enter a prompt first.'; prompt.focus(); return; }
     sending = true; send.disabled = true; checkButton.disabled = true; send.textContent = 'Waiting for NVIDIA…';
+    renderTools();
     answer.hidden = false; answer.textContent = 'Sending this prompt to NVIDIA. This can take up to 45 seconds.';
     sendController = new AbortController();
     try {
@@ -315,6 +448,7 @@ export function mountApiConnections({ documentRoot = globalThis.document, window
       nvidia = { ...nvidia, state: 'verified', verifiedAt: data.verifiedAt, error: null };
     } catch (error) {
       if (destroyed) return;
+      if (sendController.signal.aborted) { answer.textContent = 'Stopped waiting locally. The provider may still finish this request.'; return; }
       const message = String(error?.message ?? 'NVIDIA is unavailable.').slice(0, 240);
       answer.textContent = message;
       nvidia = { ...nvidia, state: 'error', error: message };
@@ -325,6 +459,7 @@ export function mountApiConnections({ documentRoot = globalThis.document, window
   function open() {
     if (destroyed || !panel.hidden) return;
     focusBeforeOpen = documentRoot.activeElement;
+    renderTools();
     onOpen?.(); panel.hidden = false; trigger.setAttribute('aria-expanded', 'true'); checkButton.focus();
   }
   function close() {
@@ -338,10 +473,12 @@ export function mountApiConnections({ documentRoot = globalThis.document, window
     if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); }
   }
   trigger.addEventListener('click', toggle); closeButton.addEventListener('click', close);
-  checkButton.addEventListener('click', checkConnections); send.addEventListener('click', sendPrompt);
+  checkButton.addEventListener('click', () => checkConnections()); send.addEventListener('click', sendPrompt);
+  refreshTools.addEventListener('click', () => checkConnections({ bridgeOnly: true })); cancelButton.addEventListener('click', cancel);
   panel.addEventListener('keydown', onKey);
   // The site may opt into one bounded public batch at startup. There is no
   // polling or inference. Library users retain a network-free default on Pages.
+  renderTools();
   if (autoCheck) {
     automaticCheckStarted = true;
     void checkConnections({ automatic: true });
@@ -349,9 +486,9 @@ export function mountApiConnections({ documentRoot = globalThis.document, window
     discoveryController = new AbortController();
     void detectBridge({ signal: discoveryController.signal });
   }
-  return Object.freeze({ open, close, toggle, checkConnections,
+  return Object.freeze({ open, close, toggle, checkConnections, checkSource, cancel,
     getSnapshot() { return Object.freeze({ open: !panel.hidden, checking, sending, bridgeUrl, bridgeError, nvidia: nvidia ? { ...nvidia } : null, lastCheckAt,
-      publicSources: [...rows.values()].map(row => row.result).filter(Boolean), credentialsInBrowser: false, automaticInference: false, automaticCheckStarted }); },
+      gpt, gptError, localTools: localTools.map(tool => ({ ...tool })), publicSources: [...rows.values()].map(row => row.result).filter(Boolean), credentialsInBrowser: false, automaticInference: false, automaticCheckStarted }); },
     destroy() {
       if (destroyed) return; destroyed = true;
       checkController?.abort(); sendController?.abort(); discoveryController?.abort();

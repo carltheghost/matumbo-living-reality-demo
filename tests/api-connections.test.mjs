@@ -10,6 +10,8 @@ const publicData = url => url.includes('open-meteo') ? { current: { temperature_
 const response = data => ({ ok: true, status: 200, json: async () => data });
 const alternateFxData = () => ({ result: 'success', provider: 'https://www.exchangerate-api.com', base_code: 'EUR',
   time_last_update_unix: 1790985752, rates: { EUR: 1, USD: 1.125175, GBP: 0.850777 } });
+const gptStatus = () => ({ service: 'matumbo-gpt-bridge', version: 1, credentialsInBrowser: false, credentialStorage: 'windows_dpapi',
+  chatgpt: { state: 'signed_out', authAvailable: true, dependencyState: 'ready', planUsage: false, activeAccountId: null }, openai: { state: 'key_needed' } });
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
 class Node {
@@ -135,7 +137,7 @@ test('loopback mount discovers status once and never sends a prompt', async () =
   const documentRoot = dom(), calls = [];
   const console = mountApiConnections({ documentRoot, windowRoot: { location: { href: 'http://127.0.0.1:8082/' } }, fetchImpl: async (url, options) => { calls.push({ url, options }); return response(bridgeStatus()); } });
   await tick();
-  assert.equal(calls.length, 1); assert.equal(calls[0].url, API_BRIDGE_DEFAULT_URL + '/api/providers');
+  assert.equal(calls.length, 2); assert.equal(calls[0].url, API_BRIDGE_DEFAULT_URL + '/api/providers');
   assert.equal(calls[0].options.method, 'GET'); assert.equal(console.getSnapshot().nvidia.state, 'configured');
   assert.equal(console.getSnapshot().publicSources.length, 0); console.destroy();
 });
@@ -155,12 +157,12 @@ test('explicit autoCheck option checks one bounded public batch and never infers
   const console = mountApiConnections({ documentRoot, windowRoot: { location: { href: 'https://carltheghost.github.io/matumbo-living-reality-demo/' } }, autoCheck: true,
     fetchImpl: async (url, options) => { calls.push({ url, options }); return response(url.endsWith('/api/providers') ? bridgeStatus() : publicData(url)); } });
   await tick(); await tick();
-  assert.equal(calls.length, 5); assert.ok(calls.every(call => call.options.method === 'GET'));
+  assert.equal(calls.length, 6); assert.ok(calls.every(call => call.options.method === 'GET'));
   assert.equal(console.getSnapshot().automaticCheckStarted, true);
   assert.equal(console.getSnapshot().publicSources.length, 4);
   assert.equal(console.getSnapshot().nvidia.state, 'configured');
   console.open(); console.close(); console.open(); await tick();
-  assert.equal(calls.length, 5); console.destroy();
+  assert.equal(calls.length, 6); console.destroy();
 });
 
 test('automatic batch uses at most one FX alternate and exposes alternate attribution in UI and snapshot', async () => {
@@ -173,7 +175,7 @@ test('automatic batch uses at most one FX alternate and exposes alternate attrib
       return response(url === API_CONNECTIONS_FX_FALLBACK.url ? alternateFxData() : url.endsWith('/api/providers') ? bridgeStatus(false) : publicData(url));
     } });
   await tick(); await tick();
-  assert.equal(calls.length, 6); assert.ok(calls.every(call => call.options.method === 'GET'));
+  assert.equal(calls.length, 7); assert.ok(calls.every(call => call.options.method === 'GET'));
   const snapshot = console.getSnapshot();
   assert.equal(snapshot.publicSources.filter(source => source.state === 'available').length, 4);
   const result = snapshot.publicSources.find(source => source.id === 'fx');
@@ -182,14 +184,14 @@ test('automatic batch uses at most one FX alternate and exposes alternate attrib
   assert.equal(attribution.href, 'https://www.exchangerate-api.com');
   assert.ok(find(documentRoot.body, node => node.textContent === 'Available · alternate'));
   assert.ok(find(documentRoot.body, node => typeof node.textContent === 'string' && node.textContent.includes('Frankfurter · ECB unavailable: Provider returned HTTP 403.')));
-  console.open(); console.close(); console.open(); await tick(); assert.equal(calls.length, 6); console.destroy();
+  console.open(); console.close(); console.open(); await tick(); assert.equal(calls.length, 7); console.destroy();
 });
 
 test('Check connections reads four public APIs once and discovers a bridge', async () => {
   const documentRoot = dom(), calls = [];
   const console = mountApiConnections({ documentRoot, windowRoot: { location: { href: 'https://carltheghost.github.io/matumbo-living-reality-demo/' } }, fetchImpl: async (url, options) => { calls.push({ url, options }); return response(url.endsWith('/api/providers') ? bridgeStatus(false) : publicData(url)); } });
   await console.checkConnections();
-  assert.equal(calls.length, 5); assert.ok(calls.every(call => call.options.method === 'GET'));
+  assert.equal(calls.length, 6); assert.ok(calls.every(call => call.options.method === 'GET'));
   assert.equal(console.getSnapshot().publicSources.length, 4); assert.equal(console.getSnapshot().nvidia.state, 'key-needed');
   const send = find(documentRoot.body, node => node.textContent === 'Send to NVIDIA'); assert.equal(send.disabled, true); console.destroy();
 });
@@ -202,8 +204,8 @@ test('explicit Send uses local fixed route and marks only successful answer veri
   await tick(); console.open();
   documentRoot.getElementById('api-connections-prompt').value = 'Explain this lens.';
   const send = find(documentRoot.body, node => node.textContent === 'Send to NVIDIA'); await send.click();
-  assert.equal(calls.length, 2); assert.equal(calls[1].url, API_BRIDGE_DEFAULT_URL + '/api/nvidia/chat');
-  assert.deepEqual(JSON.parse(calls[1].options.body), { prompt: 'Explain this lens.' });
+  assert.equal(calls.length, 3); assert.equal(calls[2].url, API_BRIDGE_DEFAULT_URL + '/api/nvidia/chat');
+  assert.deepEqual(JSON.parse(calls[2].options.body), { prompt: 'Explain this lens.' });
   assert.equal(console.getSnapshot().nvidia.state, 'verified');
   const answer = find(documentRoot.body, node => node.className === 'api-connections-answer');
   assert.equal(answer.textContent, '<script>untrusted plain text</script>'); assert.equal(answer.innerHTML, undefined);
@@ -237,4 +239,77 @@ test('destroy aborts pending connection reads and removes its DOM and stylesheet
   assert.equal(signals.length, 5); console.destroy(); await pending;
   assert.ok(signals.every(signal => signal.aborted));
   assert.equal(documentRoot.body.children.length, 0); assert.equal(documentRoot.head.children.length, 0);
+});
+
+test('assistant status and helper readiness use safe live owner state without inference', async () => {
+  const documentRoot = dom(), calls = [], events = [];
+  const tools = [{ id: 'lens-guide', enabled: true }, { id: 'plan-helper', enabled: false }];
+  const console = mountApiConnections({ documentRoot, windowRoot: { location: { href: API_BRIDGE_DEFAULT_URL } }, getLocalTools: () => tools,
+    onOpenFeature: (id, options) => events.push({ id, options }), fetchImpl: async (url, options) => { calls.push({ url, options }); return response(url.endsWith('/api/gpt/status') ? gptStatus() : bridgeStatus(false)); } });
+  await tick(); console.open();
+  assert.equal(console.getSnapshot().gpt.chatgpt.state, 'signed_out'); assert.equal(console.getSnapshot().gpt.openai.state, 'key_needed');
+  assert.deepEqual(console.getSnapshot().localTools.map(t => t.state), ['enabled', 'resting']);
+  tools[1].enabled = true; console.close(); console.open(); assert.equal(console.getSnapshot().localTools[1].state, 'enabled');
+  await find(documentRoot.body, n => n.textContent === 'Open API setup').click();
+  assert.deepEqual(events, [{ id: 'web-ai', options: { provider: 'openai' } }]); assert.equal(console.getSnapshot().open, false);
+  assert.equal(calls.length, 2); assert.ok(calls.every(c => c.options.method === 'GET')); console.destroy();
+});
+
+test('assistant refresh does not poll public endpoints or trigger sign-in and inference', async () => {
+  const documentRoot = dom(), calls = [];
+  const console = mountApiConnections({ documentRoot, windowRoot: { location: { href: 'https://example.com/' } }, fetchImpl: async (url, options) => { calls.push({ url, options }); return response(url.endsWith('/api/gpt/status') ? gptStatus() : bridgeStatus(false)); } });
+  await find(documentRoot.body, n => n.textContent === 'Refresh assistant status').click();
+  assert.deepEqual(calls.map(c => c.url), [API_BRIDGE_DEFAULT_URL + '/api/providers', API_BRIDGE_DEFAULT_URL + '/api/gpt/status']);
+  assert.ok(calls.every(c => c.options.credentials === 'omit' && c.options.redirect === 'error')); assert.equal(console.getSnapshot().publicSources.length, 0); console.destroy();
+});
+
+test('a malformed GPT endpoint leaves NVIDIA usable and shows a separate status failure', async () => {
+  const documentRoot = dom();
+  const console = mountApiConnections({ documentRoot, windowRoot: { location: { href: API_BRIDGE_DEFAULT_URL } }, fetchImpl: async url => response(url.endsWith('/api/providers') ? bridgeStatus() : {}) });
+  await tick(); assert.equal(console.getSnapshot().nvidia.state, 'configured'); assert.equal(console.getSnapshot().gpt, null); assert.match(console.getSnapshot().gptError, /recognized/); console.destroy();
+});
+
+test('individual source retry and reference conversion send no amount or extra requests', async () => {
+  const documentRoot = dom(), calls = [];
+  const date = new Date().toISOString().slice(0, 10);
+  const console = mountApiConnections({ documentRoot, windowRoot: { location: { href: 'https://example.com/' } }, fetchImpl: async (url, options) => { calls.push({ url, options }); return response([{ date, base: 'EUR', quote: 'USD', rate: 1.1 }, { date, base: 'EUR', quote: 'GBP', rate: .8 }]); } });
+  assert.equal(await console.checkSource('unreviewed'), null); assert.equal(calls.length, 0);
+  await console.checkSource('fx'); assert.equal(calls.length, 1); assert.ok(calls[0].url.includes('frankfurter'));
+  documentRoot.getElementById('network-fx-amount').value = '110'; documentRoot.getElementById('network-fx-from').value = 'USD'; documentRoot.getElementById('network-fx-to').value = 'GBP';
+  assert.equal(documentRoot.getElementById('network-fx-from').attrs['aria-label'], 'From'); assert.equal(documentRoot.getElementById('network-fx-to').attrs['aria-label'], 'To');
+  await find(documentRoot.body, n => n.textContent === 'Convert reference amount').click();
+  assert.match(find(documentRoot.body, n => n.className === 'api-connections-conversion').textContent, /80 GBP/);
+  assert.equal(calls.length, 1); assert.ok(!calls[0].options.body);
+  documentRoot.getElementById('network-fx-amount').value = ''; await find(documentRoot.body, n => n.textContent === 'Convert reference amount').click();
+  assert.match(find(documentRoot.body, n => n.className === 'api-connections-conversion').textContent, /Enter an amount/); console.destroy();
+});
+
+test('cancel restores controls and prior public observations even for uncooperative transport', async () => {
+  const documentRoot = dom(); let stall = false; let late;
+  const console = mountApiConnections({ documentRoot, windowRoot: { location: { href: 'https://example.com/' } }, fetchImpl: async url => stall ? new Promise(resolve => { late = resolve; }) : response(publicData(url)) });
+  await console.checkSource('weather'); const previous = console.getSnapshot().publicSources[0]; stall = true;
+  const pending = console.checkSource('weather'); await tick(); console.cancel(); await pending;
+  assert.equal(console.getSnapshot().checking, false); assert.deepEqual(console.getSnapshot().publicSources[0], previous);
+  assert.equal(find(documentRoot.body, n => n.textContent === 'Check connections').disabled, false);
+  late(response({})); await tick(); assert.deepEqual(console.getSnapshot().publicSources[0], previous); console.destroy();
+});
+
+test('public deadline includes stalled response decoding and blocks invalid calendar dates', async () => {
+  const probe = API_CONNECTIONS_PROBES.find(p => p.id === 'weather');
+  const stalled = await checkApiConnection(probe, { timeoutMs: 5, fetchImpl: async () => ({ ok: true, json: () => new Promise(() => {}) }) });
+  assert.equal(stalled.state, 'unavailable'); assert.match(stalled.summary, /timed out/);
+  const fx = API_CONNECTIONS_PROBES.find(p => p.id === 'fx');
+  const invalid = await checkApiConnection(fx, { fetchImpl: async url => url === fx.url ? response([{ date: '2026-02-31', base: 'EUR', quote: 'USD', rate: 1.1 }]) : response({}) });
+  assert.equal(invalid.state, 'unavailable'); assert.match(invalid.attempts[0].reason, /invalid/);
+});
+
+test('stopping NVIDIA waits suppresses late answers without claiming provider cancellation', async () => {
+  const documentRoot = dom(); let finish;
+  const console = mountApiConnections({ documentRoot, windowRoot: { location: { href: API_BRIDGE_DEFAULT_URL } }, fetchImpl: async url => url.endsWith('/api/nvidia/chat') ? new Promise(resolve => { finish = resolve; }) : response(url.endsWith('/api/gpt/status') ? gptStatus() : bridgeStatus()) });
+  await tick(); documentRoot.getElementById('api-connections-prompt').value = 'Explain.';
+  const pending = find(documentRoot.body, n => n.textContent === 'Send to NVIDIA').click(); await tick(); console.cancel(); await pending;
+  assert.equal(console.getSnapshot().sending, false); assert.equal(console.getSnapshot().nvidia.state, 'configured');
+  assert.match(find(documentRoot.body, n => n.className === 'api-connections-answer').textContent, /provider may still finish/);
+  finish(response({ provider: 'nvidia', content: 'late reply', advisory: true, verifiedAt: new Date().toISOString() })); await tick();
+  assert.equal(console.getSnapshot().nvidia.state, 'configured'); console.destroy();
 });
