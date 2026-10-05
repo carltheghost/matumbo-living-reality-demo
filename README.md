@@ -52,6 +52,8 @@ NVIDIA inference is optional and uses the local bridge. **Key needed** means no 
 
 ## Development and delivery
 
+**Hands & eyes** in the Home header opens the shared camera/video controls. Ordinary laptop, USB and phone cameras use the browser camera API; local video files use the same on-device detector. Hands can select original object controls or move, resize and rotate unlocked objects. Optional eye tracking requires nine calibration targets and five separate accuracy-check targets before it can aim or navigate. Camera access is explicit, frames stay local, and physical-camera/human-gaze validation remains open. See [the hands-and-eyes guide](docs/HANDS_AND_EYES.md) for setup, phone HTTPS access, troubleshooting and evidence boundaries.
+
 The browser uses pinned, vendored Three.js **0.179.1**, vanilla JavaScript and WebGL. Live document content becomes canvas textures on the actual mesh, and triangle UV hits operate the original controls. Canvas features retain their proportions and receive a dedicated reading surface. One native YouTube iframe uses CSS3D placement because cross-origin player pixels cannot be copied onto curved geometry. See [the whole-body surface engine](docs/REALITY_SURFACES_360.md) for geometry, ownership and media boundaries. Node's test runner exercises the JavaScript domains; Python's standard library serves and packages the prototype. Some optional widgets and public providers still need network access.
 
 ```powershell

@@ -78,6 +78,52 @@ test('all supported whole-body geometries route a painted action through actual 
   }
 });
 
+test('tracked pinches use actual triangle UVs and the original control without acquiring a browser pointer',()=>{
+  for(const shape of REALITY_TAB_FORM_IDS){
+    const f=fixture(shape);
+    try{
+      f.canvas.setPointerCapture=()=>{throw Error('No physical pointer exists');};
+      const chart=f.controller.atlas.snapshot().charts.find(item=>item.regions.some(region=>region.actionId?.startsWith('original:')));
+      const region=chart.regions.find(item=>item.actionId?.startsWith('original:')),point=aimAt(f,chart.index,uvOf(region));
+      assert.equal(f.controller.handleTrackingInput({type:'down',clientX:point.x,clientY:point.y}),true);
+      assert.equal(f.controller.handleTrackingInput({type:'up',clientX:point.x,clientY:point.y}),true);
+      assert.equal(f.button.clicks,1,shape);assert.equal(f.controls.enabled,true);assert.equal(f.capture.size,0);
+    }finally{f.dispose();}
+  }
+});
+
+test('tracked loss cancels the original drawing surface once without capture or a click',()=>{
+  const f=fixture('cube',{pointerSurface:true}),events=[];
+  try{
+    f.canvas.setPointerCapture=()=>{throw Error('No physical pointer exists');};
+    for(const type of ['pointerdown','pointercancel','pointerup','click'])f.button.addEventListener(type,event=>events.push(event.type));
+    const chart=f.controller.atlas.snapshot().charts.find(item=>item.regions.some(region=>region.kind==='canvas'));
+    const point=aimAt(f,chart.index,uvOf(chart.regions.find(region=>region.kind==='canvas')));
+    f.controller.handleTrackingInput({type:'down',clientX:point.x,clientY:point.y});
+    assert.equal(f.controller.handleTrackingInput({type:'cancel'}),true);
+    assert.equal(f.controller.handleTrackingInput({type:'cancel'}),false);
+    assert.deepEqual(events,['pointerdown','pointercancel']);assert.equal(f.controls.enabled,true);assert.equal(f.capture.size,0);
+  }finally{f.dispose();}
+});
+
+test('tracked body rotation is a preview until release and cancellation restores its original orientation',()=>{
+  const f=fixture();
+  try{
+    const chart=f.controller.atlas.snapshot().charts.find(item=>item.regions.some(region=>region.actionId?.startsWith('original:')));
+    const point=aimAt(f,chart.index,uvOf(chart.regions.find(region=>region.actionId?.startsWith('original:'))));
+    const original=f.node.root.quaternion.clone();
+    f.controller.handleTrackingInput({type:'down',clientX:point.x,clientY:point.y});
+    f.controller.handleTrackingInput({type:'rotate',radians:.4,clientX:point.x,clientY:point.y});
+    assert.ok(original.angleTo(f.node.root.quaternion)>.3);
+    f.controller.handleTrackingInput({type:'cancel'});
+    assert.ok(original.angleTo(f.node.root.quaternion)<1e-7);assert.equal(f.button.clicks,0);
+    f.controller.handleTrackingInput({type:'down',clientX:point.x,clientY:point.y});
+    f.controller.handleTrackingInput({type:'rotate',radians:.4,clientX:point.x,clientY:point.y});
+    f.controller.handleTrackingInput({type:'up',clientX:point.x,clientY:point.y});
+    assert.ok(original.angleTo(f.node.root.quaternion)>.3);assert.equal(f.button.clicks,0);
+  }finally{f.dispose();}
+});
+
 test('surfacePoint and picking agree after ancestor rotation, translation and nonuniform body scale',()=>{
   const f=fixture('sphere');
   try {

@@ -5,13 +5,13 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 
 const types = {
-  '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json',
+  '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json',
   '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
   '.webp': 'image/webp', '.gif': 'image/gif', '.ico': 'image/x-icon',
   '.woff': 'font/woff', '.woff2': 'font/woff2', '.ttf': 'font/ttf',
   '.wasm': 'application/wasm', '.glb': 'model/gltf-binary', '.gltf': 'model/gltf+json',
   '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav',
-  '.mp4': 'video/mp4', '.webm': 'video/webm', '.bin': 'application/octet-stream',
+  '.mp4': 'video/mp4', '.webm': 'video/webm', '.bin': 'application/octet-stream', '.task': 'application/octet-stream',
 };
 // Match the browser entry points in the static Pages artifact, without
 // exposing package/config files or arbitrary root-level development scripts.
@@ -22,7 +22,7 @@ const rootBrowserAssets = new Set([
 ]);
 const allowed = p => !p.split('/').some(s => !s || s.startsWith('.') || s.includes(':') || s.includes('\\'))
   && Boolean(types[path.extname(p)])
-  && (rootBrowserAssets.has(p) || /^(src\/|vendor\/three-r179\.1\/|assets\/|public\/)/.test(p));
+  && (rootBrowserAssets.has(p) || /^(src\/|vendor\/three-r179\.1\/|vendor\/mediapipe-tasks-vision-1\.0\.1\/|assets\/|public\/)/.test(p));
 const escape = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const client = `let revision = null, paused = false;
 const bar = document.createElement('div');

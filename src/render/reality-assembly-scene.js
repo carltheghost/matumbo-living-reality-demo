@@ -1,9 +1,10 @@
 import {createRealitySurfaceGeometry} from './reality-surface-geometry.js?v=20261003-skin360';
-import {REALITY_TAB_FORMS} from '../domains/reality-tab-layout.js?v=20261003-skin360';
+import {REALITY_TAB_FORMS,resolveRealityTabPosition} from '../domains/reality-tab-layout.js?v=20261003-skin360';
 import {REALITY_LENS_GROUPS,realityLensEngine,resolveRealityLensGroup} from '../domains/reality-lens-engine.js?v=20261003-skin360';
 import {realityObjectSurfaceEngine} from '../domains/reality-object-engine.js?v=20261003-skin360';
 import {lensSpaceLabel} from './reality-lens-chrome.js?v=20261003-skin360';
 import {createRealityHomeSurface} from './reality-home-surfaces.js?v=20261003-skin360';
+import {createHomeTransformStore} from './reality-tracking-input.js';
 
 /** Native volumetric fronts for feature objects and their space entries.
  * Layout and materials remain projections over the existing identities. */
@@ -613,6 +614,10 @@ function applyTabDepthMode(node){
   let selected=null,hovered=null,mode='3d',viewState=null,focusId=null,activeFocusStrength=0,activeFocusDistance=Infinity,activeFocusIsolated=false,activeGroupId='*';
   let calmMode=false,spaceViewport={width:1280,height:800},creatorAppearance=null;
   const compactPositions=new Map(),spaceBounds=new Map(),spacePages=new Map();
+  const compactBasePositions=new Map([...nodes].filter(([,node])=>Array.isArray(node.feature.initialPosition)).map(([id,node])=>[id,node.position.clone()]));
+  let homeStorage=null;try{homeStorage=globalThis.localStorage??null;}catch{}
+  const homeTransforms=createHomeTransformStore({ids:[...groupParents.keys()],storage:homeStorage});
+  const homeBases=new Map();
   const previewScale=2.2;
   function getSpacePage(groupId=activeGroupId){
     const members=groupParents.get(groupId)?.members??[],pageSize=spaceViewport.width<700?4:6,total=members.length,pageCount=Math.max(1,Math.ceil(total/pageSize));
@@ -650,7 +655,9 @@ function applyTabDepthMode(node){
       }
       return {id:marker.id,size:half.map(value=>value*2)};
     }),columns,creatorAppearance?(creatorGap*.7):(spaceViewport.width<700?.5:1.6));
-    entries.forEach(item=>groupParents.get(item.id).spacePosition.set(...item.position));spaceBounds.set(null,boundsFor(entries));
+    entries.forEach(item=>{homeBases.set(item.id,[...item.position]);const transform=homeTransforms.get(item.id);item.position=item.position.map((value,axis)=>Math.max(-60,Math.min(60,value+transform.offset[axis])));item.size=item.size.map(value=>value*transform.size);groupParents.get(item.id).spacePosition.set(...item.position);});spaceBounds.set(null,boundsFor(entries));
+    const framedHome=entries.map(item=>{const box=homeBox(item.id,getHomeTransform(item.id));return {id:item.id,position:box.getCenter(new THREE.Vector3()).toArray(),size:box.getSize(new THREE.Vector3()).toArray()};});
+    spaceBounds.set(null,boundsFor(framedHome));
     compactPositions.clear();
     for(const marker of groupParents.values()){
       const page=getSpacePage(marker.id);spacePages.set(marker.id,page.page);
@@ -659,14 +666,64 @@ function applyTabDepthMode(node){
       // choices still control their arrangement, and saved positions stay intact.
       const memberColumns=marker.id==='network'&&members.length===4&&!['focus','flow','grid'].includes(creatorAppearance?.layout)?2:columns;
       const memberGap=marker.id==='network'&&!creatorAppearance?1.0:creatorGap;
-      const items=arrangeRows(members.map(node=>{const form=REALITY_TAB_FORMS[node.shape]??REALITY_TAB_FORMS.rectangle,scale=(node.size??1)*(node.scale??1)*previewScale;return {id:node.feature.id,size:[form.width*scale,form.height*scale,form.depth*scale]};}),memberColumns,memberGap);
-      items.forEach(item=>compactPositions.set(item.id,new THREE.Vector3(...item.position)));spaceBounds.set(marker.id,boundsFor(items));
+      const items=arrangeRows(members.map(node=>{
+        const form=REALITY_TAB_FORMS[node.shape]??REALITY_TAB_FORMS.rectangle,scale=(node.size??1)*(node.scale??1)*previewScale;
+        const size=new THREE.Vector3(form.width*scale,form.height*scale,form.depth*scale);
+        if(node.rotation?.some(angle=>angle!==0)){
+          const half=size.clone().multiplyScalar(.5),box=new THREE.Box3(half.clone().negate(),half);
+          box.applyMatrix4(new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(...node.rotation))).getSize(size);
+        }
+        return {id:node.feature.id,size:size.toArray()};
+      }),memberColumns,memberGap);
+      items.forEach(item=>{const node=nodes.get(item.id),base=compactBasePositions.get(item.id)??node.position;item.position=item.position.map((value,axis)=>value+(node.position.getComponent(axis)-base.getComponent(axis)));compactPositions.set(item.id,new THREE.Vector3(...item.position));});spaceBounds.set(marker.id,boundsFor(items));
     }
   }
   function getObjectPosition(id){
     const node=nodes.get(id);if(!node)return null;
     return calmMode&&activeGroupId!=='*'&&compactPositions.has(id)?compactPositions.get(id):node.position;
   }
+  function resolveObjectMove(id,position,objects){
+    if(!calmMode||activeGroupId==='*')return resolveRealityTabPosition(id,position,objects);
+    const object=objects.find(item=>item.id===id),node=nodes.get(id),current=getObjectPosition(id),page=getSpacePage(node.lensGroup);
+    const visible=objects.filter(item=>page.ids.includes(item.id));
+    const displayed=visible.map(item=>({ ...item,position:getObjectPosition(item.id).toArray(),size:item.size*(nodes.get(item.id).scale??1)*previewScale }));
+    const proposed=current.toArray().map((value,axis)=>value+position[axis]-node.position.getComponent(axis));
+    const resolved=resolveRealityTabPosition(id,proposed,displayed);
+    return resolved.map((value,axis)=>node.position.getComponent(axis)+value-current.getComponent(axis));
+  }
+  function getHomeTransform(id){
+    const marker=groupParents.get(id);if(!marker)throw Error('Unknown Home space');
+    const transform=homeTransforms.get(id),base=homeBases.get(id)??[0,0,0];
+    return {id,position:base.map((value,axis)=>Math.max(-60,Math.min(60,value+transform.offset[axis]))),size:transform.size,rotation:transform.rotation,locked:false,anchor:false};
+  }
+  function homeBox(id,transform){
+    const marker=groupParents.get(id),index=[...groupParents.keys()].indexOf(id),yaw=(index%2?-1:1)*(spaceViewport.width<700?.09:.2);
+    const rotation=new THREE.Quaternion().setFromEuler(new THREE.Euler(.045+transform.rotation[0],yaw+transform.rotation[1],transform.rotation[2]));
+    return marker.entry.geometry.boundingBox.clone().applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(...transform.position),rotation,new THREE.Vector3().setScalar(transform.size))).expandByScalar(.18);
+  }
+  function setHomeTransform(id,value,{preview=false}={}){
+    if(viewState?.mode==='past')throw Error('Recorded history is read-only; return to the present before arranging Home');
+    const current=getHomeTransform(id),next={...current,...value,id};
+    if(!Array.isArray(next.position)||next.position.length!==3||next.position.some(number=>!Number.isFinite(number)||Math.abs(number)>60))throw Error('Home position must be finite and within the local workspace');
+    if(!Number.isFinite(next.size)||next.size<.5||next.size>2.5||!Array.isArray(next.rotation)||next.rotation.length!==3||next.rotation.some(number=>!Number.isFinite(number)||Math.abs(number)>Math.PI))throw Error('Home scale or rotation exceeds its presentation bounds');
+    next.position=[...next.position];next.rotation=[...next.rotation];
+    for(let iteration=0;iteration<64;iteration++){
+      let changed=false;
+      for(const otherId of groupParents.keys())if(otherId!==id){
+        const a=homeBox(id,next),other=getHomeTransform(otherId),b=homeBox(otherId,other);
+        if(!a.intersectsBox(b))continue;
+        const pushes=['x','y','z'].map((axis,index)=>({index,positive:b.max[axis]-a.min[axis]+.02,negative:a.max[axis]-b.min[axis]+.02}));
+        const nearest=pushes.flatMap(push=>[{index:push.index,step:push.positive},{index:push.index,step:-push.negative}]).sort((left,right)=>Math.abs(left.step)-Math.abs(right.step))[0];
+        next.position[nearest.index]=Math.max(-60,Math.min(60,next.position[nearest.index]+nearest.step));changed=true;
+      }
+      if(!changed)break;
+      if(iteration===63)throw Error('No collision-free Home slot is available; move another object first');
+    }
+    const base=homeBases.get(id)??[0,0,0],row={id,offset:next.position.map((number,axis)=>number-base[axis]),size:next.size,rotation:next.rotation};
+    homeTransforms[preview?'preview':'commit'](id,row);refreshSpaceLayout();return getHomeTransform(id);
+  }
+  function cancelHomeTransform(id){homeTransforms.cancel(id);refreshSpaceLayout();}
+  function resetHomeTransforms(){if(viewState?.mode==='past')throw Error('Recorded history is read-only; return to the present before resetting Home');homeTransforms.reset();refreshSpaceLayout();return getSnapshot();}
   function setActiveGroup(groupId=null){
     if(groupId!==null&&groupId!=='*'&&!groupParents.has(groupId))throw Error(`Unknown Reality Lens domain: ${groupId}`);
     activeGroupId=groupId;
@@ -731,7 +788,14 @@ function applyTabDepthMode(node){
       const node=nodes.get(object.id);if(!node)return;
       const position=Array.isArray(object.position)?object.position:(object.position&&typeof object.position.x==='number'&&typeof object.position.y==='number'&&typeof object.position.z==='number'?[object.position.x,object.position.y,object.position.z]:null);
       if(!position) return;
+      if(!compactBasePositions.has(object.id))compactBasePositions.set(object.id,new THREE.Vector3(...position));
       node.position.set(position[0],position[1],position[2]);node.goalOpen=object.open?1:object.id===hovered?.23:0;
+      const rotation=Array.isArray(object.rotation)?object.rotation:[0,0,0];
+      // Apply canonical changes and cancelled previews once. Mounted surface
+      // gestures can keep their existing orientation between owner changes.
+      if(!node.rotation||rotation.some((angle,axis)=>angle!==node.rotation[axis])){
+        node.rotation=[...rotation];node.root.rotation.set(...rotation);
+      }
       if(node.isTab){
         const nextShape=REALITY_TAB_FORMS[object.shape]?object.shape:'rectangle';
         node.size=Number.isFinite(object.size)?object.size:1;
@@ -801,8 +865,7 @@ function applyTabDepthMode(node){
         const perspectiveScale=lensMode&&cameraPosition?Math.max(.9,Math.min(1.22,cameraPosition.distanceTo(node.position)/78)):1;
         const targetScale=node.scale*node.size*perspectiveScale*(focusId&&id!==focusId?.72:1);
         node.root.scale.lerp(new THREE.Vector3(targetScale,targetScale,targetScale),blend);
-        node.root.rotation.y=reducedMotion?0:Math.sin(time*.18+node.traits.phase)*.025;
-        node.root.rotation.x=reducedMotion?0:Math.sin(time*.13+node.traits.phase)*.012;
+        if(!node.surface360)node.root.rotation.set((node.rotation?.[0]??0)+(reducedMotion?0:Math.sin(time*.13+node.traits.phase)*.012),(node.rotation?.[1]??0)+(reducedMotion?0:Math.sin(time*.18+node.traits.phase)*.025),node.rotation?.[2]??0);
         node.liveContent.visible=node.open>.05;
         node.liveContent.scale.setScalar(node.open*.9);
         continue;
@@ -846,7 +909,7 @@ function applyTabDepthMode(node){
         cell.group.position.set(cell.restX,cell.open*.4,CORE/2+.78+cell.open*.3);
         for(const sub of cell.subs)sub.visible=cell.open>.3;
       }
-      node.city.position.y=node.open*.55;node.root.rotation.y=reducedMotion?0:Math.sin(time*.18+node.traits.phase)*.025;
+      node.city.position.y=node.open*.55;node.root.rotation.set(node.rotation?.[0]??0,(node.rotation?.[1]??0)+(reducedMotion?0:Math.sin(time*.18+node.traits.phase)*.025),node.rotation?.[2]??0);
       node.beacon.material=level?node.beaconHot:node.beaconMat;
     }
     if(!showWorld){edges.forEach(([from,to],i)=>{const a=nodes.get(from).root.position,b=nodes.get(to).root.position;buffer.setXYZ(i*2,a.x,a.y,a.z);buffer.setXYZ(i*2+1,b.x,b.y,b.z);});buffer.needsUpdate=true;}
@@ -926,8 +989,7 @@ function applyTabDepthMode(node){
         }
         tuneSurface(node.indicator?.material,.35);
         if(!node.surface360){
-          node.root.rotation.y=reducedMotion||calmMode?0:Math.sin(time*.18+node.traits.phase)*.025;
-          node.root.rotation.x=reducedMotion||calmMode?0:Math.sin(time*.13+node.traits.phase)*.012;
+          node.root.rotation.set((node.rotation?.[0]??0)+(reducedMotion||calmMode?0:Math.sin(time*.13+node.traits.phase)*.012),(node.rotation?.[1]??0)+(reducedMotion||calmMode?0:Math.sin(time*.18+node.traits.phase)*.025),node.rotation?.[2]??0);
         }
         if(node.indicator){node.indicator.visible=!node.surfaceReading&&!calmMode;const pulse=reducedMotion?1:.9+.1*Math.sin(time*.92+node.traits.phase);node.indicator.scale.setScalar(pulse);if(node.indicator.material?.emissiveIntensity!==undefined)node.indicator.material.emissiveIntensity=node.surfaceReading||reducedMotion?.28:.28+.18*(.5+.5*Math.sin(time*1.3+node.traits.phase));}
         // At close focus the object itself owns attention. The attached
@@ -976,7 +1038,7 @@ function applyTabDepthMode(node){
         cell.group.position.set(cell.restX,cell.open*.4,CORE/2+.78+cell.open*.3);
         for(const sub of cell.subs)sub.visible=cell.open>.3;
       }
-      node.root.rotation.y=reducedMotion?0:Math.sin(time*.18+node.traits.phase)*.025;
+      node.root.rotation.set(node.rotation?.[0]??0,(node.rotation?.[1]??0)+(reducedMotion?0:Math.sin(time*.18+node.traits.phase)*.025),node.rotation?.[2]??0);
       node.beacon.material=level?node.beaconHot:node.beaconMat;
     }
     for(const [groupIndex,domain] of REALITY_LENS_GROUPS.entries()){
@@ -986,7 +1048,8 @@ function applyTabDepthMode(node){
       else{marker.members.forEach(node=>center.add(node.root.position));center.multiplyScalar(1/marker.members.length);}
       marker.root.position.lerp(center,blend);
       const motion=calmMode&&!reducedMotion?Math.sin(time*.24+groupIndex)*.007:0;
-      marker.root.rotation.set(calmMode?.045:0,calmMode?(groupIndex%2?-1:1)*(spaceViewport.width<700?.09:.2)+motion:0,0);
+      const homeTransform=homeTransforms.get(domain.id);marker.root.scale.setScalar(calmMode?homeTransform.size:1);
+      marker.root.rotation.set((calmMode?.045:0)+(calmMode?homeTransform.rotation[0]:0),(calmMode?(groupIndex%2?-1:1)*(spaceViewport.width<700?.09:.2)+motion:0)+(calmMode?homeTransform.rotation[1]:0),calmMode?homeTransform.rotation[2]:0);
       const expanded=activeGroupId===domain.id;
       marker.root.visible=calmMode?activeGroupId===null:activeGroupId!=='*'&&!expanded&&approachBlend>.08&&!focusIsolated;
       marker.entry.visible=calmMode;marker.entryEdges.visible=calmMode;
@@ -1017,8 +1080,8 @@ function applyTabDepthMode(node){
     const lod=approachBlend<.04?'nucleus':approachBlend<.98?'unfolding':'field';
     const groupIds=[...new Set([...nodes.values()].map(node=>node.lensGroup).filter(Boolean))];
     const formerCenter=nodes.get('block-world');
-    return {geometryOnly:true,referenceImagesUsedAsTextures:false,funnelGuideVisible:funnelGuide.visible,gridVisible:grid.visible,nodeIds:[...nodes.keys()],nodeCount:nodes.size,tabCount:[...nodes.values()].filter(node=>node.isTab).length,visibleFeatureIds:[...nodes.values()].filter(node=>node.isTab&&node.root.visible).map(node=>node.feature.id),visibleTabCount:[...nodes.values()].filter(node=>node.isTab&&node.root.visible&&node.tabReveal>.35&&node.contextOpacity>.05).length,groupIds,visibleGroupCount:[...groupParents.values()].filter(marker=>marker.root.visible).length,visibleGroupIds:[...groupParents.values()].filter(marker=>marker.root.visible).map(marker=>marker.id),activeGroupId,calmMode,spaceView:calmMode?(activeGroupId??'home'):'assembly',spacePage:getSpacePage(),spaceBounds:spaceBounds.get(activeGroupId)??null,focusedId:focusId,focusStrength:Number(activeFocusStrength.toFixed(3)),focusIsolated:activeFocusIsolated,focusDistance:Number.isFinite(activeFocusDistance)?Number(activeFocusDistance.toFixed(2)):null,selectedStage:nodes.get(focusId)?.revealStage??0,approachProgress:Number(approachBlend.toFixed(3)),anchorOpen:formerCenter?.isTab?0:Number((formerCenter?.open??0).toFixed(3)),edgeCount:edges.length,relationshipSource:'authored feature navigation graph',connectionsVisible:connections.visible,connectionPairs:edges.map(pair=>[...pair]),viewMode:mode,selectedId:selected,historyMode:viewState?.mode??'present',designedArchitecture:true,equalAxisCubes:false,singleFixedAnchorCube:[...nodes.values()].some(node=>!node.isTab&&node.feature.id==='block-world'),formerCenterIsMovableTab:formerCenter?.isTab===true,lensMode,lod};
+    return {homeLayout:homeTransforms.snapshot(),geometryOnly:true,referenceImagesUsedAsTextures:false,funnelGuideVisible:funnelGuide.visible,gridVisible:grid.visible,nodeIds:[...nodes.keys()],nodeCount:nodes.size,tabCount:[...nodes.values()].filter(node=>node.isTab).length,visibleFeatureIds:[...nodes.values()].filter(node=>node.isTab&&node.root.visible).map(node=>node.feature.id),visibleTabCount:[...nodes.values()].filter(node=>node.isTab&&node.root.visible&&node.tabReveal>.35&&node.contextOpacity>.05).length,groupIds,visibleGroupCount:[...groupParents.values()].filter(marker=>marker.root.visible).length,visibleGroupIds:[...groupParents.values()].filter(marker=>marker.root.visible).map(marker=>marker.id),activeGroupId,calmMode,spaceView:calmMode?(activeGroupId??'home'):'assembly',spacePage:getSpacePage(),spaceBounds:spaceBounds.get(activeGroupId)??null,focusedId:focusId,focusStrength:Number(activeFocusStrength.toFixed(3)),focusIsolated:activeFocusIsolated,focusDistance:Number.isFinite(activeFocusDistance)?Number(activeFocusDistance.toFixed(2)):null,selectedStage:nodes.get(focusId)?.revealStage??0,approachProgress:Number(approachBlend.toFixed(3)),anchorOpen:formerCenter?.isTab?0:Number((formerCenter?.open??0).toFixed(3)),edgeCount:edges.length,relationshipSource:'authored feature navigation graph',connectionsVisible:connections.visible,connectionPairs:edges.map(pair=>[...pair]),viewMode:mode,selectedId:selected,historyMode:viewState?.mode??'present',designedArchitecture:true,equalAxisCubes:false,singleFixedAnchorCube:[...nodes.values()].some(node=>!node.isTab&&node.feature.id==='block-world'),formerCenterIsMovableTab:formerCenter?.isTab===true,lensMode,lod};
   }
-  return {layer,nodes,groupParents,groupTargets,worldBlock,backdrop,apply,update,getSnapshot,setCreatorAppearance,setLensMode,setActiveGroup,setSpaceView,setSpaceViewport,setSpacePage,getSpacePage,getObjectPosition,getSpaceBounds:id=>spaceBounds.get(id??null)??null,getGroupPosition:id=>{const marker=groupParents.get(id);return marker?(calmMode?marker.spacePosition:marker.root.position):null;},focus,resolve:object=>object?.userData?.assemblyId??null,resolveGroup:object=>object?.userData?.realityLensGroup??null,
+  return {layer,nodes,groupParents,groupTargets,worldBlock,backdrop,apply,update,getSnapshot,setCreatorAppearance,setLensMode,setActiveGroup,setSpaceView,setSpaceViewport,setSpacePage,getSpacePage,getObjectPosition,resolveObjectMove,getHomeTransform,setHomeTransform,cancelHomeTransform,resetHomeTransforms,getSpaceBounds:id=>spaceBounds.get(id??null)??null,getGroupPosition:id=>{const marker=groupParents.get(id);return marker?(calmMode?marker.spacePosition:marker.root.position):null;},focus,resolve:object=>object?.userData?.assemblyId??null,resolveGroup:object=>object?.userData?.realityLensGroup??null,
     destroy(){selectable.forEach(object=>{const i=targets.indexOf(object);if(i>=0)targets.splice(i,1);});groupTargets.length=0;geometry.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());textures.forEach(t=>t.dispose());layer.removeFromParent();}};
 }

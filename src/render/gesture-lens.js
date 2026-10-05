@@ -90,6 +90,7 @@ export function createGestureLensConsole({
   onSelect = null,
   onReplay = null,
   onReset = null,
+  onOpenTracking = null,
 } = {}) {
   const get = (id) => documentRoot?.getElementById?.(id) ?? null;
   const panel = get("gesture-lens-console");
@@ -186,9 +187,11 @@ export function createGestureLensConsole({
     });
     boundaryEl.textContent = GESTURE_LENS_BOUNDARY;
     if (previewNote) {
-      previewNote.textContent = "LOCAL PREVIEW · NOT ANALYZED · NO HAND TRACKING IN THIS BUILD · CLOSING STOPS THE CAMERA";
+      previewNote.textContent = onOpenTracking
+        ? "Use Hands & eyes for real camera tracking. This pad remains available for pointer and touch practice."
+        : "LOCAL PREVIEW · NOT ANALYZED · NO HAND TRACKING IN THIS BUILD · CLOSING STOPS THE CAMERA";
     }
-    toggleButton.textContent = cameraState === "preview" ? "Stop camera preview" : "Enable camera preview";
+    toggleButton.textContent = onOpenTracking ? "Open Hands & eyes" : cameraState === "preview" ? "Stop camera preview" : "Enable camera preview";
   }
 
   function emitIntent(result, method) {
@@ -245,6 +248,10 @@ export function createGestureLensConsole({
 
   async function setCameraEnabled(next, method = "api") {
     const want = next === true;
+    if(want && typeof onOpenTracking === 'function') {
+      stopCamera();cameraState='off';render();onOpenTracking();
+      return snapshot('tracking-controls',method);
+    }
     if (want === (cameraState === "preview")) return snapshot("camera", method);
     if (!want) {
       stopCamera();

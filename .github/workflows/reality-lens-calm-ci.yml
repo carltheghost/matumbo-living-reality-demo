@@ -18,6 +18,10 @@ on:
       - 'scripts/*demo*'
       - 'scripts/run_tests.py'
       - 'scripts/public-preview.mjs'
+      - 'scripts/provision_vision.py'
+      - 'assets/models/vision/**'
+      - 'vendor/mediapipe-tasks-vision-1.0.1/**'
+      - '.gitattributes'
       - 'tests/**'
       - '.github/workflows/reality-lens-calm-ci.yml'
   workflow_dispatch:

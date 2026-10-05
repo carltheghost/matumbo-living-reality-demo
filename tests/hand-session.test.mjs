@@ -8,6 +8,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { createHandLensSession } from "../src/render/hand-session.js";
+import { createTrackingInteraction } from "../src/domains/tracking-interaction.js";
 
 // ---------------------------------------------------------------------------
 // Stubs
@@ -175,6 +176,23 @@ describe("mount / destroy lifecycle", () => {
 });
 
 describe("frame pipeline", () => {
+  it('routes a frame to one active owner and does not also manipulate Block World',()=>{
+    const {session,intents}=makeSession();const received=[];session.mount();
+    session.setInteractionHandler(value=>{received.push(value);return true;});
+    session.handleFrame({...frame(pinchHand(.6),1000),source:{id:'camera-1'}});
+    assert.equal(intents.length,0);assert.equal(received[0].source.id,'camera-1');
+    assert(received[0].lensEvents.some(event=>event.type==='pinchstart'));
+    session.destroy();
+  });
+  it('owner handoff releases a previously held Block World draft',()=>{
+    const {session,intents}=makeSession();session.mount();session.handleFrame(frame(pinchHand(.6),1000));
+    session.setInteractionHandler(()=>true);session.handleFrame(frame(pinchHand(.6),1033));
+    assert.deepEqual(intents.map(event=>event.gesture),['grab','release']);session.destroy();
+  });
+  it('an adapter failure does not send the frame into an unrelated owner',()=>{
+    const {session,intents}=makeSession();session.mount();session.setInteractionHandler(()=>{throw Error('adapter unavailable');});
+    session.handleFrame(frame(pinchHand(.6),1000));assert.equal(intents.length,0);session.destroy();
+  });
   it("pinchstart → noteGestureIntent received grab", () => {
     const { session, intents } = makeSession();
     session.mount();
@@ -246,5 +264,101 @@ describe("frame pipeline", () => {
       `expected pressKey("key-a") after pointer control keys, got ${JSON.stringify(pressed)}`,
     );
     session.destroy();
+  });
+});
+
+// The real recognizer and arbitration must agree which observations exist.
+// These fixtures exercise loss/release behavior rather than a validator mock.
+function routedHand(ratio = .9, handedness = 'Left', x = .5) {
+  return { handedness, landmarks: makeLandmarks({ 0: [x, .6], 9: [x, .5],
+    4: [x + ratio * .05, .5], 8: [x - ratio * .05, .5] }) };
+}
+function makeRoutedSession() {
+  const { session, intents } = makeSession({ withDom: false });
+  let now = 0;
+  const calls = [], received = [];
+  const interaction = createTrackingInteraction({ clock: () => now, isActive: () => true,
+    dispatch: event => { calls.push(event); return { target: { kind: 'space', id: 'experiences' } }; } });
+  session.setInteractionHandler(value => { received.push(value); return interaction.handleHands(value); });
+  function feed(hands, count = 1) {
+    for (let i = 0; i < count; i++) { now += 30; session.handleFrame({ hands, timestamp: now, source: { id: 'same-source' } }); }
+  }
+  function hold() { feed([routedHand(.9)]); feed([routedHand(.05)], 10); assert.equal(interaction.snapshot().held, 'Left'); }
+  return { session, intents, interaction, calls, received, feed, hold };
+}
+
+describe('accepted hand observations at the session boundary', () => {
+  const malformed = [
+    ['NaN fingertip', h => { h.landmarks[8].x = NaN; }],
+    ['infinite depth', h => { h.landmarks[4].z = Infinity; }],
+    ['missing fingertip', h => { h.landmarks[8] = null; }],
+    ['sparse landmarks', h => { delete h.landmarks[8]; }],
+    ['short landmarks', h => { h.landmarks.length = 20; }],
+    ['unknown handedness', h => { h.handedness = 'Unknown'; }],
+    ['zero palm span', h => { h.landmarks[9] = { ...h.landmarks[0] }; }],
+  ];
+  for (const [name, corrupt] of malformed) it(`${name} cancels a held interaction without release or another owner action`, () => {
+    const s = makeRoutedSession();
+    try {
+      s.hold(); const marker = s.calls.length, bad = routedHand(.05); corrupt(bad); s.feed([bad]);
+      assert.deepEqual(s.received.at(-1).hands, []);
+      assert.equal(s.interaction.snapshot().held, null);
+      assert.equal(s.calls.slice(marker).some(event => event.type === 'up'), false);
+      assert.ok(s.calls.slice(marker).some(event => event.type === 'cancel' && event.reason === 'hand-lost'));
+      assert.equal(s.intents.length, 0);
+    } finally { s.session.destroy(); }
+  });
+
+  it('duplicate handedness cancels the held hand before a second observation can move it', () => {
+    const s = makeRoutedSession();
+    try {
+      s.hold(); const marker = s.calls.length;
+      s.feed([routedHand(.05, 'Left', .5), routedHand(.9, 'Left', .7)], 10);
+      s.feed([routedHand(.05, 'Left', .5), routedHand(.05, 'Left', .7)], 10);
+      s.feed([routedHand(.05, 'Left', .5), routedHand(.9, 'Left', .7)], 10);
+      assert.equal(s.interaction.snapshot().held, null);
+      assert.ok(s.received.slice(-30).every(frame => frame.hands.length === 0));
+      assert.equal(s.calls.slice(marker).some(event => ['down', 'move', 'up', 'scale', 'rotate'].includes(event.type)), false);
+      assert.ok(s.calls.slice(marker).some(event => event.type === 'cancel' && event.reason === 'hand-lost'));
+    } finally { s.session.destroy(); }
+  });
+
+  it('an invalid duplicate does not select the other same-label observation as trustworthy', () => {
+    const s = makeRoutedSession();
+    try {
+      s.hold(); const marker = s.calls.length, invalid = routedHand(.9); invalid.landmarks[8].x = NaN;
+      s.feed([routedHand(.05), invalid]); assert.deepEqual(s.received.at(-1).hands, []);
+      assert.equal(s.calls.slice(marker).some(event => event.type === 'up'), false);
+      assert.equal(s.interaction.snapshot().held, null);
+    } finally { s.session.destroy(); }
+  });
+
+  it('an unambiguous opposite hand survives filtering without inheriting the rejected hand hold', () => {
+    const s = makeRoutedSession();
+    try {
+      s.hold(); const marker = s.calls.length, right = routedHand(.9, 'Right', .7);
+      s.feed([routedHand(.05), routedHand(.05), right]);
+      assert.deepEqual(s.received.at(-1).hands, [right]); assert.equal(s.interaction.snapshot().held, null);
+      assert.equal(s.calls.slice(marker).some(event => event.type === 'up'), false);
+      assert.equal(s.received.at(-1).lensEvents.some(event => event.type === 'pinchstart' && event.hand === 'Right'), false);
+    } finally { s.session.destroy(); }
+  });
+
+  it('healthy open-close-open hands retain the ordinary release path', () => {
+    const s = makeRoutedSession();
+    try {
+      s.hold(); const marker = s.calls.length; s.feed([routedHand(.9)], 10);
+      assert.equal(s.calls.slice(marker).filter(event => event.type === 'up').length, 1);
+      assert.equal(s.interaction.snapshot().held, null);
+    } finally { s.session.destroy(); }
+  });
+
+  it('recovery after rejected geometry requires reopening before a new pinch can act', () => {
+    const s = makeRoutedSession();
+    try {
+      s.hold(); const bad = routedHand(.05); bad.landmarks[8].x = NaN; s.feed([bad]); const marker = s.calls.length;
+      s.feed([routedHand(.05)], 10); assert.equal(s.calls.slice(marker).some(event => event.type === 'down'), false);
+      s.feed([routedHand(.9)], 10); s.feed([routedHand(.05)], 10); assert.equal(s.interaction.snapshot().held, 'Left');
+    } finally { s.session.destroy(); }
   });
 });

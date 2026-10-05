@@ -235,6 +235,21 @@ class BridgeHTTPTests(unittest.TestCase):
         self.assertNotIn(b"unit-test-secret", raw)
         self.assertEqual(headers["Cache-Control"], "no-store")
 
+    def test_local_vision_runtime_and_models_have_browser_mime_types(self):
+        assets = {
+            "vendor/mediapipe-tasks-vision-1.0.1/vision_bundle.mjs": "text/javascript",
+            "vendor/mediapipe-tasks-vision-1.0.1/wasm/vision_wasm_internal.wasm": "application/wasm",
+            "assets/models/vision/hand_landmarker.task": "application/octet-stream",
+        }
+        for path, mime in assets.items():
+            target = self.root / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(b"test-fixture")
+            status, headers, body = self.request("/" + path)
+            self.assertEqual(status, 200, path)
+            self.assertEqual(headers["Content-Type"].split(";")[0], mime, path)
+        self.assertEqual(self.request("/vendor/private/config.mjs")[0], 404)
+
     def test_pending_local_module_burst_fits_the_accept_queue(self):
         self.assertEqual(self.server.server_address[0], "127.0.0.1")
         self.assertEqual(self.server.request_queue_size, 128)

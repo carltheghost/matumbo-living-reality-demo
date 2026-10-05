@@ -78,6 +78,7 @@ const EXTRA_PANEL_IDS = ['gesture-input-panel', 'media-preview', 'city-journey',
 /** Scene controllers own their drawers, inspectors, and object surfaces. */
 function belongsToSceneController(el) {
   for (let parent = el; parent; parent = parent.parentElement ?? parent.parentNode) {
+    if (parent.getAttribute?.('data-controller-owned') === 'tracking') return true;
     if (parent.id === 'reality-assembly' || parent.id === 'person-studio') return true;
     if(parent.getAttribute?.('data-object-tools')==='true')return true;
   }

@@ -1,0 +1,105 @@
+{
+  "startedAt": "2026-10-05T17:01:52.323Z",
+  "physicalCamera": false,
+  "actualHumanAccuracyMeasured": false,
+  "fixture": {
+    "source": "https://storage.googleapis.com/mediapipe-assets/portrait.jpg",
+    "officialTestReference": "https://github.com/google-ai-edge/mediapipe/blob/master/mediapipe/tasks/python/test/vision/face_landmarker_test.py",
+    "bytes": 176561,
+    "sha256": "a6f11efaa834706db23f275b6115058fa87fc7f14362681e6abe14e82749de3e"
+  },
+  "requests": [
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/__eye_positive_check__"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/eye-gaze.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/eye-tracker.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/eye-detector-worker.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/vendor/mediapipe-tasks-vision-1.0.1/vision_bundle.mjs"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/vendor/mediapipe-tasks-vision-1.0.1/wasm/vision_wasm_internal.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/vendor/mediapipe-tasks-vision-1.0.1/wasm/vision_wasm_internal.wasm"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/assets/models/vision/face_landmarker.task"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/__eye_portrait_fixture__.jpg"
+    }
+  ],
+  "errors": [],
+  "result": {
+    "initializedMs": 271.30000001192093,
+    "width": 820,
+    "height": 1024,
+    "frames": [
+      {
+        "faces": 1,
+        "landmarks": 478,
+        "selectedIrisPointsFinite": true,
+        "eyeFeaturesValid": true,
+        "quality": 1,
+        "featureReason": "eye-features-ready",
+        "gazeValid": false,
+        "sampleReason": "stale-frame",
+        "blendshapeCount": 52,
+        "poseElements": 16,
+        "ms": 1992.300000011921
+      },
+      {
+        "faces": 1,
+        "landmarks": 478,
+        "selectedIrisPointsFinite": true,
+        "eyeFeaturesValid": true,
+        "quality": 1,
+        "featureReason": "eye-features-ready",
+        "gazeValid": false,
+        "sampleReason": "calibration-needed",
+        "blendshapeCount": 52,
+        "poseElements": 16,
+        "ms": 11.5
+      },
+      {
+        "faces": 1,
+        "landmarks": 478,
+        "selectedIrisPointsFinite": true,
+        "eyeFeaturesValid": true,
+        "quality": 1,
+        "featureReason": "eye-features-ready",
+        "gazeValid": false,
+        "sampleReason": "calibration-needed",
+        "blendshapeCount": 52,
+        "poseElements": 16,
+        "ms": 11
+      }
+    ],
+    "cameraCalls": 0,
+    "afterFaceLoss": {
+      "faces": 0,
+      "valid": false,
+      "point": null,
+      "reason": "no-face"
+    }
+  },
+  "passed": true,
+  "finishedAt": "2026-10-05T17:01:55.843Z"
+}

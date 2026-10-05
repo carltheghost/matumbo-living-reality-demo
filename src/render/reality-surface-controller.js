@@ -104,7 +104,7 @@ export function createRealitySurfaceController({THREE,node,element,feature,rende
     const region=pointer?.region??target?.region;if(!region||!pointer?.actionId)return;
     const uv=target?.uv??pointer.uv;pointer.uv=uv;
     semantic.dispatchPointer?.(pointer.actionId,{type,x:Math.max(0,Math.min(1,(uv.x-region.x)/region.width)),y:Math.max(0,Math.min(1,((1-uv.y)-region.y)/region.height)),pointerId:event.pointerId,pointerType:event.pointerType,button:event.button,buttons:event.buttons});
-    if(type!=='pointerup'&&type!=='pointercancel')canvas.setPointerCapture(event.pointerId);
+    if(type!=='pointerup'&&type!=='pointercancel'&&!pointer.tracked)canvas.setPointerCapture(event.pointerId);
   }
   function hit(event){
     sync();if(!mesh?.visible||!node.root.visible)return null;
@@ -116,8 +116,9 @@ export function createRealitySurfaceController({THREE,node,element,feature,rende
   function down(event){
     if(pointer&&pointer.id!==event.pointerId){stop(event);return true;}
     const target=hit(event);if(event.button!==0||!target)return false;
-    finishEditing();pointer={id:event.pointerId,pointerType:event.pointerType,x:event.clientX,y:event.clientY,lastX:event.clientX,lastY:event.clientY,dragged:false,enabled:controls.enabled};
-    controls.enabled=false;canvas.setPointerCapture(event.pointerId);canvas.focus({preventScroll:true});
+    finishEditing();pointer={id:event.pointerId,pointerType:event.pointerType,x:event.clientX,y:event.clientY,lastX:event.clientX,lastY:event.clientY,dragged:false,enabled:controls.enabled,
+      tracked:event.tracked===true,startAction:target.region?.actionId??null,startChart:target.chart,rotation:node.root.quaternion.clone()};
+    controls.enabled=false;if(!pointer.tracked)canvas.setPointerCapture(event.pointerId);canvas.focus({preventScroll:true});
     if(['canvas','pointer'].includes(target.region?.kind)){pointer.actionId=target.region.actionId;pointer.region=target.region;pointer.uv=target.uv;pointer.chart=target.chart;pointerToDocument('pointerdown',event,target);}
     stop(event);return true;
   }
@@ -134,10 +135,11 @@ export function createRealitySurfaceController({THREE,node,element,feature,rende
     const before=pointer;
     if(pointer.actionId){const target=hit(event);pointerToDocument(event.type,event,target?.chart===pointer.chart?target:null);if(event.type==='pointerup'&&!pointer.dragged)pointerToDocument('click',event,target?.chart===pointer.chart?target:null);dirty=true;}
     pointer=null;controls.enabled=before.enabled;
-    if(canvas.hasPointerCapture(event.pointerId))canvas.releasePointerCapture(event.pointerId);
+    if(!before.tracked&&canvas.hasPointerCapture(event.pointerId))canvas.releasePointerCapture(event.pointerId);
+    if(before.tracked&&event.type==='pointercancel')node.root.quaternion.copy(before.rotation);
     if(event.type==='pointerup'&&!before.dragged&&!before.actionId){
       const target=hit(event);
-      if(target){
+      if(target&&(!before.tracked||(target.chart===before.startChart&&target.region?.actionId===before.startAction))){
         const actionId=target.region?.actionId,field=actionId&&semantic.getElement(actionId);
         if(field&&!target.region.disabled)edit(field,event);
         atlas.activate(target.chart,target.uv);dirty=true;
@@ -178,7 +180,27 @@ export function createRealitySurfaceController({THREE,node,element,feature,rende
   element.addEventListener('keydown',key,true);
   canvas.addEventListener?.('keydown',key,true);
   sync();
-  return {sync,hit,down,move,up,wheel,key,surfacePoint,orientChart,refresh(){dirty=true;sync();},
+  // Tracked pinches call the same UV dispatcher directly. No browser pointer
+  // is fabricated on the render canvas and capture is never requested for a
+  // camera observation. Original ink/canvas controls keep their own handlers.
+  function handleTrackingInput(input={}){
+    if(disposed)return false;
+    if(input.type==='cancel'){
+      if(!pointer?.tracked)return false;
+      return up({type:'pointercancel',tracked:true,pointerId:pointer.id,pointerType:'pen',button:0,buttons:0,clientX:pointer.lastX,clientY:pointer.lastY,preventDefault(){},stopImmediatePropagation(){}});
+    }
+    if(!['down','move','up','rotate'].includes(input.type)||!Number.isFinite(input.clientX)||!Number.isFinite(input.clientY))return false;
+    if(pointer&&!pointer.tracked)return false;
+    if(input.type==='rotate'){
+      if(!Number.isFinite(input.radians)||!pointer?.tracked)return false;
+      if(pointer.actionId)return false; // Never twist an original drawing gesture.
+      pointer.dragged=true;node.root.rotation.z+=Math.max(-Math.PI/4,Math.min(Math.PI/4,input.radians));node.root.updateMatrixWorld(true);return true;
+    }
+    const event={type:{down:'pointerdown',move:'pointermove',up:'pointerup'}[input.type],tracked:true,pointerId:9001,pointerType:'pen',button:0,buttons:input.type==='up'?0:1,
+      clientX:input.clientX,clientY:input.clientY,preventDefault(){},stopImmediatePropagation(){}};
+    return ({down,move,up})[input.type](event);
+  }
+  return {sync,hit,down,move,up,wheel,key,surfacePoint,orientChart,handleTrackingInput,refresh(){dirty=true;sync();},
     get document(){return semantic;},get atlas(){return atlas;},
     snapshot(){return {engine:'mesh-uv-360',entityId:feature.id,bodyId:feature.id,coordinateSpace:'owning-mesh-uv',separatePanelFrame:false,canonicalOwners:1,interactiveSurfaceCount:node.surfaceCharts?.length??0,ownedByBody:mesh?.parent===node.root,rotation:node.root.rotation.toArray().slice(0,3),document:semantic.snapshot(),atlas:atlas?.snapshot(),mediaPixelMode:'native-embed-only'};},
     dispose(){
@@ -186,7 +208,8 @@ export function createRealitySurfaceController({THREE,node,element,feature,rende
       if(pointer){
         if(pointer.actionId)pointerToDocument('pointercancel',{pointerId:pointer.id,pointerType:pointer.pointerType,button:0,buttons:0});
         controls.enabled=pointer.enabled;
-        if(canvas.hasPointerCapture(pointer.id))canvas.releasePointerCapture(pointer.id);
+        if(pointer.tracked)node.root.quaternion.copy(pointer.rotation);
+        if(!pointer.tracked&&canvas.hasPointerCapture(pointer.id))canvas.releasePointerCapture(pointer.id);
         pointer=null;
       }
       element.removeEventListener('focusin',focusNative);element.removeEventListener('keydown',key,true);canvas.removeEventListener?.('keydown',key,true);semantic.dispose();if(mesh?.parent)mesh.material=previousMaterials;atlas?.dispose();node.surface360=false;node.surfaceReading=false;if(originalTabIndex===null)canvas.removeAttribute('tabindex');else canvas.setAttribute('tabindex',originalTabIndex);if(originalLabel===null)canvas.removeAttribute('aria-label');else canvas.setAttribute('aria-label',originalLabel);

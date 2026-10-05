@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import * as THREE from '../vendor/three-r179.1/build/three.module.js';
 import {buildRealityAssemblyScene} from '../src/render/reality-assembly-scene.js';
 import {REALITY_TAB_FORMS,REALITY_TAB_FORM_IDS} from '../src/domains/reality-tab-layout.js';
+import {createRealityTimeline} from '../src/domains/reality-timeline.js';
 
 test('curved scene bodies retain their whole geometry and independently mapped exterior charts',()=>{
   for(const shape of ['sphere','cylinder']){
@@ -23,6 +24,74 @@ test('curved scene bodies retain their whole geometry and independently mapped e
     assert.ok(targets.includes(node.tabMesh));
     scene.destroy();
   }
+});
+
+test('compact space positions follow the original timeline delta and cancelled previews restore the authored row',()=>{
+  const features=['gateway','web-ai','social-explorer','bot-plaza'].map((id,index)=>({id,lensGroup:'network',initialPosition:[index*8,2,-index*5]}));
+  const scene=buildRealityAssemblyScene({THREE,parent:new THREE.Scene(),features,targets:[]});
+  const owner=createRealityTimeline({objects:features.map(feature=>({id:feature.id,position:feature.initialPosition,shape:'cube',size:1}))});
+  try{
+    scene.apply(owner.getSnapshot());scene.setSpaceView('network');const original=scene.getObjectPosition('gateway').clone();
+    const state=owner.getSnapshot(),preview={...state,objects:state.objects.map(object=>object.id==='gateway'?{...object,position:[object.position[0]-3,object.position[1]+4,object.position[2]+2]}:object)};
+    scene.apply(preview);assert.deepEqual(scene.getObjectPosition('gateway').toArray(),original.clone().add(new THREE.Vector3(-3,4,2)).toArray());
+    scene.apply(owner.getSnapshot());assert.deepEqual(scene.getObjectPosition('gateway').toArray(),original.toArray());
+    owner.move('gateway',[-3,6,2]);scene.apply(owner.getSnapshot());scene.update(.1,0,{reducedMotion:true,cameraDistance:40,cameraPosition:new THREE.Vector3(0,0,40)});
+    assert.deepEqual(scene.nodes.get('gateway').root.position.toArray(),scene.getObjectPosition('gateway').toArray());
+    assert.deepEqual(scene.getObjectPosition('gateway').toArray(),original.clone().add(new THREE.Vector3(-3,4,2)).toArray());
+    const unchanged=owner.getSnapshot();scene.setSpaceViewport({width:390,height:844});assert.deepEqual(owner.getSnapshot(),unchanged);
+  }finally{scene.destroy();}
+});
+
+test('canonical feature orientation drives the original mesh and responsive bounds without frame resets',()=>{
+  const features=[{id:'agent',lensGroup:'agents',initialPosition:[0,0,0]}],targets=[];
+  const scene=buildRealityAssemblyScene({THREE,parent:new THREE.Scene(),features,targets});
+  const owner=createRealityTimeline({objects:[{id:'agent',position:[0,0,0],shape:'phone',size:1}]});
+  const update=()=>{scene.update(.1,3,{reducedMotion:true,cameraDistance:40});scene.layer.updateMatrixWorld(true);};
+  try{
+    scene.apply(owner.getSnapshot());scene.setSpaceView('agents');update();
+    const node=scene.nodes.get('agent'),body=node.tabMesh,original=owner.getSnapshot();
+    scene.apply({...original,objects:original.objects.map(object=>({...object,rotation:[.2,.3,.8]}))});update();
+    assert.deepEqual(node.root.rotation.toArray().slice(0,3),[.2,.3,.8]);assert.deepEqual(owner.getSnapshot(),original);
+    scene.apply(original);update();assert.deepEqual(node.root.rotation.toArray().slice(0,3),[0,0,0]);
+    owner.configure('agent',{rotation:[.2,.3,.8]});scene.apply(owner.getSnapshot());
+    for(let index=0;index<5;index++)update();
+    assert.equal(node.tabMesh,body);assert.deepEqual(node.root.rotation.toArray().slice(0,3),[.2,.3,.8]);
+    scene.setSpaceViewport({width:390,height:844});update();
+    const bounds=scene.getSpaceBounds('agents'),box=new THREE.Box3().setFromObject(body);
+    for(const [axis,key] of ['x','y','z'].entries()){
+      const size=[bounds.width,bounds.height,bounds.depth][axis];
+      assert.ok(box.min[key]>=bounds.center[axis]-size/2-.001);assert.ok(box.max[key]<=bounds.center[axis]+size/2+.001);
+    }
+    node.surface360=true;node.root.rotation.set(.7,.6,.5);scene.apply(owner.getSnapshot());update();
+    assert.deepEqual(node.root.rotation.toArray().slice(0,3),[.7,.6,.5],'a redraw preserves deliberate mounted-surface orientation');
+    owner.goTo(0);scene.apply(owner.getSnapshot());update();assert.deepEqual(node.root.rotation.toArray().slice(0,3),[0,0,0]);
+    assert.ok(targets.includes(node.tabMesh));assert.equal(scene.resolve(node.tabMesh),'agent');
+    assert.equal(node.root.userData.objectTabOwner,'agent','responsive geometry rebuilds retain the same original owner');
+  }finally{scene.destroy();}
+});
+
+test('original Home bodies preview, cancel, collision-resolve, persist and reset their own bounded transforms',()=>{
+  const previousStorage=globalThis.localStorage,data=new Map();globalThis.localStorage={getItem:key=>data.get(key)??null,setItem:(key,value)=>data.set(key,value)};
+  const features=[{id:'block-world',lensGroup:'worlds'},{id:'person',lensGroup:'people'},{id:'web-ai',lensGroup:'network'},{id:'contracts',lensGroup:'value'},{id:'bot-plaza',lensGroup:'agents'},{id:'chess',lensGroup:'experiences'}];
+  const build=()=>{const scene=buildRealityAssemblyScene({THREE,parent:new THREE.Scene(),features,targets:[]});scene.setSpaceView(null);return scene;};
+  const scene=build();let restored;
+  try{
+    const original=scene.getHomeTransform('agents'),other=scene.getHomeTransform('network');
+    scene.setHomeTransform('agents',{...original,position:original.position.map((value,axis)=>value+(axis===0?3:0)),size:1.2,rotation:[0,0,.3]},{preview:true});
+    assert.equal(scene.getSnapshot().homeLayout.previewIds[0],'agents');assert.equal(data.size,0);
+    scene.cancelHomeTransform('agents');assert.deepEqual(scene.getHomeTransform('agents'),original);
+    const committed=scene.setHomeTransform('agents',{...original,position:other.position,size:1.2,rotation:[0,0,.3]});
+    assert.notDeepEqual(committed.position,other.position,'an occupied Home envelope is resolved before adoption');
+    scene.update(.1,0,{reducedMotion:true,cameraDistance:40,cameraPosition:new THREE.Vector3(0,0,40)});scene.layer.updateMatrixWorld(true);
+    const body=scene.groupParents.get('agents').entry,neighbor=scene.groupParents.get('network').entry;
+    assert.equal(new THREE.Box3().setFromObject(body).intersectsBox(new THREE.Box3().setFromObject(neighbor)),false);
+    assert.deepEqual(scene.groupParents.get('agents').root.position.toArray(),committed.position);
+    assert.equal(scene.groupParents.get('agents').root.scale.x,1.2);
+    restored=build();assert.deepEqual(restored.getHomeTransform('agents'),committed);
+    const before=scene.getHomeTransform('agents');assert.throws(()=>scene.setHomeTransform('agents',{size:100}),/bounds/);assert.deepEqual(scene.getHomeTransform('agents'),before);
+    scene.resetHomeTransforms();assert.deepEqual(scene.getHomeTransform('agents'),original);
+    assert.deepEqual(restored.getSnapshot().nodeIds,features.map(feature=>feature.id),'no substitute scene or cloned feature identity');
+  }finally{scene.destroy();restored?.destroy();if(previousStorage===undefined)delete globalThis.localStorage;else globalThis.localStorage=previousStorage;}
 });
 test('the former central feature is an ordinary mutable sphere tab like every other identity',()=>{
   const parent=new THREE.Scene(),targets=[],features=[{id:'block-world',assemblyTier:'tab',sources:['semantic-block-fabric']},{id:'contracts',assemblyTier:'tab',sources:['contracts-markets']}];

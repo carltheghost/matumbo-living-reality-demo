@@ -39,21 +39,21 @@ MAX_RESPONSE_BYTES = 1_000_000
 REQUEST_TIMEOUT_SECONDS = 45
 PUBLIC_ORIGIN = "https://carltheghost.github.io"
 LOCAL_LIMIT_PER_MINUTE = 6
-STATIC_PREFIXES = ("src/", "vendor/three-r179.1/", "assets/", "public/")
+STATIC_PREFIXES = ("src/", "vendor/three-r179.1/", "vendor/mediapipe-tasks-vision-1.0.1/", "assets/", "public/")
 ROOT_FILES = frozenset({
     "index.html", "favicon.svg", "mobile-chrome.js", "mobile-layout.css",
     "mobile-polish.css", "token-mobile.css", "paper.html", "paper-live.html",
     "surface-field.html", "token-lifecycle.html",
 })
 STATIC_TYPES = {
-    ".html": "text/html", ".js": "text/javascript", ".css": "text/css",
+    ".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css",
     ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif", ".ico": "image/x-icon",
     ".woff": "font/woff", ".woff2": "font/woff2", ".ttf": "font/ttf",
     ".wasm": "application/wasm", ".json": "application/json",
     ".glb": "model/gltf-binary", ".gltf": "model/gltf+json", ".bin": "application/octet-stream",
     ".mp3": "audio/mpeg", ".ogg": "audio/ogg", ".wav": "audio/wav",
-    ".mp4": "video/mp4", ".webm": "video/webm",
+    ".mp4": "video/mp4", ".webm": "video/webm", ".task": "application/octet-stream",
 }
 
 

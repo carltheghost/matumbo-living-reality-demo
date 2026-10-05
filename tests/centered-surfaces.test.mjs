@@ -71,8 +71,10 @@ test('panel discovery leaves scene-owned drawers and nested object surfaces to t
   const studioInspector = {id:'studio-inspector',tagName:'ASIDE',parentNode:studio};
   const ordinary = {id:'arena-games-console',tagName:'ASIDE'};
   const movingTools = {id:'',tagName:'ASIDE',getAttribute:name=>name==='data-object-tools'?'true':null};
+  const tracking = {id:'hands-eyes-panel',tagName:'ASIDE',getAttribute:name=>name==='data-controller-owned'?'tracking':null};
+  const source = {id:'hand-lens-panel',tagName:'ASIDE',parentNode:tracking};
   const doc = {
-    querySelectorAll:()=>[directory,inspector,attached,studioInspector,movingTools,ordinary],
+    querySelectorAll:()=>[directory,inspector,attached,studioInspector,movingTools,tracking,source,ordinary],
     getElementById:id=>id==='hint'?{id:'hint',parentNode:assembly}:null,
   };
   assert.deepEqual(collectPanelDescriptors(doc).map(panel=>panel.id),['arena-games-console']);

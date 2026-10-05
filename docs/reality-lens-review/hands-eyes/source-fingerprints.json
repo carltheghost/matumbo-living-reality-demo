@@ -1,0 +1,94 @@
+{
+  "sourceBaseCommit": "54b08bb6c1d3e29f88272cef6f19b15d7faafd93",
+  "files": [
+    {
+      "path": "src/main.js",
+      "sha256": "36f4bdab870416a4cb0d0391fddd9894691279f0ca2c5243ed37f368247f2df3"
+    },
+    {
+      "path": "src/render/hands-eyes-controls.js",
+      "sha256": "506d11ef1bc3bfe430a984171adc10337817f0fc756944bccc8dc4a1cc0292b7"
+    },
+    {
+      "path": "src/render/hands-eyes-controls.css",
+      "sha256": "e94b516c3c576deb6179fabaf2d65795e5ef888f3d34e3b70891f24747039c3f"
+    },
+    {
+      "path": "src/render/hand-session.js",
+      "sha256": "03c193ce99509e5860db9533793ce3f330dfc695081600afec0fb304cd859b7a"
+    },
+    {
+      "path": "src/render/hand-camera.js",
+      "sha256": "04e8f16c863d4f62e1512974c8b05ab0af2f73a4d004548a8892e0dd4ec0514e"
+    },
+    {
+      "path": "src/render/hand-detector.js",
+      "sha256": "1be7fdd17bfadb4fb68be30b5f0c41775a0eaaadf5236b86bb2fd448b5be8fdf"
+    },
+    {
+      "path": "src/render/hand-detector-worker.js",
+      "sha256": "27c82e5667bee0f1953ce6af889a511ccb7ef8c80c632e975ad9914655e6ebfe"
+    },
+    {
+      "path": "src/render/eye-tracker.js",
+      "sha256": "8dcd2efc15c41b790fce3b7542e13d993d9653fe2f5201b66fe898a0356696b4"
+    },
+    {
+      "path": "src/render/eye-detector-worker.js",
+      "sha256": "db5ff73c22c85e0b9973a499ca4a43f7db2886938b177010fdb4be29e3e5a13a"
+    },
+    {
+      "path": "src/render/reality-tracking-input.js",
+      "sha256": "7a096b4d8269c44f02c15c28b07386de681744f9672f0b96440abbaa8dabd0e5"
+    },
+    {
+      "path": "src/render/reality-assembly.js",
+      "sha256": "c2f9fa9188d0a759b628f1b9922bce9ef89533c6481989011ae24395382a700e"
+    },
+    {
+      "path": "src/render/reality-assembly-scene.js",
+      "sha256": "d65058d9448cd0f9637290d34dd606a0a62db9efcbef428d1338afc45ca28d20"
+    },
+    {
+      "path": "src/render/reality-surface-controller.js",
+      "sha256": "7c9e260ae1d6118c92cf2c8123d11b23a3c095b488aad6a95c9d829e8d523d9b"
+    },
+    {
+      "path": "src/render/centered-surfaces.js",
+      "sha256": "eb7973b35e620a779078493f0ada74b31e57f0e099c67dfc97dd8e45859082b4"
+    },
+    {
+      "path": "src/render/tab-registry.js",
+      "sha256": "5d51e299974f4da9a2f9e13f029299de7aed1676857b1e322b36646f08f4b5aa"
+    },
+    {
+      "path": "src/render/mobile-panel-manager.js",
+      "sha256": "651af44a15f4feddfc5625e02bc7ec46f7a47e7ec61ce335f3b3e72fa39f0f1f"
+    },
+    {
+      "path": "src/render/gesture-lens.js",
+      "sha256": "097ed7a751dc60c2ce5c3e0f303402e3c62e91ccd52ece090416d18e3a7ee294"
+    },
+    {
+      "path": "src/domains/eye-gaze.js",
+      "sha256": "63ee599b6f2c100a8933513410c30eb498a5c53c6d78776a40d106e7d8a81ae9"
+    },
+    {
+      "path": "src/domains/tracking-interaction.js",
+      "sha256": "70039bad55a88ea9de85627ca639d44db6c7bab26f0c208b674320e566b449bd"
+    },
+    {
+      "path": "src/domains/reality-timeline.js",
+      "sha256": "8acd86530d9c6dc902585f41c65d7cf00847d94e86fa6df9b4051ccb3bf1dc1a"
+    },
+    {
+      "path": "scripts/provider_bridge.py",
+      "sha256": "2961cb875619ef0c9647bfbb88dc8cf15c9ff5051451848935dd6fe53f99049f"
+    },
+    {
+      "path": "scripts/public-preview.mjs",
+      "sha256": "4f828c49e2d11c598f8b0d28278a0369a1b85859559e300256d72a9a52f7e9b2"
+    }
+  ],
+  "scope": "Final working source at acceptance; runtime/model fingerprints are in assets/models/vision/provenance.json"
+}

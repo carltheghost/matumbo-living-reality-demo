@@ -9,6 +9,10 @@ function position(value){
   if(!Array.isArray(value)||value.length!==3||value.some(n=>!Number.isFinite(n)||Math.abs(n)>60))throw Error('Position must contain three finite coordinates within the workspace');
   return value.map(n=>Math.round(n*1000)/1000);
 }
+function rotation(value){
+  if(!Array.isArray(value)||value.length!==3||value.some(n=>!Number.isFinite(n)||Math.abs(n)>Math.PI))throw Error('Rotation must contain three finite radians between -PI and PI');
+  return value.map(n=>Math.max(-Math.PI,Math.min(Math.PI,Math.round(n*1e6)/1e6)));
+}
 export function createRealityTimeline({objects,selectedId,clock=()=>Date.now()}={}){
   if(!Array.isArray(objects)||!objects.length||objects.length>80)throw Error('A bounded object registry is required');
   const ids=new Set();
@@ -19,7 +23,7 @@ export function createRealityTimeline({objects,selectedId,clock=()=>Date.now()}=
     if(object.locked!==undefined&&typeof object.locked!=='boolean')throw Error('Tab lock state must be boolean');
     if(object.open!==undefined&&typeof object.open!=='boolean')throw Error('Tab open state must be boolean');
     return {id:object.id,position:position(object.position),shape:normalizeRealityTabShape(object.shape??(anchor?'cube':'rectangle')),
-      size:normalizeRealityTabSize(object.size??(anchor?1.6:1)),locked:anchor||Boolean(object.locked),anchor,open:Boolean(object.open)};
+      size:normalizeRealityTabSize(object.size??(anchor?1.6:1)),rotation:rotation(object.rotation??[0,0,0]),locked:anchor||Boolean(object.locked),anchor,open:Boolean(object.open)};
   });
   const initialSelection=selectedId??initial[0].id;
   if(!ids.has(initialSelection))throw Error('Unknown selected object');
@@ -55,15 +59,27 @@ export function createRealityTimeline({objects,selectedId,clock=()=>Date.now()}=
     const safe=resolveRealityTabPosition(id,position(next),source);
     return mutate(id,{position:safe},`Moved ${id}`);
   }
-  function configure(id,{shape,size}={}){
+  function configure(id,{shape,size,rotation:nextRotation}={}){
     const object=editable(id);
     const patch={};
     if(shape!==undefined)patch.shape=normalizeRealityTabShape(shape);
     if(size!==undefined)patch.size=normalizeRealityTabSize(size);
+    if(nextRotation!==undefined)patch.rotation=rotation(nextRotation);
     if(!Object.keys(patch).length)return getSnapshot();
-    // Form and size belong to the object: neither operation changes its
+    // Form, size and orientation belong to the object: no operation changes its
     // coordinate. Only an explicit drag/move resolves spatial collisions.
     return mutate(id,patch,`Changed ${id} tab form`);
+  }
+  function transform(id,{position:nextPosition,size,rotation:nextRotation}={}){
+    const object=editable(id),patch={};
+    if(size!==undefined)patch.size=normalizeRealityTabSize(size);
+    if(nextRotation!==undefined)patch.rotation=rotation(nextRotation);
+    const source=activeBranch()?.objects??present;
+    // A deliberate tracked transform is one owner mutation. Collision failure
+    // must not leave its size or orientation committed before movement fails.
+    const candidate=source.map(item=>item.id===id?{...item,...patch}:item);
+    patch.position=resolveRealityTabPosition(id,position(nextPosition??object.position),candidate);
+    return mutate(id,patch,`Transformed ${id} tab`);
   }
   function setLocked(id,locked){
     if(typeof locked!=='boolean')throw Error('Tab lock state must be boolean');
@@ -87,5 +103,5 @@ export function createRealityTimeline({objects,selectedId,clock=()=>Date.now()}=
   }
   function viewBranch(id){if(!branches.some(b=>b.id===id))throw Error('Unknown branch');branchId=id;frameCursor=null;return getSnapshot();}
   function exportHistory(){return JSON.stringify({schemaVersion:1,scope:'Local layout history, not authoritative domain state',frames,branches},null,2);}
-  return Object.freeze({getSnapshot,select,move,configure,setLocked,setOpen,goTo,propose,viewBranch,exportHistory});
+  return Object.freeze({getSnapshot,select,move,configure,transform,setLocked,setOpen,goTo,propose,viewBranch,exportHistory});
 }

@@ -1,0 +1,1093 @@
+{
+  "physicalCamera": false,
+  "syntheticVideo": true,
+  "errors": [],
+  "requests": [
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/mobile-layout.css?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/main.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/universal-reality-bridge.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/reality-command-deck.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/mobile-chrome.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/vendor/three-r179.1/build/three.module.js?v=20260922-cache2"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/city-journey.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/centered-surfaces.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/immersive-session.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/media-preview.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/token-ticker.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/mobile-panel-manager.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/mobile-freeze-guard.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/photo-mascot-mount.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/person-studio.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/reality-assembly.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/api-connections.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/token.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/economic-runtime.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/economic-world-projection.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/ourplace-economy.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/provider-navigation.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/vendor/three-r179.1/examples/jsm/controls/OrbitControls.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/vendor/three-r179.1/examples/jsm/controls/TransformControls.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/manipulate-controls.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/vendor/three-r179.1/examples/jsm/postprocessing/EffectComposer.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/vendor/three-r179.1/examples/jsm/postprocessing/RenderPass.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/vendor/three-r179.1/examples/jsm/postprocessing/UnrealBloomPass.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/core/demo-projection.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/core/default-landing.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/projections/device-projection.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/distribution-explorer.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/distribution-registry.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/person-organisms.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/feature-navigator.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/cube-dive.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/cube-dive.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/launch-console.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/launch-receipt.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/social-explorer.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/social-pulse.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/launch-kit.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/room-spaces.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/camera-input.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/gesture-input.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/gaze-hand-coupling.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/projection-bridge.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/intent-timeline.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/block-world.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/projection-session.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/block-world-focus.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/cube-quick-actions.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/portal-return.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/block-migration.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/block-migration.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/migration-snapshot.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/block-world-snapshot.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/block-world-runtime-sync.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/arena-games.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/arena-games.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/chess-arena.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/academy.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/contracts-markets.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/contracts-markets.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/protocol-evidence.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/protocol-evidence.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/paycore.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/paycore.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/t402.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/t402.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/neural-mesh.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/neural-mesh.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/matter-forge.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/picture-matter-metadata.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/picture-matter.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/nft-atelier.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/frozen-relics.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/muse-agent.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/bot-plaza.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/bot-plaza.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/lens-bot-plugins.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/contract-ledger.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/contract-runtime.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/contract-public-evidence.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/contract-world-projection.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/compute-world-projection.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/core/view-state.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/contract-workbench.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/contract-organism.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/bot-presence.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/contract-atelier.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/luna-companion.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/wardrobe-atelier.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/white-paper.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/gesture-lens.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/hand-session.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/hands-eyes-controls.js?v=20261005-hands-eyes"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/story-mode.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/ledger-proof.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/ledger-proof.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/live-gateway.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/live-gateway.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/world-events.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/world-events.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/sports-events.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/sports-events.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/multi-sport-events.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/multi-sport-events.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/device-projection.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/asset-market.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/asset-market.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/population-context.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/web-ai.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/social-mirror.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/social-mirror.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/youtube-surface.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/vendor/three-r179.1/build/three.module.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/universal/universal-object-renderer.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/universal/universal-entity.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/reality-lens-chrome.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/xr-capabilities.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/render-perf.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/photo-mascot-presence.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/photo-mascot-set.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/vendor/three-r179.1/build/three.core.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/network-tools.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/person-studio.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/person-studio-scene.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/avatar-style.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/reality-surface-controller.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/reality-workspace.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/reality-tab-layout.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/reality-lens-engine.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/reality-object-engine.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/reality-assembly-scene.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/creator-economy.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/orbit-navigation.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/reality-tracking-input.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/core/world-state.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/economic-kernel.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/economic-finance.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/compute-jobs.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/compute-account.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/compute-exchange.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/contribution-vault.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/economic-timeline.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/token-store.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/token-config.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/ourplace-finance.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/vendor/three-r179.1/examples/jsm/shaders/CopyShader.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/vendor/three-r179.1/examples/jsm/postprocessing/ShaderPass.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/vendor/three-r179.1/examples/jsm/postprocessing/MaskPass.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/vendor/three-r179.1/examples/jsm/postprocessing/Pass.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/vendor/three-r179.1/examples/jsm/shaders/LuminosityHighPassShader.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/cipher.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/asset-token.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/profile.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/rooms.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/social-explorer.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/block-world.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/academy.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/nft-atelier.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/frozen-relics.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/muse-agent.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/contract-atelier.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/luna-companion.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/wardrobe-atelier.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/white-paper.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/gesture-lens.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/launch-kit.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/room-workspace.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/room-conversations.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/merge4-snapshot-adapter.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/block-world-snapshot.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/chess-arena.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/chess-ai.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/avatar-motion.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/chess-arena-pieces.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/market-builder.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/contract-automation.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/outcome-persistence.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/contract-flow.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/outcome-contracts.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/contract-atelier-persistence.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/hand-lens.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/hand-gestures.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/air-typing.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/hand-camera.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/air-keyboard.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/ar-glasses-mode.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/hand-perf.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/hand-grab.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/story-mode.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/eye-tracker.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/tracking-interaction.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/web-ai.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/compute-economics-policy.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/my-gpt.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/topology-surface-object.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/surface-semantic-field.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/photo-mascot.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/mascot-motion.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/avatar-embodiment.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/agent-smith-rig.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/reality-surface-document.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/reality-surface-atlas.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/reality-timeline.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/side-living-reality.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/living-surface-layout-engine.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/token-sha256.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/reality-surface-geometry.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/reality-home-surfaces.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/reality-tab-layout.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/luna-intent.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/vendor/chess-1.4.0/chess.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/market-engine.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/auto-contracts.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/odds-feeds.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/contract-status-vocab.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/eye-gaze.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/my-gpt.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/surface-semantic-field-three.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/topology-semantic-field.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/token-trade-mount.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/token-boot.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/contract-workbench.css?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/hand-presence.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/person-studio.css?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/reality-assembly.css?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/vendor/three-r179.1/examples/jsm/renderers/CSS3DRenderer.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/api-connections.css?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/api/providers"
+    },
+    {
+      "method": "GET",
+      "url": "https://api.open-meteo.com/v1/forecast?latitude=40.71&longitude=-74.01&current=temperature_2m,weather_code&forecast_days=1"
+    },
+    {
+      "method": "GET",
+      "url": "https://api.frankfurter.dev/v2/providers/ecb/rates?base=EUR&quotes=USD,GBP"
+    },
+    {
+      "method": "GET",
+      "url": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson"
+    },
+    {
+      "method": "GET",
+      "url": "https://api.llama.fi/tvl/aave"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/hands-eyes-controls.css"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/tab-registry.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/persistent-user-blocks.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "https://site.web.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/token-trade.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/token-facade.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/tab-engine.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/tab-ar-tabs.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/api/gpt/status"
+    },
+    {
+      "method": "GET",
+      "url": "https://site.web.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/token-activity.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/domains/token-vault.js?v=20261003-skin360"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/favicon.svg"
+    },
+    {
+      "method": "GET",
+      "url": "https://site.web.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
+    },
+    {
+      "method": "GET",
+      "url": "https://api.elections.kalshi.com/trade-api/v2/markets"
+    },
+    {
+      "method": "GET",
+      "url": "https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=500&offset=0"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/__shared_hand.jpg"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/__shared_face.jpg"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/eye-detector-worker.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/hand-detector.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/hand-detector-worker.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/vendor/mediapipe-tasks-vision-1.0.1/vision_bundle.mjs"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/vendor/mediapipe-tasks-vision-1.0.1/vision_bundle.mjs"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/vendor/mediapipe-tasks-vision-1.0.1/wasm/vision_wasm_internal.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/vendor/mediapipe-tasks-vision-1.0.1/wasm/vision_wasm_internal.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/vendor/mediapipe-tasks-vision-1.0.1/wasm/vision_wasm_internal.wasm"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/vendor/mediapipe-tasks-vision-1.0.1/wasm/vision_wasm_internal.wasm"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/assets/models/vision/face_landmarker.task"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/assets/models/vision/hand_landmarker.task"
+    }
+  ],
+  "startedAt": "2026-10-05T17:29:36.642Z",
+  "result": {
+    "videoFrames": 50,
+    "distinctVideoElements": 1,
+    "positiveHandFrames": 2,
+    "eyeGeometryPositive": true,
+    "handDelegate": "GPU-worker",
+    "eyeDelegate": "GPU",
+    "eyeWorker": true,
+    "uncalibratedGazeValid": false,
+    "replayEnabled": false,
+    "cameraCalls": 0,
+    "sourceKind": "video-file",
+    "panelHidden": true,
+    "stopped": {
+      "camera": "idle",
+      "eyes": "disabled",
+      "held": null
+    }
+  },
+  "passed": true,
+  "finishedAt": "2026-10-05T17:29:55.373Z"
+}

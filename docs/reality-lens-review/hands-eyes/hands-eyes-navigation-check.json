@@ -1,0 +1,6165 @@
+{
+  "startedAt": "2026-10-05T17:27:18.728Z",
+  "fixture": "Synthetic normalized landmarks through the mounted actual hand session; direct public adapter calls only for the separately labeled gaze checks",
+  "physicalCamera": false,
+  "checks": [
+    {
+      "device": "desktop",
+      "name": "camera-off boot and visible header stays within viewport",
+      "pass": true,
+      "data": {
+        "cameraCalls": 0,
+        "state": {
+          "space": "gateway",
+          "spaceId": null,
+          "selectedId": "block-world",
+          "liveOwner": null,
+          "page": {
+            "page": 0,
+            "pageCount": 1,
+            "pageSize": 6,
+            "total": 0,
+            "ids": []
+          },
+          "tracking": {
+            "source": null,
+            "active": true,
+            "held": null,
+            "target": null,
+            "reason": "controls-changed",
+            "coordinateSpace": "normalized-screen",
+            "localOnly": true
+          },
+          "textView": false,
+          "camera": "idle"
+        },
+        "header": [
+          {
+            "text": "◇maTumboReality Lens Ω",
+            "right": 190,
+            "left": 42
+          },
+          {
+            "text": "FindLocate",
+            "right": 931,
+            "left": 671.828125
+          },
+          {
+            "text": "Details",
+            "right": 1008,
+            "left": 943
+          },
+          {
+            "text": "Spaces",
+            "right": 1085,
+            "left": 1020
+          },
+          {
+            "text": "View",
+            "right": 1150,
+            "left": 1097
+          },
+          {
+            "text": "Hands & eyes",
+            "right": 1271,
+            "left": 1162
+          },
+          {
+            "text": "Connections",
+            "right": 1398,
+            "left": 1283
+          }
+        ]
+      }
+    },
+    {
+      "device": "desktop",
+      "name": "pinch original Spaces button opens its actual directory",
+      "pass": true,
+      "data": {
+        "button": {
+          "point": {
+            "x": 0.7309027777777778,
+            "y": 0.054
+          },
+          "target": {
+            "kind": "navigation",
+            "id": "nav-spaces",
+            "label": "Spaces",
+            "actionId": "nav-spaces",
+            "controlActionability": true,
+            "dwellAllowed": true
+          },
+          "text": "Spaces",
+          "disabled": false,
+          "rect": {
+            "x": 1020,
+            "y": 32,
+            "width": 65,
+            "height": 44
+          }
+        },
+        "click": {
+          "down": {
+            "space": "gateway",
+            "spaceId": null,
+            "selectedId": "block-world",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 1,
+              "pageSize": 6,
+              "total": 0,
+              "ids": []
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-spaces",
+                "arrange": false
+              },
+              "target": {
+                "kind": "navigation",
+                "id": "nav-spaces",
+                "label": "Spaces",
+                "actionId": "nav-spaces",
+                "controlActionability": true,
+                "dwellAllowed": true
+              },
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "up": {
+            "space": "gateway",
+            "spaceId": null,
+            "selectedId": "block-world",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 1,
+              "pageSize": 6,
+              "total": 0,
+              "ids": []
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "after": {
+            "space": "gateway",
+            "spaceId": null,
+            "selectedId": "block-world",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 1,
+              "pageSize": 6,
+              "total": 0,
+              "ids": []
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "trace": [
+            {
+              "type": "down",
+              "x": 0.7309027777777778,
+              "y": 0.054,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-spaces",
+                "arrange": false
+              },
+              "target": "nav-spaces"
+            },
+            {
+              "type": "move",
+              "x": 0.7309027777777778,
+              "y": 0.054,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-spaces",
+                "arrange": false
+              },
+              "target": "nav-spaces"
+            },
+            {
+              "type": "move",
+              "x": 0.7309027777777778,
+              "y": 0.054,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-spaces",
+                "arrange": false
+              },
+              "target": "nav-spaces"
+            },
+            {
+              "type": "move",
+              "x": 0.7309027777777778,
+              "y": 0.054,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-spaces",
+                "arrange": false
+              },
+              "target": "nav-spaces"
+            },
+            {
+              "type": "move",
+              "x": 0.7309027777777778,
+              "y": 0.054,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-spaces",
+                "arrange": false
+              },
+              "target": "nav-spaces"
+            },
+            {
+              "type": "move",
+              "x": 0.7309027777777778,
+              "y": 0.054,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-spaces",
+                "arrange": false
+              },
+              "target": "nav-spaces"
+            },
+            {
+              "type": "move",
+              "x": 0.7309027777777778,
+              "y": 0.054,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-spaces",
+                "arrange": false
+              },
+              "target": "nav-spaces"
+            },
+            {
+              "type": "move",
+              "x": 0.7309027777777778,
+              "y": 0.054,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-spaces",
+                "arrange": false
+              },
+              "target": "nav-spaces"
+            },
+            {
+              "type": "up",
+              "x": 0.7309027777777778,
+              "y": 0.054,
+              "reason": "navigation-activated",
+              "held": null
+            }
+          ]
+        },
+        "open": true
+      }
+    },
+    {
+      "device": "desktop",
+      "name": "pinch original catalog space header opens Experiences",
+      "pass": true,
+      "data": {
+        "button": {
+          "point": {
+            "x": 0.1361111111111111,
+            "y": 0.7089375
+          },
+          "target": {
+            "kind": "navigation",
+            "id": "nav-space-experiences",
+            "label": "Play, media & learning",
+            "actionId": "nav-space-experiences",
+            "controlActionability": true,
+            "dwellAllowed": true
+          },
+          "text": "Play, media & learning13",
+          "disabled": false,
+          "rect": {
+            "x": 37,
+            "y": 686.9375,
+            "width": 318,
+            "height": 44
+          }
+        },
+        "click": {
+          "down": {
+            "space": "gateway",
+            "spaceId": null,
+            "selectedId": "block-world",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 1,
+              "pageSize": 6,
+              "total": 0,
+              "ids": []
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-space-experiences",
+                "arrange": false
+              },
+              "target": {
+                "kind": "navigation",
+                "id": "nav-space-experiences",
+                "label": "Play, media & learning",
+                "actionId": "nav-space-experiences",
+                "controlActionability": true,
+                "dwellAllowed": true
+              },
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "up": {
+            "space": "space",
+            "spaceId": "experiences",
+            "selectedId": "block-world",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 3,
+              "pageSize": 6,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens",
+                "youtube",
+                "picture-matter"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "after": {
+            "space": "space",
+            "spaceId": "experiences",
+            "selectedId": "block-world",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 3,
+              "pageSize": 6,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens",
+                "youtube",
+                "picture-matter"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "trace": [
+            {
+              "type": "down",
+              "x": 0.1363662668229589,
+              "y": 0.7086565427280784,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-space-experiences",
+                "arrange": false
+              },
+              "target": "nav-space-experiences"
+            },
+            {
+              "type": "move",
+              "x": 0.13627696232381217,
+              "y": 0.708754877773251,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-space-experiences",
+                "arrange": false
+              },
+              "target": "nav-space-experiences"
+            },
+            {
+              "type": "move",
+              "x": 0.1362189143993668,
+              "y": 0.7088187955526132,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-space-experiences",
+                "arrange": false
+              },
+              "target": "nav-space-experiences"
+            },
+            {
+              "type": "move",
+              "x": 0.1361811832484773,
+              "y": 0.7088603421091986,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-space-experiences",
+                "arrange": false
+              },
+              "target": "nav-space-experiences"
+            },
+            {
+              "type": "move",
+              "x": 0.13615665800039914,
+              "y": 0.708887347370979,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-space-experiences",
+                "arrange": false
+              },
+              "target": "nav-space-experiences"
+            },
+            {
+              "type": "move",
+              "x": 0.13614071658914834,
+              "y": 0.7089049007911363,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-space-experiences",
+                "arrange": false
+              },
+              "target": "nav-space-experiences"
+            },
+            {
+              "type": "move",
+              "x": 0.1361303546718353,
+              "y": 0.7089163105142386,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-space-experiences",
+                "arrange": false
+              },
+              "target": "nav-space-experiences"
+            },
+            {
+              "type": "move",
+              "x": 0.13612361942558182,
+              "y": 0.7089237268342551,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-space-experiences",
+                "arrange": false
+              },
+              "target": "nav-space-experiences"
+            },
+            {
+              "type": "up",
+              "x": 0.13612361942558182,
+              "y": 0.7089237268342551,
+              "reason": "navigation-activated",
+              "held": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "device": "desktop",
+      "name": "directory close is pinch-only and uses the original owner",
+      "pass": true,
+      "data": {
+        "button": {
+          "point": {
+            "x": 0.1375,
+            "y": 0.135
+          },
+          "target": {
+            "kind": "navigation",
+            "id": "nav-close-spaces",
+            "label": "Close Spaces",
+            "actionId": "nav-close-spaces",
+            "controlActionability": true,
+            "dwellAllowed": false
+          },
+          "text": "Close",
+          "disabled": false,
+          "rect": {
+            "x": 37,
+            "y": 113,
+            "width": 322,
+            "height": 44
+          }
+        },
+        "click": {
+          "down": {
+            "space": "space",
+            "spaceId": "experiences",
+            "selectedId": "block-world",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 3,
+              "pageSize": 6,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens",
+                "youtube",
+                "picture-matter"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-close-spaces",
+                "arrange": false
+              },
+              "target": {
+                "kind": "navigation",
+                "id": "nav-close-spaces",
+                "label": "Close Spaces",
+                "actionId": "nav-close-spaces",
+                "controlActionability": true,
+                "dwellAllowed": false
+              },
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "up": {
+            "space": "space",
+            "spaceId": "experiences",
+            "selectedId": "block-world",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 3,
+              "pageSize": 6,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens",
+                "youtube",
+                "picture-matter"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "after": {
+            "space": "space",
+            "spaceId": "experiences",
+            "selectedId": "block-world",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 3,
+              "pageSize": 6,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens",
+                "youtube",
+                "picture-matter"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "trace": [
+            {
+              "type": "down",
+              "x": 0.13749940445286132,
+              "y": 0.1352462093322697,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-close-spaces",
+                "arrange": false
+              },
+              "target": "nav-close-spaces"
+            },
+            {
+              "type": "move",
+              "x": 0.13749961289435986,
+              "y": 0.1351600360659753,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-close-spaces",
+                "arrange": false
+              },
+              "target": "nav-close-spaces"
+            },
+            {
+              "type": "move",
+              "x": 0.1374997483813339,
+              "y": 0.13510402344288394,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-close-spaces",
+                "arrange": false
+              },
+              "target": "nav-close-spaces"
+            },
+            {
+              "type": "move",
+              "x": 0.13749983644786706,
+              "y": 0.13506761523787456,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-close-spaces",
+                "arrange": false
+              },
+              "target": "nav-close-spaces"
+            },
+            {
+              "type": "move",
+              "x": 0.1374998936911136,
+              "y": 0.13504394990461846,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-close-spaces",
+                "arrange": false
+              },
+              "target": "nav-close-spaces"
+            },
+            {
+              "type": "move",
+              "x": 0.13749993089922383,
+              "y": 0.135028567438002,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-close-spaces",
+                "arrange": false
+              },
+              "target": "nav-close-spaces"
+            },
+            {
+              "type": "move",
+              "x": 0.13749995508449547,
+              "y": 0.1350185688347013,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-close-spaces",
+                "arrange": false
+              },
+              "target": "nav-close-spaces"
+            },
+            {
+              "type": "move",
+              "x": 0.13749997080492207,
+              "y": 0.13501206974255586,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-close-spaces",
+                "arrange": false
+              },
+              "target": "nav-close-spaces"
+            },
+            {
+              "type": "up",
+              "x": 0.13749997080492207,
+              "y": 0.13501206974255586,
+              "reason": "navigation-activated",
+              "held": null
+            }
+          ]
+        },
+        "hidden": true
+      }
+    },
+    {
+      "device": "desktop",
+      "name": "tracked paging advances and restores the original space page",
+      "pass": true,
+      "data": {
+        "available": true,
+        "before": {
+          "space": "space",
+          "spaceId": "experiences",
+          "selectedId": "block-world",
+          "liveOwner": null,
+          "page": {
+            "page": 0,
+            "pageCount": 3,
+            "pageSize": 6,
+            "total": 13,
+            "ids": [
+              "academy",
+              "world-events",
+              "multi-sport-events",
+              "reality-lens",
+              "youtube",
+              "picture-matter"
+            ]
+          },
+          "tracking": {
+            "source": "hand",
+            "active": true,
+            "held": null,
+            "target": null,
+            "reason": null,
+            "coordinateSpace": "normalized-screen",
+            "localOnly": true
+          },
+          "textView": false,
+          "camera": "idle"
+        },
+        "next": {
+          "point": {
+            "x": 0.5440972222222222,
+            "y": 0.301296875
+          },
+          "target": {
+            "kind": "navigation",
+            "id": "nav-next-objects",
+            "label": "Next objects",
+            "actionId": "nav-next-objects",
+            "controlActionability": true,
+            "dwellAllowed": true
+          },
+          "text": "→",
+          "disabled": false,
+          "rect": {
+            "x": 761.5,
+            "y": 279.296875,
+            "width": 44,
+            "height": 44
+          }
+        },
+        "forward": {
+          "down": {
+            "space": "space",
+            "spaceId": "experiences",
+            "selectedId": "block-world",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 3,
+              "pageSize": 6,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens",
+                "youtube",
+                "picture-matter"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-next-objects",
+                "arrange": false
+              },
+              "target": {
+                "kind": "navigation",
+                "id": "nav-next-objects",
+                "label": "Next objects",
+                "actionId": "nav-next-objects",
+                "controlActionability": true,
+                "dwellAllowed": true
+              },
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "up": {
+            "space": "space",
+            "spaceId": "experiences",
+            "selectedId": "block-world",
+            "liveOwner": null,
+            "page": {
+              "page": 1,
+              "pageCount": 3,
+              "pageSize": 6,
+              "total": 13,
+              "ids": [
+                "nft-atelier",
+                "white-paper",
+                "gesture-lens",
+                "sports-events",
+                "arena",
+                "chess"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "after": {
+            "space": "space",
+            "spaceId": "experiences",
+            "selectedId": "block-world",
+            "liveOwner": null,
+            "page": {
+              "page": 1,
+              "pageCount": 3,
+              "pageSize": 6,
+              "total": 13,
+              "ids": [
+                "nft-atelier",
+                "white-paper",
+                "gesture-lens",
+                "sports-events",
+                "arena",
+                "chess"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "trace": [
+            {
+              "type": "down",
+              "x": 0.5439227987898664,
+              "y": 0.30122553666605134,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-next-objects",
+                "arrange": false
+              },
+              "target": "nav-next-objects"
+            },
+            {
+              "type": "move",
+              "x": 0.5439838469911908,
+              "y": 0.3012505050829334,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-next-objects",
+                "arrange": false
+              },
+              "target": "nav-next-objects"
+            },
+            {
+              "type": "move",
+              "x": 0.5440235283220518,
+              "y": 0.30126673455390673,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-next-objects",
+                "arrange": false
+              },
+              "target": "nav-next-objects"
+            },
+            {
+              "type": "move",
+              "x": 0.5440493211871115,
+              "y": 0.30127728371003937,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-next-objects",
+                "arrange": false
+              },
+              "target": "nav-next-objects"
+            },
+            {
+              "type": "move",
+              "x": 0.5440660865494003,
+              "y": 0.3012841406615256,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-next-objects",
+                "arrange": false
+              },
+              "target": "nav-next-objects"
+            },
+            {
+              "type": "move",
+              "x": 0.544076984034888,
+              "y": 0.30128859767999167,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-next-objects",
+                "arrange": false
+              },
+              "target": "nav-next-objects"
+            },
+            {
+              "type": "move",
+              "x": 0.544084067400455,
+              "y": 0.30129149474199457,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-next-objects",
+                "arrange": false
+              },
+              "target": "nav-next-objects"
+            },
+            {
+              "type": "move",
+              "x": 0.5440886715880735,
+              "y": 0.3012933778322965,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-next-objects",
+                "arrange": false
+              },
+              "target": "nav-next-objects"
+            },
+            {
+              "type": "up",
+              "x": 0.5440886715880735,
+              "y": 0.3012933778322965,
+              "reason": "navigation-activated",
+              "held": null
+            }
+          ]
+        },
+        "previous": {
+          "point": {
+            "x": 0.4534722222222222,
+            "y": 0.301296875
+          },
+          "target": {
+            "kind": "navigation",
+            "id": "nav-previous-objects",
+            "label": "Previous objects",
+            "actionId": "nav-previous-objects",
+            "controlActionability": true,
+            "dwellAllowed": true
+          },
+          "text": "←",
+          "disabled": false,
+          "rect": {
+            "x": 631,
+            "y": 279.296875,
+            "width": 44,
+            "height": 44
+          }
+        },
+        "back": {
+          "down": {
+            "space": "space",
+            "spaceId": "experiences",
+            "selectedId": "block-world",
+            "liveOwner": null,
+            "page": {
+              "page": 1,
+              "pageCount": 3,
+              "pageSize": 6,
+              "total": 13,
+              "ids": [
+                "nft-atelier",
+                "white-paper",
+                "gesture-lens",
+                "sports-events",
+                "arena",
+                "chess"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-previous-objects",
+                "arrange": false
+              },
+              "target": {
+                "kind": "navigation",
+                "id": "nav-previous-objects",
+                "label": "Previous objects",
+                "actionId": "nav-previous-objects",
+                "controlActionability": true,
+                "dwellAllowed": true
+              },
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "up": {
+            "space": "space",
+            "spaceId": "experiences",
+            "selectedId": "block-world",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 3,
+              "pageSize": 6,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens",
+                "youtube",
+                "picture-matter"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "after": {
+            "space": "space",
+            "spaceId": "experiences",
+            "selectedId": "block-world",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 3,
+              "pageSize": 6,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens",
+                "youtube",
+                "picture-matter"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "trace": [
+            {
+              "type": "down",
+              "x": 0.45351109865699435,
+              "y": 0.30129687492645546,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-previous-objects",
+                "arrange": false
+              },
+              "target": "nav-previous-objects"
+            },
+            {
+              "type": "move",
+              "x": 0.45349749190482413,
+              "y": 0.30129687495219604,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-previous-objects",
+                "arrange": false
+              },
+              "target": "nav-previous-objects"
+            },
+            {
+              "type": "move",
+              "x": 0.45348864751591345,
+              "y": 0.30129687496892743,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-previous-objects",
+                "arrange": false
+              },
+              "target": "nav-previous-objects"
+            },
+            {
+              "type": "move",
+              "x": 0.4534828986631215,
+              "y": 0.30129687497980284,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-previous-objects",
+                "arrange": false
+              },
+              "target": "nav-previous-objects"
+            },
+            {
+              "type": "move",
+              "x": 0.45347916190880677,
+              "y": 0.30129687498687185,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-previous-objects",
+                "arrange": false
+              },
+              "target": "nav-previous-objects"
+            },
+            {
+              "type": "move",
+              "x": 0.45347673301850216,
+              "y": 0.30129687499146673,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-previous-objects",
+                "arrange": false
+              },
+              "target": "nav-previous-objects"
+            },
+            {
+              "type": "move",
+              "x": 0.4534751542398042,
+              "y": 0.3012968749944534,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-previous-objects",
+                "arrange": false
+              },
+              "target": "nav-previous-objects"
+            },
+            {
+              "type": "move",
+              "x": 0.4534741280336505,
+              "y": 0.30129687499639474,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-previous-objects",
+                "arrange": false
+              },
+              "target": "nav-previous-objects"
+            },
+            {
+              "type": "up",
+              "x": 0.4534741280336505,
+              "y": 0.30129687499639474,
+              "reason": "navigation-activated",
+              "held": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "device": "desktop",
+      "name": "original Academy mesh still opens through the mounted hand session",
+      "pass": true,
+      "data": {
+        "target": {
+          "point": {
+            "x": 0.2900271386452962,
+            "y": 0.47418432021648593
+          },
+          "target": {
+            "kind": "feature",
+            "id": "academy",
+            "label": "Financial Academy",
+            "actionId": null,
+            "controlActionability": false,
+            "dwellAllowed": true
+          }
+        },
+        "click": {
+          "down": {
+            "space": "space",
+            "spaceId": "experiences",
+            "selectedId": "block-world",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 3,
+              "pageSize": 6,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens",
+                "youtube",
+                "picture-matter"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": {
+                "kind": "feature",
+                "id": "academy",
+                "arrange": false
+              },
+              "target": {
+                "kind": "feature",
+                "id": "academy",
+                "label": "Financial Academy",
+                "actionId": null,
+                "controlActionability": false,
+                "dwellAllowed": true
+              },
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "up": {
+            "space": "feature",
+            "spaceId": "experiences",
+            "selectedId": "academy",
+            "liveOwner": "academy",
+            "page": {
+              "page": 0,
+              "pageCount": 3,
+              "pageSize": 6,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens",
+                "youtube",
+                "picture-matter"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "after": {
+            "space": "feature",
+            "spaceId": "experiences",
+            "selectedId": "academy",
+            "liveOwner": "academy",
+            "page": {
+              "page": 0,
+              "pageCount": 3,
+              "pageSize": 6,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens",
+                "youtube",
+                "picture-matter"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "trace": [
+            {
+              "type": "down",
+              "x": 0.29009725390215635,
+              "y": 0.47411015438393317,
+              "reason": null,
+              "held": {
+                "kind": "feature",
+                "id": "academy",
+                "arrange": false
+              },
+              "target": "academy"
+            },
+            {
+              "type": "move",
+              "x": 0.2900727135622553,
+              "y": 0.47413611242532666,
+              "reason": null,
+              "held": {
+                "kind": "feature",
+                "id": "academy",
+                "arrange": false
+              },
+              "target": "academy"
+            },
+            {
+              "type": "move",
+              "x": 0.2900567623413196,
+              "y": 0.4741529851522324,
+              "reason": null,
+              "held": {
+                "kind": "feature",
+                "id": "academy",
+                "arrange": false
+              },
+              "target": "academy"
+            },
+            {
+              "type": "move",
+              "x": 0.29004639404771143,
+              "y": 0.47416395242472115,
+              "reason": null,
+              "held": {
+                "kind": "feature",
+                "id": "academy",
+                "arrange": false
+              },
+              "target": "academy"
+            },
+            {
+              "type": "move",
+              "x": 0.2900396546568661,
+              "y": 0.4741710811518388,
+              "reason": null,
+              "held": {
+                "kind": "feature",
+                "id": "academy",
+                "arrange": false
+              },
+              "target": "academy"
+            },
+            {
+              "type": "move",
+              "x": 0.2900352740528167,
+              "y": 0.4741757148244653,
+              "reason": null,
+              "held": {
+                "kind": "feature",
+                "id": "academy",
+                "arrange": false
+              },
+              "target": "academy"
+            },
+            {
+              "type": "move",
+              "x": 0.29003242666018453,
+              "y": 0.4741787267116725,
+              "reason": null,
+              "held": {
+                "kind": "feature",
+                "id": "academy",
+                "arrange": false
+              },
+              "target": "academy"
+            },
+            {
+              "type": "move",
+              "x": 0.2900305758549736,
+              "y": 0.4741806844383572,
+              "reason": null,
+              "held": {
+                "kind": "feature",
+                "id": "academy",
+                "arrange": false
+              },
+              "target": "academy"
+            },
+            {
+              "type": "up",
+              "x": 0.2900305758549736,
+              "y": 0.4741806844383572,
+              "reason": "navigation-activated",
+              "held": null
+            }
+          ]
+        },
+        "panelCount": 1
+      }
+    },
+    {
+      "device": "desktop",
+      "name": "Text view rejects armed gaze and accepts deliberate pinch",
+      "pass": true,
+      "data": {
+        "button": {
+          "point": {
+            "x": 0.7260416666666667,
+            "y": 0.054
+          },
+          "target": {
+            "kind": "navigation",
+            "id": "nav-text-view",
+            "label": "Text view",
+            "actionId": "nav-text-view",
+            "controlActionability": true,
+            "dwellAllowed": false
+          },
+          "text": "Text view",
+          "disabled": false,
+          "rect": {
+            "x": 1006,
+            "y": 32,
+            "width": 79,
+            "height": 44
+          }
+        },
+        "before": {
+          "space": "feature",
+          "spaceId": "experiences",
+          "selectedId": "academy",
+          "liveOwner": "academy",
+          "page": {
+            "page": 0,
+            "pageCount": 3,
+            "pageSize": 6,
+            "total": 13,
+            "ids": [
+              "academy",
+              "world-events",
+              "multi-sport-events",
+              "reality-lens",
+              "youtube",
+              "picture-matter"
+            ]
+          },
+          "tracking": {
+            "source": "hand",
+            "active": true,
+            "held": null,
+            "target": null,
+            "reason": "cancelled",
+            "coordinateSpace": "normalized-screen",
+            "localOnly": true
+          },
+          "textView": false,
+          "camera": "idle"
+        },
+        "gaze": {
+          "handled": true,
+          "source": "gaze",
+          "active": true,
+          "held": null,
+          "target": {
+            "kind": "navigation",
+            "id": "nav-text-view",
+            "label": "Text view",
+            "actionId": "nav-text-view",
+            "controlActionability": true,
+            "dwellAllowed": false
+          },
+          "reason": "dwell-not-navigation",
+          "coordinateSpace": "normalized-screen",
+          "localOnly": true
+        },
+        "afterGaze": {
+          "space": "feature",
+          "spaceId": "experiences",
+          "selectedId": "academy",
+          "liveOwner": "academy",
+          "page": {
+            "page": 0,
+            "pageCount": 3,
+            "pageSize": 6,
+            "total": 13,
+            "ids": [
+              "academy",
+              "world-events",
+              "multi-sport-events",
+              "reality-lens",
+              "youtube",
+              "picture-matter"
+            ]
+          },
+          "tracking": {
+            "source": "gaze",
+            "active": true,
+            "held": null,
+            "target": {
+              "kind": "navigation",
+              "id": "nav-text-view",
+              "label": "Text view",
+              "actionId": "nav-text-view",
+              "controlActionability": true,
+              "dwellAllowed": false
+            },
+            "reason": "dwell-not-navigation",
+            "coordinateSpace": "normalized-screen",
+            "localOnly": true
+          },
+          "textView": false,
+          "camera": "idle"
+        },
+        "click": {
+          "down": {
+            "space": "feature",
+            "spaceId": "experiences",
+            "selectedId": "academy",
+            "liveOwner": "academy",
+            "page": {
+              "page": 0,
+              "pageCount": 3,
+              "pageSize": 6,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens",
+                "youtube",
+                "picture-matter"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "arrange": false
+              },
+              "target": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "label": "Text view",
+                "actionId": "nav-text-view",
+                "controlActionability": true,
+                "dwellAllowed": false
+              },
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "up": {
+            "space": "feature",
+            "spaceId": "experiences",
+            "selectedId": "academy",
+            "liveOwner": "academy",
+            "page": {
+              "page": 0,
+              "pageCount": 3,
+              "pageSize": 6,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens",
+                "youtube",
+                "picture-matter"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": true,
+            "camera": "idle"
+          },
+          "after": {
+            "space": "feature",
+            "spaceId": "experiences",
+            "selectedId": "academy",
+            "liveOwner": "academy",
+            "page": {
+              "page": 0,
+              "pageCount": 3,
+              "pageSize": 6,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens",
+                "youtube",
+                "picture-matter"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": true,
+            "camera": "idle"
+          },
+          "trace": [
+            {
+              "type": "down",
+              "x": 0.725854623773307,
+              "y": 0.05418025199387125,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "arrange": false
+              },
+              "target": "nav-text-view"
+            },
+            {
+              "type": "move",
+              "x": 0.7259200887859829,
+              "y": 0.05411716379601631,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "arrange": false
+              },
+              "target": "nav-text-view"
+            },
+            {
+              "type": "move",
+              "x": 0.7259626410442221,
+              "y": 0.054076156467410604,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "arrange": false
+              },
+              "target": "nav-text-view"
+            },
+            {
+              "type": "move",
+              "x": 0.7259903000120778,
+              "y": 0.05404950170381689,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "arrange": false
+              },
+              "target": "nav-text-view"
+            },
+            {
+              "type": "move",
+              "x": 0.7260082783411839,
+              "y": 0.054032176107480984,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "arrange": false
+              },
+              "target": "nav-text-view"
+            },
+            {
+              "type": "move",
+              "x": 0.7260199642551028,
+              "y": 0.05402091446986264,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "arrange": false
+              },
+              "target": "nav-text-view"
+            },
+            {
+              "type": "move",
+              "x": 0.7260275600991503,
+              "y": 0.05401359440541072,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "arrange": false
+              },
+              "target": "nav-text-view"
+            },
+            {
+              "type": "move",
+              "x": 0.726032497397781,
+              "y": 0.054008836363516964,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "arrange": false
+              },
+              "target": "nav-text-view"
+            },
+            {
+              "type": "up",
+              "x": 0.726032497397781,
+              "y": 0.054008836363516964,
+              "reason": "navigation-activated",
+              "held": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "device": "desktop",
+      "name": "foreground original feature commands retain their obstruction guard",
+      "pass": true,
+      "data": {
+        "button": {
+          "point": {
+            "x": 0.5,
+            "y": 0.475265625
+          },
+          "target": null,
+          "text": "A local projection and rehearsal",
+          "disabled": false,
+          "rect": {
+            "x": 365,
+            "y": 451.265625,
+            "width": 710,
+            "height": 48
+          }
+        },
+        "before": "No answers yet. Choose a lesson and test the idea.",
+        "after": "No answers yet. Choose a lesson and test the idea.",
+        "click": {
+          "down": {
+            "space": "feature",
+            "spaceId": "experiences",
+            "selectedId": "academy",
+            "liveOwner": "academy",
+            "page": {
+              "page": 0,
+              "pageCount": 3,
+              "pageSize": 6,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens",
+                "youtube",
+                "picture-matter"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": "no-held-pinch",
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": true,
+            "camera": "idle"
+          },
+          "up": {
+            "space": "feature",
+            "spaceId": "experiences",
+            "selectedId": "academy",
+            "liveOwner": "academy",
+            "page": {
+              "page": 0,
+              "pageCount": 3,
+              "pageSize": 6,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens",
+                "youtube",
+                "picture-matter"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": true,
+            "camera": "idle"
+          },
+          "after": {
+            "space": "feature",
+            "spaceId": "experiences",
+            "selectedId": "academy",
+            "liveOwner": "academy",
+            "page": {
+              "page": 0,
+              "pageCount": 3,
+              "pageSize": 6,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens",
+                "youtube",
+                "picture-matter"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": true,
+            "camera": "idle"
+          },
+          "trace": [
+            {
+              "type": "down",
+              "x": 0.5000969679148276,
+              "y": 0.4750849092537653,
+              "reason": "no-mesh-hit",
+              "held": null
+            },
+            {
+              "type": "move",
+              "x": 0.500063029144638,
+              "y": 0.47514815976494745,
+              "reason": "no-held-pinch",
+              "held": null
+            },
+            {
+              "type": "move",
+              "x": 0.5000409689440146,
+              "y": 0.47518927259721583,
+              "reason": "no-held-pinch",
+              "held": null
+            },
+            {
+              "type": "move",
+              "x": 0.5000266298136096,
+              "y": 0.4752159959381903,
+              "reason": "no-held-pinch",
+              "held": null
+            },
+            {
+              "type": "move",
+              "x": 0.5000173093788461,
+              "y": 0.4752333661098237,
+              "reason": "no-held-pinch",
+              "held": null
+            },
+            {
+              "type": "move",
+              "x": 0.50001125109625,
+              "y": 0.4752446567213854,
+              "reason": "no-held-pinch",
+              "held": null
+            },
+            {
+              "type": "move",
+              "x": 0.5000073132125624,
+              "y": 0.4752519956189005,
+              "reason": "no-held-pinch",
+              "held": null
+            },
+            {
+              "type": "move",
+              "x": 0.5000047535881655,
+              "y": 0.4752567659022853,
+              "reason": "no-held-pinch",
+              "held": null
+            },
+            {
+              "type": "up",
+              "x": 0.5000047535881655,
+              "y": 0.4752567659022853,
+              "reason": "no-held-pinch",
+              "held": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "device": "desktop",
+      "name": "pinch the same Text/Object button returns to the original 3D owner",
+      "pass": true,
+      "data": {
+        "button": {
+          "point": {
+            "x": 0.7204861111111112,
+            "y": 0.054
+          },
+          "target": {
+            "kind": "navigation",
+            "id": "nav-text-view",
+            "label": "Object view",
+            "actionId": "nav-text-view",
+            "controlActionability": true,
+            "dwellAllowed": false
+          },
+          "text": "Object view",
+          "disabled": false,
+          "rect": {
+            "x": 990,
+            "y": 32,
+            "width": 95,
+            "height": 44
+          }
+        },
+        "click": {
+          "down": {
+            "space": "feature",
+            "spaceId": "experiences",
+            "selectedId": "academy",
+            "liveOwner": "academy",
+            "page": {
+              "page": 0,
+              "pageCount": 3,
+              "pageSize": 6,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens",
+                "youtube",
+                "picture-matter"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "arrange": false
+              },
+              "target": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "label": "Object view",
+                "actionId": "nav-text-view",
+                "controlActionability": true,
+                "dwellAllowed": false
+              },
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": true,
+            "camera": "idle"
+          },
+          "up": {
+            "space": "feature",
+            "spaceId": "experiences",
+            "selectedId": "academy",
+            "liveOwner": "academy",
+            "page": {
+              "page": 0,
+              "pageCount": 3,
+              "pageSize": 6,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens",
+                "youtube",
+                "picture-matter"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": {
+                "kind": "navigation",
+                "id": "nav-spaces",
+                "label": "Spaces",
+                "actionId": "nav-spaces",
+                "controlActionability": true,
+                "dwellAllowed": true
+              },
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "after": {
+            "space": "feature",
+            "spaceId": "experiences",
+            "selectedId": "academy",
+            "liveOwner": "academy",
+            "page": {
+              "page": 0,
+              "pageCount": 3,
+              "pageSize": 6,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens",
+                "youtube",
+                "picture-matter"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": {
+                "kind": "navigation",
+                "id": "nav-spaces",
+                "label": "Spaces",
+                "actionId": "nav-spaces",
+                "controlActionability": true,
+                "dwellAllowed": true
+              },
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "trace": [
+            {
+              "type": "down",
+              "x": 0.720391526344164,
+              "y": 0.05418071574575665,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "arrange": false
+              },
+              "target": "nav-text-view"
+            },
+            {
+              "type": "move",
+              "x": 0.7204246310125956,
+              "y": 0.05411746523474182,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "arrange": false
+              },
+              "target": "nav-text-view"
+            },
+            {
+              "type": "move",
+              "x": 0.720446149047076,
+              "y": 0.054076352402582184,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "arrange": false
+              },
+              "target": "nav-text-view"
+            },
+            {
+              "type": "move",
+              "x": 0.7204601357694883,
+              "y": 0.05404962906167842,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "arrange": false
+              },
+              "target": "nav-text-view"
+            },
+            {
+              "type": "move",
+              "x": 0.7204692271390563,
+              "y": 0.05403225889009097,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "arrange": false
+              },
+              "target": "nav-text-view"
+            },
+            {
+              "type": "move",
+              "x": 0.7204751365292755,
+              "y": 0.05402096827855913,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "arrange": false
+              },
+              "target": "nav-text-view"
+            },
+            {
+              "type": "move",
+              "x": 0.720478977632918,
+              "y": 0.05401362938106343,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "arrange": false
+              },
+              "target": "nav-text-view"
+            },
+            {
+              "type": "move",
+              "x": 0.7204814743502856,
+              "y": 0.05400885909769123,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "arrange": false
+              },
+              "target": "nav-text-view"
+            },
+            {
+              "type": "up",
+              "x": 0.7204814743502856,
+              "y": 0.05400885909769123,
+              "reason": "navigation-activated",
+              "held": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "device": "desktop",
+      "name": "pinch the original space breadcrumb returns from the opened object",
+      "pass": true,
+      "data": {
+        "button": {
+          "point": {
+            "x": 0.29618055555555556,
+            "y": 0.121
+          },
+          "target": {
+            "kind": "navigation",
+            "id": "nav-breadcrumb-space",
+            "label": "Play, media & learning",
+            "actionId": "nav-breadcrumb-space",
+            "controlActionability": true,
+            "dwellAllowed": true
+          },
+          "text": "Play, media & learning",
+          "disabled": false,
+          "rect": {
+            "x": 350,
+            "y": 103,
+            "width": 153,
+            "height": 36
+          }
+        },
+        "click": {
+          "down": {
+            "space": "feature",
+            "spaceId": "experiences",
+            "selectedId": "academy",
+            "liveOwner": "academy",
+            "page": {
+              "page": 0,
+              "pageCount": 3,
+              "pageSize": 6,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens",
+                "youtube",
+                "picture-matter"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-space",
+                "arrange": false
+              },
+              "target": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-space",
+                "label": "Play, media & learning",
+                "actionId": "nav-breadcrumb-space",
+                "controlActionability": true,
+                "dwellAllowed": true
+              },
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "up": {
+            "space": "space",
+            "spaceId": "experiences",
+            "selectedId": "academy",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 3,
+              "pageSize": 6,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens",
+                "youtube",
+                "picture-matter"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "after": {
+            "space": "space",
+            "spaceId": "experiences",
+            "selectedId": "academy",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 3,
+              "pageSize": 6,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens",
+                "youtube",
+                "picture-matter"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "trace": [
+            {
+              "type": "down",
+              "x": 0.2963625754696499,
+              "y": 0.12097125830296643,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-space",
+                "arrange": false
+              },
+              "target": "nav-breadcrumb-space"
+            },
+            {
+              "type": "move",
+              "x": 0.29629886849971687,
+              "y": 0.12098131789692818,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-space",
+                "arrange": false
+              },
+              "target": "nav-breadcrumb-space"
+            },
+            {
+              "type": "move",
+              "x": 0.29625745896926037,
+              "y": 0.12098785663300331,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-space",
+                "arrange": false
+              },
+              "target": "nav-breadcrumb-space"
+            },
+            {
+              "type": "move",
+              "x": 0.2962305427744637,
+              "y": 0.12099210681145214,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-space",
+                "arrange": false
+              },
+              "target": "nav-breadcrumb-space"
+            },
+            {
+              "type": "move",
+              "x": 0.2962130472478458,
+              "y": 0.12099486942744389,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-space",
+                "arrange": false
+              },
+              "target": "nav-breadcrumb-space"
+            },
+            {
+              "type": "move",
+              "x": 0.2962016751555442,
+              "y": 0.12099666512783852,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-space",
+                "arrange": false
+              },
+              "target": "nav-breadcrumb-space"
+            },
+            {
+              "type": "move",
+              "x": 0.2961942832955482,
+              "y": 0.12099783233309504,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-space",
+                "arrange": false
+              },
+              "target": "nav-breadcrumb-space"
+            },
+            {
+              "type": "move",
+              "x": 0.29618947858655076,
+              "y": 0.12099859101651177,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-space",
+                "arrange": false
+              },
+              "target": "nav-breadcrumb-space"
+            },
+            {
+              "type": "up",
+              "x": 0.29618947858655076,
+              "y": 0.12099859101651177,
+              "reason": "navigation-activated",
+              "held": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "device": "desktop",
+      "name": "losing a pinch over Home cancels without navigation",
+      "pass": true,
+      "data": {
+        "button": {
+          "point": {
+            "x": 0.20729166666666668,
+            "y": 0.138
+          },
+          "target": {
+            "kind": "navigation",
+            "id": "nav-breadcrumb-home",
+            "label": "Home",
+            "actionId": "nav-breadcrumb-home",
+            "controlActionability": true,
+            "dwellAllowed": true
+          },
+          "text": "Home",
+          "disabled": false,
+          "rect": {
+            "x": 270,
+            "y": 120,
+            "width": 57,
+            "height": 36
+          }
+        },
+        "down": {
+          "space": "space",
+          "spaceId": "experiences",
+          "selectedId": "academy",
+          "liveOwner": null,
+          "page": {
+            "page": 0,
+            "pageCount": 3,
+            "pageSize": 6,
+            "total": 13,
+            "ids": [
+              "academy",
+              "world-events",
+              "multi-sport-events",
+              "reality-lens",
+              "youtube",
+              "picture-matter"
+            ]
+          },
+          "tracking": {
+            "source": "hand",
+            "active": true,
+            "held": {
+              "kind": "navigation",
+              "id": "nav-breadcrumb-home",
+              "arrange": false
+            },
+            "target": {
+              "kind": "navigation",
+              "id": "nav-breadcrumb-home",
+              "label": "Home",
+              "actionId": "nav-breadcrumb-home",
+              "controlActionability": true,
+              "dwellAllowed": true
+            },
+            "reason": null,
+            "coordinateSpace": "normalized-screen",
+            "localOnly": true
+          },
+          "textView": false,
+          "camera": "idle"
+        },
+        "after": {
+          "space": "space",
+          "spaceId": "experiences",
+          "selectedId": "academy",
+          "liveOwner": null,
+          "page": {
+            "page": 0,
+            "pageCount": 3,
+            "pageSize": 6,
+            "total": 13,
+            "ids": [
+              "academy",
+              "world-events",
+              "multi-sport-events",
+              "reality-lens",
+              "youtube",
+              "picture-matter"
+            ]
+          },
+          "tracking": {
+            "source": "hand",
+            "active": true,
+            "held": null,
+            "target": null,
+            "reason": "hand-lost",
+            "coordinateSpace": "normalized-screen",
+            "localOnly": true
+          },
+          "textView": false,
+          "camera": "idle"
+        }
+      }
+    },
+    {
+      "device": "desktop",
+      "name": "pinch original Home breadcrumb returns to the six physical spaces",
+      "pass": true,
+      "data": {
+        "button": {
+          "point": {
+            "x": 0.20729166666666668,
+            "y": 0.138
+          },
+          "target": {
+            "kind": "navigation",
+            "id": "nav-breadcrumb-home",
+            "label": "Home",
+            "actionId": "nav-breadcrumb-home",
+            "controlActionability": true,
+            "dwellAllowed": true
+          },
+          "text": "Home",
+          "disabled": false,
+          "rect": {
+            "x": 270,
+            "y": 120,
+            "width": 57,
+            "height": 36
+          }
+        },
+        "click": {
+          "down": {
+            "space": "space",
+            "spaceId": "experiences",
+            "selectedId": "academy",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 3,
+              "pageSize": 6,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens",
+                "youtube",
+                "picture-matter"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-home",
+                "arrange": false
+              },
+              "target": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-home",
+                "label": "Home",
+                "actionId": "nav-breadcrumb-home",
+                "controlActionability": true,
+                "dwellAllowed": true
+              },
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "up": {
+            "space": "gateway",
+            "spaceId": null,
+            "selectedId": "academy",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 1,
+              "pageSize": 6,
+              "total": 0,
+              "ids": []
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "after": {
+            "space": "gateway",
+            "spaceId": null,
+            "selectedId": "academy",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 1,
+              "pageSize": 6,
+              "total": 0,
+              "ids": []
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "trace": [
+            {
+              "type": "down",
+              "x": 0.20729166666666668,
+              "y": 0.138,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-home",
+                "arrange": false
+              },
+              "target": "nav-breadcrumb-home"
+            },
+            {
+              "type": "move",
+              "x": 0.20729166666666668,
+              "y": 0.138,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-home",
+                "arrange": false
+              },
+              "target": "nav-breadcrumb-home"
+            },
+            {
+              "type": "move",
+              "x": 0.20729166666666668,
+              "y": 0.138,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-home",
+                "arrange": false
+              },
+              "target": "nav-breadcrumb-home"
+            },
+            {
+              "type": "move",
+              "x": 0.20729166666666668,
+              "y": 0.138,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-home",
+                "arrange": false
+              },
+              "target": "nav-breadcrumb-home"
+            },
+            {
+              "type": "move",
+              "x": 0.20729166666666668,
+              "y": 0.138,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-home",
+                "arrange": false
+              },
+              "target": "nav-breadcrumb-home"
+            },
+            {
+              "type": "move",
+              "x": 0.20729166666666668,
+              "y": 0.138,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-home",
+                "arrange": false
+              },
+              "target": "nav-breadcrumb-home"
+            },
+            {
+              "type": "move",
+              "x": 0.20729166666666668,
+              "y": 0.138,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-home",
+                "arrange": false
+              },
+              "target": "nav-breadcrumb-home"
+            },
+            {
+              "type": "move",
+              "x": 0.20729166666666668,
+              "y": 0.138,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-home",
+                "arrange": false
+              },
+              "target": "nav-breadcrumb-home"
+            },
+            {
+              "type": "up",
+              "x": 0.20729166666666668,
+              "y": 0.138,
+              "reason": "navigation-activated",
+              "held": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "device": "desktop",
+      "name": "explicit armed public gaze navigation uses the original Home button",
+      "pass": true,
+      "data": {
+        "button": {
+          "point": {
+            "x": 0.20729166666666668,
+            "y": 0.138
+          },
+          "target": {
+            "kind": "navigation",
+            "id": "nav-breadcrumb-home",
+            "label": "Home",
+            "actionId": "nav-breadcrumb-home",
+            "controlActionability": true,
+            "dwellAllowed": true
+          },
+          "text": "Home",
+          "disabled": false,
+          "rect": {
+            "x": 270,
+            "y": 120,
+            "width": 57,
+            "height": 36
+          }
+        },
+        "result": {
+          "handled": true,
+          "source": "gaze",
+          "active": true,
+          "held": null,
+          "target": null,
+          "reason": "navigation-activated",
+          "coordinateSpace": "normalized-screen",
+          "localOnly": true
+        },
+        "after": {
+          "space": "gateway",
+          "spaceId": null,
+          "selectedId": "academy",
+          "liveOwner": null,
+          "page": {
+            "page": 0,
+            "pageCount": 1,
+            "pageSize": 6,
+            "total": 0,
+            "ids": []
+          },
+          "tracking": {
+            "source": "gaze",
+            "active": true,
+            "held": null,
+            "target": null,
+            "reason": "tracking-stale",
+            "coordinateSpace": "normalized-screen",
+            "localOnly": true
+          },
+          "textView": false,
+          "camera": "idle"
+        }
+      }
+    },
+    {
+      "device": "desktop",
+      "name": "foreground Connections requests are not tracked navigation targets",
+      "pass": true,
+      "data": {
+        "button": {
+          "point": {
+            "x": 0.7145833333333333,
+            "y": 0.2626953125
+          },
+          "target": null,
+          "text": "Check connections",
+          "disabled": false,
+          "rect": {
+            "x": 965,
+            "y": 243.296875,
+            "width": 128,
+            "height": 38.796875
+          }
+        },
+        "before": "Auto-checked once · 4/4 checked public sources available · 1:27:23 PM",
+        "after": "Auto-checked once · 4/4 checked public sources available · 1:27:23 PM",
+        "click": {
+          "down": {
+            "space": "gateway",
+            "spaceId": null,
+            "selectedId": "academy",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 1,
+              "pageSize": 6,
+              "total": 0,
+              "ids": []
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": "no-held-pinch",
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "up": {
+            "space": "gateway",
+            "spaceId": null,
+            "selectedId": "academy",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 1,
+              "pageSize": 6,
+              "total": 0,
+              "ids": []
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "after": {
+            "space": "gateway",
+            "spaceId": null,
+            "selectedId": "academy",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 1,
+              "pageSize": 6,
+              "total": 0,
+              "ids": []
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "trace": [
+            {
+              "type": "down",
+              "x": 0.714623021887814,
+              "y": 0.26295115225942217,
+              "reason": "no-mesh-hit",
+              "held": null
+            },
+            {
+              "type": "move",
+              "x": 0.7146091308937458,
+              "y": 0.26286160834362443,
+              "reason": "no-held-pinch",
+              "held": null
+            },
+            {
+              "type": "move",
+              "x": 0.7146001017476014,
+              "y": 0.2628034047983559,
+              "reason": "no-held-pinch",
+              "held": null
+            },
+            {
+              "type": "move",
+              "x": 0.7145942328026076,
+              "y": 0.26276557249393134,
+              "reason": "no-held-pinch",
+              "held": null
+            },
+            {
+              "type": "move",
+              "x": 0.7145904179883615,
+              "y": 0.26274098149605535,
+              "reason": "no-held-pinch",
+              "held": null
+            },
+            {
+              "type": "move",
+              "x": 0.7145879383591017,
+              "y": 0.262724997347436,
+              "reason": "no-held-pinch",
+              "held": null
+            },
+            {
+              "type": "move",
+              "x": 0.7145863266000828,
+              "y": 0.2627146076508334,
+              "reason": "no-held-pinch",
+              "held": null
+            },
+            {
+              "type": "move",
+              "x": 0.7145852789567205,
+              "y": 0.26270785434804167,
+              "reason": "no-held-pinch",
+              "held": null
+            },
+            {
+              "type": "up",
+              "x": 0.7145852789567205,
+              "y": 0.26270785434804167,
+              "reason": "no-held-pinch",
+              "held": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "device": "desktop",
+      "name": "all navigation fixtures leave the physical camera off and release input",
+      "pass": true,
+      "data": {
+        "calls": 0,
+        "state": {
+          "space": "gateway",
+          "spaceId": null,
+          "selectedId": "academy",
+          "liveOwner": null,
+          "page": {
+            "page": 0,
+            "pageCount": 1,
+            "pageSize": 6,
+            "total": 0,
+            "ids": []
+          },
+          "tracking": {
+            "source": "hand",
+            "active": true,
+            "held": null,
+            "target": null,
+            "reason": null,
+            "coordinateSpace": "normalized-screen",
+            "localOnly": true
+          },
+          "textView": false,
+          "camera": "idle"
+        },
+        "cursorHidden": false
+      }
+    },
+    {
+      "device": "phone",
+      "name": "camera-off boot and visible header stays within viewport",
+      "pass": true,
+      "data": {
+        "cameraCalls": 0,
+        "state": {
+          "space": "gateway",
+          "spaceId": null,
+          "selectedId": "block-world",
+          "liveOwner": null,
+          "page": {
+            "page": 0,
+            "pageCount": 1,
+            "pageSize": 4,
+            "total": 0,
+            "ids": []
+          },
+          "tracking": {
+            "source": null,
+            "active": true,
+            "held": null,
+            "target": null,
+            "reason": "controls-changed",
+            "coordinateSpace": "normalized-screen",
+            "localOnly": true
+          },
+          "textView": false,
+          "camera": "idle"
+        },
+        "header": [
+          {
+            "text": "◇maTumboReality Lens Ω",
+            "right": 130.328125,
+            "left": 17
+          },
+          {
+            "text": "Spaces",
+            "right": 249.65625,
+            "left": 136.328125
+          },
+          {
+            "text": "View",
+            "right": 369,
+            "left": 255.65625
+          },
+          {
+            "text": "Hands & eyes",
+            "right": 249.65625,
+            "left": 17
+          },
+          {
+            "text": "Connections",
+            "right": 369,
+            "left": 255.65625
+          }
+        ]
+      }
+    },
+    {
+      "device": "phone",
+      "name": "pinch original Spaces button opens its actual directory",
+      "pass": true,
+      "data": {
+        "button": {
+          "point": {
+            "x": 0.4948517628205128,
+            "y": 0.0462085308056872
+          },
+          "target": {
+            "kind": "navigation",
+            "id": "nav-spaces",
+            "label": "Spaces",
+            "actionId": "nav-spaces",
+            "controlActionability": true,
+            "dwellAllowed": true
+          },
+          "text": "Spaces",
+          "disabled": false,
+          "rect": {
+            "x": 136.328125,
+            "y": 17,
+            "width": 113.328125,
+            "height": 44
+          }
+        },
+        "click": {
+          "down": {
+            "space": "gateway",
+            "spaceId": null,
+            "selectedId": "block-world",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 1,
+              "pageSize": 4,
+              "total": 0,
+              "ids": []
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-spaces",
+                "arrange": false
+              },
+              "target": {
+                "kind": "navigation",
+                "id": "nav-spaces",
+                "label": "Spaces",
+                "actionId": "nav-spaces",
+                "controlActionability": true,
+                "dwellAllowed": true
+              },
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "up": {
+            "space": "gateway",
+            "spaceId": null,
+            "selectedId": "block-world",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 1,
+              "pageSize": 4,
+              "total": 0,
+              "ids": []
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": {
+                "kind": "navigation",
+                "id": "nav-spaces",
+                "label": "Spaces",
+                "actionId": "nav-spaces",
+                "controlActionability": true,
+                "dwellAllowed": false
+              },
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "after": {
+            "space": "gateway",
+            "spaceId": null,
+            "selectedId": "block-world",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 1,
+              "pageSize": 4,
+              "total": 0,
+              "ids": []
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": {
+                "kind": "navigation",
+                "id": "nav-spaces",
+                "label": "Spaces",
+                "actionId": "nav-spaces",
+                "controlActionability": true,
+                "dwellAllowed": false
+              },
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "trace": [
+            {
+              "type": "down",
+              "x": 0.4948517628205128,
+              "y": 0.0462085308056872,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-spaces",
+                "arrange": false
+              },
+              "target": "nav-spaces"
+            },
+            {
+              "type": "move",
+              "x": 0.4948517628205128,
+              "y": 0.0462085308056872,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-spaces",
+                "arrange": false
+              },
+              "target": "nav-spaces"
+            },
+            {
+              "type": "move",
+              "x": 0.4948517628205128,
+              "y": 0.0462085308056872,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-spaces",
+                "arrange": false
+              },
+              "target": "nav-spaces"
+            },
+            {
+              "type": "move",
+              "x": 0.4948517628205128,
+              "y": 0.0462085308056872,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-spaces",
+                "arrange": false
+              },
+              "target": "nav-spaces"
+            },
+            {
+              "type": "move",
+              "x": 0.4948517628205128,
+              "y": 0.0462085308056872,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-spaces",
+                "arrange": false
+              },
+              "target": "nav-spaces"
+            },
+            {
+              "type": "move",
+              "x": 0.4948517628205128,
+              "y": 0.0462085308056872,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-spaces",
+                "arrange": false
+              },
+              "target": "nav-spaces"
+            },
+            {
+              "type": "move",
+              "x": 0.4948517628205128,
+              "y": 0.0462085308056872,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-spaces",
+                "arrange": false
+              },
+              "target": "nav-spaces"
+            },
+            {
+              "type": "move",
+              "x": 0.4948517628205128,
+              "y": 0.0462085308056872,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-spaces",
+                "arrange": false
+              },
+              "target": "nav-spaces"
+            },
+            {
+              "type": "up",
+              "x": 0.4948517628205128,
+              "y": 0.0462085308056872,
+              "reason": "navigation-activated",
+              "held": null
+            }
+          ]
+        },
+        "open": true
+      }
+    },
+    {
+      "device": "phone",
+      "name": "pinch original catalog space header opens Experiences",
+      "pass": true,
+      "data": {
+        "button": {
+          "point": {
+            "x": 0.4948717948717949,
+            "y": 0.8439721563981043
+          },
+          "target": {
+            "kind": "navigation",
+            "id": "nav-space-experiences",
+            "label": "Play, media & learning",
+            "actionId": "nav-space-experiences",
+            "controlActionability": true,
+            "dwellAllowed": true
+          },
+          "text": "Play, media & learning13",
+          "disabled": false,
+          "rect": {
+            "x": 30,
+            "y": 685.625,
+            "width": 326,
+            "height": 53.375
+          }
+        },
+        "click": {
+          "down": {
+            "space": "gateway",
+            "spaceId": null,
+            "selectedId": "block-world",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 1,
+              "pageSize": 4,
+              "total": 0,
+              "ids": []
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-space-experiences",
+                "arrange": false
+              },
+              "target": {
+                "kind": "navigation",
+                "id": "nav-space-experiences",
+                "label": "Play, media & learning",
+                "actionId": "nav-space-experiences",
+                "controlActionability": true,
+                "dwellAllowed": true
+              },
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "up": {
+            "space": "space",
+            "spaceId": "experiences",
+            "selectedId": "block-world",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 4,
+              "pageSize": 4,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "after": {
+            "space": "space",
+            "spaceId": "experiences",
+            "selectedId": "block-world",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 4,
+              "pageSize": 4,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "trace": [
+            {
+              "type": "down",
+              "x": 0.4948717862783788,
+              "y": 0.8436299290987289,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-space-experiences",
+                "arrange": false
+              },
+              "target": "nav-space-experiences"
+            },
+            {
+              "type": "move",
+              "x": 0.49487178928607445,
+              "y": 0.8437497086535103,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-space-experiences",
+                "arrange": false
+              },
+              "target": "nav-space-experiences"
+            },
+            {
+              "type": "move",
+              "x": 0.4948717912410766,
+              "y": 0.8438275653641182,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-space-experiences",
+                "arrange": false
+              },
+              "target": "nav-space-experiences"
+            },
+            {
+              "type": "move",
+              "x": 0.494871792511828,
+              "y": 0.8438781722260134,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-space-experiences",
+                "arrange": false
+              },
+              "target": "nav-space-experiences"
+            },
+            {
+              "type": "move",
+              "x": 0.4948717933378164,
+              "y": 0.8439110666862452,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-space-experiences",
+                "arrange": false
+              },
+              "target": "nav-space-experiences"
+            },
+            {
+              "type": "move",
+              "x": 0.49487179387470887,
+              "y": 0.8439324480853958,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-space-experiences",
+                "arrange": false
+              },
+              "target": "nav-space-experiences"
+            },
+            {
+              "type": "move",
+              "x": 0.494871794223689,
+              "y": 0.8439463459948437,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-space-experiences",
+                "arrange": false
+              },
+              "target": "nav-space-experiences"
+            },
+            {
+              "type": "move",
+              "x": 0.49487179445052604,
+              "y": 0.843955379635985,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-space-experiences",
+                "arrange": false
+              },
+              "target": "nav-space-experiences"
+            },
+            {
+              "type": "up",
+              "x": 0.49487179445052604,
+              "y": 0.843955379635985,
+              "reason": "navigation-activated",
+              "held": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "device": "phone",
+      "name": "directory close is pinch-only and uses the original owner",
+      "pass": true,
+      "data": {
+        "button": {
+          "point": {
+            "x": 0.85,
+            "y": 0.24052132701421802
+          },
+          "target": {
+            "kind": "navigation",
+            "id": "nav-close-spaces",
+            "label": "Close Spaces",
+            "actionId": "nav-close-spaces",
+            "controlActionability": true,
+            "dwellAllowed": false
+          },
+          "text": "Close",
+          "disabled": false,
+          "rect": {
+            "x": 303,
+            "y": 181,
+            "width": 57,
+            "height": 44
+          }
+        },
+        "click": {
+          "down": {
+            "space": "space",
+            "spaceId": "experiences",
+            "selectedId": "block-world",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 4,
+              "pageSize": 4,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-close-spaces",
+                "arrange": false
+              },
+              "target": {
+                "kind": "navigation",
+                "id": "nav-close-spaces",
+                "label": "Close Spaces",
+                "actionId": "nav-close-spaces",
+                "controlActionability": true,
+                "dwellAllowed": false
+              },
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "up": {
+            "space": "space",
+            "spaceId": "experiences",
+            "selectedId": "block-world",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 4,
+              "pageSize": 4,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "after": {
+            "space": "space",
+            "spaceId": "experiences",
+            "selectedId": "block-world",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 4,
+              "pageSize": 4,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "trace": [
+            {
+              "type": "down",
+              "x": 0.8498476559187693,
+              "y": 0.2407801970097418,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-close-spaces",
+                "arrange": false
+              },
+              "target": "nav-close-spaces"
+            },
+            {
+              "type": "move",
+              "x": 0.8499009763472001,
+              "y": 0.24068959251130848,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-close-spaces",
+                "arrange": false
+              },
+              "target": "nav-close-spaces"
+            },
+            {
+              "type": "move",
+              "x": 0.84993563462568,
+              "y": 0.24063069958732683,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-close-spaces",
+                "arrange": false
+              },
+              "target": "nav-close-spaces"
+            },
+            {
+              "type": "move",
+              "x": 0.849958162506692,
+              "y": 0.24059241918673874,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-close-spaces",
+                "arrange": false
+              },
+              "target": "nav-close-spaces"
+            },
+            {
+              "type": "move",
+              "x": 0.8499728056293498,
+              "y": 0.2405675369263565,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-close-spaces",
+                "arrange": false
+              },
+              "target": "nav-close-spaces"
+            },
+            {
+              "type": "move",
+              "x": 0.8499823236590773,
+              "y": 0.24055136345710804,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-close-spaces",
+                "arrange": false
+              },
+              "target": "nav-close-spaces"
+            },
+            {
+              "type": "move",
+              "x": 0.8499885103784002,
+              "y": 0.24054085070209652,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-close-spaces",
+                "arrange": false
+              },
+              "target": "nav-close-spaces"
+            },
+            {
+              "type": "move",
+              "x": 0.8499925317459602,
+              "y": 0.24053401741133904,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-close-spaces",
+                "arrange": false
+              },
+              "target": "nav-close-spaces"
+            },
+            {
+              "type": "up",
+              "x": 0.8499925317459602,
+              "y": 0.24053401741133904,
+              "reason": "navigation-activated",
+              "held": null
+            }
+          ]
+        },
+        "hidden": true
+      }
+    },
+    {
+      "device": "phone",
+      "name": "tracked paging advances and restores the original space page",
+      "pass": true,
+      "data": {
+        "available": true,
+        "before": {
+          "space": "space",
+          "spaceId": "experiences",
+          "selectedId": "block-world",
+          "liveOwner": null,
+          "page": {
+            "page": 0,
+            "pageCount": 4,
+            "pageSize": 4,
+            "total": 13,
+            "ids": [
+              "academy",
+              "world-events",
+              "multi-sport-events",
+              "reality-lens"
+            ]
+          },
+          "tracking": {
+            "source": "hand",
+            "active": true,
+            "held": null,
+            "target": null,
+            "reason": null,
+            "coordinateSpace": "normalized-screen",
+            "localOnly": true
+          },
+          "textView": false,
+          "camera": "idle"
+        },
+        "next": {
+          "point": {
+            "x": 0.6628205128205128,
+            "y": 0.32943942535545023
+          },
+          "target": {
+            "kind": "navigation",
+            "id": "nav-next-objects",
+            "label": "Next objects",
+            "actionId": "nav-next-objects",
+            "controlActionability": true,
+            "dwellAllowed": true
+          },
+          "text": "→",
+          "disabled": false,
+          "rect": {
+            "x": 236.5,
+            "y": 256.046875,
+            "width": 44,
+            "height": 44
+          }
+        },
+        "forward": {
+          "down": {
+            "space": "space",
+            "spaceId": "experiences",
+            "selectedId": "block-world",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 4,
+              "pageSize": 4,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-next-objects",
+                "arrange": false
+              },
+              "target": {
+                "kind": "navigation",
+                "id": "nav-next-objects",
+                "label": "Next objects",
+                "actionId": "nav-next-objects",
+                "controlActionability": true,
+                "dwellAllowed": true
+              },
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "up": {
+            "space": "space",
+            "spaceId": "experiences",
+            "selectedId": "block-world",
+            "liveOwner": null,
+            "page": {
+              "page": 1,
+              "pageCount": 4,
+              "pageSize": 4,
+              "total": 13,
+              "ids": [
+                "youtube",
+                "picture-matter",
+                "nft-atelier",
+                "white-paper"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": {
+                "kind": "navigation",
+                "id": "nav-next-objects",
+                "label": "Next objects",
+                "actionId": "nav-next-objects",
+                "controlActionability": true,
+                "dwellAllowed": true
+              },
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "after": {
+            "space": "space",
+            "spaceId": "experiences",
+            "selectedId": "block-world",
+            "liveOwner": null,
+            "page": {
+              "page": 1,
+              "pageCount": 4,
+              "pageSize": 4,
+              "total": 13,
+              "ids": [
+                "youtube",
+                "picture-matter",
+                "nft-atelier",
+                "white-paper"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": {
+                "kind": "navigation",
+                "id": "nav-next-objects",
+                "label": "Next objects",
+                "actionId": "nav-next-objects",
+                "controlActionability": true,
+                "dwellAllowed": true
+              },
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "trace": [
+            {
+              "type": "down",
+              "x": 0.6629008095438126,
+              "y": 0.3294012812400996,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-next-objects",
+                "arrange": false
+              },
+              "target": "nav-next-objects"
+            },
+            {
+              "type": "move",
+              "x": 0.6628727056906576,
+              "y": 0.3294146316804723,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-next-objects",
+                "arrange": false
+              },
+              "target": "nav-next-objects"
+            },
+            {
+              "type": "move",
+              "x": 0.662854438186107,
+              "y": 0.32942330946671455,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-next-objects",
+                "arrange": false
+              },
+              "target": "nav-next-objects"
+            },
+            {
+              "type": "move",
+              "x": 0.662842564308149,
+              "y": 0.32942895002777206,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-next-objects",
+                "arrange": false
+              },
+              "target": "nav-next-objects"
+            },
+            {
+              "type": "move",
+              "x": 0.6628348462874764,
+              "y": 0.3294326163924594,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-next-objects",
+                "arrange": false
+              },
+              "target": "nav-next-objects"
+            },
+            {
+              "type": "move",
+              "x": 0.6628298295740391,
+              "y": 0.3294349995295062,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-next-objects",
+                "arrange": false
+              },
+              "target": "nav-next-objects"
+            },
+            {
+              "type": "move",
+              "x": 0.6628265687103049,
+              "y": 0.3294365485685866,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-next-objects",
+                "arrange": false
+              },
+              "target": "nav-next-objects"
+            },
+            {
+              "type": "move",
+              "x": 0.6628244491488777,
+              "y": 0.3294375554439889,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-next-objects",
+                "arrange": false
+              },
+              "target": "nav-next-objects"
+            },
+            {
+              "type": "up",
+              "x": 0.6628244491488777,
+              "y": 0.3294375554439889,
+              "reason": "navigation-activated",
+              "held": null
+            }
+          ]
+        },
+        "previous": {
+          "point": {
+            "x": 0.3371794871794872,
+            "y": 0.32943942535545023
+          },
+          "target": {
+            "kind": "navigation",
+            "id": "nav-previous-objects",
+            "label": "Previous objects",
+            "actionId": "nav-previous-objects",
+            "controlActionability": true,
+            "dwellAllowed": true
+          },
+          "text": "←",
+          "disabled": false,
+          "rect": {
+            "x": 109.5,
+            "y": 256.046875,
+            "width": 44,
+            "height": 44
+          }
+        },
+        "back": {
+          "down": {
+            "space": "space",
+            "spaceId": "experiences",
+            "selectedId": "block-world",
+            "liveOwner": null,
+            "page": {
+              "page": 1,
+              "pageCount": 4,
+              "pageSize": 4,
+              "total": 13,
+              "ids": [
+                "youtube",
+                "picture-matter",
+                "nft-atelier",
+                "white-paper"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-previous-objects",
+                "arrange": false
+              },
+              "target": {
+                "kind": "navigation",
+                "id": "nav-previous-objects",
+                "label": "Previous objects",
+                "actionId": "nav-previous-objects",
+                "controlActionability": true,
+                "dwellAllowed": true
+              },
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "up": {
+            "space": "space",
+            "spaceId": "experiences",
+            "selectedId": "block-world",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 4,
+              "pageSize": 4,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "after": {
+            "space": "space",
+            "spaceId": "experiences",
+            "selectedId": "block-world",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 4,
+              "pageSize": 4,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "trace": [
+            {
+              "type": "down",
+              "x": 0.33731918183493986,
+              "y": 0.32943942531612647,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-previous-objects",
+                "arrange": false
+              },
+              "target": "nav-previous-objects"
+            },
+            {
+              "type": "move",
+              "x": 0.33727028870553144,
+              "y": 0.3294394253298898,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-previous-objects",
+                "arrange": false
+              },
+              "target": "nav-previous-objects"
+            },
+            {
+              "type": "move",
+              "x": 0.337238508171416,
+              "y": 0.32943942533883597,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-previous-objects",
+                "arrange": false
+              },
+              "target": "nav-previous-objects"
+            },
+            {
+              "type": "move",
+              "x": 0.3372178508242409,
+              "y": 0.329439425344651,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-previous-objects",
+                "arrange": false
+              },
+              "target": "nav-previous-objects"
+            },
+            {
+              "type": "move",
+              "x": 0.33720442354857705,
+              "y": 0.32943942534843074,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-previous-objects",
+                "arrange": false
+              },
+              "target": "nav-previous-objects"
+            },
+            {
+              "type": "move",
+              "x": 0.33719569581939557,
+              "y": 0.32943942535088755,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-previous-objects",
+                "arrange": false
+              },
+              "target": "nav-previous-objects"
+            },
+            {
+              "type": "move",
+              "x": 0.33719002279542765,
+              "y": 0.3294394253524845,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-previous-objects",
+                "arrange": false
+              },
+              "target": "nav-previous-objects"
+            },
+            {
+              "type": "move",
+              "x": 0.33718633532984854,
+              "y": 0.3294394253535225,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-previous-objects",
+                "arrange": false
+              },
+              "target": "nav-previous-objects"
+            },
+            {
+              "type": "up",
+              "x": 0.33718633532984854,
+              "y": 0.3294394253535225,
+              "reason": "navigation-activated",
+              "held": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "device": "phone",
+      "name": "original Academy mesh still opens through the mounted hand session",
+      "pass": true,
+      "data": {
+        "target": {
+          "point": {
+            "x": 0.2536546106032879,
+            "y": 0.4616349324121754
+          },
+          "target": {
+            "kind": "feature",
+            "id": "academy",
+            "label": "Financial Academy",
+            "actionId": null,
+            "controlActionability": false,
+            "dwellAllowed": true
+          }
+        },
+        "click": {
+          "down": {
+            "space": "space",
+            "spaceId": "experiences",
+            "selectedId": "block-world",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 4,
+              "pageSize": 4,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": {
+                "kind": "feature",
+                "id": "academy",
+                "arrange": false
+              },
+              "target": {
+                "kind": "feature",
+                "id": "academy",
+                "label": "Financial Academy",
+                "actionId": null,
+                "controlActionability": false,
+                "dwellAllowed": true
+              },
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "up": {
+            "space": "feature",
+            "spaceId": "experiences",
+            "selectedId": "academy",
+            "liveOwner": "academy",
+            "page": {
+              "page": 0,
+              "pageCount": 4,
+              "pageSize": 4,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "after": {
+            "space": "feature",
+            "spaceId": "experiences",
+            "selectedId": "academy",
+            "liveOwner": "academy",
+            "page": {
+              "page": 0,
+              "pageCount": 4,
+              "pageSize": 4,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "trace": [
+            {
+              "type": "down",
+              "x": 0.2536904415272786,
+              "y": 0.46157822274289706,
+              "reason": null,
+              "held": {
+                "kind": "feature",
+                "id": "academy",
+                "arrange": false
+              },
+              "target": "academy"
+            },
+            {
+              "type": "move",
+              "x": 0.25367790070388185,
+              "y": 0.46159807112714446,
+              "reason": null,
+              "held": {
+                "kind": "feature",
+                "id": "academy",
+                "arrange": false
+              },
+              "target": "academy"
+            },
+            {
+              "type": "move",
+              "x": 0.25366974916867396,
+              "y": 0.4616109725769053,
+              "reason": null,
+              "held": {
+                "kind": "feature",
+                "id": "academy",
+                "arrange": false
+              },
+              "target": "academy"
+            },
+            {
+              "type": "move",
+              "x": 0.25366445067078885,
+              "y": 0.46161935851924984,
+              "reason": null,
+              "held": {
+                "kind": "feature",
+                "id": "academy",
+                "arrange": false
+              },
+              "target": "academy"
+            },
+            {
+              "type": "move",
+              "x": 0.2536610066471635,
+              "y": 0.4616248093817738,
+              "reason": null,
+              "held": {
+                "kind": "feature",
+                "id": "academy",
+                "arrange": false
+              },
+              "target": "academy"
+            },
+            {
+              "type": "move",
+              "x": 0.2536587680318071,
+              "y": 0.46162835244241435,
+              "reason": null,
+              "held": {
+                "kind": "feature",
+                "id": "academy",
+                "arrange": false
+              },
+              "target": "academy"
+            },
+            {
+              "type": "move",
+              "x": 0.25365731293182536,
+              "y": 0.46163065543183074,
+              "reason": null,
+              "held": {
+                "kind": "feature",
+                "id": "academy",
+                "arrange": false
+              },
+              "target": "academy"
+            },
+            {
+              "type": "move",
+              "x": 0.25365636711683726,
+              "y": 0.46163215237495137,
+              "reason": null,
+              "held": {
+                "kind": "feature",
+                "id": "academy",
+                "arrange": false
+              },
+              "target": "academy"
+            },
+            {
+              "type": "up",
+              "x": 0.25365636711683726,
+              "y": 0.46163215237495137,
+              "reason": "navigation-activated",
+              "held": null
+            }
+          ]
+        },
+        "panelCount": 1
+      }
+    },
+    {
+      "device": "phone",
+      "name": "Text view rejects armed gaze and accepts deliberate pinch",
+      "pass": true,
+      "data": {
+        "button": {
+          "point": {
+            "x": 0.18888221153846155,
+            "y": 0.10545023696682465
+          },
+          "target": {
+            "kind": "navigation",
+            "id": "nav-text-view",
+            "label": "Text view",
+            "actionId": "nav-text-view",
+            "controlActionability": true,
+            "dwellAllowed": false
+          },
+          "text": "Text view",
+          "disabled": false,
+          "rect": {
+            "x": 17,
+            "y": 67,
+            "width": 113.328125,
+            "height": 44
+          }
+        },
+        "before": {
+          "space": "feature",
+          "spaceId": "experiences",
+          "selectedId": "academy",
+          "liveOwner": "academy",
+          "page": {
+            "page": 0,
+            "pageCount": 4,
+            "pageSize": 4,
+            "total": 13,
+            "ids": [
+              "academy",
+              "world-events",
+              "multi-sport-events",
+              "reality-lens"
+            ]
+          },
+          "tracking": {
+            "source": "hand",
+            "active": true,
+            "held": null,
+            "target": null,
+            "reason": "cancelled",
+            "coordinateSpace": "normalized-screen",
+            "localOnly": true
+          },
+          "textView": false,
+          "camera": "idle"
+        },
+        "gaze": {
+          "handled": true,
+          "source": "gaze",
+          "active": true,
+          "held": null,
+          "target": {
+            "kind": "navigation",
+            "id": "nav-text-view",
+            "label": "Text view",
+            "actionId": "nav-text-view",
+            "controlActionability": true,
+            "dwellAllowed": false
+          },
+          "reason": "dwell-not-navigation",
+          "coordinateSpace": "normalized-screen",
+          "localOnly": true
+        },
+        "afterGaze": {
+          "space": "feature",
+          "spaceId": "experiences",
+          "selectedId": "academy",
+          "liveOwner": "academy",
+          "page": {
+            "page": 0,
+            "pageCount": 4,
+            "pageSize": 4,
+            "total": 13,
+            "ids": [
+              "academy",
+              "world-events",
+              "multi-sport-events",
+              "reality-lens"
+            ]
+          },
+          "tracking": {
+            "source": "gaze",
+            "active": true,
+            "held": null,
+            "target": {
+              "kind": "navigation",
+              "id": "nav-text-view",
+              "label": "Text view",
+              "actionId": "nav-text-view",
+              "controlActionability": true,
+              "dwellAllowed": false
+            },
+            "reason": "dwell-not-navigation",
+            "coordinateSpace": "normalized-screen",
+            "localOnly": true
+          },
+          "textView": false,
+          "camera": "idle"
+        },
+        "click": {
+          "down": {
+            "space": "feature",
+            "spaceId": "experiences",
+            "selectedId": "academy",
+            "liveOwner": "academy",
+            "page": {
+              "page": 0,
+              "pageCount": 4,
+              "pageSize": 4,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "arrange": false
+              },
+              "target": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "label": "Text view",
+                "actionId": "nav-text-view",
+                "controlActionability": true,
+                "dwellAllowed": false
+              },
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "up": {
+            "space": "feature",
+            "spaceId": "experiences",
+            "selectedId": "academy",
+            "liveOwner": "academy",
+            "page": {
+              "page": 0,
+              "pageCount": 4,
+              "pageSize": 4,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "label": "Object view",
+                "actionId": "nav-text-view",
+                "controlActionability": true,
+                "dwellAllowed": false
+              },
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": true,
+            "camera": "idle"
+          },
+          "after": {
+            "space": "feature",
+            "spaceId": "experiences",
+            "selectedId": "academy",
+            "liveOwner": "academy",
+            "page": {
+              "page": 0,
+              "pageCount": 4,
+              "pageSize": 4,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "label": "Object view",
+                "actionId": "nav-text-view",
+                "controlActionability": true,
+                "dwellAllowed": false
+              },
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": true,
+            "camera": "idle"
+          },
+          "trace": [
+            {
+              "type": "down",
+              "x": 0.18890999785506402,
+              "y": 0.10560303420632096,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "arrange": false
+              },
+              "target": "nav-text-view"
+            },
+            {
+              "type": "move",
+              "x": 0.18890027264425313,
+              "y": 0.10554955517249726,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "arrange": false
+              },
+              "target": "nav-text-view"
+            },
+            {
+              "type": "move",
+              "x": 0.18889395125722608,
+              "y": 0.10551479380051185,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "arrange": false
+              },
+              "target": "nav-text-view"
+            },
+            {
+              "type": "move",
+              "x": 0.18888984235565848,
+              "y": 0.10549219890872133,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "arrange": false
+              },
+              "target": "nav-text-view"
+            },
+            {
+              "type": "move",
+              "x": 0.18888717156963958,
+              "y": 0.10547751222905749,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "arrange": false
+              },
+              "target": "nav-text-view"
+            },
+            {
+              "type": "move",
+              "x": 0.18888543555872725,
+              "y": 0.105467965887276,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "arrange": false
+              },
+              "target": "nav-text-view"
+            },
+            {
+              "type": "move",
+              "x": 0.18888430715163423,
+              "y": 0.10546176076511803,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "arrange": false
+              },
+              "target": "nav-text-view"
+            },
+            {
+              "type": "move",
+              "x": 0.1888835736870238,
+              "y": 0.10545772743571534,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "arrange": false
+              },
+              "target": "nav-text-view"
+            },
+            {
+              "type": "up",
+              "x": 0.1888835736870238,
+              "y": 0.10545772743571534,
+              "reason": "navigation-activated",
+              "held": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "device": "phone",
+      "name": "foreground original feature commands retain their obstruction guard",
+      "pass": true,
+      "data": {
+        "button": {
+          "point": {
+            "x": 0.5,
+            "y": 0.7748259774881516
+          },
+          "target": null,
+          "text": "A local projection and rehearsal",
+          "disabled": false,
+          "rect": {
+            "x": 39,
+            "y": 629.953125,
+            "width": 312,
+            "height": 48
+          }
+        },
+        "before": "No answers yet. Choose a lesson and test the idea.",
+        "after": "No answers yet. Choose a lesson and test the idea.",
+        "click": {
+          "down": {
+            "space": "feature",
+            "spaceId": "experiences",
+            "selectedId": "academy",
+            "liveOwner": "academy",
+            "page": {
+              "page": 0,
+              "pageCount": 4,
+              "pageSize": 4,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": "no-held-pinch",
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": true,
+            "camera": "idle"
+          },
+          "up": {
+            "space": "feature",
+            "spaceId": "experiences",
+            "selectedId": "academy",
+            "liveOwner": "academy",
+            "page": {
+              "page": 0,
+              "pageCount": 4,
+              "pageSize": 4,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": true,
+            "camera": "idle"
+          },
+          "after": {
+            "space": "feature",
+            "spaceId": "experiences",
+            "selectedId": "academy",
+            "liveOwner": "academy",
+            "page": {
+              "page": 0,
+              "pageCount": 4,
+              "pageSize": 4,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": true,
+            "camera": "idle"
+          },
+          "trace": [
+            {
+              "type": "down",
+              "x": 0.49986653568267003,
+              "y": 0.7745388266092054,
+              "reason": "no-mesh-hit",
+              "held": null
+            },
+            {
+              "type": "move",
+              "x": 0.4999132481937355,
+              "y": 0.7746393294168366,
+              "reason": "no-held-pinch",
+              "held": null
+            },
+            {
+              "type": "move",
+              "x": 0.499943611325928,
+              "y": 0.7747046562417969,
+              "reason": "no-held-pinch",
+              "held": null
+            },
+            {
+              "type": "move",
+              "x": 0.4999633473618532,
+              "y": 0.774747118678021,
+              "reason": "no-held-pinch",
+              "held": null
+            },
+            {
+              "type": "move",
+              "x": 0.49997617578520454,
+              "y": 0.7747747192615667,
+              "reason": "no-held-pinch",
+              "held": null
+            },
+            {
+              "type": "move",
+              "x": 0.49998451426038293,
+              "y": 0.7747926596408714,
+              "reason": "no-held-pinch",
+              "held": null
+            },
+            {
+              "type": "move",
+              "x": 0.4999899342692489,
+              "y": 0.7748043208874195,
+              "reason": "no-held-pinch",
+              "held": null
+            },
+            {
+              "type": "move",
+              "x": 0.4999934572750118,
+              "y": 0.7748119006976757,
+              "reason": "no-held-pinch",
+              "held": null
+            },
+            {
+              "type": "up",
+              "x": 0.4999934572750118,
+              "y": 0.7748119006976757,
+              "reason": "no-held-pinch",
+              "held": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "device": "phone",
+      "name": "pinch the same Text/Object button returns to the original 3D owner",
+      "pass": true,
+      "data": {
+        "button": {
+          "point": {
+            "x": 0.18888221153846155,
+            "y": 0.10545023696682465
+          },
+          "target": {
+            "kind": "navigation",
+            "id": "nav-text-view",
+            "label": "Object view",
+            "actionId": "nav-text-view",
+            "controlActionability": true,
+            "dwellAllowed": false
+          },
+          "text": "Object view",
+          "disabled": false,
+          "rect": {
+            "x": 17,
+            "y": 67,
+            "width": 113.328125,
+            "height": 44
+          }
+        },
+        "click": {
+          "down": {
+            "space": "feature",
+            "spaceId": "experiences",
+            "selectedId": "academy",
+            "liveOwner": "academy",
+            "page": {
+              "page": 0,
+              "pageCount": 4,
+              "pageSize": 4,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "arrange": false
+              },
+              "target": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "label": "Object view",
+                "actionId": "nav-text-view",
+                "controlActionability": true,
+                "dwellAllowed": false
+              },
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": true,
+            "camera": "idle"
+          },
+          "up": {
+            "space": "feature",
+            "spaceId": "experiences",
+            "selectedId": "academy",
+            "liveOwner": "academy",
+            "page": {
+              "page": 0,
+              "pageCount": 4,
+              "pageSize": 4,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "label": "Text view",
+                "actionId": "nav-text-view",
+                "controlActionability": true,
+                "dwellAllowed": false
+              },
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "after": {
+            "space": "feature",
+            "spaceId": "experiences",
+            "selectedId": "academy",
+            "liveOwner": "academy",
+            "page": {
+              "page": 0,
+              "pageCount": 4,
+              "pageSize": 4,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "label": "Text view",
+                "actionId": "nav-text-view",
+                "controlActionability": true,
+                "dwellAllowed": false
+              },
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "trace": [
+            {
+              "type": "down",
+              "x": 0.18901567574684536,
+              "y": 0.10573738770726226,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "arrange": false
+              },
+              "target": "nav-text-view"
+            },
+            {
+              "type": "move",
+              "x": 0.18896896327391105,
+              "y": 0.1056368849481091,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "arrange": false
+              },
+              "target": "nav-text-view"
+            },
+            {
+              "type": "move",
+              "x": 0.1889386001665037,
+              "y": 0.10557155815465954,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "arrange": false
+              },
+              "target": "nav-text-view"
+            },
+            {
+              "type": "move",
+              "x": 0.18891886414668896,
+              "y": 0.10552909573891733,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "arrange": false
+              },
+              "target": "nav-text-view"
+            },
+            {
+              "type": "move",
+              "x": 0.18890603573380937,
+              "y": 0.1055014951686849,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "arrange": false
+              },
+              "target": "nav-text-view"
+            },
+            {
+              "type": "move",
+              "x": 0.18889769726543762,
+              "y": 0.10548355479803381,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "arrange": false
+              },
+              "target": "nav-text-view"
+            },
+            {
+              "type": "move",
+              "x": 0.188892277260996,
+              "y": 0.1054718935571106,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "arrange": false
+              },
+              "target": "nav-text-view"
+            },
+            {
+              "type": "move",
+              "x": 0.18888875425810892,
+              "y": 0.10546431375051052,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-text-view",
+                "arrange": false
+              },
+              "target": "nav-text-view"
+            },
+            {
+              "type": "up",
+              "x": 0.18888875425810892,
+              "y": 0.10546431375051052,
+              "reason": "navigation-activated",
+              "held": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "device": "phone",
+      "name": "pinch the original space breadcrumb returns from the opened object",
+      "pass": true,
+      "data": {
+        "button": {
+          "point": {
+            "x": 0.3525641025641026,
+            "y": 0.16350710900473933
+          },
+          "target": {
+            "kind": "navigation",
+            "id": "nav-breadcrumb-space",
+            "label": "Play, media & learning",
+            "actionId": "nav-breadcrumb-space",
+            "controlActionability": true,
+            "dwellAllowed": true
+          },
+          "text": "Play, media & learning",
+          "disabled": false,
+          "rect": {
+            "x": 72,
+            "y": 120,
+            "width": 131,
+            "height": 36
+          }
+        },
+        "click": {
+          "down": {
+            "space": "feature",
+            "spaceId": "experiences",
+            "selectedId": "academy",
+            "liveOwner": "academy",
+            "page": {
+              "page": 0,
+              "pageCount": 4,
+              "pageSize": 4,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-space",
+                "arrange": false
+              },
+              "target": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-space",
+                "label": "Play, media & learning",
+                "actionId": "nav-breadcrumb-space",
+                "controlActionability": true,
+                "dwellAllowed": true
+              },
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "up": {
+            "space": "space",
+            "spaceId": "experiences",
+            "selectedId": "academy",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 4,
+              "pageSize": 4,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "after": {
+            "space": "space",
+            "spaceId": "experiences",
+            "selectedId": "academy",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 4,
+              "pageSize": 4,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "trace": [
+            {
+              "type": "down",
+              "x": 0.3524938858984642,
+              "y": 0.1634822038702766,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-space",
+                "arrange": false
+              },
+              "target": "nav-breadcrumb-space"
+            },
+            {
+              "type": "move",
+              "x": 0.35251846173143764,
+              "y": 0.16349092066733856,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-space",
+                "arrange": false
+              },
+              "target": "nav-breadcrumb-space"
+            },
+            {
+              "type": "move",
+              "x": 0.3525344360228704,
+              "y": 0.16349658658542882,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-space",
+                "arrange": false
+              },
+              "target": "nav-breadcrumb-space"
+            },
+            {
+              "type": "move",
+              "x": 0.35254481931230164,
+              "y": 0.16350026943218748,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-space",
+                "arrange": false
+              },
+              "target": "nav-breadcrumb-space"
+            },
+            {
+              "type": "move",
+              "x": 0.352551568450432,
+              "y": 0.16350266328258062,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-space",
+                "arrange": false
+              },
+              "target": "nav-breadcrumb-space"
+            },
+            {
+              "type": "move",
+              "x": 0.3525559553902167,
+              "y": 0.16350421928533618,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-space",
+                "arrange": false
+              },
+              "target": "nav-breadcrumb-space"
+            },
+            {
+              "type": "move",
+              "x": 0.35255880690107677,
+              "y": 0.16350523068712727,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-space",
+                "arrange": false
+              },
+              "target": "nav-breadcrumb-space"
+            },
+            {
+              "type": "move",
+              "x": 0.3525606603831358,
+              "y": 0.1635058880982915,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-space",
+                "arrange": false
+              },
+              "target": "nav-breadcrumb-space"
+            },
+            {
+              "type": "up",
+              "x": 0.3525606603831358,
+              "y": 0.1635058880982915,
+              "reason": "navigation-activated",
+              "held": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "device": "phone",
+      "name": "losing a pinch over Home cancels without navigation",
+      "pass": true,
+      "data": {
+        "button": {
+          "point": {
+            "x": 0.08974358974358974,
+            "y": 0.16350710900473933
+          },
+          "target": {
+            "kind": "navigation",
+            "id": "nav-breadcrumb-home",
+            "label": "Home",
+            "actionId": "nav-breadcrumb-home",
+            "controlActionability": true,
+            "dwellAllowed": true
+          },
+          "text": "Home",
+          "disabled": false,
+          "rect": {
+            "x": 12,
+            "y": 120,
+            "width": 46,
+            "height": 36
+          }
+        },
+        "down": {
+          "space": "space",
+          "spaceId": "experiences",
+          "selectedId": "academy",
+          "liveOwner": null,
+          "page": {
+            "page": 0,
+            "pageCount": 4,
+            "pageSize": 4,
+            "total": 13,
+            "ids": [
+              "academy",
+              "world-events",
+              "multi-sport-events",
+              "reality-lens"
+            ]
+          },
+          "tracking": {
+            "source": "hand",
+            "active": true,
+            "held": {
+              "kind": "navigation",
+              "id": "nav-breadcrumb-home",
+              "arrange": false
+            },
+            "target": {
+              "kind": "navigation",
+              "id": "nav-breadcrumb-home",
+              "label": "Home",
+              "actionId": "nav-breadcrumb-home",
+              "controlActionability": true,
+              "dwellAllowed": true
+            },
+            "reason": null,
+            "coordinateSpace": "normalized-screen",
+            "localOnly": true
+          },
+          "textView": false,
+          "camera": "idle"
+        },
+        "after": {
+          "space": "space",
+          "spaceId": "experiences",
+          "selectedId": "academy",
+          "liveOwner": null,
+          "page": {
+            "page": 0,
+            "pageCount": 4,
+            "pageSize": 4,
+            "total": 13,
+            "ids": [
+              "academy",
+              "world-events",
+              "multi-sport-events",
+              "reality-lens"
+            ]
+          },
+          "tracking": {
+            "source": "hand",
+            "active": true,
+            "held": null,
+            "target": null,
+            "reason": "hand-lost",
+            "coordinateSpace": "normalized-screen",
+            "localOnly": true
+          },
+          "textView": false,
+          "camera": "idle"
+        }
+      }
+    },
+    {
+      "device": "phone",
+      "name": "pinch original Home breadcrumb returns to the six physical spaces",
+      "pass": true,
+      "data": {
+        "button": {
+          "point": {
+            "x": 0.08974358974358974,
+            "y": 0.16350710900473933
+          },
+          "target": {
+            "kind": "navigation",
+            "id": "nav-breadcrumb-home",
+            "label": "Home",
+            "actionId": "nav-breadcrumb-home",
+            "controlActionability": true,
+            "dwellAllowed": true
+          },
+          "text": "Home",
+          "disabled": false,
+          "rect": {
+            "x": 12,
+            "y": 120,
+            "width": 46,
+            "height": 36
+          }
+        },
+        "click": {
+          "down": {
+            "space": "space",
+            "spaceId": "experiences",
+            "selectedId": "academy",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 4,
+              "pageSize": 4,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens"
+              ]
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-home",
+                "arrange": false
+              },
+              "target": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-home",
+                "label": "Home",
+                "actionId": "nav-breadcrumb-home",
+                "controlActionability": true,
+                "dwellAllowed": true
+              },
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "up": {
+            "space": "gateway",
+            "spaceId": null,
+            "selectedId": "academy",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 1,
+              "pageSize": 4,
+              "total": 0,
+              "ids": []
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "after": {
+            "space": "gateway",
+            "spaceId": null,
+            "selectedId": "academy",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 1,
+              "pageSize": 4,
+              "total": 0,
+              "ids": []
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "trace": [
+            {
+              "type": "down",
+              "x": 0.08974358974358973,
+              "y": 0.16350710900473933,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-home",
+                "arrange": false
+              },
+              "target": "nav-breadcrumb-home"
+            },
+            {
+              "type": "move",
+              "x": 0.08974358974358973,
+              "y": 0.16350710900473933,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-home",
+                "arrange": false
+              },
+              "target": "nav-breadcrumb-home"
+            },
+            {
+              "type": "move",
+              "x": 0.08974358974358973,
+              "y": 0.16350710900473933,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-home",
+                "arrange": false
+              },
+              "target": "nav-breadcrumb-home"
+            },
+            {
+              "type": "move",
+              "x": 0.08974358974358974,
+              "y": 0.16350710900473933,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-home",
+                "arrange": false
+              },
+              "target": "nav-breadcrumb-home"
+            },
+            {
+              "type": "move",
+              "x": 0.08974358974358974,
+              "y": 0.16350710900473933,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-home",
+                "arrange": false
+              },
+              "target": "nav-breadcrumb-home"
+            },
+            {
+              "type": "move",
+              "x": 0.08974358974358974,
+              "y": 0.16350710900473933,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-home",
+                "arrange": false
+              },
+              "target": "nav-breadcrumb-home"
+            },
+            {
+              "type": "move",
+              "x": 0.08974358974358974,
+              "y": 0.16350710900473933,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-home",
+                "arrange": false
+              },
+              "target": "nav-breadcrumb-home"
+            },
+            {
+              "type": "move",
+              "x": 0.08974358974358974,
+              "y": 0.16350710900473933,
+              "reason": null,
+              "held": {
+                "kind": "navigation",
+                "id": "nav-breadcrumb-home",
+                "arrange": false
+              },
+              "target": "nav-breadcrumb-home"
+            },
+            {
+              "type": "up",
+              "x": 0.08974358974358974,
+              "y": 0.16350710900473933,
+              "reason": "navigation-activated",
+              "held": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "device": "phone",
+      "name": "explicit armed public gaze navigation uses the original Home button",
+      "pass": true,
+      "data": {
+        "button": {
+          "point": {
+            "x": 0.08974358974358974,
+            "y": 0.16350710900473933
+          },
+          "target": {
+            "kind": "navigation",
+            "id": "nav-breadcrumb-home",
+            "label": "Home",
+            "actionId": "nav-breadcrumb-home",
+            "controlActionability": true,
+            "dwellAllowed": true
+          },
+          "text": "Home",
+          "disabled": false,
+          "rect": {
+            "x": 12,
+            "y": 120,
+            "width": 46,
+            "height": 36
+          }
+        },
+        "result": {
+          "handled": true,
+          "source": "gaze",
+          "active": true,
+          "held": null,
+          "target": null,
+          "reason": "navigation-activated",
+          "coordinateSpace": "normalized-screen",
+          "localOnly": true
+        },
+        "after": {
+          "space": "gateway",
+          "spaceId": null,
+          "selectedId": "academy",
+          "liveOwner": null,
+          "page": {
+            "page": 0,
+            "pageCount": 1,
+            "pageSize": 4,
+            "total": 0,
+            "ids": []
+          },
+          "tracking": {
+            "source": "gaze",
+            "active": true,
+            "held": null,
+            "target": null,
+            "reason": "tracking-stale",
+            "coordinateSpace": "normalized-screen",
+            "localOnly": true
+          },
+          "textView": false,
+          "camera": "idle"
+        }
+      }
+    },
+    {
+      "device": "phone",
+      "name": "foreground Connections requests are not tracked navigation targets",
+      "pass": true,
+      "data": {
+        "button": {
+          "point": {
+            "x": 0.2358974358974359,
+            "y": 0.28660026658767773
+          },
+          "target": null,
+          "text": "Check connections",
+          "disabled": false,
+          "rect": {
+            "x": 28,
+            "y": 219.890625,
+            "width": 128,
+            "height": 44
+          }
+        },
+        "before": "Auto-checked once · 4/4 checked public sources available · 1:27:51 PM",
+        "after": "Auto-checked once · 4/4 checked public sources available · 1:27:51 PM",
+        "click": {
+          "down": {
+            "space": "gateway",
+            "spaceId": null,
+            "selectedId": "academy",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 1,
+              "pageSize": 4,
+              "total": 0,
+              "ids": []
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": "no-held-pinch",
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "up": {
+            "space": "gateway",
+            "spaceId": null,
+            "selectedId": "academy",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 1,
+              "pageSize": 4,
+              "total": 0,
+              "ids": []
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "after": {
+            "space": "gateway",
+            "spaceId": null,
+            "selectedId": "academy",
+            "liveOwner": null,
+            "page": {
+              "page": 0,
+              "pageCount": 1,
+              "pageSize": 4,
+              "total": 0,
+              "ids": []
+            },
+            "tracking": {
+              "source": "hand",
+              "active": true,
+              "held": null,
+              "target": null,
+              "reason": null,
+              "coordinateSpace": "normalized-screen",
+              "localOnly": true
+            },
+            "textView": false,
+            "camera": "idle"
+          },
+          "trace": [
+            {
+              "type": "down",
+              "x": 0.23617288082848525,
+              "y": 0.2868392812380779,
+              "reason": "no-mesh-hit",
+              "held": null
+            },
+            {
+              "type": "move",
+              "x": 0.23607647510261798,
+              "y": 0.2867556261104378,
+              "reason": "no-held-pinch",
+              "held": null
+            },
+            {
+              "type": "move",
+              "x": 0.23601381138080424,
+              "y": 0.2867012502774718,
+              "reason": "no-held-pinch",
+              "held": null
+            },
+            {
+              "type": "move",
+              "x": 0.2359730799616253,
+              "y": 0.28666590598604386,
+              "reason": "no-held-pinch",
+              "held": null
+            },
+            {
+              "type": "move",
+              "x": 0.235946604539159,
+              "y": 0.28664293219661574,
+              "reason": "no-held-pinch",
+              "held": null
+            },
+            {
+              "type": "move",
+              "x": 0.2359293955145559,
+              "y": 0.2866279992334874,
+              "reason": "no-held-pinch",
+              "held": null
+            },
+            {
+              "type": "move",
+              "x": 0.23591820964856391,
+              "y": 0.28661829280745404,
+              "reason": "no-held-pinch",
+              "held": null
+            },
+            {
+              "type": "move",
+              "x": 0.2359109388356691,
+              "y": 0.2866119836305323,
+              "reason": "no-held-pinch",
+              "held": null
+            },
+            {
+              "type": "up",
+              "x": 0.2359109388356691,
+              "y": 0.2866119836305323,
+              "reason": "no-held-pinch",
+              "held": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "device": "phone",
+      "name": "all navigation fixtures leave the physical camera off and release input",
+      "pass": true,
+      "data": {
+        "calls": 0,
+        "state": {
+          "space": "gateway",
+          "spaceId": null,
+          "selectedId": "academy",
+          "liveOwner": null,
+          "page": {
+            "page": 0,
+            "pageCount": 1,
+            "pageSize": 4,
+            "total": 0,
+            "ids": []
+          },
+          "tracking": {
+            "source": "hand",
+            "active": true,
+            "held": null,
+            "target": null,
+            "reason": null,
+            "coordinateSpace": "normalized-screen",
+            "localOnly": true
+          },
+          "textView": false,
+          "camera": "idle"
+        },
+        "cursorHidden": false
+      }
+    }
+  ],
+  "errors": [],
+  "failures": [],
+  "commandRequests": [],
+  "browserClosed": true,
+  "finishedAt": "2026-10-05T17:28:15.086Z",
+  "passed": true
+}

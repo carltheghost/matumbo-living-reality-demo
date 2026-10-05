@@ -1,0 +1,763 @@
+{
+  "checks": [
+    {
+      "device": "desktop",
+      "initial": {
+        "cameraCalls": 0,
+        "state": {
+          "available": true,
+          "opened": false,
+          "calibrating": false,
+          "targetIndex": 0,
+          "observedHands": 0,
+          "camera": {
+            "state": "idle",
+            "source": {
+              "kind": "camera",
+              "id": "source-0",
+              "mirrored": true,
+              "facingMode": null,
+              "requestedFacingMode": "user",
+              "deviceLabel": "",
+              "width": 0,
+              "height": 0,
+              "playing": false,
+              "coordinates": "normalized-display",
+              "available": false
+            },
+            "handDetectionEnabled": true,
+            "handModel": {
+              "state": "idle",
+              "delegate": null,
+              "errorCode": null
+            },
+            "diagnostic": {
+              "code": "off",
+              "message": "Camera is off. Enable Hand Lens when you are ready."
+            },
+            "devices": [],
+            "deviceEnumeration": "unrequested",
+            "frames": 0,
+            "secureContext": true,
+            "localOnly": true,
+            "microphone": false,
+            "recording": false,
+            "uploading": false
+          },
+          "eyes": {
+            "enabled": false,
+            "state": "disabled",
+            "reason": "eyes-disabled",
+            "detectorReady": false,
+            "delegate": null,
+            "sourceRunning": false,
+            "source": null,
+            "sample": {
+              "valid": false,
+              "reason": "calibration-needed",
+              "quality": 0,
+              "point": null,
+              "normalized": null,
+              "timestamp": null
+            },
+            "calibration": {
+              "status": "uncalibrated",
+              "reason": "calibration-needed",
+              "metrics": null,
+              "trainTargets": 0,
+              "validationTargets": 0,
+              "calibrated": false
+            },
+            "processing": false,
+            "localOnly": true,
+            "framesUploaded": false,
+            "recording": false,
+            "persistence": false,
+            "identityRecognition": false,
+            "estimateKind": "empirically-calibrated-RGB-screen-gaze",
+            "measuredAccuracy": false,
+            "workerExecution": false
+          },
+          "interaction": {
+            "enabled": true,
+            "arrange": false,
+            "gazePinch": false,
+            "dwell": false,
+            "held": null,
+            "sourceId": null,
+            "dwellTarget": null
+          }
+        },
+        "header": [
+          {
+            "text": "◇maTumboReality Lens Ω",
+            "x": 42,
+            "right": 190,
+            "display": "flex"
+          },
+          {
+            "text": "OverviewYour spaceContractsBlock World",
+            "x": 0,
+            "right": 0,
+            "display": "none"
+          },
+          {
+            "text": "FindLocate",
+            "x": 671.828125,
+            "right": 931,
+            "display": "flex"
+          },
+          {
+            "text": "Details",
+            "x": 943,
+            "right": 1008,
+            "display": "block"
+          },
+          {
+            "text": "Spaces",
+            "x": 1020,
+            "right": 1085,
+            "display": "flex"
+          },
+          {
+            "text": "Text view",
+            "x": 0,
+            "right": 0,
+            "display": "none"
+          },
+          {
+            "text": "View",
+            "x": 1097,
+            "right": 1150,
+            "display": "block"
+          },
+          {
+            "text": "Hands & eyes",
+            "x": 1162,
+            "right": 1271,
+            "display": "block"
+          },
+          {
+            "text": "Connections",
+            "x": 1283,
+            "right": 1398,
+            "display": "flex"
+          }
+        ]
+      }
+    },
+    {
+      "device": "desktop",
+      "denied": {
+        "calls": 1,
+        "state": {
+          "state": "denied",
+          "source": {
+            "kind": "camera",
+            "id": "source-2",
+            "mirrored": true,
+            "facingMode": null,
+            "requestedFacingMode": "user",
+            "deviceLabel": "",
+            "width": 0,
+            "height": 0,
+            "playing": false,
+            "coordinates": "normalized-display",
+            "available": false
+          },
+          "handDetectionEnabled": true,
+          "handModel": {
+            "state": "idle",
+            "delegate": null,
+            "errorCode": null
+          },
+          "diagnostic": {
+            "code": "permission_denied",
+            "message": "Camera access was denied or blocked. Allow camera access in browser/site settings, then retry. Pointer/touch controls remain available."
+          },
+          "devices": [],
+          "deviceEnumeration": "unrequested",
+          "frames": 0,
+          "secureContext": true,
+          "localOnly": true,
+          "microphone": false,
+          "recording": false,
+          "uploading": false
+        }
+      }
+    },
+    {
+      "device": "desktop",
+      "escape": {
+        "panelHidden": true,
+        "space": "gateway"
+      }
+    },
+    {
+      "device": "desktop",
+      "homeTargets": [
+        {
+          "id": "worlds",
+          "point": {
+            "x": 0.34466063526831214,
+            "y": 0.3296892290688255
+          },
+          "target": {
+            "kind": "space",
+            "id": "worlds",
+            "label": "Worlds & rooms",
+            "actionId": null,
+            "controlActionability": false,
+            "dwellAllowed": true
+          }
+        },
+        {
+          "id": "people",
+          "point": {
+            "x": 0.5300493821562777,
+            "y": 0.3751544786337815
+          },
+          "target": {
+            "kind": "space",
+            "id": "people",
+            "label": "Your space",
+            "actionId": null,
+            "controlActionability": false,
+            "dwellAllowed": true
+          }
+        },
+        {
+          "id": "value",
+          "point": {
+            "x": 0.24891457221741092,
+            "y": 0.8506547432183958
+          },
+          "target": {
+            "kind": "space",
+            "id": "value",
+            "label": "Value & contracts",
+            "actionId": null,
+            "controlActionability": false,
+            "dwellAllowed": true
+          }
+        },
+        {
+          "id": "agents",
+          "point": {
+            "x": 0.5613014809528705,
+            "y": 0.7171205399587626
+          },
+          "target": {
+            "kind": "space",
+            "id": "agents",
+            "label": "Agents",
+            "actionId": null,
+            "controlActionability": false,
+            "dwellAllowed": true
+          }
+        },
+        {
+          "id": "experiences",
+          "point": {
+            "x": 0.8081531833833001,
+            "y": 0.8606734193333401
+          },
+          "target": {
+            "kind": "space",
+            "id": "experiences",
+            "label": "Play, media & learning",
+            "actionId": null,
+            "controlActionability": false,
+            "dwellAllowed": true
+          }
+        },
+        {
+          "id": "network",
+          "point": {
+            "x": 0.7180471091867446,
+            "y": 0.3409961846201024
+          },
+          "target": {
+            "kind": "space",
+            "id": "network",
+            "label": "Network & tools",
+            "actionId": null,
+            "controlActionability": false,
+            "dwellAllowed": true
+          }
+        }
+      ]
+    },
+    {
+      "device": "phone",
+      "initial": {
+        "cameraCalls": 0,
+        "state": {
+          "available": true,
+          "opened": false,
+          "calibrating": false,
+          "targetIndex": 0,
+          "observedHands": 0,
+          "camera": {
+            "state": "idle",
+            "source": {
+              "kind": "camera",
+              "id": "source-0",
+              "mirrored": true,
+              "facingMode": null,
+              "requestedFacingMode": "user",
+              "deviceLabel": "",
+              "width": 0,
+              "height": 0,
+              "playing": false,
+              "coordinates": "normalized-display",
+              "available": false
+            },
+            "handDetectionEnabled": true,
+            "handModel": {
+              "state": "idle",
+              "delegate": null,
+              "errorCode": null
+            },
+            "diagnostic": {
+              "code": "off",
+              "message": "Camera is off. Enable Hand Lens when you are ready."
+            },
+            "devices": [],
+            "deviceEnumeration": "unrequested",
+            "frames": 0,
+            "secureContext": true,
+            "localOnly": true,
+            "microphone": false,
+            "recording": false,
+            "uploading": false
+          },
+          "eyes": {
+            "enabled": false,
+            "state": "disabled",
+            "reason": "eyes-disabled",
+            "detectorReady": false,
+            "delegate": null,
+            "sourceRunning": false,
+            "source": null,
+            "sample": {
+              "valid": false,
+              "reason": "calibration-needed",
+              "quality": 0,
+              "point": null,
+              "normalized": null,
+              "timestamp": null
+            },
+            "calibration": {
+              "status": "uncalibrated",
+              "reason": "calibration-needed",
+              "metrics": null,
+              "trainTargets": 0,
+              "validationTargets": 0,
+              "calibrated": false
+            },
+            "processing": false,
+            "localOnly": true,
+            "framesUploaded": false,
+            "recording": false,
+            "persistence": false,
+            "identityRecognition": false,
+            "estimateKind": "empirically-calibrated-RGB-screen-gaze",
+            "measuredAccuracy": false,
+            "workerExecution": false
+          },
+          "interaction": {
+            "enabled": true,
+            "arrange": false,
+            "gazePinch": false,
+            "dwell": false,
+            "held": null,
+            "sourceId": null,
+            "dwellTarget": null
+          }
+        },
+        "header": [
+          {
+            "text": "◇maTumboReality Lens Ω",
+            "x": 17,
+            "right": 130.328125,
+            "display": "flex"
+          },
+          {
+            "text": "OverviewYour spaceContractsBlock World",
+            "x": 0,
+            "right": 0,
+            "display": "none"
+          },
+          {
+            "text": "FindLocate",
+            "x": 0,
+            "right": 0,
+            "display": "none"
+          },
+          {
+            "text": "Details",
+            "x": 0,
+            "right": 0,
+            "display": "none"
+          },
+          {
+            "text": "Spaces",
+            "x": 136.328125,
+            "right": 249.65625,
+            "display": "flex"
+          },
+          {
+            "text": "Text view",
+            "x": 0,
+            "right": 0,
+            "display": "none"
+          },
+          {
+            "text": "View",
+            "x": 255.65625,
+            "right": 369,
+            "display": "block"
+          },
+          {
+            "text": "Hands & eyes",
+            "x": 17,
+            "right": 249.65625,
+            "display": "block"
+          },
+          {
+            "text": "Connections",
+            "x": 255.65625,
+            "right": 369,
+            "display": "flex"
+          }
+        ]
+      }
+    },
+    {
+      "device": "phone",
+      "denied": {
+        "calls": 1,
+        "state": {
+          "state": "denied",
+          "source": {
+            "kind": "camera",
+            "id": "source-2",
+            "mirrored": true,
+            "facingMode": null,
+            "requestedFacingMode": "user",
+            "deviceLabel": "",
+            "width": 0,
+            "height": 0,
+            "playing": false,
+            "coordinates": "normalized-display",
+            "available": false
+          },
+          "handDetectionEnabled": true,
+          "handModel": {
+            "state": "idle",
+            "delegate": null,
+            "errorCode": null
+          },
+          "diagnostic": {
+            "code": "permission_denied",
+            "message": "Camera access was denied or blocked. Allow camera access in browser/site settings, then retry. Pointer/touch controls remain available."
+          },
+          "devices": [],
+          "deviceEnumeration": "unrequested",
+          "frames": 0,
+          "secureContext": true,
+          "localOnly": true,
+          "microphone": false,
+          "recording": false,
+          "uploading": false
+        }
+      }
+    },
+    {
+      "device": "phone",
+      "escape": {
+        "panelHidden": true,
+        "space": "gateway"
+      }
+    },
+    {
+      "device": "phone",
+      "featureHeader": [
+        {
+          "text": "◇maTumboReality Lens Ω",
+          "x": 17,
+          "right": 130.328125,
+          "viewport": 390
+        },
+        {
+          "text": "Spaces",
+          "x": 136.328125,
+          "right": 249.65625,
+          "viewport": 390
+        },
+        {
+          "text": "Text view",
+          "x": 17,
+          "right": 130.328125,
+          "viewport": 390
+        },
+        {
+          "text": "View",
+          "x": 255.65625,
+          "right": 369,
+          "viewport": 390
+        },
+        {
+          "text": "Hands & eyes",
+          "x": 136.328125,
+          "right": 249.65625,
+          "viewport": 390
+        },
+        {
+          "text": "Connections",
+          "x": 255.65625,
+          "right": 369,
+          "viewport": 390
+        }
+      ]
+    },
+    {
+      "device": "narrow-phone",
+      "initial": {
+        "cameraCalls": 0,
+        "state": {
+          "available": true,
+          "opened": false,
+          "calibrating": false,
+          "targetIndex": 0,
+          "observedHands": 0,
+          "camera": {
+            "state": "idle",
+            "source": {
+              "kind": "camera",
+              "id": "source-0",
+              "mirrored": true,
+              "facingMode": null,
+              "requestedFacingMode": "user",
+              "deviceLabel": "",
+              "width": 0,
+              "height": 0,
+              "playing": false,
+              "coordinates": "normalized-display",
+              "available": false
+            },
+            "handDetectionEnabled": true,
+            "handModel": {
+              "state": "idle",
+              "delegate": null,
+              "errorCode": null
+            },
+            "diagnostic": {
+              "code": "off",
+              "message": "Camera is off. Enable Hand Lens when you are ready."
+            },
+            "devices": [],
+            "deviceEnumeration": "unrequested",
+            "frames": 0,
+            "secureContext": true,
+            "localOnly": true,
+            "microphone": false,
+            "recording": false,
+            "uploading": false
+          },
+          "eyes": {
+            "enabled": false,
+            "state": "disabled",
+            "reason": "eyes-disabled",
+            "detectorReady": false,
+            "delegate": null,
+            "sourceRunning": false,
+            "source": null,
+            "sample": {
+              "valid": false,
+              "reason": "calibration-needed",
+              "quality": 0,
+              "point": null,
+              "normalized": null,
+              "timestamp": null
+            },
+            "calibration": {
+              "status": "uncalibrated",
+              "reason": "calibration-needed",
+              "metrics": null,
+              "trainTargets": 0,
+              "validationTargets": 0,
+              "calibrated": false
+            },
+            "processing": false,
+            "localOnly": true,
+            "framesUploaded": false,
+            "recording": false,
+            "persistence": false,
+            "identityRecognition": false,
+            "estimateKind": "empirically-calibrated-RGB-screen-gaze",
+            "measuredAccuracy": false,
+            "workerExecution": false
+          },
+          "interaction": {
+            "enabled": true,
+            "arrange": false,
+            "gazePinch": false,
+            "dwell": false,
+            "held": null,
+            "sourceId": null,
+            "dwellTarget": null
+          }
+        },
+        "header": [
+          {
+            "text": "◇maTumboReality Lens Ω",
+            "x": 17,
+            "right": 107,
+            "display": "flex"
+          },
+          {
+            "text": "OverviewYour spaceContractsBlock World",
+            "x": 0,
+            "right": 0,
+            "display": "none"
+          },
+          {
+            "text": "FindLocate",
+            "x": 0,
+            "right": 0,
+            "display": "none"
+          },
+          {
+            "text": "Details",
+            "x": 0,
+            "right": 0,
+            "display": "none"
+          },
+          {
+            "text": "Spaces",
+            "x": 113,
+            "right": 203,
+            "display": "flex"
+          },
+          {
+            "text": "Text view",
+            "x": 0,
+            "right": 0,
+            "display": "none"
+          },
+          {
+            "text": "View",
+            "x": 209,
+            "right": 299,
+            "display": "block"
+          },
+          {
+            "text": "Hands & eyes",
+            "x": 17,
+            "right": 203,
+            "display": "block"
+          },
+          {
+            "text": "Connections",
+            "x": 209,
+            "right": 299,
+            "display": "flex"
+          }
+        ]
+      }
+    },
+    {
+      "device": "narrow-phone",
+      "denied": {
+        "calls": 1,
+        "state": {
+          "state": "denied",
+          "source": {
+            "kind": "camera",
+            "id": "source-2",
+            "mirrored": true,
+            "facingMode": null,
+            "requestedFacingMode": "user",
+            "deviceLabel": "",
+            "width": 0,
+            "height": 0,
+            "playing": false,
+            "coordinates": "normalized-display",
+            "available": false
+          },
+          "handDetectionEnabled": true,
+          "handModel": {
+            "state": "idle",
+            "delegate": null,
+            "errorCode": null
+          },
+          "diagnostic": {
+            "code": "permission_denied",
+            "message": "Camera access was denied or blocked. Allow camera access in browser/site settings, then retry. Pointer/touch controls remain available."
+          },
+          "devices": [],
+          "deviceEnumeration": "unrequested",
+          "frames": 0,
+          "secureContext": true,
+          "localOnly": true,
+          "microphone": false,
+          "recording": false,
+          "uploading": false
+        }
+      }
+    },
+    {
+      "device": "narrow-phone",
+      "escape": {
+        "panelHidden": true,
+        "space": "gateway"
+      }
+    },
+    {
+      "device": "narrow-phone",
+      "featureHeader": [
+        {
+          "text": "◇maTumboReality Lens Ω",
+          "x": 17,
+          "right": 107,
+          "viewport": 320
+        },
+        {
+          "text": "Spaces",
+          "x": 113,
+          "right": 203,
+          "viewport": 320
+        },
+        {
+          "text": "Text view",
+          "x": 17,
+          "right": 107,
+          "viewport": 320
+        },
+        {
+          "text": "View",
+          "x": 209,
+          "right": 299,
+          "viewport": 320
+        },
+        {
+          "text": "Hands & eyes",
+          "x": 113,
+          "right": 203,
+          "viewport": 320
+        },
+        {
+          "text": "Connections",
+          "x": 209,
+          "right": 299,
+          "viewport": 320
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "requests": [],
+  "passed": true
+}

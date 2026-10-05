@@ -7,6 +7,7 @@ import {lensSpaceLabel} from './reality-lens-chrome.js?v=20261003-skin360';
 import {buildRealityAssemblyScene,LOD_FAR} from './reality-assembly-scene.js?v=20261003-skin360';
 import {normalizeDesignDescriptor} from '../domains/creator-economy.js?v=20261003-skin360';
 import {mountOrbitNavigation} from './orbit-navigation.js';
+import {createRealityTrackingInput,createTrackingNavigationTargets,trackingPointIsObstructed} from './reality-tracking-input.js';
 
 // The lens contains only equal-status feature tabs; no center cube or anchor.
 export const CLEAN_LANDING_CAMERA={position:[36,25,110],target:[0,2,0],fov:60,mergeThreshold:LOD_FAR};
@@ -267,6 +268,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   find('[data-directory-toggle]').setAttribute('aria-label','Find a feature');
   directory.hidden=true;
   const toolbar=find('.assembly-toolbar');toolbar.id='assembly-view-controls';toolbar.hidden=true;
+  const resetHomeButton=document.createElement('button');resetHomeButton.type='button';resetHomeButton.textContent='Reset Home layout';resetHomeButton.onclick=()=>{try{trackingInput?.cancel('home-layout-reset');spatial.resetHomeTransforms();render();if(activeLensGroup===null)frameSpace(null);say('Home layout reset by your choice.');}catch(error){say(error.message);}};toolbar.append(resetHomeButton);
   const toolbarSizeObserver=new ResizeObserver(()=>{
     root.style.setProperty('--assembly-toolbar-height',`${Math.ceil(toolbar.getBoundingClientRect().height)}px`);
   });
@@ -331,6 +333,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   };
   window.addEventListener('resize',resizeFocus);
   let active=false,saved=null,viewMode='3d',interaction='orbit',hovered=null,pointer=null,focusTarget=null,focusPosition=null,inspectorFolded=false,activeLensGroup=null;
+  let trackingInput=null,trackedHomeHover=null,trackingControlsEnabled=null;
   const labels=new Map(),catalog=new Map(),catalogSections=new Map();
   for(const domain of REALITY_LENS_GROUPS){
     const members=groupMembers.get(domain.id)??[];if(!members.length)continue;
@@ -358,7 +361,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     onChange:next=>{if(!active)return;focusTarget=null;focusPosition=null;mountedSurface?.controller?.holdRotation?.();camera.position.fromArray(next.position);controls.target.fromArray(next.target);controls.update();onFrame?.();},
   });
   const currentObject=()=>owner.getSnapshot().objects.find(object=>object.id===owner.getSnapshot().selectedId);
-  function snapshot(){const record=mountedSurface,node=record&&spatial.nodes.get(record.featureId);return {...owner.getSnapshot(),active,viewMode,interaction,spaceId:activeLensGroup,spaceView:root.dataset.spaceView,camera:{position:camera.position.toArray(),target:controls.target.toArray(),fov:camera.fov,aspect:camera.aspect,near:camera.near,far:camera.far},spatial:spatial.getSnapshot(),liveObject:record?{...(record.controller?.snapshot()??record.binding),panelId:record.livePanel?.id??null}:null,layoutDiagnostics:initialLayout.diagnostics,reality:workspace.getSnapshot()};}
+  function snapshot(){const record=mountedSurface,node=record&&spatial.nodes.get(record.featureId);return {...owner.getSnapshot(),tracking:trackingInput?.snapshot()??null,active,viewMode,interaction,spaceId:activeLensGroup,spaceView:root.dataset.spaceView,camera:{position:camera.position.toArray(),target:controls.target.toArray(),fov:camera.fov,aspect:camera.aspect,near:camera.near,far:camera.far},spatial:spatial.getSnapshot(),liveObject:record?{...(record.controller?.snapshot()??record.binding),panelId:record.livePanel?.id??null}:null,layoutDiagnostics:initialLayout.diagnostics,reality:workspace.getSnapshot()};}
   function describeSurface(options){
     const surface=realityObjectSurfaceEngine.describe(options),feature=options.feature;
     return {...surface,label:labelFor(feature),description:copyFor(feature.description),boundary:copyFor(feature.boundary),summary:copyFor(options.summary||'Open this object to use its connected feature.'),stageLabel:['Overview','Identity','Sources','Details'][options.stage??0],state:options.object.locked?'Locked':options.object.open?'Open':'Ready to open',sourceRefs:(feature.sources??[]).map(copyFor)};
@@ -694,7 +697,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     if(!framedSpaceInsets||Math.abs(next.topInset-framedSpaceInsets.topInset)>1||Math.abs(next.bottomInset-framedSpaceInsets.bottomInset)>1)frameSpace(activeLensGroup);
   });
   spaceChromeObserver.observe(contextBar);spaceChromeObserver.observe(find('.assembly-selection-hint'));
-  function setMode(mode){viewMode=mode;all('[data-view]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.view===mode)));render();}
+  function setMode(mode){trackingInput?.cancel('view-mode-changed');viewMode=mode;all('[data-view]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.view===mode)));render();}
   function setInteraction(next){interaction=next;all('[data-interaction]').forEach(button=>{button.setAttribute('aria-pressed',String(button.dataset.interaction===next));button.textContent=next==='move'?'Finish arranging':'Arrange';});say(next==='move'?'Drag an object. Hold Shift to move through depth.':'Drag the field to orbit. Scroll to travel.');}
   function moveBy(axis,steps){
     const object=currentObject();if(object.anchor||object.locked)throw Error(object.anchor?'This object is fixed in place.':'Unlock this object first.');
@@ -792,6 +795,49 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   function foldInspector(folded){inspectorFolded=folded;inspectorBody.hidden=folded;root.classList.toggle('assembly-inspector-folded',folded);inspectorToggle.textContent=folded?'+':'−';inspectorToggle.setAttribute('aria-expanded',String(!folded));inspectorToggle.setAttribute('aria-label',folded?'Expand inspector':'Minimize inspector');compactSelection.hidden=!folded;compactSelection.textContent=featureMap.get(owner.getSnapshot().selectedId).label;}
   inspectorToggle.onclick=()=>foldInspector(!inspectorFolded);
   const locate=event=>{const rect=renderer.domElement.getBoundingClientRect();point.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);ray.setFromCamera(point,camera);return ray.intersectObjects([...targets,...(spatial.groupTargets??[])],false).find(hit=>{const group=spatial.resolveGroup?.(hit.object);if(group)return spatial.groupParents.get(group)?.root.visible&&hit.object.visible;const id=spatial.resolve(hit.object);return id&&spatial.nodes.get(id)?.root.visible&&hit.object.visible;})??null;};
+  const trackingNavigation=createTrackingNavigationTargets({documentRoot:document,entries:[
+    ...all('[data-home]').map((element,index)=>({element,id:`nav-home-${index}`,label:'Home',dwellAllowed:true})),
+    {element:find('[data-crumb-home]'),id:'nav-breadcrumb-home',label:'Home',dwellAllowed:true},
+    {element:find('[data-crumb-space]'),id:'nav-breadcrumb-space',dwellAllowed:true},
+    {element:find('[data-space-back]'),id:'nav-back',dwellAllowed:true},
+    {element:find('[data-space-prev]'),id:'nav-previous-objects',label:'Previous objects',dwellAllowed:true},
+    {element:find('[data-space-next]'),id:'nav-next-objects',label:'Next objects',dwellAllowed:true},
+    {element:directoryToggle,id:'nav-spaces',label:'Spaces',dwellAllowed:()=>directory.hidden},
+    {element:directoryClose,id:'nav-close-spaces',label:'Close Spaces',dwellAllowed:false},
+    ...[...catalogSections].map(([id,record])=>({element:record.header,id:`nav-space-${id}`,label:record.label,dwellAllowed:()=>!record.open})),
+    {element:viewToggle,id:'nav-view-tools',dwellAllowed:false},
+    {element:textView,id:'nav-text-view',dwellAllowed:false},
+  ]});
+  function pickTracking(event){
+    const navigation=trackingNavigation.pick(event);if(navigation)return navigation;
+    if(trackingPointIsObstructed(document,renderer.domElement,event))return null;
+    camera.updateMatrixWorld();spatial.layer.updateMatrixWorld(true);
+    const physical=locate(event),surface=mountedSurface?.controller?.hit(event);
+    if(surface&&(!physical||surface.intersection.distance<=physical.distance+.001)){
+      const region=surface.region,actionable=Boolean(region?.actionId&&!region.disabled);
+      return {kind:actionable?'control':'surface',id:mountedSurface.featureId,label:copyFor(region?.text??labelFor(featureMap.get(mountedSurface.featureId))),actionId:region?.actionId??null,controlActionability:actionable,dwellAllowed:false};
+    }
+    const groupId=spatial.resolveGroup?.(physical?.object);
+    if(groupId)return {kind:'space',id:groupId,label:lensSpaceLabel(groupId),controlActionability:false,dwellAllowed:true};
+    const id=spatial.resolve(physical?.object);
+    return id?{kind:'feature',id,label:labelFor(featureMap.get(id)),controlActionability:false,dwellAllowed:true}:null;
+  }
+  trackingInput=createRealityTrackingInput({THREE,canvas:renderer.domElement,camera,isActive:()=>active,getOwner:()=>owner,getArrange:()=>interaction==='move',pick:pickTracking,
+    getRay:event=>{locate(event);return ray.ray;},getSurface:()=>mountedSurface?.controller,
+    getDisplayedPosition:(id,kind)=>(kind==='space'?spatial.groupParents.get(id)?.root:spatial.nodes.get(id)?.root)?.getWorldPosition(new THREE.Vector3()).toArray(),
+    select:(id,kind)=>{if(kind!=='space')select(id,{approach:false});},
+    previewFeature:(id,patch)=>{const state=owner.getSnapshot();patch.position=spatial.resolveObjectMove(id,patch.position,state.objects.map(object=>object.id===id?{...object,...patch}:object));spatial.apply({...state,objects:state.objects.map(object=>object.id===id?{...object,...patch}:object)},{viewMode,hoveredId:id});onFrame?.();},
+    commitFeature:(id,patch)=>{owner.transform(id,{position:patch.position,size:patch.size,rotation:patch.rotation});syncActiveReality();},restore:()=>render(),
+    getHome:id=>spatial.getHomeTransform(id),previewHome:(id,patch)=>spatial.setHomeTransform(id,patch,{preview:true}),commitHome:(id,patch)=>spatial.setHomeTransform(id,patch),cancelHome:id=>spatial.cancelHomeTransform(id),
+    activateSpace:id=>exploreGroup(id),activateFeature:id=>activateObjectTab(id),activateNavigation:target=>trackingNavigation.activate(target),
+    setBusy:busy=>{if(busy){trackingControlsEnabled=controls.enabled;controls.enabled=false;focusTarget=null;focusPosition=null;}else if(trackingControlsEnabled!==null){controls.enabled=trackingControlsEnabled;trackingControlsEnabled=null;}},
+    onHover:target=>{if(trackedHomeHover&&trackedHomeHover!==target?.id){const marker=spatial.groupParents.get(trackedHomeHover);if(marker)marker.entryEdges.material.opacity=.3;}trackedHomeHover=target?.kind==='space'?target.id:null;if(trackedHomeHover)spatial.groupParents.get(trackedHomeHover).entryEdges.material.opacity=.95;
+      const next=target&&['feature','surface','control'].includes(target.kind)?target.id:null;if(hovered!==next){hovered=next;render();}find('[data-hover-label]').textContent=target?`${target.label} · ${target.controlActionability?'pinch to use':'pinch to open'}`:'Point to an object';},
+  });
+  function setTrackingArrange(arrange){if(typeof arrange!=='boolean')throw Error('Tracking Arrange must be explicit');if((interaction==='move')!==arrange){trackingInput.cancel('interaction-mode-changed');setInteraction(arrange?'move':'orbit');}return trackingInput.snapshot();}
+  function handleTrackingInput(input){if(typeof input?.arrange==='boolean')setTrackingArrange(input.arrange);return trackingInput.handle(input);}
+  const cancelHiddenTracking=()=>{if(document.hidden)trackingInput.cancel('document-hidden');};document.addEventListener('visibilitychange',cancelHiddenTracking);
+  const physicalTrackingPoint=event=>{const rect=renderer.domElement.getBoundingClientRect();return {x:(event.clientX-rect.left)/rect.width,y:(event.clientY-rect.top)/rect.height,source:'hand'};};
   const resizeOnScroll=guard(event=>{
     if(!active||event.ctrlKey||event.target?.closest?.('.assembly-inspector,[data-orbit-dial]'))return;
     if(interaction!=='move'&&mountedSurface?.controller?.wheel(event))return;
@@ -809,6 +855,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   });
   const down=guard(event=>{
     if(!active||event.button!==0)return;
+    if(interaction==='move'&&spatial.resolveGroup?.(locate(event)?.object)){handleTrackingInput({type:'down',...physicalTrackingPoint(event)});pointer={id:event.pointerId,trackedHome:true};renderer.domElement.setPointerCapture(event.pointerId);event.stopImmediatePropagation();event.preventDefault();return;}
     if(interaction!=='move'&&mountedSurface?.controller?.down(event))return;
     const hit=locate(event),id=spatial.resolve(hit?.object);pointer={id:event.pointerId,x:event.clientX,y:event.clientY,objectId:id,groupId:spatial.resolveGroup?.(hit?.object),move:false};
     if(interaction==='move'&&id&&owner.getSnapshot().mode!=='past'){
@@ -825,19 +872,20 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   });
   cssSurfaceHost.addEventListener('pointerdown',downOnObjectSurface,true);
   const move=guard(event=>{
-    if(!active)return;if(mountedSurface?.controller?.move(event))return;const hit=locate(event);
+    if(!active)return;if(pointer?.trackedHome&&pointer.id===event.pointerId){handleTrackingInput({type:'move',...physicalTrackingPoint(event)});return;}if(mountedSurface?.controller?.move(event))return;const hit=locate(event);
     if(pointer?.move&&pointer.id===event.pointerId){
       if(ray.ray.intersectPlane(dragPlane,dragPoint)){
         const delta=dragPoint.clone().sub(pointer.hit),proposed=new THREE.Vector3(...pointer.origin).add(delta);
         if(event.shiftKey)proposed.addScaledVector(pointer.cameraForward,-(event.clientY-pointer.startY)*.055);
         const next=[proposed.x,proposed.y,proposed.z].map(value=>Math.max(-60,Math.min(60,value)));
-        const state=owner.getSnapshot(),safePosition=resolveRealityTabPosition(pointer.objectId,next,state.objects);pointer.next=safePosition;
+        const state=owner.getSnapshot(),safePosition=spatial.resolveObjectMove(pointer.objectId,resolveRealityTabPosition(pointer.objectId,next,state.objects),state.objects);pointer.next=safePosition;
         spatial.apply({...state,objects:state.objects.map(object=>object.id===pointer.objectId?{...object,position:safePosition}:object)},{viewMode,hoveredId:pointer.objectId});
       }return;
     }
     const id=spatial.resolve(hit?.object);if(id!==hovered){hovered=id;render();find('[data-hover-label]').textContent=id?`${labelFor(featureMap.get(id))} · tap to open`:'Drag the field to orbit · tap an object to open';}
   });
   const release=guard(event=>{
+    if(pointer?.trackedHome&&pointer.id===event.pointerId){handleTrackingInput({type:event.type==='pointerup'?'up':'cancel',...physicalTrackingPoint(event)});pointer=null;if(renderer.domElement.hasPointerCapture(event.pointerId))renderer.domElement.releasePointerCapture(event.pointerId);return;}
     if(active&&mountedSurface?.controller?.up(event))return;
     if(!active||!pointer||event.pointerId!==pointer.id)return;const previous=pointer;pointer=null;controls.enabled=true;
     if(previous.move){if(event.type==='pointerup'){owner.move(previous.objectId,previous.next);syncActiveReality();}render();say(event.type==='pointerup'?'Layout move recorded. Use 4D to inspect it through time.':'Move cancelled.');return;}
@@ -875,7 +923,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     camera.position.copy(focusPosition);controls.target.copy(focusTarget);focusPosition=null;focusTarget=null;controls.update();render();
   }
   function close(){
-    if(!active)return;setDirectory(false);setViewTools(false);active=false;onActiveChange(false);pointer=null;controls.enabled=true;root.hidden=true;spatial.layer.visible=false;document.body.classList.remove('assembly-mode');
+    if(!active)return;trackingInput.cancel('assembly-closed');setDirectory(false);setViewTools(false);active=false;onActiveChange(false);pointer=null;controls.enabled=true;root.hidden=true;spatial.layer.visible=false;document.body.classList.remove('assembly-mode');
     clearFeatureSurface();
     spatial.setLensMode(false);activeLensMode=false;
     if(saved){camera.position.copy(saved.position);controls.target.copy(saved.target);camera.fov=saved.fov;camera.updateProjectionMatrix();controls.minDistance=saved.min;controls.maxDistance=saved.max;world.visible=saved.worldVisible;scene.fog=saved.fog;scene.environment=saved.environment;scene.background=saved.background;saved=null;}
@@ -914,6 +962,8 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     getCreatorDesign(){return creatorDesign;},
     getSpaceObject(id){return spatial.groupParents.get(id)?.entry??null;},
     getSurfaceController(){return mountedSurface?.controller??null;},
+    handleTrackingInput,setTrackingArrange,getTrackingSnapshot:()=>trackingInput.snapshot(),
+    resetHomeLayout(){trackingInput.cancel('home-layout-reset');spatial.resetHomeTransforms();render();if(activeLensGroup===null)frameSpace(null);return snapshot();},
 
     getFeatureObject(id){const node=spatial.nodes.get(id);return node?{root:node.root,feature:featureMap.get(id),get shape(){return node.shape;}}:null;},
     getPanelAnchor(featureId){
@@ -940,6 +990,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
       if(mountedSurface&&!cssSurfaceHost.hidden){materializeSurfaceObjects(mountedSurface);sizeAndPlaceSurface(mountedSurface);css3dRenderer?.render(scene,camera);}
       if(root.dataset.spaceView==='feature')onPanelFrame(owner.getSnapshot().selectedId);
       if(!toolbar.hidden)orbitNavigation.update();
+      resetHomeButton.hidden=activeLensGroup!==null;
       const overlaps=(a,b)=>a.left<b.right+4&&a.right>b.left-4&&a.top<b.bottom+4&&a.bottom>b.top-4;
       const occupied=[...all('.assembly-header,.assembly-directory,.assembly-inspector,.assembly-toolbar,.assembly-branches,.assembly-space-context,.assembly-selection-hint,.assembly-world-label,.assembly-status'),...document.querySelectorAll('body.assembly-mode #immersive-toolbar')].filter(element=>!element.hidden&&getComputedStyle(element).display!=='none'&&getComputedStyle(element).visibility!=='hidden').map(element=>element.getBoundingClientRect());
     const selectedId=owner.getSnapshot().selectedId;
@@ -1009,5 +1060,5 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
       }
       }
     },
-    destroy(){close();destroyed=true;orbitNavigation.destroy();clearFeatureSurface();window.removeEventListener('resize',resizeCss3d);window.removeEventListener('resize',resizeFocus);window.removeEventListener('resize',reframeSpace);selectionObserver.disconnect();toolbarSizeObserver.disconnect();spaceChromeObserver.disconnect();spatial.destroy();root.remove();stylesheet.remove();cssSurfaceHost.removeEventListener('pointerdown',downOnObjectSurface,true);canvas.removeEventListener('pointerdown',down,true);canvas.removeEventListener('pointermove',move);canvas.removeEventListener('pointerup',release);canvas.removeEventListener('pointercancel',release);canvas.removeEventListener('wheel',resizeOnScroll,true);root.removeEventListener('wheel',resizeOnScroll,true);document.removeEventListener('keydown',keys);}};
+    destroy(){close();destroyed=true;document.removeEventListener('visibilitychange',cancelHiddenTracking);orbitNavigation.destroy();clearFeatureSurface();window.removeEventListener('resize',resizeCss3d);window.removeEventListener('resize',resizeFocus);window.removeEventListener('resize',reframeSpace);selectionObserver.disconnect();toolbarSizeObserver.disconnect();spaceChromeObserver.disconnect();spatial.destroy();root.remove();stylesheet.remove();cssSurfaceHost.removeEventListener('pointerdown',downOnObjectSurface,true);canvas.removeEventListener('pointerdown',down,true);canvas.removeEventListener('pointermove',move);canvas.removeEventListener('pointerup',release);canvas.removeEventListener('pointercancel',release);canvas.removeEventListener('wheel',resizeOnScroll,true);root.removeEventListener('wheel',resizeOnScroll,true);document.removeEventListener('keydown',keys);}};
 }

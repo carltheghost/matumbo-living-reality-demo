@@ -32,6 +32,7 @@ function collectPanels(documentRoot) {
     : [];
   for (const el of asides) {
     if (!el || !el.id || EXCLUDED_IDS.has(el.id)) continue;
+    if (el.closest?.('[data-controller-owned="tracking"]')) continue;
     if(el.parentElement?.closest?.('aside'))continue;
     // Object skins and Assembly chrome are owned by the spatial renderer,
     // not loose floating panels. A mobile keeper election must not hide the

@@ -115,6 +115,7 @@ import { WARDROBE_ATELIER_CONSOLE_SOURCE, createWardrobeAtelierConsole } from '.
 import { WHITE_PAPER_CONSOLE_SOURCE, createWhitePaperConsole } from './render/white-paper.js?v=20261003-skin360';
 import { GESTURE_LENS_CONSOLE_SOURCE, createGestureLensConsole } from './render/gesture-lens.js?v=20261003-skin360';
 import { createHandLensSession } from './render/hand-session.js?v=20261003-skin360';
+import { mountHandsEyesControls } from './render/hands-eyes-controls.js?v=20261005-hands-eyes';
 import { createStoryModeConsole } from './render/story-mode.js?v=20261003-skin360';
 import { LEDGER_PROOF_SOURCE } from './domains/ledger-proof.js?v=20261003-skin360';
 import { LEDGER_PROOF_CONSOLE_SOURCE, createLedgerProofConsole } from './render/ledger-proof.js?v=20261003-skin360';
@@ -154,6 +155,8 @@ const projectionBridge = createProjectionBridge();
 let featureNavigator = null;
 let personStudio = null;
 let realityAssembly = null;
+let handsEyesControls = null;
+let handLensSession = null;
 let launchConsole = null;
 let launchReceipt = null;
 let launchKitConsole = null;
@@ -3796,6 +3799,7 @@ window.__TUMBO_WHITE_PAPER__ = whitePaperConsole;
 // manipulate controls as touch input.
 gestureLensConsole = createGestureLensConsole({
   documentRoot: document,
+  onOpenTracking: () => handsEyesControls?.open(),
   onGesture: (event) => {
     blockWorld?.noteGestureIntent?.(event);
     projectionBridge.emitIntent('projection.gesture-lens-intent', GESTURE_LENS_CONSOLE_SOURCE, Object.freeze({
@@ -3827,7 +3831,7 @@ window.__TUMBO_GESTURE_LENS__ = gestureLensConsole;
 // only when the user presses Enable in the hand-lens panel. A session
 // failure must never break boot, so creation + mount are guarded.
 try {
-  const handLensSession = createHandLensSession({
+  handLensSession = createHandLensSession({
     blockWorld,
     scene,
     camera,
@@ -9448,6 +9452,11 @@ const apiConnections=mountApiConnections({
   },
 });
 window.__TUMBO_API_CONNECTIONS__=apiConnections;
+handsEyesControls=mountHandsEyesControls({session:handLensSession,getAssembly:()=>realityAssembly,
+  onOpen:()=>{apiConnections.close();realityAssembly.closePanels();},
+});
+window.__TUMBO_HANDS_EYES__=handsEyesControls;
+document.querySelector('#reality-assembly .assembly-header').append(document.getElementById('hands-eyes-trigger'));
 document.querySelector('#reality-assembly .assembly-header').append(document.getElementById('api-connections-trigger'));
 document.querySelector('#reality-assembly').addEventListener('click',event=>{if(!event.target.closest('#api-connections-trigger'))apiConnections.close();});
 document.addEventListener('person-studio:enter-vr',()=>immersiveSession.start('immersive-vr'));
@@ -9535,6 +9544,8 @@ addEventListener('pagehide',()=>{
   immersiveSession.destroy();
   personStudio.destroy();
   apiConnections.destroy();
+  handsEyesControls?.destroy();
+  handLensSession?.destroy();
   tokenGamificationController?.destroy();
   tokenTickerTeardown?.();
   tokenTransferUIController?.dispose?.();

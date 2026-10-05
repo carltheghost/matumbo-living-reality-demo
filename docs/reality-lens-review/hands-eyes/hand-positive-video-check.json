@@ -1,0 +1,88 @@
+{
+  "startedAt": "2026-10-05T17:02:40.081Z",
+  "source": "official MediaPipe woman_hands.jpg sample plus changing frame marker, encoded to WebM in this test only",
+  "fixture": {
+    "source": "https://storage.googleapis.com/mediapipe-tasks/hand_landmarker/woman_hands.jpg",
+    "officialSample": "https://github.com/google-ai-edge/mediapipe-samples/blob/main/examples/hand_landmarker/python/hand_landmarker.ipynb",
+    "photoSource": "https://unsplash.com/photos/mt2fyrdXxzk",
+    "bytes": 67719,
+    "sha256": "70cbeb38e198c9862202e0979c21a99b40ca980d3e7b250176c85b1636a40f12"
+  },
+  "physicalCamera": false,
+  "productRecording": false,
+  "requests": [
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/__hand_video_check__"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/hand-camera.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/__hand_positive.jpg"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/hand-detector.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/src/render/hand-detector-worker.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/vendor/mediapipe-tasks-vision-1.0.1/vision_bundle.mjs"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/vendor/mediapipe-tasks-vision-1.0.1/wasm/vision_wasm_internal.js"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/vendor/mediapipe-tasks-vision-1.0.1/wasm/vision_wasm_internal.wasm"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:8082/assets/models/vision/hand_landmarker.task"
+    }
+  ],
+  "errors": [],
+  "result": {
+    "imageDimensions": [
+      640,
+      960
+    ],
+    "videoBytes": 125672,
+    "delegate": "GPU-worker",
+    "landmarks": [
+      [
+        21
+      ],
+      [
+        21
+      ],
+      [
+        21
+      ],
+      [
+        21
+      ],
+      [
+        21
+      ]
+    ],
+    "frames": 32,
+    "hiddenFrames": 19,
+    "distinctHiddenFramePixels": 31,
+    "pauseStoppedFrames": true,
+    "resumedFrames": 12,
+    "ended": "ended",
+    "revokedUrls": 1,
+    "gumCalls": 0,
+    "errors": []
+  },
+  "passed": true,
+  "finishedAt": "2026-10-05T17:02:49.444Z"
+}

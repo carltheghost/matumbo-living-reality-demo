@@ -17,6 +17,10 @@ test('public preview allowlist, read-only routes, context and live revisions', a
   await writeFile(path.join(root,'assets','avatar','avatar.webp'),Buffer.from([82,73,70,70]));
   await writeFile(path.join(root,'assets','avatar','manifest.json'),'{}');
   await writeFile(path.join(root,'public','models','avatar.glb'),Buffer.from([103,108,84,70]));
+  await mkdir(path.join(root,'vendor','mediapipe-tasks-vision-1.0.1','wasm'),{recursive:true});
+  await writeFile(path.join(root,'vendor','mediapipe-tasks-vision-1.0.1','vision_bundle.mjs'),'export const fixture=true;');
+  await writeFile(path.join(root,'vendor','mediapipe-tasks-vision-1.0.1','wasm','vision_wasm_internal.wasm'),Buffer.from([0,97,115,109]));
+  await writeFile(path.join(root,'assets','face_landmarker.task'),'fixture');
   await writeFile(path.join(root,'vite.config.js'),'PRIVATE CONFIG');
   await writeFile(path.join(root,'internal.js'),'PRIVATE SCRIPT');
   await writeFile(path.join(root,'.env'),'PRIVATE');
@@ -34,6 +38,9 @@ test('public preview allowlist, read-only routes, context and live revisions', a
     ['/assets/avatar/avatar.webp','image/webp'],
     ['/assets/avatar/manifest.json','application/json'],
     ['/public/models/avatar.glb','model/gltf-binary'],
+    ['/vendor/mediapipe-tasks-vision-1.0.1/vision_bundle.mjs','text/javascript'],
+    ['/vendor/mediapipe-tasks-vision-1.0.1/wasm/vision_wasm_internal.wasm','application/wasm'],
+    ['/assets/face_landmarker.task','application/octet-stream'],
   ]) {
     const response = await fetch(base+asset);
     assert.equal(response.status,200,asset);

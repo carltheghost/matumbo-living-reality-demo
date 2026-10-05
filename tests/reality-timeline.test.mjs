@@ -2,6 +2,48 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createRealityTimeline} from '../src/domains/reality-timeline.js';
 const objects=[{id:'contracts',position:[0,0,0]},{id:'person',position:[45,45,45]}];
+test('bounded orientation belongs to the original timeline and old objects default to zero radians',()=>{
+  const owner=createRealityTimeline({objects}),before=owner.getSnapshot();
+  assert.deepEqual(before.objects[0].rotation,[0,0,0]);
+  for(const rotation of [[0,0,NaN],[0,0,Math.PI+.01],[0,0],['0',0,0]]){
+    assert.throws(()=>owner.configure('contracts',{rotation}),/finite radians/);
+    assert.deepEqual(owner.getSnapshot(),before,'invalid transforms do not change history');
+  }
+  const rotated=owner.configure('contracts',{rotation:[.2,-.4,Math.PI]});
+  assert.deepEqual(rotated.objects[0].rotation,[.2,-.4,Math.PI]);assert.deepEqual(rotated.objects[0].position,[0,0,0]);
+  assert.equal(rotated.frames.length,2);assert.equal(rotated.persistent,false);
+  assert.deepEqual(JSON.parse(owner.exportHistory()).frames[1].objects[0].rotation,[.2,-.4,Math.PI]);
+  assert.throws(()=>rotated.objects[0].rotation.push(0),TypeError);
+  owner.setLocked('contracts',true);assert.throws(()=>owner.configure('contracts',{rotation:[0,0,0]}),/immutable/);
+  assert.throws(()=>createRealityTimeline({objects:[{...objects[0],rotation:[0,0,Infinity]}]}),/finite radians/);
+});
+test('orientation replays historical frames and proposed branches without replacing present',()=>{
+  const owner=createRealityTimeline({objects});owner.configure('contracts',{rotation:[0,0,.6]});
+  const present=owner.getSnapshot().present,history=JSON.parse(owner.exportHistory()).frames;
+  owner.goTo(0);assert.deepEqual(owner.getSnapshot().objects[0].rotation,[0,0,0]);
+  assert.throws(()=>owner.configure('contracts',{rotation:[0,0,.3]}),/read-only/);
+  owner.propose('Rotated proposal');owner.configure('contracts',{rotation:[0,0,-.4]});
+  assert.deepEqual(owner.getSnapshot().objects[0].rotation,[0,0,-.4]);assert.deepEqual(owner.getSnapshot().present,present);
+  assert.deepEqual(JSON.parse(owner.exportHistory()).frames,history);
+  const restored=createRealityTimeline({objects:owner.getSnapshot().objects});
+  assert.deepEqual(restored.getSnapshot().objects[0].rotation,[0,0,-.4],'workspace travel retains canonical orientation');
+  owner.goTo('present');assert.deepEqual(owner.getSnapshot().objects[0].rotation,[0,0,.6]);
+});
+test('a complete transform resolves its candidate before one history commit and rejects blocked placement atomically',()=>{
+  const owner=createRealityTimeline({objects}),before=owner.getSnapshot();
+  const transformed=owner.transform('contracts',{position:[3,2,1],size:1.2,rotation:[.1,.2,.3]});
+  assert.equal(transformed.revision,before.revision+1);assert.equal(transformed.frames.length,before.frames.length+1);
+  assert.deepEqual(transformed.objects[0].position,[3,2,1]);assert.equal(transformed.objects[0].size,1.2);assert.deepEqual(transformed.objects[0].rotation,[.1,.2,.3]);
+  const neighbors=[-60,0,60].flatMap(x=>[-60,0,60].flatMap(y=>[-60,0,60].map(z=>({
+    id:`neighbor-${[x,y,z].map(n=>n+60).join('-')}`,position:[x,y,z],shape:'cube',size:24,locked:true,
+  }))));
+  const crowded=createRealityTimeline({objects:[{id:'agent',position:[0,0,0],shape:'cube',size:1},...neighbors]}),untouched=crowded.getSnapshot();
+  assert.throws(()=>crowded.transform('agent',{position:[0,0,0],size:24,rotation:[0,0,.3]}),/No collision-free/);
+  assert.deepEqual(crowded.getSnapshot(),untouched,'rejection preserves position, size, rotation and all history');
+  owner.goTo(0);assert.throws(()=>owner.transform('contracts',{position:[5,2,1],rotation:[0,0,.5]}),/read-only/);
+  owner.propose('Transform draft');owner.transform('contracts',{position:[5,2,1],size:1.3,rotation:[0,0,.5]});
+  assert.deepEqual(owner.getSnapshot().present,transformed.present,'proposed transforms cannot change the present');
+});
 test('observed time navigation retains object identities and cannot mutate present from history',()=>{
   let now=1000;const owner=createRealityTimeline({objects,clock:()=>now++});
   owner.move('contracts',[1,0,0]);owner.setOpen('contracts',true);

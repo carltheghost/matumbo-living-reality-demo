@@ -38,7 +38,12 @@ class StaticPackageTests(unittest.TestCase):
                     self.assertEqual(manifest["fileCount"], len(manifest["files"]))
                     self.assertEqual(len(archive.namelist()), result["fileCount"] + 1)
                     required = {"index.html", "src/main.js", "src/render/reality-assembly.js",
-                                "src/render/youtube-surface.js", "vendor/three-r179.1/build/three.module.js"}
+                                "src/render/youtube-surface.js", "vendor/three-r179.1/build/three.module.js",
+                                "src/render/hand-detector-worker.js", "src/render/eye-detector-worker.js",
+                                "vendor/mediapipe-tasks-vision-1.0.1/vision_bundle.mjs",
+                                "vendor/mediapipe-tasks-vision-1.0.1/wasm/vision_wasm_internal.wasm",
+                                "assets/models/vision/hand_landmarker.task",
+                                "assets/models/vision/face_landmarker.task", "assets/models/vision/provenance.json"}
                     self.assertTrue(required.issubset(archive.namelist()))
                     for entry in manifest["files"]:
                         path = Path(entry["path"])

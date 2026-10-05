@@ -1,0 +1,5809 @@
+{
+  "startedAt": "2026-10-05T17:14:50.634Z",
+  "fixture": "Explicitly synthetic MediaPipe-style landmarks through the mounted full-app hand session",
+  "physicalCamera": false,
+  "browser": "Chromium headless D3D11",
+  "checks": [
+    {
+      "name": "boot stays camera-off",
+      "pass": true,
+      "data": {
+        "calls": 0,
+        "state": {
+          "available": true,
+          "opened": false,
+          "calibrating": false,
+          "targetIndex": 0,
+          "camera": {
+            "state": "idle",
+            "source": {
+              "kind": "camera",
+              "id": "source-0",
+              "mirrored": true,
+              "facingMode": null,
+              "requestedFacingMode": "user",
+              "deviceLabel": "",
+              "width": 0,
+              "height": 0,
+              "playing": false,
+              "coordinates": "normalized-display",
+              "available": false
+            },
+            "handDetectionEnabled": true,
+            "handModel": {
+              "state": "idle",
+              "delegate": null,
+              "errorCode": null
+            },
+            "diagnostic": {
+              "code": "off",
+              "message": "Camera is off. Enable Hand Lens when you are ready."
+            },
+            "devices": [],
+            "deviceEnumeration": "unrequested",
+            "frames": 0,
+            "secureContext": true,
+            "localOnly": true,
+            "microphone": false,
+            "recording": false,
+            "uploading": false
+          },
+          "eyes": {
+            "enabled": false,
+            "state": "disabled",
+            "reason": "eyes-disabled",
+            "detectorReady": false,
+            "delegate": null,
+            "sourceRunning": false,
+            "source": null,
+            "sample": {
+              "valid": false,
+              "reason": "calibration-needed",
+              "quality": 0,
+              "point": null,
+              "normalized": null,
+              "timestamp": null
+            },
+            "calibration": {
+              "status": "uncalibrated",
+              "reason": "calibration-needed",
+              "metrics": null,
+              "trainTargets": 0,
+              "validationTargets": 0,
+              "calibrated": false
+            },
+            "processing": false,
+            "localOnly": true,
+            "framesUploaded": false,
+            "recording": false,
+            "persistence": false,
+            "identityRecognition": false,
+            "estimateKind": "empirically-calibrated-RGB-screen-gaze",
+            "measuredAccuracy": false,
+            "workerExecution": false
+          },
+          "interaction": {
+            "enabled": true,
+            "arrange": false,
+            "gazePinch": false,
+            "dwell": false,
+            "held": null,
+            "sourceId": null,
+            "dwellTarget": null
+          }
+        },
+        "assembly": "gateway"
+      }
+    },
+    {
+      "name": "initial pinch guarded; open hand arms; hysteresis holds; release navigates Home",
+      "pass": true,
+      "data": {
+        "target": {
+          "point": {
+            "x": 0.8071016590027781,
+            "y": 0.8590823009884765
+          },
+          "target": {
+            "kind": "space",
+            "id": "experiences",
+            "label": "Play, media & learning",
+            "actionId": null,
+            "controlActionability": false,
+            "dwellAllowed": true
+          }
+        },
+        "alreadyPinched": {
+          "space": "gateway",
+          "held": null
+        },
+        "held": {
+          "space": "gateway",
+          "held": {
+            "kind": "space",
+            "id": "experiences",
+            "arrange": false
+          }
+        },
+        "jitter": {
+          "space": "gateway",
+          "held": {
+            "kind": "space",
+            "id": "experiences",
+            "arrange": false
+          }
+        },
+        "released": {
+          "space": "space",
+          "spaceId": "experiences",
+          "held": null
+        }
+      }
+    },
+    {
+      "name": "lost hand cancels a Home pinch without navigation",
+      "pass": true,
+      "data": {
+        "before": {
+          "source": "hand",
+          "active": true,
+          "held": {
+            "kind": "space",
+            "id": "worlds",
+            "arrange": false
+          },
+          "target": {
+            "kind": "space",
+            "id": "worlds",
+            "label": "Worlds & rooms",
+            "actionId": null,
+            "controlActionability": false,
+            "dwellAllowed": true
+          },
+          "reason": null,
+          "coordinateSpace": "normalized-screen",
+          "localOnly": true
+        },
+        "after": {
+          "source": "hand",
+          "active": true,
+          "held": null,
+          "target": null,
+          "reason": "hand-lost",
+          "coordinateSpace": "normalized-screen",
+          "localOnly": true
+        },
+        "space": "gateway"
+      }
+    },
+    {
+      "name": "lost open hand must reopen after already-pinched reacquisition",
+      "pass": true,
+      "data": {
+        "returnedHeld": null,
+        "returnedSpace": "gateway",
+        "openedThenHeld": {
+          "kind": "space",
+          "id": "worlds",
+          "arrange": false
+        }
+      }
+    },
+    {
+      "name": "Arrange two-hand preview changes move/size/rotation; release commits Home layout",
+      "pass": true,
+      "data": {
+        "id": "experiences",
+        "target": {
+          "point": {
+            "x": 0.8071016590027781,
+            "y": 0.8590823009884765
+          },
+          "target": {
+            "kind": "space",
+            "id": "experiences",
+            "label": "Play, media & learning",
+            "actionId": null,
+            "controlActionability": false,
+            "dwellAllowed": true
+          }
+        },
+        "baseline": {
+          "id": "experiences",
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "size": 1,
+          "rotation": [
+            0,
+            0,
+            0
+          ]
+        },
+        "storage": null,
+        "preview": {
+          "id": "experiences",
+          "offset": [
+            0.5653617887741493,
+            -0.42042327405061064,
+            0
+          ],
+          "size": 1.4326038398433765,
+          "rotation": [
+            0,
+            0,
+            -0.3257349722271028
+          ]
+        },
+        "previewStorage": null,
+        "previewIds": [
+          "experiences"
+        ],
+        "committed": {
+          "id": "experiences",
+          "offset": [
+            0.568062104664623,
+            -0.4338357036831124,
+            0
+          ],
+          "size": 1.4352414296817693,
+          "rotation": [
+            0,
+            0,
+            -0.3267247094536786
+          ]
+        },
+        "committedStorage": "{\"version\":1,\"transforms\":[{\"id\":\"experiences\",\"offset\":[0.568062104664623,-0.4338357036831124,0],\"size\":1.4352414296817693,\"rotation\":[0,0,-0.3267247094536786]}]}",
+        "held": null,
+        "layout": {
+          "transforms": [
+            {
+              "id": "worlds",
+              "offset": [
+                0,
+                0,
+                0
+              ],
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "id": "people",
+              "offset": [
+                0,
+                0,
+                0
+              ],
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "id": "network",
+              "offset": [
+                0,
+                0,
+                0
+              ],
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "id": "value",
+              "offset": [
+                0,
+                0,
+                0
+              ],
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "id": "agents",
+              "offset": [
+                0,
+                0,
+                0
+              ],
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "id": "experiences",
+              "offset": [
+                0.568062104664623,
+                -0.4338357036831124,
+                0
+              ],
+              "size": 1.4352414296817693,
+              "rotation": [
+                0,
+                0,
+                -0.3267247094536786
+              ]
+            }
+          ],
+          "previewIds": [],
+          "persistence": "local-browser",
+          "storageError": null,
+          "held": false
+        }
+      }
+    },
+    {
+      "name": "lost hand cancels Arrange preview and restores committed Home layout",
+      "pass": true,
+      "data": {
+        "baseline": {
+          "id": "experiences",
+          "offset": [
+            0.568062104664623,
+            -0.4338357036831124,
+            0
+          ],
+          "size": 1.4352414296817693,
+          "rotation": [
+            0,
+            0,
+            -0.3267247094536786
+          ]
+        },
+        "preview": {
+          "id": "experiences",
+          "offset": [
+            1.601367560840865,
+            -1.0318133982295472,
+            0
+          ],
+          "size": 1.4352414296817693,
+          "rotation": [
+            0,
+            0,
+            -0.3267247094536786
+          ]
+        },
+        "previewIds": [
+          "experiences"
+        ],
+        "restored": {
+          "id": "experiences",
+          "offset": [
+            0.568062104664623,
+            -0.4338357036831124,
+            0
+          ],
+          "size": 1.4352414296817693,
+          "rotation": [
+            0,
+            0,
+            -0.3267247094536786
+          ]
+        },
+        "unchangedStorage": true,
+        "after": {
+          "source": "hand",
+          "active": true,
+          "held": null,
+          "target": null,
+          "reason": "hand-lost",
+          "coordinateSpace": "normalized-screen",
+          "localOnly": true
+        },
+        "afterPreviewIds": []
+      }
+    },
+    {
+      "name": "Home pinch then Academy feature pinch mounts the original UV owner",
+      "pass": true,
+      "data": {
+        "group": "experiences",
+        "home": {
+          "point": {
+            "x": 0.8071016590027781,
+            "y": 0.8590823009884765
+          },
+          "target": {
+            "kind": "space",
+            "id": "experiences",
+            "label": "Play, media & learning",
+            "actionId": null,
+            "controlActionability": false,
+            "dwellAllowed": true
+          }
+        },
+        "target": {
+          "point": {
+            "x": 0.2900271386452962,
+            "y": 0.47418432021648593
+          },
+          "target": {
+            "kind": "feature",
+            "id": "academy",
+            "label": "Financial Academy",
+            "actionId": null,
+            "controlActionability": false,
+            "dwellAllowed": true
+          }
+        },
+        "beforeRelease": "space",
+        "after": {
+          "source": "reality-view-timeline",
+          "schemaVersion": 1,
+          "selectedId": "academy",
+          "mode": "present",
+          "frameCursor": null,
+          "branchId": null,
+          "revision": 1,
+          "objects": [
+            {
+              "id": "block-world",
+              "position": [
+                0.866,
+                4.491,
+                7.772
+              ],
+              "shape": "cube",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "contracts",
+              "position": [
+                6.55,
+                0.657,
+                24.809
+              ],
+              "shape": "cylinder",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "person",
+              "position": [
+                1.211,
+                5.304,
+                13.502
+              ],
+              "shape": "sphere",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "rooms",
+              "position": [
+                3.983,
+                8.142,
+                5.944
+              ],
+              "shape": "cube",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "academy",
+              "position": [
+                19.564,
+                12.226,
+                30.03
+              ],
+              "shape": "triangular-prism",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": true
+            },
+            {
+              "id": "world-events",
+              "position": [
+                19.921,
+                16.2,
+                29.04
+              ],
+              "shape": "triangular-prism",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "multi-sport-events",
+              "position": [
+                16.016,
+                13.217,
+                30.981
+              ],
+              "shape": "triangular-prism",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "asset-market",
+              "position": [
+                9.043,
+                -2.229,
+                24.622
+              ],
+              "shape": "cylinder",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "reality-lens",
+              "position": [
+                22.78,
+                13.715,
+                28.644
+              ],
+              "shape": "triangular-prism",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "runtime-sync",
+              "position": [
+                0.086,
+                8.121,
+                7.232
+              ],
+              "shape": "cube",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "migration",
+              "position": [
+                4.426,
+                4.476,
+                6.603
+              ],
+              "shape": "cube",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "asset-token",
+              "position": [
+                9.028,
+                3.217,
+                23.432
+              ],
+              "shape": "cylinder",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "launch-distribution",
+              "position": [
+                4.549,
+                -2.305,
+                26.119
+              ],
+              "shape": "cylinder",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "social-explorer",
+              "position": [
+                2.729,
+                3.146,
+                19.499
+              ],
+              "shape": "cube",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "social-mirror",
+              "position": [
+                0.222,
+                9.339,
+                12.942
+              ],
+              "shape": "sphere",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "youtube",
+              "position": [
+                16.329,
+                16.932,
+                30.062
+              ],
+              "shape": "triangular-prism",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "paycore",
+              "position": [
+                12.466,
+                -1.205,
+                23.27
+              ],
+              "shape": "cylinder",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "contract-atelier",
+              "position": [
+                5.413,
+                4.281,
+                24.388
+              ],
+              "shape": "cylinder",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "ledger",
+              "position": [
+                7.275,
+                -5.359,
+                25.891
+              ],
+              "shape": "cylinder",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "t402",
+              "position": [
+                12.643,
+                3.272,
+                22.229
+              ],
+              "shape": "cylinder",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "agent",
+              "position": [
+                14.496,
+                3.393,
+                27.615
+              ],
+              "shape": "torus",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "neural-mesh",
+              "position": [
+                20.299,
+                2.239,
+                25.958
+              ],
+              "shape": "torus",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "muse-agent",
+              "position": [
+                14.591,
+                8.914,
+                26.372
+              ],
+              "shape": "torus",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "bot-plaza",
+              "position": [
+                -1.014,
+                4.539,
+                20.425
+              ],
+              "shape": "cube",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "luna-companion",
+              "position": [
+                -2.394,
+                5.205,
+                14.711
+              ],
+              "shape": "sphere",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "picture-matter",
+              "position": [
+                18.175,
+                8.878,
+                31.222
+              ],
+              "shape": "triangular-prism",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "nft-atelier",
+              "position": [
+                23.217,
+                17.54,
+                27.661
+              ],
+              "shape": "triangular-prism",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "wardrobe-atelier",
+              "position": [
+                4.119,
+                7.299,
+                12.107
+              ],
+              "shape": "sphere",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "white-paper",
+              "position": [
+                12.999,
+                15.494,
+                31.474
+              ],
+              "shape": "triangular-prism",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "gesture-lens",
+              "position": [
+                22.364,
+                9.68,
+                29.667
+              ],
+              "shape": "triangular-prism",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "gateway",
+              "position": [
+                2.206,
+                -0.433,
+                20.457
+              ],
+              "shape": "cube",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "sports-events",
+              "position": [
+                18.923,
+                19.84,
+                28.57
+              ],
+              "shape": "triangular-prism",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "arena",
+              "position": [
+                14.607,
+                9.887,
+                32.176
+              ],
+              "shape": "triangular-prism",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "chess",
+              "position": [
+                26.203,
+                14.694,
+                27.302
+              ],
+              "shape": "triangular-prism",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "web-ai",
+              "position": [
+                3.045,
+                6.774,
+                18.598
+              ],
+              "shape": "cube",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "projections",
+              "position": [
+                13.293,
+                19.181,
+                30.568
+              ],
+              "shape": "triangular-prism",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            }
+          ],
+          "present": [
+            {
+              "id": "block-world",
+              "position": [
+                0.866,
+                4.491,
+                7.772
+              ],
+              "shape": "cube",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "contracts",
+              "position": [
+                6.55,
+                0.657,
+                24.809
+              ],
+              "shape": "cylinder",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "person",
+              "position": [
+                1.211,
+                5.304,
+                13.502
+              ],
+              "shape": "sphere",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "rooms",
+              "position": [
+                3.983,
+                8.142,
+                5.944
+              ],
+              "shape": "cube",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "academy",
+              "position": [
+                19.564,
+                12.226,
+                30.03
+              ],
+              "shape": "triangular-prism",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": true
+            },
+            {
+              "id": "world-events",
+              "position": [
+                19.921,
+                16.2,
+                29.04
+              ],
+              "shape": "triangular-prism",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "multi-sport-events",
+              "position": [
+                16.016,
+                13.217,
+                30.981
+              ],
+              "shape": "triangular-prism",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "asset-market",
+              "position": [
+                9.043,
+                -2.229,
+                24.622
+              ],
+              "shape": "cylinder",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "reality-lens",
+              "position": [
+                22.78,
+                13.715,
+                28.644
+              ],
+              "shape": "triangular-prism",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "runtime-sync",
+              "position": [
+                0.086,
+                8.121,
+                7.232
+              ],
+              "shape": "cube",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "migration",
+              "position": [
+                4.426,
+                4.476,
+                6.603
+              ],
+              "shape": "cube",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "asset-token",
+              "position": [
+                9.028,
+                3.217,
+                23.432
+              ],
+              "shape": "cylinder",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "launch-distribution",
+              "position": [
+                4.549,
+                -2.305,
+                26.119
+              ],
+              "shape": "cylinder",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "social-explorer",
+              "position": [
+                2.729,
+                3.146,
+                19.499
+              ],
+              "shape": "cube",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "social-mirror",
+              "position": [
+                0.222,
+                9.339,
+                12.942
+              ],
+              "shape": "sphere",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "youtube",
+              "position": [
+                16.329,
+                16.932,
+                30.062
+              ],
+              "shape": "triangular-prism",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "paycore",
+              "position": [
+                12.466,
+                -1.205,
+                23.27
+              ],
+              "shape": "cylinder",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "contract-atelier",
+              "position": [
+                5.413,
+                4.281,
+                24.388
+              ],
+              "shape": "cylinder",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "ledger",
+              "position": [
+                7.275,
+                -5.359,
+                25.891
+              ],
+              "shape": "cylinder",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "t402",
+              "position": [
+                12.643,
+                3.272,
+                22.229
+              ],
+              "shape": "cylinder",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "agent",
+              "position": [
+                14.496,
+                3.393,
+                27.615
+              ],
+              "shape": "torus",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "neural-mesh",
+              "position": [
+                20.299,
+                2.239,
+                25.958
+              ],
+              "shape": "torus",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "muse-agent",
+              "position": [
+                14.591,
+                8.914,
+                26.372
+              ],
+              "shape": "torus",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "bot-plaza",
+              "position": [
+                -1.014,
+                4.539,
+                20.425
+              ],
+              "shape": "cube",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "luna-companion",
+              "position": [
+                -2.394,
+                5.205,
+                14.711
+              ],
+              "shape": "sphere",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "picture-matter",
+              "position": [
+                18.175,
+                8.878,
+                31.222
+              ],
+              "shape": "triangular-prism",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "nft-atelier",
+              "position": [
+                23.217,
+                17.54,
+                27.661
+              ],
+              "shape": "triangular-prism",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "wardrobe-atelier",
+              "position": [
+                4.119,
+                7.299,
+                12.107
+              ],
+              "shape": "sphere",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "white-paper",
+              "position": [
+                12.999,
+                15.494,
+                31.474
+              ],
+              "shape": "triangular-prism",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "gesture-lens",
+              "position": [
+                22.364,
+                9.68,
+                29.667
+              ],
+              "shape": "triangular-prism",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "gateway",
+              "position": [
+                2.206,
+                -0.433,
+                20.457
+              ],
+              "shape": "cube",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "sports-events",
+              "position": [
+                18.923,
+                19.84,
+                28.57
+              ],
+              "shape": "triangular-prism",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "arena",
+              "position": [
+                14.607,
+                9.887,
+                32.176
+              ],
+              "shape": "triangular-prism",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "chess",
+              "position": [
+                26.203,
+                14.694,
+                27.302
+              ],
+              "shape": "triangular-prism",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "web-ai",
+              "position": [
+                3.045,
+                6.774,
+                18.598
+              ],
+              "shape": "cube",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            },
+            {
+              "id": "projections",
+              "position": [
+                13.293,
+                19.181,
+                30.568
+              ],
+              "shape": "triangular-prism",
+              "size": 1,
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "locked": false,
+              "anchor": false,
+              "open": false
+            }
+          ],
+          "frames": [
+            {
+              "revision": 0,
+              "observedAt": "2026-10-05T17:14:59.061Z",
+              "action": "Opened assembly",
+              "kind": "observed-local-view"
+            },
+            {
+              "revision": 1,
+              "observedAt": "2026-10-05T17:15:18.070Z",
+              "action": "Opened academy",
+              "kind": "observed-local-view"
+            }
+          ],
+          "branches": [],
+          "historyScope": "Observed local layout and open-state only; not market history or global events",
+          "persistent": false,
+          "shared": false,
+          "prediction": false,
+          "executable": false,
+          "tracking": {
+            "source": "hand",
+            "active": true,
+            "held": null,
+            "target": null,
+            "reason": null,
+            "coordinateSpace": "normalized-screen",
+            "localOnly": true
+          },
+          "active": true,
+          "viewMode": "3d",
+          "interaction": "orbit",
+          "spaceId": "experiences",
+          "spaceView": "feature",
+          "camera": {
+            "position": [
+              -5.219700000000001,
+              3.3615530979136103,
+              7.993335618804683
+            ],
+            "target": [
+              -5.219700000000001,
+              3.36155309791361,
+              0.00009999999999976694
+            ],
+            "fov": 60,
+            "aspect": 1.44,
+            "near": 0.1,
+            "far": 220
+          },
+          "spatial": {
+            "homeLayout": {
+              "transforms": [
+                {
+                  "id": "worlds",
+                  "offset": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "size": 1,
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ]
+                },
+                {
+                  "id": "people",
+                  "offset": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "size": 1,
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ]
+                },
+                {
+                  "id": "network",
+                  "offset": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "size": 1,
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ]
+                },
+                {
+                  "id": "value",
+                  "offset": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "size": 1,
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ]
+                },
+                {
+                  "id": "agents",
+                  "offset": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "size": 1,
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ]
+                },
+                {
+                  "id": "experiences",
+                  "offset": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "size": 1,
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ]
+                }
+              ],
+              "previewIds": [],
+              "persistence": "local-browser",
+              "storageError": null,
+              "held": false
+            },
+            "geometryOnly": true,
+            "referenceImagesUsedAsTextures": false,
+            "funnelGuideVisible": false,
+            "gridVisible": false,
+            "nodeIds": [
+              "block-world",
+              "contracts",
+              "person",
+              "rooms",
+              "academy",
+              "world-events",
+              "multi-sport-events",
+              "asset-market",
+              "reality-lens",
+              "runtime-sync",
+              "migration",
+              "asset-token",
+              "launch-distribution",
+              "social-explorer",
+              "social-mirror",
+              "youtube",
+              "paycore",
+              "contract-atelier",
+              "ledger",
+              "t402",
+              "agent",
+              "neural-mesh",
+              "muse-agent",
+              "bot-plaza",
+              "luna-companion",
+              "picture-matter",
+              "nft-atelier",
+              "wardrobe-atelier",
+              "white-paper",
+              "gesture-lens",
+              "gateway",
+              "sports-events",
+              "arena",
+              "chess",
+              "web-ai",
+              "projections"
+            ],
+            "nodeCount": 36,
+            "tabCount": 36,
+            "visibleFeatureIds": [
+              "academy"
+            ],
+            "visibleTabCount": 1,
+            "groupIds": [
+              "worlds",
+              "value",
+              "people",
+              "experiences",
+              "network",
+              "agents"
+            ],
+            "visibleGroupCount": 0,
+            "visibleGroupIds": [],
+            "activeGroupId": "experiences",
+            "calmMode": true,
+            "spaceView": "experiences",
+            "spacePage": {
+              "page": 0,
+              "pageCount": 3,
+              "pageSize": 6,
+              "total": 13,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens",
+                "youtube",
+                "picture-matter"
+              ]
+            },
+            "spaceBounds": {
+              "center": [
+                0.00004999999999988347,
+                0.9997999999999987,
+                0.00020000000000131024
+              ],
+              "radius": 8.234797136693777,
+              "width": 13.960899999999999,
+              "height": 8.300400000000003,
+              "depth": 2.728400000000003,
+              "count": 6,
+              "ids": [
+                "academy",
+                "world-events",
+                "multi-sport-events",
+                "reality-lens",
+                "youtube",
+                "picture-matter"
+              ]
+            },
+            "focusedId": "academy",
+            "focusStrength": 0.861,
+            "focusIsolated": true,
+            "focusDistance": 7.99,
+            "selectedStage": 3,
+            "approachProgress": 1,
+            "anchorOpen": 0,
+            "edgeCount": 76,
+            "relationshipSource": "authored feature navigation graph",
+            "connectionsVisible": false,
+            "connectionPairs": [
+              [
+                "person",
+                "reality-lens"
+              ],
+              [
+                "block-world",
+                "reality-lens"
+              ],
+              [
+                "projections",
+                "reality-lens"
+              ],
+              [
+                "person",
+                "wardrobe-atelier"
+              ],
+              [
+                "agent",
+                "person"
+              ],
+              [
+                "arena",
+                "person"
+              ],
+              [
+                "rooms",
+                "social-explorer"
+              ],
+              [
+                "agent",
+                "rooms"
+              ],
+              [
+                "block-world",
+                "rooms"
+              ],
+              [
+                "block-world",
+                "projections"
+              ],
+              [
+                "block-world",
+                "migration"
+              ],
+              [
+                "block-world",
+                "runtime-sync"
+              ],
+              [
+                "projections",
+                "runtime-sync"
+              ],
+              [
+                "gateway",
+                "runtime-sync"
+              ],
+              [
+                "migration",
+                "runtime-sync"
+              ],
+              [
+                "migration",
+                "reality-lens"
+              ],
+              [
+                "asset-market",
+                "asset-token"
+              ],
+              [
+                "asset-token",
+                "launch-distribution"
+              ],
+              [
+                "asset-token",
+                "ledger"
+              ],
+              [
+                "asset-market",
+                "contracts"
+              ],
+              [
+                "asset-market",
+                "ledger"
+              ],
+              [
+                "asset-market",
+                "launch-distribution"
+              ],
+              [
+                "launch-distribution",
+                "white-paper"
+              ],
+              [
+                "agent",
+                "social-explorer"
+              ],
+              [
+                "social-explorer",
+                "social-mirror"
+              ],
+              [
+                "social-mirror",
+                "youtube"
+              ],
+              [
+                "rooms",
+                "social-mirror"
+              ],
+              [
+                "picture-matter",
+                "youtube"
+              ],
+              [
+                "reality-lens",
+                "youtube"
+              ],
+              [
+                "paycore",
+                "web-ai"
+              ],
+              [
+                "t402",
+                "web-ai"
+              ],
+              [
+                "ledger",
+                "web-ai"
+              ],
+              [
+                "gateway",
+                "web-ai"
+              ],
+              [
+                "ledger",
+                "paycore"
+              ],
+              [
+                "paycore",
+                "t402"
+              ],
+              [
+                "contracts",
+                "paycore"
+              ],
+              [
+                "contract-atelier",
+                "contracts"
+              ],
+              [
+                "contracts",
+                "ledger"
+              ],
+              [
+                "contract-atelier",
+                "paycore"
+              ],
+              [
+                "academy",
+                "contract-atelier"
+              ],
+              [
+                "ledger",
+                "t402"
+              ],
+              [
+                "gateway",
+                "t402"
+              ],
+              [
+                "agent",
+                "neural-mesh"
+              ],
+              [
+                "agent",
+                "muse-agent"
+              ],
+              [
+                "agent",
+                "bot-plaza"
+              ],
+              [
+                "agent",
+                "luna-companion"
+              ],
+              [
+                "bot-plaza",
+                "neural-mesh"
+              ],
+              [
+                "gateway",
+                "neural-mesh"
+              ],
+              [
+                "muse-agent",
+                "person"
+              ],
+              [
+                "muse-agent",
+                "picture-matter"
+              ],
+              [
+                "bot-plaza",
+                "luna-companion"
+              ],
+              [
+                "luna-companion",
+                "rooms"
+              ],
+              [
+                "arena",
+                "luna-companion"
+              ],
+              [
+                "nft-atelier",
+                "picture-matter"
+              ],
+              [
+                "picture-matter",
+                "white-paper"
+              ],
+              [
+                "picture-matter",
+                "reality-lens"
+              ],
+              [
+                "agent",
+                "nft-atelier"
+              ],
+              [
+                "asset-market",
+                "nft-atelier"
+              ],
+              [
+                "agent",
+                "wardrobe-atelier"
+              ],
+              [
+                "arena",
+                "wardrobe-atelier"
+              ],
+              [
+                "projections",
+                "white-paper"
+              ],
+              [
+                "reality-lens",
+                "white-paper"
+              ],
+              [
+                "academy",
+                "white-paper"
+              ],
+              [
+                "block-world",
+                "gesture-lens"
+              ],
+              [
+                "gesture-lens",
+                "person"
+              ],
+              [
+                "agent",
+                "gesture-lens"
+              ],
+              [
+                "gateway",
+                "world-events"
+              ],
+              [
+                "sports-events",
+                "world-events"
+              ],
+              [
+                "multi-sport-events",
+                "world-events"
+              ],
+              [
+                "multi-sport-events",
+                "sports-events"
+              ],
+              [
+                "arena",
+                "sports-events"
+              ],
+              [
+                "arena",
+                "multi-sport-events"
+              ],
+              [
+                "arena",
+                "chess"
+              ],
+              [
+                "chess",
+                "person"
+              ],
+              [
+                "academy",
+                "chess"
+              ],
+              [
+                "academy",
+                "arena"
+              ]
+            ],
+            "viewMode": "3d",
+            "selectedId": "academy",
+            "historyMode": "present",
+            "designedArchitecture": true,
+            "equalAxisCubes": false,
+            "singleFixedAnchorCube": false,
+            "formerCenterIsMovableTab": true,
+            "lensMode": false,
+            "lod": "field"
+          },
+          "liveObject": {
+            "engine": "mesh-uv-360",
+            "entityId": "academy",
+            "bodyId": "academy",
+            "coordinateSpace": "owning-mesh-uv",
+            "separatePanelFrame": false,
+            "canonicalOwners": 1,
+            "interactiveSurfaceCount": 5,
+            "ownedByBody": true,
+            "rotation": [
+              0,
+              0,
+              0
+            ],
+            "document": {
+              "featureId": "academy",
+              "revision": 2,
+              "disposed": false,
+              "blockCount": 21,
+              "actionCount": 12,
+              "originalElementId": "academy-console",
+              "canonicalOwners": 1,
+              "clonedFeatureCount": 0,
+              "kinds": [
+                "text",
+                "heading",
+                "button",
+                "summary"
+              ]
+            },
+            "atlas": {
+              "page": 0,
+              "pageCount": 2,
+              "revision": 1,
+              "disposed": false,
+              "blockCount": 21,
+              "focusActionId": null,
+              "textureCount": 5,
+              "canonicalFeatureId": "academy",
+              "charts": [
+                {
+                  "index": 0,
+                  "id": "front",
+                  "label": "Front",
+                  "width": 793,
+                  "height": 744,
+                  "bounds": {
+                    "x": 0.3,
+                    "y": 0.55,
+                    "width": 0.4,
+                    "height": 0.20400000000000001
+                  },
+                  "blocks": [
+                    {
+                      "blockId": "academy:surface:1:text",
+                      "part": 0,
+                      "kind": "text",
+                      "lineCount": 2
+                    },
+                    {
+                      "blockId": "academy:surface:2",
+                      "part": 0,
+                      "kind": "heading",
+                      "lineCount": 1
+                    }
+                  ],
+                  "regions": [
+                    {
+                      "x": 0.3,
+                      "y": 0.8260000000000002,
+                      "width": 0.188,
+                      "height": 0.024,
+                      "actionId": "@atlas:previous",
+                      "kind": "navigation",
+                      "label": "previous",
+                      "disabled": true
+                    },
+                    {
+                      "x": 0.512,
+                      "y": 0.8260000000000002,
+                      "width": 0.188,
+                      "height": 0.024,
+                      "actionId": "@atlas:next",
+                      "kind": "navigation",
+                      "label": "next",
+                      "disabled": false
+                    }
+                  ]
+                },
+                {
+                  "index": 1,
+                  "id": "back",
+                  "label": "Back",
+                  "width": 793,
+                  "height": 744,
+                  "bounds": {
+                    "x": 0.3,
+                    "y": 0.55,
+                    "width": 0.4,
+                    "height": 0.20400000000000001
+                  },
+                  "blocks": [
+                    {
+                      "blockId": "academy:surface:3",
+                      "part": 0,
+                      "kind": "button",
+                      "lineCount": 1
+                    },
+                    {
+                      "blockId": "academy:surface:4:text",
+                      "part": 0,
+                      "kind": "text",
+                      "lineCount": 2
+                    }
+                  ],
+                  "regions": [
+                    {
+                      "x": 0.3,
+                      "y": 0.55,
+                      "width": 0.4000000000000001,
+                      "height": 0.08039594534050179,
+                      "actionId": "academy:surface:3:action",
+                      "blockId": "academy:surface:3",
+                      "kind": "button",
+                      "inputType": "button",
+                      "pointerSurface": false,
+                      "focused": false,
+                      "label": "Close Financial Academy",
+                      "disabled": false
+                    },
+                    {
+                      "x": 0.3,
+                      "y": 0.8260000000000002,
+                      "width": 0.188,
+                      "height": 0.024,
+                      "actionId": "@atlas:previous",
+                      "kind": "navigation",
+                      "label": "previous",
+                      "disabled": true
+                    },
+                    {
+                      "x": 0.512,
+                      "y": 0.8260000000000002,
+                      "width": 0.188,
+                      "height": 0.024,
+                      "actionId": "@atlas:next",
+                      "kind": "navigation",
+                      "label": "next",
+                      "disabled": false
+                    }
+                  ]
+                },
+                {
+                  "index": 2,
+                  "id": "side-0",
+                  "label": "Side 1",
+                  "width": 899,
+                  "height": 656,
+                  "bounds": {
+                    "x": 0.055,
+                    "y": 0.17,
+                    "width": 0.89,
+                    "height": 0.67
+                  },
+                  "blocks": [
+                    {
+                      "blockId": "academy:surface:5",
+                      "part": 0,
+                      "kind": "button",
+                      "lineCount": 3
+                    },
+                    {
+                      "blockId": "academy:surface:6",
+                      "part": 0,
+                      "kind": "button",
+                      "lineCount": 3
+                    },
+                    {
+                      "blockId": "academy:surface:7",
+                      "part": 0,
+                      "kind": "button",
+                      "lineCount": 3
+                    }
+                  ],
+                  "regions": [
+                    {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.18398437499999998,
+                      "actionId": "academy:surface:5:action",
+                      "blockId": "academy:surface:5",
+                      "kind": "button",
+                      "inputType": "button",
+                      "pointerSurface": false,
+                      "focused": false,
+                      "label": "1. Financial OS foundations READY Separate a useful financial interface from the authority that actually holds or moves value.",
+                      "disabled": false
+                    },
+                    {
+                      "x": 0.055,
+                      "y": 0.36440104166666665,
+                      "width": 0.89,
+                      "height": 0.18398437499999998,
+                      "actionId": "academy:surface:6:action",
+                      "blockId": "academy:surface:6",
+                      "kind": "button",
+                      "inputType": "button",
+                      "pointerSurface": false,
+                      "focused": false,
+                      "label": "2. HTTP 402 and x402 READY Understand the difference between a web payment-required response and a settlement protocol.",
+                      "disabled": false
+                    },
+                    {
+                      "x": 0.055,
+                      "y": 0.5588020833333334,
+                      "width": 0.89,
+                      "height": 0.18398437499999998,
+                      "actionId": "academy:surface:7:action",
+                      "blockId": "academy:surface:7",
+                      "kind": "button",
+                      "inputType": "button",
+                      "pointerSurface": false,
+                      "focused": false,
+                      "label": "3. T402 conditional value READY Follow offer, route, hold, evidence, and release as distinct stages.",
+                      "disabled": false
+                    },
+                    {
+                      "x": 0.055,
+                      "y": 0.91262,
+                      "width": 0.4183,
+                      "height": 0.055380000000000006,
+                      "actionId": "@atlas:previous",
+                      "kind": "navigation",
+                      "label": "previous",
+                      "disabled": true
+                    },
+                    {
+                      "x": 0.5267000000000001,
+                      "y": 0.91262,
+                      "width": 0.4183,
+                      "height": 0.055380000000000006,
+                      "actionId": "@atlas:next",
+                      "kind": "navigation",
+                      "label": "next",
+                      "disabled": false
+                    }
+                  ]
+                },
+                {
+                  "index": 3,
+                  "id": "side-1",
+                  "label": "Side 2",
+                  "width": 872,
+                  "height": 676,
+                  "bounds": {
+                    "x": 0.055,
+                    "y": 0.17,
+                    "width": 0.89,
+                    "height": 0.67
+                  },
+                  "blocks": [
+                    {
+                      "blockId": "academy:surface:8",
+                      "part": 0,
+                      "kind": "button",
+                      "lineCount": 3
+                    },
+                    {
+                      "blockId": "academy:surface:9",
+                      "part": 0,
+                      "kind": "heading",
+                      "lineCount": 1
+                    },
+                    {
+                      "blockId": "academy:surface:10:text",
+                      "part": 0,
+                      "kind": "text",
+                      "lineCount": 2
+                    },
+                    {
+                      "blockId": "academy:surface:11",
+                      "part": 0,
+                      "kind": "button",
+                      "lineCount": 2
+                    },
+                    {
+                      "blockId": "academy:surface:12",
+                      "part": 0,
+                      "kind": "button",
+                      "lineCount": 1
+                    }
+                  ],
+                  "regions": [
+                    {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.1782328648915187,
+                      "actionId": "academy:surface:8:action",
+                      "blockId": "academy:surface:8",
+                      "kind": "button",
+                      "inputType": "button",
+                      "pointerSurface": false,
+                      "focused": false,
+                      "label": "4. PAYCORE and evidence READY Compile intent, policy, budget, route, and evidence before any future action.",
+                      "disabled": false
+                    },
+                    {
+                      "x": 0.055,
+                      "y": 0.5355479536489152,
+                      "width": 0.89,
+                      "height": 0.1338819033530572,
+                      "actionId": "academy:surface:11:action",
+                      "blockId": "academy:surface:11",
+                      "kind": "button",
+                      "inputType": "button",
+                      "pointerSurface": false,
+                      "focused": false,
+                      "label": "A local projection and rehearsal",
+                      "disabled": false
+                    },
+                    {
+                      "x": 0.055,
+                      "y": 0.6798465236686391,
+                      "width": 0.89,
+                      "height": 0.08953094181459566,
+                      "actionId": "academy:surface:12:action",
+                      "blockId": "academy:surface:12",
+                      "kind": "button",
+                      "inputType": "button",
+                      "pointerSurface": false,
+                      "focused": false,
+                      "label": "A regulated bank account",
+                      "disabled": false
+                    },
+                    {
+                      "x": 0.055,
+                      "y": 0.9126199999999998,
+                      "width": 0.4183,
+                      "height": 0.05537999999999999,
+                      "actionId": "@atlas:previous",
+                      "kind": "navigation",
+                      "label": "previous",
+                      "disabled": true
+                    },
+                    {
+                      "x": 0.5267,
+                      "y": 0.9126199999999998,
+                      "width": 0.4183,
+                      "height": 0.05537999999999999,
+                      "actionId": "@atlas:next",
+                      "kind": "navigation",
+                      "label": "next",
+                      "disabled": false
+                    }
+                  ]
+                },
+                {
+                  "index": 4,
+                  "id": "side-2",
+                  "label": "Side 3",
+                  "width": 899,
+                  "height": 656,
+                  "bounds": {
+                    "x": 0.055,
+                    "y": 0.17,
+                    "width": 0.89,
+                    "height": 0.67
+                  },
+                  "blocks": [
+                    {
+                      "blockId": "academy:surface:13",
+                      "part": 0,
+                      "kind": "button",
+                      "lineCount": 1
+                    },
+                    {
+                      "blockId": "academy:surface:14:text",
+                      "part": 0,
+                      "kind": "text",
+                      "lineCount": 3
+                    },
+                    {
+                      "blockId": "academy:surface:15",
+                      "part": 0,
+                      "kind": "heading",
+                      "lineCount": 1
+                    },
+                    {
+                      "blockId": "academy:surface:16:text",
+                      "part": 0,
+                      "kind": "text",
+                      "lineCount": 2
+                    },
+                    {
+                      "blockId": "academy:surface:17",
+                      "part": 0,
+                      "kind": "button",
+                      "lineCount": 1
+                    }
+                  ],
+                  "regions": [
+                    {
+                      "x": 0.055,
+                      "y": 0.17,
+                      "width": 0.89,
+                      "height": 0.092578125,
+                      "actionId": "academy:surface:13:action",
+                      "blockId": "academy:surface:13",
+                      "kind": "button",
+                      "inputType": "button",
+                      "pointerSurface": false,
+                      "focused": false,
+                      "label": "A production custody wallet",
+                      "disabled": false
+                    },
+                    {
+                      "x": 0.055,
+                      "y": 0.6079557291666667,
+                      "width": 0.89,
+                      "height": 0.092578125,
+                      "actionId": "academy:surface:17:action",
+                      "blockId": "academy:surface:17",
+                      "kind": "button",
+                      "inputType": "button",
+                      "pointerSurface": false,
+                      "focused": false,
+                      "label": "Reset local progress",
+                      "disabled": false
+                    },
+                    {
+                      "x": 0.055,
+                      "y": 0.91262,
+                      "width": 0.4183,
+                      "height": 0.055380000000000006,
+                      "actionId": "@atlas:previous",
+                      "kind": "navigation",
+                      "label": "previous",
+                      "disabled": true
+                    },
+                    {
+                      "x": 0.5267000000000001,
+                      "y": 0.91262,
+                      "width": 0.4183,
+                      "height": 0.055380000000000006,
+                      "actionId": "@atlas:next",
+                      "kind": "navigation",
+                      "label": "next",
+                      "disabled": false
+                    }
+                  ]
+                }
+              ]
+            },
+            "mediaPixelMode": "native-embed-only",
+            "panelId": "academy-console"
+          },
+          "layoutDiagnostics": {
+            "collisionCount": 0,
+            "minimumGap": 1.28,
+            "movedObjectCount": 360
+          },
+          "reality": {
+            "revision": 2,
+            "activeId": "reality:root",
+            "nodes": [
+              {
+                "id": "reality:root",
+                "parentId": null,
+                "kind": "root",
+                "label": "Una Realitas",
+                "depth": 0,
+                "state": {
+                  "objects": [
+                    {
+                      "id": "block-world",
+                      "position": [
+                        0.866,
+                        4.491,
+                        7.772
+                      ],
+                      "shape": "cube",
+                      "size": 1,
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "locked": false,
+                      "anchor": false,
+                      "open": false
+                    },
+                    {
+                      "id": "contracts",
+                      "position": [
+                        6.55,
+                        0.657,
+                        24.809
+                      ],
+                      "shape": "cylinder",
+                      "size": 1,
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "locked": false,
+                      "anchor": false,
+                      "open": false
+                    },
+                    {
+                      "id": "person",
+                      "position": [
+                        1.211,
+                        5.304,
+                        13.502
+                      ],
+                      "shape": "sphere",
+                      "size": 1,
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "locked": false,
+                      "anchor": false,
+                      "open": false
+                    },
+                    {
+                      "id": "rooms",
+                      "position": [
+                        3.983,
+                        8.142,
+                        5.944
+                      ],
+                      "shape": "cube",
+                      "size": 1,
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "locked": false,
+                      "anchor": false,
+                      "open": false
+                    },
+                    {
+                      "id": "academy",
+                      "position": [
+                        19.564,
+                        12.226,
+                        30.03
+                      ],
+                      "shape": "triangular-prism",
+                      "size": 1,
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "locked": false,
+                      "anchor": false,
+                      "open": true
+                    },
+                    {
+                      "id": "world-events",
+                      "position": [
+                        19.921,
+                        16.2,
+                        29.04
+                      ],
+                      "shape": "triangular-prism",
+                      "size": 1,
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "locked": false,
+                      "anchor": false,
+                      "open": false
+                    },
+                    {
+                      "id": "multi-sport-events",
+                      "position": [
+                        16.016,
+                        13.217,
+                        30.981
+                      ],
+                      "shape": "triangular-prism",
+                      "size": 1,
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "locked": false,
+                      "anchor": false,
+                      "open": false
+                    },
+                    {
+                      "id": "asset-market",
+                      "position": [
+                        9.043,
+                        -2.229,
+                        24.622
+                      ],
+                      "shape": "cylinder",
+                      "size": 1,
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "locked": false,
+                      "anchor": false,
+                      "open": false
+                    },
+                    {
+                      "id": "reality-lens",
+                      "position": [
+                        22.78,
+                        13.715,
+                        28.644
+                      ],
+                      "shape": "triangular-prism",
+                      "size": 1,
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "locked": false,
+                      "anchor": false,
+                      "open": false
+                    },
+                    {
+                      "id": "runtime-sync",
+                      "position": [
+                        0.086,
+                        8.121,
+                        7.232
+                      ],
+                      "shape": "cube",
+                      "size": 1,
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "locked": false,
+                      "anchor": false,
+                      "open": false
+                    },
+                    {
+                      "id": "migration",
+                      "position": [
+                        4.426,
+                        4.476,
+                        6.603
+                      ],
+                      "shape": "cube",
+                      "size": 1,
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "locked": false,
+                      "anchor": false,
+                      "open": false
+                    },
+                    {
+                      "id": "asset-token",
+                      "position": [
+                        9.028,
+                        3.217,
+                        23.432
+                      ],
+                      "shape": "cylinder",
+                      "size": 1,
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "locked": false,
+                      "anchor": false,
+                      "open": false
+                    },
+                    {
+                      "id": "launch-distribution",
+                      "position": [
+                        4.549,
+                        -2.305,
+                        26.119
+                      ],
+                      "shape": "cylinder",
+                      "size": 1,
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "locked": false,
+                      "anchor": false,
+                      "open": false
+                    },
+                    {
+                      "id": "social-explorer",
+                      "position": [
+                        2.729,
+                        3.146,
+                        19.499
+                      ],
+                      "shape": "cube",
+                      "size": 1,
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "locked": false,
+                      "anchor": false,
+                      "open": false
+                    },
+                    {
+                      "id": "social-mirror",
+                      "position": [
+                        0.222,
+                        9.339,
+                        12.942
+                      ],
+                      "shape": "sphere",
+                      "size": 1,
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "locked": false,
+                      "anchor": false,
+                      "open": false
+                    },
+                    {
+                      "id": "youtube",
+                      "position": [
+                        16.329,
+                        16.932,
+                        30.062
+                      ],
+                      "shape": "triangular-prism",
+                      "size": 1,
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "locked": false,
+                      "anchor": false,
+                      "open": false
+                    },
+                    {
+                      "id": "paycore",
+                      "position": [
+                        12.466,
+                        -1.205,
+                        23.27
+                      ],
+                      "shape": "cylinder",
+                      "size": 1,
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "locked": false,
+                      "anchor": false,
+                      "open": false
+                    },
+                    {
+                      "id": "contract-atelier",
+                      "position": [
+                        5.413,
+                        4.281,
+                        24.388
+                      ],
+                      "shape": "cylinder",
+                      "size": 1,
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "locked": false,
+                      "anchor": false,
+                      "open": false
+                    },
+                    {
+                      "id": "ledger",
+                      "position": [
+                        7.275,
+                        -5.359,
+                        25.891
+                      ],
+                      "shape": "cylinder",
+                      "size": 1,
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "locked": false,
+                      "anchor": false,
+                      "open": false
+                    },
+                    {
+                      "id": "t402",
+                      "position": [
+                        12.643,
+                        3.272,
+                        22.229
+                      ],
+                      "shape": "cylinder",
+                      "size": 1,
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "locked": false,
+                      "anchor": false,
+                      "open": false
+                    },
+                    {
+                      "id": "agent",
+                      "position": [
+                        14.496,
+                        3.393,
+                        27.615
+                      ],
+                      "shape": "torus",
+                      "size": 1,
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "locked": false,
+                      "anchor": false,
+                      "open": false
+                    },
+                    {
+                      "id": "neural-mesh",
+                      "position": [
+                        20.299,
+                        2.239,
+                        25.958
+                      ],
+                      "shape": "torus",
+                      "size": 1,
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "locked": false,
+                      "anchor": false,
+                      "open": false
+                    },
+                    {
+                      "id": "muse-agent",
+                      "position": [
+                        14.591,
+                        8.914,
+                        26.372
+                      ],
+                      "shape": "torus",
+                      "size": 1,
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "locked": false,
+                      "anchor": false,
+                      "open": false
+                    },
+                    {
+                      "id": "bot-plaza",
+                      "position": [
+                        -1.014,
+                        4.539,
+                        20.425
+                      ],
+                      "shape": "cube",
+                      "size": 1,
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "locked": false,
+                      "anchor": false,
+                      "open": false
+                    },
+                    {
+                      "id": "luna-companion",
+                      "position": [
+                        -2.394,
+                        5.205,
+                        14.711
+                      ],
+                      "shape": "sphere",
+                      "size": 1,
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "locked": false,
+                      "anchor": false,
+                      "open": false
+                    },
+                    {
+                      "id": "picture-matter",
+                      "position": [
+                        18.175,
+                        8.878,
+                        31.222
+                      ],
+                      "shape": "triangular-prism",
+                      "size": 1,
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "locked": false,
+                      "anchor": false,
+                      "open": false
+                    },
+                    {
+                      "id": "nft-atelier",
+                      "position": [
+                        23.217,
+                        17.54,
+                        27.661
+                      ],
+                      "shape": "triangular-prism",
+                      "size": 1,
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "locked": false,
+                      "anchor": false,
+                      "open": false
+                    },
+                    {
+                      "id": "wardrobe-atelier",
+                      "position": [
+                        4.119,
+                        7.299,
+                        12.107
+                      ],
+                      "shape": "sphere",
+                      "size": 1,
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "locked": false,
+                      "anchor": false,
+                      "open": false
+                    },
+                    {
+                      "id": "white-paper",
+                      "position": [
+                        12.999,
+                        15.494,
+                        31.474
+                      ],
+                      "shape": "triangular-prism",
+                      "size": 1,
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "locked": false,
+                      "anchor": false,
+                      "open": false
+                    },
+                    {
+                      "id": "gesture-lens",
+                      "position": [
+                        22.364,
+                        9.68,
+                        29.667
+                      ],
+                      "shape": "triangular-prism",
+                      "size": 1,
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "locked": false,
+                      "anchor": false,
+                      "open": false
+                    },
+                    {
+                      "id": "gateway",
+                      "position": [
+                        2.206,
+                        -0.433,
+                        20.457
+                      ],
+                      "shape": "cube",
+                      "size": 1,
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "locked": false,
+                      "anchor": false,
+                      "open": false
+                    },
+                    {
+                      "id": "sports-events",
+                      "position": [
+                        18.923,
+                        19.84,
+                        28.57
+                      ],
+                      "shape": "triangular-prism",
+                      "size": 1,
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "locked": false,
+                      "anchor": false,
+                      "open": false
+                    },
+                    {
+                      "id": "arena",
+                      "position": [
+                        14.607,
+                        9.887,
+                        32.176
+                      ],
+                      "shape": "triangular-prism",
+                      "size": 1,
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "locked": false,
+                      "anchor": false,
+                      "open": false
+                    },
+                    {
+                      "id": "chess",
+                      "position": [
+                        26.203,
+                        14.694,
+                        27.302
+                      ],
+                      "shape": "triangular-prism",
+                      "size": 1,
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "locked": false,
+                      "anchor": false,
+                      "open": false
+                    },
+                    {
+                      "id": "web-ai",
+                      "position": [
+                        3.045,
+                        6.774,
+                        18.598
+                      ],
+                      "shape": "cube",
+                      "size": 1,
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "locked": false,
+                      "anchor": false,
+                      "open": false
+                    },
+                    {
+                      "id": "projections",
+                      "position": [
+                        13.293,
+                        19.181,
+                        30.568
+                      ],
+                      "shape": "triangular-prism",
+                      "size": 1,
+                      "rotation": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "locked": false,
+                      "anchor": false,
+                      "open": false
+                    }
+                  ],
+                  "selectedId": "academy",
+                  "layoutMode": "present"
+                },
+                "createdAt": "2026-10-05T17:14:59.062Z"
+              }
+            ],
+            "edges": []
+          }
+        },
+        "controller": {
+          "engine": "mesh-uv-360",
+          "entityId": "academy",
+          "bodyId": "academy",
+          "coordinateSpace": "owning-mesh-uv",
+          "separatePanelFrame": false,
+          "canonicalOwners": 1,
+          "interactiveSurfaceCount": 5,
+          "ownedByBody": true,
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "document": {
+            "featureId": "academy",
+            "revision": 2,
+            "disposed": false,
+            "blockCount": 21,
+            "actionCount": 12,
+            "originalElementId": "academy-console",
+            "canonicalOwners": 1,
+            "clonedFeatureCount": 0,
+            "kinds": [
+              "text",
+              "heading",
+              "button",
+              "summary"
+            ]
+          },
+          "atlas": {
+            "page": 0,
+            "pageCount": 2,
+            "revision": 1,
+            "disposed": false,
+            "blockCount": 21,
+            "focusActionId": null,
+            "textureCount": 5,
+            "canonicalFeatureId": "academy",
+            "charts": [
+              {
+                "index": 0,
+                "id": "front",
+                "label": "Front",
+                "width": 793,
+                "height": 744,
+                "bounds": {
+                  "x": 0.3,
+                  "y": 0.55,
+                  "width": 0.4,
+                  "height": 0.20400000000000001
+                },
+                "blocks": [
+                  {
+                    "blockId": "academy:surface:1:text",
+                    "part": 0,
+                    "kind": "text",
+                    "lineCount": 2
+                  },
+                  {
+                    "blockId": "academy:surface:2",
+                    "part": 0,
+                    "kind": "heading",
+                    "lineCount": 1
+                  }
+                ],
+                "regions": [
+                  {
+                    "x": 0.3,
+                    "y": 0.8260000000000002,
+                    "width": 0.188,
+                    "height": 0.024,
+                    "actionId": "@atlas:previous",
+                    "kind": "navigation",
+                    "label": "previous",
+                    "disabled": true
+                  },
+                  {
+                    "x": 0.512,
+                    "y": 0.8260000000000002,
+                    "width": 0.188,
+                    "height": 0.024,
+                    "actionId": "@atlas:next",
+                    "kind": "navigation",
+                    "label": "next",
+                    "disabled": false
+                  }
+                ]
+              },
+              {
+                "index": 1,
+                "id": "back",
+                "label": "Back",
+                "width": 793,
+                "height": 744,
+                "bounds": {
+                  "x": 0.3,
+                  "y": 0.55,
+                  "width": 0.4,
+                  "height": 0.20400000000000001
+                },
+                "blocks": [
+                  {
+                    "blockId": "academy:surface:3",
+                    "part": 0,
+                    "kind": "button",
+                    "lineCount": 1
+                  },
+                  {
+                    "blockId": "academy:surface:4:text",
+                    "part": 0,
+                    "kind": "text",
+                    "lineCount": 2
+                  }
+                ],
+                "regions": [
+                  {
+                    "x": 0.3,
+                    "y": 0.55,
+                    "width": 0.4000000000000001,
+                    "height": 0.08039594534050179,
+                    "actionId": "academy:surface:3:action",
+                    "blockId": "academy:surface:3",
+                    "kind": "button",
+                    "inputType": "button",
+                    "pointerSurface": false,
+                    "focused": false,
+                    "label": "Close Financial Academy",
+                    "disabled": false
+                  },
+                  {
+                    "x": 0.3,
+                    "y": 0.8260000000000002,
+                    "width": 0.188,
+                    "height": 0.024,
+                    "actionId": "@atlas:previous",
+                    "kind": "navigation",
+                    "label": "previous",
+                    "disabled": true
+                  },
+                  {
+                    "x": 0.512,
+                    "y": 0.8260000000000002,
+                    "width": 0.188,
+                    "height": 0.024,
+                    "actionId": "@atlas:next",
+                    "kind": "navigation",
+                    "label": "next",
+                    "disabled": false
+                  }
+                ]
+              },
+              {
+                "index": 2,
+                "id": "side-0",
+                "label": "Side 1",
+                "width": 899,
+                "height": 656,
+                "bounds": {
+                  "x": 0.055,
+                  "y": 0.17,
+                  "width": 0.89,
+                  "height": 0.67
+                },
+                "blocks": [
+                  {
+                    "blockId": "academy:surface:5",
+                    "part": 0,
+                    "kind": "button",
+                    "lineCount": 3
+                  },
+                  {
+                    "blockId": "academy:surface:6",
+                    "part": 0,
+                    "kind": "button",
+                    "lineCount": 3
+                  },
+                  {
+                    "blockId": "academy:surface:7",
+                    "part": 0,
+                    "kind": "button",
+                    "lineCount": 3
+                  }
+                ],
+                "regions": [
+                  {
+                    "x": 0.055,
+                    "y": 0.17,
+                    "width": 0.89,
+                    "height": 0.18398437499999998,
+                    "actionId": "academy:surface:5:action",
+                    "blockId": "academy:surface:5",
+                    "kind": "button",
+                    "inputType": "button",
+                    "pointerSurface": false,
+                    "focused": false,
+                    "label": "1. Financial OS foundations READY Separate a useful financial interface from the authority that actually holds or moves value.",
+                    "disabled": false
+                  },
+                  {
+                    "x": 0.055,
+                    "y": 0.36440104166666665,
+                    "width": 0.89,
+                    "height": 0.18398437499999998,
+                    "actionId": "academy:surface:6:action",
+                    "blockId": "academy:surface:6",
+                    "kind": "button",
+                    "inputType": "button",
+                    "pointerSurface": false,
+                    "focused": false,
+                    "label": "2. HTTP 402 and x402 READY Understand the difference between a web payment-required response and a settlement protocol.",
+                    "disabled": false
+                  },
+                  {
+                    "x": 0.055,
+                    "y": 0.5588020833333334,
+                    "width": 0.89,
+                    "height": 0.18398437499999998,
+                    "actionId": "academy:surface:7:action",
+                    "blockId": "academy:surface:7",
+                    "kind": "button",
+                    "inputType": "button",
+                    "pointerSurface": false,
+                    "focused": false,
+                    "label": "3. T402 conditional value READY Follow offer, route, hold, evidence, and release as distinct stages.",
+                    "disabled": false
+                  },
+                  {
+                    "x": 0.055,
+                    "y": 0.91262,
+                    "width": 0.4183,
+                    "height": 0.055380000000000006,
+                    "actionId": "@atlas:previous",
+                    "kind": "navigation",
+                    "label": "previous",
+                    "disabled": true
+                  },
+                  {
+                    "x": 0.5267000000000001,
+                    "y": 0.91262,
+                    "width": 0.4183,
+                    "height": 0.055380000000000006,
+                    "actionId": "@atlas:next",
+                    "kind": "navigation",
+                    "label": "next",
+                    "disabled": false
+                  }
+                ]
+              },
+              {
+                "index": 3,
+                "id": "side-1",
+                "label": "Side 2",
+                "width": 872,
+                "height": 676,
+                "bounds": {
+                  "x": 0.055,
+                  "y": 0.17,
+                  "width": 0.89,
+                  "height": 0.67
+                },
+                "blocks": [
+                  {
+                    "blockId": "academy:surface:8",
+                    "part": 0,
+                    "kind": "button",
+                    "lineCount": 3
+                  },
+                  {
+                    "blockId": "academy:surface:9",
+                    "part": 0,
+                    "kind": "heading",
+                    "lineCount": 1
+                  },
+                  {
+                    "blockId": "academy:surface:10:text",
+                    "part": 0,
+                    "kind": "text",
+                    "lineCount": 2
+                  },
+                  {
+                    "blockId": "academy:surface:11",
+                    "part": 0,
+                    "kind": "button",
+                    "lineCount": 2
+                  },
+                  {
+                    "blockId": "academy:surface:12",
+                    "part": 0,
+                    "kind": "button",
+                    "lineCount": 1
+                  }
+                ],
+                "regions": [
+                  {
+                    "x": 0.055,
+                    "y": 0.17,
+                    "width": 0.89,
+                    "height": 0.1782328648915187,
+                    "actionId": "academy:surface:8:action",
+                    "blockId": "academy:surface:8",
+                    "kind": "button",
+                    "inputType": "button",
+                    "pointerSurface": false,
+                    "focused": false,
+                    "label": "4. PAYCORE and evidence READY Compile intent, policy, budget, route, and evidence before any future action.",
+                    "disabled": false
+                  },
+                  {
+                    "x": 0.055,
+                    "y": 0.5355479536489152,
+                    "width": 0.89,
+                    "height": 0.1338819033530572,
+                    "actionId": "academy:surface:11:action",
+                    "blockId": "academy:surface:11",
+                    "kind": "button",
+                    "inputType": "button",
+                    "pointerSurface": false,
+                    "focused": false,
+                    "label": "A local projection and rehearsal",
+                    "disabled": false
+                  },
+                  {
+                    "x": 0.055,
+                    "y": 0.6798465236686391,
+                    "width": 0.89,
+                    "height": 0.08953094181459566,
+                    "actionId": "academy:surface:12:action",
+                    "blockId": "academy:surface:12",
+                    "kind": "button",
+                    "inputType": "button",
+                    "pointerSurface": false,
+                    "focused": false,
+                    "label": "A regulated bank account",
+                    "disabled": false
+                  },
+                  {
+                    "x": 0.055,
+                    "y": 0.9126199999999998,
+                    "width": 0.4183,
+                    "height": 0.05537999999999999,
+                    "actionId": "@atlas:previous",
+                    "kind": "navigation",
+                    "label": "previous",
+                    "disabled": true
+                  },
+                  {
+                    "x": 0.5267,
+                    "y": 0.9126199999999998,
+                    "width": 0.4183,
+                    "height": 0.05537999999999999,
+                    "actionId": "@atlas:next",
+                    "kind": "navigation",
+                    "label": "next",
+                    "disabled": false
+                  }
+                ]
+              },
+              {
+                "index": 4,
+                "id": "side-2",
+                "label": "Side 3",
+                "width": 899,
+                "height": 656,
+                "bounds": {
+                  "x": 0.055,
+                  "y": 0.17,
+                  "width": 0.89,
+                  "height": 0.67
+                },
+                "blocks": [
+                  {
+                    "blockId": "academy:surface:13",
+                    "part": 0,
+                    "kind": "button",
+                    "lineCount": 1
+                  },
+                  {
+                    "blockId": "academy:surface:14:text",
+                    "part": 0,
+                    "kind": "text",
+                    "lineCount": 3
+                  },
+                  {
+                    "blockId": "academy:surface:15",
+                    "part": 0,
+                    "kind": "heading",
+                    "lineCount": 1
+                  },
+                  {
+                    "blockId": "academy:surface:16:text",
+                    "part": 0,
+                    "kind": "text",
+                    "lineCount": 2
+                  },
+                  {
+                    "blockId": "academy:surface:17",
+                    "part": 0,
+                    "kind": "button",
+                    "lineCount": 1
+                  }
+                ],
+                "regions": [
+                  {
+                    "x": 0.055,
+                    "y": 0.17,
+                    "width": 0.89,
+                    "height": 0.092578125,
+                    "actionId": "academy:surface:13:action",
+                    "blockId": "academy:surface:13",
+                    "kind": "button",
+                    "inputType": "button",
+                    "pointerSurface": false,
+                    "focused": false,
+                    "label": "A production custody wallet",
+                    "disabled": false
+                  },
+                  {
+                    "x": 0.055,
+                    "y": 0.6079557291666667,
+                    "width": 0.89,
+                    "height": 0.092578125,
+                    "actionId": "academy:surface:17:action",
+                    "blockId": "academy:surface:17",
+                    "kind": "button",
+                    "inputType": "button",
+                    "pointerSurface": false,
+                    "focused": false,
+                    "label": "Reset local progress",
+                    "disabled": false
+                  },
+                  {
+                    "x": 0.055,
+                    "y": 0.91262,
+                    "width": 0.4183,
+                    "height": 0.055380000000000006,
+                    "actionId": "@atlas:previous",
+                    "kind": "navigation",
+                    "label": "previous",
+                    "disabled": true
+                  },
+                  {
+                    "x": 0.5267000000000001,
+                    "y": 0.91262,
+                    "width": 0.4183,
+                    "height": 0.055380000000000006,
+                    "actionId": "@atlas:next",
+                    "kind": "navigation",
+                    "label": "next",
+                    "disabled": false
+                  }
+                ]
+              }
+            ]
+          },
+          "mediaPixelMode": "native-embed-only"
+        },
+        "academy": {
+          "source": "financial-academy-console",
+          "action": "read",
+          "method": "api",
+          "opened": true,
+          "state": {
+            "source": "financial-academy-console",
+            "selectedLessonId": "academy:financial-os",
+            "completedLessonIds": [],
+            "attempts": {},
+            "xp": 0,
+            "trace": [],
+            "answerLog": [],
+            "localOnly": true,
+            "simulation": true,
+            "persistence": false,
+            "credential": false,
+            "rewards": false,
+            "externalNetwork": false,
+            "executable": false
+          },
+          "selectedLesson": {
+            "id": "academy:financial-os",
+            "order": 1,
+            "label": "Financial OS foundations",
+            "summary": "Separate a useful financial interface from the authority that actually holds or moves value.",
+            "question": "What does the maTumbo demo itself control?",
+            "options": [
+              "A local projection and rehearsal",
+              "A regulated bank account",
+              "A production custody wallet"
+            ],
+            "correctOption": 0,
+            "explanation": "The browser controls presentation and deterministic local rehearsal state. External financial authority remains separate.",
+            "xp": 30
+          },
+          "lessonCount": 4,
+          "completedCount": 0,
+          "xp": 0,
+          "localOnly": true,
+          "simulation": true,
+          "persistence": false,
+          "credential": false,
+          "rewards": false,
+          "externalNetwork": false,
+          "executable": false,
+          "boundary": "Academy is a local educational rehearsal. Progress and XP exist only in this page session; there is no credential, financial advice, wallet, reward token, persistence, or external authority."
+        }
+      }
+    },
+    {
+      "name": "tracked pinch activates the original Academy option through mesh UV",
+      "pass": true,
+      "data": {
+        "action": {
+          "id": "academy:surface:11:action",
+          "text": "A local projection and rehearsal",
+          "optionIndex": "0"
+        },
+        "region": {
+          "x": 0.055,
+          "y": 0.5355479536489152,
+          "width": 0.89,
+          "height": 0.1338819033530572,
+          "actionId": "academy:surface:11:action",
+          "blockId": "academy:surface:11",
+          "kind": "button",
+          "inputType": "button",
+          "pointerSurface": false,
+          "focused": true,
+          "label": "A local projection and rehearsal",
+          "disabled": false,
+          "chartIndex": 3,
+          "chartId": "side-1",
+          "page": 0,
+          "uv": {
+            "x": 0.5,
+            "y": 0.39751109467455625
+          }
+        },
+        "point": {
+          "x": 0.5,
+          "y": 0.5275112963117763
+        },
+        "hit": {
+          "handled": true,
+          "source": "hand",
+          "active": true,
+          "held": null,
+          "target": {
+            "kind": "control",
+            "id": "academy",
+            "label": "Financial Academy",
+            "actionId": "academy:surface:11:action",
+            "controlActionability": true,
+            "dwellAllowed": false
+          },
+          "reason": null,
+          "coordinateSpace": "normalized-screen",
+          "localOnly": true
+        },
+        "before": "No answers yet. Choose a lesson and test the idea.",
+        "after": "1 · Financial OS foundations · CORRECT · +30 XP",
+        "feedback": "CORRECT · The browser controls presentation and deterministic local rehearsal state. External financial authority remains separate. · +30 DEMO XP",
+        "held": {
+          "kind": "surface",
+          "id": "academy",
+          "arrange": false
+        },
+        "liveObject": {
+          "engine": "mesh-uv-360",
+          "entityId": "academy",
+          "bodyId": "academy",
+          "coordinateSpace": "owning-mesh-uv",
+          "separatePanelFrame": false,
+          "canonicalOwners": 1,
+          "interactiveSurfaceCount": 5,
+          "ownedByBody": true,
+          "rotation": [
+            -1.5707963267948968,
+            0,
+            0
+          ],
+          "document": {
+            "featureId": "academy",
+            "revision": 6,
+            "disposed": false,
+            "blockCount": 22,
+            "actionCount": 13,
+            "originalElementId": "academy-console",
+            "canonicalOwners": 1,
+            "clonedFeatureCount": 0,
+            "kinds": [
+              "text",
+              "heading",
+              "button",
+              "summary"
+            ]
+          },
+          "atlas": {
+            "page": 0,
+            "pageCount": 2,
+            "revision": 3,
+            "disposed": false,
+            "blockCount": 22,
+            "focusActionId": null,
+            "textureCount": 5,
+            "canonicalFeatureId": "academy",
+            "charts": [
+              {
+                "index": 0,
+                "id": "front",
+                "label": "Front",
+                "width": 793,
+                "height": 744,
+                "bounds": {
+                  "x": 0.3,
+                  "y": 0.55,
+                  "width": 0.4,
+                  "height": 0.20400000000000001
+                },
+                "blocks": [
+                  {
+                    "blockId": "academy:surface:1:text",
+                    "part": 0,
+                    "kind": "text",
+                    "lineCount": 2
+                  },
+                  {
+                    "blockId": "academy:surface:2",
+                    "part": 0,
+                    "kind": "heading",
+                    "lineCount": 1
+                  }
+                ],
+                "regions": [
+                  {
+                    "x": 0.3,
+                    "y": 0.8260000000000002,
+                    "width": 0.188,
+                    "height": 0.024,
+                    "actionId": "@atlas:previous",
+                    "kind": "navigation",
+                    "label": "previous",
+                    "disabled": true
+                  },
+                  {
+                    "x": 0.512,
+                    "y": 0.8260000000000002,
+                    "width": 0.188,
+                    "height": 0.024,
+                    "actionId": "@atlas:next",
+                    "kind": "navigation",
+                    "label": "next",
+                    "disabled": false
+                  }
+                ]
+              },
+              {
+                "index": 1,
+                "id": "back",
+                "label": "Back",
+                "width": 793,
+                "height": 744,
+                "bounds": {
+                  "x": 0.3,
+                  "y": 0.55,
+                  "width": 0.4,
+                  "height": 0.20400000000000001
+                },
+                "blocks": [
+                  {
+                    "blockId": "academy:surface:3",
+                    "part": 0,
+                    "kind": "button",
+                    "lineCount": 1
+                  },
+                  {
+                    "blockId": "academy:surface:22:text",
+                    "part": 0,
+                    "kind": "text",
+                    "lineCount": 2
+                  }
+                ],
+                "regions": [
+                  {
+                    "x": 0.3,
+                    "y": 0.55,
+                    "width": 0.4000000000000001,
+                    "height": 0.08039594534050179,
+                    "actionId": "academy:surface:3:action",
+                    "blockId": "academy:surface:3",
+                    "kind": "button",
+                    "inputType": "button",
+                    "pointerSurface": false,
+                    "focused": false,
+                    "label": "Close Financial Academy",
+                    "disabled": false
+                  },
+                  {
+                    "x": 0.3,
+                    "y": 0.8260000000000002,
+                    "width": 0.188,
+                    "height": 0.024,
+                    "actionId": "@atlas:previous",
+                    "kind": "navigation",
+                    "label": "previous",
+                    "disabled": true
+                  },
+                  {
+                    "x": 0.512,
+                    "y": 0.8260000000000002,
+                    "width": 0.188,
+                    "height": 0.024,
+                    "actionId": "@atlas:next",
+                    "kind": "navigation",
+                    "label": "next",
+                    "disabled": false
+                  }
+                ]
+              },
+              {
+                "index": 2,
+                "id": "side-0",
+                "label": "Side 1",
+                "width": 899,
+                "height": 656,
+                "bounds": {
+                  "x": 0.055,
+                  "y": 0.17,
+                  "width": 0.89,
+                  "height": 0.67
+                },
+                "blocks": [
+                  {
+                    "blockId": "academy:surface:23",
+                    "part": 0,
+                    "kind": "button",
+                    "lineCount": 3
+                  },
+                  {
+                    "blockId": "academy:surface:24",
+                    "part": 0,
+                    "kind": "button",
+                    "lineCount": 3
+                  },
+                  {
+                    "blockId": "academy:surface:25",
+                    "part": 0,
+                    "kind": "button",
+                    "lineCount": 3
+                  }
+                ],
+                "regions": [
+                  {
+                    "x": 0.055,
+                    "y": 0.17,
+                    "width": 0.89,
+                    "height": 0.18398437499999998,
+                    "actionId": "academy:surface:23:action",
+                    "blockId": "academy:surface:23",
+                    "kind": "button",
+                    "inputType": "button",
+                    "pointerSurface": false,
+                    "focused": false,
+                    "label": "1. Financial OS foundations COMPLETE Separate a useful financial interface from the authority that actually holds or moves value.",
+                    "disabled": false
+                  },
+                  {
+                    "x": 0.055,
+                    "y": 0.36440104166666665,
+                    "width": 0.89,
+                    "height": 0.18398437499999998,
+                    "actionId": "academy:surface:24:action",
+                    "blockId": "academy:surface:24",
+                    "kind": "button",
+                    "inputType": "button",
+                    "pointerSurface": false,
+                    "focused": false,
+                    "label": "2. HTTP 402 and x402 READY Understand the difference between a web payment-required response and a settlement protocol.",
+                    "disabled": false
+                  },
+                  {
+                    "x": 0.055,
+                    "y": 0.5588020833333334,
+                    "width": 0.89,
+                    "height": 0.18398437499999998,
+                    "actionId": "academy:surface:25:action",
+                    "blockId": "academy:surface:25",
+                    "kind": "button",
+                    "inputType": "button",
+                    "pointerSurface": false,
+                    "focused": false,
+                    "label": "3. T402 conditional value READY Follow offer, route, hold, evidence, and release as distinct stages.",
+                    "disabled": false
+                  },
+                  {
+                    "x": 0.055,
+                    "y": 0.91262,
+                    "width": 0.4183,
+                    "height": 0.055380000000000006,
+                    "actionId": "@atlas:previous",
+                    "kind": "navigation",
+                    "label": "previous",
+                    "disabled": true
+                  },
+                  {
+                    "x": 0.5267000000000001,
+                    "y": 0.91262,
+                    "width": 0.4183,
+                    "height": 0.055380000000000006,
+                    "actionId": "@atlas:next",
+                    "kind": "navigation",
+                    "label": "next",
+                    "disabled": false
+                  }
+                ]
+              },
+              {
+                "index": 3,
+                "id": "side-1",
+                "label": "Side 2",
+                "width": 872,
+                "height": 676,
+                "bounds": {
+                  "x": 0.055,
+                  "y": 0.17,
+                  "width": 0.89,
+                  "height": 0.67
+                },
+                "blocks": [
+                  {
+                    "blockId": "academy:surface:26",
+                    "part": 0,
+                    "kind": "button",
+                    "lineCount": 3
+                  },
+                  {
+                    "blockId": "academy:surface:9",
+                    "part": 0,
+                    "kind": "heading",
+                    "lineCount": 1
+                  },
+                  {
+                    "blockId": "academy:surface:27:text",
+                    "part": 0,
+                    "kind": "text",
+                    "lineCount": 2
+                  },
+                  {
+                    "blockId": "academy:surface:28",
+                    "part": 0,
+                    "kind": "button",
+                    "lineCount": 2
+                  },
+                  {
+                    "blockId": "academy:surface:29",
+                    "part": 0,
+                    "kind": "button",
+                    "lineCount": 1
+                  }
+                ],
+                "regions": [
+                  {
+                    "x": 0.055,
+                    "y": 0.17,
+                    "width": 0.89,
+                    "height": 0.1782328648915187,
+                    "actionId": "academy:surface:26:action",
+                    "blockId": "academy:surface:26",
+                    "kind": "button",
+                    "inputType": "button",
+                    "pointerSurface": false,
+                    "focused": false,
+                    "label": "4. PAYCORE and evidence READY Compile intent, policy, budget, route, and evidence before any future action.",
+                    "disabled": false
+                  },
+                  {
+                    "x": 0.055,
+                    "y": 0.5355479536489152,
+                    "width": 0.89,
+                    "height": 0.1338819033530572,
+                    "actionId": "academy:surface:28:action",
+                    "blockId": "academy:surface:28",
+                    "kind": "button",
+                    "inputType": "button",
+                    "pointerSurface": false,
+                    "focused": false,
+                    "label": "A local projection and rehearsal",
+                    "disabled": false
+                  },
+                  {
+                    "x": 0.055,
+                    "y": 0.6798465236686391,
+                    "width": 0.89,
+                    "height": 0.08953094181459566,
+                    "actionId": "academy:surface:29:action",
+                    "blockId": "academy:surface:29",
+                    "kind": "button",
+                    "inputType": "button",
+                    "pointerSurface": false,
+                    "focused": false,
+                    "label": "A regulated bank account",
+                    "disabled": false
+                  },
+                  {
+                    "x": 0.055,
+                    "y": 0.9126199999999998,
+                    "width": 0.4183,
+                    "height": 0.05537999999999999,
+                    "actionId": "@atlas:previous",
+                    "kind": "navigation",
+                    "label": "previous",
+                    "disabled": true
+                  },
+                  {
+                    "x": 0.5267,
+                    "y": 0.9126199999999998,
+                    "width": 0.4183,
+                    "height": 0.05537999999999999,
+                    "actionId": "@atlas:next",
+                    "kind": "navigation",
+                    "label": "next",
+                    "disabled": false
+                  }
+                ]
+              },
+              {
+                "index": 4,
+                "id": "side-2",
+                "label": "Side 3",
+                "width": 899,
+                "height": 656,
+                "bounds": {
+                  "x": 0.055,
+                  "y": 0.17,
+                  "width": 0.89,
+                  "height": 0.67
+                },
+                "blocks": [
+                  {
+                    "blockId": "academy:surface:30",
+                    "part": 0,
+                    "kind": "button",
+                    "lineCount": 1
+                  },
+                  {
+                    "blockId": "academy:surface:31",
+                    "part": 0,
+                    "kind": "button",
+                    "lineCount": 1
+                  },
+                  {
+                    "blockId": "academy:surface:32:text",
+                    "part": 0,
+                    "kind": "text",
+                    "lineCount": 4
+                  },
+                  {
+                    "blockId": "academy:surface:32:text",
+                    "part": 1,
+                    "kind": "text",
+                    "lineCount": 1
+                  },
+                  {
+                    "blockId": "academy:surface:15",
+                    "part": 0,
+                    "kind": "heading",
+                    "lineCount": 1
+                  },
+                  {
+                    "blockId": "academy:surface:33:text",
+                    "part": 0,
+                    "kind": "text",
+                    "lineCount": 2
+                  }
+                ],
+                "regions": [
+                  {
+                    "x": 0.055,
+                    "y": 0.17,
+                    "width": 0.89,
+                    "height": 0.092578125,
+                    "actionId": "academy:surface:30:action",
+                    "blockId": "academy:surface:30",
+                    "kind": "button",
+                    "inputType": "button",
+                    "pointerSurface": false,
+                    "focused": false,
+                    "label": "A production custody wallet",
+                    "disabled": false
+                  },
+                  {
+                    "x": 0.055,
+                    "y": 0.2729947916666667,
+                    "width": 0.89,
+                    "height": 0.092578125,
+                    "actionId": "academy:surface:31:action",
+                    "blockId": "academy:surface:31",
+                    "kind": "button",
+                    "inputType": "button",
+                    "pointerSurface": false,
+                    "focused": false,
+                    "label": "Continue to next lesson →",
+                    "disabled": false
+                  },
+                  {
+                    "x": 0.055,
+                    "y": 0.91262,
+                    "width": 0.4183,
+                    "height": 0.055380000000000006,
+                    "actionId": "@atlas:previous",
+                    "kind": "navigation",
+                    "label": "previous",
+                    "disabled": true
+                  },
+                  {
+                    "x": 0.5267000000000001,
+                    "y": 0.91262,
+                    "width": 0.4183,
+                    "height": 0.055380000000000006,
+                    "actionId": "@atlas:next",
+                    "kind": "navigation",
+                    "label": "next",
+                    "disabled": false
+                  }
+                ]
+              }
+            ]
+          },
+          "mediaPixelMode": "native-embed-only",
+          "panelId": "academy-console"
+        },
+        "originalPanel": "academy-console"
+      }
+    },
+    {
+      "name": "all synthetic routes leave physical camera off",
+      "pass": true,
+      "data": {
+        "cameraCalls": 0,
+        "cameraState": "idle",
+        "tracking": {
+          "source": "hand",
+          "active": true,
+          "held": null,
+          "target": {
+            "kind": "control",
+            "id": "academy",
+            "label": "Financial Academy",
+            "actionId": "academy:surface:28:action",
+            "controlActionability": true,
+            "dwellAllowed": false
+          },
+          "reason": null,
+          "coordinateSpace": "normalized-screen",
+          "localOnly": true
+        },
+        "master": {
+          "enabled": true,
+          "arrange": false,
+          "gazePinch": false,
+          "dwell": false,
+          "held": null,
+          "sourceId": "explicit-synthetic-fixture",
+          "dwellTarget": null
+        }
+      }
+    }
+  ],
+  "errors": [],
+  "requests": [
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/mobile-layout.css"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/main.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/universal-reality-bridge.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/reality-command-deck.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/mobile-chrome.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/vendor/three-r179.1/build/three.module.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/city-journey.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/centered-surfaces.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/immersive-session.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/media-preview.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/token-ticker.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/mobile-panel-manager.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/mobile-freeze-guard.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/photo-mascot-mount.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/person-studio.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/reality-assembly.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/api-connections.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/token.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/economic-runtime.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/economic-world-projection.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/ourplace-economy.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/provider-navigation.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/vendor/three-r179.1/examples/jsm/controls/OrbitControls.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/vendor/three-r179.1/examples/jsm/controls/TransformControls.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/manipulate-controls.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/vendor/three-r179.1/examples/jsm/postprocessing/EffectComposer.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/vendor/three-r179.1/examples/jsm/postprocessing/RenderPass.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/vendor/three-r179.1/examples/jsm/postprocessing/UnrealBloomPass.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/core/demo-projection.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/core/default-landing.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/projections/device-projection.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/distribution-explorer.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/distribution-registry.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/person-organisms.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/feature-navigator.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/cube-dive.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/cube-dive.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/launch-console.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/launch-receipt.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/social-explorer.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/social-pulse.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/launch-kit.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/room-spaces.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/camera-input.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/gesture-input.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/gaze-hand-coupling.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/projection-bridge.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/intent-timeline.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/block-world.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/projection-session.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/block-world-focus.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/cube-quick-actions.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/portal-return.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/block-migration.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/block-migration.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/migration-snapshot.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/block-world-snapshot.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/block-world-runtime-sync.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/arena-games.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/arena-games.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/chess-arena.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/academy.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/contracts-markets.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/contracts-markets.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/protocol-evidence.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/protocol-evidence.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/paycore.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/paycore.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/t402.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/t402.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/neural-mesh.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/neural-mesh.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/matter-forge.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/picture-matter-metadata.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/picture-matter.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/nft-atelier.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/frozen-relics.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/muse-agent.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/bot-plaza.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/bot-plaza.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/lens-bot-plugins.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/contract-ledger.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/contract-runtime.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/contract-public-evidence.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/contract-world-projection.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/compute-world-projection.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/core/view-state.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/contract-workbench.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/contract-organism.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/bot-presence.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/contract-atelier.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/luna-companion.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/wardrobe-atelier.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/white-paper.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/gesture-lens.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/hand-session.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/hands-eyes-controls.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/story-mode.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/ledger-proof.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/ledger-proof.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/live-gateway.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/live-gateway.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/world-events.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/world-events.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/sports-events.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/sports-events.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/multi-sport-events.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/multi-sport-events.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/device-projection.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/asset-market.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/asset-market.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/population-context.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/web-ai.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/social-mirror.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/social-mirror.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/youtube-surface.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/vendor/three-r179.1/build/three.module.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/universal/universal-object-renderer.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/universal/universal-entity.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/reality-lens-chrome.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/xr-capabilities.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/vendor/three-r179.1/build/three.core.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/render-perf.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/person-studio.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/person-studio-scene.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/avatar-style.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/photo-mascot-set.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/photo-mascot-presence.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/network-tools.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/reality-surface-controller.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/reality-workspace.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/reality-tab-layout.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/reality-lens-engine.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/reality-object-engine.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/reality-assembly-scene.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/creator-economy.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/orbit-navigation.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/reality-tracking-input.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/core/world-state.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/economic-kernel.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/economic-finance.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/compute-jobs.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/compute-account.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/compute-exchange.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/contribution-vault.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/economic-timeline.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/token-store.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/vendor/three-r179.1/examples/jsm/postprocessing/Pass.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/ourplace-finance.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/token-config.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/vendor/three-r179.1/examples/jsm/shaders/CopyShader.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/vendor/three-r179.1/examples/jsm/postprocessing/ShaderPass.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/vendor/three-r179.1/examples/jsm/postprocessing/MaskPass.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/vendor/three-r179.1/examples/jsm/shaders/LuminosityHighPassShader.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/cipher.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/asset-token.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/profile.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/rooms.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/social-explorer.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/block-world.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/academy.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/nft-atelier.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/frozen-relics.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/muse-agent.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/contract-atelier.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/luna-companion.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/wardrobe-atelier.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/white-paper.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/gesture-lens.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/room-workspace.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/room-conversations.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/launch-kit.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/block-world-snapshot.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/merge4-snapshot-adapter.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/market-builder.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/chess-arena.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/chess-ai.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/avatar-motion.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/chess-arena-pieces.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/eye-tracker.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/tracking-interaction.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/contract-atelier-persistence.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/outcome-contracts.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/contract-automation.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/outcome-persistence.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/contract-flow.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/hand-lens.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/hand-gestures.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/air-typing.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/hand-camera.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/air-keyboard.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/ar-glasses-mode.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/hand-perf.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/hand-grab.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/story-mode.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/web-ai.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/compute-economics-policy.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/my-gpt.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/surface-semantic-field.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/topology-surface-object.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/avatar-embodiment.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/agent-smith-rig.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/photo-mascot.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/mascot-motion.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/reality-surface-document.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/reality-surface-atlas.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/living-surface-layout-engine.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/reality-timeline.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/side-living-reality.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/reality-surface-geometry.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/reality-home-surfaces.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/token-sha256.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/reality-tab-layout.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/luna-intent.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/vendor/chess-1.4.0/chess.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/market-engine.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/eye-gaze.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/auto-contracts.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/odds-feeds.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/contract-status-vocab.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/surface-semantic-field-three.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/topology-semantic-field.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/my-gpt.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/token-trade-mount.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/token-boot.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/contract-workbench.css"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/hand-presence.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/person-studio.css"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/reality-assembly.css"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/vendor/three-r179.1/examples/jsm/renderers/CSS3DRenderer.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/api-connections.css"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/api/providers"
+    },
+    {
+      "method": "GET",
+      "origin": "https://api.open-meteo.com",
+      "path": "/v1/forecast"
+    },
+    {
+      "method": "GET",
+      "origin": "https://api.frankfurter.dev",
+      "path": "/v2/providers/ecb/rates"
+    },
+    {
+      "method": "GET",
+      "origin": "https://earthquake.usgs.gov",
+      "path": "/earthquakes/feed/v1.0/summary/all_day.geojson"
+    },
+    {
+      "method": "GET",
+      "origin": "https://api.llama.fi",
+      "path": "/tvl/aave"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/hands-eyes-controls.css"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/tab-registry.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/persistent-user-blocks.js"
+    },
+    {
+      "method": "GET",
+      "origin": "https://site.web.api.espn.com",
+      "path": "/apis/site/v2/sports/soccer/eng.1/scoreboard"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/token-trade.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/token-facade.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/tab-engine.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/render/tab-ar-tabs.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/api/gpt/status"
+    },
+    {
+      "method": "GET",
+      "origin": "https://site.web.api.espn.com",
+      "path": "/apis/site/v2/sports/basketball/nba/scoreboard"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/favicon.svg"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/token-activity.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/token-vault.js"
+    },
+    {
+      "method": "GET",
+      "origin": "https://site.web.api.espn.com",
+      "path": "/apis/site/v2/sports/football/nfl/scoreboard"
+    },
+    {
+      "method": "GET",
+      "origin": "https://api.elections.kalshi.com",
+      "path": "/trade-api/v2/markets"
+    },
+    {
+      "method": "GET",
+      "origin": "https://gamma-api.polymarket.com",
+      "path": "/markets"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/src/domains/reality-lens-engine.js"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/favicon.svg"
+    },
+    {
+      "method": "GET",
+      "origin": "http://127.0.0.1:8082",
+      "path": "/favicon.svg"
+    }
+  ],
+  "failures": [],
+  "browserClosed": true,
+  "finishedAt": "2026-10-05T17:15:23.902Z",
+  "passed": true
+}
