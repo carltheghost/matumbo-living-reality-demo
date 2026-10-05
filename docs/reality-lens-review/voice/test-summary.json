@@ -1,0 +1,27 @@
+{
+  "javascript": {
+    "command": "python scripts/run_tests.py",
+    "tests": 2637,
+    "suites": 113,
+    "passed": 2637,
+    "failed": 0,
+    "skipped": 0
+  },
+  "python": {
+    "command": "python -m unittest discover -s tests -p 'test_*.py'",
+    "tests": 76,
+    "result": "OK"
+  },
+  "portableExtracted": {
+    "command": "node --test tests/*.test.mjs",
+    "tests": 51,
+    "passed": 51,
+    "failed": 0
+  },
+  "physicalCameraUsed": false,
+  "physicalMicrophoneUsed": false,
+  "recognition": "controlled browser double",
+  "speechPlayback": "controlled browser double",
+  "recording": "actual browser MediaRecorder supplied by generated oscillator stream",
+  "gptReply": "controlled existing-owner response fixture"
+}

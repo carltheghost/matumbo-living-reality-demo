@@ -1,0 +1,11 @@
+{
+  "checks": [
+    "Forced WebGL failure still mounts one usable dictation panel and explicit copy",
+    "Fallback reports unavailable owner functions without fake messaging or GPT"
+  ],
+  "expectedRendererErrors": [
+    "Error: Error creating WebGL context."
+  ],
+  "physicalMicrophoneUsed": false,
+  "passed": true
+}

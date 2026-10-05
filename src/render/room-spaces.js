@@ -5,16 +5,17 @@
  * small, low-poly set of room portals beside the existing organ constellation.
  * The projection is never edited. A separate browser-local workspace owns
  * message content and local rooms; the canonical cipher contribution stays
- * metadata-only. Nothing here creates remote delivery or encryption.
+ * metadata-only. Optional audio encryption belongs to local voice attachments;
+ * nothing here creates remote delivery or verified participant identity.
  */
 
-import { createRoomWorkspace } from '../domains/room-workspace.js';
-import { mountRoomConversations } from './room-conversations.js';
+import { createRoomWorkspace } from '../domains/room-workspace.js?v=20261005-voice';
+import { mountRoomConversations } from './room-conversations.js?v=20261005-voice';
 
 export const ROOM_SPACES_SOURCE = "spatial-rooms";
 export const ROOM_SPACES_CONSOLE_SOURCE = "room-spaces-console";
 export const DEFAULT_ROOM_SPACES_BOUNDARY =
-  "Room conversations are saved in this browser as readable text. Canonical membership and cipher indicators remain projections; remote delivery, identity verification and encryption are not connected.";
+  "Room text and captions are saved readably in this browser. Voice audio can be encrypted with a separate unlock code; room/message metadata remains readable. Canonical membership and cipher indicators remain projections; remote delivery and identity verification are not connected.";
 
 const integerFormatter = new Intl.NumberFormat("en-US");
 
@@ -391,6 +392,7 @@ export function createRoomSpaces({
 
   function setOpen(next, method = "api") {
     opened = Boolean(next);
+    if (!opened) conversations?.suspendVoice?.();
     panel.hidden = !opened;
     panel.classList.toggle("visible", opened);
     panel.setAttribute("aria-hidden", String(!opened));
@@ -663,6 +665,7 @@ export function createRoomSpaces({
 
   return Object.freeze({
     open: () => setOpen(true, "open"),
+    getVoiceContext: () => JSON.stringify([opened, selectedId, enteredId]),
     close: () => setOpen(false, "close"),
     toggle: () => setOpen(!opened, "toggle"),
     selectRoom,

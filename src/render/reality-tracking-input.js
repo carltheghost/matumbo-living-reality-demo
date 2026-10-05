@@ -14,7 +14,7 @@ export function trackingCanvasPoint(input, canvas) {
 export function trackingPointIsObstructed(documentRoot,canvas,point){
   const front=documentRoot?.elementFromPoint?.(point.clientX,point.clientY);
   if(!front||front===canvas||front.dataset?.nativeTarget==='true')return false;
-  return Boolean(front.closest?.('button,a,input,select,textarea,summary,iframe,[contenteditable="true"],.assembly-header,.assembly-toolbar,.assembly-directory,.assembly-inspector,.reality-lens-feature-panel,.assembly-wrap-fallback,#hands-eyes-panel,#hands-eyes-calibration,#hands-eyes-live,#hand-lens-panel'));
+  return Boolean(front.closest?.('button,a,input,select,textarea,summary,iframe,[contenteditable="true"],.assembly-header,.assembly-toolbar,.assembly-directory,.assembly-inspector,.reality-lens-feature-panel,.assembly-wrap-fallback,#hands-eyes-panel,#hands-eyes-calibration,#hands-eyes-live,#hand-lens-panel,#voice-dictation-panel'));
 }
 /** Only the original Assembly's explicitly registered navigation buttons may
  * receive a tracked click. Matching data attributes alone never grant access. */

@@ -7,7 +7,7 @@ import {lensSpaceLabel} from './reality-lens-chrome.js?v=20261003-skin360';
 import {buildRealityAssemblyScene,LOD_FAR} from './reality-assembly-scene.js?v=20261003-skin360';
 import {normalizeDesignDescriptor} from '../domains/creator-economy.js?v=20261003-skin360';
 import {mountOrbitNavigation} from './orbit-navigation.js';
-import {createRealityTrackingInput,createTrackingNavigationTargets,trackingPointIsObstructed} from './reality-tracking-input.js';
+import {createRealityTrackingInput,createTrackingNavigationTargets,trackingPointIsObstructed} from './reality-tracking-input.js?v=20261005-voice';
 
 // The lens contains only equal-status feature tabs; no center cube or anchor.
 export const CLEAN_LANDING_CAMERA={position:[36,25,110],target:[0,2,0],fov:60,mergeThreshold:LOD_FAR};

@@ -74,7 +74,7 @@ function collectPanels(documentRoot) {
     : [];
   for (const el of asides) {
     if (!el || EXCLUDED_IDS.has(el.id)) continue;
-    if (el.closest?.('[data-controller-owned="tracking"]')) continue;
+    if (el.closest?.('[data-controller-owned="tracking"],[data-controller-owned="voice"]')) continue;
     // The TabEngine's own layer/dock are divs, never asides — no self-hit.
     // asset-launch is class-driven (portal-destination-visible /
     // asset-route-hidden / cube-first-hidden + body mode classes), NOT the

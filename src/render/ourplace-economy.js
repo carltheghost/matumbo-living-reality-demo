@@ -15,6 +15,7 @@ import {
 import {
   wireOurplaceFinance
 } from './ourplace-finance.js?v=20261003-skin360';
+import { createSpeechInput, watchVoiceOwnerVisibility } from './voice-session.js?v=20261005-voice';
 
 /** Native content for the existing TUMBO body: one task and one tab at a time. */
 export function mountOurplaceEconomy({
@@ -43,6 +44,8 @@ export function mountOurplaceEconomy({
     selectedPublishedKey = null;
   let finance = null,
     recognition = null,
+    voiceAccepting = false,
+    surfaceActive = true,
     disposed = false,
     reviewedSharedJson = null,
     reviewedDerivative = null,
@@ -188,6 +191,7 @@ export function mountOurplaceEconomy({
       'data-ourplace-tab': id
     });
     control.addEventListener('click', () => {
+      if (id !== 'creator') { voiceAccepting = false; recognition?.abort(); }
       for (const [name, child] of panes) {
         child.hidden = name !== id;
         tabButtons.get(name).setAttribute('aria-selected', String(name === id));
@@ -288,32 +292,29 @@ export function mountOurplaceEconomy({
   button(designActions, 'Preview changes', previewRequest, 'design-preview', {
     primary: true
   });
-  button(designActions, 'Speak a design preview', () => {
-    const SpeechRecognition = windowRoot.SpeechRecognition ?? windowRoot.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
+  const voiceButton = button(designActions, 'Speak a design preview', () => {
+    if (!surfaceActive || disposed) return;
+    if (!recognition.getSnapshot().supported) {
       status.textContent = 'Voice recognition is unavailable in this browser. Type the bounded commands above and preview them.';
       return;
     }
-    recognition?.abort();
-    recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-    recognition.onresult = event => {
-      if (disposed) return;
-      request.value = String(event.results?.[0]?.[0]?.transcript ?? '').slice(0, 1200);
-      try {
-        previewRequest();
-      } catch (error) {
-        status.textContent = error.message;
-      }
-    };
-    recognition.onerror = event => {
-      if (!disposed) status.textContent = `Voice preview unavailable (${event.error ?? 'recognition failed'}). You can type the same commands.`;
-    };
-    recognition.start();
-    status.textContent = 'Listening for one design request. Your browser controls microphone permission and may use its speech service. The transcript is previewed only; applying still requires your click.';
+    if (recognition.getSnapshot().active) { recognition.stop(); return; }
+    voiceAccepting = true;
+    if (recognition.start()) status.textContent = 'Listening for one design request. Your browser controls microphone permission and may process audio online. The transcript is previewed only; applying still requires your click.';
   }, 'design-voice');
+  recognition = createSpeechInput({ windowRoot, onUpdate(snapshot) {
+    if (disposed || !surfaceActive || !voiceAccepting || !snapshot.transcript) return;
+    // One finalized request can create a preview, never an Apply action.
+    voiceAccepting = false;
+    request.value = snapshot.transcript.slice(0, 1200);
+    try { previewRequest(); } catch (error) { status.textContent = error.message; }
+    recognition.stop();
+  }, onState(snapshot) {
+    if (disposed) return;
+    voiceButton.textContent = snapshot.active ? 'Stop design listening' : 'Speak a design preview';
+    if (snapshot.error) status.textContent = `${snapshot.errorMessage} You can type the same commands.`;
+  } });
+  request.addEventListener('input', () => { voiceAccepting = false; recognition.abort(); });
   button(designActions, 'Apply reviewed changes', () => {
     if (!preview) throw new Error('Preview your request first');
     const effect = applyReviewed(preview);
@@ -910,6 +911,7 @@ export function mountOurplaceEconomy({
   const off = runtime.kernel.onEvent(() => queueMicrotask(refresh));
   host.append(root);
   refresh();
+  const stopVisibilityWatcher = watchVoiceOwnerVisibility({ element: root, windowRoot, onHidden: () => { voiceAccepting = false; recognition?.abort('owner-hidden'); } });
   const api = Object.freeze({
     root,
     refresh,
@@ -926,9 +928,15 @@ export function mountOurplaceEconomy({
       if (!tabButtons.has(id)) throw new Error('Unknown Ourplace tab');
       tabButtons.get(id).click();
     },
+    setActive(active) {
+      surfaceActive = Boolean(active);
+      if (!surfaceActive) { voiceAccepting = false; recognition?.abort(); }
+    },
     dispose() {
       disposed = true;
-      recognition?.abort();
+      voiceAccepting = false;
+      stopVisibilityWatcher();
+      recognition?.destroy();
       finance?.dispose();
       off();
       root.remove();

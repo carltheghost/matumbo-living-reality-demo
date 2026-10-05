@@ -1,7 +1,8 @@
 /**
  * Browser-local room conversations. This workspace is separate from the
- * canonical membership/cipher projections: no network, identity or crypto.
+ * canonical membership/cipher projections: no network or identity authority.
  */
+import { normalizeVoiceAttachment } from './voice-message.js';
 export const ROOM_WORKSPACE_KEY = 'tumbo.rooms.workspace.v1';
 export const ROOM_WORKSPACE_LIMITS = Object.freeze({ rooms: 32, messagesPerRoom: 200, message: 4000, label: 80, importBytes: 2000000 });
 const CONTEXTS = new Set(['private', 'social', 'contract', 'market', 'ai']);
@@ -23,7 +24,9 @@ function normalizeMessage(input) {
   if (!record(input)) throw new TypeError('Message must be an object.');
   const sentAt = string(input.sentAt, 'Message date', 40);
   if (!Number.isFinite(Date.parse(sentAt))) throw new TypeError('Message date is invalid.');
-  return { id: string(input.id, 'Message ID'), roomId: string(input.roomId, 'Message room'), authorId: string(input.authorId, 'Message author ID'), author: string(input.author, 'Message author', 80), text: string(input.text, 'Message', ROOM_WORKSPACE_LIMITS.message), sentAt };
+  const voice = input.voice === undefined ? null : normalizeVoiceAttachment(input.voice);
+  const text = voice && (input.text === '' || input.text === undefined) ? '' : string(input.text, 'Message', ROOM_WORKSPACE_LIMITS.message);
+  return { id: string(input.id, 'Message ID'), roomId: string(input.roomId, 'Message room'), authorId: string(input.authorId, 'Message author ID'), author: string(input.author, 'Message author', 80), text, sentAt, ...(voice ? { voice } : {}) };
 }
 function normalizeData(input) {
   if (!record(input) || input.schemaVersion !== 1 || !Array.isArray(input.rooms) || !Array.isArray(input.messages)) throw new TypeError('Choose a maTumbo rooms workspace JSON export.');
@@ -36,6 +39,7 @@ function normalizeData(input) {
   const messageIds = new Set(), counts = new Map();
   for (const message of messages) {
     if (!ids.has(message.roomId)) throw new TypeError('Message references an unknown room.');
+    if (message.voice && rooms.find(room => room.id === message.roomId)?.origin !== 'local') throw new TypeError('Voice messages require a local archive room.');
     if (messageIds.has(message.id)) throw new TypeError('Duplicate message ID.');
     messageIds.add(message.id);
     const count = (counts.get(message.roomId) || 0) + 1;
@@ -86,7 +90,7 @@ export function createRoomWorkspace({ storage = null, seedRooms = [], now = () =
       }
     } catch { storageError = 'Saved rooms could not be read. This session is in memory; export a backup before closing.'; storage = null; }
   }
-  function snapshot() { return { ...copy(state), localOnly: true, networkConnected: false, cryptographyImplemented: false, storageError, conflict }; }
+  function snapshot() { return { ...copy(state), localOnly: true, networkConnected: false, cryptographyImplemented: false, voiceEncryptionImplemented: true, voiceEncryptionScope: 'audio-only', storageError, conflict }; }
   function update(change) {
     if (storage) {
       let latest;
@@ -130,12 +134,13 @@ export function createRoomWorkspace({ storage = null, seedRooms = [], now = () =
   function selectRoom(id) { return update(next => { const room = roomIn(next, id); next.selectedRoomId = id; return room; }); }
   function joinRoom(id = state.selectedRoomId) { return update(next => { const room = roomIn(next, id); for (const existing of next.rooms) existing.joined = existing.id === id; next.selectedRoomId = id; return room; }); }
   function leaveRoom(id = state.selectedRoomId) { return update(next => { const room = roomIn(next, id); room.joined = false; return room; }); }
-  function sendMessage(text, roomId = state.selectedRoomId) {
-    const message = normalizeMessage({ id: `local-message:${makeId()}`, roomId, authorId: 'local-you', author: authorLabel, text, sentAt: now() });
+  function sendMessage(text, roomId = state.selectedRoomId, voice) {
+    const message = normalizeMessage({ id: `local-message:${makeId()}`, roomId, authorId: 'local-you', author: authorLabel, text, sentAt: now(), ...(voice !== undefined ? { voice } : {}) });
     return update(next => {
       const room = roomIn(next, roomId);
       if (!room.joined) throw new Error('Enter this local room before adding a message.');
       if (room.role === 'observer') throw new Error('This projected room is read-only for your observer membership. Create your own local room to write.');
+      if (message.voice && room.origin !== 'local') throw new Error('Voice messages are available in your own local rooms.');
       if (next.messages.filter(row => row.roomId === roomId).length >= ROOM_WORKSPACE_LIMITS.messagesPerRoom) throw new RangeError('This room has 200 messages. Export a backup and remove a message before writing more.');
       if (next.messages.some(row => row.id === message.id)) throw new Error('Message ID already exists.');
       next.messages.push(message); return message;
@@ -198,5 +203,5 @@ export function createRoomWorkspace({ storage = null, seedRooms = [], now = () =
     state = normalizeData(next); seedRooms = copy(rooms);
     return snapshot();
   }
-  return Object.freeze({ snapshot, getRoom, createRoom, selectRoom, joinRoom, leaveRoom, sendMessage, deleteMessage, removeRoom, importData, exportData: () => copy(state), exportJson: () => serialize(state), reload, syncSeedRooms });
+  return Object.freeze({ snapshot, getRoom, createRoom, selectRoom, joinRoom, leaveRoom, sendMessage, sendVoiceMessage: (voice, text = '', roomId = state.selectedRoomId) => sendMessage(text, roomId, voice), deleteMessage, removeRoom, importData, exportData: () => copy(state), exportJson: () => serialize(state), reload, syncSeedRooms });
 }

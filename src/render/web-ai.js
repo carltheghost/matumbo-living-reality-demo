@@ -52,7 +52,7 @@ import {
 } from "../domains/contribution-vault.js?v=20261003-skin360";
 import { createEconomicTimeline } from "../domains/economic-timeline.js?v=20261003-skin360";
 import { evaluateComputeEconomics } from "../domains/compute-economics-policy.js?v=20261003-skin360";
-import { mountMyGpt } from "./my-gpt.js?v=20261003-skin360";
+import { mountMyGpt } from "./my-gpt.js?v=20261005-voice";
 
 export { WEB_AI_CONSOLE_SOURCE };
 
@@ -790,6 +790,7 @@ export function createWebAiConsole({
 
   function setOpen(next, method) {
     state.opened = Boolean(next);
+    myGpt.setActive(state.opened && state.tab === "gpt");
     if (state.opened) {
       state.minimized = false;
       panel.hidden = false;
@@ -807,6 +808,7 @@ export function createWebAiConsole({
   function minimize(method) {
     state.minimized = true;
     state.opened = false;
+    myGpt.setActive(false);
     panel.hidden = true;
     chip.hidden = false;
     writeStorage(store, WEB_AI_STORAGE_KEYS.minimized, "1");
@@ -1427,6 +1429,7 @@ export function createWebAiConsole({
     minimize: (method = "api") => minimize(method),
     setTab: (tab, method = "api") => setTab(tab, method, false),
     getGptSnapshot: () => myGpt.snapshot(),
+    getVoiceContext: () => JSON.stringify([state.tab, state.opened, state.minimized, myGpt.voiceContext()]),
     openGptProvider: (provider, method = 'connections') => {
       myGpt.selectProvider(provider);
       setTab('gpt', method, false);

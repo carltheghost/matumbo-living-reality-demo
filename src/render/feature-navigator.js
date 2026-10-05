@@ -33,7 +33,7 @@ export const FEATURE_DEFINITIONS = Object.freeze([
     focusOrganId: "matchbox",
     sources: ["spatial-rooms", "cipher-messaging"],
     description: "Create and enter local rooms, save conversation notes, retain their history, and export or import a room backup inside the existing spatial map.",
-    boundary: "Messages are readable text stored in this browser. Projected observer rooms are read-only. Remote participants, message delivery, encryption and cloud sync are not connected.",
+    boundary: "Text, captions and message metadata are readable in this browser. Voice audio supports optional local encryption with a separate unlock code. Projected observer rooms are read-only. Remote participants, delivery and cloud sync are not connected.",
   }),
   Object.freeze({
     id: "block-world",

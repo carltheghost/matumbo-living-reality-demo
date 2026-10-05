@@ -1,0 +1,68 @@
+{
+  "checks": [
+    {
+      "name": "Home dictation replaces selected words in original search field",
+      "passed": true
+    },
+    {
+      "name": "Cancelled and failed takes preserve reviewed draft",
+      "passed": true
+    },
+    {
+      "name": "Rich text keeps formatting and inserts literal text; secret labels excluded",
+      "passed": true
+    },
+    {
+      "name": "Native number step and calendar validation preserve invalid targets",
+      "passed": true
+    },
+    {
+      "name": "Real MediaRecorder synthetic audio saves and plays in browser",
+      "passed": true
+    },
+    {
+      "name": "Browser encrypt-save-unlock-play-lock works; saved workspace excludes key",
+      "passed": true
+    },
+    {
+      "name": "Generic owner hiding releases recording without native Close click",
+      "passed": true
+    },
+    {
+      "name": "Recording released every synthetic media track",
+      "passed": true
+    },
+    {
+      "name": "Voice conversation reviews text, explicitly sends through original provider owner, speaks fixture reply",
+      "passed": true
+    },
+    {
+      "name": "Generic owner hiding stops spoken GPT reply",
+      "passed": true
+    },
+    {
+      "name": "Persisted pagehide stops voice and retains controls for restoration",
+      "passed": true
+    }
+  ],
+  "errors": [],
+  "failedRequests": [
+    {
+      "url": "https://api.elections.kalshi.com/trade-api/v2/markets",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "https://api.elections.kalshi.com/trade-api/v2/markets",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "https://api.elections.kalshi.com/trade-api/v2/markets",
+      "error": "net::ERR_FAILED"
+    }
+  ],
+  "physicalMicrophoneUsed": false,
+  "recognition": "controlled double",
+  "recording": "real MediaRecorder with synthetic oscillator",
+  "gpt": "controlled response fixture",
+  "passed": true
+}

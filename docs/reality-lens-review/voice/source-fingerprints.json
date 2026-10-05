@@ -1,0 +1,161 @@
+{
+  "baseRevision": "742be3598b9ef0f515b3d6e12ad85f3623f577b7",
+  "sourceTree": "verified-working-copy",
+  "files": [
+    {
+      "path": "index.html",
+      "bytes": 476710,
+      "sha256": "1ae6cd53ea0d08e7ea5694c432e620eb5d23d4a2d12001271e6f32f5d8b03386"
+    },
+    {
+      "path": "scripts/build_voice_kit.py",
+      "bytes": 14485,
+      "sha256": "5396ddf708c862f987fbf9f36b8c04f4f3925ea656784ba34f6289bcbbfa1492"
+    },
+    {
+      "path": "src/domains/room-workspace.js",
+      "bytes": 14822,
+      "sha256": "ab4c5008f258624000d9f1aa04fd5b33c67accc454eb770721f26831e7537d40"
+    },
+    {
+      "path": "src/domains/voice-message.js",
+      "bytes": 7150,
+      "sha256": "4a8c01dd7af80a484c2e59526e8f1b418c05d5da4958302f4eea90ceb94eb592"
+    },
+    {
+      "path": "src/main.js",
+      "bytes": 475460,
+      "sha256": "6585f48d0d6401cf1e599f78c6db4ec3bfa4f5118dc5dbc0d9861897fe65e117"
+    },
+    {
+      "path": "src/render/centered-surfaces.js",
+      "bytes": 32733,
+      "sha256": "92aced2c64419306093a63c7ce6804b2302ebbb70548824825631325b59f89e8"
+    },
+    {
+      "path": "src/render/feature-navigator.js",
+      "bytes": 54825,
+      "sha256": "ff6f3250841e078a3e396238700d6bc7eb601906a7e3b81c6ba439c826828436"
+    },
+    {
+      "path": "src/render/luna-companion.js",
+      "bytes": 12114,
+      "sha256": "7fb9706bd4eaf5b2c279b5b66d8875714e724686ae31e054629c2329a3660af2"
+    },
+    {
+      "path": "src/render/mobile-panel-manager.js",
+      "bytes": 10575,
+      "sha256": "623d8ee32214014f3261bed12f81b979e288f8c1137db1a829420dd90212b1a8"
+    },
+    {
+      "path": "src/render/my-gpt.js",
+      "bytes": 52715,
+      "sha256": "8a9242eaee21f2755691b1af08b8c0f349c07e8c464a8690f950f802ede01e61"
+    },
+    {
+      "path": "src/render/ourplace-economy.js",
+      "bytes": 45347,
+      "sha256": "6f13abaab9ac857be7190932eb80c89ef9719a0421dd0246fec77bf7925dbd2c"
+    },
+    {
+      "path": "src/render/reality-assembly.js",
+      "bytes": 108334,
+      "sha256": "0e0c34826ecf5de6cdc2319e6d354baa886fc8e34aebbab6fea4bf5f38f8e815"
+    },
+    {
+      "path": "src/render/reality-tracking-input.js",
+      "bytes": 15286,
+      "sha256": "1df808aedd93d89a3dbfc66aef8ea2380479d95a8ea3232edb54160df1177b76"
+    },
+    {
+      "path": "src/render/room-conversations.js",
+      "bytes": 36220,
+      "sha256": "258a72571e0090bbf4be06a7dc647e35af8f6ccb8ab73bf3a0b6987c56ad0079"
+    },
+    {
+      "path": "src/render/room-spaces.js",
+      "bytes": 26386,
+      "sha256": "6e3173a8a7776d28eadbcb7e56e89e7925b48b02197cb8f75261e5a3b05ab367"
+    },
+    {
+      "path": "src/render/tab-registry.js",
+      "bytes": 15387,
+      "sha256": "98adfdded1f5d35d29882ac3ef986352cbc404e3e1ac48162d6b33b089fe7538"
+    },
+    {
+      "path": "src/render/voice-dictation.css",
+      "bytes": 2876,
+      "sha256": "9cbce95c6e17ca104129646ee842d00ef2d92df802a1fded6a86bdf5d120cb94"
+    },
+    {
+      "path": "src/render/voice-dictation.js",
+      "bytes": 10921,
+      "sha256": "473f9a98a4dd91511033db0c2b05a2e32c68d8d7b38ee3ca8d29da5fd40c88e2"
+    },
+    {
+      "path": "src/render/voice-fallback.js",
+      "bytes": 1703,
+      "sha256": "a69b81a0f2bc252fbbd246a8967abd3450cd6da3031068fa0ce487f48931f488"
+    },
+    {
+      "path": "src/render/voice-session.js",
+      "bytes": 27835,
+      "sha256": "c78cd4725a8235713e51905d37b75d93f8c0f651846ee17a9b639372f3374bc7"
+    },
+    {
+      "path": "src/render/voice-text-target.js",
+      "bytes": 9434,
+      "sha256": "de5cfb9753e672757fa1510057c05c2e36ecf0e136fc0b7794b78aff42b3b8b9"
+    },
+    {
+      "path": "src/render/web-ai.js",
+      "bytes": 76536,
+      "sha256": "92dde1f326bca912eed19922e53a8a8867c8027020f95db7fa1ecda4ef0e6493"
+    },
+    {
+      "path": "tests/creator-economy.test.mjs",
+      "bytes": 55799,
+      "sha256": "34ff2b32dda3180258ef8360363b1d8ddaabfc9f9d1947fce827eb38da0cb3de"
+    },
+    {
+      "path": "tests/luna-companion.test.mjs",
+      "bytes": 27026,
+      "sha256": "14fbbb8b5d2e244f6bd7043d6d45c00340921a96cdf62e5e366a8a2f71a8ae38"
+    },
+    {
+      "path": "tests/my-gpt-ui.test.mjs",
+      "bytes": 51530,
+      "sha256": "bf7b884370a767a0869e005b243e7694c43fa6a9fb5c5c4a316423772ee9f908"
+    },
+    {
+      "path": "tests/room-conversations.test.mjs",
+      "bytes": 28229,
+      "sha256": "5b11c19f68724161d82e2749d54090031ef00dfdda31f52d0b9bc3ff677d2b24"
+    },
+    {
+      "path": "tests/test_voice_kit.py",
+      "bytes": 5099,
+      "sha256": "b12b64681d2b49b83b70f0f8debbca6e4b6a95121a7170a2678de864303f9c6d"
+    },
+    {
+      "path": "tests/voice-dictation.test.mjs",
+      "bytes": 17399,
+      "sha256": "7c1d66f9872a32292bfd430a2e53ceeaf4955bc833ec8c97091a8e06ac9a6a00"
+    },
+    {
+      "path": "tests/voice-message.test.mjs",
+      "bytes": 10565,
+      "sha256": "e159e56c97d7f2ba41dbdfc6634073c8fd58fd5d0a39a9786ee27efc99378063"
+    },
+    {
+      "path": "tests/voice-session.test.mjs",
+      "bytes": 28126,
+      "sha256": "351eba95747bf439b637fa80d7e84b2577887359da84908e8ba623de2f4eea21"
+    },
+    {
+      "path": "tests/voice-text-target.test.mjs",
+      "bytes": 11782,
+      "sha256": "220594d9523e7a77d2285de7d3bca4324f6162efc32f843110495480ee4b69ce"
+    }
+  ]
+}

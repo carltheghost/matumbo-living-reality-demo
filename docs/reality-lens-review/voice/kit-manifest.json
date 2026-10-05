@@ -1,0 +1,105 @@
+{
+  "credentialsIncluded": false,
+  "fileCount": 15,
+  "files": [
+    {
+      "bytes": 1083,
+      "origin": "source",
+      "path": "LICENSE",
+      "sha256": "1795e4e93cd74645131ea9b221eda3c076ff19be367710433785c0815807c544"
+    },
+    {
+      "bytes": 4291,
+      "origin": "generated",
+      "path": "README.md",
+      "sha256": "6c010df24bb91c26f9c598618b14e5e853956b714568dadb1f2b22ee909dc5d3"
+    },
+    {
+      "bytes": 12833,
+      "origin": "source",
+      "path": "docs/VOICE.md",
+      "sha256": "e5ddbd51940567a09fd1504f5688762b7a20a615516b5a85ab7a5a475df364dc"
+    },
+    {
+      "bytes": 2742,
+      "origin": "generated",
+      "path": "examples/index.html",
+      "sha256": "51f988796fe1813595d94304931b64ac62e8561bc4c7caac3c927cecf1c1088e"
+    },
+    {
+      "bytes": 195,
+      "origin": "generated",
+      "path": "index.js",
+      "sha256": "c8a132d2079d9dba5586a66004f84c91029663adc9b684af6515be8082fc53f7"
+    },
+    {
+      "bytes": 537,
+      "origin": "generated",
+      "path": "package.json",
+      "sha256": "1e3c9cdd171cfefab359786a3a555da994ec9cdde4b6f7b35320fa40b16d57a0"
+    },
+    {
+      "bytes": 7150,
+      "origin": "source",
+      "path": "src/domains/voice-message.js",
+      "sha256": "4a8c01dd7af80a484c2e59526e8f1b418c05d5da4958302f4eea90ceb94eb592"
+    },
+    {
+      "bytes": 2876,
+      "origin": "source",
+      "path": "src/render/voice-dictation.css",
+      "sha256": "9cbce95c6e17ca104129646ee842d00ef2d92df802a1fded6a86bdf5d120cb94"
+    },
+    {
+      "bytes": 10921,
+      "origin": "source",
+      "path": "src/render/voice-dictation.js",
+      "sha256": "473f9a98a4dd91511033db0c2b05a2e32c68d8d7b38ee3ca8d29da5fd40c88e2"
+    },
+    {
+      "bytes": 27835,
+      "origin": "source",
+      "path": "src/render/voice-session.js",
+      "sha256": "c78cd4725a8235713e51905d37b75d93f8c0f651846ee17a9b639372f3374bc7"
+    },
+    {
+      "bytes": 9434,
+      "origin": "source",
+      "path": "src/render/voice-text-target.js",
+      "sha256": "de5cfb9753e672757fa1510057c05c2e36ecf0e136fc0b7794b78aff42b3b8b9"
+    },
+    {
+      "bytes": 1717,
+      "origin": "generated",
+      "path": "tests/package.test.mjs",
+      "sha256": "c8067f4a3a9f8632ac1898ffa6efac5db456d03e77af662e3d91d8341fd2c0e9"
+    },
+    {
+      "bytes": 17399,
+      "origin": "source",
+      "path": "tests/voice-dictation.test.mjs",
+      "sha256": "7c1d66f9872a32292bfd430a2e53ceeaf4955bc833ec8c97091a8e06ac9a6a00"
+    },
+    {
+      "bytes": 28126,
+      "origin": "source",
+      "path": "tests/voice-session.test.mjs",
+      "sha256": "351eba95747bf439b637fa80d7e84b2577887359da84908e8ba623de2f4eea21"
+    },
+    {
+      "bytes": 11782,
+      "origin": "source",
+      "path": "tests/voice-text-target.test.mjs",
+      "sha256": "220594d9523e7a77d2285de7d3bca4324f6162efc32f843110495480ee4b69ce"
+    }
+  ],
+  "manifestExcludedFromOwnHashes": true,
+  "package": "@matumbo/browser-voice",
+  "published": false,
+  "remoteDeliveryIncluded": false,
+  "schemaVersion": 1,
+  "serverIncluded": false,
+  "sourceRevision": "742be3598b9ef0f515b3d6e12ad85f3623f577b7",
+  "sourceTree": "working-copy",
+  "version": "0.1.0"
+}

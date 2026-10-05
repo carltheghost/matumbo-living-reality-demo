@@ -1,10 +1,12 @@
 /** My GPT lives inside the existing Web + AI object. Provider credentials stay in the local bridge. */
 import { GPT_LIMITS, createGptWorkspace, normalizeGptUrl, buildGptChatRequest } from '../domains/my-gpt.js?v=20261003-skin360';
+import { createSpeechInput, createVoiceOutput, watchVoiceOwnerVisibility } from './voice-session.js?v=20261005-voice';
 
 const STYLE = `
 .my-gpt{display:flex;flex-direction:column;gap:14px;min-width:0;color:#e0f2ff;font:14px/1.5 system-ui,sans-serif;padding:4px 0 12px;color-scheme:dark}
 .my-gpt-top{order:0}.my-gpt-modes{order:1}.my-gpt-toolbar{order:2}.my-gpt>.my-gpt-notice{order:3}.my-gpt-messages{order:4}.my-gpt-composer{order:5}.my-gpt-setup-entry{order:6}.my-gpt-privacy{order:7}.my-gpt-details{order:8}
 .my-gpt *{box-sizing:border-box}.my-gpt [hidden]{display:none!important}
+.my-gpt-voice{display:grid;gap:8px;padding:10px;border:1px solid #77b7f53b;border-radius:12px;background:#0b2a4628}.my-gpt-voice>strong{font-size:13px;color:#c5e1fa}.my-gpt-voice-tools{display:flex;align-items:end;flex-wrap:wrap;gap:8px}.my-gpt-voice-tools .my-gpt-field{flex:1;min-width:140px}.my-gpt-voice .my-gpt-consent input{width:16px}.my-gpt-voice-status{font-size:12px;line-height:1.5;color:#b9d9f5}.my-gpt-voice-interim{font-size:12px;white-space:pre-wrap;color:#9fbfdb}.my-gpt-voice-status[data-kind=error]{color:#ffd1d8}
 .my-gpt p,.my-gpt h3{margin:0}.my-gpt-top{display:flex;align-items:center;justify-content:space-between;gap:12px}.my-gpt h3{font-size:24px;letter-spacing:-.04em;font-weight:650;color:#f1f8ff}.my-gpt-kicker{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#79bcff}.my-gpt-consent{display:flex;align-items:flex-start;gap:8px;font-size:12px;color:#b5d2ea}.my-gpt-consent input{width:16px;min-width:16px;height:16px;margin-top:3px}
 .my-gpt button,.my-gpt select,.my-gpt input,.my-gpt textarea{font:inherit;min-width:0;max-width:100%;color:inherit}.my-gpt button{cursor:pointer;min-height:40px;padding:8px 12px;border:1px solid #6cacfa50;border-radius:10px;background:#15395c68;line-height:1.35}.my-gpt button:hover{background:#21598688;border-color:#8bc6ffb3}.my-gpt button:disabled{opacity:.45;cursor:default}.my-gpt :focus-visible{outline:2px solid #9bd3ff;outline-offset:3px}
 .my-gpt .my-gpt-primary{background:linear-gradient(135deg,#176bd3,#14538e);border-color:#8bc5ff80;color:#fff;font-weight:650;box-shadow:0 4px 20px #0774ff20}.my-gpt .my-gpt-quiet{font-size:12px;background:transparent}.my-gpt-modes{display:grid;grid-template-columns:1fr 1fr;gap:6px;border:1px solid #78bfff25;border-radius:13px;padding:4px;background:#020d1c70}.my-gpt-modes button{border-color:transparent;background:transparent;color:#a8c4df}.my-gpt-modes button[aria-pressed=true]{border-color:#75bfff6b;background:#256eb04d;color:#e9f5ff;box-shadow:inset 0 1px #addfff20}
@@ -100,6 +102,14 @@ export function mountMyGpt({ documentRoot = globalThis.document, windowRoot = gl
   let editingProfileId = null;
   let clearArmed = false;
   let hasMessages = false;
+  let activeConversationId = null;
+  let speechInput = null;
+  let speechOutput = null;
+  let voiceDraft = false;
+  let voiceRevision = 0;
+  let capturePrefix = '';
+  let captureRevision = 0;
+  let surfaceActive = true;
 
   const style = node(doc, 'style'); style.textContent = STYLE;
   (doc.head || host).appendChild(style);
@@ -125,12 +135,35 @@ export function mountMyGpt({ documentRoot = globalThis.document, windowRoot = gl
   const messages = node(doc, 'div', 'my-gpt-messages'); messages.setAttribute('role', 'log'); messages.setAttribute('aria-label', 'Conversation'); messages.setAttribute('aria-live', 'polite'); root.appendChild(messages);
   const composer = node(doc, 'form', 'my-gpt-composer');
   const prompt = node(doc, 'textarea'); prompt.rows = 3; prompt.maxLength = GPT_LIMITS.prompt; prompt.placeholder = 'What would you like to explore?'; prompt.setAttribute('aria-label', 'Message My GPT');
+  const voice = node(doc, 'section', 'my-gpt-voice'); voice.setAttribute('aria-label', 'Voice conversation');
+  voice.appendChild(node(doc, 'strong', '', 'Voice conversation'));
+  const voiceDisclosure = node(doc, 'p', 'my-gpt-small', 'Listen uses your browser’s speech service, which may send audio to its provider. Review the text below, then Send. Spoken replies use a local device voice when available; other voices may use an online service.');
+  const voiceTools = node(doc, 'div', 'my-gpt-voice-tools');
+  const voiceLanguage = field(doc, 'Voice language', 'select');
+  const languages = [['en-US', 'English (US)'], ['en-GB', 'English (UK)'], ['es-ES', 'Español'], ['fr-FR', 'Français'], ['pt-BR', 'Português'], ['de-DE', 'Deutsch'], ['it-IT', 'Italiano'], ['sw-KE', 'Kiswahili'], ['hi-IN', 'हिन्दी'], ['ja-JP', '日本語'], ['ko-KR', '한국어'], ['zh-CN', '中文'], ['ar-SA', 'العربية']];
+  for (const [value, title] of languages) { const option = node(doc, 'option', '', title); option.value = value; voiceLanguage.control.appendChild(option); }
+  const browserLanguage = windowRoot?.navigator?.language || 'en-US';
+  voiceLanguage.control.value = languages.find(([value]) => value === browserLanguage)?.[0] || languages.find(([value]) => value.split('-')[0] === browserLanguage.split('-')[0])?.[0] || 'en-US';
+  const listen = button(doc, 'Listen', startListening);
+  const stopListening = button(doc, 'Stop listening', () => speechInput?.stop()); stopListening.hidden = true;
+  const interrupt = button(doc, 'Interrupt voice', () => {
+    if (chatController) cancelChat('Stopped waiting here. The provider may continue processing this request. Your message remains in local history.');
+    else stopVoice();
+    voiceSay('Voice stopped. Review your message or press Listen for another turn.');
+  }); interrupt.hidden = true;
+  voiceTools.append(voiceLanguage.label, listen, stopListening, interrupt);
+  const readRepliesLabel = node(doc, 'label', 'my-gpt-consent');
+  const readReplies = node(doc, 'input'); readReplies.type = 'checkbox'; readReplies.setAttribute('aria-label', 'Read voice replies aloud');
+  readRepliesLabel.append(readReplies, node(doc, 'span', '', 'Read replies aloud after I send a voice message'));
+  const voiceStatus = node(doc, 'p', 'my-gpt-voice-status', 'Press Listen, review your message, then Send.'); voiceStatus.setAttribute('role', 'status'); voiceStatus.setAttribute('aria-live', 'polite');
+  const voiceInterim = node(doc, 'p', 'my-gpt-voice-interim'); voiceInterim.hidden = true; voiceInterim.setAttribute('aria-label', 'Speech being recognized');
+  voice.append(voiceDisclosure, voiceTools, readRepliesLabel, voiceStatus, voiceInterim);
   const composeActions = node(doc, 'div', 'my-gpt-compose-actions');
   const newChat = button(doc, 'New chat', () => mutateWorkspace(() => workspace.newConversation()), 'my-gpt-quiet');
   const send = button(doc, 'Send message', null, 'my-gpt-primary'); send.type = 'submit';
   const stop = button(doc, 'Stop waiting', () => cancelChat('Stopped waiting here. The provider may continue processing this request. Your message remains in local history.')); stop.hidden = true;
   const submitActions = node(doc, 'div', 'my-gpt-actions'); submitActions.append(stop, send);
-  composeActions.append(newChat, submitActions); composer.append(prompt, composeActions); root.appendChild(composer);
+  composeActions.append(newChat, submitActions); composer.append(voice, prompt, composeActions); root.appendChild(composer);
   root.appendChild(node(doc, 'p', 'my-gpt-privacy', 'History and assistant notes are saved in this browser. Send shares this chat’s recent messages and this assistant’s instructions/knowledge with the selected provider. Credentials stay on your PC.'));
   const storageNotice = node(doc, 'p', 'my-gpt-notice'); storageNotice.dataset.kind = 'error'; storageNotice.hidden = true; storageNotice.setAttribute('role', 'status'); root.appendChild(storageNotice);
 
@@ -197,6 +230,57 @@ export function mountMyGpt({ documentRoot = globalThis.document, windowRoot = gl
   host.appendChild(root);
 
   function say(text, error = false) { if (!destroyed) { notice.textContent = text; notice.dataset.kind = error ? 'error' : 'info'; } }
+  function voiceSay(text, error = false) { if (!destroyed) { voiceStatus.textContent = text; voiceStatus.dataset.kind = error ? 'error' : 'info'; } }
+  function listening() { return ['starting', 'listening', 'stopping'].includes(speechInput?.getSnapshot().status); }
+  function stopVoice() {
+    // Invalidates both a pending spoken reply and any delayed recognition event.
+    voiceRevision += 1; captureRevision = -1; voiceDraft = false;
+    speechInput?.abort(); speechOutput?.stop();
+    voiceInterim.textContent = ''; voiceInterim.hidden = true;
+    if (!destroyed) controls();
+  }
+  function startListening() {
+    if (destroyed || !surfaceActive || chatController || listening()) return;
+    speechOutput?.stop(); voiceRevision += 1; captureRevision = voiceRevision;
+    capturePrefix = prompt.value;
+    speechInput?.start({ language: voiceLanguage.control.value });
+  }
+  function receiveSpeech(snapshot) {
+    if (destroyed || !surfaceActive || captureRevision !== voiceRevision) return;
+    if (snapshot.transcript) {
+      const spacer = capturePrefix && !/\s$/.test(capturePrefix) ? ' ' : '';
+      prompt.value = `${capturePrefix}${spacer}${snapshot.transcript}`.slice(0, GPT_LIMITS.prompt);
+      voiceDraft = true;
+    }
+    voiceInterim.textContent = snapshot.interim || ''; voiceInterim.hidden = !snapshot.interim;
+    controls();
+  }
+  function speechState(snapshot) {
+    if (destroyed) return;
+    if (snapshot.status === 'error') voiceSay(snapshot.errorMessage || 'Speech input is unavailable. You can type your message.', true);
+    else if (snapshot.status === 'starting') voiceSay('Starting microphone… Allow browser microphone access if prompted.');
+    else if (snapshot.status === 'listening') voiceSay('Listening… Your words appear in the editable message.');
+    else if (snapshot.status === 'stopping') voiceSay('Finishing recognition…');
+    else if (snapshot.status === 'stopped') voiceSay(voiceDraft ? 'Review your message below, then press Send. Press Listen to add more.' : 'Listening stopped. Press Listen to try again, or type your message.');
+    if (!['starting', 'listening', 'stopping'].includes(snapshot.status)) { voiceInterim.textContent = ''; voiceInterim.hidden = true; }
+    controls();
+  }
+  function outputState(snapshot) {
+    if (destroyed) return;
+    if (snapshot.status === 'speaking') {
+      const source = snapshot.processingLocation === 'local-device' ? 'a device voice' : 'a browser voice that may use an online service';
+      voiceSay(`Reading ${snapshot.truncated ? 'the beginning of this long reply' : 'the reply'} aloud using ${source}. Press Interrupt voice or Listen to stop it.`);
+    }
+    else if (snapshot.status === 'error') voiceSay(snapshot.errorMessage || 'This browser could not read the reply aloud. The reply is available above.', true);
+    else if (snapshot.status === 'stopped') voiceSay(snapshot.reason === 'ended' ? 'Spoken reply finished. Press Listen for your next turn.' : 'Spoken reply stopped. Press Listen for your next turn.');
+    else if (snapshot.status === 'idle') voiceSay('Press Listen for your next turn.');
+    controls();
+  }
+  function voiceContext() {
+    // Owner identity only: callers can detect a destination change without
+    // copying conversation text, assistant notes, or the current voice draft.
+    return JSON.stringify([provider, profileSelect.control.value, activeConversationId, modelSelect.control.value, bridge?.chatgpt?.activeAccountId, surfaceActive]);
+  }
   function chatgptReady() { return CHATGPT_READY_STATES.has(bridge?.chatgpt?.state) && bridge.chatgpt.planUsage === true && Boolean(bridge.chatgpt.activeAccountId); }
   function ready() { return provider === 'chatgpt' ? chatgptReady() : OPENAI_READY_STATES.has(bridge?.openai?.state); }
   function selectedModelReady() {
@@ -205,7 +289,13 @@ export function mountMyGpt({ documentRoot = globalThis.document, windowRoot = gl
   function controls() {
     planMode.setAttribute('aria-pressed', String(provider === 'chatgpt'));
     apiMode.setAttribute('aria-pressed', String(provider === 'openai'));
-    send.disabled = !ready() || !selectedModelReady() || Boolean(chatController) || !prompt.value.trim();
+    const isListening = listening(), isSpeaking = speechOutput?.getSnapshot().status === 'speaking';
+    send.disabled = !ready() || !selectedModelReady() || Boolean(chatController) || isListening || !prompt.value.trim();
+    listen.disabled = !surfaceActive || !speechInput?.getSnapshot().supported || Boolean(chatController) || isListening;
+    stopListening.hidden = !isListening; stopListening.disabled = speechInput?.getSnapshot().status === 'stopping';
+    voiceLanguage.control.disabled = isListening || isSpeaking || Boolean(chatController);
+    readReplies.disabled = !speechOutput?.getSnapshot().supported;
+    interrupt.hidden = !isListening && !isSpeaking && !chatController;
     stop.hidden = !chatController; send.textContent = chatController ? 'Thinking…' : 'Send message';
     messages.setAttribute('aria-busy', String(Boolean(chatController)));
     messages.hidden = !hasMessages && !ready(); newChat.hidden = !hasMessages;
@@ -242,9 +332,11 @@ export function mountMyGpt({ documentRoot = globalThis.document, windowRoot = gl
     const rows = available.length ? available : [{ id: provider === 'openai' ? bridge?.openai?.model || '' : '', label: 'Provider default' }];
     for (const item of rows) { const option = node(doc, 'option', '', String(item.label || item.id || 'Provider default')); option.value = String(item.id || ''); modelSelect.control.appendChild(option); }
     modelSelect.control.value = rows.some(item => item.id === previous) ? previous : String(rows[0].id || '');
+    if (previous && previous !== modelSelect.control.value) stopVoice();
   }
   function renderWorkspace() {
     const snapshot = workspace.snapshot();
+    activeConversationId = snapshot.activeConversationId;
     storageNotice.hidden = !snapshot.storageError; storageNotice.textContent = snapshot.storageError || '';
     const selected = snapshot.profiles.find(item => item.id === snapshot.selectedProfileId);
     profileSelect.control.replaceChildren();
@@ -285,6 +377,7 @@ export function mountMyGpt({ documentRoot = globalThis.document, windowRoot = gl
   }
   function cancelChat(message = '') {
     generation += 1; chatController?.abort(); chatController = null;
+    stopVoice();
     controls(); if (message) say(message);
   }
   function mutateWorkspace(action) {
@@ -344,11 +437,14 @@ export function mountMyGpt({ documentRoot = globalThis.document, windowRoot = gl
       const data = await request('/api/gpt/status', { signal: statusController.signal });
       if (destroyed || current !== statusGeneration) return null;
       if (data?.service !== 'matumbo-gpt-bridge' || data.version !== 1 || data.credentialsInBrowser !== false) throw new Error('The local service does not match the GPT bridge contract.');
-      bridge = data; renderAccounts(); renderModels(); controls();
+      if (bridge && bridge.chatgpt?.activeAccountId !== data.chatgpt?.activeAccountId) cancelChat();
+      bridge = data;
+      if (!ready()) stopVoice();
+      renderAccounts(); renderModels(); controls();
       if (!chatController) say(ready() ? selectedModelReady() ? 'Ready to send. Provider response is verified only after a reply arrives.' : 'Signed in. Open Account & setup and choose Load available models before sending.' : 'Setup needed. Open Account & setup to connect your selected provider.');
       return data;
     } catch (error) {
-      if (!destroyed && current === statusGeneration && error?.name !== 'AbortError') { bridge = null; renderModels(); controls(); say(error?.message || 'The local GPT bridge is unavailable.', true); }
+      if (!destroyed && current === statusGeneration && error?.name !== 'AbortError') { bridge = null; stopVoice(); renderModels(); controls(); say(error?.message || 'The local GPT bridge is unavailable.', true); }
       return null;
     } finally { if (!destroyed && current === statusGeneration) { statusController = null; refreshButton.disabled = false; } }
   }
@@ -375,7 +471,7 @@ export function mountMyGpt({ documentRoot = globalThis.document, windowRoot = gl
   }
   async function sendMessage(event) {
     event?.preventDefault();
-    if (destroyed || chatController || !ready() || !selectedModelReady() || !prompt.value.trim()) return;
+    if (destroyed || chatController || listening() || !ready() || !selectedModelReady() || !prompt.value.trim()) return;
     const text = prompt.value.trim();
     let payload;
     try {
@@ -384,15 +480,25 @@ export function mountMyGpt({ documentRoot = globalThis.document, windowRoot = gl
     }
     catch (error) { say(error?.message || 'The message could not be prepared.', true); return; }
     const current = ++generation;
+    const speakReply = voiceDraft && readReplies.checked;
+    const replyVoiceRevision = voiceRevision;
+    const replyLanguage = voiceLanguage.control.value;
+    voiceDraft = false; speechInput?.abort(); speechOutput?.stop();
     chatController = new AbortController();
     try {
       workspace.appendMessage({ role: 'user', content: text }); prompt.value = ''; renderWorkspace(); say('Waiting for your selected provider…');
+      const replyContext = voiceContext();
       const response = await request('/api/gpt/chat', { method: 'POST', body: payload, signal: chatController.signal });
       if (destroyed || current !== generation) return;
       if (typeof response?.content !== 'string' || !response.content.trim() || response.provider !== provider) throw new Error('The provider returned no usable assistant reply.');
       workspace.appendMessage({ role: 'assistant', content: response.content });
       bridge = { ...bridge, [provider]: { ...bridge[provider], state: 'verified' } };
       renderWorkspace(); say(`Reply received${response.model ? ` · ${response.model}` : ''}. ${workspace.snapshot().storageError ? 'Export to keep this conversation; browser storage is unavailable.' : 'Saved to this browser.'}`);
+      // Only this explicitly sent voice turn may start speech. Rendering history
+      // never speaks, and changing context invalidates this revision.
+      if (speakReply && readReplies.checked && surfaceActive && ready() && replyVoiceRevision === voiceRevision && replyContext === voiceContext()) {
+        void speechOutput?.speak(response.content, { language: replyLanguage });
+      }
     } catch (error) {
       if (!destroyed && current === generation && error?.name !== 'AbortError') say(error?.message || 'Message failed. Your prompt remains in local history.', true);
     } finally { if (!destroyed && current === generation) { chatController = null; controls(); } }
@@ -457,11 +563,32 @@ export function mountMyGpt({ documentRoot = globalThis.document, windowRoot = gl
     } catch (error) { say(error?.message || 'Local export is unavailable in this browser.', true); }
   }
   composer.addEventListener('submit', sendMessage);
-  prompt.addEventListener('input', controls);
+  prompt.addEventListener('input', () => {
+    // Typing or general dictation takes ownership of the draft; late speech
+    // recognition must not replace the user's edit.
+    voiceRevision += 1; captureRevision = -1;
+    speechInput?.abort(); speechOutput?.stop();
+    voiceDraft = voiceDraft && Boolean(prompt.value.trim()); controls();
+  });
+  prompt.addEventListener('matumbo:voice-input', event => {
+    if (!destroyed && surfaceActive && event.detail?.final === true && prompt.value.trim()) {
+      voiceDraft = true; voiceSay('Review your voice message, then press Send.'); controls();
+    }
+  });
+  voiceLanguage.control.addEventListener('change', () => { stopVoice(); voiceSay('Voice language updated. Press Listen when ready.'); });
+  readReplies.addEventListener('change', () => {
+    if (!readReplies.checked) {
+      voiceRevision += 1;
+      if (listening()) captureRevision = voiceRevision;
+      speechOutput?.stop();
+    }
+    voiceSay(readReplies.checked ? 'New voice messages can receive a spoken reply after you press Send.' : 'Spoken replies are off. Replies remain visible in the conversation.');
+    controls();
+  });
   prompt.addEventListener('keydown', event => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) sendMessage(event); });
   profileSelect.control.addEventListener('change', () => mutateWorkspace(() => workspace.selectProfile(profileSelect.control.value)));
   modelSelect.control.addEventListener('change', () => cancelChat());
-  accountSelect.control.addEventListener('change', () => { planConsent.checked = false; authLink.hidden = true; });
+  accountSelect.control.addEventListener('change', () => { cancelChat(); planConsent.checked = false; authLink.hidden = true; });
   profileForm.addEventListener('submit', event => {
     event.preventDefault();
     try {
@@ -482,16 +609,32 @@ export function mountMyGpt({ documentRoot = globalThis.document, windowRoot = gl
     finally { importField.control.value = ''; }
   });
   const onFocus = () => { if (activated && !destroyed) refresh(); };
+  const onPageHide = () => stopVoice();
+  const onVisibility = () => { if (doc.hidden) stopVoice(); };
+  const voiceExitEvents = ['pagehide', 'beforeunload', 'popstate', 'hashchange'];
   windowRoot?.addEventListener?.('focus', onFocus);
+  for (const name of voiceExitEvents) windowRoot?.addEventListener?.(name, onPageHide);
+  doc.addEventListener?.('visibilitychange', onVisibility);
+  speechInput = createSpeechInput({ windowRoot, language: voiceLanguage.control.value, onUpdate: receiveSpeech, onState: speechState });
+  speechOutput = createVoiceOutput({ windowRoot, onState: outputState });
+  const stopWatchingVoiceOwner = watchVoiceOwnerVisibility({ element: root, windowRoot, onHidden: stopVoice });
+  if (!speechInput.getSnapshot().supported) voiceSay('Speech recognition is unavailable in this browser. Type your message; supported browsers can use Listen.');
+  if (!speechOutput.getSnapshot().supported) readRepliesLabel.appendChild(node(doc, 'span', '', ' · Speech playback unavailable in this browser.'));
   renderWorkspace(); renderAccounts(); renderModels(); controls();
   return Object.freeze({
     refresh,
+    voiceContext,
     selectProvider(next) {
       if (!['chatgpt', 'openai'].includes(next)) throw new Error('Choose ChatGPT plan or OpenAI API.');
       if (destroyed) return false;
       chooseProvider(next); return true;
     },
-    setActive(active) { if (active) title.setAttribute('data-autofocus', 'true'); else title.removeAttribute('data-autofocus'); },
+    setActive(active) {
+      surfaceActive = Boolean(active);
+      if (active) title.setAttribute('data-autofocus', 'true');
+      else { title.removeAttribute('data-autofocus'); stopVoice(); }
+      controls();
+    },
     activate() { if (!activated) return refresh(); return Promise.resolve(bridge); },
     completeSignIn() { return refresh().then(() => { if (chatgptReady()) return loadModels(); return null; }); },
     // Readiness can be observed without copying any assistant notes or chat.
@@ -501,7 +644,11 @@ export function mountMyGpt({ documentRoot = globalThis.document, windowRoot = gl
       if (destroyed) return;
       destroyed = true; generation += 1; statusGeneration += 1;
       chatController?.abort(); statusController?.abort(); authController?.abort(); modelsController?.abort();
-      windowRoot?.removeEventListener?.('focus', onFocus); root.remove(); style.remove();
+      stopWatchingVoiceOwner();
+      speechInput?.destroy(); speechOutput?.destroy();
+      windowRoot?.removeEventListener?.('focus', onFocus);
+      for (const name of voiceExitEvents) windowRoot?.removeEventListener?.(name, onPageHide);
+      doc.removeEventListener?.('visibilitychange', onVisibility); root.remove(); style.remove();
     },
   });
 }

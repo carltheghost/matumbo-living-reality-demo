@@ -4,21 +4,21 @@ import {mountCityJourney,resolveCityRoute} from './render/city-journey.js?v=2026
 if(resolveCityRoute(location.search).status==='rejected'){
   const safeUrl=new URL(location.href);safeUrl.search='?feature=reality-lens';history.replaceState(null,'',safeUrl);
 }
-import { mountCenteredSurfaces } from './render/centered-surfaces.js?v=20261003-skin360';
+import { mountCenteredSurfaces } from './render/centered-surfaces.js?v=20261005-voice';
 import { createImmersiveSession } from './render/immersive-session.js?v=20261003-skin360';
 import { createMediaPreview } from './render/media-preview.js?v=20261003-skin360';
 import { mountTokenTicker } from './render/token-ticker.js?v=20261003-skin360';
 // Balances, vault and transfers load only from their Asset Token controls.
-import { initMobilePanelManager } from './render/mobile-panel-manager.js?v=20261003-skin360';
+import { initMobilePanelManager } from './render/mobile-panel-manager.js?v=20261005-voice';
 import { installMobileFreezeGuard } from './render/mobile-freeze-guard.js?v=20261003-skin360';
 import { mountPhotoMascot } from './render/photo-mascot-mount.js?v=20261003-skin360';
 import { createPersonStudio } from './render/person-studio.js?v=20261003-skin360';
-import { createRealityAssembly, CLEAN_LANDING_CAMERA } from './render/reality-assembly.js?v=20261003-skin360';
+import { createRealityAssembly, CLEAN_LANDING_CAMERA } from './render/reality-assembly.js?v=20261005-voice';
 import { mountApiConnections } from './render/api-connections.js?v=20261003-skin360';
 import { engine as canonicalEconomicEngine } from './domains/token.js?v=20261003-skin360';
 import { createEconomicRuntime } from './domains/economic-runtime.js?v=20261003-skin360';
 import { ECONOMIC_WORLD_SOURCE, createEconomicWorldContribution } from './domains/economic-world-projection.js?v=20261003-skin360';
-import { mountOurplaceEconomy } from './render/ourplace-economy.js?v=20261003-skin360';
+import { mountOurplaceEconomy } from './render/ourplace-economy.js?v=20261005-voice';
 import { featureSelectionMayRefreshProvider } from './domains/provider-navigation.js?v=20261003-skin360';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
@@ -32,7 +32,7 @@ import { createDeviceProjection, readBrowserProjectionPreferences } from './proj
 import { createDistributionExplorer } from './render/distribution-explorer.js?v=20261003-skin360';
 import { createLaunchDistributionRehearsal } from './domains/distribution-registry.js?v=20261003-skin360';
 import { createPersonOrganisms } from './render/person-organisms.js?v=20261003-skin360';
-import { FEATURE_DEFINITIONS, FEATURE_HANDOFF_LINKS, createFeatureNavigator } from './render/feature-navigator.js?v=20261003-skin360';
+import { FEATURE_DEFINITIONS, FEATURE_HANDOFF_LINKS, createFeatureNavigator } from './render/feature-navigator.js?v=20261005-voice';
 import { createCubeDive } from './render/cube-dive.js?v=20261003-skin360';
 import { resolveHandoffHop, resolveHopVessel, resolveNestedDiveTargets } from './domains/cube-dive.js?v=20261003-skin360';
 import { createLaunchConsole, validateLaunchCohortRoute, validateLaunchCohortCompareRoute } from './render/launch-console.js?v=20261003-skin360';
@@ -40,7 +40,7 @@ import { LAUNCH_RECEIPT_CONSOLE_SOURCE, createLaunchReceiptConsole } from './ren
 import { createSocialExplorerConsole } from './render/social-explorer.js?v=20261003-skin360';
 import { SOCIAL_PULSE_SOURCE, createUnavailableSocialPulse, fetchSocialPulse } from './domains/social-pulse.js?v=20261003-skin360';
 import { LAUNCH_KIT_CONSOLE_SOURCE, createLaunchKitConsole } from './render/launch-kit.js?v=20261003-skin360';
-import { createRoomSpaces } from './render/room-spaces.js?v=20261003-skin360';
+import { createRoomSpaces } from './render/room-spaces.js?v=20261005-voice';
 import { CAMERA_INPUT_SOURCE, createCameraInput } from './render/camera-input.js?v=20261003-skin360';
 import { GESTURE_INPUT_SOURCE, createGestureInput } from './render/gesture-input.js?v=20261003-skin360';
 import {
@@ -110,12 +110,14 @@ import { mountContractWorkbench } from './render/contract-workbench.js?v=2026100
 import { createContractOrganism } from './render/contract-organism.js?v=20261003-skin360';
 import { mountBotPresence } from './render/bot-presence.js?v=20261003-skin360';
 import { CONTRACT_ATELIER_CONSOLE_SOURCE, createContractAtelierConsole } from './render/contract-atelier.js?v=20261003-skin360';
-import { LUNA_CONSOLE_SOURCE, createLunaCompanionConsole } from './render/luna-companion.js?v=20261003-skin360';
+import { LUNA_CONSOLE_SOURCE, createLunaCompanionConsole } from './render/luna-companion.js?v=20261005-voice';
 import { WARDROBE_ATELIER_CONSOLE_SOURCE, createWardrobeAtelierConsole } from './render/wardrobe-atelier.js?v=20261003-skin360';
 import { WHITE_PAPER_CONSOLE_SOURCE, createWhitePaperConsole } from './render/white-paper.js?v=20261003-skin360';
 import { GESTURE_LENS_CONSOLE_SOURCE, createGestureLensConsole } from './render/gesture-lens.js?v=20261003-skin360';
 import { createHandLensSession } from './render/hand-session.js?v=20261003-skin360';
 import { mountHandsEyesControls } from './render/hands-eyes-controls.js?v=20261005-hands-eyes';
+import { mountVoiceDictation } from './render/voice-dictation.js?v=20261005-voice';
+import { captureVoiceTarget, insertVoiceTranscript } from './render/voice-text-target.js';
 import { createStoryModeConsole } from './render/story-mode.js?v=20261003-skin360';
 import { LEDGER_PROOF_SOURCE } from './domains/ledger-proof.js?v=20261003-skin360';
 import { LEDGER_PROOF_CONSOLE_SOURCE, createLedgerProofConsole } from './render/ledger-proof.js?v=20261003-skin360';
@@ -132,7 +134,7 @@ import { DEVICE_PROJECTION_CONSOLE_SOURCE, createDeviceProjectionConsole } from 
 import { ASSET_MARKET_CONSOLE_SOURCE, createAssetMarketConsole } from './render/asset-market.js?v=20261003-skin360';
 import { createUnavailableAssetMarketEvidence, fetchAssetMarketEvidence } from './domains/asset-market.js?v=20261003-skin360';
 import { POPULATION_CONTEXT_SOURCE, createUnavailablePopulationContext, fetchPopulationContext } from './domains/population-context.js?v=20261003-skin360';
-import { WEB_AI_CONSOLE_SOURCE, createWebAiConsole } from './render/web-ai.js?v=20261003-skin360';
+import { WEB_AI_CONSOLE_SOURCE, createWebAiConsole } from './render/web-ai.js?v=20261005-voice';
 import { SOCIAL_MIRROR_CONSOLE_SOURCE } from './domains/social-mirror.js?v=20261003-skin360';
 import { createSocialMirrorConsole } from './render/social-mirror.js?v=20261003-skin360';
 import { createYoutubeSurface } from './render/youtube-surface.js?v=20261003-skin360';
@@ -4556,6 +4558,7 @@ ourplaceButton.addEventListener('click',()=>{
     if(!ourplaceController)ourplaceController=mountOurplaceEconomy({host:ourplaceHost,runtime:economicRuntime,
       applyDesign:descriptor=>realityAssembly?.applyCreatorDesign?.(descriptor),onNavigate:id=>featureNavigator?.select(id,'creator-step')});
     ourplaceHost.hidden=!ourplaceHost.hidden;ourplaceButton.setAttribute('aria-expanded',String(!ourplaceHost.hidden));
+    ourplaceController?.setActive?.(!ourplaceHost.hidden);
     ourplaceButton.textContent=ourplaceHost.hidden?'Open Ourplace · create, share & earn':'Close Ourplace';ourplaceController.refresh();
     if(!ourplaceHost.hidden){
       const heading=ourplaceController.root.querySelector('h2');
@@ -6953,6 +6956,7 @@ featureNavigator = createFeatureNavigator({
     document.body.classList.toggle('asset-token-mode',feature?.id==='asset-token');
     tokenTools.hidden=true;
     ourplaceHost.hidden=true;ourplaceButton.textContent='Open Ourplace · create, share & earn';ourplaceButton.setAttribute('aria-expanded','false');
+    ourplaceController?.setActive?.(false);
     tokenToolsButton.textContent='Open balances, transfers & vault';tokenToolsButton.setAttribute('aria-expanded','false');
     if(feature?.id!=='asset-token')document.querySelector('.tv-3d [data-close]')?.click();
     tokenGamificationController?.setVisible(false);
@@ -9456,6 +9460,14 @@ handsEyesControls=mountHandsEyesControls({session:handLensSession,getAssembly:()
   onOpen:()=>{apiConnections.close();realityAssembly.closePanels();},
 });
 window.__TUMBO_HANDS_EYES__=handsEyesControls;
+// A slow/failed boot can already have mounted the independent static fallback.
+window.__TUMBO_VOICE__?.destroy?.();
+const voiceDictation=mountVoiceDictation({
+  onSearch:words=>{const field=document.querySelector('.assembly-quick-find [data-quick-search]');const target=captureVoiceTarget(field);if(!target)throw Error('App search is unavailable. Your words are retained.');target.start=0;target.end=field.value.length;insertVoiceTranscript(target,words);field.closest('form')?.requestSubmit();},
+  getContext:()=>{const featureId=featureNavigator.getSnapshot().activeId;return JSON.stringify([featureId,realityAssembly.getSnapshot().liveObject?.entityId??'',featureId==='web-ai'?webAiConsole.getVoiceContext?.():null,featureId==='rooms'?roomSpaces.getVoiceContext?.():null]);},
+  onNavigate:id=>{featureNavigator.select(id,'voice-panel');featureNavigator.close();if(id==='web-ai'){webAiConsole.setTab('gpt','voice-panel');webAiConsole.open('voice-panel');}},
+});
+window.__TUMBO_VOICE__=voiceDictation;
 document.querySelector('#reality-assembly .assembly-header').append(document.getElementById('hands-eyes-trigger'));
 document.querySelector('#reality-assembly .assembly-header').append(document.getElementById('api-connections-trigger'));
 document.querySelector('#reality-assembly').addEventListener('click',event=>{if(!event.target.closest('#api-connections-trigger'))apiConnections.close();});
@@ -9505,7 +9517,7 @@ window.__TUMBO_MOBILE_PANEL_MANAGER__ = mobilePanelManager;
 // phone/desktop/AR viewports. Panels are registered in place; the dock never
 // moves, renames, or restyles them. Guarded dynamic import: a tab-dock failure
 // degrades to "no dock" and can never break the world boot.
-import("./render/tab-registry.js?v=20261003-skin360")
+import("./render/tab-registry.js?v=20261005-voice")
   .then(({ initTabDock }) => {
     try {
       window.__TUMBO_TAB_DOCK__ = initTabDock({ documentRoot: document, windowRoot: window });
@@ -9536,7 +9548,10 @@ import("./render/persistent-user-blocks.js?v=20261003-skin360")
   })
   .catch(() => {});
 
-addEventListener('pagehide',()=>{
+addEventListener('pagehide',event=>{
+  // A cached page keeps its existing owners. Voice sessions stop through their
+  // lifecycle hooks; the restored page must retain its controls and scene.
+  if(event.persisted){voiceDictation.close({restoreFocus:false});return;}
   window.__TUMBO_FREEZE_GUARD__?.dispose?.();
   cameraInput?.destroy();
   gestureInput?.destroy();
@@ -9545,6 +9560,7 @@ addEventListener('pagehide',()=>{
   personStudio.destroy();
   apiConnections.destroy();
   handsEyesControls?.destroy();
+  voiceDictation.destroy();
   handLensSession?.destroy();
   tokenGamificationController?.destroy();
   tokenTickerTeardown?.();
@@ -9552,6 +9568,6 @@ addEventListener('pagehide',()=>{
   realityAssembly.destroy();
   cityJourney.destroy();
   persistentUserBlocks?.destroy?.();
-},{once:true});
+});
 
 addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setPixelRatio(isMobile?1:Math.min(devicePixelRatio,1.5));renderer.setSize(innerWidth,innerHeight);if(!isMobile)composer.setSize(innerWidth,innerHeight);});

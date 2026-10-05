@@ -59,10 +59,11 @@ function derivativeFixture() {
 
 // Synthetic event/download harness checks review authorization and real domain
 // state without asserting browser geometry, rendering or a disk download.
-function creatorUiFixture() {
+function creatorUiFixture({ windowOverrides = {}, applyDesign = () => ({ applied: true }) } = {}) {
   const nodes = [], downloads = [], blobs = new Map();
   class FormNode {
     constructor(tag) { this.tag = tag; this.attrs = {}; this.children = []; this.listeners = new Map(); this.textContent = ''; this.value = ''; this.disabled = false; nodes.push(this); }
+    get parentElement() { return this.parent ?? null; }
     setAttribute(name, value) { this.attrs[name] = value; if (name === 'value') this.value = value; }
     append(...children) {
       if (this.tag === 'select' && !this.children.length && children.length) this.value = children[0].value;
@@ -80,10 +81,12 @@ function creatorUiFixture() {
   const engine = createTokenEngine(), runtime = createEconomicRuntime({ engine, storage: null, clock: () => Date.UTC(2026, 9, 3) });
   const body = new FormNode('body'), documentRoot = { body, createElement: tag => new FormNode(tag) };
   const windowRoot = {
+    document: documentRoot,
     Blob: class { constructor(parts) { this.serialized = parts.join(''); } },
-    URL: { createObjectURL(blob) { const url = `blob:test-${blobs.size}`; blobs.set(url, blob.serialized); return url; }, revokeObjectURL() {} }
+    URL: { createObjectURL(blob) { const url = `blob:test-${blobs.size}`; blobs.set(url, blob.serialized); return url; }, revokeObjectURL() {} },
+    ...windowOverrides,
   };
-  const controller = mountOurplaceEconomy({ host: body, runtime, documentRoot, windowRoot, applyDesign: () => ({ applied: true }) });
+  const controller = mountOurplaceEconomy({ host: body, runtime, documentRoot, windowRoot, applyDesign });
   return {
     runtime, engine, controller, downloads, journals: engine.ledger.journalCount(),
     field: attr => nodes.find(node => Object.hasOwn(node.attrs, attr)),
@@ -91,6 +94,83 @@ function creatorUiFixture() {
     dispose() { controller.dispose(); runtime.dispose(); }
   };
 }
+
+test('Ourplace speech can preview a finalized request but geometry still waits for Apply', async t => {
+  const sessions = [];
+  class Recognition {
+    constructor() { sessions.push(this); this.aborted = false; }
+    start() { this.onstart?.(); }
+    stop() { this.onend?.(); }
+    abort() { this.aborted = true; }
+  }
+  let applied = 0;
+  const f = creatorUiFixture({ windowOverrides: { SpeechRecognition: Recognition }, applyDesign: () => { applied += 1; return { applied: true }; } });
+  t.after(() => f.dispose());
+  assert.equal(sessions.length, 0);
+  const original = f.runtime.designSession.snapshot().descriptor;
+  await f.click('design-voice');
+  const recognition = sessions[0];
+  recognition.onresult({ results: [Object.assign([{ transcript: 'purple and grid' }], { isFinal: false })] });
+  assert.equal(applied, 0);
+  recognition.onresult({ results: [Object.assign([{ transcript: 'purple and grid' }], { isFinal: true })] });
+  assert.equal(f.field('data-design-request').value, 'purple and grid');
+  assert.match(f.field('data-design-preview').textContent, /a884ff/);
+  assert.deepEqual(f.runtime.designSession.snapshot().descriptor, original);
+  assert.equal(applied, 0);
+  await f.click('design-apply');
+  assert.equal(applied, 1);
+  assert.equal(f.engine.ledger.journalCount(), f.journals);
+});
+
+test('Ourplace typed edits and owner hiding cancel capture and reject late design transcripts', async t => {
+  const sessions = [];
+  class Recognition {
+    constructor() { sessions.push(this); this.aborted = false; }
+    start() { this.onstart?.(); }
+    stop() { this.onend?.(); }
+    abort() { this.aborted = true; }
+  }
+  const f = creatorUiFixture({ windowOverrides: { SpeechRecognition: Recognition } });
+  t.after(() => f.dispose());
+  await f.click('design-voice');
+  const late = sessions[0].onresult;
+  const field = f.field('data-design-request');
+  field.value = 'my typed edit';
+  field.listeners.get('input')();
+  late({ results: [Object.assign([{ transcript: 'overwrite typed edit' }], { isFinal: true })] });
+  assert.equal(field.value, 'my typed edit');
+  assert.equal(sessions[0].aborted, true);
+  await f.click('design-voice');
+  f.controller.setActive(false);
+  assert.equal(sessions[1].aborted, true);
+  await f.click('design-voice');
+  assert.equal(sessions.length, 2);
+  f.controller.setActive(true);
+  await f.click('design-voice');
+  f.controller.selectTab('compute');
+  assert.equal(sessions[2].aborted, true);
+});
+
+test('Ourplace capture stops when a generic panel manager hides its ancestor directly', async t => {
+  const observers = [], sessions = [];
+  class Observer { constructor(callback) { this.callback = callback; observers.push(this); } observe() {} disconnect() {} }
+  class Recognition {
+    constructor() { sessions.push(this); this.aborted = false; }
+    start() { this.onstart?.(); }
+    stop() { this.onend?.(); }
+    abort() { this.aborted = true; }
+  }
+  const f = creatorUiFixture({ windowOverrides: { SpeechRecognition: Recognition, MutationObserver: Observer } });
+  t.after(() => f.dispose());
+  await f.click('design-voice');
+  const late = sessions[0].onresult;
+  f.controller.root.parent.hidden = true;
+  for (const observer of observers) observer.callback([]);
+  assert.equal(sessions[0].aborted, true);
+  const before = f.field('data-design-request').value;
+  late({ results: [Object.assign([{ transcript: 'hidden edit' }], { isFinal: true })] });
+  assert.equal(f.field('data-design-request').value, before);
+});
 
 test('a conversational request previews changes without applying or authorizing money', () => {
   const session = createDesignSession();
