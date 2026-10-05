@@ -3,7 +3,7 @@ import {captureVoiceTarget,isVoiceEditable,insertVoiceTranscript,voiceTargetLabe
 
 const LANGUAGES=[['en-US','English (US)'],['en-GB','English (UK)'],['es-ES','Español'],['fr-FR','Français'],['pt-BR','Português'],['de-DE','Deutsch'],['it-IT','Italiano'],['sw-KE','Kiswahili'],['ar-SA','العربية'],['hi-IN','हिन्दी'],['zh-CN','中文'],['ja-JP','日本語']];
 /** App-wide progressive enhancement of existing editable controls. */
-export function mountVoiceDictation({documentRoot=globalThis.document,windowRoot=globalThis.window,onOpen=()=>{},onNavigate=()=>{},onSearch=null,getContext=()=>windowRoot.location?.href??'',speechFactory=createSpeechInput}={}){
+export function mountVoiceDictation({documentRoot=globalThis.document,windowRoot=globalThis.window,onOpen=()=>{},onNavigate=()=>{},onSearch=null,getContext=()=>windowRoot.location?.href??'',speechFactory=createSpeechInput,initialReview=null}={}){
   const doc=documentRoot,view=windowRoot;
   if(!doc?.body)return {destroy(){},open(){},close(){},getSnapshot:()=>({available:false})};
   let disposed=false,opened=false,target=null,context=null,lastField=null,lastFieldContext=null,speechState={status:'idle',supported:false},inserted=false,takePrefix='';
@@ -28,6 +28,8 @@ export function mountVoiceDictation({documentRoot=globalThis.document,windowRoot
   q('[data-vd-search]').hidden=typeof onSearch!=='function';
   for(const [value,label] of LANGUAGES){const option=create('option',label);option.value=value;language.append(option);}
   const preferred=String(view.navigator?.language??'en-US');if(LANGUAGES.some(([value])=>value===preferred))language.value=preferred;
+  if(typeof initialReview?.draft==='string')draft.value=initialReview.draft.slice(0,8000);
+  if(LANGUAGES.some(([value])=>value===initialReview?.language))language.value=initialReview.language;
   const speech=speechFactory({windowRoot:view,language:language.value||'en-US',onUpdate:s=>{if(disposed)return;draft.value=[takePrefix,s.transcript??''].filter(Boolean).join(' ').slice(0,8000);q('[data-vd-interim]').textContent=s.interim??'';inserted=false;render();},onState:s=>{speechState=s;if(!disposed)render();}});
   speechState=speech.getSnapshot();
   function active(){return speechState.active??['starting','listening','stopping'].includes(speechState.status);}
@@ -84,5 +86,15 @@ export function mountVoiceDictation({documentRoot=globalThis.document,windowRoot
   listen(doc,'visibilitychange',()=>{if(doc.hidden)speech.abort();});listen(view,'pagehide',()=>close({restoreFocus:false}));
   const timer=view.setInterval(()=>{if(opened&&context!==getContext()){speech.abort();target=null;context=getContext();choices();status.textContent='The active space changed. Choose a destination for your transcript.';render();}},250);
   render();
-  return {open,close,getSnapshot:()=>({available:true,opened,targetLabel:target?.label??null,speech:speech.getSnapshot(),draftLength:draft.value.length,inserted}),destroy(){if(disposed)return;close({restoreFocus:false});disposed=true;speech.destroy();view.clearInterval(timer);events.forEach(remove=>remove());trigger.remove();panel.remove();style.remove();}};
+  return {open,close,getReviewedDraft:()=>({draft:draft.value,language:language.value,opened}),getSnapshot:()=>({available:true,opened,targetLabel:target?.label??null,speech:speech.getSnapshot(),draftLength:draft.value.length,inserted}),destroy(){if(disposed)return;close({restoreFocus:false});disposed=true;speech.destroy();view.clearInterval(timer);events.forEach(remove=>remove());trigger.remove();panel.remove();style.remove();}};
+}
+
+/** Transfer reviewed words in memory when a slow app replaces its boot fallback.
+ * Never carry a destination or active recognition session into the new owner. */
+export function handoverVoiceDictation(previous,options={}){
+  const review=previous?.getReviewedDraft?.();
+  previous?.destroy?.();
+  const next=mountVoiceDictation({...options,initialReview:review});
+  if(review?.opened)next.open(null);
+  return next;
 }

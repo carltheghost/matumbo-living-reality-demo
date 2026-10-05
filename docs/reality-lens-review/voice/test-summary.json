@@ -1,9 +1,9 @@
 {
   "javascript": {
     "command": "python scripts/run_tests.py",
-    "tests": 2637,
+    "tests": 2639,
     "suites": 113,
-    "passed": 2637,
+    "passed": 2639,
     "failed": 0,
     "skipped": 0
   },
@@ -14,8 +14,8 @@
   },
   "portableExtracted": {
     "command": "node --test tests/*.test.mjs",
-    "tests": 51,
-    "passed": 51,
+    "tests": 53,
+    "passed": 53,
     "failed": 0
   },
   "physicalCameraUsed": false,

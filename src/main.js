@@ -116,7 +116,7 @@ import { WHITE_PAPER_CONSOLE_SOURCE, createWhitePaperConsole } from './render/wh
 import { GESTURE_LENS_CONSOLE_SOURCE, createGestureLensConsole } from './render/gesture-lens.js?v=20261003-skin360';
 import { createHandLensSession } from './render/hand-session.js?v=20261003-skin360';
 import { mountHandsEyesControls } from './render/hands-eyes-controls.js?v=20261005-hands-eyes';
-import { mountVoiceDictation } from './render/voice-dictation.js?v=20261005-voice';
+import { handoverVoiceDictation } from './render/voice-dictation.js?v=20261005-voice';
 import { captureVoiceTarget, insertVoiceTranscript } from './render/voice-text-target.js';
 import { createStoryModeConsole } from './render/story-mode.js?v=20261003-skin360';
 import { LEDGER_PROOF_SOURCE } from './domains/ledger-proof.js?v=20261003-skin360';
@@ -9461,8 +9461,7 @@ handsEyesControls=mountHandsEyesControls({session:handLensSession,getAssembly:()
 });
 window.__TUMBO_HANDS_EYES__=handsEyesControls;
 // A slow/failed boot can already have mounted the independent static fallback.
-window.__TUMBO_VOICE__?.destroy?.();
-const voiceDictation=mountVoiceDictation({
+const voiceDictation=handoverVoiceDictation(window.__TUMBO_VOICE__,{
   onSearch:words=>{const field=document.querySelector('.assembly-quick-find [data-quick-search]');const target=captureVoiceTarget(field);if(!target)throw Error('App search is unavailable. Your words are retained.');target.start=0;target.end=field.value.length;insertVoiceTranscript(target,words);field.closest('form')?.requestSubmit();},
   getContext:()=>{const featureId=featureNavigator.getSnapshot().activeId;return JSON.stringify([featureId,realityAssembly.getSnapshot().liveObject?.entityId??'',featureId==='web-ai'?webAiConsole.getVoiceContext?.():null,featureId==='rooms'?roomSpaces.getVoiceContext?.():null]);},
   onNavigate:id=>{featureNavigator.select(id,'voice-panel');featureNavigator.close();if(id==='web-ai'){webAiConsole.setTab('gpt','voice-panel');webAiConsole.open('voice-panel');}},

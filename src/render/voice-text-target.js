@@ -95,13 +95,17 @@ export function insertVoiceTranscript(target,text){
   if(inputType(element)!==target.type)throw Error('This field type changed. Select it again before inserting.');
   const replaceAll=VALUE_TYPES.has(target.type);
   let replacement=replaceAll?validateValue(element,transcript,target.type):transcript;
-  const max=Number(element.maxLength);
-  if(!target.editable&&!replaceAll&&max>=0&&Number.isFinite(max)&&current.length-(target.end-target.start)+transcript.length>max)throw Error(`This field allows ${max} characters. Shorten the transcript before inserting.`);
+  const checkLength=()=>{
+    const max=Number(element.maxLength);
+    if(!target.editable&&!replaceAll&&max>=0&&Number.isFinite(max)&&current.length-(target.end-target.start)+transcript.length>max)throw Error(`This field allows ${max} characters. Shorten the transcript before inserting.`);
+  };
+  checkLength();
   const doc=element.ownerDocument,view=doc?.defaultView??globalThis;
   const event=(name,options={})=>{const Type=name==='matumbo:voice-input'?view.CustomEvent:view.InputEvent??view.Event;return new Type(name,{bubbles:true,...options});};
   if(element.dispatchEvent(event('beforeinput',{cancelable:true,inputType:'insertFromDictation',data:transcript}))===false)throw Error('This field declined the edit. Your transcript is still available.');
   if(!isVoiceEditable(element)||inputType(element)!==target.type||(target.editable?element.innerHTML:String(element.value??''))!==current)throw Error('This field changed while preparing the edit. Select it again; its writing is preserved.');
   // beforeinput handlers may update constraints or custom validity too.
+  checkLength();
   if(replaceAll)replacement=validateValue(element,transcript,target.type);
   const setValue=value=>{
     // Bypass an instance-level framework value tracker so the following native

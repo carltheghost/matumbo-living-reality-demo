@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mountVoiceDictation } from '../src/render/voice-dictation.js';
+import { mountVoiceDictation, handoverVoiceDictation } from '../src/render/voice-dictation.js';
 
 // Minimal mounted DOM adapter: real module handlers, selection insertion, event
 // bubbling and visibility checks, without a browser or microphone dependency.
@@ -113,12 +113,27 @@ function setup(t, options = {}) {
     const field = element(tag, doc); field.type = type; field.value = value; field.selectionStart = field.selectionEnd = value.length;
     field.setAttribute('aria-label', title); Object.assign(field, rest); doc.body.append(field); return field;
   };
-  return { doc, win, api, q, speech, addField, intervals,
+  return { doc, win, api, q, speech, speechFactory, addField, intervals,
     setContext(value) { context = value; }, tick() { for (const callback of [...intervals.values()]) callback(); } };
 }
 async function draftWords(context, text) {
   await context.q('start').click(); context.speech.report(text); await context.q('stop').click();
 }
+
+test('a slow boot handover preserves reviewed words and language but never transfers capture or a destination', async t => {
+  const context=setup(t), field=context.addField({value:'original'});
+  context.api.open(field);context.q('language').value='sw-KE';
+  await draftWords(context,'Keep these words');
+  context.q('draft').value='Keep my edited words';await context.q('draft').fire('input');
+  const next=handoverVoiceDictation(context.api,{documentRoot:context.doc,windowRoot:context.win,speechFactory:context.speechFactory,getContext:()=> 'new-app-owner'});
+  t.after(()=>next.destroy());
+  assert.equal(context.q('draft').value,'Keep my edited words');
+  assert.equal(context.q('language').value,'sw-KE');
+  assert.equal(next.getSnapshot().opened,true);assert.equal(next.getSnapshot().targetLabel,null);
+  assert.equal(next.getSnapshot().speech.active,false);assert.equal(context.q('insert').disabled,true);
+  assert.equal(context.doc.querySelectorAll('#voice-dictation-panel').length,1);
+  assert.equal(context.speech.starts.length,1);assert.equal(context.speech.destroyed,1);assert.equal(field.value,'original');
+});
 
 test('mounted dictation requires explicit Start, review and Insert and never submits the original control', async t => {
   const searches = []; const context = setup(t, { onSearch: text => searches.push(text) });

@@ -43,6 +43,10 @@
     {
       "name": "Persisted pagehide stops voice and retains controls for restoration",
       "passed": true
+    },
+    {
+      "name": "Actual browser handover keeps reviewed words and language without capture or a stale destination",
+      "passed": true
     }
   ],
   "errors": [],

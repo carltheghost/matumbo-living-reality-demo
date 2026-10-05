@@ -35,6 +35,13 @@ test('reentrant edits and permission changes during beforeinput are preserved',(
     assert.equal(events.length,1);
   }
 });
+
+test('a limit lowered during beforeinput is rechecked before writing the transcript',()=>{
+  const {item,on,events}=field({maxLength:20});
+  on('beforeinput',()=>{item.maxLength=3;});
+  assert.throws(()=>insertVoiceTranscript(captureVoiceTarget(item),'123456'),/allows 3 characters/);
+  assert.equal(item.value,'find old words');assert.equal(events.length,1);
+});
 test('secret, disabled, detached and unsupported fields are excluded',()=>{
   for(const extra of [{type:'password'},{type:'range'},{type:'color'},{type:'file'},{type:'checkbox'},{disabled:true},{readOnly:true},{isConnected:false},{matches:()=>true},
     {name:'api_key'},{id:'unlock-code'},{attributes:{autocomplete:'one-time-code'}},{attributes:{autocomplete:'cc-number'}},

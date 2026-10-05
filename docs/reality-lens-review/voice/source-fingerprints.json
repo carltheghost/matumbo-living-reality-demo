@@ -1,5 +1,5 @@
 {
-  "baseRevision": "742be3598b9ef0f515b3d6e12ad85f3623f577b7",
+  "baseRevision": "84b117a2d59e1ded22a9e91194fea2cf942971b0",
   "sourceTree": "verified-working-copy",
   "files": [
     {
@@ -24,8 +24,8 @@
     },
     {
       "path": "src/main.js",
-      "bytes": 475460,
-      "sha256": "6585f48d0d6401cf1e599f78c6db4ec3bfa4f5118dc5dbc0d9861897fe65e117"
+      "bytes": 475451,
+      "sha256": "85ad3b05c0e7da6ea5193ee64d7f240b5740249cd5a2e16a3bf17e9b83e02838"
     },
     {
       "path": "src/render/centered-surfaces.js",
@@ -89,8 +89,8 @@
     },
     {
       "path": "src/render/voice-dictation.js",
-      "bytes": 10921,
-      "sha256": "473f9a98a4dd91511033db0c2b05a2e32c68d8d7b38ee3ca8d29da5fd40c88e2"
+      "bytes": 11629,
+      "sha256": "4a657daaba757eb14ad9fb395c90f9aff2a33c3a7abab16c199afe4263fee17a"
     },
     {
       "path": "src/render/voice-fallback.js",
@@ -104,8 +104,8 @@
     },
     {
       "path": "src/render/voice-text-target.js",
-      "bytes": 9434,
-      "sha256": "de5cfb9753e672757fa1510057c05c2e36ecf0e136fc0b7794b78aff42b3b8b9"
+      "bytes": 9503,
+      "sha256": "f858be9cd6dac8e46b9da19acd97b5de985d8faa380dbceb9c4ca72634def394"
     },
     {
       "path": "src/render/web-ai.js",
@@ -139,8 +139,8 @@
     },
     {
       "path": "tests/voice-dictation.test.mjs",
-      "bytes": 17399,
-      "sha256": "7c1d66f9872a32292bfd430a2e53ceeaf4955bc833ec8c97091a8e06ac9a6a00"
+      "bytes": 18565,
+      "sha256": "02bd663e075924f83ce35ea24f22ce4617983e0d3fd689cd250a1e7629021a54"
     },
     {
       "path": "tests/voice-message.test.mjs",
@@ -154,8 +154,8 @@
     },
     {
       "path": "tests/voice-text-target.test.mjs",
-      "bytes": 11782,
-      "sha256": "220594d9523e7a77d2285de7d3bca4324f6162efc32f843110495480ee4b69ce"
+      "bytes": 12147,
+      "sha256": "d7e6ca897438ef9ca15bc4118a8e8cc883312bbe08b41aeff33f72cb959aea83"
     }
   ]
 }
