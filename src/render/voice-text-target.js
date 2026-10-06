@@ -18,7 +18,7 @@ const ISO_FORMATS={
   week:/^\d{4,}-W\d{2}$/,
 };
 const inputType=element=>element.tagName==='INPUT'?String(element.type||'text').toLowerCase():null;
-const PRIVATE=/password|passphrase|api[-_ ]?key|secret|access[-_ ]?token|unlock[-_ ]?code|credit[-_ ]?card|one[-_ ]?time|\bcc-(?:number|csc|exp|name)\b/i;
+const PRIVATE=/password|passphrase|api[-_ ]?key|secret|access[-_ ]?token|unlock[-_ ]?code|credit[-_ ]?card|one[-_ ]?time|private[-_ ]?key|seed[-_ ]?phrase|recovery[-_ ]?phrase|mnemonic(?:[-_ ]?phrase)?|\bcc-(?:number|csc|exp|name)\b/i;
 export function isVoiceEditable(element){
   if(!element||element.disabled||element.readOnly||element.isConnected===false||element.matches?.(':disabled'))return false;
   if(element.closest?.('[data-voice-exclude],[inert]'))return false;

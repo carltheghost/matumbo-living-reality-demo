@@ -45,7 +45,9 @@ test('a limit lowered during beforeinput is rechecked before writing the transcr
 test('secret, disabled, detached and unsupported fields are excluded',()=>{
   for(const extra of [{type:'password'},{type:'range'},{type:'color'},{type:'file'},{type:'checkbox'},{disabled:true},{readOnly:true},{isConnected:false},{matches:()=>true},
     {name:'api_key'},{id:'unlock-code'},{attributes:{autocomplete:'one-time-code'}},{attributes:{autocomplete:'cc-number'}},
-    {attributes:{'aria-label':'Access token'}},{labels:[{textContent:'API key'}]},{attributes:{placeholder:'Your secret'}},{closest:()=>({})}]){
+    {attributes:{'aria-label':'Access token'}},{labels:[{textContent:'API key'}]},{attributes:{placeholder:'Your secret'}},
+    {attributes:{'aria-label':'Recovery phrase'}},{labels:[{textContent:'Seed phrase'}]},{attributes:{placeholder:'Private key'}},
+    {attributes:{'aria-label':'Mnemonic phrase'}},{closest:()=>({})}]){
     const {item}=field(extra);assert.equal(isVoiceEditable(item),false,JSON.stringify(extra));assert.equal(captureVoiceTarget(item),null);
   }
 });
