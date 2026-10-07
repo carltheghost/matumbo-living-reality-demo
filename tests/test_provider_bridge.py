@@ -193,6 +193,88 @@ class ProviderStateTests(unittest.TestCase):
         self.assertNotIn("unit-test-secret", caught.exception.message)
 
 
+class PublicMarketStateTests(unittest.TestCase):
+    def test_kalshi_public_read_uses_fixed_https_get_without_credentials(self):
+        class Response:
+            def __init__(self, body):
+                self.body = body
+                self.headers = Mock()
+                self.headers.get_content_type.return_value = "application/json"
+                self.read_limit = None
+            def __enter__(self): return self
+            def __exit__(self, *args): return False
+            def read(self, limit):
+                self.read_limit = limit
+                return self.body
+
+        body = json.dumps({"markets": [{"ticker": "KX-TEST"}], "cursor": ""}).encode()
+        response = Response(body)
+        captured = []
+        class Opener:
+            def open(self, request, timeout):
+                captured.append((request, timeout))
+                return response
+        with patch.object(bridge, "build_opener", return_value=Opener()) as make_opener:
+            result = bridge.kalshi_markets_request()
+        request, timeout = captured[0]
+        self.assertEqual(result["markets"][0]["ticker"], "KX-TEST")
+        self.assertEqual(
+            bridge.KALSHI_MARKETS_UPSTREAM,
+            "https://external-api.kalshi.com/trade-api/v2/markets?limit=100&status=open&mve_filter=exclude",
+        )
+        self.assertIsInstance(make_opener.call_args.args[0], bridge.NoRedirects)
+        self.assertEqual(request.full_url, bridge.KALSHI_MARKETS_UPSTREAM)
+        self.assertEqual(request.get_method(), "GET")
+        self.assertEqual(request.get_header("Accept"), "application/json")
+        self.assertIsNone(request.get_header("Authorization"))
+        self.assertEqual(timeout, bridge.PUBLIC_MARKET_TIMEOUT_SECONDS)
+        self.assertEqual(response.read_limit, bridge.PUBLIC_MARKET_MAX_BYTES + 1)
+
+    def test_kalshi_public_read_rejects_oversized_and_malformed_payloads(self):
+        class Response:
+            def __init__(self, body):
+                self.body = body
+                self.headers = Mock()
+                self.headers.get_content_type.return_value = "application/json"
+            def __enter__(self): return self
+            def __exit__(self, *args): return False
+            def read(self, limit): return self.body[:limit]
+
+        for body, code in [
+            (b"x" * (bridge.PUBLIC_MARKET_MAX_BYTES + 1), "public_source_too_large"),
+            (b"{\"missingMarkets\":[]}", "public_source_invalid"),
+        ]:
+            with self.subTest(code=code):
+                with patch.object(bridge, "build_opener", return_value=type("Opener", (), {"open": lambda _, *args, **kwargs: Response(body)})()):
+                    with self.assertRaises(bridge.BridgeError) as caught:
+                        bridge.kalshi_markets_request()
+                self.assertEqual(caught.exception.code, code)
+
+    def test_cache_coalesces_reads_and_enforces_six_per_minute(self):
+        now = [0]
+        calls = []
+        state = bridge.PublicMarketState(
+            requester=lambda: calls.append(now[0]) or {"markets": [{"ticker": "KX-TEST"}]},
+            clock=lambda: now[0],
+            cache_seconds=0,
+        )
+        for _ in range(bridge.LOCAL_LIMIT_PER_MINUTE):
+            state.kalshi_markets()
+        self.assertEqual(len(calls), bridge.LOCAL_LIMIT_PER_MINUTE)
+        with self.assertRaises(bridge.BridgeError) as caught:
+            state.kalshi_markets()
+        self.assertEqual(caught.exception.code, "local_rate_limit")
+        self.assertEqual(len(calls), bridge.LOCAL_LIMIT_PER_MINUTE)
+
+        cache_state = bridge.PublicMarketState(
+            requester=lambda: calls.append("cached") or {"markets": [{"ticker": "KX-TEST"}]},
+            clock=lambda: 0,
+        )
+        cache_state.kalshi_markets()
+        cache_state.kalshi_markets()
+        self.assertEqual(calls.count("cached"), 1, "nearby tabs reuse the short-lived response")
+
+
 class BridgeHTTPTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -234,6 +316,29 @@ class BridgeHTTPTests(unittest.TestCase):
         self.assertEqual(json.loads(raw)["service"], "matumbo-provider-bridge")
         self.assertNotIn(b"unit-test-secret", raw)
         self.assertEqual(headers["Cache-Control"], "no-store")
+
+    def test_kalshi_public_read_is_allowlisted_read_only_and_supports_pages_pna(self):
+        fixture = {"markets": [{"ticker": "KX-TEST"}], "cursor": ""}
+        self.server.public_market_state = bridge.PublicMarketState(requester=lambda: fixture)
+        status, headers, raw = self.request(bridge.KALSHI_MARKETS_ROUTE)
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(raw), fixture)
+        self.assertEqual(headers["Cache-Control"], "no-store")
+        self.assertNotIn(b"unit-test-secret", raw)
+
+        status, _, _ = self.request(bridge.KALSHI_MARKETS_ROUTE + "?url=https://evil.example")
+        self.assertEqual(status, 404, "clients cannot choose an upstream URL")
+        status, _, _ = self.request(bridge.KALSHI_MARKETS_ROUTE, method="POST", data=b"{}", headers={"Content-Type": "application/json"})
+        self.assertEqual(status, 404, "the connector has no write method")
+
+        status, headers, _ = self.request(bridge.KALSHI_MARKETS_ROUTE, method="OPTIONS", headers={
+            "Origin": bridge.PUBLIC_ORIGIN,
+            "Access-Control-Request-Private-Network": "true",
+        })
+        self.assertEqual(status, 204)
+        self.assertEqual(headers["Access-Control-Allow-Origin"], bridge.PUBLIC_ORIGIN)
+        self.assertEqual(headers["Access-Control-Allow-Private-Network"], "true")
+        self.assertIsNone(headers.get("Access-Control-Allow-Credentials"))
 
     def test_local_vision_runtime_and_models_have_browser_mime_types(self):
         assets = {

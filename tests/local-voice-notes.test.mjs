@@ -37,9 +37,14 @@ function setup(t,{storage}={}){
 }
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
 async function take(c){await c.q('record').click();await c.q('stop').click();await flush();}
+async function setMode(c,mode){c.q('mode').value=mode;await c.q('mode').fire('change');}
 
 test('mounted local notes require explicit record, preview and save without opening microphone on mount',async t=>{
-  const c=setup(t);assert.equal(c.capture.starts,0);c.api.open();assert.equal(c.capture.starts,0);
+  const c=setup(t),panel=c.doc.querySelector('#reality-voice-notes');assert.match(panel.className,/\breality-lens-feature-panel\b/);
+  assert.equal(panel.dataset.lensSurfaceAttached,'true');panel.className='tl-panel-movable';
+  assert.equal(c.q('mode').value,'encrypted');await setMode(c,'plain');
+  assert.equal(c.capture.starts,0);c.api.open();assert.equal(c.capture.starts,0);
+  assert.match(panel.className,/\breality-lens-feature-panel\b/);
   assert.equal(c.q('save').disabled,true);await take(c);assert.equal(c.capture.starts,1);
   assert.equal(c.values.size,0);assert.equal(c.q('audio').plays,undefined);
   await c.q('preview').click();await flush();assert.equal(c.q('audio').plays,1);
@@ -70,14 +75,14 @@ test('owner changes during asynchronous import cannot save into the new context 
 });
 
 test('storage quota failure preserves the reviewed recording for retry',async t=>{
-  const c=setup(t);c.api.open();await take(c);const original=c.win.localStorage.setItem;
+  const c=setup(t);c.api.open();await setMode(c,'plain');await take(c);const original=c.win.localStorage.setItem;
   c.win.localStorage.setItem=()=>{throw Error('quota unavailable');};await c.q('save').click();
   assert.match(c.q('status').textContent,/quota unavailable/);assert.equal(c.q('save').disabled,false);assert.equal(c.q('preview').disabled,false);
   c.win.localStorage.setItem=original;await c.q('save').click();assert.equal(readLocalVoiceNotes(c.win.localStorage).length,1);
 });
 
 test('two mounted hosts detect archive conflicts and reload without discarding an encrypted take or key',async t=>{
-  const first=setup(t),second=setup(t,{storage:first.win.localStorage});first.api.open();second.api.open();
+  const first=setup(t),second=setup(t,{storage:first.win.localStorage});first.api.open();second.api.open();await setMode(first,'plain');
   second.q('mode').value='encrypted';await second.q('mode').fire('change');await take(second);await second.q('prepare').click();
   const code=second.q('key').value;second.q('kept').checked=true;await second.q('kept').fire('change');
   await take(first);await first.q('save').click();await second.q('save').click();
@@ -85,21 +90,21 @@ test('two mounted hosts detect archive conflicts and reload without discarding a
   assert.equal(second.q('key').value,code);assert.equal(second.q('save').disabled,false);
   await second.q('reload').click();assert.equal(second.q('key').value,code);assert.equal(second.q('kept').checked,true);
   await second.q('save').click();assert.equal(readLocalVoiceNotes(first.win.localStorage).length,2);
-  const deleteButton=first.q('list').querySelectorAll('button').find(button=>button.textContent==='Delete local note');
+  const deleteButton=first.q('list').querySelectorAll('button').find(button=>button.textContent==='Delete voice message');
   await deleteButton.click();assert.match(first.q('status').textContent,/changed in another tab/);assert.equal(readLocalVoiceNotes(first.win.localStorage).length,2);
   await first.q('reload').click();await take(first);
-  await first.q('list').querySelectorAll('button').find(button=>button.textContent==='Delete local note').click();
+  await first.q('list').querySelectorAll('button').find(button=>button.textContent==='Delete voice message').click();
   assert.equal(first.q('save').disabled,false);await first.q('save').click();assert.equal(readLocalVoiceNotes(first.win.localStorage).length,2);
 });
 
 test('a pending playback cannot revive a closed owner or announce playback after an account changes',async t=>{
-  const c=setup(t);c.api.open();await take(c);await c.q('save').click();
+  const c=setup(t);c.api.open();await setMode(c,'plain');await take(c);await c.q('save').click();
   let settle;c.q('audio').play=()=>new Promise(resolve=>{settle=resolve;});
-  const playButton=c.q('list').querySelectorAll('button').find(button=>button.textContent==='Play note');
+  const playButton=c.q('list').querySelectorAll('button').find(button=>button.textContent==='Play message');
   const pending=playButton.click();await flush();const before=c.q('status').textContent;
   c.api.close();settle();await pending;
   assert.equal(c.q('audio').hidden,true);assert.equal(c.q('audio').src,'');assert.equal(c.q('status').textContent,before);
-  c.api.open();const changed=c.q('list').querySelectorAll('button').find(button=>button.textContent==='Play note').click();await flush();
+  c.api.open();const changed=c.q('list').querySelectorAll('button').find(button=>button.textContent==='Play message').click();await flush();
   c.setOwner('account:other');settle();await changed;
   assert.equal(c.q('audio').hidden,true);assert.doesNotMatch(c.q('status').textContent,/Playing audio locally/);
 });

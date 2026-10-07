@@ -14,7 +14,7 @@ export function readLocalVoiceNotes(storage) {
 }
 
 export function saveLocalVoiceNotes(storage, notes, expectedValue=undefined) {
-  if(notes.length>MAX_NOTES)throw Error('Keep at most eight local notes. Export and delete an older note first.');
+  if(notes.length>MAX_NOTES)throw Error('Keep at most eight local voice messages. Export and delete an older message first.');
   const safe=notes.map(item=>({id:String(item.id).slice(0,100),createdAt:String(item.createdAt).slice(0,40),attachment:normalizeVoiceAttachment(item.attachment)}));
   if(expectedValue!==undefined&&storage.getItem(STORAGE)!==expectedValue)throw Error('The voice archive changed in another tab. Reload archive before saving, importing or deleting. Your unsaved take and unlock code are retained.');
   storage.setItem(STORAGE,JSON.stringify(safe));
@@ -35,19 +35,20 @@ export async function shareEncryptedVoiceEnvelope({attachment,windowRoot=globalT
 /** Browser-local audio notebook. Keys and decrypted audio never enter storage. */
 export function mountLocalVoiceNotes({documentRoot:doc=document,windowRoot:view=window,getContext=()=>view.location.href,recorderFactory=createVoiceRecorder}={}) {
   const panel=doc.createElement('aside');panel.id='reality-voice-notes';panel.hidden=true;
-  panel.setAttribute('aria-label','Local voice notes');panel.setAttribute('data-voice-exclude','');
-  panel.innerHTML=`<header><h2>Encrypted voice messages</h2><button type="button" data-close aria-label="Close encrypted voice messages">×</button></header>
-    <p>Messages stay in this browser profile until you explicitly export or share an envelope file. This app does not deliver them to a recipient or account. Send the unlock code separately through a trusted channel.</p>
-    <p>Record up to 60 seconds / 384 KB. Recognition is separate and may use an online browser service. Encryption protects audio; dates, format and length remain readable.</p>
-    <label>Audio protection<select data-mode><option value="plain">Readable audio</option><option value="encrypted">Encrypt audio with a separate unlock code</option></select></label>
+  panel.className='reality-lens-feature-panel';panel.dataset.lensSurfaceAttached='true';
+  panel.setAttribute('aria-label','Voice messages');panel.setAttribute('data-voice-exclude','');
+  panel.innerHTML=`<header><h2>Voice messages</h2><button type="button" data-close aria-label="Close voice messages">×</button></header>
+    <p>Encrypted by default; messages stay in this browser until you export. Share the unlock code separately; nothing is delivered to recipients.</p>
+    <p>Up to 60 sec / 384 KB. Browser dictation may send audio online. Dates, format and length stay readable.</p>
+    <label>Audio protection<select data-mode><option value="plain">Readable audio</option><option value="encrypted" selected>Encrypt audio with a separate unlock code</option></select></label>
     <div><button type="button" data-record>Record voice</button><button type="button" data-stop>Stop recording</button><button type="button" data-discard>Discard take</button></div>
     <p role="status" aria-live="polite" data-status>Microphone starts only when you choose Record voice.</p>
     <audio data-audio controls preload="none" hidden></audio>
-    <div><button type="button" data-preview>Preview take</button><button type="button" data-prepare>Encrypt & show unlock code</button><button type="button" data-save>Save local note</button></div>
-    <section data-keybox hidden><label>Keep this code separately<input data-key readonly autocomplete="off" aria-label="Generated audio unlock code"></label><p>Losing the code makes the encrypted audio unrecoverable. It is excluded from saved notes and exports.</p><label><input type="checkbox" data-kept> I saved the unlock code separately</label></section>
-    <label>Import an audio envelope<input type="file" data-import accept="application/json,.json"></label><button type="button" data-reload>Reload archive</button><p data-count></p><div data-list></div>`;
-  const style=doc.createElement('link');style.rel='stylesheet';style.href=new URL('./local-voice-notes.css',import.meta.url).href;doc.head.append(style);doc.body.append(panel);
-  const q=s=>panel.querySelector(s),audio=q('[data-audio]'),status=q('[data-status]');
+    <div><button type="button" data-preview>Preview take</button><button type="button" data-prepare>Encrypt & show unlock code</button><button type="button" data-save>Save voice message</button></div>
+    <section data-keybox hidden><label>Keep this code separately<input data-key readonly autocomplete="off" aria-label="Generated audio unlock code"></label><p>Losing the code makes the encrypted audio unrecoverable. It is excluded from saved messages and exports.</p><label><input type="checkbox" data-kept> I saved the unlock code separately</label></section>
+    <details data-archive><summary>Saved messages</summary><label>Import an encrypted voice message<input type="file" data-import accept="application/json,.json"></label><button type="button" data-reload>Reload messages</button><p data-count></p><div data-list></div></details>`;
+  const style=doc.createElement('link');style.rel='stylesheet';style.href=new URL('./local-voice-notes.css?v=20261007-voice-message-compact-archive',import.meta.url).href;doc.head.append(style);doc.body.append(panel);
+  const q=s=>panel.querySelector(s),audio=q('[data-audio]'),status=q('[data-status]');q('[data-mode]').value='encrypted';
   let disposed=false,context=getContext(),revision=0,playRevision=0,take=null,prepared=null,notes=[],archiveSnapshot=null,url='',release=null,busy=false,recordingState={};
   const events=[];
   // A local row identifier is not a key, proof, identity or authorization token.
@@ -102,7 +103,7 @@ export function mountLocalVoiceNotes({documentRoot:doc=document,windowRoot:view=
     catch(error){report(error);}
   }
   function drawNotes(){
-    q('[data-count]').textContent=`${notes.length} of ${MAX_NOTES} browser-local notes`;
+    q('[data-count]').textContent=`${notes.length} of ${MAX_NOTES} browser-local messages`;
     const list=q('[data-list]');list.replaceChildren();
     for(const item of notes){
       const row=doc.createElement('section'),label=doc.createElement('p');
@@ -111,7 +112,7 @@ export function mountLocalVoiceNotes({documentRoot:doc=document,windowRoot:view=
       const code=doc.createElement('input');code.type='password';code.autocomplete='off';code.maxLength=43;code.setAttribute('data-unlock','');code.setAttribute('aria-label','43-character audio unlock code');
       if(item.attachment.mode==='encrypted')row.append(code);
       const button=(text,fn)=>{const el=doc.createElement('button');el.type='button';el.textContent=text;el.addEventListener('click',fn);row.append(el);};
-      button(item.attachment.mode==='encrypted'?'Unlock & play':'Play note',async()=>{
+      button(item.attachment.mode==='encrypted'?'Unlock & play':'Play message',async()=>{
         const ticket=++revision;stopAudio();busy=true;render();
         try{const blob=item.attachment.mode==='encrypted'?await decryptVoice(item.attachment,code.value,{cryptoRoot:view.crypto}):plainVoiceBlob(item.attachment);
           code.value='';if(!current(ticket))return;const playing=await play(blob);if(playing&&current(ticket))status.textContent='Playing audio locally. Lock / stop releases its playback copy.';
@@ -119,7 +120,7 @@ export function mountLocalVoiceNotes({documentRoot:doc=document,windowRoot:view=
       });
       button('Lock / stop',()=>{revision++;code.value='';stopAudio();busy=false;render();});
       button('Export / share envelope',()=>void exportEnvelope(item.attachment));
-      button('Delete local note',()=>{try{persist(notes.filter(note=>note.id!==item.id));revision++;stopAudio();busy=false;render();status.textContent='Local note deleted. Any unsaved take is retained.';}catch(error){report(error);}});
+      button('Delete voice message',()=>{try{persist(notes.filter(note=>note.id!==item.id));revision++;stopAudio();busy=false;render();status.textContent='Voice message deleted. Any unsaved take is retained.';}catch(error){report(error);}});
       list.append(row);
     }
   }
@@ -142,13 +143,13 @@ export function mountLocalVoiceNotes({documentRoot:doc=document,windowRoot:view=
     try{const attachment=q('[data-mode]').value==='encrypted'?prepared:take?await createPlainVoice(take):null;
       if(!current(ticket))return;
       if(!attachment||(attachment.mode==='encrypted'&&!q('[data-kept]').checked))throw Error('Prepare the audio and save its separate code first.');
-      persist([...notes,{id:newId(),createdAt:new Date().toISOString(),attachment}]);cancel();status.textContent='Saved in this browser only. Export explicitly to transfer the envelope.';
+      persist([...notes,{id:newId(),createdAt:new Date().toISOString(),attachment}]);cancel();status.textContent='Voice message saved in this browser only. Export explicitly to transfer the envelope.';
     }catch(error){report(error);}finally{if(ticket===revision){busy=false;render();}}
   });
   listen(q('[data-import]'),'change',async event=>{
     const file=event.target.files?.[0],ticket=++revision;event.target.value='';if(!file)return;
     try{if(file.size>514000)throw Error('Choose an envelope smaller than 514 KB.');const attachment=parseVoiceEnvelope(await file.text());
-      if(!current(ticket))return;persist([...notes,{id:newId(),createdAt:new Date().toISOString(),attachment}]);status.textContent='Envelope imported locally. Playback requires a separate explicit action.';
+      if(!current(ticket))return;persist([...notes,{id:newId(),createdAt:new Date().toISOString(),attachment}]);status.textContent='Voice message imported locally. Playback requires a separate explicit action.';
     }catch(error){report(error);}
   });
   listen(audio,'ended',()=>{release?.();release=null;});
@@ -157,7 +158,7 @@ export function mountLocalVoiceNotes({documentRoot:doc=document,windowRoot:view=
   listen(panel,'keydown',event=>{if(event.key==='Escape'){event.preventDefault();close();}});
   const unwatch=watchVoiceOwnerVisibility({element:panel,windowRoot:view,onHidden:cancel});
   const timer=view.setInterval(()=>{if(!panel.hidden&&context!==getContext()){close();context=getContext();}},250);
-  return {open(){if(disposed)return;context=getContext();panel.hidden=false;
+  return {open(){if(disposed)return;panel.className='reality-lens-feature-panel';panel.dataset.lensSurfaceAttached='true';context=getContext();panel.hidden=false;
     try{reload();status.textContent=recordingState.supported?'Choose Record voice to begin.':'Recording is unavailable. You can import, unlock and play supported audio envelopes.';}catch(error){report(error);}render();q('[data-close]').focus();},close,
     destroy(){if(disposed)return;close();disposed=true;recorder.destroy();unwatch();view.clearInterval(timer);events.forEach(remove=>remove());panel.remove();style.remove();}};
 }

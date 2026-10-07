@@ -33,7 +33,7 @@ import {
   fetchPolymarketOdds,
   isFreshQuote,
   validateQuoteShape,
-} from "./odds-feeds.js?v=20261003-skin360";
+} from "./odds-feeds.js?v=20261007-open-dollar-market-quotes";
 import { toCanonical } from "./contract-status-vocab.js?v=20261003-skin360";
 
 const FLOW_SOURCE = "contract-flow";

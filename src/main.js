@@ -40,7 +40,7 @@ import { LAUNCH_RECEIPT_CONSOLE_SOURCE, createLaunchReceiptConsole } from './ren
 import { createSocialExplorerConsole } from './render/social-explorer.js?v=20261003-skin360';
 import { SOCIAL_PULSE_SOURCE, createUnavailableSocialPulse, fetchSocialPulse } from './domains/social-pulse.js?v=20261003-skin360';
 import { LAUNCH_KIT_CONSOLE_SOURCE, createLaunchKitConsole } from './render/launch-kit.js?v=20261003-skin360';
-import { createRoomSpaces } from './render/room-spaces.js?v=20261005-voice';
+import { createRoomSpaces } from './render/room-spaces.js?v=20261007-voice-conversation-refresh';
 import { CAMERA_INPUT_SOURCE, createCameraInput } from './render/camera-input.js?v=20261003-skin360';
 import { GESTURE_INPUT_SOURCE, createGestureInput } from './render/gesture-input.js?v=20261003-skin360';
 import {
@@ -117,7 +117,7 @@ import { GESTURE_LENS_CONSOLE_SOURCE, createGestureLensConsole } from './render/
 import { createHandLensSession } from './render/hand-session.js?v=20261003-skin360';
 import { mountHandsEyesControls } from './render/hands-eyes-controls.js?v=20261005-hands-eyes';
 import { handoverVoiceDictation } from './render/voice-dictation.js?v=20261005-voice';
-import { mountLocalVoiceNotes } from './render/local-voice-notes.js?v=20261006-voice-messages';
+import { mountLocalVoiceNotes } from './render/local-voice-notes.js?v=20261007-voice-message-routing-fix';
 import { captureVoiceTarget, insertVoiceTranscript } from './render/voice-text-target.js';
 import { createStoryModeConsole } from './render/story-mode.js?v=20261003-skin360';
 import { LEDGER_PROOF_SOURCE } from './domains/ledger-proof.js?v=20261003-skin360';
@@ -135,7 +135,7 @@ import { DEVICE_PROJECTION_CONSOLE_SOURCE, createDeviceProjectionConsole } from 
 import { ASSET_MARKET_CONSOLE_SOURCE, createAssetMarketConsole } from './render/asset-market.js?v=20261003-skin360';
 import { createUnavailableAssetMarketEvidence, fetchAssetMarketEvidence } from './domains/asset-market.js?v=20261003-skin360';
 import { POPULATION_CONTEXT_SOURCE, createUnavailablePopulationContext, fetchPopulationContext } from './domains/population-context.js?v=20261003-skin360';
-import { WEB_AI_CONSOLE_SOURCE, createWebAiConsole } from './render/web-ai.js?v=20261005-voice';
+import { WEB_AI_CONSOLE_SOURCE, createWebAiConsole } from './render/web-ai.js?v=20261007-gpt-dialogue-refresh';
 import { SOCIAL_MIRROR_CONSOLE_SOURCE } from './domains/social-mirror.js?v=20261003-skin360';
 import { createSocialMirrorConsole } from './render/social-mirror.js?v=20261003-skin360';
 import { createYoutubeSurface } from './render/youtube-surface.js?v=20261003-skin360';
@@ -3463,7 +3463,7 @@ contractAtelierConsole = createContractAtelierConsole({
   // into the same review queue Tumbo already approves from.
   onContractApproved: ({ contract, proposal }) => contractFlow.handleContractApproved({ contract, proposal }),
   approveContractProposal: proposal=>contractFlow.approveProposal(proposal),
-  onScanRequested: () => contractFlow.scanAndQueue(),
+  onScanRequested: () => runUserRequestedContractScan(),
   onSelect: (snapshot) => {
     const organ = organs.find((candidate) => candidate.id === 'contract');
     if (organ) focusOrgan(organ, `contract-atelier-select:${snapshot.selectedId}`);
@@ -3559,7 +3559,7 @@ try {
     root:contractWorkbenchHost,engine:contractAutomation,onSelect:updateContractOrganism,
     getPublicEvents:()=>lastContractPublicRecords.map(record=>({id:record.id,label:record.title,status:record.status,participants:(record.participants??record.teams??[]).map(team=>({name:team.name}))})),
     onRefreshEvidence:async({contractId})=>{
-      await runAutomaticContractScan({force:true});
+      await runUserRequestedContractScan();
       return lastContractEvidenceReport.byContract?.[contractId]??{observed:0,pending:0,errors:lastContractEvidenceReport.byContract?[]:lastContractEvidenceReport.errors};
     },
   });
@@ -3591,29 +3591,18 @@ window.addEventListener('pageshow',()=>{if(contractAutomationTimer===null)contra
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')runContractAutomation();});
 window.addEventListener('pagehide',()=>{window.clearInterval(contractAutomationTimer);contractAutomationTimer=null;});
 
-// Automatic prediction-contract generation.
-// The Prediction Place should populate itself without requiring a button press:
-// scan once after boot, then refresh every five minutes. The shared proposal
-// queue and contract-flow idempotency guard prevent duplicate game proposals,
-// including across page reloads. Failures are contained inside scanAndQueue()
-// and never affect the manual Contract Atelier.
-const AUTO_CONTRACT_SCAN_INTERVAL_MS = 5 * 60 * 1000;
-const AUTO_CONTRACT_SCAN_MIN_GAP_MS = 60 * 1000;
-let automaticContractScanInFlight = null;
-let automaticContractScanLastResult = null;
-let automaticContractScanLastStartedAt = 0;
+// Public sports and market feeds are read only after a visible Scan or
+// Refresh evidence action. Opening the app, switching tabs, and reconnecting
+// never trigger provider traffic. Concurrent button presses share one read.
+let requestedContractScanInFlight = null;
+let requestedContractScanLastResult = null;
 
-function runAutomaticContractScan({ force = false } = {}) {
-  if (automaticContractScanInFlight) return automaticContractScanInFlight;
-  const now = Date.now();
-  if (!force && automaticContractScanLastStartedAt && now - automaticContractScanLastStartedAt < AUTO_CONTRACT_SCAN_MIN_GAP_MS) {
-    return Promise.resolve(automaticContractScanLastResult);
-  }
-  automaticContractScanLastStartedAt = now;
-  automaticContractScanInFlight = Promise.resolve()
+function runUserRequestedContractScan() {
+  if (requestedContractScanInFlight) return requestedContractScanInFlight;
+  requestedContractScanInFlight = Promise.resolve()
     .then(() => contractFlow.scanAndQueue())
     .then((result) => {
-      automaticContractScanLastResult = result;
+      requestedContractScanLastResult = result;
       if(result?.automation?.graded?.length){
         contractAtelierConsole?.refresh();
         projectionBridge.emitIntent('projection.contract-public-graded','contract-flow',{results:result.automation.graded,simulation:true,localOnly:true,executable:false});
@@ -3627,46 +3616,18 @@ function runAutomaticContractScan({ force = false } = {}) {
         drafts: Object.freeze([]),
         errors: Object.freeze([String(error?.message ?? error)]),
       });
-      automaticContractScanLastResult = fallback;
+      requestedContractScanLastResult = fallback;
       return fallback;
     })
     .finally(() => {
-      automaticContractScanInFlight = null;
+      requestedContractScanInFlight = null;
     });
-  return automaticContractScanInFlight;
+  return requestedContractScanInFlight;
 }
 
-let automaticContractScanTimer = window.setInterval(() => {
-  void runAutomaticContractScan();
-}, AUTO_CONTRACT_SCAN_INTERVAL_MS);
-
-window.__TUMBO_AUTO_CONTRACTS__ = Object.freeze({
-  intervalMs: AUTO_CONTRACT_SCAN_INTERVAL_MS,
-  minGapMs: AUTO_CONTRACT_SCAN_MIN_GAP_MS,
-  scanNow: () => runAutomaticContractScan({ force: true }),
-  getLastScan: () => automaticContractScanLastResult,
-});
-
-void runAutomaticContractScan({ force: true });
-
-// Background tabs can throttle timers. Re-check as soon as the Prediction
-// Place becomes visible again, while retaining a short guard against duplicate
-// scans from rapid visibility/online events.
-window.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible") {
-    void runAutomaticContractScan();
-  }
-});
-window.addEventListener("online", () => {
-  void runAutomaticContractScan();
-});
-window.addEventListener("pagehide", () => {
-  window.clearInterval(automaticContractScanTimer);
-  automaticContractScanTimer = null;
-});
-window.addEventListener('pageshow', () => {
-  if(automaticContractScanTimer===null)automaticContractScanTimer=window.setInterval(()=>void runAutomaticContractScan(),AUTO_CONTRACT_SCAN_INTERVAL_MS);
-  void runAutomaticContractScan();
+window.__TUMBO_CONTRACT_SCAN__ = Object.freeze({
+  scanNow: () => runUserRequestedContractScan(),
+  getLastScan: () => requestedContractScanLastResult,
 });
 
 // Luna Companion is a scripted local guide: plain-word navigation, feature
@@ -9474,7 +9435,7 @@ const voiceDictation=handoverVoiceDictation(window.__TUMBO_VOICE__,{
   },
 });
 document.querySelector('#voice-dictation-panel [data-vd-rooms]').textContent='Voice messages';
-document.querySelector('#voice-dictation-panel [data-vd-rooms]').setAttribute('aria-label','Open local encrypted voice messages');
+document.querySelector('#voice-dictation-panel [data-vd-rooms]').setAttribute('aria-label','Open voice messages');
 window.__TUMBO_VOICE__=voiceDictation;
 document.querySelector('#reality-assembly .assembly-header').append(document.getElementById('hands-eyes-trigger'));
 document.querySelector('#reality-assembly .assembly-header').append(document.getElementById('api-connections-trigger'));

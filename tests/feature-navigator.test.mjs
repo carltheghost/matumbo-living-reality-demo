@@ -150,7 +150,7 @@ test("navigator markup is explicit and remains local-only", async () => {
   assert.doesNotMatch(html, /Coin Engine/i);
 });
 
-test("static fallback directory mirrors the canonical feature registry", async () => {
+test("static fallback directory links every feature and labels Launch Kit as a helper tool", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const fallbackStart = html.indexOf('id="feature-nav-fallback-list"');
   const fallbackEnd = html.indexOf('</ul>', fallbackStart);
@@ -160,6 +160,10 @@ test("static fallback directory mirrors the canonical feature registry", async (
   assert.deepEqual(ids.slice(0, FEATURE_DEFINITIONS.length), FEATURE_DEFINITIONS.map((feature) => feature.id));
   assert.equal(ids.length, FEATURE_DEFINITIONS.length + 1, "fallback adds only the Launch Kit launcher entry");
   assert.equal(ids.at(-1), "launch-kit");
+  assert.match(fallback, /data-directory-kind="tool" href="\?panel=launch-kit/);
+  assert.match(html, /36 openable local features/);
+  assert.match(html, /staticCubes\(\)\.filter\(\(item\)\s*=>\s*item\.dataset\.directoryKind\s*!==\s*'tool'\)\.length/);
+  assert.match(html, /textContent\s*=\s*`\$\{staticFeatureCount\(\)\} openable local features`/);
 });
 
 test("Block World feature cards use the generic provider-free navigation policy", async () => {

@@ -1,27 +1,36 @@
 {
-  "javascript": {
-    "command": "python scripts/run_tests.py",
-    "tests": 2639,
-    "suites": 113,
-    "passed": 2639,
-    "failed": 0,
-    "skipped": 0
+  "currentSourceRun": {
+    "date": "2026-10-07",
+    "javascript": {
+      "command": "node --test tests/*.test.mjs",
+      "tests": 2656,
+      "suites": 113,
+      "passed": 2656,
+      "failed": 0,
+      "skipped": 0,
+      "cancelled": 0
+    },
+    "python": {
+      "command": "python -m unittest discover -s tests -p 'test_*.py'",
+      "tests": 80,
+      "result": "OK"
+    },
+    "mountedVoiceBrowserChecks": {
+      "passed": 12,
+      "failed": 0,
+      "physicalMicrophoneUsed": false,
+      "recognition": "controlled browser double",
+      "recording": "real browser MediaRecorder supplied by generated oscillator stream",
+      "gptReply": "controlled existing-owner response fixture"
+    }
   },
-  "python": {
-    "command": "python -m unittest discover -s tests -p 'test_*.py'",
-    "tests": 76,
-    "result": "OK"
-  },
-  "portableExtracted": {
-    "command": "node --test tests/*.test.mjs",
+  "earlierPortableArtifactRun": {
+    "note": "Separate earlier run; archive was not rebuilt or retested during the 2026-10-07 source audit.",
     "tests": 53,
     "passed": 53,
     "failed": 0
   },
+  "sourceTree": "verified-working-copy",
   "physicalCameraUsed": false,
-  "physicalMicrophoneUsed": false,
-  "recognition": "controlled browser double",
-  "speechPlayback": "controlled browser double",
-  "recording": "actual browser MediaRecorder supplied by generated oscillator stream",
-  "gptReply": "controlled existing-owner response fixture"
+  "physicalMicrophoneUsed": false
 }

@@ -52,7 +52,7 @@ import {
 } from "../domains/contribution-vault.js?v=20261003-skin360";
 import { createEconomicTimeline } from "../domains/economic-timeline.js?v=20261003-skin360";
 import { evaluateComputeEconomics } from "../domains/compute-economics-policy.js?v=20261003-skin360";
-import { mountMyGpt } from "./my-gpt.js?v=20261005-voice";
+import { mountMyGpt } from "./my-gpt.js?v=20261007-gpt-dialogue-refresh";
 
 export { WEB_AI_CONSOLE_SOURCE };
 

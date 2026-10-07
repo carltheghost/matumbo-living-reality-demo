@@ -10,7 +10,7 @@
  */
 
 import { createRoomWorkspace } from '../domains/room-workspace.js?v=20261005-voice';
-import { mountRoomConversations } from './room-conversations.js?v=20261005-voice';
+import { mountRoomConversations } from './room-conversations.js?v=20261007-voice-conversation-refresh';
 
 export const ROOM_SPACES_SOURCE = "spatial-rooms";
 export const ROOM_SPACES_CONSOLE_SOURCE = "room-spaces-console";

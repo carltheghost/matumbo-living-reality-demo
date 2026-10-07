@@ -88,11 +88,13 @@ function voiceBrowser() {
 }
 
 async function recordClip(context, browser) { await button(context.panel, 'Record voice').click(); browser.advance(); await button(context.panel, 'Stop recording').click(); }
+async function selectVoicePrivacy(context, value = 'plain') { const mode = label(context.panel, 'Voice privacy'); mode.value = value; await mode.fire('change'); }
+class TestFile extends Blob { constructor(parts, name, options) { super(parts, options); this.name = name; } }
 
 test('voice recording is explicit, previews without autoplay, saves into original local history and downloads bytes', async () => {
   const browser = voiceBrowser(), context = setup({ windowRoot: browser.windowRoot });
   assert.equal(browser.permissionCalls, 0); assert.equal(button(context.panel, 'Record voice').disabled, true);
-  await createLocalRoom(context); await recordClip(context, browser);
+  await createLocalRoom(context); await selectVoicePrivacy(context); await recordClip(context, browser);
   assert.equal(browser.permissionCalls, 1); assert.ok(browser.stoppedTracks > 0);
   const preview = label(context.panel, 'Voice recording preview'); assert.ok(preview.src); assert.notEqual(preview.autoplay, true);
   assert.equal(context.api.exportConversations().messages.length, 0);
@@ -108,7 +110,7 @@ test('voice recording is explicit, previews without autoplay, saves into origina
 });
 
 test('explicit preview and voice buttons play and stop the same native audio through original surface handlers', async () => {
-  const browser = voiceBrowser(), context = setup({ windowRoot: browser.windowRoot }); await createLocalRoom(context); await recordClip(context, browser); context.api.open();
+  const browser = voiceBrowser(), context = setup({ windowRoot: browser.windowRoot }); await createLocalRoom(context); await selectVoicePrivacy(context); await recordClip(context, browser); context.api.open();
   const preview = label(context.panel, 'Voice recording preview'); assert.equal(preview.playCalls || 0, 0); assert.equal(preview.controls, true);
   const surface = createRealitySurfaceDocument({ element: context.panel, feature: { id: 'rooms' } });
   const previewAction = surface.read().find(item => item.text === 'Play preview'); assert.ok(previewAction?.actionId);
@@ -125,7 +127,7 @@ test('explicit preview and voice buttons play and stop the same native audio thr
 });
 
 test('explicit playback surfaces browser permission and codec failures without auto-retrying', async () => {
-  const browser = voiceBrowser(), context = setup({ windowRoot: browser.windowRoot }); await createLocalRoom(context); await recordClip(context, browser);
+  const browser = voiceBrowser(), context = setup({ windowRoot: browser.windowRoot }); await createLocalRoom(context); await selectVoicePrivacy(context); await recordClip(context, browser);
   const preview = label(context.panel, 'Voice recording preview'); let attempts = 0;
   preview.play = () => { attempts++; return Promise.reject(Object.assign(new Error('blocked'), { name: 'NotAllowedError' })); };
   await button(context.panel, 'Play preview').click(); assert.match(context.panel.textContent, /Playback was blocked/); assert.equal(attempts, 1); assert.equal(preview.paused, true);
@@ -136,7 +138,7 @@ test('explicit playback surfaces browser permission and codec failures without a
 });
 
 test('pending playback is stopped before another voice activity and late settlement cannot replace stop status', async () => {
-  const browser = voiceBrowser(), context = setup({ windowRoot: browser.windowRoot }); await createLocalRoom(context); await recordClip(context, browser);
+  const browser = voiceBrowser(), context = setup({ windowRoot: browser.windowRoot }); await createLocalRoom(context); await selectVoicePrivacy(context); await recordClip(context, browser);
   const preview = label(context.panel, 'Voice recording preview'); let settle;
   preview.play = () => new Promise(resolve => { settle = resolve; });
   const playing = button(context.panel, 'Play preview').click();
@@ -151,7 +153,7 @@ test('pending playback is stopped before another voice activity and late settlem
 
 test('encrypted voice requires keeping code separately, persists ciphertext only, unlocks explicitly and locks on room change', async () => {
   const browser = voiceBrowser(), context = setup({ windowRoot: browser.windowRoot }); await createLocalRoom(context); await recordClip(context, browser);
-  const mode = label(context.panel, 'Voice privacy'); mode.value = 'encrypted'; await mode.fire('change');
+  const mode = label(context.panel, 'Voice privacy'); assert.equal(mode.value, 'encrypted');
   assert.equal(button(context.panel, 'Save local voice').disabled, true);
   await button(context.panel, 'Encrypt voice & show unlock code').click();
   const code = label(context.panel, 'Keep this unlock code separately').value; assert.match(code, /^[A-Za-z0-9_-]{43}$/);
@@ -175,8 +177,40 @@ test('encrypted envelope download can be reimported without a microphone or code
   const input = label(context.panel, 'Import encrypted voice envelope'), json = JSON.stringify(source.attachment); input.files = [{ size: json.length, text: async () => json }]; await input.fire('change');
   assert.equal(button(context.panel, 'Save local voice').disabled, false); await button(context.panel, 'Save local voice').click();
   assert.deepEqual(context.api.exportConversations().messages[0].voice, source.attachment);
-  await button(context.panel, 'Download encrypted envelope').click(); const file = [...browser.urls.values()].find(blob => blob.type === 'application/json'); assert.deepEqual(JSON.parse(await file.text()), source.attachment);
+  await button(context.panel, 'Share / download encrypted envelope').click(); const file = [...browser.urls.values()].find(blob => blob.type === 'application/json'); assert.deepEqual(JSON.parse(await file.text()), source.attachment);
   assert.equal((await file.text()).includes(source.unlockCode), false); context.api.destroy(); assert.equal(browser.urls.size, 0);
+});
+
+test('saved encrypted room voice shares only ciphertext and never implies recipient delivery', async () => {
+  const browser = voiceBrowser(), context = setup({ windowRoot: browser.windowRoot }); await createLocalRoom(context); await recordClip(context, browser);
+  await button(context.panel, 'Encrypt voice & show unlock code').click();
+  const code = label(context.panel, 'Keep this unlock code separately').value, retained = label(context.panel, 'I saved the unlock code separately'); retained.checked = true; await retained.fire('change');
+  await button(context.panel, 'Save local voice').click();
+  const shared = [];
+  browser.windowRoot.File = TestFile;
+  browser.windowRoot.navigator.canShare = ({ files }) => files.length === 1;
+  browser.windowRoot.navigator.share = async payload => { shared.push(payload); };
+  await button(context.panel, 'Share / download encrypted envelope').click();
+  assert.equal(shared.length, 1); assert.equal(shared[0].files[0].name, 'matumbo-encrypted-voice.json');
+  const serialized = await shared[0].files[0].text(), envelope = JSON.parse(serialized);
+  assert.equal(envelope.mode, 'encrypted'); assert.equal(serialized.includes(code), false); assert.equal(serialized.includes('local audio bytes'), false);
+  assert.match(shared[0].text, /send the unlock code separately/i);
+  assert.match(label(context.panel, 'Unlocked voice playback').parentNode.textContent, /sharing does not confirm delivery/i);
+  assert.equal(context.api.exportConversations().messages.length, 1); context.api.destroy();
+});
+
+test('canceling the device share menu keeps the saved encrypted message and does not download another copy', async () => {
+  const browser = voiceBrowser(), context = setup({ windowRoot: browser.windowRoot }); await createLocalRoom(context); await recordClip(context, browser);
+  await button(context.panel, 'Encrypt voice & show unlock code').click();
+  label(context.panel, 'I saved the unlock code separately').checked = true;
+  await label(context.panel, 'I saved the unlock code separately').fire('change'); await button(context.panel, 'Save local voice').click();
+  const before = [...browser.urls.values()].filter(blob => blob.type === 'application/json').length;
+  browser.windowRoot.File = TestFile; browser.windowRoot.navigator.canShare = () => true;
+  browser.windowRoot.navigator.share = async () => { throw Object.assign(new Error('dismissed'), { name: 'AbortError' }); };
+  await button(context.panel, 'Share / download encrypted envelope').click();
+  const after = [...browser.urls.values()].filter(blob => blob.type === 'application/json').length;
+  assert.equal(after, before); assert.match(label(context.panel, 'Unlocked voice playback').parentNode.textContent, /Sharing canceled/);
+  assert.equal(context.api.exportConversations().messages.length, 1); context.api.destroy();
 });
 
 test('switching rooms or cancelling a recording releases tracks and does not save a voice message', async () => {
@@ -187,7 +221,7 @@ test('switching rooms or cancelling a recording releases tracks and does not sav
 });
 
 test('closing Rooms and hiding the page revoke microphone drafts and unlocked playback', async () => {
-  const browser = voiceBrowser(), context = setup({ windowRoot: browser.windowRoot }); await createLocalRoom(context);
+  const browser = voiceBrowser(), context = setup({ windowRoot: browser.windowRoot }); await createLocalRoom(context); await selectVoicePrivacy(context);
   await button(context.panel, 'Record voice').click(); context.api.close();
   assert.ok(browser.stoppedTracks > 0); assert.equal(context.api.exportConversations().messages.length, 0);
   context.api.open(); await recordClip(context, browser); await button(context.panel, 'Save local voice').click();

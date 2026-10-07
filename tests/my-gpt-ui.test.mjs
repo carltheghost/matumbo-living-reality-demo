@@ -141,6 +141,36 @@ test('voice conversation reviews editable text and sends through the existing se
   assert.match(classNode(context.host, 'my-gpt-voice-status').textContent, /finished.*Press Listen/);
 });
 
+test('hands-free voice dialogue requires explicit consent, sends one paused turn, speaks the reply, and resumes only until stopped', async t => {
+  const speech = speechBrowser();
+  const context = setup({ configureWindow: speech.configureWindow,
+    fetcher: path => response(path === '/api/gpt/status' ? status() : { provider: 'chatgpt', model: 'plan-model', content: 'A spoken answer.' }) });
+  t.after(() => context.api.destroy());
+  await context.api.refresh();
+  const consent = label(context.host, 'Allow automatic sending during voice dialogue');
+  const start = namedButton(context.host, 'Start voice dialogue');
+  assert.equal(consent.checked, false); assert.equal(start.disabled, true);
+  assert.equal(speech.recognitions.length, 0); assert.equal(speech.spoken.length, 0);
+  consent.checked = true; await consent.fire('change');
+  assert.equal(start.disabled, false);
+  await start.click();
+  assert.equal(speech.recognitions.length, 1);
+  speech.recognitions[0].result('What is in this space?');
+  await new Promise(resolve => setTimeout(resolve, 950));
+  await flushRequests();
+  assert.equal(context.requests.filter(request => request.path === '/api/gpt/chat').length, 1);
+  assert.equal(context.api.snapshot().workspace.conversations.at(-1).messages[0].content, 'What is in this space?');
+  assert.deepEqual(speech.spoken.map(item => item.text), ['A spoken answer.']);
+  speech.spoken[0].onend();
+  await flushRequests();
+  assert.equal(speech.recognitions.length, 2, 'the next turn starts only after the answer finishes');
+  const stop = namedButton(context.host, 'Stop voice dialogue');
+  await stop.click();
+  assert.ok(namedButton(context.host, 'Start voice dialogue'));
+  assert.ok(speech.recognitions[1].aborts > 0);
+  assert.equal(label(context.host, 'Allow automatic sending during voice dialogue').checked, false);
+});
+
 test('long spoken replies disclose that playback reads only the beginning while preserving the complete text', async t => {
   const speech = speechBrowser(), content = 'Long reply. '.repeat(800);
   const context = setup({ configureWindow: speech.configureWindow, fetcher: path => response(path === '/api/gpt/status' ? status() : { provider: 'chatgpt', model: 'plan-model', content }) }); t.after(() => context.api.destroy());

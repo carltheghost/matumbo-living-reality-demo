@@ -1,11 +1,11 @@
 {
-  "baseRevision": "84b117a2d59e1ded22a9e91194fea2cf942971b0",
+  "baseRevision": "5406be909797afae8cea874286cd8228c8b24955",
   "sourceTree": "verified-working-copy",
   "files": [
     {
       "path": "index.html",
-      "bytes": 476710,
-      "sha256": "1ae6cd53ea0d08e7ea5694c432e620eb5d23d4a2d12001271e6f32f5d8b03386"
+      "bytes": 476954,
+      "sha256": "4d5d9be77fadd9e9e1a5ad9349a1fa1e0c59edd385ebae4ca2097fb194a1066f"
     },
     {
       "path": "scripts/build_voice_kit.py",
@@ -19,13 +19,13 @@
     },
     {
       "path": "src/domains/voice-message.js",
-      "bytes": 7150,
-      "sha256": "4a8c01dd7af80a484c2e59526e8f1b418c05d5da4958302f4eea90ceb94eb592"
+      "bytes": 7240,
+      "sha256": "67a2a638587733c80f82fa0e227e8bdcaea2e731e3533b7e75b3181f1e72f2dc"
     },
     {
       "path": "src/main.js",
-      "bytes": 475451,
-      "sha256": "85ad3b05c0e7da6ea5193ee64d7f240b5740249cd5a2e16a3bf17e9b83e02838"
+      "bytes": 474361,
+      "sha256": "e874ddb62a9173f87b65eed402ee78f546e86fe5199ef80f2000bd8de5368a62"
     },
     {
       "path": "src/render/centered-surfaces.js",
@@ -49,8 +49,8 @@
     },
     {
       "path": "src/render/my-gpt.js",
-      "bytes": 52715,
-      "sha256": "8a9242eaee21f2755691b1af08b8c0f349c07e8c464a8690f950f802ede01e61"
+      "bytes": 57252,
+      "sha256": "1328b7e14ffca7a27e432071410e60df92e8eccdfe507b0e52daf3783f47f006"
     },
     {
       "path": "src/render/ourplace-economy.js",
@@ -69,13 +69,13 @@
     },
     {
       "path": "src/render/room-conversations.js",
-      "bytes": 36220,
-      "sha256": "258a72571e0090bbf4be06a7dc647e35af8f6ccb8ab73bf3a0b6987c56ad0079"
+      "bytes": 37641,
+      "sha256": "7f573d0c7f6d8d3978cb304d1a8fe1f5a28b2251928110a6b67afd9159001c34"
     },
     {
       "path": "src/render/room-spaces.js",
-      "bytes": 26386,
-      "sha256": "6e3173a8a7776d28eadbcb7e56e89e7925b48b02197cb8f75261e5a3b05ab367"
+      "bytes": 26406,
+      "sha256": "23a4c2bbba3fa401822c07c0027c733883531b59fec58098438e0aa9127d015f"
     },
     {
       "path": "src/render/tab-registry.js",
@@ -104,13 +104,13 @@
     },
     {
       "path": "src/render/voice-text-target.js",
-      "bytes": 9503,
-      "sha256": "f858be9cd6dac8e46b9da19acd97b5de985d8faa380dbceb9c4ca72634def394"
+      "bytes": 9584,
+      "sha256": "60ef93412e5c6847190d6f89ce82ad93093c27ca9f2125d70306a5f5224b17e1"
     },
     {
       "path": "src/render/web-ai.js",
-      "bytes": 76536,
-      "sha256": "92dde1f326bca912eed19922e53a8a8867c8027020f95db7fa1ecda4ef0e6493"
+      "bytes": 76551,
+      "sha256": "15f9711dcd596a26427ece5e69153b2e0fdf4e4518f53a597c2e7b8d8b132992"
     },
     {
       "path": "tests/creator-economy.test.mjs",
@@ -124,13 +124,13 @@
     },
     {
       "path": "tests/my-gpt-ui.test.mjs",
-      "bytes": 51530,
-      "sha256": "bf7b884370a767a0869e005b243e7694c43fa6a9fb5c5c4a316423772ee9f908"
+      "bytes": 53374,
+      "sha256": "02f9b7233f05d6899530f36c1991d0ae164f09a8cb0708b7f95f28577390811f"
     },
     {
       "path": "tests/room-conversations.test.mjs",
-      "bytes": 28229,
-      "sha256": "5b11c19f68724161d82e2749d54090031ef00dfdda31f52d0b9bc3ff677d2b24"
+      "bytes": 31513,
+      "sha256": "b90ead52f8dc12dfbacbf63d0cba9db0fbbf7219ccfc863ae9da072ed638fe96"
     },
     {
       "path": "tests/test_voice_kit.py",
@@ -154,8 +154,19 @@
     },
     {
       "path": "tests/voice-text-target.test.mjs",
-      "bytes": 12147,
-      "sha256": "d7e6ca897438ef9ca15bc4118a8e8cc883312bbe08b41aeff33f72cb959aea83"
+      "bytes": 12329,
+      "sha256": "7dcce18f6c3d1ff921ec60a76b150f7f20327bf94cf269e179961c8746fe69ca"
+    },
+    {
+      "path": "src/domains/voice-dialogue.js",
+      "bytes": 3887,
+      "sha256": "6ae19c485fa242a25a0ca3be01b3cc9c663aa3104ed8bc2a316ea5f6e7f6e88d"
+    },
+    {
+      "path": "tests/voice-dialogue.test.mjs",
+      "bytes": 3630,
+      "sha256": "d22f83aca42f97cea6294cf7413f006e3fe8838dcaf0efe5f227839350b4d0ea"
     }
-  ]
+  ],
+  "updatedAtUtc": "2026-10-07T12:22:03.125+00:00"
 }

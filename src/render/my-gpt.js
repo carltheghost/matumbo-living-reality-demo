@@ -1,5 +1,6 @@
 /** My GPT lives inside the existing Web + AI object. Provider credentials stay in the local bridge. */
 import { GPT_LIMITS, createGptWorkspace, normalizeGptUrl, buildGptChatRequest } from '../domains/my-gpt.js?v=20261003-skin360';
+import { createVoiceDialogue } from '../domains/voice-dialogue.js?v=20261007-empty-pause-guard';
 import { createSpeechInput, createVoiceOutput, watchVoiceOwnerVisibility } from './voice-session.js?v=20261005-voice';
 
 const STYLE = `
@@ -106,6 +107,7 @@ export function mountMyGpt({ documentRoot = globalThis.document, windowRoot = gl
   let activeConversationId = null;
   let speechInput = null;
   let speechOutput = null;
+  let voiceDialogue = null;
   let voiceDraft = false;
   let voiceRevision = 0;
   let capturePrefix = '';
@@ -147,18 +149,22 @@ export function mountMyGpt({ documentRoot = globalThis.document, windowRoot = gl
   voiceLanguage.control.value = languages.find(([value]) => value === browserLanguage)?.[0] || languages.find(([value]) => value.split('-')[0] === browserLanguage.split('-')[0])?.[0] || 'en-US';
   const listen = button(doc, 'Listen', startListening);
   const stopListening = button(doc, 'Stop listening', () => speechInput?.stop()); stopListening.hidden = true;
+  const dialogueConsentLabel = node(doc, 'label', 'my-gpt-consent');
+  const dialogueConsent = node(doc, 'input'); dialogueConsent.type = 'checkbox'; dialogueConsent.setAttribute('aria-label', 'Allow automatic sending during voice dialogue');
+  dialogueConsentLabel.append(dialogueConsent, node(doc, 'span', '', 'Hands-free turns: send each recognized pause to my selected assistant and speak its reply.'));
+  const dialogueButton = button(doc, 'Start voice dialogue', toggleVoiceDialogue, 'my-gpt-primary');
   const interrupt = button(doc, 'Interrupt voice', () => {
     if (chatController) cancelChat('Stopped waiting here. The provider may continue processing this request. Your message remains in local history.');
     else stopVoice();
     voiceSay('Voice stopped. Review your message or press Listen for another turn.');
   }); interrupt.hidden = true;
-  voiceTools.append(voiceLanguage.label, listen, stopListening, interrupt);
+  voiceTools.append(voiceLanguage.label, listen, stopListening, dialogueButton, interrupt);
   const readRepliesLabel = node(doc, 'label', 'my-gpt-consent');
   const readReplies = node(doc, 'input'); readReplies.type = 'checkbox'; readReplies.setAttribute('aria-label', 'Read voice replies aloud');
   readRepliesLabel.append(readReplies, node(doc, 'span', '', 'Read replies aloud after I send a voice message'));
   const voiceStatus = node(doc, 'p', 'my-gpt-voice-status', 'Press Listen, review your message, then Send.'); voiceStatus.setAttribute('role', 'status'); voiceStatus.setAttribute('aria-live', 'polite');
   const voiceInterim = node(doc, 'p', 'my-gpt-voice-interim'); voiceInterim.hidden = true; voiceInterim.setAttribute('aria-label', 'Speech being recognized');
-  voice.append(voiceDisclosure, voiceTools, readRepliesLabel, voiceStatus, voiceInterim);
+  voice.append(voiceDisclosure, voiceTools, dialogueConsentLabel, readRepliesLabel, voiceStatus, voiceInterim);
   const composeActions = node(doc, 'div', 'my-gpt-compose-actions');
   const newChat = button(doc, 'New chat', () => mutateWorkspace(() => workspace.newConversation()), 'my-gpt-quiet');
   const send = button(doc, 'Send message', null, 'my-gpt-primary'); send.type = 'submit';
@@ -235,6 +241,7 @@ export function mountMyGpt({ documentRoot = globalThis.document, windowRoot = gl
   function listening() { return ['starting', 'listening', 'stopping'].includes(speechInput?.getSnapshot().status); }
   function stopVoice() {
     // Invalidates both a pending spoken reply and any delayed recognition event.
+    voiceDialogue?.stop(); dialogueConsent.checked = false;
     voiceRevision += 1; captureRevision = -1; voiceDraft = false;
     speechInput?.abort(); speechOutput?.stop();
     voiceInterim.textContent = ''; voiceInterim.hidden = true;
@@ -254,6 +261,7 @@ export function mountMyGpt({ documentRoot = globalThis.document, windowRoot = gl
       voiceDraft = true;
     }
     voiceInterim.textContent = snapshot.interim || ''; voiceInterim.hidden = !snapshot.interim;
+    voiceDialogue?.update(snapshot);
     controls();
   }
   function speechState(snapshot) {
@@ -264,6 +272,7 @@ export function mountMyGpt({ documentRoot = globalThis.document, windowRoot = gl
     else if (snapshot.status === 'stopping') voiceSay('Finishing recognition…');
     else if (snapshot.status === 'stopped') voiceSay(voiceDraft ? 'Review your message below, then press Send. Press Listen to add more.' : 'Listening stopped. Press Listen to try again, or type your message.');
     if (!['starting', 'listening', 'stopping'].includes(snapshot.status)) { voiceInterim.textContent = ''; voiceInterim.hidden = true; }
+    voiceDialogue?.update(snapshot);
     controls();
   }
   function outputState(snapshot) {
@@ -276,6 +285,22 @@ export function mountMyGpt({ documentRoot = globalThis.document, windowRoot = gl
     else if (snapshot.status === 'stopped') voiceSay(snapshot.reason === 'ended' ? 'Spoken reply finished. Press Listen for your next turn.' : 'Spoken reply stopped. Press Listen for your next turn.');
     else if (snapshot.status === 'idle') voiceSay('Press Listen for your next turn.');
     controls();
+  }
+  function dialogueState(snapshot) {
+    if (snapshot.phase === 'listening') voiceSay('Voice dialogue is listening. Pause when you finish a turn; recognized words are sent to your selected assistant. Press Stop voice dialogue at any time.');
+    else if (snapshot.phase === 'sending') voiceSay('Sending this recognized turn to your selected assistant…');
+    else if (snapshot.phase === 'speaking') voiceSay('Your assistant is replying aloud. Listening pauses until the reply finishes.');
+    else if (snapshot.phase === 'error') voiceSay(snapshot.error || 'Voice dialogue stopped. Your conversation remains visible.', true);
+    else if (!snapshot.running) voiceSay('Voice dialogue stopped.');
+    controls();
+  }
+  function toggleVoiceDialogue() {
+    if (voiceDialogue?.getSnapshot().running) { voiceRevision += 1; speechOutput?.stop(); voiceDialogue.stop(); dialogueConsent.checked = false; voiceSay('Voice dialogue stopped.'); controls(); return; }
+    if (!dialogueConsent.checked) { voiceSay('Check Hands-free turns first. Recognized pauses will then be sent automatically until you stop.', true); return; }
+    if (!ready() || !selectedModelReady()) { voiceSay('Connect your selected provider and choose a model in Account & setup before starting voice dialogue.', true); setup.element.open = true; return; }
+    if (!speechInput?.getSnapshot().supported || !speechOutput?.getSnapshot().supported) { voiceSay('This browser needs speech recognition and speech playback for voice dialogue. You can still type or use reviewed Listen.', true); return; }
+    readReplies.checked = true;
+    voiceDialogue.start();
   }
   function voiceContext() {
     // Owner identity only: callers can detect a destination change without
@@ -294,6 +319,10 @@ export function mountMyGpt({ documentRoot = globalThis.document, windowRoot = gl
     send.disabled = !ready() || !selectedModelReady() || Boolean(chatController) || isListening || !prompt.value.trim();
     listen.disabled = !surfaceActive || !speechInput?.getSnapshot().supported || Boolean(chatController) || isListening;
     stopListening.hidden = !isListening; stopListening.disabled = speechInput?.getSnapshot().status === 'stopping';
+    const dialogue = voiceDialogue?.getSnapshot();
+    dialogueButton.textContent = dialogue?.running ? 'Stop voice dialogue' : 'Start voice dialogue';
+    dialogueButton.disabled = !surfaceActive || (!dialogue?.running && (!dialogueConsent.checked || !speechInput?.getSnapshot().supported || !speechOutput?.getSnapshot().supported));
+    dialogueConsent.disabled = Boolean(dialogue?.running) || Boolean(chatController);
     voiceLanguage.control.disabled = isListening || isSpeaking || Boolean(chatController);
     readReplies.disabled = !speechOutput?.getSnapshot().supported;
     interrupt.hidden = !isListening && !isSpeaking && !chatController;
@@ -472,14 +501,14 @@ export function mountMyGpt({ documentRoot = globalThis.document, windowRoot = gl
   }
   async function sendMessage(event) {
     event?.preventDefault();
-    if (destroyed || chatController || listening() || !ready() || !selectedModelReady() || !prompt.value.trim()) return;
+    if (destroyed || chatController || listening() || !ready() || !selectedModelReady() || !prompt.value.trim()) return false;
     const text = prompt.value.trim();
     let payload;
     try {
       payload = buildGptChatRequest({ workspace: workspace.snapshot(), provider, model: modelSelect.control.value, prompt: text });
       if (provider === 'chatgpt') payload.accountId = bridge.chatgpt.activeAccountId;
     }
-    catch (error) { say(error?.message || 'The message could not be prepared.', true); return; }
+    catch (error) { say(error?.message || 'The message could not be prepared.', true); return false; }
     const current = ++generation;
     const speakReply = voiceDraft && readReplies.checked;
     const replyVoiceRevision = voiceRevision;
@@ -498,10 +527,15 @@ export function mountMyGpt({ documentRoot = globalThis.document, windowRoot = gl
       // Only this explicitly sent voice turn may start speech. Rendering history
       // never speaks, and changing context invalidates this revision.
       if (speakReply && readReplies.checked && surfaceActive && ready() && replyVoiceRevision === voiceRevision && replyContext === voiceContext()) {
+        // The dialogue owner speaks after this request resolves and then
+        // resumes capture, so avoid speaking the same answer twice.
+        if (voiceDialogue?.getSnapshot().running) return response.content;
         void speechOutput?.speak(response.content, { language: replyLanguage });
       }
+      return response.content;
     } catch (error) {
       if (!destroyed && current === generation && error?.name !== 'AbortError') say(error?.message || 'Message failed. Your prompt remains in local history.', true);
+      return false;
     } finally { if (!destroyed && current === generation) { chatController = null; controls(); } }
   }
   async function startSignIn() {
@@ -567,6 +601,7 @@ export function mountMyGpt({ documentRoot = globalThis.document, windowRoot = gl
   prompt.addEventListener('input', () => {
     // Typing or general dictation takes ownership of the draft; late speech
     // recognition must not replace the user's edit.
+    if (voiceDialogue?.getSnapshot().running) { voiceDialogue.stop(); dialogueConsent.checked = false; voiceSay('Voice dialogue stopped because you edited the message. Your text was kept.'); }
     voiceRevision += 1; captureRevision = -1;
     speechInput?.abort(); speechOutput?.stop();
     voiceDraft = voiceDraft && Boolean(prompt.value.trim()); controls();
@@ -584,6 +619,12 @@ export function mountMyGpt({ documentRoot = globalThis.document, windowRoot = gl
       speechOutput?.stop();
     }
     voiceSay(readReplies.checked ? 'New voice messages can receive a spoken reply after you press Send.' : 'Spoken replies are off. Replies remain visible in the conversation.');
+    controls();
+  });
+  dialogueConsent.addEventListener('change', () => {
+    voiceSay(dialogueConsent.checked
+      ? 'Hands-free is armed only after you press Start voice dialogue. Paused speech turns will be sent to the selected assistant; browser speech recognition may use an online service.'
+      : 'Hands-free dialogue is off. Listen still lets you review each message before sending.');
     controls();
   });
   prompt.addEventListener('keydown', event => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) sendMessage(event); });
@@ -618,6 +659,16 @@ export function mountMyGpt({ documentRoot = globalThis.document, windowRoot = gl
   doc.addEventListener?.('visibilitychange', onVisibility);
   speechInput = createSpeechInput({ windowRoot, language: voiceLanguage.control.value, onUpdate: receiveSpeech, onState: speechState });
   speechOutput = createVoiceOutput({ windowRoot, onState: outputState });
+  voiceDialogue = createVoiceDialogue({
+    beginCapture: () => { prompt.value = ''; voiceDraft = false; startListening(); },
+    finishCapture: () => speechInput?.stop(),
+    abortCapture: () => speechInput?.abort(),
+    submit: async text => { prompt.value = text; voiceDraft = true; controls(); return sendMessage(); },
+    speak: text => speechOutput?.speak(text, { language: voiceLanguage.control.value }),
+    onState: dialogueState,
+    setTimer: windowRoot?.setTimeout?.bind(windowRoot) || globalThis.setTimeout.bind(globalThis),
+    clearTimer: windowRoot?.clearTimeout?.bind(windowRoot) || globalThis.clearTimeout.bind(globalThis),
+  });
   const stopWatchingVoiceOwner = watchVoiceOwnerVisibility({ element: root, windowRoot, onHidden: stopVoice });
   if (!speechInput.getSnapshot().supported) voiceSay('Speech recognition is unavailable in this browser. Type your message; supported browsers can use Listen.');
   if (!speechOutput.getSnapshot().supported) readRepliesLabel.appendChild(node(doc, 'span', '', ' · Speech playback unavailable in this browser.'));
@@ -646,7 +697,7 @@ export function mountMyGpt({ documentRoot = globalThis.document, windowRoot = gl
       destroyed = true; generation += 1; statusGeneration += 1;
       chatController?.abort(); statusController?.abort(); authController?.abort(); modelsController?.abort();
       stopWatchingVoiceOwner();
-      speechInput?.destroy(); speechOutput?.destroy();
+      voiceDialogue?.stop(); speechInput?.destroy(); speechOutput?.destroy();
       windowRoot?.removeEventListener?.('focus', onFocus);
       for (const name of voiceExitEvents) windowRoot?.removeEventListener?.(name, onPageHide);
       doc.removeEventListener?.('visibilitychange', onVisibility); root.remove(); style.remove();

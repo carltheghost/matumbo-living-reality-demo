@@ -39,6 +39,11 @@ MAX_RESPONSE_BYTES = 1_000_000
 REQUEST_TIMEOUT_SECONDS = 45
 PUBLIC_ORIGIN = "https://carltheghost.github.io"
 LOCAL_LIMIT_PER_MINUTE = 6
+KALSHI_MARKETS_UPSTREAM = "https://external-api.kalshi.com/trade-api/v2/markets?limit=100&status=open&mve_filter=exclude"
+KALSHI_MARKETS_ROUTE = "/api/public/kalshi/markets"
+PUBLIC_MARKET_TIMEOUT_SECONDS = 8
+PUBLIC_MARKET_CACHE_SECONDS = 30
+PUBLIC_MARKET_MAX_BYTES = 1_000_000
 STATIC_PREFIXES = ("src/", "vendor/three-r179.1/", "vendor/mediapipe-tasks-vision-1.0.1/", "assets/", "public/")
 ROOT_FILES = frozenset({
     "index.html", "favicon.svg", "mobile-chrome.js", "mobile-layout.css",
@@ -161,6 +166,73 @@ def nvidia_request(prompt, api_key, model):
         raise BridgeError(502, "invalid_provider_response", "NVIDIA returned an unreadable response.") from None
 
 
+def kalshi_markets_request():
+    """Read a fixed public market endpoint; accept no URL, key, or user query."""
+    request = Request(KALSHI_MARKETS_UPSTREAM, headers={
+        "Accept": "application/json",
+        "User-Agent": "maTumbo-RealityLens-Prototype/1.0",
+    }, method="GET")
+    try:
+        with build_opener(NoRedirects()).open(request, timeout=PUBLIC_MARKET_TIMEOUT_SECONDS) as response:
+            if response.headers.get_content_type() != "application/json":
+                raise BridgeError(502, "public_source_invalid", "Kalshi returned a non-JSON market response.")
+            raw = response.read(PUBLIC_MARKET_MAX_BYTES + 1)
+            if len(raw) > PUBLIC_MARKET_MAX_BYTES:
+                raise BridgeError(502, "public_source_too_large", "Kalshi returned an oversized market response.")
+            value = json.loads(raw.decode("utf-8"))
+            if not isinstance(value, dict) or not isinstance(value.get("markets"), list):
+                raise BridgeError(502, "public_source_invalid", "Kalshi returned an invalid market response.")
+            return value
+    except HTTPError as error:
+        if error.code == 429:
+            retry = error.headers.get("Retry-After", "30")
+            retry = int(retry) if retry.isdigit() else 30
+            raise BridgeError(429, "public_source_rate_limited", "Kalshi temporarily rate-limited this public read.", min(max(retry, 1), 600)) from None
+        raise BridgeError(502, "public_source_error", f"Kalshi returned HTTP {error.code} for public market data.") from None
+    except (URLError, TimeoutError, OSError):
+        raise BridgeError(504, "public_source_unreachable", "Kalshi public market data could not be reached within the local timeout.") from None
+    except (ValueError, UnicodeError):
+        raise BridgeError(502, "public_source_invalid", "Kalshi returned an unreadable market response.") from None
+
+
+class PublicMarketState:
+    """Short-cache and rate-limit the single allowlisted public market read."""
+
+    def __init__(self, requester=kalshi_markets_request, clock=time.monotonic, cache_seconds=PUBLIC_MARKET_CACHE_SECONDS):
+        self.requester, self.clock, self.cache_seconds = requester, clock, cache_seconds
+        self.lock = threading.Lock()
+        self.requests = deque()
+        self.in_flight = False
+        self.cached = None
+        self.cached_at = 0
+
+    def kalshi_markets(self):
+        now = self.clock()
+        with self.lock:
+            while self.requests and now - self.requests[0] >= 60:
+                self.requests.popleft()
+            if self.cached is not None and now - self.cached_at < self.cache_seconds:
+                return self.cached
+            if self.in_flight:
+                raise BridgeError(429, "public_source_busy", "A Kalshi market read is already in progress. Try again shortly.", 3)
+            if len(self.requests) >= LOCAL_LIMIT_PER_MINUTE:
+                retry = max(1, int(60 - (now - self.requests[0]) + 0.999))
+                raise BridgeError(429, "local_rate_limit", "The local bridge permits six public market reads per minute.", retry)
+            self.requests.append(now)
+            self.in_flight = True
+        try:
+            value = self.requester()
+            if not isinstance(value, dict) or not isinstance(value.get("markets"), list):
+                raise BridgeError(502, "public_source_invalid", "Kalshi returned an invalid market response.")
+            with self.lock:
+                self.cached = value
+                self.cached_at = self.clock()
+            return value
+        finally:
+            with self.lock:
+                self.in_flight = False
+
+
 class ProviderState:
     def __init__(self, api_key="", model=DEFAULT_MODEL, requester=nvidia_request, clock=time.monotonic):
         self.api_key = api_key.strip()
@@ -281,10 +353,11 @@ def static_path(root, raw_path):
         return None
 
 
-def create_server(root, port=8082, state=None, gpt_state=None):
+def create_server(root, port=8082, state=None, gpt_state=None, market_state=None):
     root = Path(root).resolve()
     state = state or ProviderState(os.environ.get("NVIDIA_API_KEY", ""), os.environ.get("NVIDIA_MODEL", DEFAULT_MODEL))
     gpt_state = gpt_state or gpt_bridge.GPTState(os.environ.get("OPENAI_API_KEY", ""), os.environ.get("OPENAI_MODEL", gpt_bridge.DEFAULT_MODEL))
+    market_state = market_state or PublicMarketState()
     root_fingerprint = hashlib.sha256(str(root).replace('\\', '/').lower().rstrip('/').encode('utf-8')).hexdigest()
     instance_id = uuid.uuid4().hex
 
@@ -367,7 +440,7 @@ def create_server(root, port=8082, state=None, gpt_state=None):
                 route = urlsplit(self.path).path
                 if route.startswith("/api/gpt/") and not self.gpt_permitted():
                     return
-                if route not in ("/api/providers", "/api/health", "/api/nvidia/chat", "/api/gpt/status", "/api/gpt/models", "/api/gpt/chat", "/api/gpt/sign-in", "/api/gpt/disconnect"):
+                if route not in ("/api/providers", "/api/health", KALSHI_MARKETS_ROUTE, "/api/nvidia/chat", "/api/gpt/status", "/api/gpt/models", "/api/gpt/chat", "/api/gpt/sign-in", "/api/gpt/disconnect"):
                     return self.send_json(404, {"error": {"message": "Not found."}})
                 self.send_data(204, b"")
 
@@ -378,6 +451,11 @@ def create_server(root, port=8082, state=None, gpt_state=None):
             if not self.permitted():
                 return
             route = urlsplit(self.path)
+            if route.path == KALSHI_MARKETS_ROUTE and not route.query:
+                try:
+                    return self.send_json(200, self.server.public_market_state.kalshi_markets())
+                except BridgeError as error:
+                    return self.send_json(error.status, {"error": {"code": error.code, "message": error.message}}, error.retry_after)
             if route.path.startswith("/api/gpt/"):
                 if route.path != "/api/gpt/callback" and not self.gpt_permitted():
                     return
@@ -462,6 +540,7 @@ def create_server(root, port=8082, state=None, gpt_state=None):
 
     server = LoopbackThreadingHTTPServer(("127.0.0.1", port), Handler)
     server.daemon_threads = True
+    server.public_market_state = market_state
     return server
 
 

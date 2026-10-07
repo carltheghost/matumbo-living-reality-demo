@@ -50,20 +50,7 @@
     }
   ],
   "errors": [],
-  "failedRequests": [
-    {
-      "url": "https://api.elections.kalshi.com/trade-api/v2/markets",
-      "error": "net::ERR_FAILED"
-    },
-    {
-      "url": "https://api.elections.kalshi.com/trade-api/v2/markets",
-      "error": "net::ERR_FAILED"
-    },
-    {
-      "url": "https://api.elections.kalshi.com/trade-api/v2/markets",
-      "error": "net::ERR_FAILED"
-    }
-  ],
+  "failedRequests": [],
   "physicalMicrophoneUsed": false,
   "recognition": "controlled double",
   "recording": "real MediaRecorder with synthetic oscillator",

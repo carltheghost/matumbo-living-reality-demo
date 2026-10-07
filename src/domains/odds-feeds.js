@@ -14,6 +14,7 @@
 
 const KALSHI_MARKETS_URL =
   "https://api.elections.kalshi.com/trade-api/v2/markets";
+const KALSHI_LOCAL_BRIDGE_PATH = "/api/public/kalshi/markets";
 
 const POLYMARKET_MARKETS_URL =
   "https://gamma-api.polymarket.com/markets";
@@ -151,6 +152,41 @@ function uniqueOutcomes(outcomes) {
 }
 
 function kalshiPrice(market) {
+  const yesBidDollars = toFiniteNumber(
+    market?.yes_bid_dollars ?? market?.yesBidDollars
+  );
+  const yesAskDollars = toFiniteNumber(
+    market?.yes_ask_dollars ?? market?.yesAskDollars
+  );
+
+  // Current Kalshi responses use dollar strings (for example, "0.5600"),
+  // which already represent probabilities. Do not convert these to cents.
+  if (
+    yesBidDollars !== null &&
+    yesAskDollars !== null &&
+    yesBidDollars >= 0 &&
+    yesAskDollars <= 1 &&
+    yesBidDollars <= yesAskDollars
+  ) {
+    const midpoint = (yesBidDollars + yesAskDollars) / 2;
+
+    if (midpoint > 0 && midpoint < 1) {
+      return midpoint;
+    }
+  }
+
+  const lastPriceDollars = toFiniteNumber(
+    market?.last_price_dollars ?? market?.lastPriceDollars
+  );
+
+  if (
+    lastPriceDollars !== null &&
+    lastPriceDollars > 0 &&
+    lastPriceDollars < 1
+  ) {
+    return lastPriceDollars;
+  }
+
   const directProbability = toFiniteNumber(
     market?.yes_price ??
       market?.yesPrice ??
@@ -423,11 +459,28 @@ async function fetchJson({ fetch, url, timeoutMs }) {
   }
 }
 
-async function fetchKalshiOdds({ fetch, timeoutMs } = {}) {
+function resolveKalshiRequestUrl(location = globalThis.location) {
+  // Kalshi's public endpoint is readable by the local bridge but blocks
+  // browser CORS. Do not emit a doomed cross-origin fetch from static hosting.
+  // Node tests and server-side consumers without a browser location retain the
+  // direct allowlisted URL; the supported local demo uses its same-origin API.
+  if (!location || typeof location.hostname !== "string") return KALSHI_MARKETS_URL;
+  const loopback = ["localhost", "127.0.0.1"].includes(location.hostname.toLowerCase());
+  if (loopback && location.protocol === "http:" && String(location.port) === "8082") {
+    return KALSHI_LOCAL_BRIDGE_PATH;
+  }
+  return null;
+}
+
+async function fetchKalshiOdds({ fetch, timeoutMs, location = globalThis.location } = {}) {
+  const url = resolveKalshiRequestUrl(location);
+  if (!url) {
+    return createUnavailableOdds("Kalshi market reads need the local Reality Lens bridge; this static page cannot proxy the source.");
+  }
   try {
     const raw = await fetchJson({
       fetch,
-      url: KALSHI_MARKETS_URL,
+      url,
       timeoutMs,
     });
     const markets = normalizeOddsMarkets(raw, SOURCES.KALSHI);
@@ -760,11 +813,13 @@ export {
   isFreshQuote,
   matchMarketToGame,
   normalizeOddsMarkets,
+  resolveKalshiRequestUrl,
   validateQuoteShape,
 };
 
 export const ODDS_CONSTANTS = Object.freeze({
   KALSHI_MARKETS_URL,
+  KALSHI_LOCAL_BRIDGE_PATH,
   POLYMARKET_MARKETS_URL,
   MAX_QUOTE_AGE_MS,
   DEFAULT_TIMEOUT_MS,

@@ -1,13 +1,13 @@
 # Voice implementation and acceptance
 
-The Reality Lens demo now offers reviewed voice writing throughout its existing spaces, local voice attachments, separately keyed audio encryption, and opt-in spoken replies in the existing My GPT conversation. The same browser modules are packaged for other applications. This record describes the demo checkout; adoption in another repository has separate evidence.
+The Reality Lens demo now offers reviewed voice writing throughout its existing spaces, local voice attachments, separately keyed audio encryption, spoken replies, and an explicit opt-in hands-free dialogue in the existing My GPT conversation. The same browser modules are packaged for other applications. This record describes the demo checkout; adoption in another repository has separate evidence.
 
 ## Use it
 
 1. Open the local app and select a search box, text field, or editable object surface. Press **Voice** or **Alt + Shift + V**.
 2. Choose the destination and spoken language. Press **Start dictation**, speak, and press **Stop listening**. Edit the reviewed words, then press **Insert into field**. **Search app** is a separate explicit action. Dictation does not press Send or execute recognized commands.
-3. For voice messages, enter your own local **Rooms** conversation and press **Record voice**. Stop and review playback before saving. Choose encrypted audio, prepare the encrypted attachment, and keep its unlock code separately before saving. Unlock and playback remain explicit actions.
-4. For a voice conversation, open **Web + AI → My GPT**, choose an existing provider/account, and press **Listen**. Review and **Send** through the original chat owner. Enable spoken voice replies if desired; **Interrupt voice** stops playback. A working account or API configuration is still required for a real AI reply.
+3. For voice messages, enter your own local **Rooms** conversation; encrypted audio is selected by default. Press **Record voice**, stop, and review playback before saving. Prepare the encrypted attachment and keep its unlock code separately before saving. Readable audio requires an explicit privacy-mode change. Unlock and playback remain explicit actions.
+4. For a reviewed voice turn, open **Web + AI → My GPT**, choose an existing provider/account, press **Listen**, review the words, and **Send** through the original chat owner. Enable spoken replies if desired; **Interrupt voice** stops playback. For hands-free back-and-forth, enable **Hands-free turns** and press **Start voice dialogue**. Each pause is sent to the selected assistant, its reply is spoken, and listening resumes after playback. Press **Stop voice dialogue** to end it; changing spaces or typing stops capture. Browser speech recognition may process audio online. A working account or API configuration is still required for a real AI reply.
 
 Passwords, API keys, unlock codes and other secret fields are excluded from dictation. Numeric/date fields retain their constraints and require exact numeric or ISO values; ambiguous spoken words remain available for review. Existing native editing, form submission and rich-text formatting remain in place.
 
@@ -15,9 +15,9 @@ Passwords, API keys, unlock codes and other secret fields are excluded from dict
 
 | Verification | Result and scope |
 | --- | --- |
-| Complete JavaScript suite | **2,637 passed**, 113 suites, zero failures/cancellations/skips. Includes the unchanged crypto-renderer ownership test. |
-| Complete Python suite | **76 passed**. Includes launcher, protected loopback/provider and reproducible package/extraction checks. |
-| Mounted desktop voice flows | **11 passed**: original selection insertion, cancelled/failed take preservation, literal rich text, native numeric/calendar constraints, real recording/playback, encryption/unlock/lock, hidden-owner cleanup, original GPT Send, interrupted speech and persisted-page lifecycle. |
+| Complete JavaScript suite | **2,656 passed**, 113 suites, zero failures/cancellations/skips. |
+| Complete Python suite | **80 passed**. Includes launcher, protected loopback/provider and package checks. |
+| Mounted desktop voice flows | **12 passed**: original selection insertion, cancelled/failed take preservation, literal rich text, native numeric/calendar constraints, real recording/playback, encryption/unlock/lock, hidden-owner cleanup, original GPT Send, interrupted speech, persisted-page lifecycle, and an explicitly started hands-free My GPT turn with response playback and recognition resume. |
 | All feature mounts | **72 checks passed** over all 36 features in desktop and phone viewports. Exactly one voice owner/button/panel; opening a feature or Voice does not start capture. |
 | Mobile layouts | **390×844, 320×740 and 844×390 passed**. Unsupported recognition, denied recording permission, reviewed app search and local room controls remain usable without horizontal overflow. |
 | Extracted kit | **51 dependency-free Node checks passed**. A separately served extracted example also passed original-field insertion without submission, stale-document rejection with retained words, browser encryption round trip, and actual same-origin iframe activity coordination. |
@@ -25,9 +25,9 @@ Passwords, API keys, unlock codes and other secret fields are excluded from dict
 
 Recognition and speech playback use controlled browser doubles. Actual MediaRecorder receives a generated oscillator stream. GPT uses a clearly labeled test response on the existing backend path. **No physical microphone or camera was accessed**, no account authorization was started, and no real provider inference was verified. Phone tests are desktop browser viewport emulations.
 
-The desktop voice run observed existing public Kalshi fetch failures; these are retained in its report. They did not stop voice flows. This record does not establish that every external network service is available.
+The fresh voice run had zero failed browser requests. The separate network-boundary replay confirmed that market reads wait for an explicit scan and that the browser uses the same-origin local bridge for Kalshi. This does not establish that every external network service is available.
 
-The [source fingerprints](voice/source-fingerprints.json) identify the actual tested working-copy bytes, including new files. [Test summary](voice/test-summary.json), [desktop flows](voice/voice-browser-check.json), [route matrix](voice/voice-routes-check.json), [mobile layouts](voice/voice-layout-check.json), [extracted example](voice/voice-kit-browser-check.json) and [graphics fallback](voice/voice-fallback-browser-check.json) preserve the evidence and its limits. CI is recorded against an exact pushed commit separately; these local results alone do not establish a green remote workflow.
+The [source fingerprints](voice/source-fingerprints.json) identify the actual tested working-copy bytes, including new files. [Test summary](voice/test-summary.json), [desktop flows](voice/voice-browser-check.json), [route matrix](voice/voice-routes-check.json), [mobile layouts](voice/voice-layout-check.json), [extracted example](voice/voice-kit-browser-check.json) and [graphics fallback](voice/voice-fallback-browser-check.json) preserve the evidence and its limits. The extracted package/browser check is from its earlier dated run; this audit did not rebuild or retest the portable archive. CI is recorded against an exact pushed commit separately; these local results alone do not establish a green remote workflow.
 
 ## Processing and storage
 

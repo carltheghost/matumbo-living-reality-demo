@@ -28,7 +28,7 @@ export function mountRoomConversations({ documentRoot = globalThis.document, win
   const voice = node(doc, 'div', 'room-voice'); voice.setAttribute('aria-label', 'Local voice message');
   const voiceMode = field(doc, 'Voice privacy', 'select');
   for (const [value, title] of [['plain', 'Readable audio'], ['encrypted', 'Encrypt audio with an unlock code']]) { const option = node(doc, 'option', '', title); option.value = value; voiceMode.input.appendChild(option); }
-  voiceMode.input.value = 'plain';
+  voiceMode.input.value = 'encrypted';
   const voiceStatus = node(doc, 'p', '', 'Voice clips stay here. Maximum 60 seconds / 384 KB.'); voiceStatus.setAttribute('role', 'status');
   const voiceActions = node(doc, 'div', 'room-conversations-actions');
   const recordVoice = button(doc, 'Record voice', startRecording), stopVoice = button(doc, 'Stop recording', finishRecording), cancelVoice = button(doc, 'Cancel voice', () => clearVoiceDraft());
@@ -258,6 +258,25 @@ export function mountRoomConversations({ documentRoot = globalThis.document, win
     const anchor = node(doc, 'a'); anchor.href = url; anchor.download = filename; host.appendChild(anchor); anchor.click(); anchor.remove?.();
     windowRoot?.setTimeout?.(() => { windowRoot.URL.revokeObjectURL(url); downloadUrls.delete(url); }, 1000);
   }
+  async function shareEncryptedEnvelope(attachment, status) {
+    const serialized = serializeVoiceAttachment(attachment), name = 'matumbo-encrypted-voice.json', nav = windowRoot?.navigator;
+    try {
+      const FileType = windowRoot?.File, file = typeof FileType === 'function' ? new FileType([serialized], name, { type: 'application/json' }) : null;
+      if (file && typeof nav?.share === 'function' && typeof nav?.canShare === 'function' && nav.canShare({ files: [file] })) {
+        try {
+          await nav.share({ title: 'maTumbo encrypted voice message', text: 'This file contains encrypted audio only. Send the unlock code separately through a trusted channel.', files: [file] });
+          status.textContent = 'Encrypted envelope shared. The unlock code was not included; sharing does not confirm delivery.';
+          return;
+        } catch (error) {
+          if (error?.name === 'AbortError') { status.textContent = 'Sharing canceled. The message remains in this local room.'; return; }
+        }
+      }
+    } catch { /* Use the portable file path when file sharing is unavailable. */ }
+    try {
+      download(new Blob([serialized], { type: 'application/json' }), name);
+      status.textContent = 'Encrypted envelope downloaded. Attach it where you choose and send the unlock code separately.';
+    } catch (error) { status.textContent = error.message || 'The encrypted envelope could not be shared or downloaded.'; }
+  }
   function appendVoiceMessage(item, row) {
     const attachment = row.voice, encrypted = attachment.mode === 'encrypted', generation = logGeneration;
     const audio = node(doc, 'audio'); audio.controls = true; audio.preload = 'none'; audio.hidden = true; audio.setAttribute('aria-label', encrypted ? 'Unlocked voice playback' : 'Voice message playback');
@@ -300,8 +319,9 @@ export function mountRoomConversations({ documentRoot = globalThis.document, win
     } else rowActions.appendChild(button(doc, 'Load voice playback', () => {
       try { if (destroyed || generation !== logGeneration) return; setAudio(audio, plainVoiceBlob(attachment)); updatePlaybackButtons(); status.textContent = 'Audio ready. Press Play voice when ready.'; } catch (error) { status.textContent = error.message; }
     }));
-    rowActions.appendChild(button(doc, encrypted ? 'Download encrypted envelope' : 'Download voice clip', () => {
-      try { if (encrypted) download(new Blob([serializeVoiceAttachment(attachment)], { type: 'application/json' }), 'matumbo-encrypted-voice.json'); else download(plainVoiceBlob(attachment), `matumbo-voice.${voiceFileExtension(attachment.mimeType)}`); }
+    if (encrypted) rowActions.appendChild(button(doc, 'Share / download encrypted envelope', () => { void shareEncryptedEnvelope(attachment, status); }));
+    else rowActions.appendChild(button(doc, 'Download voice clip', () => {
+      try { download(plainVoiceBlob(attachment), `matumbo-voice.${voiceFileExtension(attachment.mimeType)}`); }
       catch (error) { status.textContent = error.message; }
     }));
     item.appendChild(rowActions);

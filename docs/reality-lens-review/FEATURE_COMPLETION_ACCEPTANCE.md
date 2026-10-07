@@ -1,10 +1,19 @@
 # Feature completion acceptance
 
+## Current recheck — October 7, 2026
+
+The current 36-route, cross-feature workflow, My GPT, JavaScript and Python
+results are recorded in the [October 7 feature audit](CURRENT_FEATURE_AUDIT_2026-10-07.md)
+with fresh machine-readable browser evidence. The older counts below describe
+the October 4 acceptance run.
+
 The October 4 completion pass covers every registered route and repairs the
 missing local workflows behind those routes. The [36-route matrix](../FEATURE_COMPLETION.md)
 records the owning engine, evidence and service/device limits for each space.
-The implementation remains on `fix/reality-lens-calm-2026-10-03`, continuing
-draft PR #70 from `e5f394eeb5f517cd96ab59d543ece789daa88e2b`.
+The work continues on `fix/reality-lens-calm-2026-10-03`. The commit
+`e5f394eeb5f517cd96ab59d543ece789daa88e2b` identifies the October 4
+acceptance snapshot; the October 7 audit records the current source and fresh
+browser evidence.
 
 ## Verified behavior
 
@@ -67,8 +76,8 @@ under software WebGL; the narrower component check is labelled explicitly.
 
 ## Complete suite and reproduction
 
-The complete local JavaScript suite passes **2,403/2,403 tests across 104 suites**
-with no skips. The complete Python bridge/package suite passes **59/59 tests**.
+The current local JavaScript suite passes **2,656/2,656 tests across 113 suites**
+with no skips. The current Python bridge/package suite passes **80/80 tests**.
 An old release check prohibited all room persistence; it now allows the
 requested local room owner while retaining network, wallet and authority bans,
 including the new conversation renderer. The first full run's one obsolete
@@ -103,10 +112,10 @@ acceptance artifacts.
 
 ## Runtime and external limits
 
-The verified loopback listener is PID 24996, created at
-`2026-10-04T15:44:11.4682010Z`, serving this checkout through
+The verified loopback listener is PID 25180, created at
+`2026-10-07T12:16:20.0045970Z`, serving this checkout through
 `scripts/provider_bridge.py --port 8082`. Its instance ID is
-`1d4df109b17f48fc8dbad479818f9718`; health reports 36 features. GPT status reports
+`41cc5b40514a4c9d82d84f5d96a1e0c6`; health reports 36 features. GPT status reports
 ChatGPT `signed_out`, authentication dependencies available, OpenAI `key_needed`
 and credential storage `windows_dpapi`. NVIDIA remains `key_needed`.
 
