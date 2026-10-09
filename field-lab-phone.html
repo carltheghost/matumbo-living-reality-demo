@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#09151c">
+<title>maTumbo · Phone launch</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,sans-serif;background:#09151c;color:#e7f1f4}*{box-sizing:border-box}body{margin:0;padding:28px 20px max(32px,env(safe-area-inset-bottom))}main{max-width:660px;margin:0 auto}.brand{letter-spacing:.19em;color:#a4d7d2;font-size:12px;margin:12px 0 32px}h1{font-size:clamp(30px,7vw,44px);line-height:1.1;margin:0 0 16px}p{font-size:16px;line-height:1.55;color:#b8cbd1}strong{color:#e7f1f4}.panel{border:1px solid #38545e;background:#10212a;border-radius:20px;padding:22px;margin:22px 0}.pill{font-size:12px;color:#aff5e4;letter-spacing:.07em}.button,button{display:block;width:100%;border:1px solid #526b75;border-radius:14px;padding:17px 18px;background:#aff5e4;color:#092320;text-align:center;font:600 16px system-ui;cursor:pointer;text-decoration:none;min-height:54px;margin-top:12px}button.secondary,.button.secondary{background:#152b36;color:#e7f1f4}button:disabled{opacity:.55;cursor:wait}.small{font-size:13px}.status{white-space:pre-wrap;overflow-wrap:anywhere;color:#e7f1f4;border-left:3px solid #aff5e4;padding-left:14px;margin-top:20px;line-height:1.5}label{display:flex;gap:12px;align-items:flex-start;line-height:1.45;margin:18px 0;font-size:14px}input[type=checkbox]{width:21px;height:21px;flex:0 0 auto;margin:0}code{overflow-wrap:anywhere;font-size:.92em}details{margin-top:25px;color:#b8cbd1}summary{cursor:pointer;padding:12px 0}[hidden]{display:none!important}a{color:#aff5e4}.end{font-size:12px;color:#8da8b2;margin-top:30px}noscript{color:#ffdfad}
+</style>
+</head>
+<body><main>
+<div class="brand">maTumbo / FIELD LAB / PHONE REPAIR 0.4.1</div>
+<h1>Your field.<br>A camera-ready address.</h1>
+<p>The downloaded file was opening at <code>content://</code>. This launcher runs your existing Field Lab from this website instead. It does not replace the lab with a different demo.</p>
+<section class="panel"><div class="pill" id="host">CHECKING PAGE</div>
+<div id="importPanel">
+<p><strong>Choose the Field Lab HTML already in your Downloads.</strong> Select <code>matumbo-field-lab-v04.html</code>, not the ZIP. The file is checked and read locally; it is not uploaded.</p>
+<input type="file" id="file" hidden aria-label="Choose your downloaded Field Lab HTML">
+<button id="choose">Choose existing Field Lab file</button>
+<button class="secondary" id="launchSaved" hidden>Open saved Field Lab</button>
+<label><input id="remember" type="checkbox" checked>Remember this app on this phone, when browser storage is available. Camera images are never stored by this launcher.</label>
+<p class="small">After it opens: tap <strong>Front + hands</strong> or <strong>Back + hands</strong>, then allow Camera. Use <strong>Camera only</strong> first to check video without downloading a hand model.</p>
+</div>
+<div id="blocked" hidden><p id="blockedText"></p><a class="button" id="openWebsite" target="_blank" rel="noopener">Open HTTPS launcher</a><a class="button secondary" id="openChrome">Open in Chrome on Android</a></div>
+<div class="status" id="status" role="status" aria-live="polite">Checking the launch environment. No camera access requested.</div>
+</section>
+<details><summary>What this repair changes</summary><p>It preserves the original field engine, physics, dimensions, navigation, camera controls, and Room AR code. It corrects the camera-origin check, distinguishes a blocked page from denied permission, and opens the camera controls at startup.</p><p>The camera still needs your permission. Hand tracking downloads the pinned MediaPipe runtime and model only after you request it. Frames stay in the browser in this code. Room AR remains device-dependent and separate from camera hand tracking.</p><p>This is an HTTPS launch repair, not a claim of successful testing on your physical phone. Reopening this link offers the saved app when storage succeeds.</p><button class="secondary" id="forget">Remove saved app from this phone</button></details>
+<noscript>JavaScript is disabled. Open this HTTPS page directly in a browser with JavaScript enabled.</noscript>
+<p class="end">No sign-in, file upload, microphone, or recording. This launcher accepts only the exact, verified Field Lab 0.4 files.</p>
+</main>
+<script>
+(function(){'use strict';
+const CANONICAL='https://carltheghost.github.io/matumbo-living-reality-demo/field-lab-phone.html';
+const TRUSTED=new Set(['094e6ead48e3976ea57cef761358eb62a4ded01cd6dc7ee689d364e1f91c0538']);
+const $=id=>document.getElementById(id);let dbPromise,saved=null,busy=false;
+function say(s){$('status').textContent=s;}
+function classify(x){
+ if(x.protocol==='content:')return {ok:false,code:'download',text:'DOWNLOADED FILE · Android content:// is not the hosted camera app. Open the HTTPS launcher instead.'};
+ if(!(['https:','http:'].includes(x.protocol)))return {ok:false,code:'local',text:'LOCAL / OPAQUE DOCUMENT · Use the hosted HTTPS launcher for camera access.'};
+ const loopback=['localhost','127.0.0.1','[::1]'].includes(x.hostname);
+ if(x.protocol!=='https:'&&!(x.protocol==='http:'&&loopback))return {ok:false,code:'insecure',text:'HTTP PAGE · Open the HTTPS launcher. Do not change browser security flags.'};
+ if(x.origin==='null'||!x.secure)return {ok:false,code:'origin',text:'CAMERA ORIGIN UNAVAILABLE · Open the HTTPS launcher directly in a browser.'};
+ if(!x.topLevel)return {ok:false,code:'embedded',text:'EMBEDDED VIEW · Open this page directly in Chrome, not inside a preview.'};
+ if(!x.media)return {ok:false,code:'api',text:'CAMERA API UNAVAILABLE · This browser or its settings do not expose camera access.'};
+ if(x.cameraAllowed===false)return {ok:false,code:'policy',text:'CAMERA BLOCKED BY PAGE POLICY · Open the launcher directly in Chrome.'};
+ return {ok:true,code:'eligible',text:(x.protocol==='https:'?'HTTPS PAGE':'LOCALHOST TEST')+' · Camera requests are available; your permission is still required.'};
+}
+function current(){let cameraAllowed=true;try{const p=document.permissionsPolicy||document.featurePolicy;if(p?.allowsFeature)cameraAllowed=p.allowsFeature('camera');}catch(_){}return classify({protocol:location.protocol,hostname:location.hostname,origin:location.origin,secure:window.isSecureContext,topLevel:window.top===window.self,media:!!navigator.mediaDevices?.getUserMedia,cameraAllowed});}
+function openDB(){if(!dbPromise)dbPromise=new Promise((resolve,reject)=>{const r=indexedDB.open('matumbo-field-phone-launch',1);r.onupgradeneeded=()=>r.result.createObjectStore('app');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);r.onblocked=()=>reject(new Error('Browser storage is busy.'));});return dbPromise;}
+async function store(op,value){const db=await openDB();return new Promise((resolve,reject)=>{const t=db.transaction('app',op==='get'?'readonly':'readwrite'),s=t.objectStore('app');const r=op==='get'?s.get('v04'):op==='put'?s.put(value,'v04'):s.delete('v04');t.oncomplete=()=>resolve(r.result);t.onerror=()=>reject(t.error);t.onabort=()=>reject(t.error);});}
+async function bounded(p,ms){let timer;try{return await Promise.race([p,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('Browser storage did not respond.')),ms);})]);}finally{clearTimeout(timer);}}
+async function verify(bytes){const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');if(!TRUSTED.has(hash))throw new Error('This is not the exact Field Lab 0.4 HTML from this conversation. Choose matumbo-field-lab-v04.html, not a ZIP, screenshot, earlier version, or edited file. Nothing was run.');return hash;}
+function once(text,old,replacement){if(text.split(old).length!==2)throw new Error('The app differs from the verified repair target. Nothing was run.');return text.replace(old,replacement);}
+function patched(html){
+ const guard='('+classify.toString()+')';
+ const access=`window.FieldPhoneHost={check:function(){let allowed=true;try{const p=document.permissionsPolicy||document.featurePolicy;if(p?.allowsFeature)allowed=p.allowsFeature('camera');}catch(_){}return ${guard}({protocol:location.protocol,hostname:location.hostname,origin:location.origin,secure:window.isSecureContext,topLevel:window.top===window.self,media:!!navigator.mediaDevices?.getUserMedia,cameraAllowed:allowed});}};`;
+ html=once(html,'</head>','<script>'+access+'<\/script></head>');
+ const begin=html.indexOf(' environment(){\n  let text;');
+ const end=html.indexOf('\n status(text){',begin);
+ if(begin<0||end<begin)throw new Error('Camera environment repair point was not found.');
+ html=html.slice(0,begin)+` environment(){const state=window.FieldPhoneHost.check();$('cameraEnvironment').textContent=state.text;this.diagnostics();}\n`+html.slice(end);
+ html=once(html,"   if(!isSecureContext||!navigator.mediaDevices?.getUserMedia)throw new Error('Camera API unavailable in this page. Open the hosted HTTPS app directly in a browser, not a file preview.');","   const permissionHost=window.FieldPhoneHost.check();if(!permissionHost.ok)throw new Error(permissionHost.text);");
+ html=once(html,"Camera permission denied or blocked by this viewer. Open the hosted page directly in Chrome or Safari, allow Camera in site permissions, and retry.","Camera permission was denied or blocked. On this HTTPS page: tap the icon beside the address, open Permissions, and allow Camera. Also check Android Settings > Apps > Chrome > Permissions > Camera. Then tap Camera only. No browser-security changes are needed.");
+ return html;
+}
+function run(html){
+ html=patched(html);
+ const tail=`<script>(function(){document.title='maTumbo Field Lab · HTTPS phone repair';const b=document.createElement('a');b.textContent='Phone launcher';b.href=${JSON.stringify(CANONICAL)};b.style.cssText='display:block;padding:14px;color:#aff5e4;text-align:center';document.getElementById('cameraEnvironment').after(b);document.getElementById('cameraLaunch').click();})();<\/script>`;
+ html=once(html,'</body>',tail+'</body>');
+ // Replacing the current top-level document preserves its HTTPS origin. The
+ // exact source was verified above; no blob/data URL or permission bypass is used.
+ document.open();document.write(html);document.close();
+}
+async function loadBytes(bytes,keep){
+ if(!current().ok)throw new Error(current().text);
+ if(bytes.byteLength>250000||bytes.byteLength<100000)throw new Error('Choose the original Field Lab 0.4 HTML, not the ZIP.');
+ await verify(bytes);const text=new TextDecoder('utf-8',{fatal:true}).decode(bytes);patched(text);
+ if(keep){try{await bounded(store('put',{bytes,savedAt:Date.now()}),2500);}catch(_){/* Storage is optional: never block this session on persistence. */}}
+ run(text);
+}
+$('choose').onclick=()=>{if(!busy)$('file').click();};
+$('file').onchange=async()=>{const f=$('file').files[0];if(!f||busy)return;busy=true;$('choose').disabled=true;say('Verifying the local file, then applying the phone-origin repair. No file upload.');try{if(f.size>250000)throw new Error('Choose the HTML, not a ZIP.');await loadBytes(await f.arrayBuffer(),$('remember').checked);}catch(e){say(e.message);busy=false;$('choose').disabled=false;$('file').value='';}};
+$('launchSaved').onclick=async()=>{if(!saved||busy)return;busy=true;$('launchSaved').disabled=true;try{await loadBytes(saved.bytes,false);}catch(e){say(e.message);busy=false;$('launchSaved').disabled=false;}};
+$('forget').onclick=async()=>{try{await bounded(store('delete'),2500);saved=null;$('launchSaved').hidden=true;say('Saved app removed. The original file in Downloads was not changed.');}catch(_){say('Browser storage could not be changed. Site settings can clear this site’s stored data.');}};
+const state=current();$('host').textContent=state.ok?'HTTPS LAUNCH / PERMISSION REQUIRED':'OPEN THE WEBSITE';say(state.text);
+$('openWebsite').href=CANONICAL;$('openChrome').href='intent://'+CANONICAL.slice(8)+'#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url='+encodeURIComponent(CANONICAL)+';end';
+if(!state.ok){$('importPanel').hidden=true;$('blocked').hidden=false;$('blockedText').textContent=state.text;}
+else bounded(store('get'),2500).then(v=>{if(v){saved=v;$('launchSaved').hidden=false;}}).catch(()=>{if(!busy)say(state.text+' Browser storage is unavailable; selecting the file still works for this session.');});
+// Pure environment check is exposed for regression tests and diagnostics only.
+window.FieldPhoneLaunch=Object.freeze({classify,patched});
+})();
+</script>
+</body></html>
