@@ -1,0 +1,54 @@
+name: Verify Field Lab phone launcher
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - field-lab-phone.html
+      - .github/workflows/check-field-lab-phone.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify deployed HTTPS status and exact launcher bytes
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, pathlib, time, urllib.request
+          path = pathlib.Path('field-lab-phone.html')
+          expected = hashlib.sha256(path.read_bytes()).hexdigest()
+          url = 'https://carltheghost.github.io/matumbo-living-reality-demo/field-lab-phone.html'
+          last = None
+          for attempt in range(18):
+              try:
+                  request = urllib.request.Request(url + '?verify=' + expected[:16], headers={'Cache-Control': 'no-cache'})
+                  with urllib.request.urlopen(request, timeout=12) as response:
+                      status = response.status
+                      actual = response.read()
+                      content_type = response.headers.get('Content-Type', '')
+                      final_url = response.geturl()
+                  assert status == 200, status
+                  assert final_url.startswith('https://carltheghost.github.io/'), final_url
+                  assert 'text/html' in content_type, content_type
+                  assert hashlib.sha256(actual).hexdigest() == expected, 'Published bytes do not match source yet'
+                  report = {'status': status, 'url': url, 'sha256': expected, 'byte_count': len(actual), 'source_matches_live': True, 'device_tested': False}
+                  pathlib.Path('phone-live-check.json').write_text(json.dumps(report, indent=2))
+                  print(json.dumps(report, indent=2))
+                  break
+              except Exception as error:
+                  last = error
+                  print('Waiting for Pages:', type(error).__name__, str(error))
+                  time.sleep(5)
+          else:
+              raise SystemExit('HTTPS verification failed: ' + str(last))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: field-lab-phone-live-check
+          path: phone-live-check.json
