@@ -1,0 +1,43 @@
+name: Vivo authority and input integration ports
+on:
+  push:
+    branches: ['vivo/chat1-authority-input-2026-10-10']
+  pull_request:
+    paths:
+      - 'services/vivo/web/authority/**'
+      - 'services/vivo/server/authority/**'
+      - 'services/vivo/tests/authority/**'
+      - 'scripts/vivo/stage_input_dependency.py'
+      - '.github/workflows/vivo-runtime.yml'
+permissions:
+  contents: read
+jobs:
+  integration-ports:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install aiohttp==3.13.3
+      - name: Read exact unmerged worker sources into disposable test checkout
+        run: python scripts/vivo/stage_input_dependency.py
+      - name: Authority plus actual PR 75 controller
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p test-evidence
+          node --test services/vivo/tests/authority/*.test.mjs services/vivo/tests/input/*.test.mjs services/vivo/tests/integration/contracts.test.mjs research/vivo-phase-fabric/tests/target-mailbox.test.mjs | tee test-evidence/node.log
+          python -m unittest discover -s services/vivo/tests/authority -p 'test_*.py' -v 2>&1 | tee test-evidence/http.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vivo-authority-input-evidence
+          path: test-evidence/
+          retention-days: 7
+      - name: Scope
+        run: echo 'Local lease authority, exact input controller, and real loopback module HTTP. Not a completed source import, material integration, phone UI, remote session or deployment.'
