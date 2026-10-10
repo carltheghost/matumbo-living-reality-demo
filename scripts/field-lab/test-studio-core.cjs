@@ -1,8 +1,10 @@
 'use strict';
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
-const C=require('../../src/field-lab/studio-core.js');const tests=[];
+const tests=[];
 function ok(name,fn){fn();tests.push(name);console.log('PASS',name);}
 (async()=>{
+await import('../../src/field-lab/studio-core.js');
+const C=globalThis.FieldStudioCore;
 ok('black and white camera samples are measured exactly',()=>{assert.equal(C.lightStats(new Uint8Array([0,0,0,255])).mean,0);assert.equal(Math.round(C.lightStats(new Uint8Array([255,255,255,255])).mean),255);});
 ok('invalid RGBA input rejects',()=>assert.throws(()=>C.lightStats([1,2,3])));
 ok('dim mode uses hysteresis rather than flickering at the threshold',()=>{const m=new C.LightMeter();assert.equal(m.update({mean:20}),'dim');for(let i=0;i<8;i++)assert.equal(m.update({mean:55}),'dim');for(let i=0;i<15;i++)m.update({mean:120});assert.equal(m.mode,'normal');});
