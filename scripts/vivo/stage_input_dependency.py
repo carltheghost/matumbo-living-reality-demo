@@ -9,10 +9,11 @@ from pathlib import Path
 from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parents[2]
-COMMIT = "1d8b25adbcef63559b85c069029b4caf02216b41"
+COMMIT = "9bfe8946151d4be3f302b99de205d80201fde0e3"
 BASE = f"https://raw.githubusercontent.com/carltheghost/matumbo-living-reality-demo/{COMMIT}/"
 FILES = {
-    "services/vivo/web/input/controller.mjs": "1291d359210f2bbb585d9116409c5aa59a06dac7",
+    "services/vivo/tests/input/rejection-description.test.mjs": "cc81ee37a7dedc2b0ee773d88506c881eae86b4a",
+    "services/vivo/web/input/controller.mjs": "9a6a5999f911dd4603ec67a37b88614344e7fdb1",
     "services/vivo/web/input/README.md": "eb707b7676d8d45116462b1372224ea281ad473e",
     "services/vivo/tests/input/transport-rejection.test.mjs": "43aef622c7e75f52245ed088205fb06dea1d7f44",
     "services/vivo/tests/input/controller.test.mjs": "c3dd5dcc8424a5c67a4def22b8d252f63d628396",

@@ -9,6 +9,7 @@ on:
       - 'services/vivo/tests/authority/**'
       - 'scripts/vivo/stage_input_dependency.py'
       - 'scripts/vivo/assert_input_evidence.py'
+      - 'scripts/vivo/test_input_evidence.py'
       - 'scripts/vivo/transfer_vendor_blobs.py'
       - 'scripts/vivo/vendor-transfer.json'
       - '.github/workflows/vivo-runtime.yml'
@@ -61,9 +62,10 @@ jobs:
           set -euo pipefail
           mkdir -p test-evidence
           python scripts/vivo/stage_input_dependency.py | tee test-evidence/dependency.log
-      - name: Prove all 90 input tests and 25 falsy regressions execute
+      - name: Prove 102 input tests including 25 falsy and 12 hostile-object cases
         run: |
           set -euo pipefail
+          python scripts/vivo/test_input_evidence.py 2>&1 | tee test-evidence/evidence-gate.log
           node --test services/vivo/tests/input/*.test.mjs | tee test-evidence/input.log
           python scripts/vivo/assert_input_evidence.py test-evidence/input.log
       - name: Authority plus actual PR 75 controller
@@ -78,7 +80,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p test-evidence/reproduction
-          cp --parents scripts/vivo/stage_input_dependency.py scripts/vivo/assert_input_evidence.py services/vivo/contracts/* services/vivo/web/authority/*.mjs services/vivo/web/input/* services/vivo/server/authority/*.py services/vivo/server/authority/*.mjs services/vivo/tests/authority/*.* services/vivo/tests/input/*.mjs services/vivo/tests/integration/contracts.test.mjs research/vivo-phase-fabric/web/target-mailbox.mjs research/vivo-phase-fabric/tests/target-mailbox.test.mjs test-evidence/reproduction/
+          cp --parents scripts/vivo/stage_input_dependency.py scripts/vivo/assert_input_evidence.py scripts/vivo/test_input_evidence.py services/vivo/contracts/* services/vivo/web/authority/*.mjs services/vivo/web/input/* services/vivo/server/authority/*.py services/vivo/server/authority/*.mjs services/vivo/tests/authority/*.* services/vivo/tests/input/*.mjs services/vivo/tests/integration/contracts.test.mjs research/vivo-phase-fabric/web/target-mailbox.mjs research/vivo-phase-fabric/tests/target-mailbox.test.mjs test-evidence/reproduction/
       - uses: actions/upload-artifact@v4
         if: always()
         with:
