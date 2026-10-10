@@ -8,9 +8,13 @@ on:
       - 'services/vivo/server/authority/**'
       - 'services/vivo/tests/authority/**'
       - 'scripts/vivo/stage_input_dependency.py'
+      - 'scripts/vivo/assert_input_evidence.py'
       - '.github/workflows/vivo-runtime.yml'
 permissions:
   contents: read
+defaults:
+  run:
+    shell: bash
 jobs:
   integration-ports:
     runs-on: ubuntu-latest
@@ -25,7 +29,15 @@ jobs:
           python-version: '3.11'
       - run: python -m pip install aiohttp==3.13.3
       - name: Read exact unmerged worker sources into disposable test checkout
-        run: python scripts/vivo/stage_input_dependency.py
+        run: |
+          set -euo pipefail
+          mkdir -p test-evidence
+          python scripts/vivo/stage_input_dependency.py | tee test-evidence/dependency.log
+      - name: Prove all 90 input tests and 25 falsy regressions execute
+        run: |
+          set -euo pipefail
+          node --test services/vivo/tests/input/*.test.mjs | tee test-evidence/input.log
+          python scripts/vivo/assert_input_evidence.py test-evidence/input.log
       - name: Authority plus actual PR 75 controller
         shell: bash
         run: |
@@ -33,6 +45,12 @@ jobs:
           mkdir -p test-evidence
           node --test services/vivo/tests/authority/*.test.mjs services/vivo/tests/input/*.test.mjs services/vivo/tests/integration/contracts.test.mjs research/vivo-phase-fabric/tests/target-mailbox.test.mjs | tee test-evidence/node.log
           python -m unittest discover -s services/vivo/tests/authority -p 'test_*.py' -v 2>&1 | tee test-evidence/http.log
+      - name: Preserve exact replay sources, not just test counts
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p test-evidence/reproduction
+          cp --parents scripts/vivo/stage_input_dependency.py scripts/vivo/assert_input_evidence.py services/vivo/contracts/* services/vivo/web/authority/*.mjs services/vivo/web/input/* services/vivo/server/authority/*.py services/vivo/tests/authority/*.* services/vivo/tests/input/*.mjs services/vivo/tests/integration/contracts.test.mjs research/vivo-phase-fabric/web/target-mailbox.mjs research/vivo-phase-fabric/tests/target-mailbox.test.mjs test-evidence/reproduction/
       - uses: actions/upload-artifact@v4
         if: always()
         with:

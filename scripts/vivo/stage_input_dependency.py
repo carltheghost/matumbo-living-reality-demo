@@ -9,10 +9,12 @@ from pathlib import Path
 from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parents[2]
-COMMIT = "8a10847009101ad08d6652b90608a63f18ac82f5"
+COMMIT = "1d8b25adbcef63559b85c069029b4caf02216b41"
 BASE = f"https://raw.githubusercontent.com/carltheghost/matumbo-living-reality-demo/{COMMIT}/"
 FILES = {
-    "services/vivo/web/input/controller.mjs": "80f815e65fac89ae8e9d97e570f76c862c9fb61d",
+    "services/vivo/web/input/controller.mjs": "1291d359210f2bbb585d9116409c5aa59a06dac7",
+    "services/vivo/web/input/README.md": "eb707b7676d8d45116462b1372224ea281ad473e",
+    "services/vivo/tests/input/transport-rejection.test.mjs": "43aef622c7e75f52245ed088205fb06dea1d7f44",
     "services/vivo/tests/input/controller.test.mjs": "c3dd5dcc8424a5c67a4def22b8d252f63d628396",
 }
 
@@ -22,6 +24,7 @@ def blob(data):
 
 
 def main():
+    print("Pinned PR #75 commit:", COMMIT)
     pending = []
     for relative, expected in FILES.items():
         path = ROOT / relative
