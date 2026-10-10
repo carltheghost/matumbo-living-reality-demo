@@ -114,8 +114,9 @@ test('tampered checkpoint rejected',async()=>{
  const {world}=await fixture();const bad=world.checkpoint();bad.state.snapshot.simulationTime=20;
  await assert.rejects(LocalLeaseWorld.create({store:{load:async()=>bad}}),/CHECKPOINT_HASH/);
 });
-test('unsupported nested/fork command honestly rejected at this stage',async()=>{
- const {a}=await fixture();assert.equal((await a.submit(cmd('space.enter',{portalEntityId:'relic',eyeId:'eye'}))).code,'NOT_IMPLEMENTED');
+test('nested entry requires a registered Eye; world forks remain explicitly unsupported',async()=>{
+ const {a}=await fixture();assert.equal((await a.submit(cmd('space.enter',{portalEntityId:'relic',eyeId:'eye'}))).code,'NO_EYE');
+ assert.equal((await a.submit(cmd('world.fork',{checkpointHash:'0'.repeat(64),newWorldId:'branch'}))).code,'NOT_IMPLEMENTED');
 });
 test('journal is bounded; no silent receipt eviction',async()=>{
  const {a}=await fixture({maxEvents:8});const l=(await acquire(a)).result.leaseId;

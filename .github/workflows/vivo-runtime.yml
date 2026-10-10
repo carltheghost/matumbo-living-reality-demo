@@ -19,7 +19,7 @@ defaults:
     shell: bash
 jobs:
   vendor-byte-transfer:
-    if: github.event_name == 'push' && github.repository == 'carltheghost/matumbo-living-reality-demo' && github.ref == 'refs/heads/vivo/chat1-authority-input-2026-10-10'
+    if: github.event_name == 'push' && github.repository == 'carltheghost/matumbo-living-reality-demo' && github.ref == 'refs/heads/vivo/chat1-authority-input-2026-10-10' && contains(github.event.head_commit.message, '[transfer-vendor]')
     runs-on: ubuntu-latest
     timeout-minutes: 8
     permissions:
@@ -78,7 +78,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p test-evidence/reproduction
-          cp --parents scripts/vivo/stage_input_dependency.py scripts/vivo/assert_input_evidence.py services/vivo/contracts/* services/vivo/web/authority/*.mjs services/vivo/web/input/* services/vivo/server/authority/*.py services/vivo/tests/authority/*.* services/vivo/tests/input/*.mjs services/vivo/tests/integration/contracts.test.mjs research/vivo-phase-fabric/web/target-mailbox.mjs research/vivo-phase-fabric/tests/target-mailbox.test.mjs test-evidence/reproduction/
+          cp --parents scripts/vivo/stage_input_dependency.py scripts/vivo/assert_input_evidence.py services/vivo/contracts/* services/vivo/web/authority/*.mjs services/vivo/web/input/* services/vivo/server/authority/*.py services/vivo/server/authority/*.mjs services/vivo/tests/authority/*.* services/vivo/tests/input/*.mjs services/vivo/tests/integration/contracts.test.mjs research/vivo-phase-fabric/web/target-mailbox.mjs research/vivo-phase-fabric/tests/target-mailbox.test.mjs test-evidence/reproduction/
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -86,4 +86,4 @@ jobs:
           path: test-evidence/
           retention-days: 7
       - name: Scope
-        run: echo 'Local lease authority, exact input controller, and real loopback module HTTP. Not a completed source import, material integration, phone UI, remote session or deployment.'
+        run: echo 'Local lease authority, nested Eyes, POSIX checkpoint restart, exact input controller, and real loopback module HTTP. Not a completed source import, material integration, phone UI, remote session or deployment.'

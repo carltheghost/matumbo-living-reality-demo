@@ -40,6 +40,37 @@ function validateSeed(s) {
   }
 }
 
+// Observer state is separate from material snapshots. These coordinates still use
+// the declared spatial dimension; simulationTime never becomes another axis.
+function checkView(snapshot, view) {
+  validateFrame(view);
+  const space=snapshot.spaces[view.spaceId];
+  if(!Object.hasOwn(snapshot.spaces,view.spaceId) || view.dimension!==space.dimension) fail('EYE_SPACE');
+  const d=view.dimension;
+  if(!Array.isArray(view.basis) || view.basis.length!==d ||
+      !Array.from(view.basis).every(r=>Array.isArray(r)&&r.length===d&&Array.from(r).every(Number.isFinite))) fail('EYE_BASIS');
+  for(let i=0;i<d;i++)for(let j=0;j<d;j++) {
+    const dot=view.basis[i].reduce((v,x,k)=>v+x*view.basis[j][k],0);
+    if(Math.abs(dot-+(i===j))>1e-8) fail('EYE_BASIS');
+  }
+  if(!view.slice || typeof view.slice!=='object' || Array.isArray(view.slice) ||
+      Object.entries(view.slice).some(([k,v])=>!/^x[1-9][0-9]*$/.test(k)||Number(k.slice(1))>d||!Number.isFinite(v)||Math.abs(v)>1000)) fail('EYE_SLICE');
+  return {spaceId:view.spaceId,chart:view.chart,dimension:d,q:[...view.q],basis:clone(view.basis),slice:clone(view.slice)};
+}
+function checkEyes(snapshot, eyes) {
+  if(!eyes || typeof eyes!=='object' || Array.isArray(eyes) || Object.keys(eyes).length>256) fail('INVALID_EYES');
+  for(const [k,e] of Object.entries(eyes)) {
+    if(!validId(e.actorId)||!validId(e.eyeId)||k!==key(e.actorId,e.eyeId)||!Number.isSafeInteger(e.revision)||e.revision<0||
+       !Array.isArray(e.stack)||e.stack.length>32) fail('INVALID_EYE');
+    checkView(snapshot,e);
+    const seen=new Set();
+    for(const f of e.stack) {
+      if(!validId(f.id)||seen.has(f.id)||!validId(f.portalEntityId)) fail('INVALID_RETURN');
+      seen.add(f.id);checkView(snapshot,f.view);
+    }
+  }
+}
+
 /** Host-owned factory. attach() is privileged local admission, not remote authentication. */
 export class LocalLeaseWorld {
   #state; #record; #store; #clock; #tail = Promise.resolve(); #clients = new Map();
@@ -56,15 +87,17 @@ export class LocalLeaseWorld {
     if (record) {
       if (record.schema !== 'vivo.lease-checkpoint/1' || record.digest !== await sha256(record.state)) fail('CHECKPOINT_HASH');
       validateSeed(record.state.snapshot);
+      if(record.state.eyes!==undefined) checkEyes(record.state.snapshot,record.state.eyes);
       if (snapshot && (snapshot.worldId !== record.state.snapshot.worldId || snapshot.authorityId !== record.state.snapshot.authorityId)) fail('WORLD_MISMATCH');
     } else {
       validateSeed(snapshot);
-      const state = {snapshot: clone(snapshot), leases: {}, epochs: {}, receipts: {}, events: []};
-      state.snapshot.stateHash = await sha256({snapshot:{...state.snapshot,stateHash:null},leases:state.leases});
+      const state = {snapshot: clone(snapshot), leases: {}, epochs: {}, receipts: {}, events: [], eyes: {}};
+      state.snapshot.stateHash = await sha256({snapshot:{...state.snapshot,stateHash:null},leases:state.leases,eyes:state.eyes});
       record = {schema: 'vivo.lease-checkpoint/1', state, digest: await sha256(state)};
       await store.compareAndSwap(null, record);
     }
     const world = new LocalLeaseWorld(LocalLeaseWorld, record, store, now, leaseMs, maxEvents);
+    if(record.state.eyes===undefined) await world.#internal('observer-state-initialized',null,s=>{s.eyes={};});
     // Process-local session capabilities never survive a restart. State and history do.
     if (Object.keys(record.state.leases).length) await world.#internal('restart-release', null, s => {s.leases = {};});
     return world;
@@ -82,7 +115,7 @@ export class LocalLeaseWorld {
     if (!validId(actorId) || !['editor','viewer'].includes(role)) fail('INVALID_ADMISSION');
     const token = uuid();
     const session = Object.freeze({mode:'local',actorId,worldId:this.#state.snapshot.worldId,
-      authorityId:this.#state.snapshot.authorityId,capabilities:Object.freeze(role === 'editor' ? ['grab'] : [])});
+      authorityId:this.#state.snapshot.authorityId,capabilities:Object.freeze(role === 'editor' ? ['grab','observe','nested'] : ['observe','nested'])});
     const state = {session, role, listeners:new Set(), closed:false}; this.#clients.set(token, state);
     let opened = false;
     return Object.freeze({
@@ -91,6 +124,15 @@ export class LocalLeaseWorld {
       submit: command => { if (!opened) return Promise.reject(Object.assign(new Error('NOT_OPEN'),{code:'NOT_OPEN'})); return this.#submit(token,command); },
       subscribe: listener => { this.#session(token); if (typeof listener !== 'function') fail('INVALID_LISTENER'); state.listeners.add(listener); return () => state.listeners.delete(listener); },
       inspectLease: (spaceId,entityId) => { this.#session(token); const l=this.#state.leases[key(spaceId,entityId)]; return l?.session === token && l.expiresAt > this.#time() ? clone(l) : null; },
+      registerEye: (eyeId,view) => {
+        if(!opened) return Promise.reject(Object.assign(new Error('NOT_OPEN'),{code:'NOT_OPEN'}));
+        return this.#registerEye(token,eyeId,view);
+      },
+      getEye: eyeId => {this.#session(token);if(!opened)fail('NOT_OPEN');return clone(this.#state.eyes[key(actorId,eyeId)]??null);},
+      moveEye: (eyeId,view,expectedRevision) => {
+        if(!opened) return Promise.reject(Object.assign(new Error('NOT_OPEN'),{code:'NOT_OPEN'}));
+        return this.#moveEye(token,eyeId,view,expectedRevision);
+      },
       renewLease: leaseId => this.#renew(token, leaseId),
       reconcileLease: event => this.#reconcile(token, event),
       close: () => this.#queue(async () => {
@@ -110,16 +152,17 @@ export class LocalLeaseWorld {
   }
   async #advance(next, kind, actorId, payload) {
     if(next.events.length>=this.#limit) fail('JOURNAL_FULL');
+    if(next.snapshot.acceptedSequence>=Number.MAX_SAFE_INTEGER)fail('SEQUENCE_EXHAUSTED');
     next.snapshot.acceptedSequence++;
-    next.snapshot.stateHash=await sha256({snapshot:{...next.snapshot,stateHash:null},leases:next.leases});
+    next.snapshot.stateHash=await sha256({snapshot:{...next.snapshot,stateHash:null},leases:next.leases,eyes:next.eyes});
     next.events.push({sequence:next.snapshot.acceptedSequence,kind,actorId,payload:clone(payload),stateHash:next.snapshot.stateHash});
   }
-  async #commitInternal(kind,token,mutate) {
+  async #commitInternal(kind,token,mutate,payload={}) {
     const next=clone(this.#state); mutate(next);
-    await this.#advance(next,kind,token?this.#session(token).session.actorId:'authority',{});
+    await this.#advance(next,kind,token?this.#session(token).session.actorId:'authority',payload);
     await this.#save(next);return this.snapshot();
   }
-  #internal(kind,token,mutate) { return this.#queue(()=>this.#commitInternal(kind,token,mutate)); }
+  #internal(kind,token,mutate,payload={}) { return this.#queue(()=>this.#commitInternal(kind,token,mutate,payload)); }
   sweepExpired() { return this.#queue(async()=>{
     const now=this.#time();
     if(!Object.values(this.#state.leases).some(l=>l.expiresAt<=now)) return this.snapshot();
@@ -139,6 +182,7 @@ export class LocalLeaseWorld {
       if(command.worldId!==s.snapshot.worldId) return reject('WORLD_MISMATCH');
       const fingerprint=await sha256(command), requestKey=key(token,command.id), prior=s.receipts[requestKey];
       if(prior) return prior.fingerprint===fingerprint?clone(prior.receipt):reject('COMMAND_ID_REUSE');
+      if(['space.enter','space.exit'].includes(command.kind)) return this.#navigate(token,command,fingerprint,requestKey);
       if(client.role!=='editor') return reject('VIEWER');
       if(!['grab.begin','grab.target','grab.end'].includes(command.kind)) return reject('NOT_IMPLEMENTED');
       const space=Object.hasOwn(s.snapshot.spaces,command.spaceId)?s.snapshot.spaces[command.spaceId]:null;
@@ -173,6 +217,69 @@ export class LocalLeaseWorld {
       next.receipts[requestKey]={fingerprint,receipt};
       await this.#save(next);return clone(receipt);
     });
+  }
+  #registerEye(token,eyeId,raw) {
+    const view=clone(raw);
+    return this.#queue(async()=>{
+      const c=this.#session(token),k=key(c.session.actorId,eyeId);
+      if(!validId(eyeId))fail('INVALID_EYE_ID');
+      if(this.#state.eyes[k])return clone(this.#state.eyes[k]);
+      if(Object.keys(this.#state.eyes).length>=256)fail('EYE_LIMIT');
+      const checked=checkView(this.#state.snapshot,view);
+      if(checked.spaceId!==this.#state.snapshot.rootSpaceId)fail('EYE_START_ROOT');
+      const eye={...checked,actorId:c.session.actorId,eyeId,revision:0,stack:[]};
+      await this.#commitInternal('eye-register',token,s=>{s.eyes[k]=eye;},{eye:clone(eye)});
+      return clone(this.#state.eyes[k]);
+    });
+  }
+  #moveEye(token,eyeId,raw,expectedRevision) {
+    const view=clone(raw);
+    return this.#queue(async()=>{
+      const c=this.#session(token),k=key(c.session.actorId,eyeId),e=this.#state.eyes[k];
+      if(!e)fail('NO_EYE');
+      if(!Number.isSafeInteger(expectedRevision)||e.revision!==expectedRevision)fail('STALE_EYE');
+      if(e.revision>=Number.MAX_SAFE_INTEGER)fail('EYE_REVISION_EXHAUSTED');
+      const checked=checkView(this.#state.snapshot,view);
+      if(checked.spaceId!==e.spaceId||checked.dimension!==e.dimension||checked.chart!==e.chart)fail('EYE_FRAME_MISMATCH');
+      const updated={...clone(e),...checked,revision:e.revision+1};
+      await this.#commitInternal('eye-move',token,s=>{s.eyes[k]=updated;},{eyeId,expectedRevision,view:checked});
+      return clone(this.#state.eyes[k]);
+    });
+  }
+  async #navigate(token,command,fingerprint,requestKey) {
+    const c=this.#session(token),p=command.payload,k=key(c.session.actorId,p.eyeId),s=this.#state;
+    const e=s.eyes[k],reject=(code,entity=null)=>clone(this.#receipt(command,'rejected',code,entity));
+    if(!e)return reject('NO_EYE');
+    if(e.spaceId!==command.spaceId)return reject('EYE_SPACE_MISMATCH');
+    if(e.revision>=Number.MAX_SAFE_INTEGER)return reject('EYE_REVISION_EXHAUSTED');
+    if(Object.values(s.leases).some(l=>l.session===token&&l.spaceId===e.spaceId&&l.expiresAt>this.#time()))return reject('GRIP_ACTIVE');
+    const next=clone(s),ne=next.eyes[k];let entity=null,result;
+    if(command.kind==='space.enter') {
+      const space=s.snapshot.spaces[e.spaceId];
+      entity=Object.hasOwn(space.entities,p.portalEntityId)?space.entities[p.portalEntityId]:null;
+      if(!entity)return reject('NO_PORTAL');
+      if(entity.revision!==command.expectedRevision)return reject('STALE_REVISION',entity);
+      const child=entity.innerSpaceId&&s.snapshot.spaces[entity.innerSpaceId];
+      if(!child)return reject('NO_INNER_SPACE',entity);
+      if(ne.stack.length>=32)return reject('RETURN_DEPTH',entity);
+      if(!child.entryView)return reject('NO_ENTRY_VIEW',entity);
+      let view;try{view=checkView(s.snapshot,child.entryView);}catch{return reject('INVALID_ENTRY_VIEW',entity);}
+      if(view.spaceId!==child.id)return reject('INVALID_ENTRY_VIEW',entity);
+      const returned={id:'return.'+uuid(),portalEntityId:entity.id,view:checkView(s.snapshot,e)};
+      ne.stack.push(returned);Object.assign(ne,view);ne.revision++;
+      result={eye:clone(ne),returnFrameId:returned.id,portalEntityId:entity.id};
+    } else {
+      if(command.expectedRevision!==e.revision)return reject('STALE_EYE');
+      const saved=ne.stack.at(-1);
+      if(!saved||saved.id!==p.returnFrameId)return reject('RETURN_MISMATCH');
+      let view;try{view=checkView(s.snapshot,saved.view);}catch{return reject('RETURN_UNAVAILABLE');}
+      ne.stack.pop();Object.assign(ne,view);ne.revision++;
+      result={eye:clone(ne),returnFrameId:saved.id};
+    }
+    await this.#advance(next,command.kind,c.session.actorId,command);
+    const receipt={...this.#receipt(command,'accepted','OK',entity,result),acceptedSequence:next.snapshot.acceptedSequence,stateHash:next.snapshot.stateHash};
+    next.receipts[requestKey]={fingerprint,receipt};
+    await this.#save(next);return clone(receipt);
   }
   #renew(token,leaseId) { return this.#queue(async()=>{
     this.#session(token);const now=this.#time();
