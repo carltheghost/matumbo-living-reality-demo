@@ -1,19 +1,23 @@
 {
   "schema": "vivo.ownership/1",
+  "revision": 2,
   "branch": "vivo/chat1-integration-2026-10-10",
   "baseMain": "b0a59ab4233cb5daa4ea63d43cd73fabc61842f6",
+  "frozenWorkerBase": "93dd51c2aabcfb7ffe32a53bd6ed1bee9620319a",
   "main": "chat1",
+  "activeWindows": ["chat1", "chat3"],
   "mergeAuthority": "Tumbo only",
   "workers": {
-    "chat2": {"branch": "vivo/chat2-authority-2026-10-10", "paths": ["services/vivo/web/authority/", "services/vivo/server/authority/", "services/vivo/tests/authority/"]},
-    "chat3": {"branch": "vivo/chat3-input-2026-10-10", "paths": ["services/vivo/web/input/", "services/vivo/tests/input/"]},
-    "chat4": {"branch": "vivo/chat4-material-2026-10-10", "paths": ["services/vivo/server/material/", "services/vivo/web/material/", "services/vivo/tests/material/", "research/vivo-phase-fabric/extensions/"]},
-    "chat5": {"branch": "vivo/chat5-acceptance-2026-10-10", "paths": ["services/vivo/tests/acceptance/", "coordination/vivo/acceptance/"]}
+    "chat2": {"active": false, "branch": "vivo/chat2-authority-2026-10-10", "paths": [], "absorbedBy": "chat1"},
+    "chat3": {"active": true, "branch": "vivo/chat3-input-2026-10-10", "paths": ["services/vivo/web/input/", "services/vivo/tests/input/"], "stage": "in progress; do not interrupt"},
+    "chat4": {"active": false, "branch": "vivo/chat4-material-2026-10-10", "paths": [], "absorbedBy": "chat1"},
+    "chat5": {"active": false, "branch": "vivo/chat5-acceptance-2026-10-10", "paths": [], "absorbedBy": "chat1"}
   },
   "sharedContracts": "services/vivo/contracts/",
-  "integrationOwnedByMain": ["services/vivo/server/app.py", "services/vivo/web/shared.js", "services/vivo/web/render.js", "services/vivo/web/camera.js", "services/vivo/web/hand-worker.js", "services/vivo/web/index.html", "services/vivo/web/studio-bridge.js", "services/vivo/contracts/", "scripts/vivo/", "coordination/vivo/", ".github/workflows/"],
+  "integrationOwnedByMain": ["services/vivo/", "research/vivo-phase-fabric/", "scripts/vivo/", "coordination/vivo/", ".github/workflows/vivo-baseline.yml", ".github/workflows/vivo-runtime.yml"],
+  "mainExclusions": ["services/vivo/web/input/", "services/vivo/tests/input/"],
   "frozenRecoveredInputs": ["services/vivo/server/reference.py", "services/vivo/server/geometry.py", "services/vivo/server/adaptive.py", "services/vivo/models/", "research/vivo-phase-fabric/viva_phase/", "research/vivo-phase-fabric/web/target-mailbox.mjs"],
   "forbidden": ["index.html", "field-lab-studio.html", "src/main.js", "src/field-lab/", ".github/workflows/deploy-pages.yml"],
   "handoff": ["full parent SHA", "branch and commit", "owned-file diff", "commands and raw test evidence", "public export signatures", "known limits", "integration instructions"],
-  "rules": ["No main/master writes", "No force push", "No merges without Tumbo approval", "No edits outside owned prefixes", "No git add -A on recovered overlay", "Request shared-contract changes from Chat 1"]
+  "rules": ["No main/master writes", "No force push", "No merges without Tumbo approval", "Do not edit Chat 3 owned additions", "Do not interrupt Chat 3 current stage", "Retired worker refs are historical only", "Read TWO-WINDOW-RESET.md before older packets"]
 }
