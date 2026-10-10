@@ -1,0 +1,20 @@
+{
+  "sourceArchive": "matumbo-viva-build-081-source.zip",
+  "archiveSHA256": "6c5b0338f413385fd34934ce290fcc3459a33788c1de7f763316a89061d34a72",
+  "stage": "A: original backend and model only; not full runtime import or integrated acceptance",
+  "sha256": {
+    "requirements.txt": "7f88bcbfdfb184ec1fd94d590540ba29c307654e5a0f413fc26391841d687d06",
+    "requirements-dev.txt": "4e2e874aad42b93dc29ebde16bf70d3cca06e26814effc46cb2cb209b3b02f24",
+    "package.json": "bb33e60537b29215cb12017f931ef8b15a14e9e0431b5740d0ce1e453b06ad73",
+    "web/package.json": "a90fc33418afa2b9cbf4768524b021135b965ecdf993457505bfae3ac44a8428",
+    "models/room-rule.json": "1f5592c4dd9e5e9f1ccfbfcbf7252a40b72f2b9cb09991f2207e6a07c9aa8e75",
+    "server/__init__.py": "bed63345135ce0dd33c5897680ce2add2a43a0014cdd40eb37620c883ef65bf6",
+    "server/__main__.py": "b110c46e20a62ae0cd7e28f942e2958747f144cb4d520380bac30d767d2ff22e",
+    "server/adaptive.py": "2031a51b02a965309ab6a3dbb015e50cf6a354e3e37c5ab6e9b4d1217be4c644",
+    "server/app.py": "cad6faa7f980bb2b9c8e87771ba8b34802ae6e7a23bbfb8730faa4befa08f124",
+    "server/config.py": "3c1251854baa783baab6174a853200399e7ec99fce8ed51a38cbbaffd6fb8932",
+    "server/geometry.py": "ba6f1598872786a29748aef9cb93ecb35bf359d056dbf69a7ca1749172b0b32a",
+    "server/readiness.py": "ade92205fdeb2328cd5d7f63230354aa41d5561422d800033da8e5ee52c0b83c",
+    "server/reference.py": "88525313e48659418d802605770f7e3d60e209092ec5c8befa2a2c24a7650bc8"
+  }
+}

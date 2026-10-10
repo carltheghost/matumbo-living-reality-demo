@@ -1,0 +1,33 @@
+name: Vivo original source import
+on:
+  push:
+    branches: ['vivo/chat1-integration-2026-10-10']
+  pull_request:
+    paths:
+      - 'services/vivo/server/**'
+      - 'services/vivo/models/**'
+      - 'services/vivo/source-import-stage-a.json'
+      - 'scripts/vivo/test_import_stage_a.py'
+      - '.github/workflows/vivo-source-import.yml'
+permissions:
+  contents: read
+jobs:
+  original-backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -r services/vivo/requirements.txt
+      - name: Exact imported bytes and original backend smoke tests
+        run: |
+          python scripts/vivo/test_import_stage_a.py 2>&1 | tee vivo-import-tests.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vivo-source-import-evidence
+          path: |
+            vivo-import-tests.log
+            services/vivo/source-import-stage-a.json
