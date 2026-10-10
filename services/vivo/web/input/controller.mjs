@@ -190,21 +190,22 @@ export class GripController {
       const timer=this.setTimer(()=>{
         settled=true; reject(new InputError('TRANSPORT_UNCERTAIN','Receipt deadline elapsed; do not retry or assume rollback'));
       },this.requestTimeoutMs);
-      const finish=(raw,error)=>{
+      // Promise rejection reasons may be falsy; outcome must be tracked explicitly.
+      const finish=(fulfilled,value)=>{
         if (settled) {
           let receipt=null;
-          try { if (!error) receipt=this._checked(command,raw); } catch { /* retain uncertainty */ }
+          try { if (fulfilled) receipt=this._checked(command,value); } catch { /* retain uncertainty */ }
           // A late valid receipt is evidence for the adapter, never permission to resume.
           if (receipt) this._notify('onReceipt',freeze({command,receipt,late:true,cancelled:g.cancelled}));
           this._reconcile(g,new InputError('LATE_OUTCOME'),command,receipt);
           return;
         }
         settled=true; this.clearTimer(timer);
-        if (error) { reject(new InputError('TRANSPORT_UNCERTAIN',String(error.message??error))); return; }
-        try { resolve(this._checked(command,raw)); } catch (e) { reject(e); }
+        if (!fulfilled) { reject(new InputError('TRANSPORT_UNCERTAIN',String(value?.message??value))); return; }
+        try { resolve(this._checked(command,value)); } catch (e) { reject(e); }
       };
-      try { Promise.resolve(this.ports.submit(command)).then(r=>finish(r,null),e=>finish(null,e)); }
-      catch (e) { finish(null,e); }
+      try { Promise.resolve(this.ports.submit(command)).then(r=>finish(true,r),e=>finish(false,e)); }
+      catch (e) { finish(false,e); }
     });
   }
   _accept(g, command, receipt) {
