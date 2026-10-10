@@ -807,6 +807,21 @@ function agentBlockSlice(snapshot) {
   };
 }
 
+// Neural Mesh is an owner distinct from the Agent Block console. Its local
+// selection is observable; raw records and traces remain with that owner.
+function neuralMeshSlice(snapshot) {
+  return {
+    source: snapshot?.source ?? null,
+    opened: snapshot?.opened === true,
+    selectedId: typeof snapshot?.selectedId === "string" ? snapshot.selectedId : null,
+    localOnly: snapshot?.localOnly === true,
+    simulation: snapshot?.simulation === true,
+    advisoryOnly: true, biometric: false, identityAuthority: "none",
+    externalExecution: false, authority: "none",
+    noFabrication: typeof snapshot?.selectedId !== "string",
+  };
+}
+
 // Picture Matter owns word/image fixtures, statement interpretation, and any
 // metadata-only public-read envelope. Publish only aggregate readiness and a
 // local selection cursor: bytes, URLs, thumbnails, records, and paths stay
@@ -997,6 +1012,15 @@ function mountedSurfaceSlice(surfaceSnapshots) {
         : typeof value?.summary?.reason === "string" ? value.summary.reason : null,
       localOnly: value?.localOnly === true || value?.externalNetwork === false,
       simulation: value?.simulation === true,
+      persistence: typeof value?.persistence === 'string' ? value.persistence : value?.persistence === true,
+      // Aggregate connection readiness only. Never copy personal chat content,
+      // assistant notes, room messages, credentials, or provider account IDs.
+      personalChat: isRecord(value?.personalChat) ? {
+        provider: typeof value.personalChat.provider === 'string' ? value.personalChat.provider : null,
+        connected: value.personalChat.connected === true,
+        pending: value.personalChat.pending === true,
+        state: typeof value.personalChat.state === 'string' ? value.personalChat.state : 'unavailable',
+      } : null,
     };
   });
   return surfaces;
@@ -1113,6 +1137,7 @@ export function createProjectionSession({
   getAssetTokenSnapshot = () => null,
   getT402Snapshot = () => null,
   getAgentBlockSnapshot = () => null,
+  getNeuralMeshSnapshot = () => null,
   getPictureMatterSnapshot = () => null,
   getLedgerProofSnapshot = () => null,
   getMultiSportEventsSnapshot = () => null,
@@ -1156,6 +1181,7 @@ export function createProjectionSession({
     const assetTokenSnapshot = read(getAssetTokenSnapshot);
     const t402Snapshot = read(getT402Snapshot);
     const agentBlockSnapshot = read(getAgentBlockSnapshot);
+    const neuralMeshSnapshot = read(getNeuralMeshSnapshot);
     const pictureMatterSnapshot = read(getPictureMatterSnapshot);
     const ledgerProofSnapshot = read(getLedgerProofSnapshot);
     const multiSportEventsSnapshot = read(getMultiSportEventsSnapshot);
@@ -1186,6 +1212,7 @@ export function createProjectionSession({
     const assetToken = assetTokenSlice(assetTokenSnapshot);
     const t402 = t402Slice(t402Snapshot);
     const agentBlock = agentBlockSlice(agentBlockSnapshot);
+    const neuralMesh = neuralMeshSlice(neuralMeshSnapshot);
     const pictureMatter = pictureMatterSlice(pictureMatterSnapshot);
     const ledgerProof = ledgerProofSlice(ledgerProofSnapshot);
     const multiSportEvents = multiSportEventsSlice(multiSportEventsSnapshot);
@@ -1227,6 +1254,11 @@ export function createProjectionSession({
     );
     const canonicalProjection = projectionIdentity(projection, envelope, blockWorldSnapshot);
     const surfaces = mountedSurfaceSlice(surfaceSnapshots);
+    // The mounted owner covers every registered route, including personal
+    // chat and dedicated 3D rooms. Prefer it over the older partial route map.
+    if (Object.prototype.hasOwnProperty.call(surfaces, activeFeature.id)) {
+      activeFeature.surfaceOpen = surfaces[activeFeature.id].opened;
+    }
     const snapshot = {
       schemaVersion: PROJECTION_SESSION_SCHEMA_VERSION,
       source: PROJECTION_SESSION_SOURCE,
@@ -1293,6 +1325,8 @@ export function createProjectionSession({
       selectedAssetTokenId: assetToken.selectedId,
       selectedT402RecordId: t402.selectedId,
       selectedAgentSectionId: agentBlock.selectedSection,
+      neuralMesh,
+      selectedNeuralMeshId: neuralMesh.selectedId,
       selectedPictureMatterId: pictureMatter.selectedId,
       selectedLedgerProofId: ledgerProof.selectedId,
       selectedMultiSportEventId: multiSportEvents.selectedId,

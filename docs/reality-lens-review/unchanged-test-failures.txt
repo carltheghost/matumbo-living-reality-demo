@@ -1,0 +1,53 @@
+HISTORICAL BASELINE RECORD: superseded by the passing complete suite in review.md. Retained as earlier audit evidence.
+
+3D room has actual humanoid joints and stable identity geometry across wardrobe/room/motion changes
+HUD button toggles the presence and notifies onOpenPanel
+Windows launcher exposes a verified static URL and optional memory API
+a throwing approval hook never unwinds the approval
+all three market types open with their outcome rules
+an external tick registrar drives presence.update instead of rAF
+bot plaza console renders contract proposals in the drafts section
+chess arena defines its public refreshAppearance hook before returning it
+chess renderer is standard-piece-only and does not depend on avatar textures
+click without drag triggers wave; drag does not
+corrupt stored position is ignored
+dispose removes everything and clears the singleton
+every static named import resolves to a real export in its target module
+exactly one presence is created with the given scene and camera
+feature inventory renders one non-empty actionable block per enabled feature
+forged handle fails closed
+health statuses cover healthy, stale, expired, revoked, dead, and offline
+house and player roles are recorded on the contract
+launch and distribution integration stays local with the vendored Three.js import map
+launch scripts keep the public authority boundary local
+launcher stop path is scoped to recorded PIDs
+mount is lazy: no Image constructions before the first open
+mount works without hudRoot (button skipped, presence still mounts)
+one fitted live panel preserves every tab form while staying inside the viewport
+open/close/toggle control visibility
+person floats in floorless lens space: no floor, no grid, lens-ring and glow instead
+phone orientation adapts the whole reading body without changing canonical shape
+pointermove over the canvas feeds setTilt with normalized coords
+portal handoffs retain the cube substrate while destination consoles stay local
+position persists across drags and restores on open
+projection session composes canonical identity and simultaneous owner slices
+projection session is deeply immutable and reads owner changes on demand
+question builders carry complete meaning for a live model
+semantic selection parity preserves type and targetId across supported select inputs
+setLook syncs the photo set and re-subscribes the builder texture
+setTilt is a safe no-op before open and forwards to the builder after open
+static package script is deterministic and credential-free
+tests/centered-surfaces-universal-layout.test.mjs
+tests/contract-atelier-house-pool.test.mjs
+tests/final-living-reality-lock.test.mjs
+tests/hand-presence.test.mjs
+tests/project-map-docs-consistency.test.mjs
+tests/token-facade.test.mjs
+tests/token-gamification.test.mjs
+tests/token-idempotency.test.mjs
+tests/token-ledger.test.mjs
+tests/token-lifecycle.test.mjs
+tests/token-quote-expiry.test.mjs
+tests/token-vault.test.mjs
+unmount stops the loop, disposes the presence, and removes the button
+update applies the motion sample and faces the camera

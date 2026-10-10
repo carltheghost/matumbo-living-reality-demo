@@ -1,11 +1,13 @@
-# Automatic Contract Creation Wiring
+# Contract Creation Wiring
 
 Reality Lens Ω projection-only wiring.
 
-The automatic contract engine turns upcoming games from the existing read-only
-sports-events feed into DRAFT proposal entries. Nothing in this flow places a
-bet, moves money, signs a transaction, connects a wallet, settles a contract,
-or writes to mainnet.
+The contract engine can turn upcoming games from the read-only sports-events
+feed into DRAFT proposal entries. It reads public feeds only after the person
+presses **Scan** in Contract Atelier or **Refresh evidence** in the review
+surface. Opening the app, reconnecting, and returning to a tab do not start
+provider requests. Nothing in this flow places a bet, moves money, signs a
+transaction, connects a wallet, settles a contract, or writes to mainnet.
 
 ## 1. Import the engine
 
@@ -31,13 +33,13 @@ const autoContracts = createAutoContracts({
 The now dependency is injectable so tests and replay environments can provide
 a deterministic clock.
 
-## 3. Scan at boot
+## 3. Scan only after a visible request
 
-After the read-only sports-events dependencies have been initialized, perform
-the first scan:
+Connect the existing visible controls to the scan function:
 
 ```js
-await autoContracts.scanToday();
+onScanRequested: () => contractFlow.scanAndQueue(),
+onRefreshEvidence: ({ contractId }) => contractFlow.scanAndQueue(),
 ```
 
 The scan:
@@ -48,7 +50,9 @@ The scan:
 4. Creates one DRAFT proposal per upcoming game.
 5. Stores those proposals in the automatic-contract review queue.
 
-No execution occurs during this scan.
+Do not call the scan during boot, on a timer, or in online, pageshow, or
+visibilitychange handlers. Coalesce simultaneous button presses into the same
+in-flight request. No execution occurs during a scan.
 
 ## 4. Add the drafts to the bot-plaza review queue
 
@@ -79,30 +83,21 @@ source: "ESPN_READ_ONLY"
 They therefore enter the existing bot-plaza review path as review proposals,
 not executable actions.
 
-## 5. Run the scan on an interval
+## 5. Keep the local simulation separate from public reads
 
-A lightweight periodic scan can be installed after boot:
+The local contract simulation may keep its one-second deterministic tick. That
+tick operates only on already loaded local state; it must not call public feeds.
+Do not install a periodic provider scan. A user can request another read from
+either visible control when current evidence is needed.
 
-```js
-const AUTO_CONTRACT_SCAN_INTERVAL_MS = 5 * 60 * 1000;
-const autoContractScanTimer = setInterval(async () => {
-  try {
-    await autoContracts.scanToday();
-  } catch (error) {
-    console.warn("Automatic contract scan failed.", error);
-  }
-}, AUTO_CONTRACT_SCAN_INTERVAL_MS);
-```
+For Kalshi, the local bridge reads open, non-multivariate markets only. This
+avoids the zero-quote bundle records at the top of the unfiltered feed. Current
+dollar-denominated bid, ask, and last-price fields are already probabilities
+and must not be converted to cents. The bridge remains a fixed, read-only,
+short-cached route; user scans are the only trigger.
 
-The engine is idempotent by game id, so repeatedly scanning the same ESPN feed
-does not create duplicate drafts.
-
-If the application has an existing lifecycle/shutdown mechanism, clear the
-interval there:
-
-```js
-clearInterval(autoContractScanTimer);
-```
+The engine remains idempotent by game id, so a requested repeat scan does not
+create duplicate drafts.
 
 ## 6. Keep the review queue connected to the UI
 

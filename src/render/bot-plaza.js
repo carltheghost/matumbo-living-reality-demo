@@ -10,7 +10,7 @@ import {
   createBotRuntime,
   getAtelierTemplate,
   validateAtelierRule,
-} from "../domains/bot-plaza.js?v=20260922-cache2";
+} from "../domains/bot-plaza.js?v=20261003-skin360";
 
 export { BOT_PLAZA_BOUNDARY, BOT_PLAZA_CONSOLE_SOURCE };
 export const BOT_PLAZA_RENDER_SOURCE = BOT_PLAZA_CONSOLE_SOURCE;
@@ -209,7 +209,7 @@ export function createBotPlazaConsole({
       const meta = element(documentRoot, "span", "bot-plaza-bot-meta");
       meta.append(element(documentRoot, "strong", null, bot.name));
       meta.append(element(documentRoot, "span", "bot-plaza-bot-sub",
-        `${bot.kind === "builtin" ? "built-in" : bot.kind} · ${bot.enabled ? "in the plaza" : "resting"} · ${bot.approvedCapabilities.length} approved ${bot.approvedCapabilities.length === 1 ? "power" : "powers"}`));
+        `${bot.kind === "builtin" ? "built-in" : bot.kind} · ${bot.enabled ? "in the plaza" : "resting"} · ${bot.kind === 'plugin' ? bot.persisted ? 'shipped startup module' : 'this session only' : bot.kind === 'builtin' ? 'available at startup' : 'local rules'} · ${bot.approvedCapabilities.length} approved ${bot.approvedCapabilities.length === 1 ? "power" : "powers"}`));
       card.append(meta);
       card.addEventListener("click", () => {
         selectedBotId = bot.id;
@@ -311,7 +311,7 @@ export function createBotPlazaConsole({
         renderAll();
       });
       controls.append(toggle);
-      if (bot.kind !== "builtin") {
+      if (bot.kind !== "builtin" && !(bot.kind === 'plugin' && bot.persisted)) {
         const remove = element(documentRoot, "button", "bot-plaza-mini danger", "remove bot");
         remove.type = "button";
         remove.addEventListener("click", () => {
@@ -322,7 +322,7 @@ export function createBotPlazaConsole({
         });
         controls.append(remove);
       } else {
-        controls.append(element(documentRoot, "span", "bot-plaza-bot-sub", "built-in · cannot be removed"));
+        controls.append(element(documentRoot, "span", "bot-plaza-bot-sub", "bundled · use rest to disable"));
       }
       wrap.append(controls);
       capsEl.append(wrap);
@@ -351,7 +351,8 @@ export function createBotPlazaConsole({
 
   function formatExpiry(proposal) {
     if (proposal.status !== "pending") return null;
-    const ms = Date.parse(proposal.expiresAt) - Date.now();
+    // The queue owns proposal time; a host may provide a simulation clock.
+    const ms = Date.parse(proposal.expiresAt) - (proposalQueue?.getNowMs?.() ?? Date.now());
     if (!Number.isFinite(ms) || ms <= 0) return "expiring now";
     const hours = Math.floor(ms / 3600000);
     const minutes = Math.floor((ms % 3600000) / 60000);
@@ -361,6 +362,9 @@ export function createBotPlazaConsole({
   }
 
   function renderDrafts() {
+    // Reading may expire entries and notify subscribers. Resolve that first,
+    // then replace the DOM so a nested notification cannot duplicate rows.
+    const proposals = proposalQueue ? proposalQueue.getProposals().slice().reverse() : [];
     draftsEl.replaceChildren();
     const drafts = botRuntime.getDrafts().slice().reverse();
     for (const draft of drafts) {
@@ -370,7 +374,6 @@ export function createBotPlazaConsole({
       row.append(element(documentRoot, "div", null, draft.body));
       draftsEl.append(row);
     }
-    const proposals = proposalQueue ? proposalQueue.getProposals().slice().reverse() : [];
     if (proposals.length) {
       draftsEl.append(element(documentRoot, "div", "bot-plaza-subtitle", "Contract proposals · brought to you by your bots"));
     }
@@ -406,7 +409,8 @@ export function createBotPlazaConsole({
     renderJournal();
     renderDrafts();
     const enabled = botRegistry.listEnabled().length;
-    setStatus(`PLAZA OPEN · ${enabled} ${enabled === 1 ? "bot" : "bots"} present · 100% local · no network`);
+    const startup = botRegistry.getStartupIssues?.() ?? [];
+    setStatus(`PLAZA OPEN · ${enabled} ${enabled === 1 ? "bot" : "bots"} present · 100% local · no network${startup.length ? ` · ${startup.slice(0, 2).map(issue => issue.message).join(' ')}` : ''}`);
   }
 
   function send() {

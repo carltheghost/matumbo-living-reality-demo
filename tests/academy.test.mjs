@@ -7,6 +7,8 @@ import {
   answerAcademyLesson,
   createAcademyContribution,
   createAcademyState,
+  nextAcademyLesson,
+  replayAcademy,
   selectAcademyLesson,
 } from "../src/domains/academy.js";
 import { createAcademyConsole } from "../src/render/academy.js";
@@ -86,4 +88,43 @@ test("Academy source and markup retain the educational authority boundary", asyn
   assert.match(html, /Demo XP is not a token/i);
   assert.match(html, /body\.cube-substrate-mode #academy-console\{max-height:calc\(100vh - 340px\)\}/);
   assert.doesNotMatch(domain + renderer, /\bfetch\s*\(|\beval\s*\(|\bimport\s*\(/i);
+});
+
+test("Academy replay rebuilds the full session beyond the visible trace", () => {
+  let state = createAcademyState();
+  for (let index = 0; index < 28; index++) state = answerAcademyLesson(state, index === 0 ? 0 : 1);
+  state = selectAcademyLesson(state, "academy:http-402");
+  state = answerAcademyLesson(state, 0);
+  state = answerAcademyLesson(state, 1);
+  assert.equal(state.trace.length, 24);
+  assert.equal(state.trace.at(-1).seq, 30);
+  assert.equal(state.xp, 45);
+  assert.deepEqual(replayAcademy(state), state);
+  assert.equal(nextAcademyLesson(state).selectedLessonId, "academy:t402");
+});
+
+test("Academy answer history is bounded without silently losing progress", () => {
+  let state = createAcademyState();
+  for (let index = 0; index < 256; index++) state = answerAcademyLesson(state, 0);
+  assert.equal(state.xp, 30);
+  assert.throws(() => answerAcademyLesson(state, 0), /256 answers/);
+  assert.deepEqual(replayAcademy(state), state);
+});
+
+test("Academy buttons advance completed lessons and replay actual answers", () => {
+  const documentRoot = documentFixture();
+  const view = createAcademyConsole({ documentRoot });
+  view.answer(0);
+  const nextButton = documentRoot.getElementById("academy-options").children.find(button => button.dataset.academyNext);
+  assert.ok(nextButton);
+  nextButton.listeners.get("click")();
+  assert.equal(view.getSnapshot().selectedLesson.id, "academy:http-402");
+  view.answer(1);
+  const before = view.getSnapshot().state;
+  const replayButton = documentRoot.getElementById("academy-console").children.find(button => button.dataset.academyReplay);
+  replayButton.listeners.get("click")();
+  assert.deepEqual(view.getSnapshot().state, before);
+  assert.match(documentRoot.getElementById("academy-feedback").textContent, /REPLAYED 2 ANSWERS/);
+  view.select("academy:t402");view.answer(2);view.select("academy:paycore");view.answer(0);
+  assert.match(documentRoot.getElementById("academy-progress").textContent, /LEARNING PATH COMPLETE/);
 });

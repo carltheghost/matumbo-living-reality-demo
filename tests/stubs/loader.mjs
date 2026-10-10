@@ -25,10 +25,14 @@ export async function resolve(specifier, context, nextResolve) {
   if (specifier === "three") {
     return { url: new URL("./three.mjs", stubDir).href, shortCircuit: true };
   }
-  const parent = context.parentURL || "";
-  if (parent.endsWith(TARGET) && Object.hasOwn(relativeStubs, specifier)) {
+  // Browser cache versions do not change a dependency's identity. Redirect
+  // the versioned imports too, so tests exercise the intended instrumented
+  // dependencies rather than a second, real builder/photo-set instance.
+  const parent = (context.parentURL || "").split(/[?#]/, 1)[0];
+  const modulePath = specifier.split(/[?#]/, 1)[0];
+  if (parent.endsWith(TARGET) && Object.hasOwn(relativeStubs, modulePath)) {
     return {
-      url: new URL("./" + relativeStubs[specifier], stubDir).href,
+      url: new URL("./" + relativeStubs[modulePath], stubDir).href,
       shortCircuit: true,
     };
   }

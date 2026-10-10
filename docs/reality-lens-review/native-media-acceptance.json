@@ -1,0 +1,319 @@
+{
+  "startedAt": "2026-10-03T22:28:16.334Z",
+  "sourceBefore": {
+    "reality-assembly.js": "8a2d73e279c2944c240b26cd6bbdc692e033d00e1bc292dcfeba2b95c40a6eb1",
+    "reality-assembly.css": "bda09d03f595e3791430d89ecbff12d5174bf55b1c2bdaf6fac8b93d4c26640e",
+    "youtube-surface.js": "f5fe240f87fd908fff462b4006b503e190dd4eee07934f0bd3ca385b555cb803"
+  },
+  "scope": "Original native form play, viewport-slot geometry, same-player continuity through Text/Object modes and all five shapes",
+  "runs": [
+    {
+      "device": "desktop",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "placement": {
+        "samePlayer": true,
+        "sameWindow": true,
+        "playerCount": 1,
+        "frame": {
+          "x": 365.0004577636719,
+          "y": 370.29705810546875,
+          "width": 709.9990234375,
+          "height": 399.37445068359375
+        },
+        "slot": {
+          "x": 365,
+          "y": 370.296875,
+          "width": 710,
+          "height": 399.375
+        },
+        "reader": {
+          "x": 340,
+          "y": 160,
+          "width": 760,
+          "height": 790
+        },
+        "canvasHidden": true,
+        "background": "rgb(7, 23, 37)",
+        "overflow": false,
+        "source": "https://www.youtube-nocookie.com/embed/Q7AOvWpIVHU?playsinline=1&rel=0&controls=1&autoplay=1"
+      },
+      "before": {
+        "time": 1.615648,
+        "paused": false,
+        "readyState": 4,
+        "error": null
+      },
+      "shapes": [
+        {
+          "shape": "cube",
+          "samePlayer": true,
+          "sameWindow": true,
+          "count": 1,
+          "source": "https://www.youtube-nocookie.com/embed/Q7AOvWpIVHU?playsinline=1&rel=0&controls=1&autoplay=1",
+          "owners": 1
+        },
+        {
+          "shape": "sphere",
+          "samePlayer": true,
+          "sameWindow": true,
+          "count": 1,
+          "source": "https://www.youtube-nocookie.com/embed/Q7AOvWpIVHU?playsinline=1&rel=0&controls=1&autoplay=1",
+          "owners": 1
+        },
+        {
+          "shape": "cylinder",
+          "samePlayer": true,
+          "sameWindow": true,
+          "count": 1,
+          "source": "https://www.youtube-nocookie.com/embed/Q7AOvWpIVHU?playsinline=1&rel=0&controls=1&autoplay=1",
+          "owners": 1
+        },
+        {
+          "shape": "triangular-prism",
+          "samePlayer": true,
+          "sameWindow": true,
+          "count": 1,
+          "source": "https://www.youtube-nocookie.com/embed/Q7AOvWpIVHU?playsinline=1&rel=0&controls=1&autoplay=1",
+          "owners": 1
+        },
+        {
+          "shape": "torus",
+          "samePlayer": true,
+          "sameWindow": true,
+          "count": 1,
+          "source": "https://www.youtube-nocookie.com/embed/Q7AOvWpIVHU?playsinline=1&rel=0&controls=1&autoplay=1",
+          "owners": 1
+        }
+      ],
+      "scrolledPlacement": {
+        "samePlayer": true,
+        "sameWindow": true,
+        "playerCount": 1,
+        "frame": {
+          "x": 365.0004577636719,
+          "y": 290.2971496582031,
+          "width": 709.9990234375,
+          "height": 399.3744812011719
+        },
+        "slot": {
+          "x": 365,
+          "y": 290.296875,
+          "width": 710,
+          "height": 399.375
+        },
+        "reader": {
+          "x": 340,
+          "y": 160,
+          "width": 760,
+          "height": 790
+        },
+        "canvasHidden": true,
+        "background": "rgb(7, 23, 37)",
+        "overflow": false,
+        "source": "https://www.youtube-nocookie.com/embed/Q7AOvWpIVHU?playsinline=1&rel=0&controls=1&autoplay=1"
+      },
+      "afterPlacement": {
+        "samePlayer": true,
+        "sameWindow": true,
+        "playerCount": 1,
+        "frame": {
+          "x": 365.0004577636719,
+          "y": 370.29705810546875,
+          "width": 709.9990234375,
+          "height": 399.37445068359375
+        },
+        "slot": {
+          "x": 365,
+          "y": 370.296875,
+          "width": 710,
+          "height": 399.375
+        },
+        "reader": {
+          "x": 340,
+          "y": 160,
+          "width": 760,
+          "height": 790
+        },
+        "canvasHidden": true,
+        "background": "rgb(7, 23, 37)",
+        "overflow": false,
+        "source": "https://www.youtube-nocookie.com/embed/Q7AOvWpIVHU?playsinline=1&rel=0&controls=1&autoplay=1"
+      },
+      "after": {
+        "time": 10.218902,
+        "paused": false,
+        "readyState": 4,
+        "error": null
+      },
+      "playback": {
+        "time": 11.426347,
+        "paused": false,
+        "readyState": 4,
+        "error": null
+      },
+      "passed": true
+    },
+    {
+      "device": "phone",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "placement": {
+        "samePlayer": true,
+        "sameWindow": true,
+        "playerCount": 1,
+        "frame": {
+          "x": 39.00040054321289,
+          "y": 410.2969055175781,
+          "width": 311.99920654296875,
+          "height": 175.49954223632812
+        },
+        "slot": {
+          "x": 39,
+          "y": 410.296875,
+          "width": 312,
+          "height": 175.5
+        },
+        "reader": {
+          "x": 14,
+          "y": 200,
+          "width": 362,
+          "height": 594
+        },
+        "canvasHidden": true,
+        "background": "rgb(7, 23, 37)",
+        "overflow": false,
+        "source": "https://www.youtube-nocookie.com/embed/Q7AOvWpIVHU?playsinline=1&rel=0&controls=1&autoplay=1"
+      },
+      "before": {
+        "time": 12.355724,
+        "paused": false,
+        "readyState": 4,
+        "error": null
+      },
+      "shapes": [
+        {
+          "shape": "cube",
+          "samePlayer": true,
+          "sameWindow": true,
+          "count": 1,
+          "source": "https://www.youtube-nocookie.com/embed/Q7AOvWpIVHU?playsinline=1&rel=0&controls=1&autoplay=1",
+          "owners": 1
+        },
+        {
+          "shape": "sphere",
+          "samePlayer": true,
+          "sameWindow": true,
+          "count": 1,
+          "source": "https://www.youtube-nocookie.com/embed/Q7AOvWpIVHU?playsinline=1&rel=0&controls=1&autoplay=1",
+          "owners": 1
+        },
+        {
+          "shape": "cylinder",
+          "samePlayer": true,
+          "sameWindow": true,
+          "count": 1,
+          "source": "https://www.youtube-nocookie.com/embed/Q7AOvWpIVHU?playsinline=1&rel=0&controls=1&autoplay=1",
+          "owners": 1
+        },
+        {
+          "shape": "triangular-prism",
+          "samePlayer": true,
+          "sameWindow": true,
+          "count": 1,
+          "source": "https://www.youtube-nocookie.com/embed/Q7AOvWpIVHU?playsinline=1&rel=0&controls=1&autoplay=1",
+          "owners": 1
+        },
+        {
+          "shape": "torus",
+          "samePlayer": true,
+          "sameWindow": true,
+          "count": 1,
+          "source": "https://www.youtube-nocookie.com/embed/Q7AOvWpIVHU?playsinline=1&rel=0&controls=1&autoplay=1",
+          "owners": 1
+        }
+      ],
+      "scrolledPlacement": {
+        "samePlayer": true,
+        "sameWindow": true,
+        "playerCount": 1,
+        "frame": {
+          "x": 39.00040054321289,
+          "y": 330.297119140625,
+          "width": 311.99920654296875,
+          "height": 175.49954223632812
+        },
+        "slot": {
+          "x": 39,
+          "y": 330.296875,
+          "width": 312,
+          "height": 175.5
+        },
+        "reader": {
+          "x": 14,
+          "y": 200,
+          "width": 362,
+          "height": 594
+        },
+        "canvasHidden": true,
+        "background": "rgb(7, 23, 37)",
+        "overflow": false,
+        "source": "https://www.youtube-nocookie.com/embed/Q7AOvWpIVHU?playsinline=1&rel=0&controls=1&autoplay=1"
+      },
+      "afterPlacement": {
+        "samePlayer": true,
+        "sameWindow": true,
+        "playerCount": 1,
+        "frame": {
+          "x": 39.00040054321289,
+          "y": 410.2969055175781,
+          "width": 311.99920654296875,
+          "height": 175.49954223632812
+        },
+        "slot": {
+          "x": 39,
+          "y": 410.296875,
+          "width": 312,
+          "height": 175.5
+        },
+        "reader": {
+          "x": 14,
+          "y": 200,
+          "width": 362,
+          "height": 594
+        },
+        "canvasHidden": true,
+        "background": "rgb(7, 23, 37)",
+        "overflow": false,
+        "source": "https://www.youtube-nocookie.com/embed/Q7AOvWpIVHU?playsinline=1&rel=0&controls=1&autoplay=1"
+      },
+      "after": {
+        "time": 20.875576,
+        "paused": false,
+        "readyState": 4,
+        "error": null
+      },
+      "playback": {
+        "time": 22.081054,
+        "paused": false,
+        "readyState": 4,
+        "error": null
+      },
+      "passed": true
+    }
+  ],
+  "errors": [],
+  "ownedBrowserPid": 31376,
+  "passed": true,
+  "sourceAfter": {
+    "reality-assembly.js": "8a2d73e279c2944c240b26cd6bbdc692e033d00e1bc292dcfeba2b95c40a6eb1",
+    "reality-assembly.css": "bda09d03f595e3791430d89ecbff12d5174bf55b1c2bdaf6fac8b93d4c26640e",
+    "youtube-surface.js": "f5fe240f87fd908fff462b4006b503e190dd4eee07934f0bd3ca385b555cb803"
+  },
+  "sourceUnchanged": true,
+  "finishedAt": "2026-10-03T22:28:44.567Z"
+}

@@ -4,8 +4,8 @@
  * are part of one command, never reminted into the live vault during validation.
  * Digests/local actor names are consistency checks, not authenticated authority.
  */
-import { createOutcomeContracts, hashOutcomeSeed } from './outcome-contracts.js';
-import { createFrozenRelics } from './frozen-relics.js';
+import { createOutcomeContracts, hashOutcomeSeed } from './outcome-contracts.js?v=20261003-skin360';
+import { createFrozenRelics } from './frozen-relics.js?v=20261003-skin360';
 
 export const CONTRACT_WORKSPACE_STORAGE_KEY = 'matumbo.contract-workspace.v1';
 const VERSION = 1, MAX_BYTES = 4_000_000, MAX_COMMANDS = 4000;

@@ -1,0 +1,11 @@
+{
+  "scripts/gpt_bridge.py": "4944810e0f2c78b73fa9e3167ccc1f830544d97e3abde30348f209cd5cd70771",
+  "scripts/provider_bridge.py": "c0b7c2d70f1ae2398985f7b854ac98331476a8693e1d8dec6ef2e7a97404fe49",
+  "scripts/stop-demo.ps1": "2b6acbb572a7b94095eae7b5bb32ac19c985b2587eb91c4b2e4a70b1ad8dae84",
+  "src/domains/my-gpt.js": "df8638fed18e27d3321ae5d45ae13f4c8f569b0c0fbc44532388cbf82ce57d0d",
+  "src/render/my-gpt.js": "a7ef0b0ccdced95ef3f5d9f06eb250d02bf8bcd0ce237c1c797e46adf756eda9",
+  "src/render/web-ai.js": "7f9aca62949c9ab7533d578d3667cf19c7c5edfba7ac54d486fcce730423b6ec",
+  "src/render/reality-surface-controller.js": "5b384919c22ddd5d5f91bb621c9dd6cc9c476649b2a7e740c6ccce18f8230769",
+  "src/render/feature-navigator.js": "3c41df05aa2d5becb38280273b0389a8502c5eea677f1d4f5494174acc0920ec",
+  "src/render/reality-assembly-scene.js": "e632f0cf81ce2708e5e1d48a839d1aff3b3419b0cc5c94ca892e61b455bb0d0b"
+}

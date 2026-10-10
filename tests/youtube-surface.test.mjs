@@ -75,3 +75,61 @@ test('empty in-object YouTube search never makes a provider request',async()=>{
   );
   assert.equal(called,false);
 });
+
+test('a hung search provider times out and aborts before failover',async()=>{
+  const calls=[];
+  const found=await searchYoutubeVideos('geometry',{
+    providers:['https://slow.example','https://ready.example'],timeoutMs:10,
+    fetchFn:async(url,options)=>{
+      calls.push({url,options});
+      if(calls.length===1)return new Promise(()=>{});
+      return {ok:true,json:async()=>({items:[{videoId:'M7lc1UVf-VE',title:'Geometry'}]})};
+    },
+  });
+  assert.equal(calls.length,2);
+  assert.equal(calls[0].options.signal.aborted,true);
+  assert.equal(calls[0].options.credentials,'omit');
+  assert.equal(found.provider,'ready.example');
+});
+
+test('the search timeout also bounds a stalled JSON body',async()=>{
+  let calls=0;
+  const found=await searchYoutubeVideos('geometry',{
+    providers:['https://body.example','https://ready.example'],timeoutMs:10,
+    fetchFn:async()=>({ok:true,json:()=>++calls===1?new Promise(()=>{}):Promise.resolve([{videoId:'M7lc1UVf-VE'}])}),
+  });
+  assert.equal(calls,2);
+  assert.equal(found.results[0].id,'M7lc1UVf-VE');
+});
+
+test('cancelling search aborts the active provider and never starts failover',async()=>{
+  const controller=new AbortController();let calls=0,requestSignal;
+  const search=searchYoutubeVideos('geometry',{
+    signal:controller.signal,providers:['https://one.example','https://two.example'],
+    fetchFn:async(_url,options)=>{calls++;requestSignal=options.signal;return new Promise(()=>{});},
+  });
+  controller.abort();
+  await assert.rejects(search,error=>error.name==='AbortError');
+  assert.equal(calls,1);assert.equal(requestSignal.aborted,true);
+  await assert.rejects(searchYoutubeVideos('again',{signal:controller.signal,fetchFn:()=>{throw Error('must not request');}}),error=>error.name==='AbortError');
+});
+
+test('search deduplicates video IDs and bounds displayed metadata',async()=>{
+  const found=await searchYoutubeVideos('geometry',{
+    providers:['https://ready.example'],
+    fetchFn:async()=>({ok:true,json:async()=>({items:[
+      {videoId:'M7lc1UVf-VE',title:'x'.repeat(1000),uploaderName:'y'.repeat(1000)},
+      {videoId:'M7lc1UVf-VE',title:'Duplicate'},
+      {url:'/channel/UC_NOT_A_VIDEO'},
+    ]})}),
+  });
+  assert.equal(found.results.length,1);
+  assert.equal(found.results[0].title.length,500);
+  assert.equal(found.results[0].channel.length,160);
+});
+
+test('an oversized search query is rejected before sending it to a provider',async()=>{
+  let calls=0;
+  await assert.rejects(searchYoutubeVideos('x'.repeat(501),{fetchFn:async()=>{calls++;}}),/500 characters/);
+  assert.equal(calls,0);
+});

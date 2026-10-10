@@ -1,0 +1,2110 @@
+{
+  "device": "phone",
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "url": "http://127.0.0.1:8082/",
+  "startedAt": "2026-10-03T17:42:53.528Z",
+  "interactions": [
+    {
+      "stage": "boot",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Spaces",
+      "point": {
+        "x": 135.765625,
+        "y": 31
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "boot",
+      "action": "fill",
+      "tag": "INPUT",
+      "label": "",
+      "point": {
+        "x": 195,
+        "y": 366.75
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "INPUT"
+    },
+    {
+      "stage": "boot",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "TUMBO Asset Token",
+      "point": {
+        "x": 201,
+        "y": 594.15625
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "boot",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Open Ourplace · create, share & earn",
+      "point": {
+        "x": 194.23189544677734,
+        "y": 407.2954406738281
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "asset-token-ourplace"
+    },
+    {
+      "stage": "fund participants",
+      "action": "click",
+      "tag": "SUMMARY",
+      "label": "Fund local rehearsal balances",
+      "point": {
+        "x": 194.78089141845703,
+        "y": 420.6466522216797
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "SUMMARY"
+    },
+    {
+      "stage": "fund participants",
+      "action": "select",
+      "tag": "SELECT",
+      "label": "YouVisitor · local test identityCreator · local test identity",
+      "point": {
+        "x": 194.78089141845703,
+        "y": 420.6466522216797
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "SELECT"
+    },
+    {
+      "stage": "fund participants",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Add 100 demo TUMBO",
+      "point": {
+        "x": 194.78089141845703,
+        "y": 420.6466522216797
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "fund participants",
+      "action": "select",
+      "tag": "SELECT",
+      "label": "YouVisitor · local test identityCreator · local test identity",
+      "point": {
+        "x": 194.78089141845703,
+        "y": 420.6466522216797
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "SELECT"
+    },
+    {
+      "stage": "fund participants",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Add 100 demo TUMBO",
+      "point": {
+        "x": 194.78089141845703,
+        "y": 420.6466522216797
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "service reserve and reload",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Services & pay",
+      "point": {
+        "x": 125.61036682128906,
+        "y": 419.9287109375
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "ourplace-tab-services"
+    },
+    {
+      "stage": "service reserve and reload",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Create service request · creator role",
+      "point": {
+        "x": 194.78089141845703,
+        "y": 419.8818817138672
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "ourplace-primary"
+    },
+    {
+      "stage": "service reserve and reload",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Authorize & reserve · payer role",
+      "point": {
+        "x": 194.7808952331543,
+        "y": 419.75701904296875
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "service reserve and reload",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Spaces",
+      "point": {
+        "x": 135.765625,
+        "y": 31
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "service reserve and reload",
+      "action": "fill",
+      "tag": "INPUT",
+      "label": "",
+      "point": {
+        "x": 195,
+        "y": 366.75
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "INPUT"
+    },
+    {
+      "stage": "service reserve and reload",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "TUMBO Asset Token",
+      "point": {
+        "x": 201,
+        "y": 594.15625
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "service reserve and reload",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Open Ourplace · create, share & earn",
+      "point": {
+        "x": 194.9999885559082,
+        "y": 419.5932312011719
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "asset-token-ourplace"
+    },
+    {
+      "stage": "service reserve and reload",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Services & pay",
+      "point": {
+        "x": 125.59767532348633,
+        "y": 420.53485107421875
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "ourplace-tab-services"
+    },
+    {
+      "stage": "service fulfill and approved refund",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Run tool & fulfill · provider role",
+      "point": {
+        "x": 195.0000114440918,
+        "y": 420.2686767578125
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "service fulfill and approved refund",
+      "action": "click",
+      "tag": "SUMMARY",
+      "label": "Review a completed service refund",
+      "point": {
+        "x": 194.9999885559082,
+        "y": 419.9085388183594
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "SUMMARY"
+    },
+    {
+      "stage": "service fulfill and approved refund",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Request refund · payer role",
+      "point": {
+        "x": 163.93162155151367,
+        "y": 419.9085388183594
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "service fulfill and approved refund",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Approve refund · creator role",
+      "point": {
+        "x": 170.44598770141602,
+        "y": 420.1903839111328
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "service fulfill and approved refund",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Approve refund · provider role",
+      "point": {
+        "x": 175.45702743530273,
+        "y": 420.4722137451172
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "service fulfill and approved refund",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Approve refund · operations role",
+      "point": {
+        "x": 182.9735221862793,
+        "y": 419.6110382080078
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "service fulfill and approved refund",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Commit approved refund · payer role",
+      "point": {
+        "x": 195.00000381469727,
+        "y": 419.9377136230469
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "order reserves and partial match",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Markets",
+      "point": {
+        "x": 264.4023208618164,
+        "y": 420.53485107421875
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "ourplace-tab-markets"
+    },
+    {
+      "stage": "order reserves and partial match",
+      "action": "select",
+      "tag": "SELECT",
+      "label": "YouVisitor · local test identityCreator · local test identity",
+      "point": {
+        "x": 194.9999885559082,
+        "y": 420.53485107421875
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "SELECT"
+    },
+    {
+      "stage": "order reserves and partial match",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Convert 20 demo TUMBO → sMIMAS for selected participant",
+      "point": {
+        "x": 195.0000114440918,
+        "y": 419.953369140625
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "order reserves and partial match",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Reserve buy order · you",
+      "point": {
+        "x": 195.0000114440918,
+        "y": 420.3939208984375
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "order reserves and partial match",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Reserve sell order · visitor",
+      "point": {
+        "x": 195.00000381469727,
+        "y": 419.9398498535156
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "order reserves and partial match",
+      "action": "fill",
+      "tag": "INPUT",
+      "label": "",
+      "point": {
+        "x": 194.9999885559082,
+        "y": 419.8459014892578
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "INPUT"
+    },
+    {
+      "stage": "order reserves and partial match",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Match compatible reserved lots",
+      "point": {
+        "x": 194.9999885559082,
+        "y": 419.72064208984375
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "ourplace-primary"
+    },
+    {
+      "stage": "order reserves and partial match",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Spaces",
+      "point": {
+        "x": 135.765625,
+        "y": 31
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "order reserves and partial match",
+      "action": "fill",
+      "tag": "INPUT",
+      "label": "",
+      "point": {
+        "x": 195,
+        "y": 366.75
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "INPUT"
+    },
+    {
+      "stage": "order reserves and partial match",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "TUMBO Asset Token",
+      "point": {
+        "x": 201,
+        "y": 594.15625
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "order reserves and partial match",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Open Ourplace · create, share & earn",
+      "point": {
+        "x": 195.00012588500977,
+        "y": 419.59324645996094
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "asset-token-ourplace"
+    },
+    {
+      "stage": "order reserves and partial match",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Markets",
+      "point": {
+        "x": 264.4023208618164,
+        "y": 420.53485107421875
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "ourplace-tab-markets"
+    },
+    {
+      "stage": "order complete and explicit new cancellation",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Match compatible reserved lots",
+      "point": {
+        "x": 195.00000381469727,
+        "y": 419.62669372558594
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "ourplace-primary"
+    },
+    {
+      "stage": "order complete and explicit new cancellation",
+      "action": "select",
+      "tag": "SELECT",
+      "label": "Choose an existing recordNew buy order16ac8591 · filled · u:you",
+      "point": {
+        "x": 195.0000114440918,
+        "y": 419.7049865722656
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "SELECT"
+    },
+    {
+      "stage": "order complete and explicit new cancellation",
+      "action": "fill",
+      "tag": "INPUT",
+      "label": "",
+      "point": {
+        "x": 195.0000114440918,
+        "y": 420.14341735839844
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "INPUT"
+    },
+    {
+      "stage": "order complete and explicit new cancellation",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Reserve buy order · you",
+      "point": {
+        "x": 194.99999618530273,
+        "y": 420.23736572265625
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "order complete and explicit new cancellation",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Cancel selected buy reservation · owner role",
+      "point": {
+        "x": 194.9999885559082,
+        "y": 419.90638732910156
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "order complete and explicit new cancellation",
+      "action": "select",
+      "tag": "SELECT",
+      "label": "Choose an existing recordNew sell order4cde1b7d · filled · u:visitor",
+      "point": {
+        "x": 195.00000381469727,
+        "y": 420.44090270996094
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "SELECT"
+    },
+    {
+      "stage": "order complete and explicit new cancellation",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Reserve sell order · visitor",
+      "point": {
+        "x": 194.9999885559082,
+        "y": 420.22169494628906
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "order complete and explicit new cancellation",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Cancel selected sell reservation · owner role",
+      "point": {
+        "x": 194.9999885559082,
+        "y": 420.2821807861328
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "loan reserved capital and collateral",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Credit",
+      "point": {
+        "x": 125.59503555297852,
+        "y": 419.718505859375
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "ourplace-tab-credit"
+    },
+    {
+      "stage": "loan reserved capital and collateral",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Record two independent local oracle roles",
+      "point": {
+        "x": 194.9999885559082,
+        "y": 420.2821807861328
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "loan reserved capital and collateral",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Offer 20 TUMBO capital · lender role",
+      "point": {
+        "x": 195.00000381469727,
+        "y": 419.9377136230469
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "loan reserved capital and collateral",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Borrow & lock collateral · visitor role",
+      "point": {
+        "x": 195.00000381469727,
+        "y": 419.9377136230469
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "ourplace-primary"
+    },
+    {
+      "stage": "loan reserved capital and collateral",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Spaces",
+      "point": {
+        "x": 135.765625,
+        "y": 31
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "loan reserved capital and collateral",
+      "action": "fill",
+      "tag": "INPUT",
+      "label": "",
+      "point": {
+        "x": 195,
+        "y": 366.75
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "INPUT"
+    },
+    {
+      "stage": "loan reserved capital and collateral",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "TUMBO Asset Token",
+      "point": {
+        "x": 201,
+        "y": 594.15625
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "loan reserved capital and collateral",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Open Ourplace · create, share & earn",
+      "point": {
+        "x": 195.00492095947266,
+        "y": 419.5942840576172
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "asset-token-ourplace"
+    },
+    {
+      "stage": "loan reserved capital and collateral",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Credit",
+      "point": {
+        "x": 125.59503555297852,
+        "y": 419.718505859375
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "ourplace-tab-credit"
+    },
+    {
+      "stage": "loan full repayment and unused capital withdrawal",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Repay outstanding debt · borrower role",
+      "point": {
+        "x": 195.0000114440918,
+        "y": 420.32916259765625
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "loan full repayment and unused capital withdrawal",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Withdraw unused offered capital",
+      "point": {
+        "x": 194.9999885559082,
+        "y": 420.22169494628906
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "second loan margin loss and liquidation",
+      "action": "select",
+      "tag": "SELECT",
+      "label": "Choose an existing recordNew lender capital offerd0972ec8 · cancelled · u:you",
+      "point": {
+        "x": 194.9999885559082,
+        "y": 419.7832794189453
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "SELECT"
+    },
+    {
+      "stage": "second loan margin loss and liquidation",
+      "action": "select",
+      "tag": "SELECT",
+      "label": "Choose an existing recordNew collateralized loan1fd20244 · repaid · u:you",
+      "point": {
+        "x": 195.00000381469727,
+        "y": 419.751953125
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "SELECT"
+    },
+    {
+      "stage": "second loan margin loss and liquidation",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Record two independent local oracle roles",
+      "point": {
+        "x": 194.9999885559082,
+        "y": 420.09429931640625
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "second loan margin loss and liquidation",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Offer 20 TUMBO capital · lender role",
+      "point": {
+        "x": 195.00000381469727,
+        "y": 419.9377136230469
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "second loan margin loss and liquidation",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Borrow & lock collateral · visitor role",
+      "point": {
+        "x": 194.99999618530273,
+        "y": 419.7967987060547
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "ourplace-primary"
+    },
+    {
+      "stage": "second loan margin loss and liquidation",
+      "action": "fill",
+      "tag": "INPUT",
+      "label": "",
+      "point": {
+        "x": 195.0000114440918,
+        "y": 420.20603942871094
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "INPUT"
+    },
+    {
+      "stage": "second loan margin loss and liquidation",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Record two independent local oracle roles",
+      "point": {
+        "x": 195.0000114440918,
+        "y": 420.3917999267578
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "second loan margin loss and liquidation",
+      "action": "click",
+      "tag": "SUMMARY",
+      "label": "Review margin default and liquidation",
+      "point": {
+        "x": 194.9999885559082,
+        "y": 419.84400939941406
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "SUMMARY"
+    },
+    {
+      "stage": "second loan margin loss and liquidation",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Mark proven margin default · lender",
+      "point": {
+        "x": 194.99999618530273,
+        "y": 419.9220428466797
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "second loan margin loss and liquidation",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Liquidate after guarded default · lender",
+      "point": {
+        "x": 195.00000381469727,
+        "y": 420.0003356933594
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "second loan margin loss and liquidation",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Withdraw unused offered capital",
+      "point": {
+        "x": 195.0000114440918,
+        "y": 420.0181427001953
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "prediction stakes and exact-proposal challenge",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Markets",
+      "point": {
+        "x": 264.4023208618164,
+        "y": 420.53485107421875
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "ourplace-tab-markets"
+    },
+    {
+      "stage": "prediction stakes and exact-proposal challenge",
+      "action": "click",
+      "tag": "SUMMARY",
+      "label": "Create a collateralized prediction contract",
+      "point": {
+        "x": 194.99999618530273,
+        "y": 419.609130859375
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "SUMMARY"
+    },
+    {
+      "stage": "prediction stakes and exact-proposal challenge",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Freeze new prediction contract",
+      "point": {
+        "x": 176.45917129516602,
+        "y": 419.62669372558594
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "prediction stakes and exact-proposal challenge",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Stake 1 YES · you",
+      "point": {
+        "x": 128.85446548461914,
+        "y": 420.0807800292969
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "prediction stakes and exact-proposal challenge",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Stake 1 NO · visitor",
+      "point": {
+        "x": 136.37096786499023,
+        "y": 419.9085388183594
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "prediction stakes and exact-proposal challenge",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Advance rehearsal clock by 1 minute",
+      "point": {
+        "x": 195.0000114440918,
+        "y": 420.0786437988281
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "prediction stakes and exact-proposal challenge",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Propose evidence-bound result · resolver",
+      "point": {
+        "x": 194.99999618530273,
+        "y": 420.42311096191406
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "prediction stakes and exact-proposal challenge",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Challenge exact proposal · visitor",
+      "point": {
+        "x": 183.97573471069336,
+        "y": 419.8459014892578
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "prediction replacement INVALID and independent approvals",
+      "action": "select",
+      "tag": "SELECT",
+      "label": "YESNOINVALID · refund stakes",
+      "point": {
+        "x": 195.00000381469727,
+        "y": 420.566162109375
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "SELECT"
+    },
+    {
+      "stage": "prediction replacement INVALID and independent approvals",
+      "action": "fill",
+      "tag": "TEXTAREA",
+      "label": "",
+      "point": {
+        "x": 195.00000381469727,
+        "y": 419.9377136230469
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "TEXTAREA"
+    },
+    {
+      "stage": "prediction replacement INVALID and independent approvals",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Propose evidence-bound result · resolver",
+      "point": {
+        "x": 195.00000381469727,
+        "y": 419.6871795654297
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "prediction replacement INVALID and independent approvals",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Approve exact proposal · resolver",
+      "point": {
+        "x": 185.47906112670898,
+        "y": 420.15907287597656
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "prediction replacement INVALID and independent approvals",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Approve exact proposal · independent reviewer",
+      "point": {
+        "x": 195.00000381469727,
+        "y": 419.6245422363281
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "prediction replacement INVALID and independent approvals",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Advance rehearsal clock by 1 minute",
+      "point": {
+        "x": 195.0000114440918,
+        "y": 420.01600646972656
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "prediction replacement INVALID and independent approvals",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Finalize after challenge window",
+      "point": {
+        "x": 178.96472549438477,
+        "y": 420.12774658203125
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "prediction replacement INVALID and independent approvals",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Spaces",
+      "point": {
+        "x": 135.765625,
+        "y": 31
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "prediction replacement INVALID and independent approvals",
+      "action": "fill",
+      "tag": "INPUT",
+      "label": "",
+      "point": {
+        "x": 195,
+        "y": 366.75
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "INPUT"
+    },
+    {
+      "stage": "prediction replacement INVALID and independent approvals",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "TUMBO Asset Token",
+      "point": {
+        "x": 201,
+        "y": 594.15625
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "prediction replacement INVALID and independent approvals",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Open Ourplace · create, share & earn",
+      "point": {
+        "x": 195.00000762939453,
+        "y": 419.5932312011719
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "asset-token-ourplace"
+    },
+    {
+      "stage": "prediction replacement INVALID and independent approvals",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Markets",
+      "point": {
+        "x": 264.4023208618164,
+        "y": 420.53485107421875
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "ourplace-tab-markets"
+    },
+    {
+      "stage": "prediction replacement INVALID and independent approvals",
+      "action": "click",
+      "tag": "SUMMARY",
+      "label": "Create a collateralized prediction contract",
+      "point": {
+        "x": 195.00000381469727,
+        "y": 420.56427001953125
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "SUMMARY"
+    },
+    {
+      "stage": "multiple pending records require an explicit choice",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Services & pay",
+      "point": {
+        "x": 125.59767532348633,
+        "y": 420.53485107421875
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "ourplace-tab-services"
+    },
+    {
+      "stage": "multiple pending records require an explicit choice",
+      "action": "select",
+      "tag": "SELECT",
+      "label": "Choose an existing recordNew service requestc91b54c8 · refunded · u:you",
+      "point": {
+        "x": 195.0000114440918,
+        "y": 419.9555206298828
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "SELECT"
+    },
+    {
+      "stage": "multiple pending records require an explicit choice",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Create service request · creator role",
+      "point": {
+        "x": 194.99999618530273,
+        "y": 420.4878692626953
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "ourplace-primary"
+    },
+    {
+      "stage": "multiple pending records require an explicit choice",
+      "action": "select",
+      "tag": "SELECT",
+      "label": "Choose an existing recordNew service requestc91b54c8 · refunded · u:youdd1bad1c · requeste",
+      "point": {
+        "x": 194.99999618530273,
+        "y": 420.0494689941406
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "SELECT"
+    },
+    {
+      "stage": "multiple pending records require an explicit choice",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Create service request · creator role",
+      "point": {
+        "x": 195.0000114440918,
+        "y": 419.5797119140625
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "ourplace-primary"
+    },
+    {
+      "stage": "multiple pending records require an explicit choice",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Spaces",
+      "point": {
+        "x": 135.765625,
+        "y": 31
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "multiple pending records require an explicit choice",
+      "action": "fill",
+      "tag": "INPUT",
+      "label": "",
+      "point": {
+        "x": 195,
+        "y": 366.75
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "INPUT"
+    },
+    {
+      "stage": "multiple pending records require an explicit choice",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "TUMBO Asset Token",
+      "point": {
+        "x": 201,
+        "y": 594.15625
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "multiple pending records require an explicit choice",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Open Ourplace · create, share & earn",
+      "point": {
+        "x": 195.00657653808594,
+        "y": 419.5946502685547
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "asset-token-ourplace"
+    },
+    {
+      "stage": "multiple pending records require an explicit choice",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Services & pay",
+      "point": {
+        "x": 125.59767532348633,
+        "y": 420.53485107421875
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "ourplace-tab-services"
+    },
+    {
+      "stage": "multiple pending records require an explicit choice",
+      "action": "select",
+      "tag": "SELECT",
+      "label": "Choose an existing recordNew service requestc91b54c8 · refunded · u:youdd1bad1c · requeste",
+      "point": {
+        "x": 195.0000114440918,
+        "y": 419.9555206298828
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "SELECT"
+    },
+    {
+      "stage": "multiple pending records require an explicit choice",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Cancel & release · payer role",
+      "point": {
+        "x": 195.0000114440918,
+        "y": 420.2686767578125
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    },
+    {
+      "stage": "multiple pending records require an explicit choice",
+      "action": "select",
+      "tag": "SELECT",
+      "label": "Choose an existing recordNew service requestc91b54c8 · refunded · u:youdd1bad1c · cancelle",
+      "point": {
+        "x": 195.00000381469727,
+        "y": 420.1903839111328
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "SELECT"
+    },
+    {
+      "stage": "multiple pending records require an explicit choice",
+      "action": "click",
+      "tag": "BUTTON",
+      "label": "Cancel & release · payer role",
+      "point": {
+        "x": 195.00000381469727,
+        "y": 420.5035400390625
+      },
+      "disabled": false,
+      "receivesPointer": true,
+      "hit": "BUTTON"
+    }
+  ],
+  "workflows": [
+    {
+      "name": "service reserve / reload / local delivery / three-role refund",
+      "pass": true,
+      "paymentId": "c91b54c83401705b15e9a867",
+      "amountFluff": 2000,
+      "fullOriginalBalancesRestored": true
+    },
+    {
+      "name": "two-asset reserve / partial fill / reload / full fill / both-side cancellation",
+      "pass": true,
+      "initialOrderIds": [
+        "16ac8591ab534c841ae80b1c",
+        "4cde1b7d3ee02374d606107f"
+      ],
+      "lots": 5
+    },
+    {
+      "name": "capital offer / collateral origination / reload / repayment / new margin default / in-kind liquidation",
+      "pass": true,
+      "repaidLoanId": "1fd20244d89c7eeec2528c34",
+      "liquidatedLoanId": "2e894781e2262f7aed0411c9",
+      "remainingDebtFluff": 4050,
+      "localOracleFixture": true
+    },
+    {
+      "name": "segregated stakes / evidence proposal / exact-proposal challenge / INVALID replacement / two-role approvals / timed final refunds",
+      "pass": true,
+      "marketId": "69f3e99397490978cce544b6",
+      "proposalId": "a0c81f799423776478bed3cd",
+      "stakePoolFluff": 2000,
+      "allStakeBalancesRestored": true
+    },
+    {
+      "name": "multiple-record reload requires explicit selection; new creates cannot repeat accidentally",
+      "pass": true
+    }
+  ],
+  "reloads": [
+    {
+      "name": "authorized payment",
+      "receiptsBefore": 9,
+      "receiptsAfter": 9,
+      "eventRoot": "5721636111fb386d8ea0c9db470913861a1a5a96e803ae960e0fa2e2db8f78fa",
+      "exactFinanceAndBalances": true,
+      "status": "restored-validated-local-bundle"
+    },
+    {
+      "name": "partially matched orders",
+      "receiptsBefore": 15,
+      "receiptsAfter": 15,
+      "eventRoot": "2ba2996673b33140a6777e3f281026affed8555b41da052ed6e8378fcf64c5f5",
+      "exactFinanceAndBalances": true,
+      "status": "restored-validated-local-bundle"
+    },
+    {
+      "name": "active collateralized loan",
+      "receiptsBefore": 22,
+      "receiptsAfter": 22,
+      "eventRoot": "4119f771d9dfe4f3d7703759fed4d598b5dbc08ceb7f8062b832fe09b00cf8c1",
+      "exactFinanceAndBalances": true,
+      "status": "restored-validated-local-bundle"
+    },
+    {
+      "name": "terminal finance history",
+      "receiptsBefore": 31,
+      "receiptsAfter": 31,
+      "eventRoot": "b3d31e6e88ccf300a136ba70161f883f9e0087381b31c8a74a24bbd51ad87491",
+      "exactFinanceAndBalances": true,
+      "status": "restored-validated-local-bundle"
+    },
+    {
+      "name": "multiple pending services",
+      "receiptsBefore": 31,
+      "receiptsAfter": 31,
+      "eventRoot": "e43a1913bdfb74e8d5567fcbc37c5c6c8cfb3dc979e60fba91470f3cc8a8c86f",
+      "exactFinanceAndBalances": true,
+      "status": "restored-validated-local-bundle"
+    }
+  ],
+  "frontChecks": [
+    {
+      "name": "initial",
+      "entityId": "asset-token",
+      "ownedByBody": true,
+      "interactiveSurfaceCount": 1,
+      "attached": [
+        "asset-launch"
+      ],
+      "leaks": [],
+      "documentOverflow": false,
+      "panelOverflow": false,
+      "localFace": {
+        "width": 1.1253,
+        "height": 1.64
+      },
+      "actualSkin": {
+        "width": 1.125,
+        "height": 1.6392857142857142
+      },
+      "projectionDelta": {
+        "x": 0.0426405760284112,
+        "y": 0.10093031012769416,
+        "width": -0.08526049480394704,
+        "height": -0.20152379526797404
+      }
+    },
+    {
+      "name": "services",
+      "entityId": "asset-token",
+      "ownedByBody": true,
+      "interactiveSurfaceCount": 1,
+      "attached": [
+        "asset-launch"
+      ],
+      "leaks": [],
+      "documentOverflow": false,
+      "panelOverflow": false,
+      "localFace": {
+        "width": 1.1253,
+        "height": 1.64
+      },
+      "actualSkin": {
+        "width": 1.125,
+        "height": 1.6392857142857142
+      },
+      "projectionDelta": {
+        "x": 0.0427804399700733,
+        "y": 0.10126400510389999,
+        "width": -0.08554562115114095,
+        "height": -0.20218517653552226
+      }
+    },
+    {
+      "name": "orders",
+      "entityId": "asset-token",
+      "ownedByBody": true,
+      "interactiveSurfaceCount": 1,
+      "attached": [
+        "asset-launch"
+      ],
+      "leaks": [],
+      "documentOverflow": false,
+      "panelOverflow": false,
+      "localFace": {
+        "width": 1.1253,
+        "height": 1.64
+      },
+      "actualSkin": {
+        "width": 1.125,
+        "height": 1.6392857142857142
+      },
+      "projectionDelta": {
+        "x": 0.0427804399700733,
+        "y": 0.10126400510389999,
+        "width": -0.08554562115114095,
+        "height": -0.20218517653552226
+      }
+    },
+    {
+      "name": "credit",
+      "entityId": "asset-token",
+      "ownedByBody": true,
+      "interactiveSurfaceCount": 1,
+      "attached": [
+        "asset-launch"
+      ],
+      "leaks": [],
+      "documentOverflow": false,
+      "panelOverflow": false,
+      "localFace": {
+        "width": 1.1253,
+        "height": 1.64
+      },
+      "actualSkin": {
+        "width": 1.125,
+        "height": 1.6392857142857142
+      },
+      "projectionDelta": {
+        "x": 0.0427804399700733,
+        "y": 0.10126400510389999,
+        "width": -0.08554562115114095,
+        "height": -0.20218517653552226
+      }
+    },
+    {
+      "name": "predictions",
+      "entityId": "asset-token",
+      "ownedByBody": true,
+      "interactiveSurfaceCount": 1,
+      "attached": [
+        "asset-launch"
+      ],
+      "leaks": [],
+      "documentOverflow": false,
+      "panelOverflow": false,
+      "localFace": {
+        "width": 1.1253,
+        "height": 1.64
+      },
+      "actualSkin": {
+        "width": 1.125,
+        "height": 1.6392857142857142
+      },
+      "projectionDelta": {
+        "x": 0.042780439968424844,
+        "y": 0.1012640051037863,
+        "width": -0.0855456211515957,
+        "height": -0.20218517653643175
+      }
+    }
+  ],
+  "screenshots": [
+    "phone-ourplace-services.png",
+    "phone-ourplace-orders.png",
+    "phone-ourplace-credit.png",
+    "phone-ourplace-predictions.png"
+  ],
+  "errors": [],
+  "pass": true,
+  "limits": [
+    "Software WebGL through SwiftShader",
+    "Phone viewport emulation, not physical hardware",
+    "Explicit local simulated actors and oracle fixture prices",
+    "No authenticated provider, custody, signing, live sports evidence, hardware XR or external settlement proof"
+  ],
+  "final": {
+    "finance": {
+      "authority": "explicit-local-simulated-roles",
+      "externalSettlement": false,
+      "loans": [
+        {
+          "aprBps": 0,
+          "asset": "TUMBO",
+          "borrower": "u:visitor",
+          "collateralAsset": "sMIMAS",
+          "collateralFluff": 100000,
+          "createdAt": 1791049475252,
+          "debtFluff": 5050,
+          "dueAt": 1791053075252,
+          "escrow": "b:econ-loan-1fd20244d89c7eeec2528c34",
+          "heldCollateralFluff": 0,
+          "id": "1fd20244d89c7eeec2528c34",
+          "interestFluff": 50,
+          "interestKind": "FIXED",
+          "interestPolicy": "fixed-term-amount-at-origination",
+          "lastRepaidAt": 1791049485505,
+          "lender": "u:you",
+          "ltvBasis": "principal",
+          "maxLtvBps": 6000,
+          "offerId": "d0972ec81208927879b0e39c",
+          "oracle": {
+            "maxAgeMs": 300000,
+            "maxDeviationBps": 500,
+            "minObservations": 2,
+            "sources": [
+              {
+                "observer": "u:oracle-a",
+                "source": "local-a"
+              },
+              {
+                "observer": "u:oracle-b",
+                "source": "local-b"
+              }
+            ]
+          },
+          "priceAtOrigination": {
+            "denominator": 1000,
+            "numerator": 100,
+            "simulation": true,
+            "sources": [
+              {
+                "observedAt": 1791049472458,
+                "observer": "u:oracle-a",
+                "source": "local-a"
+              },
+              {
+                "observedAt": 1791049472460,
+                "observer": "u:oracle-b",
+                "source": "local-b"
+              }
+            ],
+            "valuation": "minimum-fresh-observation"
+          },
+          "principalFluff": 5000,
+          "receiptId": "rcpt_musombpe_v_90ff349e",
+          "receiptKey": "economic:loan-repay:1791049485505:80b5900e-904c-46de-809d-c642d7d62c42:loan-repay",
+          "remainingDebtFluff": 0,
+          "simulation": true,
+          "status": "repaid",
+          "termMs": 3600000,
+          "terms": "Explicit local lender capital. Fixed 0.050 TUMBO-SIM interest; one-hour term; 60% maximum LTV; fresh two-source local oracle; no guarantee."
+        },
+        {
+          "aprBps": 0,
+          "asset": "TUMBO",
+          "borrower": "u:visitor",
+          "collateralAsset": "sMIMAS",
+          "collateralFluff": 100000,
+          "createdAt": 1791049491982,
+          "debtFluff": 5050,
+          "defaultReason": "margin",
+          "defaultedAt": 1791049495533,
+          "dueAt": 1791053091982,
+          "escrow": "b:econ-loan-2e894781e2262f7aed0411c9",
+          "heldCollateralFluff": 0,
+          "id": "2e894781e2262f7aed0411c9",
+          "interestFluff": 50,
+          "interestKind": "FIXED",
+          "interestPolicy": "fixed-term-amount-at-origination",
+          "lender": "u:you",
+          "liquidatedAt": 1791049496145,
+          "liquidationPrice": {
+            "denominator": 1000,
+            "numerator": 10,
+            "simulation": true,
+            "sources": [
+              {
+                "observedAt": 1791049493928,
+                "observer": "u:oracle-a",
+                "source": "local-a"
+              },
+              {
+                "observedAt": 1791049493928,
+                "observer": "u:oracle-b",
+                "source": "local-b"
+              }
+            ],
+            "valuation": "minimum-fresh-observation"
+          },
+          "ltvBasis": "principal",
+          "maxLtvBps": 6000,
+          "offerId": "37f53afe22fde36b6f57cdfd",
+          "oracle": {
+            "maxAgeMs": 300000,
+            "maxDeviationBps": 500,
+            "minObservations": 2,
+            "sources": [
+              {
+                "observer": "u:oracle-a",
+                "source": "local-a"
+              },
+              {
+                "observer": "u:oracle-b",
+                "source": "local-b"
+              }
+            ]
+          },
+          "priceAtOrigination": {
+            "denominator": 1000,
+            "numerator": 100,
+            "simulation": true,
+            "sources": [
+              {
+                "observedAt": 1791049489271,
+                "observer": "u:oracle-a",
+                "source": "local-a"
+              },
+              {
+                "observedAt": 1791049489271,
+                "observer": "u:oracle-b",
+                "source": "local-b"
+              }
+            ],
+            "valuation": "minimum-fresh-observation"
+          },
+          "principalFluff": 5000,
+          "receiptId": "rcpt_musomjwx_z_adf8b1db",
+          "receiptKey": "economic:loan-liquidate:1791049496145:6732574f-cde0-4785-9b92-2dbc5bcc8632:loan-liquidate",
+          "recoveredDebtFluff": 1000,
+          "remainingDebtFluff": 4050,
+          "returnedCollateralFluff": 0,
+          "seizedCollateralFluff": 100000,
+          "simulation": true,
+          "status": "liquidated",
+          "termMs": 3600000,
+          "terms": "Explicit local lender capital. Fixed 0.050 TUMBO-SIM interest; one-hour term; 60% maximum LTV; fresh two-source local oracle; no guarantee.",
+          "valuationDisclosure": "Local conservative oracle settlement credit; collateral transfer is not a cash sale or external execution."
+        }
+      ],
+      "markets": [
+        {
+          "asset": "TUMBO",
+          "challengeMs": 15000,
+          "challenges": [
+            {
+              "actor": "u:visitor",
+              "at": 1791049562297,
+              "id": "a848f67fb488dbb6dfc6df39",
+              "proposalId": "9f6fbcc6cbe1da87cb1610ef",
+              "reason": "Local participant disputes the supplied evidence"
+            }
+          ],
+          "closeAt": 1791049528948,
+          "createdAt": 1791049498948,
+          "creator": "u:you",
+          "escrow": "b:econ-pred-9c8f2cd2914a2c8502dbf70f",
+          "evidenceSpec": "Resolve from the recorded local acceptance report. Invalid or unavailable evidence requires INVALID/refund. No live market or model authority.",
+          "finalizedAt": 1791049627233,
+          "id": "69f3e99397490978cce544b6",
+          "maxStakeFluff": 100000,
+          "maximumLiability": "segregated-stake-pool",
+          "outcome": "INVALID",
+          "payoutModel": "funded-binary-parimutuel",
+          "payouts": [
+            {
+              "account": "u:you",
+              "amountFluff": 1000,
+              "stakeId": "3d4f719906e377dc9fff0334"
+            },
+            {
+              "account": "u:visitor",
+              "amountFluff": 1000,
+              "stakeId": "9f2c82cf206890fc32c0cca1"
+            }
+          ],
+          "proposal": {
+            "approvals": [
+              "u:resolver",
+              "u:reviewer"
+            ],
+            "challengeUntil": 1791049578530,
+            "evidence": "The explicit browser rehearsal challenge finds insufficient local evidence. INVALID returns every segregated simulated stake; no live sports or forecast claim.",
+            "evidenceHash": "fbc5bd6528510d1e8e6a7a026834779818c933eed52378a578227de6a8479309",
+            "id": "a0c81f799423776478bed3cd",
+            "outcome": "INVALID",
+            "proposedAt": 1791049563530
+          },
+          "question": "Will the local Ourplace design pass its recorded usability checks?",
+          "receiptId": "rcpt_musomsgy_13_3732a92b",
+          "receiptKey": "economic:prediction-finalize:1791049507233:c17f3a1c-a2dc-4fbd-8934-5ee0b0e57379:prediction-finalize",
+          "refunded": true,
+          "remainingLiabilityFluff": 0,
+          "resolutionAt": 1791049528948,
+          "resolver": "u:resolver",
+          "reviewer": "u:reviewer",
+          "simulation": true,
+          "stakePoolFluff": 2000,
+          "stakes": [
+            {
+              "amountFluff": 1000,
+              "at": 1791049499605,
+              "id": "3d4f719906e377dc9fff0334",
+              "outcome": "YES",
+              "owner": "u:you"
+            },
+            {
+              "amountFluff": 1000,
+              "at": 1791049500282,
+              "id": "9f2c82cf206890fc32c0cca1",
+              "outcome": "NO",
+              "owner": "u:visitor"
+            }
+          ],
+          "status": "finalized"
+        }
+      ],
+      "obligations": [
+        {
+          "amountFluff": 4050,
+          "asset": "TUMBO",
+          "creditor": "u:you",
+          "debtor": "u:visitor",
+          "dueAt": 1791053091982,
+          "guarantee": false,
+          "id": "2e894781e2262f7aed0411c9",
+          "kind": "borrower-debt",
+          "secured": false,
+          "status": "liquidated"
+        }
+      ],
+      "offers": [
+        {
+          "aprBps": 0,
+          "asset": "TUMBO",
+          "availableFluff": 0,
+          "cancelledAt": 1791049486917,
+          "capitalFluff": 20000,
+          "collateralAsset": "sMIMAS",
+          "createdAt": 1791049474133,
+          "escrow": "b:econ-offer-d0972ec81208927879b0e39c",
+          "expiresAt": 1791053074133,
+          "fixedInterestFluff": 50,
+          "id": "d0972ec81208927879b0e39c",
+          "interestKind": "FIXED",
+          "lender": "u:you",
+          "maxLtvBps": 6000,
+          "oracle": {
+            "maxAgeMs": 300000,
+            "maxDeviationBps": 500,
+            "minObservations": 2,
+            "sources": [
+              {
+                "observer": "u:oracle-a",
+                "source": "local-a"
+              },
+              {
+                "observer": "u:oracle-b",
+                "source": "local-b"
+              }
+            ]
+          },
+          "receiptId": "rcpt_musomcsm_w_0177094b",
+          "receiptKey": "economic:loan-offer-cancel:1791049486917:f1d4b69d-4562-4953-84e1-e861c5297983:loan-offer-cancel",
+          "simulation": true,
+          "status": "cancelled",
+          "termMs": 3600000,
+          "terms": "Explicit local lender capital. Fixed 0.050 TUMBO-SIM interest; one-hour term; 60% maximum LTV; fresh two-source local oracle; no guarantee."
+        },
+        {
+          "aprBps": 0,
+          "asset": "TUMBO",
+          "availableFluff": 0,
+          "cancelledAt": 1791049496780,
+          "capitalFluff": 20000,
+          "collateralAsset": "sMIMAS",
+          "createdAt": 1791049490547,
+          "escrow": "b:econ-offer-37f53afe22fde36b6f57cdfd",
+          "expiresAt": 1791053090547,
+          "fixedInterestFluff": 50,
+          "id": "37f53afe22fde36b6f57cdfd",
+          "interestKind": "FIXED",
+          "lender": "u:you",
+          "maxLtvBps": 6000,
+          "oracle": {
+            "maxAgeMs": 300000,
+            "maxDeviationBps": 500,
+            "minObservations": 2,
+            "sources": [
+              {
+                "observer": "u:oracle-a",
+                "source": "local-a"
+              },
+              {
+                "observer": "u:oracle-b",
+                "source": "local-b"
+              }
+            ]
+          },
+          "receiptId": "rcpt_musomkek_10_8acc4d6f",
+          "receiptKey": "economic:loan-offer-cancel:1791049496780:dc401ca2-8771-44c0-9915-3fc20497380e:loan-offer-cancel",
+          "simulation": true,
+          "status": "cancelled",
+          "termMs": 3600000,
+          "terms": "Explicit local lender capital. Fixed 0.050 TUMBO-SIM interest; one-hour term; 60% maximum LTV; fresh two-source local oracle; no guarantee."
+        }
+      ],
+      "oracleObservations": [
+        {
+          "authority": "local-observation",
+          "baseAsset": "sMIMAS",
+          "denominator": 1000,
+          "evidence": "Explicit local valuation fixture; not a market price or an authenticated external oracle.",
+          "externalVerification": false,
+          "numerator": 10,
+          "observedAt": 1791049493928,
+          "observer": "u:oracle-a",
+          "quoteAsset": "TUMBO",
+          "source": "local-a"
+        },
+        {
+          "authority": "local-observation",
+          "baseAsset": "sMIMAS",
+          "denominator": 1000,
+          "evidence": "Explicit local valuation fixture; not a market price or an authenticated external oracle.",
+          "externalVerification": false,
+          "numerator": 10,
+          "observedAt": 1791049493928,
+          "observer": "u:oracle-b",
+          "quoteAsset": "TUMBO",
+          "source": "local-b"
+        }
+      ],
+      "orders": [
+        {
+          "baseAsset": "sMIMAS",
+          "createdAt": 1791049447918,
+          "escrow": "b:econ-order-16ac8591ab534c841ae80b1c",
+          "expiresAt": 1791053047918,
+          "id": "16ac8591ab534c841ae80b1c",
+          "lotSizeFluff": 1000,
+          "lots": 5,
+          "owner": "u:you",
+          "priceDenominatorLots": 1,
+          "priceNumeratorFluff": 100,
+          "quoteAsset": "TUMBO",
+          "receiptId": "rcpt_musolipa_m_8214c1d4",
+          "receiptKey": "economic:order-BUY:1791049447918:de3a4119-fd2f-487b-8872-a2951761068d:order-reserve",
+          "remainingLots": 0,
+          "reservedFluff": 0,
+          "sequence": 1,
+          "side": "BUY",
+          "simulation": true,
+          "status": "filled"
+        },
+        {
+          "baseAsset": "sMIMAS",
+          "createdAt": 1791049449512,
+          "escrow": "b:econ-order-4cde1b7d3ee02374d606107f",
+          "expiresAt": 1791053049512,
+          "id": "4cde1b7d3ee02374d606107f",
+          "lotSizeFluff": 1000,
+          "lots": 5,
+          "owner": "u:visitor",
+          "priceDenominatorLots": 1,
+          "priceNumeratorFluff": 100,
+          "quoteAsset": "TUMBO",
+          "receiptId": "rcpt_musoljxk_n_607a99ce",
+          "receiptKey": "economic:order-SELL:1791049449512:f2cc63d7-cfa3-40b7-a887-d106de5db67a:order-reserve",
+          "remainingLots": 0,
+          "reservedFluff": 0,
+          "sequence": 2,
+          "side": "SELL",
+          "simulation": true,
+          "status": "filled"
+        },
+        {
+          "baseAsset": "sMIMAS",
+          "cancelledAt": 1791049466096,
+          "createdAt": 1791049464774,
+          "escrow": "b:econ-order-ade89dbdbec87507d02b5760",
+          "expiresAt": 1791053064774,
+          "id": "ade89dbdbec87507d02b5760",
+          "lotSizeFluff": 1000,
+          "lots": 2,
+          "owner": "u:you",
+          "priceDenominatorLots": 1,
+          "priceNumeratorFluff": 100,
+          "quoteAsset": "TUMBO",
+          "receiptId": "rcpt_musolwq8_q_04d5681d",
+          "receiptKey": "economic:order-cancel:1791049466096:4af732ca-7602-47a0-828e-3b4b889cac78:order-cancel",
+          "remainingLots": 0,
+          "reservedFluff": 0,
+          "sequence": 3,
+          "side": "BUY",
+          "simulation": true,
+          "status": "cancelled"
+        },
+        {
+          "baseAsset": "sMIMAS",
+          "cancelledAt": 1791049469304,
+          "createdAt": 1791049467646,
+          "escrow": "b:econ-order-912997a8436229d57365b527",
+          "expiresAt": 1791053067646,
+          "id": "912997a8436229d57365b527",
+          "lotSizeFluff": 1000,
+          "lots": 2,
+          "owner": "u:visitor",
+          "priceDenominatorLots": 1,
+          "priceNumeratorFluff": 100,
+          "quoteAsset": "TUMBO",
+          "receiptId": "rcpt_musolz7c_s_5eb59255",
+          "receiptKey": "economic:order-sell-cancel:1791049469304:be83d07e-9ff2-4d58-9aa0-c312b3dacd22:order-cancel",
+          "remainingLots": 0,
+          "reservedFluff": 0,
+          "sequence": 4,
+          "side": "SELL",
+          "simulation": true,
+          "status": "cancelled"
+        }
+      ],
+      "payments": [
+        {
+          "amountFluff": 2000,
+          "asset": "TUMBO",
+          "authorizedAt": 1791049426316,
+          "createdAt": 1791049424577,
+          "creator": "u:creator",
+          "creatorFluff": 600,
+          "escrow": "b:econ-pay-abfd44feb414b71a89f3a51f",
+          "evidence": "Installed local tool output commitment 1b1b9a2ff897b9321fe307ad4c8b5dc221040972635f555c20ebb1307d3f22ad; 11 words processed.",
+          "expiresAt": 1791053024577,
+          "fulfilledAt": 1791049436176,
+          "id": "c91b54c83401705b15e9a867",
+          "payer": "u:you",
+          "provider": "u:visitor",
+          "providerFluff": 1200,
+          "receiptId": "rcpt_musolf8e_j_0c3efaf9",
+          "receiptKey": "economic:service-refund:1791049443421:c05c4487-3d04-43c3-8d4c-09a97e48313a:payment-refund",
+          "refundApprovals": [
+            "u:creator",
+            "u:visitor",
+            "b:economic-operations"
+          ],
+          "refundReason": "Explicit local service refund review",
+          "refundUntil": 1791135824577,
+          "refundedAt": 1791049443421,
+          "simulation": true,
+          "status": "refunded",
+          "terms": "Local text-summary delivery. Explicit role authorization. Creator/provider/operations split. Refund requires every recipient approval.",
+          "treasury": "b:economic-operations",
+          "treasuryFluff": 200
+        },
+        {
+          "amountFluff": 2000,
+          "asset": "TUMBO",
+          "cancelledAt": 1791049664165,
+          "createdAt": 1791049643186,
+          "creator": "u:creator",
+          "creatorFluff": 600,
+          "escrow": "b:econ-pay-0c59b559a38c216b9969f009",
+          "expiresAt": 1791053243186,
+          "id": "dd1bad1cb9d2c2fe42225dd8",
+          "payer": "u:you",
+          "provider": "u:visitor",
+          "providerFluff": 1200,
+          "refundApprovals": [],
+          "refundUntil": 1791136043186,
+          "simulation": true,
+          "status": "cancelled",
+          "terms": "Local text-summary delivery. Explicit role authorization. Creator/provider/operations split. Refund requires every recipient approval.",
+          "treasury": "b:economic-operations",
+          "treasuryFluff": 200
+        },
+        {
+          "amountFluff": 2000,
+          "asset": "TUMBO",
+          "cancelledAt": 1791049665803,
+          "createdAt": 1791049646266,
+          "creator": "u:creator",
+          "creatorFluff": 600,
+          "escrow": "b:econ-pay-8c154b46a671bf6a93132eab",
+          "expiresAt": 1791053246266,
+          "id": "829d19275da80c0b373e1d1c",
+          "payer": "u:you",
+          "provider": "u:visitor",
+          "providerFluff": 1200,
+          "refundApprovals": [],
+          "refundUntil": 1791136046266,
+          "simulation": true,
+          "status": "cancelled",
+          "terms": "Local text-summary delivery. Explicit role authorization. Creator/provider/operations split. Refund requires every recipient approval.",
+          "treasury": "b:economic-operations",
+          "treasuryFluff": 200
+        }
+      ],
+      "productionAdapters": {
+        "authentication": "unsupported",
+        "custody": "unsupported",
+        "exchange": "manual-local-match",
+        "lending": "local-funded-terms",
+        "oracle": "local-evidence-only",
+        "prediction": "local-evidence-and-roles"
+      },
+      "simulation": true,
+      "source": "matumbo-economic-finance"
+    },
+    "receipts": 31,
+    "commands": 46,
+    "eventRoot": "069bb58bb702ec9e534d134de8abe774d65b7a0935d8cd6e331c9d2e9dad057a",
+    "storageStatus": "saved-local-bundle",
+    "restoreStatus": "restored-validated-local-bundle",
+    "balances": {
+      "u:you": {
+        "TUMBO": 190050,
+        "sMIMAS": 105000
+      },
+      "u:visitor": {
+        "TUMBO": 85450,
+        "sMIMAS": 95000
+      },
+      "u:creator": {
+        "TUMBO": 0,
+        "sMIMAS": 0
+      },
+      "b:economic-operations": {
+        "TUMBO": 0,
+        "sMIMAS": 0
+      }
+    },
+    "proof": {
+      "conserved": true,
+      "root": "4b454374bf24a397411add0e6d5f63fea70645c5c1d9d7cfdba300a3c4326155",
+      "liabilityRoot": "6ce5ec87ec01c7af0b9a7200a20cd03a044db5205dff080df29fa024d8a2759a",
+      "sums": {
+        "TUMBO": 10000000000,
+        "sMIMAS": 100000000000
+      },
+      "expected": {
+        "TUMBO": 10000000000,
+        "sMIMAS": 100000000000
+      }
+    },
+    "chainValid": true
+  },
+  "finishedAt": "2026-10-03T17:45:46.380Z"
+}

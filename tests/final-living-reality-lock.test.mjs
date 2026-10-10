@@ -1,19 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import {FEATURE_DEFINITIONS} from '../src/render/feature-navigator.js';
+import {REALITY_LENS_GROUPS,resolveRealityLensGroup} from '../src/domains/reality-lens-engine.js';
 
 test('clean root remains Reality Assembly forever', async () => {
   const landing = await import('../src/core/default-landing.js');
   assert.equal(landing.resolveDefaultFeature('', ''), 'reality-lens');
 
   const main = await readFile(new URL('../src/main.js', import.meta.url), 'utf8');
-  assert.match(main, /featureNavigator\.getSnapshot\(\)\.activeId==='reality-lens'\)realityAssembly\.open\(\)/);
+  assert.match(main, /if \(cleanRealityLanding\) \{\s*featureNavigator\.close\(\);\s*realityAssembly\.open\(\)/);
 });
 
-test('final assembly spacing keeps the feature rings separated', async () => {
-  const source = await readFile(new URL('../src/render/reality-assembly.js', import.meta.url), 'utf8');
-  assert.match(source, /radius=outer\?20\.5:10\.5/);
-  assert.match(source, /innerWidth<700\?92:76/);
+test('native landing contains six spaces and every feature retains a valid home', () => {
+  assert.equal(REALITY_LENS_GROUPS.length,6);
+  const groups=new Set(REALITY_LENS_GROUPS.map(group=>group.id));
+  assert.equal(groups.size,6);
+  assert.equal(new Set(FEATURE_DEFINITIONS.map(feature=>feature.id)).size,FEATURE_DEFINITIONS.length);
+  for(const feature of FEATURE_DEFINITIONS)assert.ok(groups.has(resolveRealityLensGroup(feature.id)),feature.id);
 });
 
 test('central cube has six local-style face systems', async () => {
@@ -50,14 +54,14 @@ test('TUMBO-SIM transfer chip is one continuously rotating cube', async () => {
 
 test('desktop tabs use six decorated faces and movable panels', async () => {
   const source = await readFile(new URL('../src/render/tab-engine.js', import.meta.url), 'utf8');
-  assert.match(source, /const faceMarks = \\[/);
+  assert.match(source, /const faceMarks = \[/);
   assert.match(source, /symbol: '⌖', code: 'TACT'/);
   assert.match(source, /symbol: 'T', code: 'TUMBO'/);
   assert.match(source, /symbol: 'Ω', code: 'REALITY'/);
   assert.match(source, /symbol: '✦', code: 'SIM'/);
   assert.match(source, /symbol: '▦', code: 'GRID'/);
-  assert.match(source, /_enablePanelDragging\\(record\\)/);
-  assert.match(source, /_enablePanelDragging\\(tab\\)/);
+  assert.match(source, /_enablePanelDragging\(record\)/);
+  assert.match(source, /_enablePanelDragging\(tab\)/);
   assert.match(source, /pointerdown/);
   assert.match(source, /--tl-panel-drag-x/);
 });
@@ -65,11 +69,11 @@ test('desktop tabs use six decorated faces and movable panels', async () => {
 test('desktop tabs stay on the right and use the TUMBO-SIM minimized glass language', async () => {
   const source = await readFile(new URL('../src/render/tab-engine.js', import.meta.url), 'utf8');
   assert.match(source, /\.tl-dock--desktop\s*\{[\s\S]*?right:\s*12px;/);
-  assert.doesNotMatch(source, /\.tl-dock--desktop\s*\{[\s\S]*?left:\s*12px;/);
+  assert.doesNotMatch(source, /\.tl-dock--desktop\s*\{[^}]*left:\s*12px;/);
   assert.match(source, /\.tl-layer--desktop\s*\{[\s\S]*?right:\s*154px;/);
-  assert.doesNotMatch(source, /\.tl-layer--desktop\s*\{[\s\S]*?left:\s*92px;/);
-  assert.match(source, /\.tl-chip\s*\{[\s\S]*?border:\s*1px solid rgba\(129, 232, 255, 0\.24\)/);
-  assert.match(source, /\.tl-chip\s*\{[\s\S]*?linear-gradient\(165deg/);
+  assert.doesNotMatch(source, /\.tl-layer--desktop\s*\{[^}]*left:\s*92px;/);
+  assert.match(source, /\.tl-chip\s*\{[^}]*border:\s*0;/);
+  assert.match(source, /\.tl-cube-face\s*\{[^}]*linear-gradient\(145deg/);
   assert.match(source, /\.tl-chip-cube\s*\{[\s\S]*?transform-style:\s*preserve-3d/);
   assert.match(source, /@keyframes\s+tl-minimized-cube-spin/);
   assert.match(source, /\.tl-cube-face--front/);

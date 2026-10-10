@@ -4,7 +4,7 @@ import {
   decideQualityLevel,
   shouldPauseRendering,
   particleBudget,
-} from './render-perf.js?v=20260922-cache2';
+} from './render-perf.js?v=20261003-skin360';
 
 /**
  * Install mobile freeze guard. Projection-only; no wallet/ledger/identity.

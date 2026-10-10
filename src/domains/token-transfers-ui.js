@@ -15,11 +15,11 @@ import {
   makeGlassCube,
   addGlassLighting,
   glassTintFor,
-} from "../render/glass-style.js?v=20260922-cache2";
+} from "../render/glass-style.js?v=20261003-skin360";
 import {
   attachTokenTransfers,
   FLUFF_PER_TUMBO_SIM,
-} from "./token-transfers.js?v=20260922-cache2";
+} from "./token-transfers.js?v=20261003-skin360";
 
 export const TOKEN_TRANSFER_UI_VERSION = "20260922-token-transfers-cube3";
 export const TOKEN_TRANSFER_UI_SOURCE = "tumbo-token-transfer-console";
@@ -216,7 +216,7 @@ function buildPanel(doc) {
     "<label>Idempotency key<input id='tt-key' name='key' autocomplete='off' spellcheck='false'></label>",
     "<div class='tt-form-actions'>",
     "<button type='submit' class='tt-btn' id='tt-submit'>Submit transfer</button>",
-    "<button type='button' class='tt-btn tt-btn-secondary' id='tt-replay'>Replay same key</button>",
+    "<button type='button' class='tt-btn tt-btn-secondary' id='tt-replay' disabled>Replay last transfer</button>",
     "</div>",
     "</form>",
     "<div class='tt-status' id='tt-status' data-tone='info' hidden></div>",
@@ -233,7 +233,7 @@ export function mountTokenTransferConsole(options) {
   const opts = options || {};
   const doc = opts.documentRoot || (typeof document !== "undefined" ? document : null);
   if (!doc || !doc.createElement || !doc.body || !doc.getElementById) return null;
-  if (doc.getElementById("token-transfer-chip")) return { alreadyMounted: true };
+  if (doc.getElementById("token-transfer-chip")) return doc.__TUMBO_TOKEN_TRANSFER_UI__ ?? { alreadyMounted: true };
   injectStyles(doc);
   let facade = null;
   let engine = null;
@@ -277,17 +277,19 @@ export function mountTokenTransferConsole(options) {
       }
     },
   };
+  const embedded=opts.embedded===true||doc.body.classList?.contains('assembly-mode')===true;
+  if(embedded){chip.hidden=true;chip.style.display='none';panel.dataset.tokenEmbedded='true';}
   try {
     const keyInput = ctx.byId("tt-key");
     if (keyInput) keyInput.value = makeKey();
   } catch (_) {}
   wireChipInteractions(ctx);
   try {
-    ctx.scene = startChipScene(ctx.byId("token-transfer-cube"));
+    if(!embedded)ctx.scene = startChipScene(ctx.byId("token-transfer-cube"));
   } catch (_) {}
   wirePanel(ctx);
   refreshAll(ctx);
-  return {
+  const controller = {
     chip: chip,
     panel: panel,
     facade: facade,
@@ -296,6 +298,8 @@ export function mountTokenTransferConsole(options) {
     close: function () { closePanel(ctx); },
     dispose: function () { disposeConsole(ctx); },
   };
+  doc.__TUMBO_TOKEN_TRANSFER_UI__ = controller;
+  return controller;
 }
 
 function openPanel(ctx) {
@@ -384,7 +388,7 @@ function wireChipInteractions(ctx) {
   if (panelHead) {
     panelHead.addEventListener("pointerdown", function (event) {
       try {
-        if (event.button !== 0 || event.target?.closest?.("button, a, input, select, textarea")) return;
+        if (ctx.panel.dataset?.tokenEmbedded === 'true' || event.button !== 0 || event.target?.closest?.("button, a, input, select, textarea")) return;
         const rect = ctx.panel.getBoundingClientRect();
         panelDragState = { pointerId:event.pointerId, startX:event.clientX, startY:event.clientY, origLeft:rect.left, origTop:rect.top, moved:false };
         panelHead.setPointerCapture?.(event.pointerId);
@@ -767,6 +771,10 @@ function submitTransfer(ctx, isReplay) {
   let memo = "";
   let key = "";
   try {
+    if (isReplay) {
+      if (!ctx.lastSubmission) { setStatus(ctx, "Submit a transfer before replaying it.", "info"); return; }
+      ({ action, from, to, asset, amountText, memo, key } = ctx.lastSubmission);
+    } else {
     action = ctx.byId("tt-action").value;
     from = ctx.byId("tt-from").value.trim();
     to = ctx.byId("tt-to").value.trim();
@@ -776,6 +784,7 @@ function submitTransfer(ctx, isReplay) {
     const keyInput = ctx.byId("tt-key");
     key = keyInput.value.trim() || makeKey();
     keyInput.value = key;
+    }
   } catch (_) {
     setStatus(ctx, "Could not read the form.", "error");
     return;
@@ -808,6 +817,9 @@ function submitTransfer(ctx, isReplay) {
     if (!replayed && !isReplay) {
       try { ctx.byId("tt-key").value = makeKey(); } catch (_) {}
     }
+    ctx.lastSubmission = Object.freeze({ action, from, to, asset, amountText, memo, key });
+    const replayButton = ctx.byId("tt-replay");
+    if (replayButton) replayButton.disabled = false;
     if (!replayed) pulse(ctx);
   } catch (err) {
     setStatus(ctx, "Transfer failed: " + (err && err.message ? err.message : String(err)), "error");
@@ -830,9 +842,8 @@ function wirePanel(ctx) {
     if (faucet) {
       faucet.addEventListener("click", function () {
         try {
-          ctx.engine.send({ from: "sys:faucet", to: DEMO_USER, asset: "TUMBO", amountFluff: 100 * FLUFF_PER_TUMBO_SIM, idempotencyKey: makeKey(), memo: "simulated demo funds" });
-          ctx.engine.send({ from: "sys:faucet", to: DEMO_USER, asset: "sMIMAS", amountFluff: 50 * FLUFF_PER_TUMBO_SIM, idempotencyKey: makeKey(), memo: "simulated demo funds" });
-          setStatus(ctx, "Demo funds added (simulated): " + fmtAmount(ctx, 100 * FLUFF_PER_TUMBO_SIM) + " TUMBO + " + fmtAmount(ctx, 50 * FLUFF_PER_TUMBO_SIM) + " sMIMAS.", "ok");
+          ctx.engine.fundDemo({ to: DEMO_USER, amountFluff: 100 * FLUFF_PER_TUMBO_SIM, idempotencyKey: makeKey() });
+          setStatus(ctx, "Demo funds added (simulated): " + fmtAmount(ctx, 100 * FLUFF_PER_TUMBO_SIM) + " TUMBO. sMIMAS is obtained through the local exchange.", "ok");
           pulse(ctx);
         } catch (err) {
           setStatus(ctx, "Faucet failed: " + (err && err.message ? err.message : String(err)), "error");

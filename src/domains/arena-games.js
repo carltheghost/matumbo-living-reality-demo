@@ -19,7 +19,7 @@ export const ARENA_GAMES_BOUNDARY =
   "ARENA is a local game rehearsal. No network, multiplayer service, reward, wallet, token, persistence, imported code, identity, or external execution is active.";
 
 const GAME_STATUS = Object.freeze({ READY: "ready", RUNNING: "running", COMPLETE: "complete" });
-const MAX_TRACE = 32;
+export const ARENA_GAMES_MAX_EVENTS = 256;
 
 function isRecord(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -129,8 +129,8 @@ export const ARENA_GAME_MODES = Object.freeze([
     id: "orbital-duel",
     label: "Orbital Duel",
     subtitle: "Charge, shield, and pulse against a fictional rival orbit.",
-    objective: "Reduce the rival shield to zero before six rounds elapse.",
-    maxTurns: 6,
+    objective: "Reduce the rival shield to zero within nine rounds: charge twice, then pulse; repeat three times.",
+    maxTurns: 9,
     actions: Object.freeze([
       action("charge", "Charge", "Gain one charge for a later pulse."),
       action("shield", "Shield", "Raise your shield by one, up to three."),
@@ -263,10 +263,14 @@ function withEvent(state, event) {
   return { entry, events: [...state.events, entry], headHash: hash };
 }
 
+function objectiveReached(modeId, values) {
+  if (modeId === "nebula-rally") return values.progress >= values.target;
+  if (modeId === "chrono-grid") return values.position[0] === values.target[0] && values.position[1] === values.target[1];
+  return values.rivalShield <= 0;
+}
+
 function modeComplete(modeId, values, turn) {
-  if (modeId === "nebula-rally") return values.progress >= values.target || turn >= 6;
-  if (modeId === "chrono-grid") return (values.position[0] === values.target[0] && values.position[1] === values.target[1]) || turn >= 6;
-  return values.rivalShield <= 0 || turn >= 6;
+  return objectiveReached(modeId, values) || turn >= modeDefinition(modeId).maxTurns;
 }
 
 function deriveStatus(modeId, values, turn, accepted) {
@@ -278,8 +282,8 @@ function legalActionDescriptors(state) {
   const mode = modeDefinition(state.modeId);
   const values = state.values;
   return mode.actions.map((definition) => {
-    let enabled = state.status !== GAME_STATUS.COMPLETE;
-    let reason = enabled ? "legal" : "match is complete";
+    let enabled = state.status !== GAME_STATUS.COMPLETE && state.events.length < ARENA_GAMES_MAX_EVENTS;
+    let reason = enabled ? "legal" : state.events.length >= ARENA_GAMES_MAX_EVENTS ? "action record is full; reset to start again" : "match is complete";
     if (enabled && state.modeId === "nebula-rally" && definition.id === "boost" && values.energy < 1) {
       enabled = false;
       reason = "requires one energy";
@@ -316,6 +320,7 @@ function createState(modeId, overrides = {}) {
     turn: Number.isSafeInteger(overrides.turn) ? overrides.turn : 0,
     step: Number.isSafeInteger(overrides.step) ? overrides.step : Number.isSafeInteger(overrides.turn) ? overrides.turn : 0,
     status: overrides.status ?? GAME_STATUS.READY,
+    outcome: objectiveReached(mode.id, values) ? "won" : overrides.status === GAME_STATUS.COMPLETE ? "lost" : null,
     values,
     events: Array.isArray(overrides.events) ? [...overrides.events] : [],
     headHash: overrides.headHash ?? ARENA_GAMES_GENESIS_HASH,
@@ -415,6 +420,12 @@ export function applyArenaGameAction(state, input) {
   }
   const modeId = requireModeId(state.modeId);
   const actionId = actionIdFrom(input);
+  if (state.events.length >= ARENA_GAMES_MAX_EVENTS) return deepFreeze({
+    source: ARENA_GAMES_ACTION_SOURCE, actionId, accepted: false, rejected: true,
+    reason: "action record is full (256 events); reset to start again",
+    previousState: state, state, event: null,
+    localOnly: true, simulation: true, externalNetwork: false, externalTransfer: false, executable: false,
+  });
   const definition = modeDefinition(modeId).actions.find((candidate) => candidate.id === actionId);
   if (!definition) return rejection(state, actionId, "unknown action for this mode");
   if (state.status === GAME_STATUS.COMPLETE) return rejection(state, actionId, "match is complete");
@@ -479,7 +490,8 @@ export function replayArenaGame(input = "nebula-rally", maybeActions = []) {
   let state = createArenaGameState(modeId);
   const results = [];
   const requested = Array.isArray(actions) ? actions : [];
-  requested.slice(0, MAX_TRACE).forEach((candidate) => {
+  if (requested.length > ARENA_GAMES_MAX_EVENTS) throw new RangeError("ARENA replay exceeds the 256-event limit; current match was preserved");
+  requested.forEach((candidate) => {
     const result = applyArenaGameAction(state, candidate);
     results.push(result);
     state = result.state;
@@ -487,7 +499,7 @@ export function replayArenaGame(input = "nebula-rally", maybeActions = []) {
   return deepFreeze({
     source: ARENA_GAMES_REPLAY_SOURCE,
     modeId: state.modeId,
-    actionIds: Object.freeze(requested.slice(0, MAX_TRACE).map(actionIdFrom)),
+    actionIds: Object.freeze(requested.map(actionIdFrom)),
     results: Object.freeze(results),
     state,
     acceptedCount: results.filter((result) => result.accepted).length,

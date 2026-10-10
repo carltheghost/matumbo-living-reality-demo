@@ -1,8 +1,9 @@
 /** token-ticker.test.mjs — pure helper tests for the token ticker panel.
- * No DOM, no ledger: exercises the presentation helpers against fixed inputs.
+ * No DOM: exercises presentation helpers and their canonical reversal boundary.
  */
 import { strict as assert } from 'node:assert';
 import { describe, it } from 'node:test';
+import { createTokenEngine, REVERSE_WINDOW_TICKS, ReverseWindowExpiredError } from '../src/domains/token.js';
 import {
   escapeHtml,
   reversalWindowInfo,
@@ -29,10 +30,30 @@ describe('reversalWindowInfo', () => {
     assert.equal(info.eligible, true);
     assert.equal(info.ticksLeft, 600);
   });
-  it('closes exactly at the window boundary', () => {
+  it('remains eligible exactly at the window boundary with zero ticks left', () => {
     const info = reversalWindowInfo(0, 1000, 1000);
-    assert.equal(info.eligible, false);
+    assert.equal(info.eligible, true);
     assert.equal(info.ticksLeft, 0);
+  });
+  it('agrees with the canonical engine at the final permitted tick and the next tick', () => {
+    const engine = createTokenEngine();
+    const first = engine.faucet('u:alice', 'TUMBO', 100, { idempotencyKey: 'boundary:first' });
+    const second = engine.faucet('u:bob', 'TUMBO', 100, { idempotencyKey: 'boundary:second' });
+    for (let tick = 0; tick < REVERSE_WINDOW_TICKS - 1; tick++) {
+      engine.ledger.post([{ account: 'u:alice', asset: 'TUMBO', amount: 0 }], {
+        idempotencyKey: `boundary:advance:${tick}`, action: 'boundary-tick',
+      });
+    }
+    assert.equal(engine.ledger.tick - first.tick, REVERSE_WINDOW_TICKS);
+    assert.deepEqual(reversalWindowInfo(first.tick, engine.ledger.tick, REVERSE_WINDOW_TICKS), { eligible: true, ticksLeft: 0 });
+    assert.equal(engine.reverse({ idempotencyKey: first.idempotencyKey }).action, 'reverse');
+    engine.ledger.post([{ account: 'u:alice', asset: 'TUMBO', amount: 0 }], {
+      idempotencyKey: 'boundary:advance:past', action: 'boundary-tick',
+    });
+    assert.equal(engine.ledger.tick - second.tick, REVERSE_WINDOW_TICKS + 1);
+    assert.deepEqual(reversalWindowInfo(second.tick, engine.ledger.tick, REVERSE_WINDOW_TICKS), { eligible: false, ticksLeft: 0 });
+    assert.throws(() => engine.reverse({ idempotencyKey: second.idempotencyKey }), ReverseWindowExpiredError);
+    assert.equal(engine.balance('u:bob', 'TUMBO'), 100);
   });
   it('is closed past the window', () => {
     const info = reversalWindowInfo(10, 2000, 1000);

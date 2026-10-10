@@ -11,8 +11,8 @@ import {
 const NOW = "2026-09-21T12:00:00.000Z";
 const atelier = (seed = "house-algorithms") => createContractAtelier({ seed, now: () => NOW });
 
-test("the canonical market primitive is always YES/NO", () => {
-  assert.deepEqual([...CONTRACT_ATELIER_MARKET_TYPES], ["yes_no"]);
+test("algorithmic house markets use YES/NO alongside existing market modes", () => {
+  assert.ok(CONTRACT_ATELIER_MARKET_TYPES.includes('yes_no'));
   assert.deepEqual([...CONTRACT_ATELIER_HOUSE_MODES], ["single", "pool"]);
   const market = atelier().createContract({ type: "yes_no", role: "house", topic: "custom", title: "Will the project finish?", logic: "project finishes" });
   assert.deepEqual([...market.outcomes], ["YES", "NO"]);

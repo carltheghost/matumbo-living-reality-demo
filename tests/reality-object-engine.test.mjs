@@ -26,7 +26,7 @@ test('the same surface projector follows a selected shape and grows with its obj
 });
 
 test('one fitted live panel preserves every tab form while staying inside the viewport',()=>{
-  const expectedAspect={phone:.86/1.5,square:1,rectangle:1.92/1.12,sphere:1,cylinder:1.36/1.64,cube:1,wave:1.92/1.12};
+  const expectedAspect={phone:.86/1.5,square:1,rectangle:1.92/1.12,sphere:1,cylinder:1.1253/1.64,cube:1,wave:1.92/(1.12*1.15)};
   for(const [shape,aspect] of Object.entries(expectedAspect)){
     const fit=realityObjectSurfaceEngine.fitPanel({shape,size:2,distance:4,approachScale:2,viewportWidth:420,viewportHeight:700});
     assert.equal(fit.shape,shape);assert.ok(fit.width<=388);assert.ok(fit.height<=524);assert.ok(fit.width>0&&fit.height>0);

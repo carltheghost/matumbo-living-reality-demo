@@ -1,0 +1,3 @@
+# Preserve the verified upstream bytes on every checkout, including Windows.
+vendor/mediapipe-tasks-vision-1.0.1/** -text -whitespace
+assets/models/vision/*.task -text

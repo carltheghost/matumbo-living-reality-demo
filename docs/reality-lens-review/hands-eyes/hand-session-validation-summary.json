@@ -1,0 +1,50 @@
+{
+  "change": "One validated hand observation set for recognition, gestures, adapter and presence; reject malformed geometry and duplicate handedness as absence",
+  "ownedFiles": [
+    "src/render/hand-session.js",
+    "tests/hand-session.test.mjs"
+  ],
+  "testedSource": [
+    {
+      "path": "src/render/hand-session.js",
+      "sha256": "03c193ce99509e5860db9533793ce3f330dfc695081600afec0fb304cd859b7a"
+    },
+    {
+      "path": "tests/hand-session.test.mjs",
+      "sha256": "cfde6c06b1f7e86568045cdab2d71b67c21abb52e1498958cfa58df57c8b8d2c"
+    },
+    {
+      "path": "src/domains/tracking-interaction.js",
+      "sha256": "70039bad55a88ea9de85627ca639d44db6c7bab26f0c208b674320e566b449bd"
+    }
+  ],
+  "newSessionRegressions": 12,
+  "focused": {
+    "command": "node --test tests/hand-session.test.mjs tests/tracking-interaction.test.mjs",
+    "passed": 35,
+    "failed": 0,
+    "durationMs": 102.8972
+  },
+  "expanded": {
+    "command": "node --test tests/hand-session.test.mjs tests/hand-lens.test.mjs tests/hand-gestures.test.mjs tests/hand-grab.test.mjs tests/tracking-interaction.test.mjs",
+    "passed": 79,
+    "failed": 0,
+    "durationMs": 260.6567
+  },
+  "originalReproAfterFix": {
+    "command": "node work/hand-invalid-geometry-repro.mjs",
+    "emitted": [
+      {
+        "type": "cancel",
+        "source": "hand",
+        "reason": "hand-lost"
+      }
+    ],
+    "upEmitted": false,
+    "errors": []
+  },
+  "syntax": "node --check src/render/hand-session.js passed",
+  "diffCheck": "git diff --check -- src/render/hand-session.js tests/hand-session.test.mjs passed",
+  "browserRunDuringFix": false,
+  "sourceFrozen": true
+}

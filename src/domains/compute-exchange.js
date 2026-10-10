@@ -12,7 +12,16 @@
  * and routing model for the Reality Lens.
  */
 
-export const COMPUTE_EXCHANGE_SCHEMA_VERSION = 1;
+import {
+  toComputeUnits,
+  fromComputeUnits
+} from "./compute-account.js?v=20261003-skin360";
+import {
+  sealEconomicMetadata,
+  stableEconomicString,
+  economicChecksum
+} from "./economic-timeline.js?v=20261003-skin360";
+export const COMPUTE_EXCHANGE_SCHEMA_VERSION = 2;
 export const COMPUTE_EXCHANGE_SOURCE = "matumbo-compute-exchange";
 
 export const COMPUTE_EXCHANGE_BOUNDARY =
@@ -20,13 +29,60 @@ export const COMPUTE_EXCHANGE_BOUNDARY =
   "and TUMBO-SIM rewards are non-transferable demo accounting. No API key, wallet, custody, staking, settlement, mint, or burn is executed.";
 
 export const COMPUTE_PROVIDERS = Object.freeze([
-  Object.freeze({ id: "openai", name: "OpenAI / GPT", chatUrl: "https://chatgpt.com/", executionMode: "external", capabilities: Object.freeze(["chat","reasoning","code","vision"]) }),
-  Object.freeze({ id: "anthropic", name: "Anthropic / Claude", chatUrl: "https://claude.ai/", executionMode: "external", capabilities: Object.freeze(["chat","reasoning","code","vision"]) }),
-  Object.freeze({ id: "google", name: "Google / Gemini", chatUrl: "https://gemini.google.com/", executionMode: "external", capabilities: Object.freeze(["chat","reasoning","code","vision"]) }),
-  Object.freeze({ id: "deepseek", name: "DeepSeek", chatUrl: "https://chat.deepseek.com/", executionMode: "external", capabilities: Object.freeze(["chat","reasoning","code"]) }),
-  Object.freeze({ id: "kimi", name: "Kimi", chatUrl: "https://www.kimi.com/en/", executionMode: "external", capabilities: Object.freeze(["chat","reasoning","code","research"]) }),
-  Object.freeze({ id: "nvidia", name: "NVIDIA / NIM", chatUrl: "https://build.nvidia.com/", executionMode: "external", capabilities: Object.freeze(["chat","reasoning","code","vision"]), apiBaseUrl: "https://integrate.api.nvidia.com/v1", apiKeyEnv: "NVIDIA_API_KEY", freeTier: true, models: Object.freeze(["deepseek-ai/deepseek-v4-flash", "z-ai/glm-5.3", "z-ai/glm-5.3-flash", "moonshotai/kimi-k3"]), rosterNote: "Free developer key, no credit card; hosted model roster rotates — adapter should refresh via GET /v1/models" }),
-  Object.freeze({ id: "local", name: "Local / Self-hosted", chatUrl: null, executionMode: "local", capabilities: Object.freeze(["chat","reasoning","code","private"]) }),
+  Object.freeze({
+    id: "openai",
+    name: "OpenAI / GPT",
+    chatUrl: "https://chatgpt.com/",
+    executionMode: "external",
+    capabilities: Object.freeze(["chat", "reasoning", "code", "vision"])
+  }),
+  Object.freeze({
+    id: "anthropic",
+    name: "Anthropic / Claude",
+    chatUrl: "https://claude.ai/",
+    executionMode: "external",
+    capabilities: Object.freeze(["chat", "reasoning", "code", "vision"])
+  }),
+  Object.freeze({
+    id: "google",
+    name: "Google / Gemini",
+    chatUrl: "https://gemini.google.com/",
+    executionMode: "external",
+    capabilities: Object.freeze(["chat", "reasoning", "code", "vision"])
+  }),
+  Object.freeze({
+    id: "deepseek",
+    name: "DeepSeek",
+    chatUrl: "https://chat.deepseek.com/",
+    executionMode: "external",
+    capabilities: Object.freeze(["chat", "reasoning", "code"])
+  }),
+  Object.freeze({
+    id: "kimi",
+    name: "Kimi",
+    chatUrl: "https://www.kimi.com/en/",
+    executionMode: "external",
+    capabilities: Object.freeze(["chat", "reasoning", "code", "research"])
+  }),
+  Object.freeze({
+    id: "nvidia",
+    name: "NVIDIA / NIM",
+    chatUrl: "https://build.nvidia.com/",
+    executionMode: "external",
+    capabilities: Object.freeze(["chat", "reasoning", "code", "vision"]),
+    apiBaseUrl: "https://integrate.api.nvidia.com/v1",
+    apiKeyEnv: "NVIDIA_API_KEY",
+    freeTier: true,
+    models: Object.freeze(["deepseek-ai/deepseek-v4-flash", "z-ai/glm-5.3", "z-ai/glm-5.3-flash", "moonshotai/kimi-k3"]),
+    rosterNote: "Free developer key, no credit card; hosted model roster rotates — adapter should refresh via GET /v1/models"
+  }),
+  Object.freeze({
+    id: "local",
+    name: "Local / Self-hosted",
+    chatUrl: null,
+    executionMode: "local",
+    capabilities: Object.freeze(["chat", "reasoning", "code", "private"])
+  }),
 ]);
 
 export const DEFAULT_REWARD_POLICY = Object.freeze({
@@ -42,7 +98,9 @@ function finiteNonNegative(value, fallback = 0) {
 }
 
 function wholeNonNegative(value) {
-  return Math.floor(finiteNonNegative(value));
+  const number = Number(value ?? 0);
+  if (!Number.isSafeInteger(number) || number < 0) throw new Error("Usage counts and latency must be non-negative safe integers");
+  return number;
 }
 
 function round(value, places = 6) {
@@ -60,11 +118,12 @@ export function normalizeUsageReceipt(input = {}) {
 
   const inputTokens = wholeNonNegative(input.inputTokens);
   const outputTokens = wholeNonNegative(input.outputTokens);
-  const reportedCostUsd = round(finiteNonNegative(input.reportedCostUsd), 8);
+  const reportedCostUsd = fromComputeUnits(toComputeUnits(input.reportedCostUsd ?? 0, "Reported cost"));
   const verified = input.verified === true;
   const receiptId = String(input.receiptId ?? "").trim();
 
-  if (!receiptId) throw new Error("A receiptId is required");
+  if (!receiptId || receiptId.length > 160) throw new Error("A receiptId is required and must fit 160 characters");
+  if (!Number.isSafeInteger(inputTokens + outputTokens)) throw new Error("Total tokens exceed the safe integer range");
   if (reportedCostUsd <= 0 && verified) throw new Error("Verified receipts need a positive provider-reported cost");
 
   return Object.freeze({
@@ -79,16 +138,24 @@ export function normalizeUsageReceipt(input = {}) {
     reportedCostUsd,
     verified,
     latencyMs: wholeNonNegative(input.latencyMs),
-    source: verified ? "provider-receipt" : "local-demo",
+    // A boolean entered by a caller is a local rehearsal declaration, never
+    // authenticated provider billing. Live usage without cost remains unverified.
+    source: "local-demo-receipt",
+    verificationBasis: verified ? "declared-local-rehearsal" : "unverified",
+    billingVerified: false,
+    simulation: true,
+    jobId: String(input.jobId ?? "").slice(0, 160),
+    quoteId: String(input.quoteId ?? "").slice(0, 160),
   });
 }
 
 export function estimateTumboSimReward(receipt, policy = DEFAULT_REWARD_POLICY) {
   const normalized = normalizeUsageReceipt(receipt);
-  const usdPerTumboSim = finiteNonNegative(policy?.usdPerTumboSim, DEFAULT_REWARD_POLICY.usdPerTumboSim);
-  const minimum = finiteNonNegative(policy?.minimumVerifiedSpendUsd, DEFAULT_REWARD_POLICY.minimumVerifiedSpendUsd);
+  const rewardBasisUnits = toComputeUnits(policy?.usdPerTumboSim ?? DEFAULT_REWARD_POLICY.usdPerTumboSim, "Reward normalization basis");
+  const minimumUnits = toComputeUnits(policy?.minimumVerifiedSpendUsd ?? DEFAULT_REWARD_POLICY.minimumVerifiedSpendUsd, "Reward minimum");
+  const spendUnits = toComputeUnits(normalized.reportedCostUsd);
 
-  if (!normalized.verified || normalized.reportedCostUsd < minimum || usdPerTumboSim <= 0) {
+  if (!normalized.verified || spendUnits < minimumUnits || rewardBasisUnits === 0) {
     return Object.freeze({
       eligible: false,
       tumboSim: 0,
@@ -97,20 +164,26 @@ export function estimateTumboSimReward(receipt, policy = DEFAULT_REWARD_POLICY) 
     });
   }
 
+  const rewardUnits = BigInt(spendUnits) * 1_000_000n / BigInt(rewardBasisUnits);
+  if (rewardUnits > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error("Reward entitlement exceeds safe units");
   return Object.freeze({
     eligible: true,
-    tumboSim: round(normalized.reportedCostUsd / usdPerTumboSim, 6),
+    tumboSim: Number(rewardUnits) / 1_000_000,
     basisUsd: normalized.reportedCostUsd,
-    reason: "verified-provider-spend",
+    reason: "declared-local-rehearsal-spend",
   });
 }
 
-export function rankProviderQuotes(quotes = [], { priority = "balanced" } = {}) {
+export function rankProviderQuotes(quotes = [], {
+  priority = "balanced"
+} = {}) {
   const clean = quotes
     .map((quote) => {
       const provider = providerById(String(quote?.providerId ?? ""));
       if (!provider) return null;
       return Object.freeze({
+        quoteId: String(quote?.quoteId ?? "").slice(0, 160),
+        model: String(quote?.model ?? "unspecified").slice(0, 120),
         providerId: provider.id,
         providerName: provider.name,
         estimatedCostUsd: finiteNonNegative(quote?.estimatedCostUsd, Number.POSITIVE_INFINITY),
@@ -136,7 +209,10 @@ export function rankProviderQuotes(quotes = [], { priority = "balanced" } = {}) 
       const latencyScore = Number.isFinite(quote.estimatedLatencyMs) ? quote.estimatedLatencyMs / maxLatency : 1;
       score = costScore * 0.65 + latencyScore * 0.35;
     }
-    return Object.freeze({ ...quote, score: round(score, 8) });
+    return Object.freeze({
+      ...quote,
+      score: round(score, 8)
+    });
   });
 
   return Object.freeze(scored.sort((a, b) => a.score - b.score || a.providerId.localeCompare(b.providerId)));
@@ -151,9 +227,9 @@ export function selectProviderRoute(quotes = [], {
   requiredCapabilities = [],
   privacy = "provider-default",
 } = {}) {
-  const allowed = Array.isArray(allowedProviderIds) && allowedProviderIds.length
-    ? new Set(allowedProviderIds.map(String))
-    : null;
+  const allowed = Array.isArray(allowedProviderIds) && allowedProviderIds.length ?
+    new Set(allowedProviderIds.map(String)) :
+    null;
   const required = Array.isArray(requiredCapabilities) ? requiredCapabilities.map(String) : [];
   const costCap = finiteNonNegative(maxCostUsd, Number.POSITIVE_INFINITY);
   const latencyCap = finiteNonNegative(maxLatencyMs, Number.POSITIVE_INFINITY);
@@ -163,29 +239,54 @@ export function selectProviderRoute(quotes = [], {
   for (const quote of quotes) {
     const provider = providerById(String(quote?.providerId ?? ""));
     if (!provider) {
-      rejected.push(Object.freeze({ providerId: String(quote?.providerId ?? "unknown"), reason: "unknown-provider" }));
+      rejected.push(Object.freeze({
+        providerId: String(quote?.providerId ?? "unknown"),
+        reason: "unknown-provider"
+      }));
       continue;
     }
     if (allowed && !allowed.has(provider.id)) {
-      rejected.push(Object.freeze({ providerId: provider.id, reason: "provider-not-allowed" }));
+      rejected.push(Object.freeze({
+        providerId: provider.id,
+        reason: "provider-not-allowed"
+      }));
       continue;
     }
     if (required.some((capability) => !provider.capabilities.includes(capability))) {
-      rejected.push(Object.freeze({ providerId: provider.id, reason: "missing-capability" }));
+      rejected.push(Object.freeze({
+        providerId: provider.id,
+        reason: "missing-capability"
+      }));
+      continue;
+    }
+    if (quote?.meetsCapability === false) {
+      rejected.push(Object.freeze({
+        providerId: provider.id,
+        reason: "missing-capability"
+      }));
       continue;
     }
     if (privacy === "local-only" && provider.executionMode !== "local") {
-      rejected.push(Object.freeze({ providerId: provider.id, reason: "privacy-local-only" }));
+      rejected.push(Object.freeze({
+        providerId: provider.id,
+        reason: "privacy-local-only"
+      }));
       continue;
     }
     const estimatedCostUsd = finiteNonNegative(quote?.estimatedCostUsd, Number.POSITIVE_INFINITY);
     const estimatedLatencyMs = finiteNonNegative(quote?.estimatedLatencyMs, Number.POSITIVE_INFINITY);
     if (!Number.isFinite(estimatedCostUsd) || estimatedCostUsd > costCap) {
-      rejected.push(Object.freeze({ providerId: provider.id, reason: "cost-cap" }));
+      rejected.push(Object.freeze({
+        providerId: provider.id,
+        reason: "cost-cap"
+      }));
       continue;
     }
-    if (Number.isFinite(estimatedLatencyMs) && estimatedLatencyMs > latencyCap) {
-      rejected.push(Object.freeze({ providerId: provider.id, reason: "latency-cap" }));
+    if ((Number.isFinite(latencyCap) && !Number.isFinite(estimatedLatencyMs)) || estimatedLatencyMs > latencyCap) {
+      rejected.push(Object.freeze({
+        providerId: provider.id,
+        reason: "latency-cap"
+      }));
       continue;
     }
     eligible.push({
@@ -196,7 +297,9 @@ export function selectProviderRoute(quotes = [], {
     });
   }
 
-  const candidates = rankProviderQuotes(eligible, { priority });
+  const candidates = rankProviderQuotes(eligible, {
+    priority
+  });
   return Object.freeze({
     selected: candidates[0] ?? null,
     candidates,
@@ -212,18 +315,53 @@ export function selectProviderRoute(quotes = [], {
   });
 }
 
-export function createComputeExchangeLedger({ rewardPolicy = DEFAULT_REWARD_POLICY } = {}) {
-  const receipts = [];
-  const ids = new Set();
+export function createComputeExchangeLedger({
+  rewardPolicy = DEFAULT_REWARD_POLICY,
+  maxReceipts = 10000
+} = {}) {
+  if (!Number.isSafeInteger(maxReceipts) || maxReceipts < 1 || maxReceipts > 100000) throw new Error("Invalid compute receipt limit");
+  rewardPolicy = sealEconomicMetadata(rewardPolicy);
+  let receipts = [];
+  let ids = new Map();
+
+  function preflightReceipt(input) {
+    const receipt = normalizeUsageReceipt(input);
+    const original = ids.get(receipt.receiptId);
+    if (original) {
+      if (stableEconomicString(original.receipt) !== stableEconomicString(receipt)) throw new Error("IDEM_MISMATCH: receipt ID belongs to another usage record");
+      return Object.freeze({
+        accepted: false,
+        duplicate: true,
+        reason: "duplicate-receipt",
+        receipt: original.receipt,
+        reward: original.reward
+      });
+    }
+    if (receipts.length >= maxReceipts) throw new Error("Compute receipt history is full; export before continuing");
+    const tokenTotal = receipts.reduce((sum, row) => sum + row.totalTokens, receipt.totalTokens);
+    const costTotal = receipts.reduce((sum, row) => sum + toComputeUnits(row.reportedCostUsd), toComputeUnits(receipt.reportedCostUsd));
+    if (!Number.isSafeInteger(tokenTotal) || !Number.isSafeInteger(costTotal)) throw new Error("Compute usage totals exceed safe units");
+    return Object.freeze({
+      accepted: true,
+      duplicate: false,
+      reason: "ready-local-demo",
+      receipt,
+      reward: estimateTumboSimReward(receipt, rewardPolicy)
+    });
+  }
 
   function record(input) {
-    const receipt = normalizeUsageReceipt(input);
-    if (ids.has(receipt.receiptId)) {
-      return Object.freeze({ accepted: false, duplicate: true, receipt, reward: estimateTumboSimReward(receipt, rewardPolicy) });
-    }
-    ids.add(receipt.receiptId);
+    const ready = preflightReceipt(input);
+    if (!ready.accepted) return ready;
+    const {
+      receipt,
+      reward
+    } = ready;
+    ids.set(receipt.receiptId, Object.freeze({
+      receipt,
+      reward
+    }));
     receipts.push(receipt);
-    const reward = estimateTumboSimReward(receipt, rewardPolicy);
     return Object.freeze({
       accepted: true,
       duplicate: false,
@@ -262,8 +400,8 @@ export function createComputeExchangeLedger({ rewardPolicy = DEFAULT_REWARD_POLI
       tumboSimReward: 0,
     });
 
-    totals.reportedSpendUsd = round(totals.reportedSpendUsd, 8);
-    totals.verifiedSpendUsd = round(totals.verifiedSpendUsd, 8);
+    totals.reportedSpendUsd = fromComputeUnits(receipts.reduce((sum, row) => sum + toComputeUnits(row.reportedCostUsd), 0));
+    totals.verifiedSpendUsd = fromComputeUnits(receipts.filter(row => row.verified).reduce((sum, row) => sum + toComputeUnits(row.reportedCostUsd), 0));
     totals.tumboSimReward = round(totals.tumboSimReward, 6);
 
     const byProvider = COMPUTE_PROVIDERS.map((provider) => {
@@ -281,7 +419,9 @@ export function createComputeExchangeLedger({ rewardPolicy = DEFAULT_REWARD_POLI
       source: COMPUTE_EXCHANGE_SOURCE,
       schemaVersion: COMPUTE_EXCHANGE_SCHEMA_VERSION,
       rewardPolicy,
-      totals: Object.freeze({ ...totals }),
+      totals: Object.freeze({
+        ...totals
+      }),
       byProvider: Object.freeze(byProvider),
       receipts: Object.freeze([...receipts]),
       localOnly: true,
@@ -291,7 +431,56 @@ export function createComputeExchangeLedger({ rewardPolicy = DEFAULT_REWARD_POLI
     });
   }
 
-  return Object.freeze({ record, snapshot });
+  function exportState() {
+    const body = {
+      schemaVersion: COMPUTE_EXCHANGE_SCHEMA_VERSION,
+      source: COMPUTE_EXCHANGE_SOURCE,
+      rewardPolicy,
+      receipts
+    };
+    return sealEconomicMetadata({
+      ...body,
+      checksum: economicChecksum(stableEconomicString(body)),
+      cryptographicProof: false
+    });
+  }
+
+  function importState(input) {
+    const data = sealEconomicMetadata(input);
+    if (data.schemaVersion !== COMPUTE_EXCHANGE_SCHEMA_VERSION || data.source !== COMPUTE_EXCHANGE_SOURCE || !Array.isArray(data.receipts) || data.receipts.length > maxReceipts || stableEconomicString(data.rewardPolicy) !== stableEconomicString(rewardPolicy)) throw new Error("Invalid compute exchange state");
+    const body = {
+      schemaVersion: data.schemaVersion,
+      source: data.source,
+      rewardPolicy: data.rewardPolicy,
+      receipts: data.receipts
+    };
+    if (economicChecksum(stableEconomicString(body)) !== data.checksum) throw new Error("Compute exchange checksum is invalid");
+    const next = [],
+      nextIds = new Map();
+    for (const raw of data.receipts) {
+      const receipt = normalizeUsageReceipt(raw);
+      if (stableEconomicString(receipt) !== stableEconomicString(raw) || nextIds.has(receipt.receiptId)) throw new Error("Invalid or duplicate imported receipt");
+      next.push(receipt);
+      nextIds.set(receipt.receiptId, Object.freeze({
+        receipt,
+        reward: estimateTumboSimReward(receipt, rewardPolicy)
+      }));
+    }
+    const totalTokens = next.reduce((sum, row) => sum + row.totalTokens, 0);
+    const totalCosts = next.reduce((sum, row) => sum + toComputeUnits(row.reportedCostUsd), 0);
+    if (!Number.isSafeInteger(totalTokens) || !Number.isSafeInteger(totalCosts)) throw new Error("Imported compute totals exceed safe units");
+    receipts = next;
+    ids = nextIds;
+    return snapshot();
+  }
+  return Object.freeze({
+    record,
+    preflightReceipt,
+    preflightRecord: preflightReceipt,
+    snapshot,
+    exportState,
+    importState
+  });
 }
 
 export default Object.freeze({

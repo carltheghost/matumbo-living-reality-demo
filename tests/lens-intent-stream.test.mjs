@@ -34,6 +34,14 @@ test('unknown source is dropped and counted', () => {
   assert.equal(stream.getDroppedCount(), 1);
 });
 
+test('hand taps select while grabs still move and unsupported hand gestures are dropped', () => {
+  const stream = createIntentStream();
+  assert.equal(stream.emit({source:'hand',gesture:'tap',targetId:'cube-1'}).type,'select');
+  assert.equal(stream.emit({source:'hand',gesture:'grab',targetId:'cube-1'}).type,'move');
+  assert.equal(stream.emit({source:'hand',gesture:'unknown',targetId:'cube-1'}),null);
+  assert.equal(stream.getDroppedCount(),1);
+});
+
 test('every emitted intent is frozen', () => {
   const stream = createIntentStream();
   const intents = [

@@ -1,5 +1,5 @@
-import {REALITY_TAB_FORMS} from '../domains/reality-tab-layout.js';
-import {createContractWorldContribution} from '../domains/contract-world-projection.js';
+import {REALITY_TAB_FORMS} from '../domains/reality-tab-layout.js?v=20261003-skin360';
+import {createContractWorldContribution} from '../domains/contract-world-projection.js?v=20261003-skin360';
 
 export const CONTRACT_MATERIALS = Object.freeze({pending_approval:'#b59b69',active:'#75bac0',paused:'#cbab69',disputed:'#cc8277',completed:'#80b5a0',cancelled:'#77828c',expired:'#8d859d'});
 

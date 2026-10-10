@@ -13,7 +13,7 @@
 import {
   makeGlassCube,
   glassTintFor,
-} from "./glass-style.js?v=20260922-cache2";
+} from "./glass-style.js?v=20261003-skin360";
 
 import {
   createTokenSocialUxController,
@@ -29,7 +29,7 @@ import {
   socialConfirmDelivery,
   socialCancelDelivery,
   DEFAULT_TIP_FLUFF,
-} from "../domains/token-social-ux.js?v=20260922-cache2";
+} from "../domains/token-social-ux.js?v=20261003-skin360";
 
 const STORAGE_KEY = "tumbo:token-social-ux:pose";
 const PANEL_ID = "token-social-ux-panel";

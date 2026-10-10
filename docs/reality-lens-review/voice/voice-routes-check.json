@@ -1,0 +1,510 @@
+{
+  "checks": [
+    {
+      "device": "desktop",
+      "id": "reality-lens",
+      "destinationCount": 1,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "desktop",
+      "id": "person",
+      "destinationCount": 1,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "desktop",
+      "id": "rooms",
+      "destinationCount": 2,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "desktop",
+      "id": "block-world",
+      "destinationCount": 1,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "desktop",
+      "id": "runtime-sync",
+      "destinationCount": 3,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "desktop",
+      "id": "migration",
+      "destinationCount": 1,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "desktop",
+      "id": "asset-token",
+      "destinationCount": 1,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "desktop",
+      "id": "asset-market",
+      "destinationCount": 1,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "desktop",
+      "id": "launch-distribution",
+      "destinationCount": 1,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "desktop",
+      "id": "social-explorer",
+      "destinationCount": 1,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "desktop",
+      "id": "social-mirror",
+      "destinationCount": 1,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "desktop",
+      "id": "youtube",
+      "destinationCount": 2,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "desktop",
+      "id": "paycore",
+      "destinationCount": 1,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "desktop",
+      "id": "contracts",
+      "destinationCount": 8,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "desktop",
+      "id": "contract-atelier",
+      "destinationCount": 12,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "desktop",
+      "id": "ledger",
+      "destinationCount": 1,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "desktop",
+      "id": "t402",
+      "destinationCount": 1,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "desktop",
+      "id": "agent",
+      "destinationCount": 7,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "desktop",
+      "id": "neural-mesh",
+      "destinationCount": 1,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "desktop",
+      "id": "muse-agent",
+      "destinationCount": 3,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "desktop",
+      "id": "bot-plaza",
+      "destinationCount": 7,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "desktop",
+      "id": "luna-companion",
+      "destinationCount": 2,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "desktop",
+      "id": "picture-matter",
+      "destinationCount": 2,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "desktop",
+      "id": "nft-atelier",
+      "destinationCount": 9,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "desktop",
+      "id": "wardrobe-atelier",
+      "destinationCount": 5,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "desktop",
+      "id": "white-paper",
+      "destinationCount": 1,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "desktop",
+      "id": "gesture-lens",
+      "destinationCount": 1,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "desktop",
+      "id": "gateway",
+      "destinationCount": 1,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "desktop",
+      "id": "world-events",
+      "destinationCount": 2,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "desktop",
+      "id": "sports-events",
+      "destinationCount": 1,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "desktop",
+      "id": "multi-sport-events",
+      "destinationCount": 1,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "desktop",
+      "id": "arena",
+      "destinationCount": 1,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "desktop",
+      "id": "chess",
+      "destinationCount": 1,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "desktop",
+      "id": "web-ai",
+      "destinationCount": 6,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "desktop",
+      "id": "academy",
+      "destinationCount": 1,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "desktop",
+      "id": "projections",
+      "destinationCount": 1,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "phone",
+      "id": "reality-lens",
+      "destinationCount": 0,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "phone",
+      "id": "person",
+      "destinationCount": 1,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "phone",
+      "id": "rooms",
+      "destinationCount": 1,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "phone",
+      "id": "block-world",
+      "destinationCount": 0,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "phone",
+      "id": "runtime-sync",
+      "destinationCount": 2,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "phone",
+      "id": "migration",
+      "destinationCount": 0,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "phone",
+      "id": "asset-token",
+      "destinationCount": 0,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "phone",
+      "id": "asset-market",
+      "destinationCount": 0,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "phone",
+      "id": "launch-distribution",
+      "destinationCount": 0,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "phone",
+      "id": "social-explorer",
+      "destinationCount": 0,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "phone",
+      "id": "social-mirror",
+      "destinationCount": 0,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "phone",
+      "id": "youtube",
+      "destinationCount": 1,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "phone",
+      "id": "paycore",
+      "destinationCount": 0,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "phone",
+      "id": "contracts",
+      "destinationCount": 7,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "phone",
+      "id": "contract-atelier",
+      "destinationCount": 11,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "phone",
+      "id": "ledger",
+      "destinationCount": 0,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "phone",
+      "id": "t402",
+      "destinationCount": 0,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "phone",
+      "id": "agent",
+      "destinationCount": 6,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "phone",
+      "id": "neural-mesh",
+      "destinationCount": 0,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "phone",
+      "id": "muse-agent",
+      "destinationCount": 2,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "phone",
+      "id": "bot-plaza",
+      "destinationCount": 6,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "phone",
+      "id": "luna-companion",
+      "destinationCount": 1,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "phone",
+      "id": "picture-matter",
+      "destinationCount": 1,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "phone",
+      "id": "nft-atelier",
+      "destinationCount": 8,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "phone",
+      "id": "wardrobe-atelier",
+      "destinationCount": 4,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "phone",
+      "id": "white-paper",
+      "destinationCount": 0,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "phone",
+      "id": "gesture-lens",
+      "destinationCount": 0,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "phone",
+      "id": "gateway",
+      "destinationCount": 0,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "phone",
+      "id": "world-events",
+      "destinationCount": 1,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "phone",
+      "id": "sports-events",
+      "destinationCount": 0,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "phone",
+      "id": "multi-sport-events",
+      "destinationCount": 0,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "phone",
+      "id": "arena",
+      "destinationCount": 0,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "phone",
+      "id": "chess",
+      "destinationCount": 0,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "phone",
+      "id": "web-ai",
+      "destinationCount": 5,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "phone",
+      "id": "academy",
+      "destinationCount": 0,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    },
+    {
+      "device": "phone",
+      "id": "projections",
+      "destinationCount": 0,
+      "noAutomaticMicrophone": true,
+      "singleOwner": true
+    }
+  ],
+  "errors": [],
+  "passed": true
+}

@@ -1,4 +1,4 @@
-import {validateProjectionContribution} from '../core/world-state.js';
+import {validateProjectionContribution} from '../core/world-state.js?v=20261003-skin360';
 
 /** Read source dependencies from approved declarative predicates, never guess
  * relationships from geometry/proximity or execute a supplied expression. */

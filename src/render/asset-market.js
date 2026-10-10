@@ -3,7 +3,7 @@ import {
   createUnavailableAssetMarketEvidence,
   replayAssetMarketEvidence,
   summarizeAssetMarketEvidence,
-} from "../domains/asset-market.js?v=20260922-cache2";
+} from "../domains/asset-market.js?v=20261003-skin360";
 
 export const ASSET_MARKET_CONSOLE_SOURCE = "asset-market-evidence-console";
 

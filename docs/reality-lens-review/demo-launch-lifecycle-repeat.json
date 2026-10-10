@@ -1,0 +1,33 @@
+{
+  "sourceHead": "0b14f1567b618c7ba4eab0d4a319b97cbbe2549c",
+  "sourceModified": "tests/test-demo-launch.ps1",
+  "runs": [
+    {
+      "iteration": 1,
+      "startedAt": "2026-10-03T18:17:23.682Z",
+      "finishedAt": "2026-10-03T18:17:39.934Z",
+      "status": 0,
+      "output": "Owned bridge PID 23872 exited and port 56044 has no listener; foreign fixture port 56075 was preserved without changing its ownership record.\r\nLaunch, reuse, guarded stop and foreign-listener checks passed.\r\n",
+      "stderr": "",
+      "ownedPid": 23872,
+      "ownedPort": 56044,
+      "foreignPort": 56075,
+      "recordsAbsent": true,
+      "pass": true
+    },
+    {
+      "iteration": 2,
+      "startedAt": "2026-10-03T18:17:39.936Z",
+      "finishedAt": "2026-10-03T18:17:53.177Z",
+      "status": 0,
+      "output": "Owned bridge PID 31024 exited and port 56083 has no listener; foreign fixture port 56113 was preserved without changing its ownership record.\r\nLaunch, reuse, guarded stop and foreign-listener checks passed.\r\n",
+      "stderr": "",
+      "ownedPid": 31024,
+      "ownedPort": 56083,
+      "foreignPort": 56113,
+      "recordsAbsent": true,
+      "pass": true
+    }
+  ],
+  "pass": true
+}

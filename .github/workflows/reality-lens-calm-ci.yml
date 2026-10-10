@@ -1,0 +1,64 @@
+name: Reality Lens complete tests and local package
+
+on:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'src/main.js'
+      - 'src/render/**'
+      - 'src/domains/**'
+      - 'src/domains/portal-sessions/**'
+      - 'src/domains/provider-navigation.js'
+      - 'src/domains/reality-object-engine.js'
+      - 'src/domains/living-surface-layout-engine.js'
+      - 'scripts/build*'
+      - 'scripts/provider_bridge.py'
+      - 'scripts/gpt_bridge.py'
+      - 'requirements-gpt.txt'
+      - 'scripts/*demo*'
+      - 'scripts/run_tests.py'
+      - 'scripts/public-preview.mjs'
+      - 'scripts/provision_vision.py'
+      - 'assets/models/vision/**'
+      - 'vendor/mediapipe-tasks-vision-1.0.1/**'
+      - '.gitattributes'
+      - 'tests/**'
+      - '.github/workflows/reality-lens-calm-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install local GPT authentication dependencies
+        run: python -m pip install -r requirements-gpt.txt
+      - name: Runtime syntax
+        run: |
+          node --check src/main.js
+          node --check src/render/reality-assembly.js
+          node --check src/render/reality-assembly-scene.js
+          node --check src/render/api-connections.js
+          node --check src/render/ourplace-economy.js
+          node --check src/render/ourplace-finance.js
+          node --check src/domains/economic-runtime.js
+          node --check src/domains/my-gpt.js
+          node --check src/render/my-gpt.js
+      - name: Complete JavaScript suite
+        run: python scripts/run_tests.py
+      - name: Loopback bridge and deterministic extracted package tests
+        run: python -m unittest discover -s tests -p "test_*.py"

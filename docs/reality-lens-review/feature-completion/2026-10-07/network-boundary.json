@@ -1,0 +1,35 @@
+{
+  "date": "2026-10-07",
+  "result": "passed",
+  "kalshiPublicRead": {
+    "route": "/api/public/kalshi/markets",
+    "method": "GET",
+    "fixedUpstreamFilter": "limit=100&status=open&mve_filter=exclude",
+    "authorization": "none",
+    "marketsReturned": 100,
+    "marketsWithUsablePrices": 100,
+    "normalization": "Current yes_bid_dollars and yes_ask_dollars are read as probabilities; last_price_dollars is the fallback. The source adapter normalized 100 markets."
+  },
+  "appStartup": {
+    "route": "http://127.0.0.1:8082/?feature=web-ai",
+    "observedSeconds": 5,
+    "kalshiBridgeRequests": 0
+  },
+  "explicitScan": {
+    "surface": "Contract Atelier",
+    "action": "Expanded the pooled markets review section and pressed Scan upcoming games.",
+    "scoreboardInput": "Playwright-only synthetic ESPN fixture",
+    "polymarketInput": "Playwright-only synthetic market fixture",
+    "kalshiBridgeStatus": 200,
+    "kalshiMarketsReturned": 100,
+    "fixtureDraftsQueued": 3,
+    "fixtureQuotesAttached": 3,
+    "fixtureQuoteSource": "Polymarket browser fixture",
+    "status": "SCAN DONE · 3 DRAFTS QUEUED FOR REVIEW",
+    "directBrowserToKalshiRequests": 0
+  },
+  "pageErrors": 0,
+  "failedRequests": 0,
+  "physicalCameraOrMicrophoneUsed": false,
+  "scope": "Local browser-to-bridge and explicit UI-action check. The feed parsing used 100 live public Kalshi records; the three queued game names and Polymarket quotes were test fixtures, so this does not claim a real game-to-market match or prove ChatGPT/NVIDIA inference."
+}

@@ -1,163 +1,53 @@
-/**
- * Quote-expiry handling for simulated token buy/sell.
- * Follows package.json: node --test tests/*.test.mjs
- */
-import { describe, it, beforeEach } from "node:test";
-import assert from "node:assert/strict";
-import {
-  getQuote,
-  isQuoteFresh,
-  settle,
-  fmt,
-  balance,
-  __resetLedgerForTests,
-  TOKEN_SUPPLY_CONFIG,
-  attachWindowFacade,
-} from "../src/domains/token.js";
-
-describe("token domain — quote expiry contract", () => {
-  beforeEach(() => {
-    __resetLedgerForTests();
-  });
-
-  it("fmt divides fluff by 1000", () => {
-    assert.equal(fmt(1000), "1");
-    assert.equal(fmt(2500), "2.5");
-  });
-
-  it("getQuote returns shaped quote with hash and expiry", () => {
-    const now = 1_000_000;
-    const q = getQuote({ action: "buy", amountIn: 1000, now });
-    assert.ok(q);
-    assert.equal(q.action, "buy");
-    assert.equal(q.from, "sMIMAS");
-    assert.equal(q.to, "TUMBO");
-    assert.equal(q.amountIn, 1000);
-    assert.equal(q.amountOut, 1000);
-    assert.equal(q.expiresAt, now + TOKEN_SUPPLY_CONFIG.QUOTE_TTL_MS);
-    assert.ok(typeof q.hash === "string" && q.hash.startsWith("qh_"));
-  });
-
-  it("getQuote sell routes TUMBO → sMIMAS", () => {
-    const q = getQuote({ action: "sell", amountIn: 500, now: 1 });
-    assert.ok(q);
-    assert.equal(q.from, "TUMBO");
-    assert.equal(q.to, "sMIMAS");
-  });
-
-  it("getQuote returns null for no-market sentinel amounts (never throws)", () => {
-    const q = getQuote({ action: "buy", amountIn: 7777, now: 1 });
-    assert.equal(q, null);
-  });
-
-  it("isQuoteFresh is false after expiry", () => {
-    const now = 5_000;
-    const q = getQuote({ action: "buy", amountIn: 100, now });
-    assert.equal(isQuoteFresh(q, now + 1), true);
-    assert.equal(isQuoteFresh(q, q.expiresAt), false);
-    assert.equal(isQuoteFresh(q, q.expiresAt + 1), false);
-  });
-
-  it("settle rejects expired quote (confirming with expired quote is rejected)", () => {
-    const now = 10_000;
-    const q = getQuote({ action: "buy", amountIn: 1000, now });
-    const result = settle("test-acct", q, { now: q.expiresAt + 50 });
-    assert.equal(result.ok, false);
-    assert.equal(result.reason, "quote-expired");
-  });
-
-  it("settle applies 10 bps Void tithe and reports on receipt tx", () => {
-    const now = 20_000;
-    const amountIn = 10_000;
-    const q = getQuote({ action: "buy", amountIn, now });
-    assert.ok(q);
-    const beforeFrom = balance("test-acct", "sMIMAS");
-    const beforeTo = balance("test-acct", "TUMBO");
-    const result = settle("test-acct", q, { now: now + 100 });
-    assert.equal(result.ok, true);
-    assert.equal(result.tx.voidTitheBps, 10);
-    const expectedTithe = Math.floor((amountIn * 10) / 10_000);
-    assert.equal(result.tx.voidTithe, expectedTithe);
-    assert.equal(result.tx.netOut, amountIn - expectedTithe);
-    assert.equal(balance("test-acct", "sMIMAS"), beforeFrom - amountIn);
-    assert.equal(balance("test-acct", "TUMBO"), beforeTo + result.tx.netOut);
-  });
-
-  it("attachWindowFacade exposes TumboToken", () => {
-    const fake = {};
-    attachWindowFacade(fake);
-    assert.ok(fake.TumboToken);
-    assert.equal(typeof fake.TumboToken.balance, "function");
-    assert.equal(typeof fake.TumboToken.fmt, "function");
-    assert.equal(typeof fake.TumboToken.on, "function");
-  });
+/** Trade controls exercise issued current-engine quotes, expiry and real settlement. */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createTokenEngine,CONFIG,fmt,quoteHash} from '../src/domains/token.js';
+import {requestTokenTradeQuote,isTokenTradeQuoteFresh,settleTokenTradeQuote} from '../src/render/token-trade.js';
+function funded(){const token=createTokenEngine();token.faucet('u:trader','TUMBO',50_000,{idempotencyKey:'fund'});return token;}
+const quote=(token,action='buy',amountIn=1000)=>requestTokenTradeQuote({token,action,amountIn,acct:'trader'});
+function withTime(time,fn){const original=Date.now;Date.now=()=>time;try{return fn();}finally{Date.now=original;}}
+test('trade quote has the actual direction, rational output, hash and expiry',()=>{
+  const q=withTime(100_000,()=>quote(funded()));assert.equal(q.fromAsset,'TUMBO');assert.equal(q.toAsset,'sMIMAS');assert.equal(q.from,'u:trader');
+  assert.equal(q.amountOut,Math.floor(q.amountIn*CONFIG.price.num/CONFIG.price.den));assert.equal(q.expiresAt,100_000+CONFIG.quoteTtlMs);
+  assert.equal(q.hash,quoteHash(q));assert.ok(Object.isFrozen(q));
 });
-
-describe("token trade UI — quote expiry flows (DOM-free policy)", () => {
-  function confirmPolicy(quote, now) {
-    if (!quote || !isQuoteFresh(quote, now)) {
-      return { action: "requote", confirmEnabled: false };
-    }
-    return { action: "open-confirm", confirmEnabled: true };
-  }
-
-  function countdownPolicy(quote, now) {
-    const remaining = quote ? Math.max(0, quote.expiresAt - now) : 0;
-    return {
-      remaining,
-      confirmEnabled: remaining > 0,
-      label: remaining > 0 ? `Expires in ${Math.ceil(remaining / 1000)}s` : "Quote expired — re-quote required",
-    };
-  }
-
-  function settlePolicy(quote, now, settleFn) {
-    if (!isQuoteFresh(quote, now)) {
-      const refreshed = getQuote({ action: quote?.action ?? "buy", amountIn: quote?.amountIn ?? 1000, now });
-      return { rejected: true, refreshed, reason: "quote-expired" };
-    }
-    return { rejected: false, result: settleFn(quote, now) };
-  }
-
-  it("quote expiring before confirm triggers re-quote flow", () => {
-    const now = 30_000;
-    const q = getQuote({ action: "sell", amountIn: 2000, now });
-    const afterExpiry = q.expiresAt + 1;
-    const policy = confirmPolicy(q, afterExpiry);
-    assert.equal(policy.action, "requote");
-    assert.equal(policy.confirmEnabled, false);
-    const next = getQuote({ action: "sell", amountIn: 2000, now: afterExpiry });
-    assert.ok(next);
-    assert.ok(isQuoteFresh(next, afterExpiry));
-  });
-
-  it("countdown reaching zero disables confirm", () => {
-    const now = 40_000;
-    const q = getQuote({ action: "buy", amountIn: 500, now });
-    const mid = countdownPolicy(q, now + 1000);
-    assert.equal(mid.confirmEnabled, true);
-    const end = countdownPolicy(q, q.expiresAt);
-    assert.equal(end.confirmEnabled, false);
-    assert.match(end.label, /expired/i);
-  });
-
-  it("confirming with an expired quote is rejected and refreshes", () => {
-    __resetLedgerForTests();
-    const now = 50_000;
-    const q = getQuote({ action: "buy", amountIn: 3000, now });
-    const outcome = settlePolicy(q, q.expiresAt + 10, (quote, t) => settle("ui-acct", quote, { now: t }));
-    assert.equal(outcome.rejected, true);
-    assert.equal(outcome.reason, "quote-expired");
-    assert.ok(outcome.refreshed);
-    assert.ok(isQuoteFresh(outcome.refreshed, q.expiresAt + 10));
-  });
-
-  it("fresh confirm settles with void tithe line data available", () => {
-    __resetLedgerForTests();
-    const now = 60_000;
-    const q = getQuote({ action: "buy", amountIn: 10_000, now });
-    const outcome = settlePolicy(q, now + 50, (quote, t) => settle("ui-acct", quote, { now: t }));
-    assert.equal(outcome.rejected, false);
-    assert.equal(outcome.result.ok, true);
-    assert.equal(outcome.result.tx.voidTitheBps, 10);
-  });
+test('sell quote uses the reciprocal market pair',()=>{
+  const q=quote(funded(),'sell');assert.equal(q.fromAsset,'sMIMAS');assert.equal(q.toAsset,'TUMBO');
+  assert.equal(q.amountOut,Math.floor(q.amountIn*CONFIG.price.den/CONFIG.price.num));
+});
+test('invalid amounts fail explicitly and old artificial sentinels are real quotes',()=>{
+  const token=funded();for(const amount of [0,-1,0.5,NaN,Number.MAX_SAFE_INTEGER+1])assert.throws(()=>quote(token,'buy',amount));
+  assert.ok(quote(token,'buy',7777));
+});
+test('freshness disables confirmation at the exact expiry boundary',()=>{
+  const q=quote(funded());assert.equal(isTokenTradeQuoteFresh(q,q.expiresAt-1),true);assert.equal(isTokenTradeQuoteFresh(q,q.expiresAt),false);
+  assert.equal(isTokenTradeQuoteFresh(q,q.expiresAt+1),false);assert.equal(isTokenTradeQuoteFresh(null),false);assert.equal(isTokenTradeQuoteFresh({expiresAt:NaN}),false);
+});
+test('expired confirmation returns a requote reason without moving points',()=>{
+  const token=funded(),q=withTime(100_000,()=>quote(token)),count=token.ledger.journalCount();
+  const result=withTime(q.expiresAt,()=>settleTokenTradeQuote(token,q));assert.equal(result.ok,false);assert.equal(result.reason,'quote-expired');
+  assert.equal(token.ledger.journalCount(),count);assert.equal(token.balance('u:trader','TUMBO'),50_000);
+});
+test('a fresh replacement enables confirmation after expiry',()=>{
+  const token=funded(),old=withTime(100_000,()=>quote(token));
+  withTime(old.expiresAt+1,()=>{const fresh=quote(token);assert.notEqual(fresh.id,old.id);assert.equal(isTokenTradeQuoteFresh(old),false);
+    assert.equal(isTokenTradeQuoteFresh(fresh),true);assert.equal(settleTokenTradeQuote(token,fresh).ok,true);});
+});
+test('fresh trade pays the configured tithe and exact integer output',()=>{
+  const token=funded(),q=quote(token,'buy',10_000),result=settleTokenTradeQuote(token,q);assert.equal(result.ok,true);
+  const tithe=Math.floor(q.amountIn*CONFIG.titheBps/CONFIG.titheDenominator);assert.equal(result.tx.tithe,tithe);
+  assert.equal(token.balance('sys:void','TUMBO'),tithe);assert.equal(token.balance('u:trader','TUMBO'),40_000);
+  assert.equal(token.balance('u:trader','sMIMAS'),q.amountOut);assert.equal(token.ledger.verifyChain().ok,true);assert.equal(fmt(2500),'2.500 TUMBO-SIM');
+});
+test('reconfirmation replays a single trade receipt',()=>{
+  const token=funded(),q=quote(token),first=settleTokenTradeQuote(token,q),count=token.ledger.journalCount(),second=settleTokenTradeQuote(token,q);
+  assert.equal(second.ok,true);assert.equal(second.tx.id,first.tx.id);assert.equal(token.ledger.journalCount(),count);
+});
+test('forged and cross-engine trade quotes fail without a financial mutation',()=>{
+  const token=funded(),q=quote(token),count=token.ledger.journalCount(),altered={...q,amountOut:q.amountOut+1};altered.hash=quoteHash(altered);
+  assert.equal(settleTokenTradeQuote(token,altered).ok,false);assert.equal(settleTokenTradeQuote(funded(),q).ok,false);assert.equal(token.ledger.journalCount(),count);
+});
+test('cancelled selection cannot be confirmed',()=>{
+  const token=funded(),q=quote(token);token.cancelQuote(q.id);const count=token.ledger.journalCount();
+  assert.equal(settleTokenTradeQuote(token,q).ok,false);assert.equal(token.ledger.journalCount(),count);
 });

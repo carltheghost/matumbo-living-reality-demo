@@ -16,7 +16,7 @@ import {
   ASSET_TOKEN_TOTAL_BASIS_POINTS,
   ASSET_TOKEN_TOTAL_SUPPLY,
   ASSET_TOKEN_UNIT,
-} from "./asset-token.js?v=20260922-cache2";
+} from "./asset-token.js?v=20261003-skin360";
 
 export const DISTRIBUTION_REGISTRY_SCHEMA_VERSION = 1;
 export const DISTRIBUTION_REGISTRY_SOURCE = "tumbo-distribution-registry";

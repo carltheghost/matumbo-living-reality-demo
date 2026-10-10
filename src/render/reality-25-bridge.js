@@ -377,6 +377,7 @@ canvas.addEventListener('pointerdown',event=>{
   else if(hit?.object?.userData?.realityId)select(hit.object.userData.realityId);
 });
 
+renderer.domElement.addEventListener('matumbo:surface-capture',()=>renderer.render(scene,camera));
 function animate(time){
   if(!started)return;
   const t=time*.001;

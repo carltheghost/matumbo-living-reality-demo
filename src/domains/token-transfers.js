@@ -1,84 +1,31 @@
 /**
- * token-transfers.js — Part 02 · Token transfers (send / receive / deliver / tip).
- *
- * Implements the transfer half of the shared TUMBO-SIM token contract on top of
- * an exact integer journal:
- *
- * - Units are integer fluff. 1 TUMBO-SIM = 1000 fluff. Every amount is
- *   Number.isSafeInteger and >= 0; all fund math is exact integer math.
- * - Assets: TUMBO, sMIMAS. Total supply comes from ONE config constant
- *   (TOKEN_TRANSFER_SUPPLY_FLUFF); it is never restated anywhere else.
- * - Accounts: u:<name>, b:<name>, sys:treasury, sys:faucet, sys:escrow,
- *   sys:vault, sys:void, sys:market. sys:void is credited only by burns and
- *   can never be debited.
- * - Every mutation takes a client idempotency key. Replaying a key returns
- *   the original receipt — never a second journal.
- * - Every journal sums to exactly 0 per asset; balances never go negative;
- *   conservation holds (the per-asset total always equals the configured
- *   supply).
- * - deliver is a two-phase intent: hold (sender -> sys:escrow), then settle
- *   (sys:escrow -> recipient) or cancel (sys:escrow -> sender).
- * - Every settled mutation issues an EchoProof-style hash-chained receipt.
- *   attachTokenTransfers() plugs the engine into the window.TumboToken
- *   facade ({ ledger, balance(acct, asset), fmt(fluff), on(evt, cb) }) and
- *   surfaces receipts through document CustomEvent('tumbo:token',
- *   { detail: { type: 'balance-changed' | 'receipt', ... } }).
- *
- * Pure module: no DOM, no THREE, no node builtins. Node-importable for
- * `node --test` and browser-importable through the repo import map.
- *
- * Simulation-only: TUMBO-SIM balances are simulated demo points. No real
- * money, no wagering, no wallets, no custody, no chains.
+ * Local simulated transfer/escrow adapter over the canonical QuoteEngine.
+ * Balances, journal order, idempotency and chain verification have one owner.
+ * Receipt aliases support the older console; they do not create another proof
+ * chain or grant wallet, signing, custody or external settlement capabilities.
  */
+import { createTokenEngine, CONFIG, ASSETS, assertAccount, assertAsset, isUserAccount } from './token.js?v=20261003-skin360';
+import { FLUFF_PER_TUMBO as FLUFF_PER_TUMBO_SIM } from './token-config.js?v=20261003-skin360';
+import { createTokenFacade } from './token-facade.js?v=20261003-skin360';
+export { FLUFF_PER_TUMBO_SIM };
+export const TOKEN_TRANSFER_ASSETS = ASSETS;
+export const TOKEN_TRANSFER_SUPPLY_FLUFF = CONFIG.supply;
+export const TOKEN_TRANSFER_SYS_ACCOUNTS = Object.freeze(['sys:treasury', 'sys:faucet', 'sys:escrow', 'sys:vault', 'sys:void', 'sys:market']);
+export const TOKEN_TRANSFER_REALM = 'tumbo-token';
+export const TOKEN_TRANSFER_STAMP = 'TUMBO-SIM · Local Demo Proof';
+export const TOKEN_TRANSFER_SIGNER = 'tumbo-sim-node';
 
-// ---------------------------------------------------------------------------
-// Config — the single source of truth for units, assets, accounts, and supply.
-// ---------------------------------------------------------------------------
-
-/** Integer fluff per 1 TUMBO-SIM. All fund math is done in fluff. */
-export const FLUFF_PER_TUMBO_SIM = 1000;
-
-/** Assets supported by the transfer engine. */
-export const TOKEN_TRANSFER_ASSETS = Object.freeze(["TUMBO", "sMIMAS"]);
-
-/**
- * THE supply constant. Every per-asset total in the system derives from this
- * one object; no other supply number exists in this module.
- */
-export const TOKEN_TRANSFER_SUPPLY_FLUFF = Object.freeze({
-  TUMBO: 1_000_000 * FLUFF_PER_TUMBO_SIM,
-  sMIMAS: 250_000 * FLUFF_PER_TUMBO_SIM,
-});
-
-/** System accounts owned by the simulation. */
-export const TOKEN_TRANSFER_SYS_ACCOUNTS = Object.freeze([
-  "sys:treasury",
-  "sys:faucet",
-  "sys:escrow",
-  "sys:vault",
-  "sys:void",
-  "sys:market",
-]);
-
-export const TOKEN_TRANSFER_REALM = "tumbo-token";
-export const TOKEN_TRANSFER_STAMP = "TUMBO-SIM \u00b7 Local Demo Proof";
-export const TOKEN_TRANSFER_SIGNER = "tumbo-sim-node";
-
-// ---------------------------------------------------------------------------
-// Errors
-// ---------------------------------------------------------------------------
-
-export class TokenTransferError extends Error {}
+export class TokenTransferError extends Error {
+  constructor(message, code = 'INVALID_TRANSFER') { super(message); this.name = this.constructor.name; this.code = code; }
+}
 export class InsufficientFundsError extends TokenTransferError {}
 export class UnbalancedJournalError extends TokenTransferError {}
 export class UnknownIntentError extends TokenTransferError {}
 export class IntentStateError extends TokenTransferError {}
 export class VoidDebitError extends TokenTransferError {}
 
-// ---------------------------------------------------------------------------
-// Pure hashing: SHA-256 (sync, dependency-free) + canonical JSON.
-// ---------------------------------------------------------------------------
-
+// Pure utility hashes remain available to consumers. Canonical receipts use
+// QuoteEngine's own hash/prevHash fields, not these unrelated SHA-256 helpers.
 const SHA256_K = new Uint32Array([
   0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
   0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
@@ -221,561 +168,245 @@ export function parseSimToFluff(text) {
       `amount "${s}" must be a non-negative decimal with at most 3 fraction digits (TUMBO-SIM)`,
     );
   }
-  const fluff = Number(m[1]) * FLUFF_PER_TUMBO_SIM + Number((m[2] ?? "").padEnd(3, "0"));
-  if (!Number.isSafeInteger(fluff)) {
+  const fluff = BigInt(m[1]) * BigInt(FLUFF_PER_TUMBO_SIM) + BigInt((m[2] ?? "").padEnd(3, "0"));
+  if (fluff > BigInt(Number.MAX_SAFE_INTEGER)) {
     throw new TokenTransferError(`amount "${s}" is not a safe integer number of fluff`);
   }
-  return fluff;
+  return Number(fluff);
 }
 
 // ---------------------------------------------------------------------------
-// Validation
+// Validation and the canonical adapter.
 // ---------------------------------------------------------------------------
-
-const USER_ACCT_RE = /^[ub]:[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const MAX_IDEMPOTENCY_KEY_LENGTH = 256;
-
-function validateAsset(asset) {
-  if (!TOKEN_TRANSFER_ASSETS.includes(asset)) {
-    throw new TokenTransferError(`unknown asset "${asset}"; expected one of ${TOKEN_TRANSFER_ASSETS.join(", ")}`);
-  }
-  return asset;
-}
-
-function validateAccount(acct) {
-  if (typeof acct !== "string") throw new TokenTransferError("account must be a string");
-  const a = acct.trim();
-  if (TOKEN_TRANSFER_SYS_ACCOUNTS.includes(a)) return a;
-  if (USER_ACCT_RE.test(a)) return a;
-  throw new TokenTransferError(
-    `invalid account "${acct}"; expected u:<name>, b:<name>, or one of ${TOKEN_TRANSFER_SYS_ACCOUNTS.join(", ")}`,
-  );
-}
-
-// ---------------------------------------------------------------------------
-// The transfer ledger.
-// ---------------------------------------------------------------------------
-
-const TRANSFER_ACTIONS = Object.freeze(["send", "receive", "deliver", "tip", "burn"]);
-
-/**
- * Create an isolated token-transfer ledger.
- *
- * The ledger boots with the configured per-asset supply distributed across
- * system accounts (a boot allocation, not a journal): TUMBO starts in
- * sys:treasury with a faucet share in sys:faucet; sMIMAS starts in sys:market
- * with a faucet share in sys:faucet. Every later balance change goes through
- * postJournal, so journals always sum to zero and the per-asset total always
- * equals the configured supply.
- */
-export function createTokenTransferLedger({ supplyFluff = TOKEN_TRANSFER_SUPPLY_FLUFF } = {}) {
-  for (const asset of TOKEN_TRANSFER_ASSETS) {
-    const supply = supplyFluff?.[asset];
-    if (!Number.isSafeInteger(supply) || supply < 0) {
-      throw new TokenTransferError(`supply for ${asset} must be a safe non-negative integer (fluff)`);
-    }
-  }
-
-  const balances = new Map(); // `${acct}::${asset}` -> integer fluff
-  const journals = [];
-  const receipts = [];
-  const receiptStates = new Map(); // receiptId -> { before, after, payload }
-  const idemIndex = new Map(); // idempotencyKey -> receipt (replay returns this)
-  const intents = new Map(); // deliver intentId -> intent
-  const listeners = new Set();
-
-  const bkey = (acct, asset) => `${acct}::${asset}`;
-
-  // Boot allocation: the only balances that do not come from a journal.
-  for (const asset of TOKEN_TRANSFER_ASSETS) {
-    const supply = supplyFluff[asset];
-    for (const acct of TOKEN_TRANSFER_SYS_ACCOUNTS) balances.set(bkey(acct, asset), 0);
-    const faucetShare = Math.floor(supply / 4);
-    const home = asset === "TUMBO" ? "sys:treasury" : "sys:market";
-    balances.set(bkey(home, asset), supply - faucetShare);
-    balances.set(bkey("sys:faucet", asset), faucetShare);
-  }
-
-  function balance(acct, asset) {
-    const a = validateAccount(acct);
-    validateAsset(asset);
-    return balances.get(bkey(a, asset)) ?? 0;
-  }
-
-  function emit(type, detail) {
-    for (const cb of [...listeners]) {
-      try { cb({ type, ...detail }); } catch { /* listener errors never break settlement */ }
-    }
-  }
-
-  function snapshotBalances(accounts) {
-    const snap = {};
-    for (const acct of accounts) {
-      snap[acct] = {};
-      for (const a of TOKEN_TRANSFER_ASSETS) snap[acct][a] = balances.get(bkey(acct, a)) ?? 0;
-    }
-    return snap;
-  }
-
-  /**
-   * The ONE write path. Atomically applies balanced legs, then issues a
-   * hash-chained receipt. Replays (same idempotency key) return the original
-   * receipt without journaling anything new.
-   */
-  function postJournal({
-    action,
-    phase = null,
-    asset,
-    legs,
-    idempotencyKey,
-    actor = "system",
-    memo = "",
-    intentId = null,
-  }) {
-    if (!TRANSFER_ACTIONS.includes(action)) {
-      throw new TokenTransferError(`unknown transfer action "${action}"`);
-    }
-    validateAsset(asset);
-    const key = validateIdempotencyKey(idempotencyKey);
-
-    // 1. Idempotency: a replay returns the original receipt, never a journal.
-    const replayed = idemIndex.get(key);
-    if (replayed) return replayed;
-
-    if (!Array.isArray(legs) || legs.length < 2) {
-      throw new UnbalancedJournalError("a journal needs at least two legs");
-    }
-    const actorId = typeof actor === "string" && actor.trim() !== "" ? actor.trim() : "system";
-
-    // 2. Zero-sum per asset + staged validation (atomicity: never half-apply).
-    let sum = 0;
-    const staged = new Map();
-    const touched = [];
-    for (const leg of legs) {
-      const acct = validateAccount(leg?.acct);
-      const delta = validateDelta(leg?.delta);
-      if (acct === "sys:void" && delta < 0) {
-        throw new VoidDebitError("sys:void is credited only by burns and can never be debited");
-      }
-      sum += delta;
-      const k = bkey(acct, asset);
-      const next = (staged.has(k) ? staged.get(k) : (balances.get(k) ?? 0)) + delta;
-      staged.set(k, next);
-      if (!touched.includes(acct)) touched.push(acct);
-    }
-    if (sum !== 0) {
-      throw new UnbalancedJournalError(`journal legs for ${asset} sum to ${sum} fluff; must be exactly 0`);
-    }
-    const before = snapshotBalances(touched);
-    for (const [k, next] of staged) {
-      if (next < 0) {
-        const [acct] = k.split("::");
-        throw new InsufficientFundsError(
-          `${acct} cannot cover this journal (would hold ${fmtFluff(next)} of ${asset})`,
-        );
-      }
-    }
-
-    // 3. Commit — validation passed, this cannot fail now.
-    for (const [k, next] of staged) balances.set(k, next);
-    const after = snapshotBalances(touched);
-
-    const journal = Object.freeze({
-      journalId: `journal:${journals.length}`,
-      seq: journals.length,
-      action,
-      phase,
-      asset,
-      legs: Object.freeze(legs.map((leg) => Object.freeze({ acct: validateAccount(leg.acct), delta: validateDelta(leg.delta) }))),
-      idempotencyKey: key,
-      actor: actorId,
-      memo: String(memo ?? ""),
-      intentId,
-      at: Date.now(),
-    });
-    journals.push(journal);
-
-    // 4. Hash-chained EchoProof-style receipt.
-    const sequence = receipts.length;
-    const prevHash = sequence === 0 ? "genesis" : receipts[sequence - 1].afterHash;
-    const payload = {
-      action,
-      phase,
-      asset,
-      amountFluff: Math.max(...legs.map((l) => Math.abs(l.delta))),
-      legs: journal.legs.map((l) => ({ acct: l.acct, delta: l.delta })),
-      journalId: journal.journalId,
-      idempotencyKey: key,
-      actor: actorId,
-      memo: journal.memo,
-      intentId,
-    };
-    const receipt = Object.freeze({
-      receiptId: `tumbo-tx-${String(sequence).padStart(4, "0")}`,
-      sequence,
-      action,
-      phase,
-      actorId,
-      realm: TOKEN_TRANSFER_REALM,
-      reference: key,
-      asset,
-      amountFluff: payload.amountFluff,
-      accounts: Object.freeze([...touched]),
-      journalId: journal.journalId,
-      intentId,
-      summary: describeAction({ action, phase, actor: actorId, asset, amountFluff: payload.amountFluff, legs: journal.legs }),
-      beforeHash: contentHash({ prev: prevHash, state: before }),
-      afterHash: contentHash({ prev: prevHash, state: after }),
-      payloadHash: contentHash(payload),
-      verificationState: "verified-demo",
-      signer: TOKEN_TRANSFER_SIGNER,
-      issuedAt: journal.at,
-      stamp: TOKEN_TRANSFER_STAMP,
-      simulation: true,
-    });
-    receipts.push(receipt);
-    receiptStates.set(receipt.receiptId, { before, after, payload });
-    idemIndex.set(key, receipt);
-    emit("receipt", { receipt });
-    for (const acct of touched) {
-      emit("balance-changed", { account: acct, asset, balanceFluff: balances.get(bkey(acct, asset)) ?? 0, receiptId: receipt.receiptId });
-    }
-    return receipt;
-  }
-
-  function describeAction({ action, phase, actor, asset, amountFluff, legs }) {
-    const amount = `${fmtFluff(amountFluff)} ${asset}`;
-    const route = legs.map((l) => `${l.acct} ${l.delta < 0 ? "-" : "+"}${fmtFluff(Math.abs(l.delta))}`).join(" \u2192 ");
-    const label = phase ? `${action}:${phase}` : action;
-    return `${actor} ${label} ${amount} (${route}) \u00b7 simulated`;
-  }
-
-  function move({ action, phase = null, from, to, asset, amountFluff, idempotencyKey, actor, memo = "", intentId = null }) {
-    const src = validateAccount(from);
-    const dst = validateAccount(to);
-    if (src === dst) throw new TokenTransferError(`${action} needs two different accounts`);
-    requirePositiveFluff(amountFluff);
-    return postJournal({
-      action, phase, asset,
-      legs: [{ acct: src, delta: -amountFluff }, { acct: dst, delta: amountFluff }],
-      idempotencyKey, actor, memo, intentId,
-    });
-  }
-
-  /** Move funds from sender to recipient (sender-initiated). */
-  function send({ from, to, asset, amountFluff, idempotencyKey, actor, memo = "" } = {}) {
-    return move({ action: "send", from, to, asset, amountFluff, idempotencyKey, actor: actor ?? from, memo });
-  }
-
-  /** Claim funds into the recipient account (recipient-initiated view of send). */
-  function receive({ from, to, asset, amountFluff, idempotencyKey, actor, memo = "" } = {}) {
-    return move({ action: "receive", from, to, asset, amountFluff, idempotencyKey, actor: actor ?? to, memo });
-  }
-
-  /** A gratuity transfer: same journal shape as send, receipted as a tip. */
-  function tip({ from, to, asset, amountFluff, idempotencyKey, actor, memo = "" } = {}) {
-    return move({ action: "tip", from, to, asset, amountFluff, idempotencyKey, actor: actor ?? from, memo });
-  }
-
-  /** Destroy funds into sys:void (the only account allowed to receive burns). */
-  function burn({ from, asset, amountFluff, idempotencyKey, actor, memo = "" } = {}) {
-    const src = validateAccount(from);
-    requirePositiveFluff(amountFluff);
-    return postJournal({
-      action: "burn",
-      asset,
-      legs: [{ acct: src, delta: -amountFluff }, { acct: "sys:void", delta: amountFluff }],
-      idempotencyKey, actor: actor ?? src, memo,
-    });
-  }
-
-  /**
-   * deliver phase 1 — hold: lock funds in sys:escrow and open a deliver
-   * intent. Replaying the same idempotency key returns the original receipt
-   * and the original intent (never a second hold, never a second intent).
-   */
-  function deliverHold({ from, to, asset, amountFluff, idempotencyKey, actor, memo = "" } = {}) {
-    const key = validateIdempotencyKey(idempotencyKey);
-    const replayed = idemIndex.get(key);
-    if (replayed) return replayed;
-    const src = validateAccount(from);
-    const dst = validateAccount(to);
-    if (src === dst) throw new TokenTransferError("deliver needs two different accounts");
-    requirePositiveFluff(amountFluff);
-    validateAsset(asset);
-    const intentId = `deliver:${key}`;
-    const receipt = postJournal({
-      action: "deliver",
-      phase: "hold",
-      asset,
-      legs: [{ acct: src, delta: -amountFluff }, { acct: "sys:escrow", delta: amountFluff }],
-      idempotencyKey: key,
-      actor: actor ?? src,
-      memo,
-      intentId,
-    });
-    const intent = Object.freeze({
-      intentId,
-      action: "deliver",
-      status: "held",
-      from: src,
-      to: dst,
-      asset,
-      amountFluff,
-      holdReceiptId: receipt.receiptId,
-      holdJournalId: receipt.journalId,
-      createdAt: receipt.issuedAt,
-      settledReceiptId: null,
-      settledAt: null,
-    });
-    intents.set(intentId, intent);
-    return receipt;
-  }
-
-  function resolveIntent(intentId) {
-    const intent = intents.get(intentId);
-    if (!intent) throw new UnknownIntentError(`unknown deliver intent "${intentId}"`);
-    return intent;
-  }
-
-  /**
-   * deliver phase 2a — settle: release the escrowed funds to the recipient.
-   * Idempotent via its own key; a replay returns the original settle receipt.
-   */
-  function deliverSettle({ intentId, idempotencyKey, actor, memo = "" } = {}) {
-    const key = validateIdempotencyKey(idempotencyKey);
-    const replayed = idemIndex.get(key);
-    if (replayed) return replayed;
-    const intent = resolveIntent(intentId);
-    if (intent.status !== "held") {
-      throw new IntentStateError(`deliver intent "${intentId}" is ${intent.status}; only held intents can settle`);
-    }
-    const receipt = postJournal({
-      action: "deliver",
-      phase: "settle",
-      asset: intent.asset,
-      legs: [{ acct: "sys:escrow", delta: -intent.amountFluff }, { acct: intent.to, delta: intent.amountFluff }],
-      idempotencyKey: key,
-      actor: actor ?? intent.from,
-      memo,
-      intentId,
-    });
-    intents.set(intentId, Object.freeze({ ...intent, status: "settled", settledReceiptId: receipt.receiptId, settledAt: receipt.issuedAt }));
-    return receipt;
-  }
-
-  /**
-   * deliver phase 2b — cancel: return the escrowed funds to the sender.
-   * Idempotent via its own key; a replay returns the original cancel receipt.
-   */
-  function deliverCancel({ intentId, idempotencyKey, actor, reason = "", memo = "" } = {}) {
-    const key = validateIdempotencyKey(idempotencyKey);
-    const replayed = idemIndex.get(key);
-    if (replayed) return replayed;
-    const intent = resolveIntent(intentId);
-    if (intent.status !== "held") {
-      throw new IntentStateError(`deliver intent "${intentId}" is ${intent.status}; only held intents can cancel`);
-    }
-    const receipt = postJournal({
-      action: "deliver",
-      phase: "cancel",
-      asset: intent.asset,
-      legs: [{ acct: "sys:escrow", delta: -intent.amountFluff }, { acct: intent.from, delta: intent.amountFluff }],
-      idempotencyKey: key,
-      actor: actor ?? intent.from,
-      memo: reason ? `cancel: ${reason}${memo ? ` \u2014 ${memo}` : ""}` : memo,
-      intentId,
-    });
-    intents.set(intentId, Object.freeze({ ...intent, status: "cancelled", settledReceiptId: receipt.receiptId, settledAt: receipt.issuedAt }));
-    return receipt;
-  }
-
-  // ---- reads -----------------------------------------------------------
-
-  function totalSupply(asset) {
-    validateAsset(asset);
-    let total = 0;
-    for (const [k, bal] of balances) {
-      if (k.endsWith(`::${asset}`)) total += bal;
-    }
-    return total;
-  }
-
-  /** Conservation: every asset's total must equal the configured supply. */
-  function assertConservation() {
-    for (const asset of TOKEN_TRANSFER_ASSETS) {
-      const total = totalSupply(asset);
-      if (total !== supplyFluff[asset]) {
-        throw new TokenTransferError(`conservation broken for ${asset}: total ${total} fluff \u2260 supply ${supplyFluff[asset]} fluff`);
-      }
-    }
-    return true;
-  }
-
-  function getReceipt(ref) {
-    const receipt = typeof ref === "string" ? receipts.find((r) => r.receiptId === ref) : ref;
-    if (!receipt || !receiptStates.has(receipt.receiptId)) {
-      throw new TokenTransferError(`unknown receipt "${typeof ref === "string" ? ref : "?"}"`);
-    }
-    return receipt;
-  }
-
-  /**
-   * Recompute a receipt's hashes from the retained before/after states and
-   * payload — the same recomputation the receipt viewer performs. Returns
-   * per-check results plus an overall ok flag.
-   */
-  function verifyReceipt(ref) {
-    const receipt = getReceipt(ref);
-    const { before, after, payload } = receiptStates.get(receipt.receiptId);
-    const idx = receipt.sequence;
-    const prevHash = idx === 0 ? "genesis" : receipts[idx - 1].afterHash;
-    const checks = {
-      sequence: receipts[idx] === receipt,
-      linkage: idx === 0 || receipts[idx - 1].afterHash === prevHash,
-      beforeHash: receipt.beforeHash === contentHash({ prev: prevHash, state: before }),
-      afterHash: receipt.afterHash === contentHash({ prev: prevHash, state: after }),
-      payloadHash: receipt.payloadHash === contentHash(payload),
-    };
-    return { receiptId: receipt.receiptId, ok: Object.values(checks).every(Boolean), checks };
-  }
-
-  /** Recompute the whole receipt chain. */
-  function verifyChain() {
-    for (const receipt of receipts) {
-      if (!verifyReceipt(receipt.receiptId).ok) return false;
-    }
-    return true;
-  }
-
-  return {
-    // config
-    assets: TOKEN_TRANSFER_ASSETS,
-    sysAccounts: TOKEN_TRANSFER_SYS_ACCOUNTS,
-    supplyFluff: Object.freeze({ ...supplyFluff }),
-    realm: TOKEN_TRANSFER_REALM,
-    // reads
-    balance,
-    balances: (acct) => {
-      const out = {};
-      for (const asset of TOKEN_TRANSFER_ASSETS) out[asset] = balance(acct, asset);
-      return out;
-    },
-    totalSupply,
-    assertConservation,
-    journals: () => [...journals],
-    journalCount: () => journals.length,
-    receipts: () => [...receipts],
-    getReceipt,
-    verifyReceipt,
-    verifyChain,
-    intents: () => [...intents.values()],
-    getIntent: (intentId) => intents.get(intentId) ?? null,
-    // mutations
-    send,
-    receive,
-    tip,
-    burn,
-    deliverHold,
-    deliverSettle,
-    deliverCancel,
-    // events + formatting helpers
-    onEvent: (cb) => {
-      if (typeof cb !== "function") throw new TokenTransferError("onEvent callback must be a function");
-      listeners.add(cb);
-      return () => { listeners.delete(cb); };
-    },
-    fmt: fmtFluff,
-    parseSimToFluff,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Facade adapter — plugs the engine into window.TumboToken.
-// ---------------------------------------------------------------------------
-
-/**
- * Attach transfer actions to a TumboToken facade (creating the minimal
- * contract-shaped facade when none exists yet, e.g. before the core port in
- * src/domains/token.js lands).
- *
- * Every settled mutation emits through the facade's on(evt, cb) hub AND as a
- * document CustomEvent('tumbo:token', { detail: { type, ... } }) with
- * type 'receipt' or 'balance-changed', per the shared contract.
- */
-export function attachTokenTransfers(facade = null, options = {}) {
-  const engine = options.engine ?? createTokenTransferLedger(options.ledgerOptions);
-  const target = facade && typeof facade === "object" ? facade : {};
-
-  if (!target.ledger) target.ledger = engine;
-  if (typeof target.balance !== "function") {
-    target.balance = (acct, asset) => engine.balance(acct, asset);
-  }
-  if (typeof target.fmt !== "function") {
-    target.fmt = (fluff) => engine.fmt(fluff);
-  }
-
-  const hubListeners = new Map();
-  if (typeof target.on !== "function") {
-    target.on = (evt, cb) => {
-      if (typeof cb !== "function") throw new TokenTransferError("on() callback must be a function");
-      let set = hubListeners.get(evt);
-      if (!set) { set = new Set(); hubListeners.set(evt, set); }
-      set.add(cb);
-      return () => { set.delete(cb); };
-    };
-  }
-
-  const notify = (type, detail) => {
-    for (const cb of hubListeners.get(type) ?? []) {
-      try { cb(detail); } catch { /* subscriber errors never break settlement */ }
-    }
-    try {
-      if (typeof document !== "undefined" && typeof document.dispatchEvent === "function") {
-        document.dispatchEvent(new CustomEvent("tumbo:token", { detail: { type, ...detail } }));
-      }
-    } catch { /* DOM event failures never break settlement */ }
-  };
-
-  const forwardEngineEvents = engine.onEvent(({ type, ...detail }) => notify(type, detail));
-  target.__tokenTransferDetach = () => { forwardEngineEvents(); };
-
-  for (const name of ["send", "receive", "tip", "burn", "deliverHold", "deliverSettle", "deliverCancel"]) {
-    if (typeof target[name] !== "function") target[name] = (args) => engine[name](args);
-  }
-  if (typeof target.receipts !== "function") target.receipts = () => engine.receipts();
-  if (typeof target.verifyReceipt !== "function") target.verifyReceipt = (ref) => engine.verifyReceipt(ref);
-  if (typeof target.deliverIntents !== "function") target.deliverIntents = () => engine.intents();
-  target.tokenTransfers = engine;
-
-  try {
-    if (typeof window !== "undefined" && !window.TumboToken) window.TumboToken = target;
-  } catch { /* non-browser hosts skip the global */ }
-  return target;
-}
-
-export default createTokenTransferLedger;
-
+const KEY_PREFIX = 'transfer:';
 function validateIdempotencyKey(key) {
-  if (typeof key !== "string" || key.trim() === "") {
-    throw new TokenTransferError("every mutation requires a non-empty client idempotency key");
-  }
-  if (key.length > MAX_IDEMPOTENCY_KEY_LENGTH) {
-    throw new TokenTransferError(`idempotency key must be at most ${MAX_IDEMPOTENCY_KEY_LENGTH} characters`);
+  if (typeof key !== 'string' || !key.trim() || key.length > MAX_IDEMPOTENCY_KEY_LENGTH) {
+    throw new TokenTransferError('every mutation requires a nonempty client idempotency key of at most 256 characters');
   }
   return key;
 }
-
-function requirePositiveFluff(amount, field = "amountFluff") {
-  if (!Number.isSafeInteger(amount) || amount <= 0) {
-    throw new TokenTransferError(`${field} must be a positive safe integer (fluff); received ${String(amount)}`);
-  }
+function validateAccount(account) {
+  try { return assertAccount(account); }
+  catch { throw new TokenTransferError('account must be a valid canonical user, bot, or system account'); }
+}
+function validateAsset(asset) {
+  try { return assertAsset(asset); }
+  catch { throw new TokenTransferError('unknown canonical asset'); }
+}
+function requirePositiveFluff(amount) {
+  if (!Number.isSafeInteger(amount) || amount <= 0) throw new TokenTransferError('amountFluff must be a positive safe integer (fluff)');
   return amount;
 }
-
-function validateDelta(delta) {
-  if (!Number.isSafeInteger(delta)) {
-    throw new TokenTransferError(`journal leg delta must be a safe integer; received ${String(delta)}`);
-  }
-  return delta;
+function textValue(value, name, limit = 240) {
+  if (typeof value !== 'string' || value.length > limit) throw new TokenTransferError(`${name} must be a string of at most ${limit} characters`);
+  return value;
 }
+// Validate the canonical owner contract rather than one URL's class identity.
+// Adapter metadata never grants a partial facade authority to own balances.
+function isCanonicalEngine(engine) {
+  const ledger = engine?.ledger;
+  return Boolean(engine && ledger &&
+    ['quote', 'execute', 'faucet', 'balance', 'on', '_emit', 'journalHistory'].every(name => typeof engine[name] === 'function') &&
+    ['post', 'openAccount', 'verifyChain', 'verifyReceipt', 'accounts', 'journalCount', 'onCommit'].every(name => typeof ledger[name] === 'function') &&
+    Array.isArray(ledger._journals) && typeof ledger._receipts?.get === 'function' &&
+    typeof engine._reversedJournalKeys?.has === 'function' && Number.isSafeInteger(ledger.tick) && ledger.tick >= 0 &&
+    ASSETS.every(asset => Number.isSafeInteger(engine.config?.supply?.[asset]) && engine.config.supply[asset] > 0));
+}
+function ownerEngine(owner) {
+  const engine = isCanonicalEngine(owner) ? owner : owner?.engine ?? owner?._engine;
+  return isCanonicalEngine(engine) ? engine : null;
+}
+function requireUserSource(account) {
+  if (account === 'sys:void') throw new VoidDebitError('sys:void can never be debited', 'VOID_DEBIT');
+  if (!isUserAccount(account)) throw new TokenTransferError('system debits require the explicit canonical funding or escrow path', 'SYSTEM_DEBIT');
+}
+
+export function createTokenTransferLedger({ engine = null } = {}) {
+  const owner = engine === null ? createTokenEngine() : ownerEngine(engine);
+  if (!isCanonicalEngine(owner)) throw new TypeError('transfers require the canonical QuoteEngine');
+  const core = owner.ledger;
+  const views = new WeakMap(); // Derived UI views only; never balances/journals.
+  const balance = (account, asset = 'TUMBO') => owner.balance(validateAccount(account), validateAsset(asset));
+  const validChain = () => {
+    if (!core.verifyChain().ok) throw new TokenTransferError('canonical receipt chain is invalid', 'INVALID_CHAIN');
+  };
+  const findCoreReceipt = ref => {
+    const id = typeof ref === 'string' ? ref : ref?.receiptId ?? ref?.id;
+    const row = core._journals.find(item => item.id === id || item.idempotencyKey === id);
+    if (!row) throw new TokenTransferError('unknown canonical receipt');
+    return row;
+  };
+  function view(row) {
+    if (views.has(row)) return views.get(row);
+    const meta = row.links?.kind === 'local-transfer' ? row.links : null;
+    const phase = meta?.phase ?? null;
+    const asset = meta?.asset ?? row.postings[0].asset;
+    const amountFluff = meta?.amountFluff ?? Math.max(...row.postings.map(leg => Math.abs(leg.amount)));
+    const accounts = Object.freeze([...new Set(row.postings.map(leg => leg.account))]);
+    const receipt = Object.freeze({
+      ...row, receiptId: row.id, journalId: row.id, sequence: row.tick - 1,
+      phase, reference: meta?.clientKey ?? row.idempotencyKey, intentId: meta?.intentId ?? null,
+      actorId: meta?.actorId ?? row.postings.find(leg => leg.amount < 0)?.account ?? 'simulation',
+      asset, amountFluff, accounts, realm: TOKEN_TRANSFER_REALM,
+      summary: `${row.action}${phase ? ':' + phase : ''} ${fmtFluff(amountFluff)} ${asset} · simulated`,
+      verificationState: 'local-chain', issuedAt: row.ts, stamp: TOKEN_TRANSFER_STAMP, simulation: true,
+    });
+    views.set(row, receipt); return receipt;
+  }
+  function totalSupply(asset) {
+    validateAsset(asset);
+    const total = core.accounts().filter(row => row.asset === asset && row.account !== 'sys:issuance')
+      .reduce((n, row) => n + BigInt(balance(row.account, asset)), 0n);
+    if (total > BigInt(Number.MAX_SAFE_INTEGER)) throw new TokenTransferError('supply exceeds safe integer range');
+    return Number(total);
+  }
+  function assertConservation() {
+    for (const asset of ASSETS) if (totalSupply(asset) !== owner.config.supply[asset]) {
+      throw new TokenTransferError('canonical supply conservation failed', 'CONSERVATION');
+    }
+    return true;
+  }
+  function verifyReceipt(ref) {
+    const row = findCoreReceipt(ref), canonical = core.verifyReceipt(row.id), checks = {};
+    for (const check of canonical.checks ?? []) checks[check.name] = check.ok;
+    checks['canonical-record'] = typeof ref === 'string' || canonicalJson(ref) === canonicalJson(ref?.receiptId ? view(row) : row);
+    const sums = new Map();
+    for (const leg of row.postings) sums.set(leg.asset, (sums.get(leg.asset) ?? 0n) + BigInt(leg.amount));
+    checks['balanced-postings'] = [...sums.values()].every(sum => sum === 0n);
+    return { receiptId: row.id, ok: Object.values(checks).every(Boolean), checks };
+  }
+  function emit(row) {
+    owner._emit('receipt', { receipt: row });
+    for (const leg of row.postings) owner._emit('balance-changed', {
+      account: leg.account, asset: leg.asset, balance: owner.balance(leg.account, leg.asset),
+    });
+  }
+  function commit({ action, phase = null, from, to, asset, amountFluff, idempotencyKey, actor, memo = '', intentId = null, recipient = null }) {
+    const key = validateIdempotencyKey(idempotencyKey);
+    validateAsset(asset); requirePositiveFluff(amountFluff); textValue(memo, 'memo');
+    const actorId = textValue(actor ?? from, 'actor', 100);
+    validChain();
+    const canonicalKey = KEY_PREFIX + key, replay = core._receipts.has(canonicalKey);
+    let row;
+    try {
+      row = core.post([
+        { account: from, asset, amount: -amountFluff },
+        { account: to, asset, amount: amountFluff },
+      ], {
+        idempotencyKey: canonicalKey, action, memo,
+        links: { kind: 'local-transfer', phase, from, to, asset, amountFluff, clientKey: key, actorId, intentId, recipient },
+        authority: phase === 'settle' || phase === 'cancel' ? 'internal' : null,
+        voidCreditReason: action === 'burn' ? 'burn' : null,
+      });
+    } catch (error) {
+      if (/insufficient funds/.test(error.message)) throw new InsufficientFundsError(error.message, 'INSUFFICIENT_FUNDS');
+      if (error.code === 'IDEM_MISMATCH') throw new TokenTransferError(error.message, error.code);
+      throw new TokenTransferError(error.message, error.code ?? 'INVALID_TRANSFER');
+    }
+    if (!replay) emit(row);
+    return view(row);
+  }
+  function move(action, args = {}) {
+    const { from, to, asset, amountFluff, idempotencyKey, actor, memo = '' } = args;
+    const src = validateAccount(from), dst = validateAccount(to);
+    if (src === dst) throw new TokenTransferError('transfer requires two different accounts');
+    requireUserSource(src);
+    return commit({ action, from: src, to: dst, asset, amountFluff, idempotencyKey, actor: actor ?? (action === 'receive' ? dst : src), memo });
+  }
+  function burn({ from, asset, amountFluff, idempotencyKey, actor, memo = '' } = {}) {
+    const src = validateAccount(from); requireUserSource(src);
+    return commit({ action: 'burn', from: src, to: 'sys:void', asset, amountFluff, idempotencyKey, actor, memo });
+  }
+  function fundDemo({ to, asset = 'TUMBO', amountFluff, idempotencyKey } = {}) {
+    const destination = validateAccount(to); validateAsset(asset); requirePositiveFluff(amountFluff);
+    if (!isUserAccount(destination) || asset !== 'TUMBO') throw new TokenTransferError('demo funding supplies TUMBO to user/bot accounts only');
+    const key = KEY_PREFIX + validateIdempotencyKey(idempotencyKey);
+    validChain();
+    return view(owner.faucet(destination, asset, amountFluff, { idempotencyKey: key }));
+  }
+  function intents() {
+    const reversed = new Set(core._journals.filter(row => row.action === 'reverse').map(row => row.links?.reverses));
+    const rows = new Map();
+    for (const receipt of core._journals) {
+      const meta = receipt.links;
+      if (receipt.action !== 'deliver' || meta?.kind !== 'local-transfer') continue;
+      if (meta.phase === 'hold') rows.set(meta.intentId, Object.freeze({
+        intentId: meta.intentId, action: 'deliver', status: reversed.has(receipt.id) ? 'reversed' : 'held',
+        from: meta.from, to: meta.recipient, asset: meta.asset, amountFluff: meta.amountFluff,
+        holdReceiptId: receipt.id, holdJournalId: receipt.id, createdAt: receipt.ts, settledReceiptId: null, settledAt: null,
+      }));
+      else if (meta.phase === 'settle' || meta.phase === 'cancel') {
+        const intent = rows.get(meta.intentId);
+        if (intent && intent.status !== 'reversed' && !reversed.has(receipt.id)) rows.set(meta.intentId, Object.freeze({
+          ...intent, status: meta.phase === 'settle' ? 'settled' : 'cancelled', settledReceiptId: receipt.id, settledAt: receipt.ts,
+        }));
+      }
+    }
+    return [...rows.values()];
+  }
+  const getIntent = id => intents().find(row => row.intentId === id) ?? null;
+  function deliverHold({ from, to, asset, amountFluff, idempotencyKey, actor, memo = '' } = {}) {
+    const src = validateAccount(from), dst = validateAccount(to), key = validateIdempotencyKey(idempotencyKey);
+    requireUserSource(src);
+    if (!isUserAccount(dst) || src === dst) throw new TokenTransferError('deliver requires different user/bot accounts');
+    return commit({ action: 'deliver', phase: 'hold', from: src, to: 'sys:escrow', asset, amountFluff,
+      idempotencyKey: key, actor, memo, intentId: `deliver:${key}`,
+      // Hash the final recipient separately from the first escrow posting.
+      recipient: dst,
+    });
+  }
+  function closeIntent(phase, { intentId, idempotencyKey, actor, memo = '', reason = '' } = {}) {
+    const key = validateIdempotencyKey(idempotencyKey), intent = getIntent(intentId);
+    if (!intent) throw new UnknownIntentError('unknown deliver intent', 'UNKNOWN_INTENT');
+    const replay = core._receipts.has(KEY_PREFIX + key);
+    if (!replay && intent.status !== 'held') throw new IntentStateError(`deliver intent is ${intent.status}; only held intents can close`, 'INTENT_STATE');
+    if (!replay) {
+      const required = intents().filter(row => row.status === 'held' && row.asset === intent.asset).reduce((n, row) => n + BigInt(row.amountFluff), 0n);
+      if (BigInt(balance('sys:escrow', intent.asset)) < required) throw new InsufficientFundsError('canonical escrow cannot cover its held intents', 'INSUFFICIENT_FUNDS');
+    }
+    const finalMemo = phase === 'cancel' && reason ? `cancel: ${textValue(reason, 'reason')}${memo ? ` — ${memo}` : ''}` : memo;
+    return commit({ action: 'deliver', phase, from: 'sys:escrow', to: phase === 'settle' ? intent.to : intent.from,
+      asset: intent.asset, amountFluff: intent.amountFluff, idempotencyKey: key, actor: actor ?? intent.from, memo: finalMemo, intentId });
+  }
+  function onEvent(callback) {
+    if (typeof callback !== 'function') throw new TokenTransferError('onEvent callback must be a function');
+    const offReceipt = owner.on('receipt', ({ receipt }) => callback({ type: 'receipt', receipt: view(findCoreReceipt(receipt.id)) }));
+    const offBalance = owner.on('balance-changed', detail => callback({ type: 'balance-changed', ...detail, balanceFluff: detail.balance }));
+    return () => { offReceipt(); offBalance(); };
+  }
+  return Object.freeze({
+    engine: owner, ledger: core, assets: ASSETS, sysAccounts: TOKEN_TRANSFER_SYS_ACCOUNTS, supplyFluff: owner.config.supply, realm: TOKEN_TRANSFER_REALM,
+    balance, balances: account => Object.fromEntries(ASSETS.map(asset => [asset, balance(account, asset)])), totalSupply, assertConservation,
+    journals: () => core._journals.slice(), journalCount: () => core.journalCount(),
+    receipts: () => core._journals.filter(row => row.action !== 'genesis').map(view),
+    getReceipt: ref => view(findCoreReceipt(ref)), verifyReceipt, verifyChain: () => core.verifyChain().ok,
+    intents, getIntent, fundDemo,
+    send: args => move('send', args), receive: args => move('receive', args), tip: args => move('tip', args), burn,
+    deliverHold, deliverSettle: args => closeIntent('settle', args), deliverCancel: args => closeIntent('cancel', args),
+    onEvent, fmt: fmtFluff, parseSimToFluff,
+  });
+}
+
+const adapters = new WeakMap();
+export function attachTokenTransfers(facade = null, options = {}) {
+  const existingOwner = ownerEngine(facade), suppliedOwner = ownerEngine(options.engine);
+  if (facade !== null && !existingOwner) throw new TypeError('existing facade must identify its canonical QuoteEngine');
+  if (options.engine !== undefined && !suppliedOwner) throw new TypeError('engine option must identify the canonical QuoteEngine');
+  if (existingOwner && suppliedOwner && existingOwner !== suppliedOwner) throw new TypeError('transfer engine must match the existing facade owner');
+  const engine = existingOwner ?? suppliedOwner ?? createTokenEngine();
+  if (facade?.tokenTransfers?.engine === engine) return facade;
+  const base = facade ?? createTokenFacade(engine);
+  if (!adapters.has(engine)) adapters.set(engine, createTokenTransferLedger({ engine }));
+  const adapter = adapters.get(engine), target = { ...base, engine, tokenTransfers: adapter };
+  for (const name of ['send', 'receive', 'tip', 'burn', 'deliverHold', 'deliverSettle', 'deliverCancel', 'fundDemo']) {
+    if (typeof target[name] !== 'function') target[name] = adapter[name];
+  }
+  if (typeof target.receipts !== 'function') target.receipts = adapter.receipts;
+  if (typeof target.deliverIntents !== 'function') target.deliverIntents = adapter.intents;
+  target.__tokenTransferDetach = () => {}; // The layer adds no permanent subscription.
+  Object.freeze(target);
+  try { if (typeof window !== 'undefined' && (!window.TumboToken || window.TumboToken === facade)) window.TumboToken = target; } catch { /* non-browser hosts */ }
+  return target;
+}
+export default createTokenTransferLedger;

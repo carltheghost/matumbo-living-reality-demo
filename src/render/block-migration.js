@@ -7,7 +7,7 @@ import {
   createBlockMigrationManifest,
   previewBlockMigration,
   resetBlockMigrationDraft,
-} from "../domains/block-migration.js?v=20260922-cache2";
+} from "../domains/block-migration.js?v=20261003-skin360";
 
 const freeze = (value) => Object.freeze(value);
 

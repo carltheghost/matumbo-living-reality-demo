@@ -11,7 +11,7 @@ import {
   WHITE_PAPER_BOUNDARY,
   WHITE_PAPER_CONSOLE_SOURCE,
   createWhitePaperDocument,
-} from "../domains/white-paper.js?v=20260922-cache2";
+} from "../domains/white-paper.js?v=20261003-skin360";
 
 export { WHITE_PAPER_CONSOLE_SOURCE };
 

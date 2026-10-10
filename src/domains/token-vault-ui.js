@@ -15,8 +15,8 @@
 // ============================================================================
 
 import * as THREE from 'three';
-import { makeGlassCube, makeConnectionLines, addGlassLighting, glassTintFor } from '../render/glass-style.js?v=20260922-cache2';
-import { attachTokenVault, fmtTokenFluff, parseTumboSim } from './token.js?v=20260922-cache2';
+import { makeGlassCube, makeConnectionLines, addGlassLighting, glassTintFor } from '../render/glass-style.js?v=20261003-skin360';
+import { attachTokenVault, fmtTokenFluff, parseTumboSim } from './token-vault.js?v=20261003-skin360';
 
 const VAULT_USER = 'u:you';
 const STORE_KEY = 'tumbo:vault:ui:v1';
@@ -32,15 +32,16 @@ let engine = null;
 function getEngine() {
   if (engine) return engine;
   const w = typeof window !== 'undefined' ? window : {};
-  const prior = w.TumboToken && w.TumboToken.tokenVault;
+  const existing = w.TumboToken;
+  const prior = existing && existing.tokenVault;
   if (prior) { engine = prior; return engine; }
-  const facade = attachTokenVault(w.TumboToken, {
+  const facade = attachTokenVault(existing, {
     initialGrants: [
       { to: VAULT_USER, asset: 'TUMBO', amountFluff: 250000 },
       { to: VAULT_USER, asset: 'sMIMAS', amountFluff: 100000 },
     ],
   });
-  if (typeof window !== 'undefined' && !window.TumboToken) window.TumboToken = facade;
+  if (typeof window !== 'undefined' && (!window.TumboToken || window.TumboToken === existing)) window.TumboToken = facade;
   engine = facade.tokenVault;
   return engine;
 }
@@ -181,6 +182,7 @@ function makeDraggable(node, handle, storeSlot) {
   let sx = 0, sy = 0, ox = 0, oy = 0, dragging = false, moved = 0;
   const target = handle || node;
   target.addEventListener('pointerdown', (e) => {
+    if(node.dataset?.tokenEmbedded==='true')return;
     dragging = true; moved = 0;
     const r = node.getBoundingClientRect();
     sx = e.clientX; sy = e.clientY; ox = r.left; oy = r.top;
@@ -219,7 +221,8 @@ function buildChip(eng) {
   makeDraggable(chip, null, 'chip');
 
   // mini glass cube
-  try {
+  if(document.body.classList?.contains('assembly-mode'))chip.style.display='none';
+  else try {
     const renderer = new THREE.WebGLRenderer({ canvas: cv, alpha: true, antialias: true });
     renderer.setSize(52, 52, false);
     const scene = new THREE.Scene();
@@ -317,7 +320,7 @@ function buildPanel(eng) {
   makeDraggable(panel, q('.tv-head'), 'panel');
 
   q('[data-act="min"]').addEventListener('click', () => { panel.hidden = true; });
-  q('[data-act="3d"]').addEventListener('click', () => { panel.hidden = true; open3D(); });
+  q('[data-act="3d"]').addEventListener('click', () => { if(panel.dataset?.tokenEmbedded!=='true')panel.hidden = true; open3D(); });
 
   buildForms(eng);
   buildTickRow(eng);
@@ -395,7 +398,7 @@ function refreshUI() {
     <div class="tv-kv"><span>u:you · sMIMAS</span><b>${esc(fmtTokenFluff(eng.balance(VAULT_USER, 'sMIMAS')))}</b></div>
     <div class="tv-kv"><span>sys:vault · TUMBO</span><b>${esc(fmtTokenFluff(rep.TUMBO.vaultBalance))}</b></div>
     <div class="tv-kv"><span>sys:vault · sMIMAS</span><b>${esc(fmtTokenFluff(rep.sMIMAS.vaultBalance))}</b></div>
-    <div class="tv-kv"><span>vault integrity</span><b class="${okAll ? 'tv-ok' : 'tv-bad'}">${okAll ? 'OK — vault = open positions' : 'BREACH'}</b></div>
+    <div class="tv-kv"><span>vault integrity</span><b class="${okAll ? 'tv-ok' : 'tv-bad'}">${okAll ? 'OK — owned positions covered' : 'BREACH'}</b></div>
     <div class="tv-kv"><span>rewards reserve · TUMBO</span><b>${esc(fmtTokenFluff(eng.rewardsReserveOf('TUMBO')))}</b></div>`;
   // positions
   const open = eng.openPositions({ owner: VAULT_USER });
@@ -413,7 +416,7 @@ function refreshUI() {
       actionHtml = '<button class="tv-btn">Withdraw</button>';
     }
     row.innerHTML = `<div class="tv-grow"><span class="tv-id">${esc(p.id)}</span> · ${esc(p.kind)} · ${esc(p.asset)}<br>
-      <span class="tv-sub">${esc(fmtTokenFluff(p.principal))}${p.kind === 'lock' ? ` · unlock tick ${p.unlockTick}` : ''}${p.kind === 'stake' ? ` · est. reward ${esc(fmtTokenFluff(eng.estimateRewards(p.id)))}` : ''}</span></div>${actionHtml}`;
+      <span class="tv-sub">${esc(fmtTokenFluff(p.amountFluff))}${p.kind === 'lock' ? ` · unlock tick ${p.unlockTick}` : ''}${p.kind === 'stake' ? ` · est. reward ${esc(fmtTokenFluff(eng.estimateRewards(p.id)))}` : ''}</span></div>${actionHtml}`;
     const btn = row.querySelector('.tv-btn');
     if (btn && !btn.disabled) {
       btn.addEventListener('click', () => {
@@ -447,7 +450,7 @@ function refreshUI() {
   // log
   const all = eng.receipts();
   ui.log.innerHTML = all.slice(-12).reverse().map((r) =>
-    `<div>#${all.indexOf(r) + 1} ${esc(r.action)} · tick ${r.tick} · ${esc(String(r.key).slice(0, 13))}</div>`
+    `<div>#${all.indexOf(r) + 1} ${esc(r.action)} · tick ${r.tick} · ${esc(String(r.idempotencyKey).slice(0, 13))}</div>`
   ).join('');
 }
 
@@ -473,6 +476,10 @@ function open3D() {
   } catch (err) {
     info.hidden = false;
     info.textContent = '3D unavailable in this browser (WebGL error). The vault panel still works.';
+    const closeFallback=()=>{overlay.remove();document.removeEventListener('keydown',onFallbackKey,true);};
+    const onFallbackKey=event=>{if(event.key==='Escape'){event.preventDefault();event.stopImmediatePropagation();closeFallback();}};
+    overlay.querySelector('[data-close]').addEventListener('click',closeFallback);
+    document.addEventListener('keydown',onFallbackKey,true);
     return;
   }
   overlay.prepend(renderer.domElement);
@@ -575,7 +582,7 @@ function open3D() {
       const p = wasDragCube.userData.position;
       info.hidden = false;
       info.innerHTML = `<b>${esc(p.id)}</b> · ${esc(p.kind)} · ${esc(p.asset)}<br>` +
-        `principal ${esc(fmtTokenFluff(p.principal))}<br>` +
+        `principal ${esc(fmtTokenFluff(p.amountFluff))}<br>` +
         (p.kind === 'stake' ? `est. reward ${esc(fmtTokenFluff(eng.estimateRewards(p.id)))}<br>` : '') +
         (p.kind === 'lock' ? `unlock tick ${p.unlockTick} (now ${eng.tick()})` : 'flexible term');
     }
@@ -611,10 +618,10 @@ function open3D() {
     });
     try { renderer.dispose(); } catch { /* never */ }
     overlay.remove();
-    document.removeEventListener('keydown', onKey);
+    document.removeEventListener('keydown', onKey, true);
   }
-  const onKey = (e) => { if (e.key === 'Escape') close(); };
-  document.addEventListener('keydown', onKey);
+  const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); close(); } };
+  document.addEventListener('keydown', onKey, true);
   overlay.querySelector('[data-close]').addEventListener('click', close);
 }
 

@@ -1,4 +1,4 @@
-import { stableHash } from "../domains/surface-semantic-field.js";
+import { stableHash } from "../domains/surface-semantic-field.js?v=20261003-skin360";
 
 export const UNIVERSAL_ENTITY_SCHEMA = "matumbo.universal-entity";
 export const UNIVERSAL_ENTITY_VERSION = 1;

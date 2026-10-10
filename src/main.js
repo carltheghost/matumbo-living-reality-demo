@@ -1,51 +1,48 @@
 import * as THREE from 'three';
-import {mountCityJourney,resolveCityRoute} from './render/city-journey.js?v=20260922-cache2';
+import {mountCityJourney,resolveCityRoute} from './render/city-journey.js?v=20261003-skin360';
 // Reject mixed/unknown City URLs before legacy route bootstrap can act on them.
 if(resolveCityRoute(location.search).status==='rejected'){
   const safeUrl=new URL(location.href);safeUrl.search='?feature=reality-lens';history.replaceState(null,'',safeUrl);
 }
-import { mountCenteredSurfaces } from './render/centered-surfaces.js?v=20260923-reality-lens-controls4';
-import { createImmersiveSession } from './render/immersive-session.js?v=20260923-xr-status3';
-import { createMediaPreview } from './render/media-preview.js?v=20260922-cache2';
-import { mountTokenTicker } from './render/token-ticker.js?v=20260920-ticker1';
-// Hibernation vault console — mounts the vault glass-cube chip.
-// Guarded dynamic import: token-vault-ui.js is mid-flight (its imports don't
-// match token.js yet); a static import would fail the whole module graph and
-// red-banner the boot. Mounts automatically once the lane lands a consistent graph.
-import('./domains/token-vault-ui.js?v=20260922-cache2').catch(() => {});
-// Token transfers console — side-effect import; mounts the transfers glass-cube chip.
-// Optional token-transfer presentation lane: a broken transfer UI must never red-banner the main world boot.
-import('./domains/token-transfers-ui.js?v=20260922-token-transfers-cube3').catch((error) => {
-  console.warn('[token-transfers] presentation lane degraded:', error);
-});
-import { initMobilePanelManager } from './render/mobile-panel-manager.js?v=20260922-cache2';
-import { installMobileFreezeGuard } from './render/mobile-freeze-guard.js?v=20260922-mfg1';
-import { mountPhotoMascot } from './render/photo-mascot-mount.js?v=20260922-cache2';
-import { createPersonStudio } from './render/person-studio.js?v=20260918-avatar-chess';
-import { createRealityAssembly, CLEAN_LANDING_CAMERA } from './render/reality-assembly.js?v=20260926-native-object-tab1';
+import { mountCenteredSurfaces } from './render/centered-surfaces.js?v=20261005-voice';
+import { createImmersiveSession } from './render/immersive-session.js?v=20261003-skin360';
+import { createMediaPreview } from './render/media-preview.js?v=20261003-skin360';
+import { mountTokenTicker } from './render/token-ticker.js?v=20261003-skin360';
+// Balances, vault and transfers load only from their Asset Token controls.
+import { initMobilePanelManager } from './render/mobile-panel-manager.js?v=20261005-voice';
+import { installMobileFreezeGuard } from './render/mobile-freeze-guard.js?v=20261003-skin360';
+import { mountPhotoMascot } from './render/photo-mascot-mount.js?v=20261003-skin360';
+import { createPersonStudio } from './render/person-studio.js?v=20261003-skin360';
+import { createRealityAssembly, CLEAN_LANDING_CAMERA } from './render/reality-assembly.js?v=20261005-voice';
+import { mountApiConnections } from './render/api-connections.js?v=20261003-skin360';
+import { engine as canonicalEconomicEngine } from './domains/token.js?v=20261003-skin360';
+import { createEconomicRuntime } from './domains/economic-runtime.js?v=20261003-skin360';
+import { ECONOMIC_WORLD_SOURCE, createEconomicWorldContribution } from './domains/economic-world-projection.js?v=20261003-skin360';
+import { mountOurplaceEconomy } from './render/ourplace-economy.js?v=20261005-voice';
+import { featureSelectionMayRefreshProvider } from './domains/provider-navigation.js?v=20261003-skin360';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
-import { MANIPULATE_MODES } from './render/manipulate-controls.js?v=20260922-cache2';
+import { MANIPULATE_MODES } from './render/manipulate-controls.js?v=20261003-skin360';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { createLivingRealityProjection } from './core/demo-projection.js?v=20260918-muse2';
-import { resolveDefaultFeature } from './core/default-landing.js?v=20260922-cache2';
-import { createDeviceProjection, readBrowserProjectionPreferences } from './projections/device-projection.js?v=20260922-cache2';
-import { createDistributionExplorer } from './render/distribution-explorer.js?v=20260922-cache2';
-import { createLaunchDistributionRehearsal } from './domains/distribution-registry.js?v=20260828-distribution163';
-import { createPersonOrganisms } from './render/person-organisms.js?v=20260922-cache2';
-import { FEATURE_DEFINITIONS, FEATURE_HANDOFF_LINKS, createFeatureNavigator } from './render/feature-navigator.js?v=20260923-spatial-tabs18';
-import { createCubeDive } from './render/cube-dive.js?v=20260919-dive';
-import { resolveHandoffHop, resolveHopVessel, resolveNestedDiveTargets } from './domains/cube-dive.js?v=20260919-dive';
-import { createLaunchConsole, validateLaunchCohortRoute, validateLaunchCohortCompareRoute } from './render/launch-console.js?v=20260922-cache2';
-import { LAUNCH_RECEIPT_CONSOLE_SOURCE, createLaunchReceiptConsole } from './render/launch-receipt.js?v=20260827-receipt2';
-import { createSocialExplorerConsole } from './render/social-explorer.js?v=20260828-social-pulse1';
-import { SOCIAL_PULSE_SOURCE, createUnavailableSocialPulse, fetchSocialPulse } from './domains/social-pulse.js?v=20260828-social-pulse1';
-import { LAUNCH_KIT_CONSOLE_SOURCE, createLaunchKitConsole } from './render/launch-kit.js?v=20260827-kit2';
-import { createRoomSpaces } from './render/room-spaces.js?v=20260922-cache2';
-import { CAMERA_INPUT_SOURCE, createCameraInput } from './render/camera-input.js?v=20260922-cache2';
-import { GESTURE_INPUT_SOURCE, createGestureInput } from './render/gesture-input.js?v=20260922-cache2';
+import { createLivingRealityProjection } from './core/demo-projection.js?v=20261003-skin360';
+import { resolveDefaultFeature } from './core/default-landing.js?v=20261003-skin360';
+import { createDeviceProjection, readBrowserProjectionPreferences } from './projections/device-projection.js?v=20261003-skin360';
+import { createDistributionExplorer } from './render/distribution-explorer.js?v=20261003-skin360';
+import { createLaunchDistributionRehearsal } from './domains/distribution-registry.js?v=20261003-skin360';
+import { createPersonOrganisms } from './render/person-organisms.js?v=20261003-skin360';
+import { FEATURE_DEFINITIONS, FEATURE_HANDOFF_LINKS, createFeatureNavigator } from './render/feature-navigator.js?v=20261005-voice';
+import { createCubeDive } from './render/cube-dive.js?v=20261003-skin360';
+import { resolveHandoffHop, resolveHopVessel, resolveNestedDiveTargets } from './domains/cube-dive.js?v=20261003-skin360';
+import { createLaunchConsole, validateLaunchCohortRoute, validateLaunchCohortCompareRoute } from './render/launch-console.js?v=20261003-skin360';
+import { LAUNCH_RECEIPT_CONSOLE_SOURCE, createLaunchReceiptConsole } from './render/launch-receipt.js?v=20261003-skin360';
+import { createSocialExplorerConsole } from './render/social-explorer.js?v=20261003-skin360';
+import { SOCIAL_PULSE_SOURCE, createUnavailableSocialPulse, fetchSocialPulse } from './domains/social-pulse.js?v=20261003-skin360';
+import { LAUNCH_KIT_CONSOLE_SOURCE, createLaunchKitConsole } from './render/launch-kit.js?v=20261003-skin360';
+import { createRoomSpaces } from './render/room-spaces.js?v=20261007-voice-conversation-refresh';
+import { CAMERA_INPUT_SOURCE, createCameraInput } from './render/camera-input.js?v=20261003-skin360';
+import { GESTURE_INPUT_SOURCE, createGestureInput } from './render/gesture-input.js?v=20261003-skin360';
 import {
   GAZE_HAND_COUPLING_SOURCE,
   GAZE_HAND_COUPLING_BOUNDARY,
@@ -56,23 +53,23 @@ import {
   isFreshGazeHandLock,
   normalizeGazeHandPoint,
   resolveGazeHandAction,
-} from './render/gaze-hand-coupling.js?v=20260829-gaze-hand185';
-import { createProjectionBridge } from './render/projection-bridge.js?v=20260922-cache2';
-import { createIntentTimeline } from './render/intent-timeline.js?v=20260922-cache2';
-import { createBlockWorldLayer } from './render/block-world.js?v=20260918-glass-open';
-import { createProjectionSession } from './render/projection-session.js?v=20260830-session218';
-import { applyBlockWorldFocusMode } from './render/block-world-focus.js?v=20260827-block-focus1';
-import { createBlockWorldQuickActions } from './render/cube-quick-actions.js?v=20260828-cube-actions155';
-import { PORTAL_RETURN_SOURCE, createPortalReturnHandoff } from './render/portal-return.js?v=20260827-portal-return1';
-import { BLOCK_MIGRATION_SOURCE, resolveBlockMigrationHandback } from './domains/block-migration.js?v=20260827-migration3';
-import { createBlockMigrationConsole } from './render/block-migration.js?v=20260826-migration2';
-import { MIGRATION_SNAPSHOT_CONSOLE_SOURCE, createMigrationSnapshotConsole } from './render/migration-snapshot.js?v=20260828-snapshot2';
-import { BLOCK_WORLD_SNAPSHOT_CONSOLE_SOURCE, createBlockWorldSnapshotConsole } from './render/block-world-snapshot.js?v=20260828-block-snapshot4';
-import { BLOCK_WORLD_RUNTIME_SYNC_SOURCE, createBlockWorldRuntimeSync } from './render/block-world-runtime-sync.js?v=20260828-runtime-sync171';
-import { ARENA_GAMES_SOURCE, ARENA_GAMES_CONSOLE_SOURCE } from './domains/arena-games.js?v=20260826-arena1';
-import { createArenaGamesConsole } from './render/arena-games.js?v=20260826-arena1';
-import { mountChessArena } from './render/chess-arena.js?v=20260918-avatar-chess';
-import { ACADEMY_CONSOLE_SOURCE, createAcademyConsole } from './render/academy.js?v=20260904-academy1';
+} from './render/gaze-hand-coupling.js?v=20261003-skin360';
+import { createProjectionBridge } from './render/projection-bridge.js?v=20261003-skin360';
+import { createIntentTimeline } from './render/intent-timeline.js?v=20261003-skin360';
+import { createBlockWorldLayer } from './render/block-world.js?v=20261003-skin360';
+import { createProjectionSession } from './render/projection-session.js?v=20261003-skin360';
+import { applyBlockWorldFocusMode } from './render/block-world-focus.js?v=20261003-skin360';
+import { createBlockWorldQuickActions } from './render/cube-quick-actions.js?v=20261003-skin360';
+import { PORTAL_RETURN_SOURCE, createPortalReturnHandoff } from './render/portal-return.js?v=20261003-skin360';
+import { BLOCK_MIGRATION_SOURCE, resolveBlockMigrationHandback } from './domains/block-migration.js?v=20261003-skin360';
+import { createBlockMigrationConsole } from './render/block-migration.js?v=20261003-skin360';
+import { MIGRATION_SNAPSHOT_CONSOLE_SOURCE, createMigrationSnapshotConsole } from './render/migration-snapshot.js?v=20261003-skin360';
+import { BLOCK_WORLD_SNAPSHOT_CONSOLE_SOURCE, createBlockWorldSnapshotConsole } from './render/block-world-snapshot.js?v=20261003-skin360';
+import { BLOCK_WORLD_RUNTIME_SYNC_SOURCE, createBlockWorldRuntimeSync } from './render/block-world-runtime-sync.js?v=20261003-skin360';
+import { ARENA_GAMES_SOURCE, ARENA_GAMES_CONSOLE_SOURCE } from './domains/arena-games.js?v=20261003-skin360';
+import { createArenaGamesConsole } from './render/arena-games.js?v=20261003-skin360';
+import { mountChessArena } from './render/chess-arena.js?v=20261003-skin360';
+import { ACADEMY_CONSOLE_SOURCE, createAcademyConsole } from './render/academy.js?v=20261003-skin360';
 import {
   CONTRACTS_MARKETS_SOURCE,
   CONTRACTS_MARKETS_CONTRACT_ROUTE_PARAM,
@@ -83,60 +80,65 @@ import {
   CONTRACTS_MARKETS_SOURCE_RETURN_JOURNEY,
   validateContractsMarketsGraphRoute,
   validateContractDraftRouteState,
-} from './domains/contracts-markets.js?v=20260829-contracts-graph185';
-import { CONTRACTS_MARKETS_CONSOLE_SOURCE, createContractsMarketsConsole } from './render/contracts-markets.js?v=20260829-contracts-graph185';
-import { createUnavailableProtocolEvidence, fetchProtocolEvidence } from './domains/protocol-evidence.js?v=20260828-protocol-evidence1';
-import { PROTOCOL_EVIDENCE_CONSOLE_SOURCE, createProtocolEvidenceRail } from './render/protocol-evidence.js?v=20260828-protocol-evidence1';
-import { PAYCORE_SOURCE } from './domains/paycore.js?v=20260826-paycore1';
-import { PAYCORE_CONSOLE_SOURCE, createPaycoreConsole } from './render/paycore.js?v=20260826-paycore1';
-import { T402_SOURCE } from './domains/t402.js?v=20260826-t4021';
-import { T402_CONSOLE_SOURCE, createT402Console } from './render/t402.js?v=20260826-t4021';
-import { NEURAL_MESH_SOURCE } from './domains/neural-mesh.js?v=20260827-neural1';
-import { NEURAL_MESH_CONSOLE_SOURCE, createNeuralMeshConsole } from './render/neural-mesh.js?v=20260827-neural1';
-import { MATTER_FORGE_SOURCE } from './domains/matter-forge.js?v=20260827-picture1';
-import { PICTURE_MATTER_METADATA_SOURCE, createUnavailablePictureMatterMetadata, fetchPictureMatterMetadata } from './domains/picture-matter-metadata.js?v=20260828-picture-metadata1';
-import { PICTURE_MATTER_CONSOLE_SOURCE, createPictureMatterConsole } from './render/picture-matter.js?v=20260828-picture-metadata1';
-import { NFT_ATELIER_CONSOLE_SOURCE, createNftAtelierConsole } from './render/nft-atelier.js?v=20260918-nft1';
-import { FROZEN_RELICS_CONSOLE_SOURCE, createFrozenRelicsConsole } from './render/frozen-relics.js?v=20260918-fr1';
-import { MUSE_AGENT_CONSOLE_SOURCE, createMuseAgentConsole } from './render/muse-agent.js?v=20260918-muse1';
-import { BOT_PLAZA_CONSOLE_SOURCE, createBotPlazaConsole } from './render/bot-plaza.js?v=20260918-botplaza1';
-import { createBotRegistry, createBotRuntime } from './domains/bot-plaza.js?v=20260918-botplaza1';
-import { createProposalQueue } from './domains/bot-plaza.js?v=20260918-ctr2';
-import { createContractLedger } from './domains/contract-ledger.js?v=20260920-cflow1';
-import { createBrowserContractAutomation, createBrowserContractWorkspace, createBrowserContractFlow, createUnavailableContractWorkspace } from './domains/contract-runtime.js';
-import { applyContractPublicEvidence } from './domains/contract-public-evidence.js';
-import { createContractWorldContribution } from './domains/contract-world-projection.js';
-import { COMPUTE_WORLD_SOURCE, createComputeWorldContribution } from './domains/compute-world-projection.js?v=20260925-compute1';
-import { createProjectionEnvelope } from './core/view-state.js';
-import { mountContractWorkbench } from './render/contract-workbench.js';
-import { createContractOrganism } from './render/contract-organism.js';
-import { mountBotPresence } from './render/bot-presence.js?v=20260923-lens-focus1';
-import { CONTRACT_ATELIER_CONSOLE_SOURCE, createContractAtelierConsole } from './render/contract-atelier.js?v=20260918-ctr1';
-import { LUNA_CONSOLE_SOURCE, createLunaCompanionConsole } from './render/luna-companion.js?v=20260918-luna1';
-import { WARDROBE_ATELIER_CONSOLE_SOURCE, createWardrobeAtelierConsole } from './render/wardrobe-atelier.js?v=20260918-wdr1';
-import { WHITE_PAPER_CONSOLE_SOURCE, createWhitePaperConsole } from './render/white-paper.js?v=20260918-wp1';
-import { GESTURE_LENS_CONSOLE_SOURCE, createGestureLensConsole } from './render/gesture-lens.js?v=20260918-gl1';
-import { createHandLensSession } from './render/hand-session.js?v=20260922-hand-lens-relocated';
-import { createStoryModeConsole } from './render/story-mode.js?v=20260920-story1';
-import { LEDGER_PROOF_SOURCE } from './domains/ledger-proof.js?v=20260827-ledger1';
-import { LEDGER_PROOF_CONSOLE_SOURCE, createLedgerProofConsole } from './render/ledger-proof.js?v=20260827-ledger1';
-import { LIVE_GATEWAY_SOURCE } from './domains/live-gateway.js?v=20260827-gateway1';
-import { LIVE_GATEWAY_CONSOLE_SOURCE, createLiveGatewayConsole } from './render/live-gateway.js?v=20260901-provider-docs';
-import { WORLD_EVENTS_CONSOLE_SOURCE } from './render/world-events.js?v=20260901-reality-lens';
-import { createUnavailableWorldEvents, fetchWorldEvents } from './domains/world-events.js?v=20260901-reality-lens';
-import { createWorldEventsConsole } from './render/world-events.js?v=20260901-reality-lens';
-import { SPORTS_EVENTS_CONSOLE_SOURCE, createSportsEventsConsole } from './render/sports-events.js?v=20260829-sports-return184';
-import { createUnavailableSportsEvents, fetchSportsEventDetail, fetchSportsEvents } from './domains/sports-events.js?v=20260829-sports-return184';
-import { MULTI_SPORT_EVENTS_CONSOLE_SOURCE, createMultiSportEventsConsole } from './render/multi-sport-events.js?v=20260828-multisport162';
-import { createUnavailableMultiSportEvents, fetchMultiSportEventDetail, fetchMultiSportEvents } from './domains/multi-sport-events.js?v=20260828-multisport162';
-import { DEVICE_PROJECTION_CONSOLE_SOURCE, createDeviceProjectionConsole } from './render/device-projection.js?v=20260827-device1';
-import { ASSET_MARKET_CONSOLE_SOURCE, createAssetMarketConsole } from './render/asset-market.js?v=20260828-asset-market1';
-import { createUnavailableAssetMarketEvidence, fetchAssetMarketEvidence } from './domains/asset-market.js?v=20260828-asset-market1';
-import { POPULATION_CONTEXT_SOURCE, createUnavailablePopulationContext, fetchPopulationContext } from './domains/population-context.js?v=20260828-population-context1';
-import { WEB_AI_CONSOLE_SOURCE, createWebAiConsole } from './render/web-ai.js?v=20260923-lens-return2';
-import { SOCIAL_MIRROR_CONSOLE_SOURCE } from './domains/social-mirror.js?v=20260922-cache2';
-import { createSocialMirrorConsole } from './render/social-mirror.js?v=20260923-reality-lens1';
-import { createYoutubeSurface } from './render/youtube-surface.js?v=20260926-search-play1';
+} from './domains/contracts-markets.js?v=20261003-skin360';
+import { CONTRACTS_MARKETS_CONSOLE_SOURCE, createContractsMarketsConsole } from './render/contracts-markets.js?v=20261003-skin360';
+import { createUnavailableProtocolEvidence, fetchProtocolEvidence } from './domains/protocol-evidence.js?v=20261003-skin360';
+import { PROTOCOL_EVIDENCE_CONSOLE_SOURCE, createProtocolEvidenceRail } from './render/protocol-evidence.js?v=20261003-skin360';
+import { PAYCORE_SOURCE } from './domains/paycore.js?v=20261003-skin360';
+import { PAYCORE_CONSOLE_SOURCE, createPaycoreConsole } from './render/paycore.js?v=20261003-skin360';
+import { T402_SOURCE } from './domains/t402.js?v=20261003-skin360';
+import { T402_CONSOLE_SOURCE, createT402Console } from './render/t402.js?v=20261003-skin360';
+import { NEURAL_MESH_SOURCE } from './domains/neural-mesh.js?v=20261003-skin360';
+import { NEURAL_MESH_CONSOLE_SOURCE, createNeuralMeshConsole } from './render/neural-mesh.js?v=20261003-skin360';
+import { MATTER_FORGE_SOURCE } from './domains/matter-forge.js?v=20261003-skin360';
+import { PICTURE_MATTER_METADATA_SOURCE, createUnavailablePictureMatterMetadata, fetchPictureMatterMetadata } from './domains/picture-matter-metadata.js?v=20261003-skin360';
+import { PICTURE_MATTER_CONSOLE_SOURCE, createPictureMatterConsole } from './render/picture-matter.js?v=20261003-skin360';
+import { NFT_ATELIER_CONSOLE_SOURCE, createNftAtelierConsole } from './render/nft-atelier.js?v=20261003-skin360';
+import { FROZEN_RELICS_CONSOLE_SOURCE, createFrozenRelicsConsole } from './render/frozen-relics.js?v=20261003-skin360';
+import { MUSE_AGENT_CONSOLE_SOURCE, createMuseAgentConsole } from './render/muse-agent.js?v=20261003-skin360';
+import { BOT_PLAZA_CONSOLE_SOURCE, createBotPlazaConsole } from './render/bot-plaza.js?v=20261003-skin360';
+import { createBotRegistry, createBotRuntime } from './domains/bot-plaza.js?v=20261003-skin360';
+import { LENS_BOT_FACTORIES } from './domains/lens-bot-plugins.js';
+import { createProposalQueue } from './domains/bot-plaza.js?v=20261003-skin360';
+import { createContractLedger } from './domains/contract-ledger.js?v=20261003-skin360';
+import { createBrowserContractAutomation, createBrowserContractWorkspace, createBrowserContractFlow, createUnavailableContractWorkspace } from './domains/contract-runtime.js?v=20261003-skin360';
+import { applyContractPublicEvidence } from './domains/contract-public-evidence.js?v=20261003-skin360';
+import { createContractWorldContribution } from './domains/contract-world-projection.js?v=20261003-skin360';
+import { COMPUTE_WORLD_SOURCE, createComputeWorldContribution } from './domains/compute-world-projection.js?v=20261003-skin360';
+import { createProjectionEnvelope } from './core/view-state.js?v=20261003-skin360';
+import { mountContractWorkbench } from './render/contract-workbench.js?v=20261003-skin360';
+import { createContractOrganism } from './render/contract-organism.js?v=20261003-skin360';
+import { mountBotPresence } from './render/bot-presence.js?v=20261003-skin360';
+import { CONTRACT_ATELIER_CONSOLE_SOURCE, createContractAtelierConsole } from './render/contract-atelier.js?v=20261003-skin360';
+import { LUNA_CONSOLE_SOURCE, createLunaCompanionConsole } from './render/luna-companion.js?v=20261005-voice';
+import { WARDROBE_ATELIER_CONSOLE_SOURCE, createWardrobeAtelierConsole } from './render/wardrobe-atelier.js?v=20261003-skin360';
+import { WHITE_PAPER_CONSOLE_SOURCE, createWhitePaperConsole } from './render/white-paper.js?v=20261003-skin360';
+import { GESTURE_LENS_CONSOLE_SOURCE, createGestureLensConsole } from './render/gesture-lens.js?v=20261003-skin360';
+import { createHandLensSession } from './render/hand-session.js?v=20261003-skin360';
+import { mountHandsEyesControls } from './render/hands-eyes-controls.js?v=20261005-hands-eyes';
+import { handoverVoiceDictation } from './render/voice-dictation.js?v=20261005-voice';
+import { mountLocalVoiceNotes } from './render/local-voice-notes.js?v=20261007-voice-message-routing-fix';
+import { captureVoiceTarget, insertVoiceTranscript } from './render/voice-text-target.js';
+import { createStoryModeConsole } from './render/story-mode.js?v=20261003-skin360';
+import { LEDGER_PROOF_SOURCE } from './domains/ledger-proof.js?v=20261003-skin360';
+import { LEDGER_PROOF_CONSOLE_SOURCE, createLedgerProofConsole } from './render/ledger-proof.js?v=20261003-skin360';
+import { LIVE_GATEWAY_SOURCE } from './domains/live-gateway.js?v=20261003-skin360';
+import { LIVE_GATEWAY_CONSOLE_SOURCE, createLiveGatewayConsole } from './render/live-gateway.js?v=20261003-skin360';
+import { WORLD_EVENTS_CONSOLE_SOURCE } from './render/world-events.js?v=20261003-skin360';
+import { createUnavailableWorldEvents, fetchWorldEvents } from './domains/world-events.js?v=20261003-skin360';
+import { createWorldEventsConsole } from './render/world-events.js?v=20261003-skin360';
+import { SPORTS_EVENTS_CONSOLE_SOURCE, createSportsEventsConsole } from './render/sports-events.js?v=20261003-skin360';
+import { createUnavailableSportsEvents, fetchSportsEventDetail, fetchSportsEvents } from './domains/sports-events.js?v=20261003-skin360';
+import { MULTI_SPORT_EVENTS_CONSOLE_SOURCE, createMultiSportEventsConsole } from './render/multi-sport-events.js?v=20261003-skin360';
+import { createUnavailableMultiSportEvents, fetchMultiSportEventDetail, fetchMultiSportEvents } from './domains/multi-sport-events.js?v=20261003-skin360';
+import { DEVICE_PROJECTION_CONSOLE_SOURCE, createDeviceProjectionConsole } from './render/device-projection.js?v=20261003-skin360';
+import { ASSET_MARKET_CONSOLE_SOURCE, createAssetMarketConsole } from './render/asset-market.js?v=20261003-skin360';
+import { createUnavailableAssetMarketEvidence, fetchAssetMarketEvidence } from './domains/asset-market.js?v=20261003-skin360';
+import { POPULATION_CONTEXT_SOURCE, createUnavailablePopulationContext, fetchPopulationContext } from './domains/population-context.js?v=20261003-skin360';
+import { WEB_AI_CONSOLE_SOURCE, createWebAiConsole } from './render/web-ai.js?v=20261007-gpt-dialogue-refresh';
+import { SOCIAL_MIRROR_CONSOLE_SOURCE } from './domains/social-mirror.js?v=20261003-skin360';
+import { createSocialMirrorConsole } from './render/social-mirror.js?v=20261003-skin360';
+import { createYoutubeSurface } from './render/youtube-surface.js?v=20261003-skin360';
 
 const runtimeStatus = globalThis.__MATUMBO_RUNTIME__;
 runtimeStatus?.setStage?.('projection', 'Preparing the canonical local world envelope…');
@@ -156,6 +158,8 @@ const projectionBridge = createProjectionBridge();
 let featureNavigator = null;
 let personStudio = null;
 let realityAssembly = null;
+let handsEyesControls = null;
+let handLensSession = null;
 let launchConsole = null;
 let launchReceipt = null;
 let launchKitConsole = null;
@@ -187,6 +191,8 @@ let academyConsole = null;
 let contractsMarkets = null;
 let protocolEvidence = null;
 let paycoreConsole = null;
+let economicRuntime = null;
+let ourplaceController = null;
 let t402Console = null;
 let neuralMeshConsole = null;
 let pictureMatterConsole = null;
@@ -3076,6 +3082,7 @@ catch(error) { contractWorkspace=createUnavailableContractWorkspace(error); }
 frozenRelicsVault = contractWorkspace.vault;
 window.__TUMBO_CONTRACT_WORKSPACE__=contractWorkspace;
 nftAtelierConsole = createNftAtelierConsole({
+  onChange: publishAuthoringProjection,
   documentRoot: document,
   onSelect: (snapshot) => {
     const organ = organs.find((candidate) => candidate.id === 'proof');
@@ -3235,7 +3242,7 @@ window.__TUMBO_MUSE_AGENT__ = museAgentConsole;
 // inside per-bot approved capabilities. 100% browser-local: no network, no
 // tokens, no OAuth, no external bot APIs. The Muse Agent plugin ships as the
 // built-in default bot.
-botPlazaRegistry = createBotRegistry();
+botPlazaRegistry = createBotRegistry({ pluginFactories: LENS_BOT_FACTORIES });
 // Contract mission part 3b: one shared bot-proposal queue and one shared
 // outcome desk. Bots bring outcome contracts to the queue; the Contract
 // Atelier console reviews them, and APPROVE opens the book on this desk.
@@ -3443,6 +3450,7 @@ catch(error) {
 window.__TUMBO_CONTRACT_LEDGER__ = contractLifecycleLedger;
 window.__TUMBO_CONTRACT_FLOW__ = contractFlow;
 contractAtelierConsole = createContractAtelierConsole({
+  onChange: publishAuthoringProjection,
   documentRoot: document,
   // Award NFTs from outcome contracts are minted as Frozen Relics from the
   // shared vault: the claim freezes in the relic core, its life keeps growing.
@@ -3455,7 +3463,7 @@ contractAtelierConsole = createContractAtelierConsole({
   // into the same review queue Tumbo already approves from.
   onContractApproved: ({ contract, proposal }) => contractFlow.handleContractApproved({ contract, proposal }),
   approveContractProposal: proposal=>contractFlow.approveProposal(proposal),
-  onScanRequested: () => contractFlow.scanAndQueue(),
+  onScanRequested: () => runUserRequestedContractScan(),
   onSelect: (snapshot) => {
     const organ = organs.find((candidate) => candidate.id === 'contract');
     if (organ) focusOrgan(organ, `contract-atelier-select:${snapshot.selectedId}`);
@@ -3514,7 +3522,7 @@ for(const [label,status] of [['Market and relic storage',contractWorkspace.getPe
   }
 }
 const contractStyle = document.createElement('link');
-contractStyle.rel = 'stylesheet'; contractStyle.href = new URL('./render/contract-workbench.css', import.meta.url).href;
+contractStyle.rel = 'stylesheet'; contractStyle.href = new URL('./render/contract-workbench.css?v=20261003-skin360', import.meta.url).href;
 document.head.append(contractStyle);
 let contractAutomation = null;
 let contractWorkbench = null;
@@ -3551,7 +3559,7 @@ try {
     root:contractWorkbenchHost,engine:contractAutomation,onSelect:updateContractOrganism,
     getPublicEvents:()=>lastContractPublicRecords.map(record=>({id:record.id,label:record.title,status:record.status,participants:(record.participants??record.teams??[]).map(team=>({name:team.name}))})),
     onRefreshEvidence:async({contractId})=>{
-      await runAutomaticContractScan({force:true});
+      await runUserRequestedContractScan();
       return lastContractEvidenceReport.byContract?.[contractId]??{observed:0,pending:0,errors:lastContractEvidenceReport.byContract?[]:lastContractEvidenceReport.errors};
     },
   });
@@ -3583,29 +3591,18 @@ window.addEventListener('pageshow',()=>{if(contractAutomationTimer===null)contra
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')runContractAutomation();});
 window.addEventListener('pagehide',()=>{window.clearInterval(contractAutomationTimer);contractAutomationTimer=null;});
 
-// Automatic prediction-contract generation.
-// The Prediction Place should populate itself without requiring a button press:
-// scan once after boot, then refresh every five minutes. The shared proposal
-// queue and contract-flow idempotency guard prevent duplicate game proposals,
-// including across page reloads. Failures are contained inside scanAndQueue()
-// and never affect the manual Contract Atelier.
-const AUTO_CONTRACT_SCAN_INTERVAL_MS = 5 * 60 * 1000;
-const AUTO_CONTRACT_SCAN_MIN_GAP_MS = 60 * 1000;
-let automaticContractScanInFlight = null;
-let automaticContractScanLastResult = null;
-let automaticContractScanLastStartedAt = 0;
+// Public sports and market feeds are read only after a visible Scan or
+// Refresh evidence action. Opening the app, switching tabs, and reconnecting
+// never trigger provider traffic. Concurrent button presses share one read.
+let requestedContractScanInFlight = null;
+let requestedContractScanLastResult = null;
 
-function runAutomaticContractScan({ force = false } = {}) {
-  if (automaticContractScanInFlight) return automaticContractScanInFlight;
-  const now = Date.now();
-  if (!force && automaticContractScanLastStartedAt && now - automaticContractScanLastStartedAt < AUTO_CONTRACT_SCAN_MIN_GAP_MS) {
-    return Promise.resolve(automaticContractScanLastResult);
-  }
-  automaticContractScanLastStartedAt = now;
-  automaticContractScanInFlight = Promise.resolve()
+function runUserRequestedContractScan() {
+  if (requestedContractScanInFlight) return requestedContractScanInFlight;
+  requestedContractScanInFlight = Promise.resolve()
     .then(() => contractFlow.scanAndQueue())
     .then((result) => {
-      automaticContractScanLastResult = result;
+      requestedContractScanLastResult = result;
       if(result?.automation?.graded?.length){
         contractAtelierConsole?.refresh();
         projectionBridge.emitIntent('projection.contract-public-graded','contract-flow',{results:result.automation.graded,simulation:true,localOnly:true,executable:false});
@@ -3619,46 +3616,18 @@ function runAutomaticContractScan({ force = false } = {}) {
         drafts: Object.freeze([]),
         errors: Object.freeze([String(error?.message ?? error)]),
       });
-      automaticContractScanLastResult = fallback;
+      requestedContractScanLastResult = fallback;
       return fallback;
     })
     .finally(() => {
-      automaticContractScanInFlight = null;
+      requestedContractScanInFlight = null;
     });
-  return automaticContractScanInFlight;
+  return requestedContractScanInFlight;
 }
 
-let automaticContractScanTimer = window.setInterval(() => {
-  void runAutomaticContractScan();
-}, AUTO_CONTRACT_SCAN_INTERVAL_MS);
-
-window.__TUMBO_AUTO_CONTRACTS__ = Object.freeze({
-  intervalMs: AUTO_CONTRACT_SCAN_INTERVAL_MS,
-  minGapMs: AUTO_CONTRACT_SCAN_MIN_GAP_MS,
-  scanNow: () => runAutomaticContractScan({ force: true }),
-  getLastScan: () => automaticContractScanLastResult,
-});
-
-void runAutomaticContractScan({ force: true });
-
-// Background tabs can throttle timers. Re-check as soon as the Prediction
-// Place becomes visible again, while retaining a short guard against duplicate
-// scans from rapid visibility/online events.
-window.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible") {
-    void runAutomaticContractScan();
-  }
-});
-window.addEventListener("online", () => {
-  void runAutomaticContractScan();
-});
-window.addEventListener("pagehide", () => {
-  window.clearInterval(automaticContractScanTimer);
-  automaticContractScanTimer = null;
-});
-window.addEventListener('pageshow', () => {
-  if(automaticContractScanTimer===null)automaticContractScanTimer=window.setInterval(()=>void runAutomaticContractScan(),AUTO_CONTRACT_SCAN_INTERVAL_MS);
-  void runAutomaticContractScan();
+window.__TUMBO_CONTRACT_SCAN__ = Object.freeze({
+  scanNow: () => runUserRequestedContractScan(),
+  getLastScan: () => requestedContractScanLastResult,
 });
 
 // Luna Companion is a scripted local guide: plain-word navigation, feature
@@ -3699,13 +3668,18 @@ window.__TUMBO_LUNA__ = lunaCompanionConsole;
 // outfit id also dress the 3D person. No marketplace, ownership, purchase,
 // transfer, or external publication exists.
 wardrobeAtelierConsole = createWardrobeAtelierConsole({
+  onChange: publishAuthoringProjection,
   atelier: null, // The console creates its own seeded fictional wardrobe.
   onEquip: (outfit, snapshot, event) => {
     // Sync the 3D person appearance when the wardrobe outfit maps to a
     // person-studio outfit id; wardrobe-only looks stay in the atelier.
     const studioOutfitId = outfit?.studioOutfitId ?? event?.studioOutfitId ?? null;
+    let appliedToPerson = true;
     if (studioOutfitId) {
-      try { personStudio?.chooseOutfit?.(studioOutfitId); } catch {}
+      appliedToPerson = false;
+      if (personStudio && !personStudio.getSnapshot().loading) {
+        try { personStudio.chooseOutfit(studioOutfitId); appliedToPerson = true; } catch {}
+      }
     }
     projectionBridge.emitIntent('projection.wardrobe-equip', WARDROBE_ATELIER_CONSOLE_SOURCE, Object.freeze({
       action: 'equip',
@@ -3718,6 +3692,7 @@ wardrobeAtelierConsole = createWardrobeAtelierConsole({
       network: false,
       executable: false,
     }));
+    return appliedToPerson;
   },
   onReplay: (snapshot) => projectionBridge.emitIntent('projection.replay-wardrobe-atelier', WARDROBE_ATELIER_CONSOLE_SOURCE, Object.freeze({
     action: snapshot.action,
@@ -3746,7 +3721,7 @@ window.__TUMBO_WARDROBE__ = wardrobeAtelierConsole;
 // click; the paper changes no world state.
 whitePaperConsole = createWhitePaperConsole({
   documentRoot: document,
-  getEnvelope: () => livingRealityWorld,
+  getEnvelope: () => livingRealityEnvelope,
   getFeatures: () => FEATURE_DEFINITIONS,
   onSelect: (featureId, snapshot) => {
     featureNavigator?.select(featureId, 'white-paper');
@@ -3788,6 +3763,7 @@ window.__TUMBO_WHITE_PAPER__ = whitePaperConsole;
 // manipulate controls as touch input.
 gestureLensConsole = createGestureLensConsole({
   documentRoot: document,
+  onOpenTracking: () => handsEyesControls?.open(),
   onGesture: (event) => {
     blockWorld?.noteGestureIntent?.(event);
     projectionBridge.emitIntent('projection.gesture-lens-intent', GESTURE_LENS_CONSOLE_SOURCE, Object.freeze({
@@ -3819,7 +3795,7 @@ window.__TUMBO_GESTURE_LENS__ = gestureLensConsole;
 // only when the user presses Enable in the hand-lens panel. A session
 // failure must never break boot, so creation + mount are guarded.
 try {
-  const handLensSession = createHandLensSession({
+  handLensSession = createHandLensSession({
     blockWorld,
     scene,
     camera,
@@ -4517,12 +4493,137 @@ function showSemanticReadout(node){eyebrowEl.textContent='SEMANTIC OBJECT';title
 function hideReadout(){readout.classList.remove('visible')}
 
 // TUMBO launch surface ------------------------------------------------------
-// This panel is a local, deterministic explorer for aggregate allocation
-// classes.  It deliberately never renders an address, wallet, price, claim,
-// or transfer control.
+// Allocation classes stay a deterministic local projection. The optional
+// tools below expose simulated balances, transfers and vault positions on this
+// same object front, using the existing canonical engine.
 const assetLaunchPanel=document.getElementById('asset-launch');
 const assetLaunchButton=document.getElementById('asset-launch-button');
 const assetLaunchStatus=document.getElementById('asset-launch-status');
+let tokenGamificationController=null;
+let tokenGamificationLoad=null;
+let tokenToolsLoad=null;
+let tokenTickerTeardown=null;
+let tokenTransferUIController=null;
+const tokenToolsButton=document.createElement('button');
+tokenToolsButton.type='button';tokenToolsButton.id='asset-token-tools';
+tokenToolsButton.textContent='Open balances, transfers & vault';
+tokenToolsButton.setAttribute('aria-expanded','false');
+const tokenTools=document.createElement('section');tokenTools.id='asset-token-tools-content';tokenTools.hidden=true;
+assetLaunchPanel?.append(tokenToolsButton,tokenTools);
+const ourplaceButton=document.createElement('button');ourplaceButton.type='button';ourplaceButton.id='asset-token-ourplace';ourplaceButton.className='asset-token-tools-button';
+ourplaceButton.textContent='Open Ourplace · create, share & earn';ourplaceButton.setAttribute('aria-expanded','false');
+const ourplaceHost=document.createElement('section');ourplaceHost.id='asset-token-ourplace-content';ourplaceHost.hidden=true;
+assetLaunchPanel?.insertBefore(ourplaceButton,tokenToolsButton);assetLaunchPanel?.append(ourplaceHost);
+ourplaceButton.addEventListener('click',()=>{
+  try{
+    if(!economicRuntime)throw new Error('The shared economic runtime is still initializing');
+    if(!ourplaceController)ourplaceController=mountOurplaceEconomy({host:ourplaceHost,runtime:economicRuntime,
+      applyDesign:descriptor=>realityAssembly?.applyCreatorDesign?.(descriptor),onNavigate:id=>featureNavigator?.select(id,'creator-step')});
+    ourplaceHost.hidden=!ourplaceHost.hidden;ourplaceButton.setAttribute('aria-expanded',String(!ourplaceHost.hidden));
+    ourplaceController?.setActive?.(!ourplaceHost.hidden);
+    ourplaceButton.textContent=ourplaceHost.hidden?'Open Ourplace · create, share & earn':'Close Ourplace';ourplaceController.refresh();
+    if(!ourplaceHost.hidden){
+      const heading=ourplaceController.root.querySelector('h2');
+      heading?.setAttribute('tabindex','-1');heading?.focus({preventScroll:true});
+      heading?.scrollIntoView({block:'start',behavior:'instant'});
+    }
+  }catch(error){assetLaunchStatus.textContent=`Ourplace could not open: ${error.message}`;}
+});
+function openOurplaceFlow(tab){
+  featureNavigator?.select('asset-token','shared-economy');featureNavigator?.close();
+  if(ourplaceHost.hidden)ourplaceButton.click();
+  ourplaceController?.selectTab(tab);
+}
+const tokenToolsStyle=document.createElement('style');
+tokenToolsStyle.textContent='body:not(.asset-token-mode) .tv-3d{display:none!important} #asset-token-tools-content>details>summary{cursor:pointer;min-height:44px;padding:12px 0;color:#c8f7ff} #asset-token-tools-content [data-compact]{max-width:none!important;max-height:none!important;width:100%!important;height:auto!important} #asset-token-tools-content #token-ticker .token-ticker-body{display:block!important} #asset-token-tools-content #token-ticker .token-ticker-strip{cursor:default}';
+document.head.append(tokenToolsStyle);
+tokenToolsButton.addEventListener('click',async()=>{
+  tokenToolsButton.disabled=true;
+  try{
+    if(!tokenToolsLoad)tokenToolsLoad=(async()=>{
+      // Establish the single default owner before either self-mounting adapter
+      // runs. Import completion order must never choose a second balance owner.
+      const { ensureTumboTokenFacade }=await import('./domains/token.js?v=20261003-skin360');
+      ensureTumboTokenFacade();
+      const imports=await Promise.allSettled([import('./domains/token-vault-ui.js?v=20261003-skin360'),
+        import('./domains/token-transfers-ui.js?v=20261003-skin360')]);
+      for(const chip of document.querySelectorAll('.tv-chip,.tv-peek,#token-transfer-chip,.tt-chip-peek'))chip.style.display='none';
+      const failed=imports.find(result=>result.status==='rejected');
+      if(failed){for(const panel of document.querySelectorAll('.tv-panel,#token-transfer-console'))panel.hidden=true;throw failed.reason;}
+      tokenTransferUIController=imports[1].value.mountTokenTransferConsole({embedded:true});
+      tokenTickerTeardown=mountTokenTicker();
+      const panels=[['#token-ticker','Balances & receipts'],['#token-transfer-console','Local transfers'],['.tv-panel','Vault & savings']]
+        .map(([selector,title])=>({selector,title,panel:document.querySelector(selector)}));
+      const missing=panels.find(item=>!item.panel);
+      if(missing){for(const {panel} of panels)if(panel)panel.hidden=true;throw new Error(`${missing.title} did not load`);}
+      for(const {selector,title,panel} of panels){
+        if(panel.id)document.dispatchEvent(new CustomEvent('matumbo:reality-lens-surface-attachment',{detail:{panelId:panel.id,attached:true}}));
+        panel.removeAttribute('data-compact');panel.removeAttribute('data-panel-space');
+        panel.dataset.tokenEmbedded='true';
+        for(const control of panel.querySelectorAll('.surface-grip,.surface-resize'))control.hidden=true;
+        Object.assign(panel.style,{position:'relative',left:'auto',right:'auto',top:'auto',bottom:'auto',
+          transform:'none',width:'100%',height:'auto',maxHeight:'none',maxWidth:'none',margin:'0',
+          padding:'0',border:'0',borderRadius:'0',background:'transparent',boxShadow:'none',backdropFilter:'none',overflow:'visible',zIndex:'auto'});
+        panel.hidden=false;
+        const details=document.createElement('details'),summary=document.createElement('summary');summary.textContent=title;
+        details.addEventListener('toggle',()=>{
+          if(details.open){panel.hidden=false;if(selector==='#token-transfer-console')tokenTransferUIController?.open?.();}
+        });
+        details.append(summary,panel);tokenTools.append(details);
+        for(const minimize of panel.querySelectorAll('#tt-close,.tv-head [data-act="min"]'))minimize.hidden=true;
+      }
+    })().catch(error=>{tokenToolsLoad=null;throw error;});
+    await tokenToolsLoad;
+    if(featureNavigator?.getSnapshot?.().activeId!=='asset-token')return;
+    tokenTools.hidden=!tokenTools.hidden;
+    tokenToolsButton.textContent=tokenTools.hidden?'Open balances, transfers & vault':'Close balances, transfers & vault';
+    tokenToolsButton.setAttribute('aria-expanded',String(!tokenTools.hidden));
+  }catch(error){if(assetLaunchStatus)assetLaunchStatus.textContent=`Token tools are unavailable: ${error?.message??'load failed'}`;}
+  finally{tokenToolsButton.disabled=false;}
+});
+const tokenActivityButton=document.createElement('button');
+tokenActivityButton.type='button';
+tokenActivityButton.id='asset-token-activity';
+tokenActivityButton.textContent='Open token activity';
+tokenActivityButton.setAttribute('aria-expanded','false');
+tokenActivityButton.className='asset-token-tools-button';tokenToolsButton.className='asset-token-tools-button';
+tokenToolsStyle.textContent+=' #asset-launch .asset-token-tools-button{min-height:44px;width:100%;margin:6px 0;padding:10px 12px;border:1px solid #477487;border-radius:10px;background:#0a2432;color:#d6eff7;font:inherit;cursor:pointer} #asset-launch .asset-token-tools-button:focus-visible{outline:2px solid #8fd8f2;outline-offset:2px}';
+assetLaunchPanel?.append(tokenActivityButton);
+
+// The optional activity tools share this feature's existing object front.
+// Their standalone cube and chip stay hidden in the calmer Lens layout.
+async function ensureTokenActivity() {
+  if(!tokenGamificationLoad)tokenGamificationLoad=import('./render/token-gamification.js?v=20261003-skin360')
+    .then(({mountTokenGamification})=>{
+      tokenGamificationController=mountTokenGamification({three:THREE,scene,world,camera,renderer,controls,documentRoot:document});
+      tokenGamificationController.setVisible(false);
+      window.__TUMBO_TOKEN_GAMIFICATION__=tokenGamificationController;
+      const panel=document.getElementById('tg-console');
+      if(panel&&assetLaunchPanel){
+        Object.assign(panel.style,{position:'relative',right:'auto',top:'auto',width:'100%',maxHeight:'none',
+          padding:'8px 0',border:'0',borderRadius:'0',background:'transparent',boxShadow:'none',backdropFilter:'none',overflow:'visible'});
+        assetLaunchPanel.append(panel);
+        const close=document.getElementById('tg-close');
+        close?.setAttribute('aria-label','Close token activity');
+        close?.addEventListener('click',()=>{tokenActivityButton.textContent='Open token activity';tokenActivityButton.setAttribute('aria-expanded','false');});
+      }
+      return tokenGamificationController;
+    }).catch(error=>{tokenGamificationLoad=null;throw error;});
+  return tokenGamificationLoad;
+}
+tokenActivityButton.addEventListener('click',async()=>{
+  tokenActivityButton.disabled=true;
+  try{
+    const activity=await ensureTokenActivity();
+    if(featureNavigator?.getSnapshot?.().activeId!=='asset-token')return;
+    activity.setVisible(true,{objectVisible:false});
+    const opened=tokenActivityButton.getAttribute('aria-expanded')==='true';
+    if(opened)activity.close('asset-token');else activity.open('asset-token');
+    tokenActivityButton.textContent=opened?'Open token activity':'Close token activity';
+    tokenActivityButton.setAttribute('aria-expanded',String(!opened));
+  }catch(error){if(assetLaunchStatus)assetLaunchStatus.textContent=`Token activity is unavailable: ${error?.message??'load failed'}`;}
+  finally{tokenActivityButton.disabled=false;}
+});
 const assetSupplyEl=document.getElementById('asset-supply');
 const assetAllocationCountEl=document.getElementById('asset-allocation-count');
 const distributionList=document.getElementById('distribution-list');
@@ -5206,7 +5307,7 @@ function openGatewayTentacles3D() {
   if (gatewayTentacles3D) { try { gatewayTentacles3D.open(); } catch {} return; }
   if (gatewayTentacles3DLoading) return;
   gatewayTentacles3DLoading = true;
-  import('./render/gateway-tentacles.js?v=20260921-gtw1').then((mod) => {
+  import('./render/gateway-tentacles.js?v=20261003-skin360').then((mod) => {
     try {
       gatewayTentacles3D = mod.mountGatewayTentacles({
         three: THREE, parent: world, camera, documentRoot: document,
@@ -5225,7 +5326,7 @@ function openConstellationOverview3D() {
   if (constellationOverview3D) { try { constellationOverview3D.open(); } catch {} return; }
   if (constellationOverview3DLoading) return;
   constellationOverview3DLoading = true;
-  import('./render/constellation-overview.js?v=20260921-gtw1').then((mod) => {
+  import('./render/constellation-overview.js?v=20261003-skin360').then((mod) => {
     try {
       constellationOverview3D = mod.mountConstellationOverview({
         three: THREE, parent: world, camera, documentRoot: document,
@@ -6786,6 +6887,7 @@ const REALITY_ASSEMBLY_FEATURE_PANEL_IDS = Object.freeze({
   'picture-matter': 'picture-matter-console',
   'nft-atelier': 'nft-atelier-console',
   'wardrobe-atelier': 'wardrobe-atelier-console',
+  'white-paper': 'white-paper-console',
   'gesture-lens': 'gesture-lens-console',
   gateway: 'live-gateway-console',
   'world-events': 'world-events-console',
@@ -6800,6 +6902,10 @@ const REALITY_ASSEMBLY_FEATURE_PANEL_IDS = Object.freeze({
 });
 
 function exposeRealityAssemblyFeaturePanel(featureId) {
+  // Home and space routes have no selected feature document to materialize.
+  // In particular, cold explicit Lens URLs must not build a fallback owner
+  // and immediately tear it down during space restoration.
+  if(featureId==='reality-lens')return false;
   const panel = document.getElementById(REALITY_ASSEMBLY_FEATURE_PANEL_IDS[featureId] ?? '');
   return realityAssembly?.mountFeatureSurface?.(featureId, panel && !panel.hidden ? panel : null) ?? false;
 }
@@ -6809,6 +6915,15 @@ featureNavigator = createFeatureNavigator({
   projection: livingRealityWorld,
   deviceProjection,
   onFocus: (feature, method) => {
+    document.body.classList.toggle('asset-token-mode',feature?.id==='asset-token');
+    tokenTools.hidden=true;
+    ourplaceHost.hidden=true;ourplaceButton.textContent='Open Ourplace · create, share & earn';ourplaceButton.setAttribute('aria-expanded','false');
+    ourplaceController?.setActive?.(false);
+    tokenToolsButton.textContent='Open balances, transfers & vault';tokenToolsButton.setAttribute('aria-expanded','false');
+    if(feature?.id!=='asset-token')document.querySelector('.tv-3d [data-close]')?.click();
+    tokenGamificationController?.setVisible(false);
+    tokenActivityButton.textContent='Open token activity';
+    tokenActivityButton.setAttribute('aria-expanded','false');
     personStudio?.close();
     realityAssembly?.clearFeatureSurface?.();
     document.querySelectorAll('.reality-lens-feature-panel').forEach((panel) => panel.classList.remove('reality-lens-feature-panel'));
@@ -6833,17 +6948,14 @@ featureNavigator = createFeatureNavigator({
     if (['asset-token', 'agent', 'social-mirror', 'web-ai'].includes(feature?.id)) {
       closeFeatureConsolesExcept(feature.id);
     }
-    const genericUserSelection = method === 'button'
-      || method === 'keyboard'
-      || method === 'feature-navigator'
-      || method === 'feature-block';
+    const genericUserSelection = ['button','keyboard','feature-navigator','feature-block','reality-assembly','handoff','future-option','white-paper'].includes(String(method));
     // Selecting a feature is a local navigation action. Provider reads belong
     // to explicit panel/live routes or a visible refresh control, never to a
     // generic feature handoff (including URL/popstate restoration).
-    const genericNoAutoRefresh = ['button', 'keyboard', 'feature-navigator', 'feature-block', 'url', 'launch-kit-route', 'popstate', 'reality-assembly'].includes(String(method));
+    const genericNoAutoRefresh = !featureSelectionMayRefreshProvider(method);
     if (genericUserSelection && globalThis.history?.pushState && globalThis.location) {
       const route = new URL(globalThis.location.href);
-      ['panel','draft','contract','record','graph','journey','live','city'].forEach((key) => route.searchParams.delete(key));
+      ['panel','person','node','draft','localDraft','draftSource','contract','record','graph','journey','live','city','space'].forEach((key) => route.searchParams.delete(key));
       route.searchParams.set('feature', feature.id);
       globalThis.history.pushState({ feature: feature.id }, '', route.href);
       globalThis.dispatchEvent(new Event('city-journey:route-left'));
@@ -6963,6 +7075,7 @@ featureNavigator = createFeatureNavigator({
       sportsEventsConsole?.close();
       setRealityLens('detail', `feature:${method}`);
       if (!new URLSearchParams(location.search).has('person')) {
+        realityAssembly?.close();
         personStudio?.open();
         featureNavigator?.close();
       }
@@ -6981,6 +7094,10 @@ featureNavigator = createFeatureNavigator({
       // The Asset Token already has a bounded local allocation preview. Its
       // route reveals that existing surface without adding a wallet, network
       // read, transfer path, or separate synthetic token object.
+      // The phone panel keeper may have hidden this class-driven legacy aside
+      // while another route was open. Reopen the original owner before Lens
+      // attaches it, just as the other feature consoles do in their open().
+      if(assetLaunchPanel){assetLaunchPanel.hidden=false;assetLaunchPanel.removeAttribute('aria-hidden');}
     } else if (feature.id === 'launch-distribution') {
       // Keep the right-side consoles mutually exclusive so a feature click
       // never leaves two opaque panels stacked over the world.  The feature
@@ -7760,9 +7877,42 @@ function publishComputeEconomyWorld(snapshot) {
   return true;
 }
 
+// These engines own their authoring records. Replace only their renderer-safe
+// contribution; never copy private room/chat content or change economic state.
+function publishAuthoringProjection(contribution){
+  if(!contribution || !['nft-atelier','contract-atelier','wardrobe-atelier'].includes(contribution.source))return;
+  queueMicrotask(()=>{
+    livingRealityEnvelope=createProjectionEnvelope({contributions:[...livingRealityWorld.contributions.filter(item=>item.source!==contribution.source),contribution],projectedAt:contribution.updatedAt});
+    livingRealityWorld=livingRealityEnvelope.world;
+    window.__SIMFABRIC_PROJECTION__=livingRealityWorld;window.__SIMFABRIC_ENVELOPE__=livingRealityEnvelope;
+    window.__SIMFABRIC_DEVICE_PROJECTION__=createDeviceProjection(livingRealityEnvelope,devicePreferences);
+    window.dispatchEvent(new CustomEvent('simfabric:projection',{detail:livingRealityWorld}));
+  });
+}
+
+function publishEconomicWorld(snapshot){
+  if(!snapshot)return;
+  const contribution=createEconomicWorldContribution(snapshot);
+  livingRealityEnvelope=createProjectionEnvelope({contributions:[...livingRealityWorld.contributions.filter(item=>item.source!==ECONOMIC_WORLD_SOURCE),contribution],projectedAt:contribution.updatedAt});
+  livingRealityWorld=livingRealityEnvelope.world;window.__SIMFABRIC_PROJECTION__=livingRealityWorld;window.__SIMFABRIC_ENVELOPE__=livingRealityEnvelope;
+  window.__SIMFABRIC_DEVICE_PROJECTION__=createDeviceProjection(livingRealityEnvelope,devicePreferences);
+  window.dispatchEvent(new CustomEvent('simfabric:projection',{detail:livingRealityWorld}));
+  webAiConsole?.refreshEconomicMetrics?.();ourplaceController?.refresh();
+  for(const [id,label,tab] of [['paycore-console','PAYCORE','services'],['t402-console','T402','services'],['ledger-proof-console','Prime Ledger','proof']]){
+    const panel=document.getElementById(id);if(!panel)continue;let summary=panel.querySelector('[data-shared-economic-summary]');
+    if(!summary){summary=document.createElement('p');summary.dataset.sharedEconomicSummary='true';summary.setAttribute('role','status');summary.style.cssText='padding:12px;color:#c6e7ff;background:#07182a;border-left:3px solid #39b9ff;overflow-wrap:anywhere';panel.append(summary);}
+    summary.textContent=`${label} observes the shared Ourplace kernel: ${snapshot.canonicalReceiptCount} canonical journals; ${snapshot.commandCount} economic transitions; ${snapshot.pools.rewards.amountFluff/1000} TUMBO-SIM in the funded reward pool. Chain ${snapshot.canonicalChainValid?'valid':'invalid'}. Local simulation; external settlement unavailable.`;
+    if(!panel.querySelector('[data-open-shared-economy]')){const open=document.createElement('button');open.type='button';open.dataset.openSharedEconomy=tab;open.textContent=tab==='proof'?'Inspect shared Ourplace receipts':'Open shared Ourplace service payment';open.addEventListener('click',()=>openOurplaceFlow(tab));panel.append(open);}
+  }
+}
+economicRuntime=createEconomicRuntime({engine:canonicalEconomicEngine,onChange:publishEconomicWorld});
+window.__TUMBO_ECONOMY__=economicRuntime;
+window.addEventListener('pagehide',event=>{if(event.persisted){economicRuntime?.persist();return;}ourplaceController?.dispose();economicRuntime?.dispose();});
+queueMicrotask(()=>publishEconomicWorld(economicRuntime.snapshot()));
 webAiConsole = createWebAiConsole({
   documentRoot: document,
   windowRoot: window,
+  economicRuntime,
   onEvent: (event) => {
     const action = String(event?.action ?? 'interaction');
     projectionBridge.emitIntent(
@@ -7789,6 +7939,10 @@ youtubeSurface = createYoutubeSurface({documentRoot:document});
 window.__TUMBO_YOUTUBE_SURFACE__ = youtubeSurface;
 window.__TUMBO_WEB_AI__ = webAiConsole;
 window.__TUMBO_SOCIAL_MIRROR__ = socialMirrorConsole;
+// Restored local collections must appear in the same envelope as new edits.
+for(const authoringConsole of [nftAtelierConsole,contractAtelierConsole,wardrobeAtelierConsole]){
+  publishAuthoringProjection(authoringConsole?.createContribution?.());
+}
 // The navigator reads `feature` during construction, before this assigned
 // reference exists. Replay a direct feature handoff now that route surfaces
 // can close Mission Control and expose their controls. `url` is explicitly
@@ -7812,6 +7966,7 @@ projectionSession = createProjectionSession({
   getBlockWorldSnapshot: () => blockWorld?.getSnapshot?.(),
   getSportsSnapshot: () => sportsEventsConsole?.getSnapshot?.(),
   getContractsSnapshot: () => contractsMarkets?.getSnapshot?.(),
+  getNeuralMeshSnapshot: () => neuralMeshConsole?.getSnapshot?.() ?? null,
   // Person Ω contributes only route/lens presentation metadata to the shared
   // session. Profile attributes and visual-genome details remain in their
   // owners and are never copied into this observability seam.
@@ -7914,25 +8069,23 @@ projectionSession = createProjectionSession({
   getSurfaceSnapshots: () => ({
     rooms: roomSpaces?.getSnapshot?.(),
     person: {
-      source: 'person-organisms',
-      opened: featureNavigator?.getSnapshot?.()?.activeId === 'person',
-      selectedId: realityLensPersonId ?? null,
-      lensMode: realityLensMode,
-      profileCount: Number.isInteger(personOrganisms?.count) ? personOrganisms.count : 0,
-      fictional: true,
+      source: 'person-studio',
+      opened: personStudio?.active === true,
+      selectedId: personStudio?.getSnapshot?.().avatar?.identity.personId ?? null,
+      status: personStudio?.getSnapshot?.().approved ? 'approved-local-avatar' : 'review-avatar',
+      fictional: false,
       localOnly: true,
-      simulation: true,
+      simulation: false,
       externalNetwork: false,
       externalTransfer: false,
-      persistence: false,
+      persistence: 'explicit-local-save',
       executable: false,
     },
     "reality-lens": {
-      source: 'person-organisms',
-      opened: featureNavigator?.getSnapshot?.()?.activeId === 'reality-lens',
-      selectedId: realityLensPersonId ?? null,
-      lensMode: realityLensMode,
-      profileCount: Number.isInteger(personOrganisms?.count) ? personOrganisms.count : 0,
+      source: 'reality-assembly',
+      opened: globalThis.__TUMBO_REALITY_ASSEMBLY__?.active === true,
+      selectedId: globalThis.__TUMBO_REALITY_ASSEMBLY__?.getSnapshot?.().selectedId ?? null,
+      status: globalThis.__TUMBO_REALITY_ASSEMBLY__?.getSnapshot?.().spaceView ?? 'mounting',
       fictional: true,
       localOnly: true,
       simulation: true,
@@ -7946,17 +8099,27 @@ projectionSession = createProjectionSession({
     "runtime-sync": blockWorldRuntimeSync?.getSnapshot?.(),
     "block-world-snapshot": blockWorldSnapshot?.getSnapshot?.(),
     arena: arenaGames?.getSnapshot?.(),
+    chess: { ...chessArena?.getSnapshot?.(), source: 'chess-arena', opened: chessConsole?.hidden === false, localOnly: true, simulation: false },
     academy: academyConsole?.getSnapshot?.(),
+    "block-world": blockWorld?.getSnapshot?.(),
+    "asset-token": { source: 'asset-token-console', opened: document.getElementById('asset-launch')?.hidden === false && !document.getElementById('asset-launch')?.closest('[hidden]'), localOnly: true, simulation: true },
+    contracts: contractsMarkets?.getSnapshot?.(),
+    agent: { ...botPlazaConsole?.getSnapshot?.(), localOnly: true, simulation: true, persistence: 'local-browser' },
     paycore: paycoreConsole?.getSnapshot?.(),
     t402: t402Console?.getSnapshot?.(),
     "neural-mesh": neuralMeshConsole?.getSnapshot?.(),
     "picture-matter": pictureMatterConsole?.getSnapshot?.(),
     "nft-atelier": nftAtelierConsole?.getSnapshot?.(),
     "muse-agent": museAgentConsole?.getSnapshot?.(),
-    "bot-plaza": botPlazaConsole?.getSnapshot?.(),
+    "bot-plaza": { ...botPlazaConsole?.getSnapshot?.(), localOnly: true, simulation: true, persistence: 'local-browser' },
     "contract-atelier": {...contractAtelierConsole?.getSnapshot?.(),automation:contractAutomation?.snapshot?.(),automationError:contractAutomationError},
     "luna-companion": lunaCompanionConsole?.getSnapshot?.(),
     "wardrobe-atelier": wardrobeAtelierConsole?.getSnapshot?.(),
+    "white-paper": whitePaperConsole?.getSnapshot?.(),
+    "gesture-lens": gestureLensConsole?.getSnapshot?.(),
+    youtube: { ...youtubeSurface?.getSnapshot?.(), source: 'youtube-surface', externalSource: true, localOnly: false, simulation: false },
+    "social-mirror": socialMirrorConsole?.getSnapshot?.(),
+    "web-ai": { ...webAiConsole?.getSnapshot?.(), status: webAiConsole?.getSnapshot?.().personalChat?.state ?? 'unavailable', externalSource: true, localOnly: !webAiConsole?.getSnapshot?.().personalChat?.connected, externalNetwork: webAiConsole?.getSnapshot?.().personalChat?.connected === true, persistence: 'local-browser' },
     ledger: ledgerProofConsole?.getSnapshot?.(),
     gateway: liveGatewayConsole?.getSnapshot?.(),
     "protocol-evidence": protocolEvidence?.getSnapshot?.(),
@@ -7998,7 +8161,7 @@ if (personRouteQuery.get('panel') === 'person') {
 // the Gateway URL handoff now that Mission Control can be closed reliably,
 // issuing the single public World Pulse refresh from the final route state.
 if (new URLSearchParams(globalThis.location?.search ?? '').get('feature') === 'gateway') {
-  openLivePublicStatus('url', true);
+  openLivePublicStatus('url', false);
 }
 const socialLaunchQuery = new URLSearchParams(globalThis.location?.search ?? '');
 const requestedSocialMode = socialLaunchQuery.get('mode');
@@ -8262,18 +8425,22 @@ applyContractsRoute('url');
 globalThis.addEventListener?.('popstate', () => {
   const query = new URLSearchParams(globalThis.location?.search ?? '');
   if (query.get('feature') === 'block-world') {
-    featureNavigator?.select?.('block-world', 'popstate');
+    featureNavigator?.select?.('block-world', 'popstate', { updateLocation: false });
     const cohortId = globalThis.__TUMBO_LAST_DISTRIBUTION_COHORT__;
     if (cohortId) setTimeout(() => blockWorld?.focusDistributionCohort?.(cohortId), 0);
   } else if (query.get('panel') === 'contracts' || query.has(CONTRACTS_MARKETS_DRAFT_ROUTE_PARAM) || query.has(CONTRACTS_MARKETS_CONTRACT_ROUTE_PARAM) || query.has(CONTRACTS_MARKETS_GRAPH_ROUTE_PARAM) || (query.get('feature') === 'contracts' && query.get('live') === 'protocols')) {
     applyContractsRoute('popstate');
   } else if (query.get('panel') === 'sports-events') {
     const sourceReturn = parseSportsSourceReturnRoute(query);
-    openSportsEvents('popstate', sourceReturn.strict ? sourceReturn.valid : true, {
+    openSportsEvents('popstate', false, {
       recordId: sourceReturn.requestedRecordId ?? query.get('record'),
       sourceReturn: sourceReturn.strict,
       reason: sourceReturn.reason,
     });
+  } else if (FEATURE_DEFINITIONS.some(feature => feature.id === query.get('feature')) || (!query.get('feature') && !query.get('panel'))) {
+    featureNavigator?.select?.(query.get('feature') || 'reality-lens', 'popstate', { updateLocation: false });
+    featureNavigator?.close();
+    if((query.get('feature')||'reality-lens')==='reality-lens'&&query.get('space'))realityAssembly?.openSpace?.(query.get('space'),{updateLocation:false});
   }
 });
 if (new URLSearchParams(globalThis.location?.search ?? '').get('panel') === 'asset-market') {
@@ -9049,6 +9216,9 @@ function animate(){
   if(window.__TUMBO_FREEZE_GUARD__?.getPaused())return;
   window.__TUMBO_FREEZE_GUARD__?.notifyFrame(rawDt*1000);
   if(realityAssembly?.active){
+    // Feature handoffs can restore the legacy floor while the Lens stays
+    // active. Keep this presentation boundary after every such restoration.
+    grid.visible=false;blockWorldHorizonRings.forEach(object=>{object.visible=false;});
     realityAssembly.update(dt,t);
     if(!renderer.xr.isPresenting)controls.update();
     if(isMobile || renderer.xr.isPresenting || scene.userData?.__mf_postDisabled)renderer.render(scene,camera);else composer.render();
@@ -9200,23 +9370,76 @@ personStudio=createPersonStudio({THREE,renderer,scene,camera,controls,world,targ
   onIntent:(type,detail)=>projectionBridge.emitIntent(type,'person-studio',detail),
 });
 window.__TUMBO_PERSON_STUDIO__=personStudio;
+// Restore the Person owner before retrying an explicitly saved wardrobe look.
+personStudio.ready.then(()=>wardrobeAtelierConsole?.syncEquipped?.('person-ready'));
+let realityAssemblyFloorVisibility=null;
 realityAssembly=createRealityAssembly({THREE,renderer,scene,camera,controls,world,targets:raycastTargets,features:FEATURE_DEFINITIONS,relationships:FEATURE_HANDOFF_LINKS,reducedMotion,environmentTexture:personStudio.getEnvironmentTexture(),
   onNavigate:(id)=>{featureNavigator.select(id,'reality-assembly',{updateLocation:false});featureNavigator.close();},
+  onSpaceNavigate:(space)=>{
+    featureNavigator.setActive('reality-lens','space');
+    const route=new URL(location.href);route.search='';route.hash='';route.searchParams.set('feature','reality-lens');route.searchParams.set('space',space);
+    if(route.href!==location.href)history.pushState({feature:'reality-lens',space},'',route.href);
+  },
   onFrame:()=>{cameraTween=0;cameraPositionTween=0;},
   // The Lens owns the visual field while a feature is being inspected. Bot
   // presences remain registered and return on exit; they do not float over a
   // selected object's own interactive surface.
-  onActiveChange:(active)=>botPresence?.setVisible?.(!active),
+  onActiveChange:(active)=>{
+    botPresence?.setVisible?.(!active);
+    // The original world's floor must not cut across Lens object surfaces.
+    if(active){realityAssemblyFloorVisibility=[grid,...blockWorldHorizonRings].map(object=>({object,visible:object.visible}));realityAssemblyFloorVisibility.forEach(({object})=>{object.visible=false;});}
+    else if(realityAssemblyFloorVisibility){realityAssemblyFloorVisibility.forEach(({object,visible})=>{object.visible=visible;});realityAssemblyFloorVisibility=null;}
+  },
   onPanelFrame:(id)=>{if(id&&id===featureNavigator?.getSnapshot?.().activeId)exposeRealityAssemblyFeaturePanel(id);},
   readFeature:(id)=>{
     if(id==='contract-atelier'){const contracts=contractWorldSnapshot?.contracts??[];return {summary:`${contracts.length} saved contracts · ${contracts.filter(item=>item.status==='active').length} armed · ${contracts.reduce((total,item)=>total+item.receipts.length,0)} local receipts. Conditions, approvals and history belong to the same world entity.`};}
     if(id==='person'){const state=personStudio.getSnapshot();return {summary:state.approved?'Approved local avatar and saved wardrobe are connected. No cloud account is implied.':'Reference-built local avatar is available for explicit approval.'};}
+    if(id==='bot-plaza'){const bots=botPlazaRegistry.listBots();return {summary:`${bots.filter(bot=>bot.enabled).length} of ${bots.length} local bots enabled. Lens Guide and Plan Helper are scripted helpers; manage them in Bot Plaza.`};}
+    if(id==='web-ai'){const state=webAiConsole.getSnapshot().personalChat;return {summary:`My GPT: ${state?.state??'unavailable'}. Connections shows ChatGPT, OpenAI API and NVIDIA readiness; account setup belongs to this object.`};}
+    if(id==='gateway'){return {summary:'Inspect existing public feeds, their observation dates and provider states. Connections offers individual public source retries and a local reference-rate calculator.'};}
     if(id==='multi-sport-events'){const state=multiSportEventsConsole?.getSnapshot();return {summary:state?.summary?.records?.length?`${state.summary.records.length} public records currently loaded. Open Sports for timestamps and source evidence.`:'No public sports records loaded in this session. Open Sports and explicitly refresh a provider.'};}
     if(id==='world-events'){const state=worldEventsConsole?.getSnapshot();return {summary:state?.summary?.records?.length?`${state.summary.records.length} provider observations loaded; inspect their provenance in World Pulse.`:'Open World Pulse to request current source observations. The designed city geometry is not a real-world measurement.'};}
-    return {summary:'This cube points to the existing feature owner. Inspect that feature for its local state, capability gates and provider evidence.'};
+    return {summary:'This object opens the existing feature owner. Inspect that space for its local state, available controls and source evidence.'};
   },
 });
 window.__TUMBO_REALITY_ASSEMBLY__=realityAssembly;
+const apiConnections=mountApiConnections({
+  autoCheck:true,
+  getLocalTools:()=>botPlazaRegistry.listBots(),
+  onOpen:()=>realityAssembly.closePanels(),
+  onOpenFeature:(id,options={})=>{
+    // Changing a provider/helper within the open object preserves its text
+    // view, geometry and camera. Only a different owner needs navigation.
+    const mounted=realityAssembly.getSnapshot().liveObject;
+    if(featureNavigator.getSnapshot().activeId!==id||mounted?.entityId!==id||mounted.panelId!==REALITY_ASSEMBLY_FEATURE_PANEL_IDS[id])featureNavigator.select(id,'button');
+    featureNavigator.close();
+    if(id==='web-ai'&&options.provider)webAiConsole.openGptProvider(options.provider);
+    if(id==='bot-plaza'&&options.botId)botPlazaConsole.openWithBot(options.botId);
+  },
+});
+window.__TUMBO_API_CONNECTIONS__=apiConnections;
+handsEyesControls=mountHandsEyesControls({session:handLensSession,getAssembly:()=>realityAssembly,
+  onOpen:()=>{apiConnections.close();realityAssembly.closePanels();},
+});
+window.__TUMBO_HANDS_EYES__=handsEyesControls;
+// A slow/failed boot can already have mounted the independent static fallback.
+const localVoiceNotes=mountLocalVoiceNotes({documentRoot:document,windowRoot:window,
+  getContext:()=>JSON.stringify([location.pathname,location.search,location.hash,featureNavigator.getSnapshot().activeId]),
+});
+const voiceDictation=handoverVoiceDictation(window.__TUMBO_VOICE__,{
+  onSearch:words=>{const field=document.querySelector('.assembly-quick-find [data-quick-search]');const target=captureVoiceTarget(field);if(!target)throw Error('App search is unavailable. Your words are retained.');target.start=0;target.end=field.value.length;insertVoiceTranscript(target,words);field.closest('form')?.requestSubmit();},
+  getContext:()=>{const featureId=featureNavigator.getSnapshot().activeId;return JSON.stringify([featureId,realityAssembly.getSnapshot().liveObject?.entityId??'',featureId==='web-ai'?webAiConsole.getVoiceContext?.():null,featureId==='rooms'?roomSpaces.getVoiceContext?.():null]);},
+  onNavigate:id=>{
+    if(id==='rooms'||id==='voice-messages'){featureNavigator.close();localVoiceNotes.open();return;}
+    featureNavigator.select(id,'voice-panel');featureNavigator.close();if(id==='web-ai'){webAiConsole.setTab('gpt','voice-panel');webAiConsole.open('voice-panel');}
+  },
+});
+document.querySelector('#voice-dictation-panel [data-vd-rooms]').textContent='Voice messages';
+document.querySelector('#voice-dictation-panel [data-vd-rooms]').setAttribute('aria-label','Open voice messages');
+window.__TUMBO_VOICE__=voiceDictation;
+document.querySelector('#reality-assembly .assembly-header').append(document.getElementById('hands-eyes-trigger'));
+document.querySelector('#reality-assembly .assembly-header').append(document.getElementById('api-connections-trigger'));
+document.querySelector('#reality-assembly').addEventListener('click',event=>{if(!event.target.closest('#api-connections-trigger'))apiConnections.close();});
 document.addEventListener('person-studio:enter-vr',()=>immersiveSession.start('immersive-vr'));
 if(featureNavigator.getSnapshot().activeId==='person'&&!new URLSearchParams(location.search).has('person'))personStudio.open();
 // The clean landing is owned by Reality Assembly itself. Do not make its
@@ -9230,14 +9453,7 @@ const cleanRealityLanding = !new URLSearchParams(globalThis.location?.search ?? 
 if (cleanRealityLanding) {
   featureNavigator.close();
   realityAssembly.open();
-  // Approved start composition (Tumbo 2026-09-20): ONE single clean glass cube
-  // on load, nothing else in the 3D scene. Park the camera beyond the assembly
-  // merge threshold (LOD_FAR=160) and settle the merge before first paint, so
-  // the boot frame shows only the merged world-block. Zero the in-flight
-  // camera tweens from bootstrap so the first frames cannot drift back toward
-  // the constellation; the user springs the world open by moving/zooming in.
-  camera.position.set(CLEAN_LANDING_CAMERA.position[0], CLEAN_LANDING_CAMERA.position[1], CLEAN_LANDING_CAMERA.position[2]);
-  controls.target.set(CLEAN_LANDING_CAMERA.target[0], CLEAN_LANDING_CAMERA.target[1], CLEAN_LANDING_CAMERA.target[2]);
+  // Reality Assembly frames its six calm spaces for the actual viewport.
   desiredCameraPosition.copy(camera.position);
   desiredTarget.copy(controls.target);
   cameraPositionTween = 0;
@@ -9247,12 +9463,19 @@ if (cleanRealityLanding) {
 } else if (new URLSearchParams(globalThis.location?.search ?? '').has('feature')) {
   const featureId = featureNavigator.getSnapshot().activeId;
   setBlockWorldPresentation(false);
-  realityAssembly.open({ lensMode: true, featureId });
-  if (featureId && exposeRealityAssemblyFeaturePanel(featureId)) realityAssembly.setInspectorVisible(false);
+  if (featureId !== 'person' || !personStudio.active) {
+    realityAssembly.open({ lensMode: true, featureId });
+    if (featureId && exposeRealityAssemblyFeaturePanel(featureId)) realityAssembly.setInspectorVisible(false);
+  }
 } else if(featureNavigator.getSnapshot().activeId==='reality-lens') {
   realityAssembly.open({lensMode:true});
 }
-renderer.setAnimationLoop(animate); /* TUMBO-SIM token gamification (Infinite Burrow, Part 7): self-contained glass cube + console, mounted lazily so a mount failure can never break the world bootstrap. */ import('./render/token-gamification.js?v=20260920-gam1').then(({ mountTokenGamification }) => { try { window.__TUMBO_TOKEN_GAMIFICATION__ = mountTokenGamification({ three: THREE, scene, world, camera, renderer, controls, documentRoot: document }); } catch (error) { console.warn('[token-gamification] mount failed:', error); } }).catch((error) => { console.warn('[token-gamification] load failed:', error); });
+if(new URLSearchParams(location.search).get('feature')==='reality-lens'&&new URLSearchParams(location.search).get('space'))realityAssembly.openSpace(new URLSearchParams(location.search).get('space'),{updateLocation:false});
+if(economicRuntime?.designSession.snapshot().undoDepth){
+  try{realityAssembly.applyCreatorDesign(economicRuntime.designSession.snapshot().descriptor);}
+  catch(error){assetLaunchStatus.textContent=`Stored design needs review: ${error.message}`;}
+}
+renderer.setAnimationLoop(animate);
 // URL-derived City navigation reuses the existing feature owner and avoids provider refresh.
 const mobilePanelManager = initMobilePanelManager({ documentRoot: document, windowRoot: window });
 window.__TUMBO_MOBILE_PANEL_MANAGER__ = mobilePanelManager;
@@ -9263,7 +9486,7 @@ window.__TUMBO_MOBILE_PANEL_MANAGER__ = mobilePanelManager;
 // phone/desktop/AR viewports. Panels are registered in place; the dock never
 // moves, renames, or restyles them. Guarded dynamic import: a tab-dock failure
 // degrades to "no dock" and can never break the world boot.
-import("./render/tab-registry.js?v=20260922-tabs2")
+import("./render/tab-registry.js?v=20261005-voice")
   .then(({ initTabDock }) => {
     try {
       window.__TUMBO_TAB_DOCK__ = initTabDock({ documentRoot: document, windowRoot: window });
@@ -9276,13 +9499,12 @@ import("./render/tab-registry.js?v=20260922-tabs2")
   });
 const cityJourney=mountCityJourney({navigate:(id,method)=>{featureNavigator.select(id,method||'popstate');featureNavigator.close();}});
 runtimeStatus?.markReady?.({ featureCount:featureNavigator?.getSnapshot?.().featureCount ?? 23 });
-mountTokenTicker();
 mountCenteredSurfaces();
 
 // Persistent user-created app blocks live outside feature navigation.
 // Changing feature/scene never closes, recenters, or recreates these blocks.
 let persistentUserBlocks = null;
-import("./render/persistent-user-blocks.js?v=20260922-cache2")
+import("./render/persistent-user-blocks.js?v=20261003-skin360")
   .then(({ createPersistentUserBlocks }) => {
     try {
       persistentUserBlocks = createPersistentUserBlocks({
@@ -9295,16 +9517,26 @@ import("./render/persistent-user-blocks.js?v=20260922-cache2")
   })
   .catch(() => {});
 
-addEventListener('pagehide',()=>{
+addEventListener('pagehide',event=>{
+  // A cached page keeps its existing owners. Voice sessions stop through their
+  // lifecycle hooks; the restored page must retain its controls and scene.
+  if(event.persisted){voiceDictation.close({restoreFocus:false});return;}
   window.__TUMBO_FREEZE_GUARD__?.dispose?.();
   cameraInput?.destroy();
   gestureInput?.destroy();
   mediaPreview.destroy();
   immersiveSession.destroy();
   personStudio.destroy();
+  apiConnections.destroy();
+  handsEyesControls?.destroy();
+  voiceDictation.destroy();
+  handLensSession?.destroy();
+  tokenGamificationController?.destroy();
+  tokenTickerTeardown?.();
+  tokenTransferUIController?.dispose?.();
   realityAssembly.destroy();
   cityJourney.destroy();
   persistentUserBlocks?.destroy?.();
-},{once:true});
+});
 
 addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setPixelRatio(isMobile?1:Math.min(devicePixelRatio,1.5));renderer.setSize(innerWidth,innerHeight);if(!isMobile)composer.setSize(innerWidth,innerHeight);});

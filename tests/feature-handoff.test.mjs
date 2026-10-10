@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   FEATURE_DEFINITIONS,
   FEATURE_HANDOFF_LINKS,
+  FEATURE_REPLAY_IDS,
   createFeatureNavigator,
 } from "../src/render/feature-navigator.js";
 
@@ -134,4 +135,50 @@ test("feature detail renders a KEEP GOING strip that hands off to linked feature
     "the destination feature also pushes onward — no dead ends",
   );
   assert.ok(navigator, "navigator instance returned");
+});
+
+test("features expose replay only when their owner implements it", () => {
+  const documentRoot = makeDocumentRoot();
+  const navigator = createFeatureNavigator({ documentRoot, onIntent() {} });
+  const unsupported = ["reality-lens", "person", "runtime-sync", "social-mirror", "youtube", "agent", "chess", "web-ai"];
+  assert.equal(FEATURE_REPLAY_IDS.length, FEATURE_DEFINITIONS.length - unsupported.length);
+  for (const feature of FEATURE_DEFINITIONS) {
+    navigator.setActive(feature.id);
+    const actions = queryByClass(documentRoot.getElementById("feature-detail"), "feature-action");
+    const replay = actions.filter(action => !action.dataset.featureAction);
+    assert.equal(replay.length, unsupported.includes(feature.id) ? 0 : 1, feature.id);
+    assert.equal(actions.filter(action => action.dataset.featureAction === "focus").length, 1);
+  }
+  const noOwner = makeDocumentRoot();
+  const readOnly = createFeatureNavigator({ documentRoot: noOwner });
+  readOnly.setActive("contracts");
+  assert.equal(queryByClass(noOwner.getElementById("feature-detail"), "feature-action").length, 1,
+    "a directory without a replay callback cannot claim to replay an owner");
+});
+
+test("replay waits for its owner and reports rejected or failed operations honestly", async () => {
+  for (const outcome of ["pending", "unavailable", "throws", "rejects"]) {
+    const documentRoot = makeDocumentRoot();
+    let finish;
+    const navigator = createFeatureNavigator({ documentRoot, onIntent(feature, method) {
+      assert.equal(feature.id, "contracts");
+      assert.equal(method, "replay");
+      if (outcome === "pending") return new Promise(resolve => { finish = resolve; });
+      if (outcome === "unavailable") return false;
+      if (outcome === "throws") throw new Error("Owner is unavailable");
+      return Promise.reject(new Error("Owner rejected replay"));
+    } });
+    navigator.setActive("contracts");
+    const action = queryByClass(documentRoot.getElementById("feature-detail"), "feature-action")
+      .find(button => !button.dataset.featureAction);
+    const operation = action.handlers.click[0]({});
+    if (outcome === "pending") {
+      assert.equal(action.disabled, true);
+      assert.equal(action.textContent, "REPLAYING…");
+      finish(true);
+    }
+    await operation;
+    assert.equal(action.disabled, false);
+    assert.equal(action.textContent, outcome === "pending" ? "LOCAL VIEW REPLAYED" : "REPLAY UNAVAILABLE · TRY AGAIN");
+  }
 });

@@ -1,10 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createHandle, isExpired, revoke } from '../src/domains/portal-sessions/opaque-handle.js';
-import { createSession } from '../src/domains/portal-sessions/session.js';
-import { registerAdapter, resolve } from '../src/domains/portal-sessions/adapter-registry.js';
-import { checkSession } from '../src/domains/portal-sessions/health.js';
+// Private handle membership and health symbols must share the browser's graph.
+import { createHandle, isExpired, revoke, isIssuedHandle, isHandleRevoked } from '../src/domains/portal-sessions/opaque-handle.js?v=20261003-skin360';
+import { createHandle as createForeignHandle } from '../src/domains/portal-sessions/opaque-handle.js?issuer=foreign';
+import { createSession } from '../src/domains/portal-sessions/session.js?v=20261003-skin360';
+import { createSession as createForeignSession } from '../src/domains/portal-sessions/session.js?session=foreign';
+import { registerAdapter, resolve } from '../src/domains/portal-sessions/adapter-registry.js?v=20261003-skin360';
+import { checkSession } from '../src/domains/portal-sessions/health.js?v=20261003-skin360';
 
 test('handle opacity: no credential-like fields or values', () => {
   const handle = createHandle({
@@ -23,6 +26,34 @@ test('handle opacity: no credential-like fields or values', () => {
   assert.equal(Object.isFrozen(handle), true);
   assert.equal(isExpired(handle, 149), false);
   assert.equal(isExpired(handle, 150), true);
+});
+
+test('only issued handles can be revoked or create local sessions', () => {
+  const original = createHandle({serviceId:'issued',capabilities:['read'],issuedAt:100,ttlMs:100});
+  const forged = Object.freeze({...original});
+  assert.equal(isIssuedHandle(original),true);
+  assert.equal(isIssuedHandle(forged),false);
+  assert.throws(()=>revoke(forged),/invalid handle/);
+  assert.throws(()=>createSession(forged),/invalid session handle/);
+  const session = createSession(original);
+  session.activate(101);
+  assert.equal(checkSession(session,102).status,'healthy');
+  const revoked = revoke(original);
+  assert.equal(isIssuedHandle(revoked),true);
+  assert.equal(isHandleRevoked(original),true);
+  assert.equal(isHandleRevoked(revoked),true);
+  assert.equal(checkSession(session,103).status,'revoked','an existing session observes revocation of its original handle');
+  assert.equal(Object.isFrozen(revoked),true);
+  assert.equal(original.status,'active','original immutable metadata is not mutated');
+});
+
+test('foreign issuer handles and foreign session health symbols fail closed', () => {
+  const foreign = createForeignHandle({ serviceId: 'foreign', capabilities: ['read'], issuedAt: 100, ttlMs: 100 });
+  assert.throws(() => createSession(foreign), /invalid session handle/);
+  const original = createHandle({ serviceId: 'foreign-session', capabilities: ['read'], issuedAt: 100, ttlMs: 100 });
+  const foreignSession = createForeignSession(original);
+  foreignSession.activate(101);
+  assert.throws(() => checkSession(foreignSession, 102), /session must be a portal session/);
 });
 
 test('lifecycle order and illegal transitions', () => {

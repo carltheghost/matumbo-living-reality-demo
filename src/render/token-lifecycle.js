@@ -44,8 +44,8 @@ import {
   ensureTumboTokenFacade,
   REVERSE_WINDOW_TICKS,
   ASSETS,
-} from "../domains/token.js?v=20260922-cache2";
-import { runTokenLifecycleSelfTest } from "./token-lifecycle-selftest.js?v=20260922-cache2";
+} from "../domains/token.js?v=20261003-skin360";
+import { runTokenLifecycleSelfTest } from "./token-lifecycle-selftest.js?v=20261003-skin360";
 
 const POS_KEY = "tumbo:token-lifecycle:cube-positions";
 const MAX_CUBES = 30;
@@ -425,9 +425,11 @@ export function mountTokenLifecycleAudit(root, opts = {}) {
       new ResizeObserver(resize).observe(stageEl);
       resize();
       animate();
+      const captureSurface=()=>renderer.render(scene,camera);
+      renderer.domElement.addEventListener('matumbo:surface-capture',captureSurface);
       three = {
         renderer, scene, camera, world,
-        destroy() { cancelAnimationFrame(raf); renderer.dispose(); stageEl.innerHTML = ""; },
+        destroy() { cancelAnimationFrame(raf); renderer.domElement.removeEventListener('matumbo:surface-capture',captureSurface); renderer.dispose(); stageEl.innerHTML = ""; },
         setFocus(g) { focusGoal = g; },
         clearFocus() { focusGoal = null; camDist = 11; },
       };

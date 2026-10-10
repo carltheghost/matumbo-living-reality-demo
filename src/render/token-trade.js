@@ -3,24 +3,28 @@
  * Follows repo UI conventions: <aside> consoles, hidden + .visible,
  * Escape close, own close button, mobile one-panel rule via existing manager.
  *
- * Buy  = sMIMAS → TUMBO
- * Sell = TUMBO  → sMIMAS
+ * Buy  = TUMBO → sMIMAS
+ * Sell = sMIMAS → TUMBO
  */
 
 import {
-  TumboToken,
-  TOKEN_STUB_BOUNDARY,
-  TOKEN_SUPPLY_CONFIG,
-  getQuote,
-  isQuoteFresh,
-  settle,
+  ensureTumboTokenFacade,
+  CONFIG,
+  toCoreAccount,
+  mulDivFloor,
   fmt,
-  balance,
-  attachWindowFacade,
-} from "../domains/token.js?v=20260922-cache2";
+} from "../domains/token.js?v=20261003-skin360";
 
 export const TOKEN_TRADE_CONSOLE_SOURCE = "token-trade-console";
-export const TOKEN_TRADE_BOUNDARY = TOKEN_STUB_BOUNDARY;
+export const TOKEN_TRADE_BOUNDARY = 'Local simulated points only. No real money, chain, custody, or external settlement.';
+export const isTokenTradeQuoteFresh = (quote, now = Date.now()) => Boolean(quote && Number.isFinite(quote.expiresAt) && now < quote.expiresAt);
+export function requestTokenTradeQuote({ action, amountIn, acct = 'you', token = ensureTumboTokenFacade({ seed: true }) } = {}) {
+  return token.quote({ action, from: toCoreAccount(acct), fromAsset: action === 'buy' ? 'TUMBO' : 'sMIMAS', toAsset: action === 'buy' ? 'sMIMAS' : 'TUMBO', amountIn });
+}
+export function settleTokenTradeQuote(token, quote) {
+  try { return { ok: true, tx: token.execute(quote, { idempotencyKey: `trade:${quote.id}` }) }; }
+  catch (error) { return { ok: false, reason: /expired/.test(error.message) ? 'quote-expired' : error.message, error }; }
+}
 
 const freeze = (v) => Object.freeze(v);
 
@@ -162,7 +166,7 @@ function ensurePanelMarkup(doc, { id, title, action }) {
           <button type="button" class="token-trade-btn" data-action="cancel-confirm">Cancel</button>
         </div>
       </div>
-      <div class="token-trade-boundary">${TOKEN_STUB_BOUNDARY}</div>
+      <div class="token-trade-boundary">${TOKEN_TRADE_BOUNDARY}</div>
     </div>
   `;
   doc.body.appendChild(panel);
@@ -246,21 +250,21 @@ function enableDrag(panel, id) {
 export function createTokenTradeConsole({
   action = "buy",
   documentRoot = globalThis.document,
-  acct = "local-participant",
+  acct = "you",
+  token = ensureTumboTokenFacade({ seed: true }),
   onSettled = null,
 } = {}) {
   if (!documentRoot?.body) throw new Error("Token trade console needs a document body");
   if (action !== "buy" && action !== "sell") throw new TypeError("action must be buy or sell");
 
-  attachWindowFacade(typeof window !== "undefined" ? window : null);
   ensureStyles(documentRoot);
 
   const id = action === "buy" ? "token-buy-console" : "token-sell-console";
-  const title = action === "buy" ? "Buy TUMBO (sMIMAS → TUMBO)" : "Sell TUMBO (TUMBO → sMIMAS)";
+  const title = action === "buy" ? "Buy sMIMAS (TUMBO → sMIMAS)" : "Sell sMIMAS (sMIMAS → TUMBO)";
   const panel = ensurePanelMarkup(documentRoot, { id, title, action });
   const chip = ensureChip(documentRoot, {
     id,
-    label: action === "buy" ? "Buy TUMBO · SIM" : "Sell TUMBO · SIM",
+    label: action === "buy" ? "Buy sMIMAS · SIM" : "Sell sMIMAS · SIM",
   });
 
   const amountInput = panel.querySelector(`#${id}-amount`);
@@ -324,7 +328,7 @@ export function createTokenTradeConsole({
     }
     const secs = Math.ceil(remainingMs(quote) / 1000);
     quoteEl.append(
-      createEl(documentRoot, "div", null, `Route: ${quote.from} → ${quote.to}`),
+      createEl(documentRoot, "div", null, `Route: ${quote.fromAsset} → ${quote.toAsset}`),
       createEl(documentRoot, "div", null, `In: ${fmt(quote.amountIn)} · Out: ${fmt(quote.amountOut)} (display units)`),
       createEl(documentRoot, "div", null, `Hash: ${quote.hash}`),
       createEl(
@@ -343,7 +347,7 @@ export function createTokenTradeConsole({
     stopCountdown();
     countdownTimer = setInterval(() => {
       if (!currentQuote) return;
-      if (!isQuoteFresh(currentQuote)) {
+      if (!isTokenTradeQuoteFresh(currentQuote)) {
         renderQuote(currentQuote, { expired: true });
         btnConfirm.disabled = true;
         stopCountdown();
@@ -354,7 +358,7 @@ export function createTokenTradeConsole({
   }
 
   function requestQuote() {
-    const amountIn = Math.floor(Number(amountInput.value));
+    const amountIn = Number(amountInput.value);
     if (!Number.isSafeInteger(amountIn) || amountIn <= 0) {
       currentQuote = null;
       quoteEl.replaceChildren();
@@ -363,7 +367,12 @@ export function createTokenTradeConsole({
       );
       return null;
     }
-    const quote = getQuote({ action, amountIn });
+    let quote;
+    try { quote = requestTokenTradeQuote({ action, amountIn, acct, token }); }
+    catch (error) {
+      currentQuote = null; renderQuote(null); stopCountdown();
+      showToast(`Quote blocked: ${error.message}`); return null;
+    }
     currentQuote = quote;
     renderQuote(quote);
     if (quote) startCountdown();
@@ -373,26 +382,26 @@ export function createTokenTradeConsole({
   }
 
   function openConfirm() {
-    if (!currentQuote || !isQuoteFresh(currentQuote)) {
+    if (!currentQuote || !isTokenTradeQuoteFresh(currentQuote)) {
       requestQuote();
-      if (!currentQuote || !isQuoteFresh(currentQuote)) {
+      if (!currentQuote || !isTokenTradeQuoteFresh(currentQuote)) {
         renderQuote(currentQuote, { expired: true });
         return;
       }
     }
     const q = currentQuote;
-    const tithe = Math.floor((q.amountOut * TOKEN_SUPPLY_CONFIG.VOID_TITHE_BPS) / 10_000);
-    const net = q.amountOut - tithe;
+    const tithe = mulDivFloor(q.amountIn, token.engine?.config?.titheBps ?? CONFIG.titheBps, CONFIG.titheDenominator);
+    const net = q.amountOut;
     confirmLines.replaceChildren();
     confirmLines.append(
-      createEl(documentRoot, "div", null, `In:  ${fmt(q.amountIn)} ${q.from}`),
-      createEl(documentRoot, "div", null, `Out: ${fmt(q.amountOut)} ${q.to}`),
-      createEl(documentRoot, "div", "token-trade-tithe", `Void tithe (10 bps): ${fmt(tithe)} ${q.to}`),
-      createEl(documentRoot, "div", null, `Net received: ${fmt(net)} ${q.to}`),
+      createEl(documentRoot, "div", null, `In: ${q.amountIn} fluff ${q.fromAsset}`),
+      createEl(documentRoot, "div", null, `Out: ${q.amountOut} fluff ${q.toAsset}`),
+      createEl(documentRoot, "div", "token-trade-tithe", `Void tithe (included in input): ${tithe} fluff ${q.fromAsset}`),
+      createEl(documentRoot, "div", null, `Net received: ${net} fluff ${q.toAsset}`),
       createEl(documentRoot, "div", "token-trade-sim", "SIMULATED — not real money"),
     );
     confirmEl.classList.add("open");
-    btnConfirm.disabled = !isQuoteFresh(q);
+    btnConfirm.disabled = !isTokenTradeQuoteFresh(q);
   }
 
   function showToast(message) {
@@ -411,13 +420,13 @@ export function createTokenTradeConsole({
 
   function doConfirm() {
     if (!currentQuote) return;
-    if (!isQuoteFresh(currentQuote)) {
+    if (!isTokenTradeQuoteFresh(currentQuote)) {
       const refreshed = requestQuote();
       showToast("Quote expired — refreshed. Review the new quote before confirming. (SIMULATED)");
       if (refreshed) openConfirm();
       return;
     }
-    const result = settle(acct, currentQuote);
+    const result = settleTokenTradeQuote(token, currentQuote);
     if (!result.ok) {
       if (result.reason === "quote-expired") {
         requestQuote();
@@ -429,7 +438,7 @@ export function createTokenTradeConsole({
     }
     const tx = result.tx;
     showToast(
-      `Receipt · ${tx.action.toUpperCase()} · in ${fmt(tx.amountIn)} → net ${fmt(tx.netOut)} · Void tithe ${fmt(tx.voidTithe)} · SIMULATED — not real money`,
+      `Receipt · ${tx.action.toUpperCase()} · in ${tx.amountIn} fluff ${tx.fromAsset} → ${tx.amountOut} fluff ${tx.toAsset} · Void tithe ${tx.tithe} fluff ${tx.fromAsset} · SIMULATED`,
     );
     confirmEl.classList.remove("open");
     currentQuote = null;

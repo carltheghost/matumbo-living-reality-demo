@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { createLivingRealityProjection } from "../src/core/demo-projection.js";
 import { FEATURE_DEFINITIONS, FEATURE_FUTURE_OPTIONS, FEATURE_SURFACE_ROUTES } from "../src/render/feature-navigator.js";
+import { featureSelectionMayRefreshProvider } from "../src/domains/provider-navigation.js";
 
 const expectedIds = [
   "reality-lens",
@@ -62,6 +63,7 @@ test("spatial inspector routes describe the feature they actually open", async (
     "DATA GRADE",
   ]);
   assert.deepEqual(FEATURE_SURFACE_ROUTES["web-ai"].map(([title]) => title), [
+    "MY GPT",
     "WEB TAB",
     "AI TAB",
     "COMPUTE WALLET",
@@ -85,7 +87,7 @@ test("spatial inspector routes describe the feature they actually open", async (
   assert.match(mainSource, /feature\.id === 'web-ai'[\s\S]{0,180}webAiConsole\?\.open/);
   assert.match(mainSource, /const enteredFromRealityAssembly = Boolean\(feature\?\.id && realityAssembly\?\.active\)/);
   assert.match(mainSource, /focusFeature\?\.\(feature\.id\)/);
-  assert.match(mainSource, /genericNoAutoRefresh = \[[^\]]*'reality-assembly'\]/);
+  assert.match(mainSource, /genericNoAutoRefresh\s*=\s*!featureSelectionMayRefreshProvider\(method\)/);
   assert.match(mainSource, /REALITY_ASSEMBLY_FEATURE_PANEL_IDS = Object\.freeze/);
   assert.match(mainSource, /onNavigate:\(id\)=>\{featureNavigator\.select\(id,'reality-assembly',\{updateLocation:false\}\);featureNavigator\.close\(\);\}/);
   const assemblyCss = await readFile(new URL("../src/render/reality-assembly.css", import.meta.url), "utf8");
@@ -148,7 +150,7 @@ test("navigator markup is explicit and remains local-only", async () => {
   assert.doesNotMatch(html, /Coin Engine/i);
 });
 
-test("static fallback directory mirrors the canonical feature registry", async () => {
+test("static fallback directory links every feature and labels Launch Kit as a helper tool", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const fallbackStart = html.indexOf('id="feature-nav-fallback-list"');
   const fallbackEnd = html.indexOf('</ul>', fallbackStart);
@@ -158,20 +160,34 @@ test("static fallback directory mirrors the canonical feature registry", async (
   assert.deepEqual(ids.slice(0, FEATURE_DEFINITIONS.length), FEATURE_DEFINITIONS.map((feature) => feature.id));
   assert.equal(ids.length, FEATURE_DEFINITIONS.length + 1, "fallback adds only the Launch Kit launcher entry");
   assert.equal(ids.at(-1), "launch-kit");
+  assert.match(fallback, /data-directory-kind="tool" href="\?panel=launch-kit/);
+  assert.match(html, /36 openable local features/);
+  assert.match(html, /staticCubes\(\)\.filter\(\(item\)\s*=>\s*item\.dataset\.directoryKind\s*!==\s*'tool'\)\.length/);
+  assert.match(html, /textContent\s*=\s*`\$\{staticFeatureCount\(\)\} openable local features`/);
 });
 
 test("Block World feature cards use the generic provider-free navigation policy", async () => {
   const mainSource = await readFile(new URL("../src/main.js", import.meta.url), "utf8");
   assert.match(
     mainSource,
-    /genericUserSelection\s*=\s*[\s\S]{0,260}method === ['"]feature-block['"]/,
+    /genericUserSelection\s*=\s*\[[^\]]*['"]feature-block['"][^\]]*\]\.includes\(String\(method\)\)/,
     "feature-card navigation must clear stale specialized route keys",
   );
   assert.match(
     mainSource,
-    /genericNoAutoRefresh\s*=\s*\[[^\]]*['"]feature-block['"][^\]]*\]\.includes\(String\(method\)\)/,
+    /genericNoAutoRefresh\s*=\s*!featureSelectionMayRefreshProvider\(method\)/,
     "feature-card navigation must not trigger provider reads",
   );
+});
+
+test("feature navigation never refreshes a provider without an explicit refresh intent", () => {
+  for (const method of ["button", "keyboard", "feature-navigator", "feature-block", "url", "popstate",
+    "handoff", "future-option", "focus", "replay", "reality-assembly", "launch-kit-route", "default",
+    "block-portal:rooms", "portal-return", "unknown", "", null, undefined]) {
+    assert.equal(featureSelectionMayRefreshProvider(method), false, String(method));
+  }
+  assert.equal(featureSelectionMayRefreshProvider("provider-refresh"), true);
+  assert.equal(featureSelectionMayRefreshProvider("explicit-live-route"), true);
 });
 
 test("direct feature URLs replay their local handoff after Mission Control mounts", async () => {

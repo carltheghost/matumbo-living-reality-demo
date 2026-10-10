@@ -1,4 +1,4 @@
-import { isExpired } from './opaque-handle.js';
+import { isExpired, isIssuedHandle, isHandleRevoked } from './opaque-handle.js?v=20261003-skin360';
 
 const sessions = new WeakMap();
 const HANDLE_ID = /^h_[0-9a-f]{8}$/i;
@@ -7,6 +7,8 @@ function assertHandle(handle, now) {
   if (
     !handle ||
     typeof handle !== 'object' ||
+    !isIssuedHandle(handle) ||
+    isHandleRevoked(handle) ||
     !Object.isFrozen(handle) ||
     typeof handle.handleId !== 'string' ||
     !HANDLE_ID.test(handle.handleId) ||

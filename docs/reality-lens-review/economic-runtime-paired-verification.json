@@ -1,0 +1,16 @@
+{
+  "pairedRestorePassed": true,
+  "restoreStatus": "restored-validated-local-bundle",
+  "canonicalJournalCount": 11,
+  "computeClaims": 2,
+  "creatorPayoutState": "paid",
+  "paymentCovered": true,
+  "refundProtectionAfterReload": true,
+  "corruptBundleRejectedWithoutLedgerAdoption": true,
+  "corruptStatus": "stored-history-rejected: Local economic bundle is corrupt",
+  "innerReplayCorruptionRejected": true,
+  "innerCorruptStatus": "stored-history-rejected: Compute account replay checksum or transition is invalid",
+  "missingPaidDebitProtectionStatus": "stored-history-rejected: Compute restored streams disagree: paid usage claim lacks its protected exact credit debit",
+  "missingPaidDebitProtectionRefundAccepted": false,
+  "missingPaidDebitProtectionError": "Unknown compute spend"
+}

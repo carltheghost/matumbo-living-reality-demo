@@ -15,21 +15,21 @@ import {
   ASSET_TOKEN_TOTAL_BASIS_POINTS,
   ASSET_TOKEN_TOTAL_SUPPLY,
   ASSET_TOKEN_UNIT,
-} from "./asset-token.js?v=20260922-cache2";
+} from "./asset-token.js?v=20261003-skin360";
 import {
   DISTRIBUTION_REGISTRY_SOURCE,
   FICTIONAL_RECIPIENT_REGISTRY,
   summarizeDistributionRegistry,
-} from "./distribution-registry.js?v=20260922-cache2";
+} from "./distribution-registry.js?v=20261003-skin360";
 import {
   BLOCK_MIGRATION_MANIFEST_ID,
   BLOCK_MIGRATION_MANIFEST,
-} from "./block-migration.js?v=20260922-cache2";
+} from "./block-migration.js?v=20261003-skin360";
 import {
   DEFAULT_SOCIAL_EXPLORER_PROJECTION,
   SOCIAL_EXPLORER_ID,
   SOCIAL_EXPLORER_REHEARSAL_ID,
-} from "./social-explorer.js?v=20260922-cache2";
+} from "./social-explorer.js?v=20261003-skin360";
 
 export const LAUNCH_KIT_SCHEMA_VERSION = 1;
 export const LAUNCH_KIT_SOURCE = "matumbo-launch-kit";

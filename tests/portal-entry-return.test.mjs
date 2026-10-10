@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createHandle } from '../src/domains/portal-sessions/opaque-handle.js';
-import { enterPortal, returnToLens } from '../src/domains/portal-sessions/entry-return.js';
+// The issuer's private registry belongs to the mounted canonical URL graph.
+import { createHandle, revoke } from '../src/domains/portal-sessions/opaque-handle.js?v=20261003-skin360';
+import { createHandle as createForeignHandle } from '../src/domains/portal-sessions/opaque-handle.js?issuer=foreign';
+import { enterPortal, returnToLens } from '../src/domains/portal-sessions/entry-return.js?v=20261003-skin360';
 
 function handle(serviceId = 'youtube', issuedAt = 100, ttlMs = 100) {
   return createHandle({
@@ -60,6 +62,28 @@ test('forged handle fails closed', () => {
     () => enterPortal(forged, 'https://www.icloud.com', 110),
     /invalid opaque portal handle/
   );
+});
+
+test('a handle from a different module URL issuer is not a canonical issued capability', () => {
+  const foreign = createForeignHandle({ serviceId: 'foreign', capabilities: ['read'], issuedAt: 100, ttlMs: 100 });
+  assert.throws(() => enterPortal(foreign, 'https://example.com', 110), /invalid opaque portal handle/);
+  assert.throws(() => returnToLens(foreign, 120), /invalid opaque portal handle/);
+});
+
+test('even an unchanged frozen copy is not an issued portal handle', () => {
+  const original = handle('clone');
+  const clone = Object.freeze({ ...original });
+  assert.throws(() => enterPortal(clone, 'https://example.com', 110), /invalid opaque portal handle/);
+  enterPortal(original, 'https://example.com', 110);
+  assert.throws(() => returnToLens(clone, 120), /invalid opaque portal handle/);
+  assert.equal(returnToLens(original, 120).sessionId, original.handleId);
+});
+
+test('revocation prevents entry with both the original and returned handle', () => {
+  const original = handle('revoked');
+  const revoked = revoke(original);
+  assert.throws(() => enterPortal(original, 'https://example.com', 110), /invalid opaque portal handle/);
+  assert.throws(() => enterPortal(revoked, 'https://example.com', 110), /invalid opaque portal handle/);
 });
 
 test('expired handle fails closed', () => {

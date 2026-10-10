@@ -7,7 +7,7 @@ import {
   BLOCK_WORLD_UPDATED_AT,
   DEFAULT_BLOCK_WORLD,
   createBlockWorldContribution,
-} from "./block-world.js?v=20260922-cache2";
+} from "./block-world.js?v=20261003-skin360";
 
 export const BLOCK_WORLD_SNAPSHOT_SCHEMA_VERSION = 1;
 export const BLOCK_WORLD_SNAPSHOT_SOURCE = "block-world-snapshot";

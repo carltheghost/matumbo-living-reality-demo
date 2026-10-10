@@ -1,0 +1,169 @@
+{
+  "baselineCommit": "7086fc3b5e62de04d112d6d983fbd6c3d46f3274",
+  "javascript": {
+    "command": "py -3 scripts/run_tests.py",
+    "tests": 2428,
+    "suites": 104,
+    "passed": 2428,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 21094.8515
+  },
+  "python": {
+    "status": "passed",
+    "tests": 72,
+    "failures": 0,
+    "errors": 0,
+    "seconds": 125.166,
+    "command": "python -m unittest discover -s tests -p 'test_*.py' -v",
+    "serial": true
+  },
+  "windowsBridgeRepair": {
+    "issue": "Windows HTTP response abort on early POST denial with unread request bytes",
+    "causeEvidence": "Original rejection test fails repeatedly; fixture-only body discard removes failures",
+    "sourceFrozen": true,
+    "safety": {
+      "rejectedBodyMaxBytes": 262144,
+      "totalDrainDeadlineSeconds": 10,
+      "decodesRejectedJson": false,
+      "unauthorizedAuthOrInference": false,
+      "requestQueueSize": 128,
+      "bindAddress": "127.0.0.1"
+    },
+    "checks": {
+      "originalFull": {
+        "tests": 66,
+        "errors": 1,
+        "seconds": 54.561
+      },
+      "originalRepeated": {
+        "tests": 40,
+        "errors": 23,
+        "seconds": 69.09
+      },
+      "diagnosticDrain": {
+        "tests": 40,
+        "errors": 0,
+        "seconds": 27.417,
+        "fixtureIntervention": true
+      },
+      "patchedFocused": {
+        "tests": 7,
+        "errors": 0,
+        "seconds": 1.681
+      },
+      "patchedRepeated": {
+        "tests": 40,
+        "errors": 0,
+        "seconds": 27.696,
+        "fixtureIntervention": false
+      },
+      "patchedFull": {
+        "status": "passed",
+        "tests": 72,
+        "failures": 0,
+        "errors": 0,
+        "seconds": 125.166,
+        "command": "python -m unittest discover -s tests -p 'test_*.py' -v",
+        "serial": true
+      },
+      "diffCheck": "passed"
+    },
+    "output": "work/network-tools-python-recheck.txt",
+    "changedFiles": [
+      "scripts/provider_bridge.py",
+      "tests/test_provider_bridge.py",
+      "tests/test_gpt_bridge.py"
+    ]
+  },
+  "browser": {
+    "checks": 20,
+    "passed": 20,
+    "failed": 0,
+    "independentColdLoads": true,
+    "phoneIsDesktopViewport": true,
+    "renderer": {
+      "available": true,
+      "vendor": "Google Inc. (NVIDIA)",
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4060 (0x00002882) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+    },
+    "sourceUnchanged": true,
+    "authenticationOrInferencePosts": 0,
+    "onlyInjectedResponse": "Delayed Open-Meteo response for cancellation check"
+  },
+  "liveIdentity": {
+    "url": "http://127.0.0.1:8082",
+    "verified": true,
+    "featureCount": 36,
+    "instanceId": "61fc3d146df54c429d92b8e3c5da8416",
+    "rootFingerprint": "1f2f69426b396a946266d3060fafebe18201cd4c48db9bc196e4beef39508301",
+    "storage": "browser-local-projection",
+    "nvidia": "key_needed",
+    "gpt": {
+      "statusReadOnly": true,
+      "authenticationStarted": false,
+      "inferenceAttempted": false,
+      "credentialStorage": "windows_dpapi",
+      "storageWarningPresent": false,
+      "chatgpt": {
+        "state": "signed_out",
+        "authAvailable": true,
+        "dependencyState": "ready",
+        "ready": false,
+        "cloudReplyVerified": false,
+        "verifiedAt": null
+      },
+      "openai": {
+        "state": "key_needed",
+        "ready": false,
+        "cloudReplyVerified": false,
+        "verifiedAt": null
+      }
+    },
+    "credentialsInBrowser": false,
+    "externalDeployment": false
+  },
+  "limitations": [
+    "Earlier full-app software-WebGL startup waits timed out at 45 seconds; accepted runs use hardware D3D11.",
+    "No physical phone/touch/XR test.",
+    "No real authenticated GPT or NVIDIA reply verified; account/API setup still needed.",
+    "Draft PR is unmerged; no public deployment."
+  ],
+  "sourceFingerprints": {
+    "src/main.js": "7f71b46366159d845753efce12db63d0ca97665dad1bc5875a1735ecbeb484fd",
+    "src/domains/network-tools.js": "3b8fff009c4d0f0cc62bbd4f87da060048228f4688c490c03cba0475bd7d11db",
+    "src/render/api-connections.js": "94f4894a12746cd651691fdcf86c1a753c5b8c4c03701aaa3a83de80f0196cf5",
+    "src/render/api-connections.css": "71e46f2c9bad6b5fd929700dea79466477a3d067a45e720c2fed463008c93156",
+    "src/render/my-gpt.js": "c21bff04d4d4c89e207801b0e67a2ae8965bf2fb617b13d74bc1b9a0a924b6eb",
+    "src/render/web-ai.js": "27afaff627003a3ae3357699158fb8cd79bcf25413abd7eba149f71659fed304",
+    "scripts/provider_bridge.py": "c44a1c535f0cc9ff92e64abd3c7a514c51acc67096ab0d827846c4663da64df6",
+    "scripts/verify-demo-launch.ps1": "2da1b06171c7b4968c9dc789f7c555752d3d3a831304290f886323e8dffa78ed"
+  },
+  "screenshots": {
+    "desktop-connections.png": {
+      "bytes": 401452,
+      "sha256": "939f48a31c6a18b1a9cc571e857347ce2d391a9bf000802a2469455b807e0570"
+    },
+    "desktop-network.png": {
+      "bytes": 312704,
+      "sha256": "93a285ee40ac3ada31e04a6b55c5663a34f9a1b20ae8cc6ad301fcfb451fd429"
+    },
+    "desktop-public-tools.png": {
+      "bytes": 188964,
+      "sha256": "c74147f82b1f651f878a6ff9da27806a099b0172f98b1dc96d9fc6eecb49a212"
+    },
+    "phone-connections.png": {
+      "bytes": 126826,
+      "sha256": "4c81ac9a0ec82fa8e2fb3608a2d2c07246425bb40046a1748b84c7009096c8ef"
+    },
+    "phone-network.png": {
+      "bytes": 139182,
+      "sha256": "46fc8fe8da271fbe605da50db53c7047c1840244a916cca02f8c26722ef3eedf"
+    },
+    "phone-public-tools.png": {
+      "bytes": 101645,
+      "sha256": "7560e9f090200dee4e2094bf7d223546683fbd943cd2cf99fca1fc2b6813295a"
+    }
+  },
+  "verifierSha256": "76b2aa595491e82da3632a39e8f60efe25684cb1cbef505df54fc4a673165a6c"
+}

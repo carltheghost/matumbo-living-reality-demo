@@ -214,6 +214,40 @@ describe("photo mascot", () => {
     }
   });
 
+  it("a slower previous look cannot replace the newest requested look", () => {
+    const pending = [];
+    const loader = { load(src, resolve) { pending.push({ src, resolve }); } };
+    const mascot = buildPhotoMascot({ loader });
+    const old = new THREE.Texture();
+    const newest = new THREE.Texture();
+    let oldDisposed = false;
+    old.addEventListener("dispose", () => { oldDisposed = true; });
+    mascot.setLook("old.png");
+    mascot.setLook("newest.png");
+    pending[1].resolve(newest);
+    pending[0].resolve(old);
+    assert.strictEqual(findPhotoMesh(mascot).material.map, newest);
+    assert.equal(oldDisposed, true, "unused stale responses release their texture");
+    mascot.dispose();
+  });
+
+  it("a texture finishing after disposal is released without reviving the mascot", () => {
+    let resolve;
+    const loader = { load(_src, onLoad) { resolve = onLoad; } };
+    const mascot = buildPhotoMascot({ lookSrc: "late.png", loader });
+    const photo = findPhotoMesh(mascot);
+    const late = new THREE.Texture();
+    let disposed = false;
+    late.addEventListener("dispose", () => { disposed = true; });
+    mascot.dispose();
+    resolve(late);
+    assert.equal(disposed, true);
+    assert.equal(photo.material.map, null);
+    assert.equal(mascot.group.children.length, 0);
+    mascot.setLook("ignored.png");
+    assert.doesNotThrow(() => mascot.dispose());
+  });
+
   it("build with the default loader never crashes when the texture cannot load", () => {
     let mascot = null;
     assert.doesNotThrow(() => {

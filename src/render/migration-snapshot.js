@@ -17,13 +17,13 @@ import {
   applyBlockMigrationToLocalDraft,
   previewBlockMigration,
   resetBlockMigrationDraft,
-} from "../domains/block-migration.js?v=20260922-cache2";
+} from "../domains/block-migration.js?v=20261003-skin360";
 import {
   DEFAULT_MERGE4_SNAPSHOT,
   MERGE4_SNAPSHOT_ADAPTER_SOURCE,
   adaptMerge4Snapshot,
   serializeMerge4Snapshot,
-} from "../domains/merge4-snapshot-adapter.js?v=20260922-cache2";
+} from "../domains/merge4-snapshot-adapter.js?v=20261003-skin360";
 
 export const MIGRATION_SNAPSHOT_CONSOLE_SOURCE = "block-migration-snapshot-console";
 export const MIGRATION_SNAPSHOT_RENDER_SOURCE = MIGRATION_SNAPSHOT_CONSOLE_SOURCE;

@@ -1,0 +1,69 @@
+{
+  "at": "2026-10-03T18:01:13.702308+00:00",
+  "javascript": {
+    "tests": 2197,
+    "pass": 2197,
+    "fail": 0,
+    "skipped": 0
+  },
+  "python": {
+    "tests": 20,
+    "passed": 20
+  },
+  "core": [
+    {
+      "device": "desktop",
+      "actions": 13,
+      "passed": true
+    },
+    {
+      "device": "phone",
+      "actions": 13,
+      "passed": true
+    }
+  ],
+  "creator": [
+    {
+      "device": "desktop",
+      "actions": 48,
+      "passed": true
+    },
+    {
+      "device": "phone",
+      "actions": 48,
+      "passed": true
+    }
+  ],
+  "finance": [
+    {
+      "device": "desktop",
+      "actions": 101,
+      "reloads": 5,
+      "workflows": 5,
+      "passed": true
+    },
+    {
+      "device": "phone",
+      "actions": 101,
+      "reloads": 5,
+      "workflows": 5,
+      "passed": true
+    }
+  ],
+  "effects": [
+    {
+      "device": "desktop",
+      "passed": true
+    },
+    {
+      "device": "phone",
+      "passed": true
+    }
+  ],
+  "fullTimelineProjection": true,
+  "softwareWebGL": true,
+  "physicalDevices": false,
+  "publicSupplyDecision": "undecided",
+  "externalSettlement": false,
+  "identity": "working source; committed identity and extracted archives are recorded separately in final release artifacts"
+}

@@ -106,6 +106,8 @@ export function buildPhotoMascot(options = {}) {
   motionGroup.add(tiltGroup);
 
   const disposables = new Set();
+  let disposed = false;
+  let lookRequest = 0;
   const track = (resource) => {
     disposables.add(resource);
     return resource;
@@ -167,11 +169,18 @@ export function buildPhotoMascot(options = {}) {
   }
 
   function requestLook(src) {
-    if (!src) return;
+    if (!src || disposed) return;
+    // A newer look wins even if an earlier network response arrives last.
+    // Teardown invalidates all pending responses and owns their disposal.
+    const request = ++lookRequest;
     try {
       loader.load(
         src,
         (texture) => {
+          if (disposed || request !== lookRequest) {
+            if (texture !== photoMat.map) texture?.dispose();
+            return;
+          }
           if (texture) texture.colorSpace = THREE.SRGBColorSpace;
           setPhotoTexture(texture);
         },
@@ -223,6 +232,9 @@ export function buildPhotoMascot(options = {}) {
   }
 
   function dispose() {
+    if (disposed) return;
+    disposed = true;
+    lookRequest += 1;
     if (group.parent) group.parent.remove(group);
     for (const resource of disposables) {
       if (resource && typeof resource.dispose === "function") {

@@ -1,0 +1,289 @@
+{
+  "start": {
+    "source": "person-studio",
+    "model": {
+      "id": "matumbo:reference-person:1",
+      "version": 1,
+      "rig": "matumbo-humanoid:1",
+      "height": 2.45,
+      "skin": "#794b36",
+      "hair": "#171311",
+      "face": "sculpted-reference-study",
+      "geometrySource": "procedural-reference-built",
+      "likenessVerified": false
+    },
+    "displayName": "",
+    "outfitId": "obsidian",
+    "roomId": "city",
+    "companion": "drone",
+    "companionId": "db6e2bfe-a626-4a27-ac26-75f5170a6555",
+    "approved": false,
+    "dirty": false,
+    "loading": false,
+    "error": null,
+    "avatar": null,
+    "localOnly": true,
+    "shared": false,
+    "biometric": false,
+    "aiConnected": false,
+    "opened": true,
+    "tab": "identity",
+    "spatial": {
+      "source": "person-studio-scene",
+      "modelId": "matumbo:reference-person:1",
+      "visible": true,
+      "referenceLook": "agent-smith-v1",
+      "outfitId": "obsidian",
+      "roomId": "city",
+      "companionForm": "drone",
+      "jointNames": [
+        "root",
+        "spine",
+        "neck",
+        "head",
+        "leftArm",
+        "leftElbow",
+        "leftHand",
+        "rightArm",
+        "rightElbow",
+        "rightHand",
+        "leftLeg",
+        "rightLeg"
+      ],
+      "meshCount": 233,
+      "identityHeadGeometry": "c30179bf-5a01-4275-8c2c-dadbe4043219",
+      "geometryOnly": true,
+      "referenceImagesUsedAsTextures": false,
+      "avatarHologramUrl": null,
+      "avatarHologramPresent": false,
+      "avatarHologramTint": null
+    }
+  },
+  "edited": {
+    "source": "person-studio",
+    "model": {
+      "id": "matumbo:reference-person:1",
+      "version": 1,
+      "rig": "matumbo-humanoid:1",
+      "height": 2.45,
+      "skin": "#794b36",
+      "hair": "#171311",
+      "face": "sculpted-reference-study",
+      "geometrySource": "procedural-reference-built",
+      "likenessVerified": false
+    },
+    "displayName": "Browser verification",
+    "outfitId": "cobalt",
+    "roomId": "night",
+    "companion": "bird",
+    "companionId": "db6e2bfe-a626-4a27-ac26-75f5170a6555",
+    "approved": true,
+    "dirty": true,
+    "loading": false,
+    "error": null,
+    "avatar": {
+      "identity": {
+        "schemaVersion": 1,
+        "personId": "person:ce15422a-3eda-4f88-bbb1-b92f5062726b",
+        "avatarId": "avatar:2aa17d97-df76-4330-91d2-976d1463bb36",
+        "assetId": "matumbo:reference-person:1",
+        "assetSha256": "b2f88280269b5fdc44116a75744ad9fff3786a06e94645e4e8d94c87d8cef50e",
+        "rigId": "matumbo-humanoid:1",
+        "approvedAt": 1791038969521,
+        "identityHash": "5908022496f0b3a1bda950f34cb58525be9ac7cf9dded31478467fa98ae6cc62"
+      },
+      "appearance": {
+        "version": 2,
+        "authority": "LOCKED",
+        "outfitAssetIds": [
+          "studio-outfit:cobalt"
+        ],
+        "approvedPresets": []
+      },
+      "history": [
+        {
+          "appearance": {
+            "version": 0,
+            "authority": "LOCKED",
+            "outfitAssetIds": [],
+            "approvedPresets": []
+          },
+          "changedAt": 1791038969522,
+          "actor": "user"
+        },
+        {
+          "appearance": {
+            "version": 1,
+            "authority": "LOCKED",
+            "outfitAssetIds": [
+              "studio-outfit:obsidian"
+            ],
+            "approvedPresets": []
+          },
+          "changedAt": 1791038970804,
+          "actor": "user"
+        }
+      ],
+      "projections": [
+        {
+          "projectionId": "profile-room",
+          "worldId": "studio:night",
+          "personId": "person:ce15422a-3eda-4f88-bbb1-b92f5062726b",
+          "avatarId": "avatar:2aa17d97-df76-4330-91d2-976d1463bb36",
+          "position": [
+            0,
+            0.55,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ]
+        }
+      ],
+      "motion": {
+        "sequence": 2,
+        "sourceTimestamp": 1791038973742,
+        "confidence": 1,
+        "tracking": "tracked",
+        "joints": {
+          "head": [
+            0,
+            0.159318206614246,
+            0,
+            0.987227283375627
+          ],
+          "leftArm": [
+            0,
+            0,
+            0,
+            1
+          ]
+        }
+      }
+    },
+    "localOnly": true,
+    "shared": false,
+    "biometric": false,
+    "aiConnected": false,
+    "opened": true,
+    "tab": "presence",
+    "spatial": {
+      "source": "person-studio-scene",
+      "modelId": "matumbo:reference-person:1",
+      "visible": true,
+      "referenceLook": "agent-smith-v1",
+      "outfitId": "cobalt",
+      "roomId": "night",
+      "companionForm": "bird",
+      "jointNames": [
+        "root",
+        "spine",
+        "neck",
+        "head",
+        "leftArm",
+        "leftElbow",
+        "leftHand",
+        "rightArm",
+        "rightElbow",
+        "rightHand",
+        "leftLeg",
+        "rightLeg"
+      ],
+      "meshCount": 233,
+      "identityHeadGeometry": "c30179bf-5a01-4275-8c2c-dadbe4043219",
+      "geometryOnly": true,
+      "referenceImagesUsedAsTextures": false,
+      "avatarHologramUrl": null,
+      "avatarHologramPresent": false,
+      "avatarHologramTint": null
+    }
+  },
+  "portrait": "You · snapback saved on this browser · optional photo mascot updated. Agent Smith keeps the same 3D face.",
+  "phone": {
+    "overflow": false,
+    "tabs": [
+      {
+        "id": "identity",
+        "height": 48,
+        "left": 26,
+        "right": 90.390625
+      },
+      {
+        "id": "wardrobe",
+        "height": 48,
+        "left": 94.390625,
+        "right": 158.796875
+      },
+      {
+        "id": "room",
+        "height": 48,
+        "left": 162.796875,
+        "right": 227.1875
+      },
+      {
+        "id": "presence",
+        "height": 48,
+        "left": 231.1875,
+        "right": 295.59375
+      },
+      {
+        "id": "companion",
+        "height": 48,
+        "left": 299.59375,
+        "right": 364
+      }
+    ],
+    "legacyChromeVisible": 0
+  },
+  "moduleProof": {
+    "renderer": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+    "calls": 26,
+    "jointCount": 21,
+    "depths": [
+      0.55,
+      0.5500000000000003,
+      0.5499999999999999,
+      0.55,
+      0.55,
+      0.5499999999999998,
+      0.5500000000000003,
+      0.5500000000000003,
+      0.5500000000000004,
+      0.5499999999999996,
+      0.5499999999999998,
+      0.5499999999999998,
+      0.55,
+      0.5499999999999998,
+      0.5499999999999999,
+      0.5500000000000004,
+      0.55,
+      0.5499999999999999,
+      0.5499999999999996,
+      0.55,
+      0.5499999999999999
+    ],
+    "projectedWrist": {
+      "x": -0.6799999999999976,
+      "y": 0.40000000000000435
+    },
+    "selectedImage": "http://127.0.0.1:8085/assets/avatar/photo-mascot/tumbo-hat.png",
+    "actualTextureLoaded": true,
+    "cameraWorld": [
+      3,
+      4,
+      7
+    ]
+  },
+  "teardown": {
+    "remaining": 0
+  },
+  "errors": [],
+  "limits": [
+    "software WebGL",
+    "synthetic hand packet",
+    "no hardware camera or XR assertion"
+  ]
+}

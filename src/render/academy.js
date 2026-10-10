@@ -5,9 +5,11 @@ import {
   answerAcademyLesson,
   createAcademyState,
   getAcademyLesson,
+  nextAcademyLesson,
+  replayAcademy,
   resetAcademy,
   selectAcademyLesson,
-} from "../domains/academy.js?v=20260922-cache2";
+} from "../domains/academy.js?v=20261003-skin360";
 
 export { ACADEMY_CONSOLE_SOURCE };
 
@@ -40,6 +42,10 @@ export function createAcademyConsole({ documentRoot = globalThis.document, onCha
 
   let state = createAcademyState();
   let opened = panel.hidden !== true;
+  const replayButton = element(documentRoot, "button", "academy-option", "Replay answers");
+  replayButton.type = "button";
+  replayButton.dataset.academyReplay = "true";
+  (resetButton.parentElement ?? panel).appendChild(replayButton);
 
   function snapshot(action = "read", method = "api") {
     return deepFreeze({
@@ -97,18 +103,46 @@ export function createAcademyConsole({ documentRoot = globalThis.document, onCha
       button.type = "button";
       button.dataset.optionIndex = String(index);
       button.addEventListener("click", () => {
-        state = answerAcademyLesson(state, index);
-        const result = state.trace[state.trace.length - 1];
-        feedback.textContent = `${result.correct ? "CORRECT" : "TRY AGAIN"} · ${result.explanation}${result.award ? ` · +${result.award} DEMO XP` : ""}`;
-        render();
-        publish("answer", "button");
+        answer(index, "button");
       });
       options.appendChild(button);
     });
+    if (state.completedLessonIds.includes(selected.id) && state.completedLessonIds.length < ACADEMY_LESSONS.length) {
+      const nextButton = element(documentRoot, "button", "academy-option", "Continue to next lesson →");
+      nextButton.type = "button";
+      nextButton.dataset.academyNext = "true";
+      nextButton.addEventListener("click", () => {
+        state = nextAcademyLesson(state);
+        feedback.textContent = "SELECT AN ANSWER · INCORRECT ANSWERS CAN BE RETRIED";
+        render();publish("next-lesson", "button");
+      });
+      options.appendChild(nextButton);
+    }
     progress.textContent = `${state.completedLessonIds.length}/${ACADEMY_LESSONS.length} LESSONS · ${state.xp} DEMO XP · LOCAL SESSION`;
+    if (state.completedLessonIds.length === ACADEMY_LESSONS.length) progress.textContent += " · LEARNING PATH COMPLETE";
+    replayButton.disabled = state.answerLog.length === 0;
     trace.replaceChildren();
     if (!state.trace.length) trace.appendChild(element(documentRoot, "div", "academy-empty", "No answers yet. Choose a lesson and test the idea."));
     [...state.trace].reverse().forEach((entry) => trace.appendChild(element(documentRoot, "div", "academy-trace-row", `${entry.seq} · ${getAcademyLesson(entry.lessonId)?.label ?? entry.lessonId} · ${entry.correct ? "CORRECT" : "RETRY"} · +${entry.award} XP`)));
+  }
+
+  function answer(optionIndex, method = "api") {
+    try {
+      state = answerAcademyLesson(state, optionIndex);
+      const result = state.trace.at(-1);
+      feedback.textContent = `${result.correct ? "CORRECT" : "TRY AGAIN"} · ${result.explanation}${result.award ? ` · +${result.award} DEMO XP` : ""}`;
+    } catch (error) {
+      if (method !== "button") throw error;
+      feedback.textContent = error.message;
+      return snapshot("answer-rejected", method);
+    }
+    render();return publish("answer", method);
+  }
+
+  function replay(method = "api") {
+    state = replayAcademy(state);
+    feedback.textContent = `REPLAYED ${state.answerLog.length} ANSWERS · PROGRESS AND XP REBUILT FROM THE LOCAL RECORD`;
+    render();return publish("replay", method);
   }
 
   function setOpen(next, method = "api") {
@@ -120,6 +154,7 @@ export function createAcademyConsole({ documentRoot = globalThis.document, onCha
   }
 
   closeButton.addEventListener("click", () => setOpen(false, "button"));
+  replayButton.addEventListener("click", () => replay("button"));
   resetButton.addEventListener("click", () => {
     state = resetAcademy();
     feedback.textContent = "PROGRESS RESET · LOCAL SESSION ONLY";
@@ -133,8 +168,8 @@ export function createAcademyConsole({ documentRoot = globalThis.document, onCha
     close: (method = "api") => setOpen(false, method),
     reset: (method = "api") => { state = resetAcademy(); render(); return publish("reset", method); },
     select: (lessonId, method = "api") => { state = selectAcademyLesson(state, lessonId); render(); return publish("select-lesson", method); },
-    answer: (optionIndex, method = "api") => { state = answerAcademyLesson(state, optionIndex); render(); return publish("answer", method); },
-    replay: (method = "api") => publish("replay", method),
+    answer,
+    replay,
     getSnapshot: () => snapshot(),
     boundary: ACADEMY_BOUNDARY,
   });

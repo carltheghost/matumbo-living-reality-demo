@@ -1,0 +1,237 @@
+{
+  "checks": [
+    {
+      "device": "phone",
+      "dictationLayout": {
+        "bounds": {
+          "x": 8,
+          "y": 22,
+          "width": 374,
+          "height": 754,
+          "top": 22,
+          "right": 382,
+          "bottom": 776,
+          "left": 8
+        },
+        "horizontalOverflow": false,
+        "children": [
+          {
+            "x": 328,
+            "right": 363
+          },
+          {
+            "x": 27,
+            "right": 363
+          },
+          {
+            "x": 27,
+            "right": 363
+          },
+          {
+            "x": 27,
+            "right": 141
+          },
+          {
+            "x": 149,
+            "right": 254
+          },
+          {
+            "x": 27,
+            "right": 363
+          },
+          {
+            "x": 27,
+            "right": 149
+          },
+          {
+            "x": 157,
+            "right": 249
+          },
+          {
+            "x": 257,
+            "right": 353
+          },
+          {
+            "x": 27,
+            "right": 142
+          },
+          {
+            "x": 27,
+            "right": 146
+          },
+          {
+            "x": 154,
+            "right": 289
+          }
+        ],
+        "viewport": {
+          "width": 390,
+          "height": 844
+        }
+      },
+      "recordingDenied": true,
+      "roomVoiceLayout": {
+        "width": 312,
+        "overflow": false
+      },
+      "microphoneCalls": 1,
+      "explicitAppSearch": true
+    },
+    {
+      "device": "narrow-phone",
+      "dictationLayout": {
+        "bounds": {
+          "x": 8,
+          "y": 22,
+          "width": 304,
+          "height": 650,
+          "top": 22,
+          "right": 312,
+          "bottom": 672,
+          "left": 8
+        },
+        "horizontalOverflow": false,
+        "children": [
+          {
+            "x": 258,
+            "right": 293
+          },
+          {
+            "x": 27,
+            "right": 293
+          },
+          {
+            "x": 27,
+            "right": 293
+          },
+          {
+            "x": 27,
+            "right": 141
+          },
+          {
+            "x": 149,
+            "right": 254
+          },
+          {
+            "x": 27,
+            "right": 293
+          },
+          {
+            "x": 27,
+            "right": 149
+          },
+          {
+            "x": 157,
+            "right": 249
+          },
+          {
+            "x": 27,
+            "right": 123
+          },
+          {
+            "x": 131,
+            "right": 246
+          },
+          {
+            "x": 27,
+            "right": 146
+          },
+          {
+            "x": 154,
+            "right": 289
+          }
+        ],
+        "viewport": {
+          "width": 320,
+          "height": 740
+        }
+      },
+      "recordingDenied": true,
+      "roomVoiceLayout": {
+        "width": 242,
+        "overflow": false
+      },
+      "microphoneCalls": 1,
+      "explicitAppSearch": true
+    },
+    {
+      "device": "landscape",
+      "dictationLayout": {
+        "bounds": {
+          "x": 18,
+          "y": 34,
+          "width": 390,
+          "height": 280,
+          "top": 34,
+          "right": 408,
+          "bottom": 314,
+          "left": 18
+        },
+        "horizontalOverflow": false,
+        "children": [
+          {
+            "x": 350,
+            "right": 385
+          },
+          {
+            "x": 41,
+            "right": 385
+          },
+          {
+            "x": 41,
+            "right": 385
+          },
+          {
+            "x": 41,
+            "right": 155
+          },
+          {
+            "x": 163,
+            "right": 268
+          },
+          {
+            "x": 41,
+            "right": 385
+          },
+          {
+            "x": 41,
+            "right": 163
+          },
+          {
+            "x": 171,
+            "right": 263
+          },
+          {
+            "x": 271,
+            "right": 367
+          },
+          {
+            "x": 41,
+            "right": 156
+          },
+          {
+            "x": 41,
+            "right": 160
+          },
+          {
+            "x": 168,
+            "right": 303
+          }
+        ],
+        "viewport": {
+          "width": 844,
+          "height": 390
+        }
+      },
+      "recordingDenied": true,
+      "roomVoiceLayout": {
+        "width": 710,
+        "overflow": false
+      },
+      "microphoneCalls": 1,
+      "explicitAppSearch": true
+    }
+  ],
+  "errors": [],
+  "passed": true
+}

@@ -2,12 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from '../vendor/three-r179.1/build/three.module.js';
 import {buildPersonStudioScene} from '../src/render/person-studio-scene.js';
+import {STUDIO_OUTFITS} from '../src/domains/person-studio.js';
 test('3D room has actual humanoid joints and stable identity geometry across wardrobe/room/motion changes',()=>{
   const scene=new THREE.Scene(),targets=[];
   const studio=buildPersonStudioScene({THREE,parent:scene,targets,compact:true});studio.layer.visible=true;
   const before=studio.getSnapshot();assert.ok(before.meshCount>100);assert.ok(before.jointNames.includes('head'));assert.ok(before.jointNames.includes('leftHand'));
   studio.apply({outfitId:'ivory',roomId:'ocean',companion:'bird'});studio.update(.1,10,{joints:{head:[0,.3,0,.9539]}},true);
-  const after=studio.getSnapshot();assert.equal(after.identityHeadGeometry,before.identityHeadGeometry);assert.equal(after.outfitId,'ivory');assert.equal(after.referenceImagesUsedAsTextures,true);
+  const after=studio.getSnapshot();assert.equal(after.identityHeadGeometry,before.identityHeadGeometry);assert.equal(after.outfitId,'ivory');assert.equal(after.referenceImagesUsedAsTextures,false);
+  assert.equal(after.referenceLook,'agent-smith-v1');assert.equal(after.geometryOnly,true);
   assert.ok(targets.some(t=>studio.resolve(t)?.id==='wardrobe'));assert.ok(studio.joints.head.quaternion.y>.1);
   studio.destroy();assert.equal(targets.length,0);assert.equal(scene.children.length,0);
 });
@@ -22,14 +24,19 @@ test('person floats in floorless lens space: no floor, no grid, lens-ring and gl
   assert.equal(receiveShadow,0,'nothing dangles a receiveShadow on removed geometry');
   assert.ok(studio.layer.getObjectByName('Hologram lens-ring'),'floating hologram lens-ring replaces the plinth');
   assert.ok(studio.layer.getObjectByName('Lens energy glow'),'soft glow sprite grounds the avatar instead of a floor');
-  const hologram=studio.layer.getObjectByName('Reference avatar hologram');
-  assert.ok(hologram&&hologram.isSprite,'the approved likeness billboards as a hologram');
-  assert.equal(hologram.userData.avatarHologramUrl,'assets/avatar/fluffy-body-template.webp');
-  assert.ok(studio.getSnapshot().avatarHologramPresent);
-  // Every interactive target survives: tab targets and the 3 outfit targets.
+  const rig=studio.avatar.children.find(object=>object.userData.agentSmithRig===true);
+  assert.ok(rig,'Agent Smith is the visible articulated character');
+  let solidParts=0,portraitSurfaces=0;
+  rig.traverse(object=>{if(object.isMesh){solidParts++;if(object.geometry?.type==='PlaneGeometry'||object.material?.map)portraitSurfaces++;}if(object.isSprite)portraitSurfaces++;});
+  assert.ok(solidParts>20,'the character has physical head, torso, limbs and facial parts');
+  assert.equal(portraitSurfaces,0,'the avatar must never return to a flat portrait or sprite');
+  assert.equal(studio.layer.getObjectByName('Reference avatar hologram'),undefined);
+  assert.equal(studio.getSnapshot().avatarHologramPresent,false);
+  assert.equal(studio.getSnapshot().avatarHologramUrl,null);
+  // Every catalog style owns a real garment target, including Oxblood.
   const kinds=targets.map(t=>studio.resolve(t));
   for(const id of ['identity','wardrobe','room','companion'])assert.ok(kinds.some(k=>k?.kind==='tab'&&k.id===id),`tab target ${id} resolves`);
-  for(const id of ['obsidian','cobalt','ivory'])assert.equal(kinds.filter(k=>k?.kind==='outfit'&&k.id===id).length,3,`outfit target ${id} resolves thrice`);
+  for(const {id} of STUDIO_OUTFITS)assert.equal(kinds.filter(k=>k?.kind==='outfit'&&k.id===id).length,3,`outfit target ${id} resolves thrice`);
   // Lens energy floats gently; reduced motion freezes it at rest height.
   studio.update(.1,10,{},false);
   assert.notEqual(studio.avatar.position.y,.55,'avatar bobs in lens space');

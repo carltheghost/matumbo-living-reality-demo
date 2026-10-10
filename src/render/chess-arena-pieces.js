@@ -8,7 +8,7 @@
  * Projection only: no network, identity authority, wallet, settlement, or
  * external asset loading is involved.
  */
-import {STUDIO_MODEL, STUDIO_OUTFITS, PERSON_STUDIO_STORAGE_KEY} from '../domains/person-studio.js?v=20260922-cache2';
+import {STUDIO_MODEL, STUDIO_OUTFITS, PERSON_STUDIO_STORAGE_KEY} from '../domains/person-studio.js?v=20261003-skin360';
 
 export const CHESS_ARENA_PIECE_TYPES = Object.freeze(['p','n','b','r','q','k']);
 const FILES = 'abcdefgh';
@@ -116,6 +116,23 @@ function createMaterialSet(THREE) {
       },
     },
   };
+}
+
+/** Raycasters intersect a Sprite's full rectangle. Let transparent glyph
+ * margins pass through to the visible piece or square behind them. */
+export function isVisibleChessIntersection(hit) {
+  if(!hit?.object?.isSprite || !hit.uv)return true;
+  const material=hit.object.material,map=material?.map,image=map?.image;
+  if(!image?.getContext || !image.width || !image.height)return true;
+  try{
+    const uv=hit.uv.clone();
+    if(map.matrixAutoUpdate)map.updateMatrix();
+    map.transformUv(uv);
+    const x=Math.min(image.width-1,Math.max(0,Math.floor(uv.x*image.width)));
+    const y=Math.min(image.height-1,Math.max(0,Math.floor(uv.y*image.height)));
+    const alpha=image.getContext('2d').getImageData(x,y,1,1).data[3]/255;
+    return alpha*(material.opacity??1)>Math.max(.02,material.alphaTest??0);
+  }catch{return true;}
 }
 
 function buildStandardGlyph(THREE, color, type, glyphRegistry = null) {

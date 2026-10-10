@@ -1,10 +1,10 @@
 import * as THREE from '../../vendor/three-r179.1/build/three.module.js';
-import { createUniversalObjectRenderer } from '../universal/universal-object-renderer.js';
+import { createUniversalObjectRenderer } from '../universal/universal-object-renderer.js?v=20261003-skin360';
 import {
   featureToCompanionEntities,
   featureToPrimaryEntity,
   normalizeUniversalEntity,
-} from '../universal/universal-entity.js';
+} from '../universal/universal-entity.js?v=20261003-skin360';
 
 const BRIDGE_SOURCE='matumbo-universal-reality-bridge';
 const ROUTE_FEATURE='reality-lens';
@@ -519,10 +519,16 @@ export function createUniversalRealityBridge({
   return api;
 }
 
+/** Legacy experiments must never replace the canonical whole-body owner when
+ * a Home or space address is reloaded. They remain explicitly addressable. */
+export function shouldAutoMountUniversalBridge(search){
+  const params=new URLSearchParams(search);
+  return params.get('feature')===ROUTE_FEATURE&&params.get('surface')==='universal';
+}
+
 function autoBoot(){
   if(typeof window==='undefined'||typeof document==='undefined')return;
-  const params=new URLSearchParams(window.location.search);
-  if(params.get('feature')!==ROUTE_FEATURE)return;
+  if(!shouldAutoMountUniversalBridge(window.location.search))return;
   let attempts=0;
   const tryMount=()=>{
     if(window.__TUMBO_UNIVERSAL_OBJECTS__)return;

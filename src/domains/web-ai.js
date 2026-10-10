@@ -19,8 +19,8 @@ export const WEB_AI_SCHEMA_VERSION = 1;
 
 export const WEB_AI_BOUNDARY =
   "External sites open only by your explicit tap — inside a sandboxed frame or a separate tab that leaves the Reality Lens open. " +
-  "Return to the Lens tab to continue; provider sign-in does not authorize this demo or return through an OAuth callback. " +
-  "This demo never collects, stores, or sends credentials, API keys, tokens, or logins. AI handoffs are links plus a prompt you copy yourself.";
+  "A link-out provider sign-in does not authorize this demo. My GPT has a separate, explicit local ChatGPT connection; its credentials stay in the local server. " +
+  "My GPT sends only the selected conversation and assistant context when you press Send. Browser controls never accept API keys. Compute credits remain a local simulation.";
 
 export const WEB_AI_STORAGE_KEYS = Object.freeze({
   position: "tumbo.web-ai.pos.v1",
@@ -226,7 +226,7 @@ export function buildAiPrompt({ taskNote = "", pageUrl = "", pageTitle = "" } = 
   const title = String(pageTitle ?? "").trim().slice(0, 120);
   const lines = [
     "I'm using maTumbo Living Reality, a browser-based Reality Lens. Feature tools are live interfaces attached to mutable 3D objects; the selected object's real controls stay in the Lens.",
-    "External assistants may open in a separate tab. This demo has no provider OAuth or sign-in bridge: returning to the Lens resumes its object and locally saved note, but does not connect the provider account.",
+    "External assistants may open in a separate tab. A link-out does not connect the provider account; returning resumes the Lens object and locally saved note. My GPT has a separate local connection that requires explicit authorization.",
     "",
     `Task note: ${note}`,
   ];

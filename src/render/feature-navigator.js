@@ -14,7 +14,7 @@ export const FEATURE_DEFINITIONS = Object.freeze([
     kicker: "semantic zoom",
     focusOrganId: "logo",
     sources: [],
-    description: "Navigate reference-built architectural cubes, expose interiors, enter existing features, move their local layout and inspect observed view history or proposed branches.",
+    description: "Navigate architectural objects, open their connected features, arrange the local layout, rotate your viewpoint with the View dial, and inspect recorded view history or proposed branches.",
     boundary: "One feature identity across views. 4D is space plus recorded local layout history; proposed branches are not predictions, shared worlds or financial execution.",
   }),
   Object.freeze({
@@ -32,8 +32,8 @@ export const FEATURE_DEFINITIONS = Object.freeze([
     kicker: "space + cipher",
     focusOrganId: "matchbox",
     sources: ["spatial-rooms", "cipher-messaging"],
-    description: "Open the room map, membership scope, and metadata-only message session indicators.",
-    boundary: "Room membership and cipher indicators are simulated metadata; message content and cryptography are not implemented here.",
+    description: "Create and enter local rooms, save conversation notes, retain their history, and export or import a room backup inside the existing spatial map.",
+    boundary: "Text, captions and message metadata are readable in this browser. Voice audio supports optional local encryption with a separate unlock code. Projected observer rooms are read-only. Remote participants, delivery and cloud sync are not connected.",
   }),
   Object.freeze({
     id: "block-world",
@@ -68,8 +68,8 @@ export const FEATURE_DEFINITIONS = Object.freeze([
     kicker: "fixed allocation",
     focusOrganId: "asset-token",
     sources: ["tumbo-asset-token"],
-    description: "Inspect the fixed 1,000,000,000 TUMBO-SIM schedule and its eight aggregate allocation cohorts.",
-    boundary: "This is a fictional social-experiment projection. No wallet, issuance, custody, transfer, settlement, or money exists.",
+    description: "Inspect the fixed TUMBO-SIM allocation and enter Ourplace to create, share, rehearse payments, inspect local balances and follow their receipts.",
+    boundary: "TUMBO-SIM movements belong to the shared local simulation engine. No external wallet, chain, issuance, custody, real settlement or real money is connected.",
   }),
   Object.freeze({
     id: "asset-market",
@@ -140,7 +140,7 @@ export const FEATURE_DEFINITIONS = Object.freeze([
     kicker: "create · stake · resolve",
     focusOrganId: "contract",
     sources: ["contract-atelier"],
-    description: "Open your own pool, binary, or multi-outcome contract on any topic as the house or a player — then stake rehearsal credits and resolve it with true/false, AND, OR, or IF/ELSE logic.",
+    description: "Create a pool, binary or multi-outcome contract, fund a local house, stake rehearsal credits and resolve its logic. Manual contracts are saved locally and support replay-validated backups.",
     boundary: "Every contract is a fictional local rehearsal. No wallet, chain, custody, settlement, wagering, or real money exists; stakes are rehearsal credits with zero real value.",
   }),
   Object.freeze({
@@ -194,7 +194,7 @@ export const FEATURE_DEFINITIONS = Object.freeze([
     kicker: "local agent registry",
     focusOrganId: "bots",
     sources: ["bot-plaza"],
-    description: "Open the local agent roster, chat with deterministic built-in bots, and review their renderer-only drafts.",
+    description: "Lens Guide and Plan Helper join automatically. Chat with the local roster, save declarative bots, and review explicitly approved local drafts.",
     boundary: "Bots have only explicitly granted local capabilities. They cannot access the network, wallets, credentials, or canonical world state.",
   }),
   Object.freeze({
@@ -221,7 +221,7 @@ export const FEATURE_DEFINITIONS = Object.freeze([
     kicker: "mint · collect · inspect",
     focusOrganId: "proof",
     sources: ["nft-atelier"],
-    description: "Mint fictional collectibles, inspect their simulated provenance, or burn them — a standalone local rehearsal with no wallet or chain.",
+    description: "Create and save fictional collectibles, inspect their simulated provenance, burn them locally, and export or restore your collection backup.",
     boundary: "Minted pieces are simulated collectibles. No wallet, chain, transfer, sale, custody, royalty, or external publication exists.",
   }),
   
@@ -233,7 +233,7 @@ export const FEATURE_DEFINITIONS = Object.freeze([
     kicker: "dress · equip · express",
     focusOrganId: "person",
     sources: ["wardrobe-atelier"],
-    description: "Browse and design fictional outfits, then equip a look — starter looks that map to the Person Studio also dress the 3D person. A standalone local rehearsal with no marketplace.",
+    description: "Design, equip and save fictional outfits in this browser, or export and restore a wardrobe backup. Mapped starter looks also dress the existing 3D Person.",
     boundary: "Outfits are simulated looks. No marketplace, ownership, purchase, transfer, or external publication exists.",
   }),
   Object.freeze({
@@ -310,12 +310,12 @@ export const FEATURE_DEFINITIONS = Object.freeze([
   }),
   Object.freeze({
     id: "web-ai",
-    label: "Web + AI",
+    label: "Web + AI / My GPT",
     kicker: "browse + ask",
     focusOrganId: "arena",
     sources: [],
-    description: "Browse the open web, hand one task to ChatGPT, Claude, Gemini, DeepSeek, Kimi and other assistants, or open the local Compute tab to meter cross-provider usage and rehearse the maTumbo reward loop.",
-    boundary: "Provider handoffs remain separate tabs and the Compute economy is local simulation. No credentials, API keys, wallet authority, provider billing verification, token issuance, settlement, staking, or burn is performed.",
+    description: "My GPT: chat inside your object using a connected ChatGPT plan or OpenAI API, keep custom assistant instructions and selected history locally, browse the web, or open other assistants.",
+    boundary: "My GPT needs the local server and explicit account connection. Credentials stay server-side; selected context is sent only on Send. Saved GPT links open ChatGPT; original GPT configuration and conversations are not automatically synced. Compute credits remain local simulation.",
   }),
   Object.freeze({
     id: "academy",
@@ -369,6 +369,18 @@ export const FEATURE_FUTURE_OPTIONS = Object.freeze([
 ]);
 
 const FEATURE_BY_ID = new Map(FEATURE_DEFINITIONS.map((feature) => [feature.id, feature]));
+
+// Only owners with a real replay operation expose this action. Navigation,
+// provider handoffs, and the Person Studio have no replay operation to claim.
+export const FEATURE_REPLAY_IDS = Object.freeze([
+  "asset-token", "asset-market", "launch-distribution", "social-explorer",
+  "rooms", "block-world", "migration", "sports-events", "multi-sport-events",
+  "arena", "academy", "contracts", "paycore", "t402", "neural-mesh",
+  "picture-matter", "nft-atelier", "muse-agent", "bot-plaza", "contract-atelier",
+  "luna-companion", "wardrobe-atelier", "white-paper", "gesture-lens", "ledger",
+  "gateway", "world-events", "projections",
+]);
+const FEATURE_REPLAY_ID_SET = new Set(FEATURE_REPLAY_IDS);
 
 // Infinite-handoff graph (2026-09-18): every feature links onward to a few
 // related features so one interaction always pushes into the next. Rendered
@@ -569,6 +581,7 @@ export const FEATURE_SURFACE_ROUTES = Object.freeze({
     Object.freeze(["DATA GRADE", "field completeness only · research"]),
   ]),
   "web-ai": Object.freeze([
+    Object.freeze(["MY GPT", "ChatGPT plan or OpenAI API · local assistants and selected conversation history"]),
     Object.freeze(["WEB TAB", "sandboxed frame for framing-friendly sites · new-tab handoff otherwise"]),
     Object.freeze(["AI TAB", "ChatGPT · Claude · Gemini · DeepSeek · Kimi + other handoffs"]),
     Object.freeze(["COMPUTE WALLET", "demo credits · monthly + per-task budget guardrails"]),
@@ -862,30 +875,36 @@ export function createFeatureNavigator({
       globalThis.setTimeout?.(() => { focusAction.textContent = "FOCUS IN WORLD"; }, 1200);
     });
     actionBar.appendChild(focusAction);
-    const action = documentRoot.createElement("button");
-    action.type = "button";
-    action.className = "feature-action";
-    action.textContent = feature.id === "asset-token"
-      ? "REPLAY LAUNCH PREVIEW"
-      : feature.id === "social-explorer"
-        ? "REPLAY SOCIAL REHEARSAL"
-        : "REPLAY LOCAL VIEW";
-    action.addEventListener("click", () => {
-      onIntent?.(feature, "replay");
+    if (FEATURE_REPLAY_ID_SET.has(feature.id) && typeof onIntent === "function") {
+      const action = documentRoot.createElement("button");
+      action.type = "button";
+      action.className = "feature-action";
       action.textContent = feature.id === "asset-token"
-        ? "LAUNCH PREVIEW REPLAYED"
+        ? "REPLAY LAUNCH PREVIEW"
         : feature.id === "social-explorer"
-          ? "SOCIAL REHEARSAL REPLAYED"
-          : "LOCAL VIEW REPLAYED";
-      globalThis.setTimeout?.(() => {
-        action.textContent = feature.id === "asset-token"
-          ? "REPLAY LAUNCH PREVIEW"
-          : feature.id === "social-explorer"
-            ? "REPLAY SOCIAL REHEARSAL"
-            : "REPLAY LOCAL VIEW";
-      }, 1200);
-    });
-    actionBar.appendChild(action);
+          ? "REPLAY SOCIAL REHEARSAL"
+          : "REPLAY LOCAL VIEW";
+      const defaultActionLabel = action.textContent;
+      action.addEventListener("click", async () => {
+        action.disabled = true;
+        action.textContent = "REPLAYING…";
+        try {
+          const result = await onIntent(feature, "replay");
+          if (result === false) throw new Error("Replay unavailable");
+          action.textContent = feature.id === "asset-token"
+            ? "LAUNCH PREVIEW REPLAYED"
+            : feature.id === "social-explorer"
+              ? "SOCIAL REHEARSAL REPLAYED"
+              : "LOCAL VIEW REPLAYED";
+        } catch {
+          action.textContent = "REPLAY UNAVAILABLE · TRY AGAIN";
+        } finally {
+          action.disabled = false;
+        }
+        globalThis.setTimeout?.(() => { action.textContent = defaultActionLabel; }, 1200);
+      });
+      actionBar.appendChild(action);
+    }
     detail.appendChild(actionBar);
 
     // KEEP GOING (2026-09-18): the infinite-handoff strip. Every feature

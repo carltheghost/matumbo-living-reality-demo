@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>maTumbo Living Reality Ω</title>
   <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="./mobile-layout.css?v=20260924-mobile1" />
+  <link rel="stylesheet" href="./mobile-layout.css?v=20261003-skin360" />
   <style>
     :root {
       --ink:#dff7ff;
@@ -2157,7 +2157,7 @@
         </div>
         <button id="feature-close" type="button" aria-label="Close feature navigator">×</button>
       </div>
-    <div id="feature-count" role="status" aria-live="polite">32 openable local features</div>
+    <div id="feature-count" role="status" aria-live="polite">36 openable local features</div>
       <div id="camera-actions"><button id="camera-reset" type="button">RESET CAMERA · R</button><button id="camera-input-open" type="button" aria-controls="camera-input-panel" aria-expanded="false">CAMERA MOTION</button><button id="story-mode-open" type="button" aria-controls="story-mode-console">STORIES</button><span id="camera-gesture-hint" title="Drag the empty field to orbit the camera; use the wheel or trackpad to travel.">CAMERA ORBIT: EMPTY-FIELD DRAG · WHEEL: TRAVEL</span></div>
       <nav id="feature-nav" aria-label="Openable maTumbo features">
         <div id="feature-nav-fallback" aria-label="Static local feature directory">
@@ -2200,7 +2200,7 @@
             <li><a class="feature-nav-fallback-item" href="?feature=web-ai&amp;build=control4&amp;fresh=20260923-reality-lens"><strong>Web + AI</strong><span>browse and ask</span></a></li>
             <li><a class="feature-nav-fallback-item" href="?feature=academy&amp;build=control4&amp;fresh=20260904-academy"><strong>Financial Academy</strong><span>learn → test → progress</span></a></li>
             <li><a class="feature-nav-fallback-item" href="?feature=projections&amp;build=control4&amp;fresh=20260903-reality-lens"><strong>Phone / PC / XR</strong><span>one canonical view</span></a></li>
-            <li><a class="feature-nav-fallback-item" href="?panel=launch-kit&amp;build=control4&amp;fresh=20260903-reality-lens"><strong>Launch Kit</strong><span>everything in one view</span></a></li>
+            <li><a class="feature-nav-fallback-item" data-directory-kind="tool" href="?panel=launch-kit&amp;build=control4&amp;fresh=20260903-reality-lens"><strong>Launch Kit</strong><span>everything in one view</span></a></li>
           </ul>
         </div>
       </nav>
@@ -3857,11 +3857,13 @@
         setStaticDirectoryOpen(true);
       };
       const staticCubes = () => [...staticDirectory?.querySelectorAll('.feature-nav-fallback-item') ?? []];
+      const staticFeatureCount = () => staticCubes().filter((item) => item.dataset.directoryKind !== 'tool').length;
       // Correct the static feature-count label from the actual pre-rendered
-      // card count. This runs pre-boot; main.js owns the label after boot.
+      // feature count. Helper tools stay navigable without inflating the
+      // canonical feature total. This runs pre-boot; main.js owns it after boot.
       const featureCountEl = document.getElementById('feature-count');
       if (featureCountEl) {
-        featureCountEl.textContent = `${staticCubes().length} openable local features`;
+        featureCountEl.textContent = `${staticFeatureCount()} openable local features`;
       }
       const focusStaticCube = (cube, { moveFocus = false } = {}) => {
         if (!cube || state !== 'error') return;
@@ -3998,9 +4000,10 @@
       }, 30000) ?? null;
     })();
   </script>
-    <script type="module" src="./src/main.js?v=20260924-aspectus1" onerror="globalThis.__MATUMBO_RUNTIME__?.markFailed?.(event, 'module load')"></script>
-    <script type="module" src="./src/render/universal-reality-bridge.js?v=20260924-universal-live1"></script>
-    <script type="module" src="./src/render/reality-command-deck.js?v=20260922-commanddeck1"></script>
-    <script type="module" src="./mobile-chrome.js?v=20260924-mobile1"></script>
+    <script type="module" src="./src/render/voice-fallback.js?v=20261005-voice"></script>
+    <script type="module" src="./src/main.js?v=20261007-open-dollar-market-quotes" onerror="globalThis.__MATUMBO_RUNTIME__?.markFailed?.(event, 'module load')"></script>
+    <script type="module" src="./src/render/universal-reality-bridge.js?v=20261003-skin360"></script>
+    <script type="module" src="./src/render/reality-command-deck.js?v=20261003-skin360"></script>
+    <script type="module" src="./mobile-chrome.js?v=20261003-skin360"></script>
 </body>
 </html>

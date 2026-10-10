@@ -1,7 +1,7 @@
 // Guarded: token-trade-mount's module graph is mid-flight (its imports don't
 // match token.js yet); a static import would fail the whole module graph and
 // red-banner the boot. Boots automatically once the lane lands a consistent graph.
-import("./token-trade-mount.js?v=20260922-cache2").catch(() => {});
+import("./token-trade-mount.js?v=20261003-skin360").catch(() => {});
 /** Mobile panel manager — 2D UI chrome/layout only.
  *
  * On narrow viewports (<=700px) only one floating panel may be visible at a
@@ -32,6 +32,7 @@ function collectPanels(documentRoot) {
     : [];
   for (const el of asides) {
     if (!el || !el.id || EXCLUDED_IDS.has(el.id)) continue;
+    if (el.closest?.('[data-controller-owned="tracking"],[data-controller-owned="voice"]')) continue;
     if(el.parentElement?.closest?.('aside'))continue;
     // Object skins and Assembly chrome are owned by the spatial renderer,
     // not loose floating panels. A mobile keeper election must not hide the

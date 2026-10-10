@@ -49,10 +49,10 @@ test("all three market types open with their outcome rules", () => {
   const studio = atelier();
   const binary = studio.createContract({ type: "binary", role: "player", topic: "sports", title: "Binary demo", logic: "team wins" });
   assert.deepEqual(binary.outcomes, ["YES", "NO"]);
-  const pool = studio.createContract({ type: "yes_no", role: "house", topic: "weather", title: "Pool demo", logic: "rain", outcomes: ["RAIN", "DRY"] });
+  const pool = studio.createContract({ type: "pool", role: "house", topic: "weather", title: "Pool demo", logic: "rain", outcomes: ["RAIN", "DRY"] });
   assert.deepEqual(pool.outcomes, ["RAIN", "DRY"]);
   assert.throws(() => studio.createContract({ type: "pool", role: "house", topic: "weather", title: "Bad pool", logic: "rain", outcomes: ["RAIN"] }), TypeError);
-  const multi = studio.createContract({ type: "over_under", role: "player", topic: "politics", title: "Multi demo", logic: "vote held", outcomes: ["A", "B", "C"] });
+  const multi = studio.createContract({ type: "multi", role: "player", topic: "politics", title: "Multi demo", logic: "vote held", outcomes: ["A", "B", "C"] });
   assert.deepEqual(multi.outcomes, ["A", "B", "C"]);
   assert.throws(() => studio.createContract({ type: "multi", role: "player", topic: "politics", title: "Bad multi", logic: "vote held", outcomes: ["A", "A"] }), TypeError);
   for (const contract of [binary, pool, multi]) {
@@ -74,7 +74,7 @@ test("house and player roles are recorded on the contract", () => {
   assert.equal(house.role, "house");
   assert.equal(player.role, "player");
   assert.deepEqual([...CONTRACT_ATELIER_ROLES].sort(), ["house", "player"]);
-  assert.deepEqual([...CONTRACT_ATELIER_MARKET_TYPES].sort(), ["home_away", "over_under", "yes_no"]);
+  assert.deepEqual([...CONTRACT_ATELIER_MARKET_TYPES].sort(), ["binary", "multi", "pool", "yes_no"]);
   assert.deepEqual([...CONTRACT_ATELIER_TOPICS].sort(), ["custom", "politics", "sports", "transport", "weather"]);
   assert.deepEqual([...CONTRACT_ATELIER_LOGIC_KINDS].sort(), ["and", "condition", "if_else", "or"]);
 });
@@ -374,4 +374,15 @@ test("mounted multi contract shows a resolve hint about logic-satisfying facts",
     String(el.className || "").includes("contract-atelier-hint")
     && /logic/i.test(String(el.textContent || "")));
   assert.ok(hints.length >= 1, "resolve hint element is present in the mounted console");
+});
+
+test("resetting manual atelier preserves the shared approved outcome desk", () => {
+  const doc = interactiveDocument();
+  let resets = 0;
+  const shared = {getSnapshot:()=>({}),list:()=>[],listNfts:()=>[],reset:()=>{resets++;}};
+  const controller = createContractAtelierConsole({documentRoot:doc,atelier:atelier("manual-reset"),outcomeDesk:shared});
+  doc.byId("contract-atelier-reset").click();
+  controller.reset();
+  assert.equal(resets,0,"manual reset must not erase another domain's approved books and awards");
+  assert.match(doc.byId("contract-atelier-status").textContent,/SHARED APPROVED BOOKS AND AWARDS PRESERVED/);
 });

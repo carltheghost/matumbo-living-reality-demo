@@ -1,532 +1,174 @@
-# maTumbo demo launch and TUMBO asset-token boundary
+# Launch and use Reality Lens
 
-This checkout launches a local social-experiment / space-explorer demo. The
-browser renders a deterministic **TUMBO Asset Token** projection (`TUMBO-SIM`);
-it does not create a chain asset, account, wallet, claim, payment, or transfer.
-The launch map is an explorable story about how a future allocation could be
-structured, not a promise to distribute anything to real counties,
-organisations, funds, or people.
+This guide describes the working browser prototype and its loopback provider bridge. It supersedes earlier launch instructions that started a cube-first interface and an optional Merge4 memory server. Historical architecture and feature receipts remain linked below; they do not establish a running backend or public deployment.
 
-## Run the demo locally
+## Start on Windows
 
-The supported Windows path starts the static browser and, when installed, the
-separate in-memory rehearsal API. It never replaces an existing listener:
+Python **3.10 or newer** is required. The local bridge uses the standard library, so no pip installation is needed. In a PowerShell window opened at this repository:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\launch-demo.ps1 -OpenBrowser
+.\run_local.bat
 ```
 
-The launcher verifies the static page at <http://localhost:8080/> and records
-its own process IDs under `work\demo-launch\`. If `runtime\merge4\node_modules`
-contains the server dependencies, it also starts the local-only API and probes
-<http://localhost:8091/api/health>; the expected response is `postgres:false`
-and `storage:"memory-demo"`. If those dependencies are absent, the browser
-demo still launches and the launcher prints the install hint. Stop only those
-processes with:
+The equivalent direct launcher command is:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\stop-demo.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\launch-demo.ps1 -OpenBrowser
 ```
 
-For a static-only fallback, serve the files with any HTTP server. For a
-minimal PowerShell session:
+The default URL is [http://127.0.0.1:8082/](http://127.0.0.1:8082/). The launcher starts `scripts/provider_bridge.py` in a hidden process, verifies the selected checkout and required browser resources, and records the actual port-owning Python process. It also reports the canonical feature count and NVIDIA configuration state. No database, account, Merge4 service, or NVIDIA inference is started by opening the page.
+
+The local Launch Registry opens through the `launch-distribution` feature in Spaces. Its existing direct-link alias is [http://127.0.0.1:8082/?panel=launch-distribution](http://127.0.0.1:8082/?panel=launch-distribution); the current feature link is [http://127.0.0.1:8082/?feature=launch-distribution](http://127.0.0.1:8082/?feature=launch-distribution). Both describe a local prototype registry; publishing requires its separate release workflow.
+
+If a listener already exists, the launcher verifies its health fingerprint against this checkout and probes its resources. It reuses a matching service without taking process ownership. A different or unverifiable listener causes an error; it is not killed or replaced. Choose a free port instead:
 
 ```powershell
-python -m http.server 8080
+.\run_local.bat -StaticPort 8085
 ```
 
-Then open the current cache-busted control surface at
-<http://localhost:8080/?build=control4&fresh=20260827> in a modern browser. A
-bare visit now starts in the focused cube world so the first screen is an
-interactive object field; press **F** to open Mission Control and choose the
-explicit Reality Lens semantic-organ view when you want the older zoom
-presentation. A small runtime badge
-shows the projection, renderer, and feature-directory stages while the page
-starts. It changes to **Local surface ready** after the first render loop is
-mounted; if WebGL, the vendored module, or another startup step fails, it changes
-to **Local 3-D surface unavailable** and provides a reload link while the
-static feature names remain readable. The page imports the exact Three.js
-0.179.1 closure from `vendor/three-r179.1`, so the core 3-D world no longer
-needs a CDN connection. Explicit public-data refreshes still require network
-access to their displayed provider endpoints. The static page does not call an API,
-wallet connector, token contract, recipient database, or deployment secret.
-The optional `runtime/merge4` memory service is a separate local rehearsal
-surface and is never a live provider or asset rail.
+## Verify and stop
 
-### Block World interaction
-
-Open <http://localhost:8080/?build=control4&fresh=20260827&feature=block-world>
-to work in the cube-only Block World surface. Click a cube in the 3-D field or
-the coordinate directory, then use **Open cube** to lift its lid and reveal
-nested cubes, **Inspect inside** to read the deterministic contents, or the
-directional / **LIFT** / **DROP** controls to move it one bounded grid step.
-**Add above**, **Replace**, **Remove**, and **Reset local block draft** remain
-available. The expanded preview route (with the default container selected) is
-<http://localhost:8080/?build=control4&fresh=20260827&feature=block-world&block=open>.
-For a carry-style edit, select a cube, press **Grab cube**, use the **HOLD**
-direction buttons to carry it one bounded step at a time, then press **Place
-cube**. The carried cube floats above its current cell and the active grid
-temporarily shows the detached state; placement rejects occupied cells.
-You can also drag a cube directly in the focused 3-D field: a horizontal drag
-commits one X step and a vertical drag commits one Z step when you release it.
-The gesture is pointer/touch-only, uses the same atomic local Grab → Hold →
-Place contract, and leaves the button controls available as an accessible
-fallback. A short click still selects without moving the cube. Double-click
-(mouse) or double-tap (touch) a container cube to open or close it directly in
-the field; the first tap only selects, and solid cubes stay inert.
-While this feature is active, the round semantic-organ layers are hidden so
-the cubes are the only interactive 3-D objects; leaving the feature restores
-the rest of the local projection. These actions are local, deterministic, and
-non-persistent.
-
-Portal cubes are also hand-off points. Select a cube whose type is **Portal**;
-the **Portal routes · same-world handoff** section exposes Rooms + Messaging,
-Migration Bridge, Social Explorer / Re-market, Launch Distribution,
-TUMBO Asset Token, Asset Market Evidence, ARENA / Game Lab, Contracts + Pools,
-PAYCORE Asset-token Balances, T402 Value Routing, Neural Mesh / Agents,
-Picture Matter, Prime Ledger + EchoProof, World Gateway / Evidence,
-World Events / Evidence, Tennis Evidence / ATP · WTA, Multi-Sport Scoreboards,
-Phone / PC / XR, and Reality Lens Ω. Choosing one opens the existing local
-feature surface in the same page while
-keeping the originating cube field visible underneath and records the source
-cube, route, and `portal` transition in the visible trace. There is no full page
-reload, hidden global route state, wallet action, or persistence. Asset Market
-Evidence and World Events / Evidence issue only their explicit documented
-public GET refresh through the existing host handlers.
-Return to **Block World / Fabric** from Mission Control and the route trace
-remains available until Reset local block draft.
-For a route-first view with the Portal cube already selected, use
-<http://localhost:8080/?build=control4&fresh=20260827&feature=block-world&block=portal>.
-
-Choosing **Social Explorer / Re-market** from that Portal opens a guided local
-path: **Discover → Discuss → Create → Allocation-preview**. The next step is
-highlighted, skipped steps are rejected, and **Reset flow** / **Replay local
-social rehearsal** make the sequence repeatable. Completing the fourth step
-shows the fixed 18-row `TUMBO-SIM` registry and hands off to Launch Distribution
-on the same page. This is a fictional community-reuse rehearsal only: it does
-not create a social account, publish externally, show a price, identify a
-recipient, or transfer an asset.
-
-Use **Move world JSON** from Block World (or Migration Bridge) to open the
-snapshot handoff. **Export JSON** serializes the current cube draft, while
-**Load JSON** accepts a pasted data-only envelope for bounded validation and
-preview before **Apply local draft** hands it back to the visible cubes. This
-is the actual block-world migration path; the separate Migration Snapshot
-surface still handles the six named legacy mappings. No file picker, package
-import, code execution, network upload, or persistent save is involved.
-The snapshot console also has a direct link:
-<http://localhost:8080/?build=control4&fresh=20260827&panel=block-snapshot>.
-
-## Runtime readiness and recovery
-
-The page shows a small runtime badge while the canonical projection, WebGL
-renderer, and local feature directory are starting. It changes to **Local
-surface ready** only after the first render loop is mounted. If WebGL is
-unavailable, the pinned module cannot load, or an uncaught runtime error stops
-the module, the badge changes to **Local 3-D surface unavailable** and offers a
-  reload link. The Mission Control markup includes a static directory of all 22
-feature names, so the page remains legible even when Three.js cannot create a
-canvas. Try a current browser with WebGL enabled, then reload the local page.
-
-This recovery path is deliberately local UI only. It does not create a wallet,
-provider, persisted state, token authority, signing operation, transfer, or
-other external execution path.
-
-To verify a running launch without starting anything new:
+Verification is read-only and does not start another service:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\verify-demo-launch.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify-demo-launch.ps1
 ```
 
-The page opens with **Mission Control** visible so the major surfaces are not
-hidden behind the organ art. Select any feature button to open its local
-records and focus the camera on the nearest visual organ. The **ARENA / Game
-Lab** button opens three playable local modes with legal actions, visible state
-transitions, a bounded event chain, and replay/reset controls. Press **F** (or the
-close button) to hide/show Mission Control, **R** to reset the camera, drag the
-empty field to orbit, and use the wheel/trackpad to travel. Dragging a cube is
-reserved for its bounded one-step move. **Reality Lens Ω** still provides WORLD →
-PEOPLE → DETAIL zoom. The TUMBO allocation rows remain available when Mission
-Control is closed; use them to inspect aggregate cohorts, or use **Replay launch
-preview** to replay the same deterministic reveal. A URL such as
-`/?feature=rooms`, `/?feature=block-world`, `/?feature=migration`, or
-`/?feature=arena`, and URLs such as `/?lens=detail&person=profile%3Amira-vale`, only change
-presentation focus; it does not mutate canonical state.
+Use `-StaticPort 8085` to check that alternate port. The verifier reads `GET /api/health`, checks the service and normalized-checkout-path fingerprint, fetches the entry page, main module, assembly, Connections module and vendored Three.js module, then reads `GET /api/providers`.
 
-Use `/?build=control4&fresh=20260828&panel=camera` to open the cube-first Camera
-Motion consent panel directly. Permission is requested only after **Enable
-camera motion**; the control uses coarse frame-difference vectors to steer the
-local camera and keeps mouse/trackpad orbit available as the fallback. The
-camera route hides the legacy round semantic layers so the block field remains
-the visible substrate.
+Health fields include `service:matumbo-provider-bridge`, `healthy`, `instanceId`, `rootFingerprint`, `featureCount`, `storage:browser-local-projection`, `localOnly:true`, `credentialsInBrowser:false`, and `externalDeployment:false`. The path fingerprint identifies the directory; it is not a Git commit hash or source-integrity checksum. These probes establish service identity and file delivery. Browser rendering, interaction, source availability, and actual NVIDIA answers require separate checks.
 
-Inside **Launch Distribution**, **Open rehearsal receipt** opens the exact
-18-cohort reconciliation (10,000 basis points and 1,000,000,000 TUMBO-SIM
-units), lets you inspect cohorts, replay/reset the receipt, view its serialized
-JSON, and use **Download JSON** for an explicit local browser export. The
-download validates the receipt first, then revokes its temporary object URL;
-unsupported browser download APIs leave the JSON visible for manual saving. It
-is a local proof of the demo's allocation math, not an issuance, claim, wallet,
-or distribution receipt, and it never uploads or shares externally.
+Stop the launcher-owned process with:
 
-The complete registry is also a shareable local panel route:
-`/?build=control4&fresh=20260828&panel=launch-distribution`. This opens the
-18 aggregate fictional registry rows directly and performs no network request.
-Add `&live=population` only when the optional World Bank metadata rail is
-explicitly wanted; that route performs one bounded context read and never
-changes the registry totals.
+```powershell
+.\run_local.bat stop
+```
 
-The **Open Launch Kit** button in Launch Distribution or Social Explorer opens
-the complete local handoff in one place: all 22 Mission Control routes, the
-fixed fictional token/allocation registry, the six migration mappings, the
-social catalog, and Phone/PC/XR presentation profiles. Each route button
-returns to the corresponding Mission Control console. **Download Launch Kit**
-exports that validated manifest as local JSON only; it cannot launch a service,
-create recipients, or issue/distribute an asset.
+For an alternate port:
 
-**Contracts + Pools** is also an openable local graph. It lists the covenant,
-pool, collateral, position, and derived risk records from the canonical
-projection; selecting a row, replaying the inspection, or resetting the view
-only changes the in-memory renderer trace. It never creates a trade or
-settlement path.
+```powershell
+.\run_local.bat stop -StaticPort 8085
+```
 
-**PAYCORE Asset-token Balances** opens the two fictional TUMBO asset-token
-balance previews and the projected flow between them. Selecting a balance or
-flow, replaying the preview, and resetting the view are renderer-only actions;
-they never move value or create a wallet.
+Launch records and logs are under `work/demo-launch/`. The stopper requires the recorded checkout and port, PID, process creation time, exact command line, and the running health instance/fingerprint to match. It refuses a changed identity. If there is no owned record, it stops nothing; if the recorded process already exited, it removes that stale record. A manually started or reused service remains owned by its original launcher.
 
-**T402 Value Routing** opens the four-stage offer → route → simulated hold →
-live movement blocked rehearsal. Select any stage to inspect its local record,
-then replay or reset the sequence. It never creates custody, signing, release,
-transfer, settlement, or a payment rail. A shareable local route is
-`/?feature=t402`.
+## Other platforms and browser-only preview
 
-**Agent** opens the advisory graph. The Control Tower → Oracle
-relationship, declared ancestry, intent, and proposal are selectable records;
-replay follows their local links and reset clears the in-memory trace. These
-fixtures have no provider, tool, autonomous execution, or identity authority.
-Use `/?feature=agent` to open it directly.
+On macOS/Linux, run the bridge in the foreground from the repository:
 
-**Picture Matter** opens the word → statement → provenance chain. Select the
-local `reality` word-object, its interpretation, or either provenance link to
-inspect the joins; replay follows the chain and reset clears the local trace.
-Images remain local metadata, statements are not truth determinations, and
-external fetching or publishing is denied. Use `/?feature=picture-matter`.
+```sh
+python3 scripts/provider_bridge.py --port 8082
+```
 
-**Prime Ledger + EchoProof** opens the balanced journal record and its declared
-proof ancestry. Select either journal or proof node, replay the local path, and
-reset the trace. The surface is a renderer summary only: it does not verify
-cryptography, sign, settle, publish, or mutate a ledger. Use `/?feature=ledger`.
+Open the same loopback URL and stop that process with Ctrl+C. A Windows foreground session can use `py -3 scripts/provider_bridge.py --port 8082`.
 
-**World Gateway / Evidence** opens the World Pulse public-source projection.
-Refresh requests documented public feeds and keeps each provider's status,
-source URL, observed time, missing event time, and uncertainty visible. A
-provider failure yields an unavailable/partial state; no fabricated rows or
-graphic imagery are inserted. The former Live Gateway fixture remains mounted
-only as an internal regression surface and is not the user-facing route. Use
-`/?feature=gateway`.
+For a browser-only preview, any ordinary HTTP server can serve a built static package. This fallback has no `/api/health`, process ownership protocol, or NVIDIA inference route:
 
-The same World Pulse panel also exposes a separate **Structured humanitarian
-evidence** rail backed by the documented, credential-free UNHCR Refugee Data
-Finder API. It shows only provider-returned annual population metrics, the
-provider year, and named origin/asylum dimensions when UNHCR supplies them.
-The rail never turns a population count into a conflict event, brutality,
-severity, casualty, or intensity claim: event time, severity, and intensity
-remain visibly unavailable/unknown, and missing geography is not inferred.
-The four headline/event providers and their title-language signal remain a
-separate stream. If the UNHCR request fails or returns no usable row, the rail
-stays unavailable and no fallback data is fabricated.
+```sh
+python3 -m http.server 8080 --bind 127.0.0.1 --directory work/static-preview
+```
 
-The **Public source status · live refresh snapshots** surface in Live Gateway
-mirrors that UNHCR envelope as a nested **Structured humanitarian · UNHCR**
-status row beneath World Pulse. It also exposes the existing fixed ESPN
-Multi-Sport Scoreboards read (soccer, NBA, and NFL) alongside Tennis, Asset
-Market, and Protocol TVL. Every row preserves provider state, freshness,
-retrieved time, observed-time availability, record count, source URL, and
-failure reason without merging the humanitarian row into the headline /
-event-provider totals.
+Use an extracted static package as `work/static-preview` and open `http://127.0.0.1:8080/`. Do not use the bridge verifier to certify an ordinary file server. Open the bridge's own 8082 page when testing NVIDIA, avoiding public-page local-network access restrictions.
 
-**Tennis Evidence / ATP · WTA** opens a public sports read over the same
-cube-first field. Refresh requests the ESPN public ATP/WTA scoreboard and
-ranking endpoints, then follows bounded public competition and linescore
-references when they are returned. Each match keeps its source URL, observed
-time, player/ranking fields, status, set-score availability, play-by-play
-availability, and a data-completeness grade. The grade is not a player rating,
-prediction, odds signal, betting recommendation, or outcome claim; unavailable
-provider fields remain unavailable and no rows are fabricated. Use
-`/?feature=sports-events`.
+## First use and recovery
 
-**Multi-Sport Scoreboards** opens a cube-backed public read for the fixed
-English Premier League soccer, NBA, and NFL ESPN scoreboards. An explicit
-refresh requests those three HTTPS endpoints and displays only returned event,
-participant, score, status, time, venue, leader, and source fields. Empty or
-failed providers remain unavailable with no replacement rows; field
-completeness is not an outcome claim. Selecting, replaying, and resetting an
-event are local inspection traces, and the route has no odds, betting, media,
-identity, persistence, or value-execution path. Use
-`/?build=control4&fresh=20260828&panel=multi-sport-events`.
+The landing is **Reality Lens / Reality Assembly**, organized into six spaces using five bodies: cube, sphere, cylinder, triangular prism and torus. Choose a space, then open a feature object. Busy spaces show six objects per desktop page or four per compact phone page. **Find / Locate** searches the canonical identities; breadcrumbs and browser Back return object → containing space → Home. Drag a body to turn it, tap its painted controls, and use surface **Previous / Next** to browse longer content. **Details** adds information to the same body's surfaces. **Text view** exposes the original accessible feature. **View** and **Connections** expose optional controls on request. Person Ω opens the personal room through the same navigator. See [whole-body surfaces](REALITY_SURFACES_360.md) for interaction and media boundaries.
 
-**Phone / PC / XR** opens the device-parity readout over the same canonical
-world. Select the compact phone, expanded PC, or not-tested XR profile to see
-the input, motion, viewport, and fallback metadata; replay and reset only touch
-the local trace. No XR session, shared-state sync, or parity claim is active. Use
-`/?feature=projections`.
+The page uses the vendored Three.js 0.179.1 module; the core renderer does not depend on a Three.js CDN. WebGL is required for the full 3D view. If startup or WebGL fails, the page reports an unavailable renderer and preserves an accessible feature fallback. Check the reported failure, use a current WebGL-capable browser, and reload. A successful HTTP probe alone does not prove the 3D world is working.
 
-## Local intent timeline
+If an older screen remains after an update, reload the page with the browser's cache bypass. Do not use a hard-coded historical `build=control4` or `fresh=...` query as a release identifier. Direct routes use the canonical identity, for example `/?feature=youtube`, `/?feature=chess`, or `/?feature=contract-atelier`; Back/Forward restores navigation separately from domain state.
 
-The **Intent Trace** button opens a small in-page observability window for the
-same renderer intents that drive Mission Control, launch-distribution replay,
-Social Explorer rehearsal, Reality Lens changes, camera focus, and optional
-camera-motion samples. It keeps at most 12 recent entries in memory. Each row
-shows only a type, target, and a shallow primitive metadata summary; nested
-objects and address/key/credential-shaped fields are omitted.
+## Canonical feature identities
 
-Use **Replay visible trace** to redraw the captured rows or **Clear trace** to
-remove them. Both actions are local UI operations and do not alter the
-canonical projection. Closing the panel or reloading the page clears the
-session window. The trace is explicitly labelled **local simulation / no
-network** and does not persist, identify, authorize, or execute anything.
+The current registry is [FEATURE_DEFINITIONS](../src/render/feature-navigator.js). It contains **36 identities**; counts are derived from that registry rather than an old packet's route list. Each ID can be selected through the navigator or `/?feature=ID`. A present route is not evidence that its provider, account, hardware dependency, or every workflow has been verified.
 
-## Optional camera motion
+| Space | Feature | Canonical ID |
+| --- | --- | --- |
+| Worlds & rooms | Rooms + Messaging | `rooms` |
+| Worlds & rooms | Block World / Fabric | `block-world` |
+| Worlds & rooms | Local Cube Sync | `runtime-sync` |
+| Worlds & rooms | Migration Bridge | `migration` |
+| Your space | Person Ω | `person` |
+| Your space | Social Mirror / Feed Ticker | `social-mirror` |
+| Your space | Luna Companion | `luna-companion` |
+| Your space | Wardrobe Atelier | `wardrobe-atelier` |
+| Network & tools | Social Explorer / Re-market | `social-explorer` |
+| Network & tools | Bot Plaza | `bot-plaza` |
+| Network & tools | World Gateway / Evidence | `gateway` |
+| Network & tools | Web + AI | `web-ai` |
+| Value & contracts | TUMBO Asset Token | `asset-token` |
+| Value & contracts | Asset Market Evidence | `asset-market` |
+| Value & contracts | Launch Distribution | `launch-distribution` |
+| Value & contracts | PAYCORE Asset-token Balances | `paycore` |
+| Value & contracts | Contracts + Pools | `contracts` |
+| Value & contracts | Contract Atelier | `contract-atelier` |
+| Value & contracts | Prime Ledger + EchoProof | `ledger` |
+| Value & contracts | T402 Value Routing | `t402` |
+| Agents | Agent | `agent` |
+| Agents | Neural Mesh | `neural-mesh` |
+| Agents | Muse Agent | `muse-agent` |
+| Play, media & learning | Reality Lens Ω | `reality-lens` |
+| Play, media & learning | YouTube | `youtube` |
+| Play, media & learning | Picture Matter | `picture-matter` |
+| Play, media & learning | NFT Atelier | `nft-atelier` |
+| Play, media & learning | White Paper | `white-paper` |
+| Play, media & learning | Gesture Lens | `gesture-lens` |
+| Play, media & learning | World Events / Evidence | `world-events` |
+| Play, media & learning | Tennis Evidence / ATP · WTA | `sports-events` |
+| Play, media & learning | Multi-Sport Scoreboards | `multi-sport-events` |
+| Play, media & learning | ARENA / Game Lab | `arena` |
+| Play, media & learning | Chess | `chess` |
+| Play, media & learning | Financial Academy | `academy` |
+| Play, media & learning | Phone / PC / XR | `projections` |
 
-Mission Control includes a **Camera Motion** button. Camera access is never
-requested on page load: press the button, approve the browser permission, and
-the local adapter will use only coarse frame-difference motion to steer the
-OrbitControls camera. Empty-field drag orbit and wheel/trackpad travel remain
-available at all times; cube drags stay reserved for local one-step moves. The
-adapter does not recognize faces, infer identity, record, store, or
-send frames; disabling it immediately releases the camera tracks. If the
-browser does not support camera access or permission is denied, the panel
-reports the fallback and the mouse/trackpad path keeps working.
+Local Cube Sync is an explicit adapter for a separately running compatible Merge4 service. The standard launcher does not install or start that service. Rooms/cipher indicators, allocation schedules, projected ledger proofs, and several advisory graphs describe simulated or illustrative state. Keep those boundaries distinct from playable local workflows and provider-returned observations.
 
-## Fixed demo allocation schedule
+## What persists
 
-The projection uses 1,000,000,000 integer `TUMBO-SIM` units and 10,000 basis
-points. The rows are aggregate fictional classes, never recipient addresses:
+The service reports `browser-local-projection`. The browser can store feature layout, an approved avatar/look, local bot definitions and proposal records, persistent user blocks, and simulation records through their domain adapters. Other room actions, projections, and inspection traces remain session-only. Persistence varies by feature; it does not turn renderer metadata into backend authority.
 
-| Cohort | Share | Simulated units |
-| --- | ---: | ---: |
-| Public social-experiment participants | 25% | 250,000,000 |
-| County and community cohorts | 20% | 200,000,000 |
-| Participating organisations | 15% | 150,000,000 |
-| International public-good funds | 15% | 150,000,000 |
-| Ecosystem grants | 10% | 100,000,000 |
-| Treasury reserve | 10% | 100,000,000 |
-| Demo operations | 3% | 30,000,000 |
-| Insurance and risk reserve | 2% | 20,000,000 |
+Browser storage belongs to its origin. `localhost:8082`, `127.0.0.1:8082`, another port, and the public GitHub Pages site each have separate state. Use the same URL to continue the same local workspace. Clearing that site's browser data can remove saved layouts and simulation progress; export supported JSON before deliberately resetting it. Ordinary navigation does not need a global storage clear.
 
-The schedule reconciles exactly to both 10,000 basis points and the fixed
-1,000,000,000-unit supply. “Distributed at launch” in the UI means only that
-these rows become visible in the local scene; no units leave the browser.
+The block draft's editing/import path and a separately connected Local Cube Sync service have their own boundaries. The launch kit is a data manifest, not a service installer or proof that a backend is present. Nothing in the browser grants account membership, real identity authority, wallet custody, signing, settlement, or external bot execution.
 
-## Complete launch registry and replay behavior
+## Public reads and NVIDIA
 
-Mission Control includes a **Launch Distribution** feature. It opens the full
-scrollable registry rather than only the eight class summaries. The registry
-is deterministic and contains 18 aggregate fictional rows:
+Connections deliberately runs **one bounded public batch on page load**: Open-Meteo example weather, Frankfurter/ECB EUR rates, USGS past-day earthquakes, and DeFiLlama Aave TVL. One fixed ExchangeRate-API alternate is tried only if the FX primary fails, with its own attribution and retained primary failure. **Check connections** requests another batch. There is no repeating background poll.
 
-| Registry cohort | Class share | Simulated units |
-| --- | ---: | ---: |
-| Opt-in social-experiment participants | 10% | 100,000,000 |
-| Community builders in the social experiment | 8% | 80,000,000 |
-| Space-explorer demo cohorts | 7% | 70,000,000 |
-| County/community cohort Alpha | 5% | 50,000,000 |
-| County/community cohort Beta | 5% | 50,000,000 |
-| County/community cohort Gamma | 5% | 50,000,000 |
-| County/community cohort Delta | 5% | 50,000,000 |
-| Civic and public-service organisations | 5% | 50,000,000 |
-| Education and research organisations | 5% | 50,000,000 |
-| Nonprofit and community organisations | 5% | 50,000,000 |
-| International public-good funds | 5% | 50,000,000 |
-| International humanitarian funds | 5% | 50,000,000 |
-| International climate and resilience funds | 5% | 50,000,000 |
-| Ecosystem builder grants | 5% | 50,000,000 |
-| Ecosystem creator and research grants | 5% | 50,000,000 |
-| Treasury reserve | 10% | 100,000,000 |
-| Demo operations reserve | 3% | 30,000,000 |
-| Insurance and risk reserve | 2% | 20,000,000 |
+Older source surfaces keep their own explicit refresh controls and provenance. YouTube search requests public metadata after a user search; selected video IDs play through one privacy-enhanced YouTube iframe on the object. Provider failures remain visible rather than being replaced with invented live rows. See [API_CONNECTIONS.md](API_CONNECTIONS.md) for endpoint, quota, attribution, and CORS details.
 
-The **Run local launch preview** button marks the registry event as
-`previewed`, reveals the deterministic event id, and checks row totals against
-10,000 basis points and 1,000,000,000 units. Replaying the button increments a
-local replay counter but uses the same event and rows; it emits only a frozen
-`simfabric:intent` for the renderer. It never generates recipient addresses,
-wallet records, signatures, settlement instructions, provider calls, or
-external transfers.
+NVIDIA uses `GET /api/providers` for configuration discovery and `POST /api/nvidia/chat` only after **Send to NVIDIA**. Without a server environment key, its state is **Key needed**. Key presence yields **Configured · untested**; a successful explicit answer is needed to verify authentication and entitlement. No inference is issued automatically, and the result is advisory.
 
-The console now keeps the selected cohort visible in an inline inspection card
-above the scrollable registry. Selecting any row updates that card with the
-fictional cohort label, recipient class, coverage, allocation id, percentage,
-basis points, simulated `TUMBO-SIM` units, and status. The card also repeats
-the aggregate-fictional / local-only boundary so a row selection cannot be
-mistaken for a claim or a transfer. `getSnapshot().selectedCohort` exposes the
-same frozen readout to the host for local intent tracing; it does not create a
-second schedule or mutate the canonical projection.
+Follow [secure NVIDIA setup](API_CONNECTIONS.md#connect-nvidia-securely) to supply the developer key to the server environment. Stop and relaunch the owned bridge from that shell after configuring it; an already running process cannot inherit a new environment variable. Never put the key in the page, a URL, browser storage, a source file, or a launch log. Static GitHub Pages cannot run Python or keep a server API key secret. Browser local-network policy can block cross-origin discovery, so the bridge's own page is the supported local path.
 
-The registry table has a **Coverage** lens rail for quicker inspection of the
-same rows: **ALL**, **SOCIAL**, **COUNTY/COMMUNITY**, **ORGANISATIONS**,
-**INTERNATIONAL FUNDS**, **GRANTS**, and **RESERVES**. The lens matches the
-canonical `recipientClass` on each existing registry row; it does not infer a
-new recipient or build a second allocation. The rail reports the visible row,
-basis-point, and unit subtotals while the fixed 18-row, 10,000-basis-point,
-1,000,000,000-unit reconciliation remains unchanged. Changing the lens only
-changes which rows are rendered and keeps selection local; replay still reports
-the canonical launch totals and remains `TUMBO-SIM` / no-transfer preview data.
+## Build a static package
 
-The launch console also includes a four-step **Launch story** rail so the
-social-experiment path is navigable rather than hidden behind one replay
-button: **Prepare** explains the fixed-supply boundary, **Reveal map** lights
-the aggregate 3-D cohorts, **Inspect registry** keeps the full 18-row table in
-view, and **Social explorer** hands the viewer to the local discovery rooms.
-The Back/Next controls and the social handoff all update presentation state
-only and emit frozen local intents.
+From Windows:
 
-### Optional World Bank population context
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\package-demo.ps1
+```
 
-The Launch Distribution console has a separate **Public population context ·
-optional read** rail. It is not part of the registry and never derives a
-recipient count or allocation percentage. Press **Refresh World Bank** (or use
-the explicit route below) to request one bounded HTTPS read from the official
-World Bank v2 Indicators API for `SP.POP.TOTL`. The fixed request covers six
-representative context lenses (`USA`, `KEN`, `IND`, `BRA`, `NGA`, and `DEU`)
-and the 2022–2024 year window, with a maximum of 18 observations. Provider
-country names, years, values, source, retrieval time, and unavailable
-contexts remain visible as metadata only; no geocoding, identity resolution,
-eligibility, population weighting, or community membership is inferred.
+The script chooses a fresh `work/static-demo-<id>/` directory. An explicit fresh destination is also supported:
 
-The shareable opt-in route is:
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\package-demo.ps1 -OutputDirectory .\work\review-package
+```
 
-`http://localhost:8080/?build=control4&fresh=20260828&panel=launch-distribution&live=population`
+On another platform:
 
-Ordinary Launch Distribution routes do not call the provider. The URL above
-performs one explicit host-owned request; the DOM adapter itself has no
-network client. If the provider fails, returns malformed data, or omits a
-context, the rail reports `UNAVAILABLE` or `PARTIAL` and shows no replacement
-rows. The fixed 18-row, 10,000-basis-point, 1,000,000,000-unit `TUMBO-SIM`
-schedule remains unchanged. The read is public research context, not a
-distribution plan, issuance, wallet, transfer, custody, signing, settlement,
-price, or money claim.
+```sh
+python3 scripts/package_demo.py work/review-package
+```
 
-## Social Explorer / Re-market rehearsal
+The output includes `matumbo-static-demo.zip`, `manifest.json` with each browser file's size and SHA-256, and `SHA256.txt` for the ZIP. Archive entry ordering, timestamps, and permissions are fixed for reproducible content. The packager builds browser directories and root entrypoints, checks ZIP integrity and each recorded file hash, and refuses to replace an existing archive. It does not freeze a universal file count or checksum: those depend on the actual source being packaged.
 
-Mission Control also includes **Social Explorer / Re-market**. Open it to
-browse four fictional rooms, six creator/community cards, and six discovery
-signals. The rooms make the intended local flow visible:
+The ZIP is browser-only and excludes the Python server, credentials, repository metadata, and dotfiles. Extract it into a separate directory and serve it over HTTP to check the rendered result. Packaging and checksums are not deployment or interaction proof. The [Pages workflow](../.github/workflows/deploy-pages.yml) builds the static site on main-branch pushes or explicit dispatch; a draft PR remains separate from the published build.
 
-`discover → discuss → create → allocate-preview`
+## Architecture and history
 
-The phrase “re-market” here means only a rehearsal of discovery and community
-reuse. It is not a market, listing, exchange, trading pair, price, return
-promise, buy/sell action, or investment product. The final
-`allocate-preview` step links back to the same fixed launch-registry story; it
-does not create a second schedule or move units.
+Current controls preserve the project's local simulation/projection boundary. Domain records own their state; the 3D world and mesh surface textures render it. The cross-origin YouTube player remains one planar native browser surface. Public reads do not become trades, cryptographic proofs, membership, or financial authority. Optional advisory AI has no wallet, signing, settlement, or external execution tools.
 
-The **Re-market rehearsal actions** rail makes all four verbs clickable:
-**Discover a community story**, **Discuss the shared question**, **Create a
-remix preview**, and **Preview community reuse**. Each button updates the
-local status and trace; the last action opens the existing launch console at
-the registry step so the two stories visibly share one allocation projection.
+For deeper feature history and architecture, see [Block World and migration](BLOCK_WORLD_MIGRATION.md), [contract flow](CONTRACT_FLOW.md), [Person embodiment](PERSON_EMBODIMENT.md), [public source evidence](LIVE_GATEWAY_EVIDENCE.md), [device projection](DEVICE_PROJECTION.md), and [Merge4 snapshot adapter](MERGE4_SNAPSHOT_ADAPTER.md). Packet receipts may contain earlier routes, geometry, fixture descriptions, or test counts; use current source and fresh evidence for acceptance.
 
-Use **Replay local social rehearsal** to run the four-step trace again. The
-console reports `REPLAYED · LOCAL REHEARSAL` and marks each step with the local
-replay count. Every action emits a frozen simulation intent in memory only.
-
-The same console now has a separate **launch plan** for choosing how this
-demo is entered. **Social experiment** emphasizes discovery, discussion,
-creation, and community reuse; **Space explorer** emphasizes rooms, nested
-cubes, and the block-world route. Both modes are opt-in previews only: the
-page reports `OPT-IN-NOT-RECORDED`, never enrolls a person, and never creates a
-social account. The ordered local phases are **Opt in → Explore → Create →
-Allocation-preview**. The last phase points back to the canonical TUMBO
-asset-token registry and always reports `PREVIEW-ONLY · NO TRANSFER`; it does
-not copy the registry rows or invent another percentage schedule.
-
-Shareable local examples are:
-
-`http://localhost:8080/?build=control4&fresh=20260827&panel=social-explorer&mode=social-experiment`
-
-`http://localhost:8080/?build=control4&fresh=20260827&panel=social-explorer&mode=space-explorer`
-
-Those two default examples are deliberately local and make no provider calls.
-For an explicit public-read observation, add `&live=public` to the social-
-experiment route:
-
-`http://localhost:8080/?build=control4&fresh=20260828&panel=social-explorer&mode=social-experiment&live=public`
-
-That opt-in route makes one bounded request to the public Bluesky AppView for
-the allowlisted `@atproto.com` author feed and renders up to eight text and
-metadata observations. It does not post, authenticate, load media, identify a
-viewer, persist a feed, or turn observations into social membership, allocation,
-wallet, transfer, settlement, or money. If the provider is unavailable, the
-rail says so instead of inserting fixtures or fallback rows.
-
-## Rooms + Messaging / enterable space layer
-
-Mission Control's **Rooms + Messaging** feature opens a separate local space
-surface over the two membership-scoped rooms in the canonical `spatial-rooms`
-contribution: **Living Reality Chamber** (owner role) and **Market
-Observatory** (observer role). Each room is rendered as a small low-poly
-portal in the 3-D scene, and the console exposes:
-
-- room selection from the same projection that drives the portals;
-- explicit **Enter selected room** and **Leave room** actions;
-- a local enter/leave trace and a **Replay local enter / leave** rehearsal;
-- metadata-only messaging status (the demo never displays message content).
-
-Selecting a portal on the canvas or selecting a row in the console focuses the
-camera. Entering changes only the renderer's in-memory state and emits a frozen
-local intent; it does not grant membership, send a message, persist state, or
-contact a provider. The room map is intentionally bounded for compact/mobile
-viewports and remains a presentation layer over the canonical projection.
-
-## Migration Bridge / old project → blocks
-
-Mission Control's **Migration Bridge** keeps the earlier Arena / Living Reality
-concepts visible instead of leaving them in an archive. Its fixed six-row
-manifest maps scene layout, game-room motion, contracts, rooms, and semantic
-block concepts to current local destinations; external project sync is shown as
-explicitly deferred. **Preview mappings** rebuilds the deterministic map, and
-**Apply local draft** validates and applies the five safe rows to the visible
-Block World / Fabric draft, including a trace entry for each destination
-coordinate, before handing the viewer back to the voxel surface.
-
-The **Load JSON snapshot** button opens a shareable local textarea for a
-data-only fixture of known mapping IDs. It validates malformed, unknown,
-duplicate, and executable-looking fields before Apply is enabled, then hands
-valid mappings back to Block World as an in-memory draft. Replay and Reset are
-local controls; no file path, package, script, command, network request, or
-persistent migration is performed.
-
-The **Review Merge 4 snapshot** control on the same bridge opens the staged
-in-memory adapter fixture. It maps safe fabric/room/event/message/proof and
-balanced-journal metadata into a frozen local envelope and lists deferred
-server-only records. It never calls the Merge 4 API, writes PostgreSQL, opens
-ciphertext, or hands Merge 4 records to the Block World apply path.
-
-This is not a file importer. The bridge never reads a legacy path or package,
-executes imported code, writes a migrated project, persists a draft, contacts a
-provider, or changes the canonical projection. A real import would need a
-separately authorized format adapter, consent/identity boundary, persistence
-review, and rollback plan.
-
-## What a real launch would still require
-
-An actual public asset launch is a separate project and must not be inferred
-from this demo. Before any live issuance or public distribution, the team
-would need, at minimum:
-
-1. jurisdiction-specific legal and tax review of the asset, its promotion,
-   recipient program, and any consideration or expectation of profit;
-2. a documented issuer, contract, upgrade, treasury, reserve, and key-control
-   model with independent security review and an incident/recovery plan;
-3. provider and infrastructure decisions for chain, custody, signing,
-   monitoring, sanctions/eligibility, privacy, and data retention;
-4. a real recipient registry and consent process, with country/county and
-   organisation-level eligibility, privacy, and dispute handling; and
-5. a staged testnet/rehearsal, approval record, rollback plan, and fresh
-   production verification before any public announcement.
-
-Until those gates are separately approved and implemented, keep the demo in
-simulation mode. Do not add a wallet button, buy/sell language, token price,
-claim link, recipient address, exchange listing, or “guaranteed distribution”
-copy to this surface.
+The [earlier launch document at commit a12462c](https://github.com/carltheghost/matumbo-living-reality-demo/blob/a12462cd865dc094a44c58f6d11ef8061eb7b79e/docs/DEMO_LAUNCH.md) preserves the earlier cube-first / optional Merge4-memory narrative and fictional allocation examples. It is a historical reference, not the current startup procedure. Production services, shared synchronization, physical-device gestures, and XR hardware acceptance each need their own implemented and verified environment.

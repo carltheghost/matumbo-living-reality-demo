@@ -1,0 +1,33 @@
+{
+  "started": "2026-10-04T16:34:50.278Z",
+  "runs": [
+    {
+      "name": "desktop",
+      "checks": [
+        "Design errors remain visible, custom creation and equip save locally",
+        "Reload preserves the authored design and exact selected/equipped record",
+        "Starter equip updates Person and JSON download contains all saved designs",
+        "Reset restores Person default; actual file import restores all designs and Person mapping",
+        "Malformed file import preserves both the current gallery and persisted backup",
+        "Isolated second component tab refuses a stale write and explicit reload recovers the newer wardrobe",
+        "No page errors or horizontal overflow"
+      ],
+      "errors": []
+    },
+    {
+      "name": "phone",
+      "checks": [
+        "Design errors remain visible, custom creation and equip save locally",
+        "Reload preserves the authored design and exact selected/equipped record",
+        "Starter equip updates Person and JSON download contains all saved designs",
+        "Reset restores Person default; actual file import restores all designs and Person mapping",
+        "Malformed file import preserves both the current gallery and persisted backup",
+        "No page errors or horizontal overflow"
+      ],
+      "errors": []
+    }
+  ],
+  "staleTabVerification": "Isolated original Wardrobe component on the same loopback origin; a second full app hit the 30-second navigation timeout twice under software WebGL.",
+  "passed": true,
+  "completed": "2026-10-04T16:35:38.290Z"
+}

@@ -5,3 +5,6 @@ __pycache__/
 # Historical dashboard stub is intentionally outside the canonical runtime.
 dashboard/
 runtime/merge4/node_modules/
+node_modules/
+dist/
+work/

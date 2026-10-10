@@ -1,436 +1,109 @@
-/**
- * Token lifecycle tests (node:test).
- *
- * Covers the TUMBO-SIM lifecycle slice:
- *  - reverse within the bounded window posts a compensating journal
- *    (history is never edited)
- *  - reverse after window expiry fails closed
- *  - double-reverse is impossible (deterministic idempotency key)
- *  - cancel of a settled tx fails closed; cancel of pending works
- *  - chain-tamper detection via recomputed hashes and prevHash links
- *
- * Run: node --test tests/token-lifecycle.test.mjs
- * Simulation only — no real value, no network, no wallets.
- */
-
-import test from "node:test";
-import assert from "node:assert/strict";
-import {
-  TOKEN_CONFIG,
-  createTumboToken,
-  fmtFluff,
-  sha256Hex,
-  TokenError,
-  InsufficientFundsError,
-  ReverseWindowExpiredError,
-  AlreadyReversedError,
-  CancelRejectedError,
-  JournalNotFoundError,
-} from "../src/domains/token.js";
-
-const WINDOW = TOKEN_CONFIG.REVERSE_WINDOW_TICKS;
-
-/** Fresh facade with u:alice funded from sys:treasury. */
-function funded(aliceFluff = 50_000, asset = "TUMBO") {
-  const t = createTumboToken();
-  t.execute({
-    action: "send",
-    asset,
-    from: "sys:treasury",
-    to: "u:alice",
-    amountFluff: aliceFluff,
-    idempotencyKey: `fund-alice-${asset}`,
-  });
-  return t;
+/** Current engine lifecycle: immutable journals, bounded reversals and pending quotes. */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createTokenEngine,TumboUserLedger,CONFIG,fmt,REVERSE_WINDOW_TICKS,
+  CancelRejectedError,ReverseWindowExpiredError,JournalNotFoundError,receiptChainHash,VOID_ACCOUNT} from '../src/domains/token.js';
+import {sha256Hex} from '../src/domains/token-sha256.js';
+function funded(){
+  const engine=createTokenEngine(),wallet=new TumboUserLedger(engine);
+  engine.faucet('u:alice','TUMBO',50_000,{idempotencyKey:'fund-alice'});
+  return {engine,wallet};
 }
-
-function tickForward(t, n, prefix = "tick") {
-  for (let i = 0; i < n; i += 1) {
-    t.execute({
-      action: "send",
-      from: "sys:treasury",
-      to: "sys:faucet",
-      amountFluff: 1,
-      idempotencyKey: `${prefix}-${i}`,
-    });
-  }
+const send=wallet=>wallet.send({from:'alice',to:'bob',amountFluff:1500,idempotencyKey:'send-1'});
+const buy=engine=>engine.quote({action:'buy',from:'u:alice',fromAsset:'TUMBO',toAsset:'sMIMAS',amountIn:10_000});
+function advance(engine,count){for(let i=0;i<count;i++)engine.faucet('u:clock','TUMBO',1,{idempotencyKey:'clock-'+i});}
+function balanced(journal){
+  const totals=new Map();for(const p of journal.postings)totals.set(p.asset,(totals.get(p.asset)??0n)+BigInt(p.amount));
+  assert.ok([...totals.values()].every(total=>total===0n));
 }
-
-test("facade contract: { ledger, balance, fmt, on } with integer fluff units", () => {
-  const t = createTumboToken();
-  assert.equal(typeof t.balance, "function");
-  assert.equal(typeof t.fmt, "function");
-  assert.equal(typeof t.on, "function");
-  assert.ok(t.ledger, "ledger exposed");
-  // Supply comes from the ONE config constant; both assets derive from it.
-  assert.equal(t.balance("sys:treasury", "TUMBO"), TOKEN_CONFIG.SUPPLY_FLUFF);
-  assert.equal(t.balance("sys:treasury", "sMIMAS"), TOKEN_CONFIG.SUPPLY_FLUFF);
-  assert.equal(TOKEN_CONFIG.FLUFF_PER_UNIT, 1000, "1 TUMBO-SIM = 1000 fluff");
-});
-
-test("sha256 matches the standard test vector", () => {
-  assert.equal(
-    sha256Hex("abc"),
-    "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
-  );
-});
-
-test("fmt renders exact decimals without floats", () => {
-  assert.equal(fmtFluff(1500), "1.500 TUMBO-SIM");
-  assert.equal(fmtFluff(1), "0.001 TUMBO-SIM");
-  assert.equal(fmtFluff(0, "sMIMAS"), "0.000 sMIMAS-SIM");
-});
-
-test("send posts a balanced journal and moves balances", () => {
-  const t = funded();
-  const before = t.balance("u:alice");
-  const res = t.execute({
-    action: "send",
-    from: "u:alice",
-    to: "u:bob",
-    amountFluff: 1500,
-    idempotencyKey: "send-1",
-  });
-  assert.equal(res.replayed, false);
-  assert.equal(res.journal.state, "settled");
-  assert.equal(t.balance("u:alice"), before - 1500);
-  assert.equal(t.balance("u:bob"), 1500);
-  const sums = new Map();
-  for (const p of res.journal.postings) {
-    sums.set(p.asset, (sums.get(p.asset) ?? 0n) + BigInt(p.amountFluff));
+test('supplies come from the shared config and integer units format exactly',()=>{
+  const {engine}=funded();
+  for(const asset of ['TUMBO','sMIMAS']){
+    const issued=engine.ledger.accounts().filter(a=>a.asset===asset&&a.account!=='sys:issuance').reduce((sum,a)=>sum+engine.balance(a.account,asset),0);
+    assert.equal(issued,CONFIG.supply[asset]);
   }
-  for (const total of sums.values()) assert.equal(total, 0n, "journal sums to 0 per asset");
+  assert.equal(fmt(1500),'1.500 TUMBO-SIM');assert.equal(fmt(1),'0.001 TUMBO-SIM');
+  assert.equal(sha256Hex('abc'),'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
 });
-
-test("idempotency: replaying a key returns the original receipt", () => {
-  const t = funded();
-  const first = t.execute({
-    action: "tip",
-    from: "u:alice",
-    to: "u:bob",
-    amountFluff: 700,
-    idempotencyKey: "tip-once",
-  });
-  const count = t.ledger.journalCount;
-  const again = t.execute({
-    action: "tip",
-    from: "u:alice",
-    to: "u:bob",
-    amountFluff: 700,
-    idempotencyKey: "tip-once",
-  });
-  assert.equal(again.replayed, true);
-  assert.equal(again.journal.journalId, first.journal.journalId);
-  assert.equal(again.receipt.payloadHash, first.receipt.payloadHash);
-  assert.equal(t.ledger.journalCount, count, "no duplicate journal");
-  assert.equal(t.balance("u:bob"), 700, "balance moved only once");
+test('wallet send posts a balanced immutable journal and moves requested points',()=>{
+  const {engine,wallet}=funded();send(wallet);const row=engine.ledger._journals.at(-1);balanced(row);assert.ok(Object.isFrozen(row));
+  assert.equal(engine.balance('u:alice','TUMBO'),48_500);assert.equal(engine.balance('u:bob','TUMBO'),1500);
 });
-
-test("balances never go negative", () => {
-  const t = funded(1000);
-  assert.throws(
-    () =>
-      t.execute({
-        action: "send",
-        from: "u:alice",
-        to: "u:bob",
-        amountFluff: 1001,
-        idempotencyKey: "overdraft",
-      }),
-    InsufficientFundsError
-  );
-  assert.equal(t.balance("u:alice"), 1000, "failed tx moved nothing");
+test('replay returns the existing send and changed payload fails without another journal',()=>{
+  const {engine,wallet}=funded();const first=send(wallet),count=engine.ledger.journalCount();
+  const replay=send(wallet);assert.equal(replay.id,first.id);assert.equal(replay.duplicate,true);assert.equal(engine.ledger.journalCount(),count);
+  assert.throws(()=>wallet.send({from:'alice',to:'bob',amountFluff:1600,idempotencyKey:'send-1'}),/IDEM_MISMATCH/);
 });
-
-test("sys:void is credited only by burns and never debited", () => {
-  const t = funded();
-  t.execute({
-    action: "send",
-    from: "u:alice",
-    to: "sys:void",
-    amountFluff: 500,
-    idempotencyKey: "burn-1",
-  });
-  assert.equal(t.balance("sys:void"), 500);
-  assert.throws(
-    () =>
-      t.execute({
-        action: "send",
-        from: "sys:void",
-        to: "u:bob",
-        amountFluff: 100,
-        idempotencyKey: "void-debit",
-      }),
-    (err) => err instanceof TokenError && err.code === "void-debit"
-  );
+test('insufficient funds and system sends fail atomically',()=>{
+  const {engine,wallet}=funded(),count=engine.ledger.journalCount();
+  assert.throws(()=>wallet.send({from:'alice',to:'bob',amountFluff:50_001,idempotencyKey:'overdraw'}),/insufficient/);
+  assert.throws(()=>wallet.send({from:'sys:treasury',to:'bob',amountFluff:1,idempotencyKey:'system'}),/user accounts/);
+  assert.equal(engine.ledger.journalCount(),count);assert.equal(engine.balance('u:alice','TUMBO'),50_000);
 });
-
-test("exchange is a balanced multi-asset journal", () => {
-  const t = funded(100_000, "TUMBO");
-  t.execute({
-    action: "send",
-    asset: "sMIMAS",
-    from: "sys:treasury",
-    to: "u:bob",
-    amountFluff: 100_000,
-    idempotencyKey: "fund-bob-smimas",
-  });
-  const res = t.execute({
-    action: "exchange",
-    asset: "TUMBO",
-    assetB: "sMIMAS",
-    from: "u:alice",
-    to: "u:bob",
-    amountFluff: 2000,
-    amountBFluff: 4000,
-    idempotencyKey: "xchg-1",
-  });
-  const sums = new Map();
-  for (const p of res.journal.postings) {
-    sums.set(p.asset, (sums.get(p.asset) ?? 0n) + BigInt(p.amountFluff));
-  }
-  assert.equal(sums.get("TUMBO"), 0n);
-  assert.equal(sums.get("sMIMAS"), 0n);
-  assert.equal(t.balance("u:alice", "sMIMAS"), 4000);
-  assert.equal(t.balance("u:bob", "TUMBO"), 2000);
+test('market settlement balances both assets and credits the configured tithe',()=>{
+  const {engine}=funded(),q=buy(engine),row=engine.execute(q,{idempotencyKey:'buy-1'});balanced(row);
+  assert.equal(engine.balance(VOID_ACCOUNT,'TUMBO'),row.tithe);assert.equal(engine.balance('u:alice','sMIMAS'),q.amountOut);
 });
-
-test("reverse within the window posts a compensating journal, never edits history", () => {
-  const t = funded();
-  const tx = t.execute({
-    action: "send",
-    from: "u:alice",
-    to: "u:bob",
-    amountFluff: 9000,
-    idempotencyKey: "reversible",
-  });
-  const originalPostings = JSON.stringify(tx.journal.postings);
-  const aliceBefore = t.balance("u:alice");
-  const rev = t.reverse(tx.journal.journalId);
-  assert.equal(rev.journal.action, "reverse");
-  assert.equal(rev.journal.linkedJournalId, tx.journal.journalId);
-  assert.equal(t.balance("u:alice"), aliceBefore + 9000, "funds restored");
-  assert.equal(t.balance("u:bob"), 0);
-  const original = t.journalOf(tx.journal.journalId);
-  assert.equal(original.state, "reversed");
-  assert.equal(original.reversedBy, rev.journal.journalId);
-  assert.equal(JSON.stringify(original.postings), originalPostings, "original postings untouched");
-  // The reversal itself is a balanced journal.
-  const sum = rev.journal.postings.reduce((s, p) => s + BigInt(p.amountFluff), 0n);
-  assert.equal(sum, 0n);
-  assert.ok(t.verifyChain(), "chain still verifies after reversal");
+test('reversal adds a compensating journal and preserves original history',()=>{
+  const {engine,wallet}=funded();send(wallet);const before=engine.ledger._journals.slice();
+  balanced(engine.reverse({idempotencyKey:'send-1'}));assert.deepEqual(engine.ledger._journals.slice(0,-1),before);
+  assert.equal(engine.balance('u:alice','TUMBO'),50_000);assert.equal(engine.balance('u:bob','TUMBO'),0);assert.equal(engine.ledger.verifyChain().ok,true);
 });
-
-test("double-reverse is impossible", () => {
-  const t = funded();
-  const tx = t.execute({
-    action: "send",
-    from: "u:alice",
-    to: "u:bob",
-    amountFluff: 3000,
-    idempotencyKey: "double-rev",
-  });
-  const first = t.reverse(tx.journal.journalId);
-  // Same deterministic key replays the original reversal.
-  const replay = t.reverse(tx.journal.journalId);
-  assert.equal(replay.replayed, true);
-  assert.equal(replay.journal.journalId, first.journal.journalId);
-  // A fresh key against an already-reversed tx throws.
-  assert.throws(() => t.reverse(tx.journal.journalId, { idempotencyKey: "sneaky" }), AlreadyReversedError);
-  assert.equal(t.balance("u:bob"), 0, "no second compensation applied");
+test('repeating a reversal returns one receipt without paying twice',()=>{
+  const {engine,wallet}=funded();send(wallet);const first=engine.reverse({idempotencyKey:'send-1'}),count=engine.ledger.journalCount();
+  assert.equal(engine.reverse({idempotencyKey:'send-1'}),first);assert.equal(engine.ledger.journalCount(),count);
+  assert.throws(()=>engine.reverse({journalId:first.id}),/lifecycle journals/);
 });
-
-test("reverse after the window expires fails closed", () => {
-  const t = funded();
-  const tx = t.execute({
-    action: "send",
-    from: "u:alice",
-    to: "u:bob",
-    amountFluff: 2500,
-    idempotencyKey: "too-old",
-  });
-  tickForward(t, WINDOW + 1, "age");
-  const age = t.tick() - tx.journal.tick;
-  assert.ok(age > WINDOW, `aged ${age} ticks past the ${WINDOW}-tick window`);
-  assert.throws(() => t.reverse(tx.journal.journalId), ReverseWindowExpiredError);
-  const original = t.journalOf(tx.journal.journalId);
-  assert.equal(original.state, "settled", "original tx untouched");
-  assert.equal(t.balance("u:bob"), 2500, "no compensation posted");
+test('reversal at the exact journal window succeeds',()=>{
+  const {engine,wallet}=funded();send(wallet);advance(engine,REVERSE_WINDOW_TICKS);
+  engine.reverse({idempotencyKey:'send-1'});assert.equal(engine.balance('u:bob','TUMBO'),0);
 });
-
-test("reverse at exactly the window boundary still succeeds", () => {
-  const t = funded();
-  const tx = t.execute({
-    action: "send",
-    from: "u:alice",
-    to: "u:bob",
-    amountFluff: 2500,
-    idempotencyKey: "boundary",
-  });
-  tickForward(t, WINDOW, "edge");
-  assert.equal(t.tick() - tx.journal.tick, WINDOW);
-  const rev = t.reverse(tx.journal.journalId);
-  assert.equal(rev.journal.action, "reverse");
-  assert.equal(t.balance("u:bob"), 0);
+test('reversal after the window fails without altering points or receipts',()=>{
+  const {engine,wallet}=funded();send(wallet);advance(engine,REVERSE_WINDOW_TICKS+1);const count=engine.ledger.journalCount();
+  assert.throws(()=>engine.reverse({idempotencyKey:'send-1'}),ReverseWindowExpiredError);
+  assert.equal(engine.ledger.journalCount(),count);assert.equal(engine.balance('u:bob','TUMBO'),1500);
 });
-
-test("cancel of a pending tx posts a compensating journal", () => {
-  const t = funded();
-  const tx = t.execute({
-    action: "send",
-    from: "u:alice",
-    to: "u:bob",
-    amountFluff: 4000,
-    idempotencyKey: "pending-1",
-    settle: false,
-  });
-  assert.equal(tx.journal.state, "pending");
-  const res = t.cancel(tx.journal.journalId);
-  assert.equal(res.journal.action, "cancel");
-  assert.equal(res.journal.linkedJournalId, tx.journal.journalId);
-  assert.equal(t.journalOf(tx.journal.journalId).state, "cancelled");
-  assert.equal(t.balance("u:bob"), 0, "pending effects voided");
-  assert.ok(t.verifyChain());
+test('exchange reversal leaves the Void tithe intact and restores user principal',()=>{
+  const {engine}=funded(),q=buy(engine),settled=engine.execute(q,{idempotencyKey:'buy-1'});engine.reverse({idempotencyKey:'buy-1'});
+  assert.equal(engine.balance('u:alice','TUMBO'),50_000);assert.equal(engine.balance('u:alice','sMIMAS'),0);
+  assert.equal(engine.balance(VOID_ACCOUNT,'TUMBO'),settled.tithe);assert.equal(engine.ledger.verifyChain().ok,true);
 });
-
-test("cancel of a settled tx fails closed", () => {
-  const t = funded();
-  const tx = t.execute({
-    action: "send",
-    from: "u:alice",
-    to: "u:bob",
-    amountFluff: 4000,
-    idempotencyKey: "settled-1",
-  });
-  assert.equal(tx.journal.state, "settled");
-  assert.throws(() => t.cancel(tx.journal.journalId), CancelRejectedError);
-  assert.equal(t.journalOf(tx.journal.journalId).state, "settled", "tx untouched");
-  assert.equal(t.balance("u:bob"), 4000, "balances untouched");
+test('spent recipient points prevent unaffordable reversal atomically',()=>{
+  const {engine,wallet}=funded();send(wallet);wallet.send({from:'bob',to:'charlie',amountFluff:1500,idempotencyKey:'spent'});
+  const count=engine.ledger.journalCount();assert.throws(()=>engine.reverse({idempotencyKey:'send-1'}),/insufficient/);assert.equal(engine.ledger.journalCount(),count);
 });
-
-test("settle moves pending -> settled; double settle throws", () => {
-  const t = funded();
-  const tx = t.execute({
-    action: "send",
-    from: "u:alice",
-    to: "u:bob",
-    amountFluff: 100,
-    idempotencyKey: "pend-settle",
-    settle: false,
-  });
-  assert.equal(t.settle(tx.journal.journalId).state, "settled");
-  assert.throws(() => t.settle(tx.journal.journalId), TokenError);
+test('pending quote cancellation is repeatable and prevents execution',()=>{
+  const {engine}=funded(),q=buy(engine),count=engine.ledger.journalCount(),cancelled=engine.cancelQuote(q.id);
+  assert.equal(cancelled.cancelled,true);assert.equal(engine.cancelQuote(q.id),cancelled);
+  assert.throws(()=>engine.execute(q,{idempotencyKey:'cancelled-buy'}),/cancelled/);assert.equal(engine.ledger.journalCount(),count);
 });
-
-test("history filters by action, account, and asset", () => {
-  const t = funded(100_000, "TUMBO");
-  t.execute({
-    action: "send",
-    asset: "sMIMAS",
-    from: "sys:treasury",
-    to: "u:alice",
-    amountFluff: 9000,
-    idempotencyKey: "fund-smimas",
-  });
-  t.execute({
-    action: "tip",
-    from: "u:alice",
-    to: "u:bob",
-    amountFluff: 111,
-    idempotencyKey: "tip-f",
-  });
-  t.execute({
-    action: "send",
-    asset: "sMIMAS",
-    from: "u:alice",
-    to: "u:bob",
-    amountFluff: 222,
-    idempotencyKey: "smimas-f",
-  });
-  const tips = t.history({ action: "tip" });
-  assert.equal(tips.total, 1);
-  const alice = t.history({ account: "u:alice" });
-  assert.ok(alice.total >= 3, "alice appears in several journals");
-  assert.ok(alice.rows.every((r) => r.postings.some((p) => p.account === "u:alice")));
-  const smimas = t.history({ asset: "sMIMAS" });
-  assert.ok(smimas.total >= 2);
-  assert.ok(smimas.rows.every((r) => r.postings.some((p) => p.asset === "sMIMAS")));
-  const pending = t.history({ state: "pending" });
-  assert.equal(pending.total, 0, "everything auto-settled");
+test('settled quotes cannot be cancelled or executed under another key',()=>{
+  const {engine}=funded(),q=buy(engine);engine.execute(q,{idempotencyKey:'buy-1'});const count=engine.ledger.journalCount();
+  assert.throws(()=>engine.cancelQuote(q.id),CancelRejectedError);assert.throws(()=>engine.execute(q,{idempotencyKey:'buy-2'}),/already been executed/);
+  assert.equal(engine.ledger.journalCount(),count);
 });
-
-test("receipt chain verifies; tampering is detected", () => {
-  const t = funded();
-  t.execute({
-    action: "send",
-    from: "u:alice",
-    to: "u:bob",
-    amountFluff: 1234,
-    idempotencyKey: "chain-1",
-  });
-  assert.ok(t.verifyChain(), "pristine chain verifies");
-  const tx = t.history({ action: "send", account: "u:bob" }).rows[0];
-  const v = t.verifyJournal(tx.journalId);
-  assert.equal(v.ok, true);
-  assert.ok(v.checks.length >= 5, "hash + prevHash checks present");
-
-  // Tamper with a stored receipt hash: detection must fail closed.
-  const tampered = createTumboToken();
-  tampered.execute({
-    action: "send",
-    from: "sys:treasury",
-    to: "u:alice",
-    amountFluff: 10,
-    idempotencyKey: "tamper-fund",
-  });
-  const victim = tampered.ledger._receipts[1];
-  tampered.ledger._receipts[1] = { ...victim, afterHash: "00".repeat(32) };
-  assert.equal(tampered.verifyChain(), false, "tampered afterHash detected");
-
-  // Tamper with retained state: recomputation must fail.
-  const tampered2 = createTumboToken();
-  tampered2.execute({
-    action: "send",
-    from: "sys:treasury",
-    to: "u:alice",
-    amountFluff: 10,
-    idempotencyKey: "tamper-fund-2",
-  });
-  tampered2.ledger._receiptStates[1].afterState["u:alice"]["TUMBO"] = "999999";
-  assert.equal(tampered2.verifyChain(), false, "tampered state detected");
+test('cancellation keys cannot be reused for a different quote',()=>{
+  const {engine}=funded(),first=buy(engine),second=buy(engine);engine.cancelQuote(first.id,{idempotencyKey:'cancel-1'});
+  assert.throws(()=>engine.cancelQuote(second.id,{idempotencyKey:'cancel-1'}),/IDEM_MISMATCH/);
+  assert.doesNotThrow(()=>engine.execute(second,{idempotencyKey:'buy-2'}));
 });
-
-test("unknown journals and accounts fail loudly", () => {
-  const t = createTumboToken();
-  assert.throws(() => t.reverse("tx-999999"), JournalNotFoundError);
-  assert.throws(() => t.cancel("nope"), JournalNotFoundError);
-  assert.throws(
-    () =>
-      t.execute({
-        action: "send",
-        from: "hacker",
-        to: "u:bob",
-        amountFluff: 1,
-        idempotencyKey: "bad-acct",
-      }),
-    (err) => err.code === "unknown-account"
-  );
+test('history filters use actual action, account and asset postings',()=>{
+  const {engine,wallet}=funded();send(wallet);engine.execute(buy(engine),{idempotencyKey:'buy-1'});
+  const history=engine.journalHistory({action:'buy',account:'u:alice',asset:'sMIMAS'});
+  assert.equal(history.rows.length,1);assert.equal(history.rows[0].action,'buy');
 });
-
-test("events fire for receipts and balance changes", () => {
-  const t = funded();
-  const seen = [];
-  t.on("receipt", (e) => seen.push(["receipt", e.receipt.action]));
-  t.on("balance-changed", (e) => seen.push(["balance-changed", e.account, e.asset, e.balance]));
-  t.execute({
-    action: "send",
-    from: "u:alice",
-    to: "u:bob",
-    amountFluff: 500,
-    idempotencyKey: "evt-1",
-  });
-  assert.ok(seen.some((s) => s[0] === "receipt" && s[1] === "send"));
-  const bobEvt = seen.find((s) => s[0] === "balance-changed" && s[1] === "u:bob");
-  assert.ok(bobEvt, "bob balance-changed fired");
-  assert.equal(bobEvt[3], 500);
+test('receipt hashes and chain links detect altered history',()=>{
+  const {engine,wallet}=funded();send(wallet);assert.equal(engine.ledger.verifyChain().ok,true);
+  const original=engine.ledger._journals.at(-1),altered={...original,postings:original.postings.map((p,i)=>({...p,amount:p.amount+(i===0?1:-1)}))};
+  engine.ledger._journals[engine.ledger._journals.length-1]=altered;assert.equal(engine.ledger.verifyChain().reason,'hash-mismatch');
+  altered.hash=receiptChainHash(altered);assert.equal(engine.ledger.verifyChain().ok,true);
+  altered.prevHash='unissued-link';assert.equal(engine.ledger.verifyChain().reason,'broken-link');
+});
+test('unknown journals and malformed accounts fail explicitly',()=>{
+  const {engine}=funded();assert.throws(()=>engine.reverse({journalId:'missing'}),JournalNotFoundError);assert.throws(()=>engine.balance('unknown','TUMBO'),/invalid account/);
+});
+test('wallet send observers fire once and stop after unsubscribe',()=>{
+  const {wallet}=funded();let receipts=0,balances=0;const off1=wallet.on('receipt',()=>receipts++),off2=wallet.on('balance-changed',()=>balances++);
+  send(wallet);assert.equal(receipts,1);assert.equal(balances,1);off1();off2();wallet.send({from:'alice',to:'bob',amountFluff:1,idempotencyKey:'send-2'});
+  assert.equal(receipts,1);assert.equal(balances,1);
 });

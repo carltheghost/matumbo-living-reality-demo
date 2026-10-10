@@ -2,7 +2,7 @@
  * Wardrobe Atelier — a fictional local outfit studio for the Living Reality demo.
  *
  * Outfits here are simulated looks: creating, browsing, and equipping them
- * happens only in this page session. There is no marketplace, no ownership,
+ * stays local to this browser. There is no marketplace, no ownership,
  * no purchase, no transfer, and no external publication. IDs are
  * deterministic so the same seed always rebuilds the same wardrobe.
  * Equipping an outfit emits a local equip event; outfits that map to a
@@ -30,13 +30,16 @@ export const WARDROBE_ATELIER_UPDATED_AT = "2026-09-18T00:00:00.000Z";
 export const WARDROBE_ATELIER_MAX_NAME_LENGTH = 48;
 export const WARDROBE_ATELIER_MAX_DESCRIPTION_LENGTH = 280;
 export const WARDROBE_ATELIER_MAX_PIECES = 8;
+export const WARDROBE_ATELIER_MAX_OUTFITS = 256;
+export const WARDROBE_ATELIER_MAX_IMPORT_BYTES = 524288;
+const MAX_STATE_BYTES = WARDROBE_ATELIER_MAX_IMPORT_BYTES - 512; // workspace envelope and selected identity
 
 export const WARDROBE_EQUIPPED = "WARDROBE_EQUIPPED";
 export const WARDROBE_ERROR_NOT_FOUND = "OUTFIT_NOT_FOUND";
 export const WARDROBE_ERROR_IMMUTABLE = "OUTFIT_IMMUTABLE";
 
 export const WARDROBE_ATELIER_BOUNDARY =
-  "Wardrobe Atelier is a fictional local rehearsal. Outfits are simulated looks with no marketplace, no ownership, no purchase, no transfer, and no external publication. Equipping changes a local preview only; nothing worn here is ownable or valuable outside this page session. Single-instance local simulation: no cross-tab syncing is promised.";
+  "Wardrobe Atelier is a fictional local rehearsal. Outfits are simulated looks with no marketplace, no ownership, no purchase, no transfer, and no external publication. The console saves designs on this browser when storage is available and offers JSON backups. Equipping changes a local preview only. Reload saved data before editing from another tab.";
 
 const freeze = (value) => {
   if (Array.isArray(value)) value.forEach(freeze);
@@ -169,6 +172,7 @@ export const WARDROBE_ATELIER_STARTER_OUTFITS = freeze([
  */
 export function createWardrobeAtelier({ seed = "local-wardrobe", now = null } = {}) {
   const wardrobeSeed = safeText(seed) || "local-wardrobe";
+  if (wardrobeSeed.length > 128) throw new RangeError("wardrobe seed must fit within 128 characters");
   let counter = 0;
   const outfits = new Map();
   const trace = [];
@@ -186,6 +190,7 @@ export function createWardrobeAtelier({ seed = "local-wardrobe", now = null } = 
       at: nowIso(now),
       simulation: true,
     }));
+    if (trace.length > 24) trace.shift();
     return seq;
   }
 
@@ -218,6 +223,7 @@ export function createWardrobeAtelier({ seed = "local-wardrobe", now = null } = 
   }
 
   function createOutfit({ name, palette = "", motif = "", description = "", pieces = [] } = {}) {
+    if (outfits.size >= WARDROBE_ATELIER_MAX_OUTFITS) throw new RangeError("Wardrobe is full (256 outfits); export a backup and delete a design before adding another");
     const outfit = buildOutfit({
       key: "",
       name: boundedName(name),
@@ -228,6 +234,7 @@ export function createWardrobeAtelier({ seed = "local-wardrobe", now = null } = 
       studioOutfitId: null,
       origin: "custom",
     });
+    assertBackupCapacity([...outfits.values(), outfit]);
     outfits.set(outfit.id, outfit);
     recordTrace("create", outfit.id, outfit.name);
     return outfit;
@@ -240,10 +247,11 @@ export function createWardrobeAtelier({ seed = "local-wardrobe", now = null } = 
   function customizeOutfit(sourceId, changes = {}) {
     const source = getOutfit(sourceId);
     if (!source) throw wardrobeError(WARDROBE_ERROR_NOT_FOUND, "unknown wardrobe outfit id");
+    if (outfits.size >= WARDROBE_ATELIER_MAX_OUTFITS) throw new RangeError("Wardrobe is full (256 outfits); export a backup and delete a design before adding another");
     const input = changes ?? {};
     const outfit = buildOutfit({
       key: "",
-      name: input.name !== undefined && input.name !== null ? boundedName(input.name) : `Copy of ${source.name}`,
+      name: input.name !== undefined && input.name !== null ? boundedName(input.name) : boundedName(`Copy of ${source.name}`),
       palette: input.palette !== undefined && input.palette !== null ? input.palette : source.palette,
       motif: input.motif !== undefined && input.motif !== null ? boundedText(input.motif, 48) : source.motif,
       description: input.description !== undefined && input.description !== null
@@ -253,6 +261,7 @@ export function createWardrobeAtelier({ seed = "local-wardrobe", now = null } = 
       studioOutfitId: null, // Derived looks stay in the atelier; only starters map to the 3D person.
       origin: "custom",
     });
+    assertBackupCapacity([...outfits.values(), outfit]);
     outfits.set(outfit.id, outfit);
     recordTrace("customize", outfit.id, `${outfit.name} from ${source.id}`);
     return outfit;
@@ -400,25 +409,54 @@ export function createWardrobeAtelier({ seed = "local-wardrobe", now = null } = 
     });
   }
 
+  function assertBackupCapacity(proposed, proposedEquippedId = equippedId) {
+    const data = { ...exportState(), outfits: proposed, equippedId: proposedEquippedId };
+    if (new TextEncoder().encode(JSON.stringify(data)).length > MAX_STATE_BYTES) throw new RangeError("Wardrobe is full (512 KiB backup limit); export and delete a design before adding another");
+  }
+
   /**
    * Persistence lifecycle: import previously exported state, preserving user
    * outfits. Every record is re-validated through the wardrobe schema.
    */
   function importState(state) {
-    if (!state || typeof state !== "object") throw new TypeError("wardrobe state must be an object");
+    if (!state || typeof state !== "object" || Array.isArray(state)) throw new TypeError("wardrobe state must be an object");
     if (state.source !== WARDROBE_ATELIER_SOURCE) throw new TypeError("wardrobe state source mismatch");
     if (state.schemaVersion !== WARDROBE_ATELIER_SCHEMA_VERSION) throw new TypeError("wardrobe state schema mismatch");
     if (!Array.isArray(state.outfits)) throw new TypeError("wardrobe state outfits must be an array");
-    outfits.clear();
-    trace.length = 0;
-    counter = 0;
-    sequence = 0;
-    equippedId = null;
+    if (state.outfits.length > WARDROBE_ATELIER_MAX_OUTFITS) throw new RangeError("wardrobe backup exceeds 256 outfits");
+    const importSeed = state.seed ?? wardrobeSeed;
+    if (typeof importSeed !== "string" || importSeed.length > 128 || !importSeed) throw new TypeError("wardrobe backup seed is invalid");
+    // Stage the whole transaction. The current gallery survives any bad row.
+    const staged = new Map([...outfits.values()].filter(outfit => outfit.origin === "starter").map(outfit => [outfit.id, freeze({ ...outfit, equipped: false })]));
+    const importedIds = new Set(), starterKeys = new Set(), starterRemap = new Map();
     state.outfits.forEach((raw) => {
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new TypeError("wardrobe state contains an invalid outfit");
       const id = safeText(raw?.id);
       if (!/^wdr:[0-9a-f]{8}$/.test(id)) throw new TypeError("wardrobe state contains an invalid outfit id");
-      if (outfits.has(id)) throw new TypeError("wardrobe state contains a duplicate outfit id");
-      const origin = raw?.origin === "starter" ? "starter" : "custom";
+      if (importedIds.has(id)) throw new TypeError("wardrobe state contains a duplicate outfit id");
+      importedIds.add(id);
+      if (typeof raw.name !== "string" || raw.name.length > WARDROBE_ATELIER_MAX_NAME_LENGTH
+        || typeof raw.description !== "string" || raw.description.length > WARDROBE_ATELIER_MAX_DESCRIPTION_LENGTH
+        || !Array.isArray(raw.pieces) || raw.pieces.length > WARDROBE_ATELIER_MAX_PIECES
+        || raw.pieces.some(piece => typeof piece !== "string" || piece.length > 48)
+        || typeof raw.motif !== "string" || raw.motif.length > 48
+        || typeof raw.palette !== "string" || raw.palette.length > 96
+        || typeof raw.key !== "string" || raw.key.length > 48
+        || typeof raw.createdAt !== "string" || raw.createdAt.length > 40 || !Number.isFinite(Date.parse(raw.createdAt))) throw new TypeError("wardrobe state contains an oversized or invalid outfit field");
+      if (raw.origin !== "starter" && raw.origin !== "custom") throw new TypeError("wardrobe outfit origin is invalid");
+      if (raw.origin === "starter") {
+        const index = WARDROBE_ATELIER_STARTER_OUTFITS.findIndex(starter => starter.key === raw.key);
+        const canonical = WARDROBE_ATELIER_STARTER_OUTFITS[index];
+        if (!canonical || starterKeys.has(raw.key)) throw new TypeError("wardrobe backup contains an unknown or duplicate starter");
+        const expectedId = `wdr:${hashWardrobeAtelierSeed(`${importSeed}:${index + 1}:${canonical.name}`)}`;
+        if (id !== expectedId || ["name", "palette", "motif", "description", "studioOutfitId"].some(field => raw[field] !== canonical[field])
+          || JSON.stringify(raw.pieces) !== JSON.stringify(canonical.pieces)) throw wardrobeError(WARDROBE_ERROR_IMMUTABLE, "backup cannot change a starter identity or Person mapping");
+        const current = [...staged.values()].find(outfit => outfit.key === canonical.key);
+        starterKeys.add(raw.key);starterRemap.set(id, current.id);
+        return;
+      }
+      if (staged.has(id)) throw new TypeError("custom outfit collides with a starter identity");
+      if (isStarterKey(raw.key) || (raw.studioOutfitId !== null && raw.studioOutfitId !== undefined && raw.studioOutfitId !== "")) throw new TypeError("custom outfit cannot claim a starter or Person mapping");
       const outfit = freeze({
         id,
         key: safeText(raw?.key) || id,
@@ -427,8 +465,8 @@ export function createWardrobeAtelier({ seed = "local-wardrobe", now = null } = 
         motif: safeText(raw?.motif).trim().slice(0, 48) || "custom",
         description: boundedText(raw?.description, WARDROBE_ATELIER_MAX_DESCRIPTION_LENGTH),
         pieces: normalizedPieces(raw?.pieces),
-        studioOutfitId: safeText(raw?.studioOutfitId) || null,
-        origin,
+        studioOutfitId: null,
+        origin: "custom",
         createdAt: safeText(raw?.createdAt) || nowIso(now),
         equipped: false,
         simulation: true,
@@ -436,17 +474,21 @@ export function createWardrobeAtelier({ seed = "local-wardrobe", now = null } = 
         transferable: false,
         valuable: false,
       });
-      outfits.set(id, outfit);
+      staged.set(id, outfit);
     });
-    counter = outfits.size;
+    if (starterKeys.size !== WARDROBE_ATELIER_STARTER_OUTFITS.length) throw new TypeError("wardrobe backup must contain all four immutable starters");
     const importedEquipped = safeText(state.equippedId);
-    if (importedEquipped) {
-      if (!outfits.has(importedEquipped)) {
-        throw wardrobeError(WARDROBE_ERROR_NOT_FOUND, "imported equippedId does not resolve to an outfit");
-      }
-      equippedId = importedEquipped;
-      setEquippedRecord(getOutfit(equippedId), true);
+    const restoredEquipped = (starterRemap.get(importedEquipped) ?? importedEquipped) || [...staged.values()].find(outfit => outfit.origin === "starter").id;
+    if (!staged.has(restoredEquipped)) {
+      throw wardrobeError(WARDROBE_ERROR_NOT_FOUND, "imported equippedId does not resolve to an outfit");
     }
+    assertBackupCapacity([...staged.values()], restoredEquipped);
+    outfits.clear();
+    for (const [id, outfit] of staged) outfits.set(id, outfit);
+    trace.length = 0;
+    counter = outfits.size;
+    equippedId = restoredEquipped;
+    setEquippedRecord(getOutfit(equippedId), true);
     recordTrace("import", "wardrobe", `${outfits.size} outfits restored`);
     return getSnapshot();
   }
@@ -480,7 +522,7 @@ export function createWardrobeAtelier({ seed = "local-wardrobe", now = null } = 
     // which outfit is currently worn must never count as "modifying" a
     // starter record.
     const canonical = (outfit) => {
-      const { equipped, ...rest } = outfit;
+      const { equipped, createdAt, ...rest } = outfit;
       return rest;
     };
     if (equippedId && !outfits.has(equippedId)) issues.push("equippedId does not resolve to an outfit");

@@ -1,0 +1,689 @@
+{
+  "passed": true,
+  "browserClosed": true,
+  "fixture": "Synthetic normalized landmarks through the mounted actual hand session; direct public adapter calls only for the separately labeled gaze checks",
+  "startedAt": "2026-10-05T17:27:18.728Z",
+  "finishedAt": "2026-10-05T17:28:15.086Z",
+  "physicalCamera": false,
+  "errors": [],
+  "failures": [],
+  "commandRequests": [],
+  "checks": [
+    {
+      "device": "desktop",
+      "name": "camera-off boot and visible header stays within viewport",
+      "pass": true,
+      "target": null,
+      "heldOnDown": null,
+      "releasedTo": null,
+      "releaseReason": null,
+      "gazeReason": null,
+      "blockedButton": null,
+      "cameraCalls": null
+    },
+    {
+      "device": "desktop",
+      "name": "pinch original Spaces button opens its actual directory",
+      "pass": true,
+      "target": {
+        "kind": "navigation",
+        "id": "nav-spaces",
+        "label": "Spaces",
+        "actionId": "nav-spaces",
+        "controlActionability": true,
+        "dwellAllowed": true
+      },
+      "heldOnDown": {
+        "kind": "navigation",
+        "id": "nav-spaces",
+        "arrange": false
+      },
+      "releasedTo": {
+        "space": "gateway",
+        "spaceId": null,
+        "owner": null,
+        "page": 0,
+        "textView": false
+      },
+      "releaseReason": "navigation-activated",
+      "gazeReason": null,
+      "blockedButton": null,
+      "cameraCalls": null
+    },
+    {
+      "device": "desktop",
+      "name": "pinch original catalog space header opens Experiences",
+      "pass": true,
+      "target": {
+        "kind": "navigation",
+        "id": "nav-space-experiences",
+        "label": "Play, media & learning",
+        "actionId": "nav-space-experiences",
+        "controlActionability": true,
+        "dwellAllowed": true
+      },
+      "heldOnDown": {
+        "kind": "navigation",
+        "id": "nav-space-experiences",
+        "arrange": false
+      },
+      "releasedTo": {
+        "space": "space",
+        "spaceId": "experiences",
+        "owner": null,
+        "page": 0,
+        "textView": false
+      },
+      "releaseReason": "navigation-activated",
+      "gazeReason": null,
+      "blockedButton": null,
+      "cameraCalls": null
+    },
+    {
+      "device": "desktop",
+      "name": "directory close is pinch-only and uses the original owner",
+      "pass": true,
+      "target": {
+        "kind": "navigation",
+        "id": "nav-close-spaces",
+        "label": "Close Spaces",
+        "actionId": "nav-close-spaces",
+        "controlActionability": true,
+        "dwellAllowed": false
+      },
+      "heldOnDown": {
+        "kind": "navigation",
+        "id": "nav-close-spaces",
+        "arrange": false
+      },
+      "releasedTo": {
+        "space": "space",
+        "spaceId": "experiences",
+        "owner": null,
+        "page": 0,
+        "textView": false
+      },
+      "releaseReason": "navigation-activated",
+      "gazeReason": null,
+      "blockedButton": null,
+      "cameraCalls": null
+    },
+    {
+      "device": "desktop",
+      "name": "tracked paging advances and restores the original space page",
+      "pass": true,
+      "target": null,
+      "heldOnDown": null,
+      "releasedTo": null,
+      "releaseReason": null,
+      "gazeReason": null,
+      "blockedButton": null,
+      "cameraCalls": null
+    },
+    {
+      "device": "desktop",
+      "name": "original Academy mesh still opens through the mounted hand session",
+      "pass": true,
+      "target": null,
+      "heldOnDown": {
+        "kind": "feature",
+        "id": "academy",
+        "arrange": false
+      },
+      "releasedTo": {
+        "space": "feature",
+        "spaceId": "experiences",
+        "owner": "academy",
+        "page": 0,
+        "textView": false
+      },
+      "releaseReason": "navigation-activated",
+      "gazeReason": null,
+      "blockedButton": null,
+      "cameraCalls": null
+    },
+    {
+      "device": "desktop",
+      "name": "Text view rejects armed gaze and accepts deliberate pinch",
+      "pass": true,
+      "target": {
+        "kind": "navigation",
+        "id": "nav-text-view",
+        "label": "Text view",
+        "actionId": "nav-text-view",
+        "controlActionability": true,
+        "dwellAllowed": false
+      },
+      "heldOnDown": {
+        "kind": "navigation",
+        "id": "nav-text-view",
+        "arrange": false
+      },
+      "releasedTo": {
+        "space": "feature",
+        "spaceId": "experiences",
+        "owner": "academy",
+        "page": 0,
+        "textView": true
+      },
+      "releaseReason": "navigation-activated",
+      "gazeReason": "dwell-not-navigation",
+      "blockedButton": null,
+      "cameraCalls": null
+    },
+    {
+      "device": "desktop",
+      "name": "foreground original feature commands retain their obstruction guard",
+      "pass": true,
+      "target": null,
+      "heldOnDown": null,
+      "releasedTo": {
+        "space": "feature",
+        "spaceId": "experiences",
+        "owner": "academy",
+        "page": 0,
+        "textView": true
+      },
+      "releaseReason": "no-held-pinch",
+      "gazeReason": null,
+      "blockedButton": "A local projection and rehearsal",
+      "cameraCalls": null
+    },
+    {
+      "device": "desktop",
+      "name": "pinch the same Text/Object button returns to the original 3D owner",
+      "pass": true,
+      "target": {
+        "kind": "navigation",
+        "id": "nav-text-view",
+        "label": "Object view",
+        "actionId": "nav-text-view",
+        "controlActionability": true,
+        "dwellAllowed": false
+      },
+      "heldOnDown": {
+        "kind": "navigation",
+        "id": "nav-text-view",
+        "arrange": false
+      },
+      "releasedTo": {
+        "space": "feature",
+        "spaceId": "experiences",
+        "owner": "academy",
+        "page": 0,
+        "textView": false
+      },
+      "releaseReason": "navigation-activated",
+      "gazeReason": null,
+      "blockedButton": null,
+      "cameraCalls": null
+    },
+    {
+      "device": "desktop",
+      "name": "pinch the original space breadcrumb returns from the opened object",
+      "pass": true,
+      "target": {
+        "kind": "navigation",
+        "id": "nav-breadcrumb-space",
+        "label": "Play, media & learning",
+        "actionId": "nav-breadcrumb-space",
+        "controlActionability": true,
+        "dwellAllowed": true
+      },
+      "heldOnDown": {
+        "kind": "navigation",
+        "id": "nav-breadcrumb-space",
+        "arrange": false
+      },
+      "releasedTo": {
+        "space": "space",
+        "spaceId": "experiences",
+        "owner": null,
+        "page": 0,
+        "textView": false
+      },
+      "releaseReason": "navigation-activated",
+      "gazeReason": null,
+      "blockedButton": null,
+      "cameraCalls": null
+    },
+    {
+      "device": "desktop",
+      "name": "losing a pinch over Home cancels without navigation",
+      "pass": true,
+      "target": {
+        "kind": "navigation",
+        "id": "nav-breadcrumb-home",
+        "label": "Home",
+        "actionId": "nav-breadcrumb-home",
+        "controlActionability": true,
+        "dwellAllowed": true
+      },
+      "heldOnDown": null,
+      "releasedTo": null,
+      "releaseReason": null,
+      "gazeReason": null,
+      "blockedButton": null,
+      "cameraCalls": null
+    },
+    {
+      "device": "desktop",
+      "name": "pinch original Home breadcrumb returns to the six physical spaces",
+      "pass": true,
+      "target": {
+        "kind": "navigation",
+        "id": "nav-breadcrumb-home",
+        "label": "Home",
+        "actionId": "nav-breadcrumb-home",
+        "controlActionability": true,
+        "dwellAllowed": true
+      },
+      "heldOnDown": {
+        "kind": "navigation",
+        "id": "nav-breadcrumb-home",
+        "arrange": false
+      },
+      "releasedTo": {
+        "space": "gateway",
+        "spaceId": null,
+        "owner": null,
+        "page": 0,
+        "textView": false
+      },
+      "releaseReason": "navigation-activated",
+      "gazeReason": null,
+      "blockedButton": null,
+      "cameraCalls": null
+    },
+    {
+      "device": "desktop",
+      "name": "explicit armed public gaze navigation uses the original Home button",
+      "pass": true,
+      "target": {
+        "kind": "navigation",
+        "id": "nav-breadcrumb-home",
+        "label": "Home",
+        "actionId": "nav-breadcrumb-home",
+        "controlActionability": true,
+        "dwellAllowed": true
+      },
+      "heldOnDown": null,
+      "releasedTo": null,
+      "releaseReason": null,
+      "gazeReason": null,
+      "blockedButton": null,
+      "cameraCalls": null
+    },
+    {
+      "device": "desktop",
+      "name": "foreground Connections requests are not tracked navigation targets",
+      "pass": true,
+      "target": null,
+      "heldOnDown": null,
+      "releasedTo": {
+        "space": "gateway",
+        "spaceId": null,
+        "owner": null,
+        "page": 0,
+        "textView": false
+      },
+      "releaseReason": "no-held-pinch",
+      "gazeReason": null,
+      "blockedButton": "Check connections",
+      "cameraCalls": null
+    },
+    {
+      "device": "desktop",
+      "name": "all navigation fixtures leave the physical camera off and release input",
+      "pass": true,
+      "target": null,
+      "heldOnDown": null,
+      "releasedTo": null,
+      "releaseReason": null,
+      "gazeReason": null,
+      "blockedButton": null,
+      "cameraCalls": 0
+    },
+    {
+      "device": "phone",
+      "name": "camera-off boot and visible header stays within viewport",
+      "pass": true,
+      "target": null,
+      "heldOnDown": null,
+      "releasedTo": null,
+      "releaseReason": null,
+      "gazeReason": null,
+      "blockedButton": null,
+      "cameraCalls": null
+    },
+    {
+      "device": "phone",
+      "name": "pinch original Spaces button opens its actual directory",
+      "pass": true,
+      "target": {
+        "kind": "navigation",
+        "id": "nav-spaces",
+        "label": "Spaces",
+        "actionId": "nav-spaces",
+        "controlActionability": true,
+        "dwellAllowed": true
+      },
+      "heldOnDown": {
+        "kind": "navigation",
+        "id": "nav-spaces",
+        "arrange": false
+      },
+      "releasedTo": {
+        "space": "gateway",
+        "spaceId": null,
+        "owner": null,
+        "page": 0,
+        "textView": false
+      },
+      "releaseReason": "navigation-activated",
+      "gazeReason": null,
+      "blockedButton": null,
+      "cameraCalls": null
+    },
+    {
+      "device": "phone",
+      "name": "pinch original catalog space header opens Experiences",
+      "pass": true,
+      "target": {
+        "kind": "navigation",
+        "id": "nav-space-experiences",
+        "label": "Play, media & learning",
+        "actionId": "nav-space-experiences",
+        "controlActionability": true,
+        "dwellAllowed": true
+      },
+      "heldOnDown": {
+        "kind": "navigation",
+        "id": "nav-space-experiences",
+        "arrange": false
+      },
+      "releasedTo": {
+        "space": "space",
+        "spaceId": "experiences",
+        "owner": null,
+        "page": 0,
+        "textView": false
+      },
+      "releaseReason": "navigation-activated",
+      "gazeReason": null,
+      "blockedButton": null,
+      "cameraCalls": null
+    },
+    {
+      "device": "phone",
+      "name": "directory close is pinch-only and uses the original owner",
+      "pass": true,
+      "target": {
+        "kind": "navigation",
+        "id": "nav-close-spaces",
+        "label": "Close Spaces",
+        "actionId": "nav-close-spaces",
+        "controlActionability": true,
+        "dwellAllowed": false
+      },
+      "heldOnDown": {
+        "kind": "navigation",
+        "id": "nav-close-spaces",
+        "arrange": false
+      },
+      "releasedTo": {
+        "space": "space",
+        "spaceId": "experiences",
+        "owner": null,
+        "page": 0,
+        "textView": false
+      },
+      "releaseReason": "navigation-activated",
+      "gazeReason": null,
+      "blockedButton": null,
+      "cameraCalls": null
+    },
+    {
+      "device": "phone",
+      "name": "tracked paging advances and restores the original space page",
+      "pass": true,
+      "target": null,
+      "heldOnDown": null,
+      "releasedTo": null,
+      "releaseReason": null,
+      "gazeReason": null,
+      "blockedButton": null,
+      "cameraCalls": null
+    },
+    {
+      "device": "phone",
+      "name": "original Academy mesh still opens through the mounted hand session",
+      "pass": true,
+      "target": null,
+      "heldOnDown": {
+        "kind": "feature",
+        "id": "academy",
+        "arrange": false
+      },
+      "releasedTo": {
+        "space": "feature",
+        "spaceId": "experiences",
+        "owner": "academy",
+        "page": 0,
+        "textView": false
+      },
+      "releaseReason": "navigation-activated",
+      "gazeReason": null,
+      "blockedButton": null,
+      "cameraCalls": null
+    },
+    {
+      "device": "phone",
+      "name": "Text view rejects armed gaze and accepts deliberate pinch",
+      "pass": true,
+      "target": {
+        "kind": "navigation",
+        "id": "nav-text-view",
+        "label": "Text view",
+        "actionId": "nav-text-view",
+        "controlActionability": true,
+        "dwellAllowed": false
+      },
+      "heldOnDown": {
+        "kind": "navigation",
+        "id": "nav-text-view",
+        "arrange": false
+      },
+      "releasedTo": {
+        "space": "feature",
+        "spaceId": "experiences",
+        "owner": "academy",
+        "page": 0,
+        "textView": true
+      },
+      "releaseReason": "navigation-activated",
+      "gazeReason": "dwell-not-navigation",
+      "blockedButton": null,
+      "cameraCalls": null
+    },
+    {
+      "device": "phone",
+      "name": "foreground original feature commands retain their obstruction guard",
+      "pass": true,
+      "target": null,
+      "heldOnDown": null,
+      "releasedTo": {
+        "space": "feature",
+        "spaceId": "experiences",
+        "owner": "academy",
+        "page": 0,
+        "textView": true
+      },
+      "releaseReason": "no-held-pinch",
+      "gazeReason": null,
+      "blockedButton": "A local projection and rehearsal",
+      "cameraCalls": null
+    },
+    {
+      "device": "phone",
+      "name": "pinch the same Text/Object button returns to the original 3D owner",
+      "pass": true,
+      "target": {
+        "kind": "navigation",
+        "id": "nav-text-view",
+        "label": "Object view",
+        "actionId": "nav-text-view",
+        "controlActionability": true,
+        "dwellAllowed": false
+      },
+      "heldOnDown": {
+        "kind": "navigation",
+        "id": "nav-text-view",
+        "arrange": false
+      },
+      "releasedTo": {
+        "space": "feature",
+        "spaceId": "experiences",
+        "owner": "academy",
+        "page": 0,
+        "textView": false
+      },
+      "releaseReason": "navigation-activated",
+      "gazeReason": null,
+      "blockedButton": null,
+      "cameraCalls": null
+    },
+    {
+      "device": "phone",
+      "name": "pinch the original space breadcrumb returns from the opened object",
+      "pass": true,
+      "target": {
+        "kind": "navigation",
+        "id": "nav-breadcrumb-space",
+        "label": "Play, media & learning",
+        "actionId": "nav-breadcrumb-space",
+        "controlActionability": true,
+        "dwellAllowed": true
+      },
+      "heldOnDown": {
+        "kind": "navigation",
+        "id": "nav-breadcrumb-space",
+        "arrange": false
+      },
+      "releasedTo": {
+        "space": "space",
+        "spaceId": "experiences",
+        "owner": null,
+        "page": 0,
+        "textView": false
+      },
+      "releaseReason": "navigation-activated",
+      "gazeReason": null,
+      "blockedButton": null,
+      "cameraCalls": null
+    },
+    {
+      "device": "phone",
+      "name": "losing a pinch over Home cancels without navigation",
+      "pass": true,
+      "target": {
+        "kind": "navigation",
+        "id": "nav-breadcrumb-home",
+        "label": "Home",
+        "actionId": "nav-breadcrumb-home",
+        "controlActionability": true,
+        "dwellAllowed": true
+      },
+      "heldOnDown": null,
+      "releasedTo": null,
+      "releaseReason": null,
+      "gazeReason": null,
+      "blockedButton": null,
+      "cameraCalls": null
+    },
+    {
+      "device": "phone",
+      "name": "pinch original Home breadcrumb returns to the six physical spaces",
+      "pass": true,
+      "target": {
+        "kind": "navigation",
+        "id": "nav-breadcrumb-home",
+        "label": "Home",
+        "actionId": "nav-breadcrumb-home",
+        "controlActionability": true,
+        "dwellAllowed": true
+      },
+      "heldOnDown": {
+        "kind": "navigation",
+        "id": "nav-breadcrumb-home",
+        "arrange": false
+      },
+      "releasedTo": {
+        "space": "gateway",
+        "spaceId": null,
+        "owner": null,
+        "page": 0,
+        "textView": false
+      },
+      "releaseReason": "navigation-activated",
+      "gazeReason": null,
+      "blockedButton": null,
+      "cameraCalls": null
+    },
+    {
+      "device": "phone",
+      "name": "explicit armed public gaze navigation uses the original Home button",
+      "pass": true,
+      "target": {
+        "kind": "navigation",
+        "id": "nav-breadcrumb-home",
+        "label": "Home",
+        "actionId": "nav-breadcrumb-home",
+        "controlActionability": true,
+        "dwellAllowed": true
+      },
+      "heldOnDown": null,
+      "releasedTo": null,
+      "releaseReason": null,
+      "gazeReason": null,
+      "blockedButton": null,
+      "cameraCalls": null
+    },
+    {
+      "device": "phone",
+      "name": "foreground Connections requests are not tracked navigation targets",
+      "pass": true,
+      "target": null,
+      "heldOnDown": null,
+      "releasedTo": {
+        "space": "gateway",
+        "spaceId": null,
+        "owner": null,
+        "page": 0,
+        "textView": false
+      },
+      "releaseReason": "no-held-pinch",
+      "gazeReason": null,
+      "blockedButton": "Check connections",
+      "cameraCalls": null
+    },
+    {
+      "device": "phone",
+      "name": "all navigation fixtures leave the physical camera off and release input",
+      "pass": true,
+      "target": null,
+      "heldOnDown": null,
+      "releasedTo": null,
+      "releaseReason": null,
+      "gazeReason": null,
+      "blockedButton": null,
+      "cameraCalls": 0
+    }
+  ],
+  "screenshots": [
+    "hands-eyes-navigation-desktop.png",
+    "hands-eyes-navigation-phone.png"
+  ],
+  "settling": "16 open-hand samples before pinching after large pointer transitions; original 7px drag safeguards unchanged",
+  "fullTrace": "hands-eyes-navigation-check.json"
+}

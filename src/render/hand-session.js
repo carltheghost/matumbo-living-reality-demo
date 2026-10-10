@@ -26,14 +26,14 @@
  * without a documentRoot is a graceful no-op returning false.
  */
 
-import { createHandLens, handDepthDelta } from "../domains/hand-lens.js?v=20260922-cache2";
-import { createHandGestures } from "../domains/hand-gestures.js?v=20260922-cache2";
-import { createAirTyping } from "../domains/air-typing.js?v=20260922-cache2";
-import { createHandCamera } from "./hand-camera.js?v=20260922-cache2";
-import { createAirKeyboard } from "./air-keyboard.js?v=20260922-cache2";
-import { createArGlassesMode } from "./ar-glasses-mode.js?v=20260922-cache2";
-import { createHandPerf } from "./hand-perf.js?v=20260922-cache2";
-import { createHandGrab } from "./hand-grab.js?v=20260922-cache2";
+import { createHandLens, handDepthDelta } from "../domains/hand-lens.js?v=20261003-skin360";
+import { createHandGestures } from "../domains/hand-gestures.js?v=20261003-skin360";
+import { createAirTyping } from "../domains/air-typing.js?v=20261003-skin360";
+import { createHandCamera } from "./hand-camera.js?v=20261003-skin360";
+import { createAirKeyboard } from "./air-keyboard.js?v=20261003-skin360";
+import { createArGlassesMode } from "./ar-glasses-mode.js?v=20261003-skin360";
+import { createHandPerf } from "./hand-perf.js?v=20261003-skin360";
+import { createHandGrab } from "./hand-grab.js?v=20261003-skin360";
 
 // hand-presence.js statically imports three.js (browser-vendored via
 // importmap). It is imported lazily inside mount() — the only place presence
@@ -42,7 +42,7 @@ import { createHandGrab } from "./hand-grab.js?v=20260922-cache2";
 let presenceFactoryPromise = null;
 function loadPresenceFactory() {
   if (!presenceFactoryPromise) {
-    presenceFactoryPromise = import("./hand-presence.js?v=20260922-cache2").then(
+    presenceFactoryPromise = import("./hand-presence.js?v=20261003-skin360").then(
       (module) => module.createHandPresence,
     );
   }
@@ -86,6 +86,27 @@ function keyIdForChar(char) {
     return `key-${char}`;
   }
   return `key-${String(char)}`;
+}
+
+/** One accepted observation set for recognition, actions and presence. The
+ * gesture owners identify hands by Left/Right, so duplicate labels are
+ * ambiguous; selecting either observation could move or release the other.
+ * Invalid observations count as absence, allowing the active owner to cancel
+ * its preview rather than treating a recognizer's loss pinchend as release.
+ */
+function acceptHandObservations(value) {
+  if (!Array.isArray(value)) return [];
+  const counts = new Map();
+  for (const hand of value) if (hand?.handedness === 'Left' || hand?.handedness === 'Right') {
+    counts.set(hand.handedness, (counts.get(hand.handedness) ?? 0) + 1);
+  }
+  return value.filter(hand => {
+    if (counts.get(hand?.handedness) !== 1 || !Array.isArray(hand?.landmarks) || hand.landmarks.length < 21) return false;
+    // Array iteration includes sparse slots, unlike Array.every().
+    for (const point of hand.landmarks) if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y) || !Number.isFinite(point.z ?? 0)) return false;
+    const wrist = hand.landmarks[0], middle = hand.landmarks[9];
+    return Math.hypot(wrist.x - middle.x, wrist.y - middle.y) > Number.EPSILON;
+  });
 }
 
 /**
@@ -154,6 +175,10 @@ export function createHandLensSession({
   let mounted = false;
   let hudButton = null;
   let resizeHandler = null;
+  let unsubscribeHands = null;
+  let interactionHandler = null;
+  let openHandler = null;
+  let legacyHolding = false;
 
   // ---- air-typing state ---------------------------------------------------
   // Mirrors of the visible keyboard's one-shot control state, so air taps
@@ -308,7 +333,7 @@ export function createHandLensSession({
       : typeof performance !== "undefined"
         ? performance.now()
         : Date.now();
-    const hands = Array.isArray(frame.hands) ? frame.hands : [];
+    const hands = acceptHandObservations(frame.hands);
 
     // a. Performance governor.
     const latencyMs = Number.isFinite(frame.latencyMs) ? frame.latencyMs : 0;
@@ -407,16 +432,27 @@ export function createHandLensSession({
       gestureEvents = [];
     }
 
-    // f. Route into the block-world authorities (never a second raycaster).
+    // Exactly one active world owns a tracked interaction. The assembly
+    // adapter consumes frames while its world (or calibration) is active;
+    // legacy Block World stays the default for standalone session consumers.
+    let handled = false;
     try {
-      handGrab.handleHandLensEvents(lensEvents);
+      handled = interactionHandler?.({ ...frame, hands, lensEvents, gestureEvents, timestamp: nowMs }) === true;
     } catch (error) {
+      // An adapter error must not fall through into a different world.
+      handled = true;
       reportError(error);
     }
-    try {
-      handGrab.handleGestureEvents(gestureEvents);
-    } catch (error) {
-      reportError(error);
+    if (!handled) {
+      try { handGrab.handleHandLensEvents(lensEvents); } catch (error) { reportError(error); }
+      try { handGrab.handleGestureEvents(gestureEvents); } catch (error) { reportError(error); }
+      if (lensEvents.some(event => event.type === 'pinchstart')) legacyHolding = true;
+      if (!hands.length || lensEvents.some(event => event.type === 'pinchend')) legacyHolding = false;
+    } else if (legacyHolding) {
+      // A held legacy draft cannot remain captured behind a newly active
+      // assembly or calibration modal.
+      try { handGrab.handleGestureEvents([{type:'release-all'}]); } catch (error) { reportError(error); }
+      legacyHolding = false;
     }
 
     // g. Hand presence visuals.
@@ -461,7 +497,7 @@ export function createHandLensSession({
     }
 
     // i. Air typing — only while the keyboard is visible.
-    if (lastKeyboardVisible === true) {
+    if (lastKeyboardVisible === true && !handled) {
       const airEvents = [];
       for (const event of lensEvents) {
         if (event.type !== "tap") continue;
@@ -529,6 +565,7 @@ export function createHandLensSession({
       hudButton.title = "Open local Hand Lens controls";
       hudButton.style.pointerEvents = "auto";
       hudButton.addEventListener("click", () => {
+        if (openHandler) { openHandler(); return; }
         if (
           handCamera &&
           typeof handCamera.setPanelOpen === "function" &&
@@ -603,7 +640,7 @@ export function createHandLensSession({
 
     if (handCamera && typeof handCamera.onHands === "function") {
       try {
-        handCamera.onHands(handleFrame);
+        unsubscribeHands = handCamera.onHands(handleFrame);
       } catch (error) {
         reportError(error);
       }
@@ -618,6 +655,10 @@ export function createHandLensSession({
 
   function destroy() {
     mounted = false;
+    if (typeof unsubscribeHands === 'function') unsubscribeHands();
+    unsubscribeHands = null;
+    interactionHandler = null;
+    openHandler = null;
     if (handCamera && typeof handCamera.disable === "function") {
       try {
         handCamera.disable();
@@ -625,6 +666,7 @@ export function createHandLensSession({
         reportError(error);
       }
     }
+    handCamera?.destroy?.();
     if (arMode && typeof arMode.destroy === "function") {
       try {
         arMode.destroy();
@@ -685,6 +727,14 @@ export function createHandLensSession({
     getCamera: () => handCamera,
     getKeyboard: () => keyboard,
     getArMode: () => arMode,
+    setInteractionHandler: (handler) => { interactionHandler = typeof handler === 'function' ? handler : null; },
+    setOpenHandler: (handler) => {
+      openHandler = typeof handler === 'function' ? handler : null;
+      if (hudButton && openHandler) {
+        hudButton.textContent = 'Hands & eyes';
+        hudButton.setAttribute('aria-label', 'Open Hands and eyes controls');
+      }
+    },
     refreshAirKeyMap,
     isMounted: () => mounted,
   };

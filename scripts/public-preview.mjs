@@ -4,8 +4,25 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 
-const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.woff2': 'font/woff2', '.wasm': 'application/wasm' };
-const allowed = p => p === 'index.html' || p === 'favicon.svg' || (/^(src\/|vendor\/three-r179\.1\/)/.test(p) && !p.split('/').some(s => s.startsWith('.') || s.includes(':')) && Boolean(types[path.extname(p)]));
+const types = {
+  '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json',
+  '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp', '.gif': 'image/gif', '.ico': 'image/x-icon',
+  '.woff': 'font/woff', '.woff2': 'font/woff2', '.ttf': 'font/ttf',
+  '.wasm': 'application/wasm', '.glb': 'model/gltf-binary', '.gltf': 'model/gltf+json',
+  '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav',
+  '.mp4': 'video/mp4', '.webm': 'video/webm', '.bin': 'application/octet-stream', '.task': 'application/octet-stream',
+};
+// Match the browser entry points in the static Pages artifact, without
+// exposing package/config files or arbitrary root-level development scripts.
+const rootBrowserAssets = new Set([
+  'index.html', 'favicon.svg', 'mobile-chrome.js', 'mobile-layout.css',
+  'mobile-polish.css', 'token-mobile.css', 'paper.html', 'paper-live.html',
+  'surface-field.html', 'token-lifecycle.html',
+]);
+const allowed = p => !p.split('/').some(s => !s || s.startsWith('.') || s.includes(':') || s.includes('\\'))
+  && Boolean(types[path.extname(p)])
+  && (rootBrowserAssets.has(p) || /^(src\/|vendor\/three-r179\.1\/|vendor\/mediapipe-tasks-vision-1\.0\.1\/|assets\/|public\/)/.test(p));
 const escape = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const client = `let revision = null, paused = false;
 const bar = document.createElement('div');
@@ -39,8 +56,9 @@ export async function createPreviewServer(root) {
         else if(allowed(rel)) files.push(rel);
       }
     }
-    files.push('index.html','favicon.svg');
+    files.push(...rootBrowserAssets);
     await walk('src'); await walk('vendor/three-r179.1');
+    await walk('assets'); await walk('public');
     const hash = createHash('sha256'); let updated = 0, count = 0;
     for(const rel of files.sort()) {
       const f = await safeFile(rel); if(!f) continue;

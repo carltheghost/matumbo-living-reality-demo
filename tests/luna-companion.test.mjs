@@ -12,6 +12,7 @@ import {
   hashLunaSeed,
 } from "../src/domains/luna-companion.js";
 import { createLunaCompanionConsole } from "../src/render/luna-companion.js";
+import { createSpeechInput } from "../src/render/voice-session.js";
 import { createLivingRealityProjection } from "../src/core/demo-projection.js";
 import { FEATURE_DEFINITIONS } from "../src/render/feature-navigator.js";
 
@@ -272,6 +273,63 @@ test("console chips fill the input and send; speak toggle is a safe no-op withou
   documentRoot.getElementById("luna-companion-send").on_click();
   api.toggleSpeak();
   assert.equal(api.getSnapshot().speakOn, false);
+});
+
+test("Luna voice shares the capture lock and closing or disabling Luna never cancels another owner", t => {
+  const documentRoot = fakeDocument();
+  const spoken = [];
+  let cancelled = 0;
+  class Recognition { start() { this.onstart?.(); } abort() {} stop() {} }
+  class Utterance { constructor(text) { this.text = text; } }
+  const windowRoot = {
+    SpeechRecognition: Recognition,
+    SpeechSynthesisUtterance: Utterance,
+    speechSynthesis: { speak: utterance => spoken.push(utterance), cancel: () => { cancelled += 1; } },
+  };
+  const api = createLunaCompanionConsole({ documentRoot, windowRoot, companion: luna(), features: TEST_FEATURES });
+  const input = createSpeechInput({ windowRoot });
+  t.after(() => { api.destroy(); input.destroy(); });
+  api.open(); api.send('hello');
+  assert.equal(spoken.length, 0, 'Luna defaults to text');
+  api.toggleSpeak(); api.send('hello');
+  assert.equal(spoken.length, 1);
+  assert.equal(api.getSnapshot().aiModel, false);
+  assert.match(documentRoot.getElementById('luna-companion-status').textContent, /MAY USE AN ONLINE SERVICE/);
+  input.start();
+  assert.equal(cancelled, 1);
+  api.toggleSpeak(); api.close();
+  assert.equal(cancelled, 1);
+  assert.equal(input.getSnapshot().active, true);
+  api.open(); api.toggleSpeak(); api.send('hello');
+  assert.equal(input.getSnapshot().active, false);
+  assert.equal(spoken.length, 2);
+  api.close();
+  assert.equal(cancelled, 2);
+  api.send('hello');
+  assert.equal(spoken.length, 2, 'hidden Luna never speaks');
+  api.destroy();
+  api.open(); api.send('hello');
+  assert.equal(spoken.length, 2, 'destroyed Luna never speaks');
+});
+
+test("Luna stops speaking when the tab dock hides its panel without invoking the native close button", t => {
+  const documentRoot = fakeDocument(), observers = [], spoken = [];
+  let cancelled = 0;
+  class Observer { constructor(callback) { this.callback = callback; observers.push(this); } observe() {} disconnect() {} }
+  class Utterance { constructor(text) { this.text = text; } }
+  const windowRoot = { document: documentRoot, MutationObserver: Observer, SpeechSynthesisUtterance: Utterance,
+    speechSynthesis: { speak: utterance => spoken.push(utterance), cancel: () => { cancelled += 1; } } };
+  const api = createLunaCompanionConsole({ documentRoot, windowRoot, companion: luna(), features: TEST_FEATURES });
+  t.after(() => api.destroy());
+  api.open();
+  for (const observer of observers) observer.callback([]);
+  api.toggleSpeak(); api.send('hello');
+  assert.equal(spoken.length, 1);
+  documentRoot.getElementById('luna-companion-console').hidden = true;
+  for (const observer of observers) observer.callback([]);
+  assert.equal(cancelled, 1);
+  assert.equal(api.getSnapshot().voice.active, false);
+  assert.equal(api.getSnapshot().voice.reason, 'owner-hidden');
 });
 
 test("navigator definitions include luna-companion with its boundary", () => {

@@ -1,0 +1,7 @@
+{
+  "source": "https://storage.googleapis.com/mediapipe-tasks/hand_landmarker/woman_hands.jpg",
+  "officialSample": "https://github.com/google-ai-edge/mediapipe-samples/blob/main/examples/hand_landmarker/python/hand_landmarker.ipynb",
+  "photoSource": "https://unsplash.com/photos/mt2fyrdXxzk",
+  "bytes": 67719,
+  "sha256": "70cbeb38e198c9862202e0979c21a99b40ca980d3e7b250176c85b1636a40f12"
+}

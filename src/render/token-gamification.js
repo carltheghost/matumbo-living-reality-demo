@@ -16,12 +16,13 @@
  */
 
 import * as THREE from "three";
-import { ensureTumboToken, fmtFluff } from "../domains/token.js?v=20260922-cache2";
+import { ensureTumboTokenFacade, formatSimAmount as fmtFluff } from "../domains/token.js?v=20261003-skin360";
+import { activityForEngine } from '../domains/token-activity.js?v=20261003-skin360';
 import {
   HUNGER_MAX,
   RIBBON_CAP,
   LEADERBOARD_SIZE,
-} from "../domains/token-config.js?v=20260922-cache2";
+} from "../domains/token-config.js?v=20261003-skin360";
 import {
   GAMIFICATION_VERSION,
   SIM_BOUNDARY_NOTE,
@@ -29,7 +30,7 @@ import {
   createTokenGamification,
   seedDemoBurrow,
   presenceDayKey,
-} from "../domains/token-gamification.js?v=20260922-cache2";
+} from "../domains/token-gamification.js?v=20261003-skin360";
 
 export const TOKEN_GAMIFICATION_CONSOLE_SOURCE = "token-gamification-console";
 export const TOKEN_GAMIFICATION_VERSION = GAMIFICATION_VERSION;
@@ -186,7 +187,16 @@ export function mountTokenGamification({
   const dom =
     renderer?.domElement ?? doc.querySelector("canvas") ?? doc.body;
 
-  const token = ensureTumboToken({ documentRoot: doc });
+  const sharedToken = ensureTumboTokenFacade();
+  const activityLedger = activityForEngine(sharedToken.engine);
+  const token = {
+    ledger: activityLedger,
+    balance: (account, asset) => activityLedger.balance(account, asset),
+    ensureAccount: (...args) => activityLedger.ensureAccount(...args),
+    drip: (...args) => activityLedger.drip(...args),
+    act: (...args) => activityLedger.act(...args),
+    on: (...args) => activityLedger.on(...args),
+  };
   const gam = createTokenGamification({ ledger: token.ledger });
   try {
     token.ensureAccount(DEMO_ACCOUNT, "user", "Burrow guest");
@@ -423,6 +433,8 @@ export function mountTokenGamification({
   let selected = false;
   let hovered = false;
   let disposed = false;
+  let visible = true;
+  let objectVisible = true;
   let pointerDown = null;
   let dragging = false;
   let lastTap = null;
@@ -443,12 +455,14 @@ export function mountTokenGamification({
   }
 
   function hitsCube(event) {
+    if (!visible || !objectVisible || disposed) return false;
     setNdc(event);
     raycaster.setFromCamera(ndc, camera);
     return raycaster.intersectObjects(pickTargets, false).length > 0;
   }
 
   function showPeek(event) {
+    if (!visible || !objectVisible || disposed) return;
     if (event) lastPeekEvent = { clientX: event.clientX, clientY: event.clientY };
     const snap = gam.snapshot(DEMO_ACCOUNT);
     peekLine.textContent = `Hunger ${snap.hunger}/${HUNGER_MAX} · Score ${snap.score.total} pts`;
@@ -489,9 +503,10 @@ export function mountTokenGamification({
   }
 
   function setOpen(next, method = "button") {
+    if (disposed || (next && !visible)) return;
     opened = Boolean(next);
     panel.hidden = !opened;
-    chip.hidden = opened;
+    chip.hidden = !visible || !objectVisible || opened;
     panel.setAttribute("aria-hidden", String(!opened));
     if (opened) {
       refresh();
@@ -761,7 +776,7 @@ export function mountTokenGamification({
   function frame(now) {
     if (disposed) return;
     rafId = requestAnimationFrame(frame);
-    if (reducedMotion) return;
+    if (reducedMotion || !visible || !objectVisible) return;
     const dt = Math.min(0.05, (now - lastFrame) / 1000 || 0);
     lastFrame = now;
     core.rotation.y += dt * 0.9;
@@ -781,6 +796,8 @@ export function mountTokenGamification({
       source: TOKEN_GAMIFICATION_CONSOLE_SOURCE,
       version: TOKEN_GAMIFICATION_VERSION,
       opened,
+      visible,
+      objectVisible,
       selected,
       position: Object.freeze({
         x: Number(group.position.x.toFixed(3)),
@@ -827,11 +844,39 @@ export function mountTokenGamification({
     peek.remove();
   }
 
+  function setVisible(next, options = {}) {
+    if (disposed) return;
+    visible = next === true;
+    objectVisible = options.objectVisible !== false;
+    group.visible = visible && objectVisible;
+    tether.visible = visible && objectVisible;
+    if (!visible) {
+      setOpen(false, 'route');
+      hovered = false;
+      peekPinnedUntil = 0;
+      peek.hidden = true;
+      if (pointerDown?.dragging && controls) controls.enabled = true;
+      pointerDown = null;
+      dragging = false;
+      setSelected(false, 'route');
+    }
+    if (!objectVisible) {
+      peekPinnedUntil = 0; peek.hidden = true; hovered = false;
+      if (pointerDown?.dragging && controls) controls.enabled = true;
+      pointerDown = null; dragging = false; lastTap = null;
+      dom.style.cursor = '';
+      setSelected(false, 'route');
+    }
+    chip.hidden = !visible || !objectVisible || opened;
+    return visible;
+  }
+
   return Object.freeze({
     open: (method = "api") => setOpen(true, method),
     close: (method = "api") => setOpen(false, method),
     toggle: (method = "api") => setOpen(!opened, method),
     refresh,
+    setVisible,
     getSnapshot,
     destroy,
     cube: group,

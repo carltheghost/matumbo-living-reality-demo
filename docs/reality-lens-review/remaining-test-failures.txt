@@ -1,0 +1,60 @@
+HISTORICAL BASELINE RECORD: superseded by the passing complete suite in review.md. Retained as earlier audit evidence.
+
+Remaining failures on the same Windows host; all names match the starting PR baseline.
+
+question builders carry complete meaning for a live model
+feature inventory renders one non-empty actionable block per enabled feature
+bot plaza console renders contract proposals in the drafts section
+tests\\centered-surfaces-universal-layout.test.mjs
+chess arena defines its public refreshAppearance hook before returning it
+tests\\contract-atelier-house-pool.test.mjs
+all three market types open with their outcome rules
+house and player roles are recorded on the contract
+a throwing approval hook never unwinds the approval
+Windows launcher exposes a verified static URL and optional memory API
+launcher stop path is scoped to recorded PIDs
+launch scripts keep the public authority boundary local
+static package script is deterministic and credential-free
+tests\\final-living-reality-lock.test.mjs
+tests\\hand-presence.test.mjs
+every static named import resolves to a real export in its target module
+3D room has actual humanoid joints and stable identity geometry across wardrobe/room/motion changes
+person floats in floorless lens space: no floor, no grid, lens-ring and glow instead
+mount is lazy: no Image constructions before the first open
+exactly one presence is created with the given scene and camera
+HUD button toggles the presence and notifies onOpenPanel
+pointermove over the canvas feeds setTilt with normalized coords
+unmount stops the loop, disposes the presence, and removes the button
+an external tick registrar drives presence.update instead of rAF
+mount works without hudRoot (button skipped, presence still mounts)
+open/close/toggle control visibility
+position persists across drags and restores on open
+click without drag triggers wave; drag does not
+dispose removes everything and clears the singleton
+update applies the motion sample and faces the camera
+setLook syncs the photo set and re-subscribes the builder texture
+setTilt is a safe no-op before open and forwards to the builder after open
+corrupt stored position is ignored
+portal handoffs retain the cube substrate while destination consoles stay local
+tests\\project-map-docs-consistency.test.mjs
+projection session composes canonical identity and simultaneous owner slices
+projection session is deeply immutable and reads owner changes on demand
+launch and distribution integration stays local with the vendored Three.js import map
+tests\\token-facade.test.mjs
+tests\\token-gamification.test.mjs
+tests\\token-idempotency.test.mjs
+tests\\token-ledger.test.mjs
+tests\\token-lifecycle.test.mjs
+tests\\token-quote-expiry.test.mjs
+tests\\token-vault.test.mjs
+the World Gateway route opens the public status console, not the legacy fixture
+
+Previously failing names now passing:
+chess renderer is standard-piece-only and does not depend on avatar textures
+semantic selection parity preserves type and targetId across supported select inputs
+phone orientation adapts the whole reading body without changing canonical shape
+forged handle fails closed
+health statuses cover healthy, stale, expired, revoked, dead, and offline
+the actual Pages build includes every root browser script, local CSS, and runtime assets
+one fitted live panel preserves every tab form while staying inside the viewport
+World Pulse is mounted as a real-source route over the cube-only field

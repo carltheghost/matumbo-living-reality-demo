@@ -8,6 +8,7 @@ import {
   isFreshQuote,
   matchMarketToGame,
   normalizeOddsMarkets,
+  resolveKalshiRequestUrl,
   validateQuoteShape,
 } from "../src/domains/odds-feeds.js";
 
@@ -87,6 +88,85 @@ test("fetchKalshiOdds normalizes public markets with a fake fetch", async () => 
   assert.equal(fakeFetch.calls.length, 1);
   assert.match(fakeFetch.calls[0].url, /\/markets/);
   assert.equal(fakeFetch.calls[0].options.method, "GET");
+});
+
+test("fetchKalshiOdds reads current dollar quotes as probabilities and skips unpriced markets", async () => {
+  const fakeFetch = makeFetch(() =>
+    makeResponse({
+      json: {
+        markets: [
+          {
+            ticker: "KX-DOLLAR-SPREAD",
+            title: "Dollar quote spread",
+            yes_bid_dollars: "0.5100",
+            yes_ask_dollars: "0.5600",
+            last_price_dollars: "0.0000",
+            updated_time: "2026-10-07T12:06:00.667409Z",
+          },
+          {
+            ticker: "KX-DOLLAR-LAST",
+            title: "Dollar last price",
+            yes_bid_dollars: "0.0000",
+            yes_ask_dollars: "0.0000",
+            last_price_dollars: "0.3400",
+          },
+          {
+            ticker: "KX-UNPRICED",
+            title: "Unpriced market",
+            yes_bid_dollars: "0.0000",
+            yes_ask_dollars: "0.0000",
+            last_price_dollars: "0.0000",
+          },
+        ],
+      },
+    })
+  );
+
+  const result = await fetchKalshiOdds({ fetch: fakeFetch, timeoutMs: 1000 });
+
+  assert.equal(result.available, true);
+  assert.deepEqual(
+    result.markets.map(({ marketId, outcomes }) => ({
+      marketId,
+      yes: outcomes.find(({ name }) => name === "Yes")?.price,
+    })),
+    [
+      { marketId: "KX-DOLLAR-SPREAD", yes: 0.535 },
+      { marketId: "KX-DOLLAR-LAST", yes: 0.34 },
+    ]
+  );
+});
+
+test("Kalshi uses the same-origin local bridge on the supported app and avoids browser CORS on static Pages", async () => {
+  assert.equal(
+    resolveKalshiRequestUrl({ protocol: "http:", hostname: "127.0.0.1", port: "8082" }),
+    "/api/public/kalshi/markets",
+  );
+  assert.equal(
+    resolveKalshiRequestUrl({ protocol: "http:", hostname: "localhost", port: "8082" }),
+    "/api/public/kalshi/markets",
+  );
+  assert.equal(
+    resolveKalshiRequestUrl({ protocol: "https:", hostname: "carltheghost.github.io", port: "" }),
+    null,
+  );
+
+  const noFetch = makeFetch(() => assert.fail("Static hosting must not attempt a browser-CORS request"));
+  const unavailable = await fetchKalshiOdds({
+    fetch: noFetch,
+    location: { protocol: "https:", hostname: "carltheghost.github.io", port: "" },
+  });
+  assert.equal(unavailable.available, false);
+  assert.match(unavailable.reason, /local Reality Lens bridge/i);
+  assert.equal(noFetch.calls.length, 0);
+
+  const localFetch = makeFetch(() => makeResponse({ json: { markets: [{ ticker: "KX-LOCAL", title: "Local bridge market", yes_bid: 50, yes_ask: 52 }] } }));
+  const local = await fetchKalshiOdds({
+    fetch: localFetch,
+    location: { protocol: "http:", hostname: "127.0.0.1", port: "8082" },
+  });
+  assert.equal(local.available, true);
+  assert.equal(localFetch.calls[0].url, "/api/public/kalshi/markets");
 });
 
 test("fetchKalshiOdds converts HTTP failure into unavailable odds", async () => {

@@ -26,8 +26,8 @@
  * dock" and can never red-banner the boot.
  */
 
-import { TabEngine } from './tab-engine.js?v=20260922-rotating-cubes3';
-import { initTabAR } from './tab-ar-tabs.js?v=20260922-cache2';
+import { TabEngine } from './tab-engine.js?v=20261003-skin360';
+import { initTabAR } from './tab-ar-tabs.js?v=20261003-skin360';
 
 const NARROW_QUERY = '(max-width:700px)';
 
@@ -74,6 +74,7 @@ function collectPanels(documentRoot) {
     : [];
   for (const el of asides) {
     if (!el || EXCLUDED_IDS.has(el.id)) continue;
+    if (el.closest?.('[data-controller-owned="tracking"],[data-controller-owned="voice"]')) continue;
     // The TabEngine's own layer/dock are divs, never asides — no self-hit.
     // asset-launch is class-driven (portal-destination-visible /
     // asset-route-hidden / cube-first-hidden + body mode classes), NOT the

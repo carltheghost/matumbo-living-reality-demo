@@ -3,15 +3,19 @@
  *
  * This adapter reads the canonical `spatial-rooms` contribution and builds a
  * small, low-poly set of room portals beside the existing organ constellation.
- * Selection, entering, and leaving are presentation state only.  The module
- * never edits the projection and never creates a message, wallet, network, or
- * persistence path.
+ * The projection is never edited. A separate browser-local workspace owns
+ * message content and local rooms; the canonical cipher contribution stays
+ * metadata-only. Optional audio encryption belongs to local voice attachments;
+ * nothing here creates remote delivery or verified participant identity.
  */
+
+import { createRoomWorkspace } from '../domains/room-workspace.js?v=20261005-voice';
+import { mountRoomConversations } from './room-conversations.js?v=20261007-voice-conversation-refresh';
 
 export const ROOM_SPACES_SOURCE = "spatial-rooms";
 export const ROOM_SPACES_CONSOLE_SOURCE = "room-spaces-console";
 export const DEFAULT_ROOM_SPACES_BOUNDARY =
-  "Rooms are local membership projections. Enter and leave are renderer-only; message content, cryptography, network, identity, and persistence are not active.";
+  "Room text and captions are saved readably in this browser. Voice audio can be encrypted with a separate unlock code; room/message metadata remains readable. Canonical membership and cipher indicators remain projections; remote delivery and identity verification are not connected.";
 
 const integerFormatter = new Intl.NumberFormat("en-US");
 
@@ -51,10 +55,10 @@ function normalizeMembership(entity, index) {
   };
 }
 
-function normalizeRoom(entity, index, memberships) {
+function normalizeRoom(entity, index, memberships, viewerId) {
   const id = text(entity?.id, `room-${index + 1}`);
   const roomMemberships = memberships.filter((membership) => membership.roomId === id);
-  const role = roomMemberships[0]?.role ?? "observer";
+  const role = (viewerId ? roomMemberships.find(membership => membership.memberId === viewerId) : roomMemberships[0])?.role ?? "observer";
   return {
     id,
     label: text(entity?.label, `Room ${index + 1}`),
@@ -96,9 +100,10 @@ export function summarizeRooms(projection) {
   const memberships = entities
     .filter((entity) => entity?.kind === "room-membership")
     .map(normalizeMembership);
+  const viewerId = asArray(contribution?.evidence).find(evidence => evidence?.kind === 'local-membership-filter')?.viewerId;
   const rooms = entities
     .filter((entity) => entity?.kind === "spatial-room")
-    .map((entity, index) => normalizeRoom(entity, index, memberships));
+    .map((entity, index) => normalizeRoom(entity, index, memberships, viewerId));
   return freezeSnapshot({
     source: contribution?.source ?? ROOM_SPACES_SOURCE,
     updatedAt: text(contribution?.updatedAt),
@@ -158,18 +163,27 @@ function markRoomObject(object, roomId, raycastTargets) {
   return object;
 }
 
+function positionRoomNode(group, index) {
+  const positions = [
+    [-3.35, -0.72, -4.25],
+    [3.35, -0.72, -4.25],
+    [0, -0.72, -7.15],
+  ];
+  if (index < positions.length) group.position.set(...positions[index]);
+  else {
+    const ring = 9 + Math.floor((index - 3) / 8) * 4.2;
+    const angle = (index - 3) % 8 / 8 * Math.PI * 2;
+    group.position.set(Math.sin(angle) * ring, -0.72, -4.5 - Math.cos(angle) * ring);
+  }
+}
+
 /** Build one deliberately small room portal. `three` is injected for testability. */
 function buildRoomNode(three, room, index, isMobile, parent, raycastTargets) {
   const THREE = three;
   const group = new THREE.Group();
   group.name = `room-space:${room.id}`;
   group.userData.roomId = room.id;
-  const positions = [
-    new THREE.Vector3(-3.35, -0.72, -4.25),
-    new THREE.Vector3(3.35, -0.72, -4.25),
-    new THREE.Vector3(0, -0.72, -7.15),
-  ];
-  group.position.copy(positions[index % positions.length]);
+  positionRoomNode(group, index);
   const accent = room.context === "market" ? 0xffc866 : room.context === "private" ? 0x74ecff : 0xb79cff;
   const accentMaterial = new THREE.MeshStandardMaterial({
     color: accent,
@@ -291,6 +305,8 @@ function disposeNode(node, raycastTargets) {
  */
 export function createRoomSpaces({
   documentRoot = globalThis.document,
+  windowRoot = globalThis.window,
+  storage,
   projection = null,
   three = null,
   parent = null,
@@ -322,9 +338,25 @@ export function createRoomSpaces({
   }
 
   let currentProjection = projection;
-  let summary = summarizeRooms(currentProjection);
-  let selectedId = summary.rooms[0]?.id ?? null;
-  let enteredId = null;
+  let canonicalSummary = summarizeRooms(currentProjection);
+  let localStorage = storage;
+  if (storage === undefined) {
+    try { localStorage = windowRoot?.localStorage ?? null; }
+    catch { localStorage = { getItem() { throw new Error('Storage unavailable.'); }, setItem() { throw new Error('Storage unavailable.'); } }; }
+  }
+  const workspace = createRoomWorkspace({ storage: localStorage, seedRooms: canonicalSummary.rooms });
+  let summary;
+  function refreshSummary() {
+    const local = workspace.snapshot();
+    const byId = new Map(canonicalSummary.rooms.map(room => [room.id, room]));
+    const rooms = local.rooms.map(room => byId.get(room.id) ?? {
+      ...room, privacy: 'browser-only', memberships: [{ id: `local-membership:${room.id}`, roomId: room.id, memberId: 'local-you', role: room.role, simulation: true }], memberCount: 1, simulation: true, localOnly: true,
+    });
+    summary = freezeSnapshot({ ...canonicalSummary, rooms, roomCount: rooms.length, memberships: rooms.flatMap(room => room.memberships), membershipCount: rooms.reduce((count, room) => count + room.memberCount, 0) });
+  }
+  refreshSummary();
+  let selectedId = workspace.snapshot().selectedRoomId;
+  let enteredId = workspace.snapshot().rooms.find(room => room.joined)?.id ?? null;
   let hoveredId = null;
   let opened = panel.hidden !== true;
   let replayCount = 0;
@@ -336,6 +368,19 @@ export function createRoomSpaces({
     parent.add(layer);
   }
   const nodes = new Map();
+  let conversations = null;
+  // Mount within the existing owner: Object and Text views capture the same
+  // controls, and message context follows the selected room portal.
+  conversations = mountRoomConversations({
+    documentRoot, windowRoot, host: panel, workspace,
+    onSelect: id => selectRoom(id, 'conversation-selector'),
+    onCreate: room => { refreshSummary(); syncNodes(); selectRoom(room.id, 'local-room-create'); enterRoom('local-room-create'); },
+    onChange: () => {
+      refreshSummary(); selectedId = workspace.snapshot().selectedRoomId;
+      enteredId = workspace.snapshot().rooms.find(room => room.joined)?.id ?? null;
+      syncNodes(); render();
+    },
+  });
 
   function selectedRoom() {
     return roomById(summary, selectedId);
@@ -347,6 +392,7 @@ export function createRoomSpaces({
 
   function setOpen(next, method = "api") {
     opened = Boolean(next);
+    if (!opened) conversations?.suspendVoice?.();
     panel.hidden = !opened;
     panel.classList.toggle("visible", opened);
     panel.setAttribute("aria-hidden", String(!opened));
@@ -384,9 +430,9 @@ export function createRoomSpaces({
       item.append(
         createText(documentRoot, "strong", "room-console-room-title", room.label),
         createText(documentRoot, "span", "room-console-room-meta", roomDetail(room)),
-        createText(documentRoot, "span", "room-console-room-summary", room.role === "owner" ? "You own this local room projection." : "You observe this local room projection."),
+        createText(documentRoot, "span", "room-console-room-summary", room.origin === 'local' ? "Your browser-local room and history." : room.role === "owner" ? "You own this local room projection." : "You observe this local room projection."),
       );
-      item.addEventListener("click", () => selectRoom(room.id, "row"));
+      item.addEventListener("click", () => runRoomAction(() => selectRoom(room.id, "row")));
       roomsList.appendChild(item);
     });
     if (!summary.rooms.length) {
@@ -425,11 +471,13 @@ export function createRoomSpaces({
     replayButton.disabled = !selected;
     renderList();
     renderTrace();
+    conversations?.render();
   }
 
   function selectRoom(id, method = "row") {
     const room = roomById(summary, id);
     if (!room) return null;
+    workspace.selectRoom(id);
     selectedId = id;
     lastAction = roomActionSnapshot(summary, id, "select", method, replayCount);
     render();
@@ -441,6 +489,7 @@ export function createRoomSpaces({
   function enterRoom(method = "button") {
     const room = selectedRoom();
     if (!room) return null;
+    workspace.joinRoom(room.id);
     enteredId = room.id;
     lastAction = roomActionSnapshot(summary, room.id, "enter", method, replayCount);
     render();
@@ -452,6 +501,7 @@ export function createRoomSpaces({
   function leaveRoom(method = "button") {
     const room = enteredRoom();
     if (!room) return null;
+    workspace.leaveRoom(room.id);
     enteredId = null;
     lastAction = roomActionSnapshot(summary, room.id, "leave", method, replayCount);
     render();
@@ -466,9 +516,11 @@ export function createRoomSpaces({
     selectedId = room.id;
     replayCount += 1;
     const previousEntered = enteredId;
+    workspace.joinRoom(room.id);
     enteredId = room.id;
     const enter = roomActionSnapshot(summary, room.id, "enter", `${method}:replay`, replayCount);
     enteredId = null;
+    workspace.leaveRoom(room.id);
     const leave = roomActionSnapshot(summary, room.id, "leave", `${method}:replay`, replayCount);
     lastReplay = freezeSnapshot({
       source: ROOM_SPACES_CONSOLE_SOURCE,
@@ -503,6 +555,7 @@ export function createRoomSpaces({
       replayCount,
       lastAction,
       lastReplay,
+      conversationWorkspace: conversations?.getSnapshot() ?? null,
       localOnly: true,
       simulation: true,
     });
@@ -510,7 +563,9 @@ export function createRoomSpaces({
 
   function syncProjection(nextProjection) {
     currentProjection = nextProjection ?? currentProjection;
-    summary = summarizeRooms(currentProjection);
+    canonicalSummary = summarizeRooms(currentProjection);
+    workspace.syncSeedRooms(canonicalSummary.rooms);
+    refreshSummary();
     if (!roomById(summary, selectedId)) selectedId = summary.rooms[0]?.id ?? null;
     if (!roomById(summary, enteredId)) enteredId = null;
     syncNodes();
@@ -569,6 +624,7 @@ export function createRoomSpaces({
       if (existing) {
         existing.room = room;
         existing.group.userData.roomId = room.id;
+        positionRoomNode(existing.group, index);
         return;
       }
       nodes.set(room.id, buildRoomNode(three, room, index, isMobile, layer, raycastTargets));
@@ -592,9 +648,13 @@ export function createRoomSpaces({
   }
 
   closeButton.addEventListener("click", () => setOpen(false, "close"));
-  replayButton.addEventListener("click", () => replay("button"));
-  enterButton.addEventListener("click", () => enterRoom("button"));
-  leaveButton.addEventListener("click", () => leaveRoom("button"));
+  function runRoomAction(action) {
+    try { action(); }
+    catch (error) { conversations?.render(); statusEl.textContent = error.message; }
+  }
+  replayButton.addEventListener("click", () => runRoomAction(() => replay("button")));
+  enterButton.addEventListener("click", () => runRoomAction(() => enterRoom("button")));
+  leaveButton.addEventListener("click", () => runRoomAction(() => leaveRoom("button")));
   documentRoot.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && opened) setOpen(false, "escape");
   });
@@ -605,6 +665,7 @@ export function createRoomSpaces({
 
   return Object.freeze({
     open: () => setOpen(true, "open"),
+    getVoiceContext: () => JSON.stringify([opened, selectedId, enteredId]),
     close: () => setOpen(false, "close"),
     toggle: () => setOpen(!opened, "toggle"),
     selectRoom,
@@ -618,9 +679,13 @@ export function createRoomSpaces({
     getFocusTarget,
     update,
     getSnapshot,
+    // Host diagnostics expose metadata by default; explicit local callers can
+    // back up their plaintext workspace without polluting SIMFABRIC entities.
+    exportConversations: () => workspace.exportData(),
     destroy: () => {
       nodes.forEach((node) => disposeNode(node, raycastTargets));
       nodes.clear();
+      conversations?.destroy();
       layer?.parent?.remove(layer);
     },
   });

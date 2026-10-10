@@ -700,6 +700,7 @@ test("projection session composes canonical identity and simultaneous owner slic
   assert.equal(snapshot.surfaceSummary.activeId, "contracts");
   assert.equal(snapshot.surfaceSummary.activeMounted, true);
   assert.equal(snapshot.surfaceSummary.activeOpened, true);
+  assert.equal(snapshot.activeFeature.surfaceOpen, true);
   assert.deepEqual(snapshot.surfaceSummary.openedIds, ["rooms", "contracts"]);
   assert.equal(snapshot.surfaceSummary.mountedCount, 5);
   assert.equal(snapshot.surfaceSummary.openedCount, 2);
@@ -883,4 +884,22 @@ test("mounted launch surface can expose its console state separately from its vi
   assert.equal(snapshot.surfaces["distribution-explorer"].mounted, true);
   assert.equal(snapshot.surfaces["distribution-explorer"].opened, false);
   assert.equal(snapshot.surfaces["distribution-explorer"].localOnly, true);
+});
+
+test('mounted readiness preserves chat connection state without copying private content', () => {
+  const state = fixtureState();
+  state.feature.activeId = 'web-ai';
+  state.surfaces = { 'web-ai': {
+    source: 'web-ai-console', opened: true, persistence: 'local-browser',
+    personalChat: { provider: 'chatgpt', connected: true, pending: false, state: 'signed_in',
+      workspace: { messages: ['private message'], instructions: 'private notes' }, accountId: 'private-id' },
+  } };
+  const snapshot = createFixtureSession(state).getSnapshot();
+  assert.equal(snapshot.surfaceSummary.activeMounted, true);
+  assert.equal(snapshot.surfaceSummary.activeOpened, true);
+  assert.deepEqual(snapshot.surfaces['web-ai'].personalChat, {
+    provider: 'chatgpt', connected: true, pending: false, state: 'signed_in',
+  });
+  assert.equal(snapshot.surfaces['web-ai'].persistence, 'local-browser');
+  assert.equal(JSON.stringify(snapshot.surfaces).includes('private'), false);
 });

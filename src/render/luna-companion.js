@@ -2,7 +2,8 @@ import {
   LUNA_BOUNDARY,
   LUNA_CONSOLE_SOURCE,
   createLunaCompanion,
-} from "../domains/luna-companion.js?v=20260922-cache2";
+} from "../domains/luna-companion.js?v=20261003-skin360";
+import { createVoiceOutput, watchVoiceOwnerVisibility } from "./voice-session.js?v=20261005-voice";
 
 export { LUNA_CONSOLE_SOURCE };
 export const LUNA_RENDER_SOURCE = LUNA_CONSOLE_SOURCE;
@@ -21,9 +22,11 @@ function element(documentRoot, tag, className, value) {
 }
 
 const WELCOME_TEXT = "Hello! I'm Luna — a scripted local guide, not an AI. Talk to me in plain words: I'll open any feature by name, explain what each place does, and tell you where you are. I forget everything when this page closes.";
+const VOICE_BOUNDARY = "Optional spoken replies use a device voice when available; other browser voices may use an online speech service.";
 
 export function createLunaCompanionConsole({
   documentRoot = globalThis.document,
+  windowRoot = documentRoot?.defaultView ?? globalThis,
   companion = null,
   features = [],
   getCurrentFeature = null,
@@ -51,6 +54,17 @@ export function createLunaCompanionConsole({
   let opened = panel.hidden !== true;
   let speakOn = false;
   let welcomed = false;
+  let disposed = false;
+  const voiceOutput = createVoiceOutput({ windowRoot, onState(state) {
+    if (disposed) return;
+    speakButton.title = state.status === "speaking"
+      ? state.processingLocation === "local-device" ? "Speaking with a device voice" : "Speaking with a browser voice that may use an online service"
+      : VOICE_BOUNDARY;
+    if (state.status === "speaking") statusEl.textContent = state.processingLocation === "local-device"
+      ? "SCRIPTED LOCAL GUIDE · READING WITH A DEVICE VOICE"
+      : "SCRIPTED LOCAL GUIDE · BROWSER VOICE MAY USE AN ONLINE SERVICE";
+    if (state.error) statusEl.textContent = `${state.errorMessage} Luna's scripted reply remains in the conversation.`;
+  } });
 
   function snapshot(action = "read", method = "api") {
     return deepFreeze({
@@ -59,6 +73,7 @@ export function createLunaCompanionConsole({
       method,
       opened,
       speakOn,
+      voice: voiceOutput.getSnapshot(),
       visited: [...visitedIds],
       companion: luna.getSnapshot(),
       localOnly: true,
@@ -156,23 +171,12 @@ export function createLunaCompanionConsole({
   }
 
   function speak(text) {
-    if (!speakOn) return;
-    try {
-      const synth = globalThis.speechSynthesis;
-      if (!synth || typeof synth.speak !== "function") return;
-      synth.cancel();
-      const utterance = new globalThis.SpeechSynthesisUtterance(safeSlice(text));
-      synth.speak(utterance);
-    } catch {
-      // Speech output is best-effort; text always works.
-    }
-  }
-
-  function safeSlice(text) {
-    return String(text ?? "").slice(0, 500);
+    if (!speakOn || !opened || disposed) return;
+    void voiceOutput.speak(text);
   }
 
   function send(text) {
+    if (disposed) return null;
     const raw = String(text ?? "").trim();
     let result;
     try {
@@ -236,6 +240,7 @@ export function createLunaCompanionConsole({
   }
 
   function setOpen(next, method = "api") {
+    if (disposed) return snapshot("read", method);
     opened = Boolean(next);
     panel.hidden = !opened;
     panel.setAttribute("aria-hidden", String(!opened));
@@ -246,34 +251,38 @@ export function createLunaCompanionConsole({
       }
       renderStatus();
       renderTrace();
-      boundaryEl.textContent = LUNA_BOUNDARY;
-    }
+      boundaryEl.textContent = `${LUNA_BOUNDARY} ${VOICE_BOUNDARY}`;
+    } else voiceOutput.stop();
     return publish(opened ? "open" : "close", method);
   }
 
   function setSpeak(next) {
+    if (disposed) return snapshot();
     speakOn = Boolean(next);
     speakButton.setAttribute("aria-pressed", String(speakOn));
     speakButton.textContent = speakOn ? "Voice: on" : "Voice: off";
-    if (!speakOn) {
-      try { globalThis.speechSynthesis?.cancel?.(); } catch { /* silent */ }
-    }
+    if (!speakOn) voiceOutput.stop();
     return publish("speak", "button");
   }
 
   sendButton.addEventListener("click", sendInput);
-  inputEl.addEventListener("keydown", (event) => {
+  const onInputKeydown = (event) => {
     if (event?.key === "Enter") sendInput();
-  });
-  closeButton.addEventListener("click", () => setOpen(false, "button"));
-  speakButton.addEventListener("click", () => setSpeak(!speakOn));
+  };
+  const onClose = () => setOpen(false, "button");
+  const onToggleSpeak = () => setSpeak(!speakOn);
+  inputEl.addEventListener("keydown", onInputKeydown);
+  closeButton.addEventListener("click", onClose);
+  speakButton.addEventListener("click", onToggleSpeak);
   speakButton.setAttribute("aria-pressed", "false");
   speakButton.textContent = "Voice: off";
+  speakButton.title = VOICE_BOUNDARY;
 
   renderChips();
-  boundaryEl.textContent = LUNA_BOUNDARY;
+  boundaryEl.textContent = `${LUNA_BOUNDARY} ${VOICE_BOUNDARY}`;
   renderStatus();
   renderTrace();
+  const stopVisibilityWatcher = watchVoiceOwnerVisibility({ element: panel, windowRoot, onHidden: () => voiceOutput.stop("owner-hidden") });
 
   return Object.freeze({
     open: (method = "api") => setOpen(true, method),
@@ -285,6 +294,18 @@ export function createLunaCompanionConsole({
     replay: (method = "api") => publish("replay", method),
     toggleSpeak: (method = "api") => setSpeak(!speakOn),
     getSnapshot: () => snapshot(),
+    destroy() {
+      if (disposed) return;
+      disposed = true;
+      opened = false;
+      panel.hidden = true;
+      stopVisibilityWatcher();
+      voiceOutput.destroy();
+      sendButton.removeEventListener?.("click", sendInput);
+      inputEl.removeEventListener?.("keydown", onInputKeydown);
+      closeButton.removeEventListener?.("click", onClose);
+      speakButton.removeEventListener?.("click", onToggleSpeak);
+    },
     boundary: LUNA_BOUNDARY,
   });
 }

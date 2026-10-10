@@ -1,0 +1,425 @@
+{
+  "base": "http://127.0.0.1:8082/",
+  "startedAt": "2026-10-05T10:33:50.352Z",
+  "sourceBefore": {
+    "src/main.js": "7f71b46366159d845753efce12db63d0ca97665dad1bc5875a1735ecbeb484fd",
+    "src/domains/network-tools.js": "3b8fff009c4d0f0cc62bbd4f87da060048228f4688c490c03cba0475bd7d11db",
+    "src/render/api-connections.js": "94f4894a12746cd651691fdcf86c1a753c5b8c4c03701aaa3a83de80f0196cf5",
+    "src/render/api-connections.css": "71e46f2c9bad6b5fd929700dea79466477a3d067a45e720c2fed463008c93156",
+    "src/render/my-gpt.js": "c21bff04d4d4c89e207801b0e67a2ae8965bf2fb617b13d74bc1b9a0a924b6eb",
+    "src/render/web-ai.js": "27afaff627003a3ae3357699158fb8cd79bcf25413abd7eba149f71659fed304",
+    "scripts/provider_bridge.py": "c44a1c535f0cc9ff92e64abd3c7a514c51acc67096ab0d827846c4663da64df6",
+    "scripts/verify-demo-launch.ps1": "2da1b06171c7b4968c9dc789f7c555752d3d3a831304290f886323e8dffa78ed"
+  },
+  "runs": [
+    {
+      "name": "desktop",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "checks": [
+        {
+          "label": "network-keeps-four-feature-owners",
+          "pass": true,
+          "spaceId": "network",
+          "owners": [
+            "bot-plaza",
+            "gateway",
+            "social-explorer",
+            "web-ai"
+          ]
+        },
+        {
+          "label": "live-assistant-and-local-plugin-status",
+          "pass": true,
+          "gpt": {
+            "chatgpt": {
+              "state": "signed_out",
+              "ready": false,
+              "verifiedAt": null,
+              "authAvailable": true,
+              "dependencyState": "ready",
+              "error": null
+            },
+            "openai": {
+              "state": "key_needed",
+              "ready": false,
+              "verifiedAt": null,
+              "error": null
+            },
+            "credentialStorage": "windows_dpapi",
+            "storageWarning": null,
+            "credentialsInBrowser": false
+          },
+          "nvidia": {
+            "configured": false,
+            "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+            "verifiedAt": null,
+            "error": null,
+            "state": "key-needed"
+          },
+          "localTools": [
+            {
+              "id": "lens-guide",
+              "name": "Lens Guide",
+              "version": "1.0.0",
+              "description": "Scripted local guide to existing feature routes. Suggests where to go; never navigates or calls tools.",
+              "state": "enabled"
+            },
+            {
+              "id": "plan-helper",
+              "name": "Plan Helper",
+              "version": "1.0.0",
+              "description": "Scripted local planning checklists for creating, learning, research and organizing. No provider, actions or scheduling.",
+              "state": "enabled"
+            }
+          ],
+          "publicSources": [
+            {
+              "id": "weather",
+              "state": "available",
+              "provider": "Open-Meteo",
+              "summary": "13.1 °C · New York example · 2026-10-05T10:30",
+              "sourceUrl": "https://api.open-meteo.com/v1/forecast?latitude=40.71&longitude=-74.01&current=temperature_2m,weather_code&forecast_days=1",
+              "observedAt": null
+            },
+            {
+              "id": "fx",
+              "state": "available",
+              "provider": "Frankfurter · ECB",
+              "summary": "1 EUR = 0.85033 GBP · 2026-10-02 / 1 EUR = 1.1225 USD · 2026-10-02",
+              "sourceUrl": "https://api.frankfurter.dev/v2/providers/ecb/rates?base=EUR&quotes=USD,GBP",
+              "observedAt": "2026-10-02"
+            },
+            {
+              "id": "earthquakes",
+              "state": "available",
+              "provider": "USGS",
+              "summary": "192 observations in the provider feed",
+              "sourceUrl": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson",
+              "observedAt": null
+            },
+            {
+              "id": "tvl",
+              "state": "available",
+              "provider": "DeFiLlama",
+              "summary": "Aave TVL · $19,638,764,283",
+              "sourceUrl": "https://api.llama.fi/tvl/aave",
+              "observedAt": null
+            }
+          ]
+        },
+        {
+          "label": "assistant-refresh-is-local-GET-only",
+          "pass": true,
+          "requests": [
+            {
+              "url": "http://127.0.0.1:8082/api/providers",
+              "method": "GET"
+            },
+            {
+              "url": "http://127.0.0.1:8082/api/gpt/status",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "label": "API-setup-handoff-selects-actual-owner-and-provider",
+          "pass": true,
+          "feature": "web-ai",
+          "provider": "openai"
+        },
+        {
+          "label": "ChatGPT-handoff-selects-actual-account-mode",
+          "pass": true,
+          "provider": "chatgpt"
+        },
+        {
+          "label": "Lens-Guide-handoff-and-scripted-reply",
+          "pass": true,
+          "selectedBotId": "lens-guide"
+        },
+        {
+          "label": "Plan-Helper-handoff-and-local-plan",
+          "pass": true,
+          "selectedBotId": "plan-helper"
+        },
+        {
+          "label": "individual-FX-retry-and-local-reference-conversion",
+          "pass": true,
+          "requests": [
+            {
+              "url": "https://api.frankfurter.dev/v2/providers/ecb/rates?base=EUR&quotes=USD,GBP",
+              "method": "GET"
+            }
+          ],
+          "sourceState": "available",
+          "sourceProvider": "Frankfurter · ECB",
+          "conversion": "100 EUR ≈ 112.25 USD · Frankfurter · ECB · 2026-10-02"
+        },
+        {
+          "label": "cancel-pending-public-read-recovers-and-suppresses-late-data",
+          "pass": true,
+          "injectedFailureOnly": true
+        },
+        {
+          "label": "keyboard-dismiss-restores-focus-and-no-uncaught-errors",
+          "pass": true
+        }
+      ],
+      "pageErrors": [],
+      "unexpectedProviderActions": [],
+      "renderer": {
+        "available": true,
+        "vendor": "Google Inc. (NVIDIA)",
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4060 (0x00002882) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+      },
+      "drawerLayout": {
+        "scrollLeft": 0,
+        "width": 478,
+        "scrollWidth": 478,
+        "header": {
+          "x": 941,
+          "y": 83,
+          "width": 478,
+          "height": 140.296875,
+          "top": 83,
+          "right": 1419,
+          "bottom": 223.296875,
+          "left": 941
+        },
+        "heading": {
+          "x": 965,
+          "y": 132.5,
+          "width": 350,
+          "height": 28.796875,
+          "top": 132.5,
+          "right": 1315,
+          "bottom": 161.296875,
+          "left": 965
+        },
+        "headerContentScrollLeft": 0,
+        "headerContentWidth": 350,
+        "headerContentScrollWidth": 350
+      },
+      "pendingRequests": []
+    },
+    {
+      "name": "phone",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "checks": [
+        {
+          "label": "network-keeps-four-feature-owners",
+          "pass": true,
+          "spaceId": "network",
+          "owners": [
+            "bot-plaza",
+            "gateway",
+            "social-explorer",
+            "web-ai"
+          ]
+        },
+        {
+          "label": "live-assistant-and-local-plugin-status",
+          "pass": true,
+          "gpt": {
+            "chatgpt": {
+              "state": "signed_out",
+              "ready": false,
+              "verifiedAt": null,
+              "authAvailable": true,
+              "dependencyState": "ready",
+              "error": null
+            },
+            "openai": {
+              "state": "key_needed",
+              "ready": false,
+              "verifiedAt": null,
+              "error": null
+            },
+            "credentialStorage": "windows_dpapi",
+            "storageWarning": null,
+            "credentialsInBrowser": false
+          },
+          "nvidia": {
+            "configured": false,
+            "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+            "verifiedAt": null,
+            "error": null,
+            "state": "key-needed"
+          },
+          "localTools": [
+            {
+              "id": "lens-guide",
+              "name": "Lens Guide",
+              "version": "1.0.0",
+              "description": "Scripted local guide to existing feature routes. Suggests where to go; never navigates or calls tools.",
+              "state": "enabled"
+            },
+            {
+              "id": "plan-helper",
+              "name": "Plan Helper",
+              "version": "1.0.0",
+              "description": "Scripted local planning checklists for creating, learning, research and organizing. No provider, actions or scheduling.",
+              "state": "enabled"
+            }
+          ],
+          "publicSources": [
+            {
+              "id": "weather",
+              "state": "available",
+              "provider": "Open-Meteo",
+              "summary": "13.1 °C · New York example · 2026-10-05T10:30",
+              "sourceUrl": "https://api.open-meteo.com/v1/forecast?latitude=40.71&longitude=-74.01&current=temperature_2m,weather_code&forecast_days=1",
+              "observedAt": null
+            },
+            {
+              "id": "fx",
+              "state": "available",
+              "provider": "Frankfurter · ECB",
+              "summary": "1 EUR = 0.85033 GBP · 2026-10-02 / 1 EUR = 1.1225 USD · 2026-10-02",
+              "sourceUrl": "https://api.frankfurter.dev/v2/providers/ecb/rates?base=EUR&quotes=USD,GBP",
+              "observedAt": "2026-10-02"
+            },
+            {
+              "id": "earthquakes",
+              "state": "available",
+              "provider": "USGS",
+              "summary": "192 observations in the provider feed",
+              "sourceUrl": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson",
+              "observedAt": null
+            },
+            {
+              "id": "tvl",
+              "state": "available",
+              "provider": "DeFiLlama",
+              "summary": "Aave TVL · $19,638,764,283",
+              "sourceUrl": "https://api.llama.fi/tvl/aave",
+              "observedAt": null
+            }
+          ]
+        },
+        {
+          "label": "assistant-refresh-is-local-GET-only",
+          "pass": true,
+          "requests": [
+            {
+              "url": "http://127.0.0.1:8082/api/providers",
+              "method": "GET"
+            },
+            {
+              "url": "http://127.0.0.1:8082/api/gpt/status",
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "label": "API-setup-handoff-selects-actual-owner-and-provider",
+          "pass": true,
+          "feature": "web-ai",
+          "provider": "openai"
+        },
+        {
+          "label": "ChatGPT-handoff-selects-actual-account-mode",
+          "pass": true,
+          "provider": "chatgpt"
+        },
+        {
+          "label": "Lens-Guide-handoff-and-scripted-reply",
+          "pass": true,
+          "selectedBotId": "lens-guide"
+        },
+        {
+          "label": "Plan-Helper-handoff-and-local-plan",
+          "pass": true,
+          "selectedBotId": "plan-helper"
+        },
+        {
+          "label": "individual-FX-retry-and-local-reference-conversion",
+          "pass": true,
+          "requests": [
+            {
+              "url": "https://api.frankfurter.dev/v2/providers/ecb/rates?base=EUR&quotes=USD,GBP",
+              "method": "GET"
+            }
+          ],
+          "sourceState": "available",
+          "sourceProvider": "Frankfurter · ECB",
+          "conversion": "100 EUR ≈ 112.25 USD · Frankfurter · ECB · 2026-10-02"
+        },
+        {
+          "label": "cancel-pending-public-read-recovers-and-suppresses-late-data",
+          "pass": true,
+          "injectedFailureOnly": true
+        },
+        {
+          "label": "keyboard-dismiss-restores-focus-and-no-uncaught-errors",
+          "pass": true
+        }
+      ],
+      "pageErrors": [],
+      "unexpectedProviderActions": [],
+      "renderer": {
+        "available": true,
+        "vendor": "Google Inc. (NVIDIA)",
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4060 (0x00002882) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+      },
+      "drawerLayout": {
+        "scrollLeft": 0,
+        "width": 370,
+        "scrollWidth": 370,
+        "header": {
+          "x": 10,
+          "y": 69,
+          "width": 370,
+          "height": 132.890625,
+          "top": 69,
+          "right": 380,
+          "bottom": 201.890625,
+          "left": 10
+        },
+        "heading": {
+          "x": 28,
+          "y": 113.5,
+          "width": 275,
+          "height": 26.390625,
+          "top": 113.5,
+          "right": 303,
+          "bottom": 139.890625,
+          "left": 28
+        },
+        "headerContentScrollLeft": 0,
+        "headerContentWidth": 275,
+        "headerContentScrollWidth": 275
+      },
+      "pendingRequests": []
+    }
+  ],
+  "isolatedBrowserStorage": true,
+  "independentColdLoads": true,
+  "browserChannel": "chromium",
+  "requestedAngle": "d3d11",
+  "softwareWebGL": false,
+  "inferenceAttempted": false,
+  "liveIdentity": {
+    "instanceId": "61fc3d146df54c429d92b8e3c5da8416",
+    "rootFingerprint": "1f2f69426b396a946266d3060fafebe18201cd4c48db9bc196e4beef39508301",
+    "featureCount": 36,
+    "checkedAt": "2026-10-05T10:33:50.367865Z"
+  },
+  "sourceAfter": {
+    "src/main.js": "7f71b46366159d845753efce12db63d0ca97665dad1bc5875a1735ecbeb484fd",
+    "src/domains/network-tools.js": "3b8fff009c4d0f0cc62bbd4f87da060048228f4688c490c03cba0475bd7d11db",
+    "src/render/api-connections.js": "94f4894a12746cd651691fdcf86c1a753c5b8c4c03701aaa3a83de80f0196cf5",
+    "src/render/api-connections.css": "71e46f2c9bad6b5fd929700dea79466477a3d067a45e720c2fed463008c93156",
+    "src/render/my-gpt.js": "c21bff04d4d4c89e207801b0e67a2ae8965bf2fb617b13d74bc1b9a0a924b6eb",
+    "src/render/web-ai.js": "27afaff627003a3ae3357699158fb8cd79bcf25413abd7eba149f71659fed304",
+    "scripts/provider_bridge.py": "c44a1c535f0cc9ff92e64abd3c7a514c51acc67096ab0d827846c4663da64df6",
+    "scripts/verify-demo-launch.ps1": "2da1b06171c7b4968c9dc789f7c555752d3d3a831304290f886323e8dffa78ed"
+  },
+  "sourceUnchanged": true
+}

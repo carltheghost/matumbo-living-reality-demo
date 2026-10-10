@@ -11,7 +11,7 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { TumboLedger } from "../src/domains/token.js";
+import { TokenActivityLedger as TumboLedger } from "../src/domains/token-activity.js";
 import {
   HUNGER_MAX,
   HUNGER_DECAY_PER_TICK,

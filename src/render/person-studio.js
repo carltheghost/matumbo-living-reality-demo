@@ -1,7 +1,7 @@
-import {createPersonStudioOwner,STUDIO_OUTFITS,STUDIO_ROOMS,STUDIO_COMPANIONS} from '../domains/person-studio.js?v=20260922-cache2';
-import {buildPersonStudioScene} from './person-studio-scene.js?v=20260923-meshfix';
-import {AVATAR_FACE_CHOICES,AVATAR_FACE_MAX_DIM,AVATAR_FLUFFY_BODY_TEMPLATE_URL,avatarFaceChoiceToMascotLook,buildChibi,loadAvatarFaceChoice,resolveAvatarFaceUrl,saveAvatarFace,saveAvatarFaceChoice} from '../domains/avatar-style.js?v=20260922-cache2';
-import {setMascotLook} from './photo-mascot-set.js?v=20260922-cache2';
+import {createPersonStudioOwner,STUDIO_OUTFITS,STUDIO_ROOMS,STUDIO_COMPANIONS} from '../domains/person-studio.js?v=20261003-skin360';
+import {buildPersonStudioScene} from './person-studio-scene.js?v=20261003-skin360';
+import {AVATAR_FACE_CHOICES,AVATAR_FACE_MAX_DIM,AVATAR_FLUFFY_BODY_TEMPLATE_URL,avatarFaceChoiceToMascotLook,buildChibi,loadAvatarFaceChoice,resolveAvatarFaceUrl,saveAvatarFace,saveAvatarFaceChoice} from '../domains/avatar-style.js?v=20261003-skin360';
+import {setMascotLook} from './photo-mascot-set.js?v=20261003-skin360';
 
 export function createPersonStudio({THREE,renderer,scene,camera,controls,world,targets,documentRoot=document,onNavigate,onFrame,onIntent,reducedMotion=false}) {
   let storage=null;try{storage=globalThis.localStorage;}catch{}
@@ -17,7 +17,7 @@ export function createPersonStudio({THREE,renderer,scene,camera,controls,world,t
   }
   const pmrem=new THREE.PMREMGenerator(renderer);const environmentTarget=pmrem.fromScene(environmentScene,.04);pmrem.dispose();
   [envRoom,...envLights].forEach(m=>{m.geometry.dispose();m.material.dispose();});
-  const stylesheet=documentRoot.createElement('link');stylesheet.rel='stylesheet';stylesheet.href=new URL('./person-studio.css',import.meta.url).href;documentRoot.head.append(stylesheet);
+  const stylesheet=documentRoot.createElement('link');stylesheet.rel='stylesheet';stylesheet.href=new URL('./person-studio.css?v=20261003-skin360',import.meta.url).href;documentRoot.head.append(stylesheet);
   const root=documentRoot.createElement('section');root.id='person-studio';root.hidden=true;root.setAttribute('aria-label','PERSON Ω personal room');
   root.innerHTML=`
     <header class="studio-topbar">
@@ -28,8 +28,8 @@ export function createPersonStudio({THREE,renderer,scene,camera,controls,world,t
     <div class="studio-title"><span class="studio-kicker">01 / Person Ω</span><h1>The same you.<br><i>Everywhere.</i></h1><p>Your identity stays yours.<br>Dress it. Move it. Make this space your own.</p></div>
     <aside class="studio-identity"><span class="studio-kicker">Your persistent identity</span><h2 data-display-name>Your digital self</h2><p class="studio-lock" data-identity-lock>Awaiting your approval</p><p>Camera input controls motion.<br>Only you change the appearance.</p><dl><dt>Appearance</dt><dd data-version>Preview</dd><dt>Identity</dt><dd data-short-id>Not created</dd><dt>Storage</dt><dd data-storage>Not saved</dd></dl></aside>
     <aside class="studio-inspector" aria-label="Personal space controls">
-      <section data-panel="identity" role="tabpanel"><span class="studio-kicker">Identity / by choice</span><h2>Make it yours.</h2><p>An original, stylized 3D avatar built from your design references. Approve this model to lock its identity; outfits remain yours to change.</p><form data-approve-form><label>Your display name<input name="displayName" type="text" maxlength="60" autocomplete="nickname" placeholder="Your name" required></label><button class="studio-primary" type="submit">Approve this avatar</button></form><div data-approved-actions hidden><button class="studio-primary" type="button" data-save>Save profile & look</button><button class="studio-secondary" type="button" data-export>Export profile</button><div class="studio-projection-record" data-identity-hash></div></div><div class="studio-face" data-face-block><span class="studio-kicker">Face / your look</span><h2>Whose face?</h2><p>Choose your Person Studio face for the personal avatar. Chess uses a separate standard piece set.</p><div class="studio-face-options" data-face-options></div><label class="studio-photo-upload">Use my photo<input type="file" accept="image/*" data-photo-input hidden></label><p class="studio-subtle">Your photo becomes your personal chibi look on this device only. Chess remains a standard-piece game.</p></div><p class="studio-subtle">Local approval is not account verification or biometric enrollment. Nothing is uploaded.</p></section>
-      <section data-panel="wardrobe" role="tabpanel" hidden><span class="studio-kicker">Wear your world</span><h2>A look of your own.</h2><p>Change the clothing. Keep the person.</p><div class="studio-outfits"></div><button class="studio-primary studio-secondary" type="button" data-save>Save this look</button><p class="studio-subtle">These are selectable 3D outfits, not owned marketplace products.</p></section>
+      <section data-panel="identity" role="tabpanel"><span class="studio-kicker">Identity / by choice</span><h2>Make it yours.</h2><p>An original, articulated 3D avatar built with procedural geometry. Approve this model to lock its identity; its trim and room remain yours to change.</p><form data-approve-form><label>Your display name<input name="displayName" type="text" maxlength="60" autocomplete="nickname" placeholder="Your name" required></label><button class="studio-primary" type="submit">Approve this avatar</button></form><div data-approved-actions hidden><button class="studio-primary" type="button" data-save>Save profile & look</button><button class="studio-secondary" type="button" data-export>Export profile</button><div class="studio-projection-record" data-identity-hash></div></div><div class="studio-face" data-face-block><span class="studio-kicker">Profile portrait / on this device</span><h2>Your portrait.</h2><p>Choose a portrait for this local profile. Bundled photo looks also update the optional photo mascot.</p><img data-face-preview class="studio-face-preview" alt="Selected local profile portrait" loading="lazy" width="160" height="160"><div class="studio-face-options" data-face-options></div><label class="studio-photo-upload">Use my photo<input type="file" accept="image/*" data-photo-input hidden></label><p class="studio-subtle">A photo creates a local chibi portrait. Agent Smith keeps his articulated 3D face; chess keeps its standard pieces.</p></div><p class="studio-subtle">Local approval is not account verification or biometric enrollment. Nothing is uploaded.</p></section>
+      <section data-panel="wardrobe" role="tabpanel" hidden><span class="studio-kicker">Wear your world</span><h2>A look of your own.</h2><p>Choose the tie and pocket-square trim. Agent Smith keeps his brown suit and the same physical identity.</p><div class="studio-outfits"></div><button class="studio-primary studio-secondary" type="button" data-save>Save this look</button><p class="studio-subtle">The floating garments preview each style. These are local presentation choices.</p></section>
       <section data-panel="room" role="tabpanel" hidden><span class="studio-kicker">Your space / your atmosphere</span><h2>Somewhere to belong.</h2><p>Same avatar. A different light, horizon and mood.</p><div class="studio-room-options"></div><button class="studio-secondary" type="button" data-center>Recenter the room</button></section>
       <section data-panel="presence" role="tabpanel" hidden><span class="studio-kicker">Identity persists / motion flows</span><h2>Move. Stay you.</h2><p>Test the articulated rig. These controls supply pose only—they cannot change the face, hair or clothing.</p><label>Head rotation<input data-head type="range" min="-0.75" max="0.75" step="0.01" value="0"></label><label>Raise left arm<input data-arm type="range" min="0" max="1.4" step="0.01" value="0"></label><button class="studio-secondary" data-rest type="button">Release to rest</button><button class="studio-secondary" data-xr type="button">Enter this room in VR</button><p class="studio-subtle">Camera-to-skeleton tracking and hardware XR validation remain pending. Manual pose requires an approved avatar.</p></section>
       <section data-panel="companion" role="tabpanel" hidden><span class="studio-kicker">Luna / one companion</span><h2>Always beside you.</h2><p>Choose its embodiment. The companion ID stays the same.</p><div class="studio-companion-options"></div><p data-companion-context></p><p class="studio-subtle">Local contextual guide. No AI model or conversation service is connected here yet.</p></section>
@@ -47,7 +47,7 @@ export function createPersonStudio({THREE,renderer,scene,camera,controls,world,t
     tab=next;all('[data-tab]').forEach(b=>{const selected=b.dataset.tab===tab;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;});
     root.classList.remove('studio-clear-view');find('[data-clear-view]').textContent='Hide controls · explore';
     all('[data-panel]').forEach(p=>{p.hidden=p.dataset.panel!==tab;});
-    announce(tab==='wardrobe'?'Choose an outfit to preview it on the same 3D person.':tab==='presence'?'Manual pose test · your identity remains locked.':'');
+    announce(tab==='wardrobe'?'Choose a trim style for the same 3D person.':tab==='presence'?'Manual pose test · your identity remains locked.':'');
   }
   function render(snapshot){
     spatial.apply(snapshot);root.dataset.previewDirty=String(snapshot.dirty);
@@ -69,16 +69,17 @@ export function createPersonStudio({THREE,renderer,scene,camera,controls,world,t
   for(const outfit of STUDIO_OUTFITS){
     const b=documentRoot.createElement('button');b.type='button';b.className='studio-outfit';b.dataset.outfit=outfit.id;
     b.innerHTML=`<svg viewBox="0 0 70 90" aria-hidden="true"><path d="M22 10 10 18 3 52 14 56 23 34 19 82 33 82 35 36 37 82 51 82 47 34 56 56 67 52 60 18 48 10 42 6 35 16 28 6Z" fill="${outfit.color}" stroke="${outfit.trim}" stroke-width="1.5"/><path d="m27 12 6 19-5 21m15-40-6 19 5 21M35 17v57" fill="none" stroke="${outfit.trim}" stroke-width="1.3"/></svg><strong>${outfit.name}</strong><small>${outfit.subtitle}</small>`;
-    b.onclick=guard(()=>{owner.chooseOutfit(outfit.id);announce(`${outfit.name} applied · identity unchanged. Save to keep this look.`);});find('.studio-outfits').append(b);
+    b.onclick=guard(()=>{owner.chooseOutfit(outfit.id);announce(`${outfit.name} trim applied · identity unchanged. Save to keep this look.`);});find('.studio-outfits').append(b);
   }
   for(const room of STUDIO_ROOMS){const b=documentRoot.createElement('button');b.type='button';b.dataset.room=room.id;const name=documentRoot.createElement('strong'),caption=documentRoot.createElement('small');name.textContent=room.name;caption.textContent=room.caption;b.append(name,caption);b.onclick=guard(()=>{owner.chooseRoom(room.id);announce(`${room.name} · the same avatar stays with you.`);});find('.studio-room-options').append(b);}
   for(const form of STUDIO_COMPANIONS){const b=documentRoot.createElement('button');b.type='button';b.dataset.companion=form;b.textContent=form;b.onclick=guard(()=>{owner.chooseCompanion(form);announce('Companion form changed · companion identity preserved.');});find('.studio-companion-options').append(b);}
-  // Face options: the default Tumbo character, Tumbo's own likeness, or the
-  // user's own photo styled locally ("Become Tumbo"). The choice dresses the
-  // hologram here and the user's chess pieces; a photo never leaves the device.
+  // Local profile portraits, including the user's on-device chibi. The
+  // optional photo mascot uses bundled looks; the articulated avatar and
+  // standard chess geometry retain their own physical presentation.
   function refreshFacePressed(){
     const current=loadAvatarFaceChoice(storage);
     all('[data-face]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.face===current)));
+    find('[data-face-preview]').src=resolveAvatarFaceUrl(storage);
   }
   function chooseFace(id){
     if(!saveAvatarFaceChoice(storage,id)){announce('Could not save the face choice on this browser.');return;}
@@ -97,7 +98,7 @@ export function createPersonStudio({THREE,renderer,scene,camera,controls,world,t
     }
     refreshFacePressed();
     const choice=AVATAR_FACE_CHOICES.find(c=>c.id===id);
-    announce(`${choice?choice.label:'Face'} selected · your avatar and chess pieces wear it now.`);
+    announce(`${choice?choice.label:'Portrait'} saved on this browser${mascotLook?' · optional photo mascot updated':''}. Agent Smith keeps the same 3D face.`);
   }
   for(const choice of AVATAR_FACE_CHOICES){
     const b=documentRoot.createElement('button');b.type='button';b.className='studio-face-option';b.dataset.face=choice.id;
@@ -212,6 +213,7 @@ export function createPersonStudio({THREE,renderer,scene,camera,controls,world,t
   };
   renderer.domElement.addEventListener('pointerdown',pointerDown);renderer.domElement.addEventListener('pointerup',pointerUp);renderer.domElement.addEventListener('pointercancel',pointerCancel);
   return {open,close,get active(){return active;},resolve:spatial.resolve,selectObject,
+    ready:owner.ready,
     chooseOutfit:(id)=>owner.chooseOutfit(id),
     setHologramTint:(tint,opacity)=>spatial.setHologramTint?.(tint,opacity),
     getEnvironmentTexture:()=>environmentTarget.texture,

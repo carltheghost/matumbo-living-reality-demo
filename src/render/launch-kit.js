@@ -14,7 +14,7 @@ import {
   serializeLaunchKit,
   summarizeLaunchKit,
   validateLaunchKit,
-} from "../domains/launch-kit.js?v=20260922-cache2";
+} from "../domains/launch-kit.js?v=20261003-skin360";
 
 export const LAUNCH_KIT_CONSOLE_SOURCE = "launch-kit-console";
 export const LAUNCH_KIT_RENDER_SOURCE = LAUNCH_KIT_CONSOLE_SOURCE;

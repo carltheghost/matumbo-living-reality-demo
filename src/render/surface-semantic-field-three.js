@@ -5,7 +5,7 @@ import {
   generatePlanarUv,
   resolveRegionAtUv,
   semanticLod,
-} from '../domains/surface-semantic-field.js';
+} from '../domains/surface-semantic-field.js?v=20261003-skin360';
 
 const DEFAULT_PALETTE = Object.freeze({
   base: '#04131d',

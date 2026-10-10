@@ -1,9 +1,9 @@
-import { SurfaceObject } from './surface-semantic-field-three.js';
+import { SurfaceObject } from './surface-semantic-field-three.js?v=20261003-skin360';
 import {
   analyzeTopology,
   semanticPatchesFromTopology,
   topologySummary,
-} from '../domains/topology-semantic-field.js';
+} from '../domains/topology-semantic-field.js?v=20261003-skin360';
 
 /**
  * TopologySurfaceObject

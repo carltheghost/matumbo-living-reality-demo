@@ -228,7 +228,7 @@
     showFatal((e && e.reason && (e.reason.message || String(e.reason))) || "unhandled rejection");
   });
   try {
-    const { mountTokenLifecycleAudit } = await import("./src/render/token-lifecycle.js");
+    const { mountTokenLifecycleAudit } = await import("./src/render/token-lifecycle.js?v=20261003-skin360");
     mountTokenLifecycleAudit(document.getElementById("tl-app"));
   } catch (err) {
     showFatal(err && err.message ? err.message : String(err));

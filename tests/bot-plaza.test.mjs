@@ -133,6 +133,60 @@ test("registry persists bots across restarts (round-trip)", () => {
   assert.ok(log.some((entry) => entry.from === helper.id && entry.text === "Hi you!"));
 });
 
+test('one-off callback plugins are honestly session-only and are never serialized as executable code', () => {
+  const storage = fakeStorage(), registry = createBotRegistry({ storage, now });
+  const installed = registry.install(echoPlugin(), { persisted: true, approvedCapabilities: ['world.announce'] });
+  assert.equal(installed.persisted, false);
+  const runtime = createBotRuntime({ registry, now }); runtime.tellBot(installed.id, 'hello');
+  assert.ok(runtime.getBus().getLog().some(entry => entry.text === 'echo: hello'));
+  assert.equal(createBotRegistry({ storage, now }).getBot(installed.id), null);
+});
+
+test('trusted shipped plugin factories join automatically and retain only explicitly approved powers on reload', () => {
+  const storage = fakeStorage();
+  const pluginFactories = { 'echo-bot': { version: '1.0.0', create: () => echoPlugin() } };
+  const first = createBotRegistry({ storage, now, pluginFactories });
+  assert.equal(first.getBot('echo-bot').enabled, true); assert.equal(first.getBot('echo-bot').persisted, true);
+  assert.deepEqual(first.getBot('echo-bot').approvedCapabilities, []);
+  first.approveCapabilities('echo-bot', ['world.announce']); first.setEnabled('echo-bot', false);
+  const second = createBotRegistry({ storage, now, pluginFactories });
+  assert.deepEqual(second.getBot('echo-bot').approvedCapabilities, ['world.announce']); assert.equal(second.getBot('echo-bot').enabled, false);
+  assert.equal(second.getStartupIssues().length, 0);
+});
+
+test('factory declaration changes drop removed powers and a new version rests with no inherited approvals', () => {
+  const storage = fakeStorage();
+  const first = createBotRegistry({ storage, now, pluginFactories: { 'echo-bot': { version: '1.0.0', create: () => echoPlugin() } } });
+  first.approveCapabilities('echo-bot', ['world.announce', 'world.message-bots']);
+  const narrowed = createBotRegistry({ storage, now, pluginFactories: { 'echo-bot': { version: '1.0.0', create: () => echoPlugin({ capabilities: ['world.announce'] }) } } });
+  assert.deepEqual(narrowed.getBot('echo-bot').approvedCapabilities, ['world.announce']);
+  const changed = createBotRegistry({ storage, now, pluginFactories: { 'echo-bot': { version: '2.0.0', create: () => echoPlugin({ version: '2.0.0', capabilities: ['world.announce', 'world.launch-feature'] }) } } });
+  assert.deepEqual(changed.getBot('echo-bot').approvedCapabilities, []); assert.equal(changed.getBot('echo-bot').enabled, false);
+  assert.equal(changed.getStartupIssues()[0].reason, 'version-changed');
+});
+
+test('removed shipped factories keep saved settings without executing absent code and restore when code returns', () => {
+  const storage = fakeStorage(), pluginFactories = { 'echo-bot': { version: '1.0.0', create: () => echoPlugin() } };
+  const first = createBotRegistry({ storage, now, pluginFactories }); first.approveCapabilities('echo-bot', ['world.announce']); first.setEnabled('echo-bot', false);
+  const absent = createBotRegistry({ storage, now });
+  assert.equal(absent.getPlugin('echo-bot'), null); assert.equal(absent.getStartupIssues()[0].reason, 'factory-unavailable');
+  absent.setEnabled('muse-agent', false); // A separate settings write must not discard the held record.
+  const returned = createBotRegistry({ storage, now, pluginFactories });
+  assert.equal(returned.getBot('echo-bot').enabled, false); assert.deepEqual(returned.getBot('echo-bot').approvedCapabilities, ['world.announce']);
+});
+
+test('persisted installation uses known factory callbacks and refuses invalid factory identities or scripts', () => {
+  const storage = fakeStorage(), pluginFactories = { 'echo-bot': { version: '1.0.0', create: () => echoPlugin() } };
+  const registry = createBotRegistry({ storage, now, pluginFactories });
+  registry.install(echoPlugin({ onMessage: () => 'unregistered replacement' }));
+  const runtime = createBotRuntime({ registry, now }); runtime.tellBot('echo-bot', 'hello');
+  assert.ok(runtime.getBus().getLog().some(entry => entry.text === 'echo: hello'));
+  assert.equal(runtime.getBus().getLog().some(entry => entry.text === 'unregistered replacement'), false);
+  const rejected = createBotRegistry({ storage: fakeStorage(), now, pluginFactories: { 'echo-bot': { version: '1.0.0', create: 'https://example.com/plugin.js' }, bad: { version: '1.0.0', create: () => echoPlugin() } } });
+  assert.equal(rejected.listBots().length, 1); assert.equal(rejected.getStartupIssues().length, 2);
+  assert.throws(() => registry.install(echoPlugin({ id: 'muse-agent' })), /reserved/);
+});
+
 // ---------------------------------------------------------------------------
 // Message routing: user→bot and bot→bot
 // ---------------------------------------------------------------------------
@@ -571,6 +625,20 @@ test("expired proposals are auto-marked on read and on load", () => {
   assert.equal(later.getProposals({ status: "expired" }).length, 1);
 });
 
+test("expiry prevents approving or extending a proposal without a preceding read", () => {
+  let clock = "2026-09-18T12:00:00.000Z";
+  const queue = createProposalQueue({ now: () => clock, storage: fakeStorage() });
+  const first = queue.submitProposal({ botId: "scout" }, validProposal({ expiresAt: "2026-09-18T13:00:00.000Z" }));
+  const second = queue.submitProposal({ botId: "scout" }, validProposal({ expiresAt: "2026-09-18T13:00:00.000Z" }));
+  clock = "2026-09-18T13:00:00.000Z";
+  assert.throws(() => queue.setProposalStatus(first.id, "approved"), /only pending/);
+  assert.throws(() => queue.updateProposal(second.id, { expiresAt: "2026-09-20T13:00:00.000Z" }), /only pending/);
+  assert.equal(queue.getProposal(first.id).status, "expired");
+  assert.equal(queue.getProposal(second.id).status, "expired");
+  assert.equal(queue.getProposal(first.id).history.some(entry => entry.status === "approved"), false);
+  assert.equal(queue.getNowMs(), Date.parse(clock));
+});
+
 test("proposal queue persists across restarts (round-trip)", () => {
   const storage = fakeStorage();
   const first = createProposalQueue({ storage, now });
@@ -812,7 +880,23 @@ test("bot plaza console renders contract proposals in the drafts section", () =>
   assert.match(text, /User said Rivals at home\./);
   assert.match(text, /Muse Agent/);
   assert.match(text, /expires in/);
+  assert.match(text, /expires in 3d 0h/);
   assert.match(text, /Review in Contract Atelier → Contracts for your review/);
+});
+
+test("expiring a rendered proposal shows one row using the queue clock", () => {
+  let clock = FIXED_NOW;
+  const documentRoot = makeDocument();
+  const { registry } = registryWith();
+  const queue = createProposalQueue({ now: () => clock, storage: fakeStorage() });
+  const runtime = createBotRuntime({ registry, proposalQueue: queue, now: () => clock });
+  queue.submitProposal({ botId: "scout", botName: "Scout" }, validProposal({ expiresAt: "2026-09-18T13:00:00.000Z" }));
+  const console = createBotPlazaConsole({ documentRoot, registry, runtime });
+  clock = "2026-09-18T13:00:00.000Z";
+  console.open();
+  const rows = documentRoot.getElementById("bot-plaza-drafts").children.filter(node => node.className?.includes("bot-plaza-proposal-row"));
+  assert.equal(rows.length, 1);
+  assert.match(rows[0].children[0].textContent, /PROPOSAL · EXPIRED/);
 });
 
 test("atelier template picker pre-fills the contract scout", () => {

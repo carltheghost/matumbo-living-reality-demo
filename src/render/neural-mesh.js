@@ -1,4 +1,4 @@
-import { NEURAL_MESH_SOURCE } from "../domains/neural-mesh.js?v=20260922-cache2";
+import { NEURAL_MESH_SOURCE } from "../domains/neural-mesh.js?v=20261003-skin360";
 
 /**
  * Renderer-only adapter for the advisory Neural Mesh projection.

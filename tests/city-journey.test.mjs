@@ -49,3 +49,14 @@ test('plain ?feature= URLs are left untouched',()=>{
   assert.equal(calls.pushState.length,0);
   assert.equal(calls.replaceState.length,0);
 });
+
+test('browser history leaves an explicit Reality Lens space to its canonical route owner',()=>{
+  const {doc,win,calls}=makeHarness('http://localhost/?feature=reality-lens&space=agents');
+  const listeners=new Map(),seen=[];
+  win.addEventListener=(name,listener)=>listeners.set(name,listener);
+  mountCityJourney({navigate:id=>seen.push(id),documentRoot:doc,windowRoot:win});
+  listeners.get('popstate')({type:'popstate'});
+  assert.deepEqual(seen,[],'must not reset a restored space to the home gateway');
+  assert.deepEqual(calls,{pushState:[],replaceState:[]});
+  assert.equal(resolveCityRoute('?city=rooms&feature=rooms&space=agents').status,'rejected');
+});

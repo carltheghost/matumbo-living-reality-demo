@@ -13,7 +13,7 @@
  */
 
 // One source of truth for lifecycle constants — no hardcoded duplicates.
-import { TOKEN_CONFIG } from "./token.js?v=20260922-cache2";
+import { REVERSE_WINDOW_TICKS } from "./token.js?v=20261003-skin360";
 
 export const TOKEN_LIFECYCLE_SCHEMA_VERSION = 1;
 export const TOKEN_LIFECYCLE_SOURCE = "tumbo-token-lifecycle";
@@ -135,7 +135,7 @@ function createEvidence(updatedAt) {
       kind: "lifecycle-semantics",
       status: "declared",
       simulation: true,
-      reverseWindowTicks: TOKEN_CONFIG.REVERSE_WINDOW_TICKS,
+      reverseWindowTicks: REVERSE_WINDOW_TICKS,
       reverseModel: "compensating-journal",
       historyModel: "append-only",
       doubleReverse: "impossible-by-deterministic-idempotency-key",

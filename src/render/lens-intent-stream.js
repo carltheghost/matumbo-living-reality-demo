@@ -22,6 +22,8 @@ export function createIntentStream() {
       type = 'select';
     } else if (source === 'hand' && raw?.gesture === 'grab') {
       type = 'move';
+    } else if (source === 'hand' && raw?.gesture === 'tap') {
+      type = 'select';
     } else if (raw?.gesture === 'swipe') {
       type = 'navigate';
     } else if (source === 'voice' && typeof raw?.transcript === 'string' && raw.transcript.length > 0) {

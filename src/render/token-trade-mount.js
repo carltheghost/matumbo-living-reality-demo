@@ -7,18 +7,18 @@
 import {
   createTokenBuyConsole,
   createTokenSellConsole,
-} from "./token-trade.js?v=20260922-cache2";
+} from "./token-trade.js?v=20261003-skin360";
 
 const FEATURES = Object.freeze([
   Object.freeze({
     id: "token-buy",
-    label: "Buy TUMBO (simulated)",
-    kicker: "sMIMAS → TUMBO",
+    label: "Buy sMIMAS (simulated)",
+    kicker: "TUMBO → sMIMAS",
   }),
   Object.freeze({
     id: "token-sell",
-    label: "Sell TUMBO (simulated)",
-    kicker: "TUMBO → sMIMAS",
+    label: "Sell sMIMAS (simulated)",
+    kicker: "sMIMAS → TUMBO",
   }),
 ]);
 
@@ -114,7 +114,7 @@ function handleRoute(buy, sell) {
   } catch { /* ignore */ }
 }
 
-export function mountTokenTrade({ documentRoot = document, acct = "local-participant" } = {}) {
+export function mountTokenTrade({ documentRoot = document, acct = "you" } = {}) {
   if (!documentRoot?.body) return null;
   injectStyles(documentRoot);
   const buy = createTokenBuyConsole({ documentRoot, acct });

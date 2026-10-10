@@ -176,6 +176,60 @@ test("replay and reset are deterministic, frozen, and local-only", () => {
   assert.equal(reset.state.executable, false);
 });
 
+test("every Arena objective is reachable and expiry is a distinct loss", () => {
+  const winningLines = {
+    "nebula-rally": ["boost", "boost", "boost", "drift"],
+    "chrono-grid": ["north", "north", "east", "east"],
+    "orbital-duel": ["charge", "charge", "pulse", "charge", "charge", "pulse", "charge", "charge", "pulse"],
+  };
+  for (const [modeId, actions] of Object.entries(winningLines)) {
+    const result = replayArenaGame(modeId, actions);
+    assert.equal(result.acceptedCount, actions.length, modeId);
+    assert.equal(result.state.status, "complete", modeId);
+    assert.equal(result.state.outcome, "won", modeId);
+    assert.equal(applyArenaGameAction(result.state, actions[0]).accepted, false);
+  }
+  const missed = replayArenaGame("orbital-duel", Array(9).fill("shield"));
+  assert.equal(missed.state.status, "complete");
+  assert.equal(missed.state.outcome, "lost");
+});
+
+test("Arena shows the real running state and readable objective result", () => {
+  const documentRoot = makeDocument();
+  const view = createArenaGamesConsole({ documentRoot });
+  view.action("boost");
+  assert.match(documentRoot.getElementById("arena-games-status").textContent, /^RUNNING/);
+  assert.match(documentRoot.getElementById("arena-games-current").textContent, /Sector 2\/7 · Energy 2\/3/);
+  for (const action of ["boost", "boost", "drift"]) view.action(action);
+  assert.match(documentRoot.getElementById("arena-games-status").textContent, /^OBJECTIVE REACHED/);
+  view.reset();
+  for (let turn = 0; turn < 6; turn++) view.action("scan");
+  assert.match(documentRoot.getElementById("arena-games-status").textContent, /^OUT OF TURNS/);
+});
+
+test("Arena replay retains a winning session after more than32 rejected inputs", () => {
+  const documentRoot = makeDocument();
+  const view = createArenaGamesConsole({ documentRoot });
+  view.selectMode("orbital-duel");
+  for (let index = 0; index < 33; index++) view.action("pulse");
+  for (const action of ["charge", "charge", "pulse", "charge", "charge", "pulse", "charge", "charge", "pulse"]) view.action(action);
+  const before = view.getSnapshot().state;
+  assert.equal(before.events.length, 42);assert.equal(before.outcome, "won");
+  view.replay();
+  assert.deepEqual(view.getSnapshot().state, before, "every authoritative event must survive replay");
+});
+
+test("Arena caps the authoritative event log and rejects oversized replay atomically", () => {
+  let state = createArenaGameState("orbital-duel");
+  for (let index = 0; index < 256; index++) state = applyArenaGameAction(state, "pulse").state;
+  const rejected = applyArenaGameAction(state, "charge");
+  assert.equal(rejected.accepted, false);assert.equal(rejected.state, state);
+  assert.equal(state.events.length, 256);
+  assert.equal(state.legalActions.some(action => action.enabled), false);
+  assert.deepEqual(replayArenaGame(state).state, state);
+  assert.throws(() => replayArenaGame("orbital-duel", Array(257).fill("pulse")), /256-event limit/);
+});
+
 test("Game Lab console exposes mode/action/replay/reset controls and rejected actions", () => {
   const documentRoot = makeDocument();
   const actions = [];

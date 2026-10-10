@@ -122,6 +122,7 @@ function presenceStubSource() {
     "    toggle() { calls.push(['toggle']); return api.__open ? api.close() : api.open(); },",
     "    update(t, dt) { calls.push(['update', t, dt]); },",
     "    setTilt(x, y) { calls.push(['setTilt', x, y]); },",
+    "    setLook(look) { calls.push(['setLook', look]); },",
     "    dispose() { calls.push(['dispose']); api.__disposed = true; },",
     "  };",
     "  const registry = globalThis.__createdPresences || (globalThis.__createdPresences = []);",
@@ -135,7 +136,7 @@ export async function resolve(specifier, context, nextResolve) {
   if (specifier === "three") {
     return { url: "photo-mascot-test:three-stub", shortCircuit: true };
   }
-  if (/(^|\/)photo-mascot-presence\.js$/.test(specifier)) {
+  if (/(^|\/)photo-mascot-presence\.js$/.test(specifier.split(/[?#]/, 1)[0])) {
     return { url: "photo-mascot-test:presence-stub", shortCircuit: true };
   }
   return nextResolve(specifier, context);
