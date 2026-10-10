@@ -1,0 +1,68 @@
+name: Universal Reality browser proof
+
+on:
+  push:
+    branches:
+      - feature/universal-real-data-browser-proof
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'src/render/universal-reality-bridge.js'
+      - 'src/universal/**'
+      - 'src/domains/surface-semantic-field.js'
+      - 'src/domains/topology-semantic-field.js'
+      - 'src/render/surface-semantic-field-three.js'
+      - 'src/render/topology-surface-object.js'
+      - 'tests/browser-universal-reality-live.mjs'
+      - 'tests/browser-contract-workflow.mjs'
+      - '.github/workflows/universal-browser-proof.yml'
+      - '.github/workflows/deploy-pages.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  browser-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Playwright
+        run: |
+          npm install --no-save --ignore-scripts playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Start exact checkout
+        shell: bash
+        run: |
+          python3 -m http.server 4184 --bind 127.0.0.1 > /tmp/matumbo-http.log 2>&1 &
+          echo $! > /tmp/matumbo-http.pid
+          for i in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4184/index.html >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/matumbo-http.log
+          exit 1
+      - name: Prove universal Reality Lens in desktop and phone Chromium
+        env:
+          MATUMBO_NODE_DEPENDENCIES: ${{ github.workspace }}/package.json
+          MATUMBO_PREVIEW_URL: http://127.0.0.1:4184/
+          MATUMBO_EXPECTED_BUILD: ${{ github.sha }}
+        run: node tests/browser-universal-reality-live.mjs
+      - name: Prove real Contract + Covenant Slip + Contractor handoff
+        env:
+          MATUMBO_NODE_DEPENDENCIES: ${{ github.workspace }}/package.json
+          MATUMBO_PREVIEW_URL: http://127.0.0.1:4184/
+        run: node tests/browser-contract-workflow.mjs
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: universal-reality-browser-proof-${{ github.sha }}
+          path: |
+            artifacts/universal-browser
+            artifacts/contract-browser
+          if-no-files-found: warn
+          retention-days: 14
