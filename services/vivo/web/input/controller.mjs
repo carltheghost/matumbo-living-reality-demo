@@ -201,7 +201,11 @@ export class GripController {
           return;
         }
         settled=true; this.clearTimer(timer);
-        if (!fulfilled) { reject(new InputError('TRANSPORT_UNCERTAIN',String(value?.message??value))); return; }
+        if (!fulfilled) {
+          // Rejection objects are untrusted: never read getters or invoke coercion.
+          const message=typeof value==='string'?value:'Transport rejected with a non-text reason';
+          reject(new InputError('TRANSPORT_UNCERTAIN',message)); return;
+        }
         try { resolve(this._checked(command,value)); } catch (e) { reject(e); }
       };
       try { Promise.resolve(this.ports.submit(command)).then(r=>finish(true,r),e=>finish(false,e)); }
