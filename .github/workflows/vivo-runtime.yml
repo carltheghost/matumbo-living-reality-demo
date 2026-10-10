@@ -9,6 +9,8 @@ on:
       - 'services/vivo/tests/authority/**'
       - 'scripts/vivo/stage_input_dependency.py'
       - 'scripts/vivo/assert_input_evidence.py'
+      - 'scripts/vivo/transfer_vendor_blobs.py'
+      - 'scripts/vivo/vendor-transfer.json'
       - '.github/workflows/vivo-runtime.yml'
 permissions:
   contents: read
@@ -16,6 +18,32 @@ defaults:
   run:
     shell: bash
 jobs:
+  vendor-byte-transfer:
+    if: github.event_name == 'push' && github.repository == 'carltheghost/matumbo-living-reality-demo' && github.ref == 'refs/heads/vivo/chat1-authority-input-2026-10-10'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Transfer complete hash-verified vendor bytes to detached blobs only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p transfer-evidence
+          python scripts/vivo/transfer_vendor_blobs.py --upload --report transfer-evidence/result.json | tee transfer-evidence/transfer.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vivo-vendor-byte-transfer
+          path: transfer-evidence/
+          retention-days: 7
   integration-ports:
     runs-on: ubuntu-latest
     timeout-minutes: 8
