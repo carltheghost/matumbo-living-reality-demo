@@ -115,10 +115,19 @@ export class GripHost {
     const e=this.#entries.get(key);if(!e) return;
     if(e.phase==='acquiring') { e.cancelled=true; return; }
     if(!e.controller) return;
-    if(finalSample&&!e.controller.offer(finalSample.frame,finalSample.observedAt)) {
-      await this.cancel(key,'invalid-final-sample');throw error('FINAL_SAMPLE_REJECTED');
-    }
+    // End capture before inspecting application-provided final data. Validation,
+    // getters or frame conversion may throw; none may strand a renewing grip.
     this.#stopRenew(e);e.phase='ending';
+    if(finalSample!==null) {
+      let offered=false;
+      try { offered=e.controller.offer(finalSample.frame,finalSample.observedAt); }
+      catch { /* Invalid final data is cancelled, never timestamp-refreshed. */ }
+      if(!offered) {
+        try { await this.cancel(key,'invalid-final-sample'); }
+        catch { throw error('FINAL_SAMPLE_CLEANUP_UNCONFIRMED'); }
+        throw error('FINAL_SAMPLE_REJECTED');
+      }
+    }
     try { await e.controller.end(reason);e.phase='closed'; }
     catch(err) { if(e.controller.state.phase==='closed')e.phase='closed';else await this.#recover(key,e).catch(()=>{});throw err; }
   }
