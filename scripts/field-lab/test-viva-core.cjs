@@ -1,0 +1,46 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');require('node:vm').runInThisContext(fs.readFileSync(path.join(__dirname,'../../src/field-lab/viva-core.js'),'utf8'));const C=globalThis.VivaCore;const tests=[];function test(name,fn){fn();tests.push(name);console.log('PASS',name);}
+const c=C.circuit();
+test('Known network solves 33 by 32 without supplying tile side lengths',()=>{assert.ok(Math.abs(c.width-33)<1e-10);assert.equal(c.height,32);});
+test('Nine solved sides match the classical example',()=>assert.deepEqual(c.tiles.map(t=>Math.round(t.width)),[18,15,7,8,14,4,10,1,9]));
+test('Circuit residual is within numerical tolerance',()=>assert.ok(c.residual<1e-10));
+test('Independent overlap containment and coverage validation passes',()=>assert.equal(C.checkCircuit(c),true));
+test('Voltage scaling doubles every coordinate and side',()=>{const d=C.circuit(64);c.tiles.forEach((t,i)=>['x','y','width','height'].forEach(k=>assert.ok(Math.abs(d.tiles[i][k]-2*t[k])<1e-9)));});
+test('Overlapping tiling fails',()=>{const b=C.clone(c);b.tiles[1].x=0;assert.throws(()=>C.checkCircuit(b));});
+test('Non-square tile fails',()=>{const b=C.clone(c);b.tiles[0].height++;assert.throws(()=>C.checkCircuit(b));});
+test('Negative and nonfinite circuit height fail',()=>[-1,0,Infinity,NaN].forEach(v=>assert.throws(()=>C.circuit(v))));
+test('Singular circuit fails clearly',()=>assert.throws(()=>C.solve([[0]],[1]),/Singular/));
+function img(f,w=16,h=16){const d=new Uint8ClampedArray(w*h*4);for(let i=0;i<w*h;i++){d.fill(f(i),i*4,i*4+3);d[i*4+3]=255;}return d;}
+const black=C.imageStats(img(()=>0),16,16),white=C.imageStats(img(()=>255),16,16),gray=C.imageStats(img(()=>100),16,16);
+test('Black identifies missing sensor detail',()=>assert.deepEqual([black.mean,black.dark,C.lightClass(black)],[0,1,'dark']));
+test('White identifies clipping not excellent tracking',()=>assert.deepEqual([white.mean,white.clipped,C.lightClass(white)],[255,1,'glare']));
+test('Midtones select balanced display',()=>assert.equal(C.lightClass(gray),'balanced'));
+test('Region sampling distinguishes lit hand area from dark room',()=>{const d=img(i=>i%16<8?0:120);assert.equal(C.imageStats(d,16,16,[.5,0,1,1]).mean,120);assert.equal(C.imageStats(d,16,16).mean,60);});
+test('Bad image shape rejects',()=>assert.throws(()=>C.imageStats(new Uint8Array(3),1,1)));
+test('Nonfinite region rejects',()=>assert.throws(()=>C.imageStats(img(()=>0),16,16,[NaN,0,1,1])));
+test('Display hysteresis rejects single-frame light flicker',()=>{const g=new C.LightGuard();g.update({...gray,mean:216});assert.equal(g.mode,'balanced');g.update(gray);assert.equal(g.mode,'balanced');});
+test('Three bright samples switch profile',()=>{const g=new C.LightGuard();for(let i=0;i<3;i++)g.update({...gray,mean:216});assert.equal(g.mode,'glare');});
+test('Blackout switches immediately',()=>{const g=new C.LightGuard();g.update(black);assert.equal(g.mode,'dark');});
+const pts=Array.from({length:21},(_,i)=>({x:.25+(i%5)*.05,y:.3+Math.floor(i/5)*.05,z:0}));
+function feed(g,now,ratio=.8,extra={}){return g.accept({points:pts,now,ratio,open:.42,age:50,...extra});}
+test('Three distinct fresh open observations arm hand control',()=>{const g=new C.HandGate();assert.equal(feed(g,10),false);assert.equal(feed(g,40),false);assert.equal(feed(g,70),true);});
+test('Pinched reacquisition never auto-grabs',()=>{const g=new C.HandGate();for(let t=0;t<12;t++)assert.equal(feed(g,t*30,.1),false);});
+test('Excessive result age disarms control',()=>{const g=new C.HandGate();[10,40,70].forEach(t=>feed(g,t));assert.equal(feed(g,100,.1,{age:260}),false);assert.equal(g.ready,false);});
+test('Long missing-frame gap disarms even without explicit lost callback',()=>{const g=new C.HandGate();[10,40,70].forEach(t=>feed(g,t));assert.equal(feed(g,800,.1),false);});
+test('Duplicate timestamps cannot count as fresh evidence',()=>{const g=new C.HandGate();for(let i=0;i<10;i++)assert.equal(feed(g,50),false);});
+test('Hand-region clipping rejects a false detected hand',()=>{const g=new C.HandGate();[10,40,70].forEach(t=>feed(g,t));assert.equal(feed(g,100,.1,{stats:white}),false);});
+test('Dark background does not block a usable hand region',()=>{const g=new C.HandGate();assert.equal(feed(g,10,.8,{stats:gray}),false);feed(g,40,.8,{stats:gray});assert.equal(feed(g,70,.8,{stats:gray}),true);});
+test('Malformed landmarks reject before navigation',()=>assert.equal(new C.HandGate().accept({points:[{}],now:0,age:0,ratio:.5}),false));
+test('Long-running browser time remains valid',()=>{const g=new C.HandGate();feed(g,2e6);feed(g,2e6+40);assert.equal(feed(g,2e6+80),true);});
+test('Nested route has one consistent ancestry',()=>assert.deepEqual(C.route('inner-lab'),['field','circuit','room-S1']));
+test('Unknown room cannot be entered',()=>assert.throws(()=>C.route('__proto__')));
+test('Forged replay route rejects',()=>assert.equal(C.validMeta({version:1,space:'inner-lab',path:['field']}),false));
+const universe={format:'matumbo-viva-universe',version:1,active:'field',path:[],worlds:[{id:'field',name:'Field',revision:0,state:{viva:{version:1,space:'field',path:[]}}}],events:[]};
+test('Universe validates as a candidate without mutating source',()=>{const n=C.validateUniverse(universe,()=>{});n.get('field').name='changed';assert.equal(universe.worlds[0].name,'Field');});
+test('Duplicate world IDs reject',()=>{const u=C.clone(universe);u.worlds.push(u.worlds[0]);assert.throws(()=>C.validateUniverse(u,()=>{}));});
+test('Mismatched embedded identity rejects',()=>{const u=C.clone(universe);u.worlds[0].state.viva={version:1,space:'circuit',path:['field']};assert.throws(()=>C.validateUniverse(u,()=>{}));});
+test('Invalid field is delegated to canonical state validation',()=>assert.throws(()=>C.validateUniverse(universe,()=>{throw Error('bad field')}),/bad field/));
+test('Unknown journal events reject',()=>assert.throws(()=>C.boundedEvents([{sequence:1,space:'field',type:'execute'}])));
+test('Nonbyte image input rejects before luminance calculations',()=>assert.throws(()=>C.imageStats([NaN,0,0,255],1,1)));
+test('Duplicate or reversed journal sequence rejects',()=>assert.throws(()=>C.boundedEvents([{sequence:2,space:'field',type:'enter'},{sequence:2,space:'field',type:'leave'}])));
+fs.mkdirSync('viva-test-results',{recursive:true});fs.writeFileSync('viva-test-results/core.json',JSON.stringify({passed:tests.length,tests},null,2));

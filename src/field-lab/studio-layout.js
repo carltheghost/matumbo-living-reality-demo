@@ -1,0 +1,2 @@
+/* Keep the Studio launcher clear of the original phone dimension controls. */
+(function(){'use strict';if(!window.FieldApp?.studio)return;const style=document.createElement('style');style.textContent='@media(max-width:820px) and (min-height:601px){#studioOpen{top:210px}#studioBadge{top:214px}}';document.head.append(style);const mode=document.getElementById('studioPadMode');if(mode)for(const option of mode.options)option.textContent=({grab:'Selected node',field:'Whole field',view:'Viewpoint'})[option.value]||option.textContent;})();

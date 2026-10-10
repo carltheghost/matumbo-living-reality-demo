@@ -1,0 +1,44 @@
+name: Viva Studio 0.7 checks
+on:
+  pull_request:
+    paths: ['field-lab-studio.html', 'src/field-lab/studio*', 'src/field-lab/viva*', 'scripts/field-lab/test-studio-core.cjs', 'scripts/field-lab/test-viva-core.cjs', '.github/workflows/field-studio.yml']
+  push:
+    branches: [feature/field-studio-movement-light-history]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  studio:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Compile the additive scripts and launcher
+        run: |
+          for file in src/field-lab/studio*.js src/field-lab/viva*.js; do node --check "$file"; done
+          node -e 'const s=require("fs").readFileSync("field-lab-studio.html","utf8");for(const m of s.matchAll(/<script>([\s\S]*?)<\/script>/g))new Function(m[1]);'
+      - name: Verify the hosted module integrity manifest
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,pathlib,re
+          page=pathlib.Path('field-lab-studio.html').read_text()
+          modules=json.loads(re.search(r'const modules=(\{[^\n]+\});',page).group(1))
+          assert len(modules)==6
+          for name,expected in modules.items():
+              actual=hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest()
+              assert actual==expected,(name,actual,expected)
+              print(name,actual)
+          PY
+      - name: Run independent mathematics and history checks
+        run: |
+          node scripts/field-lab/test-studio-core.cjs
+          node scripts/field-lab/test-viva-core.cjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: viva-studio-core-checks
+          path: |
+            studio-test-results/core.json
+            viva-test-results/core.json

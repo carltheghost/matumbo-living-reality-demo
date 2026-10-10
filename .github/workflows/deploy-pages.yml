@@ -97,7 +97,7 @@ jobs:
           import hashlib, json, pathlib, time, urllib.request
           base = 'https://carltheghost.github.io/matumbo-living-reality-demo/'
           report = []
-          for name in ['field-lab-grab.html', 'src/field-lab/field-lab-touch-repair.js']:
+          for name in ['field-lab-grab.html', 'src/field-lab/field-lab-touch-repair.js', 'field-lab-studio.html', 'src/field-lab/studio-core.js', 'src/field-lab/studio.js', 'src/field-lab/studio-layout.js', 'src/field-lab/viva-core.js', 'src/field-lab/viva-visibility.js', 'src/field-lab/viva-spaces.js']:
               expected = hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest()
               for attempt in range(18):
                   try:
