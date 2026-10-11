@@ -107,6 +107,9 @@ class MemoryApplicationTests(unittest.IsolatedAsyncioTestCase):
         capabilities = self.ready['capabilities']
         self.assertTrue(capabilities['sessionOnly'])
         self.assertEqual(capabilities['persistenceMode'], 'session-only')
+        self.assertTrue(capabilities['studio']['projection'])
+        self.assertTrue(capabilities['studio']['canonicalCommit']['allowed'])
+        self.assertFalse(capabilities['studio']['canonicalCommit']['durable'])
         self.assertIn('no backend world/checkpoint/database file', capabilities['persistence'])
         async with self.http.get(self.base + '/local/accepted/') as response:
             html = await response.text()
@@ -139,6 +142,9 @@ class MemoryApplicationTests(unittest.IsolatedAsyncioTestCase):
         one, two = await self.open('one'), await self.open('two')
         self.assertTrue(one['state']['capabilities']['materialDynamics'])
         self.assertTrue(one['state']['capabilities']['sessionOnly'])
+        self.assertFalse(one['state']['capabilities']['studio']['canonicalCommit']['allowed'])
+        self.assertEqual(one['state']['capabilities']['studio']['canonicalCommit']['rejectionCode'],
+                         'STUDIO_MATERIAL_BOUNDARY')
         entity = one['state']['snapshot']['spaces']['root']['entities']['relic']
         epoch = (await self.rpc(one, 'nextEpoch'))['value']
         begun = (await self.submit(one, self.command(one, 'grab.begin',
