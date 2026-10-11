@@ -13,6 +13,49 @@ const fail = code => { throw Object.assign(new Error(code), {code}); };
 const key = (...parts) => JSON.stringify(parts);
 const uuid = () => crypto.randomUUID();
 
+async function offlineBranch(state, actorId, payload) {
+  const branchAuthorityId = 'offline.' + (await sha256({
+    parentAuthorityId: state.snapshot.authorityId,
+    parentCheckpointHash: state.snapshot.stateHash,
+    newWorldId: payload.newWorldId,
+  })).slice(0, 32);
+  const snapshot = clone(state.snapshot);
+  snapshot.worldId = payload.newWorldId;
+  snapshot.authorityId = branchAuthorityId;
+  snapshot.acceptedSequence = 0;
+  snapshot.stateHash = '0'.repeat(64);
+  snapshot.branch = {
+    schema: 'vivo.offline-branch/1',
+    mode: 'offline',
+    parentWorldId: state.snapshot.worldId,
+    parentAuthorityId: state.snapshot.authorityId,
+    parentCheckpointHash: state.snapshot.stateHash,
+    parentAcceptedSequence: state.snapshot.acceptedSequence,
+  };
+  const branchState = {snapshot, leases: {}, epochs: {}, receipts: {}, events: [], eyes: {}};
+  snapshot.stateHash = await sha256({snapshot: {...snapshot, stateHash: null}, leases: {}, eyes: {}});
+  const eye = state.eyes[key(actorId, 'main')] ? clone(state.eyes[key(actorId, 'main')]) : null;
+  const material = state.material ? {
+    protocol: state.material.protocol,
+    state: 'paused',
+    checkpointIncluded: false,
+    checkpointDigest: await sha256(state.material.checkpoint),
+  } : null;
+  return {
+    schema: 'vivo.offline-branch/1',
+    mode: 'offline',
+    worldId: snapshot.worldId,
+    authorityId: snapshot.authorityId,
+    parentWorldId: state.snapshot.worldId,
+    parentAuthorityId: state.snapshot.authorityId,
+    checkpointHash: state.snapshot.stateHash,
+    acceptedSequence: snapshot.acceptedSequence,
+    snapshot: clone(branchState.snapshot),
+    eye,
+    material,
+  };
+}
+
 /** Atomic in-process test/personal-session store; explicitly volatile, not disk persistence. */
 export class MemoryAuthorityStore {
   #value = null;
@@ -89,15 +132,17 @@ export class LocalLeaseWorld {
         || !Number.isSafeInteger(maxEvents) || maxEvents < 8 || maxEvents > 65536) fail('INVALID_OPTIONS');
     let material=null;
     if(materialProtocol!==undefined) {
-      if(materialProtocol!=='vivo.lease-material/1') fail('MATERIAL_PROTOCOL');
+      const modules={'vivo.lease-material/1':'./material-authority.mjs','vivo.lease-adaptive/1':'./adaptive-material.mjs'};
+      if(!Object.hasOwn(modules,materialProtocol)) fail('MATERIAL_PROTOCOL');
       if(store.supportsCommitGuard!==true) fail('MATERIAL_STORE_GUARD_REQUIRED');
-      material=await import('./material-authority.mjs');
+      material=await import(modules[materialProtocol]);
     } else if(materialInitial!==undefined) fail('MATERIAL_PROTOCOL_REQUIRED');
     let record = await store.load();
     if (record) {
       if (record.schema !== 'vivo.lease-checkpoint/1' || record.digest !== await sha256(record.state)) fail('CHECKPOINT_HASH');
       validateSeed(record.state.snapshot);
       if(Boolean(record.state.material)!==Boolean(material)) fail('MATERIAL_PROTOCOL_MISMATCH');
+      if(material && record.state.material?.protocol!==materialProtocol) fail('MATERIAL_PROTOCOL_MISMATCH');
       if(materialInitial!==undefined) fail('MATERIAL_INITIAL_ON_RESTORE');
       if(material) material.validateMaterialState(record.state,materialProtocol);
       if(record.state.eyes!==undefined) checkEyes(record.state.snapshot,record.state.eyes);
@@ -146,9 +191,11 @@ export class LocalLeaseWorld {
     return this.#queue(async()=>{
       const s=this.#state, candidate=this.#material.validateProposal(s,proposal,this.#time()), next=clone(s);
       next.snapshot=candidate;next.material.checkpoint=clone(proposal.fieldState);
-      for(const l of Object.values(next.leases)) if(l.spaceId===s.material.spaceId) {
+      for(const l of Object.values(next.leases)) if(this.#material.coversSpace(s,l.spaceId)) {
         const e=s.snapshot.spaces[l.spaceId].entities[l.entityId];
-        if(e && l.materialCoverageRevision===e.revision && l.materialInvariant===this.#material.invariantFingerprint(s.snapshot,l.spaceId,l.entityId)) l.materialCoverageRevision=e.revision+1;
+        const accepted=candidate.spaces?.[l.spaceId]?.entities?.[l.entityId];
+        if(e && accepted && l.materialCoverageRevision===e.revision && l.materialInvariant===this.#material.invariantFingerprint(s.snapshot,l.spaceId,l.entityId))
+          l.materialCoverageRevision=accepted.revision;
       }
       await this.#advance(next,'material-step','authority',this.#material.materialEvent(proposal));
       await this.#save(next,()=>this.#material.checkCommitProvenance(this.#state,proposal,this.#time()));
@@ -167,7 +214,14 @@ export class LocalLeaseWorld {
       getSnapshot: () => { this.#session(token); if (!opened) fail('NOT_OPEN'); return this.snapshot(); },
       submit: command => { if (!opened) return Promise.reject(Object.assign(new Error('NOT_OPEN'),{code:'NOT_OPEN'})); return this.#submit(token,command); },
       subscribe: listener => { this.#session(token); if (typeof listener !== 'function') fail('INVALID_LISTENER'); state.listeners.add(listener); return () => state.listeners.delete(listener); },
-      inspectLease: (spaceId,entityId) => { this.#session(token); const l=this.#state.leases[key(spaceId,entityId)]; return l?.session === token && l.expiresAt > this.#time() ? clone(l) : null; },
+      inspectLease: (spaceId,entityId,criteria={}) => {
+        this.#session(token);const now=this.#time();
+        const matches=Object.values(this.#state.leases).filter(l=>l.session===token&&l.spaceId===spaceId&&l.entityId===entityId&&l.expiresAt>now
+          && (criteria.source===undefined||l.source===criteria.source)
+          && (criteria.inputEpoch===undefined||l.inputEpoch===criteria.inputEpoch)
+          && (criteria.acquireCommandId===undefined||l.acquireCommandId===criteria.acquireCommandId));
+        return matches.length===1?clone(matches[0]):null;
+      },
       registerEye: (eyeId,view) => {
         if(!opened) return Promise.reject(Object.assign(new Error('NOT_OPEN'),{code:'NOT_OPEN'}));
         return this.#registerEye(token,eyeId,view);
@@ -229,43 +283,71 @@ export class LocalLeaseWorld {
       if(prior) return prior.fingerprint===fingerprint?clone(prior.receipt):reject('COMMAND_ID_REUSE');
       if(['space.enter','space.exit'].includes(command.kind)) return this.#navigate(token,command,fingerprint,requestKey);
       if(client.role!=='editor') return reject('VIEWER');
+      if(command.kind==='world.fork') {
+        if(command.spaceId!==s.snapshot.rootSpaceId) return reject('FORK_ROOT_ONLY');
+        if(command.expectedRevision!==s.snapshot.acceptedSequence) return reject('STALE_WORLD');
+        if(p.checkpointHash!==s.snapshot.stateHash) return reject('FORK_CHECKPOINT_MISMATCH');
+        if(p.newWorldId===s.snapshot.worldId) return reject('FORK_WORLD_ID');
+        const branch=await offlineBranch(s,client.session.actorId,p),next=clone(s);
+        await this.#advance(next,'world-fork',client.session.actorId,{
+          schema:'vivo.offline-branch/1',worldId:branch.worldId,authorityId:branch.authorityId,
+          parentWorldId:branch.parentWorldId,parentAuthorityId:branch.parentAuthorityId,
+          checkpointHash:branch.checkpointHash,
+        });
+        const receipt={...this.#receipt(command,'accepted','OFFLINE_BRANCH',null,branch),
+          acceptedSequence:next.snapshot.acceptedSequence,stateHash:next.snapshot.stateHash};
+        next.receipts[requestKey]={fingerprint,receipt};
+        await this.#save(next);return clone(receipt);
+      }
       if(!['grab.begin','grab.target','grab.end'].includes(command.kind)) return reject('NOT_IMPLEMENTED');
       const space=Object.hasOwn(s.snapshot.spaces,command.spaceId)?s.snapshot.spaces[command.spaceId]:null;
       const entity=space&&Object.hasOwn(space.entities,p.entityId)?space.entities[p.entityId]:null;
       if(!entity) return reject('NO_ENTITY');
-      const k=key(command.spaceId,p.entityId), held=s.leases[k];
-      const materialLease=this.#material && command.spaceId===s.material.spaceId && held;
+      const now=this.#time(), entityEntries=Object.entries(s.leases).filter(([,l])=>
+        l.spaceId===command.spaceId&&l.entityId===p.entityId&&l.expiresAt>now);
+      let entry=command.kind==='grab.begin'?null:entityEntries.find(([,l])=>l.id===p.leaseId);
+      let current=entry?.[1]??null, leaseKey=entry?.[0]??null;
+      const materialLease=this.#material && this.#material.coversSpace(s,command.spaceId) && current;
       const invariant=materialLease && this.#material.invariantFingerprint(s.snapshot,command.spaceId,p.entityId);
-      const covered=materialLease && held.materialCoverageRevision===entity.revision && held.materialInvariant===invariant;
-      if(entity.revision!==command.expectedRevision && !(command.kind!=='grab.begin' && covered && command.expectedRevision===held.inputReceiptRevision)) return reject('STALE_REVISION',entity);
+      const covered=materialLease && current.materialCoverageRevision===entity.revision && current.materialInvariant===invariant;
+      if(entity.revision!==command.expectedRevision && !(command.kind!=='grab.begin' && covered && command.expectedRevision===current.inputReceiptRevision)) return reject('STALE_REVISION',entity);
       if(command.kind==='grab.target' && materialLease && !covered) return reject('LEASE_INVALIDATED',entity);
-      const next=clone(s), current=next.leases[k], now=this.#time();
-      const alive=current && current.expiresAt>now;
-      let result;
+      const next=clone(s);let result;
       if(command.kind==='grab.begin') {
-        if(alive) return reject('LEASE_HELD',entity);
+        const group=p.cooperativeGroup??null, cooperative=group!==null;
+        if(cooperative && s.material?.protocol!=='vivo.lease-adaptive/1') return reject('COOPERATIVE_UNSUPPORTED',entity);
+        if(!cooperative && entityEntries.length) return reject('LEASE_HELD',entity);
+        if(cooperative) {
+          if(entityEntries.some(([,l])=>l.cooperativeGroup!==group)) return reject('LEASE_HELD',entity);
+          if(entityEntries.length>=4) return reject('COOPERATIVE_LIMIT',entity);
+          if(entityEntries.some(([,l])=>l.session===token&&l.source===p.source)) return reject('LEASE_HELD',entity);
+        }
         const ek=key(token,command.spaceId,p.entityId,p.source), previous=next.epochs[ek]??-1;
         if(p.inputEpoch<=previous) return reject('STALE_EPOCH',entity);
         const lease={id:'lease.'+uuid(),acquireCommandId:command.id,session:token,actorId:client.session.actorId,spaceId:command.spaceId,
-          entityId:p.entityId,source:p.source,inputEpoch:p.inputEpoch,targetSeq:0,expiresAt:now+this.#ttl,target:null};
-        if(this.#material && command.spaceId===s.material.spaceId) Object.assign(lease,{
+          entityId:p.entityId,source:p.source,inputEpoch:p.inputEpoch,targetSeq:0,expiresAt:now+this.#ttl,target:null,
+          ...(cooperative?{cooperativeGroup:group}:{})};
+        if(this.#material && this.#material.coversSpace(s,command.spaceId)) Object.assign(lease,{
           inputReceiptRevision:entity.revision,materialCoverageRevision:entity.revision,
           materialInvariant:this.#material.invariantFingerprint(s.snapshot,command.spaceId,p.entityId)});
-        next.leases[k]=lease;next.epochs[ek]=p.inputEpoch;
-        result={leaseId:lease.id,expiresAt:lease.expiresAt,leaseMs:this.#ttl,entity:clone(entity)};
+        leaseKey=cooperative?key(command.spaceId,p.entityId,'cooperative',lease.id):key(command.spaceId,p.entityId);
+        next.leases[leaseKey]=lease;next.epochs[ek]=p.inputEpoch;
+        result={leaseId:lease.id,expiresAt:lease.expiresAt,leaseMs:this.#ttl,entity:clone(entity),...(cooperative?{cooperativeGroup:group}:{})};
       } else {
-        if(!alive) return reject('LEASE_EXPIRED',entity);
+        current=leaseKey===null?null:next.leases[leaseKey];
+        if(!current) return reject(entityEntries.length?'LEASE_MISMATCH':'LEASE_EXPIRED',entity);
+        if(current.expiresAt<=now) return reject('LEASE_EXPIRED',entity);
         if(current.session!==token || current.id!==p.leaseId || current.inputEpoch!==p.inputEpoch) return reject('LEASE_MISMATCH',entity);
         if(command.kind==='grab.target') {
           if(p.source!==current.source) return reject('SOURCE_MISMATCH',entity);
           if(p.dimension!==entity.dimension || p.chart!==entity.chart) return reject('FRAME_MISMATCH',entity);
           if(p.targetSeq<=current.targetSeq) return reject('STALE_TARGET',entity);
-          if(materialLease && !p.q.every((q,i)=>q>=-s.material.checkpoint.lengths[i]/2 && q<s.material.checkpoint.lengths[i]/2)) return reject('MATERIAL_DOMAIN',entity);
+          if(materialLease && !this.#material.targetAllowed(s,command.spaceId,p.q)) return reject('MATERIAL_DOMAIN',entity);
           current.targetSeq=p.targetSeq;current.expiresAt=now+this.#ttl;
           if(materialLease) current.inputReceiptRevision=entity.revision;
           current.target={spaceId:command.spaceId,chart:p.chart,dimension:p.dimension,q:[...p.q]};
-          result={leaseId:current.id,target:clone(current.target),targetSeq:p.targetSeq};
-        } else { delete next.leases[k]; result={leaseId:p.leaseId,released:true}; }
+          result={leaseId:current.id,target:clone(current.target),targetSeq:p.targetSeq,...(current.cooperativeGroup?{cooperativeGroup:current.cooperativeGroup}:{})};
+        } else { delete next.leases[leaseKey]; result={leaseId:p.leaseId,released:true}; }
       }
       await this.#advance(next,command.kind,client.session.actorId,command);
       const receipt={...this.#receipt(command,'accepted','OK',entity,result),acceptedSequence:next.snapshot.acceptedSequence,stateHash:next.snapshot.stateHash};
@@ -349,12 +431,12 @@ export class LocalLeaseWorld {
     return this.#queue(async()=>{
       this.#session(token);
       if(!e || e.worldId!==this.#state.snapshot.worldId || e.authorityId!==this.#state.snapshot.authorityId) fail('RECONCILE_WORLD');
-      const k=key(e.spaceId,e.entityId), lease=this.#state.leases[k];
-      if(lease && lease.id===e.leaseId) {
-        if(lease.session!==token || lease.inputEpoch!==e.inputEpoch) fail('RECONCILE_OWNER');
+      const entry=Object.entries(this.#state.leases).find(([,l])=>l.id===e.leaseId&&l.spaceId===e.spaceId&&l.entityId===e.entityId);
+      if(entry) {
+        const [k,lease]=entry;if(lease.session!==token||lease.inputEpoch!==e.inputEpoch)fail('RECONCILE_OWNER');
         await this.#commitInternal('lease-reconciled',token,s=>{delete s.leases[k];});
       }
-      return {released:!this.#state.leases[k]||this.#state.leases[k].id!==e.leaseId,snapshot:this.snapshot()};
+      return {released:!Object.values(this.#state.leases).some(l=>l.id===e.leaseId),snapshot:this.snapshot()};
     });
   }
 }

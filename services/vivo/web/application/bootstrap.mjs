@@ -5,8 +5,10 @@ import {LocalTransport,requestJSON} from './transport.mjs';
 import {ApplicationInputs} from './interactions.mjs';
 import {eventTime,frameOf,screenTarget,viewBasis,viewAngles,projectAccepted,timestampedCameraClass} from './adapters.mjs';
 import {DensityOverlay} from './density-overlay.mjs';
+import {installCameraConstraintFallback,normalizeCameraFacing} from './camera-compat.mjs';
 
 const $=id=>document.getElementById(id),copy=structuredClone;
+installCameraConstraintFallback();
 const renderer=new Renderer($('world'),$('overlay'));
 const previews=new Map(),grids=new Map(),densityCache=new Map();
 let transport=null,host=null,inputs=null,state=null,selected=null,poll=null,densityPoll=null,densityRequest=0,online=false,viewTail=Promise.resolve();
@@ -59,9 +61,9 @@ peopleSheet.querySelector('p.muted').textContent=sessionOnly
 peopleSheet.querySelector('a').href='/local/';peopleSheet.querySelector('a').textContent='Full Studio (primary) ↗';
 const recordSheet=document.querySelector('[data-sheet="record"]');
 for(const child of[...recordSheet.children])child.hidden=true;
-const saveButton=element('button',{id:'saveLocal',textContent:'Verify saved checkpoint'}),exportButton=element('button',{id:'exportLocal',textContent:sessionOnly?'Download accepted session JSON':'Export accepted state JSON'}),reconcileButton=element('button',{id:'reconcileLocal',textContent:'Reconcile uncertain grips'});
+const saveButton=element('button',{id:'saveLocal',textContent:'Verify saved checkpoint'}),exportButton=element('button',{id:'exportLocal',textContent:sessionOnly?'Download accepted session JSON':'Export accepted state JSON'}),forkButton=element('button',{id:'forkOffline',textContent:'Fork offline branch'}),reconcileButton=element('button',{id:'reconcileLocal',textContent:'Reconcile uncertain grips'});
 if(!sessionOnly)recordSheet.append(saveButton);
-recordSheet.append(exportButton,reconcileButton,element('p',{id:'journalState',className:'muted'}),element('p',{className:'muted',textContent:sessionOnly
+recordSheet.append(exportButton,forkButton,reconcileButton,element('p',{id:'journalState',className:'muted'}),element('p',{className:'muted',textContent:sessionOnly
   ?'SESSION ONLY: accepted state, Eyes, leases and phase checkpoints live only in this local server process. This download is a user-requested export, not durable storage or an import/reload path. Browser/sessionStorage tokens are tab-scoped and not backend world storage. No camera frames or session tokens are exported.'
   :'Every accepted operation is atomically saved on this computer. This export is state evidence, not a replay/import feature. The bounded journal becomes read-only before cleanup capacity runs out. No camera frames or session tokens are exported.'}));
 const phaseButton=element('button',{id:'runPhase',textContent:'Run experimental 4D phase'});phaseButton.hidden=true;recordSheet.append(phaseButton);
@@ -105,23 +107,23 @@ function updateUI(){
   $('peopleList').replaceChildren();for(const person of state.participants||[])$('peopleList').append(element('p',{textContent:(person.actorId||person.id||person.seat)+' · '+(person.online?'online':'offline')+(person.actorId===transport?.session?.actorId?' (you)':'')}));
   $('journalState').textContent=(sessionOnly?'Session sequence ':'Accepted sequence ')+state.snapshot.acceptedSequence+' · '+JSON.stringify(state.journal);
   $('metrics').textContent='Camera '+(camera.stream?'on, local only':'off')+' · no microphone · no frame uploads · '+(sessionOnly?'session-only server memory; no backend world/checkpoint/database file':'accepted sequence '+state.snapshot.acceptedSequence);
-  const phase=state.capabilities?.material;
+  const phase=state.capabilities?.material,adaptive=phase?.profile==='adaptive-graph';
   phaseButton.hidden=!phase;phaseButton.disabled=connecting||!online||!!state.journal?.readOnly||!!transport?.session?.readOnly;
   if(phase){
     const phaseRunning=phase.running&&state.materialHost?.running!==false;
     phaseButton.disabled=phaseButton.disabled||!!state.materialHost?.fault;
-    phaseButton.textContent=(phaseRunning?'Pause':'Run')+' experimental 4D phase';
-    $('moveTarget').options[0].textContent='Finite compliant phase target';
-    moveSheet.querySelector('p').textContent='Dashed targets are accepted constraints. Solid relics mark the accepted density centroids of real 4D phase fields; they are not liquid surfaces. Phase targets must stay within −4 ≤ x < 4 on each axis.';
-    moveSheet.querySelector('p.muted').textContent='Root: periodic 4D phase, 8 samples per axis. Nested 11D material is unavailable. Run/Pause is shared by both seats; each Eye stays independent. Numerical fidelity and learning remain experimental/unimplemented.';
+    phaseButton.textContent=(phaseRunning?'Pause':'Run')+(adaptive?' learned adaptive material':' experimental 4D phase');
+    $('moveTarget').options[0].textContent=adaptive?'Learned material target':'Finite compliant phase target';
+    moveSheet.querySelector('p').textContent=adaptive?'Dashed targets are accepted constraints. Solid objects move only after the learned graph material step is accepted; 4D and 11D coordinates remain native.':'Dashed targets are accepted constraints. Solid relics mark the accepted density centroids of real 4D phase fields; they are not liquid surfaces. Phase targets must stay within −4 ≤ x < 4 on each axis.';
+    moveSheet.querySelector('p.muted').textContent=adaptive?'Root 4D and nested 11D use the frozen recovered neural edge law. Time is separate; this is a software constitutive model, not physical validation.':'Root: periodic 4D phase, 8 samples per axis. Nested 11D material is unavailable. Run/Pause is shared by both seats; each Eye stays independent. Numerical fidelity and learning remain experimental/unimplemented.';
     const diag=state.materialDiagnostics?.diagnostics;
     $('metrics').textContent+=' · simulation t='+state.snapshot.simulationTime.toFixed(3)+' · '+(phaseRunning?'running: at most 0.02 s per 0.5 wall s':'paused')+(diag?' · mass '+diag.mass.toFixed(8)+' · energy '+diag.energy.toFixed(5)+' · residual '+diag.residual.toExponential(2):'');
     if(state.materialHost?.fault)$('metrics').textContent+=' · phase stopped: '+state.materialHost.fault.code;
   }
   if(sessionOnly) capability.textContent=acceptedLabel+(state.journal?.readOnly
     ?'SESSION ONLY · process journal read-only · download available'
-    :'SESSION ONLY · volatile server memory · '+(phase?'experimental 4D phase centroids · ':'accepted constraints · ')+'no backend world/checkpoint/database file');
-  else capability.textContent=acceptedLabel+(state.journal?.readOnly?'READ ONLY · saved history preserved':phase?'LOCAL · experimental 4D phase centroids · '+(state.eye.dimension===4?'learning unavailable':'11D material unavailable'):'LOCAL ONLY · accepted constraints; material motion / learning pending');
+    :'SESSION ONLY · volatile server memory · '+(phase?(adaptive?'learned adaptive 4D/11D material · ':'experimental 4D phase centroids · '):'accepted constraints · ')+'no backend world/checkpoint/database file');
+  else capability.textContent=acceptedLabel+(state.journal?.readOnly?'READ ONLY · saved history preserved':phase?(adaptive?'LOCAL · learned adaptive 4D/11D material · independent Eyes':'LOCAL · experimental 4D phase centroids · '+(state.eye.dimension===4?'learning unavailable':'11D material unavailable')):'LOCAL ONLY · accepted constraints; material motion / learning pending');
 }
 function updateDensityPanel(observation){
   if(!observation||state?.eye?.spaceId!=='root'||state?.capabilities?.material?.profile!=='phase'){
@@ -195,7 +197,7 @@ async function refreshDensity(generation,client){
     if(generation===connectionGeneration&&transport===client&&densityKey()===key&&!densityOverlay.observation)updateDensityPanel(null);
   }
   if(generation===connectionGeneration&&transport===client&&!client.closed)densityPoll=setTimeout(()=>refreshDensity(generation,client),1000);
-}
+ }
 async function connect(){
   if(connecting)return;connecting=true;$('createRoom').disabled=true;
   let generation;
@@ -316,22 +318,23 @@ $('homeView').onclick=safe(()=>editEye(eye=>{eye.q.fill(0);eye.basis=viewBasis(e
 $('followSelected').onclick=safe(()=>editEye(eye=>{const e=currentEntity();eye.q=[...e.q];for(let a=3;a<eye.dimension;a++)eye.slice['x'+(a+1)]=eye.q[a];}));
 
 const TimedCamera=timestampedCameraClass(Camera);
-const camera=new TimedCamera($('cameraVideo'),text=>{$('cameraState').textContent=text;},event=>{
+const camera=normalizeCameraFacing(new TimedCamera($('cameraVideo'),text=>{$('cameraState').textContent=text;},event=>{
   if(event.type==='lost'){renderer.pointer=null;hand=null;void cancelGesture('hand','hand-source-lost').catch(e=>say(e.message));return;}
   if(event.type==='aim'){renderer.pointer=event.point;return;}
   if(!state||$('panel').open){hand=null;void cancelGesture('hand','controls-opened').catch(e=>say(e.message));return;}
   if(event.type==='grab'){const id=renderer.at(...event.point);if(!id)return;hand={epoch:event.epoch};void beginGesture('hand','hand',id,event.point,event.observedAt).catch(e=>say(e.message));}
   if(event.type==='move'&&hand?.epoch===event.epoch)safe(moveGesture)('hand',event.point,event.observedAt);
   if(event.type==='release'){hand=null;void endGesture('hand',event.point,event.observedAt).catch(e=>say(e.message));}
-},points=>{renderer.hand=$('skeleton').checked?points:[];});
+},points=>{renderer.hand=$('skeleton').checked?points:[];}));
 for(const[id,facing]of[['frontCamera','user'],['backCamera','environment']])$(id).onclick=safe(async()=>{$('panel').close();await camera.start(facing);updateUI();});
 $('previewCamera').onclick=safe(async()=>{$('panel').close();await camera.start('environment',false);updateUI();});
 $('stopCamera').onclick=()=>{camera.stop();updateUI();};$('visibility').onchange=()=>{camera.profile=$('visibility').value;camera.sampleLuma();};
 $('torch').onclick=safe(()=>camera.light());$('exposure').onclick=safe(()=>camera.exposure());
 
-phaseButton.onclick=safe(async()=>{const context=captureConnection();const running=!context.client.current.capabilities.material?.running;await context.client.call('materialRun',{running});context.assert();say(running?'Experimental phase running slowly. Solid marks show accepted field centroids.':sessionOnly?'Phase paused; accepted fields remain in this server process.':'Phase paused; accepted fields remain saved.');});
+phaseButton.onclick=safe(async()=>{const context=captureConnection(),adaptive=context.client.current.capabilities.material?.profile==='adaptive-graph';const running=!context.client.current.capabilities.material?.running;await context.client.call('materialRun',{running});context.assert();say(running?(adaptive?'Learned adaptive material running. Accepted grips now drive 4D/11D graph dynamics.':'Experimental phase running slowly. Solid marks show accepted field centroids.'):(sessionOnly?'Material paused; accepted state remains in this server process.':'Material paused; accepted state remains saved.'));});
 saveButton.onclick=safe(async()=>{const action=captureConnection();await action.owner.releaseAll();action.assert();await action.client.refresh();action.assert();say('Checkpoint confirmed at accepted sequence '+action.client.current.snapshot.acceptedSequence+'. Saved atomically on this computer.');});
 exportButton.onclick=safe(async()=>{const action=captureConnection();await action.owner.releaseAll();action.assert();const data=await action.client.export();action.assert();const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)+'\n'],{type:'application/json'}));const link=element('a',{href:url,download:'vivo-accepted-state.json'});link.click();setTimeout(()=>URL.revokeObjectURL(url),5000);say(sessionOnly?'Downloaded accepted session state; this is not durable storage or an import/reload path. Camera frames and session tokens excluded.':'Exported accepted state; camera frames and session tokens excluded.');});
+forkButton.onclick=safe(async()=>{const action=captureConnection();await action.owner.releaseAll();action.assert();const receipt=await action.client.forkOffline();action.assert();if(receipt.status!=='accepted')throw Error(receipt.code);const branch=receipt.result,url=URL.createObjectURL(new Blob([JSON.stringify(branch,null,2)+'\n'],{type:'application/json'}));const link=element('a',{href:url,download:'vivo-offline-'+branch.worldId.replace(/[^A-Za-z0-9_.-]/g,'_')+'.json'});link.click();setTimeout(()=>URL.revokeObjectURL(url),5000);say('Explicit offline branch created from accepted checkpoint '+branch.checkpointHash.slice(0,12)+'; material is paused and no shared history was replayed.');});
 reconcileButton.onclick=safe(async()=>{const action=captureConnection();await action.owner.reconcileAll();action.assert();await action.client.refresh();action.assert();say(sessionOnly?'Reconciliation completed for known grips in this session.':'Reconciliation completed for known grips. Saved state refreshed.');});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){points.clear();camera.stop();void cancelAll('tab-hidden').catch(e=>say(e.message));}});
 window.addEventListener('pagehide',()=>{camera.stop();void cancelAll('page-hidden').catch(()=>{});});

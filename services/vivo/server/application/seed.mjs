@@ -48,3 +48,16 @@ export function phaseWorkshopSeed(){
   }
   return snapshot;
 }
+
+
+/** Learned graph material across the existing 4D root and 11D inner space. */
+export function adaptiveWorkshopSeed(){
+  const snapshot=workshopSeed(),model='9ab89f46361e397fe41845d86ecc23e38f75561032fd65ae9f8389e9780afdb0';
+  for(const space of Object.values(snapshot.spaces)){
+    space.law={id:'vivo.adaptive.graph',version:'1'};space.modelHashes=[model];
+    space.field={codec:'vivo.material.adaptive-graph/1',handle:'adaptive.'+space.id,hash:'0'.repeat(64)};
+    const ids=Object.keys(space.entities).sort();space.adaptiveEdges=ids.slice(0,-1).map((id,i)=>[id,ids[i+1]]);
+    for(const entity of Object.values(space.entities)){entity.materialProfile='adaptive-graph';entity.fieldMembership=['field.'+space.id+'.'+entity.id];}
+  }
+  return snapshot;
+}

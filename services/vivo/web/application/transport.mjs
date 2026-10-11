@@ -1,4 +1,6 @@
 /** Same-origin loopback transport. Admission belongs to the host, not this adapter. */
+import {offlineForkCommand} from './offline-branch.mjs';
+
 export async function requestJSON(url,options={}, {fetch:fetcher=globalThis.fetch,timeoutMs=7000}={}){
   if(!Number.isFinite(timeoutMs)||timeoutMs<=0||timeoutMs>30000)throw Error('INVALID_FETCH_TIMEOUT');
   const controller=new AbortController();let timer;
@@ -41,7 +43,8 @@ export class LocalTransport {
   getSnapshot(){if(!this.current)throw Error('NO_SNAPSHOT');return structuredClone(this.current.snapshot);}
   subscribe(listener){this.listeners.add(listener);return()=>this.listeners.delete(listener);}
   submit(command){return this.call('submit',{command});}
-  inspectLease(spaceId,entityId){return this.call('inspectLease',{spaceId,entityId});}
+  forkOffline(options={}){return this.submit(offlineForkCommand(this.current?.snapshot,options));}
+  inspectLease(spaceId,entityId,criteria={}){return this.call('inspectLease',{spaceId,entityId,...(Object.keys(criteria).length?{criteria}:{})});}
   renewLease(leaseId){return this.call('renewLease',{leaseId});}
   reconcileLease(event){return this.call('reconcileLease',{event});}
   moveEye(view,expectedRevision){return this.call('moveEye',{view,expectedRevision});}

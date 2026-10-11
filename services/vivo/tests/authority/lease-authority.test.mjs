@@ -114,9 +114,27 @@ test('tampered checkpoint rejected',async()=>{
  const {world}=await fixture();const bad=world.checkpoint();bad.state.snapshot.simulationTime=20;
  await assert.rejects(LocalLeaseWorld.create({store:{load:async()=>bad}}),/CHECKPOINT_HASH/);
 });
-test('nested entry requires a registered Eye; world forks remain explicitly unsupported',async()=>{
- const {a}=await fixture();assert.equal((await a.submit(cmd('space.enter',{portalEntityId:'relic',eyeId:'eye'}))).code,'NO_EYE');
- assert.equal((await a.submit(cmd('world.fork',{checkpointHash:'0'.repeat(64),newWorldId:'branch'}))).code,'NOT_IMPLEMENTED');
+test('nested entry requires a registered Eye; offline forks preserve provenance and identity',async()=>{
+ const {world,a}=await fixture();assert.equal((await a.submit(cmd('space.enter',{portalEntityId:'relic',eyeId:'eye'}))).code,'NO_EYE');
+ const parent=a.getSnapshot(),fork=cmd('world.fork',{
+   checkpointHash:parent.stateHash,newWorldId:'offline:branch'},parent.acceptedSequence,'fork.offline');
+ const accepted=await a.submit(fork);assert.equal(accepted.status,'accepted');assert.equal(accepted.code,'OFFLINE_BRANCH');
+ const branch=accepted.result;
+ assert.equal(branch.schema,'vivo.offline-branch/1');assert.equal(branch.mode,'offline');
+ assert.equal(branch.parentWorldId,parent.worldId);assert.equal(branch.parentAuthorityId,parent.authorityId);
+ assert.equal(branch.checkpointHash,parent.stateHash);assert.equal(branch.worldId,'offline:branch');
+ assert.notEqual(branch.authorityId,parent.authorityId);assert.equal(branch.snapshot.worldId,branch.worldId);
+ assert.equal(branch.snapshot.authorityId,branch.authorityId);assert.equal(branch.snapshot.acceptedSequence,0);
+ assert.equal(branch.snapshot.branch.parentCheckpointHash,parent.stateHash);
+ assert.deepEqual(Object.keys(branch.snapshot.spaces).sort(),Object.keys(parent.spaces).sort());
+ assert.equal(branch.snapshot.spaces.root.entities.relic.id,parent.spaces.root.entities.relic.id);
+ const offline=await LocalLeaseWorld.create({snapshot:branch.snapshot});
+ assert.equal(offline.snapshot().worldId,branch.worldId);assert.equal(offline.snapshot().authorityId,branch.authorityId);
+ const session=offline.attach({actorId:'offline.actor'});await session.open();
+ assert.equal((await session.submit({...fork,id:'fork.offline.child',worldId:branch.worldId})).code,'FORK_CHECKPOINT_MISMATCH');
+ assert.equal(world.checkpoint().state.events.at(-1).kind,'world-fork');
+ const stale={...fork,id:'fork.offline.stale',expectedRevision:world.snapshot().acceptedSequence-1};
+ assert.equal((await a.submit(stale)).code,'STALE_WORLD');
 });
 test('journal is bounded; no silent receipt eviction',async()=>{
  const {a}=await fixture({maxEvents:8});const l=(await acquire(a)).result.leaseId;
