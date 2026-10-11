@@ -38,6 +38,8 @@ test('two people hold one adaptive object through explicit matching cooperative 
   assert.equal(ra.status,'accepted');assert.equal(rb.status,'accepted');
   assert.notEqual(ra.result.leaseId,rb.result.leaseId);
   assert.equal(ra.result.cooperativeGroup,'shape.team');assert.equal(rb.result.cooperativeGroup,'shape.team');
+  await f.a.submit(target(ra.result.leaseId,[0,1,0,0],1,1,'touch'));
+  await f.b.submit(target(rb.result.leaseId,[0,0,0,1],1,1,'hand'));
   const leases=f.world.constraints().filter(l=>l.entityId==='a');
   assert.equal(leases.length,2);assert.deepEqual(new Set(leases.map(l=>l.actorId)),new Set(['person.A','person.B']));
 });

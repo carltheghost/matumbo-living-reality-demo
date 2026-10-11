@@ -24,7 +24,8 @@ test('GripHost forwards explicit cooperative group while two independent control
   assert.equal(leases.length,2);assert.deepEqual(new Set(leases.map(l=>l.cooperativeGroup)),new Set(['shape.team']));
   assert.equal(A.offer('pointer:1',{spaceId:'root',chart:'flat',dimension:4,q:[0,1,0,0]},10),true);
   assert.equal(B.offer('hand:left',{spaceId:'root',chart:'flat',dimension:4,q:[0,0,0,1]},10),true);
-  await new Promise(resolve=>setTimeout(resolve,0));
+  for(let i=0;i<50&&w.constraints().filter(l=>l.entityId==='a'&&l.target!==null).length<2;i++)
+    await new Promise(resolve=>setTimeout(resolve,2));
   assert.equal(w.constraints().filter(l=>l.entityId==='a'&&l.target!==null).length,2);
   await A.end('pointer:1','pointerup');assert.equal(w.constraints().filter(l=>l.entityId==='a').length,1);
   await B.end('hand:left','hand-open');assert.equal(w.constraints().filter(l=>l.entityId==='a').length,0);
