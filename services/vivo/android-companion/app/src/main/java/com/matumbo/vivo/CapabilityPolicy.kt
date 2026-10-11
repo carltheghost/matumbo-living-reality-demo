@@ -36,6 +36,8 @@ object CapabilityPolicy {
     fun permits(name: String, granted: Set<String>, accessibilityReady: Boolean): Boolean =
         visibleTools(granted, accessibilityReady).any { it.name == name }
 
+    fun safeAuditOutcome(success: Boolean): String = if (success) "accepted" else "rejected"
+
     fun canSetText(serviceEnabled: Boolean, passwordField: Boolean, text: String): Boolean =
         serviceEnabled && !passwordField && text.length <= 2000
 }
