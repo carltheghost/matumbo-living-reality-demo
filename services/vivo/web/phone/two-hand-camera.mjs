@@ -10,7 +10,8 @@ export class PhoneTwoHandCamera {
   constructor({ video, overlay, renderer, onState = () => {}, onGesture = () => {}, onHands = () => {}, scope = globalThis } = {}) {
     this.video = video; this.overlay = overlay; this.renderer = renderer; this.onState = onState;
     this.onGesture = onGesture; this.onHands = onHands; this.scope = scope;
-    this.stream = null; this.worker = null; this.ready = false; this.epoch = 0; this.frame = 0;
+    this.stream = null; this.worker = null; this.ready = false; this.starting = false; this.startupReject = null; this.startupTimer = null;
+    this.epoch = 0; this.frame = 0;
     this.busy = false; this.sequence = 0; this.lastFrameAt = 0; this.facing = 'user';
     this.resultFence = 0; this.lastResultTime = -Infinity; this.lastAcceptedResultAt = -Infinity;
     this.previous = [null, null]; this.lastPose = new Map(); this.held = new Set(); this.armed = new Set();
@@ -20,7 +21,7 @@ export class PhoneTwoHandCamera {
     this.onResize = () => this.resizeOverlay();
     this.scope.addEventListener?.('resize', this.onResize);
     this.onVisibilityChange = () => {
-      if (this.scope.document?.visibilityState === 'hidden' && this.active) this.stop('Hand tracking paused while page was hidden; camera released');
+      if (this.scope.document?.visibilityState === 'hidden' && (this.active || this.starting)) this.stop('Hand tracking paused while page was hidden; camera released');
     };
     this.scope.document?.addEventListener?.('visibilitychange', this.onVisibilityChange);
     this.scope.addEventListener?.('pagehide', () => this.stop('Page closed; camera released'));
@@ -57,6 +58,7 @@ export class PhoneTwoHandCamera {
 
   async start(facing = 'user') {
     this.stop('Starting local hand tracker…');
+    this.starting = true;
     const epoch = this.epoch;
     this.facing = facing;
     try {
@@ -93,6 +95,7 @@ export class PhoneTwoHandCamera {
         this.video.addEventListener('loadedmetadata', loaded, { once: true });
         if (this.video.videoWidth) loaded();
       });
+      if (epoch !== this.epoch) return false;
 
       const worker = new this.scope.Worker(new URL('./two-hand-worker.mjs', import.meta.url), {
         type: 'module', name: 'vivo-local-two-hand-tracker',
@@ -100,16 +103,23 @@ export class PhoneTwoHandCamera {
       this.worker = worker; this.ready = false;
       await new Promise((resolve, reject) => {
         const timeout = this.scope.setTimeout(() => reject(new Error('Local hand model initialization timed out.')), 15000);
+        this.startupTimer = timeout;
+        const finish = () => {
+          this.scope.clearTimeout(timeout);
+          if (this.startupTimer === timeout) this.startupTimer = null;
+          if (this.startupReject === reject) this.startupReject = null;
+        };
+        this.startupReject = reject;
         worker.onmessage = ({ data }) => {
           if (epoch !== this.epoch) return;
           if (data.type === 'ready') {
-            this.ready = true; this.scope.clearTimeout(timeout); resolve(data);
+            this.ready = true; finish(); resolve(data);
             return;
           }
           if (data.type === 'error') {
             const message = data.message || 'Local hand inference failed.';
             this.busy = false;
-            if (!this.ready) { this.scope.clearTimeout(timeout); reject(new Error(message)); }
+            if (!this.ready) { finish(); reject(new Error(message)); }
             else this.handleWorkerFailure(message);
             return;
           }
@@ -120,7 +130,7 @@ export class PhoneTwoHandCamera {
         };
         worker.onerror = error => {
           const message = error.message || 'Local hand worker failed.';
-          this.busy = false; this.scope.clearTimeout(timeout);
+          this.busy = false; finish();
           if (this.ready) this.handleWorkerFailure(message);
           else reject(new Error(message));
         };
@@ -135,6 +145,8 @@ export class PhoneTwoHandCamera {
     } catch (error) {
       if (epoch === this.epoch) this.stop('Hand tracking stopped: ' + error.message);
       throw error;
+    } finally {
+      if (epoch === this.epoch) this.starting = false;
     }
   }
 
@@ -205,7 +217,6 @@ export class PhoneTwoHandCamera {
       if (this.held.delete(handId)) this.onGesture({ type: 'release', handId, reason: 'contradictory handedness' });
       this.armed.delete(handId); this.lastPose.delete(handId);
     }
-    if (conflictingIds.size) for (const track of matched) this.armed.delete(track.id);
     const nextPrevious = [null, null];
     for (const track of this.previous) if (track && (track.missing || 0) < MAX_HAND_MISSING_FRAMES) nextPrevious[track.slot] = { ...track, missing: (track.missing || 0) + 1 };
     const hands = matched.map(item => {
@@ -323,6 +334,12 @@ export class PhoneTwoHandCamera {
 
   stop(message = 'Camera off. Touch remains available.') {
     this.epoch++; this.scope.cancelAnimationFrame?.(this.frame); this.frame = 0;
+    const rejectStartup = this.startupReject;
+    this.startupReject = null;
+    if (this.startupTimer !== null) this.scope.clearTimeout?.(this.startupTimer);
+    this.startupTimer = null;
+    this.starting = false;
+    rejectStartup?.(new Error(message));
     this.worker?.terminate(); this.worker = null;
     this.stream?.getTracks?.().forEach(track => track.stop()); this.stream = null;
     this.video?.pause?.(); if (this.video) this.video.srcObject = null;

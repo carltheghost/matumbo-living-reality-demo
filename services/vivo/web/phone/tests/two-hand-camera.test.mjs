@@ -129,6 +129,25 @@ test('contradictory handedness releases the old owner and requires an open-hand 
   assert.ok(gestures.some(event => event.type === 'grab' && event.handId === 'hand-2'));
 });
 
+test('contradictory one-to-two assignment releases the held owner without a transferred move', () => {
+  const gestures = [];
+  const scope = {
+    innerWidth: 400,
+    performance: { now: () => 100 },
+    document: { getElementById: () => ({ getBoundingClientRect: () => ({ left: 0, top: 0, width: 400, height: 600 }) }) },
+    addEventListener() {},
+  };
+  const camera = new PhoneTwoHandCamera({ video: { videoWidth: 640, videoHeight: 480 }, renderer: {}, onGesture: event => gestures.push(event), scope });
+  camera.consume({ sequence: 1, hands: [{ landmarks: makePinchHand(0), handedness: 'Left', confidence: 0.99 }] });
+  camera.held.add('hand-1');
+  camera.consume({ sequence: 2, hands: [
+    { landmarks: makePinchHand(0.1), handedness: 'Right', confidence: 0.99 },
+    { landmarks: makePoseHand({ open: false, offset: 1 }), handedness: 'Right', confidence: 0.99 },
+  ] });
+  assert.ok(gestures.some(event => event.type === 'release' && event.handId === 'hand-1' && event.reason === 'contradictory handedness'));
+  assert.equal(gestures.filter(event => event.type === 'move' && event.handId === 'hand-1').length, 0);
+});
+
 test('late inference releases held ownership and rejects stale moves until re-armed', () => {
   let now = 0;
   const gestures = [];
@@ -184,5 +203,101 @@ test('worker failure and background interruption release ownership and stop the 
   scope.document.visibilityState = 'hidden'; listeners.visibilitychange();
   assert.equal(second.active, false);
   assert.ok(gestures.some(event => event.type === 'release' && event.handId === 'hand-2' && /page was hidden/.test(event.reason)));
+});
+
+function deferred() {
+  let resolve;
+  const promise = new Promise(value => { resolve = value; });
+  return { promise, resolve };
+}
+
+function startScope({ getUserMedia, Worker = class { postMessage() {} terminate() {} } } = {}) {
+  const listeners = {};
+  const scope = {
+    innerWidth: 400,
+    isSecureContext: true,
+    location: { protocol: 'https:' },
+    performance: { now: () => 100 },
+    navigator: { mediaDevices: { getUserMedia } },
+    createImageBitmap: async () => ({ close() {} }),
+    Worker,
+    setTimeout,
+    clearTimeout,
+    cancelAnimationFrame() {},
+    requestAnimationFrame() { return 1; },
+    document: {
+      visibilityState: 'visible',
+      body: { classList: { add() {}, remove() {} } },
+      getElementById: () => ({ getBoundingClientRect: () => ({ left: 0, top: 0, width: 400, height: 600 }) }),
+      addEventListener: (name, listener) => { listeners[name] = listener; },
+    },
+    addEventListener() {},
+  };
+  return { scope, listeners };
+}
+
+function streamWith(track) {
+  return { getTracks: () => [track], getVideoTracks: () => [track] };
+}
+
+function video() {
+  return { videoWidth: 640, videoHeight: 480, readyState: 2, style: {}, play: async () => {}, pause() {}, addEventListener() {} };
+}
+
+test('hiding during delayed camera permission fences the late stream and never starts tracking', async () => {
+  const permission = deferred(), track = { stopped: 0, stop() { this.stopped++; } };
+  const { scope, listeners } = startScope({ getUserMedia: () => permission.promise });
+  const camera = new PhoneTwoHandCamera({ video: video(), renderer: {}, scope });
+  const pending = camera.start();
+  await Promise.resolve();
+  scope.document.visibilityState = 'hidden'; listeners.visibilitychange();
+  permission.resolve(streamWith(track));
+  assert.equal(await pending, false);
+  assert.equal(track.stopped, 1);
+  assert.equal(camera.active, false);
+  assert.equal(camera.starting, false);
+  assert.equal(camera.stream, null);
+});
+
+test('hiding during worker initialization rejects startup, terminates the worker, and ignores delayed ready', async () => {
+  let worker;
+  class DelayedWorker {
+    constructor() { worker = this; }
+    postMessage() {}
+    terminate() { this.terminated = true; }
+  }
+  const track = { stopped: 0, stop() { this.stopped++; }, getSettings: () => ({ facingMode: 'user' }) };
+  const { scope, listeners } = startScope({ getUserMedia: async () => streamWith(track), Worker: DelayedWorker });
+  const camera = new PhoneTwoHandCamera({ video: video(), renderer: {}, scope });
+  const pending = camera.start();
+  for (let i = 0; i < 10 && !worker; i++) await Promise.resolve();
+  assert.ok(worker);
+  scope.document.visibilityState = 'hidden'; listeners.visibilitychange();
+  await assert.rejects(pending, /page was hidden/);
+  assert.equal(worker.terminated, true);
+  assert.equal(track.stopped, 1);
+  worker.onmessage?.({ data: { type: 'ready' } });
+  assert.equal(camera.active, false);
+  assert.equal(camera.starting, false);
+});
+
+test('explicit stop during worker initialization fences a late ready result', async () => {
+  let worker;
+  class DelayedWorker {
+    constructor() { worker = this; }
+    postMessage() {}
+    terminate() { this.terminated = true; }
+  }
+  const track = { stopped: 0, stop() { this.stopped++; }, getSettings: () => ({ facingMode: 'user' }) };
+  const { scope } = startScope({ getUserMedia: async () => streamWith(track), Worker: DelayedWorker });
+  const camera = new PhoneTwoHandCamera({ video: video(), renderer: {}, scope });
+  const pending = camera.start();
+  for (let i = 0; i < 10 && !worker; i++) await Promise.resolve();
+  camera.stop('User stopped camera.');
+  await assert.rejects(pending, /User stopped camera/);
+  assert.equal(worker.terminated, true);
+  assert.equal(track.stopped, 1);
+  worker.onmessage?.({ data: { type: 'ready' } });
+  assert.equal(camera.active, false);
 });
 

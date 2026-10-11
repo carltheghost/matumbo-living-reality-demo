@@ -7,7 +7,7 @@ const SHELL = [
   'authority/material-authority.mjs', 'application/bootstrap.mjs', 'application/transport.mjs',
   'application/interactions.mjs', 'application/density-overlay.mjs',
   'phone/bootstrap.mjs', 'phone/client.mjs', 'phone/two-hand-camera.mjs', 'phone/two-hand-worker.mjs',
-  'phone/engine-worker.mjs', 'phone/engine.mjs', 'phone/storage.mjs', 'phone/agent-tools.mjs',
+  'phone/engine-worker.mjs', 'phone/engine.mjs', 'phone/storage.mjs', 'phone/agent-tools.mjs', 'phone/persistence-status.mjs',
   'phone/bridge.mjs', 'phone/projection.mjs', 'phone/hand-gestures.mjs',
 ];
 const scoped = relative => new URL(relative, self.registration.scope).href;

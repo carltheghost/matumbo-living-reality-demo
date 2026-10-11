@@ -4,6 +4,7 @@ import { AndroidPhoneBridge } from './bridge.mjs';
 import { AgentToolRegistry } from './agent-tools.mjs';
 import { HandsFreeProjection } from './projection.mjs';
 import { PhoneTwoHandCamera } from './two-hand-camera.mjs';
+import { formatPersistenceStatus } from './persistence-status.mjs';
 
 const $ = id => document.getElementById(id);
 const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
@@ -89,6 +90,13 @@ function updateEyeControls(envelope) {
   $('phoneEnterNested').disabled = !S.state?.entities[R.selected]?.innerSpaceId;
 }
 async function refreshSnapshot() { if (!engine) return null; const envelope = await engine.snapshot(); if (localMode) renderEye(envelope); return envelope; }
+async function reportPersistenceStatus(action, operation = engine?.lastPersistence) {
+  let result = null;
+  try { if (operation) result = await operation; } catch {}
+  const current = await refreshSnapshot();
+  status(formatPersistenceStatus(action, current?.persistence, result));
+  return current?.persistence || null;
+}
 function updateProjectionState(projectionPatch) {
   if (!engine) return;
   const write = async () => {
@@ -132,7 +140,12 @@ function handleHandGesture(event) {
     if (activeAxis < dimension) engine.translate(heldHand.entityId, activeAxis, materialAxisGesture(dx, dy)).catch(error => status(error.message));
     return;
   }
-  if (event.type === 'release' && heldHand?.id === event.handId) { status('Hand released · local state saved'); heldHand = null; return; }
+  if (event.type === 'release' && heldHand?.id === event.handId) {
+    const pending = engine?.lastPersistence;
+    heldHand = null;
+    reportPersistenceStatus('release', pending).catch(error => status(`Hand released · local persistence status unavailable: ${error.message}. Retry remains available.`));
+    return;
+  }
   if (event.type === 'twohand') {
     if (event.scale > 0.01 && Number.isFinite(event.scale)) R.distance = clamp(R.distance / event.scale, 4, 22);
     R.yaw = (R.yaw - event.rotation + Math.PI * 4) % (Math.PI * 2);
@@ -236,7 +249,10 @@ function addPhoneSurface() {
   document.querySelectorAll('[data-local-cap]').forEach(input => { input.checked = localGrants().includes(input.dataset.localCap); input.addEventListener('change', updateLocalGrants); });
   $('phoneEyeSelect').onchange = () => engine?.selectEye($('phoneEyeSelect').value).catch(error => status(error.message));
   $('phoneNewEye').onclick = async () => { await engine.createEye(`Eye ${Object.keys((await engine.snapshot()).eyes).length + 1}`); await refreshSnapshot(); };
-  $('phonePersist').onclick = async () => { await engine.persist(); status('Saved locally on this device.'); };
+  $('phonePersist').onclick = async () => {
+    try { await reportPersistenceStatus('save', engine.persist()); }
+    catch (error) { status(`Local Vivo state could not be saved: ${error.message}. Retry remains available.`); }
+  };
   $('phoneAxis').onchange = () => { activeAxis = Number($('phoneAxis').value); };
   for (const [id, direction] of [['phoneAxisMinus', -1], ['phoneAxisPlus', 1]]) $(id).onclick = async () => {
     const id = R.selected, axis = Number($('phoneAxis').value); if (!id) return;

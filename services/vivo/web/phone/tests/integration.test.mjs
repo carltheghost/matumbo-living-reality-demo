@@ -25,6 +25,9 @@ test('the Android Companion extends the canonical GitHub Pages UI at runtime', a
   assert.match(bootstrap, /navigator\.serviceWorker\.ready/);
   assert.match(bootstrap, /caches\.open\('vivo-phone-shell-2026-10-11-v2'\)/);
   assert.match(bootstrap, /two-hand-camera\.mjs/);
+  assert.match(bootstrap, /persistence-status\.mjs/);
+  assert.match(bootstrap, /reportPersistenceStatus\('release'/);
+  assert.match(bootstrap, /reportPersistenceStatus\('save'/);
 });
 
 test('the phone-owned tracker detects two complete hands without transporting frames', async () => {
@@ -48,6 +51,7 @@ test('the phone-owned tracker detects two complete hands without transporting fr
   assert.match(sw, /camera frames.*never cached/i);
   assert.match(sw, /phone\/two-hand-camera\.mjs/);
   assert.match(sw, /phone\/two-hand-worker\.mjs/);
+  assert.match(sw, /phone\/persistence-status\.mjs/);
   assert.match(sw, /request\.mode === 'navigate'/);
   assert.match(sw, /scope\.pathname/);
   assert.match(sw, /shell\.match\(scoped\('index\.html'\)\)/);
