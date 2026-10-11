@@ -152,6 +152,12 @@ class MountedApplicationTests(unittest.IsolatedAsyncioTestCase):
             async with self.http.get(self.base + '/' + name) as response:
                 self.assertEqual(response.status, 200)
                 self.assertEqual(await response.read(), (ROOT / 'web' / name).read_bytes())
+        for name in ['vivo-ui-overlay.mjs', 'vivo-ui-overlay.css']:
+            async with self.http.get(self.base + '/' + name) as response:
+                self.assertEqual(response.status, 200, name)
+                expected_type = 'text/javascript' if name.endswith('.mjs') else 'text/css'
+                self.assertEqual(response.content_type, expected_type)
+                self.assertEqual(await response.read(), (ROOT / 'web' / name).read_bytes())
         for path in ['/studio-bridge.js', '/vendor/field-lab/vision_bundle.mjs',
                      '/vendor/field-lab/wasm/vision_wasm_internal.js',
                      '/vendor/field-lab/hand_landmarker.task']:

@@ -7,6 +7,14 @@ import {buildRealityAssemblyScene,LOD_FAR} from './reality-assembly-scene.js?v=2
 // The lens contains only equal-status feature tabs; no center cube or anchor.
 export const CLEAN_LANDING_CAMERA={position:[36,25,110],target:[0,2,0],fov:60,mergeThreshold:LOD_FAR};
 
+export function assemblyInputGuidance(pointerType = "mouse") {
+  const mode = pointerType === "mouse" || pointerType === "pen" ? pointerType : pointerType === "hand" || pointerType === "xr" ? "hand" : "touch";
+  return Object.freeze({
+    mode,
+    text: `CURRENT ${mode.toUpperCase()} · touch tap · hand point + pinch · mouse drag + wheel · select enter`,
+  });
+}
+
 /** Reading orientation belongs to the whole entity rig, never a loose panel. */
 export function turnLivingSurfaceTowardCamera(objectRoot,cameraPosition){
   if(!objectRoot?.isObject3D||!cameraPosition||![cameraPosition.x,cameraPosition.y,cameraPosition.z].every(Number.isFinite))throw Error('Reading orientation needs an object and finite camera position');
@@ -132,7 +140,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   const spatial=buildRealityAssemblyScene({THREE,parent:scene,features:ordered.map((feature,i)=>({...feature,label:labelFor(feature),description:copyFor(feature.description),boundary:copyFor(feature.boundary),sources:(feature.sources??[]).map(copyFor),assemblyTier:'tab',lensGroup:positions[i]?.lensGroup??'worlds',initialTabShape:initialShapes.get(feature.id),initialPosition:positions[i]?.position})),targets,relationships});
   spatial.setActiveGroup(null);
   const featureMap=new Map(features.map(feature=>[feature.id,feature]));
-  const stylesheet=document.createElement('link');stylesheet.rel='stylesheet';stylesheet.href=`${new URL('./reality-assembly.css',import.meta.url).href}?v=20260924-aspectus1`;document.head.append(stylesheet);
+  const stylesheet=document.createElement('link');stylesheet.rel='stylesheet';stylesheet.href=`${new URL('./reality-assembly.css',import.meta.url).href}?v=20261011-assembly-acceptance1`;document.head.append(stylesheet);
   const root=document.createElement('section');root.id='reality-assembly';root.hidden=true;root.setAttribute('aria-label','Reality Lens spatial assembly');
   root.innerHTML=`<header class="assembly-header"><a class="assembly-brand" href="?feature=reality-lens"><span aria-hidden="true">◇</span><div>maTumbo<small>People × planet × possibility</small></div></a><nav aria-label="Assembly navigation"><button data-home>Explore</button><button data-enter-person>Your space</button><button data-enter-contracts>Contracts</button><button data-grid>Block World</button></nav><form class="assembly-quick-find" data-quick-find role="search"><label><span>Find object</span><input data-quick-search type="search" autocomplete="off" placeholder="Search YouTube, agents…" aria-label="Find a Reality Lens object"></label><button type="submit">Locate</button></form><button data-clean>Hide panels</button></header>
   <aside class="assembly-directory"><p class="assembly-eyebrow">Reality Lens Ω</p><h1>Many worlds.<br><em>One reality.</em></h1><p class="assembly-intro">Explore the same universe across space and depth.<br>Every window is a real, rearrangeable tab.</p><label class="assembly-search-label">Find a connected feature<input data-search placeholder="Search worlds, contracts…" type="search"></label><nav class="assembly-catalog" aria-label="Feature objects"></nav><p class="assembly-note">Designed 3D feature previews.<br>Only the selected feature opens its connected controls.</p></aside>
@@ -178,9 +186,13 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   find('.assembly-header [data-home]').textContent='Explora';
   find('[data-enter-person]').textContent='Meum spatium';find('[data-enter-contracts]').textContent='Foedera';find('[data-grid]').textContent='Cubus';
   find('[data-enter-person]').setAttribute('aria-label','Meum spatium');find('[data-enter-contracts]').setAttribute('aria-label','Foedera');find('[data-grid]').textContent='Materia';find('[data-grid]').setAttribute('aria-label','Materia');
-  find('[data-clean]').textContent='Objectum';find('[data-clean]').setAttribute('aria-label','Ostende vel cela superficiem electam');
+  find('[data-clean]').textContent='Objectum';find('[data-clean]').setAttribute('aria-label','Ostende vel cela superficiem electam');find('[data-clean]').setAttribute('aria-pressed','false');
   find('[data-world-label]').textContent='Unum punctum · scrolla vel preme ut accedas';
-  find('[data-hover-label]').textContent='Spatium: iter · obiectum: magnitudo · clic: ingredere';
+  const inputHint=find('[data-hover-label]');
+  const updateInputGuidance=(pointerType)=>{const guidance=assemblyInputGuidance(pointerType);root.dataset.inputMode=guidance.mode;inputHint.textContent=guidance.text;inputHint.setAttribute('aria-label',guidance.text);};
+  updateInputGuidance(globalThis.matchMedia?.('(pointer: coarse)').matches?'touch':'mouse');
+  const inputPointer=event=>{if(!root.hidden)updateInputGuidance(event.pointerType);};
+  globalThis.addEventListener?.('pointerdown',inputPointer,{passive:true,capture:true});
   find('.assembly-inspector .assembly-eyebrow').textContent='Oculus Realitatis · instrumentum apertum';
   find('.assembly-tab-controls h3').textContent='Mutabilitas';
   find('[data-anchor-note]').textContent='Instrumentum fixum.';
@@ -502,7 +514,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     selectedSurface.hidden=!revealInspector;
     root.classList.toggle('assembly-object-focused',revealInspector);
     root.classList.toggle('assembly-clean',!revealInspector);
-    find('[data-clean]').textContent=revealInspector?'Celare':'Objectum';
+    find('[data-clean]').textContent=revealInspector?'Celare':'Objectum';find('[data-clean]').setAttribute('aria-pressed',String(revealInspector));
     render();say(`${labelFor(featureMap.get(id))} · superficiem vivam aperire.`);
   }
   function exploreGroup(groupId){
@@ -617,7 +629,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   find('[data-branch-form]').onsubmit=guard(event=>{event.preventDefault();owner.propose(find('#assembly-branch-name').value);find('#assembly-branch-name').value='';render();say('Proposed branch created from the inspected frame. The present remains unchanged.');});
   find('[data-branch-select]').onchange=guard(event=>{if(event.target.value==='present')owner.goTo('present');else owner.viewBranch(event.target.value);render();});
   find('[data-export]').onclick=()=>{const url=URL.createObjectURL(new Blob([owner.exportHistory()],{type:'application/json'})),anchor=document.createElement('a');anchor.href=url;anchor.download='matumbo-local-layout-history.json';anchor.click();setTimeout(()=>URL.revokeObjectURL(url),1000);say('Exported local layout history; no account, market or wallet state is included.');};
-  find('[data-clean]').onclick=()=>{selectedSurface.hidden=!selectedSurface.hidden;root.classList.toggle('assembly-object-focused',!selectedSurface.hidden);if(!selectedSurface.hidden)root.classList.remove('assembly-clean');else root.classList.add('assembly-clean');find('[data-clean]').textContent=selectedSurface.hidden?'Objectum':'Celare';if(!selectedSurface.hidden)render();};
+  find('[data-clean]').onclick=()=>{selectedSurface.hidden=!selectedSurface.hidden;root.classList.toggle('assembly-object-focused',!selectedSurface.hidden);if(!selectedSurface.hidden)root.classList.remove('assembly-clean');else root.classList.add('assembly-clean');find('[data-clean]').textContent=selectedSurface.hidden?'Objectum':'Celare';find('[data-clean]').setAttribute('aria-pressed',String(!selectedSurface.hidden));if(!selectedSurface.hidden)render();};
   const inspectorBody=find('.assembly-inspector-body');inspectorBody.id='assembly-inspector-content';
   const inspectorToggle=find('[data-fold-inspector]');inspectorToggle.setAttribute('aria-controls',inspectorBody.id);inspectorToggle.setAttribute('aria-expanded','true');
   const compactSelection=document.createElement('span');compactSelection.className='assembly-compact-selection';compactSelection.hidden=true;find('.assembly-inspector header').append(compactSelection);
@@ -691,7 +703,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     // The user materializes the directory / inspector with the header
     // toggles ("Objectum", "Invenire", inspector fold); nothing
     // auto-opens large over the 3D view.
-    root.classList.add('assembly-clean');find('[data-clean]').textContent='Objectum';selectedSurface.hidden=true;
+    root.classList.add('assembly-clean');find('[data-clean]').textContent='Objectum';find('[data-clean]').setAttribute('aria-pressed','false');selectedSurface.hidden=true;
     activeLensMode=Boolean(lensMode);spatial.setLensMode(activeLensMode);spatial.layer.visible=true;world.visible=false;scene.fog=activeLensMode?null:new THREE.FogExp2('#030911',.009);if(activeLensMode)scene.background=spatial.backdrop;document.body.classList.add('assembly-mode');
     scene.environment=environmentTexture;
     camera.fov=CLEAN_LANDING_CAMERA.fov;camera.updateProjectionMatrix();controls.minDistance=.45;controls.maxDistance=220;
@@ -706,7 +718,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   }
   render();
   const selectionObserver=new MutationObserver(()=>{compactSelection.textContent=find('[data-title]').textContent;});selectionObserver.observe(find('[data-title]'),{childList:true});
-  return {open,close,get active(){return active;},getSnapshot:snapshot,resolve:spatial.resolve,focusFeature(id){if(!featureMap.has(id))return false;if(!active)open({lensMode:true,featureId:id});else select(id);return true;},mountFeatureSurface,clearFeatureSurface,setInspectorVisible(visible){selectedSurface.hidden=!visible;root.classList.toggle('assembly-object-focused',Boolean(visible));root.classList.toggle('assembly-clean',!visible);find('[data-clean]').textContent=visible?'Celare':'Objectum';if(visible)render();},
+  return {open,close,get active(){return active;},getSnapshot:snapshot,resolve:spatial.resolve,focusFeature(id){if(!featureMap.has(id))return false;if(!active)open({lensMode:true,featureId:id});else select(id);return true;},mountFeatureSurface,clearFeatureSurface,setInspectorVisible(visible){selectedSurface.hidden=!visible;root.classList.toggle('assembly-object-focused',Boolean(visible));root.classList.toggle('assembly-clean',!visible);find('[data-clean]').textContent=visible?'Celare':'Objectum';find('[data-clean]').setAttribute('aria-pressed',String(Boolean(visible)));if(visible)render();},
     getFeatureObject(id){const node=spatial.nodes.get(id);return node?{root:node.root,feature:featureMap.get(id),get shape(){return node.shape;}}:null;},
     getPanelAnchor(featureId){
       const node=spatial.nodes.get(featureId),object=owner.getSnapshot().objects.find(item=>item.id===featureId);if(!node||!object)return null;
@@ -806,5 +818,5 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
       }
       }
     },
-    destroy(){close();destroyed=true;clearFeatureSurface();window.removeEventListener('resize',resizeCss3d);window.removeEventListener('resize',resizeFocus);selectionObserver.disconnect();spatial.destroy();root.remove();stylesheet.remove();cssSurfaceHost.removeEventListener('pointerdown',downOnObjectSurface,true);canvas.removeEventListener('pointerdown',down,true);canvas.removeEventListener('pointermove',move);canvas.removeEventListener('pointerup',release);canvas.removeEventListener('pointercancel',release);canvas.removeEventListener('wheel',resizeOnScroll,true);root.removeEventListener('wheel',resizeOnScroll,true);document.removeEventListener('keydown',keys);}};
+    destroy(){close();destroyed=true;clearFeatureSurface();globalThis.removeEventListener?.('pointerdown',inputPointer,true);window.removeEventListener('resize',resizeCss3d);window.removeEventListener('resize',resizeFocus);selectionObserver.disconnect();spatial.destroy();root.remove();stylesheet.remove();cssSurfaceHost.removeEventListener('pointerdown',downOnObjectSurface,true);canvas.removeEventListener('pointerdown',down,true);canvas.removeEventListener('pointermove',move);canvas.removeEventListener('pointerup',release);canvas.removeEventListener('pointercancel',release);canvas.removeEventListener('wheel',resizeOnScroll,true);root.removeEventListener('wheel',resizeOnScroll,true);document.removeEventListener('keydown',keys);}};
 }

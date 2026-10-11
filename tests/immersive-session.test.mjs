@@ -160,7 +160,7 @@ test("XR entry does not claim device support before it is checked", async () => 
     documentRoot: harness.documentRoot,
     navigatorRoot: harness.navigatorRoot,
   });
-  assert.equal(harness.body.children[0].children.at(-1).textContent,"Same world · XR checked when you enter");
+  assert.equal(harness.body.children[0].children.at(-1).textContent,"XR checking · same local world retained");
   await session.destroy();
 });
 
@@ -176,7 +176,30 @@ test("XR entry reports when this browser has no WebXR API", async () => {
     documentRoot: harness.documentRoot,
     navigatorRoot: harness.navigatorRoot,
   });
-  assert.equal(harness.body.children[0].children.at(-1).textContent,"Same world · XR unavailable in this browser");
+  assert.equal(harness.body.children[0].children.at(-1).textContent,"XR unavailable · desktop field retained");
+  await session.destroy();
+});
+
+test("XR capability results gate the matching buttons without requesting a session", async () => {
+  const harness = createHarness();
+  let requested = 0;
+  harness.navigatorRoot.xr.isSessionSupported = async (mode) => mode === "immersive-vr";
+  harness.navigatorRoot.xr.requestSession = async () => { requested += 1; throw new Error("should not start from a capability probe"); };
+  const session = createImmersiveSession({
+    THREE: FakeThree,
+    renderer: harness.renderer,
+    scene: harness.scene,
+    camera: harness.camera,
+    controls: harness.controls,
+    documentRoot: harness.documentRoot,
+    navigatorRoot: harness.navigatorRoot,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const toolbar = harness.body.children[0];
+  assert.equal(toolbar.children[0].disabled, false);
+  assert.equal(toolbar.children[1].disabled, true);
+  assert.match(toolbar.children.at(-1).textContent, /VR ready/);
+  assert.equal(requested, 0);
   await session.destroy();
 });
 

@@ -1,4 +1,8 @@
-import { inspectXrSession, XR_OPTIONAL_FEATURES } from "./xr-capabilities.js?v=20260922-cache2";
+import {
+  detectXrCapabilities,
+  inspectXrSession,
+  XR_OPTIONAL_FEATURES,
+} from "./xr-capabilities.js?v=20260922-cache2";
 
 /** A single renderer/scene and the existing domain actions across desktop, VR and AR. */
 export const IMMERSIVE_SESSION_SOURCE = "immersive-session";
@@ -15,6 +19,17 @@ export const XR_SESSION_OPTIONS = Object.freeze({
 function safeText(value, fallback = "") {
   const text = String(value ?? "").trim();
   return text || fallback;
+}
+
+function modeLabel(mode) {
+  return mode === "immersive-ar" ? "AR" : "VR";
+}
+
+function capabilityMessage(capabilities) {
+  if (!capabilities?.webxr) return "XR unavailable · desktop field retained";
+  const available = capabilities.availableModes ?? [];
+  if (!available.length) return "XR unavailable on this browser/device · desktop field retained";
+  return `${available.map(modeLabel).join(" + ")} ready · desktop field retained`;
 }
 
 /**
@@ -43,6 +58,8 @@ export function createImmersiveSession({
   let activeMode = null;
   let destroyed = false;
   let controlsEnabledBeforeSession = null;
+  let capabilities = null;
+  let capabilityPromise = null;
 
   const ray = new THREE.Raycaster();
   const rotation = new THREE.Matrix4();
@@ -69,6 +86,7 @@ export function createImmersiveSession({
       externalNetwork: false,
       externalExecution: false,
       handTracking: activeMode ? "requested-if-supported" : "not-requested",
+      capabilities,
       detail: detail ?? null,
     });
     if (status) {
@@ -83,6 +101,7 @@ export function createImmersiveSession({
     const button = documentRoot.createElement("button");
     button.type = "button";
     button.textContent = title;
+    button.setAttribute("data-xr-mode", title === "Enter AR" ? "immersive-ar" : title === "Enter VR" ? "immersive-vr" : "exit");
     button.addEventListener("click", onClick);
     toolbar.append(button);
     buttons.push(button);
@@ -110,9 +129,21 @@ export function createImmersiveSession({
   function setButtonState(active) {
     const controlsGroup = toolbar?._xrButtons;
     if (!controlsGroup) return;
-    controlsGroup.vr.disabled = active || starting;
-    controlsGroup.ar.disabled = active || starting;
+    const supported = mode => capabilities?.modes?.[mode]?.supported === false ? false : true;
+    [
+      [controlsGroup.vr, "immersive-vr"],
+      [controlsGroup.ar, "immersive-ar"],
+    ].forEach(([button, mode]) => {
+      if (!button) return;
+      button.disabled = active || starting || !supported(mode);
+      button.setAttribute("aria-disabled", String(button.disabled));
+      button.title = button.disabled && capabilities?.modes?.[mode]?.reason
+        ? `${modeLabel(mode)} unavailable · ${capabilities.modes[mode].reason}`
+        : `${modeLabel(mode)} · same local world`;
+    });
     controlsGroup.leave.hidden = !active;
+    controlsGroup.leave.setAttribute("aria-disabled", String(!active));
+    toolbar.setAttribute("data-xr-state", active ? "active" : capabilities ? (capabilities.availableModes?.length ? "ready" : "unsupported") : "checking");
   }
 
   function visibleTarget(object) {
@@ -194,6 +225,26 @@ export function createImmersiveSession({
     }
   }
 
+  async function refreshCapabilities() {
+    if (capabilityPromise) return capabilityPromise;
+    capabilityPromise = detectXrCapabilities(navigatorRoot, globalThis)
+      .then((result) => {
+        capabilities = result;
+        setButtonState(Boolean(session));
+        if (!session && !starting) {
+          emitStatus(result.availableModes?.length ? "ready" : "unsupported", capabilityMessage(result));
+        }
+        return result;
+      })
+      .catch(() => {
+        capabilities = Object.freeze({ webxr: false, availableModes: [], modes: {} });
+        setButtonState(Boolean(session));
+        if (!session && !starting) emitStatus("unsupported", capabilityMessage(capabilities));
+        return capabilities;
+      });
+    return capabilityPromise;
+  }
+
   function setReferenceSpace() {
     try {
       renderer.xr.setReferenceSpaceType("local-floor");
@@ -210,9 +261,11 @@ export function createImmersiveSession({
       throw new TypeError("XR mode must be immersive-vr or immersive-ar");
     }
 
-    const supported = await supports(mode);
+    const supported = capabilities?.modes?.[mode]?.supported === false
+      ? false
+      : await supports(mode);
     if (!supported) {
-      emitStatus("unsupported", (mode === "immersive-ar" ? "AR" : "VR") + " is not supported on this browser/device");
+      emitStatus("unsupported", `${modeLabel(mode)} unavailable · desktop field retained`);
       return false;
     }
 
@@ -255,9 +308,10 @@ export function createImmersiveSession({
 
       starting = false;
       setButtonState(true);
+      const sessionInfo = inspectXrSession(nextSession);
       emitStatus(
         "active",
-        (mode === "immersive-ar" ? "AR" : "VR") + " · point + pinch / trigger to open cube",
+        `${modeLabel(mode)} active · ${sessionInfo.handTracking ? "point + pinch" : "trigger / gaze"} · same world retained`,
       );
       return true;
     } catch (error) {
@@ -268,7 +322,8 @@ export function createImmersiveSession({
       }
       reset();
       const name = safeText(error?.name, "unavailable");
-      emitStatus("error", "XR not started: " + name);
+      const denied = name === "NotAllowedError" || name === "SecurityError";
+      emitStatus("error", `${modeLabel(mode)} ${denied ? "permission denied" : "not started"} · desktop field retained`);
       return false;
     }
   }
@@ -301,6 +356,7 @@ export function createImmersiveSession({
       localOnly: true,
       externalNetwork: false,
       externalExecution: false,
+      capabilities,
     });
   }
 
@@ -320,8 +376,10 @@ export function createImmersiveSession({
   }
 
   emitStatus("ready", navigatorRoot?.xr?.requestSession
-    ? "Same world · XR checked when you enter"
-    : "Same world · XR unavailable in this browser");
+    ? "XR checking · same local world retained"
+    : "XR unavailable · desktop field retained");
+  setButtonState(false);
+  refreshCapabilities();
 
   return Object.freeze({
     start,
