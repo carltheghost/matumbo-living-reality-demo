@@ -43,7 +43,16 @@ class ToolBroker(private val activity:Activity){
        "display.brightness"->{val value=args.optDouble("value",.6).coerceIn(.02,1.0).toFloat();activity.runOnUiThread{val p=activity.window.attributes;p.screenBrightness=value;activity.window.attributes=p};JSONObject().put("value",value)}
        "display.keepAwake"->{val enabled=args.optBoolean("enabled",true);activity.runOnUiThread{if(enabled)activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)else activity.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)};JSONObject().put("enabled",enabled)}
        "media.volume"->{val audio=activity.getSystemService(AudioManager::class.java);val max=audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC);val value=(args.optDouble("value",.5).coerceIn(0.0,1.0)*max).toInt().coerceIn(0,max);audio.setStreamVolume(AudioManager.STREAM_MUSIC,value,0);JSONObject().put("value",value).put("max",max)}
-       "camera.torch"->{val enabled=args.optBoolean("enabled",true),manager=activity.getSystemService(CameraManager::class.java);val id=manager.cameraIdList.firstOrNull{cid->val c=manager.getCameraCharacteristics(cid);c.get(CameraCharacteristics.FLASH_INFO_AVAILABLE)==true&&c.get(CameraCharacteristics.LENS_FACING)==CameraCharacteristics.LENS_FACING_BACK}?:throw IllegalStateException("NO_TORCH");manager.setTorchMode(id,enabled);JSONObject().put("enabled",enabled)}
+       "camera.torch"->{
+         val enabled=args.optBoolean("enabled",true)
+         val manager=activity.getSystemService(CameraManager::class.java)
+         val id=manager.cameraIdList.firstOrNull{cid->
+           val c=manager.getCameraCharacteristics(cid)
+           c.get(CameraCharacteristics.FLASH_INFO_AVAILABLE)==true&&c.get(CameraCharacteristics.LENS_FACING)==CameraCharacteristics.LENS_FACING_BACK
+         }?:throw IllegalStateException("NO_TORCH")
+         manager.setTorchMode(id,enabled)
+         JSONObject().put("enabled",enabled)
+       }
        "app.openUrl"->{val uri=Uri.parse(args.getString("url"));require(uri.scheme=="https"||uri.scheme=="http"){"URL_SCHEME"};activity.startActivity(Intent(Intent.ACTION_VIEW,uri));JSONObject().put("opened",true)}
        "app.shareText"->{val text=args.getString("text").take(10000);activity.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply{type="text/plain";putExtra(Intent.EXTRA_TEXT,text)},"Share from Vivo"));JSONObject().put("shared",true)}
        "app.openSettings"->{activity.startActivity(Intent(Settings.ACTION_SETTINGS));JSONObject().put("opened",true)}
