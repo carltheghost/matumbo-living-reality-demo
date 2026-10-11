@@ -2,7 +2,7 @@
 import {validateStudioBinding, studioBindingSeed} from './studio-binding.mjs';
 
 export const VERSION = 'vivo.command/1';
-const kinds = new Set(['grab.begin','grab.target','grab.end','space.enter','space.exit','world.fork','studio.transform']);
+const kinds = new Set(['grab.begin','grab.target','grab.end','space.enter','space.exit','world.fork','studio.transform','studio.commit']);
 const sources = new Set(['touch','hand','eye-confirmed','keyboard']);
 const id = value => typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,128}$/.test(value);
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -43,11 +43,16 @@ export function validateCommand(command) {
     keys(p,['portalEntityId','eyeId']); need(id(p.portalEntityId) && id(p.eyeId),'Invalid entry');
   } else if (command.kind === 'space.exit') {
     keys(p,['eyeId','returnFrameId']); need(id(p.eyeId) && id(p.returnFrameId),'Invalid return');
-  } else if (command.kind === 'studio.transform') {
-    keys(p,['bindingId','sourceModel','sourceNode','entityId','dimension','chart','q','metadata']);
+  } else if (command.kind === 'studio.transform' || command.kind === 'studio.commit') {
+    const expected = command.kind === 'studio.commit' ? ['expectedBindingRevision','expectedEntityRevision'] : [];
+    keys(p,['bindingId','sourceModel','sourceNode','entityId','dimension','chart','q','metadata',...expected]);
+    if (command.kind === 'studio.commit')
+      need(uint(p.expectedBindingRevision) && uint(p.expectedEntityRevision), 'Invalid Studio commit CAS');
     let binding;
     try {
-      binding = validateStudioBinding({...studioBindingSeed(p.q, {bindingId:p.bindingId, metadata:p.metadata}), ...p,
+      const identity={bindingId:p.bindingId,sourceModel:p.sourceModel,sourceNode:p.sourceNode,entityId:p.entityId,
+        dimension:p.dimension,chart:p.chart,q:p.q,metadata:p.metadata};
+      binding = validateStudioBinding({...studioBindingSeed(p.q, {bindingId:p.bindingId, metadata:p.metadata}), ...identity,
         schema:'vivo.studio-binding/1', bindingRevision:0, acceptedSequence:0});
     } catch {
       need(false, 'Invalid Studio binding identity');

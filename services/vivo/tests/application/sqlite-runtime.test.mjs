@@ -10,6 +10,7 @@ import {DatabaseSync} from 'node:sqlite';
 import {MountedRuntime} from '../../server/application/runtime.mjs';
 import {SQLiteAuthorityStore} from '../../server/authority/sqlite-store.mjs';
 import {LocalLeaseWorld} from '../../web/authority/lease-authority.mjs';
+import {studioCommitCommand} from '../../contracts/studio-binding.mjs';
 import {workshopSeed,entryView} from '../../server/application/seed.mjs';
 const root=fileURLToPath(new URL('../../../../',import.meta.url));
 const runtimeURL=new URL('../../server/application/runtime.mjs',import.meta.url).href;
@@ -100,6 +101,18 @@ test('mounted material guard runs after actual SQLite DML: expiry rolls back fie
  // All accepted fields/q/v, Eyes, receipts, epochs and material lease cursors are
  // covered by the exact full-checkpoint comparison, not only the snapshot.
  await observer.close();
+});
+
+test('material-bound Studio commit rejects before canonical mutation',async t=>{
+ const internals=captureInternals(t),{runtime}=await fixture(t,{phase:true,initializeMaterial:snapshot=>python({op:'seed',snapshot})});
+ await runtime.dispatch({op:'open',args:{seat:'one'}});
+ const client=internals.world.attach({actorId:'studio.material-boundary'});await client.open();
+ const snapshot=client.getSnapshot(),binding=snapshot.studioBindings['studio.node.echo'],entity=snapshot.spaces.root.entities.relic,before=internals.world.checkpoint();
+ const receipt=await client.submit(studioCommitCommand(snapshot,[0,0,0,0],{bindingId:binding.bindingId,metadata:binding.metadata,
+   commandId:'studio.material.boundary',expectedBindingRevision:binding.bindingRevision,expectedEntityRevision:entity.revision}));
+ assert.equal(receipt.status,'rejected');assert.equal(receipt.code,'STUDIO_MATERIAL_BOUNDARY');
+ assert.deepEqual(internals.world.checkpoint(),before);
+ await client.close();
 });
 
 for(const afterCommit of [false,true])test(`mounted COMMIT ${afterCommit?'after':'before'} ambiguity stays unavailable through ready and timer sweeps; restart recovers exact durable outcome`,async t=>{

@@ -9,9 +9,11 @@ import {
   studioBindingDefinition,
   studioBindingRegistrySeed,
   studioBindingSeed,
+  studioCommitCommand,
   studioTransformCommand,
   validateStudioBinding,
 } from '../../contracts/studio-binding.mjs';
+import {validateCommand} from '../../contracts/validate.mjs';
 
 test('Studio projection mapping is four-dimensional and does not alias the rich snapshot',()=>{
   const q=Array.from({length:9*64},(_,i)=>i/10),studio={engine:{q,velocity:['kept'],edges:[{a:1,b:2}],law:{id:'rich'}},view:{paused:false,camera:{yaw:.4}},landmarks:[{node:STUDIO_SOURCE_NODE,name:'Echo'}]};
@@ -59,4 +61,20 @@ test('Studio transform command carries fixed binding identity and an explicit CA
   assert.deepEqual(command,{schema:'vivo.command/1',id:'studio.test.1',worldId:snapshot.worldId,spaceId:'root',kind:'studio.transform',expectedRevision:7,
     payload:{bindingId:STUDIO_BINDING_ID,sourceModel:'matumbo-field-lab',sourceNode:55,entityId:'relic',dimension:4,chart:'flat',q:[1,2,3,4],metadata:{name:'Echo',kind:'RESONANCE / 02'}}});
   assert.throws(()=>studioTransformCommand(snapshot,[1001,2,3,4],{commandId:'studio.test.2'}),/coordinates/);
+});
+
+test('Studio commit is a separate canonical command with binding and entity CAS',()=>{
+  const snapshot={schema:'vivo.snapshot/1',worldId:'vivo.local.workshop',acceptedSequence:7};
+  const command=studioCommitCommand(snapshot,[1,2,3,4],{
+    commandId:'studio.commit.test.1',expectedBindingRevision:2,expectedEntityRevision:4,
+  });
+  assert.deepEqual(command,{schema:'vivo.command/1',id:'studio.commit.test.1',worldId:snapshot.worldId,spaceId:'root',kind:'studio.commit',expectedRevision:7,
+    payload:{bindingId:STUDIO_BINDING_ID,sourceModel:'matumbo-field-lab',sourceNode:55,entityId:'relic',dimension:4,chart:'flat',q:[1,2,3,4],metadata:{name:'Echo',kind:'RESONANCE / 02'},expectedBindingRevision:2,expectedEntityRevision:4}});
+  assert.equal(validateCommand(command),command);
+  for(const option of ['expectedBindingRevision','expectedEntityRevision'])
+    assert.throws(()=>studioCommitCommand(snapshot,[1,2,3,4],{commandId:'studio.commit.'+option,[option]:-1}),/context/);
+  const forged={...command,payload:{...command.payload}};delete forged.payload.expectedEntityRevision;
+  assert.throws(()=>validateCommand(forged),/Unexpected or missing keys/);
+  const bad={...command,payload:{...command.payload,expectedBindingRevision:.5}};
+  assert.throws(()=>validateCommand(bad),/Invalid Studio commit CAS/);
 });

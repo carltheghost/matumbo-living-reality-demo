@@ -9,10 +9,17 @@ export interface StudioBinding {
   metadata: Readonly<{name: string; kind: string}>;
   bindingRevision: number; acceptedSequence: number;
 }
+export interface StudioBindingCommandPayload {
+  bindingId: string; sourceModel: string; sourceNode: number; entityId: string;
+  dimension: number; chart: string; q: Vec; metadata: Readonly<{name: string; kind: string}>;
+}
+export interface StudioCommitPayload extends StudioBindingCommandPayload {
+  expectedBindingRevision: number; expectedEntityRevision: number;
+}
 export interface Command {
   schema: 'vivo.command/1'; id: string; worldId: string; spaceId: string;
-  kind: 'grab.begin' | 'grab.target' | 'grab.end' | 'space.enter' | 'space.exit' | 'world.fork' | 'studio.transform';
-  expectedRevision: number; payload: Readonly<Record<string, unknown>>;
+  kind: 'grab.begin' | 'grab.target' | 'grab.end' | 'space.enter' | 'space.exit' | 'world.fork' | 'studio.transform' | 'studio.commit';
+  expectedRevision: number; payload: Readonly<Record<string, unknown> | StudioBindingCommandPayload | StudioCommitPayload>;
 }
 export interface TargetPayload {
   entityId: string; leaseId: string; source: InputSource; inputEpoch: number;
