@@ -6,9 +6,12 @@ import {ApplicationInputs} from './interactions.mjs';
 import {eventTime,frameOf,screenTarget,viewBasis,viewAngles,projectAccepted,timestampedCameraClass} from './adapters.mjs';
 import {DensityOverlay} from './density-overlay.mjs';
 import {installCameraConstraintFallback,normalizeCameraFacing} from './camera-compat.mjs';
+import {installWorkshopOverlay} from '/vivo-ui-overlay.mjs';
 
 const $=id=>document.getElementById(id),copy=structuredClone;
 installCameraConstraintFallback();
+const vivoOverlayStyle=document.createElement('link');vivoOverlayStyle.rel='stylesheet';vivoOverlayStyle.href='/vivo-ui-overlay.css';document.head.append(vivoOverlayStyle);
+const vivoOverlay=installWorkshopOverlay();
 const renderer=new Renderer($('world'),$('overlay'));
 const previews=new Map(),grids=new Map(),densityCache=new Map();
 let transport=null,host=null,inputs=null,state=null,selected=null,poll=null,densityPoll=null,densityRequest=0,online=false,viewTail=Promise.resolve();

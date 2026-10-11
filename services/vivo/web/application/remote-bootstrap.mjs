@@ -5,9 +5,12 @@ import {RemoteTransport} from './remote-transport.mjs';
 import {ApplicationInputs} from './interactions.mjs';
 import {eventTime,screenTarget,viewBasis,projectAccepted,timestampedCameraClass} from './adapters.mjs';
 import {installCameraConstraintFallback,normalizeCameraFacing} from './camera-compat.mjs';
+import {installWorkshopOverlay} from '/application/vivo-ui-overlay.mjs';
 
 const $=id=>document.getElementById(id),element=(tag,p={})=>Object.assign(document.createElement(tag),p);
 installCameraConstraintFallback();
+const vivoOverlayStyle=document.createElement('link');vivoOverlayStyle.rel='stylesheet';vivoOverlayStyle.href='/application/vivo-ui-overlay.css';document.head.append(vivoOverlayStyle);
+const vivoOverlay=installWorkshopOverlay();
 const renderer=new Renderer($('world'),$('overlay')),grids=new Map(),previews=new Map();
 let transport=null,host=null,inputs=null,state=null,selected=null,hand=null,online=false,role=null;
 const say=t=>{$('status').textContent=t;},safe=fn=>async(...a)=>{try{return await fn(...a);}catch(e){say(e.code||e.message||String(e));}};
