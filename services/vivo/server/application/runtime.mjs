@@ -105,11 +105,11 @@ class MeteredStore {
 
 export class MountedRuntime {
   #world; #store; #maxEvents; #reserve; #sessions=new Map(); #seats=new Map();
-  #phase=false; #adaptive=false; #materialRunning=false; #statusRevision=0; #storageFault=null;
+  #phase=false; #adaptive=false; #remoteActors=false; #materialRunning=false; #statusRevision=0; #storageFault=null;
   #tail=Promise.resolve(); #timer; #stopped=false; #fault=null; #sweepQueued=false;
-  constructor(key,world,store,maxEvents,reserve,phase,adaptive) {
+  constructor(key,world,store,maxEvents,reserve,phase,adaptive,remoteActors) {
     if(key!==MountedRuntime)fail('USE_OPEN');
-    this.#phase=phase;this.#adaptive=adaptive;this.#world=world;this.#store=store;this.#maxEvents=maxEvents;this.#reserve=reserve;
+    this.#phase=phase;this.#adaptive=adaptive;this.#remoteActors=remoteActors;this.#world=world;this.#store=store;this.#maxEvents=maxEvents;this.#reserve=reserve;
     this.#timer=setInterval(()=>{
       if(this.#sweepQueued)return;this.#sweepQueued=true;
       void this.#queue(()=>this.#sweep()).catch(error=>{this.#fault=publicError(error).code;})
@@ -117,8 +117,8 @@ export class MountedRuntime {
     },SWEEP_MS);
     this.#timer.unref();
   }
-  static async open({path,store:storeKind='posix',maxEvents=65536,reserve=MIN_RESERVE,phase=false,adaptive=false,initializeMaterial}={}) {
-    if(typeof phase!=='boolean'||typeof adaptive!=='boolean'||(phase&&adaptive)||!['posix','sqlite','memory'].includes(storeKind))fail('INVALID_RUNTIME_OPTIONS');
+  static async open({path,store:storeKind='posix',maxEvents=65536,reserve=MIN_RESERVE,phase=false,adaptive=false,remoteActors=false,initializeMaterial}={}) {
+    if(typeof phase!=='boolean'||typeof adaptive!=='boolean'||typeof remoteActors!=='boolean'||(phase&&adaptive)||!['posix','sqlite','memory'].includes(storeKind))fail('INVALID_RUNTIME_OPTIONS');
     if((storeKind!=='memory'&&(typeof path!=='string'||!isAbsolute(path)))||
       (storeKind==='memory'&&path!==undefined&&path!==null)||!Number.isSafeInteger(maxEvents)||maxEvents>65536||
       !Number.isSafeInteger(reserve)||reserve<MIN_RESERVE||maxEvents<reserve+2)fail('INVALID_RUNTIME_OPTIONS');
@@ -149,7 +149,8 @@ export class MountedRuntime {
       if(!Array.isArray(existing.state.events)||existing.state.events.length>maxEvents)fail('JOURNAL_LIMIT_MISMATCH');
       if(existing.state.events.length>=maxEvents && Object.keys(existing.state.leases??{}).length)fail('JOURNAL_RECOVERY_CAPACITY');
       for(const eye of Object.values(existing.state.eyes??{})) {
-        if(!Object.values(LOCAL_SEATS).includes(eye.actorId)||eye.eyeId!=='main'||eye.stack?.length>1)fail('WORKSHOP_CHECKPOINT_MISMATCH');
+        const remoteActor=remoteActors&&(eye.actorId==='remote.owner'||/^remote\.invite\.[0-9a-f]{32}$/.test(eye.actorId));
+        if(!(Object.values(LOCAL_SEATS).includes(eye.actorId)||remoteActor)||eye.eyeId!=='main'||eye.stack?.length>1)fail('WORKSHOP_CHECKPOINT_MISMATCH');
       }
     }
     if((phase||adaptive)&&!existing){
@@ -171,7 +172,7 @@ export class MountedRuntime {
     const materialProtocol=phase?'vivo.lease-material/1':adaptive?'vivo.lease-adaptive/1':null;
     const world=await LocalLeaseWorld.create({snapshot:seed,store,maxEvents,
       ...(materialProtocol?{materialProtocol,...(materialInitial?{materialInitial}:{})}:{})});
-    return new MountedRuntime(MountedRuntime,world,store,maxEvents,reserve,phase,adaptive);
+    return new MountedRuntime(MountedRuntime,world,store,maxEvents,reserve,phase,adaptive,remoteActors);
     } catch(error) {
       // An owner acquired before validation must never escape a failed startup.
       // Preserve a FIRST close failure: a retry is not proof ownership released.
@@ -259,7 +260,9 @@ export class MountedRuntime {
   async #open(args) {
     keys(args,['seat'],['resumeToken','readOnly','actorId']);
     if(Object.hasOwn(args,'readOnly')&&typeof args.readOnly!=='boolean')fail('INVALID_ARGUMENT');
-    if(Object.hasOwn(args,'actorId')&&!validId(args.actorId))fail('INVALID_ARGUMENT');
+    if(Object.hasOwn(args,'actorId')){
+      if(!this.#remoteActors||!validId(args.actorId)||(args.actorId!=='remote.owner'&&!/^remote\.invite\.[0-9a-f]{32}$/.test(args.actorId)))fail('INVALID_ARGUMENT');
+    }
     if(typeof args.seat!=='string'||!Object.hasOwn(LOCAL_SEATS,args.seat))fail('INVALID_SEAT');
     const existing=this.#seats.get(args.seat);
     if(Object.hasOwn(args,'resumeToken')) {
@@ -419,11 +422,12 @@ async function* privateLines(stream){
   if(pending.length||discard)yield {error:'INCOMPLETE_REQUEST'};
 }
 async function main() {
-  let path=null,phase=false,adaptive=false,maxEvents=65536,store='posix';const flags=process.argv.slice(2),seen=new Set();
+  let path=null,phase=false,adaptive=false,remoteActors=false,maxEvents=65536,store='posix';const flags=process.argv.slice(2),seen=new Set();
   while(flags.length) {
     const flag=flags.shift();if(seen.has(flag))fail('INVALID_RUNTIME_OPTIONS');seen.add(flag);
     if(flag==='--phase')phase=true;
     else if(flag==='--adaptive')adaptive=true;
+    else if(flag==='--remote-actors')remoteActors=true;
     else if(flag==='--journal-events'&&flags.length)maxEvents=Number(flags.shift());
     else if(flag==='--store'&&flags.length)store=flags.shift();
     else if(!flag.startsWith('-')&&path===null)path=flag;
@@ -436,7 +440,7 @@ async function main() {
   } else if(!isAbsolute(path??'')) fail('ABSOLUTE_CHECKPOINT_PATH_REQUIRED');
   const write=value=>new Promise((done,reject)=>process.stdout.write(JSON.stringify(value)+'\n',error=>error?reject(error):done()));
   const lines=privateLines(process.stdin);
-  const runtime=await MountedRuntime.open({path,store,phase,adaptive,maxEvents,initializeMaterial:async snapshot=>{
+  const runtime=await MountedRuntime.open({path,store,phase,adaptive,remoteActors,maxEvents,initializeMaterial:async snapshot=>{
     await write({initializeMaterial:phase?'phase':'adaptive',snapshot});const line=await lines.next();
     if(line.done||line.value.error)fail('MATERIAL_INITIALIZER_FAILED');return line.value.value;
   }});

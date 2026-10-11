@@ -26,7 +26,7 @@ from .authority.module_routes import install_module_routes
 
 
 class LocalBridge:
-    def __init__(self, path=None, *, phase=False, adaptive=False, max_events=65536, store='posix'):
+    def __init__(self, path=None, *, phase=False, adaptive=False, remote_actors=False, max_events=65536, store='posix'):
         if store == 'memory':
             if path is not None:
                 raise ValueError('Memory store does not accept a data path; session state is process-local only')
@@ -37,6 +37,7 @@ class LocalBridge:
         if phase and adaptive: raise ValueError('Choose one material mode')
         self.phase = phase
         self.adaptive = adaptive
+        self.remote_actors = bool(remote_actors)
         self.max_events = max_events
         self.process = None
         self.lock = asyncio.Lock()
@@ -50,7 +51,7 @@ class LocalBridge:
         command = [node, str(ROOT / 'server/application/runtime.mjs')]
         if self.path is not None:
             command.append(self.path)
-        command.extend(['--store', self.store, *(['--phase'] if self.phase else ['--adaptive'] if self.adaptive else []), '--journal-events', str(self.max_events)])
+        command.extend(['--store', self.store, *(['--phase'] if self.phase else ['--adaptive'] if self.adaptive else []), *(['--remote-actors'] if self.remote_actors else []), '--journal-events', str(self.max_events)])
         self.process = await asyncio.create_subprocess_exec(
             *command,
             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,

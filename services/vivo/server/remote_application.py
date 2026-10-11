@@ -147,7 +147,7 @@ class RemoteGateway:
         self.invites = InvitationStore(self.data_dir / "remote-invitations.sqlite")
         suffix = ".sqlite" if store == "sqlite" else ".json"
         self.bridge = LocalBridge(self.data_dir / ("canonical-remote" + suffix),
-                                  adaptive=True, store=store)
+                                  adaptive=True, remote_actors=True, store=store)
         self.material = AdaptiveApplicationHost(self.bridge.material_call)
         self.connections = set()
         self.started = False
