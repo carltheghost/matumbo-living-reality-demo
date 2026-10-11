@@ -48,6 +48,7 @@ const REJECTION_REASONS = Object.freeze({
   STUDIO_BINDING_IDENTITY: 'The canonical binding identity did not match the reviewed phone mapping.',
   PHONE_LOCAL_STATE_CHANGED: 'The phone local state changed while the authority command was being prepared; nothing was sent. Review and repeat the explicit action.',
   AUTHORITY_SESSION_CHANGED: 'The canonical authority session changed while the command was being prepared; nothing was sent.',
+  AUTHORITY_OUTCOME_UNKNOWN: 'The command was already sent before this phone session changed; its completion was not applied here. Reconnect and read before retrying.',
 });
 
 const reasonFor = (code, fallback) => REJECTION_REASONS[code] || fallback || `Authority rejected this action with ${code}.`;
@@ -182,7 +183,7 @@ export class PhoneAuthorityAdapter {
       const nextEntity = this._canonicalEntity(next, binding);
       const priorBaseline = this._acceptedBaselines.get(identity.bindingId);
       if (priorBaseline && this._acceptedBaselineChanged(priorBaseline, binding, nextEntity)) {
-        const local = this.localEnvelope ? mapPhoneEnvelopeToCanonical(this.localEnvelope, entityId) : null;
+        const local = this.localEnvelope ? this._localMapping(entityId) : null;
         const priorBinding = priorBaseline.binding;
         const existing = this._conflicts.get(identity.bindingId);
         if (local?.status === 'available' && priorBinding &&
@@ -226,7 +227,7 @@ export class PhoneAuthorityAdapter {
     const canonicalEntity = entity || this.state?.snapshot?.spaces?.[binding.spaceId]?.entities?.[binding.entityId] || null;
     const mapping = localMapping || (entityId === this.selectedEntityId
       ? this._mapping()
-      : mapPhoneEnvelopeToCanonical(this.localEnvelope || {}, entityId));
+      : this._localMapping(entityId));
     const record = {
       code,
       localQ: localQ ? [...localQ] : null,
@@ -293,6 +294,25 @@ export class PhoneAuthorityAdapter {
     return local || mapPhoneEnvelopeToCanonical(this.localEnvelope || {}, this.selectedEntityId);
   }
 
+  _localMapping(entityId = this.selectedEntityId) {
+    const envelope = this.localEnvelope || {};
+    const selected = mapPhoneEnvelopeToCanonical(envelope, entityId);
+    if (selected.status === 'available' || !envelope.snapshot?.spaces?.root || !envelope.eyes) return selected;
+    // Conflict detection may need the root-owned phone object while the
+    // user's current Eye is inside a nested space.  This detached probe is
+    // read-only and never makes an inner object publishable.
+    const eyes = copy(envelope.eyes);
+    const rootEye = Object.entries(eyes).find(([, eye]) => eye?.spaceId === 'root');
+    let rootEyeId = rootEye?.[0];
+    if (!rootEyeId) {
+      const active = eyes[envelope.currentEyeId];
+      if (!active) return selected;
+      rootEyeId = '__phone_authority_root_conflict_probe__';
+      eyes[rootEyeId] = {...active, id: rootEyeId, spaceId: 'root', dimension: envelope.snapshot.spaces.root.dimension};
+    }
+    return mapPhoneEnvelopeToCanonical({...envelope, eyes, currentEyeId: rootEyeId}, entityId);
+  }
+
   async connect({seat = this.seat, resumeToken} = {}) {
     if (this._closing) return this._staleResult('connect', 'AUTHORITY_SESSION_CHANGED', reasonFor('AUTHORITY_SESSION_CHANGED'));
     if (statusOf(this.transport) && !this._pendingConnect) return this.debug();
@@ -332,7 +352,12 @@ export class PhoneAuthorityAdapter {
       const stale = !this._generationCurrent(generation) || this._connectGeneration !== connectGeneration;
       if (this.transport === client) this.transport = null;
       await disposeTransport(client);
-      if (stale) return this._staleResult('connect', 'AUTHORITY_SESSION_CHANGED', reasonFor('AUTHORITY_SESSION_CHANGED'));
+      // Disposal yields. A newer connect may have admitted successfully while
+      // this failed client was closing; never let the older error overwrite
+      // the newer session's message or throw into the UI.
+      if (stale || !this._generationCurrent(generation) || this._connectGeneration !== connectGeneration) {
+        return this._staleResult('connect', 'AUTHORITY_SESSION_CHANGED', reasonFor('AUTHORITY_SESSION_CHANGED'));
+      }
       this.message = reasonFor(error?.code || 'AUTHORITY_UNAVAILABLE', error?.message);
       this.lastResult = this._rejection('connect', error?.code || 'AUTHORITY_UNAVAILABLE', this.message, false);
       this._emit('connect-failed');
@@ -502,10 +527,19 @@ export class PhoneAuthorityAdapter {
     return this._rejection(action, 'PHONE_LOCAL_STATE_CHANGED', reasonFor('PHONE_LOCAL_STATE_CHANGED'), false);
   }
 
-  async _reconcile(action, code, reason) {
+  _submitStaleResult(action, operation, outcome = 'unknown') {
+    return this._staleResult(action, 'AUTHORITY_OUTCOME_UNKNOWN', reasonFor('AUTHORITY_OUTCOME_UNKNOWN'), {
+      submitted: true,
+      outcome,
+    });
+  }
+
+  async _reconcile(action, code, reason, operation = null) {
+    if (operation && !this._operationCurrent(operation)) return this._submitStaleResult(action, operation);
     if (statusOf(this.transport)) {
       try { await this.transport.refresh(); } catch {}
     }
+    if (operation && !this._operationCurrent(operation)) return this._submitStaleResult(action, operation);
     const binding = currentBinding(this.state, this._bindingId());
     const local = this._mapping();
     if (binding && local.status === 'available' && code.startsWith('STALE')) {
@@ -608,12 +642,17 @@ export class PhoneAuthorityAdapter {
     try {
       receipt = await transport.submit(command);
     } catch (error) {
-      return this._reconcile(action, error?.code || 'AUTHORITY_UNAVAILABLE', error?.message);
+      if (!this._operationCurrent(operation)) return this._submitStaleResult(action, operation);
+      return this._reconcile(action, error?.code || 'AUTHORITY_UNAVAILABLE', error?.message, operation);
+    }
+    if (!this._operationCurrent(operation)) {
+      return this._submitStaleResult(action, operation, receipt?.status === 'accepted' ? 'accepted' : 'unknown');
     }
     if (!receipt || receipt.status !== 'accepted') {
-      return this._reconcile(action, receipt?.code || 'AUTHORITY_REJECTED', receipt?.code ? reasonFor(receipt.code) : 'Authority rejected the command; accepted state was refreshed and local state was unchanged.');
+      return this._reconcile(action, receipt?.code || 'AUTHORITY_REJECTED', receipt?.code ? reasonFor(receipt.code) : 'Authority rejected the command; accepted state was refreshed and local state was unchanged.', operation);
     }
     await this.syncLocal();
+    if (!this._operationCurrent(operation)) return this._submitStaleResult(action, operation, 'accepted');
     this.conflict = null;
     this.conflictOverrideArmed = false;
     this.acceptedBinding = currentBinding(this.state, freshMapping.binding.bindingId) || copy(receipt.result?.binding);

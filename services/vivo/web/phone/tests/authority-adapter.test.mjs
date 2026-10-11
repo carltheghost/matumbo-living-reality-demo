@@ -458,3 +458,133 @@ test('a newer overlapping connect admission wins and disposes the older factory 
   assert.equal(winningClient.closeCalls, 0);
 });
 
+test('a late successful submit cannot revive a closed adapter', async t => {
+  const {runtime, transports, first, one} = await fixture();
+  t.after(async () => { await one.close(); await first.engine.close(); await runtime.dispatch({op: 'shutdown'}); });
+  await one.connect();
+  first.engine.world.spaces.root.entities.relic.q[0] = 1;
+  await one.syncLocal();
+  const submitStarted = deferred();
+  const releaseSubmit = deferred();
+  const transport = transports[0];
+  transport.submit = async command => {
+    submitStarted.resolve(command);
+    return releaseSubmit.promise;
+  };
+  const pending = one.commit();
+  await submitStarted.promise;
+  await one.close();
+  releaseSubmit.resolve({status: 'accepted', result: {binding: {bindingId: 'studio.node.echo', q: [1, 0, 0, 0]}}});
+  const result = await pending;
+  assert.equal(result.status, 'rejected');
+  assert.equal(result.code, 'AUTHORITY_OUTCOME_UNKNOWN');
+  assert.equal(result.submitted, true);
+  assert.equal(result.outcome, 'accepted');
+  assert.equal(one.debug().connected, false);
+  assert.match(one.debug().message, /disconnected/i);
+  assert.equal(one.debug().acceptedBinding, null);
+});
+
+test('a late failed submit cannot replace a closed adapter message', async t => {
+  const {runtime, transports, first, one} = await fixture();
+  t.after(async () => { await one.close(); await first.engine.close(); await runtime.dispatch({op: 'shutdown'}); });
+  await one.connect();
+  first.engine.world.spaces.root.entities.relic.q[0] = 1;
+  await one.syncLocal();
+  const submitStarted = deferred();
+  const releaseSubmit = deferred();
+  const transport = transports[0];
+  transport.submit = async command => {
+    submitStarted.resolve(command);
+    await releaseSubmit.promise;
+    throw Object.assign(new Error('submit socket closed'), {code: 'AUTHORITY_UNAVAILABLE'});
+  };
+  const pending = one.commit();
+  await submitStarted.promise;
+  await one.close();
+  releaseSubmit.resolve();
+  const result = await pending;
+  assert.equal(result.status, 'rejected');
+  assert.equal(result.code, 'AUTHORITY_OUTCOME_UNKNOWN');
+  assert.equal(result.submitted, true);
+  assert.equal(result.outcome, 'unknown');
+  assert.equal(one.debug().connected, false);
+  assert.match(one.debug().message, /disconnected/i);
+});
+
+test('root conflict survives nested navigation while the inner object remains unbound', async t => {
+  const {runtime, transports, first, second, one, two} = await fixture();
+  t.after(async () => { await one.close(); await two.close(); await first.engine.close(); await second.engine.close(); await runtime.dispatch({op: 'shutdown'}); });
+  await one.connect();
+  await two.connect();
+  first.engine.world.spaces.root.entities.relic.q[0] = 3;
+  await one.syncLocal();
+  first.engine.enterNested('portal');
+  await one.selectEntity('innerRelic');
+  assert.equal(one.debug().mapping.code, 'PHONE_OBJECT_UNBOUND');
+  second.engine.world.spaces.root.entities.relic.q[0] = 9;
+  await two.syncLocal();
+  await two.commit();
+  await one.read();
+  // The adapter only owns the local engine through its snapshot provider; the
+  // explicit navigation itself remains phone-local.
+  first.engine.exitNested();
+  await one.selectEntity('relic');
+  assert.equal(one.debug().conflict?.bindingId, 'studio.node.echo');
+  const blocked = await one.commit();
+  assert.equal(blocked.code, 'STUDIO_CONFLICT');
+  assert.equal(blocked.retryArmed, true);
+  const accepted = await one.commit();
+  assert.equal(accepted.status, 'accepted');
+  assert.equal(one.debug().acceptedEntity.q[0], 3);
+  assert.equal(transports[0].submitCalls.length >= 1, true);
+});
+
+test('a failed admission cannot overwrite a newer connected session after deferred disposal', async t => {
+  const runtime = await MountedRuntime.open({store: 'memory'});
+  const source = await initialEnvelope('admission-disposal-race');
+  const firstFactory = deferred();
+  const secondFactory = deferred();
+  const admissionStarted = deferred();
+  const failAdmission = deferred();
+  const closeStarted = deferred();
+  const releaseClose = deferred();
+  let factoryCalls = 0;
+  const adapter = new PhoneAuthorityAdapter({
+    snapshot: () => source.engine.snapshot(),
+    transportFactory: async () => (++factoryCalls === 1 ? firstFactory.promise : secondFactory.promise),
+  });
+  const failing = {
+    closed: false,
+    async admit() { admissionStarted.resolve(); await failAdmission.promise; throw new Error('admission failed'); },
+    async close() { closeStarted.resolve(); await releaseClose.promise; this.closed = true; },
+  };
+  const winner = {
+    closed: false,
+    current: null,
+    session: null,
+    async admit(seat) {
+      const result = await runtime.dispatch({op: 'open', args: {seat}});
+      this.current = copy(result.state); this.session = copy(result.session); this.token = result.token;
+      return {token: this.token, session: copy(this.session), state: copy(result.state)};
+    },
+    async close() { this.closed = true; },
+  };
+  t.after(async () => { await adapter.close(); await source.engine.close(); await runtime.dispatch({op: 'shutdown'}); });
+
+  const older = adapter.connect();
+  firstFactory.resolve(failing);
+  await admissionStarted.promise;
+  failAdmission.resolve();
+  await closeStarted.promise;
+  const newer = adapter.connect();
+  secondFactory.resolve(winner);
+  const connected = await newer;
+  assert.equal(connected.connected, true);
+  releaseClose.resolve();
+  const stale = await older;
+  assert.equal(stale.code, 'AUTHORITY_SESSION_CHANGED');
+  assert.equal(adapter.transport, winner);
+  assert.match(adapter.debug().message, /Connected to canonical seat/);
+});
+
