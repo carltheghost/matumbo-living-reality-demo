@@ -1,6 +1,6 @@
 /** Local canonical-engine snapshots. Hashes detect corruption; registries are
  * cross-checked against journal evidence before a snapshot becomes live. */
-import { createTokenEngine, CONFIG, quoteHash, receiptChainHash } from "./token.js";
+import { createTokenEngine, CONFIG, MARKET_ACTIONS, mulDivFloor, quoteHash, receiptChainHash } from "./token.js";
 
 export const TOKEN_STORAGE_KEY = "tumbo.token.engine.v2";
 
@@ -99,12 +99,62 @@ function validateIssuedQuotes(data, engine) {
   return { issued, quotes };
 }
 
-function validateReceiptRegistry(data, journals, issued, executed, cancelled) {
+function quoteIdFromSettlementJournal(journal) {
+  if (!MARKET_ACTIONS.includes(journal.action)) return null;
+  const prefix = "quote ";
+  if (typeof journal.memo !== "string" || !journal.memo.startsWith(prefix) || journal.memo.length <= prefix.length) {
+    throw new Error("market settlement journal has no canonical quote identity");
+  }
+  return journal.memo.slice(prefix.length);
+}
+
+function expectedQuotePostings(quote, engine) {
+  const tithe = mulDivFloor(quote.amountIn, engine.config.titheBps, engine.config.titheDenominator);
+  const postings = [
+    { account: quote.from, asset: quote.fromAsset, amount: -quote.amountIn },
+    { account: "sys:market", asset: quote.fromAsset, amount: quote.amountIn - tithe },
+  ];
+  if (tithe > 0) postings.push({ account: "sys:void", asset: quote.fromAsset, amount: tithe });
+  postings.push(
+    { account: "sys:market", asset: quote.toAsset, amount: -quote.amountOut },
+    { account: quote.from, asset: quote.toAsset, amount: quote.amountOut },
+  );
+  return postings;
+}
+
+function validateQuoteSettlement(journal, receipt, quoteId, quote, engine) {
+  if (!quote || quote.id !== quoteId || quote.hash !== quoteHash(quote)) {
+    throw new Error("quote settlement has no matching issued quote");
+  }
+  engine._validateQuoteShape(quote);
+  if (quote.action !== journal.action || receipt.quoteId !== quoteId || receipt.action !== quote.action ||
+      receipt.from !== quote.from || receipt.to !== quote.to || receipt.fromAsset !== quote.fromAsset ||
+      receipt.toAsset !== quote.toAsset || receipt.amountIn !== quote.amountIn || receipt.amountOut !== quote.amountOut) {
+    throw new Error("quote settlement identity differs from journal evidence");
+  }
+  const expected = expectedQuotePostings(quote, engine);
+  const expectedTithe = expected.find((leg) => leg.account === "sys:void")?.amount ?? 0;
+  if (!sameJson(journal.postings, expected) || receipt.tithe !== expectedTithe) {
+    throw new Error("quote settlement postings differ from issued quote");
+  }
+}
+
+function validateReceiptRegistry(data, journals, issued, executed, cancelled, quotes, engine) {
   if (!Array.isArray(data.receipts)) throw new Error("malformed receipt registry");
   const receipts = new Map();
   const derivedExecuted = new Set();
   const derivedCancelled = new Set();
   const normalReceiptKeys = new Set();
+  const settlementQuoteIds = new Map();
+  const seenSettlementQuoteIds = new Set();
+  for (const [key, journal] of journals) {
+    const quoteId = quoteIdFromSettlementJournal(journal);
+    if (quoteId) {
+      if (seenSettlementQuoteIds.has(quoteId)) throw new Error("quote settlement appears more than once in journal evidence");
+      seenSettlementQuoteIds.add(quoteId);
+      settlementQuoteIds.set(key, quoteId);
+    }
+  }
   for (const entry of data.receipts) {
     if (!Array.isArray(entry) || entry.length !== 2 || typeof entry[0] !== "string" || !entry[1] || typeof entry[1] !== "object") {
       throw new Error("malformed receipt registry");
@@ -122,20 +172,15 @@ function validateReceiptRegistry(data, journals, issued, executed, cancelled) {
     if (!journal || receipt.id !== journal.id || receipt.hash !== journal.hash || receipt.action !== journal.action || receipt.tick !== journal.tick) {
       throw new Error("receipt registry differs from journal evidence");
     }
-    if (receipt.postings && !sameJson(receipt.postings, journal.postings)) throw new Error("receipt postings differ from journal evidence");
+    if (receipt.kind !== "receipt" || !sameJson(receipt.postings, journal.postings)) throw new Error("receipt postings differ from journal evidence");
     normalReceiptKeys.add(key);
-    if (receipt.quoteId) {
-      const quoteId = receipt.quoteId;
-      if (!issued.has(quoteId) || !executed.has(quoteId)) throw new Error("quote receipt has an unbound lifecycle registry");
-      const quote = data.issuedQuotes?.find((entry) => entry?.[0] === quoteId)?.[1];
-      if (!quote || quote.hash !== receiptHashForQuote(quote)) throw new Error("quote receipt has no matching issued quote");
-      const paid = journal.postings.find((leg) => leg.account === receipt.from && leg.asset === receipt.fromAsset && leg.amount < 0);
-      const received = journal.postings.find((leg) => leg.account === receipt.from && leg.asset === receipt.toAsset && leg.amount > 0);
-      const tithe = journal.postings.filter((leg) => leg.account === "sys:void").reduce((sum, leg) => sum + leg.amount, 0);
-      if (receipt.to !== "sys:market" || paid?.amount !== -receipt.amountIn || received?.amount !== receipt.amountOut || tithe !== receipt.tithe) {
-        throw new Error("quote receipt metadata differs from settled amounts");
-      }
-      derivedExecuted.add(quoteId);
+    const settlementQuoteId = settlementQuoteIds.get(key);
+    if (settlementQuoteId) {
+      if (!issued.has(settlementQuoteId) || !executed.has(settlementQuoteId)) throw new Error("quote settlement has an unbound lifecycle registry");
+      validateQuoteSettlement(journal, receipt, settlementQuoteId, quotes.get(settlementQuoteId), engine);
+      derivedExecuted.add(settlementQuoteId);
+    } else if (receipt.quoteId !== undefined && receipt.quoteId !== null) {
+      throw new Error("non-settlement receipt has quote identity");
     }
     receipts.set(key, Object.freeze({ ...receipt, postings: journal.postings }));
   }
@@ -145,10 +190,9 @@ function validateReceiptRegistry(data, journals, issued, executed, cancelled) {
   exactSet(registryJournalKeys, normalReceiptKeys, "receipts");
   exactSet(executed, derivedExecuted, "executed quotes");
   exactSet(cancelled, derivedCancelled, "cancelled quotes");
+  exactSet(new Set(settlementQuoteIds.values()), derivedExecuted, "settlement quote identities");
   return receipts;
 }
-
-function receiptHashForQuote(quote) { return quoteHash(quote); }
 
 export function loadTokenEngine(raw, { config = CONFIG } = {}) {
   const data = typeof raw === "string" ? JSON.parse(raw) : raw;
@@ -211,7 +255,7 @@ export function loadTokenEngine(raw, { config = CONFIG } = {}) {
   if ([...executed, ...cancelled].some((id) => !issued.has(id)) || [...executed].some((id) => cancelled.has(id))) {
     throw new Error("token snapshot lifecycle registry is inconsistent");
   }
-  const receiptRegistry = validateReceiptRegistry(data, journals, issued, executed, cancelled);
+  const receiptRegistry = validateReceiptRegistry(data, journals, issued, executed, cancelled, quotes, engine);
 
   const derivedReversed = new Set(data.journals.filter((row) => row.action === "reverse" && row.links?.reversesKey).map((row) => row.links.reversesKey));
   exactSet(reversed, derivedReversed, "reversed journals");

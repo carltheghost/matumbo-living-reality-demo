@@ -192,6 +192,23 @@ test("snapshot restores balances, journal identities, pending quotes and safe se
   assert.equal(reloaded.ledger.verifyChain().ok, true);
 });
 
+test("snapshot rejects combined quote identity and executed-registry erasure", () => {
+  const engine = createTokenEngine();
+  engine.faucet("u:alice", "TUMBO", 10_000, { idempotencyKey: "fund" });
+  const offered = engine.quote({ action: "buy", from: "u:alice", fromAsset: "TUMBO", toAsset: "sMIMAS", amountIn: 2_000 });
+  engine.execute(offered, { idempotencyKey: "settlement" });
+
+  const data = JSON.parse(serializeTokenEngine(engine));
+  const settlement = data.receipts.find(([key]) => key === "settlement");
+  assert.ok(settlement);
+  delete settlement[1].quoteId;
+  data.executed = [];
+
+  assert.throws(() => loadTokenEngine(JSON.stringify(data)), /quote|settlement|lifecycle|registry/i);
+  assert.equal(engine.ledger.verifyChain().ok, true);
+  assert.equal(engine.balance("u:alice", "sMIMAS"), 20_000);
+});
+
 test("snapshot restores cancellation and reversal without enabling a replayed trade", () => {
   const engine = funded();
   const pending = quote(engine);
