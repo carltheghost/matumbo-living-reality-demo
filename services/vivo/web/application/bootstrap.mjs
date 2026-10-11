@@ -5,8 +5,10 @@ import {LocalTransport,requestJSON} from './transport.mjs';
 import {ApplicationInputs} from './interactions.mjs';
 import {eventTime,frameOf,screenTarget,viewBasis,viewAngles,projectAccepted,timestampedCameraClass} from './adapters.mjs';
 import {DensityOverlay} from './density-overlay.mjs';
+import {installCameraConstraintFallback,normalizeCameraFacing} from './camera-compat.mjs';
 
 const $=id=>document.getElementById(id),copy=structuredClone;
+installCameraConstraintFallback();
 const renderer=new Renderer($('world'),$('overlay'));
 const previews=new Map(),grids=new Map(),densityCache=new Map();
 let transport=null,host=null,inputs=null,state=null,selected=null,poll=null,densityPoll=null,densityRequest=0,online=false,viewTail=Promise.resolve();
@@ -316,14 +318,14 @@ $('homeView').onclick=safe(()=>editEye(eye=>{eye.q.fill(0);eye.basis=viewBasis(e
 $('followSelected').onclick=safe(()=>editEye(eye=>{const e=currentEntity();eye.q=[...e.q];for(let a=3;a<eye.dimension;a++)eye.slice['x'+(a+1)]=eye.q[a];}));
 
 const TimedCamera=timestampedCameraClass(Camera);
-const camera=new TimedCamera($('cameraVideo'),text=>{$('cameraState').textContent=text;},event=>{
+const camera=normalizeCameraFacing(new TimedCamera($('cameraVideo'),text=>{$('cameraState').textContent=text;},event=>{
   if(event.type==='lost'){renderer.pointer=null;hand=null;void cancelGesture('hand','hand-source-lost').catch(e=>say(e.message));return;}
   if(event.type==='aim'){renderer.pointer=event.point;return;}
   if(!state||$('panel').open){hand=null;void cancelGesture('hand','controls-opened').catch(e=>say(e.message));return;}
   if(event.type==='grab'){const id=renderer.at(...event.point);if(!id)return;hand={epoch:event.epoch};void beginGesture('hand','hand',id,event.point,event.observedAt).catch(e=>say(e.message));}
   if(event.type==='move'&&hand?.epoch===event.epoch)safe(moveGesture)('hand',event.point,event.observedAt);
   if(event.type==='release'){hand=null;void endGesture('hand',event.point,event.observedAt).catch(e=>say(e.message));}
-},points=>{renderer.hand=$('skeleton').checked?points:[];});
+},points=>{renderer.hand=$('skeleton').checked?points:[];}));
 for(const[id,facing]of[['frontCamera','user'],['backCamera','environment']])$(id).onclick=safe(async()=>{$('panel').close();await camera.start(facing);updateUI();});
 $('previewCamera').onclick=safe(async()=>{$('panel').close();await camera.start('environment',false);updateUI();});
 $('stopCamera').onclick=()=>{camera.stop();updateUI();};$('visibility').onchange=()=>{camera.profile=$('visibility').value;camera.sampleLuma();};

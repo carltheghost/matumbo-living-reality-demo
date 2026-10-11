@@ -4,8 +4,10 @@ import {GripHost} from '/services/vivo/web/authority/grip-host.mjs';
 import {RemoteTransport} from './remote-transport.mjs';
 import {ApplicationInputs} from './interactions.mjs';
 import {eventTime,screenTarget,viewBasis,projectAccepted,timestampedCameraClass} from './adapters.mjs';
+import {installCameraConstraintFallback,normalizeCameraFacing} from './camera-compat.mjs';
 
 const $=id=>document.getElementById(id),element=(tag,p={})=>Object.assign(document.createElement(tag),p);
+installCameraConstraintFallback();
 const renderer=new Renderer($('world'),$('overlay')),grids=new Map(),previews=new Map();
 let transport=null,host=null,inputs=null,state=null,selected=null,hand=null,online=false,role=null;
 const say=t=>{$('status').textContent=t;},safe=fn=>async(...a)=>{try{return await fn(...a);}catch(e){say(e.code||e.message||String(e));}};
@@ -137,13 +139,13 @@ $('overlay').addEventListener('pointermove',event=>{const key=pointers.get(event
 for(const type of ['pointerup','pointercancel'])$('overlay').addEventListener(type,event=>{const key=pointers.get(event.pointerId);if(!key)return;pointers.delete(event.pointerId);if(type==='pointerup')void endGesture(key,[event.clientX,event.clientY],eventTime(event)).catch(e=>say(e.code||e.message));else void inputs.cancel(key,'pointercancel').catch(e=>say(e.code||e.message));});
 
 const TimedCamera=timestampedCameraClass(Camera);
-const camera=new TimedCamera($('cameraVideo'),text=>{$('cameraState').textContent=text;},event=>{
+const camera=normalizeCameraFacing(new TimedCamera($('cameraVideo'),text=>{$('cameraState').textContent=text;},event=>{
  if(event.type==='lost'){renderer.pointer=null;hand=null;void inputs?.cancel('hand','hand-source-lost').catch(()=>{});return;}
  if(event.type==='aim'){renderer.pointer=event.point;return;}if(!state||$('panel').open)return;
  if(event.type==='grab'){const id=renderer.at(...event.point);if(id){hand={epoch:event.epoch};void beginGesture('hand','hand',id,event.point,event.observedAt).catch(e=>say(e.code||e.message));}}
  if(event.type==='move'&&hand?.epoch===event.epoch)moveGesture('hand',event.point,event.observedAt);
  if(event.type==='release'){hand=null;void endGesture('hand',event.point,event.observedAt).catch(e=>say(e.code||e.message));}
-},points=>renderer.hand=$('skeleton').checked?points:[]);
+},points=>renderer.hand=$('skeleton').checked?points:[]));
 for(const[id,facing]of[['frontCamera','user'],['backCamera','environment']])$(id).onclick=safe(async()=>{$('panel').close();await camera.start(facing);updateUI();});
 $('previewCamera').onclick=safe(async()=>{$('panel').close();await camera.start('environment',false);updateUI();});$('stopCamera').onclick=()=>{camera.stop();updateUI();};$('visibility').onchange=()=>{camera.profile=$('visibility').value;camera.sampleLuma();};$('torch').onclick=safe(()=>camera.light());$('exposure').onclick=safe(()=>camera.exposure());
 

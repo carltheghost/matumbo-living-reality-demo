@@ -121,6 +121,24 @@ class AdaptiveApplicationHost:
             self._wake.set()
         return self.status()
 
+    async def pause(self, reason="MATERIAL_PAUSED"):
+        """Record an authority-owned pause without treating it as a manual stop.
+
+        The Node authority can pause material when the last local session is
+        closed. Keep that lifecycle evidence visible to the Python host so a
+        later rejoin is observably paused for the same reason and can resume
+        cleanly. Explicit materialRun(False) still uses set_running(False) and
+        intentionally clears this reason.
+        """
+        if not isinstance(reason, str) or not re.fullmatch(r"[A-Z][A-Z0-9_]{0,63}", reason):
+            raise AdaptiveHostError("MATERIAL_PAUSE_REASON")
+        if self._running or self._pause_reason != reason:
+            self._running = False
+            self._pause_reason = reason
+            self._generation += 1
+            self._wake.set()
+        return self.status()
+
     async def stop(self):
         self._running = False
         self._stopped = True

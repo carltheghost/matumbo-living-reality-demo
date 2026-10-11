@@ -312,6 +312,7 @@ def studio_index():
  #vivaLightHud{left:37px!important;right:auto!important;top:566px!important;bottom:auto!important;max-width:250px!important}
 }
 </style>'''
+    adapter_source = (ROOT / 'web/studio-hands-adapter.mjs').read_text(encoding='utf-8')
     asset_bridge = '''<script id="vivoLocalAssetBridge">(function(){
   const origin=location.origin,assets=Object.freeze({bundle:new URL('/vendor/field-lab/vision_bundle.mjs',origin).href,wasm:new URL('/vendor/field-lab/wasm',origin).href,model:new URL('/vendor/field-lab/hand_landmarker.task',origin).href});
   window.FieldHandAssets=assets;
@@ -343,7 +344,7 @@ def studio_index():
     return originalModelBytes.call(this,kind,local,signal);
    };
   }
- })();</script>'''
+  })();</script>''' + '<script type="module" data-vivo-studio-hands="1">\n' + adapter_source + '\n</script>'
     entry = '''<nav id="vivoLocalEntry" aria-label="Vivo local surfaces">
   <span>PRIMARY · FULL STUDIO</span>
   <a href="/local/accepted/" target="_blank" rel="noopener noreferrer" aria-label="Open accepted phase preview in a new tab">Accepted phase preview ↗</a>
@@ -430,7 +431,7 @@ def make_local_app(data_dir=None, *, phase=False, adaptive=False, max_events=655
         capabilities = state.get('capabilities') if isinstance(state, dict) else result.get('capabilities')
         material = capabilities.get('material') if isinstance(capabilities, dict) else None
         if isinstance(material, dict) and material.get('running') is False and material_host.status()['running']:
-            await material_host.set_running(False)
+            await material_host.pause('MATERIAL_PAUSED')
 
     async def root(request):
         require_local(request)

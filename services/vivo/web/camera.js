@@ -4,14 +4,8 @@ export class OneEuro{
  update(x,t){if(this.last===null||t-this.last>500||t<=this.last){this.last=t;this.raw=this.x=x;this.dx=0;return x;}const dt=(t-this.last)/1000,a=f=>1/(1+1/(2*Math.PI*f*dt));this.dx+=a(1)*((x-this.raw)/dt-this.dx);this.x+=a(2.8+1.8*Math.abs(this.dx))*(x-this.x);this.last=t;this.raw=x;return this.x;}
 }
 export function fitPoint(p,vw,vh,w,h,mirror){const scale=Math.max(w/vw,h/vh);return [(mirror?1-p.x:p.x)*vw*scale-(vw*scale-w)/2,p.y*vh*scale-(vh*scale-h)/2];}
-const cameraFacing=new Set(['user','environment']);
-const cameraPreference=facing=>({audio:false,video:{...(cameraFacing.has(facing)?{facingMode:{ideal:facing}}:{}),width:{ideal:640},height:{ideal:480},frameRate:{ideal:24,max:30}}});
-const cameraGeneric=()=>({audio:false,video:{width:{ideal:640},height:{ideal:480},frameRate:{ideal:24,max:30}}});
-const canRetryCameraConstraints=error=>['OverconstrainedError','NotFoundError','TypeError'].includes(error?.name);
-export function cameraConstraints(facing,generic=false){return generic?cameraGeneric():cameraPreference(facing);}
-export function cameraConstraintFallbackAllowed(error){return canRetryCameraConstraints(error);}
 export class Camera{
- constructor(video,onState,onGesture,onHands){this.video=video;this.onState=onState;this.onGesture=onGesture;this.onHands=onHands;this.epoch=0;this.stream=null;this.worker=null;this.busy=false;this.requestedFacing='user';this.facing=null;this.frame=0;this.lastResult=0;this.sequence=0;this.lastSequence=0;this.lastTime=-1;this.arm=0;this.held=false;this.fx=new OneEuro();this.fy=new OneEuro();this.age=0;this.inferenceMs=0;this.profile='auto';this.brightness=0;this.mean=0;this.lastLuma=0;this.ready=false;this.sampler=document.createElement('canvas');this.sampler.width=40;this.sampler.height=30;this.sctx=this.sampler.getContext('2d',{willReadFrequently:true});
+ constructor(video,onState,onGesture,onHands){this.video=video;this.onState=onState;this.onGesture=onGesture;this.onHands=onHands;this.epoch=0;this.stream=null;this.worker=null;this.busy=false;this.facing='user';this.frame=0;this.lastResult=0;this.sequence=0;this.lastSequence=0;this.lastTime=-1;this.arm=0;this.held=false;this.fx=new OneEuro();this.fy=new OneEuro();this.age=0;this.inferenceMs=0;this.profile='auto';this.brightness=0;this.mean=0;this.lastLuma=0;this.ready=false;this.sampler=document.createElement('canvas');this.sampler.width=40;this.sampler.height=30;this.sctx=this.sampler.getContext('2d',{willReadFrequently:true});
   document.addEventListener('visibilitychange',()=>{if(document.hidden)this.stop('Tab hidden; camera released');});window.addEventListener('pagehide',()=>this.stop());window.addEventListener('keydown',e=>{if(e.key==='Escape')this.stop('Camera stopped');});
  }
  lost(message){if(this.held)this.onGesture({type:'release',reason:message});this.held=false;this.arm=0;this.onHands([]);this.onGesture({type:'lost'});}
@@ -19,21 +13,14 @@ export class Camera{
   this.epoch++;cancelAnimationFrame(this.frame);this.worker?.terminate();this.worker=null;this.stream?.getTracks().forEach(t=>t.stop());this.stream=null;this.video.pause();this.video.srcObject=null;this.busy=false;this.ready=false;this.lost(message);document.body.classList.remove('camera-live');this.onState(message);clearTimeout(this.timer);if(this.initReject){const reject=this.initReject;this.initReject=null;reject(Error('Tracking initialization cancelled'));}
  }
  async start(facing='user',tracking=true){
-  this.stop();const epoch=this.epoch;this.requestedFacing=facing;this.facing=null;this.onState('Waiting for camera permission…');
+  this.stop();const epoch=this.epoch;this.facing=facing;this.onState('Waiting for camera permission…');
   try{
    if(!['https:','http:'].includes(location.protocol)||!isSecureContext||!navigator.mediaDevices?.getUserMedia)throw Error('Use a direct HTTPS page (or localhost), not a Downloads/content:// preview.');
    let stream;
-   try{stream=await navigator.mediaDevices.getUserMedia(cameraConstraints(facing));}
-   catch(e){
-    // Facing is a preference. Ordinary USB, virtual, linked-phone and
-    // browser-provided cameras may not expose facingMode at all. Preserve
-    // permission errors, but retry a generic video request after a
-    // constraint/device-selection failure instead of rejecting usable video.
-    if(!cameraConstraintFallbackAllowed(e))throw e;
-    stream=await navigator.mediaDevices.getUserMedia(cameraConstraints(facing,true));
-   }
+   try{stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:facing},width:{ideal:640},height:{ideal:480},frameRate:{ideal:24,max:30}}});}
+   catch(e){if(e.name==='OverconstrainedError')stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:facing}});else throw e;}
    if(epoch!==this.epoch){stream.getTracks().forEach(t=>t.stop());return false;}
-   this.stream=stream;const track=stream.getVideoTracks()[0];this.facing=track.getSettings?.().facingMode||null;track.addEventListener('ended',()=>{if(epoch===this.epoch)this.stop('Camera disconnected');});
+   this.stream=stream;const track=stream.getVideoTracks()[0];this.facing=track.getSettings?.().facingMode||facing;track.addEventListener('ended',()=>{if(epoch===this.epoch)this.stop('Camera disconnected');});
    this.video.srcObject=stream;this.video.muted=true;this.video.style.transform=this.facing==='user'?'scaleX(-1)':'none';await this.video.play();if(epoch!==this.epoch)return false;
    if(!this.video.videoWidth)await new Promise((resolve,reject)=>{const t=setTimeout(()=>reject(Error('Camera produced no frames')),12000);this.video.addEventListener('loadeddata',()=>{clearTimeout(t);resolve();},{once:true});});
    if(epoch!==this.epoch)return false;document.body.classList.add('camera-live');if(!tracking){this.keepPreview('VIDEO READY · touch controls; hand tracking is off');return true;}this.onState('Video ready. Loading local hand model…');
@@ -80,5 +67,5 @@ export class Camera{
  }
  async light(){if(!this.stream)throw Error('Start the back camera first');const t=this.stream.getVideoTracks()[0],c=t.getCapabilities?.();if(!c?.torch)throw Error('This camera/browser does not expose a torch');const current=t.getSettings?.().torch;await t.applyConstraints({advanced:[{torch:!current}]});return !current;}
  async exposure(){if(!this.stream)throw Error('Start a camera first');const t=this.stream.getVideoTracks()[0],c=t.getCapabilities?.().exposureCompensation;if(!c)throw Error('This camera/browser does not expose exposure compensation');const x=clamp((t.getSettings?.().exposureCompensation||0)-(c.step||.5),c.min,c.max);await t.applyConstraints({advanced:[{exposureCompensation:x}]});return x;}
- diagnostics(){return {stream:!!this.stream,modelReady:this.ready,requestedFacing:this.requestedFacing,facing:this.facing,frameAgeMs:this.age,inferenceMs:this.inferenceMs,handRegionMean:this.mean,whiteClippedFraction:this.clipped,secure:isSecureContext,protocol:location.protocol,framesUploaded:false};}
+ diagnostics(){return {stream:!!this.stream,modelReady:this.ready,facing:this.facing,frameAgeMs:this.age,inferenceMs:this.inferenceMs,handRegionMean:this.mean,whiteClippedFraction:this.clipped,secure:isSecureContext,protocol:location.protocol,framesUploaded:false};}
 }

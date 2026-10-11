@@ -1,4 +1,7 @@
 import {Camera} from '/camera.js';
+import {installCameraConstraintFallback,normalizeCameraFacing} from './camera-compat.mjs';
+
+installCameraConstraintFallback();
 
 const $=id=>document.getElementById(id);
 const startedAt=new Date().toISOString();
@@ -126,7 +129,7 @@ function hands(points){
   report.camera.maxHandsSeen=Math.max(report.camera.maxHandsSeen,1);
   update();
 }
-const camera=new Camera($('cameraVideo'),cameraState,gesture,hands);
+const camera=normalizeCameraFacing(new Camera($('cameraVideo'),cameraState,gesture,hands));
 function updateCameraMetrics(){
   const d=camera.diagnostics();
   report.camera.diagnostics={

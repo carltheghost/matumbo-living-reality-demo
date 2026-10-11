@@ -89,7 +89,9 @@ class AdaptiveEntrypointTests(unittest.IsolatedAsyncioTestCase):
 
         rejoined = await self.open('one')
         state = await self.wait_for(rejoined['token'], lambda current:
-            not current['materialHost']['running'] and current['materialHost']['fault'] is None)
+            not current['materialHost']['running'] and
+            current['materialHost']['pauseReason'] == 'MATERIAL_PAUSED' and
+            current['materialHost']['fault'] is None)
         self.assertEqual(state['materialHost']['pauseReason'], 'MATERIAL_PAUSED')
         self.assertGreaterEqual(state['materialHost']['acceptedSteps'], accepted_before_close)
 
