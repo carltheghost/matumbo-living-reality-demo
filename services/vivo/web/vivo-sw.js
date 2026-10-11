@@ -6,7 +6,7 @@ const SHELL = [
   'application/adapters.mjs', 'authority/grip-host.mjs', 'authority/lease-authority.mjs',
   'authority/material-authority.mjs', 'application/bootstrap.mjs', 'application/transport.mjs',
   'application/interactions.mjs', 'application/density-overlay.mjs',
-  'phone/manifest.webmanifest', 'phone/icon.svg', 'phone/bootstrap.mjs', 'phone/client.mjs',
+  'phone/bootstrap.mjs', 'phone/client.mjs', 'phone/two-hand-camera.mjs', 'phone/two-hand-worker.mjs',
   'phone/engine-worker.mjs', 'phone/engine.mjs', 'phone/storage.mjs', 'phone/agent-tools.mjs',
   'phone/bridge.mjs', 'phone/projection.mjs', 'phone/hand-gestures.mjs',
 ];

@@ -177,6 +177,16 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 if (url != null && !isTrustedVivoUrl(Uri.parse(url))) view?.stopLoading()
                 super.onPageStarted(view, url, favicon)
             }
+            override fun onPageFinished(view: WebView?, url: String?) {
+                super.onPageFinished(view, url)
+                val uri = url?.let { runCatching { Uri.parse(it) }.getOrNull() } ?: return
+                val canonicalPage = uri.path == PAGES_PATH_PREFIX || uri.path == PAGES_PATH_PREFIX + "index.html"
+                if (!canonicalPage || !isTrustedVivoUrl(uri)) return
+                view?.evaluateJavascript(
+                    "(async()=>{await import(new URL('phone/bootstrap.mjs',location.href).href)})().catch(error=>console.error('Vivo phone stage failed',error));",
+                    null
+                )
+            }
         }
         webView.webChromeClient = object : WebChromeClient() {
             override fun onPermissionRequest(request: PermissionRequest) {
@@ -471,3 +481,4 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         const val NOTIFICATION_CHANNEL = "vivo-agent"
     }
 }
+

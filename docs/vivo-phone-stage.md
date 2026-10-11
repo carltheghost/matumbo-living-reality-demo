@@ -1,14 +1,14 @@
 # Viva phone stage
 
-GitHub Pages remains the canonical Vivo UI. The Android Companion is a hardened WebView host for that same Pages app; it does not ship a second renderer or a separate object model. The web implementation is additive under `services/vivo/web/phone/` and leaves the protected root Vivo entry points and deployment workflow alone.
+GitHub Pages remains the canonical Vivo UI. The Android Companion is a hardened WebView host for that same Pages app; it does not ship a second renderer or a separate object model. It imports `phone/bootstrap.mjs` after the canonical page loads, keeping the original Vivo entry points byte-identical. The phone implementation is additive under `services/vivo/web/phone/`.
 
 ## Runtime layout
 
 - `phone/engine.mjs` holds one sparse world snapshot, object IDs, material edges, and per-Eye projection state. The local root can use the selected 3D through 11D dimension, with an 11D nested world, without allocating dense higher-dimensional grids.
 - `phone/engine-worker.mjs` runs the local solver in a module Worker. The engine uses WebGPU/WebGL2/WASM capability detection only to describe available rendering/inference paths; the sparse solver has a JavaScript fallback.
 - `phone/storage.mjs` stores the world snapshot and Eyes in IndexedDB. The service worker caches the Vivo shell only. The optional hand-model cache is separate and can be cleared separately. API, websocket and camera traffic are excluded from the app-shell cache.
-- `hand-worker.js` owns hand inference. It asks the pinned MediaPipe Tasks Vision model for up to two hands, all 21 landmarks per hand, and tries the GPU delegate before CPU fallback. Video frames travel to that worker as transferable `ImageBitmap`s; no camera frame is sent to the Pages server, Android bridge, or service worker.
-- `phone/hand-gestures.mjs` matches hands across detection-order changes, derives five finger states and poses, and calculates two-hand span/roll. The existing renderer draws the 21-point skeleton for each detected hand.
+- `phone/two-hand-worker.mjs` owns phone hand inference. It asks the pinned MediaPipe Tasks Vision model for up to two hands, all 21 landmarks per hand, and tries the GPU delegate before CPU/WASM fallback. `phone/two-hand-camera.mjs` transfers local `ImageBitmap`s to that Worker; no camera frame is sent to the Pages server, Android bridge, or service worker.
+- `phone/hand-gestures.mjs` re-identifies both hands across detection-order changes, classifies all five fingers per hand, and calculates two-hand pinch-point span and roll. The phone module draws both complete skeletons as an overlay without changing the imported Vivo renderer.
 - `phone/bridge.mjs` connects the Pages UI to AndroidX `WebMessageListener` at the fixed GitHub Pages origin. The native tool list is filtered to the capabilities currently granted by the app and supported by OS/device state.
 - `android-companion/` loads the canonical Pages URL. `CapabilityBroker` combines explicit in-app grants with Android runtime permission, sensor, and optional AccessibilityService state before exposing a tool.
 
@@ -26,15 +26,15 @@ Use the front camera with palm and fingertips visible. Gestures in local phone m
 | Peace sign | Toggle overview and current-slice view |
 | Thumbs-up | Cycle the active material axis |
 | Open-hand swipe | Select the next or previous object |
-| Two hands, change fingertip span | Zoom the Eye |
-| Two hands, rotate the line between index fingertips | Rotate the Eye |
+| Two pinched hands, change the span between thumb-index pinch points | Zoom the Eye |
+| Two pinched hands, rotate the line between pinch points | Rotate the Eye |
 | Touch drag / two-finger pinch and rotate | Select or move objects; zoom and rotate without the camera |
 
-The tracker supports two hands because the pinned MediaPipe hand landmark task exposes a maximum of two. It draws every returned hand and all 21 landmarks; there is no one-hand-only selection path. Camera tracking and projection are separate controls. Browser and Android lifecycle rules may suspend camera capture when the display is backgrounded.
+The pinned MediaPipe hand landmark task supports up to two hands. Phone mode draws every returned hand and all 21 landmarks per hand, with visible status for thumb, index, middle, ring, and pinky; there is no one-hand-only selection path. Camera tracking and projection are separate controls. Browser and Android lifecycle rules may suspend camera capture when the display is backgrounded.
 
 ## Android Companion
 
-Install/run from `services/vivo/android-companion/`. The app opens `https://carltheghost.github.io/matumbo-living-reality-demo/services/vivo/web/` and only injects its message bridge at `https://carltheghost.github.io`. Navigation to other hosts opens outside the WebView; file/content URLs and cleartext traffic are disabled.
+Install/run from `services/vivo/android-companion/`. The app opens `https://carltheghost.github.io/matumbo-living-reality-demo/services/vivo/web/` and imports the phone stage only on the canonical Vivo page. Its message bridge accepts the fixed `https://carltheghost.github.io` origin. Navigation to other hosts opens outside the WebView; file/content URLs and cleartext traffic are disabled.
 
 Use **Capabilities** to select individual tools. Camera and notification grants also require Android's runtime permission. The optional accessibility path requires both the app kill-switch and the Android Accessibility settings switch. Turning the app switch off immediately removes accessibility tools, even if Android still has the service enabled.
 
@@ -63,3 +63,4 @@ The `Vivo phone stage` GitHub Actions workflow runs both jobs on pull requests a
 - ScreenProjection permission is a hook only. Actual TV, projector, or glasses routing is provided by Android/system/browser support and is not established by this repository.
 - Browser policies may stop or throttle camera frames when the page loses foreground visibility. `Hands-free Projection` keeps the web capture session requested across the route change, but the OS/browser remains authoritative.
 - The Android build and WebView bridge need a physical device or emulator for runtime acceptance; CI cannot validate OEM casting or camera behavior.
+
