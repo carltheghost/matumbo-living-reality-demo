@@ -21,6 +21,8 @@ test('camera guidance distinguishes an open panel, video-only preview, hand trac
   assert.equal(inputModeForCameraState({cameraLive: false, state: 'SECURE PAGE · Start a camera mode'}), 'touch');
   assert.equal(inputModeForCameraState({cameraLive: true, state: 'VIDEO LIVE · Back camera. Start hands to control it.'}), 'touch');
   assert.equal(inputModeForCameraState({cameraLive: true, state: '3 / 3 · Hand model ready. Show your whole hand.'}), 'hand');
+  assert.equal(inputModeForCameraState({cameraLive: true, state: 'Tracking off. Camera video remains on.'}), 'touch');
+  assert.equal(inputModeForCameraState({cameraLive: true, state: 'Hand tracking stopped: worker unavailable · camera and touch only'}), 'touch');
   assert.equal(inputModeForCameraState({cameraLive: false, state: 'OFF · Camera released. Nothing recorded.'}), 'touch');
 });
 
@@ -64,5 +66,7 @@ test('workshop and Studio routes load the application-owned overlay without repl
   assert.match(remoteMount, /vivo-ui-overlay/);
   assert.match(remoteMount, /source_name = name if name\.startswith\("vivo-ui-overlay\."\)/);
   assert.match(remoteMount, /asset\(request, n\)/);
+  assert.match(overlay, /role="group" aria-label="Choose an input guide"/);
+  assert.doesNotMatch(overlay, /role="tablist"|role="tab"|aria-selected/);
   assert.doesNotMatch(overlay, /event\.key === 'Tab'|event\.key\.startsWith\('Arrow'\)/);
 });

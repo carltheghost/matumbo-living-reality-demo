@@ -6,6 +6,8 @@ test('input guidance names the active pointer and the other supported paths',()=
   assert.equal(assemblyInputGuidance('mouse').mode,'mouse');
   assert.match(assemblyInputGuidance('touch').text,/touch tap.*hand point \+ pinch.*mouse drag \+ wheel/i);
   assert.equal(assemblyInputGuidance('xr').mode,'hand');
+  assert.match(assemblyInputGuidance('mouse').moveText,/Shift.*depth/i);
+  assert.doesNotMatch(assemblyInputGuidance('touch').moveText,/Shift/i);
 });
 
 test('object labels sit a consistent margin beside either side of the object',()=>{

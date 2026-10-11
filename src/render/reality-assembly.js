@@ -8,10 +8,15 @@ import {buildRealityAssemblyScene,LOD_FAR} from './reality-assembly-scene.js?v=2
 export const CLEAN_LANDING_CAMERA={position:[36,25,110],target:[0,2,0],fov:60,mergeThreshold:LOD_FAR};
 
 export function assemblyInputGuidance(pointerType = "mouse") {
-  const mode = pointerType === "mouse" || pointerType === "pen" ? pointerType : pointerType === "hand" || pointerType === "xr" ? "hand" : "touch";
+  const mode = pointerType === "mouse" || pointerType === "pen" ? "mouse" : pointerType === "hand" || pointerType === "xr" ? "hand" : "touch";
   return Object.freeze({
     mode,
     text: `CURRENT ${mode.toUpperCase()} · touch tap · hand point + pinch · mouse drag + wheel · select enter`,
+    moveText: mode === "mouse"
+      ? "Mouse: drag a tab; hold Shift while dragging for depth; wheel resizes."
+      : mode === "hand"
+        ? "Hand: point + pinch a tab; move to reposition; open hand releases."
+        : "Touch: drag a tab; pinch to zoom; tap to select.",
   });
 }
 
@@ -189,8 +194,9 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   find('[data-clean]').textContent='Objectum';find('[data-clean]').setAttribute('aria-label','Ostende vel cela superficiem electam');find('[data-clean]').setAttribute('aria-pressed','false');
   find('[data-world-label]').textContent='Unum punctum · scrolla vel preme ut accedas';
   const inputHint=find('[data-hover-label]');
-  const updateInputGuidance=(pointerType)=>{const guidance=assemblyInputGuidance(pointerType);root.dataset.inputMode=guidance.mode;inputHint.textContent=guidance.text;inputHint.setAttribute('aria-label',guidance.text);};
-  updateInputGuidance(globalThis.matchMedia?.('(pointer: coarse)').matches?'touch':'mouse');
+  let activeInputMode=globalThis.matchMedia?.('(pointer: coarse)').matches?'touch':'mouse';
+  const updateInputGuidance=(pointerType=activeInputMode, label=null)=>{const guidance=assemblyInputGuidance(pointerType);activeInputMode=guidance.mode;const text=label?`${label} · ${guidance.text}`:guidance.text;root.dataset.inputMode=guidance.mode;inputHint.textContent=text;inputHint.setAttribute('aria-label',text);};
+  updateInputGuidance(activeInputMode);
   const inputPointer=event=>{if(!root.hidden)updateInputGuidance(event.pointerType);};
   globalThis.addEventListener?.('pointerdown',inputPointer,{passive:true,capture:true});
   find('.assembly-inspector .assembly-eyebrow').textContent='Oculus Realitatis · instrumentum apertum';
@@ -205,7 +211,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   const readout=document.createElement('div');readout.className='assembly-size-readout';readout.innerHTML='<span>Magnitudo</span><strong data-size-readout>1.0×</strong><small>Scrolla super obiectum</small>';
   find('[data-tab-size]').closest('label').replaceWith(readout);find('.assembly-nudges').remove();
   find('.assembly-travel').remove();find('[data-interaction="orbit"]').remove();find('[data-interaction="move"]').textContent='Arrange';
-  find('[data-edit-note]').textContent='Trahe ad disponendum; Shift-trahe per profunditatem. Scrolla obiectum ad augendum.';
+  find('[data-edit-note]').textContent=assemblyInputGuidance(activeInputMode).moveText;
   all('.assembly-inspector dt').forEach((term,index)=>{term.textContent=['Identitas','Positio · x / y / z','Status','Fontes'][index]??term.textContent;});
   const objectSymbol=find('.assembly-object-symbol'),objectTitle=find('[data-title]'),objectDescription=find('[data-description]'),objectHero=document.createElement('div'),objectCopy=document.createElement('div'),stageBadge=document.createElement('span');
   objectHero.className='assembly-object-hero';objectCopy.className='assembly-object-copy';stageBadge.className='assembly-stage-badge';stageBadge.dataset.stageBadge='';
@@ -481,7 +487,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     find('[data-size-readout]').textContent=`${object.size.toFixed(1)}× · ${immutable?'Immutabilis':'Mutabilis'}`;
     const lockButton=find('[data-lock-toggle]');lockButton.textContent=immutable?'Muta':'Fige';lockButton.disabled=!surface.controls.canLock||state.mode==='past';
     find('[data-lock-state]').textContent=anchor?'Fixum':immutable?'Immutabilis':'Mutabilis';
-    find('[data-edit-note]').textContent=anchor?'Instrumentum fixum manet.':state.mode==='past'?'Historia sola legitur · redi ad Praesens.':immutable?'Libera instrumentum ut formam vel situm mutare possis.':'Trahe ad disponendum · Shift-trahe per profunditatem · super obiectum volve ad augendum.';
+    find('[data-edit-note]').textContent=anchor?'Instrumentum fixum manet.':state.mode==='past'?'Historia sola legitur · redi ad Praesens.':immutable?'Libera instrumentum ut formam vel situm mutare possis.':assemblyInputGuidance(activeInputMode).moveText;
     const activeReality=workspace.getCurrentNode();
     find('[data-mode]').textContent=state.mode==='past'?'Praeteritum · sola lectio':state.mode==='proposed'?'Propositum · non vivum':'Praesens · localis';
     find('[data-source-count]').textContent=String(surface.sourceCount);find('[data-boundary]').textContent=surface.boundary;
@@ -562,7 +568,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     onFrame?.();
   }
   function setMode(mode){viewMode=mode;all('[data-view]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.view===mode)));render();}
-  function setInteraction(next){interaction=next;all('[data-interaction]').forEach(button=>{button.setAttribute('aria-pressed',String(button.dataset.interaction===next));button.textContent=next==='move'?'Fini disponere':'Disponde';});say(next==='move'?'Trahe obiectum; Shift-trahe per profunditatem.':'Trahe ad circumferentiam · scrolla ad iter.');}
+  function setInteraction(next){interaction=next;all('[data-interaction]').forEach(button=>{button.setAttribute('aria-pressed',String(button.dataset.interaction===next));button.textContent=next==='move'?'Fini disponere':'Disponde';});say(next==='move'?assemblyInputGuidance(activeInputMode).moveText:assemblyInputGuidance(activeInputMode).text);}
   function moveBy(axis,steps){
     const object=currentObject();if(object.anchor||object.locked)throw Error(object.anchor?'Objectum fixum est.':'Primum hoc instrumentum libera.');
     const axisIndex={x:0,y:1,z:2}[axis],next=[...object.position];next[axisIndex]=Math.max(-60,Math.min(60,next[axisIndex]+steps));
@@ -677,7 +683,7 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
         spatial.apply({...state,objects:state.objects.map(object=>object.id===pointer.objectId?{...object,position:safePosition}:object)},{viewMode,hoveredId:pointer.objectId});
       }return;
     }
-    const id=spatial.resolve(hit?.object);if(id!==hovered){hovered=id;render();find('[data-hover-label]').textContent=id?`${labelFor(featureMap.get(id))} · clicca ut instrumentum aperias`:'Spatium: iter · obiectum: magnitudo · clic: ingredere';}
+    const id=spatial.resolve(hit?.object);if(id!==hovered){hovered=id;render();updateInputGuidance(activeInputMode,id?labelFor(featureMap.get(id)):null);}
   });
   const release=guard(event=>{
     if(!active||!pointer||event.pointerId!==pointer.id)return;const previous=pointer;pointer=null;controls.enabled=true;

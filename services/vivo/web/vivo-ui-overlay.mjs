@@ -27,8 +27,11 @@ export function inputModeForPointer(pointerType = '') {
 export function inputModeForCameraState({cameraLive = false, state = ''} = {}) {
   const text = String(state).trim();
   if (!cameraLive) return 'touch';
-  if (/video\s+(?:live|ready)|camera\s+(?:preview|only)|camera\s+(?:and|\+)\s+touch|tracking\s+is\s+off|model\s+failed|permission|blocked|denied|unavailable/i.test(text)) return 'touch';
-  return /hand|pinch|open hand|show your whole hand|tracking/i.test(text) ? 'hand' : 'touch';
+  // A live video stream is not the same thing as active hand input. Keep
+  // touch as the fallback for explicit stop/off/failure lifecycle messages;
+  // test those before the positive hand-language match below.
+  if (/video\s+(?:live|ready)|camera\s+(?:preview|only)|camera\s+(?:and|\+)\s+touch|tracking\s+(?:is\s+)?(?:off|stopped|paused)|hand\s+tracking\s+(?:is\s+)?(?:off|stopped|paused)|hands?\s+(?:off|stopped)|model\s+failed|permission|blocked|denied|unavailable/i.test(text)) return 'touch';
+  return /hand\s+(?:model\s+)?(?:ready|active)|hand\s+input|pinch|open hand|show your whole hand|tracking\s+(?:ready|active|enabled|on)/i.test(text) ? 'hand' : 'touch';
 }
 
 export function xrSummary({secureContext = false, api = false, ar = false, vr = false} = {}) {
@@ -66,7 +69,7 @@ function makeInputCard({rootClass = 'vivo-ui-overlay', workshop = false} = {}) {
   const root = document.createElement('section');
   root.className = workshop ? 'vivo-mode-dock' : 'vivo-input-card';
   root.setAttribute('aria-label', workshop ? 'Input guidance' : 'Studio input and XR guidance');
-  root.innerHTML = `<div class="vivo-card-heading"><strong>INPUT LENS</strong><span data-vivo-input-status>TOUCH READY</span>${workshop ? '' : '<button type="button" class="vivo-card-toggle" data-vivo-toggle aria-expanded="true">Hide</button>'}</div><div class="vivo-input-body"><div class="vivo-input-tabs" role="tablist" aria-label="Choose an input guide"><button type="button" role="tab" aria-selected="true" aria-pressed="true" data-vivo-mode="touch">Touch</button><button type="button" role="tab" aria-selected="false" aria-pressed="false" data-vivo-mode="hand">Hand</button><button type="button" role="tab" aria-selected="false" aria-pressed="false" data-vivo-mode="mouse">Mouse</button></div><p data-vivo-input-copy>${inputCopy('touch').text}</p><div class="vivo-xr-actions" ${workshop ? 'hidden' : ''}><button type="button" data-vivo-xr="ar">Enter AR</button><button type="button" data-vivo-xr="vr" disabled title="VR rendering is not exposed by this Studio route">Enter VR</button></div><div class="vivo-xr-state" role="status" aria-live="polite" data-vivo-xr-state>Checking local XR capability…</div><small>Input is a local projection. Shared state remains governed by the existing route and authority.</small></div>`;
+  root.innerHTML = `<div class="vivo-card-heading"><strong>INPUT LENS</strong><span data-vivo-input-status>TOUCH READY</span>${workshop ? '' : '<button type="button" class="vivo-card-toggle" data-vivo-toggle aria-expanded="true">Hide</button>'}</div><div class="vivo-input-body"><div class="vivo-input-tabs" role="group" aria-label="Choose an input guide"><button type="button" aria-pressed="true" data-vivo-mode="touch">Touch</button><button type="button" aria-pressed="false" data-vivo-mode="hand">Hand</button><button type="button" aria-pressed="false" data-vivo-mode="mouse">Mouse</button></div><p data-vivo-input-copy>${inputCopy('touch').text}</p><div class="vivo-xr-actions" ${workshop ? 'hidden' : ''}><button type="button" data-vivo-xr="ar">Enter AR</button><button type="button" data-vivo-xr="vr" disabled title="VR rendering is not exposed by this Studio route">Enter VR</button></div><div class="vivo-xr-state" role="status" aria-live="polite" data-vivo-xr-state>Checking local XR capability…</div><small>Input is a local projection. Shared state remains governed by the existing route and authority.</small></div>`;
   root.dataset.vivoRootClass = rootClass;
   return root;
 }
@@ -78,7 +81,6 @@ function applyInputMode(card, mode) {
   card.querySelectorAll('[data-vivo-mode]').forEach(button => {
     const selected = button.dataset.vivoMode === mode;
     button.setAttribute('aria-pressed', String(selected));
-    button.setAttribute('aria-selected', String(selected));
   });
   card.dataset.inputMode = mode;
 }
