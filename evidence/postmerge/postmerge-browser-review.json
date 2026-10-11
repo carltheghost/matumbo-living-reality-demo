@@ -1,0 +1,299 @@
+{
+  "schema": "vivo.postmerge-browser-review/2",
+  "base": "http://127.0.0.1:8877",
+  "viewport": [
+    1440,
+    1000
+  ],
+  "cameraPermissions": [],
+  "cameraRequested": false,
+  "passed": 11,
+  "failed": 0,
+  "checks": [
+    {
+      "name": "Primary Studio route opens",
+      "passed": true
+    },
+    {
+      "name": "Primary route keeps same-origin CSP",
+      "passed": true
+    },
+    {
+      "name": "Local camera asset adapter is present",
+      "passed": true,
+      "details": {
+        "source": {
+          "href": "/local/accepted/",
+          "target": "_blank",
+          "rel": "noopener noreferrer",
+          "bridgeScripts": [],
+          "handAssets": {
+            "bundle": "http://127.0.0.1:8877/vendor/field-lab/vision_bundle.mjs",
+            "wasm": "http://127.0.0.1:8877/vendor/field-lab/wasm",
+            "model": "http://127.0.0.1:8877/vendor/field-lab/hand_landmarker.task"
+          },
+          "cameraAssetTrace": {
+            "loadVisionCalls": 0,
+            "modelBytesCalls": [],
+            "cameraPresencePatched": true
+          },
+          "legacyBridge": false,
+          "bridgeSessionKeys": [],
+          "headButton": {
+            "disabled": true,
+            "text": "Head unavailable \u00b7 no local face model",
+            "title": "Head pointer unavailable on the local Studio route: no face landmarker model is vendored.",
+            "ariaLabel": "Head pointer unavailable on the local Studio route: no face landmarker model is vendored."
+          },
+          "centerHead": {
+            "disabled": true,
+            "text": "Center unavailable",
+            "title": "Head pointer unavailable on the local Studio route: no face landmarker model is vendored.",
+            "ariaLabel": "Head pointer unavailable on the local Studio route: no face landmarker model is vendored."
+          },
+          "cameraStream": false,
+          "cameraCalls": 0
+        },
+        "headLifecycle": [
+          {
+            "state": "camera-only",
+            "trackHead": true,
+            "centerHead": true,
+            "text": "Head unavailable \u00b7 no local face model",
+            "title": "Head pointer unavailable on the local Studio route: no face landmarker model is vendored."
+          },
+          {
+            "state": "flip",
+            "trackHead": true,
+            "centerHead": true,
+            "text": "Head unavailable \u00b7 no local face model",
+            "title": "Head pointer unavailable on the local Studio route: no face landmarker model is vendored."
+          },
+          {
+            "state": "stop",
+            "trackHead": true,
+            "centerHead": true,
+            "text": "Head unavailable \u00b7 no local face model",
+            "title": "Head pointer unavailable on the local Studio route: no face landmarker model is vendored."
+          }
+        ]
+      }
+    },
+    {
+      "name": "Local hand assets resolve under /vendor/field-lab",
+      "passed": true,
+      "details": {
+        "bundle": "http://127.0.0.1:8877/vendor/field-lab/vision_bundle.mjs",
+        "wasm": "http://127.0.0.1:8877/vendor/field-lab/wasm",
+        "model": "http://127.0.0.1:8877/vendor/field-lab/hand_landmarker.task"
+      }
+    },
+    {
+      "name": "Preview link is safe new-tab navigation",
+      "passed": true,
+      "details": {
+        "href": "/local/accepted/",
+        "target": "_blank",
+        "rel": "noopener noreferrer",
+        "bridgeScripts": [],
+        "handAssets": {
+          "bundle": "http://127.0.0.1:8877/vendor/field-lab/vision_bundle.mjs",
+          "wasm": "http://127.0.0.1:8877/vendor/field-lab/wasm",
+          "model": "http://127.0.0.1:8877/vendor/field-lab/hand_landmarker.task"
+        },
+        "cameraAssetTrace": {
+          "loadVisionCalls": 0,
+          "modelBytesCalls": [],
+          "cameraPresencePatched": true
+        },
+        "legacyBridge": false,
+        "bridgeSessionKeys": [],
+        "headButton": {
+          "disabled": true,
+          "text": "Head unavailable \u00b7 no local face model",
+          "title": "Head pointer unavailable on the local Studio route: no face landmarker model is vendored.",
+          "ariaLabel": "Head pointer unavailable on the local Studio route: no face landmarker model is vendored."
+        },
+        "centerHead": {
+          "disabled": true,
+          "text": "Center unavailable",
+          "title": "Head pointer unavailable on the local Studio route: no face landmarker model is vendored.",
+          "ariaLabel": "Head pointer unavailable on the local Studio route: no face landmarker model is vendored."
+        },
+        "cameraStream": false,
+        "cameraCalls": 0
+      }
+    },
+    {
+      "name": "Camera remains untouched",
+      "passed": true
+    },
+    {
+      "name": "Original CameraPresence hand loader uses vendored assets and gates head honestly",
+      "passed": true,
+      "details": {
+        "ok": true,
+        "assetSource": "vendored field-lab",
+        "local": "field-lab",
+        "wasm": "http://127.0.0.1:8877/vendor/field-lab/wasm",
+        "modelBytes": 7819105,
+        "head": {
+          "gated": true,
+          "name": "Error",
+          "error": "Error: Head pointer unavailable on the local Studio route: no face landmarker model is vendored."
+        },
+        "trace": {
+          "loadVisionCalls": 1,
+          "modelBytesCalls": [
+            "hand",
+            "head"
+          ]
+        }
+      }
+    },
+    {
+      "name": "No external tracking asset request occurs on the primary route",
+      "passed": true,
+      "details": []
+    },
+    {
+      "name": "Accepted preview opens in a separate page",
+      "passed": true,
+      "details": "http://127.0.0.1:8877/local/accepted/"
+    },
+    {
+      "name": "Original Studio remains live with unsaved history",
+      "passed": true,
+      "details": {
+        "before": {
+          "url": "http://127.0.0.1:8877/local/",
+          "recording": true,
+          "frames": 1
+        },
+        "after": {
+          "url": "http://127.0.0.1:8877/local/",
+          "recording": true,
+          "frames": 1,
+          "camera": false
+        }
+      }
+    },
+    {
+      "name": "No uncaught browser errors",
+      "passed": true,
+      "details": []
+    }
+  ],
+  "pageErrors": [],
+  "network": [
+    {
+      "kind": "request",
+      "url": "http://127.0.0.1:8877/local/",
+      "resourceType": "document"
+    },
+    {
+      "kind": "response",
+      "url": "http://127.0.0.1:8877/local/",
+      "status": 200,
+      "resourceType": "document"
+    },
+    {
+      "kind": "request",
+      "url": "http://127.0.0.1:8877/vendor/field-lab/vision_bundle.mjs",
+      "resourceType": "fetch"
+    },
+    {
+      "kind": "response",
+      "url": "http://127.0.0.1:8877/vendor/field-lab/vision_bundle.mjs",
+      "status": 200,
+      "resourceType": "fetch"
+    },
+    {
+      "kind": "request",
+      "url": "http://127.0.0.1:8877/vendor/field-lab/vision_bundle.mjs",
+      "resourceType": "script"
+    },
+    {
+      "kind": "response",
+      "url": "http://127.0.0.1:8877/vendor/field-lab/vision_bundle.mjs",
+      "status": 200,
+      "resourceType": "script"
+    },
+    {
+      "kind": "request",
+      "url": "http://127.0.0.1:8877/vendor/field-lab/hand_landmarker.task",
+      "resourceType": "fetch"
+    },
+    {
+      "kind": "response",
+      "url": "http://127.0.0.1:8877/vendor/field-lab/hand_landmarker.task",
+      "status": 200,
+      "resourceType": "fetch"
+    },
+    {
+      "kind": "request",
+      "url": "http://127.0.0.1:8877/vendor/field-lab/wasm/vision_wasm_internal.js",
+      "resourceType": "script"
+    },
+    {
+      "kind": "response",
+      "url": "http://127.0.0.1:8877/vendor/field-lab/wasm/vision_wasm_internal.js",
+      "status": 200,
+      "resourceType": "script"
+    },
+    {
+      "kind": "request",
+      "url": "http://127.0.0.1:8877/vendor/field-lab/wasm/vision_wasm_internal.wasm",
+      "resourceType": "fetch"
+    },
+    {
+      "kind": "response",
+      "url": "http://127.0.0.1:8877/vendor/field-lab/wasm/vision_wasm_internal.wasm",
+      "status": 200,
+      "resourceType": "fetch"
+    }
+  ],
+  "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' ws: wss:; worker-src 'self' blob:; frame-ancestors 'self'; object-src 'none'; base-uri 'self'",
+  "headLifecycle": [
+    {
+      "state": "camera-only",
+      "trackHead": true,
+      "centerHead": true,
+      "text": "Head unavailable \u00b7 no local face model",
+      "title": "Head pointer unavailable on the local Studio route: no face landmarker model is vendored."
+    },
+    {
+      "state": "flip",
+      "trackHead": true,
+      "centerHead": true,
+      "text": "Head unavailable \u00b7 no local face model",
+      "title": "Head pointer unavailable on the local Studio route: no face landmarker model is vendored."
+    },
+    {
+      "state": "stop",
+      "trackHead": true,
+      "centerHead": true,
+      "text": "Head unavailable \u00b7 no local face model",
+      "title": "Head pointer unavailable on the local Studio route: no face landmarker model is vendored."
+    }
+  ],
+  "trackingInitialization": {
+    "ok": true,
+    "assetSource": "vendored field-lab",
+    "local": "field-lab",
+    "wasm": "http://127.0.0.1:8877/vendor/field-lab/wasm",
+    "modelBytes": 7819105,
+    "head": {
+      "gated": true,
+      "name": "Error",
+      "error": "Error: Head pointer unavailable on the local Studio route: no face landmarker model is vendored."
+    },
+    "trace": {
+      "loadVisionCalls": 1,
+      "modelBytesCalls": [
+        "hand",
+        "head"
+      ]
+    }
+  }
+}

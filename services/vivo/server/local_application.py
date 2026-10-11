@@ -291,9 +291,41 @@ def studio_index():
  #vivaLightHud{left:37px!important;right:auto!important;top:566px!important;bottom:auto!important;max-width:250px!important}
 }
 </style>'''
+    asset_bridge = '''<script id="vivoLocalAssetBridge">(function(){
+  const origin=location.origin,assets=Object.freeze({bundle:new URL('/vendor/field-lab/vision_bundle.mjs',origin).href,wasm:new URL('/vendor/field-lab/wasm',origin).href,model:new URL('/vendor/field-lab/hand_landmarker.task',origin).href});
+  window.FieldHandAssets=assets;
+  const trace=window.__vivoCameraAssetTrace={loadVisionCalls:0,modelBytesCalls:[],cameraPresencePatched:false};
+  const headMessage='Head pointer unavailable on the local Studio route: no face landmarker model is vendored.';
+  const CameraPresence=window.CameraPresence;
+  if(CameraPresence?.prototype){
+   trace.cameraPresencePatched=true;
+   const originalModelBytes=CameraPresence.prototype.modelBytes;
+   const originalUpdateButtons=CameraPresence.prototype.updateButtons;
+   const gateHead=()=>{const button=document.getElementById('trackHead'),center=document.getElementById('centerHead');if(button){button.disabled=true;button.textContent='Head unavailable · no local face model';button.title=headMessage;button.setAttribute('aria-label',headMessage);}if(center){center.disabled=true;center.textContent='Center unavailable';center.title=headMessage;center.setAttribute('aria-label',headMessage);}};
+   CameraPresence.prototype.updateButtons=function(){originalUpdateButtons.call(this);gateHead();};
+   gateHead();
+   CameraPresence.prototype.loadVision=async function(){
+    trace.loadVisionCalls++;
+    const response=await fetch(assets.bundle,{method:'HEAD',signal:AbortSignal.timeout(2500)});
+    if(!response.ok||!/javascript|ecmascript/.test(response.headers.get('content-type')||''))throw Error('Local vision runtime returned HTTP '+response.status+'.');
+    const vision=await import(assets.bundle);this.assetSource='vendored field-lab';return{vision,wasm:assets.wasm,local:'field-lab'};
+   };
+   CameraPresence.prototype.modelBytes=async function(kind,local,signal){
+    trace.modelBytesCalls.push(kind);
+    if(local==='field-lab'){
+     if(kind!=='hand')throw Error(headMessage);
+     const response=await fetch(assets.model,{signal});
+     if(!response.ok)throw Error('Local hand model returned HTTP '+response.status+'.');
+     if((response.headers.get('content-type')||'').includes('text/html'))throw Error('Local hand model returned a webpage.');
+     const bytes=new Uint8Array(await response.arrayBuffer());if(bytes.byteLength>32*1024*1024)throw Error('Unexpected local model size.');return bytes;
+    }
+    return originalModelBytes.call(this,kind,local,signal);
+   };
+  }
+ })();</script>'''
     entry = '''<nav id="vivoLocalEntry" aria-label="Vivo local surfaces">
   <span>PRIMARY · FULL STUDIO</span>
-  <a href="/local/accepted/">Accepted phase preview ↗</a>
+  <a href="/local/accepted/" target="_blank" rel="noopener noreferrer" aria-label="Open accepted phase preview in a new tab">Accepted phase preview ↗</a>
  </nav>
  <button id="vivoStudioTools" type="button" aria-expanded="false">Studio tools</button>
  <aside id="vivoStudioToolsDrawer" hidden aria-label="Compact Studio tools">
@@ -310,7 +342,7 @@ def studio_index():
  </aside>
  <script>(function(){const toggle=document.getElementById('vivoStudioTools'),drawer=document.getElementById('vivoStudioToolsDrawer'),close=document.getElementById('vivoStudioToolsClose');if(!toggle||!drawer)return;const setOpen=open=>{drawer.hidden=!open;toggle.setAttribute('aria-expanded',String(open));toggle.textContent=open?'Close tools':'Studio tools';};toggle.addEventListener('click',()=>setOpen(drawer.hidden));close?.addEventListener('click',()=>setOpen(false));const click=selector=>document.querySelector(selector)?.click();document.querySelectorAll('[data-vivo-mode]').forEach(button=>button.addEventListener('click',()=>{click('[data-mode="'+button.dataset.vivoMode+'"]');}));document.querySelectorAll('[data-vivo-lens]').forEach(button=>button.addEventListener('click',()=>{click('[data-lens="'+button.dataset.vivoLens+'"]');}));document.getElementById('vivoStudioParent')?.addEventListener('click',()=>click('#parentBranch'));document.getElementById('vivoStudioExperiment')?.addEventListener('click',()=>{click('#experimentButton');setOpen(false);});const original=document.getElementById('search'),search=document.getElementById('vivoStudioSearch');search?.addEventListener('input',()=>{if(!original)return;original.value=search.value;original.dispatchEvent(new Event('input',{bubbles:true}));});})();</script>'''
     text = text.replace('</head>', bridge_style + '</head>', 1)
-    text = text.replace('</body>', entry + '</body>', 1)
+    text = text.replace('</body>', asset_bridge + entry + '</body>', 1)
     return source, text
 
 

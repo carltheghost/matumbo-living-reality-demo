@@ -111,12 +111,26 @@ class MountedApplicationTests(unittest.IsolatedAsyncioTestCase):
             text = await response.text()
             self.assertIn('id="vivoLocalEntry"', text)
             self.assertIn('href="/local/accepted/"', text)
+            self.assertIn('target="_blank"', text)
+            self.assertIn('rel="noopener noreferrer"', text)
+            self.assertIn('id="vivoLocalAssetBridge"', text)
+            self.assertIn('CameraPresence.prototype.loadVision', text)
+            self.assertIn('CameraPresence.prototype.modelBytes', text)
+            self.assertIn('/vendor/field-lab/vision_bundle.mjs', text)
+            self.assertIn('Head unavailable · no local face model', text)
+            self.assertIn('Center unavailable', text)
+            self.assertIn('no face landmarker model is vendored', text)
+            self.assertNotIn('<script src="/studio-bridge.js"></script>', text)
+            self.assertNotIn('sharedBridge', text)
             self.assertIn('PRIMARY · FULL STUDIO', text)
             self.assertNotIn('/application/bootstrap.mjs', text)
             self.assertIn('<base href="/">', text)
             expected = hashlib.sha256((ROOT / 'web/studio-original.html').read_bytes()).hexdigest()
             self.assertEqual(response.headers['X-Vivo-Original-Studio-SHA256'], expected)
             self.assertEqual(response.headers['X-Content-Type-Options'], 'nosniff')
+            csp = response.headers['Content-Security-Policy']
+            self.assertNotIn('cdn.jsdelivr.net', csp)
+            self.assertNotIn('storage.googleapis.com', csp)
         async with self.http.get(self.base + '/local/accepted/') as response:
             self.assertEqual(response.status, 200)
             text = await response.text()
@@ -130,8 +144,22 @@ class MountedApplicationTests(unittest.IsolatedAsyncioTestCase):
             async with self.http.get(self.base + '/' + name) as response:
                 self.assertEqual(response.status, 200)
                 self.assertEqual(await response.read(), (ROOT / 'web' / name).read_bytes())
+        for path in ['/studio-bridge.js', '/vendor/field-lab/vision_bundle.mjs',
+                     '/vendor/field-lab/wasm/vision_wasm_internal.js',
+                     '/vendor/field-lab/hand_landmarker.task']:
+            async with self.http.head(self.base + path) as response:
+                self.assertEqual(response.status, 200, path)
         async with self.http.get(self.base + '/legacy') as response:
             self.assertEqual(await response.read(), (ROOT / 'web/index.html').read_bytes())
+
+    def test_runbook_distinguishes_studio_and_accepted_models(self):
+        text = (ROOT / 'CANONICAL-LOCAL.md').read_text()
+        self.assertIn('`http://127.0.0.1:8766/local/` for the primary **Full Studio**', text)
+        self.assertIn('`http://127.0.0.1:8766/local/accepted/`', text)
+        self.assertIn('intentionally separate state models', text)
+        self.assertIn('session-only and resets with the server', text)
+        self.assertIn('head-pointer mode is explicitly unavailable', text)
+        self.assertNotIn('Open `http://127.0.0.1:8766/`. Choose Seat one.', text)
 
     async def test_actual_entrypoint_serves_entire_browser_esm_import_graph(self):
         queue = ['/application/bootstrap.mjs']
