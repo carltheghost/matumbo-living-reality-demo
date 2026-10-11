@@ -26,8 +26,13 @@ from .authority.module_routes import install_module_routes
 
 
 class LocalBridge:
-    def __init__(self, path, *, phase=False, max_events=65536, store='posix'):
-        self.path = str(Path(path)) if store == 'sqlite' else str(Path(path).resolve())
+    def __init__(self, path=None, *, phase=False, max_events=65536, store='posix'):
+        if store == 'memory':
+            if path is not None:
+                raise ValueError('Memory store does not accept a data path; session state is process-local only')
+            self.path = None
+        else:
+            self.path = str(Path(path)) if store == 'sqlite' else str(Path(path).resolve())
         self.store = store
         self.phase = phase
         self.max_events = max_events
@@ -40,8 +45,12 @@ class LocalBridge:
         node = shutil.which('node')
         if not node:
             raise RuntimeError('Canonical local mode requires Node.js 22+; SQLite requires Node.js 24.19+ in the Node 24 line')
+        command = [node, str(ROOT / 'server/application/runtime.mjs')]
+        if self.path is not None:
+            command.append(self.path)
+        command.extend(['--store', self.store, *(['--phase'] if self.phase else []), '--journal-events', str(self.max_events)])
         self.process = await asyncio.create_subprocess_exec(
-            node, str(ROOT / 'server/application/runtime.mjs'), self.path, '--store', self.store, *(['--phase'] if self.phase else []), '--journal-events', str(self.max_events),
+            *command,
             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
             # Errors go to the operator; protocol output never contains raw tokens.
             stderr=None, limit=64 * 1024 * 1024)
@@ -148,13 +157,14 @@ def require_local(request, *, mutation=False):
         raise web.HTTPForbidden(text='Cross-site access refused')
 
 
-def local_index(*, phase=False):
+def local_index(*, phase=False, store='posix'):
     source = (ROOT / 'web/index.html').read_bytes()
     marker = '<script type="module" src="shared.js"></script>'
     text = source.decode('utf-8')
     if text.count(marker) != 1:
         raise RuntimeError('Imported application bootstrap changed; review the local mount')
     text = text.replace('<head>', '<head><base href="/">', 1)
+    text = text.replace('<html lang="en">', f'<html lang="en" data-vivo-store="{store}">', 1)
     text = text.replace(marker, '<script type="module" src="/application/bootstrap.mjs"></script>')
     text = text.replace('</head>', '<link rel="stylesheet" href="/application/local.css"></head>', 1)
     text = text.replace('SHARED WORKSHOP · 0.8.1', 'CANONICAL LOCAL · APPLICATION STAGE')
@@ -163,19 +173,27 @@ def local_index(*, phase=False):
         'Open one of two local seats. Explore saved spatial coordinates and nested space. Grip targets are accepted constraints; material motion and learning are not connected yet.')
     text = text.replace('Checking the shared server…', 'Checking the local Python + Node application…')
     text = text.replace('Create shared space', 'Open local seat')
+    if store == 'memory':
+        text = text.replace('One saved world.<br>Two independent Eyes.', 'One session-only world.<br>Two independent Eyes.')
+        text = text.replace('Explore saved spatial coordinates and nested space.', 'Explore session coordinates and nested space.')
+        text = text.replace('Open local seat', 'Open session-only seat')
     if phase:
         text = text.replace('Grip targets are accepted constraints; material motion and learning are not connected yet.',
-            'Experimental 4D phase material is connected. Press Run phase in Saved state to advance the bounded numerical model; 11D material and learning remain unavailable.')
+            'Experimental 4D phase material is connected. Press Run phase in '+('Session state' if store == 'memory' else 'Saved state')+' to advance the bounded numerical model; 11D material and learning remain unavailable.')
     return source, text
 
 
-def make_local_app(data_dir, *, phase=False, max_events=65536, store='posix'):
-    if store not in ('posix', 'sqlite'):
-        raise ValueError('Choose store posix or sqlite')
+def make_local_app(data_dir=None, *, phase=False, max_events=65536, store='posix'):
+    if store not in ('posix', 'sqlite', 'memory'):
+        raise ValueError('Choose store posix, sqlite or memory')
+    if store == 'memory' and data_dir is not None:
+        raise ValueError('Memory store does not accept --data-dir; session state is process-local only')
     if store == 'posix' and sys.platform == 'win32':
         raise RuntimeError('Native Windows persistence is unsupported: directory fsync fails. A reviewed compatible store is required; no writes were started.')
-    directory = Path(data_dir) if store == 'sqlite' else Path(data_dir).resolve()
-    if store == 'sqlite':
+    directory = None if store == 'memory' else (Path(data_dir) if store == 'sqlite' else Path(data_dir if data_dir is not None else ROOT / 'data/canonical-local').resolve())
+    if store == 'memory':
+        app = make_app(':memory:')
+    elif store == 'sqlite':
         if not directory.is_absolute() or not directory.is_dir():
             raise ValueError('SQLite requires an existing absolute private directory outside the checkout')
         # Keep the supplied path intact: Node must inspect every ancestor/reparse
@@ -188,8 +206,8 @@ def make_local_app(data_dir, *, phase=False, max_events=65536, store='posix'):
             raise ValueError('Local data must stay outside the web directory')
         directory.mkdir(parents=True, exist_ok=True, mode=0o700)
         app = make_app(directory / 'comparison.sqlite')
-    checkpoint = ('canonical-phase' if phase else 'canonical-world') + ('.sqlite' if store == 'sqlite' else '.json')
-    bridge = LocalBridge(directory / checkpoint, phase=phase, max_events=max_events, store=store)
+    checkpoint = None if store == 'memory' else ('canonical-phase' if phase else 'canonical-world') + ('.sqlite' if store == 'sqlite' else '.json')
+    bridge = LocalBridge(None if checkpoint is None else directory / checkpoint, phase=phase, max_events=max_events, store=store)
     material_host = None
     if phase:
         from .application.material_host import PhaseApplicationHost
@@ -214,7 +232,7 @@ def make_local_app(data_dir, *, phase=False, max_events=65536, store='posix'):
 
     async def index(request):
         require_local(request)
-        original, html = local_index(phase=phase)
+        original, html = local_index(phase=phase, store=store)
         return web.Response(text=html, content_type='text/html', headers={
             'X-Vivo-Imported-Index-SHA256': hashlib.sha256(original).hexdigest(),
             'X-Vivo-Application': 'canonical-local-1',
@@ -243,7 +261,9 @@ def make_local_app(data_dir, *, phase=False, max_events=65536, store='posix'):
         if isinstance(detail, dict):
             annotate_material(detail.get('capabilities'))
         return web.json_response({**baseline, 'ok': ok, 'mode': 'canonical-local',
-            'node': alive, 'python': python_ok, 'legacyComparisonPersistence': 'volatile memory' if store == 'sqlite' else 'SQLite file', 'capabilities': detail.get('capabilities') if isinstance(detail, dict) else bridge.capabilities,
+            'node': alive, 'python': python_ok, 'legacyComparisonPersistence': 'volatile memory' if store in ('sqlite', 'memory') else 'SQLite file',
+            'canonicalPersistence': 'session-only volatile memory' if store == 'memory' else 'durable checkpoint',
+            'capabilities': detail.get('capabilities') if isinstance(detail, dict) else bridge.capabilities,
             'materialHost': material_host.status() if material_host else None,
             'journal': detail.get('journal') if isinstance(detail, dict) else None,
             'physicalDeviceValidated': False, 'publicDeploymentVerified': False,
@@ -336,9 +356,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--port', type=int, default=8766)
     parser.add_argument('--journal-events', type=int, default=65536, help='Retained event capacity (12–65536); default 65536 with cleanup reserve')
-    parser.add_argument('--store', choices=('posix', 'sqlite'), default='posix', help='Explicit canonical backend; SQLite needs Node 24.19+ in the Node 24 line and an existing private directory outside the checkout')
+    parser.add_argument('--store', choices=('posix', 'sqlite', 'memory'), default='posix', help='Explicit canonical backend; memory is session-only and rejects --data-dir; SQLite needs Node 24.19+ in the Node 24 line and an existing private directory outside the checkout')
     parser.add_argument('--material-phase', action='store_true', help='Explicit experimental 4D phase mode with separate checkpoint; initially paused')
-    parser.add_argument('--data-dir', type=Path, default=ROOT / 'data/canonical-local')
+    parser.add_argument('--data-dir', type=Path, default=None)
     args = parser.parse_args()
     if not 1 <= args.port <= 65535:
         parser.error('Port must be between 1 and 65535')
