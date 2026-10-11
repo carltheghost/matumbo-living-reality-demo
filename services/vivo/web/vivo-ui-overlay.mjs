@@ -14,11 +14,6 @@ const INPUT_COPY = Object.freeze({
     status: 'HAND INPUT · CAMERA LOCAL',
     text: 'Hand: open hand → point → pinch → move → open hand. Camera frames stay local; touch remains the fallback.'
   },
-  keyboard: {
-    label: 'KEYBOARD',
-    status: 'KEYBOARD FOCUS READY',
-    text: 'Keyboard: focus the controls, use the selected panel, and press Escape to close an open surface.'
-  }
 });
 
 export function inputCopy(mode = 'touch') {
@@ -27,6 +22,13 @@ export function inputCopy(mode = 'touch') {
 
 export function inputModeForPointer(pointerType = '') {
   return pointerType === 'mouse' || pointerType === 'pen' ? 'mouse' : 'touch';
+}
+
+export function inputModeForCameraState({cameraLive = false, state = ''} = {}) {
+  const text = String(state).trim();
+  if (!cameraLive) return 'touch';
+  if (/video\s+(?:live|ready)|camera\s+(?:preview|only)|camera\s+(?:and|\+)\s+touch|tracking\s+is\s+off|model\s+failed|permission|blocked|denied|unavailable/i.test(text)) return 'touch';
+  return /hand|pinch|open hand|show your whole hand|tracking/i.test(text) ? 'hand' : 'touch';
 }
 
 export function xrSummary({secureContext = false, api = false, ar = false, vr = false} = {}) {
@@ -108,19 +110,23 @@ function observeInputSignals(card, controller) {
     const mode = inputModeForPointer(event.pointerType);
     controller.setMode(mode);
   }, {passive: true, capture: true});
-  document.addEventListener('keydown', event => {
-    if (event.key === 'Tab' || event.key === 'Escape' || event.key.startsWith('Arrow')) controller.setMode('keyboard');
-  }, {passive: true});
-  const state = document.querySelector('#cameraState, #cameraStatus, #liveCameraState');
+  const states = [...document.querySelectorAll('#cameraState, #cameraStatus, #liveCameraState')];
+  let cameraSelectedHand = false;
   const syncCamera = () => {
-    const live = document.body.classList.contains('camera-live') || document.body.classList.contains('presence-open');
-    const text = state?.textContent || '';
-    if (live && !/off|stopped|denied|unavailable/i.test(text)) controller.setMode('hand');
-    if (!live && /touch remains|camera off|tracking is off/i.test(text)) controller.setMode('touch');
+    const cameraLive = document.body.classList.contains('camera-live');
+    const state = states.map(element => element.textContent || '').join(' · ');
+    const mode = inputModeForCameraState({cameraLive, state});
+    if (mode === 'hand') {
+      cameraSelectedHand = true;
+      controller.setMode('hand');
+    } else if (cameraSelectedHand) {
+      cameraSelectedHand = false;
+      controller.setMode('touch');
+    }
   };
   const observer = new MutationObserver(syncCamera);
   observer.observe(document.body, {attributes: true, attributeFilter: ['class']});
-  if (state) observer.observe(state, {childList: true, characterData: true, subtree: true});
+  states.forEach(state => observer.observe(state, {childList: true, characterData: true, subtree: true}));
   syncCamera();
   return () => observer.disconnect();
 }

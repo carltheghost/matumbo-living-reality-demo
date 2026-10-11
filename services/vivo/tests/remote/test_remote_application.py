@@ -342,6 +342,17 @@ class RemoteAcceptance(unittest.IsolatedAsyncioTestCase):
                         pending.add(child)
         self.assertIn("/application/offline-branch.mjs", seen)
 
+    async def test_remote_overlay_assets_are_served_from_application_mount(self):
+        """The application namespace must mount overlay files from web/."""
+        async with ClientSession() as session:
+            for path, marker in (
+                ("/application/vivo-ui-overlay.mjs", "installWorkshopOverlay"),
+                ("/application/vivo-ui-overlay.css", "prefers-reduced-motion"),
+            ):
+                async with session.get(self.base + path) as response:
+                    self.assertEqual(response.status, 200, path)
+                    self.assertIn(marker, await response.text())
+
     async def test_invitation_identity_cap_counts_revoked_rows(self):
         owner = await RemoteClient.connect(self.base, self.origin, OWNER_TOKEN)
         invites = []

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {inputCopy, inputModeForPointer, probeXrCapabilities, xrSummary} from '../../web/vivo-ui-overlay.mjs';
+import {inputCopy, inputModeForCameraState, inputModeForPointer, probeXrCapabilities, xrSummary} from '../../web/vivo-ui-overlay.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const webRoot = path.resolve(here, '../../web');
@@ -15,6 +15,13 @@ test('input guidance names all supported local input paths', () => {
   assert.equal(inputModeForPointer('touch'), 'touch');
   assert.equal(inputModeForPointer('mouse'), 'mouse');
   assert.equal(inputModeForPointer('pen'), 'mouse');
+});
+
+test('camera guidance distinguishes an open panel, video-only preview, hand tracking, and stop', () => {
+  assert.equal(inputModeForCameraState({cameraLive: false, state: 'SECURE PAGE · Start a camera mode'}), 'touch');
+  assert.equal(inputModeForCameraState({cameraLive: true, state: 'VIDEO LIVE · Back camera. Start hands to control it.'}), 'touch');
+  assert.equal(inputModeForCameraState({cameraLive: true, state: '3 / 3 · Hand model ready. Show your whole hand.'}), 'hand');
+  assert.equal(inputModeForCameraState({cameraLive: false, state: 'OFF · Camera released. Nothing recorded.'}), 'touch');
 });
 
 test('XR summary is explicit about secure context and route capability', () => {
@@ -33,12 +40,13 @@ test('XR capability probe does not request a session or permission', async () =>
 });
 
 test('workshop and Studio routes load the application-owned overlay without replacing the field', async () => {
-  const [workshop, studio, original, bridge, css, bootstrap, remoteBootstrap, localMount, remoteMount] = await Promise.all([
+  const [workshop, studio, original, bridge, css, overlay, bootstrap, remoteBootstrap, localMount, remoteMount] = await Promise.all([
     fs.readFile(path.join(webRoot, 'index.html'), 'utf8'),
     fs.readFile(path.join(webRoot, 'studio.html'), 'utf8'),
     fs.readFile(path.join(webRoot, 'studio-original.html'), 'utf8'),
     fs.readFile(path.join(webRoot, 'studio-bridge.js'), 'utf8'),
     fs.readFile(path.join(webRoot, 'vivo-ui-overlay.css'), 'utf8'),
+    fs.readFile(path.join(webRoot, 'vivo-ui-overlay.mjs'), 'utf8'),
     fs.readFile(path.join(webRoot, 'application/bootstrap.mjs'), 'utf8'),
     fs.readFile(path.join(webRoot, 'application/remote-bootstrap.mjs'), 'utf8'),
     fs.readFile(path.resolve(webRoot, '../server/local_application.py'), 'utf8'),
@@ -54,4 +62,7 @@ test('workshop and Studio routes load the application-owned overlay without repl
   assert.match(remoteBootstrap, /installWorkshopOverlay/);
   assert.match(localMount, /installStudioOverlay/);
   assert.match(remoteMount, /vivo-ui-overlay/);
+  assert.match(remoteMount, /source_name = name if name\.startswith\("vivo-ui-overlay\."\)/);
+  assert.match(remoteMount, /asset\(request, n\)/);
+  assert.doesNotMatch(overlay, /event\.key === 'Tab'|event\.key\.startsWith\('Arrow'\)/);
 });
