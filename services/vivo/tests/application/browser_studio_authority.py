@@ -43,6 +43,20 @@ async def wait_for_binding(page, expected_q0):
     raise AssertionError(f"Studio authority binding did not reach x1={expected_q0}")
 
 
+async def wait_for_conflict(page, expected_local_q0, expected_remote_q0):
+    deadline = asyncio.get_running_loop().time() + 20
+    while asyncio.get_running_loop().time() < deadline:
+        debug = await page.evaluate("window.__vivoStudioAuthorityBridge.debug()")
+        local_q = debug.get("localProjection") or []
+        status = await page.locator("#vivoStudioAuthorityBridge [data-vivo-authority-status]").inner_text()
+        if (status == "CONFLICT" and debug.get("publishConflict") and debug.get("publishConflict", {}).get("acceptedBinding")
+                and debug.get("localDiverged") is True and debug.get("publishConflict", {}).get("acceptedBinding", {}).get("q", [float("nan")])[0] == expected_remote_q0
+                and local_q and abs(local_q[0] - expected_local_q0) < 1e-6):
+            return debug
+        await asyncio.sleep(0.1)
+    raise AssertionError(f"Studio authority bridge did not expose an explicit publish conflict: {debug}")
+
+
 async def main():
     page_errors = []
     camera_calls = []
@@ -82,18 +96,56 @@ async def main():
 
             # Change only the rich Studio node, then publish through the explicit
             # binding command. The authority maps no velocities/edges/material.
-            await pages[0].evaluate("""
+            first_publish = await pages[0].evaluate("""
                 () => {
                   const app = window.FieldApp;
                   app.engine.q[55 * 9] = 2.5;
                   return window.__vivoStudioAuthorityBridge.publish();
                 }
             """)
+            assert first_publish["status"] == "accepted", first_publish
             await wait_for_binding(pages[1], 2.5)
             after_publish = await pages[1].evaluate("window.__vivoStudioAuthorityBridge.debug()")
             assert after_publish["acceptedEntityQ"] == [-1.2, -0.15, 0.25, 0]
             assert after_publish["binding"]["q"] == [2.5, after_publish["binding"]["q"][1], after_publish["binding"]["q"][2], after_publish["binding"]["q"][3]]
             assert after_publish["lastApplied"]["q"][0] == 2.5
+
+            # A real concurrent Studio edit must not be silently overwritten.
+            # Seat one keeps its local projection while seat two publishes a
+            # different projection; the first retry is only an explicit
+            # conflict acknowledgement, and the second retry is the explicit
+            # replacement action.
+            await pages[0].evaluate("window.FieldApp.engine.q[55 * 9] = 2.8")
+            await pages[1].evaluate("window.FieldApp.engine.q[55 * 9] = 3.5")
+            second_publish = await pages[1].evaluate("window.__vivoStudioAuthorityBridge.publish()")
+            assert second_publish["status"] == "accepted", second_publish
+            conflict = await wait_for_conflict(pages[0], 2.8, 3.5)
+            assert conflict["publishConflict"]["acceptedBinding"]["q"][0] == 3.5
+            blocked = await pages[0].evaluate("window.__vivoStudioAuthorityBridge.publish()")
+            assert blocked["status"] == "rejected" and blocked["code"] == "STUDIO_CONFLICT", blocked
+            assert await pages[0].locator("#vivoStudioAuthorityBridge [data-vivo-authority-status]").inner_text() == "CONFLICT"
+            assert "click publish echo again" in (await pages[0].locator("#vivoStudioAuthorityBridge [data-vivo-authority-message]").inner_text()).lower()
+            armed = await pages[0].evaluate("window.__vivoStudioAuthorityBridge.debug()")
+            assert armed["publishOverrideArmed"] is True
+
+            # A newer accepted edit after the acknowledgement re-arms the
+            # resolution rather than allowing the older acknowledgement to
+            # become a silent last-writer-wins authorization.
+            await pages[1].evaluate("window.FieldApp.engine.q[55 * 9] = 3.9")
+            third_publish = await pages[1].evaluate("window.__vivoStudioAuthorityBridge.publish()")
+            assert third_publish["status"] == "accepted", third_publish
+            newer_conflict = await wait_for_conflict(pages[0], 2.8, 3.9)
+            assert newer_conflict["publishOverrideArmed"] is False
+            rearmed = await pages[0].evaluate("window.__vivoStudioAuthorityBridge.publish()")
+            assert rearmed["status"] == "rejected" and rearmed["code"] == "STUDIO_CONFLICT", rearmed
+            assert (await pages[0].evaluate("window.__vivoStudioAuthorityBridge.debug()"))["publishOverrideArmed"] is True
+            replacement = await pages[0].evaluate("window.__vivoStudioAuthorityBridge.publish()")
+            assert replacement["status"] == "accepted", replacement
+            await wait_for_binding(pages[1], 2.8)
+            after_conflict_resolution = await pages[0].evaluate("window.__vivoStudioAuthorityBridge.debug()")
+            assert after_conflict_resolution["localProjection"][0] == 2.8
+            assert after_conflict_resolution["localDiverged"] is False
+            assert after_conflict_resolution["publishConflict"] is None, after_conflict_resolution
 
             # Move only seat one's authority Eye using the existing accepted API;
             # seat two must retain its own Eye and the Studio bridge must not call
@@ -119,16 +171,17 @@ async def main():
             assert divergent["localDiverged"] is True
             await pages[1].evaluate("window.__vivoStudioAuthorityBridge.applyAccepted()")
             resolved = await pages[1].evaluate("window.__vivoStudioAuthorityBridge.debug()")
-            assert resolved["localDiverged"] is False and resolved["localProjection"][0] == 2.5
+            assert resolved["localDiverged"] is False and resolved["localProjection"][0] == 2.8
 
             # The explicit fork is accepted by the authority and includes the
             # binding, but no merge/replay is attempted.
             branch = await pages[0].evaluate("window.__vivoStudioAuthorityBridge.forkOffline()")
             assert branch["mode"] == "offline"
-            assert branch["snapshot"]["studioBindings"]["studio.node.echo"]["q"][0] == 2.5
+            assert branch["snapshot"]["studioBindings"]["studio.node.echo"]["q"][0] == 2.8
             assert branch["snapshot"]["branch"]["parentWorldId"] == "vivo.local.workshop"
             camera_calls = await pages[0].evaluate("window.__vivoCameraCalls") + await pages[1].evaluate("window.__vivoCameraCalls")
             evidence = {"initialOne": initial_one, "initialTwo": initial_two, "afterPublish": after_publish,
+                        "conflict": conflict, "afterConflictResolution": after_conflict_resolution,
                         "oneEye": one_eye, "twoEye": two_eye, "resolved": resolved, "offlineBranch": {
                             "worldId": branch["worldId"], "authorityId": branch["authorityId"], "parentWorldId": branch["parentWorldId"]}}
         finally:

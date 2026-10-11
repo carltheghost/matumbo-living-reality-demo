@@ -29,6 +29,25 @@ test('accepted Studio binding replicates, persists, and preserves independent Ey
   await one.close();await two.close();
 });
 
+test('presence advancement cannot turn a cached Studio publish into an overwrite',async()=>{
+  const store=new MemoryAuthorityStore(),world=await LocalLeaseWorld.create({snapshot:workshopSeed(),store});
+  const one=world.attach({actorId:'local.one'});await one.open();await one.registerEye('main',entryView());
+  const cached=one.getSnapshot(),cachedSequence=cached.acceptedSequence;
+  const two=world.attach({actorId:'local.two'});await two.open();await two.registerEye('main',entryView());
+  assert.equal(two.getSnapshot().acceptedSequence,cachedSequence+1,'the second observer registration advances the world sequence');
+
+  const current=two.getSnapshot();
+  const accepted=await two.submit(studioTransformCommand(current,[4.5,-.4,.6,.2],{commandId:'studio.concurrent.accept',expectedRevision:current.acceptedSequence}));
+  assert.equal(accepted.status,'accepted');
+
+  const stale=await one.submit(studioTransformCommand(cached,[9.9,9.9,9.9,9.9],{commandId:'studio.cached.stale',expectedRevision:cachedSequence}));
+  assert.equal(stale.status,'rejected');assert.equal(stale.code,'STALE_WORLD');
+  const latest=one.getSnapshot();
+  assert.deepEqual(latest.studioBindings['studio.node.echo'].q,[4.5,-.4,.6,.2]);
+  assert.deepEqual(latest.spaces.root.entities.relic.q,[-1.2,-.15,.25,0],'a stale Studio projection cannot mutate the accepted entity');
+  await one.close();await two.close();
+});
+
 test('older checkpoint without Studio binding is migrated without losing accepted state',async()=>{
   const old=workshopSeed();delete old.studioBindings;const store=new MemoryAuthorityStore();
   await LocalLeaseWorld.create({snapshot:old,store});

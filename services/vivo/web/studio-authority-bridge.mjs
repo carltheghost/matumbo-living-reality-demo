@@ -19,6 +19,8 @@ import {
 const copy=value=>structuredClone(value);
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const qOf=value=>Array.isArray(value)?value.map(Number):null;
+const bindingVersion=value=>value?{bindingRevision:value.bindingRevision,acceptedSequence:value.acceptedSequence,q:qOf(value.q)}:null;
+const sameBinding=(a,b)=>same(bindingVersion(a),bindingVersion(b));
 const seatId=value=>value==='two'?'two':'one';
 const storageKey=seat=>'vivo.studio.authority.'+seat;
 
@@ -32,7 +34,8 @@ export class StudioAuthorityBridge {
   constructor({app=globalThis.FieldApp,rootDocument=globalThis.document}={}){
     if(!app||typeof app.snapshot!=='function'||typeof app.applySnapshot!=='function')throw Error('FULL_STUDIO_UNAVAILABLE');
     this.app=app;this.document=rootDocument;this.transport=null;this.state=null;this.remoteBinding=null;
-    this.lastApplied=null;this.localDiverged=false;this.pendingRemote=null;this.seat=seatId(new URL(location.href).searchParams.get('seat'));
+    this.lastApplied=null;this.localDiverged=false;this.pendingRemote=null;this.publishConflict=null;this.publishOverrideArmed=false;
+    this.seat=seatId(new URL(location.href).searchParams.get('seat'));
     this.pollTimer=null;this.closed=false;this.message='Not connected. Accepted state is untouched.';this.xr=null;
     this.mount();
   }
@@ -72,7 +75,7 @@ export class StudioAuthorityBridge {
   }
   setMessage(message,status){
     this.message=String(message);if(this.messageNode)this.messageNode.textContent=this.message;
-    if(this.statusNode)this.statusNode.textContent=status==='ERROR'?'ERROR':this.transport&&!this.transport.closed?(this.localDiverged?'LOCAL DIVERGENCE':'CONNECTED'):'OFFLINE';
+    if(this.statusNode)this.statusNode.textContent=status==='ERROR'?'ERROR':status==='CONFLICT'||this.publishConflict?'CONFLICT':this.transport&&!this.transport.closed?(this.localDiverged?'LOCAL DIVERGENCE':'CONNECTED'):'OFFLINE';
   }
   localQ(){try{return mapStudioNodeToCanonical(this.app.snapshot(),STUDIO_SOURCE_NODE);}catch{return null;}}
   currentBinding(){return this.state?.snapshot?.studioBindings?.[STUDIO_BINDING_ID]??null;}
@@ -104,23 +107,67 @@ export class StudioAuthorityBridge {
     const changed=!this.remoteBinding||!next||next.bindingRevision!==this.remoteBinding.bindingRevision||next.acceptedSequence!==this.remoteBinding.acceptedSequence||!same(next.q,this.remoteBinding.q);
     this.state=copy(state);if(next)this.remoteBinding=copy(next);
     if(next&&changed){
-      if(this.localDiverged){this.pendingRemote=copy(next);this.setMessage('Accepted Echo changed while this Studio is locally divergent. Choose Apply accepted or Publish Echo.');}
+      if(this.localDiverged){this.pendingRemote=copy(next);this.rememberConflict('STUDIO_CONFLICT','Accepted Echo changed while this Studio is locally divergent. Choose Apply accepted, or click Publish Echo again to explicitly replace it.',{acceptedBinding:next,acceptedSequence:state.snapshot.acceptedSequence});}
       else this.applyBinding(next,'Accepted Echo applied; Studio paused at the authority projection.');
     }
     this.updateUI();this.schedulePoll();
   }
   applyBinding(binding,message='Accepted Echo applied; Studio paused at the authority projection.'){
     const next=applyCanonicalBindingToStudioSnapshot(this.app.snapshot(),binding);this.app.applySnapshot(next);
-    this.lastApplied={q:[...binding.q],bindingRevision:binding.bindingRevision,acceptedSequence:binding.acceptedSequence};this.localDiverged=false;this.pendingRemote=null;this.setMessage(message);this.updateUI();return this.debug();
+    this.lastApplied={q:[...binding.q],bindingRevision:binding.bindingRevision,acceptedSequence:binding.acceptedSequence};this.localDiverged=false;this.pendingRemote=null;this.publishConflict=null;this.publishOverrideArmed=false;this.setMessage(message);this.updateUI();return this.debug();
   }
   async applyAccepted(){
     if(!this.remoteBinding)throw Error('STUDIO_BINDING_UNAVAILABLE');return this.applyBinding(this.remoteBinding,'Accepted Echo applied explicitly; local divergent Studio state was discarded.');
   }
+  blockedPublish(code='STUDIO_CONFLICT'){
+    return {status:'rejected',code,acceptedSequence:this.state?.snapshot?.acceptedSequence??null};
+  }
+  rememberConflict(code,message,{acceptedBinding=this.currentBinding(),acceptedSequence=this.state?.snapshot?.acceptedSequence??null,allowNextPublish=false}={}){
+    const local=this.localQ();
+    this.publishConflict={code,localQ:local?[...local]:null,acceptedBinding:acceptedBinding?copy(acceptedBinding):null,acceptedSequence,explicitRetryRequired:true};
+    this.publishOverrideArmed=allowNextPublish;this.setMessage(message,'CONFLICT');this.updateUI();return this.blockedPublish(code);
+  }
   async publish(){
     if(!this.transport||this.transport.closed)throw Error('AUTHORITY_NOT_CONNECTED');
     const q=this.markLocalDivergence();if(!q)throw Error('STUDIO_NODE_UNAVAILABLE');
-    const snapshot=this.transport.getSnapshot();const command=studioTransformCommand(snapshot,q,{expectedRevision:snapshot.acceptedSequence,commandId:'studio.transform.'+crypto.randomUUID()});
-    const receipt=await this.transport.submit(command);if(receipt.status!=='accepted'){this.setMessage('Publish rejected: '+receipt.code+'. Refresh and resolve explicitly.','ERROR');return receipt;}
+    const conflict=this.publishConflict;
+    if(conflict){
+      if(!same(q,conflict.localQ)){
+        this.publishConflict={...conflict,localQ:[...q]};this.publishOverrideArmed=false;
+        this.setMessage('Local Echo changed after the conflict. Click Publish Echo again to explicitly replace accepted Echo, or Apply accepted.','CONFLICT');this.updateUI();return this.blockedPublish();
+      }
+      if(!this.publishOverrideArmed){
+        this.publishOverrideArmed=true;this.setMessage('Conflict is visible. Click Publish Echo again to explicitly replace accepted Echo, or Apply accepted.','CONFLICT');this.updateUI();return this.blockedPublish();
+      }
+    }
+    // Presence and observer registration advance the world sequence without
+    // changing the binding.  Refresh before constructing the CAS command so
+    // an ordinary two-client join does not turn a valid publish into a stale
+    // command.  The authority CAS remains strict for a real concurrent edit.
+    await this.transport.refresh();
+    const freshQ=this.markLocalDivergence();if(!freshQ)throw Error('STUDIO_NODE_UNAVAILABLE');
+    const freshBinding=this.currentBinding();
+    if(conflict&&!sameBinding(freshBinding,conflict.acceptedBinding)){
+      return this.rememberConflict('STUDIO_CONFLICT','Accepted Echo changed again. Apply accepted, or click Publish Echo again after reviewing the new accepted projection.',{acceptedBinding:freshBinding,acceptedSequence:this.state?.snapshot?.acceptedSequence});
+    }
+    if(!conflict&&this.publishConflict){
+      this.publishOverrideArmed=false;this.setMessage('Accepted Echo changed while publish was preparing. Click Publish Echo again to explicitly replace it, or Apply accepted.','CONFLICT');this.updateUI();return this.blockedPublish();
+    }
+    const snapshot=this.transport.getSnapshot();const command=studioTransformCommand(snapshot,freshQ,{expectedRevision:snapshot.acceptedSequence,commandId:'studio.transform.'+crypto.randomUUID()});
+    const receipt=await this.transport.submit(command);
+    if(receipt.status!=='accepted'){
+      if(receipt.code==='STALE_WORLD'){
+        // The submit response already carries a current state, but make the
+        // recovery explicit and never retry the rejected command implicitly.
+        await this.transport.refresh();
+        if(this.publishConflict){
+          this.publishOverrideArmed=false;this.setMessage('Accepted Echo changed during publish. Review the accepted projection, then click Publish Echo again to explicitly replace it, or Apply accepted.','CONFLICT');this.updateUI();
+        }else{
+          this.rememberConflict('STALE_WORLD','Authority advanced during publish. Accepted state was refreshed; click Publish Echo again to explicitly retry.',{acceptedBinding:this.currentBinding(),acceptedSequence:this.state?.snapshot?.acceptedSequence,allowNextPublish:true});
+        }
+      }else this.setMessage('Publish rejected: '+receipt.code+'. Refresh and resolve explicitly.','ERROR');
+      return receipt;
+    }
     this.localDiverged=false;
     const accepted=this.state?.snapshot?.studioBindings?.[STUDIO_BINDING_ID]??receipt.result?.binding;
     if(accepted)this.applyBinding(accepted,'Echo transform accepted at sequence '+receipt.acceptedSequence+'. Studio paused at the accepted projection.');
@@ -139,7 +186,7 @@ export class StudioAuthorityBridge {
     this.xr={secureContext:secure,webXRAPI:api,arSupported:ar,vrSupported:vr,sessionStarted:false};
     this.setMessage('XR capability only: immersive AR '+(ar?'available':'unavailable')+', VR '+(vr?'available':'unavailable')+'. No camera or XR session was started.');return copy(this.xr);
   }
-  async close(){clearTimeout(this.pollTimer);if(this.transport&&!this.transport.closed)await this.transport.close();this.transport=null;this.state=null;this.remoteBinding=null;this.pendingRemote=null;this.localDiverged=false;this.updateUI();}
+  async close(){clearTimeout(this.pollTimer);if(this.transport&&!this.transport.closed)await this.transport.close();this.transport=null;this.state=null;this.remoteBinding=null;this.pendingRemote=null;this.localDiverged=false;this.publishConflict=null;this.publishOverrideArmed=false;this.updateUI();}
   updateUI(){
     if(!this.root)return;const connected=!!this.transport&&!this.transport.closed,local=this.markLocalDivergence();
     this.root.querySelector('[data-vivo-authority-connect]').disabled=connected;
@@ -147,13 +194,14 @@ export class StudioAuthorityBridge {
     this.root.querySelector('[data-vivo-authority-apply]').disabled=!this.remoteBinding;
     this.root.querySelector('[data-vivo-authority-publish]').disabled=!connected||!local;
     this.root.querySelector('[data-vivo-authority-fork]').disabled=!connected;
-    if(this.statusNode)this.statusNode.textContent=connected?(this.localDiverged?'LOCAL DIVERGENCE':'CONNECTED'):'OFFLINE';
+    if(this.statusNode)this.statusNode.textContent=this.publishConflict?'CONFLICT':connected?(this.localDiverged?'LOCAL DIVERGENCE':'CONNECTED'):'OFFLINE';
   }
   debug(){
     this.markLocalDivergence();const snapshot=this.state?.snapshot;return {schema:'vivo.studio-authority-bridge/1',connected:!!this.transport&&!this.transport.closed,seat:this.seat,
       binding:this.remoteBinding?copy(this.remoteBinding):null,acceptedSequence:snapshot?.acceptedSequence??null,localProjection:this.localQ(),
       acceptedEntityQ:copy(snapshot?.spaces?.root?.entities?.relic?.q??null),
       lastApplied:this.lastApplied?copy(this.lastApplied):null,localDiverged:this.localDiverged,pendingRemote:this.pendingRemote?copy(this.pendingRemote):null,
+      publishConflict:this.publishConflict?copy(this.publishConflict):null,publishOverrideArmed:this.publishOverrideArmed,
       authorityEye:copy(this.state?.eye??null),worldEyesIndependent:true,xr:this.xr?copy(this.xr):null};
   }
 }
