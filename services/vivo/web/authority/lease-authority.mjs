@@ -1,5 +1,6 @@
 /** Local, single-writer canonical lease authority. Targets are constraints, NOT physics.
- * The host supplies validated world state. No network, camera, render, or material loop.
+ * The host supplies validated world state. Optional versioned material acceptance
+ * is private to the host. No network, camera, render, or material loop.
  */
 import {validateCommand, validateFrame, validateReceipt} from '../../contracts/validate.mjs';
 const clone = value => structuredClone(value);
@@ -15,10 +16,13 @@ const uuid = () => crypto.randomUUID();
 /** Atomic in-process test/personal-session store; explicitly volatile, not disk persistence. */
 export class MemoryAuthorityStore {
   #value = null;
+  supportsCommitGuard = true;
   async load() { return clone(this.#value); }
-  async compareAndSwap(expected, value) {
+  async compareAndSwap(expected, value, {beforeCommit} = {}) {
     if ((this.#value?.digest ?? null) !== expected) fail('STORE_CONFLICT');
-    this.#value = clone(value);
+    const copy=clone(value);
+    if(beforeCommit) {const result=beforeCommit();if(result && typeof result.then==='function') fail('STORE_COMMIT_GUARD_ASYNC');}
+    this.#value = copy;
   }
 }
 
@@ -74,29 +78,43 @@ function checkEyes(snapshot, eyes) {
 /** Host-owned factory. attach() is privileged local admission, not remote authentication. */
 export class LocalLeaseWorld {
   #state; #record; #store; #clock; #tail = Promise.resolve(); #clients = new Map();
-  #ttl; #limit;
-  constructor(token, record, store, clock, ttl, limit) {
+  #ttl; #limit; #material;
+  constructor(token, record, store, clock, ttl, limit, material) {
     if (token !== LocalLeaseWorld) fail('USE_CREATE');
     this.#record = record; this.#state = record.state; this.#store = store;
-    this.#clock = clock; this.#ttl = ttl; this.#limit = limit;
+    this.#clock = clock; this.#ttl = ttl; this.#limit = limit; this.#material = material;
   }
-  static async create({snapshot, store = new MemoryAuthorityStore(), now = () => Date.now(), leaseMs = 3000, maxEvents = 4096}) {
+  static async create({snapshot, store = new MemoryAuthorityStore(), now = () => Date.now(), leaseMs = 3000, maxEvents = 4096, materialProtocol, materialInitial}) {
     if (typeof now !== 'function' || !Number.isFinite(leaseMs) || leaseMs < 100 || leaseMs > 60000
         || !Number.isSafeInteger(maxEvents) || maxEvents < 8 || maxEvents > 65536) fail('INVALID_OPTIONS');
+    let material=null;
+    if(materialProtocol!==undefined) {
+      if(materialProtocol!=='vivo.lease-material/1') fail('MATERIAL_PROTOCOL');
+      if(store.supportsCommitGuard!==true) fail('MATERIAL_STORE_GUARD_REQUIRED');
+      material=await import('./material-authority.mjs');
+    } else if(materialInitial!==undefined) fail('MATERIAL_PROTOCOL_REQUIRED');
     let record = await store.load();
     if (record) {
       if (record.schema !== 'vivo.lease-checkpoint/1' || record.digest !== await sha256(record.state)) fail('CHECKPOINT_HASH');
       validateSeed(record.state.snapshot);
+      if(Boolean(record.state.material)!==Boolean(material)) fail('MATERIAL_PROTOCOL_MISMATCH');
+      if(materialInitial!==undefined) fail('MATERIAL_INITIAL_ON_RESTORE');
+      if(material) material.validateMaterialState(record.state,materialProtocol);
       if(record.state.eyes!==undefined) checkEyes(record.state.snapshot,record.state.eyes);
       if (snapshot && (snapshot.worldId !== record.state.snapshot.worldId || snapshot.authorityId !== record.state.snapshot.authorityId)) fail('WORLD_MISMATCH');
     } else {
       validateSeed(snapshot);
       const state = {snapshot: clone(snapshot), leases: {}, epochs: {}, receipts: {}, events: [], eyes: {}};
+      if(material) {
+        if(!materialInitial || Object.keys(materialInitial).sort().join(',')!=='checkpoint,spaceId') fail('MATERIAL_INITIAL_REQUIRED');
+        state.material={protocol:materialProtocol,spaceId:materialInitial.spaceId,checkpoint:clone(materialInitial.checkpoint)};
+        material.validateMaterialState(state,materialProtocol);
+      }
       state.snapshot.stateHash = await sha256({snapshot:{...state.snapshot,stateHash:null},leases:state.leases,eyes:state.eyes});
       record = {schema: 'vivo.lease-checkpoint/1', state, digest: await sha256(state)};
       await store.compareAndSwap(null, record);
     }
-    const world = new LocalLeaseWorld(LocalLeaseWorld, record, store, now, leaseMs, maxEvents);
+    const world = new LocalLeaseWorld(LocalLeaseWorld, record, store, now, leaseMs, maxEvents, material);
     if(record.state.eyes===undefined) await world.#internal('observer-state-initialized',null,s=>{s.eyes={};});
     // Process-local session capabilities never survive a restart. State and history do.
     if (Object.keys(record.state.leases).length) await world.#internal('restart-release', null, s => {s.leases = {};});
@@ -110,6 +128,32 @@ export class LocalLeaseWorld {
   constraints() {
     const now = this.#time();
     return clone(Object.values(this.#state.leases).filter(l => l.expiresAt > now && l.target !== null));
+  }
+  /** Host-only coherent capture; never exposed by attach() or a public endpoint. */
+  captureMaterial(spaceId) { return this.#queue(()=>{
+    if(!this.#material) fail('MATERIAL_DISABLED');
+    if(spaceId!==this.#state.material.spaceId) fail('MATERIAL_SPACE');
+    this.#material.checkMaterialLeases(this.#state);
+    const now=this.#time(), latest=this.#state.events.findLast(e=>e.kind==='material-step'&&e.payload.spaceId===spaceId)?.payload;
+    return clone({snapshot:this.#state.snapshot,constraints:Object.values(this.#state.leases).filter(l=>l.expiresAt>now&&l.target!==null),
+      authorityTimeMs:now,checkpoint:this.#state.material.checkpoint,diagnostics:latest?.diagnostics??null,fieldDiagnostics:latest?.fieldDiagnostics??[]});
+  }); }
+  /** Only a trusted private host solver may submit this versioned envelope. */
+  applyMaterialProposal(raw) {
+    if(!this.#material) return Promise.reject(Object.assign(new Error('MATERIAL_DISABLED'),{code:'MATERIAL_DISABLED'}));
+    let proposal;
+    try {this.#material.validateProposal(this.#state,raw,this.#time());proposal=clone(raw);} catch(error) {return Promise.reject(error);}
+    return this.#queue(async()=>{
+      const s=this.#state, candidate=this.#material.validateProposal(s,proposal,this.#time()), next=clone(s);
+      next.snapshot=candidate;next.material.checkpoint=clone(proposal.fieldState);
+      for(const l of Object.values(next.leases)) if(l.spaceId===s.material.spaceId) {
+        const e=s.snapshot.spaces[l.spaceId].entities[l.entityId];
+        if(e && l.materialCoverageRevision===e.revision && l.materialInvariant===this.#material.invariantFingerprint(s.snapshot,l.spaceId,l.entityId)) l.materialCoverageRevision=e.revision+1;
+      }
+      await this.#advance(next,'material-step','authority',this.#material.materialEvent(proposal));
+      await this.#save(next,()=>this.#material.checkCommitProvenance(this.#state,proposal,this.#time()));
+      return this.snapshot();
+    });
   }
   attach({role = 'editor', actorId = 'actor.' + uuid()} = {}) {
     if (!validId(actorId) || !['editor','viewer'].includes(role)) fail('INVALID_ADMISSION');
@@ -142,9 +186,10 @@ export class LocalLeaseWorld {
       })
     });
   }
-  async #save(next) {
+  async #save(next, beforeCommit) {
     const record={schema:'vivo.lease-checkpoint/1',state:next,digest:await sha256(next)};
-    await this.#store.compareAndSwap(this.#record.digest,record);
+    if(beforeCommit) await this.#store.compareAndSwap(this.#record.digest,record,{beforeCommit});
+    else await this.#store.compareAndSwap(this.#record.digest,record);
     this.#record=record;this.#state=next;
     for(const c of this.#clients.values()) for(const listener of c.listeners) {
       try { Promise.resolve(listener(this.snapshot())).catch(()=>{}); } catch { /* Observer cannot undo acceptance. */ }
@@ -188,8 +233,13 @@ export class LocalLeaseWorld {
       const space=Object.hasOwn(s.snapshot.spaces,command.spaceId)?s.snapshot.spaces[command.spaceId]:null;
       const entity=space&&Object.hasOwn(space.entities,p.entityId)?space.entities[p.entityId]:null;
       if(!entity) return reject('NO_ENTITY');
-      if(entity.revision!==command.expectedRevision) return reject('STALE_REVISION',entity);
-      const next=clone(s), k=key(command.spaceId,p.entityId), current=next.leases[k], now=this.#time();
+      const k=key(command.spaceId,p.entityId), held=s.leases[k];
+      const materialLease=this.#material && command.spaceId===s.material.spaceId && held;
+      const invariant=materialLease && this.#material.invariantFingerprint(s.snapshot,command.spaceId,p.entityId);
+      const covered=materialLease && held.materialCoverageRevision===entity.revision && held.materialInvariant===invariant;
+      if(entity.revision!==command.expectedRevision && !(command.kind!=='grab.begin' && covered && command.expectedRevision===held.inputReceiptRevision)) return reject('STALE_REVISION',entity);
+      if(command.kind==='grab.target' && materialLease && !covered) return reject('LEASE_INVALIDATED',entity);
+      const next=clone(s), current=next.leases[k], now=this.#time();
       const alive=current && current.expiresAt>now;
       let result;
       if(command.kind==='grab.begin') {
@@ -198,6 +248,9 @@ export class LocalLeaseWorld {
         if(p.inputEpoch<=previous) return reject('STALE_EPOCH',entity);
         const lease={id:'lease.'+uuid(),acquireCommandId:command.id,session:token,actorId:client.session.actorId,spaceId:command.spaceId,
           entityId:p.entityId,source:p.source,inputEpoch:p.inputEpoch,targetSeq:0,expiresAt:now+this.#ttl,target:null};
+        if(this.#material && command.spaceId===s.material.spaceId) Object.assign(lease,{
+          inputReceiptRevision:entity.revision,materialCoverageRevision:entity.revision,
+          materialInvariant:this.#material.invariantFingerprint(s.snapshot,command.spaceId,p.entityId)});
         next.leases[k]=lease;next.epochs[ek]=p.inputEpoch;
         result={leaseId:lease.id,expiresAt:lease.expiresAt,leaseMs:this.#ttl,entity:clone(entity)};
       } else {
@@ -207,7 +260,9 @@ export class LocalLeaseWorld {
           if(p.source!==current.source) return reject('SOURCE_MISMATCH',entity);
           if(p.dimension!==entity.dimension || p.chart!==entity.chart) return reject('FRAME_MISMATCH',entity);
           if(p.targetSeq<=current.targetSeq) return reject('STALE_TARGET',entity);
+          if(materialLease && !p.q.every((q,i)=>q>=-s.material.checkpoint.lengths[i]/2 && q<s.material.checkpoint.lengths[i]/2)) return reject('MATERIAL_DOMAIN',entity);
           current.targetSeq=p.targetSeq;current.expiresAt=now+this.#ttl;
+          if(materialLease) current.inputReceiptRevision=entity.revision;
           current.target={spaceId:command.spaceId,chart:p.chart,dimension:p.dimension,q:[...p.q]};
           result={leaseId:current.id,target:clone(current.target),targetSeq:p.targetSeq};
         } else { delete next.leases[k]; result={leaseId:p.leaseId,released:true}; }

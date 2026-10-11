@@ -1,0 +1,47 @@
+name: Vivo mounted local application
+on:
+  pull_request:
+    paths:
+      - 'services/vivo/**'
+      - 'services/vivo_material/**'
+      - 'research/vivo-phase-fabric/viva_phase/**'
+      - 'research/vivo-phase-fabric/web/target-mailbox.mjs'
+      - 'scripts/vivo/**'
+      - '.github/workflows/vivo-application.yml'
+permissions:
+  contents: read
+jobs:
+  actual-entrypoint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: python -m pip install -r services/vivo/requirements.txt
+      - run: python scripts/vivo/stage_input_dependency.py
+      - name: Exact imported originals remain unchanged
+        run: python scripts/vivo/verify_source_import.py
+      - name: Application adapters, private authority runtime and real HTTP launcher
+        run: |
+          set -euo pipefail
+          mkdir -p application-evidence
+          node --test services/vivo/tests/application/*.test.mjs services/vivo/tests/material-authority/*.test.mjs services/vivo_material/tests/*.test.mjs | tee application-evidence/node.log
+          python -m unittest discover -s services/vivo/tests/application -p 'test_*.py' -v 2>&1 | tee application-evidence/http.log
+          python -m unittest discover -s services/vivo_material/tests -v 2>&1 | tee application-evidence/material.log
+          python -m services.vivo_material.verify > application-evidence/numerical.json
+      - name: Original runtime regression and integration contracts
+        run: |
+          set -euo pipefail
+          python scripts/vivo/test_import_stage_a.py 2>&1 | tee application-evidence/import.log
+          node --test services/vivo/tests/authority/*.test.mjs services/vivo/tests/input/*.test.mjs services/vivo/tests/integration/contracts.test.mjs research/vivo-phase-fabric/tests/target-mailbox.test.mjs | tee application-evidence/composition.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vivo-mounted-application-evidence
+          path: application-evidence/
+          retention-days: 7

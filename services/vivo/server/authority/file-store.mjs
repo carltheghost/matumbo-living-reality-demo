@@ -2,8 +2,8 @@
  * A failed/uncertain write never becomes an accepted in-memory authority receipt.
  * Crash-left lock directories require operator inspection; never steal a live lock.
  */
-import {mkdir,open,rename,unlink,rmdir,lstat} from 'node:fs/promises';
-import {constants} from 'node:fs';
+import {mkdir,open,unlink,rmdir,lstat} from 'node:fs/promises';
+import {constants,renameSync} from 'node:fs';
 import {dirname,resolve,relative,sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {randomUUID} from 'node:crypto';
@@ -12,6 +12,7 @@ const webRoot=fileURLToPath(new URL('../../web/',import.meta.url));
 
 export class FileAuthorityStore {
   #path; #limit;
+  supportsCommitGuard = true;
   constructor({path,maxBytes=20*1024*1024}) {
     if(typeof path!=='string'||!path.length||!Number.isSafeInteger(maxBytes)||maxBytes<1024||maxBytes>64*1024*1024)fail('INVALID_STORE_OPTIONS');
     this.#path=resolve(path);this.#limit=maxBytes;
@@ -41,7 +42,8 @@ export class FileAuthorityStore {
       return v;
     } finally {await f.close();}
   }
-  async compareAndSwap(expected,value) {
+  async compareAndSwap(expected,value,{beforeCommit}={}) {
+    if(beforeCommit!==undefined&&typeof beforeCommit!=='function')fail('STORE_COMMIT_GUARD');
     if(expected!==null&&(typeof expected!=='string'||!/^[a-f0-9]{64}$/.test(expected)))fail('STORE_EXPECTED_DIGEST');
     if(value?.schema!=='vivo.lease-checkpoint/1'||!/^[a-f0-9]{64}$/.test(value.digest)||!value.state)fail('STORE_RECORD');
     const data=Buffer.from(JSON.stringify(value)+'\n');
@@ -54,7 +56,10 @@ export class FileAuthorityStore {
       if((current?.digest??null)!==expected)fail('STORE_CONFLICT');
       file=await open(tmp,constants.O_CREAT|constants.O_EXCL|constants.O_WRONLY|constants.O_NOFOLLOW,0o600);
       await file.writeFile(data);await file.sync();await file.close();file=null;
-      await rename(tmp,this.#path);
+      // Final authorization/expiry check and rename share a synchronous boundary.
+      // The following directory fsync still must succeed before acceptance.
+      if(beforeCommit){const result=beforeCommit();if(result?.then){Promise.resolve(result).catch(()=>{});fail('STORE_ASYNC_COMMIT_GUARD');}}
+      renameSync(tmp,this.#path);
       const directory=await open(dirname(this.#path),constants.O_RDONLY|constants.O_DIRECTORY);
       try{await directory.sync();}finally{await directory.close();}
     } finally {
