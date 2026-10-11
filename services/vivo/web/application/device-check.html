@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#07171d">
+  <title>Vivo Device Evidence</title>
+  <link rel="stylesheet" href="/application/device-check.css">
+</head>
+<body>
+  <main>
+    <header>
+      <div><strong>Vivo</strong><span>PHYSICAL DEVICE EVIDENCE</span></div>
+      <a href="/">Back to Vivo</a>
+    </header>
+    <section class="card">
+      <h1>Phone / camera acceptance</h1>
+      <p>This page tests this device. Camera frames stay in this browser and are never sent to the Vivo server. The exported evidence contains diagnostics and event counts, not images, video, tokens, or hand coordinates.</p>
+      <div id="privacy" class="ok">NO CAMERA FRAMES UPLOADED</div>
+    </section>
+    <section class="card">
+      <h2>Environment</h2>
+      <div id="staticChecks" class="grid"></div>
+      <button id="network">Measure server round trip</button>
+      <output id="networkState">Not measured</output>
+    </section>
+    <section class="card">
+      <h2>Touch</h2>
+      <p>Touch and release the target once with a finger. Mouse input is shown separately and does not count as physical-touch evidence.</p>
+      <button id="touchTarget" class="touch-target">TOUCH HERE</button>
+      <output id="touchState">Waiting for physical touch</output>
+    </section>
+    <section class="card">
+      <h2>Camera + local hand model</h2>
+      <video id="cameraVideo" playsinline muted></video>
+      <div class="buttons">
+        <button id="front">Front + hands</button>
+        <button id="rear">Rear + hands</button>
+        <button id="preview">Rear preview only</button>
+        <button id="stop">Stop camera</button>
+      </div>
+      <output id="cameraState">OFF</output>
+      <div id="cameraMetrics" class="grid"></div>
+      <p class="muted">For hand evidence, show an open hand until the page reports MODEL READY, then point and pinch. Tracking runs in the existing worker using the same-origin packaged model and WASM.</p>
+    </section>
+    <section class="card">
+      <h2>Evidence</h2>
+      <div id="verdict">Physical-device acceptance is pending.</div>
+      <button id="export">Export evidence JSON</button>
+      <pre id="summary"></pre>
+    </section>
+  </main>
+  <script type="module" src="/application/device-check.mjs"></script>
+</body>
+</html>

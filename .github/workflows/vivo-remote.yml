@@ -9,6 +9,7 @@ on:
       - 'services/vivo/web/authority/**'
       - 'services/vivo/contracts/**'
       - 'services/vivo/tests/remote/**'
+      - 'services/vivo/web/application/device-check.*'
       - 'services/vivo_adaptive/**'
       - 'coordination/vivo/REMOTE-CANONICAL-STAGE.md'
       - '.github/workflows/vivo-remote.yml'
