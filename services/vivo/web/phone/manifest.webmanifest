@@ -1,0 +1,11 @@
+{
+  "name": "maTumbo Vivo Phone Engine",
+  "short_name": "Vivo",
+  "description": "Local-first window into one persistent Vivo reality.",
+  "start_url": "../index.html?phone=1",
+  "scope": "../",
+  "display": "standalone",
+  "background_color": "#07171d",
+  "theme_color": "#07171d",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
