@@ -161,3 +161,18 @@ test('explicit Studio commit advances only the selected unbound entity and survi
   assert.equal(staleEntity.status,'rejected');assert.equal(staleEntity.code,'STALE_ENTITY');assert.deepEqual(restored.checkpoint(),beforeReject);
   await resumed.close();await other.close();
 });
+
+test('canonical Studio commit rejects an active lease without mutation',async()=>{
+  const store=new MemoryAuthorityStore(),world=await LocalLeaseWorld.create({snapshot:workshopSeed(),store});
+  const actor=world.attach({actorId:'studio.lease'});await actor.open();await actor.registerEye('main',entryView());
+  const initial=actor.getSnapshot(),binding=initial.studioBindings['studio.node.echo'],entity=initial.spaces.root.entities.relic;
+  const begun=await actor.submit({schema:'vivo.command/1',id:'studio.lease.begin',worldId:initial.worldId,spaceId:'root',kind:'grab.begin',
+    expectedRevision:entity.revision,payload:{entityId:'relic',source:'touch',inputEpoch:1}});
+  assert.equal(begun.status,'accepted');const held=actor.getSnapshot(),heldBinding=held.studioBindings[binding.bindingId],heldEntity=held.spaces.root.entities.relic;
+  const before=world.checkpoint();
+  const rejected=await actor.submit(studioCommitCommand(held,[2.9,-1.1,.8,.2],{bindingId:binding.bindingId,metadata:heldBinding.metadata,
+    commandId:'studio.commit.held',expectedBindingRevision:heldBinding.bindingRevision,expectedEntityRevision:heldEntity.revision}));
+  assert.equal(rejected.status,'rejected');assert.equal(rejected.code,'STUDIO_ENTITY_HELD');assert.deepEqual(world.checkpoint(),before);
+  assert.deepEqual(actor.getSnapshot().studioBindings[binding.bindingId].q,binding.q);assert.deepEqual(actor.getSnapshot().spaces.root.entities.relic.q,entity.q);
+  await actor.close();
+});

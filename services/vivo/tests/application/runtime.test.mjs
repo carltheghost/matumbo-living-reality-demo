@@ -12,7 +12,7 @@ import {createHash} from 'node:crypto';
 import {MountedRuntime} from '../../server/application/runtime.mjs';
 import {FileAuthorityStore} from '../../server/authority/file-store.mjs';
 import {workshopSeed,entryView} from '../../server/application/seed.mjs';
-import {studioCommitCommand} from '../../contracts/studio-binding.mjs';
+import {studioCommitCommand,studioTransformCommand} from '../../contracts/studio-binding.mjs';
 
 let serial=0;
 const command=(kind,payload,spaceId='root',expectedRevision=0,id='test.'+(++serial))=>({
@@ -225,6 +225,26 @@ test('event backpressure is serialized; cleanup remains possible and history is 
     }
     assert.equal((await restarted.dispatch({op:'ready'})).journal.retainedEvents,20);
   } finally {await restarted.dispatch({op:'shutdown'});}
+});
+
+test('journal backpressure revokes Studio writes and preserves the mounted snapshot',async t=>{
+  const {runtime,one}=await fixture(t,{maxEvents:18});
+  let current=await state(runtime,one);
+  while(current.state.journal.remainingEvents>0){
+    const eye=entryView();eye.q[0]+=current.state.eye.revision*.01+.01;eye.slice.x1=eye.q[0];
+    current=await runtime.dispatch({op:'moveEye',token:one.token,args:{view:eye,expectedRevision:current.state.eye.revision}});
+  }
+  assert.equal(current.state.journal.readOnly,true);
+  assert.deepEqual(current.state.capabilities.studio.canonicalCommit,{allowed:false,durable:false,
+    rejectionCode:'JOURNAL_BACKPRESSURE',
+    reason:'Accepted history is read-only at its cleanup reserve; Studio writes are unavailable until a reviewed journal continuation is provisioned.'});
+  const before=current.state.snapshot,binding=before.studioBindings['studio.node.echo'],entity=before.spaces.root.entities.relic;
+  const transform=studioTransformCommand(before,[2.1,2.2,2.3,2.4],{bindingId:binding.bindingId,metadata:binding.metadata,commandId:'journal.transform'});
+  await assert.rejects(submit(runtime,one,transform),{code:'JOURNAL_BACKPRESSURE'});
+  const commit=studioCommitCommand(before,[2.1,2.2,2.3,2.4],{bindingId:binding.bindingId,metadata:binding.metadata,
+    expectedBindingRevision:binding.bindingRevision,expectedEntityRevision:entity.revision,commandId:'journal.commit'});
+  await assert.rejects(submit(runtime,one,commit),{code:'JOURNAL_BACKPRESSURE'});
+  assert.deepEqual((await state(runtime,one)).state.snapshot,before);
 });
 
 test('real subprocess protocol persists Eyes, rejects old tokens, and crash-releases leases',async t=>{
