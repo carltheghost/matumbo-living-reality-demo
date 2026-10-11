@@ -109,7 +109,7 @@ export class GripHost {
       let known;
       try {
         known=await this.#deadline(Promise.resolve().then(()=>
-          this.#authority.inspectLease(e.entity.spaceId,e.entity.id)),
+          this.#authority.inspectLease(e.entity.spaceId,e.entity.id,{source:e.source,inputEpoch:e.inputEpoch,acquireCommandId:e.acquireCommandId})),
           this.#options.cleanupTimeoutMs,'ACQUIRE_CLEANUP_UNCONFIRMED');
       } catch(err) {
         if(e.cleanupConfirmed)return e.cleanupResult;
@@ -169,18 +169,19 @@ export class GripHost {
       catch(v) {finish(false,v);}
     });
   }
-  async begin(key,{entity,source,inputEpoch}) {
+  async begin(key,{entity,source,inputEpoch,cooperativeGroup=null}) {
     if(this.#closed) throw error('HOST_CLOSED');
     if(typeof key!=='string'||!key.length) throw error('SOURCE_KEY_REQUIRED');
     validateFrame(entity);
     const old=this.#entries.get(key);
     if(old&&!['closed','reconciled'].includes(old.phase)) throw error('SOURCE_BUSY');
-    const e={entity:copy(entity),source,inputEpoch,phase:'acquiring',controller:null,
+    if(cooperativeGroup!==null&&(typeof cooperativeGroup!=='string'||!/^[A-Za-z0-9_.:-]{1,128}$/.test(cooperativeGroup)))throw error('INVALID_COOPERATIVE_GROUP');
+    const e={entity:copy(entity),source,inputEpoch,cooperativeGroup,phase:'acquiring',controller:null,
       cancelled:false,leaseId:null,leaseMs:3000,recovery:null,renewal:null,
       fenced:false,cleanupConfirmed:false,cleanupResult:null,acquisition:null,acquisitionPending:true};
     const idPrefix='host.'+crypto.randomUUID();
     const command=validateCommand({schema:'vivo.command/1',id:idPrefix+':acquire',worldId:this.#session.worldId,
-      spaceId:entity.spaceId,kind:'grab.begin',expectedRevision:entity.revision,payload:{entityId:entity.id,source,inputEpoch}});
+      spaceId:entity.spaceId,kind:'grab.begin',expectedRevision:entity.revision,payload:{entityId:entity.id,source,inputEpoch,...(cooperativeGroup?{cooperativeGroup}:{})}});
     e.acquireCommandId=command.id;
     this.#entries.set(key,e);
     e.acquisition=this.#beginAcquisition(key,e,command,idPrefix);

@@ -1,0 +1,224 @@
+name: Vivo canonical remote collaboration
+on:
+  pull_request:
+    paths:
+      - 'services/vivo/server/remote_application.py'
+      - 'services/vivo/server/application/runtime.mjs'
+      - 'services/vivo/server/application/adaptive_host.py'
+      - 'services/vivo/web/application/**'
+      - 'services/vivo/web/authority/**'
+      - 'services/vivo/contracts/**'
+      - 'services/vivo/tests/remote/**'
+      - 'services/vivo/web/application/device-check.*'
+      - 'services/vivo_adaptive/**'
+      - 'coordination/vivo/REMOTE-CANONICAL-STAGE.md'
+      - 'coordination/vivo/REMOTE-DEVICE-ACCEPTANCE.md'
+      - 'services/vivo/start-canonical-remote.sh'
+      - '.github/workflows/vivo-remote.yml'
+permissions:
+  contents: read
+jobs:
+  two-person:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: python -m pip install -r services/vivo/requirements.txt
+      - name: Syntax
+        run: |
+          set -euo pipefail
+          node --check services/vivo/web/application/remote-transport.mjs
+          node --check services/vivo/server/application/runtime.mjs
+          python -m py_compile services/vivo/server/remote_application.py
+      - name: Real two-WebSocket canonical acceptance
+        run: |
+          set -euo pipefail
+          PYTHONPATH="$PWD" python -m unittest discover -s services/vivo/tests/remote -p 'test_*.py' -v
+      - name: Cooperative/adaptive regressions
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s services/vivo_adaptive/tests -v
+          node --test services/vivo/tests/adaptive-authority/*.test.mjs
+      - name: Scope
+        run: echo 'Loopback two-WebSocket evidence. No physical phone, camera, public DNS/TLS deployment, or real Internet latency is certified.'
+
+  browser-two-person:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned browser requirements
+        run: python -m pip install -r services/vivo/requirements-dev.txt
+      - name: Install pinned Chromium
+        run: python -m playwright install --with-deps chromium
+      - name: Browser module syntax
+        run: |
+          set -euo pipefail
+          node --check services/vivo/web/application/remote-bootstrap.mjs
+          node --check services/vivo/web/application/remote-transport.mjs
+      - name: Run real two-tab remote browser acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p remote-browser-evidence
+          data_dir="$(mktemp -d)"
+          server_pid=''
+          owner_token='owner-test-0123456789abcdefghijklmnopqrstuvwxyz-ABCDE'
+          cleanup() {
+            if [ -n "$server_pid" ] && kill -0 "$server_pid" 2>/dev/null; then
+              kill "$server_pid" 2>/dev/null || true
+              wait "$server_pid" 2>/dev/null || true
+            fi
+            rm -rf "$data_dir"
+          }
+          trap cleanup EXIT
+          VIVO_TEST_OWNER="$owner_token" PYTHONPATH="$PWD/services/vivo:$PWD"             python -m server.remote_application               --host 127.0.0.1 --port 8769               --data-dir "$data_dir"               --origin http://127.0.0.1:8769               --owner-token-env VIVO_TEST_OWNER               --allow-insecure-loopback               >remote-browser-evidence/server.log 2>&1 &
+          server_pid=$!
+          python - <<'PY'
+          import json, time
+          from urllib.request import urlopen
+          deadline=time.monotonic()+45
+          last=None
+          while time.monotonic()<deadline:
+              try:
+                  with urlopen('http://127.0.0.1:8769/healthz',timeout=2) as r:
+                      body=json.load(r)
+                  if r.status==200 and body.get('ok'):
+                      print('remote browser authority ready')
+                      break
+                  last=body
+              except Exception as error:
+                  last=f'{type(error).__name__}: {error}'
+              time.sleep(.25)
+          else:
+              raise SystemExit(f'remote readiness timeout: {last!r}')
+          PY
+          timeout --signal=TERM 120s python services/vivo/tests/remote/browser_two_person.py             http://127.0.0.1:8769/ "$owner_token" remote-browser-evidence/two-person.json
+          timeout --signal=TERM 60s python services/vivo/tests/remote/browser_device_check_smoke.py             http://127.0.0.1:8769/ remote-browser-evidence/device-check-smoke.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vivo-remote-browser-two-person-evidence
+          path: remote-browser-evidence/
+          retention-days: 7
+      - name: Scope
+        run: echo 'Managed headless Chromium, camera-off, loopback WebSocket evidence only; not a physical phone/camera or public Internet/TLS deployment test.'
+
+
+  tls-loopback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install runtime requirements
+        run: python -m pip install -r services/vivo/requirements.txt
+      - name: Refuse non-loopback plaintext startup
+        shell: bash
+        run: |
+          set -euo pipefail
+          data_dir="$(mktemp -d)"
+          chmod 700 "$data_dir"
+          trap 'rm -rf "$data_dir"' EXIT
+          export VIVO_OWNER_TOKEN='tls-gate-owner-0123456789abcdef0123456789abcdef'
+          if PYTHONPATH="$PWD/services/vivo:$PWD" python -m server.remote_application \
+              --host 0.0.0.0 --port 8771 \
+              --data-dir "$data_dir" \
+              --origin http://127.0.0.1:8771 \
+              >tls-refusal.log 2>&1; then
+            echo 'non-loopback plaintext startup unexpectedly succeeded' >&2
+            exit 1
+          fi
+          grep -q 'TLS_REQUIRED' tls-refusal.log
+      - name: Real HTTPS and WSS transport on self-signed loopback certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d)"
+          chmod 700 "$work"
+          server_pid=''
+          cleanup() {
+            if [ -n "$server_pid" ] && kill -0 "$server_pid" 2>/dev/null; then
+              kill "$server_pid" 2>/dev/null || true
+              wait "$server_pid" 2>/dev/null || true
+            fi
+            rm -rf "$work"
+          }
+          trap cleanup EXIT
+          openssl req -x509 -newkey rsa:2048 -sha256 -nodes -days 1 \
+            -keyout "$work/key.pem" -out "$work/cert.pem" \
+            -subj '/CN=127.0.0.1' \
+            -addext 'subjectAltName=IP:127.0.0.1' >/dev/null 2>&1
+          export VIVO_TLS_OWNER='tls-owner-0123456789abcdef0123456789abcdef'
+          PYTHONPATH="$PWD/services/vivo:$PWD" python -m server.remote_application \
+            --host 127.0.0.1 --port 8770 \
+            --data-dir "$work/data" \
+            --origin https://127.0.0.1:8770 \
+            --owner-token-env VIVO_TLS_OWNER \
+            --cert "$work/cert.pem" --key "$work/key.pem" \
+            >"$work/server.log" 2>&1 &
+          server_pid=$!
+          python - <<'PY'
+          import asyncio,json,os,ssl,time
+          from urllib.request import Request,urlopen
+          import aiohttp
+
+          https='https://127.0.0.1:8770'
+          ctx=ssl._create_unverified_context()
+          deadline=time.monotonic()+30
+          last=None
+          while time.monotonic()<deadline:
+              try:
+                  with urlopen(Request(https+'/healthz'),context=ctx,timeout=2) as response:
+                      body=json.load(response)
+                      headers=dict(response.headers)
+                  if response.status==200 and body.get('ok'):
+                      assert headers.get('Permissions-Policy') == 'camera=(self), microphone=(), geolocation=()'
+                      break
+                  last=body
+              except Exception as exc:
+                  last=f'{type(exc).__name__}: {exc}'
+              time.sleep(.2)
+          else:
+              raise SystemExit(f'HTTPS readiness timeout: {last!r}')
+
+          async def main():
+              connector=aiohttp.TCPConnector(ssl=False)
+              async with aiohttp.ClientSession(connector=connector) as session:
+                  async with session.ws_connect(
+                      'wss://127.0.0.1:8770/ws',
+                      headers={'Origin':'https://127.0.0.1:8770'},
+                      heartbeat=10,
+                  ) as ws:
+                      await ws.send_json({'type':'join','token':os.environ['VIVO_TLS_OWNER']})
+                      joined=await ws.receive_json(timeout=5)
+                      assert joined['type']=='joined' and joined['role']=='owner', joined
+                      await ws.send_json({'id':'tls.state','op':'state','args':{}})
+                      while True:
+                          msg=await ws.receive_json(timeout=5)
+                          if msg.get('type')=='reply' and msg.get('id')=='tls.state':
+                              assert not msg.get('error'), msg
+                              assert msg['state']['snapshot']['worldId']=='vivo.local.workshop'
+                              break
+          asyncio.run(main())
+          print('real HTTPS/WSS loopback transport passed')
+          PY
+      - name: Scope
+        run: echo 'Self-signed loopback TLS proves the HTTPS/WSS code path and TLS-required gate, not public certificate trust, DNS, Internet latency or physical-device acceptance.'

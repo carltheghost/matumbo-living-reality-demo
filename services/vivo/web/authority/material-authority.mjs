@@ -3,6 +3,11 @@
  * Loaded dynamically only when the host explicitly selects this protocol. */
 import {materialDigest, verifyMaterialDigest} from '../../../vivo_material/codec.mjs';
 export const MATERIAL_PROTOCOL = 'vivo.lease-material/1';
+export function coversSpace(state,spaceId){return state?.material?.spaceId===spaceId;}
+export function targetAllowed(state,spaceId,q){
+  const cp=state?.material?.checkpoint;
+  return coversSpace(state,spaceId)&&Array.isArray(q)&&q.length===4&&q.every((v,i)=>num(v)&&v>=-cp.lengths[i]/2&&v<cp.lengths[i]/2);
+}
 const CODEC = 'vivo.material.phase/1';
 const LAW = 'vivo.phase.periodic-compliant/1';
 const TEACHER = '0580e63e9a7dac96b70ffd5ed559b2ccd063f0526066fe38bafa571ca0d27947';

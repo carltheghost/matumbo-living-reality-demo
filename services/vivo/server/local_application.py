@@ -67,7 +67,7 @@ def material_observation_view_matches(observed, expected_eye, candidate_eye, ent
 
 
 class LocalBridge:
-    def __init__(self, path=None, *, phase=False, max_events=65536, store='posix'):
+    def __init__(self, path=None, *, phase=False, adaptive=False, remote_actors=False, max_events=65536, store='posix'):
         if store == 'memory':
             if path is not None:
                 raise ValueError('Memory store does not accept a data path; session state is process-local only')
@@ -75,7 +75,10 @@ class LocalBridge:
         else:
             self.path = str(Path(path)) if store == 'sqlite' else str(Path(path).resolve())
         self.store = store
+        if phase and adaptive: raise ValueError('Choose one material mode')
         self.phase = phase
+        self.adaptive = adaptive
+        self.remote_actors = bool(remote_actors)
         self.max_events = max_events
         self.process = None
         self.lock = asyncio.Lock()
@@ -89,7 +92,7 @@ class LocalBridge:
         command = [node, str(ROOT / 'server/application/runtime.mjs')]
         if self.path is not None:
             command.append(self.path)
-        command.extend(['--store', self.store, *(['--phase'] if self.phase else []), '--journal-events', str(self.max_events)])
+        command.extend(['--store', self.store, *(['--phase'] if self.phase else ['--adaptive'] if self.adaptive else []), *(['--remote-actors'] if self.remote_actors else []), '--journal-events', str(self.max_events)])
         self.process = await asyncio.create_subprocess_exec(
             *command,
             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
@@ -97,12 +100,20 @@ class LocalBridge:
             stderr=None, limit=64 * 1024 * 1024)
         try:
             ready = json.loads(await asyncio.wait_for(self.process.stdout.readline(), 15))
-            if ready.get('initializePhase') and self.phase:
-                from .application.material_host import initialize_phase
-                initialized = await asyncio.to_thread(initialize_phase, ready['snapshot'])
+            if ready.get('initializeMaterial'):
+                mode = ready['initializeMaterial']
+                if mode == 'phase' and self.phase:
+                    from .application.material_host import initialize_phase
+                    initializer = initialize_phase
+                elif mode == 'adaptive' and self.adaptive:
+                    from .application.adaptive_host import initialize_adaptive
+                    initializer = initialize_adaptive
+                else:
+                    raise RuntimeError('Material initializer mode mismatch')
+                initialized = await asyncio.to_thread(initializer, ready['snapshot'])
                 encoded = (json.dumps(initialized, allow_nan=False, ensure_ascii=False) + '\n').encode('utf-8')
                 if len(encoded) > 4 * 1024 * 1024:
-                    raise RuntimeError('Phase initializer exceeds private allocation bound')
+                    raise RuntimeError('Material initializer exceeds private allocation bound')
                 self.process.stdin.write(encoded)
                 await asyncio.wait_for(self.process.stdin.drain(), 15)
                 ready = json.loads(await asyncio.wait_for(self.process.stdout.readline(), 15))
@@ -141,6 +152,13 @@ class LocalBridge:
                 response = json.loads(raw)
                 if response.get('id') != ident:
                     raise RuntimeError('Authority response mismatch')
+            except asyncio.CancelledError:
+                # Cancellation while an exchange is in flight can leave its reply
+                # unread. Never let a later request consume that stale receipt.
+                if self.process.returncode is None:
+                    self.process.kill()
+                    await self.process.wait()
+                raise
             except (ValueError, RuntimeError, BrokenPipeError, ConnectionError, asyncio.TimeoutError):
                 # Never read a late response as another request's receipt. Kill this
                 # uncertain process; a restart invalidates process-local capabilities.
@@ -198,7 +216,7 @@ def require_local(request, *, mutation=False):
         raise web.HTTPForbidden(text='Cross-site access refused')
 
 
-def local_index(*, phase=False, store='posix'):
+def local_index(*, phase=False, adaptive=False, store='posix'):
     source = (ROOT / 'web/index.html').read_bytes()
     marker = '<script type="module" src="shared.js"></script>'
     text = source.decode('utf-8')
@@ -225,6 +243,9 @@ def local_index(*, phase=False, store='posix'):
     if phase:
         text = text.replace('Grip targets are accepted constraints; material motion and learning are not connected yet.',
             'Experimental 4D phase material is connected. Press Run phase in '+('Session state' if store == 'memory' else 'Saved state')+' to advance the bounded numerical model; 11D material and learning remain unavailable.')
+    elif adaptive:
+        text = text.replace('Grip targets are accepted constraints; material motion and learning are not connected yet.',
+            'Learned adaptive graph material is connected in the 4D root and 11D inner world. Accepted grips drive the versioned neural edge law; time remains separate.')
     return source, text
 
 
@@ -346,7 +367,8 @@ def studio_index():
     return source, text
 
 
-def make_local_app(data_dir=None, *, phase=False, max_events=65536, store='posix'):
+def make_local_app(data_dir=None, *, phase=False, adaptive=False, max_events=65536, store='posix'):
+    if phase and adaptive: raise ValueError('Choose one material mode')
     if store not in ('posix', 'sqlite', 'memory'):
         raise ValueError('Choose store posix, sqlite or memory')
     if store == 'memory' and data_dir is not None:
@@ -369,12 +391,16 @@ def make_local_app(data_dir=None, *, phase=False, max_events=65536, store='posix
             raise ValueError('Local data must stay outside the web directory')
         directory.mkdir(parents=True, exist_ok=True, mode=0o700)
         app = make_app(directory / 'comparison.sqlite')
-    checkpoint = None if store == 'memory' else ('canonical-phase' if phase else 'canonical-world') + ('.sqlite' if store == 'sqlite' else '.json')
-    bridge = LocalBridge(None if checkpoint is None else directory / checkpoint, phase=phase, max_events=max_events, store=store)
+    label = 'phase' if phase else 'adaptive' if adaptive else 'world'
+    checkpoint = None if store == 'memory' else ('canonical-' + label) + ('.sqlite' if store == 'sqlite' else '.json')
+    bridge = LocalBridge(None if checkpoint is None else directory / checkpoint, phase=phase, adaptive=adaptive, max_events=max_events, store=store)
     material_host = None
     if phase:
         from .application.material_host import PhaseApplicationHost
         material_host = PhaseApplicationHost(bridge.material_call)
+    elif adaptive:
+        from .application.adaptive_host import AdaptiveApplicationHost
+        material_host = AdaptiveApplicationHost(bridge.material_call)
     app['local_bridge'] = bridge
     app['local_data_dir'] = directory
     app['material_host'] = material_host
@@ -403,7 +429,7 @@ def make_local_app(data_dir=None, *, phase=False, max_events=65536, store='posix
 
     async def accepted_preview(request):
         require_local(request)
-        original, html = local_index(phase=phase, store=store)
+        original, html = local_index(phase=phase, adaptive=adaptive, store=store)
         return web.Response(text=html, content_type='text/html', headers={
             'X-Vivo-Imported-Index-SHA256': hashlib.sha256(original).hexdigest(),
             'X-Vivo-Application': 'canonical-local-accepted-preview-1',
@@ -612,11 +638,12 @@ def main():
     parser.add_argument('--journal-events', type=int, default=65536, help='Retained event capacity (12–65536); default 65536 with cleanup reserve')
     parser.add_argument('--store', choices=('posix', 'sqlite', 'memory'), default='posix', help='Explicit canonical backend; memory is session-only and rejects --data-dir; SQLite needs Node 24.19+ in the Node 24 line and an existing private directory outside the checkout')
     parser.add_argument('--material-phase', action='store_true', help='Explicit experimental 4D phase mode with separate checkpoint; initially paused')
+    parser.add_argument('--material-adaptive', action='store_true', help='Learned adaptive graph material across the 4D root and 11D inner space; initially paused')
     parser.add_argument('--data-dir', type=Path, default=None)
     args = parser.parse_args()
     if not 1 <= args.port <= 65535:
         parser.error('Port must be between 1 and 65535')
-    web.run_app(make_local_app(args.data_dir, phase=args.material_phase, max_events=args.journal_events, store=args.store), host='127.0.0.1', port=args.port, access_log=None)
+    web.run_app(make_local_app(args.data_dir, phase=args.material_phase, adaptive=args.material_adaptive, max_events=args.journal_events, store=args.store), host='127.0.0.1', port=args.port, access_log=None)
 
 
 if __name__ == '__main__':

@@ -1,0 +1,38 @@
+name: Vivo learned adaptive graph material
+on:
+  pull_request:
+    paths:
+      - 'services/vivo_adaptive/**'
+      - 'services/vivo/models/neural-edge-law.npz'
+      - 'services/vivo/server/reference.py'
+      - 'services/vivo_material/driver.py'
+      - 'coordination/vivo/ADAPTIVE-MATERIAL-STAGE.md'
+      - 'services/vivo/contracts/**'
+      - 'services/vivo/web/authority/**'
+      - 'services/vivo/tests/adaptive-authority/**'
+      - 'services/vivo/server/application/**'
+      - 'services/vivo/server/local_application.py'
+      - 'services/vivo/web/application/**'
+      - '.github/workflows/vivo-adaptive-material.yml'
+permissions:
+  contents: read
+jobs:
+  adaptive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -r services/vivo/requirements.txt && python -m pip install numpy==2.3.5
+      - name: Learned 3D-11D material checks
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s services/vivo_adaptive/tests -v
+          node --test services/vivo/tests/adaptive-authority/*.test.mjs
+          node --test services/vivo/tests/material-authority/*.test.mjs
+          node --test services/vivo/tests/integration/contracts.test.mjs
+          python -m unittest services.vivo.tests.application.test_adaptive_entrypoint -v
+      - name: Scope
+        run: echo 'Learned graph material unit/numerical checks only; authority/app/browser/device integration is separate.'

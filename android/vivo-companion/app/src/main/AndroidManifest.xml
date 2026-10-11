@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-permission android:name="android.permission.INTERNET"/>
+  <uses-permission android:name="android.permission.CAMERA"/>
+  <uses-permission android:name="android.permission.VIBRATE"/>
+  <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
+  <uses-feature android:name="android.hardware.camera.any" android:required="false"/>
+  <uses-feature android:name="android.hardware.camera.flash" android:required="false"/>
+  <application android:allowBackup="false" android:usesCleartextTraffic="false" android:label="Vivo Companion" android:theme="@style/AppTheme">
+    <activity android:name=".MainActivity" android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+      <intent-filter android:autoVerify="false">
+        <action android:name="android.intent.action.VIEW"/>
+        <category android:name="android.intent.category.DEFAULT"/>
+        <category android:name="android.intent.category.BROWSABLE"/>
+        <data android:scheme="https" android:host="carltheghost.github.io" android:pathPrefix="/matumbo-living-reality-demo/field-lab-studio.html"/>
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>

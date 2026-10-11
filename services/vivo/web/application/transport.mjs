@@ -41,7 +41,7 @@ export class LocalTransport {
   getSnapshot(){if(!this.current)throw Error('NO_SNAPSHOT');return structuredClone(this.current.snapshot);}
   subscribe(listener){this.listeners.add(listener);return()=>this.listeners.delete(listener);}
   submit(command){return this.call('submit',{command});}
-  inspectLease(spaceId,entityId){return this.call('inspectLease',{spaceId,entityId});}
+  inspectLease(spaceId,entityId,criteria={}){return this.call('inspectLease',{spaceId,entityId,...(Object.keys(criteria).length?{criteria}:{})});}
   renewLease(leaseId){return this.call('renewLease',{leaseId});}
   reconcileLease(event){return this.call('reconcileLease',{event});}
   moveEye(view,expectedRevision){return this.call('moveEye',{view,expectedRevision});}

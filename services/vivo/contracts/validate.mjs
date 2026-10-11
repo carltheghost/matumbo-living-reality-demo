@@ -29,8 +29,11 @@ export function validateCommand(command) {
     need(typeof p.sampleAgeMs === 'number' && Number.isFinite(p.sampleAgeMs) && p.sampleAgeMs >= 0 && p.sampleAgeMs <= 150, 'Stale target');
     validateFrame({spaceId:command.spaceId,dimension:p.dimension,chart:p.chart,q:p.q});
   } else if (command.kind === 'grab.begin') {
-    keys(p,['entityId','source','inputEpoch']);
+    const base=['entityId','source','inputEpoch'], actual=Object.keys(p).sort();
+    const normal=[...base].sort(), cooperative=[...base,'cooperativeGroup'].sort();
+    need(object(p) && (JSON.stringify(actual)===JSON.stringify(normal) || JSON.stringify(actual)===JSON.stringify(cooperative)), 'Unexpected or missing keys');
     need(id(p.entityId) && sources.has(p.source) && uint(p.inputEpoch), 'Invalid grab');
+    if (Object.hasOwn(p,'cooperativeGroup')) need(id(p.cooperativeGroup), 'Invalid cooperative group');
   } else if (command.kind === 'grab.end') {
     keys(p,['entityId','leaseId','inputEpoch','reason']);
     need(id(p.entityId) && id(p.leaseId) && uint(p.inputEpoch) && typeof p.reason === 'string' && p.reason.length > 0 && p.reason.length <= 120, 'Invalid release');
