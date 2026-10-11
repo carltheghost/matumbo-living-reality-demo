@@ -1,104 +1,123 @@
-// token-boot.js — side-effect boot module for the TUMBO-SIM ledger core.
-// Part of the TUMBO-SIM ledger core (src/domains).
+// token-boot.js - side-effect boot for the shared TUMBO-SIM owner.
 //
-// Imported once by the app entry (transitively, so the huge main bundle stays
-// untouched). Responsibilities:
-//   1. Load a persisted ledger (localStorage "tumbo.token.ledger.v1", strict
-//      load). A corrupt/tampered snapshot is discarded and replaced with a
-//      fresh ledger — silently, no console error.
-//   2. Fund generic demo genesis accounts (u:visitor, b:guide) from sys:faucet
-//      with explicit, fixed idempotency keys (re-boots replay safely).
-//      b:guide is registered with kind "bot".
-//   3. verifyInvariants() before exposing anything.
-//   4. Expose window.TumboToken = { ledger, balance, fmt, quote, execute, on }.
-//   5. Queue persistence in a microtask after every settled commit — never
-//      synchronously inside the commit, because vault/escrow bookkeeping for
-//      stake/deposit/intent actions may not be finished yet. (Receipt +
-//      balance-changed document CustomEvent("tumbo:token") dispatch lives in
-//      the facade's own onCommit subscription, so each settlement emits
-//      exactly one event wave.)
-//
-// Simulation only: TUMBO-SIM is a demo token. No real money, wagering, wallet
-// custody, or chains are involved anywhere in this module.
-import { TumboLedger } from "./token.js?v=20260922-cache2";
-import { createTokenFacade } from "./token-facade.js?v=20260922-cache2";
+// Persistence is a validated full-engine snapshot. A legacy key is read only
+// through an explicit migration path and is never deleted or overwritten until
+// the migrated snapshot has loaded and verified successfully.
 
-const STORAGE_KEY = "tumbo.token.ledger.v1";
-const GENESIS_IDEM = "genesis:demo-funding:v1";
+import {
+  engine as sharedEngine,
+  seedDemoWallet,
+  TumboUserLedger,
+} from "./token.js";
+import { createTokenFacade } from "./token-facade.js";
+import {
+  LedgerStore,
+  TOKEN_STORAGE_KEY,
+  loadTokenEngine,
+  adoptTokenEngine,
+} from "./token-store.js";
+
+export const LEGACY_STORAGE_KEY = "tumbo.token.ledger.v1";
 const DEMO_ACCOUNTS = ["u:visitor", "b:guide"];
-const DEMO_GRANT_TUMBO = 1000;
+const DEMO_GRANT_FLUFF = 1000 * 1000;
+const booted = new WeakMap();
 
 function storage() {
   try { return typeof localStorage !== "undefined" ? localStorage : null; }
   catch { return null; }
 }
 
-function loadPersisted() {
+function migrateLegacySnapshot(raw) {
+  const data = JSON.parse(raw);
+  // Some builds temporarily wrote a v2 document under the v1 key while the
+  // storage namespace was being moved. It is safe to promote that document;
+  // old metadata-only {v,tick,tip} records are deliberately rejected.
+  if (data?.format === "tumbo-token-engine-v2") return JSON.stringify(data);
+  if (data?.v === 2 && data?.engine?.format === "tumbo-token-engine-v2") return JSON.stringify(data.engine);
+  throw new Error("legacy token snapshot has no supported full-engine payload");
+}
+
+export function restorePersisted(owner) {
   const ls = storage();
-  if (!ls) return null;
-  let raw = null;
-  try { raw = ls.getItem(STORAGE_KEY); } catch { return null; }
-  if (!raw) return null;
+  if (!ls) return { owner, status: "in-memory" };
+  let current = null;
+  try { current = ls.getItem(TOKEN_STORAGE_KEY); } catch { return { owner, status: "storage-unavailable" }; }
+  if (current) {
+    try {
+      const restored = loadTokenEngine(current);
+      return { owner: adoptTokenEngine(owner, restored), status: "restored-local-snapshot" };
+    } catch {
+      // Preserve the invalid document for diagnostics/recovery. A later
+      // successful boot must not silently replace evidence of corruption.
+      return { owner, status: "invalid-local-snapshot-skipped" };
+    }
+  }
+
+  let legacy = null;
+  try { legacy = ls.getItem(LEGACY_STORAGE_KEY); } catch { return { owner, status: "storage-unavailable" }; }
+  if (!legacy) return { owner, status: "in-memory" };
   try {
-    return TumboLedger.load(raw); // strict: throws on tamper/corruption
+    const migratedRaw = migrateLegacySnapshot(legacy);
+    const restored = loadTokenEngine(migratedRaw);
+    // Promote only after parse, schema, journal, and lifecycle validation all
+    // succeed. Keep the original legacy value untouched for rollback.
+    ls.setItem(TOKEN_STORAGE_KEY, migratedRaw);
+    return { owner: adoptTokenEngine(owner, restored), status: "migrated-legacy-snapshot" };
   } catch {
-    try { ls.removeItem(STORAGE_KEY); } catch { /* keep going in memory */ }
-    return null; // corrupt snapshot: start fresh, silently
+    return { owner, status: "legacy-snapshot-skipped" };
   }
 }
 
-function fundDemoGenesis(ledger) {
-  for (const acct of DEMO_ACCOUNTS)
-    ledger.ensureAccount(acct, acct.startsWith("b:") ? "bot" : "user");
-  // Fixed idempotency keys make re-boots replay-safe: funded once, ever.
-  // faucetDrip honors the explicit idem, so a re-boot finds both keys in the
-  // idem registry and skips (no second drip, no FAUCET_COOLDOWN trip).
-  for (const acct of DEMO_ACCOUNTS) {
-    const dripKey = `${GENESIS_IDEM}:${acct.slice(2)}`;
-    const recvKey = `${GENESIS_IDEM}:recv:${acct.slice(2)}`;
-    if (ledger.s.idem[dripKey] && ledger.s.idem[recvKey]) continue;
-    const drip = ledger.faucetDrip({ to: acct, amountTumbo: DEMO_GRANT_TUMBO, idem: dripKey });
-    ledger.receive({ intentTxId: drip.txId, by: acct, idem: recvKey });
+function fundDemoGenesis(engine) {
+  for (const account of DEMO_ACCOUNTS) {
+    try {
+      engine.faucet(account, "TUMBO", DEMO_GRANT_FLUFF, {
+        idempotencyKey: `genesis:demo-funding:v2:${account}`,
+      });
+    } catch {
+      // Reboots replay the fixed request or leave an already-funded account
+      // unchanged when the local faucet has no remaining demo float.
+    }
   }
 }
 
-export function bootToken({ persist = true } = {}) {
-  const ledger = loadPersisted() || new TumboLedger({ seed: 20260920 });
-  fundDemoGenesis(ledger);
-  ledger.verifyInvariants();
+export function bootToken({ persist = true, engine = null, seed = true, install = true } = {}) {
+  const supplied = engine ?? sharedEngine;
+  if (booted.has(supplied)) return booted.get(supplied);
 
-  const facade = createTokenFacade(ledger);
+  let owner = supplied;
+  let storageStatus = "in-memory";
+  if (!engine && supplied.ledger.journalCount() === 4 && !(typeof window !== "undefined" && window.TumboToken?.engine)) {
+    const restored = restorePersisted(supplied);
+    owner = restored.owner;
+    storageStatus = restored.status;
+  }
 
-  let persistQueued = false;
-  function queuePersist() {
-    if (!persist || persistQueued) return;
-    persistQueued = true;
+  if (seed) seedDemoWallet(new TumboUserLedger(owner));
+  fundDemoGenesis(owner);
+  if (!owner.ledger.verifyChain().ok) throw new Error("token boot rejected an invalid chain");
+
+  const facade = createTokenFacade(owner);
+  let queued = false;
+  const queuePersist = () => {
+    if (!persist || queued) return;
+    queued = true;
     queueMicrotask(() => {
-      persistQueued = false;
-      const ls = storage();
-      if (!ls) return;
-      try { ls.setItem(STORAGE_KEY, ledger.serialize()); }
-      catch { /* storage full/blocked: ledger keeps running in memory */ }
+      queued = false;
+      try { LedgerStore.save(owner); } catch { /* blocked/full local storage is non-fatal */ }
     });
-  }
-
-  // Persistence only. The facade already announces every settled commit via
-  // its own onCommit subscription — this listener must not dispatch events,
-  // or execute() calls would emit a second, duplicate wave.
-  ledger.onCommit(() => queuePersist());
-
-  if (typeof window !== "undefined" && typeof document !== "undefined") {
-    window.TumboToken = {
-      ledger,
-      balance: facade.balance,
-      fmt: facade.fmt,
-      quote: facade.quote,
-      execute: facade.execute,
-      on: facade.on,
-    };
-  }
-  return facade;
+  };
+  const off = owner.on("receipt", queuePersist);
+  const api = Object.freeze({
+    ...facade,
+    storageStatus,
+    dispose() { off?.(); facade.dispose(); booted.delete(supplied); },
+  });
+  booted.set(supplied, api);
+  if (install && typeof window !== "undefined" && !window.TumboToken) window.TumboToken = api;
+  return api;
 }
 
 const api = bootToken();
 export default api;
+export { LedgerStore, TOKEN_STORAGE_KEY, loadTokenEngine };

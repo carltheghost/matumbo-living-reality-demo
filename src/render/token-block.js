@@ -41,7 +41,7 @@ import {
   tumboSimToFluff,
   newIdempotencyKey,
   getTumboTokenFacade,
-} from '../domains/token.js?v=20260922-cache2';
+} from '../domains/token.js';
 
 export const TOKEN_BLOCK_CONSOLE_SOURCE = 'tumbo-token-block';
 const TOKEN_BLOCK_ID = 'tumbo-token';

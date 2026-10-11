@@ -24,7 +24,7 @@ import {
   PositionNotFoundError,
   PositionStateError,
   LockNotMaturedError,
-} from '../src/domains/token.js';
+} from '../src/domains/token-vault.js';
 
 let keyN = 0;
 const key = () => `test-key-${++keyN}`;
@@ -49,8 +49,8 @@ test('boots with conservation, an empty vault, and a funded rewards reserve', ()
   assert.equal(v.assertVaultIntegrity(), true);
   assert.equal(v.assertConservation(), true);
   const totals = v.conservationTotals();
-  assert.equal(totals.TUMBO, TOKEN_VAULT_SUPPLY_FLUFF);
-  assert.equal(totals.sMIMAS, TOKEN_VAULT_SUPPLY_FLUFF);
+  assert.equal(totals.TUMBO, TOKEN_VAULT_SUPPLY_FLUFF.TUMBO);
+  assert.equal(totals.sMIMAS, TOKEN_VAULT_SUPPLY_FLUFF.sMIMAS);
   assert.ok(v.rewardsReserveOf('TUMBO') > 0);
   assert.ok(v.rewardsReserveOf('sMIMAS') > 0);
   assert.equal(v.balance('u:alice', 'TUMBO'), 5_000_000);
@@ -274,7 +274,7 @@ test('receipt hash chain verifies end to end', () => {
   const rs = v.receipts();
   assert.ok(rs.length >= 4);
   for (let i = 1; i < rs.length; i++) assert.equal(rs[i].proof.prevHash, rs[i - 1].proof.hash);
-  assert.equal(rs[0].proof.prevHash, 'GENESIS');
+  assert.equal(rs[0].proof.prevHash, 'genesis');
 });
 
 test('facade adapter exposes the shared TumboToken contract without clobbering', () => {
@@ -292,13 +292,13 @@ test('facade adapter exposes the shared TumboToken contract without clobbering',
   facade.tokenVault.stake({ from: 'u:alice', asset: 'TUMBO', amountFluff: 500, idempotencyKey: key() });
   assert.deepEqual(seen, ['stake']);
   off();
-  // does not clobber pre-installed fields
-  const keep = { ledger: { tag: 'other' }, balance: () => 42, fmt: () => 'x', on: () => 7 };
-  const f2 = attachTokenVault(keep, {});
-  assert.equal(f2.ledger.tag, 'other');
-  assert.equal(f2.balance(), 42);
-  assert.equal(f2.fmt(), 'x');
-  assert.equal(f2.on(), 7);
+  // An existing financial facade must identify the canonical owner; arbitrary
+  // lookalike surfaces are rejected instead of being silently adopted.
+  const invalid = { ledger: { tag: 'other' }, balance: () => 42, fmt: () => 'x', on: () => 7 };
+  assert.throws(() => attachTokenVault(invalid, {}), /canonical QuoteEngine/);
+  const f2 = attachTokenVault({ custom: 1 }, { engine: facade.engine });
+  assert.equal(f2.custom, 1);
+  assert.equal(f2.engine, facade.engine);
   assert.ok(f2.tokenVault);
 });
 
