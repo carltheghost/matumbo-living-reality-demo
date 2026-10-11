@@ -1,3 +1,5 @@
+import {studioBindingSeed} from '../../contracts/studio-binding.mjs';
+
 /** Fixed local workshop. Spatial coordinates are not a material simulation. */
 export const WORLD_ID = 'vivo.local.workshop';
 export const AUTHORITY_ID = 'vivo.local.authority';
@@ -25,7 +27,8 @@ export function workshopSeed() {
     field:{codec:'pending',handle:'pending.'+id,hash:'0'.repeat(64)},
     entryView:entryView(id,dimension),entities});
   return {schema:'vivo.snapshot/1',worldId:WORLD_ID,authorityId:AUTHORITY_ID,
-    acceptedSequence:0,simulationTime:0,rootSpaceId:'root',stateHash:'0'.repeat(64),spaces:{
+    acceptedSequence:0,simulationTime:0,rootSpaceId:'root',stateHash:'0'.repeat(64),
+    studioBindings:{'studio.node.echo':studioBindingSeed([-1.2,-.15,.25,0])},spaces:{
       root:space('root',4,{
         relic:entity('relic','root',4,[-1.2,-.15,.25,0],'Relic',.25),
         workpiece:entity('workpiece','root',4,[.15,.75,.25,0],'Workpiece',.3),

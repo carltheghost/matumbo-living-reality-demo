@@ -9,6 +9,7 @@ from aiohttp import web
 
 MODULES = (
     "services/vivo/contracts/validate.mjs",
+    "services/vivo/contracts/studio-binding.mjs",
     "research/vivo-phase-fabric/web/target-mailbox.mjs",
     "services/vivo/web/input/controller.mjs",
     "services/vivo/web/authority/lease-authority.mjs",

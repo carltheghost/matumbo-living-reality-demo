@@ -26,7 +26,7 @@ class ModuleRoutesTests(unittest.IsolatedAsyncioTestCase):
         await self.client.close()
         await self.runner.cleanup()
 
-    async def test_exact_bytes_and_mime_for_all_five_modules(self):
+    async def test_exact_bytes_and_mime_for_all_allowlisted_modules(self):
         for path in MODULE.MODULES:
             async with self.client.get(self.base + "/" + path) as r:
                 self.assertEqual(r.status, 200)

@@ -114,6 +114,9 @@ class MountedApplicationTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn('target="_blank"', text)
             self.assertIn('rel="noopener noreferrer"', text)
             self.assertIn('id="vivoLocalAssetBridge"', text)
+            self.assertIn('data-vivo-studio-authority="1"', text)
+            self.assertIn('SHARED OBJECT / ECHO', text)
+            self.assertIn("/services/vivo/contracts/studio-binding.mjs", text)
             self.assertIn('CameraPresence.prototype.loadVision', text)
             self.assertIn('CameraPresence.prototype.modelBytes', text)
             self.assertIn('/vendor/field-lab/vision_bundle.mjs', text)
@@ -179,6 +182,7 @@ class MountedApplicationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('/research/vivo-phase-fabric/web/target-mailbox.mjs', seen)
         self.assertIn('/services/vivo/web/input/controller.mjs', seen)
         self.assertIn('/services/vivo/contracts/validate.mjs', seen)
+        self.assertIn('/services/vivo/contracts/studio-binding.mjs', seen)
         self.assertGreaterEqual(len(seen), 9)
 
     async def test_origin_host_method_and_private_file_boundaries(self):

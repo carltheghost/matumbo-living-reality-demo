@@ -25,7 +25,12 @@ The launcher never installs software automatically.
 
 Open `http://127.0.0.1:8766/local/` for the primary **Full Studio**. This is the
 original browser-local field/universe model: browser checkpoints and JSON exports
-are explicit Studio actions, and it has no local-authority seat admission.
+are explicit Studio actions, and it has no automatic local-authority admission.
+The optional **Shared object / Echo** panel is an explicit projection bridge;
+open `http://127.0.0.1:8766/local/?vivoAuthority=1&seat=one` to connect it to
+local seat one, and use `seat=two` in a second tab. It maps only Studio node 055
+to the accepted root `relic` binding. Publish, apply, and offline-fork actions
+are explicit; a local Studio edit is never silently merged or overwritten.
 Its local camera adapter initializes hand tracking from the vendored Field Lab
 runtime/model; head-pointer mode is explicitly unavailable because no face
 landmarker model is included. Camera permission remains opt-in.
@@ -39,12 +44,15 @@ prior grips and retains its accepted Eye. Tokens are kept in tab sessionStorage,
 never in the checkpoint. A server restart invalidates all old tokens;
 explicitly clear/reopen the expired seat if the UI asks.
 
-The Studio and accepted preview are intentionally separate state models. Studio
+The Studio and accepted preview retain separate state models. Studio
 browser saves/history/video and JSON exports do not become accepted backend
-state. Conversely, accepted preview history/export describes the local authority
-world and does not restore the Studio field. In `--store memory` the accepted
-world is session-only and resets with the server; POSIX/SQLite modes persist
-accepted state in their private backend files.
+state automatically. The optional bridge carries only the versioned Echo
+projection binding through the authority; it does not copy Studio velocities,
+edges, laws, material checkpoints, camera state, or Eye state. Conversely,
+accepted preview history/export does not restore the whole Studio field. In
+`--store memory` the accepted world and binding are session-only and reset with
+the server; POSIX/SQLite modes persist accepted state in their private backend
+files.
 
 The accepted preview's **Fork offline branch** action is an explicit, downloaded
 handoff from the current accepted checkpoint. It preserves object IDs, nested
@@ -90,6 +98,8 @@ reloaded automatically.
 - Two session-bound local actors; separate Eye coordinates, basis and slice
 - Explicit mapped root 4D → inner 11D entry and exact outer-Eye return
 - Explicit `vivo.offline-branch/1` fork receipt and downloadable checkpoint handoff
+- Versioned `vivo.studio-binding/1` Echo projection with explicit CAS publish/apply
+- Full Studio bridge keeps two accepted Eyes independent and exposes capability-gated AR/VR checks without starting a session
 - Full-dimensional accepted grip targets with capture-time freshness checks
 - Distinct provisional and accepted target markers; solid marks use accepted entity coordinates
 - Final pointer/hand samples, source-specific loss cleanup and explicit reconcile
@@ -99,7 +109,9 @@ In POSIX/SQLite modes, each accepted operation is saved before acknowledgment. I
 memory mode, each accepted operation is committed atomically to the in-process
 session store before acknowledgment and is discarded when the process stops. The local server enforces
 loopback peer/Host and exact Origin for mutation. No forwarded identity is trusted.
-Raw camera frames and hand landmarks never enter the authority bridge.
+Raw camera frames, hand landmarks and head-tracking claims never enter the
+authority bridge. The bridge's AR/VR button is capability inspection only; it
+does not start camera or WebXR sessions.
 
 ## Honest capability boundaries
 
