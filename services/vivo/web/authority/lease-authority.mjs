@@ -274,7 +274,8 @@ export class LocalLeaseWorld {
         result={leaseId:lease.id,expiresAt:lease.expiresAt,leaseMs:this.#ttl,entity:clone(entity),...(cooperative?{cooperativeGroup:group}:{})};
       } else {
         current=leaseKey===null?null:next.leases[leaseKey];
-        if(!current||current.expiresAt<=now) return reject('LEASE_EXPIRED',entity);
+        if(!current) return reject(entityEntries.length?'LEASE_MISMATCH':'LEASE_EXPIRED',entity);
+        if(current.expiresAt<=now) return reject('LEASE_EXPIRED',entity);
         if(current.session!==token || current.id!==p.leaseId || current.inputEpoch!==p.inputEpoch) return reject('LEASE_MISMATCH',entity);
         if(command.kind==='grab.target') {
           if(p.source!==current.source) return reject('SOURCE_MISMATCH',entity);
