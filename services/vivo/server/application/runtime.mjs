@@ -233,7 +233,7 @@ export class MountedRuntime {
     if(this.#statusRevision>=Number.MAX_SAFE_INTEGER)fail('STATUS_REVISION_EXHAUSTED');
     return {runtimeRevision:++this.#statusRevision,snapshot:this.#world.snapshot(),eye:clone(this.#store.record.state.eyes[JSON.stringify([session.session.actorId,'main'])]??null),
       constraints:this.#world.constraints().map(l=>({actorId:l.actorId,entityId:l.entityId,
-        spaceId:l.spaceId,source:l.source,target:clone(l.target),cooperativeGroup:l.cooperativeGroup??null})),
+        spaceId:l.spaceId,source:l.source,target:clone(l.target),...(l.cooperativeGroup?{cooperativeGroup:l.cooperativeGroup}:{})})),
       participants:SEATS.map(seat=>({seat,actorId:LOCAL_SEATS[seat],online:this.#seats.has(seat)})),
       capabilities:this.#capabilities(),journal:this.#journal(),
       materialDiagnostics:this.#materialDiagnostics()};
