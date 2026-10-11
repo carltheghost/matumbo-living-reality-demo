@@ -16,6 +16,12 @@ export interface StudioBindingCommandPayload {
 export interface StudioCommitPayload extends StudioBindingCommandPayload {
   expectedBindingRevision: number; expectedEntityRevision: number;
 }
+export interface StudioCanonicalCommitCapability {
+  allowed: boolean; durable: boolean; rejectionCode: string | null; reason: string;
+}
+export interface StudioRuntimeCapability {
+  projection: boolean; canonicalCommit: StudioCanonicalCommitCapability;
+}
 export interface Command {
   schema: 'vivo.command/1'; id: string; worldId: string; spaceId: string;
   kind: 'grab.begin' | 'grab.target' | 'grab.end' | 'space.enter' | 'space.exit' | 'world.fork' | 'studio.transform' | 'studio.commit';

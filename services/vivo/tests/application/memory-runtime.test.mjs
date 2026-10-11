@@ -23,6 +23,9 @@ test('explicit memory mode is session-only, shares one authority, and writes no 
  assert.equal(ready.capabilities.sessionOnly,true);
  assert.match(ready.capabilities.persistence,/Session-only volatile memory/);
  assert.match(ready.capabilities.sessionOnlyGuarantee,/only while this local server process runs/);
+ assert.equal(ready.capabilities.studio.projection,true);
+ assert.deepEqual(ready.capabilities.studio.canonicalCommit,{allowed:true,durable:false,rejectionCode:null,
+   reason:'Canonical commits are accepted for this process, but memory mode resets accepted changes when the server restarts.'});
  const one=await runtime.dispatch({op:'open',args:{seat:'one'}});
  const two=await runtime.dispatch({op:'open',args:{seat:'two'}});
  assert.equal(one.state.snapshot.worldId,two.state.snapshot.worldId);
