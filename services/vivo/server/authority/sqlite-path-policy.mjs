@@ -14,6 +14,15 @@ const mutations=0x500d0040; // DELETE, DELETE_CHILD, WRITE_DAC, WRITE_OWNER, gen
 export const SQLITE_SIDECARS=Object.freeze(['-wal','-shm','-journal']);
 const within=(path,root,api)=>{const r=api.relative(root,path);return r===''||(!api.isAbsolute(r)&&r!=='..'&&!r.startsWith('..'+api.sep));};
 
+/** Keep the Windows PowerShell helper on its own built-in module path. */
+export function windowsPowerShellEnvironment(root,base=process.env) {
+  if(typeof root!=='string'||! /^[A-Za-z]:\\[^\x00-\x1f]*$/.test(root))fail('STORE_PATH_CHECK_UNAVAILABLE');
+  const child={...base};
+  for(const key of Object.keys(child))if(key.toLowerCase()==='psmodulepath')delete child[key];
+  child.PSModulePath=win32.join(root,'System32','WindowsPowerShell','v1.0','Modules');
+  return child;
+}
+
 /** Pure lexical policy, also exercised by non-Windows tests; no platform spoof. */
 export function validateWindowsPath(path,staticRoots=[]) {
   if(typeof path!=='string'||path.length>240||! /^[A-Za-z]:\\/.test(path)||path.includes('/'))fail('STORE_PRIVATE_PATH');
@@ -68,14 +77,12 @@ export function validateWindowsEvidence(report,path) {
   return true;
 }
 
-function nativeWindowsEvidence(path) {
-  const root=process.env.SystemRoot;
-  if(typeof root!=='string'||! /^[A-Za-z]:\\[^\x00-\x1f]*$/.test(root))fail('STORE_PATH_CHECK_UNAVAILABLE');
+export function nativeWindowsEvidence(path,{run=execFileSync,env=process.env,root=env.SystemRoot}={}) {
   let result;
   try {
-    result=execFileSync(win32.join(root,'System32','WindowsPowerShell','v1.0','powershell.exe'),
+    result=run(win32.join(root,'System32','WindowsPowerShell','v1.0','powershell.exe'),
       ['-NoLogo','-NoProfile','-NonInteractive','-File',probe,'-TargetPath',path],
-      {encoding:'utf8',timeout:15000,maxBuffer:1024*1024,windowsHide:true});
+      {encoding:'utf8',timeout:15000,maxBuffer:1024*1024,windowsHide:true,env:windowsPowerShellEnvironment(root,env)});
   } catch {fail('STORE_PATH_CHECK_UNAVAILABLE');}
   try {return JSON.parse(result.replace(/^\uFEFF/,''));}catch{fail('STORE_PATH_CHECK_UNAVAILABLE');}
 }
