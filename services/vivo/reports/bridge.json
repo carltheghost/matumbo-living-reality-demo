@@ -1,0 +1,52 @@
+{
+  "passed": 11,
+  "failed": 0,
+  "checks": [
+    {
+      "name": "Original Viva and Studio both boot",
+      "passed": true
+    },
+    {
+      "name": "Original nested entry still works",
+      "passed": true
+    },
+    {
+      "name": "Additive bridge is present",
+      "passed": true
+    },
+    {
+      "name": "Explicit publication produces native 9D objects",
+      "passed": true
+    },
+    {
+      "name": "Published IDs carry original provenance",
+      "passed": true
+    },
+    {
+      "name": "Original visited universe checkpoint is retained",
+      "passed": true
+    },
+    {
+      "name": "Returned shared position updates original node",
+      "passed": true
+    },
+    {
+      "name": "Original place remains paused after handoff",
+      "passed": true
+    },
+    {
+      "name": "Other visited places survive handoff",
+      "passed": true
+    },
+    {
+      "name": "Return marker removed only after successful application",
+      "passed": true
+    },
+    {
+      "name": "No uncaught script errors",
+      "passed": true
+    }
+  ],
+  "limits": "Real original app and adapter, Canvas renderer, controlled in-memory sessionStorage; no public-origin storage or navigation test",
+  "success": true
+}

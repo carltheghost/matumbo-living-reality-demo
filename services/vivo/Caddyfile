@@ -1,0 +1,3 @@
+{$VIVA_DOMAIN} {
+    reverse_proxy viva:8765
+}

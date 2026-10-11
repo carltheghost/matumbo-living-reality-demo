@@ -1,0 +1,31 @@
+test_01_tesseract_counts (test_reference.VivaReferenceTests.test_01_tesseract_counts) ... ok
+test_02_every_dimension_is_spatial_plus_clock (test_reference.VivaReferenceTests.test_02_every_dimension_is_spatial_plus_clock) ... ok
+test_03_dimension_validation (test_reference.VivaReferenceTests.test_03_dimension_validation) ... ok
+test_04_all_rotations_preserve_distance (test_reference.VivaReferenceTests.test_04_all_rotations_preserve_distance) ... ok
+test_05_fourth_axis_rotation_changes_real_coordinates (test_reference.VivaReferenceTests.test_05_fourth_axis_rotation_changes_real_coordinates) ... ok
+test_06_false_overlap_in_projection_is_not_collision (test_reference.VivaReferenceTests.test_06_false_overlap_in_projection_is_not_collision) ... ok
+test_07_exact_ball_slice_changes_and_disappears (test_reference.VivaReferenceTests.test_07_exact_ball_slice_changes_and_disappears) ... ok
+test_08_ray_uses_fourth_direction (test_reference.VivaReferenceTests.test_08_ray_uses_fourth_direction) ... ok
+test_09_opaque_objects_still_occlude_in_four_dimensions (test_reference.VivaReferenceTests.test_09_opaque_objects_still_occlude_in_four_dimensions) ... ok
+test_10_portal_roundtrip_all_dimensions (test_reference.VivaReferenceTests.test_10_portal_roundtrip_all_dimensions) ... ok
+test_11_portals_do_not_silently_drop_dimensions (test_reference.VivaReferenceTests.test_11_portals_do_not_silently_drop_dimensions) ... ok
+test_12_two_observers_share_one_entity (test_reference.VivaReferenceTests.test_12_two_observers_share_one_entity) ... ok
+test_13_stale_edit_rejected_without_mutation (test_reference.VivaReferenceTests.test_13_stale_edit_rejected_without_mutation) ... ok
+test_14_permission_failure_does_not_mutate (test_reference.VivaReferenceTests.test_14_permission_failure_does_not_mutate) ... ok
+test_15_snapshot_roundtrip_retains_identity_and_history (test_reference.VivaReferenceTests.test_15_snapshot_roundtrip_retains_identity_and_history) ... ok
+test_16_snapshot_is_not_a_mutable_view (test_reference.VivaReferenceTests.test_16_snapshot_is_not_a_mutable_view) ... ok
+test_17_neural_gradient_matches_finite_difference (test_reference.VivaReferenceTests.test_17_neural_gradient_matches_finite_difference) ... ok
+test_18_neural_fit_and_stronger_baseline_reported (test_reference.VivaReferenceTests.test_18_neural_fit_and_stronger_baseline_reported) ... ok
+test_19_neural_weights_roundtrip (test_reference.VivaReferenceTests.test_19_neural_weights_roundtrip) ... ok
+test_20_neural_coefficients_are_bounded (test_reference.VivaReferenceTests.test_20_neural_coefficients_are_bounded) ... ok
+test_21_equal_opposite_forces_conserve_total_internal_force (test_reference.VivaReferenceTests.test_21_equal_opposite_forces_conserve_total_internal_force) ... ok
+test_22_neural_forces_are_rotation_translation_equivariant (test_reference.VivaReferenceTests.test_22_neural_forces_are_rotation_translation_equivariant) ... ok
+test_23_coincident_positions_do_not_generate_nan (test_reference.VivaReferenceTests.test_23_coincident_positions_do_not_generate_nan) ... ok
+test_24_eleventh_coordinate_changes_forces (test_reference.VivaReferenceTests.test_24_eleventh_coordinate_changes_forces) ... ok
+test_25_field_runs_and_transmits_wave_in_every_dimension (test_reference.VivaReferenceTests.test_25_field_runs_and_transmits_wave_in_every_dimension) ... ok
+test_26_bad_input_rejected (test_reference.VivaReferenceTests.test_26_bad_input_rejected) ... ok
+
+----------------------------------------------------------------------
+Ran 26 tests in 0.090s
+
+OK

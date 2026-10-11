@@ -1,5 +1,6 @@
 """Import-only tests for the original 0.8.1 backend, not integrated Vivo acceptance."""
 import asyncio, hashlib, json, sys, tempfile, unittest, uuid
+from unittest.mock import patch
 from pathlib import Path
 import numpy as np
 from aiohttp import ClientSession, web, WSMsgType
@@ -7,6 +8,7 @@ from aiohttp import ClientSession, web, WSMsgType
 ROOT=Path(sys.argv.pop(1)).resolve() if len(sys.argv)>1 and not sys.argv[1].startswith('-') else Path(__file__).resolve().parents[2]/'services/vivo'
 sys.path.insert(0,str(ROOT))
 from server.app import make_app
+from server.readiness import inspect_assets
 from server.geometry import Geometry
 from server.reference import HyperBall,dimension_contract
 from server.adaptive import RoomRule,teacher
@@ -85,10 +87,23 @@ class SourceNetwork(unittest.IsolatedAsyncioTestCase):
   eye=await self.recv(a,'observer','eye-step');self.assertAlmostEqual(eye['observer']['q'][10],.2)
   room=self.app['hub'].room(c['room']);self.assertIsNone(room.sessions[bb['actor']]['observer'])
   self.assertEqual(room.entities['relic-0']['q'][10],0)
- async def test_08_incomplete_assets_are_not_ready(self):
+ async def test_08_complete_assets_are_ready(self):
+  async with self.http.get(self.base+'/readyz') as r:
+   self.assertEqual(r.status,200);status=await r.json()
+   self.assertTrue(status['ok']);self.assertTrue(status['checks']['assetsPresent'])
+   self.assertTrue(status['checks']['modelReadable']);self.assertTrue(status['checks']['databaseOpen'])
+   self.assertEqual(status['checks']['missingAssets'],[])
+   self.assertFalse(status['deviceValidated']);self.assertFalse(status['publicDeploymentVerified'])
+ async def test_09_missing_assets_fixture_is_not_ready(self):
+  # Readiness is captured at app construction. Build the negative fixture from
+  # an empty asset root, never remove or rewrite the actual imported originals.
+  missing=inspect_assets(Path(self.tmp.name)/'missing-assets')
+  await self.runner.cleanup()
+  with patch('server.app.inspect_assets',return_value=missing):await self.start()
   async with self.http.get(self.base+'/readyz') as r:
    self.assertEqual(r.status,503);status=await r.json()
-   self.assertFalse(status['ok']);self.assertFalse(status['deviceValidated'])
+   self.assertFalse(status['ok']);self.assertFalse(status['checks']['assetsPresent'])
+   self.assertTrue(status['checks']['databaseOpen']);self.assertFalse(status['deviceValidated'])
    self.assertIn('web/vendor/field-lab/hand_landmarker.task',status['checks']['missingAssets'])
 
 if __name__=='__main__':unittest.main(verbosity=2)

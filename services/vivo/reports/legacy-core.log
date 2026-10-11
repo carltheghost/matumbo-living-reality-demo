@@ -1,0 +1,25 @@
+PASS black and white camera samples are measured exactly
+PASS invalid RGBA input rejects
+PASS dim mode uses hysteresis rather than flickering at the threshold
+PASS bright mode and reset return correctly
+PASS 2D plane rotation preserves radii and dormant coordinates
+PASS 3D plane rotation preserves radii and dormant coordinates
+PASS 4D plane rotation preserves radii and dormant coordinates
+PASS 5D plane rotation preserves radii and dormant coordinates
+PASS 6D plane rotation preserves radii and dormant coordinates
+PASS 7D plane rotation preserves radii and dormant coordinates
+PASS 8D plane rotation preserves radii and dormant coordinates
+PASS 9D plane rotation preserves radii and dormant coordinates
+PASS inactive or duplicate rotation axes reject
+PASS depth cue is centred and bounded, invalid spans do not drive motion
+PASS recorder codec is chosen by capability
+PASS history is opt-in
+PASS capture copies input without retaining mutable references
+PASS rolling frame budget and monotonic clock are enforced
+PASS export distinguishes discrete state from camera video
+PASS history round-trips states
+PASS failed import is atomic
+PASS mixed camera payload format rejects
+PASS underlying state validation failure is atomic
+PASS per-checkpoint memory limit rejects before retention
+PASS a new recording cannot be overwritten by an earlier asynchronous import

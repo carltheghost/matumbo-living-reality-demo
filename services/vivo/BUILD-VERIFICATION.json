@@ -1,0 +1,101 @@
+{
+  "release": "maTumbo Viva Shared Workshop 0.8.1",
+  "built_utc": "2026-10-10T19:18:05.766535+00:00",
+  "status": "Runnable source build verified locally. Not deployed publicly.",
+  "checks_passed": 246,
+  "suites": [
+    {
+      "name": "Server, geometry, neural, configuration and real TLS/WSS tests",
+      "passed": 97,
+      "failed": 0,
+      "evidence": "reports/regression.log"
+    },
+    {
+      "name": "Existing numerical regression",
+      "passed": 26,
+      "failed": 0,
+      "evidence": "reports/legacy-numerical.log"
+    },
+    {
+      "name": "Existing Studio core",
+      "passed": 25,
+      "failed": 0,
+      "evidence": "reports/legacy-core.log"
+    },
+    {
+      "name": "Existing Viva core",
+      "passed": 37,
+      "failed": 0,
+      "evidence": "reports/legacy-viva.log"
+    },
+    {
+      "name": "Browser component acceptance",
+      "passed": 41,
+      "failed": 0,
+      "evidence": "reports/browser.json"
+    },
+    {
+      "name": "New readiness/hold/camera-fallback browser checks",
+      "passed": 9,
+      "failed": 0,
+      "evidence": "reports/browser-release.json"
+    },
+    {
+      "name": "Original Studio and explicit bridge",
+      "passed": 11,
+      "failed": 0,
+      "evidence": "reports/bridge.json"
+    }
+  ],
+  "new_changes": [
+    "Explicit server readiness and honest static-page failure",
+    "Camera-only touch mode and video-preserving tracker-failure fallback",
+    "Motionless owned-grab renewal and release when hidden",
+    "Idle invitation expiration disconnects",
+    "Converged guidance stops repeated solver work and redundant frequent broadcasts",
+    "Public origin/key/database path validation",
+    "Safe optional add-only repository installer",
+    "Test discovery no longer starts image probes",
+    "Removed deprecated Railway TOML deployment assumption"
+  ],
+  "test_boundaries": {
+    "real_tls_wss": "Verified local TLS with a test certificate trusted by the client, two real TCP WSS participants, x11 movement, origin rejection, lease ownership, idle expiry and persistence after restart. No ssl=False bypass.",
+    "browser": "Real Chromium DOM, Canvas renderer, controllers and generated video. HTTP/WS uses an explicitly documented test relay to real loopback sockets.",
+    "native_browser_navigation": "Attempted direct localhost navigation and received ERR_BLOCKED_BY_ADMINISTRATOR. Not counted as a pass.",
+    "camera": "Generated Canvas MediaStreams and controlled landmarks/worker failure only. Real image inference not rerun in this release; prior 0.8 probe was blocked by unavailable WebGL image processing.",
+    "physical_phone": false,
+    "real_webcam": false,
+    "public_internet_multiplayer": false,
+    "actual_room_AR": false,
+    "calibrated_eye_tracking": false,
+    "gpu_rendering_validated": false,
+    "docker_deployed": false,
+    "persistent_host_volume_verified": false
+  },
+  "deployment": {
+    "replit_attempt": "failed_authorization",
+    "reason": "requires_active_subscription",
+    "app_created": false,
+    "public_url": null,
+    "railway_connected": false,
+    "github_writes": false,
+    "new_pr": null,
+    "existing_site_changed": false
+  },
+  "preservation": {
+    "studio_original_sha256": "fac4d035e277e54e64c381dd808586a3d07b78c2dbef95fed3e2f8956128332e",
+    "room_rule_sha256": "1f5592c4dd9e5e9f1ccfbfcbf7252a40b72f2b9cb09991f2207e6a07c9aa8e75",
+    "neural_weights_retrained_here": false,
+    "description": "Original Studio bytes retained; learned model from 0.8 retained and behavior regressed, not retrained."
+  },
+  "not_claimed": [
+    "Real-time phone latency improvement",
+    "World-anchored AR in new shared mode",
+    "Arbitrary global manifold solver",
+    "General intelligent rooms",
+    "Automatic cloud deployment",
+    "Completed end-to-end physical-device acceptance"
+  ],
+  "instructions": "README.md; RAILWAY-SETUP.md; docs/DEPLOYMENT.md",
+  "integrity": "python scripts/verify_integrity.py verifies 45 packaged code/model files"
+}

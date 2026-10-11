@@ -1,0 +1,21 @@
+{
+  "task": "Synthetic local comfort cost = 1 + .4 curvature\u00b2 + 1.8 crowd + .35 noise\u00b2 + .25 roughness",
+  "training_examples": 6000,
+  "validation_examples": 1000,
+  "test_examples": 2000,
+  "seeds": [
+    801,
+    802,
+    803
+  ],
+  "selection": "validation only; independent test drawn before training, only evaluated after selection",
+  "selected_step": 1180,
+  "validation_mse": 0.0007798498263582587,
+  "test_neural_mse": 0.0007362517062574625,
+  "test_constant_mse": 0.3026220500469208,
+  "test_quadratic_mse": 1.2768636686352627e-14,
+  "parameters": 369,
+  "scope": "Learned local cost rule; graph relaxation itself is explicit, not learned. Analytic/quadratic baseline is better.",
+  "general_intelligence": false,
+  "personal_data": false
+}
