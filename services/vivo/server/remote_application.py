@@ -44,6 +44,7 @@ RELEASE_FILES = (
     "application/device-check.html",
     "application/device-check.mjs",
     "application/device-check.css",
+    "application/offline-branch.mjs",
     "application/camera-compat.mjs",
     "camera.js",
     "hand-worker.js",

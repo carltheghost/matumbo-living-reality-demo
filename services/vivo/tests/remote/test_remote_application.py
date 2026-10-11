@@ -3,7 +3,9 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import posixpath
 from pathlib import Path
+import re
 import socket
 import tempfile
 import time
@@ -310,6 +312,35 @@ class RemoteAcceptance(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(response.headers.get("X-Vivo-Release-Origin"), self.origin)
             digest = response.headers.get("X-Vivo-Release-Digest")
             self.assertRegex(digest or "", r"^sha256:[0-9a-f]{64}$")
+
+    async def test_remote_browser_module_graph_is_allowlisted(self):
+        """Every static ESM import used by the remote bootstrap must be served."""
+        imports = re.compile(
+            r'''(?:\bimport\s+(?:[^"']*?\sfrom\s+)?|\bexport\s+[^"']*?\sfrom\s+)["']([^"']+)["']'''
+        )
+        pending = {"/application/remote-bootstrap.mjs"}
+        seen = set()
+        async with ClientSession() as session:
+            while pending:
+                path = pending.pop()
+                if path in seen or not path.startswith("/"):
+                    continue
+                async with session.get(self.base + path) as response:
+                    self.assertEqual(response.status, 200, path)
+                    source = await response.text()
+                seen.add(path)
+                for specifier in imports.findall(source):
+                    if specifier.startswith("/"):
+                        child = posixpath.normpath(specifier)
+                    elif specifier.startswith("."):
+                        child = posixpath.normpath(
+                            posixpath.join(posixpath.dirname(path), specifier)
+                        )
+                    else:
+                        continue
+                    if child.endswith((".mjs", ".js")):
+                        pending.add(child)
+        self.assertIn("/application/offline-branch.mjs", seen)
 
     async def test_invitation_identity_cap_counts_revoked_rows(self):
         owner = await RemoteClient.connect(self.base, self.origin, OWNER_TOKEN)
