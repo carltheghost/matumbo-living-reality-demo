@@ -330,8 +330,9 @@ class RemoteGateway:
         finally:
             stop.set()
             if poll_task:
-                poll_task.cancel()
-                with contextlib.suppress(asyncio.CancelledError, Exception):
+                # Do not cancel an in-flight private-pipe state read: cancellation
+                # could strand a valid reply and desynchronize the next request.
+                with contextlib.suppress(Exception):
                     await poll_task
             if node_token:
                 with contextlib.suppress(Exception):

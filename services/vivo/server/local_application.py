@@ -111,6 +111,13 @@ class LocalBridge:
                 response = json.loads(raw)
                 if response.get('id') != ident:
                     raise RuntimeError('Authority response mismatch')
+            except asyncio.CancelledError:
+                # Cancellation while an exchange is in flight can leave its reply
+                # unread. Never let a later request consume that stale receipt.
+                if self.process.returncode is None:
+                    self.process.kill()
+                    await self.process.wait()
+                raise
             except (ValueError, RuntimeError, BrokenPipeError, ConnectionError, asyncio.TimeoutError):
                 # Never read a late response as another request's receipt. Kill this
                 # uncertain process; a restart invalidates process-local capabilities.
