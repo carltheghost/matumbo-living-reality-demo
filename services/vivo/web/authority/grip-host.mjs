@@ -14,7 +14,13 @@ export class GripHost {
   }
   constructor(token, authority, session, options) {
     if (token !== GripHost) throw error('USE_OPEN');
-    this.#authority=authority; this.#session=session; this.#options=options;
+    this.#authority=authority; this.#session=session;
+    this.#options={...options,requestTimeoutMs:options.requestTimeoutMs??5000,
+      acquisitionTimeoutMs:options.acquisitionTimeoutMs??options.requestTimeoutMs??5000,
+      cleanupTimeoutMs:options.cleanupTimeoutMs??options.requestTimeoutMs??5000};
+    for(const name of ['requestTimeoutMs','acquisitionTimeoutMs','cleanupTimeoutMs'])
+      if(!Number.isFinite(this.#options[name])||this.#options[name]<=0||this.#options[name]>2147483647)
+        throw error('INVALID_TIMING_BUDGET');
     this.#timers={set:options.setTimer??setTimeout,clear:options.clearTimer??clearTimeout};
     this.#ports={preview:options.onPreview??(()=>{}),receipt:options.onReceipt??(()=>{}),
       snapshot:options.onSnapshot??(()=>{}),status:options.onStatus??(()=>{})};
@@ -24,7 +30,8 @@ export class GripHost {
   state(key) {
     const e=this.#entries.get(key);
     return e ? {phase:e.phase,source:e.source,leaseId:e.leaseId??null,controller:e.controller?.state??null,
-      reconciling:!!e.recovery,pendingRenewal:e.renewal!==null} : null;
+      reconciling:!!e.recovery,pendingRenewal:e.renewal!==null,
+      acquisitionPending:e.acquisitionPending,cleanupConfirmed:e.cleanupConfirmed,fenced:e.fenced} : null;
   }
   #stopRenew(e) { if(e.renewal!==null) this.#timers.clear(e.renewal); e.renewal=null; }
   #renew(key,e) {
@@ -35,32 +42,112 @@ export class GripHost {
       try { await this.#authority.renewLease(e.leaseId); this.#renew(key,e); }
       catch(err) {
         if(this.#live(key,e)&&e.phase==='active') {
-          e.phase='blocked';
-          void e.controller.cancel('lease-renewal-failed').catch(()=>{});
           await this.#recover(key,e,{reason:'LEASE_RENEWAL_FAILED'}).catch(()=>{});
         }
       }
     }, Math.max(25,Math.floor(e.leaseMs/3)));
     e.renewal?.unref?.();
   }
-  async #recover(key,e,event={}) {
-    if(e.recovery) return e.recovery;
-    this.#stopRenew(e);
+  #deadline(promise,ms,code) {
+    return new Promise((resolve,reject)=>{
+      const timer=this.#timers.set(()=>reject(error(code)),ms);
+      Promise.resolve(promise).then(resolve,reject).finally(()=>this.#timers.clear(timer));
+    });
+  }
+  #fence(key,e) {
+    e.fenced=true;e.cancelled=true;this.#stopRenew(e);
+    // Public cancel synchronously discards mailbox intent. The submit port below
+    // also fences the controller's delayed release/ACK continuations.
+    if(e.controller) void e.controller.cancel('host-reconciliation').catch(()=>{});
     if(this.#live(key,e)) this.#notify('preview',key,null);
-    e.phase='reconciling';
-    e.recovery=(async()=>{
-      const result=await this.#authority.reconcileLease({...event,worldId:this.#session.worldId,
+  }
+  #onReconcile(key,e,event) {
+    // This is accepted target evidence, not a failed release. The controller is
+    // already cancelling and will release after its in-flight target settles.
+    if(event.reason==='CANCELLED_IN_FLIGHT' && event.command?.kind==='grab.target'
+        && event.receipt?.status==='accepted') return;
+    return this.#recover(key,e,event);
+  }
+  async #recover(key,e,event={}) {
+    if(e.cleanupConfirmed) return e.cleanupResult;
+    if(e.recovery) return e.recovery;
+    if(!e.leaseId) throw error('ACQUIRE_CLEANUP_UNCONFIRMED');
+    // Install the shared recovery before cancelling: cancellation itself can
+    // synchronously notify onReconcile on an already-blocked controller.
+    const attempt=Promise.resolve().then(async()=>{
+      const result=copy(await this.#authority.reconcileLease({...event,worldId:this.#session.worldId,
         authorityId:this.#session.authorityId,spaceId:e.entity.spaceId,entityId:e.entity.id,
-        leaseId:e.leaseId,inputEpoch:e.inputEpoch});
-      if(!result?.released || result.snapshot?.authorityId!==this.#session.authorityId
+        leaseId:e.leaseId,inputEpoch:e.inputEpoch}));
+      if(result?.released!==true || result.snapshot?.authorityId!==this.#session.authorityId
           || result.snapshot?.worldId!==this.#session.worldId) throw error('RECONCILIATION_UNCONFIRMED');
-      e.phase='reconciled';
+      e.cleanupConfirmed=true;e.cleanupResult=result;e.phase='reconciled';
       if(this.#live(key,e)) this.#notify('snapshot',copy(result.snapshot));
       return result;
-    })();
-    try { return await e.recovery; }
-    catch(err) { e.phase='blocked'; this.#notify('status',key,{code:err.code??'RECONCILIATION_FAILED'}); throw err; }
-    finally { e.recovery=null; }
+    });
+    const recovery=this.#deadline(attempt,this.#options.cleanupTimeoutMs,'RECONCILIATION_UNCONFIRMED');
+    e.recovery=recovery;e.phase='reconciling';this.#fence(key,e);
+    try { return await recovery; }
+    catch(err) {
+      if(!e.cleanupConfirmed)e.phase='blocked';
+      this.#notify('status',key,{code:err?.code??'RECONCILIATION_FAILED'});throw err;
+    } finally { if(e.recovery===recovery)e.recovery=null; }
+  }
+  async #cleanupAcquisition(key,e) {
+    if(e.cleanupConfirmed)return e.cleanupResult;
+    this.#fence(key,e);
+    if(!e.leaseId && typeof this.#authority.inspectLease==='function') {
+      // An absent lease is not a fence on an acquisition still in transport.
+      // Only an owner-scoped positive match lets us reconcile that acquisition.
+      const known=await this.#deadline(Promise.resolve().then(()=>
+        this.#authority.inspectLease(e.entity.spaceId,e.entity.id)),
+        this.#options.cleanupTimeoutMs,'ACQUIRE_CLEANUP_UNCONFIRMED');
+      if(known?.inputEpoch===e.inputEpoch && known.source===e.source
+          && known.spaceId===e.entity.spaceId && known.entityId===e.entity.id) e.leaseId=known.id;
+    }
+    if(e.leaseId)return this.#recover(key,e);
+    e.phase='blocked';throw error('ACQUIRE_CLEANUP_UNCONFIRMED');
+  }
+  #acquireReceipt(key,e,command,raw,late) {
+    const r=copy(validateReceipt(raw));
+    if(r.id!==command.id||r.authorityId!==this.#session.authorityId) throw error('ACQUIRE_RECEIPT_MISMATCH');
+    this.#notify('receipt',key,{command,receipt:r,late,cancelled:e.cancelled});
+    if(r.status!=='accepted') {
+      e.cleanupConfirmed=true;
+      if(e.phase!=='reconciled')e.phase='closed';
+      throw error(r.code);
+    }
+    const leaseId=r.result?.leaseId,leaseMs=r.result?.leaseMs,accepted=r.result?.entity;
+    if(typeof leaseId!=='string'||!/^[A-Za-z0-9_.:-]{1,128}$/.test(leaseId)
+        ||(e.leaseId!==null&&e.leaseId!==leaseId)) throw error('ACQUIRE_RESULT_MISMATCH');
+    e.leaseId=leaseId; // Keep the capability for cleanup even if the remaining result is malformed.
+    validateFrame(accepted);
+    if(accepted.id!==e.entity.id||accepted.spaceId!==e.entity.spaceId||accepted.chart!==e.entity.chart
+        ||accepted.dimension!==e.entity.dimension||accepted.revision!==r.entityRevision
+        ||!Number.isFinite(leaseMs)||leaseMs<100||leaseMs>60000)
+      throw error('ACQUIRE_RESULT_MISMATCH');
+    e.entity=copy(accepted);e.leaseMs=leaseMs;
+    return r;
+  }
+  async #lateAcquisition(key,e,command,fulfilled,value) {
+    try {if(fulfilled)this.#acquireReceipt(key,e,command,value,true);} catch { /* Keep uncertainty. */ }
+    if(!e.cleanupConfirmed) {
+      await this.#cleanupAcquisition(key,e).catch(()=>{});
+      if(!e.cleanupConfirmed)this.#notify('status',key,{code:'LATE_ACQUISITION_UNCONFIRMED'});
+    }
+  }
+  #requestAcquisition(key,e,command) {
+    return new Promise((resolve,reject)=>{
+      let settled=false;
+      const timer=this.#timers.set(()=>{settled=true;reject(error('ACQUIRE_UNCERTAIN'));},this.#options.acquisitionTimeoutMs);
+      const finish=(fulfilled,value)=>{
+        e.acquisitionPending=false;
+        if(settled) {void this.#lateAcquisition(key,e,command,fulfilled,value);return;}
+        settled=true;this.#timers.clear(timer);
+        if(fulfilled)resolve(value);else reject(error('ACQUIRE_UNCERTAIN'));
+      };
+      try {Promise.resolve(this.#authority.submit(command)).then(v=>finish(true,v),v=>finish(false,v));}
+      catch(v) {finish(false,v);}
+    });
   }
   async begin(key,{entity,source,inputEpoch}) {
     if(this.#closed) throw error('HOST_CLOSED');
@@ -69,40 +156,36 @@ export class GripHost {
     const old=this.#entries.get(key);
     if(old&&!['closed','reconciled'].includes(old.phase)) throw error('SOURCE_BUSY');
     const e={entity:copy(entity),source,inputEpoch,phase:'acquiring',controller:null,
-      cancelled:false,leaseId:null,leaseMs:3000,recovery:null,renewal:null};
+      cancelled:false,leaseId:null,leaseMs:3000,recovery:null,renewal:null,
+      fenced:false,cleanupConfirmed:false,cleanupResult:null,acquisition:null,acquisitionPending:true};
     const idPrefix='host.'+crypto.randomUUID();
     const command=validateCommand({schema:'vivo.command/1',id:idPrefix+':acquire',worldId:this.#session.worldId,
       spaceId:entity.spaceId,kind:'grab.begin',expectedRevision:entity.revision,payload:{entityId:entity.id,source,inputEpoch}});
     this.#entries.set(key,e);
+    e.acquisition=this.#beginAcquisition(key,e,command,idPrefix);
+    return e.acquisition;
+  }
+  async #beginAcquisition(key,e,command,idPrefix) {
     try {
-      const r=copy(validateReceipt(await this.#authority.submit(command)));
-      if(r.id!==command.id||r.authorityId!==this.#session.authorityId) throw error('ACQUIRE_RECEIPT_MISMATCH');
-      if(r.status!=='accepted') { e.phase='closed'; throw error(r.code); }
-      e.leaseId=r.result?.leaseId; e.leaseMs=r.result?.leaseMs;
-      const accepted=r.result?.entity; validateFrame(accepted);
-      if(accepted.id!==entity.id||accepted.spaceId!==entity.spaceId||accepted.chart!==entity.chart
-          ||accepted.dimension!==entity.dimension||accepted.revision!==r.entityRevision
-          ||typeof e.leaseId!=='string'||!Number.isFinite(e.leaseMs)||e.leaseMs<100||e.leaseMs>60000)
-        throw error('ACQUIRE_RESULT_MISMATCH');
-      e.entity=copy(accepted);
-      if(this.#closed||e.cancelled) { await this.#recover(key,e); throw error('ACQUIRE_CANCELLED'); }
+      const r=this.#acquireReceipt(key,e,command,await this.#requestAcquisition(key,e,command),false);
+      if(this.#closed||e.cancelled||e.fenced)throw error('ACQUIRE_CANCELLED');
       e.controller=new GripController({session:this.#session,idPrefix,acceptedSequence:r.acceptedSequence,
-        submit:c=>this.#authority.submit(c),now:this.#options.now,
+        submit:c=>{if(e.fenced)throw error('HOST_FENCED');return this.#authority.submit(c);},now:this.#options.now,
         setTimer:this.#timers.set,clearTimer:this.#timers.clear,requestTimeoutMs:this.#options.requestTimeoutMs??5000,
         onPreview:v=>{if(this.#live(key,e))this.#notify('preview',key,copy(v));},
         onReceipt:v=>this.#notify('receipt',key,v),
         onStatus:v=>this.#notify('status',key,v),
-        onReconcile:event=>this.#recover(key,e,event)});
-      e.controller.begin({entity:e.entity,leaseId:e.leaseId,source,inputEpoch});
+        onReconcile:event=>this.#onReconcile(key,e,event)});
+      e.controller.begin({entity:e.entity,leaseId:e.leaseId,source:e.source,inputEpoch:e.inputEpoch});
       e.phase='active';this.#renew(key,e);
       return this.state(key);
     } catch(err) {
-      if(e.leaseId&&e.phase!=='reconciled') await this.#recover(key,e).catch(()=>{});
-      if(e.phase==='acquiring') {
-        const known=this.#authority.inspectLease?.(entity.spaceId,entity.id);
-        if(known?.inputEpoch===inputEpoch&&known.source===source) {
-          e.leaseId=known.id;await this.#recover(key,e).catch(()=>{});
-        } else e.phase='blocked';
+      if(!e.cleanupConfirmed) {
+        try {await this.#cleanupAcquisition(key,e);}
+        catch {
+          if(!e.cleanupConfirmed)e.phase='blocked';
+          if(err?.code==='ACQUIRE_CANCELLED')throw error('ACQUIRE_CLEANUP_UNCONFIRMED');
+        }
       }
       throw err;
     }
@@ -113,8 +196,9 @@ export class GripHost {
   }
   async end(key,reason,finalSample=null) {
     const e=this.#entries.get(key);if(!e) return;
-    if(e.phase==='acquiring') { e.cancelled=true; return; }
-    if(!e.controller) return;
+    if(e.phase==='acquiring') return this.cancel(key,reason);
+    if(e.cleanupConfirmed)return;
+    if(e.fenced||!e.controller)return this.reconcile(key);
     // End capture before inspecting application-provided final data. Validation,
     // getters or frame conversion may throw; none may strand a renewing grip.
     this.#stopRenew(e);e.phase='ending';
@@ -128,17 +212,27 @@ export class GripHost {
         throw error('FINAL_SAMPLE_REJECTED');
       }
     }
-    try { await e.controller.end(reason);e.phase='closed'; }
-    catch(err) { if(e.controller.state.phase==='closed')e.phase='closed';else await this.#recover(key,e).catch(()=>{});throw err; }
+    try { await e.controller.end(reason);if(!e.fenced){e.phase='closed';e.cleanupConfirmed=true;} }
+    catch(err) { if(e.controller.state.phase==='closed'&&!e.fenced){e.phase='closed';e.cleanupConfirmed=true;}else await this.#recover(key,e).catch(()=>{});throw err; }
   }
   async cancel(key,reason='cancelled') {
     const e=this.#entries.get(key);if(!e) return;
     e.cancelled=true;this.#stopRenew(e);
-    if(e.phase==='acquiring') return;
-    if(!e.controller) {if(e.leaseId)await this.#recover(key,e);return;}
-    try { await e.controller.cancel(reason);if(!e.recovery)e.phase='closed'; }
-    catch(err) {await this.#recover(key,e);}
-    if(e.recovery) await e.recovery;
+    if(e.cleanupConfirmed)return e.cleanupResult;
+    if(e.phase==='acquiring') {
+      await e.acquisition.catch(()=>{});
+      if(!e.cleanupConfirmed)throw error('ACQUIRE_CLEANUP_UNCONFIRMED');
+      return e.cleanupResult;
+    }
+    if(!e.controller)return this.#cleanupAcquisition(key,e);
+    if(e.fenced)return this.#recover(key,e);
+    e.phase='cancelling';
+    try {
+      await e.controller.cancel(reason);
+      if(!e.fenced){e.phase='closed';e.cleanupConfirmed=true;}
+    } catch {return this.#recover(key,e);}
+    if(e.recovery)await e.recovery;
+    if(!e.cleanupConfirmed)throw error('RECONCILIATION_UNCONFIRMED');
   }
   async cancelSource(source,reason,key) {
     const matches=[...this.#entries].filter(([k,e])=>e.source===source&&(key===undefined||key===k));
@@ -146,7 +240,11 @@ export class GripHost {
     const errors=results.filter(r=>r.status==='rejected').map(r=>r.reason);
     if(errors.length)throw new AggregateError(errors,'Source cleanup incomplete');
   }
-  async reconcile(key) { const e=this.#entries.get(key);if(e?.leaseId)return this.#recover(key,e); }
+  async reconcile(key) {
+    const e=this.#entries.get(key);if(!e)return;
+    if(e.phase==='acquiring') {this.#fence(key,e);return this.cancel(key,'host-reconciliation');}
+    return e.leaseId?this.#recover(key,e):this.#cleanupAcquisition(key,e);
+  }
   async close() {
     this.#closed=true;
     const results=await Promise.allSettled([...this.#entries].map(([key])=>this.cancel(key,'host-closed')));
