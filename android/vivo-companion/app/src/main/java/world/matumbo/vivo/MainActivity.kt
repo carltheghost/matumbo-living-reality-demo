@@ -36,7 +36,7 @@ class MainActivity:Activity(){
    web.settings.apply{javaScriptEnabled=true;domStorageEnabled=true;allowFileAccess=false;allowContentAccess=false;setSupportMultipleWindows(false);mediaPlaybackRequiresUserGesture=true;mixedContentMode=android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW}
    WebView.setWebContentsDebuggingEnabled(false)
    web.webViewClient=object:WebViewClient(){
-     override fun shouldOverrideUrlLoading(view:WebView,request:WebResourceRequest):Boolean{val u=request.url;return if(u.scheme=="https"&&u.host=="carltheghost.github.io")false else{startActivity(Intent(Intent.ACTION_VIEW,u));true}}
+     override fun shouldOverrideUrlLoading(view:WebView,request:WebResourceRequest):Boolean{val u=request.url;val allowed=u.scheme=="https"&&u.host=="carltheghost.github.io"&&(u.path?:"").startsWith("/matumbo-living-reality-demo/");return if(allowed)false else{startActivity(Intent(Intent.ACTION_VIEW,u));true}}
      override fun onPageFinished(view:WebView,url:String){val caps=JSONObject.quote(broker.capabilities().toString());view.evaluateJavascript("window.dispatchEvent(new CustomEvent('vivo-native-ready',{detail:JSON.parse($caps)}));",null)}
    }
    web.webChromeClient=object:WebChromeClient(){
