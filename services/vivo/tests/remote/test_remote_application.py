@@ -287,10 +287,22 @@ class RemoteAcceptance(unittest.IsolatedAsyncioTestCase):
     async def test_revocation_disconnects_an_already_admitted_editor(self):
         invite = await self.connect_pair()
         await self.owner.call("invite.revoke", {"id": invite["id"]})
+        # aiohttp updates the client-side closed flag only after its reader
+        # consumes the server's close frame.  Assert the protocol event
+        # directly so this regression does not race the reader task.
         deadline = time.monotonic() + 5
-        while not self.editor.ws.closed and time.monotonic() < deadline:
-            await asyncio.sleep(0.05)
-        self.assertTrue(self.editor.ws.closed)
+        message = None
+        while time.monotonic() < deadline:
+            remaining = max(0.05, deadline - time.monotonic())
+            try:
+                message = await self.editor.ws.receive(timeout=min(remaining, 1))
+            except asyncio.TimeoutError:
+                continue
+            if message.type in (WSMsgType.CLOSE, WSMsgType.CLOSED, WSMsgType.ERROR):
+                break
+        self.assertIsNotNone(message)
+        self.assertIn(message.type, (WSMsgType.CLOSE, WSMsgType.CLOSED))
+        self.assertEqual(self.editor.ws.close_code, 4003)
 
     async def test_device_evidence_has_origin_and_release_digest_headers(self):
         request = Request(self.base + "/device-check", method="HEAD")
