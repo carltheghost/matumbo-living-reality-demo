@@ -23,7 +23,15 @@ async def main():
             assert "NO CAMERA FRAMES UPLOADED" in await page.locator("#privacy").inner_text()
             assert await page.locator("#staticChecks .check").count() >= 6
             await page.click("#network")
-            await page.wait_for_function("document.querySelector('#networkState').textContent.includes('5/5')")
+            deadline = asyncio.get_running_loop().time() + 10
+            network_text = ""
+            while asyncio.get_running_loop().time() < deadline:
+                network_text = await page.locator("#networkState").inner_text()
+                if "5/5" in network_text:
+                    break
+                await asyncio.sleep(0.1)
+            else:
+                raise AssertionError(f"network check timeout: {network_text!r}")
             # Mouse click must not become physical-touch evidence.
             await page.click("#touchTarget")
             summary = json.loads(await page.locator("#summary").inner_text())
