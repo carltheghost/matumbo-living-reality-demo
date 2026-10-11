@@ -24,4 +24,9 @@ class CapabilityPolicyTest {
         assertTrue(CapabilityPolicy.canSetText(true, passwordField = false, text = "hello"))
         assertFalse(CapabilityPolicy.canSetText(false, passwordField = false, text = "hello"))
     }
+    @Test fun auditOutcomeContainsOnlyGenericSuccessState() {
+        assertEquals("accepted", CapabilityPolicy.safeAuditOutcome(true))
+        assertEquals("rejected", CapabilityPolicy.safeAuditOutcome(false))
+    }
+
 }
