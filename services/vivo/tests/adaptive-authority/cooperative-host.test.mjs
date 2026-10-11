@@ -24,7 +24,10 @@ test('GripHost forwards explicit cooperative group while two independent control
   const lb=b.inspectLease('root','a',{source:'hand',inputEpoch:1});
   assert.equal(la?.cooperativeGroup,'shape.team');assert.equal(lb?.cooperativeGroup,'shape.team');
   assert.notEqual(la?.id,lb?.id);
-  await A.end('pointer:1','pointerup');assert.equal(w.constraints().filter(l=>l.entityId==='a').length,1);
-  await B.end('hand:left','hand-open');assert.equal(w.constraints().filter(l=>l.entityId==='a').length,0);
+  await A.end('pointer:1','pointerup');
+  assert.equal(a.inspectLease('root','a',{source:'touch',inputEpoch:1}),null);
+  assert.equal(b.inspectLease('root','a',{source:'hand',inputEpoch:1})?.id,lb.id);
+  await B.end('hand:left','hand-open');
+  assert.equal(b.inspectLease('root','a',{source:'hand',inputEpoch:1}),null);
   await A.close();await B.close();
 });
