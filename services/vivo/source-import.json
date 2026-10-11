@@ -1,0 +1,1058 @@
+{
+  "schema": "vivo.source-import/1",
+  "baseCommit": "84832d07ee21bef76c538be8f897b1be637bc3ca",
+  "scope": "Exact original runtime and research bytes; service readiness is not application integration or device acceptance.",
+  "archives": {
+    "matumbo-viva-build-081-source.zip": {
+      "sha256": "6c5b0338f413385fd34934ce290fcc3459a33788c1de7f763316a89061d34a72",
+      "members": 109,
+      "destination": "services/vivo/"
+    },
+    "viva-phase-fabric-research.zip": {
+      "sha256": "adcda4383e98903a12711ceeaf6fef48ddfb60214e206a9f502339bdea50f278",
+      "members": 31,
+      "destination": "research/vivo-phase-fabric/"
+    }
+  },
+  "files": [
+    {
+      "path": "services/vivo/.dockerignore",
+      "bytes": 63,
+      "sha256": "3bc23d79f9dc06a3ad325ed570595017643ad48704e67b09504fe5e06a9ffe5d",
+      "gitBlob": "933c5d27c88715df2727ddbf094d584e9aff9e16",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/.env.example",
+      "bytes": 379,
+      "sha256": "a831e1fcb7078db119075dcb2a43ae1db9c0118f6196dcc57112366eb46237ef",
+      "gitBlob": "4008397aec0fa9b799826cbe7ef2f273d409ac0f",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/.gitignore",
+      "bytes": 69,
+      "sha256": "4cbbeb715149b22b77e96790dbea9c025f4196919173d0c716b342b8ca54c0c4",
+      "gitBlob": "00b7f24e0053957e8a9a045c8e7f2d8208ae226f",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/BUILD-VERIFICATION.json",
+      "bytes": 3978,
+      "sha256": "76bc6f602c564c73d074dccde997e466bd4616edfbec9c99d74c489c29853c26",
+      "gitBlob": "2f70733fd9d0f4300c75e8e4125dfa6e632e7517",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/Caddyfile",
+      "bytes": 47,
+      "sha256": "d53a73edd78ee33fc445b849617edec4098b052ecf153a9c8ea908ae9e0e56f7",
+      "gitBlob": "bfe29140861f26cee2aa6a27944ccb2db83ffc39",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/Dockerfile",
+      "bytes": 445,
+      "sha256": "641c54a00428d7da1fc2be98b5d05e6905b471286b93910b7cb4215f6a393483",
+      "gitBlob": "15eefe25eb0506b417fb4aa1da23d0b489f36dd7",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/RAILWAY-SETUP.md",
+      "bytes": 1400,
+      "sha256": "c036196e49144f4fe923ff442ed4f7cf6a9e5aaf1d49487f0182023efbac0a12",
+      "gitBlob": "b585266f040a9f084ef8903cc654e14538bd61a2",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/README-08.md",
+      "bytes": 8208,
+      "sha256": "4d1c497c0163fbd8af8387bde048a2092b4ce7f88d50047cf42c4197d57a774a",
+      "gitBlob": "402167c242e216f68fb06440ce449e2a1ae624b2",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/README.md",
+      "bytes": 3835,
+      "sha256": "99d862c31b2815d0abf7c37397136be34dfa624524b4620e3f466b9db68ea8c7",
+      "gitBlob": "52ff1757d999d2996a4d5f6454132b973eeb1677",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/THIRD_PARTY.md",
+      "bytes": 1162,
+      "sha256": "868345b3f25ea6cbde14e6dc5bbca66df75956bf3140d2dce5625bf597b81546",
+      "gitBlob": "696c242e6194fc9f62b58372e75e19e9fd635b91",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/compose.yaml",
+      "bytes": 706,
+      "sha256": "68e38f4bd53bc5f3b7c6f5fc7104548c765a691d6a7fb0dfed3d87a3b7a856bd",
+      "gitBlob": "3ec3dc96c0dda575ef342d11e6d4f70c5d07e3ca",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/docs/ACCEPTANCE.md",
+      "bytes": 3616,
+      "sha256": "a827053adef3ce8690fe6e688cdd75b6b2b51df8f8be7ec161d13d79fbbaa626",
+      "gitBlob": "b85604f27c29d58208780a38e354521c981a0323",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/docs/DEPLOYMENT.md",
+      "bytes": 4071,
+      "sha256": "917409360c7733d5e7123c50bbaff906e2a74f1d141cd76622c1992ed1d7119d",
+      "gitBlob": "d44ba38a4bd5def7bc55c617990e32238b6e7f7c",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/docs/GEOMETRY-AND-NEURAL.md",
+      "bytes": 3527,
+      "sha256": "f22ca45ece331dcaed83a267f46c02a123a913996994fae698e1d3471ae55dc5",
+      "gitBlob": "7eba0966c9c624f0fe1c1e4c6ed7fc0bf4873bc8",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/integrity.json",
+      "bytes": 4587,
+      "sha256": "646b73853e35242a084772828c760e89d03577f972582cd6b5b13523bd080926",
+      "gitBlob": "ee9bfc8468585d36941d7c1c719409e25553f080",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/legacy/numerical/results/neural-edge-law.npz",
+      "bytes": 4006,
+      "sha256": "9ab89f46361e397fe41845d86ecc23e38f75561032fd65ae9f8389e9780afdb0",
+      "gitBlob": "60a44696374d73868f904279847d60a3451dd851",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/legacy/numerical/results/neural-training-report.json",
+      "bytes": 1106,
+      "sha256": "1c686436011c9b88da9abde875d41554599440ebf95dd03a73c801a8375a4428",
+      "gitBlob": "86fde133adaa67c4448396c7cf64eeee0931473e",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/legacy/numerical/test_reference.py",
+      "bytes": 10366,
+      "sha256": "39964bad52fb0bda2a2604c82efb8b3c9b279e01cd74ada250f9d1487e71205a",
+      "gitBlob": "d7b79a24c81d8ccf02048c3639c1747f16700a15",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/legacy/numerical/viva_reference.py",
+      "bytes": 14192,
+      "sha256": "88525313e48659418d802605770f7e3d60e209092ec5c8befa2a2c24a7650bc8",
+      "gitBlob": "ee723f9b8286320538d6cbf462786dcaf0962eda",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/legacy/package_report_08.py",
+      "bytes": 4688,
+      "sha256": "d54141aea8ed3e020cc6293db03f40eb7492f38f3d323cb81b28108cec450440",
+      "gitBlob": "e804b0bd1236281ef7409fe0e66a3827d483fe92",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/legacy/studio/reports/core.json",
+      "bytes": 1449,
+      "sha256": "d9954e19acbfca2b677992f4b82174b34406e26fa13424b603ef197481b3de84",
+      "gitBlob": "12ea8015769304b72ca4d0170b55b51168229a5d",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/legacy/studio/reports/viva-core.json",
+      "bytes": 1889,
+      "sha256": "454829872bb3adfc82494d32274fbdb02652f6c46e8a34062ce00653aa9c9061",
+      "gitBlob": "3b1bd09f3f3cb1d50dd7375d6a2110595aecdae6",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/legacy/studio/src/field-lab/studio-core.js",
+      "bytes": 4129,
+      "sha256": "1ed8daed01acd549d9e48cc5deea940cdd8576e9ad9a70c6b6f6581a5521a5db",
+      "gitBlob": "cc0d6ddfbec7b7a3faa7ff5751ff09ddd0a81141",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/legacy/studio/src/field-lab/viva-core.js",
+      "bytes": 8012,
+      "sha256": "f6cad93402474e0565994ab29df24bbdb960351cc6a76f314256d9a53982e89f",
+      "gitBlob": "cd9831581938d4935eb448a3b63d26e76d946720",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/legacy/studio/tests/core.cjs",
+      "bytes": 4303,
+      "sha256": "eef59f6bbb0fcc0e27fc6040ef0d22d06e1a98d21c48b5c2e8dfe156aa2eb922",
+      "gitBlob": "925794b209f4c8e0c001c865d89513e80209e59a",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/legacy/studio/tests/viva-core.cjs",
+      "bytes": 6307,
+      "sha256": "2e912febe1a15a2e5e988ceb950428e530ee33892d93992d8fee8140e81875fd",
+      "gitBlob": "b7994a140e0bf9a63a0253bc83c35eec2cb71a16",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/models/neural-edge-law.npz",
+      "bytes": 4006,
+      "sha256": "9ab89f46361e397fe41845d86ecc23e38f75561032fd65ae9f8389e9780afdb0",
+      "gitBlob": "60a44696374d73868f904279847d60a3451dd851",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/models/room-rule.json",
+      "bytes": 8286,
+      "sha256": "1f5592c4dd9e5e9f1ccfbfcbf7252a40b72f2b9cb09991f2207e6a07c9aa8e75",
+      "gitBlob": "506499c20768688b7615c85bddb4cf3e0f7773b2",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/package.json",
+      "bytes": 82,
+      "sha256": "bb33e60537b29215cb12017f931ef8b15a14e9e0431b5740d0ce1e453b06ad73",
+      "gitBlob": "7edc0083b25ee030d8e4b0b439e0831ad69a90f8",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/reports/bridge-run.log",
+      "bytes": 1476,
+      "sha256": "7f284f148388e6f7817e6a3fe2e553a9df4466c80edd3200ab1d7ad479b69277",
+      "gitBlob": "31de34401067d6584390583d9b5b2f4bbc449eb2",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/reports/bridge.json",
+      "bytes": 1218,
+      "sha256": "86caab8b3d3aed8b1263ee5002469cbba8011e3fce36b522841fd7d9183e878e",
+      "gitBlob": "d5e92db07eb5bc0ae965411de9b61628ec851a70",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/reports/browser-release.json",
+      "bytes": 1126,
+      "sha256": "f823615b5fcdeb52ae376fe0df358cde9a1bb00204021f8b284a6a0cc79b24eb",
+      "gitBlob": "5a149252761dfd5cb13173ab83b2eb06b13cf235",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/reports/browser-release.log",
+      "bytes": 1127,
+      "sha256": "4af8638d9357f074ab2bf346e2aed9ee86cc6f804fbaf117448dddf1dc99b547",
+      "gitBlob": "dc4c5b4e92a2862737b14d18ea0104ff7748039a",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/reports/browser-run.log",
+      "bytes": 28,
+      "sha256": "c270c6d654155c68d085b58f8948627709f73e9ce5160841580f8dfc6bc713fd",
+      "gitBlob": "494e415e10e6b4290bbb2ca1aa47f331ef77fd4a",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/reports/browser.json",
+      "bytes": 4383,
+      "sha256": "c9e55f622c0a332038a900655aab1d19e2a5e44637a5844c6e5eafadce8293e9",
+      "gitBlob": "6dbff1cf466cdb00b0ceb572b9524bcea31d68cf",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/reports/curved-demo.webm",
+      "bytes": 55320,
+      "sha256": "667a4c675a05644438175a678d6646bfcd868064d485ccd0df8a0217502dc594",
+      "gitBlob": "8d8a8d09a1a3dab68ee4dc7e0720d896edc178bf",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/reports/curved-desktop.png",
+      "bytes": 184141,
+      "sha256": "250ce84ae89e6cc4d3bf71657aedc725b7ea1f2ab5bffe1d28a8c4c075524359",
+      "gitBlob": "ad8885866288c104a2e3ea5c65bb711f4c6f4ece",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/reports/curved-mobile.png",
+      "bytes": 100674,
+      "sha256": "33aa27639f19782dc5edee95d78ba9caae136789c8377834f932a72cdaff6b5e",
+      "gitBlob": "d668f05b5d53efe01be12cb84b94a4060f10e3ae",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/reports/legacy-core.log",
+      "bytes": 1364,
+      "sha256": "d13825310ba089700e24983277bb3f23716586762dc38d374a11833f5dc18d6b",
+      "gitBlob": "aac2d2b8fa7a0bff599bab4c824dc87b32fa6c04",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/reports/legacy-numerical.log",
+      "bytes": 3543,
+      "sha256": "0a96ea059f0d7a3ba7cbd5a77113dcbaad7bcccd801e0ac33cdcffd26b4a5b87",
+      "gitBlob": "27a8529a2f4e50c3b3cfc3dffaa61778b56b2393",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/reports/legacy-viva.log",
+      "bytes": 1780,
+      "sha256": "ac327950f90839da3e1078b0e22870cde20b9883d4cadb0c28db9ce2a48a62f2",
+      "gitBlob": "184a715801965c43caaacc0d3dc3d16f27665f8e",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/reports/regression.log",
+      "bytes": 24266,
+      "sha256": "db052200a9d32d072688ad2be4443e923250d5beae5b2882c0e13b91aea0ff43",
+      "gitBlob": "731b2cc667b5d7449bc8385c20b6237a3f842151",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/reports/release-desktop.png",
+      "bytes": 150913,
+      "sha256": "1c3190aa81292f52f1b679f73db29bcb9655472457c5da7ded6de4e8300799c9",
+      "gitBlob": "0ec64fdb943e0684224ba949e0b292db22352385",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/reports/release-mobile.png",
+      "bytes": 85850,
+      "sha256": "2b4f902ac9d24f035c93be0a9074d1e206b49bc3a9676198709aeabe6025d998",
+      "gitBlob": "c75aa42df28b9fded4d966dc89642e26a551ea2a",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/reports/shared-demo.webm",
+      "bytes": 45187,
+      "sha256": "51cbfecd1f51848ef72cd99cf9763b9bbf2656166bd701bc2301ada9e522fc1c",
+      "gitBlob": "12e2f2877e84d1c8a38c4d27f59305b8b09de69f",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/reports/shared-mobile.png",
+      "bytes": 80554,
+      "sha256": "df71b5c90ef4f4d1b6062be6bb4de22ba6843e6578c949ad13648b3c1027c0b8",
+      "gitBlob": "9afadc33f06e9715d2aa6ec79f25f2205cb7b59a",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/reports-08/bridge.json",
+      "bytes": 1218,
+      "sha256": "86caab8b3d3aed8b1263ee5002469cbba8011e3fce36b522841fd7d9183e878e",
+      "gitBlob": "d5e92db07eb5bc0ae965411de9b61628ec851a70",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/reports-08/browser.json",
+      "bytes": 4383,
+      "sha256": "d6be41dcdd06700d744ff0f945377823e2a70e63c6299ce3ef2a395ff1656372",
+      "gitBlob": "ee0fc33ede30ce4d44ace14af5f2df2bc5e6cd52",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/reports-08/core-network-packaging.log",
+      "bytes": 16433,
+      "sha256": "b390b0747c6212d6cf55d259ba9e5a0a1a5ef4a4add08a8e806edf9f7ae874f9",
+      "gitBlob": "e04e9f9795f20c360d202baacd6fcb6c39c58fa4",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/reports-08/curved-demo.webm",
+      "bytes": 53147,
+      "sha256": "9c4f4a2cbe348150ac80746eb90595cc43cf0be0724a44416538d198249e685f",
+      "gitBlob": "4ba6df74376a4575da0928d2b9d28cb79a5ecf23",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/reports-08/curved-desktop.png",
+      "bytes": 185273,
+      "sha256": "ed9910b5a7afd51316a744428a1591fa8821e116e271680e8949aec6e0152c42",
+      "gitBlob": "8f18ed418302f474fa6ef9cb024813692b2ee56b",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/reports-08/curved-mobile.png",
+      "bytes": 100632,
+      "sha256": "2d67de979965d55a271897a900b22a2b63c3b74e411bca49e070da24791a7f69",
+      "gitBlob": "54fc77eaceaa711609219dade8394271f47ee965",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/reports-08/legacy-numerical.log",
+      "bytes": 3543,
+      "sha256": "fb8cf29a45ae50ff80ac535af81bf68607a60e0f9556fcfaca502d97700bc633",
+      "gitBlob": "6fcaaa821c1fab5234ad1534c3929dde27d40db2",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/reports-08/legacy-studio-core.log",
+      "bytes": 1364,
+      "sha256": "d13825310ba089700e24983277bb3f23716586762dc38d374a11833f5dc18d6b",
+      "gitBlob": "aac2d2b8fa7a0bff599bab4c824dc87b32fa6c04",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/reports-08/legacy-viva-core.log",
+      "bytes": 1780,
+      "sha256": "ac327950f90839da3e1078b0e22870cde20b9883d4cadb0c28db9ce2a48a62f2",
+      "gitBlob": "184a715801965c43caaacc0d3dc3d16f27665f8e",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/reports-08/local-movement-timing.json",
+      "bytes": 1102,
+      "sha256": "b2bc4e3fc4b152c57d34612ebaf243f8f5228869ebe668558299b631596dfa34",
+      "gitBlob": "23335e2c76ec79b8932b34be0d599a851e1f8e07",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/reports-08/real-model.json",
+      "bytes": 610,
+      "sha256": "a6a4ecbc70f8bf49efa94e1eeab07192ef1854846a40905dfa369fc620396e61",
+      "gitBlob": "01b2e4178753c75929578b4512ee6ccf0eb2ee6e",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/reports-08/room-training.json",
+      "bytes": 761,
+      "sha256": "79a8c27ac6e86b40ccaf239c5cf1136631ea8f5d7122d898bd3c816a3365ec82",
+      "gitBlob": "513ec052da636efd9372fb3052e7dafb92d63bc5",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/reports-08/shared-demo.webm",
+      "bytes": 43703,
+      "sha256": "f6d84612992f36131b313c6428c175c471184c4686d0956bf91b9902e4f999fa",
+      "gitBlob": "0c8370bf474d0e9359410caa8858c305205c63ef",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/reports-08/shared-mobile.png",
+      "bytes": 80522,
+      "sha256": "41cb1ec30921384c830921bb3d4b91c3e8da87d01b02219dbdcd21c978a987d5",
+      "gitBlob": "3b7bde0d77b97beb4a22087e9d961b8bc5fb40a2",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/requirements-dev.txt",
+      "bytes": 137,
+      "sha256": "4e2e874aad42b93dc29ebde16bf70d3cca06e26814effc46cb2cb209b3b02f24",
+      "gitBlob": "4b031407c87d9eadc04ef7e45aa2df5d5287f5bf",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/requirements.txt",
+      "bytes": 29,
+      "sha256": "7f88bcbfdfb184ec1fd94d590540ba29c307654e5a0f413fc26391841d687d06",
+      "gitBlob": "07b3ca94abe32d8092e1be0d24970da2901e6951",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/scripts/install_into_repository.py",
+      "bytes": 1460,
+      "sha256": "2cabfd62022bfe7120a1c1835bc0426ca8d33f585e63c3a76fba87eaa6cd5b24",
+      "gitBlob": "0ba2a78d6528a3a2c92d15113b5faedd43cdc824",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/scripts/test.sh",
+      "bytes": 292,
+      "sha256": "d8eb2de6e1755070e88b379142d8bea938a9024ff28dcee7961f8b7064c4ea89",
+      "gitBlob": "44b0c3c34b30cf0265cd9b46ef539eddcab5540c",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/scripts/train_room.py",
+      "bytes": 2937,
+      "sha256": "56f64596c2bf8170358936056daad7d45a6887c45dbd98d895a05544b22bc820",
+      "gitBlob": "eea652e58faf21ac18d7443f21f7df1ca4ba6a87",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/scripts/verify_integrity.py",
+      "bytes": 513,
+      "sha256": "453d4ad09a2886adcef25b40628a07c02bb1ceccadd1211a617031c730b84e7e",
+      "gitBlob": "18dbb5442dc639d70dfc82f0fc07e00c89def323",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/server/__init__.py",
+      "bytes": 72,
+      "sha256": "bed63345135ce0dd33c5897680ce2add2a43a0014cdd40eb37620c883ef65bf6",
+      "gitBlob": "1b566caa6b40ce6fdcfb90b3caa0f4190b1ee9f5",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/server/__main__.py",
+      "bytes": 916,
+      "sha256": "b110c46e20a62ae0cd7e28f942e2958747f144cb4d520380bac30d767d2ff22e",
+      "gitBlob": "9302c69fde81e517c2fc2b925af7878854f70251",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/server/adaptive.py",
+      "bytes": 4364,
+      "sha256": "2031a51b02a965309ab6a3dbb015e50cf6a354e3e37c5ab6e9b4d1217be4c644",
+      "gitBlob": "fa65397619d6ef20843bc3579adbd948c30bab0e",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/server/app.py",
+      "bytes": 23836,
+      "sha256": "cad6faa7f980bb2b9c8e87771ba8b34802ae6e7a23bbfb8730faa4befa08f124",
+      "gitBlob": "1a71bf894f655c3cf023985eae8fe82bd883510c",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/server/config.py",
+      "bytes": 1809,
+      "sha256": "3c1251854baa783baab6174a853200399e7ec99fce8ed51a38cbbaffd6fb8932",
+      "gitBlob": "c1be161143231ae44b918753642cb42431c4f00f",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/server/geometry.py",
+      "bytes": 11910,
+      "sha256": "ba6f1598872786a29748aef9cb93ecb35bf359d056dbf69a7ca1749172b0b32a",
+      "gitBlob": "892146d514e58152f5801d97b6b8a7fc1e5eb5f7",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/server/readiness.py",
+      "bytes": 1696,
+      "sha256": "ade92205fdeb2328cd5d7f63230354aa41d5561422d800033da8e5ee52c0b83c",
+      "gitBlob": "de47f988491ce26973911fc1bdd2400b6c16d8b5",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/server/reference.py",
+      "bytes": 14192,
+      "sha256": "88525313e48659418d802605770f7e3d60e209092ec5c8befa2a2c24a7650bc8",
+      "gitBlob": "ee723f9b8286320538d6cbf462786dcaf0962eda",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/start-local.cmd",
+      "bytes": 433,
+      "sha256": "05bdf0e7e96c0e47cb5f2bab434689a0fbb5fccc41a48f7cbc83db41c5407b29",
+      "gitBlob": "121ad87239c8d0b14989a5f858544e5819b90ed2",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/start-local.sh",
+      "bytes": 283,
+      "sha256": "f56d292085db65ecd8a7c7a6c7ddde39b9f0d8ee9a1cf65af799ac120d0af554",
+      "gitBlob": "e85d4f3c9a5a7baed21b6e715e21fc1d83ea03b2",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/tests/__init__.py",
+      "bytes": 75,
+      "sha256": "12e1ca19af515e14398592b4d17a9886071967c95c4eb507fd70f590c90fe002",
+      "gitBlob": "507865664fbc357babcabbd71c15199f283267b9",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/tests/browser_acceptance.py",
+      "bytes": 13300,
+      "sha256": "54ac66153485579acbb8504989a51f0d7b6ce7a3cd0dc2a3f49fb0b7db052bdb",
+      "gitBlob": "42ccdb8473712edd461aee8cac2fd8ccfd322da5",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/tests/browser_bridge.py",
+      "bytes": 3795,
+      "sha256": "e0be288f98277f2084cba35e70047da7bd603b2e9b6ef00a910fea731cf04cd1",
+      "gitBlob": "29d398e05faf269fe5f71484231a2621193ef7e0",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/tests/browser_harness.py",
+      "bytes": 4566,
+      "sha256": "7db6da1034ba7f078f13c3b4b3d7a3d7c04742626dab47a2c528021a580592d2",
+      "gitBlob": "9ff895e7e7050a79c4721f47d51ca0731a68538e",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/tests/browser_release.py",
+      "bytes": 3764,
+      "sha256": "8684dae411fd876585f188006323fb9fee9331f7a38a5dbba0fd938536afa11a",
+      "gitBlob": "d802325d3b7dc6e471a7a685fe39a2707b9e5ca2",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/tests/test_adaptive.py",
+      "bytes": 2540,
+      "sha256": "abe966bb4362503ef7a6ad932d9918ed6548a16614b6313bdb925eb1773dc066",
+      "gitBlob": "e261f80bff71fbd60ef9e33599e78f29e98c728e",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/tests/test_geometry.py",
+      "bytes": 4761,
+      "sha256": "dbdee94d1631c887cadf35984085ad2292df9e69911cd57d096951e55ace7542",
+      "gitBlob": "978e0c040aaf72aa7a72a4438c3adfe5622cdb69",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/tests/test_network.py",
+      "bytes": 10105,
+      "sha256": "13d1d50712a96d1506d909565761bb804c6730cc82ceafb6c5c224950c4c0a2e",
+      "gitBlob": "f03c8fbbc2df1e68bc98e1778ef5fa2e4359653e",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/tests/test_packaging.py",
+      "bytes": 1341,
+      "sha256": "c6115e99cd85b613915d9292e8a4e8826b08227900a00d9f5a1e63a7761d983a",
+      "gitBlob": "b10d1fc81018cc3848515a38090ea01f69ebd3fd",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/tests/test_real_model.py",
+      "bytes": 3061,
+      "sha256": "94b8470a3e8f5d6bbc2f2ac85be328e89cd4117504a0b47588f25206e4c148a6",
+      "gitBlob": "209323e13a5842913508f7d5f35d59dd5188fdc6",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/tests/test_release.py",
+      "bytes": 10336,
+      "sha256": "410a1dfa2f076d560b37dec5a6ecab2f1626028a736ecef723602efe2b427bf0",
+      "gitBlob": "7f756ecec33a825bccf227f7179283f25e5c4e23",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/verification-08.json",
+      "bytes": 11936,
+      "sha256": "1239b38d249de5684fc3d4fa6d80ebae89cc34bf3dcfd0b5204acdae3b8a7cb8",
+      "gitBlob": "4f070d138c2d485f6d5c49daef3affde0bda54fa",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/verification.json",
+      "bytes": 3978,
+      "sha256": "76bc6f602c564c73d074dccde997e466bd4616edfbec9c99d74c489c29853c26",
+      "gitBlob": "2f70733fd9d0f4300c75e8e4125dfa6e632e7517",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/web/camera.js",
+      "bytes": 10578,
+      "sha256": "4c42b8338e639c5848f94103b2ab360cb919eb79f76159c09bc3f3bc28d62ec3",
+      "gitBlob": "cb23577e0735211d6f87e1e1cfbd985999221bba",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/web/hand-worker.js",
+      "bytes": 1196,
+      "sha256": "74607647c012396e9f1cf0b22d3e23657e7ba9f5b390b309a0d7c90c767131fb",
+      "gitBlob": "75aa217b95a4fce9ef38f44dbf28e7e04f65c6cf",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/web/index.html",
+      "bytes": 8742,
+      "sha256": "4b664ef0acbb1fd8fc28557a716563c83a94216e04c5383e22b83b89ac729288",
+      "gitBlob": "c95e2079a6b51a724c6f176d414bd6b7008b979a",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/web/package.json",
+      "bytes": 33,
+      "sha256": "a90fc33418afa2b9cbf4768524b021135b965ecdf993457505bfae3ac44a8428",
+      "gitBlob": "f84528506796fb565716eaf2798e653919e3aa33",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/web/render.js",
+      "bytes": 8338,
+      "sha256": "661c1ec77a826fe38c446f92868d9ff066001f0fb3cadb59817864decfe7d66d",
+      "gitBlob": "da1d22df00db59af69d7e83b0362924dba4bf15d",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/web/shared.css",
+      "bytes": 5347,
+      "sha256": "a88028cb542ff3220bda2cfd2f37942c4a2dddda62f855092b9e9443bd1e789c",
+      "gitBlob": "34b5e5fc265ae02a16954d1f32f51ba1543609e1",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/web/shared.js",
+      "bytes": 23415,
+      "sha256": "57790495e3ecde77db3ba0247c3b02a679f00a2a6a3ed2cd5a3e139556b60edb",
+      "gitBlob": "ec99cff587128a81aa83f1689211b188e52bf145",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/web/studio-bridge.js",
+      "bytes": 4107,
+      "sha256": "b335e0a76202e96414b4869d0c06f1560bbab24ece52612c32158baac719e45a",
+      "gitBlob": "b5c9de8a7a095d8c74cdd771307dd9c66034f858",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/web/studio-original.html",
+      "bytes": 284687,
+      "sha256": "fac4d035e277e54e64c381dd808586a3d07b78c2dbef95fed3e2f8956128332e",
+      "gitBlob": "369571b50d1f18105a8395c8837dccb3012211b9",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/web/studio.html",
+      "bytes": 284727,
+      "sha256": "3cf4f6aa1df5cdd67b346add247554b08d40cd2cc53edaccfd2646de47e9c193",
+      "gitBlob": "7c9183683397ed286f2ba9305517bd59ff86f24c",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/web/vendor/field-lab/LICENSE-Apache-2.0.txt",
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "gitBlob": "d645695673349e3947e8e5ae42332d0ac3164cd7",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/web/vendor/field-lab/NOTICE.txt",
+      "bytes": 233,
+      "sha256": "aae24f06d37883c4b252f2e756ac40d0968ae4008dd961b04b2a8656defd1cd7",
+      "gitBlob": "751346f5c5d933bee2b95886728acd7d97eb9e97",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/web/vendor/field-lab/hand_landmarker.task",
+      "bytes": 7819105,
+      "sha256": "fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1",
+      "gitBlob": "0d53faf3786146e95c5bc010c48029ff16b7fa59",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/web/vendor/field-lab/manifest.json",
+      "bytes": 1726,
+      "sha256": "e5b3f7d36f0ae83aa3647f5403baa7e01b05a9757bdd38ccc52732904b0cf594",
+      "gitBlob": "384a147e3f83308c92b0ae97e02c2a0f41854b31",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/web/vendor/field-lab/package.json",
+      "bytes": 592,
+      "sha256": "20120384b2b0c1300d27ba769fff3cacfdbc964d5eb4cc12dda37a68d6c3885b",
+      "gitBlob": "3d8610b2568abecb452821b0361307be51fbe39b",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/web/vendor/field-lab/vision_bundle.mjs",
+      "bytes": 136870,
+      "sha256": "e77f281f9619150d937023c355bae170e9120e3b9e43f1e23a2a7bee07197669",
+      "gitBlob": "c367f270812135e746e910aebf94e14d6b392f6b",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/web/vendor/field-lab/wasm/vision_wasm_internal.js",
+      "bytes": 209826,
+      "sha256": "9440cf0cc0cea21800e31581ec32aeedcc5fbf9df4509796bbc7d3f99e52ab9c",
+      "gitBlob": "15ccc9124484032a0156a93dad6300e11383b305",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/web/vendor/field-lab/wasm/vision_wasm_internal.wasm",
+      "bytes": 9423986,
+      "sha256": "f82a8e6c05e08a44cc9f9e7ec5f845935bcbb1b1500ebe8c2f4812fb4e2917dc",
+      "gitBlob": "639e1896a631dcd49b39f9c76c908a99285e1bcf",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/web/vendor/field-lab/wasm/vision_wasm_nosimd_internal.js",
+      "bytes": 209735,
+      "sha256": "abe9b6fbeaf86fcb53a5edce3926c82ccb0619e18fed4d9d9ce561ee7f55e054",
+      "gitBlob": "d35ef64207f9c109d9cab4b9d1953d2ad6521a84",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "services/vivo/web/vendor/field-lab/wasm/vision_wasm_nosimd_internal.wasm",
+      "bytes": 9294247,
+      "sha256": "38b61feab2fd7934e05cbe9f68baa308978a5e3b7f85c1913bb8ae89b8ef8b97",
+      "gitBlob": "a6dd15a0976a36094f5299965ccc9f31003dcd05",
+      "archive": "matumbo-viva-build-081-source.zip"
+    },
+    {
+      "path": "research/vivo-phase-fabric/README.md",
+      "bytes": 4363,
+      "sha256": "27f465cb02aec316eb6b5199dc38d7a6f9efa6bf47f6cf5c4b21edde4712b7cf",
+      "gitBlob": "e17622af685c7f862345d9ba5f98fdfcc3e92d6d",
+      "archive": "viva-phase-fabric-research.zip"
+    },
+    {
+      "path": "research/vivo-phase-fabric/docs/AUDIT.md",
+      "bytes": 4831,
+      "sha256": "570db68dd6ac0b35dec1b49b5549b7865e20bd6abc346d16f66cae6a48648b7e",
+      "gitBlob": "d63186cc79fcc58a3426be9fb66d10e44bb6e60a",
+      "archive": "viva-phase-fabric-research.zip"
+    },
+    {
+      "path": "research/vivo-phase-fabric/docs/BLUEPRINT.md",
+      "bytes": 19445,
+      "sha256": "5c9b3c7dd12aefa75efc64174f48a932621dd219bfb3c5c9f6a092ee2e79a790",
+      "gitBlob": "c16cce1abf36d0592eb34b807ebde8564ff3b405",
+      "archive": "viva-phase-fabric-research.zip"
+    },
+    {
+      "path": "research/vivo-phase-fabric/generate_training_data.py",
+      "bytes": 3593,
+      "sha256": "0a5c9c7d35aa7862936ca9c09f189989108a2e3061a1ea2d32701b687882c8a4",
+      "gitBlob": "b4fe3da60d3cb31f5d7ad97c2629e6a87695e942",
+      "archive": "viva-phase-fabric-research.zip"
+    },
+    {
+      "path": "research/vivo-phase-fabric/reports/experiment-run.log",
+      "bytes": 2793,
+      "sha256": "e001811f3f37f39368bdb3864a1e886337c839e7a84c8903c6afa5265919cbaf",
+      "gitBlob": "4e2b1ec55ed5b03ee450d2ba40a1b76af7328eb7",
+      "archive": "viva-phase-fabric-research.zip"
+    },
+    {
+      "path": "research/vivo-phase-fabric/reports/experiment.json",
+      "bytes": 2792,
+      "sha256": "ce7895196e050bc6ba504fb368928deba66b3592d2be53af3fab9fc482b310ec",
+      "gitBlob": "61c4cae2dcc4cf07bc580525564dfdbd9acf8d63",
+      "archive": "viva-phase-fabric-research.zip"
+    },
+    {
+      "path": "research/vivo-phase-fabric/reports/mailbox-tests.log",
+      "bytes": 1741,
+      "sha256": "bd63a3b4cc5a32ab827d55e0269a49d8ce7ff739b24ca27bdb2c55e2fd1b10d1",
+      "gitBlob": "cfcbbaa1e6811b818d831270365965d320cc2a3c",
+      "archive": "viva-phase-fabric-research.zip"
+    },
+    {
+      "path": "research/vivo-phase-fabric/reports/phase-4d-checkpoint.npz",
+      "bytes": 4767344,
+      "sha256": "c23dd337fa1ab4baf95bfa65b7e2a7a18a8e33e782d8bab1ebc2d7418fedf11c",
+      "gitBlob": "b4add20f57999c4bdff84af686f6c508edb154d6",
+      "archive": "viva-phase-fabric-research.zip"
+    },
+    {
+      "path": "research/vivo-phase-fabric/reports/phase-tests.log",
+      "bytes": 2641,
+      "sha256": "7df96bbe20a60f1cc12062af9d6695ab6b928cf61c71edbcaec984cb60edfd33",
+      "gitBlob": "ee9a65a1320e3f50482ece4eaa73d24fe1061f2f",
+      "archive": "viva-phase-fabric-research.zip"
+    },
+    {
+      "path": "research/vivo-phase-fabric/reports/source-audit.json",
+      "bytes": 4650,
+      "sha256": "9b420b323654ac0fe814a340317ea315e19e096fdb4dc76ea8ce9ae2df869f1e",
+      "gitBlob": "bb6aaee359387d3a7d77173699eee00bc5b2c141",
+      "archive": "viva-phase-fabric-research.zip"
+    },
+    {
+      "path": "research/vivo-phase-fabric/reports/verification.json",
+      "bytes": 13260,
+      "sha256": "428811ab1b56810a17b8705092b531aa939bb036e04060576b8ecb08990c59de",
+      "gitBlob": "147ab927849a1d43042c87d51d4887af1aafb95b",
+      "archive": "viva-phase-fabric-research.zip"
+    },
+    {
+      "path": "research/vivo-phase-fabric/requirements.txt",
+      "bytes": 13,
+      "sha256": "7bd6b8946940b79948c548c8048e545684b91c8edc9444d8dfc0c8f76a97c0a7",
+      "gitBlob": "d59d856f1cc6c05962ca6bd4f14dd3315acd207c",
+      "archive": "viva-phase-fabric-research.zip"
+    },
+    {
+      "path": "research/vivo-phase-fabric/run_experiment.py",
+      "bytes": 4325,
+      "sha256": "4bf4ac313e5ceccef640956f97de9a13eba4cca0cec6228ed08f74acab01ec75",
+      "gitBlob": "b1479e2a1db5a1dd85764a9220deee98d816e908",
+      "archive": "viva-phase-fabric-research.zip"
+    },
+    {
+      "path": "research/vivo-phase-fabric/tests/target-mailbox.test.mjs",
+      "bytes": 3388,
+      "sha256": "0b10812446e3f06c0c5ea1da2501df206cd1bd386946504d394028ac9fb95258",
+      "gitBlob": "e550fa481d7004ad22169196298fd588145b7572",
+      "archive": "viva-phase-fabric-research.zip"
+    },
+    {
+      "path": "research/vivo-phase-fabric/tests/test_phase.py",
+      "bytes": 7412,
+      "sha256": "051495921cc6a27a039e3ed4fcbbf7c0ca277a90527d12db3f18f836686ed785",
+      "gitBlob": "71a584a793cff52c3006de88a43acb4f5b1d33c5",
+      "archive": "viva-phase-fabric-research.zip"
+    },
+    {
+      "path": "research/vivo-phase-fabric/training-data/manifest.json",
+      "bytes": 4112,
+      "sha256": "8acff47771e78634e536fb244872410855472a68b84618e4611c9dbf953190e8",
+      "gitBlob": "5af5b6ac131f540d5a23e592b6cceafee8943b06",
+      "archive": "viva-phase-fabric-research.zip"
+    },
+    {
+      "path": "research/vivo-phase-fabric/training-data/test-3601.npz",
+      "bytes": 300445,
+      "sha256": "55eb3e00e494ca619ea80e6c6fcc04b8d80c55e3801d05ab016ac8fbd8142a8a",
+      "gitBlob": "0420b006e17c321fcbba6238a4fe1e795fc6830f",
+      "archive": "viva-phase-fabric-research.zip"
+    },
+    {
+      "path": "research/vivo-phase-fabric/training-data/test-3602.npz",
+      "bytes": 298047,
+      "sha256": "18c313a0c8637615658e79f19d1b8eada43be5c282b75e282c57beff997640f1",
+      "gitBlob": "6a18a59827ec6d33c96773c3a07ca0b64280125e",
+      "archive": "viva-phase-fabric-research.zip"
+    },
+    {
+      "path": "research/vivo-phase-fabric/training-data/train-1601.npz",
+      "bytes": 284360,
+      "sha256": "4f0a04c1dce17a330a51455c994fb7f6006396459bf52053e96ba1df6fa66bd4",
+      "gitBlob": "4c8d96e68ffc87ae8bb00ef1921f3a8e6b7b15f9",
+      "archive": "viva-phase-fabric-research.zip"
+    },
+    {
+      "path": "research/vivo-phase-fabric/training-data/train-1602.npz",
+      "bytes": 300638,
+      "sha256": "2bc8a4491e0e5b4a613b0bd0245eb708b6f7f6fd57d1339f5b6317203ae811b6",
+      "gitBlob": "21f9fabcbb6e7aeb643fc6dce1e56e26487b6b06",
+      "archive": "viva-phase-fabric-research.zip"
+    },
+    {
+      "path": "research/vivo-phase-fabric/training-data/train-1603.npz",
+      "bytes": 284996,
+      "sha256": "195d0b98115d5fb839d4761a58de8b6c6bdd93279ace4831cfd23c153e46ab60",
+      "gitBlob": "99a7b3776dc37ce2f621d2bbfd02dc1eb7eadafc",
+      "archive": "viva-phase-fabric-research.zip"
+    },
+    {
+      "path": "research/vivo-phase-fabric/training-data/train-1604.npz",
+      "bytes": 298226,
+      "sha256": "0a40d5e1c1c4dde58838534ed91402796554dd648aa5c654b01c8bba053a3229",
+      "gitBlob": "d581887f881aaa1682da0423c963797cdcbf47ab",
+      "archive": "viva-phase-fabric-research.zip"
+    },
+    {
+      "path": "research/vivo-phase-fabric/training-data/train-1605.npz",
+      "bytes": 329608,
+      "sha256": "1ca8320e373b7d7da27769587a7351eb737e82f583501e455849873d94b50063",
+      "gitBlob": "4a16dfb6b81478ffd1b873d4a100e8abea367c13",
+      "archive": "viva-phase-fabric-research.zip"
+    },
+    {
+      "path": "research/vivo-phase-fabric/training-data/train-1606.npz",
+      "bytes": 300027,
+      "sha256": "ea4cf060f1c470642b1099320bfb8c5f6762d12e8f4419da6636d7d7f5470ebd",
+      "gitBlob": "909becbd5c57366ec9ce0267f7b6d5dbbf324b27",
+      "archive": "viva-phase-fabric-research.zip"
+    },
+    {
+      "path": "research/vivo-phase-fabric/training-data/train-1607.npz",
+      "bytes": 298894,
+      "sha256": "7edf37bca3a64a0f73790d05bbbb43a9ae9f51a6cd5a216c2b3e4248dfce8247",
+      "gitBlob": "3126ddf24f3bd0f993d5d408c728567269a96cad",
+      "archive": "viva-phase-fabric-research.zip"
+    },
+    {
+      "path": "research/vivo-phase-fabric/training-data/train-1608.npz",
+      "bytes": 302397,
+      "sha256": "af43d9d415e6427ea5dbd9fa6b921c9e069afac8dd84dda04229def78bfc9394",
+      "gitBlob": "e95117ebfea9a4377cebd35f2dcc460bf41ee404",
+      "archive": "viva-phase-fabric-research.zip"
+    },
+    {
+      "path": "research/vivo-phase-fabric/training-data/validation-2601.npz",
+      "bytes": 324163,
+      "sha256": "a71fe6958d9b024e0aa69a79f96560da4e35970082e0891992625097d376e222",
+      "gitBlob": "de540979e6865e94ecbeb29defe7c8ff7d627a7e",
+      "archive": "viva-phase-fabric-research.zip"
+    },
+    {
+      "path": "research/vivo-phase-fabric/training-data/validation-2602.npz",
+      "bytes": 299382,
+      "sha256": "cc73e2dfb4a821204710b7141a6b82fde859961907d6106cec827441ae7e0ff2",
+      "gitBlob": "b3fc00a011fe012248c49b99dbdc3ddb33c19064",
+      "archive": "viva-phase-fabric-research.zip"
+    },
+    {
+      "path": "research/vivo-phase-fabric/viva_phase/__init__.py",
+      "bytes": 197,
+      "sha256": "2ec58528fc5493e5f2582167349f20c150c47aeb2704fb5e4fab39456d447dde",
+      "gitBlob": "17c1030342f39ff52a6a1178f35f55e09d722896",
+      "archive": "viva-phase-fabric-research.zip"
+    },
+    {
+      "path": "research/vivo-phase-fabric/viva_phase/solver.py",
+      "bytes": 10482,
+      "sha256": "0580e63e9a7dac96b70ffd5ed559b2ccd063f0526066fe38bafa571ca0d27947",
+      "gitBlob": "c0fe0d13b2a937155bcbe7fcb316ebe69720b969",
+      "archive": "viva-phase-fabric-research.zip"
+    },
+    {
+      "path": "research/vivo-phase-fabric/web/target-mailbox.mjs",
+      "bytes": 3661,
+      "sha256": "54190e41215feb67aa41f9c7c824ea661aeb1aa71809ef05ad1156b64ddfa768",
+      "gitBlob": "8f7a935095927dfd08d5398f6dbb91f29c61f59a",
+      "archive": "viva-phase-fabric-research.zip"
+    }
+  ],
+  "preservedAdditions": [
+    {
+      "path": "services/vivo/contracts/interfaces.d.ts",
+      "gitBlob": "0a28649e3e3709094611dd5c4ab91a7a98cb7bbd"
+    },
+    {
+      "path": "services/vivo/contracts/validate.mjs",
+      "gitBlob": "75a9463a14b9f66fe2770ea58a8547f11ba92831"
+    },
+    {
+      "path": "services/vivo/server/authority/file-store.mjs",
+      "gitBlob": "c788e2b2f0f906d9ddf09c4e95628d4861339241"
+    },
+    {
+      "path": "services/vivo/server/authority/module_routes.py",
+      "gitBlob": "62c86b8f9928a1fd5a92cc9d31c2711b9d46a968"
+    },
+    {
+      "path": "services/vivo/source-import-stage-a.json",
+      "gitBlob": "9799ea0a19f6e8ded57bbbb341ba80cf3c8ac9b1"
+    },
+    {
+      "path": "services/vivo/tests/authority/host-final-sample.test.mjs",
+      "gitBlob": "dc6c701746b4d4d8a2d415b9b9fcd514a3f8cfc4"
+    },
+    {
+      "path": "services/vivo/tests/authority/lease-authority.test.mjs",
+      "gitBlob": "d9231633a04bdcdfe6a6801a8be1f6093a7914eb"
+    },
+    {
+      "path": "services/vivo/tests/authority/nested-durable.test.mjs",
+      "gitBlob": "be724e42a6176281c8e413ee47bdcf3fbb3e2225"
+    },
+    {
+      "path": "services/vivo/tests/authority/release-receipt.test.mjs",
+      "gitBlob": "e2f0b7623b1bd9398d6eceb5200fdeba277c64f8"
+    },
+    {
+      "path": "services/vivo/tests/authority/test_module_routes.py",
+      "gitBlob": "d5baf9dbe0b3770054174a69d16cadc5860cf6b7"
+    },
+    {
+      "path": "services/vivo/tests/integration/contracts.test.mjs",
+      "gitBlob": "1286ca7a61eb8b6687f07a6bf6b3bdfafc76fe39"
+    },
+    {
+      "path": "services/vivo/tests/integration/test_intake.py",
+      "gitBlob": "5bba0e7071592d75f690d20c45111b320fd606fa"
+    },
+    {
+      "path": "services/vivo/web/authority/grip-host.mjs",
+      "gitBlob": "2935a50c15f4b94aae6be4b9f6b70cedfd8a63a1"
+    },
+    {
+      "path": "services/vivo/web/authority/lease-authority.mjs",
+      "gitBlob": "6a8b1fd9ddd26d9b257d2b0440c613f791166e98"
+    }
+  ],
+  "modifiedOriginalOverlays": []
+}

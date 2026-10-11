@@ -1,0 +1,17 @@
+✔ fast input is retained as latest target during a network round trip (6.045198ms)
+✔ reversing a hand replaces the pending target, not a backlog of old frames (2.518086ms)
+✔ stale pending observation cannot initiate new motion (0.704428ms)
+✔ cancel does not replay unacknowledged target after release (0.844973ms)
+✔ uncertain result blocks sends instead of blindly retrying (0.500722ms)
+✔ older ACK cannot authorize a new grab (1.265301ms)
+✔ all eleven coordinates are retained (0.968062ms)
+✔ future and stale samples rejected, coordinate count validated (0.360545ms)
+✔ unknown or stale ACK requires explicit reconciliation (0.89866ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 145.82609

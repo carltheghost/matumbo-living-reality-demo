@@ -1,0 +1,29 @@
+services:
+  viva:
+    build: .
+    environment:
+      VIVA_CREATE_KEY: ${VIVA_CREATE_KEY:?Set a long random creation key in .env}
+      VIVA_PUBLIC_ORIGIN: https://${VIVA_DOMAIN:?Set your public hostname in .env}
+      VIVA_DB: /data/viva.sqlite
+      PORT: 8765
+    volumes:
+      - viva-data:/data
+    restart: unless-stopped
+  https:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      VIVA_DOMAIN: ${VIVA_DOMAIN:?Set your public hostname in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - viva
+    restart: unless-stopped
+volumes:
+  viva-data:
+  caddy-data:
+  caddy-config:

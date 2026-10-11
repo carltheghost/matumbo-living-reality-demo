@@ -1,0 +1,64 @@
+TAP version 13
+# Subtest: fast input is retained as latest target during a network round trip
+ok 1 - fast input is retained as latest target during a network round trip
+  ---
+  duration_ms: 5.177605
+  type: 'test'
+  ...
+# Subtest: reversing a hand replaces the pending target, not a backlog of old frames
+ok 2 - reversing a hand replaces the pending target, not a backlog of old frames
+  ---
+  duration_ms: 0.677693
+  type: 'test'
+  ...
+# Subtest: stale pending observation cannot initiate new motion
+ok 3 - stale pending observation cannot initiate new motion
+  ---
+  duration_ms: 1.168213
+  type: 'test'
+  ...
+# Subtest: cancel does not replay unacknowledged target after release
+ok 4 - cancel does not replay unacknowledged target after release
+  ---
+  duration_ms: 0.513325
+  type: 'test'
+  ...
+# Subtest: uncertain result blocks sends instead of blindly retrying
+ok 5 - uncertain result blocks sends instead of blindly retrying
+  ---
+  duration_ms: 0.406213
+  type: 'test'
+  ...
+# Subtest: older ACK cannot authorize a new grab
+ok 6 - older ACK cannot authorize a new grab
+  ---
+  duration_ms: 0.49675
+  type: 'test'
+  ...
+# Subtest: all eleven coordinates are retained
+ok 7 - all eleven coordinates are retained
+  ---
+  duration_ms: 0.837033
+  type: 'test'
+  ...
+# Subtest: future and stale samples rejected, coordinate count validated
+ok 8 - future and stale samples rejected, coordinate count validated
+  ---
+  duration_ms: 0.18517
+  type: 'test'
+  ...
+# Subtest: unknown or stale ACK requires explicit reconciliation
+ok 9 - unknown or stale ACK requires explicit reconciliation
+  ---
+  duration_ms: 0.703272
+  type: 'test'
+  ...
+1..9
+# tests 9
+# suites 0
+# pass 9
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 59.237651

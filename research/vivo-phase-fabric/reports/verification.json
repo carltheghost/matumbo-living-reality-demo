@@ -1,0 +1,571 @@
+{
+  "release": "Viva Phase Fabric research and integration kit",
+  "status": "isolated reference, audit and proposed integration; not a deployed app",
+  "environment": {
+    "python": "3.13.5",
+    "numpy": "2.3.5",
+    "node": "v22.16.0",
+    "platform": "Linux-6.18.44-x86_64-with-glibc2.41"
+  },
+  "test_suites": [
+    {
+      "name": "Python numerical phase field",
+      "named_tests_passed": 26,
+      "failed": 0,
+      "log": "phase-tests.log"
+    },
+    {
+      "name": "Node target mailbox",
+      "named_tests_passed": 9,
+      "failed": 0,
+      "log": "mailbox-tests.log"
+    }
+  ],
+  "named_tests_passed_total": 35,
+  "compile_check": "Python solver, experiment, data generator compiled successfully",
+  "experiment": {
+    "name": "Viva native four-spatial-dimensional phase-field experiment",
+    "status": "isolated numerical reference; not a website/app update",
+    "equation": "i*dpsi/dt = (-0.5*Delta + V + g*abs(psi)^2)*psi; hbar=mass=1",
+    "scope": "mean-field quantum-inspired model, not quantitative strongly interacting helium-4",
+    "grid": {
+      "shape": [
+        24,
+        24,
+        24,
+        24
+      ],
+      "lengths": [
+        6.283185307179586,
+        6.283185307179586,
+        6.283185307179586,
+        6.283185307179586
+      ],
+      "spatial_dimension": 4,
+      "boundary": "periodic",
+      "metric": "Euclidean / flat torus",
+      "clock": "separate"
+    },
+    "complex_samples": 331776,
+    "full_state_complex_bytes": 5308416,
+    "coupling": 2.0,
+    "simulation_time_before_kick": 0.24,
+    "time_step": 0.01,
+    "norm_initial": 1558.5454565440382,
+    "relative_norm_drift_before_kick": 5.266570602118814e-14,
+    "energy_initial": 1600.2207544951375,
+    "max_relative_energy_drift_dt_001": 4.415448187269334e-08,
+    "temporal_refinement": {
+      "fixed_shape": [
+        24,
+        24,
+        24,
+        24
+      ],
+      "reference_dt": 0.005,
+      "coarse_dt": 0.04,
+      "medium_dt": 0.02,
+      "coarse_relative_L2": 2.2481588624880592e-05,
+      "medium_relative_L2": 5.350153488220817e-06,
+      "error_ratio": 4.20204554399743
+    },
+    "spatial_convergence": "not established; temporal refinement holds spatial grid fixed",
+    "two_observer_slices_do_not_mutate_world": true,
+    "slice_phase_sensitive_difference_L2": 30.963728942854388,
+    "sampled_local_vortex_sheet": {
+      "core_dimension": 2,
+      "free_core_axes": [
+        "x3",
+        "x4"
+      ],
+      "winding": 1,
+      "residual": 0.0,
+      "minimum_amplitude": 0.7615941559557646,
+      "equilibrium_stability": "not established; analytic local fixture"
+    },
+    "stirring": {
+      "norm": 1558.5454565441203,
+      "supplied_energy": 28.696633455480196,
+      "relative_norm_change": 0.0,
+      "energy_units": "dimensionless"
+    },
+    "timing": {
+      "seconds_for_24_steps_including_energy_diagnostics": 0.7498127210000121,
+      "environment": "Linux-6.18.44-x86_64-with-glibc2.41",
+      "numpy": "2.3.5",
+      "physical_phone": false,
+      "performance_claim": "not a phone or GPU benchmark"
+    },
+    "neural_training": "not run; reference solver can generate training targets. Existing trained guidance remains unchanged.",
+    "not_implemented": [
+      "liquid-helium equation of state",
+      "normal-fluid/thermal component",
+      "Rollin film wetting",
+      "free-surface droplets/solid constitutive model",
+      "arbitrary curved manifold PDE",
+      "live room integration",
+      "learned material model",
+      "hand inference",
+      "new networking",
+      "emergent intelligent room"
+    ],
+    "test_scope": "Tests exercise discrete numerical laws and local geometry; not empirical validation of nature."
+  },
+  "dataset": {
+    "trajectories": 12,
+    "split_counts": {
+      "train": 8,
+      "validation": 2,
+      "test": 2
+    },
+    "all_checksums_verified": true,
+    "all_numeric_arrays_finite": true,
+    "neural_training_performed": false,
+    "source": "synthetic mean-field simulations; not empirical helium or user recordings",
+    "manifest": "../training-data/manifest.json",
+    "shape_records": [
+      {
+        "file": "train-1601.npz",
+        "sha256_verified": true,
+        "arrays": {
+          "psi": {
+            "shape": [
+              9,
+              8,
+              8,
+              8,
+              8,
+              2
+            ],
+            "dtype": "float32"
+          },
+          "potential": {
+            "shape": [
+              8,
+              8,
+              8,
+              8,
+              8
+            ],
+            "dtype": "float32"
+          },
+          "coupling": {
+            "shape": [],
+            "dtype": "float64"
+          },
+          "delta_t": {
+            "shape": [],
+            "dtype": "float64"
+          }
+        }
+      },
+      {
+        "file": "train-1602.npz",
+        "sha256_verified": true,
+        "arrays": {
+          "psi": {
+            "shape": [
+              9,
+              8,
+              8,
+              8,
+              8,
+              2
+            ],
+            "dtype": "float32"
+          },
+          "potential": {
+            "shape": [
+              8,
+              8,
+              8,
+              8,
+              8
+            ],
+            "dtype": "float32"
+          },
+          "coupling": {
+            "shape": [],
+            "dtype": "float64"
+          },
+          "delta_t": {
+            "shape": [],
+            "dtype": "float64"
+          }
+        }
+      },
+      {
+        "file": "train-1603.npz",
+        "sha256_verified": true,
+        "arrays": {
+          "psi": {
+            "shape": [
+              9,
+              8,
+              8,
+              8,
+              8,
+              2
+            ],
+            "dtype": "float32"
+          },
+          "potential": {
+            "shape": [
+              8,
+              8,
+              8,
+              8,
+              8
+            ],
+            "dtype": "float32"
+          },
+          "coupling": {
+            "shape": [],
+            "dtype": "float64"
+          },
+          "delta_t": {
+            "shape": [],
+            "dtype": "float64"
+          }
+        }
+      },
+      {
+        "file": "train-1604.npz",
+        "sha256_verified": true,
+        "arrays": {
+          "psi": {
+            "shape": [
+              9,
+              8,
+              8,
+              8,
+              8,
+              2
+            ],
+            "dtype": "float32"
+          },
+          "potential": {
+            "shape": [
+              8,
+              8,
+              8,
+              8,
+              8
+            ],
+            "dtype": "float32"
+          },
+          "coupling": {
+            "shape": [],
+            "dtype": "float64"
+          },
+          "delta_t": {
+            "shape": [],
+            "dtype": "float64"
+          }
+        }
+      },
+      {
+        "file": "train-1605.npz",
+        "sha256_verified": true,
+        "arrays": {
+          "psi": {
+            "shape": [
+              9,
+              8,
+              8,
+              8,
+              8,
+              2
+            ],
+            "dtype": "float32"
+          },
+          "potential": {
+            "shape": [
+              8,
+              8,
+              8,
+              8,
+              8
+            ],
+            "dtype": "float32"
+          },
+          "coupling": {
+            "shape": [],
+            "dtype": "float64"
+          },
+          "delta_t": {
+            "shape": [],
+            "dtype": "float64"
+          }
+        }
+      },
+      {
+        "file": "train-1606.npz",
+        "sha256_verified": true,
+        "arrays": {
+          "psi": {
+            "shape": [
+              9,
+              8,
+              8,
+              8,
+              8,
+              2
+            ],
+            "dtype": "float32"
+          },
+          "potential": {
+            "shape": [
+              8,
+              8,
+              8,
+              8,
+              8
+            ],
+            "dtype": "float32"
+          },
+          "coupling": {
+            "shape": [],
+            "dtype": "float64"
+          },
+          "delta_t": {
+            "shape": [],
+            "dtype": "float64"
+          }
+        }
+      },
+      {
+        "file": "train-1607.npz",
+        "sha256_verified": true,
+        "arrays": {
+          "psi": {
+            "shape": [
+              9,
+              8,
+              8,
+              8,
+              8,
+              2
+            ],
+            "dtype": "float32"
+          },
+          "potential": {
+            "shape": [
+              8,
+              8,
+              8,
+              8,
+              8
+            ],
+            "dtype": "float32"
+          },
+          "coupling": {
+            "shape": [],
+            "dtype": "float64"
+          },
+          "delta_t": {
+            "shape": [],
+            "dtype": "float64"
+          }
+        }
+      },
+      {
+        "file": "train-1608.npz",
+        "sha256_verified": true,
+        "arrays": {
+          "psi": {
+            "shape": [
+              9,
+              8,
+              8,
+              8,
+              8,
+              2
+            ],
+            "dtype": "float32"
+          },
+          "potential": {
+            "shape": [
+              8,
+              8,
+              8,
+              8,
+              8
+            ],
+            "dtype": "float32"
+          },
+          "coupling": {
+            "shape": [],
+            "dtype": "float64"
+          },
+          "delta_t": {
+            "shape": [],
+            "dtype": "float64"
+          }
+        }
+      },
+      {
+        "file": "validation-2601.npz",
+        "sha256_verified": true,
+        "arrays": {
+          "psi": {
+            "shape": [
+              9,
+              8,
+              8,
+              8,
+              8,
+              2
+            ],
+            "dtype": "float32"
+          },
+          "potential": {
+            "shape": [
+              8,
+              8,
+              8,
+              8,
+              8
+            ],
+            "dtype": "float32"
+          },
+          "coupling": {
+            "shape": [],
+            "dtype": "float64"
+          },
+          "delta_t": {
+            "shape": [],
+            "dtype": "float64"
+          }
+        }
+      },
+      {
+        "file": "validation-2602.npz",
+        "sha256_verified": true,
+        "arrays": {
+          "psi": {
+            "shape": [
+              9,
+              8,
+              8,
+              8,
+              8,
+              2
+            ],
+            "dtype": "float32"
+          },
+          "potential": {
+            "shape": [
+              8,
+              8,
+              8,
+              8,
+              8
+            ],
+            "dtype": "float32"
+          },
+          "coupling": {
+            "shape": [],
+            "dtype": "float64"
+          },
+          "delta_t": {
+            "shape": [],
+            "dtype": "float64"
+          }
+        }
+      },
+      {
+        "file": "test-3601.npz",
+        "sha256_verified": true,
+        "arrays": {
+          "psi": {
+            "shape": [
+              9,
+              8,
+              8,
+              8,
+              8,
+              2
+            ],
+            "dtype": "float32"
+          },
+          "potential": {
+            "shape": [
+              8,
+              8,
+              8,
+              8,
+              8
+            ],
+            "dtype": "float32"
+          },
+          "coupling": {
+            "shape": [],
+            "dtype": "float64"
+          },
+          "delta_t": {
+            "shape": [],
+            "dtype": "float64"
+          }
+        }
+      },
+      {
+        "file": "test-3602.npz",
+        "sha256_verified": true,
+        "arrays": {
+          "psi": {
+            "shape": [
+              9,
+              8,
+              8,
+              8,
+              8,
+              2
+            ],
+            "dtype": "float32"
+          },
+          "potential": {
+            "shape": [
+              8,
+              8,
+              8,
+              8,
+              8
+            ],
+            "dtype": "float32"
+          },
+          "coupling": {
+            "shape": [],
+            "dtype": "float64"
+          },
+          "delta_t": {
+            "shape": [],
+            "dtype": "float64"
+          }
+        }
+      }
+    ]
+  },
+  "changes_to_existing_project": {
+    "source_archive_modified": false,
+    "repository_modified": false,
+    "live_website_modified": false,
+    "deployment_created": false
+  },
+  "not_validated": [
+    "physical phone latency",
+    "camera inference",
+    "real hand input",
+    "browser integration of target mailbox",
+    "new network/server endpoint",
+    "quantitative helium-4 physics",
+    "wetting/Rollin film",
+    "classical free-surface liquid or solid material",
+    "arbitrary curved manifold PDE",
+    "spatial-grid convergence",
+    "stable evolved vortex sheets",
+    "full emergent intelligence",
+    "trained neural material surrogate"
+  ],
+  "accounting": "Tests are headless numerical and JS component tests. Prior app test totals are not added. Data integrity checks are reported separately, not counted as named tests."
+}

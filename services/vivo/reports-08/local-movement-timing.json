@@ -1,0 +1,55 @@
+{
+  "environment": "container CPU, not a phone or network end-to-end benchmark",
+  "moves": [
+    {
+      "geometry": "flat",
+      "dimension": 4,
+      "milliseconds_per_move": 1.303
+    },
+    {
+      "geometry": "flat",
+      "dimension": 11,
+      "milliseconds_per_move": 1.119
+    },
+    {
+      "geometry": "sphere",
+      "dimension": 4,
+      "milliseconds_per_move": 4.343
+    },
+    {
+      "geometry": "sphere",
+      "dimension": 11,
+      "milliseconds_per_move": 14.904
+    },
+    {
+      "geometry": "torus",
+      "dimension": 4,
+      "milliseconds_per_move": 4.445
+    },
+    {
+      "geometry": "torus",
+      "dimension": 11,
+      "milliseconds_per_move": 15.168
+    },
+    {
+      "geometry": "mobius",
+      "dimension": 4,
+      "milliseconds_per_move": 4.857
+    },
+    {
+      "geometry": "mobius",
+      "dimension": 11,
+      "milliseconds_per_move": 16.309
+    },
+    {
+      "geometry": "custom",
+      "dimension": 4,
+      "milliseconds_per_move": 29.997
+    },
+    {
+      "geometry": "custom",
+      "dimension": 11,
+      "milliseconds_per_move": 83.643
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+✔ all 2-11 coordinate dimensions accepted explicitly (1.831173ms)
+✔ last coordinate retained (0.240276ms)
+✔ dimension and coordinate length must agree (0.416494ms)
+✔ time is not accepted as another coordinate label (0.173208ms)
+✔ NaN infinity numeric strings and booleans rejected (0.300213ms)
+✔ client actor cannot impersonate a session (0.1778ms)
+✔ missing lease rejected (0.220651ms)
+✔ stale/future-observation age rejected (0.341815ms)
+✔ old relative move is not mistaken for target (0.252545ms)
+✔ validation never mutates caller coordinates (3.547425ms)
+✔ touch/hand origins remain distinct (0.205542ms)
+✔ geometry domain budget rejects unsupported direction counts (0.245729ms)
+✔ negative unsafe and fractional revisions rejected (0.182564ms)
+✔ entry and exit are explicit object/eye references (0.142452ms)
+✔ offline fork must carry checkpoint provenance (0.246058ms)
+✔ accepted receipt carries authority hash; rejection need not (0.368438ms)
+✔ sparse coordinate arrays are not valid state (0.245208ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 140.956861

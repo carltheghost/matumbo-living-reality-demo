@@ -1,0 +1,11 @@
+{
+  "probe": "actual pinned MediaPipe worker with user-supplied still image",
+  "model_initialized": true,
+  "real_image_inference_passed": false,
+  "blank_image_inference_verified": false,
+  "error": "MediaPipe image preprocessing could not access WebGL (activeTexture on unavailable graphics context).",
+  "result": "BLOCKED / NOT VALIDATED, excluded from passing checks",
+  "input_privacy": "Provided photo was used only locally for this probe; image is not packaged.",
+  "physical_camera_tested": false,
+  "runtime": "CPU delegate, actual pinned WASM/model; preprocessing still requires graphics support"
+}

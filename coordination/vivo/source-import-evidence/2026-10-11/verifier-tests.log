@@ -1,0 +1,15 @@
+test_duplicate_member_fails (__main__.ImportVerificationTests.test_duplicate_member_fails) ... ok
+test_exact_binary_bytes (__main__.ImportVerificationTests.test_exact_binary_bytes) ... ok
+test_missing_member_fails (__main__.ImportVerificationTests.test_missing_member_fails) ... ok
+test_mutation_fails (__main__.ImportVerificationTests.test_mutation_fails) ... ok
+test_symlink_fails (__main__.ImportVerificationTests.test_symlink_fails) ... ok
+test_traversal_fails (__main__.ImportVerificationTests.test_traversal_fails) ... ok
+test_truncated_inventory_fails (__main__.ImportVerificationTests.test_truncated_inventory_fails) ... ok
+test_wrong_archive_fails (__main__.ImportVerificationTests.test_wrong_archive_fails) ... ok
+test_wrong_destination_fails (__main__.ImportVerificationTests.test_wrong_destination_fails) ... ok
+test_wrong_git_blob_fails (__main__.ImportVerificationTests.test_wrong_git_blob_fails) ... ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 0.004s
+
+OK
