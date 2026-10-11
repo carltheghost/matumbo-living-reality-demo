@@ -110,6 +110,29 @@ async def main():
             assert after_publish["binding"]["q"] == [2.5, after_publish["binding"]["q"][1], after_publish["binding"]["q"][2], after_publish["binding"]["q"][3]]
             assert after_publish["lastApplied"]["q"][0] == 2.5
 
+            # Select a second existing Full Studio node explicitly.  Only its
+            # accepted projection changes; the canonical Workpiece entity and
+            # the already accepted Echo projection remain independent.
+            workpiece_publish = await pages[0].evaluate("""
+                async () => {
+                  const bridge = window.__vivoStudioAuthorityBridge;
+                  await bridge.selectBinding('studio.node.workpiece');
+                  window.FieldApp.engine.q[56 * 9] = 1.75;
+                  return bridge.publish();
+                }
+            """)
+            assert workpiece_publish["status"] == "accepted", workpiece_publish
+            await pages[1].evaluate("window.__vivoStudioAuthorityBridge.selectBinding('studio.node.workpiece')")
+            await wait_for_binding(pages[1], 1.75)
+            workpiece_state = await pages[1].evaluate("window.__vivoStudioAuthorityBridge.debug()")
+            assert workpiece_state["bindingId"] == "studio.node.workpiece"
+            assert workpiece_state["selectedEntityId"] == "workpiece"
+            assert workpiece_state["acceptedEntityQ"] == [0.15, 0.75, 0.25, 0]
+            assert workpiece_state["bindings"] == ["studio.node.echo", "studio.node.workpiece", "studio.node.portal"]
+            await pages[0].evaluate("window.__vivoStudioAuthorityBridge.selectBinding('studio.node.echo')")
+            await pages[1].evaluate("window.__vivoStudioAuthorityBridge.selectBinding('studio.node.echo')")
+            await wait_for_binding(pages[1], 2.5)
+
             # A real concurrent Studio edit must not be silently overwritten.
             # Seat one keeps its local projection while seat two publishes a
             # different projection; the first retry is only an explicit
@@ -124,7 +147,7 @@ async def main():
             blocked = await pages[0].evaluate("window.__vivoStudioAuthorityBridge.publish()")
             assert blocked["status"] == "rejected" and blocked["code"] == "STUDIO_CONFLICT", blocked
             assert await pages[0].locator("#vivoStudioAuthorityBridge [data-vivo-authority-status]").inner_text() == "CONFLICT"
-            assert "click publish echo again" in (await pages[0].locator("#vivoStudioAuthorityBridge [data-vivo-authority-message]").inner_text()).lower()
+            assert "publish again" in (await pages[0].locator("#vivoStudioAuthorityBridge [data-vivo-authority-message]").inner_text()).lower()
             armed = await pages[0].evaluate("window.__vivoStudioAuthorityBridge.debug()")
             assert armed["publishOverrideArmed"] is True
 
@@ -181,6 +204,7 @@ async def main():
             assert branch["snapshot"]["branch"]["parentWorldId"] == "vivo.local.workshop"
             camera_calls = await pages[0].evaluate("window.__vivoCameraCalls") + await pages[1].evaluate("window.__vivoCameraCalls")
             evidence = {"initialOne": initial_one, "initialTwo": initial_two, "afterPublish": after_publish,
+                        "workpiecePublish": workpiece_publish, "workpieceState": workpiece_state,
                         "conflict": conflict, "afterConflictResolution": after_conflict_resolution,
                         "oneEye": one_eye, "twoEye": two_eye, "resolved": resolved, "offlineBranch": {
                             "worldId": branch["worldId"], "authorityId": branch["authorityId"], "parentWorldId": branch["parentWorldId"]}}

@@ -5,15 +5,20 @@ import {mkdtemp,rm,writeFile,readdir,mkdir,chmod,symlink} from 'node:fs/promises
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
+import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {DatabaseSync} from 'node:sqlite';
 import {MountedRuntime} from '../../server/application/runtime.mjs';
 import {SQLiteAuthorityStore} from '../../server/authority/sqlite-store.mjs';
 import {LocalLeaseWorld} from '../../web/authority/lease-authority.mjs';
+import {studioCommitCommand} from '../../contracts/studio-binding.mjs';
 import {workshopSeed,entryView} from '../../server/application/seed.mjs';
 const root=fileURLToPath(new URL('../../../../',import.meta.url));
 const runtimeURL=new URL('../../server/application/runtime.mjs',import.meta.url).href;
 const error=code=>e=>e.code===code;
+const canonical=value=>JSON.stringify(value,(_,v)=>v&&typeof v==='object'&&!Array.isArray(v)
+ ?Object.fromEntries(Object.keys(v).sort().map(k=>[k,v[k]])):v);
+const digest=value=>createHash('sha256').update(canonical(value)).digest('hex');
 const command=(kind,payload,id='sqlite.command')=>({schema:'vivo.command/1',id,worldId:'vivo.local.workshop',spaceId:'root',kind,expectedRevision:0,payload});
 async function fixture(t,options={}){
  const dir=await mkdtemp(join(tmpdir(),'vivo-sqlite-mount-')),path=join(dir,options.phase?'canonical-phase.sqlite':'canonical-world.sqlite');
@@ -100,6 +105,53 @@ test('mounted material guard runs after actual SQLite DML: expiry rolls back fie
  // All accepted fields/q/v, Eyes, receipts, epochs and material lease cursors are
  // covered by the exact full-checkpoint comparison, not only the snapshot.
  await observer.close();
+});
+
+test('material-bound Studio commit rejects before canonical mutation',async t=>{
+ const internals=captureInternals(t),{runtime}=await fixture(t,{phase:true,initializeMaterial:snapshot=>python({op:'seed',snapshot})});
+ await runtime.dispatch({op:'open',args:{seat:'one'}});
+ const client=internals.world.attach({actorId:'studio.material-boundary'});await client.open();
+ const snapshot=client.getSnapshot(),binding=snapshot.studioBindings['studio.node.echo'],entity=snapshot.spaces.root.entities.relic,before=internals.world.checkpoint();
+ const receipt=await client.submit(studioCommitCommand(snapshot,[0,0,0,0],{bindingId:binding.bindingId,metadata:binding.metadata,
+   commandId:'studio.material.boundary',expectedBindingRevision:binding.bindingRevision,expectedEntityRevision:entity.revision}));
+ assert.equal(receipt.status,'rejected');assert.equal(receipt.code,'STUDIO_MATERIAL_BOUNDARY');
+ assert.deepEqual(internals.world.checkpoint(),before);
+ await client.close();
+});
+
+test('canonical Studio commit survives mounted SQLite shutdown and reopen without changing entity-owned fields',async t=>{
+ const internals=captureInternals(t),{runtime,path}=await fixture(t);
+ const one=await runtime.dispatch({op:'open',args:{seat:'one'}}),before=one.state.snapshot;
+ const binding=before.studioBindings['studio.node.echo'],entity=before.spaces.root.entities.relic;
+ const q=[-.8,.2,.4,.1],immutable=value=>({...structuredClone(value),q:null,revision:null});
+ const accepted=await runtime.dispatch({op:'submit',token:one.token,args:{command:studioCommitCommand(before,q,{bindingId:binding.bindingId,
+   metadata:binding.metadata,commandId:'runtime.sqlite.studio-commit',expectedBindingRevision:binding.bindingRevision,
+   expectedEntityRevision:entity.revision})}});
+ assert.equal(accepted.value.status,'accepted');
+ assert.deepEqual(accepted.state.snapshot.spaces.root.entities.relic.q,q);
+ assert.equal(accepted.state.snapshot.spaces.root.entities.relic.revision,entity.revision+1);
+ assert.deepEqual(immutable(accepted.state.snapshot.spaces.root.entities.relic),immutable(entity));
+ await runtime.dispatch({op:'shutdown'});
+ const reopened=await MountedRuntime.open({path,store:'sqlite'});
+ try {
+  const restored=await reopened.dispatch({op:'open',args:{seat:'one'}}),restoredEntity=restored.state.snapshot.spaces.root.entities.relic;
+  assert.deepEqual(restoredEntity.q,q);
+  assert.equal(restoredEntity.revision,entity.revision+1);
+  assert.deepEqual(immutable(restoredEntity),immutable(entity));
+  assert.equal(restored.state.snapshot.studioBindings['studio.node.echo'].bindingRevision,
+   binding.bindingRevision+1);
+  assert.deepEqual(restored.state.snapshot.studioBindings['studio.node.echo'].q,q);
+ } finally { await reopened.dispatch({op:'shutdown'}); }
+});
+
+test('mounted SQLite rejects persisted dynamics on an unbound nested entity',async t=>{
+ const {runtime,path}=await fixture(t);
+ await runtime.dispatch({op:'open',args:{seat:'one'}});await runtime.dispatch({op:'shutdown'});
+ const store=await SQLiteAuthorityStore.open({path}),record=await store.load(),corrupted=structuredClone(record);
+ const nested=corrupted.state.snapshot.spaces.inner.entities.relic;
+ nested.q[0]+=1;nested.revision+=1;corrupted.digest=digest(corrupted.state);
+ await store.compareAndSwap(record.digest,corrupted);await store.close();
+ await assert.rejects(MountedRuntime.open({path,store:'sqlite'}),error('WORKSHOP_CHECKPOINT_MISMATCH'));
 });
 
 for(const afterCommit of [false,true])test(`mounted COMMIT ${afterCommit?'after':'before'} ambiguity stays unavailable through ready and timer sweeps; restart recovers exact durable outcome`,async t=>{
