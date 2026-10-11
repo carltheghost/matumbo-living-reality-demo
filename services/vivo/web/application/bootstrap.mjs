@@ -7,10 +7,12 @@ import {eventTime,frameOf,screenTarget,viewBasis,viewAngles,projectAccepted,time
 
 const $=id=>document.getElementById(id),copy=structuredClone;
 const renderer=new Renderer($('world'),$('overlay'));
-const previews=new Map(),grids=new Map();
-let transport=null,host=null,inputs=null,state=null,selected=null,poll=null,online=false,viewTail=Promise.resolve();
+const previews=new Map(),grids=new Map(),densityCache=new Map();
+let transport=null,host=null,inputs=null,state=null,selected=null,poll=null,densityPoll=null,densityRequest=0,online=false,viewTail=Promise.resolve();
 let orbit=null,hand=null,rendering=true,readOnlySeen=false,connectionGeneration=0,connecting=false;
 const sessionOnly=document.documentElement.dataset.vivoStore==='memory';
+const acceptedPreview=document.documentElement.dataset.vivoStage==='accepted-preview';
+const acceptedLabel=acceptedPreview?(document.documentElement.dataset.vivoPhase==='true'?'ACCEPTED PHASE PREVIEW · ':'ACCEPTED BACKEND PREVIEW · '):'';
 const scopeLabel=sessionOnly?'SESSION ONLY':'LOCAL SAVED';
 const say=text=>{$('status').textContent=text;};
 const safe=fn=>async(...args)=>{try{return await fn(...args);}catch(error){say(error.message||String(error));return null;}};
@@ -29,7 +31,7 @@ const seatLabel=element('label',{textContent:'Your local seat'}),seat=element('s
 seat.append(element('option',{value:'one',textContent:'Seat one'}),element('option',{value:'two',textContent:'Seat two'}));
 seat.value=saved()?.seat||new URL(location.href).searchParams.get('seat')||'one';seatLabel.append(seat);
 $('createRoom').before(seatLabel);
-$('welcome').querySelector('a').href='/legacy';$('welcome').querySelector('a').textContent='Original 0.8.1 shared comparison ↗';
+$('welcome').querySelector('a').href='/local/';$('welcome').querySelector('a').textContent='Full Studio (primary) ↗';
 $('welcome').querySelectorAll('p.muted').forEach(e=>{if(e!==$('inviteNote'))e.hidden=true;});
 $('createRoom').textContent=sessionOnly?'Open session-only seat':'Open local seat';
 document.querySelector('[data-panel="neural"]').hidden=true;
@@ -51,7 +53,7 @@ for(const id of['inviteRole','makeInvite','inviteLink','copyInvite','revokeInvit
 peopleSheet.querySelector('p.muted').textContent=sessionOnly
   ?'Open a second tab and choose the other seat. Each seat has an independent Eye in this process. Tab-scoped session tokens are not durable and become invalid after restart; remote sharing is not enabled.'
   :'Open a second tab and choose the other seat. Each seat has a separate saved Eye. A reload rotates its session and releases old grips. Remote sharing is not enabled.';
-peopleSheet.querySelector('a').href='/legacy';peopleSheet.querySelector('a').textContent='Original shared comparison ↗';
+peopleSheet.querySelector('a').href='/local/';peopleSheet.querySelector('a').textContent='Full Studio (primary) ↗';
 const recordSheet=document.querySelector('[data-sheet="record"]');
 for(const child of[...recordSheet.children])child.hidden=true;
 const saveButton=element('button',{id:'saveLocal',textContent:'Verify saved checkpoint'}),exportButton=element('button',{id:'exportLocal',textContent:sessionOnly?'Download accepted session JSON':'Export accepted state JSON'}),reconcileButton=element('button',{id:'reconcileLocal',textContent:'Reconcile uncertain grips'});
@@ -60,8 +62,10 @@ recordSheet.append(exportButton,reconcileButton,element('p',{id:'journalState',c
   ?'SESSION ONLY: accepted state, Eyes, leases and phase checkpoints live only in this local server process. This download is a user-requested export, not durable storage or an import/reload path. Browser/sessionStorage tokens are tab-scoped and not backend world storage. No camera frames or session tokens are exported.'
   :'Every accepted operation is atomically saved on this computer. This export is state evidence, not a replay/import feature. The bounded journal becomes read-only before cleanup capacity runs out. No camera frames or session tokens are exported.'}));
 const phaseButton=element('button',{id:'runPhase',textContent:'Run experimental 4D phase'});phaseButton.hidden=true;recordSheet.append(phaseButton);
-const capability=element('div',{id:'localCapabilities',textContent:sessionOnly?'SESSION ONLY · volatile server memory · no backend world/checkpoint/database file':'LOCAL ONLY · material motion / learning pending'});
+const capability=element('div',{id:'localCapabilities',textContent:acceptedLabel+(sessionOnly?'SESSION ONLY · volatile server memory · no backend world/checkpoint/database file':'LOCAL ONLY · material motion / learning pending')});
+const densityPanel=element('div',{id:'phaseDensity',hidden:true,role:'status','aria-live':'polite'});
 document.body.append(capability);
+document.body.append(densityPanel);
 
 function currentEntity(){return state?.snapshot.spaces[state.eye.spaceId].entities[selected];}
 async function gridFor(d){if(!grids.has(d))grids.set(d,await requestJSON('/api/local/grid?dimension='+d));return grids.get(d);}
@@ -79,6 +83,8 @@ function receive(next){
   if(grids.has(next.eye.dimension))apply();else void gridFor(next.eye.dimension).then(apply).catch(e=>{if(generation===connectionGeneration)say(e.message);});
   if(priorSpace!==next.eye.spaceId)configureAxes();
   updateUI();
+  if(next.eye.spaceId!=='root'){renderer.setDensity(null);updateDensityPanel(null);}
+  else if(renderer.densityMeta?.materialDigest&&renderer.densityMeta.materialDigest!==next.snapshot?.spaces?.root?.field?.hash){densityPanel.hidden=false;densityPanel.textContent='LAST ACCEPTED FIELD DENSITY · '+renderer.densityMeta.entityId+' · awaiting committed sample';}
   if(next.journal?.readOnly&&!readOnlySeen){readOnlySeen=true;void cancelAll('journal-read-only').catch(e=>say(e.message));say(sessionOnly?'Session journal is read-only; download the current process state.':'Journal is read-only. Saved state is intact; export it. New editing needs a reviewed journal continuation.');}
 }
 function configureAxes(){if(!state)return;for(const id of['moveAxis','sliceAxis']){$(id).replaceChildren();for(let a=id==='sliceAxis'?3:0;a<state.eye.dimension;a++)$(id).append(element('option',{value:String(a),textContent:'x'+(a+1)}));$(id).disabled=!$(id).options.length;}const axis=+$('sliceAxis').value;$('sliceValue').value=String(state.eye.slice['x'+(axis+1)]||0);}
@@ -106,10 +112,42 @@ function updateUI(){
     $('metrics').textContent+=' · simulation t='+state.snapshot.simulationTime.toFixed(3)+' · '+(phaseRunning?'running: at most 0.02 s per 0.5 wall s':'paused')+(diag?' · mass '+diag.mass.toFixed(8)+' · energy '+diag.energy.toFixed(5)+' · residual '+diag.residual.toExponential(2):'');
     if(state.materialHost?.fault)$('metrics').textContent+=' · phase stopped: '+state.materialHost.fault.code;
   }
-  if(sessionOnly) capability.textContent=state.journal?.readOnly
+  if(sessionOnly) capability.textContent=acceptedLabel+(state.journal?.readOnly
     ?'SESSION ONLY · process journal read-only · download available'
-    :'SESSION ONLY · volatile server memory · '+(phase?'experimental 4D phase centroids · ':'accepted constraints · ')+'no backend world/checkpoint/database file';
-  else capability.textContent=state.journal?.readOnly?'READ ONLY · saved history preserved':phase?'LOCAL · experimental 4D phase centroids · '+(state.eye.dimension===4?'learning unavailable':'11D material unavailable'):'LOCAL ONLY · accepted constraints; material motion / learning pending';
+    :'SESSION ONLY · volatile server memory · '+(phase?'experimental 4D phase centroids · ':'accepted constraints · ')+'no backend world/checkpoint/database file');
+  else capability.textContent=acceptedLabel+(state.journal?.readOnly?'READ ONLY · saved history preserved':phase?'LOCAL · experimental 4D phase centroids · '+(state.eye.dimension===4?'learning unavailable':'11D material unavailable'):'LOCAL ONLY · accepted constraints; material motion / learning pending');
+}
+function updateDensityPanel(observation){
+  if(!observation||state?.eye?.spaceId!=='root'||state?.capabilities?.material?.profile!=='phase'){
+    densityPanel.hidden=true;densityPanel.textContent='';return;
+  }
+  const shape=Array.isArray(observation.shape)?observation.shape.join('×'):'8×8';
+  densityPanel.hidden=false;densityPanel.textContent='ACCEPTED FIELD DENSITY · '+observation.entityId+' · x1/x2 slice · '+shape+' · sequence '+observation.acceptedSequence+' · tick '+observation.tick;
+}
+function densityKey(){
+  if(!state?.capabilities?.material||state.eye.spaceId!=='root'||state.eye.dimension!==4||!selected)return null;
+  const fieldHash=state.snapshot?.spaces?.root?.field?.hash||'unknown';
+  return selected+'|0,1|'+fieldHash+'|'+JSON.stringify([state.eye.slice?.x3??0,state.eye.slice?.x4??0]);
+}
+async function refreshDensity(generation,client){
+  if(generation!==connectionGeneration||transport!==client||client.closed)return;
+  const key=densityKey();
+  if(!key){renderer.setDensity(null);updateDensityPanel(null);return;}
+  const cached=densityCache.get(key);
+  if(cached){renderer.setDensity(cached);updateDensityPanel(cached);densityPoll=setTimeout(()=>refreshDensity(generation,client),1000);return;}
+  const request=++densityRequest;
+  try{
+    const observation=await client.observeMaterial(selected,[0,1]);
+    if(generation===connectionGeneration&&transport===client&&request===densityRequest&&densityKey()===key&&observation?.entityId===selected&&observation?.materialDigest===state.snapshot?.spaces?.root?.field?.hash){
+      if(renderer.setDensity(observation)){
+        densityCache.set(key,observation);while(densityCache.size>8)densityCache.delete(densityCache.keys().next().value);
+        updateDensityPanel(observation);
+      }else updateDensityPanel(null);
+    }
+  }catch(error){
+    if(generation===connectionGeneration&&transport===client&&densityKey()===key&&!renderer.densityMeta)updateDensityPanel(null);
+  }
+  if(generation===connectionGeneration&&transport===client&&!client.closed)densityPoll=setTimeout(()=>refreshDensity(generation,client),1000);
 }
 async function connect(){
   if(connecting)return;connecting=true;$('createRoom').disabled=true;
@@ -126,7 +164,7 @@ async function connect(){
     inputs=new ApplicationInputs({host,nextEpoch:()=>client.nextEpoch(),project:(entity,anchor,point)=>screenTarget(renderer,entity,anchor,point),onRemove:key=>{if(generation===connectionGeneration)previews.delete(key);}});
     await gridFor(state.eye.dimension);configureAxes();receive(state);
     $('welcome').hidden=true;$('toolbar').hidden=false;say(sessionOnly?'Session-only world open. State lasts while this local server process runs. Tap a relic, travel with your Eye, or enter its nested space.':'Saved world open. Tap a relic, travel with your Eye, or enter its nested space.');
-    clearTimeout(poll);void refreshLoop(client,generation);
+    clearTimeout(poll);clearTimeout(densityPoll);void refreshLoop(client,generation);void refreshDensity(generation,client);
   }finally{connecting=false;$('createRoom').disabled=false;}
 }
 async function refreshLoop(client,generation){
@@ -137,7 +175,7 @@ async function refreshLoop(client,generation){
 async function beginGesture(key,source,id,point,observedAt){
   if(connecting||!inputs||!online||state.journal?.readOnly||transport.session.readOnly)throw Error('Editing is unavailable');
   const entity=state.snapshot.spaces[state.eye.spaceId].entities[id];if(!entity)return;
-  selected=id;updateUI();renderer.selected=id;
+  selected=id;renderer.setDensity(null);updateDensityPanel(null);updateUI();renderer.selected=id;
   return inputs.begin(key,{entity,source,point,observedAt});
 }
 function moveGesture(key,point,observedAt){return inputs?.move(key,point,observedAt);}
@@ -147,7 +185,7 @@ async function cancelAll(reason){orbit=null;hand=null;await inputs?.cancelAll(re
 async function releaseAll(){await inputs?.releaseAll();}
 
 async function disconnect(){
-  ++connectionGeneration;online=false;updateUI();clearTimeout(poll);points.clear();camera.stop();await cancelAll('disconnect');
+  ++connectionGeneration;online=false;updateUI();clearTimeout(poll);clearTimeout(densityPoll);densityRequest++;renderer.setDensity(null);updateDensityPanel(null);points.clear();camera.stop();await cancelAll('disconnect');
   if(inputs)await inputs.close();else if(host)await host.close();if(transport&&!transport.closed)await transport.close();
   host=null;inputs=null;transport=null;online=false;remember(null);
 }

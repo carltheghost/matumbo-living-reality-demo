@@ -164,13 +164,17 @@ def local_index(*, phase=False, store='posix'):
     if text.count(marker) != 1:
         raise RuntimeError('Imported application bootstrap changed; review the local mount')
     text = text.replace('<head>', '<head><base href="/">', 1)
-    text = text.replace('<html lang="en">', f'<html lang="en" data-vivo-store="{store}">', 1)
+    text = text.replace('</head>', '<link rel="icon" href="data:,"></head>', 1)
+    text = text.replace('<html lang="en">',
+                        f'<html lang="en" data-vivo-store="{store}" data-vivo-stage="accepted-preview" data-vivo-phase="{str(phase).lower()}">', 1)
     text = text.replace(marker, '<script type="module" src="/application/bootstrap.mjs"></script>')
     text = text.replace('</head>', '<link rel="stylesheet" href="/application/local.css"></head>', 1)
-    text = text.replace('SHARED WORKSHOP · 0.8.1', 'CANONICAL LOCAL · APPLICATION STAGE')
+    stage_label = 'ACCEPTED PHASE PREVIEW · BACKEND STAGE' if phase else 'ACCEPTED BACKEND PREVIEW · BACKEND STAGE'
+    text = text.replace('SHARED WORKSHOP · 0.8.1', stage_label)
     text = text.replace('Meet inside<br>the mathematics.', 'One saved world.<br>Two independent Eyes.')
     text = text.replace('Move the same objects with another person. Explore curved spaces. Watch a learned local rule grow a guidance field.',
         'Open one of two local seats. Explore saved spatial coordinates and nested space. Grip targets are accepted constraints; material motion and learning are not connected yet.')
+    text = text.replace('Create a room or join with an invitation.', 'Accepted backend preview. Open one of two local seats.')
     text = text.replace('Checking the shared server…', 'Checking the local Python + Node application…')
     text = text.replace('Create shared space', 'Open local seat')
     if store == 'memory':
@@ -180,6 +184,36 @@ def local_index(*, phase=False, store='posix'):
     if phase:
         text = text.replace('Grip targets are accepted constraints; material motion and learning are not connected yet.',
             'Experimental 4D phase material is connected. Press Run phase in '+('Session state' if store == 'memory' else 'Saved state')+' to advance the bounded numerical model; 11D material and learning remain unavailable.')
+    return source, text
+
+
+def studio_index():
+    """Return the preserved Studio as the primary local surface.
+
+    The imported Studio bytes remain untouched on disk.  Only the local mount
+    adds a base URL and an explicit link to the separate accepted-phase
+    backend preview; neither route silently synchronizes the two state models.
+    """
+    source = (ROOT / 'web/studio-original.html').read_bytes()
+    text = source.decode('utf-8')
+    if not text.startswith('<!DOCTYPE html>') or text.count('</body>') != 1:
+        raise RuntimeError('Imported Studio changed; review the local mount')
+    text = text.replace('<head>', '<head><base href="/">', 1)
+    text = text.replace('</head>', '<link rel="icon" href="data:,"></head>', 1)
+    bridge_style = '''<style id="vivoLocalEntryStyle">
+#vivoLocalEntry{position:fixed;right:12px;top:132px;z-index:120;display:flex;align-items:center;gap:8px;max-width:calc(100vw - 24px);padding:6px 8px;border:1px solid rgba(148,235,220,.30);border-radius:9px;background:rgba(8,19,25,.88);backdrop-filter:blur(14px);font:10px ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.04em;color:#9db8b9;box-shadow:0 8px 24px rgba(0,0,0,.18)}
+#vivoLocalEntry span{color:#a9eadc}
+#vivoLocalEntry a{color:#c9eee6;text-decoration:none;border:1px solid rgba(148,235,220,.32);border-radius:6px;padding:6px 8px;white-space:nowrap}
+#vivoLocalEntry a:hover,#vivoLocalEntry a:focus-visible{background:#173a3a;color:#fff;outline:2px solid #94ebdc;outline-offset:2px}
+@media(max-width:820px){#vivoLocalEntry{top:122px;right:12px;font-size:9px}#vivoLocalEntry span{display:none}#vivoLocalEntry a{padding:4px 6px}}
+@media(min-width:821px) and (max-height:610px){#vivoLocalEntry{top:124px}}
+</style>'''
+    entry = '''<nav id="vivoLocalEntry" aria-label="Vivo local surfaces">
+  <span>PRIMARY · FULL STUDIO</span>
+  <a href="/local/accepted/">Accepted phase preview ↗</a>
+</nav>'''
+    text = text.replace('</head>', bridge_style + '</head>', 1)
+    text = text.replace('</body>', entry + '</body>', 1)
     return source, text
 
 
@@ -232,10 +266,18 @@ def make_local_app(data_dir=None, *, phase=False, max_events=65536, store='posix
 
     async def index(request):
         require_local(request)
+        original, html = studio_index()
+        return web.Response(text=html, content_type='text/html', headers={
+            'X-Vivo-Original-Studio-SHA256': hashlib.sha256(original).hexdigest(),
+            'X-Vivo-Application': 'canonical-local-studio-1',
+        })
+
+    async def accepted_preview(request):
+        require_local(request)
         original, html = local_index(phase=phase, store=store)
         return web.Response(text=html, content_type='text/html', headers={
             'X-Vivo-Imported-Index-SHA256': hashlib.sha256(original).hexdigest(),
-            'X-Vivo-Application': 'canonical-local-1',
+            'X-Vivo-Application': 'canonical-local-accepted-preview-1',
         })
 
     async def legacy(request):
@@ -299,11 +341,78 @@ def make_local_app(data_dir=None, *, phase=False, max_events=65536, store='posix
                 raise web.HTTPBadRequest(text='Invalid local resume token')
             result = await bridge.call('open', args=data)
         else:
-            if set(data) - {'op', 'args'} or not isinstance(data.get('op'), str) or data['op'] not in ('state', 'submit', 'moveEye', 'inspectLease', 'renewLease', 'reconcileLease', 'close', 'export', 'nextEpoch', 'materialRun'):
+            if set(data) - {'op', 'args'} or not isinstance(data.get('op'), str) or data['op'] not in ('state', 'submit', 'moveEye', 'inspectLease', 'renewLease', 'reconcileLease', 'close', 'export', 'nextEpoch', 'materialRun', 'materialObserve'):
                 raise web.HTTPBadRequest(text='Unsupported operation')
             header = request.headers.get('Authorization', '')
             if not header.startswith('Bearer ') or not 20 <= len(header[7:]) <= 256:
                 raise web.HTTPUnauthorized(text='Local session required')
+            if data['op'] == 'materialObserve':
+                if material_host is None:
+                    return web.json_response({'error': 'MATERIAL_UNAVAILABLE'}, status=409)
+                args = data.get('args', {})
+                if not isinstance(args, dict) or set(args) != {'entityId', 'axes'}:
+                    raise web.HTTPBadRequest(text='materialObserve requires entityId and axes')
+                entity_id, axes = args['entityId'], args['axes']
+                if (not isinstance(entity_id, str) or not re.fullmatch(r'[A-Za-z0-9_.:-]{1,128}', entity_id)
+                        or not isinstance(axes, list) or len(axes) != 2
+                        or any(type(axis) is not int or not 0 <= axis < 4 for axis in axes)
+                        or len(set(axes)) != 2):
+                    raise web.HTTPBadRequest(text='materialObserve expects two distinct phase axes')
+                current = await bridge.call('state', token=header[7:], args={})
+                if isinstance(current, web.StreamResponse):
+                    return current
+                current_state = current.get('state') if isinstance(current, dict) else None
+                eye = current_state.get('eye') if isinstance(current_state, dict) else None
+                snapshot = current_state.get('snapshot') if isinstance(current_state, dict) else None
+                capabilities = current_state.get('capabilities') if isinstance(current_state, dict) else None
+                phase = capabilities.get('material') if isinstance(capabilities, dict) else None
+                if (not isinstance(eye, dict) or eye.get('spaceId') != 'root'
+                        or not isinstance(snapshot, dict) or not isinstance(phase, dict)
+                        or phase.get('dimension') != 4 or phase.get('resolution') != [8, 8, 8, 8]):
+                    raise web.HTTPConflict(text='Material density is only available in the accepted root phase space')
+                try:
+                    root_space = snapshot['spaces']['root']
+                    entity = root_space['entities'][entity_id]
+                    if not isinstance(entity, dict):
+                        raise KeyError(entity_id)
+                    q = eye.get('q')
+                    eye_slice = eye.get('slice', {})
+                    if not isinstance(q, list) or len(q) != 4 or not isinstance(eye_slice, dict):
+                        raise ValueError('MATERIAL_VIEW_FIXED')
+                    fixed = {}
+                    for axis in range(4):
+                        if axis in axes:
+                            continue
+                        value = eye_slice.get('x'+str(axis + 1), q[axis])
+                        if type(value) not in (int, float) or not (value == value and abs(value) < 1e9):
+                            raise ValueError('MATERIAL_VIEW_FIXED')
+                        fixed[axis] = int(round((((float(value) + 4.) % 8.) / 8.) * 8)) % 8
+                    aligned_state = None
+                    for _ in range(3):
+                        observed = await material_host.observe(entity_id, axes, fixed)
+                        aligned = await bridge.call('state', token=header[7:], args={})
+                        if isinstance(aligned, web.StreamResponse):
+                            return aligned
+                        candidate = aligned.get('state') if isinstance(aligned, dict) else None
+                        candidate_hash = (candidate.get('snapshot', {}).get('spaces', {}).get('root', {})
+                                          .get('field', {}).get('hash')) if isinstance(candidate, dict) else None
+                        if candidate_hash == observed.get('materialDigest'):
+                            aligned_state = candidate
+                            break
+                    if aligned_state is None:
+                        return web.json_response({'error': 'MATERIAL_VIEW_RACE'}, status=409)
+                except KeyError as error:
+                    raise web.HTTPBadRequest(text='Unknown accepted phase entity') from error
+                except Exception as error:
+                    code = getattr(error, 'code', None)
+                    if code:
+                        return web.json_response({'error': code}, status=409)
+                    if isinstance(error, ValueError):
+                        raise web.HTTPBadRequest(text='Invalid accepted phase observation') from error
+                    raise
+                result = {'value': observed, 'state': aligned_state}
+                result['state']['materialHost'] = annotate_material(result['state'].get('capabilities'))
+                return web.json_response(result)
             if material_host and data['op'] == 'materialRun' and isinstance(data.get('args'), dict) and data['args'].get('running') is True and material_host.status()['fault']:
                 return web.json_response({'error': 'MATERIAL_HOST_RESTART_REQUIRED'}, status=409)
             result = await bridge.call(data['op'], token=header[7:], args=data.get('args', {}))
@@ -315,6 +424,7 @@ def make_local_app(data_dir=None, *, phase=False, max_events=65536, store='posix
 
     mounted.router.add_get('/', root)
     mounted.router.add_get('/local/', index)
+    mounted.router.add_get('/local/accepted/', accepted_preview)
     mounted.router.add_get('/legacy', legacy)
     mounted.router.add_get('/api/local/ready', ready)
     mounted.router.add_get('/readyz', ready)

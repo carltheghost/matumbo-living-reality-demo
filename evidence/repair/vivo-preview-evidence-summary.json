@@ -1,0 +1,78 @@
+{
+  "schema": "vivo.preview-evidence/1",
+  "generated": "2026-10-11",
+  "surfaces": {
+    "primary": "/local/",
+    "acceptedPreview": "/local/accepted/",
+    "primaryOriginalStudioSha256": "fac4d035e277e54e64c381dd808586a3d07b78c2dbef95fed3e2f8956128332e"
+  },
+  "browser": {
+    "primaryStudio": {
+      "passed": 28,
+      "failed": 0,
+      "viewports": ["1440x1000", "430x932", "932x430"],
+      "cameraRequested": false,
+      "pageErrors": 0,
+      "http404s": 0
+    },
+    "acceptedPhasePreview": {
+      "passed": 19,
+      "failed": 0,
+      "cameraRequested": false,
+      "density": "committed 8x8 root slice visible beyond centroid discs",
+      "independentEyes": true,
+      "nested11DMaterial": "unavailable",
+      "portalRoundTrip": true,
+      "exportOmitsCameraAndSessionTokens": true,
+      "explicitReconnect": true,
+      "pageErrors": 0,
+      "http404s": 0
+    },
+    "acceptedX4Regression": {
+      "passed": 12,
+      "failed": 0,
+      "acceptedReceipts": true,
+      "responseLossReconciliation": true,
+      "seatHandoff": true,
+      "pageErrors": 0
+    }
+  },
+  "numerical": {
+    "phaseEntrypointTests": 17,
+    "materialHostTests": 25,
+    "densityComparison": "every returned sample compared to independently decoded complex128 checkpoint psi with abs(psi)**2 and 1e-15 absolute tolerance",
+    "massChecks": "each field approximately 1 and combined fields approximately 3",
+    "privateFieldBytesExposed": false,
+    "privateProposalOpsExposed": false
+  },
+  "environmentGates": [
+    {
+      "name": "Primary Studio field-only video",
+      "status": "blocked-by-environment",
+      "details": "Headless Chromium MediaRecorder emitted a zero-byte blob; rerun in a visible browser/encoder environment. Camera inclusion remained off."
+    },
+    {
+      "name": "Physical camera/device/native GPU acceptance",
+      "status": "not-run",
+      "details": "This validation intentionally used loopback Chromium only and did not request camera access, expose ports, or configure a tunnel."
+    }
+  ],
+  "artifacts": {
+    "screenshots": [
+      "primary-studio-final-desktop.png",
+      "primary-studio-final-portrait.png",
+      "primary-studio-final-landscape.png",
+      "primary-studio-interactive-desktop.png",
+      "accepted-phase-launch-desktop.png",
+      "accepted-phase-connected-desktop.png",
+      "accepted-phase-connected-portrait.png",
+      "accepted-phase-connected-landscape.png",
+      "accepted-phase-final-desktop.png"
+    ],
+    "reports": [
+      "studio-interaction.json",
+      "accepted-phase-interaction.json",
+      "browser-x4-regression-latest.json"
+    ]
+  }
+}

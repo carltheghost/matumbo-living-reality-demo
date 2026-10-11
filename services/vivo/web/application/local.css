@@ -1,5 +1,6 @@
 /* Additive local-mode labels; original application layout remains the base. */
 #localCapabilities{position:fixed;left:30px;top:178px;z-index:4;max-width:60vw;font-size:10px;color:#dcc6ef;border:1px dashed #856d9c;border-radius:8px;padding:5px 9px;background:#101e2ad9;pointer-events:none}
+#phaseDensity{position:fixed;left:30px;top:211px;z-index:4;max-width:62vw;font:10px ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.04em;color:#b9dff0;border:1px solid #4e7891;border-radius:8px;padding:5px 9px;background:#0b202bd9;pointer-events:none}
 #journalState{overflow-wrap:anywhere;max-height:160px;overflow:auto}
 #enterSpace,#exitSpace{width:100%}
-@media(max-width:600px){#localCapabilities{left:18px;top:132px;font-size:9px;max-width:90vw}#selection{top:182px;max-width:70vw}.world-caption div{gap:4px}.world-caption b,.world-caption div span{font-size:9px;padding:4px 7px}}
+@media(max-width:600px){#localCapabilities{left:18px;top:132px;font-size:9px;max-width:90vw}#phaseDensity{left:18px;top:211px;max-width:90vw;font-size:8px}#selection{top:182px;max-width:70vw}.world-caption div{gap:4px}.world-caption b,.world-caption div span{font-size:9px;padding:4px 7px}}

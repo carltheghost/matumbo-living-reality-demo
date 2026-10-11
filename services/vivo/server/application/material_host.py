@@ -242,6 +242,37 @@ class PhaseApplicationHost:
             self._wake.set()
         return self.status()
 
+    async def observe(self, entity_id, axes, fixed):
+        """Return a bounded read-only slice of the currently accepted field.
+
+        Observation captures the authority checkpoint through the same private
+        pipe used by the material pump, then asks the frozen solver to derive a
+        slice.  It never accepts a proposal, mutates the checkpoint, or exposes
+        the serialized field bytes to the browser.
+        """
+        require(identifier(entity_id), 'MATERIAL_ENTITY')
+        require(isinstance(axes, (list, tuple)) and len(axes) == 2
+                and len(set(axes)) == 2
+                and all(type(axis) is int and 0 <= axis < 4 for axis in axes),
+                'MATERIAL_VIEW_AXES')
+        require(isinstance(fixed, dict)
+                and set(fixed) == set(range(4)) - set(axes)
+                and all(type(index) is int and 0 <= index < 8 for index in fixed.values()),
+                'MATERIAL_VIEW_FIXED')
+        capture = await self._call('materialCapture', args={'spaceId': self._space_id})
+        capture = await self._compute(self._capture_copy, capture, validate=True)
+        snapshot, checkpoint = capture['snapshot'], capture['checkpoint']
+        space = _space(snapshot, self._space_id)
+        require(entity_id in space['entities'], 'NO_ENTITY')
+        result = await self._compute(PhaseMaterialDriver(checkpoint).observe,
+                                     entity_id, tuple(axes), dict(fixed))
+        require(space['field'].get('hash') == result['materialDigest'],
+                'MATERIAL_DIGEST_MISMATCH')
+        return {**result, 'spaceId': self._space_id,
+                'acceptedSequence': snapshot['acceptedSequence'],
+                'simulationTime': snapshot['simulationTime'],
+                'tick': checkpoint['tick']}
+
     async def stop(self):
         self._running = False
         self._stopped = True
