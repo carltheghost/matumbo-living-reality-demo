@@ -1,0 +1,32 @@
+name: Vivo Android companion
+on:
+  pull_request:
+    paths:
+      - 'android/vivo-companion/**'
+      - 'src/vivo-phone-engine/**'
+      - 'vivo-phone-sw.js'
+      - 'field-lab-studio.html'
+      - '.github/workflows/vivo-android-companion.yml'
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - run: gradle -p android/vivo-companion :app:testDebugUnitTest :app:assembleDebug --stacktrace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vivo-android-companion-debug
+          path: android/vivo-companion/app/build/outputs/apk/debug/*.apk
+          retention-days: 7
+      - name: Scope
+        run: echo 'Debug companion build only; no install, store publication, root escalation or deployment.'

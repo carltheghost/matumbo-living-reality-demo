@@ -1,0 +1,4 @@
+const DB='vivo-phone-engine',VERSION=1,STORE='worlds';let opening;
+function db(){if(!opening)opening=new Promise((resolve,reject)=>{const r=indexedDB.open(DB,VERSION);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains(STORE))r.result.createObjectStore(STORE);};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);r.onblocked=()=>reject(Error('VIVO_STORAGE_BLOCKED'));});return opening;}
+export async function loadWorld(id='default'){const d=await db();return new Promise((resolve,reject)=>{const t=d.transaction(STORE,'readonly'),r=t.objectStore(STORE).get(id);r.onsuccess=()=>resolve(r.result??null);r.onerror=()=>reject(r.error);});}
+export async function saveWorld(value,id='default'){const d=await db();return new Promise((resolve,reject)=>{const t=d.transaction(STORE,'readwrite');t.objectStore(STORE).put(structuredClone(value),id);t.oncomplete=()=>resolve();t.onerror=()=>reject(t.error);t.onabort=()=>reject(t.error);});}

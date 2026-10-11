@@ -33,4 +33,4 @@ $('saved').onclick=async()=>{if(busy||!saved)return;setBusy(true);try{await laun
 const h=host();if(!h.ok){say(h.text);setBusy(true);}else bound(store('get'),2500).then(v=>{if(v?.bytes){saved=v;$('saved').hidden=false;say('Your saved original app was found. Open it with the new Viva 0.7 controls.');}else say('No saved app was found. Choose the original Field Lab 0.4 HTML already in Downloads.');}).catch(()=>say('Browser storage is unavailable. Choose the original HTML to run it for this session.'));
 window.FieldGrabLaunch=Object.freeze({host,prepare,hash});
 })();
-</script></body></html>
+</script><script type="module" src="./src/vivo-phone-engine/boot.mjs"></script></body></html>
