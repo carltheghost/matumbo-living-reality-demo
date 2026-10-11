@@ -167,39 +167,57 @@ jobs:
             rm -rf "$data_dir"
           }
           trap cleanup EXIT
-          wait_ready() {
-            python - <<'PY'
-            import json
-            import time
-            from urllib.request import urlopen
-
-            url = 'http://127.0.0.1:8768/api/local/ready'
-            deadline = time.monotonic() + 45
-            last = None
-            while time.monotonic() < deadline:
-                try:
-                    with urlopen(url, timeout=2) as response:
-                        body = json.load(response)
-                    if response.status == 200 and body.get('ok') is True:
-                        print('local application ready')
-                        break
-                    last = body
-                except Exception as error:
-                    last = f'{type(error).__name__}: {error}'
-                time.sleep(0.25)
-            else:
-                raise SystemExit(f'local application readiness timeout: {last!r}')
-            PY
-          }
           VIVO_PYTHON=python services/vivo/start-canonical-local.sh --store posix --data-dir "$data_dir" --port 8768 >browser-evidence/server-studio.log 2>&1 &
           server_pid=$!
-          wait_ready
+          python - <<'PY'
+          import json
+          import time
+          from urllib.request import urlopen
+
+          url = 'http://127.0.0.1:8768/api/local/ready'
+          deadline = time.monotonic() + 45
+          last = None
+          while time.monotonic() < deadline:
+              try:
+                  with urlopen(url, timeout=2) as response:
+                      body = json.load(response)
+                  if response.status == 200 and body.get('ok') is True:
+                      print('local application ready')
+                      break
+                  last = body
+              except Exception as error:
+                  last = f'{type(error).__name__}: {error}'
+              time.sleep(0.25)
+          else:
+              raise SystemExit(f'local application readiness timeout: {last!r}')
+          PY
           timeout --signal=TERM 90s python services/vivo/tests/application/browser_studio_authority.py \
             http://127.0.0.1:8768/local/ browser-evidence/browser-studio-authority.json
           stop_server
           VIVO_PYTHON=python services/vivo/start-canonical-local.sh --store posix --data-dir "$data_dir" --port 8768 >>browser-evidence/server-studio.log 2>&1 &
           server_pid=$!
-          wait_ready
+          python - <<'PY'
+          import json
+          import time
+          from urllib.request import urlopen
+
+          url = 'http://127.0.0.1:8768/api/local/ready'
+          deadline = time.monotonic() + 45
+          last = None
+          while time.monotonic() < deadline:
+              try:
+                  with urlopen(url, timeout=2) as response:
+                      body = json.load(response)
+                  if response.status == 200 and body.get('ok') is True:
+                      print('local application ready')
+                      break
+                  last = body
+              except Exception as error:
+                  last = f'{type(error).__name__}: {error}'
+              time.sleep(0.25)
+          else:
+              raise SystemExit(f'local application readiness timeout: {last!r}')
+          PY
           timeout --signal=TERM 60s python services/vivo/tests/application/browser_studio_authority_restart.py \
             http://127.0.0.1:8768/local/ 2.5 1 2.8 5 browser-evidence/browser-studio-authority-restart.json
       - uses: actions/upload-artifact@v4
