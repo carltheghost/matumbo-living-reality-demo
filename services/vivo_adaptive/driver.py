@@ -311,11 +311,12 @@ class AdaptiveGraphDriver:
                 dissipated += DAMPING * float(np.dot(v, v)) * dt
                 total_mass += mass
                 kinetic += 0.5 * mass * float(np.dot(v2, v2))
+                changed = not (np.array_equal(q2, q) and np.array_equal(v2, v))
                 updated = {
                     "q": q2.tolist(),
                     "v": v2.tolist(),
                     "mass": mass,
-                    "revision": old["revision"] + 1,
+                    "revision": old["revision"] + (1 if changed else 0),
                 }
                 next_state["spaces"][sid]["entities"][eid] = updated
                 updates.append({"spaceId": sid, "id": eid, "q": updated["q"], "v": updated["v"], "revision": updated["revision"]})
