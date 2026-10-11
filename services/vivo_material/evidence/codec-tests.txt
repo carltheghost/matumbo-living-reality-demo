@@ -1,0 +1,11 @@
+✔ numeric codec matches Python golden fixtures including exponents and negative zero (203.559923ms)
+✔ real initial and stepped checkpoints verify after Node persistence and Python restore (544.186508ms)
+✔ codec has unambiguous type tags and bounded common inputs (4.392411ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 881.562496

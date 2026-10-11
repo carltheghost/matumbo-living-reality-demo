@@ -1,0 +1,227 @@
+{
+  "schema": "vivo.material.local-evidence/1",
+  "evidenceClass": "headless local CPU numerical tests",
+  "python": "3.12.14",
+  "numpy": "2.3.5",
+  "platform": "Linux-6.18.44-x86_64-with-glibc2.41",
+  "referenceSha256": "0580e63e9a7dac96b70ffd5ed559b2ccd063f0526066fe38bafa571ca0d27947",
+  "capabilities": {
+    "lawVersion": "vivo.phase.periodic-compliant/1",
+    "modelHashes": [],
+    "teacherHash": "0580e63e9a7dac96b70ffd5ed559b2ccd063f0526066fe38bafa571ca0d27947",
+    "profiles": [
+      "phase"
+    ],
+    "modes": [
+      "analytic"
+    ],
+    "spatialDimensions": [
+      4
+    ],
+    "shapeAxis": {
+      "min": 8,
+      "max": 16,
+      "even": true
+    },
+    "maxFields": 4,
+    "maxCells": 262144,
+    "maxDt": 0.02,
+    "minDt": 0.0001,
+    "maxTicks": 1000000,
+    "boundary": "periodic",
+    "metric": "Euclidean / flat torus",
+    "clock": "separate",
+    "coupling": "finite-stiffness periodic potential",
+    "damping": false,
+    "learned": false,
+    "spatialConvergenceEstablished": false,
+    "quantitativePhysicalValidation": false
+  },
+  "fourthAxisResponse": {
+    "driven": {
+      "shape": [
+        8,
+        8,
+        8,
+        8
+      ],
+      "dt": 0.02,
+      "duration": 0.6,
+      "steps": 30,
+      "q": [
+        0.0,
+        0.0,
+        0.0,
+        0.16082076042845372
+      ],
+      "v": [
+        4.105315801353476e-17,
+        2.0686589103155096e-18,
+        1.1369875197096487e-17,
+        0.4831342711078884
+      ],
+      "maxAbsoluteMassError": 4.063416270128073e-14,
+      "summedAbsoluteEnergyResidual": 7.90852904453132e-06,
+      "suppliedWork": 3.344797086213764,
+      "stepMs": {
+        "p50": 3.5439315006442484,
+        "p95": 8.265477599979931,
+        "max": 8.487048000461073
+      },
+      "checkpointJsonBytes": 131831,
+      "checkpointDigest": "cbc17f351c479b5010685a5b5ac6b8c5180c26bcb514fdca8e6c069d0b03347e"
+    },
+    "free": {
+      "shape": [
+        8,
+        8,
+        8,
+        8
+      ],
+      "dt": 0.02,
+      "duration": 0.6,
+      "steps": 30,
+      "q": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "v": [
+        -1.516871596654345e-18,
+        -7.631069178937144e-18,
+        -2.715878838852476e-18,
+        -7.757538558010364e-19
+      ],
+      "maxAbsoluteMassError": 4.085620730620576e-14,
+      "summedAbsoluteEnergyResidual": 2.322594755410634e-10,
+      "suppliedWork": 0.0,
+      "stepMs": {
+        "p50": 3.392570500182046,
+        "p95": 4.469349699684243,
+        "max": 5.974702999083092
+      },
+      "checkpointJsonBytes": 131820,
+      "checkpointDigest": "c6c7af4cc845b080e49063224a263341763ce54bd67a794082e9dfe1bb55de64"
+    },
+    "densityL2Difference": 0.007171364430750678
+  },
+  "temporalRefinement": {
+    "coarseDt": 0.02,
+    "halfDt": 0.01,
+    "referenceDt": 0.0025,
+    "coarseError": 8.173864579244036e-06,
+    "halfError": 1.946128622557321e-06,
+    "errorRatio": 4.200063903537436
+  },
+  "boundedCpuMeasurements": [
+    {
+      "shape": [
+        8,
+        8,
+        8,
+        8
+      ],
+      "dt": 0.02,
+      "duration": 0.6,
+      "steps": 30,
+      "q": [
+        0.0,
+        0.0,
+        0.0,
+        0.16082076042845372
+      ],
+      "v": [
+        4.105315801353476e-17,
+        2.0686589103155096e-18,
+        1.1369875197096487e-17,
+        0.4831342711078884
+      ],
+      "maxAbsoluteMassError": 4.063416270128073e-14,
+      "summedAbsoluteEnergyResidual": 7.90852904453132e-06,
+      "suppliedWork": 3.344797086213764,
+      "stepMs": {
+        "p50": 3.5439315006442484,
+        "p95": 8.265477599979931,
+        "max": 8.487048000461073
+      },
+      "checkpointJsonBytes": 131831,
+      "checkpointDigest": "cbc17f351c479b5010685a5b5ac6b8c5180c26bcb514fdca8e6c069d0b03347e"
+    },
+    {
+      "shape": [
+        12,
+        12,
+        12,
+        12
+      ],
+      "dt": 0.02,
+      "duration": 0.24,
+      "steps": 12,
+      "q": [
+        0.0,
+        0.0,
+        0.0,
+        0.028032595874100785
+      ],
+      "v": [
+        3.252840359001485e-16,
+        4.215037532665281e-16,
+        3.057165611568348e-16,
+        0.22967230947108652
+      ],
+      "maxAbsoluteMassError": 2.4868995751603507e-14,
+      "summedAbsoluteEnergyResidual": 1.1328059903448207e-06,
+      "suppliedWork": 3.3447970862137644,
+      "stepMs": {
+        "p50": 14.306911501080322,
+        "p95": 22.87009275032687,
+        "max": 29.38954800083593
+      },
+      "checkpointJsonBytes": 664312,
+      "checkpointDigest": "7db13097cdedfae4cf64bbdb3bc349f7540c4660d78ac49a8dcf641b2e8a1565"
+    },
+    {
+      "shape": [
+        16,
+        16,
+        16,
+        16
+      ],
+      "dt": 0.02,
+      "duration": 0.24,
+      "steps": 12,
+      "q": [
+        0.0,
+        0.0,
+        0.0,
+        0.02803259587422513
+      ],
+      "v": [
+        -1.9248257171763325e-16,
+        1.6387017441338455e-17,
+        -4.228512125592225e-17,
+        0.22967230947633033
+      ],
+      "maxAbsoluteMassError": 2.220446049250313e-16,
+      "summedAbsoluteEnergyResidual": 1.132806082271287e-06,
+      "suppliedWork": 3.344797086213764,
+      "stepMs": {
+        "p50": 38.052522500947816,
+        "p95": 40.64605629937432,
+        "max": 41.0191949995351
+      },
+      "checkpointJsonBytes": 2097919,
+      "checkpointDigest": "dd4cc59710823c2692a9528ae0876598c7048d31177cfe05982c7406d7c7485f"
+    }
+  ],
+  "notEstablished": [
+    "spatial convergence",
+    "physical helium accuracy",
+    "physical-device latency",
+    "11D material validation",
+    "elastic/viscous/surface/adaptive profiles",
+    "learned response",
+    "authority atomic acceptance and browser integration"
+  ]
+}

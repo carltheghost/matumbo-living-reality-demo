@@ -21,7 +21,14 @@ export class GripHost {
     for(const name of ['requestTimeoutMs','acquisitionTimeoutMs','cleanupTimeoutMs'])
       if(!Number.isFinite(this.#options[name])||this.#options[name]<=0||this.#options[name]>2147483647)
         throw error('INVALID_TIMING_BUDGET');
-    this.#timers={set:options.setTimer??setTimeout,clear:options.clearTimer??clearTimeout};
+    // Browser timer methods are Web IDL methods: detached native references can
+    // throw "Illegal invocation" when called as object properties. Keep custom
+    // injected timers untouched for deterministic tests, but bind the browser
+    // defaults to their owning global.
+    this.#timers={
+      set:options.setTimer??((...args)=>globalThis.setTimeout(...args)),
+      clear:options.clearTimer??((...args)=>globalThis.clearTimeout(...args))
+    };
     this.#ports={preview:options.onPreview??(()=>{}),receipt:options.onReceipt??(()=>{}),
       snapshot:options.onSnapshot??(()=>{}),status:options.onStatus??(()=>{})};
   }
