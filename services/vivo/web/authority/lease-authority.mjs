@@ -158,14 +158,20 @@ export class LocalLeaseWorld {
     if (record) {
       if (record.schema !== 'vivo.lease-checkpoint/1' || record.digest !== await sha256(record.state)) fail('CHECKPOINT_HASH');
       validateSeed(record.state.snapshot);
-      if(snapshot?.studioBindings && !record.state.snapshot.studioBindings) {
+      if(snapshot?.studioBindings) {
         validateSeed(snapshot);
-        const migrated=clone(record.state);
-        migrated.snapshot.studioBindings=clone(snapshot.studioBindings);
-        migrated.snapshot.stateHash=await acceptedStateHash(migrated);
-        const migratedRecord={schema:'vivo.lease-checkpoint/1',state:migrated,digest:await sha256(migrated)};
-        await store.compareAndSwap(record.digest,migratedRecord);
-        record=migratedRecord;
+        const current=record.state.snapshot.studioBindings;
+        const missing=Object.keys(snapshot.studioBindings).filter(bindingId=>
+          !current || !Object.hasOwn(current,bindingId));
+        if(missing.length) {
+          const migrated=clone(record.state);
+          migrated.snapshot.studioBindings ??= {};
+          for(const bindingId of missing) migrated.snapshot.studioBindings[bindingId]=clone(snapshot.studioBindings[bindingId]);
+          migrated.snapshot.stateHash=await acceptedStateHash(migrated);
+          const migratedRecord={schema:'vivo.lease-checkpoint/1',state:migrated,digest:await sha256(migrated)};
+          await store.compareAndSwap(record.digest,migratedRecord);
+          record=migratedRecord;
+        }
       }
       if(Boolean(record.state.material)!==Boolean(material)) fail('MATERIAL_PROTOCOL_MISMATCH');
       if(material && record.state.material?.protocol!==materialProtocol) fail('MATERIAL_PROTOCOL_MISMATCH');
@@ -326,14 +332,15 @@ export class LocalLeaseWorld {
         await this.#save(next);return clone(receipt);
       }
       if(command.kind==='studio.transform') {
-        if(command.spaceId!==s.snapshot.rootSpaceId) return reject('STUDIO_BINDING_SPACE');
         if(command.expectedRevision!==s.snapshot.acceptedSequence) return reject('STALE_WORLD');
         const binding=s.snapshot.studioBindings?.[p.bindingId];
         if(!binding) return reject('STUDIO_BINDING_UNAVAILABLE');
         try { validateStudioBinding(binding); } catch { return reject('STUDIO_BINDING_INVALID'); }
+        if(command.spaceId!==binding.spaceId) return reject('STUDIO_BINDING_SPACE');
         if(binding.sourceModel!==p.sourceModel || binding.sourceNode!==p.sourceNode ||
             binding.entityId!==p.entityId || binding.dimension!==p.dimension || binding.chart!==p.chart ||
-            binding.spaceId!==command.spaceId) return reject('STUDIO_BINDING_IDENTITY');
+            binding.spaceId!==command.spaceId || binding.metadata.name!==p.metadata.name ||
+            binding.metadata.kind!==p.metadata.kind) return reject('STUDIO_BINDING_IDENTITY');
         if(binding.bindingRevision>=Number.MAX_SAFE_INTEGER) return reject('STUDIO_BINDING_REVISION_EXHAUSTED');
         const next=clone(s), updated={...clone(binding),q:[...p.q],metadata:clone(p.metadata),
           bindingRevision:binding.bindingRevision+1,acceptedSequence:next.snapshot.acceptedSequence+1};
