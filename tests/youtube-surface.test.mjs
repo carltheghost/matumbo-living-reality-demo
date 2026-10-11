@@ -67,6 +67,31 @@ test('in-object YouTube search fails over between public providers without crede
   assert.deepEqual(found.results,[{id:'M7lc1UVf-VE',title:'First playable',channel:'Channel A',duration:42}]);
 });
 
+test('a stalled public provider is aborted before the search fails over',async()=>{
+  let calls=0,firstSignal=null;
+  const fetchFn=async(_url,{signal}={})=>{
+    calls+=1;
+    if(calls===1){
+      firstSignal=signal;
+      return new Promise((_resolve,reject)=>signal.addEventListener('abort',()=>{
+        const error=new Error('aborted');error.name='AbortError';reject(error);
+      },{once:true}));
+    }
+    return {ok:true,status:200,json:async()=>({items:[
+      {url:'/watch?v=M7lc1UVf-VE',title:'Recovered result',uploaderName:'Channel B',duration:64},
+    ]})};
+  };
+  const found=await searchYoutubeVideos('provider recovery',{
+    fetchFn,
+    providers:['https://stalled.example','https://healthy.example'],
+    timeoutMs:25,
+  });
+  assert.equal(firstSignal?.aborted,true);
+  assert.equal(calls,2);
+  assert.equal(found.provider,'healthy.example');
+  assert.equal(found.results[0].title,'Recovered result');
+});
+
 test('empty in-object YouTube search never makes a provider request',async()=>{
   let called=false;
   await assert.rejects(
