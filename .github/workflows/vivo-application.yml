@@ -120,7 +120,7 @@ jobs:
               raise SystemExit(f'local application readiness timeout: {last!r}')
           PY
           timeout --signal=TERM 90s python services/vivo/tests/application/browser_x4_regression.py \
-            http://127.0.0.1:8767/ browser-evidence/browser-x4-regression.json
+            http://127.0.0.1:8767/local/accepted/ browser-evidence/browser-x4-regression.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:

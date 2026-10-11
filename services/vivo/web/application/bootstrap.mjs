@@ -4,19 +4,24 @@ import {GripHost} from '/services/vivo/web/authority/grip-host.mjs';
 import {LocalTransport,requestJSON} from './transport.mjs';
 import {ApplicationInputs} from './interactions.mjs';
 import {eventTime,frameOf,screenTarget,viewBasis,viewAngles,projectAccepted,timestampedCameraClass} from './adapters.mjs';
+import {DensityOverlay} from './density-overlay.mjs';
 
 const $=id=>document.getElementById(id),copy=structuredClone;
 const renderer=new Renderer($('world'),$('overlay'));
-const previews=new Map(),grids=new Map();
-let transport=null,host=null,inputs=null,state=null,selected=null,poll=null,online=false,viewTail=Promise.resolve();
+const previews=new Map(),grids=new Map(),densityCache=new Map();
+let transport=null,host=null,inputs=null,state=null,selected=null,poll=null,densityPoll=null,densityRequest=0,online=false,viewTail=Promise.resolve();
 let orbit=null,hand=null,rendering=true,readOnlySeen=false,connectionGeneration=0,connecting=false;
 const sessionOnly=document.documentElement.dataset.vivoStore==='memory';
+const acceptedPreview=document.documentElement.dataset.vivoStage==='accepted-preview';
+const acceptedLabel=acceptedPreview?(document.documentElement.dataset.vivoPhase==='true'?'ACCEPTED PHASE PREVIEW · ':'ACCEPTED BACKEND PREVIEW · '):'';
 const scopeLabel=sessionOnly?'SESSION ONLY':'LOCAL SAVED';
 const say=text=>{$('status').textContent=text;};
 const safe=fn=>async(...args)=>{try{return await fn(...args);}catch(error){say(error.message||String(error));return null;}};
 const saved=()=>{try{return JSON.parse(sessionStorage.getItem('vivo.local.session'));}catch{return null;}};
 function remember(value){try{if(value)sessionStorage.setItem('vivo.local.session',JSON.stringify(value));else sessionStorage.removeItem('vivo.local.session');}catch{}}
 const element=(tag,properties)=>Object.assign(document.createElement(tag),properties);
+const densityCanvas=element('canvas',{id:'densityOverlay'});document.body.append(densityCanvas);
+const densityOverlay=new DensityOverlay(renderer,densityCanvas);
 
 // Existing application controls are reused, with unsupported paths removed from this mode.
 $('displayName').closest('label').hidden=true;
@@ -29,7 +34,7 @@ const seatLabel=element('label',{textContent:'Your local seat'}),seat=element('s
 seat.append(element('option',{value:'one',textContent:'Seat one'}),element('option',{value:'two',textContent:'Seat two'}));
 seat.value=saved()?.seat||new URL(location.href).searchParams.get('seat')||'one';seatLabel.append(seat);
 $('createRoom').before(seatLabel);
-$('welcome').querySelector('a').href='/legacy';$('welcome').querySelector('a').textContent='Original 0.8.1 shared comparison ↗';
+$('welcome').querySelector('a').href='/local/';$('welcome').querySelector('a').textContent='Full Studio (primary) ↗';
 $('welcome').querySelectorAll('p.muted').forEach(e=>{if(e!==$('inviteNote'))e.hidden=true;});
 $('createRoom').textContent=sessionOnly?'Open session-only seat':'Open local seat';
 document.querySelector('[data-panel="neural"]').hidden=true;
@@ -51,7 +56,7 @@ for(const id of['inviteRole','makeInvite','inviteLink','copyInvite','revokeInvit
 peopleSheet.querySelector('p.muted').textContent=sessionOnly
   ?'Open a second tab and choose the other seat. Each seat has an independent Eye in this process. Tab-scoped session tokens are not durable and become invalid after restart; remote sharing is not enabled.'
   :'Open a second tab and choose the other seat. Each seat has a separate saved Eye. A reload rotates its session and releases old grips. Remote sharing is not enabled.';
-peopleSheet.querySelector('a').href='/legacy';peopleSheet.querySelector('a').textContent='Original shared comparison ↗';
+peopleSheet.querySelector('a').href='/local/';peopleSheet.querySelector('a').textContent='Full Studio (primary) ↗';
 const recordSheet=document.querySelector('[data-sheet="record"]');
 for(const child of[...recordSheet.children])child.hidden=true;
 const saveButton=element('button',{id:'saveLocal',textContent:'Verify saved checkpoint'}),exportButton=element('button',{id:'exportLocal',textContent:sessionOnly?'Download accepted session JSON':'Export accepted state JSON'}),reconcileButton=element('button',{id:'reconcileLocal',textContent:'Reconcile uncertain grips'});
@@ -60,8 +65,13 @@ recordSheet.append(exportButton,reconcileButton,element('p',{id:'journalState',c
   ?'SESSION ONLY: accepted state, Eyes, leases and phase checkpoints live only in this local server process. This download is a user-requested export, not durable storage or an import/reload path. Browser/sessionStorage tokens are tab-scoped and not backend world storage. No camera frames or session tokens are exported.'
   :'Every accepted operation is atomically saved on this computer. This export is state evidence, not a replay/import feature. The bounded journal becomes read-only before cleanup capacity runs out. No camera frames or session tokens are exported.'}));
 const phaseButton=element('button',{id:'runPhase',textContent:'Run experimental 4D phase'});phaseButton.hidden=true;recordSheet.append(phaseButton);
-const capability=element('div',{id:'localCapabilities',textContent:sessionOnly?'SESSION ONLY · volatile server memory · no backend world/checkpoint/database file':'LOCAL ONLY · material motion / learning pending'});
-document.body.append(capability);
+const capability=element('div',{id:'localCapabilities',textContent:acceptedLabel+(sessionOnly?'SESSION ONLY · volatile server memory · no backend world/checkpoint/database file':'LOCAL ONLY · material motion / learning pending')});
+const densityPanel=element('div',{id:'phaseDensity',hidden:true,role:'status','aria-live':'polite'});
+const diagnostics=element('aside',{id:'localDiagnostics',hidden:true});diagnostics.setAttribute('aria-label','Accepted diagnostics');
+const diagnosticToggle=element('button',{id:'diagnosticToggle',type:'button',textContent:'Hide diagnostics'});diagnosticToggle.setAttribute('aria-expanded','true');
+diagnosticToggle.onclick=()=>{const collapsed=diagnostics.classList.toggle('collapsed');diagnosticToggle.textContent=collapsed?'Show diagnostics':'Hide diagnostics';diagnosticToggle.setAttribute('aria-expanded',String(!collapsed));};
+diagnostics.append(diagnosticToggle,capability,densityPanel,$('metrics'),$('status'));document.body.append(diagnostics);
+function setDiagnostics(visible,collapsed=false){diagnostics.hidden=!visible;diagnostics.classList.toggle('collapsed',collapsed);diagnosticToggle.textContent=collapsed?'Show diagnostics':'Hide diagnostics';diagnosticToggle.setAttribute('aria-expanded',String(!collapsed));}
 
 function currentEntity(){return state?.snapshot.spaces[state.eye.spaceId].entities[selected];}
 async function gridFor(d){if(!grids.has(d))grids.set(d,await requestJSON('/api/local/grid?dimension='+d));return grids.get(d);}
@@ -79,6 +89,8 @@ function receive(next){
   if(grids.has(next.eye.dimension))apply();else void gridFor(next.eye.dimension).then(apply).catch(e=>{if(generation===connectionGeneration)say(e.message);});
   if(priorSpace!==next.eye.spaceId)configureAxes();
   updateUI();
+  if(next.eye.spaceId!=='root'){densityOverlay.clear();updateDensityPanel(null);}
+  else if(densityOverlay.observation&&!densityMatchesState(densityOverlay.observation)){densityOverlay.clear();updateDensityPanel(null);}
   if(next.journal?.readOnly&&!readOnlySeen){readOnlySeen=true;void cancelAll('journal-read-only').catch(e=>say(e.message));say(sessionOnly?'Session journal is read-only; download the current process state.':'Journal is read-only. Saved state is intact; export it. New editing needs a reviewed journal continuation.');}
 }
 function configureAxes(){if(!state)return;for(const id of['moveAxis','sliceAxis']){$(id).replaceChildren();for(let a=id==='sliceAxis'?3:0;a<state.eye.dimension;a++)$(id).append(element('option',{value:String(a),textContent:'x'+(a+1)}));$(id).disabled=!$(id).options.length;}const axis=+$('sliceAxis').value;$('sliceValue').value=String(state.eye.slice['x'+(axis+1)]||0);}
@@ -106,10 +118,83 @@ function updateUI(){
     $('metrics').textContent+=' · simulation t='+state.snapshot.simulationTime.toFixed(3)+' · '+(phaseRunning?'running: at most 0.02 s per 0.5 wall s':'paused')+(diag?' · mass '+diag.mass.toFixed(8)+' · energy '+diag.energy.toFixed(5)+' · residual '+diag.residual.toExponential(2):'');
     if(state.materialHost?.fault)$('metrics').textContent+=' · phase stopped: '+state.materialHost.fault.code;
   }
-  if(sessionOnly) capability.textContent=state.journal?.readOnly
+  if(sessionOnly) capability.textContent=acceptedLabel+(state.journal?.readOnly
     ?'SESSION ONLY · process journal read-only · download available'
-    :'SESSION ONLY · volatile server memory · '+(phase?'experimental 4D phase centroids · ':'accepted constraints · ')+'no backend world/checkpoint/database file';
-  else capability.textContent=state.journal?.readOnly?'READ ONLY · saved history preserved':phase?'LOCAL · experimental 4D phase centroids · '+(state.eye.dimension===4?'learning unavailable':'11D material unavailable'):'LOCAL ONLY · accepted constraints; material motion / learning pending';
+    :'SESSION ONLY · volatile server memory · '+(phase?'experimental 4D phase centroids · ':'accepted constraints · ')+'no backend world/checkpoint/database file');
+  else capability.textContent=acceptedLabel+(state.journal?.readOnly?'READ ONLY · saved history preserved':phase?'LOCAL · experimental 4D phase centroids · '+(state.eye.dimension===4?'learning unavailable':'11D material unavailable'):'LOCAL ONLY · accepted constraints; material motion / learning pending');
+}
+function updateDensityPanel(observation){
+  if(!observation||state?.eye?.spaceId!=='root'||state?.capabilities?.material?.profile!=='phase'){
+    densityPanel.hidden=true;densityPanel.textContent='';return;
+  }
+  const axes=(observation.axes||[0,1]).map(axis=>'x'+(axis+1));
+  const shape=Array.isArray(observation.shape)?observation.shape.join('×'):'8×8';
+  const fixedCoordinates=observation.fixedCoordinates||{};
+  const hidden=[0,1,2,3].filter(axis=>!(observation.axes||[0,1]).includes(axis));
+  const hiddenText=hidden.map(axis=>'x'+(axis+1)+'='+Number(fixedCoordinates[String(axis)]??0).toFixed(2)).join(' · ');
+  const values=(observation.density||[]).flat().map(Number).filter(Number.isFinite);
+  const minimum=values.length?Math.min(...values):0,maximum=values.length?Math.max(...values):0;
+  const scale=element('span',{className:'density-scale'});
+  scale.append(element('span',{className:'density-gradient','aria-hidden':'true'}));
+  scale.append(element('span',{textContent:'|ψ|² '+minimum.toExponential(2)+' → '+maximum.toExponential(2)+' · exact lattice samples · no interpolation · sqrt visual contrast'}));
+  densityPanel.replaceChildren(
+    element('strong',{className:'density-title',textContent:'ACCEPTED DENSITY · 2D '+axes.join('/')+' SLICE OF 4D FIELD'}),
+    element('span',{className:'density-detail',textContent:observation.entityId+' · '+shape+' lattice · hidden '+hiddenText}),
+    scale,
+    element('span',{className:'density-progress',textContent:'accepted sequence '+observation.acceptedSequence+' · tick '+observation.tick+' · digest '+String(observation.materialDigest||'').slice(0,12)+'…'})
+  );
+  densityPanel.hidden=false;
+}
+function densityKey(){
+  if(!state?.capabilities?.material||state.eye.spaceId!=='root'||state.eye.dimension!==4||!selected)return null;
+  const fieldHash=state.snapshot?.spaces?.root?.field?.hash||'unknown';
+  const fixed=densityFixed();
+  return selected+'|0,1|'+fieldHash+'|'+state.snapshot.acceptedSequence+'|'+state.snapshot.stateHash+'|'+JSON.stringify(fixed);
+}
+function phaseSliceIndex(value){
+  let normalized=(Number(value)+4)%8;if(normalized<0)normalized+=8;
+  const lower=Math.floor(normalized),fraction=normalized-lower;
+  const rounded=fraction<.5?lower:fraction>.5?lower+1:(lower%2===0?lower:lower+1);
+  return rounded%8;
+}
+function densityFixed(){
+  if(!state?.eye)return null;
+  return [2,3].map(axis=>{
+    const value=state.eye.slice?.['x'+(axis+1)]??state.eye.q?.[axis]??0;
+    return phaseSliceIndex(value);
+  });
+}
+function densityMatchesState(observation){
+  const fixed=densityFixed(),observedFixed=[2,3].map(axis=>Number(observation?.fixed?.[axis]??observation?.fixed?.[String(axis)]));
+  return Boolean(observation&&state&&densityKey()&&observation.entityId===selected&&observation.spaceId==='root'
+    &&observation.worldDimension===4&&JSON.stringify(observation.axes)===JSON.stringify([0,1])
+    &&JSON.stringify(observation.shape)===JSON.stringify([8,8])
+    &&observation.acceptedSequence===state.snapshot.acceptedSequence
+    &&observation.acceptedStateHash===state.snapshot.stateHash
+    &&observation.materialDigest===state.snapshot.spaces?.root?.field?.hash
+    &&observation.acceptedFieldDigest===observation.materialDigest
+    &&fixed&&observedFixed.every((value,index)=>value===fixed[index]));
+}
+async function refreshDensity(generation,client){
+  if(generation!==connectionGeneration||transport!==client||client.closed)return;
+  const key=densityKey();
+  if(!key){densityOverlay.clear();updateDensityPanel(null);if(generation===connectionGeneration&&transport===client&&!client.closed)densityPoll=setTimeout(()=>refreshDensity(generation,client),1000);return;}
+  const cached=densityCache.get(key);
+  if(cached){densityOverlay.setObservation(cached);updateDensityPanel(cached);densityPoll=setTimeout(()=>refreshDensity(generation,client),1000);return;}
+  if(densityOverlay.observation&&!densityMatchesState(densityOverlay.observation)){densityOverlay.clear();updateDensityPanel(null);}
+  const request=++densityRequest;
+  try{
+    const observation=await client.observeMaterial(selected,[0,1]);
+    if(generation===connectionGeneration&&transport===client&&request===densityRequest&&densityKey()===key&&observation?.entityId===selected&&densityMatchesState(observation)){
+      if(densityOverlay.setObservation(observation)){
+        densityCache.set(key,observation);while(densityCache.size>8)densityCache.delete(densityCache.keys().next().value);
+        updateDensityPanel(observation);
+      }else updateDensityPanel(null);
+    }
+  }catch(error){
+    if(generation===connectionGeneration&&transport===client&&densityKey()===key&&!densityOverlay.observation)updateDensityPanel(null);
+  }
+  if(generation===connectionGeneration&&transport===client&&!client.closed)densityPoll=setTimeout(()=>refreshDensity(generation,client),1000);
 }
 async function connect(){
   if(connecting)return;connecting=true;$('createRoom').disabled=true;
@@ -125,8 +210,8 @@ async function connect(){
       onStatus:(_key,event)=>{if(generation!==connectionGeneration)return;if(event.code)say('Grip status: '+event.code);},requestTimeoutMs:5000,cleanupTimeoutMs:5000});
     inputs=new ApplicationInputs({host,nextEpoch:()=>client.nextEpoch(),project:(entity,anchor,point)=>screenTarget(renderer,entity,anchor,point),onRemove:key=>{if(generation===connectionGeneration)previews.delete(key);}});
     await gridFor(state.eye.dimension);configureAxes();receive(state);
-    $('welcome').hidden=true;$('toolbar').hidden=false;say(sessionOnly?'Session-only world open. State lasts while this local server process runs. Tap a relic, travel with your Eye, or enter its nested space.':'Saved world open. Tap a relic, travel with your Eye, or enter its nested space.');
-    clearTimeout(poll);void refreshLoop(client,generation);
+    $('welcome').hidden=true;$('toolbar').hidden=false;setDiagnostics(true,true);say(sessionOnly?'Session-only world open. State lasts while this local server process runs. Tap a relic, travel with your Eye, or enter its nested space.':'Saved world open. Tap a relic, travel with your Eye, or enter its nested space.');
+    clearTimeout(poll);clearTimeout(densityPoll);void refreshLoop(client,generation);void refreshDensity(generation,client);
   }finally{connecting=false;$('createRoom').disabled=false;}
 }
 async function refreshLoop(client,generation){
@@ -137,7 +222,7 @@ async function refreshLoop(client,generation){
 async function beginGesture(key,source,id,point,observedAt){
   if(connecting||!inputs||!online||state.journal?.readOnly||transport.session.readOnly)throw Error('Editing is unavailable');
   const entity=state.snapshot.spaces[state.eye.spaceId].entities[id];if(!entity)return;
-  selected=id;updateUI();renderer.selected=id;
+  selected=id;densityOverlay.clear();updateDensityPanel(null);updateUI();renderer.selected=id;
   return inputs.begin(key,{entity,source,point,observedAt});
 }
 function moveGesture(key,point,observedAt){return inputs?.move(key,point,observedAt);}
@@ -147,7 +232,7 @@ async function cancelAll(reason){orbit=null;hand=null;await inputs?.cancelAll(re
 async function releaseAll(){await inputs?.releaseAll();}
 
 async function disconnect(){
-  ++connectionGeneration;online=false;updateUI();clearTimeout(poll);points.clear();camera.stop();await cancelAll('disconnect');
+  ++connectionGeneration;online=false;updateUI();clearTimeout(poll);clearTimeout(densityPoll);densityRequest++;densityOverlay.clear();updateDensityPanel(null);setDiagnostics(false);points.clear();camera.stop();await cancelAll('disconnect');
   if(inputs)await inputs.close();else if(host)await host.close();if(transport&&!transport.closed)await transport.close();
   host=null;inputs=null;transport=null;online=false;remember(null);
 }
@@ -257,6 +342,6 @@ function drawTarget(target,label,color){
   const p=renderer.project(embed(target.q,{kind:'flat',dimension:target.dimension},target.chart));if(!p.visible)return;
   const ctx=renderer.ctx;ctx.save();ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=2;ctx.setLineDash([5,5]);ctx.beginPath();ctx.arc(p.x,p.y,20,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);ctx.font='10px system-ui';ctx.textAlign='center';ctx.fillText(label,p.x,p.y-28);ctx.restore();
 }
-function draw(now){if(!rendering)return;renderer.draw(now);for(const constraint of state?.constraints||[])drawTarget(constraint.target,'ACCEPTED GRIP TARGET','#c8a7ed');for(const preview of previews.values())drawTarget(preview.frame,'PROVISIONAL TARGET','#edd395');requestAnimationFrame(draw);}
+function draw(now){if(!rendering)return;renderer.draw(now);densityOverlay.draw();for(const constraint of state?.constraints||[])drawTarget(constraint.target,'ACCEPTED GRIP TARGET','#c8a7ed');for(const preview of previews.values())drawTarget(preview.frame,'PROVISIONAL TARGET','#edd395');requestAnimationFrame(draw);}
 requestAnimationFrame(draw);
 requestJSON('/api/local/ready').then(data=>{if(!data.ok)throw Error('Local authority is not ready');$('serviceReady').textContent='LOCAL SERVER READY · Python + Node · '+(sessionOnly?'SESSION ONLY · camera off':'camera off');$('createRoom').disabled=false;}).catch(error=>{$('serviceReady').textContent=error.message;$('createRoom').disabled=true;});

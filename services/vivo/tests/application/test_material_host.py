@@ -245,6 +245,30 @@ class HostTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(MaterialHostError):
                 await self.host.set_running(bad)
 
+    async def test_read_only_observation_projects_accepted_density_without_field_bytes(self):
+        await self.host.start()
+        before = copy.deepcopy(self.authority.checkpoint)
+        observed = await self.host.observe('relic', [0, 1], {2: 4, 3: 4})
+        self.assertEqual(observed['shape'], [8, 8])
+        self.assertEqual(observed['axes'], [0, 1])
+        self.assertEqual(observed['fixed'], {2: 4, 3: 4})
+        self.assertEqual(observed['projectionSchema'], 'vivo.material-observation/1')
+        self.assertEqual(observed['worldDimension'], 4)
+        self.assertEqual(observed['resolution'], [8, 8, 8, 8])
+        self.assertEqual(observed['densityDefinition'], 'abs(psi)**2')
+        self.assertEqual(observed['sampling'], 'exact-lattice; no interpolation')
+        self.assertEqual(observed['fixedCoordinates'], {'2': 0.0, '3': 0.0})
+        self.assertEqual(observed['acceptedSequence'], 0)
+        self.assertEqual(observed['materialDigest'], before['digest'])
+        self.assertEqual(observed['materialDigest'], self.authority.snapshot['spaces']['root']['field']['hash'])
+        self.assertEqual(observed['acceptedFieldDigest'], observed['materialDigest'])
+        self.assertEqual(observed['acceptedStateHash'], self.authority.snapshot['stateHash'])
+        self.assertEqual(len(observed['density']), 8)
+        self.assertEqual(len(observed['density'][0]), 8)
+        self.assertTrue(all(value >= 0 for row in observed['density'] for value in row))
+        self.assertNotIn('"psi"', json.dumps(observed))
+        self.assertEqual(self.authority.checkpoint, before)
+
     async def test_accepted_diagnostic_extensions_are_bounded_and_not_solver_input(self):
         self.authority.extra_capture = {'diagnostics': None, 'fieldDiagnostics': []}
         await self.host.start()

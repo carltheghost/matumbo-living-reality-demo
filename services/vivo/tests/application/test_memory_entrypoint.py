@@ -108,7 +108,7 @@ class MemoryApplicationTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(capabilities['sessionOnly'])
         self.assertEqual(capabilities['persistenceMode'], 'session-only')
         self.assertIn('no backend world/checkpoint/database file', capabilities['persistence'])
-        async with self.http.get(self.base + '/local/') as response:
+        async with self.http.get(self.base + '/local/accepted/') as response:
             html = await response.text()
         self.assertIn('data-vivo-store="memory"', html)
         self.assertIn('session-only', html.lower())

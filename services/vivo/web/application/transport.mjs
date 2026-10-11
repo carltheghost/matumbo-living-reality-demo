@@ -47,6 +47,7 @@ export class LocalTransport {
   moveEye(view,expectedRevision){return this.call('moveEye',{view,expectedRevision});}
   refresh(){return this.call('state');}
   nextEpoch(){return this.call('nextEpoch');}
+  observeMaterial(entityId,axes){return this.call('materialObserve',{entityId,axes});}
   export(){return this.call('export');}
   async close(){if(this.closed)return;await this.call('close');this.closed=true;this.listeners.clear();}
 }

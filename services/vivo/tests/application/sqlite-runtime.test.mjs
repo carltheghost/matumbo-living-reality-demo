@@ -1,7 +1,7 @@
 /** Linux synthetic SQLite integration, not native Windows acceptance. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,rm,writeFile,readdir,mkdir,symlink} from 'node:fs/promises';
+import {mkdtemp,rm,writeFile,readdir,mkdir,chmod,symlink} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
@@ -69,7 +69,7 @@ test('fresh SQLite refuses a legacy JSON world and invalid/private/symlink paths
  await writeFile(join(dir,'canonical-world.json'),'existing legacy checkpoint',{mode:0o600});
  await assert.rejects(MountedRuntime.open({path:join(dir,'canonical-world.sqlite'),store:'sqlite'}),error('STORE_LEGACY_CHECKPOINT_PRESENT'));
  assert.deepEqual(await readdir(dir),['canonical-world.json']);
- const publicDir=join(dir,'public');await mkdir(publicDir,{mode:0o755});
+ const publicDir=join(dir,'public');await mkdir(publicDir,{mode:0o755});await chmod(publicDir,0o755);
  await assert.rejects(MountedRuntime.open({path:join(publicDir,'canonical-world.sqlite'),store:'sqlite'}),error('STORE_PRIVATE_PATH'));assert.deepEqual(await readdir(publicDir),[]);
  const link=join(dir,'alias');await symlink(publicDir,link);
  await assert.rejects(MountedRuntime.open({path:join(link,'canonical-world.sqlite'),store:'sqlite'}),error('STORE_PRIVATE_PATH'));assert.deepEqual(await readdir(publicDir),[]);
