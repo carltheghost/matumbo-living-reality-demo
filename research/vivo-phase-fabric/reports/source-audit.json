@@ -1,0 +1,113 @@
+{
+  "artifact_sha256": "6c5b0338f413385fd34934ce290fcc3459a33788c1de7f763316a89061d34a72",
+  "scope": "selected critical paths of uploaded 0.8.1, not full repo/live-site/security audit",
+  "files": [
+    {
+      "path": "web/shared.js",
+      "sha256": "57790495e3ecde77db3ba0247c3b02a679f00a2a6a3ed2cd5a3e139556b60edb",
+      "line_count": 104,
+      "markers": [
+        {
+          "line": 40,
+          "text": "async function moveDirection(direction,distance){if(S.moving||!S.held||!S.state)return;const id=S.held,e=S.state.entities[id];S.moving=true;try{const ack=await command('move',{entity:id,expected:e.revision,direction,distance});if(ack.entity&&S.state.entities[id].revision<=ack.entity.revision)S.state.entities[id]=ack.entity;}finally{S.moving=false;}}"
+        },
+        {
+          "line": 42,
+          "text": "async function drag(dx,dy){if(performance.now()-S.lastMove<55||S.moving||!S.held)return;S.lastMove=performance.now();const d=screenDirection(dx,dy);if(d)await moveDirection(d.direction,d.distance);}"
+        },
+        {
+          "line": 52,
+          "text": "$('world').addEventListener('pointermove',safe(async e=>{if(!touches.has(e.pointerId))return;touches.set(e.pointerId,[e.clientX,e.clientY]);if(touches.size>1){const p=[...touches.values()],d=Math.hypot(p[0][0]-p[1][0],p[0][1]-p[1][1]);R.distance=Math.max(4,Math.min(22,R.distance-(d-pinchDistance)*.025));pinchDistance=d;return;}if(!touch||touch.pointer!==e.pointerId)return;const dx=e.clientX-touch.x,dy=e.clientY-touch.y;if(touch.kind==='view'){R.yaw+=dx*.006;R.pitch=Math.max(-1.3,Math.min(1.3,R.pitch+dy*.006));}else if(!S.moving)await drag(dx,dy);touch.x=e.clientX;touch.y=e.clientY;}));"
+        },
+        {
+          "line": 70,
+          "text": " if(gesture.type==='move'){if(handPoint&&S.heldSource==='hand')safe(drag)(gesture.point[0]-handPoint[0],gesture.point[1]-handPoint[1]);handPoint=gesture.point;}"
+        },
+        {
+          "line": 98,
+          "text": "let last=0;function frame(now){requestAnimationFrame(frame);if(document.hidden||now-last<31)return;last=now;R.draw(now);S.frames++;if(S.recording)composite(S.recording.includeCamera);if(S.frames%15===0)$('metrics').textContent=R.backend+' \u00b7 '+Math.round(R.fps)+' FPS \u00b7 '+(S.latency===null?'no RTT yet':Math.round(S.latency)+' ms ACK')+' \u00b7 '+(camera.stream?'camera local \u00b7 '+Math.round(camera.age)+' ms hand age':'camera off')+(S.replay?' \u00b7 REPLAY':'');}requestAnimationFrame(frame);"
+        }
+      ]
+    },
+    {
+      "path": "web/render.js",
+      "sha256": "661c1ec77a826fe38c446f92868d9ff066001f0fb3cadb59817864decfe7d66d",
+      "line_count": 45,
+      "markers": []
+    },
+    {
+      "path": "web/camera.js",
+      "sha256": "4c42b8338e639c5848f94103b2ab360cb919eb79f76159c09bc3f3bc28d62ec3",
+      "line_count": 71,
+      "markers": []
+    },
+    {
+      "path": "web/hand-worker.js",
+      "sha256": "74607647c012396e9f1cf0b22d3e23657e7ba9f5b390b309a0d7c90c767131fb",
+      "line_count": 16,
+      "markers": []
+    },
+    {
+      "path": "server/app.py",
+      "sha256": "cad6faa7f980bb2b9c8e87771ba8b34802ae6e7a23bbfb8730faa4befa08f124",
+      "line_count": 328,
+      "markers": [
+        {
+          "line": 16,
+          "text": "from .reference import HyperBall"
+        },
+        {
+          "line": 130,
+          "text": "                changed=r.guide.step(3)"
+        },
+        {
+          "line": 263,
+          "text": "                    e['q']=p.q.tolist();e['chart']=p.chart;e['revision']+=1;lease['expires']=time.time()+5"
+        }
+      ]
+    },
+    {
+      "path": "server/adaptive.py",
+      "sha256": "2031a51b02a965309ab6a3dbb015e50cf6a354e3e37c5ab6e9b4d1217be4c644",
+      "line_count": 82,
+      "markers": [
+        {
+          "line": 13,
+          "text": "def teacher(x):"
+        },
+        {
+          "line": 28,
+          "text": "class Guidance:"
+        }
+      ]
+    },
+    {
+      "path": "server/geometry.py",
+      "sha256": "ba6f1598872786a29748aef9cb93ecb35bf359d056dbf69a7ca1749172b0b32a",
+      "line_count": 222,
+      "markers": [
+        {
+          "line": 166,
+          "text": "    def sample_grid(self,nu=20,nv=14):"
+        }
+      ]
+    },
+    {
+      "path": "server/reference.py",
+      "sha256": "88525313e48659418d802605770f7e3d60e209092ec5c8befa2a2c24a7650bc8",
+      "line_count": 332,
+      "markers": [
+        {
+          "line": 242,
+          "text": "class NeuralWaveField:"
+        }
+      ]
+    },
+    {
+      "path": "README.md",
+      "sha256": "99d862c31b2815d0abf7c37397136be34dfa624524b4620e3f466b9db68ea8c7",
+      "line_count": 68,
+      "markers": []
+    }
+  ]
+}

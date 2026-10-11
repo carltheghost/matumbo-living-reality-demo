@@ -1,0 +1,3 @@
+MediaPipe Tasks Vision 0.10.14, Google. Runtime package metadata and source URLs are included.
+Hand Landmarker float16 model version 1 from Google MediaPipe.
+No user images are included. These are unmodified runtime/model downloads.

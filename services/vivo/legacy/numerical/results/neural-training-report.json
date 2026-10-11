@@ -1,0 +1,29 @@
+{
+  "task": "Learn a specified synthetic nonlinear spring force F=s+0.6*s^3; s=r-1.",
+  "scope": "MLP local edge operator; explicit D-dimensional graph aggregation, not full EGNN reproduction.",
+  "split": {
+    "train": 2048,
+    "validation": 512,
+    "test": 1024,
+    "method": "Independent seeded draws, same distance distribution; validation selects checkpoint; test does not train or select.",
+    "strain_interval": [
+      -0.45,
+      0.8
+    ]
+  },
+  "selected_step": 1775,
+  "validation_mse": 1.4594637182189356e-06,
+  "test_neural_mse": 1.3517407416820362e-06,
+  "test_hooke_mse": 0.007209813840292258,
+  "test_fitted_cubic_mse": 1.5835391600796737e-30,
+  "parameter_count": 321,
+  "truth_boundary": "The cubic baseline is essentially exact and better. This demonstrates learned dynamics, not superiority to the known law, general intelligence, or discovery of physics.",
+  "not_tested": [
+    "Phone or headset",
+    "Real hand or gaze tracking",
+    "Network multiplayer",
+    "Curved-manifold dynamics",
+    "Long-horizon stability guarantee",
+    "Emergent objects or adaptive rooms"
+  ]
+}

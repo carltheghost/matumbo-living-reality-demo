@@ -1,0 +1,37 @@
+{
+  "vision_bundle.mjs": {
+    "url": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs",
+    "bytes": 136870,
+    "sha256": "e77f281f9619150d937023c355bae170e9120e3b9e43f1e23a2a7bee07197669"
+  },
+  "wasm/vision_wasm_internal.js": {
+    "url": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm/vision_wasm_internal.js",
+    "bytes": 209826,
+    "sha256": "9440cf0cc0cea21800e31581ec32aeedcc5fbf9df4509796bbc7d3f99e52ab9c"
+  },
+  "wasm/vision_wasm_internal.wasm": {
+    "url": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm/vision_wasm_internal.wasm",
+    "bytes": 9423986,
+    "sha256": "f82a8e6c05e08a44cc9f9e7ec5f845935bcbb1b1500ebe8c2f4812fb4e2917dc"
+  },
+  "wasm/vision_wasm_nosimd_internal.js": {
+    "url": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm/vision_wasm_nosimd_internal.js",
+    "bytes": 209735,
+    "sha256": "abe9b6fbeaf86fcb53a5edce3926c82ccb0619e18fed4d9d9ce561ee7f55e054"
+  },
+  "wasm/vision_wasm_nosimd_internal.wasm": {
+    "url": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm/vision_wasm_nosimd_internal.wasm",
+    "bytes": 9294247,
+    "sha256": "38b61feab2fd7934e05cbe9f68baa308978a5e3b7f85c1913bb8ae89b8ef8b97"
+  },
+  "hand_landmarker.task": {
+    "url": "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+    "bytes": 7819105,
+    "sha256": "fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1"
+  },
+  "package.json": {
+    "url": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/package.json",
+    "bytes": 592,
+    "sha256": "20120384b2b0c1300d27ba769fff3cacfdbc964d5eb4cc12dda37a68d6c3885b"
+  }
+}

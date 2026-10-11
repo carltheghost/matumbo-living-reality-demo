@@ -1,0 +1,31 @@
+test_axis_permutation_symmetry (test_phase.PhaseTests.test_axis_permutation_symmetry) ... ok
+test_budget_rejected_before_allocation (test_phase.PhaseTests.test_budget_rejected_before_allocation) ... ok
+test_complex_potential_rejected (test_phase.PhaseTests.test_complex_potential_rejected) ... ok
+test_constant_stationary_density (test_phase.PhaseTests.test_constant_stationary_density) ... ok
+test_forward_backward (test_phase.PhaseTests.test_forward_backward) ... ok
+test_four_axis_plane_wave_exact (test_phase.PhaseTests.test_four_axis_plane_wave_exact) ... ok
+test_four_d_loops_link_same_sheet_at_different_hidden_positions (test_phase.PhaseTests.test_four_d_loops_link_same_sheet_at_different_hidden_positions) ... ok
+test_fourth_axis_current (test_phase.PhaseTests.test_fourth_axis_current) ... ok
+test_fourth_axis_density_transport (test_phase.PhaseTests.test_fourth_axis_density_transport) ... ok
+test_global_phase_symmetry (test_phase.PhaseTests.test_global_phase_symmetry) ... ok
+test_invalid_state_rejected (test_phase.PhaseTests.test_invalid_state_rejected) ... ok
+test_lattice_translation_symmetry (test_phase.PhaseTests.test_lattice_translation_symmetry) ... ok
+test_loop_crossing_core_rejected (test_phase.PhaseTests.test_loop_crossing_core_rejected) ... ok
+test_non_spatial_feature_axis_rejected (test_phase.PhaseTests.test_non_spatial_feature_axis_rejected) ... ok
+test_norm_without_renormalizing (test_phase.PhaseTests.test_norm_without_renormalizing) ... ok
+test_phase_kick_supplies_energy_not_mass (test_phase.PhaseTests.test_phase_kick_supplies_energy_not_mass) ... ok
+test_potential_changes_flow (test_phase.PhaseTests.test_potential_changes_flow) ... ok
+test_snapshot_continues_same_state (test_phase.PhaseTests.test_snapshot_continues_same_state) ... ok
+test_temporal_refinement (test_phase.PhaseTests.test_temporal_refinement) ... ok
+test_three_to_eleven_axes_have_real_kinetic_terms (test_phase.PhaseTests.test_three_to_eleven_axes_have_real_kinetic_terms) ... ok
+test_timestep_rejection_is_atomic (test_phase.PhaseTests.test_timestep_rejection_is_atomic) ... ok
+test_unobserved_axes_must_be_explicit (test_phase.PhaseTests.test_unobserved_axes_must_be_explicit) ... ok
+test_view_independent (test_phase.PhaseTests.test_view_independent) ... ok
+test_view_order (test_phase.PhaseTests.test_view_order) ... ok
+test_vortex_sheet_core_is_two_dimensional (test_phase.PhaseTests.test_vortex_sheet_core_is_two_dimensional) ... ok
+test_vortex_winding_both_signs (test_phase.PhaseTests.test_vortex_winding_both_signs) ... ok
+
+----------------------------------------------------------------------
+Ran 26 tests in 0.343s
+
+OK

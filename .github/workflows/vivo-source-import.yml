@@ -1,33 +1,62 @@
 name: Vivo original source import
 on:
   push:
-    branches: ['vivo/chat1-integration-2026-10-10']
+    branches: ['vivo/**']
   pull_request:
     paths:
-      - 'services/vivo/server/**'
-      - 'services/vivo/models/**'
-      - 'services/vivo/source-import-stage-a.json'
-      - 'scripts/vivo/test_import_stage_a.py'
+      - 'services/vivo/**'
+      - 'research/vivo-phase-fabric/**'
+      - 'scripts/vivo/**'
+      - 'coordination/vivo/SOURCE-IMPORT.md'
       - '.github/workflows/vivo-source-import.yml'
 permissions:
   contents: read
+defaults:
+  run:
+    shell: bash
 jobs:
-  original-backend:
+  original-sources:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - run: python -m pip install -r services/vivo/requirements.txt
-      - name: Exact imported bytes and original backend smoke tests
+      - name: Full exact source inventory and verifier negative fixtures
         run: |
-          python scripts/vivo/test_import_stage_a.py 2>&1 | tee vivo-import-tests.log
+          set -euo pipefail
+          mkdir -p vivo-import-evidence
+          python scripts/vivo/verify_source_import.py --report vivo-import-evidence/integrity.json | tee vivo-import-evidence/integrity.log
+          python scripts/vivo/test_source_import.py 2>&1 | tee vivo-import-evidence/verifier-tests.log
+          python services/vivo/scripts/verify_integrity.py | tee vivo-import-evidence/packaged-integrity.log
+      - name: Service readiness with complete and deliberately missing assets
+        run: |
+          set -euo pipefail
+          python scripts/vivo/test_import_stage_a.py 2>&1 | tee vivo-import-evidence/import-readiness.log
+      - name: All original runtime and research suites
+        run: |
+          set -euo pipefail
+          sh services/vivo/scripts/test.sh 2>&1 | tee vivo-import-evidence/original-runtime.log
+          PYTHONPATH=research/vivo-phase-fabric python -m unittest discover -s research/vivo-phase-fabric/tests -p 'test_*.py' -v 2>&1 | tee vivo-import-evidence/original-phase.log
+          node --test research/vivo-phase-fabric/tests/target-mailbox.test.mjs | tee vivo-import-evidence/original-mailbox.log
+      - name: Preserve source bytes after tests
+        run: |
+          set -euo pipefail
+          python scripts/vivo/verify_source_import.py | tee vivo-import-evidence/post-test-integrity.log
+          python --version | tee vivo-import-evidence/environment.log
+          node --version | tee -a vivo-import-evidence/environment.log
+          python -m pip freeze | tee -a vivo-import-evidence/environment.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: vivo-source-import-evidence
           path: |
-            vivo-import-tests.log
-            services/vivo/source-import-stage-a.json
+            vivo-import-evidence/
+            services/vivo/source-import.json
+      - name: Scope
+        run: echo 'Exact original import and service readiness; not mounted application, camera, physical phone, material-learning, public-network or deployment acceptance.'
