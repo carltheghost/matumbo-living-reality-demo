@@ -115,6 +115,31 @@ test('material-bound Studio commit rejects before canonical mutation',async t=>{
  await client.close();
 });
 
+test('canonical Studio commit survives mounted SQLite shutdown and reopen without changing entity-owned fields',async t=>{
+ const internals=captureInternals(t),{runtime,path}=await fixture(t);
+ const one=await runtime.dispatch({op:'open',args:{seat:'one'}}),before=one.state.snapshot;
+ const binding=before.studioBindings['studio.node.echo'],entity=before.spaces.root.entities.relic;
+ const q=[-.8,.2,.4,.1],immutable=value=>({...structuredClone(value),q:null,revision:null});
+ const accepted=await runtime.dispatch({op:'submit',token:one.token,args:{command:studioCommitCommand(before,q,{bindingId:binding.bindingId,
+   metadata:binding.metadata,commandId:'runtime.sqlite.studio-commit',expectedBindingRevision:binding.bindingRevision,
+   expectedEntityRevision:entity.revision})}});
+ assert.equal(accepted.value.status,'accepted');
+ assert.deepEqual(accepted.state.snapshot.spaces.root.entities.relic.q,q);
+ assert.equal(accepted.state.snapshot.spaces.root.entities.relic.revision,entity.revision+1);
+ assert.deepEqual(immutable(accepted.state.snapshot.spaces.root.entities.relic),immutable(entity));
+ await runtime.dispatch({op:'shutdown'});
+ const reopened=await MountedRuntime.open({path,store:'sqlite'});
+ try {
+  const restored=await reopened.dispatch({op:'open',args:{seat:'one'}}),restoredEntity=restored.state.snapshot.spaces.root.entities.relic;
+  assert.deepEqual(restoredEntity.q,q);
+  assert.equal(restoredEntity.revision,entity.revision+1);
+  assert.deepEqual(immutable(restoredEntity),immutable(entity));
+  assert.equal(restored.state.snapshot.studioBindings['studio.node.echo'].bindingRevision,
+   binding.bindingRevision+1);
+  assert.deepEqual(restored.state.snapshot.studioBindings['studio.node.echo'].q,q);
+ } finally { await reopened.dispatch({op:'shutdown'}); }
+});
+
 for(const afterCommit of [false,true])test(`mounted COMMIT ${afterCommit?'after':'before'} ambiguity stays unavailable through ready and timer sweeps; restart recovers exact durable outcome`,async t=>{
  const internals=captureInternals(t),{runtime,path}=await fixture(t);
  const one=await runtime.dispatch({op:'open',args:{seat:'one'}}),before=internals.world.checkpoint();

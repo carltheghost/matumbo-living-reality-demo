@@ -10,6 +10,7 @@ import {once} from 'node:events';
 import {createInterface} from 'node:readline';
 import {MountedRuntime} from '../../server/application/runtime.mjs';
 import {workshopSeed,entryView} from '../../server/application/seed.mjs';
+import {studioCommitCommand} from '../../contracts/studio-binding.mjs';
 
 let serial=0;
 const command=(kind,payload,spaceId='root',expectedRevision=0,id='test.'+(++serial))=>({
@@ -298,4 +299,29 @@ test('failed checkpoint commit is rejected without changing accepted state and c
     assert.equal((await runtime.dispatch({op:'inspectLease',token:one.token,args:{spaceId:'root',entityId:'relic'}})).value,null);
   } finally {await rm(path+'.lock',{recursive:true});}
   assert.equal((await submit(runtime,one,c)).value.status,'accepted');
+});
+
+test('canonical Studio commit survives mounted POSIX shutdown and reopen without changing entity-owned fields',async t=>{
+  const path=await pathFor(t),runtime=await MountedRuntime.open({path});
+  const one=await runtime.dispatch({op:'open',args:{seat:'one'}}),before=one.state.snapshot;
+  const binding=before.studioBindings['studio.node.echo'],entity=before.spaces.root.entities.relic;
+  const q=[-.8,.2,.4,.1],immutable=value=>({...structuredClone(value),q:null,revision:null});
+  const accepted=await submit(runtime,one,studioCommitCommand(before,q,{bindingId:binding.bindingId,
+    metadata:binding.metadata,commandId:'runtime.posix.studio-commit',expectedBindingRevision:binding.bindingRevision,
+    expectedEntityRevision:entity.revision}));
+  assert.equal(accepted.value.status,'accepted');
+  assert.deepEqual(accepted.state.snapshot.spaces.root.entities.relic.q,q);
+  assert.equal(accepted.state.snapshot.spaces.root.entities.relic.revision,entity.revision+1);
+  assert.deepEqual(immutable(accepted.state.snapshot.spaces.root.entities.relic),immutable(entity));
+  await runtime.dispatch({op:'shutdown'});
+  const reopened=await MountedRuntime.open({path});
+  try {
+    const restored=await reopened.dispatch({op:'open',args:{seat:'one'}}),restoredEntity=restored.state.snapshot.spaces.root.entities.relic;
+    assert.deepEqual(restoredEntity.q,q);
+    assert.equal(restoredEntity.revision,entity.revision+1);
+    assert.deepEqual(immutable(restoredEntity),immutable(entity));
+    assert.equal(restored.state.snapshot.studioBindings['studio.node.echo'].bindingRevision,
+      binding.bindingRevision+1);
+    assert.deepEqual(restored.state.snapshot.studioBindings['studio.node.echo'].q,q);
+  } finally { await reopened.dispatch({op:'shutdown'}); }
 });
