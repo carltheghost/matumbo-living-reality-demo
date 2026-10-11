@@ -337,7 +337,13 @@ function addPhoneSurface() {
     catch (error) { updatePhoneAuthorityUI(); status(`Canonical authority unavailable: ${error.message}`); }
   };
   $('phoneAuthorityRead').onclick = async () => {
-    try { await authority.read(); updatePhoneAuthorityUI(); status('Accepted canonical state refreshed. Local phone state remains unchanged.'); }
+    try {
+      const result = await authority.read();
+      updatePhoneAuthorityUI();
+      status(result?.status === 'rejected'
+        ? (result.reason || `Canonical read rejected: ${result.code || 'AUTHORITY_UNAVAILABLE'}.`)
+        : 'Accepted canonical state refreshed. Local phone state remains unchanged.');
+    }
     catch (error) { updatePhoneAuthorityUI(); status(`Canonical read failed: ${error.message}`); }
   };
   $('phoneAuthorityPreview').onclick = async () => {

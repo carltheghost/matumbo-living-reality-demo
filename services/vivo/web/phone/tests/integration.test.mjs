@@ -35,6 +35,8 @@ test('the Android Companion extends the canonical GitHub Pages UI at runtime', a
   assert.match(bootstrap, /phoneAuthorityConnect/);
   assert.match(bootstrap, /phoneAuthorityPublish/);
   assert.match(bootstrap, /phoneAuthorityCommit/);
+  assert.match(bootstrap, /const result = await authority\.read\(\)/);
+  assert.match(bootstrap, /result\?\.status === 'rejected'/);
 });
 
 test('phone authority adapter is cached for offline local startup and keeps shared contracts lazy', async () => {

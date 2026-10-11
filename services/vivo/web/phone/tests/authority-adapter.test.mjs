@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {MountedRuntime} from '../../../server/application/runtime.mjs';
 import {workshopSeed} from '../../../server/application/seed.mjs';
-import {studioBindingDefinition} from '../../../contracts/studio-binding.mjs';
+import {studioBindingDefinition, studioCommitCommand, studioTransformCommand} from '../../../contracts/studio-binding.mjs';
 import {LocalVivoEngine} from '../engine.mjs';
 import {PHONE_CANONICAL_BINDINGS, PHONE_LOCAL_DIMENSIONS, PHONE_ROOT_DIMENSION, mapPhoneEnvelopeToCanonical} from '../authority-mapping.mjs';
 import {PhoneAuthorityAdapter} from '../authority-adapter.mjs';
@@ -12,6 +12,11 @@ const initialEnvelope = async worldId => {
   const engine = new LocalVivoEngine();
   await engine.open(worldId, 4);
   return {engine, envelope: await engine.snapshot()};
+};
+const deferred = () => {
+  let resolve;
+  const promise = new Promise(value => { resolve = value; });
+  return {promise, resolve};
 };
 
 class RuntimeTransport {
@@ -144,10 +149,119 @@ test('stale accepted changes require an explicit conflict retry and never replac
   const blocked = await one.publish();
   assert.equal(blocked.status, 'rejected'); assert.equal(blocked.code, 'STUDIO_CONFLICT'); assert.equal(blocked.retryArmed, true);
   assert.equal(transports[0].submitCalls.length, callsBefore, 'first conflict action must not send');
-  const resolved = await one.publish();
+  const wrongAction = await one.commit();
+  assert.equal(wrongAction.status, 'rejected'); assert.equal(wrongAction.code, 'STUDIO_CONFLICT');
+  assert.equal(transports[0].submitCalls.length, callsBefore, 'changing conflict action must not send');
+  const resolved = await one.commit();
   assert.equal(resolved.status, 'accepted');
   assert.equal(transports[0].submitCalls.length, callsBefore + 1);
   assert.deepEqual((await first.engine.snapshot()).snapshot.spaces.root.entities.relic.q, before);
+});
+
+test('a conflict acknowledgement is retained per binding when another phone object is selected', async t => {
+  const {runtime, transports, first, second, one, two} = await fixture();
+  t.after(async () => { await one.close(); await two.close(); await first.engine.close(); await second.engine.close(); await runtime.dispatch({op: 'shutdown'}); });
+  await one.connect();
+  await first.engine.translate('relic', 0, .4); await one.publish();
+  await two.connect();
+  await first.engine.translate('relic', 0, .1);
+  await second.engine.translate('relic', 0, .8); await two.commit();
+  await one.read();
+  assert.equal(one.debug().conflict?.code, 'STUDIO_CONFLICT');
+  await one.selectEntity('workpiece');
+  assert.equal(one.debug().conflict, null);
+  await one.selectEntity('relic');
+  assert.equal(one.debug().conflict?.bindingId, 'studio.node.echo');
+  const firstRetry = await one.commit();
+  assert.equal(firstRetry.status, 'rejected'); assert.equal(firstRetry.code, 'STUDIO_CONFLICT');
+  const secondRetry = await one.commit();
+  assert.equal(secondRetry.status, 'accepted');
+  assert.ok(transports[0].submitCalls.some(command => command.kind === 'studio.commit'));
+});
+
+test('canonical entity changes with an unchanged binding q require explicit conflict acknowledgement', async t => {
+  const {runtime, transports, first, second, one, two} = await fixture();
+  t.after(async () => { await one.close(); await two.close(); await first.engine.close(); await second.engine.close(); await runtime.dispatch({op: 'shutdown'}); });
+  await one.connect();
+  first.engine.world.spaces.root.entities.relic.q[0] = 7;
+  await one.syncLocal(); await one.publish();
+  await two.connect();
+  second.engine.world.spaces.root.entities.relic.q[0] = 3;
+  await two.syncLocal();
+  await one.commit();
+  assert.equal(one.debug().acceptedBinding.q[0], 7);
+  assert.equal(one.debug().acceptedEntity.q[0], 7);
+  await two.read();
+  assert.equal(two.debug().conflict?.acceptedBinding.q[0], 7);
+  assert.equal(two.debug().conflict?.acceptedEntity.q[0], 7);
+  const callsBefore = transports[1].submitCalls.length;
+  const blocked = await two.commit();
+  assert.equal(blocked.status, 'rejected'); assert.equal(blocked.code, 'STUDIO_CONFLICT');
+  assert.equal(transports[1].submitCalls.length, callsBefore);
+  assert.equal(two.debug().acceptedEntity.q[0], 7);
+  const accepted = await two.commit();
+  assert.equal(accepted.status, 'accepted');
+  assert.equal(two.debug().acceptedEntity.q[0], 3);
+});
+
+test('pending command loading fences a new offline branch before transport submit', async t => {
+  const {runtime, transports, first, one} = await fixture();
+  t.after(async () => { await one.close(); await first.engine.close(); await runtime.dispatch({op: 'shutdown'}); });
+  await one.connect();
+  first.engine.world.spaces.root.entities.relic.q[0] = 1;
+  await one.syncLocal();
+  const loaderStarted = deferred();
+  const releaseLoader = deferred();
+  one.commandLoader = async () => { loaderStarted.resolve(); return releaseLoader.promise; };
+  const pending = one.commit();
+  await loaderStarted.promise;
+  first.engine.forkOffline('race branch');
+  await one.syncLocal();
+  releaseLoader.resolve({studioCommitCommand, studioTransformCommand});
+  const result = await pending;
+  assert.equal(result.code, 'PHONE_OFFLINE_BRANCH_NO_SEND');
+  assert.equal(transports[0].submitCalls.length, 0);
+  assert.equal(one.debug().local.mode, 'offline-branch');
+});
+
+test('close disposes a transport that resolves after connect was cancelled', async () => {
+  const factoryResult = deferred();
+  const snapshot = await initialEnvelope('late-connect');
+  const late = {
+    closed: false, closeCalls: 0, admitCalls: 0,
+    async admit() { this.admitCalls++; throw new Error('late admit must not run'); },
+    async close() { this.closeCalls++; this.closed = true; },
+  };
+  const adapter = new PhoneAuthorityAdapter({snapshot: () => snapshot.envelope, transportFactory: () => factoryResult.promise});
+  const connecting = adapter.connect();
+  await Promise.resolve();
+  await adapter.close();
+  factoryResult.resolve(late);
+  const result = await connecting;
+  assert.equal(result.code, 'AUTHORITY_SESSION_CHANGED');
+  assert.equal(late.admitCalls, 0);
+  assert.equal(late.closeCalls, 1);
+  assert.equal(adapter.debug().connected, false);
+  await snapshot.engine.close();
+});
+
+test('older local snapshot results cannot replace a newer explicit offline envelope', async () => {
+  const source = await initialEnvelope('local-fence');
+  const oldResult = deferred();
+  let calls = 0;
+  const adapter = new PhoneAuthorityAdapter({snapshot: () => {
+    calls++;
+    return calls === 1 ? oldResult.promise : source.engine.snapshot();
+  }});
+  const older = adapter.syncLocal();
+  const offline = copy(await source.engine.snapshot());
+  offline.mode = 'offline-branch'; offline.branchId = 'offline.new'; offline.parentBranchId = 'local-fence';
+  await adapter.syncLocal(offline);
+  oldResult.resolve(copy(await source.engine.snapshot()));
+  await older;
+  assert.equal(adapter.debug().local.mode, 'offline-branch');
+  assert.equal(adapter.debug().local.branchId, 'offline.new');
+  await source.engine.close();
 });
 
 test('offline branch, permission, material and journal gates reject without a send or local mutation', async t => {

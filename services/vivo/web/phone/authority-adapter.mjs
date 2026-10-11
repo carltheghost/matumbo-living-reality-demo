@@ -23,7 +23,12 @@ const loadStudioCommands = async () => {
 const copy = value => value === undefined ? undefined : structuredClone(value);
 const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 const sameQ = (left, right) => Array.isArray(left) && Array.isArray(right) && same(left, right);
+const entityChanged = (left, right) => Boolean(left && right && (left.revision !== right.revision || !sameQ(left.q, right.q)));
 const randomId = prefix => `${prefix}.${globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}.${Math.random().toString(36).slice(2)}`}`;
+const disposeTransport = async transport => {
+  if (!transport || transport.closed || typeof transport.close !== 'function') return;
+  try { await transport.close(); } catch {}
+};
 
 const REJECTION_REASONS = Object.freeze({
   AUTHORITY_NOT_CONNECTED: 'Connect to the canonical authority explicitly before sending a command.',
@@ -41,6 +46,8 @@ const REJECTION_REASONS = Object.freeze({
   STUDIO_ENTITY_HELD: 'The canonical entity is currently held by another authority session; no change was accepted.',
   STUDIO_BINDING_UNAVAILABLE: 'The selected phone object is not present in the canonical binding registry.',
   STUDIO_BINDING_IDENTITY: 'The canonical binding identity did not match the reviewed phone mapping.',
+  PHONE_LOCAL_STATE_CHANGED: 'The phone local state changed while the authority command was being prepared; nothing was sent. Review and repeat the explicit action.',
+  AUTHORITY_SESSION_CHANGED: 'The canonical authority session changed while the command was being prepared; nothing was sent.',
 });
 
 const reasonFor = (code, fallback) => REJECTION_REASONS[code] || fallback || `Authority rejected this action with ${code}.`;
@@ -68,6 +75,7 @@ export class PhoneAuthorityAdapter {
     snapshot = null,
     transport = null,
     transportFactory = null,
+    commandLoader = loadStudioCommands,
     base = '',
     fetch: fetcher = globalThis.fetch,
     seat = 'one',
@@ -77,6 +85,7 @@ export class PhoneAuthorityAdapter {
     this.engine = engine;
     this.snapshotProvider = snapshot || (() => this.engine.snapshot());
     this.transportFactory = transportFactory;
+    this.commandLoader = commandLoader;
     this.transport = transport;
     this.transportOptions = {base, fetch: fetcher};
     this.seat = seat === 'two' ? 'two' : 'one';
@@ -86,16 +95,30 @@ export class PhoneAuthorityAdapter {
     this.selectedEntityId = 'relic';
     this.acceptedBinding = null;
     this.conflict = null;
+    this._conflicts = new Map();
     this.conflictOverrideArmed = false;
     this.lastResult = null;
     this.message = 'Canonical authority is disconnected. The phone world remains local.';
-    if (transport) this._wireTransport(transport);
+    this._closing = false;
+    this._lifecycleGeneration = 0;
+    this._localRequestVersion = 0;
+    this._localIntentVersion = 0;
+    if (transport) this._wireTransport(transport, this._lifecycleGeneration);
   }
 
-  _wireTransport(transport) {
+  _generationCurrent(generation) {
+    return !this._closing && this._lifecycleGeneration === generation;
+  }
+
+  _transportCurrent(transport, generation = this._lifecycleGeneration) {
+    return this._generationCurrent(generation) && this.transport === transport && statusOf(transport);
+  }
+
+  _wireTransport(transport, generation = this._lifecycleGeneration) {
     if (!transport) return;
     const prior = transport.onState;
     transport.onState = state => {
+      if (!this._transportCurrent(transport, generation)) return;
       try { prior?.(state); } catch {}
       this.receive(state);
     };
@@ -108,10 +131,23 @@ export class PhoneAuthorityAdapter {
   }
 
   async syncLocal(envelope = null) {
-    this.localEnvelope = copy(envelope || await this.snapshotProvider());
+    const requestVersion = ++this._localRequestVersion;
+    const next = copy(envelope === null ? await this.snapshotProvider() : envelope);
+    // An older provider result must never replace a newer explicit branch or
+    // engine event that arrived while the provider was awaiting storage.
+    if (requestVersion !== this._localRequestVersion) return this.debug();
+    if (envelope !== null) this._localIntentVersion++;
+    this.localEnvelope = next;
     const local = mapPhoneEnvelopeToCanonical(this.localEnvelope, this.selectedEntityId);
-    if (this.conflict && local.status === 'available' && !sameQ(local.q, this.conflict.localQ)) {
-      this.conflict = {...this.conflict, localQ: [...local.q]};
+    const conflict = this._currentConflict();
+    if (conflict && local.status === 'available' &&
+        (conflict.localIntentVersion !== this._localIntentVersion ||
+         !sameQ(local.q, conflict.localQ) || this._localFenceKey(local) !== conflict.localKey)) {
+      conflict.localQ = [...local.q];
+      conflict.localKey = this._localFenceKey(local);
+      conflict.localIntentVersion = this._localIntentVersion;
+      conflict.acknowledgedAction = null;
+      conflict.retryArmed = false;
       this.conflictOverrideArmed = false;
     }
     this._emit('local');
@@ -121,8 +157,7 @@ export class PhoneAuthorityAdapter {
   async selectEntity(entityId) {
     if (typeof entityId !== 'string' || !entityId.length) throw new TypeError('PHONE_OBJECT_UNAVAILABLE');
     this.selectedEntityId = entityId;
-    this.conflict = null;
-    this.conflictOverrideArmed = false;
+    this._useCurrentConflict();
     const mapping = this._mapping();
     this.acceptedBinding = mapping.binding ? currentBinding(this.state, mapping.binding.bindingId) : null;
     await this.syncLocal();
@@ -134,17 +169,22 @@ export class PhoneAuthorityAdapter {
     const next = copy(state);
     const binding = currentBinding(next, this._bindingId());
     const prior = this.acceptedBinding;
+    const priorBinding = currentBinding(this.state, this._bindingId());
+    const priorEntity = priorBinding && this.state?.snapshot?.spaces?.[priorBinding.spaceId]?.entities?.[priorBinding.entityId];
+    const nextEntity = binding && next.snapshot?.spaces?.[binding.spaceId]?.entities?.[binding.entityId];
     const local = this.localEnvelope ? mapPhoneEnvelopeToCanonical(this.localEnvelope, this.selectedEntityId) : null;
-    if (prior && binding && !sameQ(prior.q, binding.q)) {
+    const bindingAdvanced = Boolean(prior && binding && (prior.bindingRevision !== binding.bindingRevision || !sameQ(prior.q, binding.q)));
+    const entityAdvanced = entityChanged(priorEntity, nextEntity);
+    if (prior && binding && (bindingAdvanced || entityAdvanced)) {
       if (local?.status === 'available' && !sameQ(local.q, prior.q) && !sameQ(local.q, binding.q)) {
-        this._rememberConflict(binding, local.q, 'STUDIO_CONFLICT');
-      } else if (this.conflict && sameQ(local?.q, binding.q)) {
-        this.conflict = null;
-        this.conflictOverrideArmed = false;
+        this._rememberConflict(binding, local.q, 'STUDIO_CONFLICT', nextEntity);
+      } else if (this._currentConflict() && sameQ(local?.q, binding.q)) {
+        this._clearConflict(binding.bindingId);
       }
     }
     this.state = next;
     if (binding) this.acceptedBinding = copy(binding);
+    this._useCurrentConflict();
     this._emit('authority');
     return this.debug();
   }
@@ -154,10 +194,45 @@ export class PhoneAuthorityAdapter {
       ({relic: 'studio.node.echo', workpiece: 'studio.node.workpiece', portal: 'studio.node.portal'}[this.selectedEntityId] || 'studio.node.echo');
   }
 
-  _rememberConflict(binding, localQ, code = 'STUDIO_CONFLICT') {
-    this.conflict = {code, localQ: localQ ? [...localQ] : null, acceptedBinding: copy(binding), acceptedSequence: this.state?.snapshot?.acceptedSequence ?? null};
+  _rememberConflict(binding, localQ, code = 'STUDIO_CONFLICT', entity = null) {
+    const canonicalEntity = entity || this.state?.snapshot?.spaces?.[binding.spaceId]?.entities?.[binding.entityId] || null;
+    const mapping = this._mapping();
+    const record = {
+      code,
+      localQ: localQ ? [...localQ] : null,
+      localKey: this._localFenceKey(mapping),
+      localIntentVersion: this._localIntentVersion,
+      entityId: binding.entityId,
+      bindingId: binding.bindingId,
+      acknowledgedAction: null,
+      retryArmed: false,
+      acceptedBinding: copy(binding),
+      acceptedEntity: copy(canonicalEntity),
+      acceptedBindingRevision: binding.bindingRevision,
+      acceptedEntityRevision: canonicalEntity?.revision ?? null,
+      acceptedSequence: this.state?.snapshot?.acceptedSequence ?? null,
+    };
+    this._conflicts.set(binding.bindingId, record);
+    this.conflict = record;
     this.conflictOverrideArmed = false;
-    return this.conflict;
+    return record;
+  }
+
+  _currentConflict() {
+    const bindingId = this._bindingId();
+    const record = this._conflicts.get(bindingId) || null;
+    this.conflict = record;
+    this.conflictOverrideArmed = Boolean(record?.retryArmed);
+    return record;
+  }
+
+  _useCurrentConflict() {
+    return this._currentConflict();
+  }
+
+  _clearConflict(bindingId = this._bindingId()) {
+    this._conflicts.delete(bindingId);
+    this._useCurrentConflict();
   }
 
   _mapping(local = null) {
@@ -165,21 +240,42 @@ export class PhoneAuthorityAdapter {
   }
 
   async connect({seat = this.seat, resumeToken} = {}) {
+    if (this._closing) return this._staleResult('connect', 'AUTHORITY_SESSION_CHANGED', reasonFor('AUTHORITY_SESSION_CHANGED'));
     if (statusOf(this.transport)) return this.debug();
+    const generation = this._lifecycleGeneration;
     this.seat = seat === 'two' ? 'two' : 'one';
-    const options = {...this.transportOptions, onState: state => this.receive(state)};
-    const client = this.transportFactory
-      ? await this.transportFactory(options)
-      : new (await loadLocalTransport())(options);
-    this.transport = client;
+    const options = {...this.transportOptions};
+    let client = null;
     try {
+      client = this.transportFactory
+        ? await this.transportFactory(options)
+        : new (await loadLocalTransport())(options);
+      if (!this._generationCurrent(generation)) {
+        await disposeTransport(client);
+        return this._staleResult('connect', 'AUTHORITY_SESSION_CHANGED', reasonFor('AUTHORITY_SESSION_CHANGED'));
+      }
+      this.transport = client;
+      this._wireTransport(client, generation);
       const result = await client.admit(this.seat, resumeToken);
+      if (!this._transportCurrent(client, generation)) {
+        await disposeTransport(client);
+        if (this.transport === client) this.transport = null;
+        return this._staleResult('connect', 'AUTHORITY_SESSION_CHANGED', reasonFor('AUTHORITY_SESSION_CHANGED'));
+      }
       this.receive(result.state || currentState(client));
       this.message = `Connected to canonical seat ${this.seat}. Local phone state was not replaced.`;
       await this.syncLocal();
+      if (!this._transportCurrent(client, generation)) {
+        await disposeTransport(client);
+        if (this.transport === client) this.transport = null;
+        return this._staleResult('connect', 'AUTHORITY_SESSION_CHANGED', reasonFor('AUTHORITY_SESSION_CHANGED'));
+      }
       return this._emit('connected');
     } catch (error) {
-      this.transport = null;
+      const stale = !this._generationCurrent(generation);
+      if (this.transport === client) this.transport = null;
+      await disposeTransport(client);
+      if (stale) return this._staleResult('connect', 'AUTHORITY_SESSION_CHANGED', reasonFor('AUTHORITY_SESSION_CHANGED'));
       this.message = reasonFor(error?.code || 'AUTHORITY_UNAVAILABLE', error?.message);
       this.lastResult = this._rejection('connect', error?.code || 'AUTHORITY_UNAVAILABLE', this.message, false);
       this._emit('connect-failed');
@@ -256,24 +352,96 @@ export class PhoneAuthorityAdapter {
     return result;
   }
 
+  _staleResult(action, code, reason, extra = {}) {
+    return {status: 'rejected', action, code, reason: reasonFor(code, reason), acceptedSequence: this.state?.snapshot?.acceptedSequence ?? null, ...extra};
+  }
+
+  _localFenceKey(mapping = this._mapping()) {
+    const local = this.localEnvelope || {};
+    return JSON.stringify({
+      worldId: local.snapshot?.worldId ?? null,
+      branchId: local.branchId ?? null,
+      mode: local.mode ?? 'local',
+      parentBranchId: local.parentBranchId ?? null,
+      branchLabel: local.branchLabel ?? null,
+      spaceId: mapping.local?.spaceId ?? null,
+      entityId: mapping.local?.entityId ?? null,
+      dimension: mapping.local?.dimension ?? null,
+      entityRevision: mapping.local?.entityRevision ?? null,
+      q: mapping.q || null,
+    });
+  }
+
+  _captureWriteFence(transport, mapping, generation = this._lifecycleGeneration) {
+    return {
+      generation,
+      transport,
+      entityId: this.selectedEntityId,
+      localIntentVersion: this._localIntentVersion,
+      localKey: this._localFenceKey(mapping),
+    };
+  }
+
+  _writeFenceValid(fence) {
+    if (!fence || !this._transportCurrent(fence.transport, fence.generation)) return false;
+    if (this.selectedEntityId !== fence.entityId || this._localIntentVersion !== fence.localIntentVersion) return false;
+    const mapping = this._mapping();
+    return mapping.status === 'available' && this._localFenceKey(mapping) === fence.localKey;
+  }
+
+  _writeFenceRejection(action, fence) {
+    if (!this._generationCurrent(fence?.generation) || this.transport !== fence?.transport) {
+      return this._staleResult(action, 'AUTHORITY_SESSION_CHANGED', reasonFor('AUTHORITY_SESSION_CHANGED'));
+    }
+    const mapping = this._mapping();
+    if (mapping.local?.mode === 'offline-branch') {
+      return this._rejection(action, 'PHONE_OFFLINE_BRANCH_NO_SEND', reasonFor('PHONE_OFFLINE_BRANCH_NO_SEND'), false);
+    }
+    return this._rejection(action, 'PHONE_LOCAL_STATE_CHANGED', reasonFor('PHONE_LOCAL_STATE_CHANGED'), false);
+  }
+
   async _reconcile(action, code, reason) {
     if (statusOf(this.transport)) {
       try { await this.transport.refresh(); } catch {}
     }
     const binding = currentBinding(this.state, this._bindingId());
     const local = this._mapping();
-    if (binding && local.status === 'available' && code.startsWith('STALE')) this._rememberConflict(binding, local.q, code);
+    if (binding && local.status === 'available' && code.startsWith('STALE')) {
+      const entity = this.state?.snapshot?.spaces?.[binding.spaceId]?.entities?.[binding.entityId];
+      this._rememberConflict(binding, local.q, code, entity);
+    }
     return this._rejection(action, code, reason, false, {conflict: Boolean(this.conflict), acceptedBinding: binding ? copy(binding) : null});
   }
 
   _conflictGate(action, mapping) {
-    if (!this.conflict) return null;
-    if (mapping.status !== 'available' || !sameQ(mapping.q, this.conflict.localQ)) {
-      this.conflict = mapping.status === 'available' ? {...this.conflict, localQ: [...mapping.q]} : this.conflict;
+    const conflict = this._currentConflict();
+    if (!conflict) return null;
+    const binding = mapping.status === 'available' ? currentBinding(this.state, mapping.binding.bindingId) : null;
+    const entity = binding && this.state?.snapshot?.spaces?.[binding.spaceId]?.entities?.[binding.entityId];
+    const remoteChanged = !binding || binding.bindingId !== conflict.bindingId ||
+      binding.bindingRevision !== conflict.acceptedBindingRevision || !sameQ(binding.q, conflict.acceptedBinding?.q) ||
+      entity?.revision !== conflict.acceptedEntityRevision || !sameQ(entity?.q, conflict.acceptedEntity?.q);
+    if (remoteChanged) {
+      if (binding && mapping.status === 'available') this._rememberConflict(binding, mapping.q, 'STUDIO_CONFLICT', entity);
+      else { conflict.acknowledgedAction = null; conflict.retryArmed = false; this.conflictOverrideArmed = false; }
+      return this._rejection(action, 'STUDIO_CONFLICT', reasonFor('STUDIO_CONFLICT'), false, {conflict: true});
+    }
+    const localKey = this._localFenceKey(mapping);
+    if (mapping.status !== 'available' || conflict.localIntentVersion !== this._localIntentVersion ||
+        !sameQ(mapping.q, conflict.localQ) || localKey !== conflict.localKey) {
+      if (mapping.status === 'available') {
+        conflict.localQ = [...mapping.q];
+        conflict.localKey = localKey;
+        conflict.localIntentVersion = this._localIntentVersion;
+      }
+      conflict.acknowledgedAction = null;
+      conflict.retryArmed = false;
       this.conflictOverrideArmed = false;
       return this._rejection(action, 'STUDIO_CONFLICT', reasonFor('STUDIO_CONFLICT'), false, {conflict: true});
     }
-    if (!this.conflictOverrideArmed) {
+    if (conflict.acknowledgedAction !== action || !conflict.retryArmed) {
+      conflict.acknowledgedAction = action;
+      conflict.retryArmed = true;
       this.conflictOverrideArmed = true;
       return this._rejection(action, 'STUDIO_CONFLICT', 'Accepted canonical state changed. Repeat the same explicit action once to replace it, or leave the local phone edit untouched.', false, {conflict: true, retryArmed: true});
     }
@@ -295,13 +463,22 @@ export class PhoneAuthorityAdapter {
     if (!freshCapability.allowed) return this._rejection(action, freshCapability.code, freshCapability.reason, false, {durable: freshCapability.durable ?? null});
     const afterReadBlocked = this._conflictGate(action, freshMapping);
     if (afterReadBlocked) return afterReadBlocked;
-    const snapshot = this.transport.getSnapshot();
-    const binding = currentBinding(this.state, freshMapping.binding.bindingId);
+    const transport = this.transport;
+    const fence = this._captureWriteFence(transport, freshMapping);
+    const commands = await this.commandLoader();
+    if (!this._writeFenceValid(fence)) return this._writeFenceRejection(action, fence);
+    await this.syncLocal();
+    const guardedMapping = this._mapping();
+    if (!this._writeFenceValid(fence)) return this._writeFenceRejection(action, fence);
+    const guardedCapability = this._capability(action, guardedMapping);
+    if (!guardedCapability.allowed) return this._rejection(action, guardedCapability.code, guardedCapability.reason, false, {durable: guardedCapability.durable ?? null});
+    const snapshot = transport.getSnapshot();
+    const binding = currentBinding(this.state, guardedMapping.binding.bindingId);
     const entity = snapshot.spaces?.[binding.spaceId]?.entities?.[binding.entityId];
     if (!binding || !entity) return this._rejection(action, 'STUDIO_BINDING_TARGET', 'The canonical binding target is unavailable; the local phone state was not changed.', false);
-    const {studioCommitCommand, studioTransformCommand} = await loadStudioCommands();
+    const {studioCommitCommand, studioTransformCommand} = commands;
     const command = action === 'commit'
-      ? studioCommitCommand(snapshot, freshMapping.q, {
+      ? studioCommitCommand(snapshot, guardedMapping.q, {
         bindingId: binding.bindingId,
         metadata: binding.metadata,
         expectedRevision: snapshot.acceptedSequence,
@@ -309,15 +486,18 @@ export class PhoneAuthorityAdapter {
         expectedEntityRevision: entity.revision,
         commandId: randomId('phone.studio.commit'),
       })
-      : studioTransformCommand(snapshot, freshMapping.q, {
+      : studioTransformCommand(snapshot, guardedMapping.q, {
         bindingId: binding.bindingId,
         metadata: binding.metadata,
         expectedRevision: snapshot.acceptedSequence,
         commandId: randomId('phone.studio.transform'),
       });
     let receipt;
+    // Keep this check adjacent to submit: a branch/session change during
+    // lazy command loading must fail closed instead of sending stale intent.
+    if (!this._writeFenceValid(fence)) return this._writeFenceRejection(action, fence);
     try {
-      receipt = await this.transport.submit(command);
+      receipt = await transport.submit(command);
     } catch (error) {
       return this._reconcile(action, error?.code || 'AUTHORITY_UNAVAILABLE', error?.message);
     }
@@ -341,18 +521,23 @@ export class PhoneAuthorityAdapter {
   commit() { return this._write('commit'); }
 
   async close() {
-    if (statusOf(this.transport)) {
-      try { await this.transport.close(); } finally { this.transport = null; }
-    }
+    if (this._closing) return this.debug();
+    this._closing = true;
+    this._lifecycleGeneration++;
+    const transport = this.transport;
+    this.transport = null;
+    await disposeTransport(transport);
     this.state = null;
     this.acceptedBinding = null;
     this.conflict = null;
+    this._conflicts.clear();
     this.conflictOverrideArmed = false;
     this.message = 'Canonical authority disconnected. The phone world remains local.';
     return this._emit('closed');
   }
 
   debug() {
+    this._useCurrentConflict();
     const mapping = this._mapping();
     const capability = {
       projection: this.state?.capabilities?.studio?.projection === true || this.state?.capabilities?.studio?.projection?.allowed === true,
