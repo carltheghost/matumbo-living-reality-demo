@@ -24,5 +24,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m unittest discover -s services/vivo_adaptive/tests -v
+          node --test services/vivo/tests/adaptive-authority/*.test.mjs
+          node --test services/vivo/tests/material-authority/*.test.mjs
       - name: Scope
         run: echo 'Learned graph material unit/numerical checks only; authority/app/browser/device integration is separate.'

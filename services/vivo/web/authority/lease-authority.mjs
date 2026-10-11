@@ -89,9 +89,10 @@ export class LocalLeaseWorld {
         || !Number.isSafeInteger(maxEvents) || maxEvents < 8 || maxEvents > 65536) fail('INVALID_OPTIONS');
     let material=null;
     if(materialProtocol!==undefined) {
-      if(materialProtocol!=='vivo.lease-material/1') fail('MATERIAL_PROTOCOL');
+      const modules={'vivo.lease-material/1':'./material-authority.mjs','vivo.lease-adaptive/1':'./adaptive-material.mjs'};
+      if(!Object.hasOwn(modules,materialProtocol)) fail('MATERIAL_PROTOCOL');
       if(store.supportsCommitGuard!==true) fail('MATERIAL_STORE_GUARD_REQUIRED');
-      material=await import('./material-authority.mjs');
+      material=await import(modules[materialProtocol]);
     } else if(materialInitial!==undefined) fail('MATERIAL_PROTOCOL_REQUIRED');
     let record = await store.load();
     if (record) {
@@ -146,7 +147,7 @@ export class LocalLeaseWorld {
     return this.#queue(async()=>{
       const s=this.#state, candidate=this.#material.validateProposal(s,proposal,this.#time()), next=clone(s);
       next.snapshot=candidate;next.material.checkpoint=clone(proposal.fieldState);
-      for(const l of Object.values(next.leases)) if(l.spaceId===s.material.spaceId) {
+      for(const l of Object.values(next.leases)) if(this.#material.coversSpace(s,l.spaceId)) {
         const e=s.snapshot.spaces[l.spaceId].entities[l.entityId];
         if(e && l.materialCoverageRevision===e.revision && l.materialInvariant===this.#material.invariantFingerprint(s.snapshot,l.spaceId,l.entityId)) l.materialCoverageRevision=e.revision+1;
       }
@@ -234,7 +235,7 @@ export class LocalLeaseWorld {
       const entity=space&&Object.hasOwn(space.entities,p.entityId)?space.entities[p.entityId]:null;
       if(!entity) return reject('NO_ENTITY');
       const k=key(command.spaceId,p.entityId), held=s.leases[k];
-      const materialLease=this.#material && command.spaceId===s.material.spaceId && held;
+      const materialLease=this.#material && this.#material.coversSpace(s,command.spaceId) && held;
       const invariant=materialLease && this.#material.invariantFingerprint(s.snapshot,command.spaceId,p.entityId);
       const covered=materialLease && held.materialCoverageRevision===entity.revision && held.materialInvariant===invariant;
       if(entity.revision!==command.expectedRevision && !(command.kind!=='grab.begin' && covered && command.expectedRevision===held.inputReceiptRevision)) return reject('STALE_REVISION',entity);
@@ -260,7 +261,7 @@ export class LocalLeaseWorld {
           if(p.source!==current.source) return reject('SOURCE_MISMATCH',entity);
           if(p.dimension!==entity.dimension || p.chart!==entity.chart) return reject('FRAME_MISMATCH',entity);
           if(p.targetSeq<=current.targetSeq) return reject('STALE_TARGET',entity);
-          if(materialLease && !p.q.every((q,i)=>q>=-s.material.checkpoint.lengths[i]/2 && q<s.material.checkpoint.lengths[i]/2)) return reject('MATERIAL_DOMAIN',entity);
+          if(materialLease && !this.#material.targetAllowed(s,command.spaceId,p.q)) return reject('MATERIAL_DOMAIN',entity);
           current.targetSeq=p.targetSeq;current.expiresAt=now+this.#ttl;
           if(materialLease) current.inputReceiptRevision=entity.revision;
           current.target={spaceId:command.spaceId,chart:p.chart,dimension:p.dimension,q:[...p.q]};
