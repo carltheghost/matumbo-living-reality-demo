@@ -352,6 +352,39 @@ export class LocalLeaseWorld {
         next.receipts[requestKey]={fingerprint,receipt};
         await this.#save(next);return clone(receipt);
       }
+      if(command.kind==='studio.commit') {
+        if(command.expectedRevision!==s.snapshot.acceptedSequence) return reject('STALE_WORLD');
+        const binding=s.snapshot.studioBindings?.[p.bindingId];
+        if(!binding) return reject('STUDIO_BINDING_UNAVAILABLE');
+        try { validateStudioBinding(binding); } catch { return reject('STUDIO_BINDING_INVALID'); }
+        if(command.spaceId!==binding.spaceId) return reject('STUDIO_BINDING_SPACE');
+        if(binding.sourceModel!==p.sourceModel || binding.sourceNode!==p.sourceNode ||
+            binding.entityId!==p.entityId || binding.dimension!==p.dimension || binding.chart!==p.chart ||
+            binding.spaceId!==command.spaceId || binding.metadata.name!==p.metadata.name ||
+            binding.metadata.kind!==p.metadata.kind) return reject('STUDIO_BINDING_IDENTITY');
+        const space=s.snapshot.spaces[binding.spaceId], entity=space?.entities?.[binding.entityId];
+        if(!space || !entity || entity.dimension!==binding.dimension || entity.chart!==binding.chart)
+          return reject('STUDIO_BINDING_TARGET');
+        if(this.#material && this.#material.coversSpace(s,binding.spaceId)) return reject('STUDIO_MATERIAL_BOUNDARY',entity);
+        if(p.expectedBindingRevision!==binding.bindingRevision) return reject('STALE_STUDIO_BINDING',entity);
+        if(p.expectedEntityRevision!==entity.revision) return reject('STALE_ENTITY',entity);
+        const now=this.#time(), held=Object.values(s.leases).some(l=>l.spaceId===binding.spaceId &&
+          l.entityId===binding.entityId && l.expiresAt>now);
+        if(held) return reject('STUDIO_ENTITY_HELD',entity);
+        if(binding.bindingRevision>=Number.MAX_SAFE_INTEGER) return reject('STUDIO_BINDING_REVISION_EXHAUSTED',entity);
+        if(entity.revision>=Number.MAX_SAFE_INTEGER) return reject('STUDIO_ENTITY_REVISION_EXHAUSTED',entity);
+        const next=clone(s), updatedBinding={...clone(binding),q:[...p.q],metadata:clone(p.metadata),
+          bindingRevision:binding.bindingRevision+1,acceptedSequence:next.snapshot.acceptedSequence+1};
+        const updatedEntity={...clone(entity),q:[...p.q],revision:entity.revision+1};
+        next.snapshot.studioBindings[p.bindingId]=updatedBinding;
+        next.snapshot.spaces[binding.spaceId].entities[binding.entityId]=updatedEntity;
+        await this.#advance(next,'studio-commit',client.session.actorId,command);
+        const result={binding:clone(updatedBinding),entity:clone(updatedEntity),projectionOnly:false,canonical:true};
+        const receipt={...this.#receipt(command,'accepted','OK',updatedEntity,result),
+          acceptedSequence:next.snapshot.acceptedSequence,stateHash:next.snapshot.stateHash};
+        next.receipts[requestKey]={fingerprint,receipt};
+        await this.#save(next);return clone(receipt);
+      }
       if(!['grab.begin','grab.target','grab.end'].includes(command.kind)) return reject('NOT_IMPLEMENTED');
       const space=Object.hasOwn(s.snapshot.spaces,command.spaceId)?s.snapshot.spaces[command.spaceId]:null;
       const entity=space&&Object.hasOwn(space.entities,p.entityId)?space.entities[p.entityId]:null;

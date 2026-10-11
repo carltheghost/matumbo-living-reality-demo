@@ -88,6 +88,30 @@ function normalizeMountedStudioBindingTopology(normalized, seed) {
   normalized.studioBindings=clone(expected);
 }
 
+function normalizeMountedCanonicalDynamics(normalized, seed) {
+  // The world profile accepts canonical Studio commits.  q and revision are
+  // therefore validated dynamic state, not fixed workshop topology.  Only
+  // entities named by the already-validated Studio binding registry may carry
+  // those dynamic values; every unbound entity remains immutable at startup.
+  // Mask only those two fields for the immutable-seed comparison below; v,
+  // material/field membership, lineage, identity, and nested-space links must
+  // still match the mounted seed exactly.
+  const boundTargets=new Set(Object.values(seed?.studioBindings??{}).map(binding=>
+    JSON.stringify([binding.spaceId,binding.entityId])));
+  for(const [spaceId, expectedSpace] of Object.entries(seed?.spaces??{})) {
+    const actualSpace=normalized?.spaces?.[spaceId], actualEntities=actualSpace?.entities;
+    if(!actualEntities || typeof actualEntities!=='object' || Array.isArray(actualEntities)) continue;
+    for(const [entityId, expected] of Object.entries(expectedSpace.entities??{})) {
+      if(!boundTargets.has(JSON.stringify([spaceId,entityId]))) continue;
+      const actual=actualEntities[entityId];
+      if(actual && typeof actual==='object' && !Array.isArray(actual)) {
+        actual.q=clone(expected.q);
+        actual.revision=expected.revision;
+      }
+    }
+  }
+}
+
 /** Mounted profile is intentionally narrower than the reusable phase driver. */
 export function checkMountedAdaptiveCheckpoint(cp){
   if(!cp||cp.schema!=='vivo.material.adaptive-graph/1'||cp.lawVersion!=='vivo.adaptive.graph/1'||
@@ -176,6 +200,7 @@ export class MountedRuntime {
         }
       }
       normalizeMountedStudioBindingTopology(normalized,seed);
+      if(!phase&&!adaptive) normalizeMountedCanonicalDynamics(normalized,seed);
       // Capacity proof is for exactly this fixed four-entity, depth-one workshop.
       // Refuse other checkpoint topologies rather than silently weaken that bound.
       if(!snapshot || JSON.stringify({...normalized,acceptedSequence:0,stateHash:seed.stateHash})!==JSON.stringify(seed))

@@ -191,6 +191,46 @@ export function studioTransformCommand(snapshot, q, {
 }
 
 /**
+ * Build the explicit canonical-commit command.  Unlike studio.transform, this
+ * command carries both selected-record CAS values so the authority can decide
+ * whether a Studio projection is allowed to advance the unbound entity too.
+ * The caller must opt into this stronger operation; no revision is inferred.
+ */
+export function studioCommitCommand(snapshot, q, {
+  commandId = 'studio.commit.' + (globalThis.crypto?.randomUUID?.() ?? ''),
+  expectedRevision = snapshot?.acceptedSequence,
+  expectedBindingRevision,
+  expectedEntityRevision,
+  bindingId = STUDIO_BINDING_ID,
+  metadata = STUDIO_BINDING_METADATA,
+} = {}) {
+  if (!object(snapshot) || !id(snapshot.worldId) || !uint(expectedRevision) || !id(commandId) ||
+      !uint(expectedBindingRevision) || !uint(expectedEntityRevision))
+    fail('Invalid Studio commit command context');
+  const binding = studioBindingSeed(q, {bindingId, metadata: copy(metadata)});
+  return {
+    schema: 'vivo.command/1',
+    id: commandId,
+    worldId: snapshot.worldId,
+    spaceId: binding.spaceId,
+    kind: 'studio.commit',
+    expectedRevision,
+    payload: {
+      bindingId: binding.bindingId,
+      sourceModel: binding.sourceModel,
+      sourceNode: binding.sourceNode,
+      entityId: binding.entityId,
+      dimension: binding.dimension,
+      chart: binding.chart,
+      q: binding.q,
+      metadata: binding.metadata,
+      expectedBindingRevision,
+      expectedEntityRevision,
+    },
+  };
+}
+
+/**
  * Apply only the accepted projection to a cloned Full Studio snapshot.  The
  * result is paused so the local physics clock cannot silently diverge after a
  * remote accepted update.  Engine topology, velocity, memory, edges, laws,
