@@ -150,7 +150,9 @@ export class LocalLeaseWorld {
       next.snapshot=candidate;next.material.checkpoint=clone(proposal.fieldState);
       for(const l of Object.values(next.leases)) if(this.#material.coversSpace(s,l.spaceId)) {
         const e=s.snapshot.spaces[l.spaceId].entities[l.entityId];
-        if(e && l.materialCoverageRevision===e.revision && l.materialInvariant===this.#material.invariantFingerprint(s.snapshot,l.spaceId,l.entityId)) l.materialCoverageRevision=e.revision+1;
+        const accepted=candidate.spaces?.[l.spaceId]?.entities?.[l.entityId];
+        if(e && accepted && l.materialCoverageRevision===e.revision && l.materialInvariant===this.#material.invariantFingerprint(s.snapshot,l.spaceId,l.entityId))
+          l.materialCoverageRevision=accepted.revision;
       }
       await this.#advance(next,'material-step','authority',this.#material.materialEvent(proposal));
       await this.#save(next,()=>this.#material.checkCommitProvenance(this.#state,proposal,this.#time()));

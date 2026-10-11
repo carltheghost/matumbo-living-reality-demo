@@ -74,6 +74,7 @@ class AdaptiveGraphTests(unittest.TestCase):
         result = driver.step(payload(driver, s))
         for update in result["entityUpdates"]:
             self.assertLess(math.dist(update["q"], s["spaces"]["root"]["entities"][update["id"]]["q"]), 1e-12)
+            self.assertEqual(update["revision"], s["spaces"]["root"]["entities"][update["id"]]["revision"])
 
     def test_last_axis_grip_moves_real_last_coordinate(self):
         d = 11
@@ -89,6 +90,7 @@ class AdaptiveGraphTests(unittest.TestCase):
         result = driver.step(payload(driver, s, [grip]))
         moved = next(u for u in result["entityUpdates"] if u["id"] == "a")
         self.assertGreater(moved["q"][-1], 0)
+        self.assertEqual(moved["revision"], 1)
         self.assertEqual(moved["q"][1:-1], [0.0] * (d - 2))
 
     def test_two_grips_on_one_entity_combine_without_duplicate_state(self):

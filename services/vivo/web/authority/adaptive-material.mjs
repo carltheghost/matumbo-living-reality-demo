@@ -95,7 +95,9 @@ export function validateProposal(state,p,now){
     exact(u,['spaceId','id','q','v','revision'],'MATERIAL_UPDATE_KEYS');
     const key=u.spaceId+'\0'+u.id,base=snap.spaces?.[u.spaceId]?.entities?.[u.id],cs=old.spaces?.[u.spaceId];
     require(expected.includes(key)&&!seen.has(key)&&base&&cs,'MATERIAL_UPDATE_ID');seen.add(key);
-    require(u.revision===base.revision+1&&vector(u.q,cs.dimension)&&vector(u.v,cs.dimension,-100,100),'MATERIAL_UPDATE');
+    require((u.revision===base.revision||u.revision===base.revision+1)&&vector(u.q,cs.dimension)&&vector(u.v,cs.dimension,-100,100),'MATERIAL_UPDATE');
+    const changed=!eq(u.q,base.q)||!eq(u.v,base.v);
+    require((changed&&u.revision===base.revision+1)||(!changed&&u.revision===base.revision),'MATERIAL_REVISION_SEMANTICS');
     Object.assign(candidate.spaces[u.spaceId].entities[u.id],{q:structuredClone(u.q),v:structuredClone(u.v),revision:u.revision});
   }
   candidate.simulationTime=p.fieldState.simulationTime;
