@@ -19,6 +19,19 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Phone-engine syntax
+        run: |
+          set -euo pipefail
+          node --check src/vivo-phone-engine/native-tools.mjs
+          node --check src/vivo-phone-engine/agent-runtime.mjs
+          node --check src/vivo-phone-engine/storage.mjs
+          node --check src/vivo-phone-engine/engine-worker.mjs
+          node --check src/vivo-phone-engine/engine.mjs
+          node --check src/vivo-phone-engine/boot.mjs
+          node --check vivo-phone-sw.js
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
