@@ -405,6 +405,10 @@ async def make_remote_app(data_dir, owner_token, origin, *, store="posix"):
         return web.Response(text=remote_index(), content_type="text/html",
                             headers={"Cache-Control": "no-cache", "X-Vivo-Application": "canonical-remote-1"})
 
+    async def device_check(_request):
+        return web.FileResponse(WEB_ROOT / "application" / "device-check.html",
+                                headers={"Cache-Control": "no-cache", "X-Vivo-Application": "physical-device-evidence-1"})
+
     async def grid(request):
         try:
             dimension = int(request.query.get("dimension", "4"))
@@ -421,12 +425,13 @@ async def make_remote_app(data_dir, owner_token, origin, *, store="posix"):
 
     app.router.add_get("/", index)
     app.router.add_get("/remote/", index)
+    app.router.add_get("/device-check", device_check)
     app.router.add_get("/healthz", health)
     app.router.add_get("/api/remote/grid", grid)
     app.router.add_get("/ws", gateway.websocket)
     for name in ("shared.css","render.js","camera.js","geometry.js","hand-worker.js"):
         app.router.add_get("/" + name, lambda request, n=name: asset(request, n))
-    for name in ("remote-bootstrap.mjs","remote-transport.mjs","interactions.mjs","adapters.mjs","remote.css"):
+    for name in ("remote-bootstrap.mjs","remote-transport.mjs","interactions.mjs","adapters.mjs","remote.css","device-check.mjs","device-check.css"):
         app.router.add_get("/application/" + name,
                            lambda request, n=name: asset(request, "application/" + n))
     app.router.add_static("/vendor/", WEB_ROOT / "vendor", show_index=False, follow_symlinks=False)

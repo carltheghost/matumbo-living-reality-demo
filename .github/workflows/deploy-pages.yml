@@ -36,7 +36,7 @@ jobs:
           set -euo pipefail
           rm -rf dist
           mkdir -p dist
-          cp -R index.html favicon.svg dist/
+          cp -R index.html favicon.svg vivo-phone-sw.js dist/
           cp -R src dist/
           cp -R vendor dist/
           find . -maxdepth 1 -type f \( -name '*.css' -o -name '*.html' \) -not -path './index.html' -exec cp {} dist/ \;
@@ -97,7 +97,7 @@ jobs:
           import hashlib, json, pathlib, time, urllib.request
           base = 'https://carltheghost.github.io/matumbo-living-reality-demo/'
           report = []
-          for name in ['field-lab-grab.html', 'src/field-lab/field-lab-touch-repair.js', 'field-lab-studio.html', 'src/field-lab/studio-core.js', 'src/field-lab/studio.js', 'src/field-lab/studio-layout.js', 'src/field-lab/viva-core.js', 'src/field-lab/viva-visibility.js', 'src/field-lab/viva-spaces.js']:
+          for name in ['field-lab-grab.html', 'src/field-lab/field-lab-touch-repair.js', 'field-lab-studio.html', 'src/field-lab/studio-core.js', 'src/field-lab/studio.js', 'src/field-lab/studio-layout.js', 'src/field-lab/viva-core.js', 'src/field-lab/viva-visibility.js', 'src/field-lab/viva-spaces.js', 'vivo-phone-sw.js', 'src/vivo-phone-engine/boot.mjs', 'src/vivo-phone-engine/engine.mjs', 'src/vivo-phone-engine/engine-worker.mjs', 'src/vivo-phone-engine/agent-runtime.mjs', 'src/vivo-phone-engine/native-tools.mjs', 'src/vivo-phone-engine/storage.mjs']:
               expected = hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest()
               for attempt in range(18):
                   try:

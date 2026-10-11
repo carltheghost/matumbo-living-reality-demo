@@ -9,6 +9,7 @@ on:
       - 'services/vivo/web/authority/**'
       - 'services/vivo/contracts/**'
       - 'services/vivo/tests/remote/**'
+      - 'services/vivo/web/application/device-check.*'
       - 'services/vivo_adaptive/**'
       - 'coordination/vivo/REMOTE-CANONICAL-STAGE.md'
       - 'coordination/vivo/REMOTE-DEVICE-ACCEPTANCE.md'
@@ -105,6 +106,7 @@ jobs:
               raise SystemExit(f'remote readiness timeout: {last!r}')
           PY
           timeout --signal=TERM 120s python services/vivo/tests/remote/browser_two_person.py             http://127.0.0.1:8769/ "$owner_token" remote-browser-evidence/two-person.json
+          timeout --signal=TERM 60s python services/vivo/tests/remote/browser_device_check_smoke.py             http://127.0.0.1:8769/ remote-browser-evidence/device-check-smoke.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
