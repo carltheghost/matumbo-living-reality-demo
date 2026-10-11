@@ -3,9 +3,15 @@ export type Vec = readonly number[];
 export type InputSource = 'touch' | 'hand' | 'eye-confirmed' | 'keyboard';
 export interface Frame { spaceId: string; chart: string; dimension: number; q: Vec; }
 export interface Eye extends Frame { actorId: string; eyeId: string; basis: readonly Vec[]; slice: Readonly<Record<string,number>>; }
+export interface StudioBinding {
+  schema: 'vivo.studio-binding/1'; bindingId: string; sourceModel: string; sourceNode: number;
+  spaceId: string; entityId: string; dimension: number; chart: string; q: Vec;
+  metadata: Readonly<{name: string; kind: string}>;
+  bindingRevision: number; acceptedSequence: number;
+}
 export interface Command {
   schema: 'vivo.command/1'; id: string; worldId: string; spaceId: string;
-  kind: 'grab.begin' | 'grab.target' | 'grab.end' | 'space.enter' | 'space.exit' | 'world.fork';
+  kind: 'grab.begin' | 'grab.target' | 'grab.end' | 'space.enter' | 'space.exit' | 'world.fork' | 'studio.transform';
   expectedRevision: number; payload: Readonly<Record<string, unknown>>;
 }
 export interface TargetPayload {
@@ -31,7 +37,7 @@ export interface Space {
 export interface Snapshot {
   schema: 'vivo.snapshot/1'; worldId: string; authorityId: string;
   acceptedSequence: number; simulationTime: number; rootSpaceId: string;
-  spaces: Readonly<Record<string, Space>>; stateHash: string;
+  spaces: Readonly<Record<string, Space>>; studioBindings?: Readonly<Record<string, StudioBinding>>; stateHash: string;
 }
 export interface Session {
   mode: 'local' | 'remote'; actorId: string; worldId: string;

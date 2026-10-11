@@ -9,6 +9,7 @@ import {pathToFileURL} from 'node:url';
 import {LocalLeaseWorld,MemoryAuthorityStore} from '../../web/authority/lease-authority.mjs';
 import {FileAuthorityStore} from '../authority/file-store.mjs';
 import {validateCommand} from '../../contracts/validate.mjs';
+import {studioBindingTopology,validateStudioBinding} from '../../contracts/studio-binding.mjs';
 import {workshopSeed,phaseWorkshopSeed,adaptiveWorkshopSeed,entryView,LOCAL_SEATS,ENTITY_COUNT} from './seed.mjs';
 
 const MAX_BYTES = 64 * 1024 * 1024;
@@ -53,6 +54,34 @@ function publicError(error) {
   const code=typeof error?.code==='string'&&/^[A-Z][A-Z0-9_]{0,63}$/.test(error.code)
     ?error.code:error instanceof TypeError?'INVALID_ARGUMENT':error instanceof SyntaxError?'INVALID_JSON':'RUNTIME_FAILURE';
   return {code,message:code};
+}
+
+function normalizeMountedStudioBindingTopology(normalized, seed) {
+  const expected=seed?.studioBindings;
+  if(expected===undefined) {
+    if(normalized?.studioBindings!==undefined) fail('WORKSHOP_CHECKPOINT_MISMATCH');
+    return;
+  }
+  if(!normalized) return;
+  const actual=normalized.studioBindings;
+  if(actual===undefined) {
+    // Older accepted checkpoints predate the optional projection.  The
+    // authority factory performs the durable, hash-preserving migration after
+    // this topology check; no dynamic binding value is invented here.
+    normalized.studioBindings=clone(expected);
+    return;
+  }
+  if(!actual || typeof actual!=='object' || Array.isArray(actual) ||
+      JSON.stringify(Object.keys(actual).sort())!==JSON.stringify(Object.keys(expected).sort()))
+    fail('WORKSHOP_CHECKPOINT_MISMATCH');
+  for(const id of Object.keys(expected)) {
+    try { validateStudioBinding(actual[id]); } catch { fail('WORKSHOP_CHECKPOINT_MISMATCH'); }
+    if(JSON.stringify(studioBindingTopology(actual[id]))!==JSON.stringify(studioBindingTopology(expected[id])))
+      fail('WORKSHOP_CHECKPOINT_MISMATCH');
+  }
+  // q/revision/acceptedSequence are the dynamic projection state.  Compare
+  // fixed checkpoint topology above, then ignore those fields for startup.
+  normalized.studioBindings=clone(expected);
 }
 
 /** Mounted profile is intentionally narrower than the reusable phase driver. */
@@ -142,6 +171,7 @@ export class MountedRuntime {
           }
         }
       }
+      normalizeMountedStudioBindingTopology(normalized,seed);
       // Capacity proof is for exactly this fixed four-entity, depth-one workshop.
       // Refuse other checkpoint topologies rather than silently weaken that bound.
       if(!snapshot || JSON.stringify({...normalized,acceptedSequence:0,stateHash:seed.stateHash})!==JSON.stringify(seed))
