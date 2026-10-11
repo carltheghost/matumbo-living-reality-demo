@@ -16,7 +16,7 @@
 
 import * as THREE from 'three';
 import { makeGlassCube, makeConnectionLines, addGlassLighting, glassTintFor } from '../render/glass-style.js?v=20260922-cache2';
-import { attachTokenVault, fmtTokenFluff, parseTumboSim } from './token.js?v=20260922-cache2';
+import { attachTokenVault, fmtTokenFluff, parseTumboSim } from './token-vault.js?v=20261003-complete8';
 
 const VAULT_USER = 'u:you';
 const STORE_KEY = 'tumbo:vault:ui:v1';
