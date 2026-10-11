@@ -39,21 +39,39 @@ python -m server.local_application --port 8766 --data-dir /absolute/private/path
 
 The command binds only `127.0.0.1`. It deliberately has no public-bind flag.
 
+For a real browser preview without backend world/checkpoint/database files, opt
+into the explicit session-only backend. Do not pass `--data-dir` in this mode:
+
+```sh
+services/vivo/start-canonical-local.sh --store memory --material-phase --port 8766
+```
+
+The session-only label in the UI is a hard capability boundary: accepted world,
+Eye, lease, history and phase state exist only while this local server process
+runs. A fresh process starts from a fresh world and rejects old tab tokens. The
+guarantee is scoped to backend world/checkpoint/database files; normal
+OS/browser writes are outside it. Tab-scoped `sessionStorage` tokens may help a
+reload reconnect to the same process, but are not durable world storage. A
+manual state export is a user download for evidence only; it is not imported or
+reloaded automatically.
+
 ## What is mounted
 
 - Existing index/layout, original WebGL/Canvas renderer and local camera worker
 - Frozen absolute-input controller via GripHost and allowlisted ESM routes
 - Canonical LocalLeaseWorld behind a private supervised Node stdin/stdout pipe
-- Default POSIX atomic FileAuthorityStore, with an explicit optional SQLite backend
+- Default POSIX atomic FileAuthorityStore, with explicit optional SQLite and session-only memory backends
 - Canonical state remains separate from the original legacy comparison
-- Two session-bound local actors; separate saved Eye coordinates, basis and slice
+- Two session-bound local actors; separate Eye coordinates, basis and slice
 - Explicit mapped root 4D → inner 11D entry and exact outer-Eye return
 - Full-dimensional accepted grip targets with capture-time freshness checks
 - Distinct provisional and accepted target markers; solid marks use accepted entity coordinates
 - Final pointer/hand samples, source-specific loss cleanup and explicit reconcile
-- Durable checkpoint confirmation and sanitized state export
+- Durable checkpoint confirmation for POSIX/SQLite and sanitized state export
 
-Each accepted operation is saved before acknowledgment. The local server enforces
+In POSIX/SQLite modes, each accepted operation is saved before acknowledgment. In
+memory mode, each accepted operation is committed atomically to the in-process
+session store before acknowledgment and is discarded when the process stops. The local server enforces
 loopback peer/Host and exact Origin for mutation. No forwarded identity is trusted.
 Raw camera frames and hand landmarks never enter the authority bridge.
 
@@ -103,6 +121,11 @@ Default private files are `services/vivo/data/canonical-local/canonical-world.js
 and `comparison.sqlite` (phase mode instead uses `canonical-phase.json`). Use `--data-dir` for a different private folder outside
 the web directory. One Python process supervises exactly one Node authority.
 Readiness probes both. Stop the launcher normally to release local sessions.
+
+The explicit `--store memory` mode does not create or write a data directory,
+canonical checkpoint, comparison database, or SQLite sidecar. It uses the same
+authority, lease, nested-Eye and material guards with a process-local
+`MemoryAuthorityStore`; it never silently falls back to POSIX or SQLite.
 
 The checkpoint contains accepted snapshot/history and separate Eyes; it is not
 an event-only replay engine. Existing lock directories after a crash must be

@@ -10,6 +10,8 @@ const renderer=new Renderer($('world'),$('overlay'));
 const previews=new Map(),grids=new Map();
 let transport=null,host=null,inputs=null,state=null,selected=null,poll=null,online=false,viewTail=Promise.resolve();
 let orbit=null,hand=null,rendering=true,readOnlySeen=false,connectionGeneration=0,connecting=false;
+const sessionOnly=document.documentElement.dataset.vivoStore==='memory';
+const scopeLabel=sessionOnly?'SESSION ONLY':'LOCAL SAVED';
 const say=text=>{$('status').textContent=text;};
 const safe=fn=>async(...args)=>{try{return await fn(...args);}catch(error){say(error.message||String(error));return null;}};
 const saved=()=>{try{return JSON.parse(sessionStorage.getItem('vivo.local.session'));}catch{return null;}};
@@ -20,36 +22,45 @@ const element=(tag,properties)=>Object.assign(document.createElement(tag),proper
 $('displayName').closest('label').hidden=true;
 $('spaceKind').closest('.row').hidden=true;
 $('metricInputLabel').hidden=true;$('keyLabel').hidden=true;$('joinRoom').hidden=true;
-$('inviteNote').textContent='Two local seats on this computer. This is local host admission, not remote person authentication. Camera stays off.';
+$('inviteNote').textContent=sessionOnly
+  ?'Two local seats on this computer. SESSION ONLY: accepted state lasts only while this local server process runs; no backend world/checkpoint/database file is written. Camera stays off.'
+  :'Two local seats on this computer. This is local host admission, not remote person authentication. Camera stays off.';
 const seatLabel=element('label',{textContent:'Your local seat'}),seat=element('select',{id:'localSeat'});
 seat.append(element('option',{value:'one',textContent:'Seat one'}),element('option',{value:'two',textContent:'Seat two'}));
 seat.value=saved()?.seat||new URL(location.href).searchParams.get('seat')||'one';seatLabel.append(seat);
 $('createRoom').before(seatLabel);
 $('welcome').querySelector('a').href='/legacy';$('welcome').querySelector('a').textContent='Original 0.8.1 shared comparison ↗';
 $('welcome').querySelectorAll('p.muted').forEach(e=>{if(e!==$('inviteNote'))e.hidden=true;});
-$('createRoom').textContent='Open local seat';
+$('createRoom').textContent=sessionOnly?'Open session-only seat':'Open local seat';
 document.querySelector('[data-panel="neural"]').hidden=true;
 document.querySelector('[data-panel="people"]').textContent='♧ Local seats';
-document.querySelector('[data-panel="record"]').textContent='↧ Saved state';
+document.querySelector('[data-panel="record"]').textContent=sessionOnly?'↧ Session state':'↧ Saved state';
 $('moveTarget').options[0].textContent='Grip target (material driver pending)';
 const moveSheet=document.querySelector('[data-sheet="move"]');
 moveSheet.querySelector('p').textContent='Drag a relic or use an axis to set an accepted grip target. Dashed targets are constraints. The solid relic remains at its accepted material coordinates until a real material driver is connected.';
 moveSheet.querySelector('p.muted').textContent='This mode supports an explicit flat 4D workshop and its mapped 11D nested space. Time is separate and the material clock is paused.';
-const enterButton=element('button',{id:'enterSpace',textContent:'Enter selected inner space'}),exitButton=element('button',{id:'exitSpace',textContent:'Return to saved outer Eye'});
+const enterButton=element('button',{id:'enterSpace',textContent:'Enter selected inner space'}),exitButton=element('button',{id:'exitSpace',textContent:sessionOnly?'Return to session outer Eye':'Return to saved outer Eye'});
 moveSheet.append(enterButton,exitButton);
 const eyeSheet=document.querySelector('[data-sheet="eye"]');
-eyeSheet.querySelector('p').textContent='Your accepted Eye coordinates, basis, slice and nested return frame are saved independently. Looking never moves another seat or the relic.';
+eyeSheet.querySelector('p').textContent=sessionOnly
+  ?'Your accepted Eye coordinates, basis, slice and nested return frame live independently in this server process. They are discarded when it stops.'
+  :'Your accepted Eye coordinates, basis, slice and nested return frame are saved independently. Looking never moves another seat or the relic.';
 $('homeView').textContent='Reset own Eye view';
 const peopleSheet=document.querySelector('[data-sheet="people"]');
 for(const id of['inviteRole','makeInvite','inviteLink','copyInvite','revokeInvites']){$(id).hidden=true;if(id==='inviteRole')$(id).closest('label').hidden=true;}
-peopleSheet.querySelector('p.muted').textContent='Open a second tab and choose the other seat. Each seat has a separate saved Eye. A reload rotates its session and releases old grips. Remote sharing is not enabled.';
+peopleSheet.querySelector('p.muted').textContent=sessionOnly
+  ?'Open a second tab and choose the other seat. Each seat has an independent Eye in this process. Tab-scoped session tokens are not durable and become invalid after restart; remote sharing is not enabled.'
+  :'Open a second tab and choose the other seat. Each seat has a separate saved Eye. A reload rotates its session and releases old grips. Remote sharing is not enabled.';
 peopleSheet.querySelector('a').href='/legacy';peopleSheet.querySelector('a').textContent='Original shared comparison ↗';
 const recordSheet=document.querySelector('[data-sheet="record"]');
 for(const child of[...recordSheet.children])child.hidden=true;
-const saveButton=element('button',{id:'saveLocal',textContent:'Verify saved checkpoint'}),exportButton=element('button',{id:'exportLocal',textContent:'Export accepted state JSON'}),reconcileButton=element('button',{id:'reconcileLocal',textContent:'Reconcile uncertain grips'});
-recordSheet.append(saveButton,exportButton,reconcileButton,element('p',{id:'journalState',className:'muted'}),element('p',{className:'muted',textContent:'Every accepted operation is atomically saved on this computer. This export is state evidence, not a replay/import feature. The bounded journal becomes read-only before cleanup capacity runs out. No camera frames or session tokens are exported.'}));
+const saveButton=element('button',{id:'saveLocal',textContent:'Verify saved checkpoint'}),exportButton=element('button',{id:'exportLocal',textContent:sessionOnly?'Download accepted session JSON':'Export accepted state JSON'}),reconcileButton=element('button',{id:'reconcileLocal',textContent:'Reconcile uncertain grips'});
+if(!sessionOnly)recordSheet.append(saveButton);
+recordSheet.append(exportButton,reconcileButton,element('p',{id:'journalState',className:'muted'}),element('p',{className:'muted',textContent:sessionOnly
+  ?'SESSION ONLY: accepted state, Eyes, leases and phase checkpoints live only in this local server process. This download is a user-requested export, not durable storage or an import/reload path. Browser/sessionStorage tokens are tab-scoped and not backend world storage. No camera frames or session tokens are exported.'
+  :'Every accepted operation is atomically saved on this computer. This export is state evidence, not a replay/import feature. The bounded journal becomes read-only before cleanup capacity runs out. No camera frames or session tokens are exported.'}));
 const phaseButton=element('button',{id:'runPhase',textContent:'Run experimental 4D phase'});phaseButton.hidden=true;recordSheet.append(phaseButton);
-const capability=element('div',{id:'localCapabilities',textContent:'LOCAL ONLY · material motion / learning pending'});
+const capability=element('div',{id:'localCapabilities',textContent:sessionOnly?'SESSION ONLY · volatile server memory · no backend world/checkpoint/database file':'LOCAL ONLY · material motion / learning pending'});
 document.body.append(capability);
 
 function currentEntity(){return state?.snapshot.spaces[state.eye.spaceId].entities[selected];}
@@ -68,20 +79,20 @@ function receive(next){
   if(grids.has(next.eye.dimension))apply();else void gridFor(next.eye.dimension).then(apply).catch(e=>{if(generation===connectionGeneration)say(e.message);});
   if(priorSpace!==next.eye.spaceId)configureAxes();
   updateUI();
-  if(next.journal?.readOnly&&!readOnlySeen){readOnlySeen=true;void cancelAll('journal-read-only').catch(e=>say(e.message));say('Journal is read-only. Saved state is intact; export it. New editing needs a reviewed journal continuation.');}
+  if(next.journal?.readOnly&&!readOnlySeen){readOnlySeen=true;void cancelAll('journal-read-only').catch(e=>say(e.message));say(sessionOnly?'Session journal is read-only; download the current process state.':'Journal is read-only. Saved state is intact; export it. New editing needs a reviewed journal continuation.');}
 }
 function configureAxes(){if(!state)return;for(const id of['moveAxis','sliceAxis']){$(id).replaceChildren();for(let a=id==='sliceAxis'?3:0;a<state.eye.dimension;a++)$(id).append(element('option',{value:String(a),textContent:'x'+(a+1)}));$(id).disabled=!$(id).options.length;}const axis=+$('sliceAxis').value;$('sliceValue').value=String(state.eye.slice['x'+(axis+1)]||0);}
 function updateUI(){
   if(!state)return;const e=currentEntity();
-  $('connection').textContent=(online?'LOCAL SAVED':'DISCONNECTED')+' · '+(seat.value==='one'?'seat one':'seat two');
-  $('worldName').textContent=state.eye.spaceId==='root'?'Local workshop · shared accepted state':'Inside the relic · saved nested space';
+  $('connection').textContent=(online?scopeLabel:'DISCONNECTED')+' · '+(seat.value==='one'?'seat one':'seat two');
+  $('worldName').textContent=state.eye.spaceId==='root'?(sessionOnly?'Local session · shared accepted state':'Local workshop · shared accepted state'):(sessionOnly?'Inside the relic · session Eye':'Inside the relic · saved nested space');
   $('dimensionBadge').textContent=state.eye.dimension+' spatial axes + separate time';
   $('geometryBadge').textContent='Flat · '+state.eye.spaceId+' · Eye r'+state.eye.revision;
   $('selection').hidden=!e;if(e){$('selectedName').textContent=e.name||e.id;$('selectedCoords').textContent=e.q.map((v,i)=>'x'+(i+1)+' '+v.toFixed(2)).join(' · ');}
   enterButton.disabled=!e?.innerSpaceId||!!state.journal?.readOnly;exitButton.disabled=!state.eye.stack.length||!!state.journal?.readOnly;
   $('peopleList').replaceChildren();for(const person of state.participants||[])$('peopleList').append(element('p',{textContent:(person.actorId||person.id||person.seat)+' · '+(person.online?'online':'offline')+(person.actorId===transport?.session?.actorId?' (you)':'')}));
-  $('journalState').textContent='Accepted sequence '+state.snapshot.acceptedSequence+' · '+JSON.stringify(state.journal);
-  $('metrics').textContent='Camera '+(camera.stream?'on, local only':'off')+' · no microphone · no frame uploads · accepted sequence '+state.snapshot.acceptedSequence;
+  $('journalState').textContent=(sessionOnly?'Session sequence ':'Accepted sequence ')+state.snapshot.acceptedSequence+' · '+JSON.stringify(state.journal);
+  $('metrics').textContent='Camera '+(camera.stream?'on, local only':'off')+' · no microphone · no frame uploads · '+(sessionOnly?'session-only server memory; no backend world/checkpoint/database file':'accepted sequence '+state.snapshot.acceptedSequence);
   const phase=state.capabilities?.material;
   phaseButton.hidden=!phase;phaseButton.disabled=connecting||!online||!!state.journal?.readOnly||!!transport?.session?.readOnly;
   if(phase){
@@ -95,7 +106,10 @@ function updateUI(){
     $('metrics').textContent+=' · simulation t='+state.snapshot.simulationTime.toFixed(3)+' · '+(phaseRunning?'running: at most 0.02 s per 0.5 wall s':'paused')+(diag?' · mass '+diag.mass.toFixed(8)+' · energy '+diag.energy.toFixed(5)+' · residual '+diag.residual.toExponential(2):'');
     if(state.materialHost?.fault)$('metrics').textContent+=' · phase stopped: '+state.materialHost.fault.code;
   }
-  capability.textContent=state.journal?.readOnly?'READ ONLY · saved history preserved':phase?'LOCAL · experimental 4D phase centroids · '+(state.eye.dimension===4?'learning unavailable':'11D material unavailable'):'LOCAL ONLY · accepted constraints; material motion / learning pending';
+  if(sessionOnly) capability.textContent=state.journal?.readOnly
+    ?'SESSION ONLY · process journal read-only · download available'
+    :'SESSION ONLY · volatile server memory · '+(phase?'experimental 4D phase centroids · ':'accepted constraints · ')+'no backend world/checkpoint/database file';
+  else capability.textContent=state.journal?.readOnly?'READ ONLY · saved history preserved':phase?'LOCAL · experimental 4D phase centroids · '+(state.eye.dimension===4?'learning unavailable':'11D material unavailable'):'LOCAL ONLY · accepted constraints; material motion / learning pending';
 }
 async function connect(){
   if(connecting)return;connecting=true;$('createRoom').disabled=true;
@@ -104,14 +118,14 @@ async function connect(){
     if(transport?.session&&!transport.closed)await disconnect();
     generation=++connectionGeneration;readOnlySeen=false;
     const previous=saved();let client;client=new LocalTransport({onState:next=>{if(generation===connectionGeneration&&transport===client)receive(next);}});transport=client;
-    let result;try{result=await client.admit(seat.value,previous?.seat===seat.value?previous.token:undefined);}catch(error){if(error.code==='JOURNAL_BACKPRESSURE')result=await client.admit(seat.value,previous?.seat===seat.value?previous.token:undefined,true);else if(error.code==='SESSION_EXPIRED'){remember(null);transport=null;throw Error('Previous local session expired. Click Open local seat again to restore your saved Eye.');}else{transport=null;throw error;}}
+    let result;try{result=await client.admit(seat.value,previous?.seat===seat.value?previous.token:undefined);}catch(error){if(error.code==='JOURNAL_BACKPRESSURE')result=await client.admit(seat.value,previous?.seat===seat.value?previous.token:undefined,true);else if(error.code==='SESSION_EXPIRED'){remember(null);transport=null;throw Error(sessionOnly?'Previous session no longer exists. Click Open session-only seat for a fresh world.':'Previous local session expired. Click Open local seat again to restore your saved Eye.');}else{transport=null;throw error;}}
     remember({seat:seat.value,token:result.token});
     host=await GripHost.open(client,{onPreview:(key,value)=>{if(generation!==connectionGeneration)return;if(value)previews.set(key,value);else previews.delete(key);},
       onSnapshot:()=>{},onReceipt:(_key,{command,receipt})=>{if(generation!==connectionGeneration)return;if(command.kind==='grab.target'&&receipt.status==='accepted')say(state.capabilities?.materialDynamics?'Grip target accepted. The phase field responds only through accepted numerical steps.':'Grip target accepted. Material coordinates remain unchanged: driver pending.');},
       onStatus:(_key,event)=>{if(generation!==connectionGeneration)return;if(event.code)say('Grip status: '+event.code);},requestTimeoutMs:5000,cleanupTimeoutMs:5000});
     inputs=new ApplicationInputs({host,nextEpoch:()=>client.nextEpoch(),project:(entity,anchor,point)=>screenTarget(renderer,entity,anchor,point),onRemove:key=>{if(generation===connectionGeneration)previews.delete(key);}});
     await gridFor(state.eye.dimension);configureAxes();receive(state);
-    $('welcome').hidden=true;$('toolbar').hidden=false;say('Saved world open. Tap a relic, travel with your Eye, or enter its nested space.');
+    $('welcome').hidden=true;$('toolbar').hidden=false;say(sessionOnly?'Session-only world open. State lasts while this local server process runs. Tap a relic, travel with your Eye, or enter its nested space.':'Saved world open. Tap a relic, travel with your Eye, or enter its nested space.');
     clearTimeout(poll);void refreshLoop(client,generation);
   }finally{connecting=false;$('createRoom').disabled=false;}
 }
@@ -149,7 +163,7 @@ async function navigate(enter){
     kind:enter?'space.enter':'space.exit',expectedRevision:enter?e.revision:eye.revision,
     payload:enter?{eyeId:'main',portalEntityId:e.id}:{eyeId:'main',returnFrameId:eye.stack.at(-1)?.id}};
   const receipt=await transport.submit(command);if(receipt.status!=='accepted')throw Error(receipt.code);
-  $('panel').close();say(enter?'Entered the mapped inner space. Your outer Eye is saved.':'Returned to your exact saved outer Eye. Accepted object state is unchanged.');
+  $('panel').close();say(enter?(sessionOnly?'Entered the mapped inner space. Your outer Eye remains in this session.':'Entered the mapped inner space. Your outer Eye is saved.'):(sessionOnly?'Returned to your session outer Eye. Accepted object state is unchanged.':'Returned to your exact saved outer Eye. Accepted object state is unchanged.'));
 }
 
 $('createRoom').onclick=safe(connect);
@@ -159,11 +173,11 @@ $('reconnect').onclick=safe(async()=>{
   finally{connecting=false;}
   await connect();
 });
-$('leaveRoom').onclick=safe(async()=>{if(connecting)return;connecting=true;try{await disconnect();$('welcome').hidden=false;$('toolbar').hidden=true;say('Local seat closed. Saved state remains on this computer.');}finally{connecting=false;}});
+$('leaveRoom').onclick=safe(async()=>{if(connecting)return;connecting=true;try{await disconnect();$('welcome').hidden=false;$('toolbar').hidden=true;say(sessionOnly?'Local seat closed. Session-only state remains only while the server process runs.':'Local seat closed. Saved state remains on this computer.');}finally{connecting=false;}});
 $('releaseGrab').onclick=safe(releaseAll);enterButton.onclick=safe(()=>navigate(true));exitButton.onclick=safe(()=>navigate(false));
 async function axisStep(sign){
   const owner=inputs,generation=connectionGeneration;const axis=+$('moveAxis').value,time=performance.now();
-  if($('moveTarget').value==='observer'){await editEye(eye=>{eye.q[axis]+=sign*.12;if(axis>=3)eye.slice['x'+(axis+1)]=eye.q[axis];});say('Your saved Eye moved along x'+(axis+1));return;}
+  if($('moveTarget').value==='observer'){await editEye(eye=>{eye.q[axis]+=sign*.12;if(axis>=3)eye.slice['x'+(axis+1)]=eye.q[axis];});say((sessionOnly?'Your session Eye moved along x':'Your saved Eye moved along x')+(axis+1));return;}
   if(!inputs.get('keyboard'))await beginGesture('keyboard','keyboard',selected,[0,0],time);
   if(owner!==inputs||generation!==connectionGeneration)return;const record=owner.get('keyboard');if(!record)return;
   const frame=copy(record.latest.frame);frame.q[axis]+=sign*.12;record.latest={frame,observedAt:time};
@@ -191,7 +205,7 @@ $('world').addEventListener('pointerup',safe(async event=>{
 }));
 for(const name of['pointercancel','lostpointercapture'])$('world').addEventListener(name,safe(async event=>{if(name==='lostpointercapture'&&!points.has(event.pointerId))return;points.delete(event.pointerId);if(orbit?.pointer===event.pointerId)orbit=null;await cancelGesture('pointer.'+event.pointerId,name);}));
 $('world').addEventListener('wheel',event=>{event.preventDefault();renderer.distance=Math.max(4,Math.min(22,renderer.distance+event.deltaY*.007));},{passive:false});
-const panelNames={move:'Accepted targets & nested space',eye:'Your saved Eye',camera:'Local camera',people:'Two local seats',record:'Saved accepted state'};
+const panelNames={move:'Accepted targets & nested space',eye:sessionOnly?'Your session Eye':'Your saved Eye',camera:'Local camera',people:'Two local seats',record:sessionOnly?'Session-only state':'Saved accepted state'};
 function captureConnection(){
   if(connecting||!transport||transport.closed||!inputs)throw Error('Wait for the local connection');
   const client=transport,owner=inputs,generation=connectionGeneration;
@@ -201,7 +215,10 @@ async function showPanel(id){
   const action=captureConnection();let cleanupError;
   try{await action.owner.releaseAll();}catch(error){cleanupError=error;}
   action.assert();$('panelTitle').textContent=panelNames[id];document.querySelectorAll('[data-sheet]').forEach(e=>e.classList.toggle('active',e.dataset.sheet===id));$('panel').showModal();
-  if(cleanupError)say('Cleanup is uncertain. Use Saved state → Reconcile uncertain grips; controls remain available.');
+  if(cleanupError){
+    const panelScope=document.documentElement?.dataset?.vivoStore==='memory'?'Session state':'Saved state';
+    say('Cleanup is uncertain. Use '+panelScope+' → Reconcile uncertain grips; controls remain available.');
+  }
 }
 
 document.querySelectorAll('[data-panel]').forEach(button=>button.onclick=safe(()=>showPanel(button.dataset.panel)));
@@ -227,10 +244,10 @@ $('previewCamera').onclick=safe(async()=>{$('panel').close();await camera.start(
 $('stopCamera').onclick=()=>{camera.stop();updateUI();};$('visibility').onchange=()=>{camera.profile=$('visibility').value;camera.sampleLuma();};
 $('torch').onclick=safe(()=>camera.light());$('exposure').onclick=safe(()=>camera.exposure());
 
-phaseButton.onclick=safe(async()=>{const context=captureConnection();const running=!context.client.current.capabilities.material?.running;await context.client.call('materialRun',{running});context.assert();say(running?'Experimental phase running slowly. Solid marks show accepted field centroids.':'Phase paused; accepted fields remain saved.');});
+phaseButton.onclick=safe(async()=>{const context=captureConnection();const running=!context.client.current.capabilities.material?.running;await context.client.call('materialRun',{running});context.assert();say(running?'Experimental phase running slowly. Solid marks show accepted field centroids.':sessionOnly?'Phase paused; accepted fields remain in this server process.':'Phase paused; accepted fields remain saved.');});
 saveButton.onclick=safe(async()=>{const action=captureConnection();await action.owner.releaseAll();action.assert();await action.client.refresh();action.assert();say('Checkpoint confirmed at accepted sequence '+action.client.current.snapshot.acceptedSequence+'. Saved atomically on this computer.');});
-exportButton.onclick=safe(async()=>{const action=captureConnection();await action.owner.releaseAll();action.assert();const data=await action.client.export();action.assert();const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)+'\n'],{type:'application/json'}));const link=element('a',{href:url,download:'vivo-accepted-state.json'});link.click();setTimeout(()=>URL.revokeObjectURL(url),5000);say('Exported accepted state; camera frames and session tokens excluded.');});
-reconcileButton.onclick=safe(async()=>{const action=captureConnection();await action.owner.reconcileAll();action.assert();await action.client.refresh();action.assert();say('Reconciliation completed for known grips. Saved state refreshed.');});
+exportButton.onclick=safe(async()=>{const action=captureConnection();await action.owner.releaseAll();action.assert();const data=await action.client.export();action.assert();const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)+'\n'],{type:'application/json'}));const link=element('a',{href:url,download:'vivo-accepted-state.json'});link.click();setTimeout(()=>URL.revokeObjectURL(url),5000);say(sessionOnly?'Downloaded accepted session state; this is not durable storage or an import/reload path. Camera frames and session tokens excluded.':'Exported accepted state; camera frames and session tokens excluded.');});
+reconcileButton.onclick=safe(async()=>{const action=captureConnection();await action.owner.reconcileAll();action.assert();await action.client.refresh();action.assert();say(sessionOnly?'Reconciliation completed for known grips in this session.':'Reconciliation completed for known grips. Saved state refreshed.');});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){points.clear();camera.stop();void cancelAll('tab-hidden').catch(e=>say(e.message));}});
 window.addEventListener('pagehide',()=>{camera.stop();void cancelAll('page-hidden').catch(()=>{});});
 window.addEventListener('keydown',event=>{if(event.key==='Escape')void cancelAll('escape').catch(e=>say(e.message));});
@@ -242,4 +259,4 @@ function drawTarget(target,label,color){
 }
 function draw(now){if(!rendering)return;renderer.draw(now);for(const constraint of state?.constraints||[])drawTarget(constraint.target,'ACCEPTED GRIP TARGET','#c8a7ed');for(const preview of previews.values())drawTarget(preview.frame,'PROVISIONAL TARGET','#edd395');requestAnimationFrame(draw);}
 requestAnimationFrame(draw);
-requestJSON('/api/local/ready').then(data=>{if(!data.ok)throw Error('Local authority is not ready');$('serviceReady').textContent='LOCAL SERVER READY · Python + Node · camera off';$('createRoom').disabled=false;}).catch(error=>{$('serviceReady').textContent=error.message;$('createRoom').disabled=true;});
+requestJSON('/api/local/ready').then(data=>{if(!data.ok)throw Error('Local authority is not ready');$('serviceReady').textContent='LOCAL SERVER READY · Python + Node · '+(sessionOnly?'SESSION ONLY · camera off':'camera off');$('createRoom').disabled=false;}).catch(error=>{$('serviceReady').textContent=error.message;$('createRoom').disabled=true;});

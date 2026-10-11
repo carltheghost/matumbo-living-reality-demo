@@ -9,4 +9,4 @@ if [ ! -f web/input/controller.mjs ]; then
   echo 'Exact PR75 input dependency is missing. From repository root run: python scripts/vivo/stage_input_dependency.py' >&2
   exit 1
 fi
-exec "$PYTHON" -m server.local_application "$@"
+PYTHONDONTWRITEBYTECODE=1 exec "$PYTHON" -m server.local_application "$@"

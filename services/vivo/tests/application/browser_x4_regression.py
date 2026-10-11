@@ -22,6 +22,7 @@ from playwright.async_api import async_playwright
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8767/"
 REPORT = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("browser-x4-regression.json")
+EXPECT_SESSION_ONLY = os.environ.get("VIVO_EXPECT_SESSION_ONLY") == "1"
 
 
 async def wait_text(page, selector, needle, timeout=20):
@@ -138,7 +139,7 @@ async def open_seat(context, seat, page_errors, requests, responses, response_ta
     await wait_text(page, "#serviceReady", "LOCAL SERVER READY")
     await page.select_option("#localSeat", seat)
     await page.click("#createRoom")
-    await wait_text(page, "#connection", "LOCAL SAVED")
+    await wait_text(page, "#connection", "SESSION ONLY" if EXPECT_SESSION_ONLY else "LOCAL SAVED")
     return page
 
 
@@ -366,6 +367,25 @@ async def main():
                     and not await two.locator("#recordCamera").is_checked()
                 ),
             )
+            if EXPECT_SESSION_ONLY:
+                session_label = await one.locator("#localCapabilities").inner_text()
+                connection_label = await one.locator("#connection").inner_text()
+                check(
+                    "Session-only capability and connection labels are explicit",
+                    "SESSION ONLY" in session_label and "SESSION ONLY" in connection_label
+                    and "backend world/checkpoint/database file" in session_label,
+                    {"capability": session_label, "connection": connection_label},
+                )
+                await open_panel(one, "record")
+                check(
+                    "Session-only record panel hides save checkpoint and keeps export download",
+                    await one.locator("#saveLocal").count() == 0
+                    and await one.locator("#exportLocal").is_visible()
+                    and "Download accepted session JSON" in await one.locator("#exportLocal").inner_text(),
+                    {"saveButtons": await one.locator("#saveLocal").count(),
+                     "export": await one.locator("#exportLocal").inner_text()},
+                )
+                await one.click("#closePanel")
 
             first = await x4_target(one, "one", requests, responses, prior_sequence=0)
             check(
