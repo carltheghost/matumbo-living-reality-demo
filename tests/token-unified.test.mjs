@@ -65,7 +65,11 @@ test("send moves funds and is idempotent", () => {
   assert.equal(r1.duplicate, false);
   assert.equal(ledger.balance("you", "TUMBO-SIM"), before - 1000);
   assert.equal(ledger.balance("alice", "TUMBO-SIM"), 1000);
-  const r2 = ledger.send({ to: "alice", amountFluff: 1000, idempotencyKey: "k-1" });
+  assert.throws(
+    () => ledger.send({ to: "alice", amountFluff: 1000, idempotencyKey: "k-1", memo: "changed" }),
+    (error) => error.code === "IDEM_MISMATCH",
+  );
+  const r2 = ledger.send({ to: "alice", amountFluff: 1000, idempotencyKey: "k-1", memo: "hi" });
   assert.equal(r2.duplicate, true);
   assert.equal(r2.id, r1.id);
   assert.equal(ledger.balance("you", "TUMBO-SIM"), before - 1000); // no double move
