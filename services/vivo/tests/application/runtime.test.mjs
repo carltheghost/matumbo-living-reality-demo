@@ -230,7 +230,7 @@ test('event backpressure is serialized; cleanup remains possible and history is 
 test('journal backpressure revokes Studio writes and preserves the mounted snapshot',async t=>{
   const {runtime,one}=await fixture(t,{maxEvents:18});
   let current=await state(runtime,one);
-  while(current.state.journal.remainingEvents>1){
+  while(current.state.journal.remainingEvents>0){
     const eye=entryView();eye.q[0]+=current.state.eye.revision*.01+.01;eye.slice.x1=eye.q[0];
     current=await runtime.dispatch({op:'moveEye',token:one.token,args:{view:eye,expectedRevision:current.state.eye.revision}});
   }

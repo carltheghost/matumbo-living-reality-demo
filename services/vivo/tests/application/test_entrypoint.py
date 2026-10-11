@@ -179,7 +179,7 @@ class MountedApplicationTests(unittest.IsolatedAsyncioTestCase):
         one = await self.open('one')
         await self.open('two')
         state = await self.rpc(one, 'state')
-        while state['state']['journal']['remainingEvents'] > 1:
+        while state['state']['journal']['remainingEvents'] > 0:
             eye = state['state']['eye']
             eye['q'][0] += .01
             eye['slice']['x1'] = eye['q'][0]
