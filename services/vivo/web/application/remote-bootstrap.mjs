@@ -9,7 +9,7 @@ const $=id=>document.getElementById(id),element=(tag,p={})=>Object.assign(docume
 const renderer=new Renderer($('world'),$('overlay')),grids=new Map(),previews=new Map();
 let transport=null,host=null,inputs=null,state=null,selected=null,hand=null,online=false,role=null;
 const say=t=>{$('status').textContent=t;},safe=fn=>async(...a)=>{try{return await fn(...a);}catch(e){say(e.code||e.message||String(e));}};
-const tokenFromUrl=()=>{const p=new URLSearchParams(location.hash.slice(1));return p.get('token')||'';};
+const tokenFromUrl=()=>{const p=new URLSearchParams(location.hash.slice(1)),token=p.get('token')||'';if(token)history.replaceState(null,'',location.pathname+location.search);return token;};
 const tokenInput=element('input',{id:'remoteToken',type:'password',autocomplete:'off',placeholder:'Owner or invitation token',value:tokenFromUrl()});
 const tokenLabel=element('label',{textContent:'Private access token'});tokenLabel.append(tokenInput);
 $('displayName').closest('label').replaceWith(tokenLabel);
@@ -19,6 +19,8 @@ $('welcome').querySelector('a').hidden=true;document.querySelector('[data-panel=
 document.querySelector('[data-panel="people"]').textContent='♧ People';document.querySelector('[data-panel="record"]').textContent='↧ State';
 $('moveTarget').options[0].textContent='Shared learned material object';
 const moveSheet=document.querySelector('[data-sheet="move"]');
+const objectLabel=element('label',{textContent:'Active object'}),objectSelect=element('select',{id:'remoteObject'});objectLabel.append(objectSelect);moveSheet.prepend(objectLabel);
+objectSelect.onchange=()=>{selected=objectSelect.value;renderer.selected=selected;updateUI();};
 moveSheet.querySelector('p').textContent='Drag the same object from two devices. Matching cooperative grips become separate accepted constraints; one canonical learned material state responds to both.';
 moveSheet.querySelector('p.muted').textContent='Root is native 4D; the nested relic is native 11D. Time is separate. Dashed markers are targets, not the object itself.';
 const enterButton=element('button',{id:'enterSpace',textContent:'Enter selected inner world'});
@@ -48,6 +50,9 @@ function updateUI(){if(!state)return;const e=currentEntity();$('connection').tex
   $('worldName').textContent=state.eye.spaceId==='root'?'Shared 4D adaptive workshop':'Inside persistent 11D relic world';
   $('dimensionBadge').textContent=state.eye.dimension+' spatial axes + separate time';$('geometryBadge').textContent='Eye r'+state.eye.revision+' · seq '+state.snapshot.acceptedSequence;
   $('selection').hidden=!e;if(e){$('selectedName').textContent=e.name;$('selectedCoords').textContent=e.q.map((v,i)=>'x'+(i+1)+' '+v.toFixed(3)).join(' · ');}
+  const ids=Object.keys(state.snapshot.spaces[state.eye.spaceId].entities);
+  if(objectSelect.options.length!==ids.length||ids.some((id,i)=>objectSelect.options[i]?.value!==id))objectSelect.replaceChildren(...ids.map(id=>element('option',{value:id,textContent:state.snapshot.spaces[state.eye.spaceId].entities[id].name||id})));
+  objectSelect.value=selected;
   enterButton.disabled=!e?.innerSpaceId;exitButton.disabled=!state.eye.stack?.length;
   $('peopleList').replaceChildren();for(const p of state.participants||[])$('peopleList').append(element('p',{textContent:(p.actorId||p.seat)+' · '+(p.online?'online':'offline')+(p.actorId===transport.actorId?' (you)':'')}));
   const running=state.capabilities.material?.running;materialButton.hidden=role!=='owner';materialButton.textContent=(running?'Pause':'Run')+' learned adaptive material';
@@ -75,7 +80,28 @@ $('closePanel').onclick=()=>$('panel').close();document.querySelectorAll('.toolb
 $('homeView').onclick=safe(()=>editEye(eye=>{eye.q=Array(eye.dimension).fill(0);eye.basis=viewBasis(eye.dimension,.55,.68);for(const k of Object.keys(eye.slice||{}))eye.slice[k]=0;}));
 $('followSelected').onclick=safe(()=>editEye(eye=>{const e=currentEntity();eye.q=[...e.q];for(let a=3;a<eye.dimension;a++)eye.slice['x'+(a+1)]=e.q[a];}));
 $('sliceValue').oninput=safe(()=>editEye(eye=>{const a=+$('sliceAxis').value;eye.slice['x'+(a+1)]=+$('sliceValue').value;eye.q[a]=+$('sliceValue').value;}));
-for(const [id,sign] of [['axisMinus',-1],['axisPlus',1]])$(id).onclick=safe(()=>editEye(eye=>{const a=+$('moveAxis').value;eye.q[a]+=sign*.25;if(a>=3)eye.slice['x'+(a+1)]=eye.q[a];}));
+async function axisMove(sign){
+  const axis=+$('moveAxis').value;
+  if($('moveTarget').value==='observer')return editEye(eye=>{eye.q[axis]+=sign*.25;if(axis>=3)eye.slice['x'+(axis+1)]=eye.q[axis];});
+  const entity=currentEntity();if(!entity)throw Error('Select an object');
+  if(!state.capabilities.material?.running)throw Error(role==='owner'?'Run learned material first':'Ask the owner to run learned material');
+  const key='axis:'+crypto.randomUUID(),epoch=await transport.nextEpoch(),target={spaceId:entity.spaceId,chart:entity.chart,dimension:entity.dimension,q:[...entity.q]};
+  target.q[axis]+=sign*.25;
+  await host.begin(key,{entity,source:'keyboard',inputEpoch:epoch,cooperativeGroup:cooperativeGroup(entity.id)});
+  const observedAt=performance.now();
+  try{
+    if(!host.offer(key,target,observedAt))throw Error('Axis target rejected');
+    const deadline=performance.now()+1800;
+    while(performance.now()<deadline){
+      const accepted=state?.snapshot.spaces[entity.spaceId]?.entities[entity.id];
+      if(accepted?.revision>entity.revision)break;
+      await new Promise(resolve=>setTimeout(resolve,40));
+    }
+    if(!(state?.snapshot.spaces[entity.spaceId]?.entities[entity.id]?.revision>entity.revision))throw Error('No material step accepted the held target');
+    await host.end(key,'axis-nudge');
+  }catch(error){await host.cancel(key,'axis-nudge-failed').catch(()=>{});throw error;}
+}
+for(const [id,sign] of [['axisMinus',-1],['axisPlus',1]])$(id).onclick=safe(()=>axisMove(sign));
 $('remoteMaterial').onclick=safe(async()=>{await transport.materialRun(!state.capabilities.material.running);});
 $('remoteExport').onclick=safe(async()=>{await releaseAll();const data=await transport.export();const u=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)+'\n'],{type:'application/json'}));const a=element('a',{href:u,download:'vivo-remote-accepted.json'});a.click();setTimeout(()=>URL.revokeObjectURL(u),5000);});
 $('remoteReconcile').onclick=safe(()=>inputs.reconcileAll());

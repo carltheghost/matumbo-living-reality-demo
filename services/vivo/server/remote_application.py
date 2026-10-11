@@ -360,7 +360,24 @@ def remote_index():
 
 async def make_remote_app(data_dir, owner_token, origin, *, store="posix"):
     gateway = RemoteGateway(Path(data_dir), owner_token, origin, store=store)
-    app = web.Application(client_max_size=MAX_MESSAGE)
+
+    @web.middleware
+    async def security(request, handler):
+        response = await handler(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["X-Frame-Options"] = "SAMEORIGIN"
+        response.headers["Permissions-Policy"] = "camera=(self), microphone=(), geolocation=()"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' blob:; "
+            "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
+            "media-src 'self' blob:; connect-src 'self' ws: wss:; "
+            "worker-src 'self' blob:; frame-ancestors 'self'; object-src 'none'; base-uri 'self'"
+        )
+        return response
+
+    app = web.Application(client_max_size=MAX_MESSAGE, middlewares=[security])
     app["gateway"] = gateway
     install_module_routes(app, REPOSITORY)
     grids = {d: Geometry("flat", d).sample_grid() for d in (4, 11)}
