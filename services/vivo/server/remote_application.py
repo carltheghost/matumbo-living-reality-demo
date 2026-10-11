@@ -27,6 +27,11 @@ from aiohttp import WSMsgType, web
 
 from .local_application import LocalBridge
 from .application.adaptive_host import AdaptiveApplicationHost
+from .authority.module_routes import install_module_routes
+from .geometry import Geometry
+
+WEB_ROOT = Path(__file__).resolve().parents[1] / "web"
+REPOSITORY = WEB_ROOT.parents[2]
 
 MAX_MESSAGE = 64 * 1024
 MAX_CONNECTIONS = 2
@@ -335,10 +340,29 @@ class RemoteGateway:
         return ws
 
 
+def remote_index():
+    source = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    marker = '<script type="module" src="shared.js"></script>'
+    require(source.count(marker) == 1, "REMOTE_INDEX_CHANGED")
+    source = source.replace("<head>", '<head><base href="/">', 1)
+    source = source.replace("</head>", '<link rel="stylesheet" href="/application/remote.css"></head>', 1)
+    source = source.replace(marker, '<script type="module" src="/application/remote-bootstrap.mjs"></script>')
+    source = source.replace("maTumbo Viva · Shared Workshop", "Vivo · Canonical Remote")
+    source = source.replace("SHARED WORKSHOP · 0.8.1", "CANONICAL REMOTE · TWO PERSON")
+    source = source.replace("Meet inside<br>the mathematics.", "One world.<br>Different places.")
+    source = source.replace(
+        "Move the same objects with another person. Explore curved spaces. Watch a learned local rule grow a guidance field.",
+        "Shape one persistent learned material with another person, keep independent Eyes, and enter the same nested higher-dimensional world."
+    )
+    return source
+
+
 async def make_remote_app(data_dir, owner_token, origin, *, store="posix"):
     gateway = RemoteGateway(Path(data_dir), owner_token, origin, store=store)
     app = web.Application(client_max_size=MAX_MESSAGE)
     app["gateway"] = gateway
+    install_module_routes(app, REPOSITORY)
+    grids = {d: Geometry("flat", d).sample_grid() for d in (4, 11)}
 
     async def health(_request):
         try:
@@ -352,8 +376,35 @@ async def make_remote_app(data_dir, owner_token, origin, *, store="posix"):
                                   "publicDeploymentVerified": False},
                                  status=200 if ok else 503)
 
+    async def index(_request):
+        return web.Response(text=remote_index(), content_type="text/html",
+                            headers={"Cache-Control": "no-cache", "X-Vivo-Application": "canonical-remote-1"})
+
+    async def grid(request):
+        try:
+            dimension = int(request.query.get("dimension", "4"))
+            value = grids[dimension]
+        except (ValueError, KeyError):
+            raise web.HTTPBadRequest(text="Remote Vivo supports the canonical 4D root and 11D inner world")
+        return web.json_response(value)
+
+    async def asset(_request, name):
+        data = (WEB_ROOT / name).read_bytes()
+        content_type = "text/css" if name.endswith(".css") else "text/javascript"
+        return web.Response(body=data, content_type=content_type,
+                            headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"})
+
+    app.router.add_get("/", index)
+    app.router.add_get("/remote/", index)
     app.router.add_get("/healthz", health)
+    app.router.add_get("/api/remote/grid", grid)
     app.router.add_get("/ws", gateway.websocket)
+    for name in ("shared.css","render.js","camera.js","geometry.js","hand-worker.js"):
+        app.router.add_get("/" + name, lambda request, n=name: asset(request, n))
+    for name in ("remote-bootstrap.mjs","remote-transport.mjs","interactions.mjs","adapters.mjs","remote.css"):
+        app.router.add_get("/application/" + name,
+                           lambda request, n=name: asset(request, "application/" + n))
+    app.router.add_static("/vendor/", WEB_ROOT / "vendor", show_index=False, follow_symlinks=False)
     app.on_startup.append(lambda _app: gateway.start())
     app.on_shutdown.append(lambda _app: gateway.stop())
     return app

@@ -17,16 +17,16 @@ export class ApplicationInputs {
     if(!this.host.state(key)||this.host.state(key).cleanupConfirmed)this.known.delete(key);
     this.onRemove(key);
   }
-  async begin(key,{entity,source,point,observedAt}){
+  async begin(key,{entity,source,point,observedAt,cooperativeGroup=null}){
     if(this.closed)throw failure('INPUT_CONNECTION_CLOSED');
     if(this.records.has(key))throw failure('INPUT_SOURCE_ACTIVE');
     if(this.known.has(key)&&!this.host.state(key)?.cleanupConfirmed)throw failure('INPUT_RECONCILIATION_REQUIRED');
-    const record={key,source,entity:copy(entity),anchor:[...point],latest:{frame:frameOf(entity),observedAt},ended:false,started:false,terminal:null};
+    const record={key,source,entity:copy(entity),anchor:[...point],latest:{frame:frameOf(entity),observedAt},cooperativeGroup,ended:false,started:false,terminal:null};
     this.records.set(key,record);
     record.ready=(async()=>{
       const inputEpoch=await this.nextEpoch();if(record.ended||this.closed)return;
       record.started=true;this.known.add(key);
-      await this.host.begin(key,{entity:record.entity,source,inputEpoch});
+      await this.host.begin(key,{entity:record.entity,source,inputEpoch,cooperativeGroup:record.cooperativeGroup});
       if(!record.ended&&record.latest)this.host.offer(key,record.latest.frame,record.latest.observedAt);
     })();
     try{await record.ready;return record;}
