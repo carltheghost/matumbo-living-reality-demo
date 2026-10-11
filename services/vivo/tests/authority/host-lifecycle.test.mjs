@@ -42,7 +42,8 @@ async function fixture(t,wrap=p=>p,options={}) {
   });
   const host=await GripHost.open(port,{now:()=>clock.time,setTimer:clock.set,clearTimer:clock.clear,
     requestTimeoutMs:100,acquisitionTimeoutMs:100,cleanupTimeoutMs:100,...options,
-    onReceipt:(key,event)=>receipts.push({key,...event}),onSnapshot:s=>snapshots.push(s),
+    onReceipt:(key,event)=>{receipts.push({key,...structuredClone(event)});return options.onReceipt?.(key,event);},
+    onSnapshot:s=>snapshots.push(s),
     onStatus:(key,s)=>statuses.push({key,...s})});
   t.after(()=>{clock.timers.clear();});
   const entity=id=>a.getSnapshot().spaces.root.entities[id];
@@ -286,4 +287,201 @@ for(const released of [false,1,'true']) test(`unconfirmed reconciliation flag ${
   const f=await fixture(t,p=>({...p,reconcileLease:async()=>({released,snapshot:p.getSnapshot()})}));
   await f.begin();await assert.rejects(f.host.reconcile('hand'),e=>e.code==='RECONCILIATION_UNCONFIRMED');
   assert.equal(f.host.state('hand').cleanupConfirmed,false);assert.ok(f.a.inspectLease('root','relic'));
+});
+
+const observerMutations=[
+  ['status',event=>{event.receipt.status='rejected';event.receipt.code='UI_NORMALIZED';}],
+  ['nested result',event=>{
+    event.receipt.result.leaseId='observer.fake';event.receipt.result.leaseMs=0;
+    event.receipt.result.entity.id='other';event.receipt.result.entity.q[0]=99;
+    event.receipt.result.entity.dimension=11;
+  }],
+  ['command identity',event=>{event.command.id='observer.command';event.command.payload.entityId='other';}],
+];
+for(const [name,mutate] of observerMutations) {
+  test(`acquisition observer ${name} mutation cannot change acceptance or release ownership`,async t=>{
+    const f=await fixture(t,p=>p,{onReceipt:(_key,event)=>{if(event.command.kind==='grab.begin')mutate(event);}});
+    await f.begin();const lease=f.a.inspectLease('root','relic');assert.ok(lease);
+    assert.equal(f.host.state('hand').phase,'active');assert.equal(f.host.state('hand').leaseId,lease.id);
+    assert.equal(f.host.state('hand').cleanupConfirmed,false);
+    assert.equal(f.offer(),true);await f.finish(f.host.close());
+    assert.equal(f.a.inspectLease('root','relic'),null);assert.equal(f.host.state('hand').cleanupConfirmed,true);
+    assert.equal(f.outcomes[0].receipt.status,'accepted');assert.equal(f.outcomes[0].receipt.result.entity.q[0],0);
+    assert.equal(f.reconciles.length,0);assert.equal(f.receipts[0].receipt.status,'accepted');
+  });
+  test(`late acquisition observer ${name} mutation cannot falsify cleanup`,async t=>{
+    const h=holdAfter('grab.begin'),f=await fixture(t,p=>h.wrap({...p,inspectLease:undefined}),
+      {onReceipt:(_key,event)=>{if(event.command.kind==='grab.begin')mutate(event);}});
+    const begun=assert.rejects(f.begin(),e=>e.code==='ACQUIRE_UNCERTAIN');await h.ready.promise;
+    const closed=assert.rejects(f.host.close(),e=>e.code==='CLOSE_REQUIRES_RECONCILIATION');
+    f.clock.run(100);await begun;await closed;assert.ok(f.a.inspectLease('root','relic'));
+    h.held.resolve(h.receipt);await until(()=>f.host.state('hand').cleanupConfirmed);
+    assert.equal(f.a.inspectLease('root','relic'),null);assert.equal(f.host.state('hand').controller,null);
+    assert.equal(f.host.state('hand').phase,'reconciled');assert.equal(f.reconciles.length,1);
+    assert.equal(f.reconciles[0].leaseId,h.receipt.result.leaseId);
+    assert.equal(f.receipts[0].receipt.status,'accepted');assert.equal(f.receipts[0].late,true);await f.host.close();
+  });
+}
+
+test('observer cannot turn an authoritative rejected acquisition into a controller or release another owner',async t=>{
+  let observerCalls=0;
+  const f=await fixture(t,p=>p,{onReceipt:(_key,event)=>{
+    observerCalls++;event.receipt.status='accepted';event.receipt.code='OK';
+    event.receipt.result={leaseId:'observer.fake',leaseMs:3000,entity:f.entity('relic')};
+  }});
+  const b=f.world.attach({actorId:'B'});await b.open();
+  const held=await b.submit({schema:'vivo.command/1',id:'owner',worldId:'lifecycle.world',spaceId:'root',kind:'grab.begin',
+    expectedRevision:7,payload:{entityId:'relic',source:'touch',inputEpoch:1}});
+  await assert.rejects(f.begin(),e=>e.code==='LEASE_HELD');await f.host.close();
+  assert.equal(observerCalls,1);assert.equal(f.host.state('hand').controller,null);assert.equal(f.reconciles.length,0);
+  assert.equal(f.receipts[0].receipt.status,'rejected');assert.equal(b.inspectLease('root','relic').id,held.result.leaseId);
+  await b.close();
+});
+
+test('asynchronous observer mutation and rejection cannot alter accepted acquisition evidence',async t=>{
+  const observer=deferred();
+  const f=await fixture(t,p=>p,{onReceipt:async(_key,event)=>{
+    if(event.command.kind!=='grab.begin')return;
+    await observer.promise;event.receipt.result.entity.q.fill(99);event.receipt.status='rejected';throw null;
+  }});
+  await f.begin();observer.resolve();await turn();
+  assert.equal(f.host.state('hand').phase,'active');assert.equal(f.receipts[0].receipt.status,'accepted');
+  assert.equal(f.offer(),true);await f.finish(f.host.close());assert.equal(f.a.inspectLease('root','relic'),null);
+});
+
+for(const settlement of ['null','rejected lookup','lookup timeout']) test(`late acquisition rejection wins over older ${settlement} inspection`,async t=>{
+  const h=holdAfter('grab.begin'),inspecting=deferred(),inspection=deferred();
+  const f=await fixture(t,p=>{
+    const held=h.wrap(p);
+    return {...held,submit:c=>c.payload.inputEpoch===1?held.submit(c):p.submit(c),
+      inspectLease:()=>{inspecting.resolve();return inspection.promise;}};
+  });
+  const b=f.world.attach({actorId:'B'});await b.open();
+  await b.submit({schema:'vivo.command/1',id:'holder',worldId:'lifecycle.world',spaceId:'root',kind:'grab.begin',
+    expectedRevision:7,payload:{entityId:'relic',source:'touch',inputEpoch:1}});
+  const begun=assert.rejects(f.begin(),e=>e.code==='ACQUIRE_UNCERTAIN');await h.ready.promise;
+  assert.equal(h.receipt.status,'rejected');f.clock.run(100);await inspecting.promise;
+  h.held.resolve(h.receipt);await until(()=>f.host.state('hand').cleanupConfirmed);
+  assert.equal(f.host.state('hand').phase,'closed');
+  if(settlement==='null')inspection.resolve(null);
+  else if(settlement==='rejected lookup')inspection.reject(Error('old lookup failure'));
+  else f.clock.run(100);
+  await begun;assert.equal(f.host.state('hand').phase,'closed');
+  await b.close();await f.begin('hand','relic','hand',2);
+  assert.equal(f.host.state('hand').phase,'active');await f.finish(f.host.close());
+  assert.equal(f.a.inspectLease('root','relic'),null);
+});
+
+test('late accepted acquisition cleanup wins over an older negative inspection',async t=>{
+  const h=holdAfter('grab.begin'),inspecting=deferred(),inspection=deferred();
+  const f=await fixture(t,p=>h.wrap({...p,inspectLease:()=>{inspecting.resolve();return inspection.promise;}}));
+  const begun=assert.rejects(f.begin(),e=>e.code==='ACQUIRE_UNCERTAIN');await h.ready.promise;
+  const closed=f.host.close();f.clock.run(100);await inspecting.promise;
+  h.held.resolve(h.receipt);await until(()=>f.host.state('hand').cleanupConfirmed);
+  inspection.resolve(null);await begun;await closed;
+  assert.equal(f.host.state('hand').phase,'reconciled');assert.equal(f.reconciles.length,1);
+  assert.equal(f.a.inspectLease('root','relic'),null);
+});
+
+test('older positive inspection cannot replace the lease identified by a late accepted receipt',async t=>{
+  const h=holdAfter('grab.begin'),inspecting=deferred(),inspection=deferred(),cleanup=deferred(),cleaning=deferred();let release;
+  const f=await fixture(t,p=>h.wrap({...p,inspectLease:()=>{inspecting.resolve();return inspection.promise;},
+    reconcileLease:e=>{release=()=>p.reconcileLease(e).then(cleanup.resolve,cleanup.reject);cleaning.resolve();return cleanup.promise;}}));
+  const begun=assert.rejects(f.begin(),e=>e.code==='ACQUIRE_UNCERTAIN');await h.ready.promise;
+  f.clock.run(100);await inspecting.promise;h.held.resolve(h.receipt);await cleaning.promise;
+  inspection.resolve({id:'older.lookup',source:'hand',inputEpoch:1,spaceId:'root',entityId:'relic'});await turn();
+  assert.equal(f.host.state('hand').leaseId,h.receipt.result.leaseId);
+  release();await begun;assert.equal(f.reconciles.length,1);assert.equal(f.a.inspectLease('root','relic'),null);
+  assert.equal(f.host.state('hand').leaseId,h.receipt.result.leaseId);await f.host.close();
+});
+
+for(const sharedHosts of [false,true]) test(`timed-out competing grab cannot release same-source/epoch owner across ${sharedHosts?'two hosts':'two keys'}`,async t=>{
+  const held=deferred(),ready=deferred();let rejection,hold=false;
+  const f=await fixture(t,p=>({...p,submit:async c=>{
+    const r=await p.submit(c);
+    if(hold&&c.kind==='grab.begin'){rejection=r;ready.resolve();return held.promise;}return r;
+  }}));
+  const left=sharedHosts?await GripHost.open(f.a,{now:()=>f.clock.time,setTimer:f.clock.set,clearTimer:f.clock.clear}):f.host;
+  await left.begin('hand:left',{entity:f.entity('relic'),source:'hand',inputEpoch:1});
+  const owner=f.a.inspectLease('root','relic');assert.ok(owner.acquireCommandId);hold=true;
+  const begun=assert.rejects(f.begin('hand:right'),e=>e.code==='ACQUIRE_UNCERTAIN');await ready.promise;
+  assert.equal(rejection.code,'LEASE_HELD');f.clock.run(100);await begun;
+  assert.equal(f.reconciles.length,0);assert.equal(f.a.inspectLease('root','relic').id,owner.id);
+  assert.equal(f.host.state('hand:right').cleanupConfirmed,false);assert.equal(f.host.state('hand:right').phase,'blocked');
+  assert.equal(left.state('hand:left').phase,'active');
+  held.resolve(rejection);await until(()=>f.host.state('hand:right').cleanupConfirmed);
+  assert.equal(f.host.state('hand:right').phase,'closed');assert.equal(f.a.inspectLease('root','relic').id,owner.id);
+  await f.finish(left.close());await f.host.close();assert.equal(f.a.inspectLease('root','relic'),null);
+});
+
+test('two same-source/epoch acquisition ACKs withheld still require exact command ownership',async t=>{
+  const gates=[deferred(),deferred()],ready=[deferred(),deferred()],replies=[];let count=0;
+  const f=await fixture(t,p=>({...p,submit:async c=>{
+    if(c.kind!=='grab.begin')return p.submit(c);
+    const index=count++,r=await p.submit(c);replies[index]=r;ready[index].resolve();return gates[index].promise;
+  }}));
+  const left=assert.rejects(f.begin('hand:left'),e=>e.code==='ACQUIRE_UNCERTAIN');await ready[0].promise;
+  const right=assert.rejects(f.begin('hand:right'),e=>e.code==='ACQUIRE_UNCERTAIN');await ready[1].promise;
+  assert.equal(replies[0].status,'accepted');assert.equal(replies[1].code,'LEASE_HELD');
+  const owner=f.a.inspectLease('root','relic');
+  // Timeout only the second acquisition first. Timer IDs reflect insertion order,
+  // but advancing the first deadline too would hide the wrong-owner deletion.
+  const secondTimer=[...f.clock.timers].at(-1);f.clock.timers.delete(secondTimer[0]);secondTimer[1].fn();await right;
+  assert.equal(f.reconciles.length,0);assert.equal(f.a.inspectLease('root','relic').id,owner.id);
+  assert.equal(f.host.state('hand:right').cleanupConfirmed,false);
+  f.clock.run(100);await left;assert.equal(f.reconciles.length,1);
+  assert.equal(f.reconciles[0].leaseId,owner.id);assert.equal(f.a.inspectLease('root','relic'),null);
+  gates[0].resolve(replies[0]);gates[1].resolve(replies[1]);await until(()=>f.host.state('hand:right').cleanupConfirmed);
+  await f.host.close();assert.equal(f.reconciles.length,1);
+});
+
+for(const correlation of ['missing','different']) test(`${correlation} inspection command correlation stays uncertain until a valid receipt`,async t=>{
+  const h=holdAfter('grab.begin');
+  const f=await fixture(t,p=>h.wrap({...p,inspectLease:(...args)=>{
+    const lease=p.inspectLease(...args);
+    if(correlation==='missing')delete lease.acquireCommandId;else lease.acquireCommandId='different.command';
+    return lease;
+  }}));
+  const begun=assert.rejects(f.begin(),e=>e.code==='ACQUIRE_UNCERTAIN');await h.ready.promise;
+  const closed=assert.rejects(f.host.close(),e=>e.code==='CLOSE_REQUIRES_RECONCILIATION');
+  f.clock.run(100);await begun;await closed;
+  assert.equal(f.reconciles.length,0);assert.ok(f.a.inspectLease('root','relic'));assert.equal(f.host.state('hand').cleanupConfirmed,false);
+  h.held.resolve(h.receipt);await until(()=>f.host.state('hand').cleanupConfirmed);
+  assert.equal(f.a.inspectLease('root','relic'),null);assert.equal(f.reconciles.length,1);await f.host.close();
+});
+
+test('inspection correlation is detached from authority storage and cannot rewrite live ownership',async t=>{
+  const f=await fixture(t);await f.begin();
+  const original=f.a.inspectLease('root','relic'),inspection=f.a.inspectLease('root','relic');
+  inspection.acquireCommandId='changed.command';inspection.actorId='other';inspection.id='changed.lease';
+  inspection.source='touch';inspection.inputEpoch=999;
+  assert.deepEqual(f.a.inspectLease('root','relic'),original);
+  assert.equal(original.acquireCommandId,f.sent[0].id);assert.equal(original.actorId,'A');
+  const other=f.world.attach({actorId:'A'});await other.open();assert.equal(other.inspectLease('root','relic'),null);
+  await f.finish(f.host.close());await other.close();
+});
+
+test('restart accepts a legacy checkpoint without acquisition correlation and still drops old capabilities',async t=>{
+  const f=await fixture(t);await f.begin();
+  const record=f.world.checkpoint();
+  for(const lease of Object.values(record.state.leases))delete lease.acquireCommandId;
+  // Reproduce the existing private persisted codec, with the pre-extension lease shape.
+  const hash=async value=>{
+    const canonical=JSON.stringify(value,(_,v)=>v&&typeof v==='object'&&!Array.isArray(v)
+      ?Object.fromEntries(Object.keys(v).sort().map(k=>[k,v[k]])):v);
+    return Buffer.from(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(canonical))).toString('hex');
+  };
+  record.state.snapshot.stateHash=await hash({snapshot:{...record.state.snapshot,stateHash:null},leases:record.state.leases,eyes:record.state.eyes});
+  record.digest=await hash(record.state);
+  let saved=structuredClone(record);
+  const restored=await LocalLeaseWorld.create({now:()=>f.clock.time,store:{load:async()=>structuredClone(saved),
+    compareAndSwap:async(expected,next)=>{assert.equal(expected,saved.digest);saved=structuredClone(next);}}});
+  assert.equal(restored.constraints().length,0);assert.equal(Object.keys(restored.checkpoint().state.leases).length,0);
+  assert.equal(restored.checkpoint().state.events.at(-1).kind,'restart-release');
+  assert.deepEqual(restored.snapshot().spaces.root.entities,f.a.getSnapshot().spaces.root.entities);
+  const a=restored.attach({actorId:'restored'});await a.open();
+  const command={schema:'vivo.command/1',id:'new.after.restart',worldId:'lifecycle.world',spaceId:'root',kind:'grab.begin',
+    expectedRevision:7,payload:{entityId:'relic',source:'hand',inputEpoch:1}};
+  const r=await a.submit(command);assert.equal(r.status,'accepted');assert.equal(a.inspectLease('root','relic').acquireCommandId,command.id);
+  await a.close();await f.finish(f.host.close());
 });

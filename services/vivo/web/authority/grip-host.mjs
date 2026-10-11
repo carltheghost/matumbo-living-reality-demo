@@ -97,11 +97,22 @@ export class GripHost {
     this.#fence(key,e);
     if(!e.leaseId && typeof this.#authority.inspectLease==='function') {
       // An absent lease is not a fence on an acquisition still in transport.
-      // Only an owner-scoped positive match lets us reconcile that acquisition.
-      const known=await this.#deadline(Promise.resolve().then(()=>
-        this.#authority.inspectLease(e.entity.spaceId,e.entity.id)),
-        this.#options.cleanupTimeoutMs,'ACQUIRE_CLEANUP_UNCONFIRMED');
-      if(known?.inputEpoch===e.inputEpoch && known.source===e.source
+      // Owner/source/epoch alone can also describe another key's rejected grab.
+      // Adoption additionally requires the exact accepted acquisition command.
+      let known;
+      try {
+        known=await this.#deadline(Promise.resolve().then(()=>
+          this.#authority.inspectLease(e.entity.spaceId,e.entity.id)),
+          this.#options.cleanupTimeoutMs,'ACQUIRE_CLEANUP_UNCONFIRMED');
+      } catch(err) {
+        if(e.cleanupConfirmed)return e.cleanupResult;
+        if(!e.leaseId)throw err;
+      }
+      // A late authoritative receipt can settle or identify this acquisition
+      // while inspection is pending. Its evidence wins over the older lookup.
+      if(e.cleanupConfirmed)return e.cleanupResult;
+      if(!e.leaseId && known?.acquireCommandId===e.acquireCommandId && known.actorId===this.#session.actorId
+          && known.inputEpoch===e.inputEpoch && known.source===e.source
           && known.spaceId===e.entity.spaceId && known.entityId===e.entity.id) e.leaseId=known.id;
     }
     if(e.leaseId)return this.#recover(key,e);
@@ -110,7 +121,9 @@ export class GripHost {
   #acquireReceipt(key,e,command,raw,late) {
     const r=copy(validateReceipt(raw));
     if(r.id!==command.id||r.authorityId!==this.#session.authorityId) throw error('ACQUIRE_RECEIPT_MISMATCH');
-    this.#notify('receipt',key,{command,receipt:r,late,cancelled:e.cancelled});
+    // Observers may normalize or annotate evidence, but never the receipt or
+    // nested acquisition result that drives our ownership/cleanup decisions.
+    this.#notify('receipt',key,copy({command,receipt:r,late,cancelled:e.cancelled}));
     if(r.status!=='accepted') {
       e.cleanupConfirmed=true;
       if(e.phase!=='reconciled')e.phase='closed';
@@ -161,6 +174,7 @@ export class GripHost {
     const idPrefix='host.'+crypto.randomUUID();
     const command=validateCommand({schema:'vivo.command/1',id:idPrefix+':acquire',worldId:this.#session.worldId,
       spaceId:entity.spaceId,kind:'grab.begin',expectedRevision:entity.revision,payload:{entityId:entity.id,source,inputEpoch}});
+    e.acquireCommandId=command.id;
     this.#entries.set(key,e);
     e.acquisition=this.#beginAcquisition(key,e,command,idPrefix);
     return e.acquisition;
