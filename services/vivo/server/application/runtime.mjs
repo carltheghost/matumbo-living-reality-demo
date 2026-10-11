@@ -6,7 +6,7 @@ import {randomBytes} from 'node:crypto';
 import {dirname,isAbsolute,join,resolve} from 'node:path';
 import {lstat} from 'node:fs/promises';
 import {pathToFileURL} from 'node:url';
-import {LocalLeaseWorld} from '../../web/authority/lease-authority.mjs';
+import {LocalLeaseWorld,MemoryAuthorityStore} from '../../web/authority/lease-authority.mjs';
 import {FileAuthorityStore} from '../authority/file-store.mjs';
 import {validateCommand} from '../../contracts/validate.mjs';
 import {workshopSeed,phaseWorkshopSeed,entryView,LOCAL_SEATS,ENTITY_COUNT} from './seed.mjs';
@@ -67,6 +67,7 @@ class MeteredStore {
   record=null; bytes=0;
   constructor(backend,kind) {this.file=backend;this.kind=kind;}
   static async open(path,kind,phase) {
+    if(kind==='memory') return new MeteredStore(new MemoryAuthorityStore(),kind);
     if(kind==='posix') {
       if(process.platform==='win32')fail('POSIX_STORE_UNSUPPORTED');
       return new MeteredStore(new FileAuthorityStore({path,maxBytes:MAX_BYTES}),kind);
@@ -108,8 +109,9 @@ export class MountedRuntime {
     this.#timer.unref();
   }
   static async open({path,store:storeKind='posix',maxEvents=65536,reserve=MIN_RESERVE,phase=false,initializeMaterial}={}) {
-    if(typeof phase!=='boolean'||!['posix','sqlite'].includes(storeKind))fail('INVALID_RUNTIME_OPTIONS');
-    if(typeof path!=='string'||!isAbsolute(path)||!Number.isSafeInteger(maxEvents)||maxEvents>65536||
+    if(typeof phase!=='boolean'||!['posix','sqlite','memory'].includes(storeKind))fail('INVALID_RUNTIME_OPTIONS');
+    if((storeKind!=='memory'&&(typeof path!=='string'||!isAbsolute(path)))||
+      (storeKind==='memory'&&path!==undefined&&path!==null)||!Number.isSafeInteger(maxEvents)||maxEvents>65536||
       !Number.isSafeInteger(reserve)||reserve<MIN_RESERVE||maxEvents<reserve+2)fail('INVALID_RUNTIME_OPTIONS');
     const store=await MeteredStore.open(path,storeKind,phase);
     try {
@@ -182,9 +184,13 @@ export class MountedRuntime {
       fault:this.#fault};
   }
   #capabilities() {
+    const memory=this.#store.kind==='memory';
     return {materialDynamics:this.#phase,materialLearning:false,remoteMultiplayer:false,localSeats:2,nested:true,
       material:this.#phase?{profile:'phase',dimension:4,spaceId:'root',resolution:[8,8,8,8],running:this.#materialRunning,simulationStep:.02,wallIntervalMs:500,leaseRevisionProtocol:'vivo.lease-material/1'}:null,
-      persistence:this.#store.kind==='sqlite'?'SQLite WAL/FULL exclusive checkpoint':'POSIX atomic checkpoint',sessionIdleMs:SESSION_IDLE_MS,
+      persistence:memory?'Session-only volatile memory; no backend world/checkpoint/database file':this.#store.kind==='sqlite'?'SQLite WAL/FULL exclusive checkpoint':'POSIX atomic checkpoint',
+      persistenceMode:memory?'session-only':'durable',sessionOnly:memory,
+      sessionOnlyGuarantee:memory?'Accepted world, checkpoint and database state exists only while this local server process runs; OS/browser writes are outside this guarantee.':null,
+      sessionIdleMs:SESSION_IDLE_MS,
       maxRequestBytes:MAX_LINE_BYTES,leaseMs:3000,journal:this.#journal()};
   }
   get capabilities() {return this.#capabilities();}
@@ -385,18 +391,22 @@ async function* privateLines(stream){
   if(pending.length||discard)yield {error:'INCOMPLETE_REQUEST'};
 }
 async function main() {
-  if(!isAbsolute(process.argv[2]??''))fail('ABSOLUTE_CHECKPOINT_PATH_REQUIRED');
-  let phase=false,maxEvents=65536,store='posix';const flags=process.argv.slice(3),seen=new Set();
+  let path=null,phase=false,maxEvents=65536,store='posix';const flags=process.argv.slice(2),seen=new Set();
   while(flags.length) {
     const flag=flags.shift();if(seen.has(flag))fail('INVALID_RUNTIME_OPTIONS');seen.add(flag);
     if(flag==='--phase')phase=true;
     else if(flag==='--journal-events'&&flags.length)maxEvents=Number(flags.shift());
     else if(flag==='--store'&&flags.length)store=flags.shift();
+    else if(!flag.startsWith('-')&&path===null)path=flag;
     else fail('INVALID_RUNTIME_OPTIONS');
   }
+  if(!['posix','sqlite','memory'].includes(store))fail('INVALID_RUNTIME_OPTIONS');
+  if(store==='memory') {
+    if(path!==null)fail('MEMORY_PATH_UNSUPPORTED');
+  } else if(!isAbsolute(path??'')) fail('ABSOLUTE_CHECKPOINT_PATH_REQUIRED');
   const write=value=>new Promise((done,reject)=>process.stdout.write(JSON.stringify(value)+'\n',error=>error?reject(error):done()));
   const lines=privateLines(process.stdin);
-  const runtime=await MountedRuntime.open({path:process.argv[2],store,phase,maxEvents,initializeMaterial:async snapshot=>{
+  const runtime=await MountedRuntime.open({path,store,phase,maxEvents,initializeMaterial:async snapshot=>{
     await write({initializePhase:true,snapshot});const line=await lines.next();
     if(line.done||line.value.error)fail('PHASE_INITIALIZER_FAILED');return line.value.value;
   }});
