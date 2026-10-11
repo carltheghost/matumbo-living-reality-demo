@@ -358,3 +358,35 @@ body.assembly-mode #reality-assembly .reality-lens-feature-panel[data-lens-surfa
   content:none!important;
   display:none!important;
 }
+
+/* Acceptance pass: keep the same spatial field, but make its control status
+   explicit and usable when the viewport collapses to a phone. */
+#reality-assembly{overflow:hidden;isolation:isolate}
+#reality-assembly .assembly-selection-hint{max-width:calc(100vw - 32px);overflow-wrap:anywhere}
+#reality-assembly .assembly-group-label{opacity:.88;color:#e1cd93!important;border-color:rgba(214,185,112,.42)!important;background:rgba(7,18,24,.62)!important;box-shadow:0 4px 18px rgba(0,0,0,.32)!important;text-shadow:0 1px 8px rgba(0,0,0,.8)}
+#reality-assembly .assembly-node-label{opacity:.76;color:#d6bf83!important;text-shadow:0 1px 8px rgba(0,0,0,.82)!important}
+#reality-assembly .assembly-group-label:hover,#reality-assembly .assembly-group-label:focus-visible,#reality-assembly .assembly-node-label.is-selected,#reality-assembly .assembly-node-label.is-hovered{opacity:1}
+#reality-assembly [data-clean][aria-pressed="true"],
+#reality-assembly [data-directory-toggle][aria-expanded="true"]{border-color:#d5b66f!important;color:#ffe6aa!important;background:#17384a!important;box-shadow:0 0 0 2px rgba(213,182,111,.14),0 7px 20px rgba(0,0,0,.3)}
+#reality-assembly .assembly-domain-toggle[aria-expanded="true"]{border-color:#70cbe9!important;color:#e5fbff!important;background:#12364a!important}
+#immersive-toolbar{box-shadow:0 12px 32px rgba(0,0,0,.42);border-color:#4d8eaa!important;background:linear-gradient(145deg,#102637f5,#07131ef5)!important}
+#immersive-toolbar button{min-width:44px;min-height:40px;padding:7px 9px;border:1px solid #467389;border-radius:7px;background:#0d2637;color:#d9f6ff;font:600 11px/1.1 system-ui,sans-serif;cursor:pointer;touch-action:manipulation}
+#immersive-toolbar button:hover,#immersive-toolbar button:focus-visible{border-color:#9deaff;background:#17465e;color:#fff;outline:2px solid rgba(157,234,255,.26);outline-offset:2px}
+#immersive-toolbar button:disabled{border-color:#324c5a;background:#0a1823;color:#75909c;opacity:.72;cursor:not-allowed;box-shadow:none}
+#immersive-toolbar [role="status"]{max-width:220px;color:#a9c6d1;font-size:10px;line-height:1.3;letter-spacing:.035em}
+#immersive-toolbar[data-xr-state="unsupported"] [role="status"]{color:#e5c58c}
+#immersive-toolbar[data-xr-state="active"] [role="status"]{color:#a9efd1}
+@media(max-width:700px){
+  body.assembly-mode #immersive-toolbar{top:68px!important;right:8px!important;left:auto!important;width:min(268px,calc(100vw - 16px))!important;max-width:calc(100vw - 16px)!important;padding:6px!important;gap:5px!important;border-radius:12px!important;justify-content:flex-end}
+  body.assembly-mode #immersive-toolbar [role="status"]{display:block!important;flex:1 0 100%;order:4;max-width:none;padding:2px 3px 0;white-space:normal;font-size:9px;line-height:1.3}
+  body.assembly-mode #immersive-toolbar button{min-width:44px!important;min-height:44px!important;font-size:10px}
+  #reality-assembly .assembly-selection-hint{font-size:10px;line-height:1.35;padding:7px 10px;letter-spacing:.015em}
+}
+@media(max-height:600px) and (orientation:landscape){
+  body.assembly-mode #immersive-toolbar{top:auto!important;bottom:8px!important;right:8px!important;width:min(260px,calc(100vw - 16px))!important;max-width:260px!important}
+  body.assembly-mode #immersive-toolbar [role="status"]{display:block!important;font-size:8px}
+}
+@media(prefers-reduced-motion:reduce){
+  #immersive-toolbar *{animation:none!important;transition:none!important}
+  #immersive-toolbar button{scroll-behavior:auto!important}
+}

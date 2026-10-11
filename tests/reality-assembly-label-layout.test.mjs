@@ -1,6 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {assemblySideLabelPoint,placeAssemblyLabel,shouldShowRealityObjectLabel} from '../src/render/reality-assembly.js';
+import {assemblyInputGuidance,assemblySideLabelPoint,placeAssemblyLabel,shouldShowRealityObjectLabel} from '../src/render/reality-assembly.js';
+
+test('input guidance names the active pointer and the other supported paths',()=>{
+  assert.equal(assemblyInputGuidance('mouse').mode,'mouse');
+  assert.match(assemblyInputGuidance('touch').text,/touch tap.*hand point \+ pinch.*mouse drag \+ wheel/i);
+  assert.equal(assemblyInputGuidance('xr').mode,'hand');
+  assert.match(assemblyInputGuidance('mouse').moveText,/Shift.*depth/i);
+  assert.doesNotMatch(assemblyInputGuidance('touch').moveText,/Shift/i);
+});
 
 test('object labels sit a consistent margin beside either side of the object',()=>{
   assert.deepEqual(assemblySideLabelPoint({position:[3,4,5],cameraRight:[1,0,0],halfWidth:1.2,side:1}),[4.68,4,5]);

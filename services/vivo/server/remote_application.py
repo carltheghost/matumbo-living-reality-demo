@@ -429,7 +429,7 @@ def remote_index():
     marker = '<script type="module" src="shared.js"></script>'
     require(source.count(marker) == 1, "REMOTE_INDEX_CHANGED")
     source = source.replace("<head>", '<head><base href="/">', 1)
-    source = source.replace("</head>", '<link rel="stylesheet" href="/application/remote.css"></head>', 1)
+    source = source.replace("</head>", '<link rel="stylesheet" href="/application/remote.css"><link rel="stylesheet" href="/application/vivo-ui-overlay.css"></head>', 1)
     source = source.replace(marker, '<script type="module" src="/application/remote-bootstrap.mjs"></script>')
     source = source.replace("maTumbo Viva · Shared Workshop", "Vivo · Canonical Remote")
     source = source.replace("SHARED WORKSHOP · 0.8.1", "CANONICAL REMOTE · TWO PERSON")
@@ -509,9 +509,10 @@ async def make_remote_app(data_dir, owner_token, origin, *, store="posix"):
     app.router.add_get("/ws", gateway.websocket)
     for name in ("shared.css","render.js","camera.js","geometry.js","hand-worker.js"):
         app.router.add_get("/" + name, lambda request, n=name: asset(request, n))
-    for name in ("remote-bootstrap.mjs","remote-transport.mjs","offline-branch.mjs","interactions.mjs","adapters.mjs","camera-compat.mjs","remote.css","device-check.mjs","device-check.css"):
+    for name in ("remote-bootstrap.mjs","remote-transport.mjs","offline-branch.mjs","interactions.mjs","adapters.mjs","camera-compat.mjs","remote.css","device-check.mjs","device-check.css","vivo-ui-overlay.mjs","vivo-ui-overlay.css"):
+        source_name = name if name.startswith("vivo-ui-overlay.") else "application/" + name
         app.router.add_get("/application/" + name,
-                           lambda request, n=name: asset(request, "application/" + n))
+                           lambda request, n=source_name: asset(request, n))
     app.router.add_static("/vendor/", WEB_ROOT / "vendor", show_index=False, follow_symlinks=False)
     app.on_startup.append(lambda _app: gateway.start())
     app.on_shutdown.append(lambda _app: gateway.stop())

@@ -5,7 +5,7 @@ if(resolveCityRoute(location.search).status==='rejected'){
   const safeUrl=new URL(location.href);safeUrl.search='?feature=reality-lens';history.replaceState(null,'',safeUrl);
 }
 import { mountCenteredSurfaces } from './render/centered-surfaces.js?v=20260923-reality-lens-controls4';
-import { createImmersiveSession } from './render/immersive-session.js?v=20260923-xr-status3';
+import { createImmersiveSession } from './render/immersive-session.js?v=20261011-xr-acceptance1';
 import { createMediaPreview } from './render/media-preview.js?v=20260922-cache2';
 import { mountTokenTicker } from './render/token-ticker.js?v=20260920-ticker1';
 // Hibernation vault console — mounts the vault glass-cube chip.
@@ -22,7 +22,7 @@ import { initMobilePanelManager } from './render/mobile-panel-manager.js?v=20260
 import { installMobileFreezeGuard } from './render/mobile-freeze-guard.js?v=20260922-mfg1';
 import { mountPhotoMascot } from './render/photo-mascot-mount.js?v=20260922-cache2';
 import { createPersonStudio } from './render/person-studio.js?v=20260918-avatar-chess';
-import { createRealityAssembly, CLEAN_LANDING_CAMERA } from './render/reality-assembly.js?v=20260926-native-object-tab1';
+import { createRealityAssembly, CLEAN_LANDING_CAMERA } from './render/reality-assembly.js?v=20261011-assembly-acceptance1';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { MANIPULATE_MODES } from './render/manipulate-controls.js?v=20260922-cache2';

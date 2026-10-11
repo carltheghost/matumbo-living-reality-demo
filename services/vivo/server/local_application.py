@@ -227,7 +227,7 @@ def local_index(*, phase=False, adaptive=False, store='posix'):
     text = text.replace('<html lang="en">',
                         f'<html lang="en" data-vivo-store="{store}" data-vivo-stage="accepted-preview" data-vivo-phase="{str(phase).lower()}">', 1)
     text = text.replace(marker, '<script type="module" src="/application/bootstrap.mjs"></script>')
-    text = text.replace('</head>', '<link rel="stylesheet" href="/application/local.css"></head>', 1)
+    text = text.replace('</head>', '<link rel="stylesheet" href="/application/local.css"><link rel="stylesheet" href="/vivo-ui-overlay.css"></head>', 1)
     stage_label = 'ACCEPTED PHASE PREVIEW · BACKEND STAGE' if phase else 'ACCEPTED BACKEND PREVIEW · BACKEND STAGE'
     text = text.replace('SHARED WORKSHOP · 0.8.1', stage_label)
     text = text.replace('Meet inside<br>the mathematics.', 'One saved world.<br>Two independent Eyes.')
@@ -261,7 +261,7 @@ def studio_index():
     if not text.startswith('<!DOCTYPE html>') or text.count('</body>') != 1:
         raise RuntimeError('Imported Studio changed; review the local mount')
     text = text.replace('<head>', '<head><base href="/">', 1)
-    text = text.replace('</head>', '<link rel="icon" href="data:,"></head>', 1)
+    text = text.replace('</head>', '<link rel="icon" href="data:,"><link rel="stylesheet" href="/vivo-ui-overlay.css"></head>', 1)
     bridge_style = '''<style id="vivoLocalEntryStyle">
 #vivoLocalEntry{position:fixed;right:180px;top:80px;z-index:120;display:flex;align-items:center;gap:8px;max-width:calc(100vw - 24px);padding:6px 8px;border:1px solid rgba(148,235,220,.30);border-radius:9px;background:rgba(8,19,25,.88);backdrop-filter:blur(14px);font:10px ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.04em;color:#9db8b9;box-shadow:0 8px 24px rgba(0,0,0,.18)}
 #vivoLocalEntry span{color:#a9eadc}
@@ -365,7 +365,8 @@ def studio_index():
  </aside>
  <script>(function(){const toggle=document.getElementById('vivoStudioTools'),drawer=document.getElementById('vivoStudioToolsDrawer'),close=document.getElementById('vivoStudioToolsClose');if(!toggle||!drawer)return;const setOpen=open=>{drawer.hidden=!open;toggle.setAttribute('aria-expanded',String(open));toggle.textContent=open?'Close tools':'Studio tools';};toggle.addEventListener('click',()=>setOpen(drawer.hidden));close?.addEventListener('click',()=>setOpen(false));const click=selector=>document.querySelector(selector)?.click();document.querySelectorAll('[data-vivo-mode]').forEach(button=>button.addEventListener('click',()=>{click('[data-mode="'+button.dataset.vivoMode+'"]');}));document.querySelectorAll('[data-vivo-lens]').forEach(button=>button.addEventListener('click',()=>{click('[data-lens="'+button.dataset.vivoLens+'"]');}));document.getElementById('vivoStudioParent')?.addEventListener('click',()=>click('#parentBranch'));document.getElementById('vivoStudioExperiment')?.addEventListener('click',()=>{click('#experimentButton');setOpen(false);});const original=document.getElementById('search'),search=document.getElementById('vivoStudioSearch');search?.addEventListener('input',()=>{if(!original)return;original.value=search.value;original.dispatchEvent(new Event('input',{bubbles:true}));});})();</script>'''
     text = text.replace('</head>', bridge_style + '</head>', 1)
-    text = text.replace('</body>', asset_bridge + entry + '</body>', 1)
+    overlay_bootstrap = '<script type="module" data-vivo-overlay="studio">import {installStudioOverlay} from "/vivo-ui-overlay.mjs";installStudioOverlay();</script>'
+    text = text.replace('</body>', asset_bridge + entry + overlay_bootstrap + '</body>', 1)
     return source, text
 
 
