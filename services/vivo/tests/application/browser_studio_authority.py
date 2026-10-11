@@ -1,5 +1,9 @@
 """Two-tab Full Studio authority-bridge smoke; camera and XR remain off.
 
+The evidence exercises both projection-only ``studio.transform`` and the
+separate CAS-fenced canonical ``studio.commit`` action, including cancellation,
+active-lease rejection, stale global state, independent Eyes and offline fork.
+
 Run against a mounted local server, for example:
 
     python services/vivo/tests/application/browser_studio_authority.py \
@@ -91,24 +95,53 @@ async def main():
             initial_one = await pages[0].evaluate("window.__vivoStudioAuthorityBridge.debug()")
             initial_two = await pages[1].evaluate("window.__vivoStudioAuthorityBridge.debug()")
             assert initial_one["worldEyesIndependent"] and initial_two["worldEyesIndependent"]
+            assert initial_one["canonicalCommitCapability"]["allowed"] is True
             assert initial_one["acceptedEntityQ"] == [-1.2, -0.15, 0.25, 0]
             assert initial_two["authorityEye"]["q"] == [0, 0, 0, 0]
 
-            # Change only the rich Studio node, then publish through the explicit
-            # binding command. The authority maps no velocities/edges/material.
-            first_publish = await pages[0].evaluate("""
+            # Cancellation is a no-op and does not even submit a command.
+            canceled = await pages[0].evaluate("window.__vivoStudioAuthorityBridge.commitCanonical({cancelled:true})")
+            assert canceled == {"status": "cancelled", "code": "STUDIO_COMMIT_CANCELLED"}
+            canceled_state = await pages[0].evaluate("window.__vivoStudioAuthorityBridge.debug()")
+            assert canceled_state["acceptedEntityQ"] == [-1.2, -0.15, 0.25, 0]
+            assert canceled_state["acceptedEntityRevision"] == 0
+
+            # First commit the rich Studio node through the stronger canonical
+            # command. This advances both the selected binding and the unbound
+            # canonical entity, while preserving all non-q entity state.
+            first_commit = await pages[0].evaluate("""
                 () => {
                   const app = window.FieldApp;
                   app.engine.q[55 * 9] = 2.5;
+                  return window.__vivoStudioAuthorityBridge.commitCanonical();
+                }
+            """)
+            assert first_commit["status"] == "accepted", first_commit
+            await wait_for_binding(pages[1], 2.5)
+            after_commit = await pages[1].evaluate("window.__vivoStudioAuthorityBridge.debug()")
+            assert after_commit["acceptedEntityQ"] == [2.5, -0.15, 0.25, 0]
+            assert after_commit["acceptedEntityRevision"] == 1
+            assert after_commit["binding"]["q"] == [2.5, after_commit["binding"]["q"][1], after_commit["binding"]["q"][2], after_commit["binding"]["q"][3]]
+            committed_state = await pages[0].evaluate("window.__vivoStudioAuthorityBridge.debug()")
+            assert committed_state["canonicalCommitResult"]["result"]["canonical"] is True
+
+            # A projection-only publish must not silently commit the canonical
+            # entity. The accepted binding moves to 2.6, but entity q/revision
+            # remain at the committed 2.5/1 values.
+            projection_publish = await pages[0].evaluate("""
+                () => {
+                  const app = window.FieldApp;
+                  app.engine.q[55 * 9] = 2.6;
                   return window.__vivoStudioAuthorityBridge.publish();
                 }
             """)
-            assert first_publish["status"] == "accepted", first_publish
-            await wait_for_binding(pages[1], 2.5)
+            assert projection_publish["status"] == "accepted", projection_publish
+            await wait_for_binding(pages[1], 2.6)
             after_publish = await pages[1].evaluate("window.__vivoStudioAuthorityBridge.debug()")
-            assert after_publish["acceptedEntityQ"] == [-1.2, -0.15, 0.25, 0]
-            assert after_publish["binding"]["q"] == [2.5, after_publish["binding"]["q"][1], after_publish["binding"]["q"][2], after_publish["binding"]["q"][3]]
-            assert after_publish["lastApplied"]["q"][0] == 2.5
+            assert after_publish["acceptedEntityQ"] == [2.5, -0.15, 0.25, 0]
+            assert after_publish["acceptedEntityRevision"] == 1
+            assert after_publish["binding"]["q"] == [2.6, after_publish["binding"]["q"][1], after_publish["binding"]["q"][2], after_publish["binding"]["q"][3]]
+            assert after_publish["lastApplied"]["q"][0] == 2.6
 
             # Select a second existing Full Studio node explicitly.  Only its
             # accepted projection changes; the canonical Workpiece entity and
@@ -131,7 +164,7 @@ async def main():
             assert workpiece_state["bindings"] == ["studio.node.echo", "studio.node.workpiece", "studio.node.portal"]
             await pages[0].evaluate("window.__vivoStudioAuthorityBridge.selectBinding('studio.node.echo')")
             await pages[1].evaluate("window.__vivoStudioAuthorityBridge.selectBinding('studio.node.echo')")
-            await wait_for_binding(pages[1], 2.5)
+            await wait_for_binding(pages[1], 2.6)
 
             # A real concurrent Studio edit must not be silently overwritten.
             # Seat one keeps its local projection while seat two publishes a
@@ -170,6 +203,56 @@ async def main():
             assert after_conflict_resolution["localDiverged"] is False
             assert after_conflict_resolution["publishConflict"] is None, after_conflict_resolution
 
+            # An active authoritative lease blocks canonical commit. The bridge
+            # surfaces the rejection and leaves both local Studio and accepted
+            # canonical q/revision unchanged; it never retries or applies a
+            # rejected result.
+            held = await pages[0].evaluate("""
+                async () => {
+                  const bridge = window.__vivoStudioAuthorityBridge;
+                  const snapshot = bridge.transport.getSnapshot();
+                  const entity = snapshot.spaces.root.entities.relic;
+                  return bridge.transport.submit({schema:'vivo.command/1',id:'browser.lease.begin',worldId:snapshot.worldId,spaceId:'root',kind:'grab.begin',expectedRevision:entity.revision,
+                    payload:{entityId:'relic',source:'touch',inputEpoch:1}});
+                }
+            """)
+            assert held["status"] == "accepted", held
+            held_commit = await pages[0].evaluate("window.__vivoStudioAuthorityBridge.commitCanonical()")
+            assert held_commit["status"] == "rejected" and held_commit["code"] == "STUDIO_ENTITY_HELD", held_commit
+            held_state = await pages[0].evaluate("window.__vivoStudioAuthorityBridge.debug()")
+            assert held_state["acceptedEntityQ"] == [2.5, -0.15, 0.25, 0]
+            assert held_state["acceptedEntityRevision"] == 1
+            assert held_state["localProjection"][0] == 2.8
+            await pages[0].evaluate("""
+                async () => {
+                  const bridge = window.__vivoStudioAuthorityBridge;
+                  const snapshot = bridge.transport.getSnapshot();
+                  const lease = await bridge.transport.inspectLease('root','relic');
+                  const entity = snapshot.spaces.root.entities.relic;
+                  await bridge.transport.submit({schema:'vivo.command/1',id:'browser.lease.end',worldId:snapshot.worldId,spaceId:'root',kind:'grab.end',expectedRevision:entity.revision,
+                    payload:{entityId:'relic',leaseId:lease.id,inputEpoch:1,reason:'browser-test-release'}});
+                }
+            """)
+
+            # A stale global CAS is also rejected without changing the bridge's
+            # accepted or local projection state.
+            stale_commit = await pages[0].evaluate("""
+                async () => {
+                  const bridge = window.__vivoStudioAuthorityBridge;
+                  const snapshot = bridge.transport.getSnapshot();
+                  const binding = snapshot.studioBindings['studio.node.echo'];
+                  const entity = snapshot.spaces.root.entities.relic;
+                  return bridge.transport.submit({schema:'vivo.command/1',id:'browser.studio.stale',worldId:snapshot.worldId,spaceId:binding.spaceId,kind:'studio.commit',expectedRevision:snapshot.acceptedSequence - 1,
+                    payload:{bindingId:binding.bindingId,sourceModel:binding.sourceModel,sourceNode:binding.sourceNode,entityId:binding.entityId,dimension:binding.dimension,chart:binding.chart,q:[4.4,-1.1,.8,.2],metadata:binding.metadata,
+                      expectedBindingRevision:binding.bindingRevision,expectedEntityRevision:entity.revision}});
+                }
+            """)
+            assert stale_commit["status"] == "rejected" and stale_commit["code"] == "STALE_WORLD", stale_commit
+            stale_state = await pages[0].evaluate("window.__vivoStudioAuthorityBridge.debug()")
+            assert stale_state["acceptedEntityQ"] == [2.5, -0.15, 0.25, 0]
+            assert stale_state["acceptedEntityRevision"] == 1
+            assert stale_state["localProjection"][0] == 2.8
+
             # Move only seat one's authority Eye using the existing accepted API;
             # seat two must retain its own Eye and the Studio bridge must not call
             # moveEye while applying the shared object.
@@ -203,7 +286,9 @@ async def main():
             assert branch["snapshot"]["studioBindings"]["studio.node.echo"]["q"][0] == 2.8
             assert branch["snapshot"]["branch"]["parentWorldId"] == "vivo.local.workshop"
             camera_calls = await pages[0].evaluate("window.__vivoCameraCalls") + await pages[1].evaluate("window.__vivoCameraCalls")
-            evidence = {"initialOne": initial_one, "initialTwo": initial_two, "afterPublish": after_publish,
+            evidence = {"initialOne": initial_one, "initialTwo": initial_two, "canceled": canceled,
+                        "firstCommit": first_commit, "afterCommit": after_commit, "projectionPublish": projection_publish,
+                        "afterPublish": after_publish, "heldCommit": held_commit, "staleCommit": stale_commit,
                         "workpiecePublish": workpiece_publish, "workpieceState": workpiece_state,
                         "conflict": conflict, "afterConflictResolution": after_conflict_resolution,
                         "oneEye": one_eye, "twoEye": two_eye, "resolved": resolved, "offlineBranch": {
@@ -213,7 +298,7 @@ async def main():
     assert camera_calls == 0, camera_calls
     assert "moveEye" not in rpc_ops["two"], rpc_ops
     assert not page_errors, page_errors
-    report = {"schema": "vivo.browser-studio-authority/1", "physicalDeviceValidated": False,
+    report = {"schema": "vivo.browser-studio-authority/2", "physicalDeviceValidated": False,
               "cameraCalls": camera_calls, "rpcOps": rpc_ops, "pageErrors": page_errors, "evidence": evidence}
     REPORT.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report, indent=2))

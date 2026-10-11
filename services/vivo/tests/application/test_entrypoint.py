@@ -121,6 +121,8 @@ class MountedApplicationTests(unittest.IsolatedAsyncioTestCase):
             # presentation title.
             self.assertIn('data-vivo-authority-binding', text)
             self.assertIn('Publish selected', text)
+            self.assertIn('Commit canonical', text)
+            self.assertIn('Canonical commit capability', text)
             self.assertIn("/services/vivo/contracts/studio-binding.mjs", text)
             self.assertIn('CameraPresence.prototype.loadVision', text)
             self.assertIn('CameraPresence.prototype.modelBytes', text)

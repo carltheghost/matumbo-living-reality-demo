@@ -119,6 +119,8 @@ jobs:
           else:
               raise SystemExit(f'local application readiness timeout: {last!r}')
           PY
+          timeout --signal=TERM 60s python services/vivo/tests/application/browser_studio_authority_material.py \
+            http://127.0.0.1:8767/local/ browser-evidence/browser-studio-authority-material.json
           timeout --signal=TERM 90s python services/vivo/tests/application/browser_x4_regression.py \
             http://127.0.0.1:8767/local/accepted/ browser-evidence/browser-x4-regression.json
       - uses: actions/upload-artifact@v4
@@ -151,40 +153,55 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p browser-evidence
+          data_dir="$(mktemp -d)"
           server_pid=''
-          cleanup() {
+          stop_server() {
             if [ -n "$server_pid" ] && kill -0 "$server_pid" 2>/dev/null; then
               kill "$server_pid" 2>/dev/null || true
               wait "$server_pid" 2>/dev/null || true
             fi
+            server_pid=''
+          }
+          cleanup() {
+            stop_server
+            rm -rf "$data_dir"
           }
           trap cleanup EXIT
-          VIVO_PYTHON=python services/vivo/start-canonical-local.sh --store memory --port 8768 >browser-evidence/server-studio.log 2>&1 &
-          server_pid=$!
-          python - <<'PY'
-          import json
-          import time
-          from urllib.request import urlopen
+          wait_ready() {
+            python - <<'PY'
+            import json
+            import time
+            from urllib.request import urlopen
 
-          url = 'http://127.0.0.1:8768/api/local/ready'
-          deadline = time.monotonic() + 45
-          last = None
-          while time.monotonic() < deadline:
-              try:
-                  with urlopen(url, timeout=2) as response:
-                      body = json.load(response)
-                  if response.status == 200 and body.get('ok') is True:
-                      print('local application ready')
-                      break
-                  last = body
-              except Exception as error:
-                  last = f'{type(error).__name__}: {error}'
-              time.sleep(0.25)
-          else:
-              raise SystemExit(f'local application readiness timeout: {last!r}')
-          PY
+            url = 'http://127.0.0.1:8768/api/local/ready'
+            deadline = time.monotonic() + 45
+            last = None
+            while time.monotonic() < deadline:
+                try:
+                    with urlopen(url, timeout=2) as response:
+                        body = json.load(response)
+                    if response.status == 200 and body.get('ok') is True:
+                        print('local application ready')
+                        break
+                    last = body
+                except Exception as error:
+                    last = f'{type(error).__name__}: {error}'
+                time.sleep(0.25)
+            else:
+                raise SystemExit(f'local application readiness timeout: {last!r}')
+            PY
+          }
+          VIVO_PYTHON=python services/vivo/start-canonical-local.sh --store posix --data-dir "$data_dir" --port 8768 >browser-evidence/server-studio.log 2>&1 &
+          server_pid=$!
+          wait_ready
           timeout --signal=TERM 90s python services/vivo/tests/application/browser_studio_authority.py \
             http://127.0.0.1:8768/local/ browser-evidence/browser-studio-authority.json
+          stop_server
+          VIVO_PYTHON=python services/vivo/start-canonical-local.sh --store posix --data-dir "$data_dir" --port 8768 >>browser-evidence/server-studio.log 2>&1 &
+          server_pid=$!
+          wait_ready
+          timeout --signal=TERM 60s python services/vivo/tests/application/browser_studio_authority_restart.py \
+            http://127.0.0.1:8768/local/ 2.5 1 2.8 5 browser-evidence/browser-studio-authority-restart.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -192,4 +209,4 @@ jobs:
           path: browser-evidence/
           retention-days: 7
       - name: Scope notice
-        run: echo 'This is synthetic two-tab loopback browser evidence for the explicit Studio projection bridge; it does not certify physical camera, hand, head, AR, VR, public networking or deployment behavior.'
+        run: echo 'This is synthetic two-tab loopback browser evidence for separate Studio projection and canonical commit, including POSIX restart persistence; it does not certify physical camera, hand, head, AR, VR, public networking or deployment behavior.'

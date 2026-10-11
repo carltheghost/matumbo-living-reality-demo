@@ -98,7 +98,7 @@ reloaded automatically.
 - Two session-bound local actors; separate Eye coordinates, basis and slice
 - Explicit mapped root 4D → inner 11D entry and exact outer-Eye return
 - Explicit `vivo.offline-branch/1` fork receipt and downloadable checkpoint handoff
-- Versioned `vivo.studio-binding/1` Echo projection with explicit CAS publish/apply
+- Versioned `vivo.studio-binding/1` registry with separate CAS projection publish and canonical commit/apply actions
 - Full Studio bridge keeps two accepted Eyes independent and exposes capability-gated AR/VR checks without starting a session
 - Full-dimensional accepted grip targets with capture-time freshness checks
 - Distinct provisional and accepted target markers; solid marks use accepted entity coordinates
@@ -111,7 +111,12 @@ session store before acknowledgment and is discarded when the process stops. The
 loopback peer/Host and exact Origin for mutation. No forwarded identity is trusted.
 Raw camera frames, hand landmarks and head-tracking claims never enter the
 authority bridge. The bridge's AR/VR button is capability inspection only; it
-does not start camera or WebXR sessions.
+does not start camera or WebXR sessions. `Publish selected` advances only the
+Studio binding projection. `Commit canonical` is separately capability-gated,
+requires editor authority plus global/binding/entity CAS, preserves non-q
+entity state, and is rejected for material-owned bindings with
+`STUDIO_MATERIAL_BOUNDARY`. Memory-mode commits are process-session only;
+POSIX/SQLite commits are durable after checkpoint acknowledgment.
 
 ## Honest capability boundaries
 

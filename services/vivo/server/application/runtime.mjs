@@ -266,6 +266,11 @@ export class MountedRuntime {
       this.#adaptive?{profile:'adaptive-graph',dimensions:[4,11],spaceId:'root',running:this.#materialRunning,simulationStep:.01,wallIntervalMs:500,leaseRevisionProtocol:'vivo.lease-adaptive/1',modelHashes:['9ab89f46361e397fe41845d86ecc23e38f75561032fd65ae9f8389e9780afdb0']}:null;
     return {materialDynamics:!!material,materialLearning:this.#adaptive,remoteMultiplayer:false,localSeats:2,nested:true,
       material,
+      studio:{projection:true,canonicalCommit:{allowed:!material,durable:!memory,
+        rejectionCode:material?'STUDIO_MATERIAL_BOUNDARY':null,
+        reason:material?'Material-owned bindings remain driver-authoritative; canonical Studio commit is unavailable.':
+          memory?'Canonical commits are accepted for this process, but memory mode resets accepted changes when the server restarts.':
+          'Canonical Studio commit is available for unbound authority objects and persists through the configured durable store.'}},
       persistence:memory?'Session-only volatile memory; no backend world/checkpoint/database file':this.#store.kind==='sqlite'?'SQLite WAL/FULL exclusive checkpoint':'POSIX atomic checkpoint',
       persistenceMode:memory?'session-only':'durable',sessionOnly:memory,
       sessionOnlyGuarantee:memory?'Accepted world, checkpoint and database state exists only while this local server process runs; OS/browser writes are outside this guarantee.':null,

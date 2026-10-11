@@ -1,11 +1,12 @@
 /**
  * Optional, explicit bridge for the preserved Full Studio.
  *
- * The authority owns one versioned Echo projection.  This adapter never
+ * The authority owns a versioned Studio binding registry. This adapter never
  * replaces Studio controls, never calls moveEye, and never runs a second
- * physics/material loop.  It polls the accepted state because the local HTTP
- * transport has no browser push channel; every local publish, accepted
- * projection application, and offline fork is explicit.
+ * physics/material loop. Projection-only publish and stronger canonical commit
+ * are separate explicit actions. It polls the accepted state because the local
+ * HTTP transport has no browser push channel; every accepted application and
+ * offline fork is explicit.
  */
 import {LocalTransport} from '/application/transport.mjs';
 import {
@@ -14,6 +15,7 @@ import {
   applyCanonicalBindingToStudioSnapshot,
   mapStudioNodeToCanonical,
   studioBindingDefinition,
+  studioCommitCommand,
   studioTransformCommand,
 } from '/services/vivo/contracts/studio-binding.mjs';
 
@@ -39,7 +41,7 @@ export class StudioAuthorityBridge {
     this.bindingId=bindingId(new URL(location.href).searchParams.get('binding'));
     this.lastApplied=null;this.localDiverged=false;this.pendingRemote=null;this.publishConflict=null;this.publishOverrideArmed=false;
     this.seat=seatId(new URL(location.href).searchParams.get('seat'));
-    this.pollTimer=null;this.closed=false;this.message='Not connected. Accepted state is untouched.';this.xr=null;
+    this.pollTimer=null;this.closed=false;this.message='Not connected. Accepted state is untouched.';this.xr=null;this.canonicalCommitResult=null;
     this.mount();
   }
   mount(){
@@ -55,16 +57,18 @@ export class StudioAuthorityBridge {
 #vivoStudioAuthorityBridge button:disabled{cursor:not-allowed;opacity:.45}
 #vivoStudioAuthorityBridge .vivo-authority-seat{display:flex;align-items:center;gap:7px;margin-bottom:7px;color:#a7bdbc}
 #vivoStudioAuthorityBridge .vivo-authority-seat select{flex:1}
+#vivoStudioAuthorityBridge [data-vivo-authority-capability]{margin:7px 0 0;padding:6px 7px;border:1px solid rgba(148,235,220,.2);border-radius:7px;color:#b9d4cc;line-height:1.3}
 #vivoStudioAuthorityBridge output{display:block;min-height:28px;margin-top:7px;color:#b9d4cc;white-space:pre-wrap;line-height:1.3}
 @media(max-width:820px){#vivoStudioAuthorityBridge{right:10px;bottom:calc(245px + env(safe-area-inset-bottom));width:min(320px,calc(100vw - 20px));}}
 `;
     doc.head.append(style);
     const root=doc.createElement('aside');root.id='vivoStudioAuthorityBridge';root.setAttribute('aria-label','Shared Studio object bridge');
     root.innerHTML=`<div class="vivo-authority-head"><span>SHARED OBJECT / STUDIO</span><span data-vivo-authority-status>OFFLINE</span></div>
-      <p class="vivo-authority-copy">Explicit projection only: select and publish one accepted canonical object at a time. Local physics, camera and World Eyes stay independent.</p>
+      <p class="vivo-authority-copy">Projection and canonical commit are separate explicit actions. Local physics, camera and World Eyes stay independent.</p>
       <label class="vivo-authority-seat">Authority seat <select data-vivo-authority-seat aria-label="Authority seat"><option value="one">Seat one</option><option value="two">Seat two</option></select></label>
       <label class="vivo-authority-seat">Canonical object <select data-vivo-authority-binding aria-label="Canonical object"></select></label>
-      <div class="vivo-authority-controls"><button data-vivo-authority-connect type="button">Connect</button><button data-vivo-authority-refresh type="button" disabled>Refresh</button><button data-vivo-authority-apply type="button" disabled>Apply accepted</button><button data-vivo-authority-publish type="button" disabled>Publish selected</button><button data-vivo-authority-fork type="button" disabled>Fork offline</button><button data-vivo-authority-xr type="button">Check AR / VR</button></div>
+      <div data-vivo-authority-capability aria-live="polite">Canonical commit capability: checking authority.</div>
+      <div class="vivo-authority-controls"><button data-vivo-authority-connect type="button">Connect</button><button data-vivo-authority-refresh type="button" disabled>Refresh</button><button data-vivo-authority-apply type="button" disabled>Apply accepted</button><button data-vivo-authority-publish type="button" disabled>Publish selected</button><button data-vivo-authority-commit type="button" disabled>Commit canonical</button><button data-vivo-authority-fork type="button" disabled>Fork offline</button><button data-vivo-authority-xr type="button">Check AR / VR</button></div>
       <output data-vivo-authority-message aria-live="polite">Not connected. Accepted state is untouched.</output>`;
     doc.body.append(root);this.root=root;this.statusNode=root.querySelector('[data-vivo-authority-status]');this.messageNode=root.querySelector('[data-vivo-authority-message]');
     this.seatNode=root.querySelector('[data-vivo-authority-seat]');this.seatNode.value=this.seat;
@@ -75,6 +79,7 @@ export class StudioAuthorityBridge {
     root.querySelector('[data-vivo-authority-refresh]').addEventListener('click',()=>this.refresh().catch(error=>this.setMessage(error.message||String(error),'ERROR')));
     root.querySelector('[data-vivo-authority-apply]').addEventListener('click',()=>this.applyAccepted().catch(error=>this.setMessage(error.message||String(error),'ERROR')));
     root.querySelector('[data-vivo-authority-publish]').addEventListener('click',()=>this.publish().catch(error=>this.setMessage(error.message||String(error),'ERROR')));
+    root.querySelector('[data-vivo-authority-commit]').addEventListener('click',()=>this.commitCanonical().catch(error=>this.setMessage(error.message||String(error),'ERROR')));
     root.querySelector('[data-vivo-authority-fork]').addEventListener('click',()=>this.forkOffline().catch(error=>this.setMessage(error.message||String(error),'ERROR')));
     root.querySelector('[data-vivo-authority-xr]').addEventListener('click',()=>this.checkXR().catch(error=>this.setMessage(error.message||String(error),'ERROR')));
     this.updateUI();
@@ -87,6 +92,20 @@ export class StudioAuthorityBridge {
   bindingName(){return this.currentBinding()?.metadata?.name??this.bindingDefinition().metadata.name;}
   localQ(){try{return mapStudioNodeToCanonical(this.app.snapshot(),this.currentBinding()?.sourceNode??this.bindingDefinition().sourceNode);}catch{return null;}}
   currentBinding(){return this.state?.snapshot?.studioBindings?.[this.bindingId]??null;}
+  canonicalCommitCapability(){
+    const advertised=this.state?.capabilities?.studio?.canonicalCommit;
+    if(advertised&&typeof advertised.allowed==='boolean'){
+      const capability=copy(advertised),permissions=this.transport?.session?.capabilities;
+      if(capability.allowed&&Array.isArray(permissions)&&!permissions.includes('grab'))return {allowed:false,durable:false,rejectionCode:'STUDIO_PERMISSION_DENIED',reason:'The current authority seat is read-only; canonical Studio commit requires an editor permission.'};
+      return capability;
+    }
+    if(this.state?.capabilities?.material)return {allowed:false,durable:false,rejectionCode:'STUDIO_MATERIAL_BOUNDARY',reason:'Material-owned bindings remain driver-authoritative; canonical Studio commit is unavailable.'};
+    return {allowed:false,durable:false,rejectionCode:'STUDIO_COMMIT_UNAVAILABLE',reason:'Authority did not advertise canonical commit capability; this action is fail-closed.'};
+  }
+  capabilityMessage(capability){
+    if(!capability.allowed)return 'Canonical commit unavailable: '+(capability.reason||capability.rejectionCode||'authority denied it')+'.';
+    return capability.durable?'Canonical commit available; accepted changes persist through the configured durable store.':'Canonical commit available for this session only; memory mode resets accepted changes when the server restarts.';
+  }
   populateBindingSelector(){
     const selector=this.root?.querySelector('[data-vivo-authority-binding]');if(!selector)return;
     const bindings=this.state?.snapshot?.studioBindings??{};
@@ -196,6 +215,47 @@ export class StudioAuthorityBridge {
     else this.setMessage(this.bindingName()+' transform accepted at sequence '+receipt.acceptedSequence+'.');
     return receipt;
   }
+  async commitCanonical({cancelled=false}={}){
+    if(cancelled){
+      const result={status:'cancelled',code:'STUDIO_COMMIT_CANCELLED'};
+      this.canonicalCommitResult=copy(result);this.setMessage('Canonical commit canceled; accepted state and local Studio remain unchanged.');this.updateUI();return result;
+    }
+    const capability=this.canonicalCommitCapability();
+    if(!capability.allowed){
+      const result={status:'rejected',code:capability.rejectionCode||'STUDIO_COMMIT_UNAVAILABLE'};
+      this.canonicalCommitResult=copy(result);this.setMessage(this.capabilityMessage(capability),'ERROR');this.updateUI();return result;
+    }
+    if(!this.transport||this.transport.closed)throw Error('AUTHORITY_NOT_CONNECTED');
+    if(this.publishConflict){
+      const result=this.blockedPublish('STUDIO_CONFLICT');this.canonicalCommitResult=copy(result);
+      this.setMessage('Canonical commit blocked by an unresolved accepted projection conflict. Apply accepted or resolve the projection explicitly first.','CONFLICT');this.updateUI();return result;
+    }
+    const q=this.markLocalDivergence();if(!q)throw Error('STUDIO_NODE_UNAVAILABLE');
+    // Presence and observer registration advance the global sequence. Refresh
+    // before constructing all three CAS values, but never retry a rejected
+    // commit implicitly.
+    await this.transport.refresh();
+    const freshQ=this.markLocalDivergence();if(!freshQ)throw Error('STUDIO_NODE_UNAVAILABLE');
+    if(this.publishConflict){
+      const result=this.blockedPublish('STUDIO_CONFLICT');this.canonicalCommitResult=copy(result);
+      this.setMessage('Accepted '+this.bindingName()+' changed while canonical commit was preparing. Review it and choose Apply accepted before retrying.','CONFLICT');this.updateUI();return result;
+    }
+    const snapshot=this.transport.getSnapshot(),freshBinding=this.currentBinding();
+    const freshEntity=freshBinding&&snapshot.spaces?.[freshBinding.spaceId]?.entities?.[freshBinding.entityId];
+    if(!freshBinding||!freshEntity)throw Error('STUDIO_BINDING_TARGET');
+    const command=studioCommitCommand(snapshot,freshQ,{bindingId:this.bindingId,metadata:freshBinding.metadata,
+      expectedRevision:snapshot.acceptedSequence,expectedBindingRevision:freshBinding.bindingRevision,
+      expectedEntityRevision:freshEntity.revision,commandId:'studio.commit.'+crypto.randomUUID()});
+    const receipt=await this.transport.submit(command);this.canonicalCommitResult=copy(receipt);
+    if(receipt.status!=='accepted'){
+      this.setMessage('Canonical commit rejected: '+receipt.code+'. Accepted state and local Studio were not changed by this action.','CONFLICT');this.updateUI();return receipt;
+    }
+    this.localDiverged=false;
+    const accepted=this.state?.snapshot?.studioBindings?.[this.bindingId]??receipt.result?.binding;
+    if(accepted)this.applyBinding(accepted,this.bindingName()+' canonical commit accepted at sequence '+receipt.acceptedSequence+'.');
+    else this.setMessage(this.bindingName()+' canonical commit accepted at sequence '+receipt.acceptedSequence+'.');
+    return receipt;
+  }
   async forkOffline(){
     if(!this.transport||this.transport.closed)throw Error('AUTHORITY_NOT_CONNECTED');
     const receipt=await this.transport.forkOffline({newWorldId:'offline:studio:'+crypto.randomUUID()});
@@ -208,22 +268,25 @@ export class StudioAuthorityBridge {
     this.xr={secureContext:secure,webXRAPI:api,arSupported:ar,vrSupported:vr,sessionStarted:false};
     this.setMessage('XR capability only: immersive AR '+(ar?'available':'unavailable')+', VR '+(vr?'available':'unavailable')+'. No camera or XR session was started.');return copy(this.xr);
   }
-  async close(){clearTimeout(this.pollTimer);if(this.transport&&!this.transport.closed)await this.transport.close();this.transport=null;this.state=null;this.remoteBinding=null;this.pendingRemote=null;this.localDiverged=false;this.publishConflict=null;this.publishOverrideArmed=false;this.updateUI();}
+  async close(){clearTimeout(this.pollTimer);if(this.transport&&!this.transport.closed)await this.transport.close();this.transport=null;this.state=null;this.remoteBinding=null;this.pendingRemote=null;this.localDiverged=false;this.publishConflict=null;this.publishOverrideArmed=false;this.canonicalCommitResult=null;this.updateUI();}
   updateUI(){
-    if(!this.root)return;this.populateBindingSelector();const connected=!!this.transport&&!this.transport.closed,local=this.markLocalDivergence();
+    if(!this.root)return;this.populateBindingSelector();const connected=!!this.transport&&!this.transport.closed,local=this.markLocalDivergence(),capability=this.canonicalCommitCapability();
     this.root.querySelector('[data-vivo-authority-connect]').disabled=connected;
     this.root.querySelector('[data-vivo-authority-refresh]').disabled=!connected;
     this.root.querySelector('[data-vivo-authority-apply]').disabled=!this.remoteBinding;
     this.root.querySelector('[data-vivo-authority-publish]').disabled=!connected||!local;
+    this.root.querySelector('[data-vivo-authority-commit]').disabled=!connected||!local||!capability.allowed||!!this.publishConflict;
     this.root.querySelector('[data-vivo-authority-fork]').disabled=!connected;
+    const capabilityNode=this.root.querySelector('[data-vivo-authority-capability]');if(capabilityNode)capabilityNode.textContent=this.capabilityMessage(capability);
     if(this.statusNode)this.statusNode.textContent=this.publishConflict?'CONFLICT':connected?(this.localDiverged?'LOCAL DIVERGENCE':'CONNECTED'):'OFFLINE';
   }
   debug(){
     this.markLocalDivergence();const snapshot=this.state?.snapshot,binding=this.currentBinding(),entity=binding&&snapshot?.spaces?.[binding.spaceId]?.entities?.[binding.entityId];return {schema:'vivo.studio-authority-bridge/1',connected:!!this.transport&&!this.transport.closed,seat:this.seat,
       binding:this.remoteBinding?copy(this.remoteBinding):null,bindingId:this.bindingId,bindings:Object.keys(snapshot?.studioBindings??{}),acceptedSequence:snapshot?.acceptedSequence??null,localProjection:this.localQ(),
-      acceptedEntityQ:copy(entity?.q??null),selectedEntityId:binding?.entityId??null,selectedSpaceId:binding?.spaceId??null,
+      acceptedEntityQ:copy(entity?.q??null),acceptedEntityRevision:entity?.revision??null,selectedEntityId:binding?.entityId??null,selectedSpaceId:binding?.spaceId??null,
       lastApplied:this.lastApplied?copy(this.lastApplied):null,localDiverged:this.localDiverged,pendingRemote:this.pendingRemote?copy(this.pendingRemote):null,
       publishConflict:this.publishConflict?copy(this.publishConflict):null,publishOverrideArmed:this.publishOverrideArmed,
+      canonicalCommitCapability:this.canonicalCommitCapability(),canonicalCommitResult:this.canonicalCommitResult?copy(this.canonicalCommitResult):null,
       authorityEye:copy(this.state?.eye??null),worldEyesIndependent:true,xr:this.xr?copy(this.xr):null};
   }
 }
