@@ -208,8 +208,15 @@ class RemoteGateway:
     def state_signature(state):
         snap = state.get("snapshot", {})
         eye = state.get("eye") or {}
+        participants = tuple(
+            sorted((p.get("seat"), p.get("actorId"), bool(p.get("online")))
+                   for p in state.get("participants", []))
+        )
+        material = state.get("capabilities", {}).get("material") or {}
+        host = state.get("materialHost") or {}
         return (snap.get("stateHash"), snap.get("acceptedSequence"), snap.get("simulationTime"),
-                eye.get("revision"), eye.get("spaceId"), state.get("journal", {}).get("readOnly"))
+                eye.get("revision"), eye.get("spaceId"), state.get("journal", {}).get("readOnly"),
+                participants, bool(material.get("running")), host.get("state"), host.get("acceptedSteps"))
 
     async def poll(self, ws, node_token, stop):
         previous = None
