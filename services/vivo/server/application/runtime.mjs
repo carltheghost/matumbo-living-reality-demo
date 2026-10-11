@@ -72,13 +72,17 @@ function normalizeMountedStudioBindingTopology(normalized, seed) {
     return;
   }
   if(!actual || typeof actual!=='object' || Array.isArray(actual) ||
-      JSON.stringify(Object.keys(actual).sort())!==JSON.stringify(Object.keys(expected).sort()))
+      Object.keys(actual).some(id=>!Object.hasOwn(expected,id)))
     fail('WORKSHOP_CHECKPOINT_MISMATCH');
-  for(const id of Object.keys(expected)) {
+  for(const id of Object.keys(actual)) {
     try { validateStudioBinding(actual[id]); } catch { fail('WORKSHOP_CHECKPOINT_MISMATCH'); }
     if(JSON.stringify(studioBindingTopology(actual[id]))!==JSON.stringify(studioBindingTopology(expected[id])))
       fail('WORKSHOP_CHECKPOINT_MISMATCH');
   }
+  // Checkpoints may be from an older registry revision.  Missing bindings are
+  // added by the authority factory, which preserves every dynamic value that
+  // already exists in the durable record.
+  for(const id of Object.keys(expected)) if(!Object.hasOwn(actual,id)) actual[id]=clone(expected[id]);
   // q/revision/acceptedSequence are the dynamic projection state.  Compare
   // fixed checkpoint topology above, then ignore those fields for startup.
   normalized.studioBindings=clone(expected);

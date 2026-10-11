@@ -19,6 +19,35 @@ export const STUDIO_BINDING_DIMENSION = 4;
 export const STUDIO_BINDING_CHART = 'flat';
 export const STUDIO_BINDING_METADATA = Object.freeze({name: 'Echo', kind: 'RESONANCE / 02'});
 
+/**
+ * Stable projection topology for the currently accepted Full Studio slice.
+ * These are deliberately root-space bindings: the canonical authority owns
+ * nested-space identity and Eye navigation separately, while Studio remains a
+ * rich nine-dimensional local engine.  The source-node numbers are part of
+ * this versioned application contract, not an inference from mutable labels.
+ */
+const BINDING_DEFINITIONS = Object.freeze({
+  'studio.node.echo': Object.freeze({
+    bindingId: 'studio.node.echo', sourceModel: STUDIO_SOURCE_MODEL, sourceNode: 55,
+    spaceId: 'root', entityId: 'relic', dimension: 4, chart: 'flat',
+    metadata: STUDIO_BINDING_METADATA, initialQ: Object.freeze([-1.2, -.15, .25, 0]),
+  }),
+  'studio.node.workpiece': Object.freeze({
+    bindingId: 'studio.node.workpiece', sourceModel: STUDIO_SOURCE_MODEL, sourceNode: 56,
+    spaceId: 'root', entityId: 'workpiece', dimension: 4, chart: 'flat',
+    metadata: Object.freeze({name: 'Workpiece', kind: 'PERSISTENT OBJECT'}),
+    initialQ: Object.freeze([.15, .75, .25, 0]),
+  }),
+  'studio.node.portal': Object.freeze({
+    bindingId: 'studio.node.portal', sourceModel: STUDIO_SOURCE_MODEL, sourceNode: 57,
+    spaceId: 'root', entityId: 'portal', dimension: 4, chart: 'flat',
+    metadata: Object.freeze({name: 'Inner world', kind: 'MAPPED ENTRANCE'}),
+    initialQ: Object.freeze([1.35, -.15, .25, 0]),
+  }),
+});
+
+export const STUDIO_BINDING_IDS = Object.freeze(Object.keys(BINDING_DEFINITIONS));
+
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const id = value => typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,128}$/.test(value);
 const uint = value => Number.isSafeInteger(value) && value >= 0;
@@ -53,35 +82,65 @@ export function studioBindingTopology(binding) {
   };
 }
 
-export function studioBindingSeed(q, {bindingRevision = 0, acceptedSequence = 0} = {}) {
+/** Return a detached stable definition so callers cannot mutate the contract. */
+export function studioBindingDefinition(bindingId = STUDIO_BINDING_ID) {
+  const definition = BINDING_DEFINITIONS[bindingId];
+  if (!definition) fail('Unknown Studio binding');
+  return copy(definition);
+}
+
+export function studioBindingSeed(q, {
+  bindingId = STUDIO_BINDING_ID,
+  bindingRevision = 0,
+  acceptedSequence = 0,
+  metadata,
+} = {}) {
   if (!uint(bindingRevision) || !uint(acceptedSequence)) fail('Invalid Studio binding revision');
+  const definition = studioBindingDefinition(bindingId);
   return validateStudioBinding({
     schema: STUDIO_BINDING_SCHEMA,
-    bindingId: STUDIO_BINDING_ID,
-    sourceModel: STUDIO_SOURCE_MODEL,
-    sourceNode: STUDIO_SOURCE_NODE,
-    spaceId: STUDIO_BINDING_SPACE_ID,
-    entityId: STUDIO_BINDING_ENTITY_ID,
-    dimension: STUDIO_BINDING_DIMENSION,
-    chart: STUDIO_BINDING_CHART,
-    q: checkedQ(q),
-    metadata: copy(STUDIO_BINDING_METADATA),
+    bindingId: definition.bindingId,
+    sourceModel: definition.sourceModel,
+    sourceNode: definition.sourceNode,
+    spaceId: definition.spaceId,
+    entityId: definition.entityId,
+    dimension: definition.dimension,
+    chart: definition.chart,
+    q: checkedQ(q === undefined ? definition.initialQ : q),
+    metadata: copy(metadata ?? definition.metadata),
     bindingRevision,
     acceptedSequence,
   });
 }
 
+/** Build the complete accepted registry without sharing mutable input state. */
+export function studioBindingRegistrySeed(overrides = {}) {
+  if (!object(overrides)) fail('Invalid Studio binding registry');
+  for (const bindingId of Object.keys(overrides)) {
+    if (!BINDING_DEFINITIONS[bindingId]) fail('Unknown Studio binding');
+  }
+  return Object.fromEntries(STUDIO_BINDING_IDS.map(bindingId => {
+    const override = overrides[bindingId];
+    if (override === undefined) {
+      const definition = studioBindingDefinition(bindingId);
+      return [bindingId, studioBindingSeed(definition.initialQ, {bindingId})];
+    }
+    return [bindingId, validateStudioBinding(copy(override))];
+  }));
+}
+
 export function validateStudioBinding(binding) {
   requireKeys(binding, ['schema', 'bindingId', 'sourceModel', 'sourceNode', 'spaceId', 'entityId',
     'dimension', 'chart', 'q', 'metadata', 'bindingRevision', 'acceptedSequence']);
-  if (binding.schema !== STUDIO_BINDING_SCHEMA || binding.bindingId !== STUDIO_BINDING_ID ||
-      binding.sourceModel !== STUDIO_SOURCE_MODEL || binding.sourceNode !== STUDIO_SOURCE_NODE ||
-      binding.spaceId !== STUDIO_BINDING_SPACE_ID || binding.entityId !== STUDIO_BINDING_ENTITY_ID ||
-      binding.dimension !== STUDIO_BINDING_DIMENSION || binding.chart !== STUDIO_BINDING_CHART ||
+  const definition = BINDING_DEFINITIONS[binding.bindingId];
+  if (binding.schema !== STUDIO_BINDING_SCHEMA || !definition ||
+      binding.sourceModel !== definition.sourceModel || binding.sourceNode !== definition.sourceNode ||
+      binding.spaceId !== definition.spaceId || binding.entityId !== definition.entityId ||
+      binding.dimension !== definition.dimension || binding.chart !== definition.chart ||
       !uint(binding.bindingRevision) || !uint(binding.acceptedSequence)) fail('Invalid Studio binding identity');
   checkedQ(binding.q);
   requireKeys(binding.metadata, ['name', 'kind']);
-  if (binding.metadata.name !== STUDIO_BINDING_METADATA.name || binding.metadata.kind !== STUDIO_BINDING_METADATA.kind)
+  if (binding.metadata.name !== definition.metadata.name || binding.metadata.kind !== definition.metadata.kind)
     fail('Invalid Studio binding metadata');
   return binding;
 }
@@ -110,7 +169,7 @@ export function studioTransformCommand(snapshot, q, {
 } = {}) {
   if (!object(snapshot) || !id(snapshot.worldId) || !uint(expectedRevision) || !id(commandId))
     fail('Invalid Studio transform command context');
-  const binding = validateStudioBinding({...studioBindingSeed(q), bindingId, metadata: copy(metadata)});
+  const binding = studioBindingSeed(q, {bindingId, metadata: copy(metadata)});
   return {
     schema: 'vivo.command/1',
     id: commandId,
@@ -143,7 +202,7 @@ export function applyCanonicalBindingToStudioSnapshot(studioSnapshot, binding) {
   if (!object(studioSnapshot) || !object(studioSnapshot.engine) || !Array.isArray(studioSnapshot.engine.q))
     fail('Invalid Studio snapshot');
   const next = copy(studioSnapshot);
-  const offset = STUDIO_SOURCE_NODE * 9;
+  const offset = binding.sourceNode * 9;
   if (next.engine.q.length < offset + 4) fail('Studio node is unavailable');
   next.engine.q[offset] = binding.q[0];
   next.engine.q[offset + 2] = binding.q[1];

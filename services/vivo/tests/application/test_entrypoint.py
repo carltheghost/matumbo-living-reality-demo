@@ -115,7 +115,12 @@ class MountedApplicationTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn('rel="noopener noreferrer"', text)
             self.assertIn('id="vivoLocalAssetBridge"', text)
             self.assertIn('data-vivo-studio-authority="1"', text)
-            self.assertIn('SHARED OBJECT / ECHO', text)
+            # The bridge now exposes a registry of independently selectable
+            # canonical objects; keep this mounted contract focused on the
+            # selector and explicit publish control rather than one object's
+            # presentation title.
+            self.assertIn('data-vivo-authority-binding', text)
+            self.assertIn('Publish selected', text)
             self.assertIn("/services/vivo/contracts/studio-binding.mjs", text)
             self.assertIn('CameraPresence.prototype.loadVision', text)
             self.assertIn('CameraPresence.prototype.modelBytes', text)

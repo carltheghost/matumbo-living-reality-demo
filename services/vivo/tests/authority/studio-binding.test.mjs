@@ -29,6 +29,40 @@ test('accepted Studio binding replicates, persists, and preserves independent Ey
   await one.close();await two.close();
 });
 
+test('multiple selected bindings persist independently across nested navigation and offline provenance',async()=>{
+  const store=new MemoryAuthorityStore(),seed=workshopSeed(),world=await LocalLeaseWorld.create({snapshot:seed,store});
+  const one=world.attach({actorId:'local.one'}),two=world.attach({actorId:'local.two'});await one.open();await two.open();
+  await one.registerEye('main',entryView());await two.registerEye('main',entryView());
+  let snapshot=one.getSnapshot();
+  for(const [bindingId,q] of [['studio.node.workpiece',[2,.7,.25,0]],['studio.node.portal',[1.8,-.15,.25,0]]]) {
+    const binding=snapshot.studioBindings[bindingId];
+    const receipt=await one.submit(studioTransformCommand(snapshot,q,{bindingId,metadata:binding.metadata,commandId:'studio.multi.'+bindingId,expectedRevision:snapshot.acceptedSequence}));
+    assert.equal(receipt.status,'accepted');snapshot=one.getSnapshot();
+  }
+  assert.deepEqual(snapshot.studioBindings['studio.node.workpiece'].q,[2,.7,.25,0]);
+  assert.deepEqual(snapshot.studioBindings['studio.node.portal'].q,[1.8,-.15,.25,0]);
+  assert.deepEqual(snapshot.spaces.root.entities.workpiece.q,[.15,.75,.25,0]);
+  assert.deepEqual(snapshot.spaces.root.entities.portal.q,[1.35,-.15,.25,0]);
+  assert.deepEqual(two.getSnapshot().studioBindings,snapshot.studioBindings);
+  const enter=await one.submit({schema:'vivo.command/1',id:'space.multi.enter',worldId:snapshot.worldId,spaceId:'root',kind:'space.enter',expectedRevision:snapshot.spaces.root.entities.portal.revision,
+    payload:{portalEntityId:'portal',eyeId:'main'}});
+  assert.equal(enter.status,'accepted');assert.equal(enter.result.eye.spaceId,'inner');assert.equal(two.getEye('main').spaceId,'root');snapshot=one.getSnapshot();
+  await one.close();await two.close();
+  const restored=await LocalLeaseWorld.create({snapshot:workshopSeed(),store});
+  const resumed=restored.attach({actorId:'local.one'}),other=restored.attach({actorId:'local.two'});await resumed.open();await other.open();
+  assert.equal(resumed.getEye('main').spaceId,'inner');assert.equal(other.getEye('main').spaceId,'root');
+  assert.deepEqual(resumed.getSnapshot().studioBindings['studio.node.workpiece'].q,[2,.7,.25,0]);
+  assert.deepEqual(resumed.getSnapshot().studioBindings['studio.node.portal'].q,[1.8,-.15,.25,0]);
+  const parentBeforeFork=resumed.getSnapshot().acceptedSequence;
+  const fork=await resumed.submit(offlineForkCommand(resumed.getSnapshot(),{newWorldId:'offline:studio:multi',commandId:'fork.multi'}));
+  assert.equal(fork.status,'accepted');const branch=fork.result;
+  assert.deepEqual(Object.keys(branch.snapshot.studioBindings),['studio.node.echo','studio.node.workpiece','studio.node.portal']);
+  for(const binding of Object.values(branch.snapshot.studioBindings)) {assert.equal(binding.bindingRevision,0);assert.equal(binding.acceptedSequence,0);}
+  assert.equal(branch.snapshot.branch.parentWorldId,'vivo.local.workshop');assert.equal(branch.snapshot.branch.parentAcceptedSequence,parentBeforeFork);
+  assert.equal(branch.eye.spaceId,'inner');assert.equal(branch.snapshot.spaces.root.entities.portal.innerSpaceId,'inner');
+  await resumed.close();await other.close();
+});
+
 test('presence advancement cannot turn a cached Studio publish into an overwrite',async()=>{
   const store=new MemoryAuthorityStore(),world=await LocalLeaseWorld.create({snapshot:workshopSeed(),store});
   const one=world.attach({actorId:'local.one'});await one.open();await one.registerEye('main',entryView());
@@ -55,4 +89,14 @@ test('older checkpoint without Studio binding is migrated without losing accepte
   assert.deepEqual(migrated.snapshot().studioBindings['studio.node.echo'].q,[-1.2,-.15,.25,0]);
   const record=migrated.checkpoint();assert.equal(record.state.snapshot.worldId,'vivo.local.workshop');
   assert.match(record.digest,/^[a-f0-9]{64}$/);assert.match(record.state.snapshot.stateHash,/^[a-f0-9]{64}$/);
+});
+
+test('older partial Studio registry gains new bindings without overwriting the accepted Echo projection',async()=>{
+  const old=workshopSeed();old.studioBindings={['studio.node.echo']:old.studioBindings['studio.node.echo']};const store=new MemoryAuthorityStore();
+  const initial=await LocalLeaseWorld.create({snapshot:old,store}),actor=initial.attach({actorId:'local.one'});await actor.open();
+  const changed=await actor.submit(studioTransformCommand(actor.getSnapshot(),[7,-2,.8,.1],{commandId:'studio.partial.echo'}));assert.equal(changed.status,'accepted');await actor.close();
+  const migrated=await LocalLeaseWorld.create({snapshot:workshopSeed(),store}),bindings=migrated.snapshot().studioBindings;
+  assert.deepEqual(bindings['studio.node.echo'].q,[7,-2,.8,.1]);
+  assert.deepEqual(bindings['studio.node.workpiece'].q,[.15,.75,.25,0]);assert.deepEqual(bindings['studio.node.portal'].q,[1.35,-.15,.25,0]);
+  assert.equal(Object.keys(bindings).length,3);
 });

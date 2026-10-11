@@ -1,4 +1,6 @@
 /** Canonical envelope/target validation. Authority must still authorize and reconcile. */
+import {validateStudioBinding, studioBindingSeed} from './studio-binding.mjs';
+
 export const VERSION = 'vivo.command/1';
 const kinds = new Set(['grab.begin','grab.target','grab.end','space.enter','space.exit','world.fork','studio.transform']);
 const sources = new Set(['touch','hand','eye-confirmed','keyboard']);
@@ -43,11 +45,14 @@ export function validateCommand(command) {
     keys(p,['eyeId','returnFrameId']); need(id(p.eyeId) && id(p.returnFrameId),'Invalid return');
   } else if (command.kind === 'studio.transform') {
     keys(p,['bindingId','sourceModel','sourceNode','entityId','dimension','chart','q','metadata']);
-    need(p.bindingId === 'studio.node.echo' && p.sourceModel === 'matumbo-field-lab' && p.sourceNode === 55 &&
-      p.entityId === 'relic' && p.dimension === 4 && p.chart === 'flat', 'Invalid Studio binding identity');
-    validateFrame({spaceId:command.spaceId,dimension:p.dimension,chart:p.chart,q:p.q});
-    keys(p.metadata,['name','kind']);
-    need(p.metadata.name === 'Echo' && p.metadata.kind === 'RESONANCE / 02', 'Invalid Studio binding metadata');
+    let binding;
+    try {
+      binding = validateStudioBinding({...studioBindingSeed(p.q, {bindingId:p.bindingId, metadata:p.metadata}), ...p,
+        schema:'vivo.studio-binding/1', bindingRevision:0, acceptedSequence:0});
+    } catch {
+      need(false, 'Invalid Studio binding identity');
+    }
+    need(binding && command.spaceId === binding.spaceId, 'Invalid Studio binding space');
   } else {
     keys(p,['checkpointHash','newWorldId']);
     need(typeof p.checkpointHash === 'string' && /^[a-f0-9]{64}$/.test(p.checkpointHash) && id(p.newWorldId),'Invalid explicit fork');
