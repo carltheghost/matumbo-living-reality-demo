@@ -12,7 +12,7 @@ GitHub Pages remains the canonical Vivo UI. The Android Companion is a hardened 
 - `phone/bridge.mjs` connects the Pages UI to AndroidX `WebMessageListener` at the fixed GitHub Pages origin. The native tool list is filtered to the capabilities currently granted by the app and supported by OS/device state.
 - `android-companion/` loads the canonical Pages URL. `CapabilityBroker` combines explicit in-app grants with Android runtime permission, sensor, and optional AccessibilityService state before exposing a tool.
 
-The local phone world keeps a stable world ID and object identities. Each Eye has independent view, projection, nested-world return state, and revision. Offline work creates a named branch envelope and does not silently merge with a shared/server world.
+The local phone world keeps a stable world ID, object identities, and a persisted branch envelope (`branchId`, mode, parent branch and label). Each Eye has independent view, projection, nested-world return state, and revision; the phone allows at most 64 persisted Eyes. Offline work creates a named branch envelope and does not silently merge with a shared/server world. Nested transitions fence active material updates to the selected space, so a root edit cannot continue driving an inner world after entry or return.
 
 ## Hand input
 
@@ -31,6 +31,8 @@ Use the front camera with palm and fingertips visible. Gestures in local phone m
 | Touch drag / two-finger pinch and rotate | Select or move objects; zoom and rotate without the camera |
 
 The pinned MediaPipe hand landmark task supports up to two hands. Phone mode draws every returned hand and all 21 landmarks per hand, with visible status for thumb, index, middle, ring, and pinky; there is no one-hand-only selection path. Camera tracking and projection are separate controls. Browser and Android lifecycle rules may suspend camera capture when the display is backgrounded.
+
+Hand identity uses detector handedness when available, then predicted motion and a short track-age window during occlusion. A near-tie at a crossing is reported as ambiguous and releases any held hand instead of transferring object ownership; a later pinch must be re-armed with an open hand.
 
 ## Android Companion
 

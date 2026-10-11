@@ -41,6 +41,22 @@ test('two-hand identity survives model result order swapping', () => {
   assert.equal(swapped[0].id, 'hand-1'); assert.equal(swapped[1].id, 'hand-2');
 });
 
+test('detector handedness wins over a crossing and preserves held identities', () => {
+  const left = makeHand({ open: true, offset: 0.45 }), right = makeHand({ open: true, offset: 0.55 });
+  const first = matchHands([{ landmarks: left, handedness: 'Left' }, { landmarks: right, handedness: 'Right' }]);
+  const crossed = matchHands([{ landmarks: makeHand({ open: true, offset: 0.53 }), handedness: 'Right' }, { landmarks: makeHand({ open: true, offset: 0.47 }), handedness: 'Left' }], first);
+  assert.equal(crossed.ambiguous, false);
+  assert.equal(crossed.find(hand => hand.handedness === 'left').id, 'hand-1');
+  assert.equal(crossed.find(hand => hand.handedness === 'right').id, 'hand-2');
+});
+
+test('near-tie crossing is explicitly ambiguous instead of transferring ownership', () => {
+  const first = matchHands([makeHand({ open: true, offset: 0.45 }), makeHand({ open: true, offset: 0.55 })]);
+  const crossing = matchHands([makeHand({ open: true, offset: 0.5 }), makeHand({ open: true, offset: 0.5 })], first);
+  assert.equal(crossing.ambiguous, true);
+  assert.deepEqual(crossing.ambiguousIds, ['hand-1', 'hand-2']);
+});
+
 test('two-hand span changes zoom and wrist angle changes Eye roll', () => {
   const start = twoHandTransform([10, 10], [110, 10]);
   const next = twoHandTransform([10, 10], [160, 60], start);

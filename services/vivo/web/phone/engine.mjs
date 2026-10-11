@@ -6,11 +6,13 @@
 export const PHONE_SCHEMA = 'vivo.phone.snapshot/1';
 export const MIN_DIMENSION = 3;
 export const MAX_DIMENSION = 11;
+export const MAX_EYES = 64;
 export const MAX_ENTITIES_PER_SPACE = 4096;
 export const MAX_EDGES_PER_SPACE = 32768;
 const MAX_COORDINATE = 1e6;
 const MAX_SPEED = 20;
 const FIXED_STEP = 1 / 30;
+const BRANCH_MODES = new Set(['local', 'offline-branch']);
 
 const clone = value => structuredClone(value);
 const finiteVector = (value, dimension, label) => {
@@ -97,7 +99,7 @@ export function validatePhoneSnapshot(snapshot) {
 }
 
 export function validateEyes(eyes, snapshot) {
-  if (!eyes || typeof eyes !== 'object' || Object.keys(eyes).length > 64) throw new RangeError('Invalid Eye collection');
+  if (!eyes || typeof eyes !== 'object' || Object.keys(eyes).length > MAX_EYES) throw new RangeError('Invalid Eye collection');
   for (const eye of Object.values(eyes)) {
     const space = snapshot.spaces[eye.spaceId];
     if (!space) throw new TypeError('Eye refers to a missing space');
@@ -106,6 +108,25 @@ export function validateEyes(eyes, snapshot) {
     if (!Array.isArray(eye.returnStack) || eye.returnStack.length > 64) throw new RangeError('Eye return stack limit exceeded');
   }
   return eyes;
+}
+
+const validBranchId = value => typeof value === 'string' && value.length >= 1 && value.length <= 256 && !/[\u0000-\u001f\u007f]/.test(value);
+function restoreBranchMetadata(envelope) {
+  if (envelope.branchId !== undefined && !validBranchId(envelope.branchId)) throw new TypeError('Invalid phone branch identity');
+  if (envelope.mode !== undefined && !BRANCH_MODES.has(envelope.mode)) throw new TypeError('Invalid phone branch mode');
+  if (envelope.mode === 'offline-branch' && !envelope.branchId) throw new TypeError('Offline branch identity is missing');
+  if (envelope.parentBranchId !== undefined && envelope.parentBranchId !== null && !validBranchId(envelope.parentBranchId)) throw new TypeError('Invalid phone parent branch identity');
+  if (envelope.mode === 'offline-branch' && envelope.parentBranchId !== undefined && envelope.parentBranchId !== null && envelope.parentBranchId === envelope.branchId) throw new TypeError('Offline branch cannot parent itself');
+  if (envelope.branchLabel !== undefined && envelope.branchLabel !== null && typeof envelope.branchLabel !== 'string') throw new TypeError('Invalid phone branch label');
+  const forkedAt = envelope.forkedAt === undefined || envelope.forkedAt === null ? null : Number(envelope.forkedAt);
+  if (forkedAt !== null && !Number.isFinite(forkedAt)) throw new TypeError('Invalid phone branch timestamp');
+  return {
+    branchId: envelope.branchId || uuid(),
+    mode: envelope.mode || 'local',
+    parentBranchId: envelope.parentBranchId || null,
+    branchLabel: envelope.branchLabel === undefined || envelope.branchLabel === null ? null : envelope.branchLabel.slice(0, 256),
+    forkedAt,
+  };
 }
 
 /** Fixed-step, local-neighborhood simulation. Nothing allocates by D^dimension. */
@@ -150,7 +171,8 @@ export class LocalVivoEngine {
   constructor({ storage, onChange = () => {}, now = () => Date.now() } = {}) {
     this.storage = storage || null; this.onChange = onChange; this.now = now;
     this.snapshotState = null; this.eyes = {}; this.currentEyeId = null; this.activeIds = new Set();
-    this._tail = Promise.resolve(); this.branchId = uuid(); this.mode = 'local';
+    this.activeSpaceId = null; this._tail = Promise.resolve(); this.branchId = uuid(); this.mode = 'local';
+    this.parentBranchId = null; this.branchLabel = null; this.forkedAt = null;
   }
   async open(worldId, rootDimension = 4) {
     const stored = await this.storage?.load?.(worldId);
@@ -158,10 +180,12 @@ export class LocalVivoEngine {
       validatePhoneSnapshot(stored.snapshot); validateEyes(stored.eyes, stored.snapshot);
       this.snapshotState = clone(stored.snapshot); this.eyes = clone(stored.eyes);
       this.currentEyeId = stored.currentEyeId;
+      Object.assign(this, restoreBranchMetadata(stored));
     } else {
       this.snapshotState = createPhoneSnapshot({ worldId, now: this.now(), rootDimension });
       const eye = createEye({ dimension: this.snapshotState.spaces.root.dimension });
       this.eyes = { [eye.id]: eye }; this.currentEyeId = eye.id;
+      this.branchId = uuid(); this.mode = 'local'; this.parentBranchId = null; this.branchLabel = null; this.forkedAt = null;
       await this.persist();
     }
     if (!this.eyes[this.currentEyeId]) this.currentEyeId = Object.keys(this.eyes)[0];
@@ -169,7 +193,13 @@ export class LocalVivoEngine {
   }
   get world() { if (!this.snapshotState) throw new Error('Open the local world first'); return this.snapshotState; }
   get eye() { const eye = this.eyes[this.currentEyeId]; if (!eye) throw new Error('The active Eye is missing'); return eye; }
-  snapshot() { return { snapshot: clone(this.world), eyes: clone(this.eyes), currentEyeId: this.currentEyeId, branchId: this.branchId, mode: this.mode }; }
+  snapshot() {
+    return {
+      snapshot: clone(this.world), eyes: clone(this.eyes), currentEyeId: this.currentEyeId,
+      branchId: this.branchId, mode: this.mode, parentBranchId: this.parentBranchId,
+      branchLabel: this.branchLabel, forkedAt: this.forkedAt,
+    };
+  }
   async persist() {
     if (!this.snapshotState) return;
     this.snapshotState.savedAt = this.now();
@@ -181,12 +211,17 @@ export class LocalVivoEngine {
   }
   emit(reason) { this.onChange({ reason, state: this.snapshot() }); }
   createEye(label = 'New Eye') {
+    if (Object.keys(this.eyes).length >= MAX_EYES) throw new RangeError(`The phone Eye limit is ${MAX_EYES}`);
     const space = this.world.spaces[this.eye.spaceId];
     const next = createEye({ label, spaceId: space.id, dimension: space.dimension });
     next.q = [...this.eye.q]; next.slice = clone(this.eye.slice); next.projection = clone(this.eye.projection);
     this.eyes[next.id] = next; this.currentEyeId = next.id; this.queuePersist(); this.emit('eye-created'); return clone(next);
   }
-  selectEye(id) { if (!this.eyes[id]) throw new TypeError('Unknown Eye'); this.currentEyeId = id; this.emit('eye-selected'); this.queuePersist(); }
+  selectEye(id) {
+    if (!this.eyes[id]) throw new TypeError('Unknown Eye');
+    if (this.currentEyeId !== id) { this.activeIds.clear(); this.activeSpaceId = null; }
+    this.currentEyeId = id; this.emit('eye-selected'); this.queuePersist();
+  }
   setEye(patch) {
     const eye = this.eye;
     if (patch.q) eye.q = finiteVector(patch.q, this.world.spaces[eye.spaceId].dimension, 'Eye q').slice();
@@ -198,22 +233,26 @@ export class LocalVivoEngine {
     const space = this.world.spaces[this.eye.spaceId], entity = space?.entities[entityId];
     if (!entity) throw new TypeError('Object is not in the active space');
     if (!Number.isInteger(axis) || axis < 0 || axis >= space.dimension || !Number.isFinite(delta) || Math.abs(delta) > 5) throw new RangeError('Invalid local material movement');
+    if (this.activeSpaceId && this.activeSpaceId !== space.id) { this.activeIds.clear(); this.activeSpaceId = null; }
     entity.q[axis] = Math.max(-MAX_COORDINATE, Math.min(MAX_COORDINATE, entity.q[axis] + delta));
     entity.v[axis] = 0; entity.revision++; this.activeIds.add(entity.id);
     for (const edge of space.field.edges) if (edge.a === entity.id) this.activeIds.add(edge.b); else if (edge.b === entity.id) this.activeIds.add(edge.a);
+    this.activeSpaceId = space.id;
     this.world.acceptedSequence++; this.emit('object-provisional'); this.queuePersist();
   }
   async step(dt = FIXED_STEP) {
     const space = this.world.spaces[this.eye.spaceId];
+    if (this.activeSpaceId && this.activeSpaceId !== space.id) { this.activeIds.clear(); this.activeSpaceId = null; }
     if (!this.activeIds.size) return false;
     const moving = stepSparseSpace(space, dt, this.activeIds);
-    if (!moving) this.activeIds.clear();
+    if (!moving) { this.activeIds.clear(); this.activeSpaceId = null; }
     this.world.simulationTime += dt; this.world.acceptedSequence++;
     this.emit('material-step'); await this.persist(); return moving;
   }
   enterNested(entityId) {
     const entity = this.world.spaces[this.eye.spaceId].entities[entityId];
     if (!entity?.innerSpaceId || !this.world.spaces[entity.innerSpaceId]) throw new TypeError('Object has no nested world');
+    this.activeIds.clear(); this.activeSpaceId = null;
     const prior = { spaceId: this.eye.spaceId, q: [...this.eye.q], basis: clone(this.eye.basis), slice: clone(this.eye.slice) };
     this.eye.returnStack.push(prior);
     this.eye.spaceId = entity.innerSpaceId;
@@ -223,13 +262,15 @@ export class LocalVivoEngine {
     this.eye.revision++; this.queuePersist(); this.emit('nested-enter');
   }
   exitNested() {
-    const prior = this.eye.returnStack.pop(); if (!prior) return false;
+    const prior = this.eye.returnStack.pop(); if (!prior) { this.activeIds.clear(); this.activeSpaceId = null; return false; }
+    this.activeIds.clear(); this.activeSpaceId = null;
     Object.assign(this.eye, prior); this.eye.revision++; this.queuePersist(); this.emit('nested-exit'); return true;
   }
   forkOffline(label = 'Offline branch') {
     const parentBranchId = this.branchId;
-    this.branchId = uuid(); this.mode = 'offline-branch';
-    const branch = { ...this.snapshot(), parentBranchId, label, forkedAt: this.now() };
+    this.branchId = uuid(); this.mode = 'offline-branch'; this.parentBranchId = parentBranchId;
+    this.branchLabel = String(label).slice(0, 256); this.forkedAt = this.now();
+    const branch = this.snapshot();
     this.queuePersist(); this.emit('offline-fork'); return clone(branch);
   }
   async close() { await this._tail; await this.persist(); this.activeIds.clear(); }

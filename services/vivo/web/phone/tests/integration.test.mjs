@@ -26,9 +26,10 @@ test('the phone-owned tracker detects two complete hands without transporting fr
   assert.match(worker, /numHands: 2/);
   assert.match(worker, /maxHands: 2/);
   assert.match(worker, /landmarksPerHand: 21/);
+  assert.match(worker, /handednesses/);
   assert.match(worker, /delegate: 'GPU'/);
   assert.match(worker, /delegate: 'CPU'/);
-  assert.match(camera, /matchHands\(detections, this\.previous\)/);
+  assert.match(camera, /matchHands\(detections, this\.previous,/);
   assert.match(camera, /describeHand\(item\.landmarks\)/);
   assert.match(camera, /twohand/);
   assert.match(camera, /createImageBitmap\(this\.video\)/);

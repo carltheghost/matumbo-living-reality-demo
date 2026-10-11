@@ -1,3 +1,9 @@
+export const MAX_HANDS = 2;
+export const MAX_HAND_MISSING_FRAMES = 3;
+const MATCH_DISTANCE = 0.65;
+const AMBIGUITY_MARGIN = 0.12;
+const LABEL_PENALTY = 4;
+const LABEL_BONUS = 0.12;
 const xy = p => [Number(p?.x), Number(p?.y)];
 const d2 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 const palmCenter = hand => {
@@ -5,29 +11,122 @@ const palmCenter = hand => {
   return indexes.reduce((out, i) => [out[0] + (Number(hand[i]?.x) || 0) / indexes.length, out[1] + (Number(hand[i]?.y) || 0) / indexes.length], [0, 0]);
 };
 
-/** Re-identify two detections between frames without depending on model order. */
-export function matchHands(detections, previous = []) {
-  const hands = (detections || []).filter(hand => Array.isArray(hand) && hand.length === 21);
-  if (hands.length > 2) hands.length = 2;
-  if (!previous.some(Boolean)) return hands.map((landmarks, detectionIndex) => ({ id: `hand-${detectionIndex + 1}`, slot: detectionIndex, landmarks, detectionIndex })).sort((a, b) => palmCenter(a.landmarks)[0] - palmCenter(b.landmarks)[0]).map((hand, slot) => ({ ...hand, id: `hand-${slot + 1}`, slot }));
-  if (hands.length === 1) {
-    const center = palmCenter(hands[0]);
-    let best = 0, score = Infinity;
-    previous.forEach((prior, slot) => { if (!prior) return; const next = d2(center, prior.center); if (next < score) { score = next; best = slot; } });
-    if (score > 0.28) best = previous[0] ? 1 : 0;
-    return [{ id: `hand-${best + 1}`, slot: best, landmarks: hands[0], detectionIndex: 0 }];
-  }
-  if (hands.length === 2) {
-    const centers = hands.map(palmCenter), candidates = [];
-    for (const permutation of [[0, 1], [1, 0]]) {
-      let score = 0;
-      for (let slot = 0; slot < 2; slot++) if (previous[slot]) score += d2(centers[permutation[slot]], previous[slot].center); else score += 0.15;
-      candidates.push({ permutation, score });
+export function normalizeHandedness(value) {
+  const raw = typeof value === 'string' ? value : value?.categoryName || value?.displayName || value?.label;
+  if (typeof raw !== 'string') return null;
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === 'left' || normalized === 'right') return normalized;
+  return null;
+}
+
+function normalizeDetection(value, detectionIndex, handednesses = []) {
+  const object = Array.isArray(value) ? { landmarks: value, handedness: handednesses[detectionIndex] } : (value || {});
+  const landmarks = object.landmarks || object.points;
+  if (!Array.isArray(landmarks) || landmarks.length !== 21) return null;
+  const confidence = Number(object.confidence ?? object.score ?? handednesses[detectionIndex]?.score);
+  return {
+    landmarks, detectionIndex, handedness: normalizeHandedness(object.handedness || object.handednesses || handednesses[detectionIndex]),
+    confidence: Number.isFinite(confidence) ? confidence : null,
+  };
+}
+
+function predictedCenter(track) {
+  const center = Array.isArray(track?.center) ? track.center : [0, 0];
+  const velocity = Array.isArray(track?.velocity) ? track.velocity : [0, 0];
+  const frames = Math.min(MAX_HAND_MISSING_FRAMES, Math.max(1, Number(track?.missing || 0) + 1));
+  return [center[0] + (Number(velocity[0]) || 0) * frames, center[1] + (Number(velocity[1]) || 0) * frames];
+}
+
+function trackScore(track, detection) {
+  const center = palmCenter(detection.landmarks), distance = d2(center, predictedCenter(track));
+  const sameLabel = track?.handedness && detection.handedness && track.handedness === detection.handedness;
+  const conflictingLabel = track?.handedness && detection.handedness && track.handedness !== detection.handedness;
+  return {
+    center, distance, sameLabel, conflictingLabel,
+    score: distance + (conflictingLabel ? LABEL_PENALTY : sameLabel ? -LABEL_BONUS : 0),
+  };
+}
+
+function makeTrack(track, detection, slot) {
+  const center = palmCenter(detection.landmarks);
+  const prior = Array.isArray(track?.center) ? track.center : null;
+  const velocity = prior ? [center[0] - prior[0], center[1] - prior[1]] : [0, 0];
+  return {
+    id: track?.id || `hand-${slot + 1}`, slot, landmarks: detection.landmarks,
+    detectionIndex: detection.detectionIndex, handedness: detection.handedness,
+    confidence: detection.confidence, center, velocity, age: Number(track?.age || 0) + 1, missing: 0,
+  };
+}
+
+function withMatchMeta(matches, { ambiguous = false, ambiguousIds = [], missingIds = [] } = {}) {
+  matches.ambiguous = ambiguous;
+  matches.ambiguousIds = [...new Set(ambiguousIds.filter(Boolean))];
+  matches.missingIds = [...new Set(missingIds.filter(Boolean))];
+  return matches;
+}
+
+function initialTracks(detections) {
+  const rank = value => value.handedness === 'left' ? 0 : value.handedness === 'right' ? 1 : 2;
+  const ordered = detections.slice().sort((a, b) => rank(a) - rank(b) || palmCenter(a.landmarks)[0] - palmCenter(b.landmarks)[0]);
+  return withMatchMeta(ordered.slice(0, MAX_HANDS).map((detection, slot) => makeTrack(null, detection, slot)));
+}
+
+/**
+ * Re-identify two detections between frames. Detector handedness is the first
+ * signal; predicted motion and track age keep a short occlusion stable. A
+ * near-tie while hands cross is deliberately ambiguous so callers can release
+ * ownership instead of transferring a held gesture to the other hand.
+ */
+export function matchHands(detections, previous = [], { handednesses = [] } = {}) {
+  const hands = (detections || []).map((value, index) => normalizeDetection(value, index, handednesses)).filter(Boolean).slice(0, MAX_HANDS);
+  const prior = Array.from({ length: MAX_HANDS }, (_, slot) => previous[slot] || null);
+  const priorIds = prior.map(track => track?.id).filter(Boolean);
+  if (!hands.length) return withMatchMeta([], { missingIds: priorIds });
+  if (!prior.some(Boolean)) return initialTracks(hands);
+
+  if (hands.length === 2 && prior.every(Boolean)) {
+    const candidates = [[0, 1], [1, 0]].map(permutation => {
+      const scored = permutation.map((detectionIndex, slot) => trackScore(prior[slot], hands[detectionIndex]));
+      return { permutation, scored, score: scored.reduce((sum, item) => sum + item.score, 0) };
+    }).sort((a, b) => a.score - b.score);
+    const best = candidates[0], alternate = candidates[1];
+    const distinctLabels = hands.every(hand => hand.handedness) && hands[0].handedness !== hands[1].handedness;
+    const closeTracks = d2(prior[0].center || [0, 0], prior[1].center || [0, 0]) < 0.42;
+    const closeDetections = d2(palmCenter(hands[0].landmarks), palmCenter(hands[1].landmarks)) < 0.2;
+    if (!distinctLabels && closeTracks && closeDetections && alternate.score - best.score < AMBIGUITY_MARGIN) {
+      return withMatchMeta([], { ambiguous: true, ambiguousIds: priorIds });
     }
-    const best = candidates.sort((a, b) => a.score - b.score)[0].permutation;
-    return best.map((handIndex, slot) => ({ id: `hand-${slot + 1}`, slot, landmarks: hands[handIndex], detectionIndex: handIndex }));
+    return withMatchMeta(best.permutation.map((detectionIndex, slot) => makeTrack(prior[slot], hands[detectionIndex], slot)));
   }
-  return [];
+
+  if (hands.length === 1) {
+    const scored = prior.map((track, slot) => track ? { slot, ...trackScore(track, hands[0]) } : null).filter(Boolean).sort((a, b) => a.score - b.score);
+    if (!scored.length) return initialTracks(hands);
+    const best = scored[0], alternate = scored[1];
+    const exactLabel = best.sameLabel && !best.conflictingLabel;
+    const closeTracks = alternate && d2(prior[best.slot].center || [0, 0], prior[alternate.slot].center || [0, 0]) < 0.42;
+    if (!exactLabel && alternate && closeTracks && alternate.score - best.score < AMBIGUITY_MARGIN) {
+      return withMatchMeta([], { ambiguous: true, ambiguousIds: priorIds });
+    }
+    if (!exactLabel && best.distance > MATCH_DISTANCE) {
+      const freeSlot = prior.findIndex((track, slot) => !track || slot !== best.slot && (track.missing || 0) > 0);
+      if (freeSlot >= 0) return withMatchMeta([makeTrack(null, hands[0], freeSlot)]);
+    }
+    return withMatchMeta([makeTrack(prior[best.slot], hands[0], best.slot)], { missingIds: prior.filter((_, slot) => slot !== best.slot).map(track => track?.id) });
+  }
+
+  // One tracked hand plus two detections: attach the closest/highest-confidence
+  // detection to that track, then give the remaining detection a free slot.
+  const trackedSlot = prior.findIndex(Boolean);
+  if (trackedSlot < 0) return initialTracks(hands);
+  const candidates = hands.map((hand, detectionIndex) => ({ detectionIndex, ...trackScore(prior[trackedSlot], hand) })).sort((a, b) => a.score - b.score);
+  const best = candidates[0], alternate = candidates[1];
+  if (!best.sameLabel && alternate && !alternate.sameLabel && alternate.score - best.score < AMBIGUITY_MARGIN) {
+    return withMatchMeta([], { ambiguous: true, ambiguousIds: priorIds });
+  }
+  const freeSlot = trackedSlot === 0 ? 1 : 0;
+  const result = [makeTrack(prior[trackedSlot], hands[best.detectionIndex], trackedSlot), makeTrack(null, hands[alternate.detectionIndex], freeSlot)];
+  return withMatchMeta(result.sort((a, b) => a.slot - b.slot));
 }
 
 /** Use all 21 points: five articulated fingers, pinch ratio and useful poses. */

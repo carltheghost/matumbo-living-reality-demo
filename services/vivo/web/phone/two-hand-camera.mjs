@@ -1,4 +1,4 @@
-import { describeHand, matchHands, twoHandTransform } from './hand-gestures.mjs';
+import { describeHand, matchHands, twoHandTransform, MAX_HAND_MISSING_FRAMES } from './hand-gestures.mjs';
 
 const BONES = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[0,17],[17,18],[18,19],[19,20]];
 const COLORS = ['#7ee2c3', '#e2ba76'];
@@ -149,9 +149,20 @@ export class PhoneTwoHandCamera {
 
   consume(result) {
     if (result.sequence < this.sequence - 2) return;
-    const detections = (result.landmarks || []).filter(points => Array.isArray(points) && points.length === 21);
-    const matched = matchHands(detections, this.previous);
-    this.previous = [null, null];
+    const detections = (result.hands || result.landmarks || []).filter(hand => Array.isArray(hand) ? hand.length === 21 : Array.isArray(hand?.landmarks) && hand.landmarks.length === 21);
+    const matched = matchHands(detections, this.previous, { handednesses: result.handednesses || [] });
+    if (matched.ambiguous) {
+      for (const handId of this.held) this.onGesture({ type: 'release', handId, reason: 'ambiguous hand crossing' });
+      const handIds = matched.ambiguousIds.length ? matched.ambiguousIds : this.previous.map(hand => hand?.id).filter(Boolean);
+      this.held.clear(); this.armed.clear(); this.lastPose.clear(); this.swipeStart.clear(); this.lastTwoHand = null;
+      this.previous = [null, null]; this.hands = []; this.renderer.hand = [];
+      this.onHands([]); this.draw();
+      this.onGesture({ type: 'frame', hands: [], landmarksPerHand: 21, ambiguous: true, handIds });
+      this.onGesture({ type: 'lost', reason: 'ambiguous hand crossing', handIds });
+      return;
+    }
+    const nextPrevious = [null, null];
+    for (const track of this.previous) if (track && (track.missing || 0) < MAX_HAND_MISSING_FRAMES) nextPrevious[track.slot] = { ...track, missing: (track.missing || 0) + 1 };
     const hands = matched.map(item => {
       const details = describeHand(item.landmarks);
       const screenLandmarks = item.landmarks.map(point => this.screenPoint(point));
@@ -161,19 +172,20 @@ export class PhoneTwoHandCamera {
         (screenLandmarks[4][1] + screenLandmarks[8][1]) / 2,
       ];
       const center = palmCenter(item.landmarks);
-      this.previous[item.slot] = { center };
+      nextPrevious[item.slot] = item;
       return { id: item.id, slot: item.slot, pose: details.pose, fingers: details.fingers,
-        pinchRatio: details.pinchRatio, screenLandmarks, indexPoint, pinchPoint,
+        handedness: item.handedness, confidence: item.confidence, pinchRatio: details.pinchRatio, screenLandmarks, indexPoint, pinchPoint,
         center: this.screenPoint({ x: center[0], y: center[1] }),
         rawLandmarks: item.landmarks };
     });
+    this.previous = nextPrevious;
     this.hands = hands;
     this.renderer.hand = hands[0]?.screenLandmarks || [];
     this.onHands(hands.map(({ rawLandmarks, ...hand }) => hand));
     this.draw();
     this.onGesture({
       type: 'frame',
-      hands: hands.map(({ id, pose, fingers, pinchRatio }) => ({ id, pose, fingers: { ...fingers }, pinchRatio })),
+      hands: hands.map(({ id, pose, fingers, pinchRatio, handedness, confidence }) => ({ id, pose, fingers: { ...fingers }, pinchRatio, handedness, confidence })),
       landmarksPerHand: 21,
     });
     this.emitSwipe(hands);

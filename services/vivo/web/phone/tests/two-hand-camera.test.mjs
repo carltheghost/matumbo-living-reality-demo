@@ -72,3 +72,37 @@ test('an open hand arms a pinch grab and an open hand releases it', () => {
   assert.equal(gestures.filter(event => event.type === 'release').length, 1);
 });
 
+test('handedness survives a one-frame occlusion and reacquire keeps the same IDs', () => {
+  const tracked = [];
+  const scope = {
+    innerWidth: 400,
+    performance: { now: () => 100 },
+    document: { getElementById: () => ({ getBoundingClientRect: () => ({ left: 0, top: 0, width: 400, height: 600 }) }) },
+    addEventListener() {},
+  };
+  const camera = new PhoneTwoHandCamera({ video: { videoWidth: 640, videoHeight: 480 }, renderer: {}, onHands: hands => tracked.push(hands), scope });
+  const left = makePinchHand(0), right = makePinchHand(1);
+  camera.consume({ sequence: 1, hands: [{ landmarks: left, handedness: 'Left' }, { landmarks: right, handedness: 'Right' }] });
+  camera.consume({ sequence: 2, hands: [{ landmarks: left, handedness: 'Left' }] });
+  assert.deepEqual(tracked.at(-1).map(hand => hand.id), ['hand-1']);
+  camera.consume({ sequence: 3, hands: [{ landmarks: right, handedness: 'Right' }, { landmarks: left, handedness: 'Left' }] });
+  assert.equal(tracked.at(-1).find(hand => hand.handedness === 'left').id, 'hand-1');
+  assert.equal(tracked.at(-1).find(hand => hand.handedness === 'right').id, 'hand-2');
+});
+
+test('ambiguous crossing releases an owned hand instead of transferring it', () => {
+  const gestures = [];
+  const scope = {
+    innerWidth: 400,
+    performance: { now: () => 100 },
+    document: { getElementById: () => ({ getBoundingClientRect: () => ({ left: 0, top: 0, width: 400, height: 600 }) }) },
+    addEventListener() {},
+  };
+  const camera = new PhoneTwoHandCamera({ video: { videoWidth: 640, videoHeight: 480 }, renderer: {}, onGesture: event => gestures.push(event), scope });
+  camera.consume({ sequence: 1, landmarks: [makePinchHand(0.45), makePinchHand(0.55)] });
+  camera.held.add('hand-1');
+  camera.consume({ sequence: 2, landmarks: [makePinchHand(0.5), makePinchHand(0.5)] });
+  assert.ok(gestures.some(event => event.type === 'release' && event.handId === 'hand-1' && event.reason === 'ambiguous hand crossing'));
+  assert.ok(gestures.some(event => event.type === 'lost' && event.reason === 'ambiguous hand crossing'));
+});
+

@@ -41,11 +41,20 @@ self.onmessage = async ({ data }) => {
   try {
     if (!model) throw new Error('Local hand model is not initialized.');
     const result = model.detectForVideo(data.image, data.time);
-    const hands = (result.landmarks || []).slice(0, 2).map(points => points.slice(0, 21));
+    const hands = (result.landmarks || []).slice(0, 2).map((points, index) => {
+      const category = result.handednesses?.[index]?.[0];
+      return {
+        landmarks: points.slice(0, 21),
+        handedness: category?.categoryName || category?.displayName || null,
+        confidence: Number.isFinite(category?.score) ? category.score : null,
+      };
+    });
     self.postMessage({
       type: 'result', sequence: data.sequence, time: data.time,
       inferenceMs: performance.now() - begin, delegate: activeDelegate,
-      maxHands: 2, landmarksPerHand: 21, landmarks: hands,
+      maxHands: 2, landmarksPerHand: 21, hands,
+      landmarks: hands.map(hand => hand.landmarks),
+      handednesses: hands.map(hand => ({ categoryName: hand.handedness, score: hand.confidence })),
     });
   } catch (error) {
     self.postMessage({ type: 'error', message: error?.message || 'Local hand inference failed.' });

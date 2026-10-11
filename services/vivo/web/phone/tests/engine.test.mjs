@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { LocalVivoEngine, createEye, createPhoneSnapshot, projectForRenderer, stepSparseSpace, validatePhoneSnapshot } from '../engine.mjs';
+import { MAX_EYES, LocalVivoEngine, createEye, createPhoneSnapshot, projectForRenderer, stepSparseSpace, validatePhoneSnapshot } from '../engine.mjs';
 
 class MemoryStore {
   rows = new Map();
@@ -65,6 +65,39 @@ test('world identity is persistent while two Eyes keep separate view and nested 
   assert.deepEqual(reloaded.eyes[eyeTwo.id].q, [0, 0, 0, 0]);
   assert.equal(reloaded.eyes[eyeOne].projection.scale, 15);
   assert.equal(reloaded.eyes[eyeTwo.id].projection.scale, 7);
+});
+
+test('branch identity and offline provenance survive close and reload', async () => {
+  const store = new MemoryStore(), first = new LocalVivoEngine({ storage: store, now: () => 100 });
+  await first.open('branch-persistence');
+  const parentBranchId = first.branchId;
+  const branch = first.forkOffline('No-network work');
+  await first.close();
+  const reloaded = new LocalVivoEngine({ storage: store });
+  await reloaded.open('branch-persistence');
+  assert.equal(reloaded.branchId, branch.branchId);
+  assert.equal(reloaded.mode, 'offline-branch');
+  assert.equal(reloaded.parentBranchId, parentBranchId);
+  assert.equal(reloaded.branchLabel, 'No-network work');
+  assert.equal(reloaded.forkedAt, 100);
+});
+
+test('Eye creation is capped at the validated envelope limit', async () => {
+  const engine = new LocalVivoEngine(); await engine.open('eye-cap');
+  for (let index = 1; index < MAX_EYES; index++) engine.createEye(`Eye ${index + 1}`);
+  assert.equal(Object.keys((await engine.snapshot()).eyes).length, MAX_EYES);
+  assert.throws(() => engine.createEye('poisoning Eye'), new RegExp(`Eye limit is ${MAX_EYES}`));
+});
+
+test('nested transitions fence active material IDs to their current space', async () => {
+  const engine = new LocalVivoEngine(); await engine.open('nested-active-fence');
+  engine.translate('relic', 0, 0.1);
+  engine.enterNested('portal');
+  assert.equal(await engine.step(1 / 30), false);
+  engine.translate('innerRelic', 0, 0.1);
+  assert.equal(await engine.step(1 / 30), false);
+  assert.equal(engine.exitNested(), true);
+  assert.equal(await engine.step(1 / 30), false);
 });
 
 test('snapshot and sparse solver reject unsupported dimensions, neighbors, and unsafe time steps', () => {
