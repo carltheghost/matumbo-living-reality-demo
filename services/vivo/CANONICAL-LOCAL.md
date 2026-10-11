@@ -50,9 +50,9 @@ state automatically. The optional bridge carries only the versioned Echo
 projection binding through the authority; it does not copy Studio velocities,
 edges, laws, material checkpoints, camera state, or Eye state. Conversely,
 accepted preview history/export does not restore the whole Studio field. In
-`--store memory` the accepted world and binding are session-only and reset with
-the server; POSIX/SQLite modes persist accepted state in their private backend
-files.
+`--store memory` uses a session-only accepted world and binding; its accepted
+state is session-only and resets with the server; POSIX/SQLite modes persist
+accepted state in their private backend files.
 
 The accepted preview's **Fork offline branch** action is an explicit, downloaded
 handoff from the current accepted checkpoint. It preserves object IDs, nested
