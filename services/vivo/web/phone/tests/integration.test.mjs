@@ -31,6 +31,32 @@ test('the Android Companion extends the canonical GitHub Pages UI at runtime', a
   assert.match(bootstrap, /persistence-status\.mjs/);
   assert.match(bootstrap, /reportPersistenceStatus\('release'/);
   assert.match(bootstrap, /reportPersistenceStatus\('save'/);
+  assert.match(bootstrap, /PhoneAuthorityAdapter/);
+  assert.match(bootstrap, /phoneAuthorityConnect/);
+  assert.match(bootstrap, /phoneAuthorityPublish/);
+  assert.match(bootstrap, /phoneAuthorityCommit/);
+  assert.match(bootstrap, /const result = await authority\.connect\(\{ seat: \$\('phoneAuthoritySeat'\)\.value \}\)/);
+  assert.match(bootstrap, /result\?\.status === 'rejected'/);
+  assert.match(bootstrap, /const result = await authority\.read\(\)/);
+  assert.match(bootstrap, /result\?\.status === 'rejected'/);
+});
+
+test('phone authority adapter is cached for offline local startup and keeps shared contracts lazy', async () => {
+  const [adapter, mapping, sw] = await Promise.all([
+    readFile(new URL('phone/authority-adapter.mjs', root), 'utf8'),
+    readFile(new URL('phone/authority-mapping.mjs', root), 'utf8'),
+    readFile(new URL('vivo-sw.js', root), 'utf8'),
+  ]);
+  assert.match(mapping, /studio\.node\.echo/);
+  assert.match(mapping, /studio\.node\.workpiece/);
+  assert.match(mapping, /studio\.node\.portal/);
+  assert.match(adapter, /PHONE_OFFLINE_BRANCH_NO_SEND/);
+  assert.match(adapter, /studioCommitCommand/);
+  assert.match(adapter, /studioTransformCommand/);
+  assert.match(adapter, /loadStudioCommands/);
+  assert.match(sw, /phone\/authority-adapter\.mjs/);
+  assert.match(sw, /phone\/authority-mapping\.mjs/);
+  assert.doesNotMatch(adapter, /new LocalTransport\(options\)/);
 });
 
 test('the phone-owned tracker detects two complete hands without transporting frames', async () => {

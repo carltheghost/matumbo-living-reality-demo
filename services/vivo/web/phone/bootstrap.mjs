@@ -6,6 +6,7 @@ import { HandsFreeProjection } from './projection.mjs';
 import { PhoneTwoHandCamera } from './two-hand-camera.mjs';
 import { formatPersistenceStatus } from './persistence-status.mjs';
 import { startCameraFromButton } from './camera-start-status.mjs';
+import { PhoneAuthorityAdapter } from './authority-adapter.mjs';
 
 const $ = id => document.getElementById(id);
 const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
@@ -15,7 +16,7 @@ const registry = new AgentToolRegistry({ bridge });
 const shared = window.VivaShared;
 if (!shared?.R || !shared?.S || !shared?.camera) throw new Error('Viva phone integration loaded before the shared renderer.');
 const { R, S, camera } = shared;
-let engine = null, localMode = false, selectedId = null, activeAxis = 0, heldHand = null;
+let engine = null, authority = null, localMode = false, selectedId = null, activeAxis = 0, heldHand = null;
 let pointer = null, pinch = null, projection = null;
 let persistTimer = null, lastTwoHand = null, latestCapabilities = null, lastPoseAction = -Infinity;
 const lastPoseByHand = new Map();
@@ -91,6 +92,42 @@ function updateEyeControls(envelope) {
   $('phoneEnterNested').disabled = !S.state?.entities[R.selected]?.innerSpaceId;
 }
 async function refreshSnapshot() { if (!engine) return null; const envelope = await engine.snapshot(); if (localMode) renderEye(envelope); return envelope; }
+function updatePhoneAuthorityUI(detail = null) {
+  const debug = detail?.state || authority?.debug();
+  const state = $('phoneAuthorityState'), output = $('phoneAuthorityDebug');
+  if (!debug) {
+    if (state) state.textContent = 'Enter local Vivo first. Canonical authority is never contacted automatically.';
+    if (output) output.textContent = '';
+    return;
+  }
+  const mapping = debug.mapping || {};
+  const capability = debug.capabilities?.canonicalCommit || {};
+  const statusText = mapping.status !== 'available'
+    ? `${debug.connected ? 'CONNECTED' : 'OFFLINE'} · ${mapping.code || 'PHONE_OBJECT_UNAVAILABLE'} · ${mapping.reason || 'Local object is not mapped.'}`
+    : `${debug.connected ? 'CONNECTED' : 'OFFLINE'} · ${debug.local?.mode || 'local'} · ${debug.local?.dimension || '?'}D root · ${debug.authorityPersistence?.durable ? 'authority durable' : 'authority memory/session'} · ${capability.allowed ? 'canonical commit available' : (capability.rejectionCode || 'canonical commit unavailable')}`;
+  if (state) state.textContent = debug.conflict
+    ? `CONFLICT · ${debug.message}`
+    : statusText + (debug.message ? ` · ${debug.message}` : '');
+  if (output) output.textContent = JSON.stringify({
+    mapping: debug.mapping,
+    local: debug.local,
+    acceptedSequence: debug.acceptedSequence,
+    acceptedBinding: debug.acceptedBinding,
+    acceptedEntity: debug.acceptedEntity,
+    capabilities: debug.capabilities,
+    authorityPersistence: debug.authorityPersistence,
+    conflict: debug.conflict,
+    lastResult: debug.lastResult,
+  }, null, 2);
+  const entity = $('phoneAuthorityEntity'), connected = debug.connected;
+  if (entity && entity.value !== authority?.selectedEntityId) entity.value = authority?.selectedEntityId || entity.value;
+  const setDisabled = (id, disabled) => { const node = $(id); if (node) node.disabled = disabled; };
+  setDisabled('phoneAuthorityConnect', connected || !engine);
+  setDisabled('phoneAuthorityRead', !connected);
+  setDisabled('phoneAuthorityPreview', !engine);
+  setDisabled('phoneAuthorityPublish', !connected || mapping.status !== 'available' || !debug.capabilities?.projection);
+  setDisabled('phoneAuthorityCommit', !connected || mapping.status !== 'available' || !capability.allowed);
+}
 async function reportPersistenceStatus(action, operation = engine?.lastPersistence) {
   let result = null;
   try { if (operation) result = await operation; } catch {}
@@ -240,6 +277,15 @@ function addPhoneSurface() {
     <p id="phoneProjectionState" class="muted">Projection is controlled separately from input. OS support decides whether a route is available.</p>
     <div class="row"><button id="phoneInstallOffline">Install offline shell</button><button id="phoneCacheHands">Cache hand model (large)</button></div>
     <p id="phoneCapabilityState" class="muted"></p>
+    <hr><h3>Canonical authority (explicit)</h3>
+    <p class="muted">The phone remains a local authority. Connect and read are explicit; Preview sends nothing. Publish selected uses <code>studio.transform</code> only. Commit canonical uses <code>studio.commit</code> with global, binding and entity CAS. Offline branches never send and accepted state is never copied back into the phone.</p>
+    <label>Authority seat<select id="phoneAuthoritySeat"><option value="one">Seat one</option><option value="two">Seat two</option></select></label>
+    <label>Phone object<select id="phoneAuthorityEntity"><option value="relic">Relic → canonical Echo</option><option value="workpiece">Workpiece → canonical Workpiece</option><option value="portal">Portal → canonical Portal</option><option value="innerRelic">Inner relic → local only</option></select></label>
+    <div class="row"><button id="phoneAuthorityConnect">Connect authority</button><button id="phoneAuthorityRead" disabled>Read accepted</button></div>
+    <div class="row"><button id="phoneAuthorityPreview" disabled>Preview local mapping</button><button id="phoneAuthorityPublish" disabled>Publish projection</button></div>
+    <div class="row"><button id="phoneAuthorityCommit" disabled>Commit canonical</button></div>
+    <p id="phoneAuthorityState" class="muted" aria-live="polite">Enter local Vivo first. Canonical authority is never contacted automatically.</p>
+    <pre id="phoneAuthorityDebug" class="muted" aria-live="polite"></pre>
     <hr><h3>Agent tool grants</h3><p class="muted">An agent only receives the capabilities you check here or explicitly grant in the Android Companion.</p>
     <label class="check"><input type="checkbox" data-local-cap="world.read">Allow local agent to read this world</label>
     <label class="check"><input type="checkbox" data-local-cap="world.edit">Allow local agent to move objects</label>
@@ -280,6 +326,46 @@ function addPhoneSurface() {
   $('phoneInstallOffline').onclick = installOffline;
   $('phoneCacheHands').onclick = cacheHandAssets;
   $('phoneRefreshTools').onclick = refreshNativeTools;
+  $('phoneAuthorityEntity').onchange = async event => {
+    if (!authority) return;
+    try { await authority.selectEntity(event.target.value); updatePhoneAuthorityUI(); }
+    catch (error) { status(error.message); }
+  };
+  $('phoneAuthorityConnect').onclick = async () => {
+    if (!authority) { status('Enter the local Vivo engine before connecting the canonical authority.'); return; }
+    try {
+      const result = await authority.connect({ seat: $('phoneAuthoritySeat').value });
+      updatePhoneAuthorityUI();
+      status(result?.status === 'rejected'
+        ? (result.reason || `Canonical authority connection rejected: ${result.code || 'AUTHORITY_UNAVAILABLE'}.`)
+        : 'Canonical authority connected explicitly. Local phone state remains unchanged.');
+    }
+    catch (error) { updatePhoneAuthorityUI(); status(`Canonical authority unavailable: ${error.message}`); }
+  };
+  $('phoneAuthorityRead').onclick = async () => {
+    try {
+      const result = await authority.read();
+      updatePhoneAuthorityUI();
+      status(result?.code === 'AUTHORITY_SESSION_CHANGED'
+        ? 'Canonical authority closed before the read completed. Local phone state remains unchanged.'
+        : result?.status === 'rejected'
+        ? (result.reason || `Canonical read rejected: ${result.code || 'AUTHORITY_UNAVAILABLE'}.`)
+        : 'Accepted canonical state refreshed. Local phone state remains unchanged.');
+    }
+    catch (error) { updatePhoneAuthorityUI(); status(`Canonical read failed: ${error.message}`); }
+  };
+  $('phoneAuthorityPreview').onclick = async () => {
+    try { const result = await authority.preview({ entityId: $('phoneAuthorityEntity').value }); updatePhoneAuthorityUI(); status(result.reason); }
+    catch (error) { updatePhoneAuthorityUI(); status(`Phone mapping preview failed: ${error.message}`); }
+  };
+  $('phoneAuthorityPublish').onclick = async () => {
+    try { const result = await authority.publish(); updatePhoneAuthorityUI(); status(result.reason || (result.status === 'accepted' ? 'Projection published.' : 'Projection rejected.')); }
+    catch (error) { updatePhoneAuthorityUI(); status(`Projection publish failed: ${error.message}`); }
+  };
+  $('phoneAuthorityCommit').onclick = async () => {
+    try { const result = await authority.commit(); updatePhoneAuthorityUI(); status(result.reason || (result.status === 'accepted' ? 'Canonical commit accepted.' : 'Canonical commit rejected.')); }
+    catch (error) { updatePhoneAuthorityUI(); status(`Canonical commit failed: ${error.message}`); }
+  };
   projection.addEventListener('change', event => { $('phoneProjectionState').textContent = `Projection ${event.detail.type} · ${event.detail.route} · camera ${event.detail.cameraTrack} · frames uploaded: no`; });
   bridge.addEventListener('ready', refreshNativeTools);
   bridge.addEventListener('message', event => {
@@ -303,16 +389,19 @@ function openPhonePanel() {
   refreshSnapshot().catch(error => status(error.message));
 }
 async function startLocal() {
-  if (engine) { localMode = true; updateLocalGrants(); document.body.classList.add('phone-local'); const state = await engine.snapshot(); renderEye(state); openPhonePanel(); return; }
+  if (engine) { localMode = true; updateLocalGrants(); document.body.classList.add('phone-local'); const state = await engine.snapshot(); renderEye(state); await authority?.syncLocal(state); updatePhoneAuthorityUI(); openPhonePanel(); return; }
   status('Starting the local worker and opening this phone’s saved Vivo world…');
   engine = new PhoneEngineClient();
   engine.addEventListener('statechange', event => {
     if (event.detail?.state && localMode) renderEye(event.detail.state);
+    if (event.detail?.state && authority) authority.syncLocal(event.detail.state).catch(() => {});
     if (event.detail?.reason === 'step-error') status(event.detail.error || 'Local material step stopped safely.');
     if (event.detail?.reason === 'persistence-failed') status(`Local Vivo state changed but was not saved: ${event.detail.state?.persistence?.error || 'storage failed'}. Retry remains available.`);
   });
   const rootDimension = Number($('createD')?.value) || 4;
   const state = await engine.open(getWorldId(), rootDimension);
+  authority = new PhoneAuthorityAdapter({ engine, onState: updatePhoneAuthorityUI });
+  await authority.syncLocal(state);
   localMode = true; updateLocalGrants(); document.body.classList.add('phone-local'); renderEye(state);
   $('welcome').hidden = true; $('toolbar').hidden = false;
   const caps = await detectPhoneCapabilities(); latestCapabilities = caps;
@@ -391,6 +480,10 @@ window.VivaPhoneEngine = Object.freeze({
   get active() { return !!engine && localMode; }, get available() { return browserCapabilities.worker; },
   snapshot: () => engine?.snapshot(), translate: (...args) => engine?.translate(...args), setEye: patch => engine?.setEye(patch),
   forkOffline: label => engine?.forkOffline(label), startCamera: (facing = 'user') => startPhoneCamera(facing), stopCamera: stopPhoneCamera,
+  authority: () => authority?.debug() || null,
+  connectAuthority: options => authority?.connect(options), readAuthority: () => authority?.read(),
+  previewAuthority: options => authority?.preview(options), publishAuthority: () => authority?.publish(),
+  commitAuthority: () => authority?.commit(),
   capabilities: () => latestCapabilities || browserCapabilities,
 });
 
