@@ -196,7 +196,7 @@ export class LocalLeaseWorld {
         if(alive) return reject('LEASE_HELD',entity);
         const ek=key(token,command.spaceId,p.entityId,p.source), previous=next.epochs[ek]??-1;
         if(p.inputEpoch<=previous) return reject('STALE_EPOCH',entity);
-        const lease={id:'lease.'+uuid(),session:token,actorId:client.session.actorId,spaceId:command.spaceId,
+        const lease={id:'lease.'+uuid(),acquireCommandId:command.id,session:token,actorId:client.session.actorId,spaceId:command.spaceId,
           entityId:p.entityId,source:p.source,inputEpoch:p.inputEpoch,targetSeq:0,expiresAt:now+this.#ttl,target:null};
         next.leases[k]=lease;next.epochs[ek]=p.inputEpoch;
         result={leaseId:lease.id,expiresAt:lease.expiresAt,leaseMs:this.#ttl,entity:clone(entity)};

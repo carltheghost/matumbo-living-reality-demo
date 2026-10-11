@@ -153,7 +153,8 @@ test('hand loss clears only hand preview, preserving touch grip',async()=>{
 test('late acquisition after cancel is cleaned without starting a controller',async()=>{
  const {a}=await fixture();let release;const port={...a,submit:c=>new Promise((res,rej)=>{release=()=>a.submit(c).then(res,rej);})};
  const host=await GripHost.open(port);const p=host.begin('pointer:1',{entity:entity(a),source:'touch',inputEpoch:1});
- await host.cancel('pointer:1','pointercancel');release();await assert.rejects(p,/ACQUIRE_CANCELLED/);
+ const cancelled=host.cancel('pointer:1','pointercancel');release();
+ await assert.rejects(p,/ACQUIRE_CANCELLED/);await cancelled;
  assert.equal(a.inspectLease('root','relic'),null);assert.equal(host.state('pointer:1').controller,null);await host.close();
 });
 test('uncertain target is reconciled; intent never silently replayed',async()=>{
