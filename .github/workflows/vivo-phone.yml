@@ -1,0 +1,100 @@
+name: Vivo phone stage
+
+on:
+  pull_request:
+    paths:
+      - 'services/vivo/web/**'
+      - 'services/vivo/android-companion/**'
+      - 'docs/vivo-phone-*.md'
+      - '.github/workflows/vivo-phone.yml'
+  push:
+    branches:
+      - 'viva/android-phone-engine-2026-10-11'
+    paths:
+      - 'services/vivo/web/**'
+      - 'services/vivo/android-companion/**'
+      - 'docs/vivo-phone-*.md'
+      - '.github/workflows/vivo-phone.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  web-phone-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node --test services/vivo/web/phone/tests/*.test.mjs
+      - name: Check browser module syntax
+        run: |
+          find services/vivo/web/phone -name '*.mjs' -print0 | xargs -0 -n1 node --check
+          node --input-type=module --check < services/vivo/web/camera.js
+          node --input-type=module --check < services/vivo/web/hand-worker.js
+          node --input-type=module --check < services/vivo/web/render.js
+
+  browser-offline-shell:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install browser test dependency
+        run: python -m pip install playwright==1.57.0
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+      - name: Reopen the canonical Companion URL offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m http.server 9878 --bind 127.0.0.1 --directory . >"$RUNNER_TEMP/vivo-phone-offline-server.log" 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          python - <<'PY'
+          import time
+          from urllib.request import urlopen
+          deadline = time.monotonic() + 20
+          while time.monotonic() < deadline:
+              try:
+                  with urlopen('http://127.0.0.1:9878/services/vivo/web/', timeout=2) as response:
+                      if response.status == 200:
+                          break
+              except Exception:
+                  pass
+              time.sleep(0.1)
+          else:
+              raise SystemExit('static server timeout')
+          PY
+          python services/vivo/web/phone/tests/browser_offline_shell.py http://127.0.0.1:9878/
+
+  android-companion:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android SDK Platform 35
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -path '*/bin/sdkmanager' -print | sort -V | tail -n 1)"
+          if [ -z "$SDKMANAGER" ]; then echo "Android sdkmanager was not found under $SDK_ROOT" >&2; exit 1; fi
+          echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
+          set +o pipefail
+          yes | "$SDKMANAGER" --licenses >/dev/null
+          set -o pipefail
+          "$SDKMANAGER" --install 'platforms;android-35' 'build-tools;35.0.0' 'platform-tools'
+      - name: Install Gradle 8.11.1
+        run: |
+          curl --fail --location --silent --show-error https://services.gradle.org/distributions/gradle-8.11.1-bin.zip --output "$RUNNER_TEMP/gradle.zip"
+          unzip -q "$RUNNER_TEMP/gradle.zip" -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/gradle-8.11.1/bin" >> "$GITHUB_PATH"
+      - name: Test broker policy and build debug APK
+        working-directory: services/vivo/android-companion
+        run: gradle --no-daemon testDebugUnitTest assembleDebug
+
