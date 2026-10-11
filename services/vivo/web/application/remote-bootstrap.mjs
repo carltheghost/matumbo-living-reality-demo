@@ -88,16 +88,25 @@ async function axisMove(sign){
   const key='axis:'+crypto.randomUUID(),epoch=await transport.nextEpoch(),target={spaceId:entity.spaceId,chart:entity.chart,dimension:entity.dimension,q:[...entity.q]};
   target.q[axis]+=sign*.25;
   await host.begin(key,{entity,source:'keyboard',inputEpoch:epoch,cooperativeGroup:cooperativeGroup(entity.id)});
-  const observedAt=performance.now();
+  const observedAt=performance.now(),epsilon=1e-6;
   try{
     if(!host.offer(key,target,observedAt))throw Error('Axis target rejected');
-    const deadline=performance.now()+1800;
-    while(performance.now()<deadline){
+    const acceptedDeadline=performance.now()+1800;
+    while(performance.now()<acceptedDeadline){
+      const own=state?.constraints?.find(c=>c.actorId===transport.actorId&&c.spaceId===entity.spaceId&&c.entityId===entity.id);
+      if(own?.target?.q?.length===target.q.length&&Math.abs(own.target.q[axis]-target.q[axis])<=epsilon)break;
+      await new Promise(resolve=>setTimeout(resolve,30));
+    }
+    const own=state?.constraints?.find(c=>c.actorId===transport.actorId&&c.spaceId===entity.spaceId&&c.entityId===entity.id);
+    if(!(own?.target?.q?.length===target.q.length&&Math.abs(own.target.q[axis]-target.q[axis])<=epsilon))throw Error('Axis target was not accepted before release');
+    const moveDeadline=performance.now()+2600,start=entity.q[axis];
+    while(performance.now()<moveDeadline){
       const accepted=state?.snapshot.spaces[entity.spaceId]?.entities[entity.id];
-      if(accepted?.revision>entity.revision)break;
+      if(accepted&&Math.abs(accepted.q[axis]-start)>epsilon)break;
       await new Promise(resolve=>setTimeout(resolve,40));
     }
-    if(!(state?.snapshot.spaces[entity.spaceId]?.entities[entity.id]?.revision>entity.revision))throw Error('No material step accepted the held target');
+    const accepted=state?.snapshot.spaces[entity.spaceId]?.entities[entity.id];
+    if(!(accepted&&Math.abs(accepted.q[axis]-start)>epsilon))throw Error('No material step moved the held axis target');
     await host.end(key,'axis-nudge');
   }catch(error){await host.cancel(key,'axis-nudge-failed').catch(()=>{});throw error;}
 }
