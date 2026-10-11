@@ -234,7 +234,7 @@ export class MountedRuntime {
     return {runtimeRevision:++this.#statusRevision,snapshot:this.#world.snapshot(),eye:clone(this.#store.record.state.eyes[JSON.stringify([session.session.actorId,'main'])]??null),
       constraints:this.#world.constraints().map(l=>({actorId:l.actorId,entityId:l.entityId,
         spaceId:l.spaceId,source:l.source,target:clone(l.target),...(l.cooperativeGroup?{cooperativeGroup:l.cooperativeGroup}:{})})),
-      participants:SEATS.map(seat=>({seat,actorId:LOCAL_SEATS[seat],online:this.#seats.has(seat)})),
+      participants:SEATS.map(seat=>({seat,actorId:this.#seats.get(seat)?.session.actorId??LOCAL_SEATS[seat],online:this.#seats.has(seat)})),
       capabilities:this.#capabilities(),journal:this.#journal(),
       materialDiagnostics:this.#materialDiagnostics()};
   }
@@ -257,14 +257,15 @@ export class MountedRuntime {
     });
   }
   async #open(args) {
-    keys(args,['seat'],['resumeToken','readOnly']);
+    keys(args,['seat'],['resumeToken','readOnly','actorId']);
     if(Object.hasOwn(args,'readOnly')&&typeof args.readOnly!=='boolean')fail('INVALID_ARGUMENT');
+    if(Object.hasOwn(args,'actorId')&&!validId(args.actorId))fail('INVALID_ARGUMENT');
     if(typeof args.seat!=='string'||!Object.hasOwn(LOCAL_SEATS,args.seat))fail('INVALID_SEAT');
     const existing=this.#seats.get(args.seat);
     if(Object.hasOwn(args,'resumeToken')) {
       if(typeof args.resumeToken!=='string'||!existing||existing.token!==args.resumeToken)fail('SESSION_EXPIRED');
     } else if(existing)fail('SEAT_BUSY');
-    const actorId=LOCAL_SEATS[args.seat];
+    const actorId=args.actorId??LOCAL_SEATS[args.seat];
     let authority=null,session;
     if(args.readOnly) {
       if(!this.#store.record.state.eyes[JSON.stringify([actorId,'main'])])fail('NO_SAVED_EYE');
@@ -371,9 +372,14 @@ export class MountedRuntime {
         case 'moveEye':
           keys(args,['view','expectedRevision']);if(!uint(args.expectedRevision))fail('INVALID_ARGUMENT');
           this.#gate();value=await s.authority.moveEye('main',checkedView(args.view),args.expectedRevision);break;
-        case 'inspectLease':
-          keys(args,['spaceId','entityId']);if(!validId(args.spaceId)||!validId(args.entityId))fail('INVALID_ARGUMENT');
-          value=s.authority?publicLease(s.authority.inspectLease(args.spaceId,args.entityId)):null;break;
+        case 'inspectLease': {
+          keys(args,['spaceId','entityId'],['criteria']);if(!validId(args.spaceId)||!validId(args.entityId))fail('INVALID_ARGUMENT');
+          const criteria=args.criteria??{};keys(criteria,[],['source','inputEpoch','acquireCommandId']);
+          if(Object.hasOwn(criteria,'source')&&!['touch','hand','eye-confirmed','keyboard'].includes(criteria.source))fail('INVALID_ARGUMENT');
+          if(Object.hasOwn(criteria,'inputEpoch')&&!uint(criteria.inputEpoch))fail('INVALID_ARGUMENT');
+          if(Object.hasOwn(criteria,'acquireCommandId')&&!validId(criteria.acquireCommandId))fail('INVALID_ARGUMENT');
+          value=s.authority?publicLease(s.authority.inspectLease(args.spaceId,args.entityId,criteria)):null;break;
+        }
         case 'renewLease':
           keys(args,['leaseId']);if(!validId(args.leaseId))fail('INVALID_ARGUMENT');
           this.#gate();value=publicLease(await s.authority.renewLease(args.leaseId));break;

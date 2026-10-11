@@ -1,0 +1,47 @@
+name: Vivo canonical remote collaboration
+on:
+  pull_request:
+    paths:
+      - 'services/vivo/server/remote_application.py'
+      - 'services/vivo/server/application/runtime.mjs'
+      - 'services/vivo/server/application/adaptive_host.py'
+      - 'services/vivo/web/application/remote-transport.mjs'
+      - 'services/vivo/web/application/transport.mjs'
+      - 'services/vivo/web/authority/**'
+      - 'services/vivo/contracts/**'
+      - 'services/vivo/tests/remote/**'
+      - 'services/vivo_adaptive/**'
+      - 'coordination/vivo/REMOTE-CANONICAL-STAGE.md'
+      - '.github/workflows/vivo-remote.yml'
+permissions:
+  contents: read
+jobs:
+  two-person:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: python -m pip install -r services/vivo/requirements.txt
+      - name: Syntax
+        run: |
+          set -euo pipefail
+          node --check services/vivo/web/application/remote-transport.mjs
+          node --check services/vivo/server/application/runtime.mjs
+          python -m py_compile services/vivo/server/remote_application.py
+      - name: Real two-WebSocket canonical acceptance
+        run: |
+          set -euo pipefail
+          PYTHONPATH="$PWD" python -m unittest discover -s services/vivo/tests/remote -p 'test_*.py' -v
+      - name: Cooperative/adaptive regressions
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s services/vivo_adaptive/tests -v
+          node --test services/vivo/tests/adaptive-authority/*.test.mjs
+      - name: Scope
+        run: echo 'Loopback two-WebSocket evidence. No physical phone, camera, public DNS/TLS deployment, or real Internet latency is certified.'
