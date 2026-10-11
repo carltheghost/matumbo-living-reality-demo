@@ -72,9 +72,20 @@ async function beginGesture(key,source,id,point,observedAt){if(!inputs||!online)
 const moveGesture=(key,p,t)=>inputs?.move(key,p,t),endGesture=(key,p,t)=>inputs?.end(key,{point:p,observedAt:t});
 async function releaseAll(){await inputs?.releaseAll();}
 async function editEye(change){const eye=structuredClone(state.eye);change(eye);await transport.moveEye(eye,eye.revision);}
-async function navigate(enter){await releaseAll();const eye=state.eye,e=currentEntity();if(enter&&!e?.innerSpaceId)throw Error('Select an entrance object');
- const command={schema:'vivo.command/1',id:'nav.'+crypto.randomUUID(),worldId:state.snapshot.worldId,spaceId:eye.spaceId,kind:enter?'space.enter':'space.exit',expectedRevision:enter?e.revision:eye.revision,payload:enter?{eyeId:'main',portalEntityId:e.id}:{eyeId:'main',returnFrameId:eye.stack.at(-1)?.id}};
- const receipt=await transport.submit(command);if(receipt.status!=='accepted')throw Error(receipt.code);say(enter?'Entered persistent nested world. Your collaborator Eye was not moved.':'Returned through your saved Eye frame.');}
+async function navigate(enter){
+ await releaseAll();
+ for(let attempt=0;attempt<3;attempt++){
+   const eye=state.eye,e=currentEntity();if(enter&&!e?.innerSpaceId)throw Error('Select an entrance object');
+   const command={schema:'vivo.command/1',id:'nav.'+crypto.randomUUID(),worldId:state.snapshot.worldId,spaceId:eye.spaceId,kind:enter?'space.enter':'space.exit',expectedRevision:enter?e.revision:eye.revision,payload:enter?{eyeId:'main',portalEntityId:e.id}:{eyeId:'main',returnFrameId:eye.stack.at(-1)?.id}};
+   const receipt=await transport.submit(command);
+   if(receipt.status==='accepted'){say(enter?'Entered persistent nested world. Your collaborator Eye was not moved.':'Returned through your saved Eye frame.');return;}
+   if(!(enter&&receipt.code==='STALE_REVISION'&&attempt<2))throw Error(receipt.code);
+   // A moving material portal can advance between render and submit. Refresh
+   // identity/state and retry; do not reuse the stale command ID or guess state.
+   await transport.refresh();
+ }
+ throw Error('STALE_REVISION');
+}
 $('createRoom').onclick=safe(connect);$('connection').onclick=safe(disconnect);enterButton.onclick=safe(()=>navigate(true));exitButton.onclick=safe(()=>navigate(false));
 $('closePanel').onclick=()=>$('panel').close();document.querySelectorAll('.toolbar button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.sheet').forEach(s=>{const active=s.dataset.sheet===b.dataset.panel;s.hidden=!active;s.classList.toggle('active',active);});$('panelTitle').textContent=b.textContent;$('panel').showModal();});
 $('homeView').onclick=safe(()=>editEye(eye=>{eye.q=Array(eye.dimension).fill(0);eye.basis=viewBasis(eye.dimension,.55,.68);for(const k of Object.keys(eye.slice||{}))eye.slice[k]=0;}));
