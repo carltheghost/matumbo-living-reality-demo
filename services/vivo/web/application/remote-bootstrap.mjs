@@ -46,7 +46,7 @@ function receive(next){if(!next)return;const old=state?.eye?.spaceId;state=next;
   void gridFor(next.eye.dimension).then(grid=>{renderer.grid=grid;renderer.state=projectAccepted(next,grid);renderer.slice=[...next.eye.q];for(const[k,v]of Object.entries(next.eye.slice||{}))renderer.slice[+k.slice(1)-1]=v;renderer.origin=embed(next.eye.q,renderer.state.geometry,next.eye.chart);});
   if(old!==next.eye.spaceId)configureAxes();updateUI();
 }
-function updateUI(){if(!state)return;const e=currentEntity();$('connection').textContent=(online?'REMOTE '+role.toUpperCase():'DISCONNECTED')+' · '+transport.actorId;
+function updateUI(){if(!state)return;const e=currentEntity(),activeRole=role??transport?.role??'joining';$('connection').textContent=(online?'REMOTE '+activeRole.toUpperCase():'DISCONNECTED')+' · '+transport.actorId;
   $('worldName').textContent=state.eye.spaceId==='root'?'Shared 4D adaptive workshop':'Inside persistent 11D relic world';
   $('dimensionBadge').textContent=state.eye.dimension+' spatial axes + separate time';$('geometryBadge').textContent='Eye r'+state.eye.revision+' · seq '+state.snapshot.acceptedSequence;
   $('selection').hidden=!e;if(e){$('selectedName').textContent=e.name;$('selectedCoords').textContent=e.q.map((v,i)=>'x'+(i+1)+' '+v.toFixed(3)).join(' · ');}
