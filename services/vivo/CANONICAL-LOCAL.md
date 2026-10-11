@@ -23,12 +23,28 @@ exact immutable PR75 file hashes and refuses to overwrite different files; it is
 needed while the input feature remains unmerged. It does not commit those files.
 The launcher never installs software automatically.
 
-Open `http://127.0.0.1:8766/`. Choose Seat one. Open a second browser tab and choose
-Seat two. The two seats are local host admission, not verified human identities.
-Only one active session is allowed per seat. Reloading/resuming a saved seat
-rotates its token, releases prior grips and retains its accepted Eye. Tokens are
-kept in tab sessionStorage, never in the checkpoint. A server restart invalidates
-all old tokens; explicitly clear/reopen the expired seat if the UI asks.
+Open `http://127.0.0.1:8766/local/` for the primary **Full Studio**. This is the
+original browser-local field/universe model: browser checkpoints and JSON exports
+are explicit Studio actions, and it has no local-authority seat admission.
+Its local camera adapter initializes hand tracking from the vendored Field Lab
+runtime/model; head-pointer mode is explicitly unavailable because no face
+landmarker model is included. Camera permission remains opt-in.
+
+For the separate accepted backend preview, open
+`http://127.0.0.1:8766/local/accepted/`. Choose Seat one. Open a second browser
+tab at the same `/local/accepted/` URL and choose Seat two. The two seats are
+local host admission, not verified human identities. Only one active session is
+allowed per seat. Reloading/resuming a saved seat rotates its token, releases
+prior grips and retains its accepted Eye. Tokens are kept in tab sessionStorage,
+never in the checkpoint. A server restart invalidates all old tokens;
+explicitly clear/reopen the expired seat if the UI asks.
+
+The Studio and accepted preview are intentionally separate state models. Studio
+browser saves/history/video and JSON exports do not become accepted backend
+state. Conversely, accepted preview history/export describes the local authority
+world and does not restore the Studio field. In `--store memory` the accepted
+world is session-only and resets with the server; POSIX/SQLite modes persist
+accepted state in their private backend files.
 
 For direct Python invocation on a supported POSIX environment:
 
