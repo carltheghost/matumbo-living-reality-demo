@@ -1,6 +1,11 @@
 {
   "schema": "vivo.preview-evidence/1",
   "generated": "2026-10-11",
+  "source": {
+    "baseCommit": "28fe281f441da4d6ac5b5e77df015fcd71ea206f",
+    "branch": "codex/vivo-baseline-repair-2026-10-11",
+    "commit": "e8fd6591a82aa46e13cc9cce267f8ec14afdbd57"
+  },
   "surfaces": {
     "primary": "/local/",
     "acceptedPreview": "/local/accepted/",
