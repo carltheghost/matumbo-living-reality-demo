@@ -43,3 +43,45 @@ jobs:
           retention-days: 7
       - name: Scope
         run: echo 'Debug companion build only; no install, store publication, root escalation or deployment.'
+
+  browser-phone-engine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install browser test dependency
+        run: python -m pip install playwright==1.57.0
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+      - name: Run GitHub-page phone-engine smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phone-engine-evidence
+          python -m http.server 9877 --bind 127.0.0.1 --directory . >phone-engine-evidence/server.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          python - <<'PY'
+          import time
+          from urllib.request import urlopen
+          deadline=time.monotonic()+20
+          while time.monotonic()<deadline:
+              try:
+                  with urlopen('http://127.0.0.1:9877/field-lab-studio.html',timeout=2) as r:
+                      if r.status==200: break
+              except Exception: pass
+              time.sleep(.1)
+          else: raise SystemExit('static server timeout')
+          PY
+          python services/vivo/tests/remote/browser_phone_engine_smoke.py             http://127.0.0.1:9877/ phone-engine-evidence/report.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vivo-phone-engine-browser-smoke
+          path: phone-engine-evidence/
+          retention-days: 7
+      - name: Scope
+        run: echo 'Managed Chromium proves browser-local Worker/IndexedDB/agent behavior, not a physical-phone GPU/camera or Android-native permission run.'
