@@ -3,12 +3,14 @@
  * is private to the host. No network, camera, render, or material loop.
  */
 import {validateCommand, validateFrame, validateReceipt} from '../../contracts/validate.mjs';
+import {validateStudioBinding} from '../../contracts/studio-binding.mjs';
 const clone = value => structuredClone(value);
 const validId = value => typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,128}$/.test(value);
 const canonical = value => JSON.stringify(value, (_, v) => v && typeof v === 'object' && !Array.isArray(v)
   ? Object.fromEntries(Object.keys(v).sort().map(k => [k, v[k]])) : v);
 const sha256 = async value => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',
   new TextEncoder().encode(canonical(value)))), b => b.toString(16).padStart(2, '0')).join('');
+const acceptedStateHash = state => sha256({snapshot: {...state.snapshot,stateHash:null},leases:state.leases,eyes:state.eyes});
 const fail = code => { throw Object.assign(new Error(code), {code}); };
 const key = (...parts) => JSON.stringify(parts);
 const uuid = () => crypto.randomUUID();
@@ -33,7 +35,11 @@ async function offlineBranch(state, actorId, payload) {
     parentAcceptedSequence: state.snapshot.acceptedSequence,
   };
   const branchState = {snapshot, leases: {}, epochs: {}, receipts: {}, events: [], eyes: {}};
-  snapshot.stateHash = await sha256({snapshot: {...snapshot, stateHash: null}, leases: {}, eyes: {}});
+  for(const binding of Object.values(snapshot.studioBindings??{})) {
+    binding.bindingRevision=0;
+    binding.acceptedSequence=0;
+  }
+  snapshot.stateHash = await acceptedStateHash(branchState);
   const eye = state.eyes[key(actorId, 'main')] ? clone(state.eyes[key(actorId, 'main')]) : null;
   const material = state.material ? {
     protocol: state.material.protocol,
@@ -83,6 +89,17 @@ function validateSeed(s) {
           || !Number.isSafeInteger(e.revision) || e.revision < 0) fail('INVALID_ENTITY');
       if (!Array.isArray(e.v) || e.v.length !== e.dimension || !e.v.every(Number.isFinite)) fail('INVALID_VELOCITY');
       if (e.innerSpaceId !== null && !Object.hasOwn(s.spaces, e.innerSpaceId)) fail('MISSING_INNER_SPACE');
+    }
+  }
+  if (s.studioBindings !== undefined) {
+    if (!s.studioBindings || typeof s.studioBindings !== 'object' || Array.isArray(s.studioBindings) ||
+        Object.keys(s.studioBindings).length > 32) fail('INVALID_STUDIO_BINDINGS');
+    for (const [bindingId, binding] of Object.entries(s.studioBindings)) {
+      if (bindingId !== binding?.bindingId) fail('INVALID_STUDIO_BINDING_ID');
+      try { validateStudioBinding(binding); } catch { fail('INVALID_STUDIO_BINDING'); }
+      if (binding.acceptedSequence > s.acceptedSequence) fail('INVALID_STUDIO_BINDING_SEQUENCE');
+      const space=s.spaces[binding.spaceId], entity=space?.entities?.[binding.entityId];
+      if (!space || !entity || entity.dimension!==binding.dimension || entity.chart!==binding.chart) fail('INVALID_STUDIO_BINDING_TARGET');
     }
   }
 }
@@ -141,6 +158,15 @@ export class LocalLeaseWorld {
     if (record) {
       if (record.schema !== 'vivo.lease-checkpoint/1' || record.digest !== await sha256(record.state)) fail('CHECKPOINT_HASH');
       validateSeed(record.state.snapshot);
+      if(snapshot?.studioBindings && !record.state.snapshot.studioBindings) {
+        validateSeed(snapshot);
+        const migrated=clone(record.state);
+        migrated.snapshot.studioBindings=clone(snapshot.studioBindings);
+        migrated.snapshot.stateHash=await acceptedStateHash(migrated);
+        const migratedRecord={schema:'vivo.lease-checkpoint/1',state:migrated,digest:await sha256(migrated)};
+        await store.compareAndSwap(record.digest,migratedRecord);
+        record=migratedRecord;
+      }
       if(Boolean(record.state.material)!==Boolean(material)) fail('MATERIAL_PROTOCOL_MISMATCH');
       if(material && record.state.material?.protocol!==materialProtocol) fail('MATERIAL_PROTOCOL_MISMATCH');
       if(materialInitial!==undefined) fail('MATERIAL_INITIAL_ON_RESTORE');
@@ -155,7 +181,7 @@ export class LocalLeaseWorld {
         state.material={protocol:materialProtocol,spaceId:materialInitial.spaceId,checkpoint:clone(materialInitial.checkpoint)};
         material.validateMaterialState(state,materialProtocol);
       }
-      state.snapshot.stateHash = await sha256({snapshot:{...state.snapshot,stateHash:null},leases:state.leases,eyes:state.eyes});
+      state.snapshot.stateHash = await acceptedStateHash(state);
       record = {schema: 'vivo.lease-checkpoint/1', state, digest: await sha256(state)};
       await store.compareAndSwap(null, record);
     }
@@ -253,7 +279,7 @@ export class LocalLeaseWorld {
     if(next.events.length>=this.#limit) fail('JOURNAL_FULL');
     if(next.snapshot.acceptedSequence>=Number.MAX_SAFE_INTEGER)fail('SEQUENCE_EXHAUSTED');
     next.snapshot.acceptedSequence++;
-    next.snapshot.stateHash=await sha256({snapshot:{...next.snapshot,stateHash:null},leases:next.leases,eyes:next.eyes});
+    next.snapshot.stateHash=await acceptedStateHash(next);
     next.events.push({sequence:next.snapshot.acceptedSequence,kind,actorId,payload:clone(payload),stateHash:next.snapshot.stateHash});
   }
   async #commitInternal(kind,token,mutate,payload={}) {
@@ -295,6 +321,26 @@ export class LocalLeaseWorld {
           checkpointHash:branch.checkpointHash,
         });
         const receipt={...this.#receipt(command,'accepted','OFFLINE_BRANCH',null,branch),
+          acceptedSequence:next.snapshot.acceptedSequence,stateHash:next.snapshot.stateHash};
+        next.receipts[requestKey]={fingerprint,receipt};
+        await this.#save(next);return clone(receipt);
+      }
+      if(command.kind==='studio.transform') {
+        if(command.spaceId!==s.snapshot.rootSpaceId) return reject('STUDIO_BINDING_SPACE');
+        if(command.expectedRevision!==s.snapshot.acceptedSequence) return reject('STALE_WORLD');
+        const binding=s.snapshot.studioBindings?.[p.bindingId];
+        if(!binding) return reject('STUDIO_BINDING_UNAVAILABLE');
+        try { validateStudioBinding(binding); } catch { return reject('STUDIO_BINDING_INVALID'); }
+        if(binding.sourceModel!==p.sourceModel || binding.sourceNode!==p.sourceNode ||
+            binding.entityId!==p.entityId || binding.dimension!==p.dimension || binding.chart!==p.chart ||
+            binding.spaceId!==command.spaceId) return reject('STUDIO_BINDING_IDENTITY');
+        if(binding.bindingRevision>=Number.MAX_SAFE_INTEGER) return reject('STUDIO_BINDING_REVISION_EXHAUSTED');
+        const next=clone(s), updated={...clone(binding),q:[...p.q],metadata:clone(p.metadata),
+          bindingRevision:binding.bindingRevision+1,acceptedSequence:next.snapshot.acceptedSequence+1};
+        next.snapshot.studioBindings[p.bindingId]=updated;
+        await this.#advance(next,'studio-transform',client.session.actorId,command);
+        const result={binding:clone(updated),entityId:p.entityId,projectionOnly:true};
+        const receipt={...this.#receipt(command,'accepted','OK',null,result),
           acceptedSequence:next.snapshot.acceptedSequence,stateHash:next.snapshot.stateHash};
         next.receipts[requestKey]={fingerprint,receipt};
         await this.#save(next);return clone(receipt);

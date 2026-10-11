@@ -313,6 +313,7 @@ def studio_index():
 }
 </style>'''
     adapter_source = (ROOT / 'web/studio-hands-adapter.mjs').read_text(encoding='utf-8')
+    authority_bridge_source = (ROOT / 'web/studio-authority-bridge.mjs').read_text(encoding='utf-8')
     asset_bridge = '''<script id="vivoLocalAssetBridge">(function(){
   const origin=location.origin,assets=Object.freeze({bundle:new URL('/vendor/field-lab/vision_bundle.mjs',origin).href,wasm:new URL('/vendor/field-lab/wasm',origin).href,model:new URL('/vendor/field-lab/hand_landmarker.task',origin).href});
   window.FieldHandAssets=assets;
@@ -344,7 +345,7 @@ def studio_index():
     return originalModelBytes.call(this,kind,local,signal);
    };
   }
-  })();</script>''' + '<script type="module" data-vivo-studio-hands="1">\n' + adapter_source + '\n</script>'
+  })();</script>''' + '<script type="module" data-vivo-studio-hands="1">\n' + adapter_source + '\n</script>' + '<script type="module" data-vivo-studio-authority="1">\n' + authority_bridge_source + '\n</script>'
     entry = '''<nav id="vivoLocalEntry" aria-label="Vivo local surfaces">
   <span>PRIMARY · FULL STUDIO</span>
   <a href="/local/accepted/" target="_blank" rel="noopener noreferrer" aria-label="Open accepted phase preview in a new tab">Accepted phase preview ↗</a>
