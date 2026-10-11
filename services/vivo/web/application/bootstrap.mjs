@@ -93,15 +93,15 @@ function updateUI(){
   $('peopleList').replaceChildren();for(const person of state.participants||[])$('peopleList').append(element('p',{textContent:(person.actorId||person.id||person.seat)+' · '+(person.online?'online':'offline')+(person.actorId===transport?.session?.actorId?' (you)':'')}));
   $('journalState').textContent=(sessionOnly?'Session sequence ':'Accepted sequence ')+state.snapshot.acceptedSequence+' · '+JSON.stringify(state.journal);
   $('metrics').textContent='Camera '+(camera.stream?'on, local only':'off')+' · no microphone · no frame uploads · '+(sessionOnly?'session-only server memory; no backend world/checkpoint/database file':'accepted sequence '+state.snapshot.acceptedSequence);
-  const phase=state.capabilities?.material;
+  const phase=state.capabilities?.material,adaptive=phase?.profile==='adaptive-graph';
   phaseButton.hidden=!phase;phaseButton.disabled=connecting||!online||!!state.journal?.readOnly||!!transport?.session?.readOnly;
   if(phase){
     const phaseRunning=phase.running&&state.materialHost?.running!==false;
     phaseButton.disabled=phaseButton.disabled||!!state.materialHost?.fault;
-    phaseButton.textContent=(phaseRunning?'Pause':'Run')+' experimental 4D phase';
-    $('moveTarget').options[0].textContent='Finite compliant phase target';
-    moveSheet.querySelector('p').textContent='Dashed targets are accepted constraints. Solid relics mark the accepted density centroids of real 4D phase fields; they are not liquid surfaces. Phase targets must stay within −4 ≤ x < 4 on each axis.';
-    moveSheet.querySelector('p.muted').textContent='Root: periodic 4D phase, 8 samples per axis. Nested 11D material is unavailable. Run/Pause is shared by both seats; each Eye stays independent. Numerical fidelity and learning remain experimental/unimplemented.';
+    phaseButton.textContent=(phaseRunning?'Pause':'Run')+(adaptive?' learned adaptive material':' experimental 4D phase');
+    $('moveTarget').options[0].textContent=adaptive?'Learned material target':'Finite compliant phase target';
+    moveSheet.querySelector('p').textContent=adaptive?'Dashed targets are accepted constraints. Solid objects move only after the learned graph material step is accepted; 4D and 11D coordinates remain native.':'Dashed targets are accepted constraints. Solid relics mark the accepted density centroids of real 4D phase fields; they are not liquid surfaces. Phase targets must stay within −4 ≤ x < 4 on each axis.';
+    moveSheet.querySelector('p.muted').textContent=adaptive?'Root 4D and nested 11D use the frozen recovered neural edge law. Time is separate; this is a software constitutive model, not physical validation.':'Root: periodic 4D phase, 8 samples per axis. Nested 11D material is unavailable. Run/Pause is shared by both seats; each Eye stays independent. Numerical fidelity and learning remain experimental/unimplemented.';
     const diag=state.materialDiagnostics?.diagnostics;
     $('metrics').textContent+=' · simulation t='+state.snapshot.simulationTime.toFixed(3)+' · '+(phaseRunning?'running: at most 0.02 s per 0.5 wall s':'paused')+(diag?' · mass '+diag.mass.toFixed(8)+' · energy '+diag.energy.toFixed(5)+' · residual '+diag.residual.toExponential(2):'');
     if(state.materialHost?.fault)$('metrics').textContent+=' · phase stopped: '+state.materialHost.fault.code;
@@ -109,7 +109,7 @@ function updateUI(){
   if(sessionOnly) capability.textContent=state.journal?.readOnly
     ?'SESSION ONLY · process journal read-only · download available'
     :'SESSION ONLY · volatile server memory · '+(phase?'experimental 4D phase centroids · ':'accepted constraints · ')+'no backend world/checkpoint/database file';
-  else capability.textContent=state.journal?.readOnly?'READ ONLY · saved history preserved':phase?'LOCAL · experimental 4D phase centroids · '+(state.eye.dimension===4?'learning unavailable':'11D material unavailable'):'LOCAL ONLY · accepted constraints; material motion / learning pending';
+  else capability.textContent=state.journal?.readOnly?'READ ONLY · saved history preserved':phase?(adaptive?'LOCAL · learned adaptive 4D/11D material · independent Eyes':'LOCAL · experimental 4D phase centroids · '+(state.eye.dimension===4?'learning unavailable':'11D material unavailable')):'LOCAL ONLY · accepted constraints; material motion / learning pending';
 }
 async function connect(){
   if(connecting)return;connecting=true;$('createRoom').disabled=true;
@@ -244,7 +244,7 @@ $('previewCamera').onclick=safe(async()=>{$('panel').close();await camera.start(
 $('stopCamera').onclick=()=>{camera.stop();updateUI();};$('visibility').onchange=()=>{camera.profile=$('visibility').value;camera.sampleLuma();};
 $('torch').onclick=safe(()=>camera.light());$('exposure').onclick=safe(()=>camera.exposure());
 
-phaseButton.onclick=safe(async()=>{const context=captureConnection();const running=!context.client.current.capabilities.material?.running;await context.client.call('materialRun',{running});context.assert();say(running?'Experimental phase running slowly. Solid marks show accepted field centroids.':sessionOnly?'Phase paused; accepted fields remain in this server process.':'Phase paused; accepted fields remain saved.');});
+phaseButton.onclick=safe(async()=>{const context=captureConnection(),adaptive=context.client.current.capabilities.material?.profile==='adaptive-graph';const running=!context.client.current.capabilities.material?.running;await context.client.call('materialRun',{running});context.assert();say(running?(adaptive?'Learned adaptive material running. Accepted grips now drive 4D/11D graph dynamics.':'Experimental phase running slowly. Solid marks show accepted field centroids.'):(sessionOnly?'Material paused; accepted state remains in this server process.':'Material paused; accepted state remains saved.'));});
 saveButton.onclick=safe(async()=>{const action=captureConnection();await action.owner.releaseAll();action.assert();await action.client.refresh();action.assert();say('Checkpoint confirmed at accepted sequence '+action.client.current.snapshot.acceptedSequence+'. Saved atomically on this computer.');});
 exportButton.onclick=safe(async()=>{const action=captureConnection();await action.owner.releaseAll();action.assert();const data=await action.client.export();action.assert();const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)+'\n'],{type:'application/json'}));const link=element('a',{href:url,download:'vivo-accepted-state.json'});link.click();setTimeout(()=>URL.revokeObjectURL(url),5000);say(sessionOnly?'Downloaded accepted session state; this is not durable storage or an import/reload path. Camera frames and session tokens excluded.':'Exported accepted state; camera frames and session tokens excluded.');});
 reconcileButton.onclick=safe(async()=>{const action=captureConnection();await action.owner.reconcileAll();action.assert();await action.client.refresh();action.assert();say(sessionOnly?'Reconciliation completed for known grips in this session.':'Reconciliation completed for known grips. Saved state refreshed.');});

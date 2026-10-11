@@ -9,7 +9,7 @@ import {pathToFileURL} from 'node:url';
 import {LocalLeaseWorld,MemoryAuthorityStore} from '../../web/authority/lease-authority.mjs';
 import {FileAuthorityStore} from '../authority/file-store.mjs';
 import {validateCommand} from '../../contracts/validate.mjs';
-import {workshopSeed,phaseWorkshopSeed,entryView,LOCAL_SEATS,ENTITY_COUNT} from './seed.mjs';
+import {workshopSeed,phaseWorkshopSeed,adaptiveWorkshopSeed,entryView,LOCAL_SEATS,ENTITY_COUNT} from './seed.mjs';
 
 const MAX_BYTES = 64 * 1024 * 1024;
 const MAX_LINE_BYTES = 64 * 1024;
@@ -56,6 +56,15 @@ function publicError(error) {
 }
 
 /** Mounted profile is intentionally narrower than the reusable phase driver. */
+export function checkMountedAdaptiveCheckpoint(cp){
+  if(!cp||cp.schema!=='vivo.material.adaptive-graph/1'||cp.lawVersion!=='vivo.adaptive.graph/1'||
+      JSON.stringify(cp.modelHashes)!=='["9ab89f46361e397fe41845d86ecc23e38f75561032fd65ae9f8389e9780afdb0"]'||
+      !object(cp.spaces)||JSON.stringify(Object.keys(cp.spaces).sort())!=='["inner","root"]')fail('MOUNTED_ADAPTIVE_CONFIGURATION');
+  if(cp.spaces.root.dimension!==4||cp.spaces.inner.dimension!==11||
+      JSON.stringify(Object.keys(cp.spaces.root.entities).sort())!=='["portal","relic","workpiece"]'||
+      JSON.stringify(Object.keys(cp.spaces.inner.entities).sort())!=='["relic"]')fail('MOUNTED_ADAPTIVE_CONFIGURATION');
+}
+
 export function checkMountedPhaseCheckpoint(cp){
   if(!cp||cp.spaceId!=='root'||JSON.stringify(cp.shape)!=='[8,8,8,8]'||JSON.stringify(cp.lengths)!=='[8,8,8,8]'||cp.coupling!==1||
       !object(cp.fields)||JSON.stringify(Object.keys(cp.fields).sort())!=='["portal","relic","workpiece"]')fail('MOUNTED_PHASE_CONFIGURATION');
@@ -66,7 +75,7 @@ export function checkMountedPhaseCheckpoint(cp){
 class MeteredStore {
   record=null; bytes=0;
   constructor(backend,kind) {this.file=backend;this.kind=kind;}
-  static async open(path,kind,phase) {
+  static async open(path,kind,mode) {
     if(kind==='memory') return new MeteredStore(new MemoryAuthorityStore(),kind);
     if(kind==='posix') {
       if(process.platform==='win32')fail('POSIX_STORE_UNSUPPORTED');
@@ -75,8 +84,8 @@ class MeteredStore {
     // Backend selection is explicit. Never seed a new SQLite world beside a
     // corresponding JSON world and never interpret JSON as a SQLite migration.
     const exists=async p=>{try{await lstat(p);return true;}catch(e){if(e.code==='ENOENT')return false;throw e;}};
-    if(!await exists(path)&&await exists(join(dirname(path),phase?'canonical-phase.json':'canonical-world.json')))
-      fail('STORE_LEGACY_CHECKPOINT_PRESENT');
+    const legacy=mode==='phase'?'canonical-phase.json':mode==='adaptive'?'canonical-adaptive.json':'canonical-world.json';
+    if(!await exists(path)&&await exists(join(dirname(path),legacy))) fail('STORE_LEGACY_CHECKPOINT_PRESENT');
     const {SQLiteAuthorityStore}=await import('../authority/sqlite-store.mjs');
     return new MeteredStore(await SQLiteAuthorityStore.open({path,maxBytes:MAX_BYTES}),kind);
   }
@@ -96,11 +105,11 @@ class MeteredStore {
 
 export class MountedRuntime {
   #world; #store; #maxEvents; #reserve; #sessions=new Map(); #seats=new Map();
-  #phase=false; #materialRunning=false; #statusRevision=0; #storageFault=null;
+  #phase=false; #adaptive=false; #materialRunning=false; #statusRevision=0; #storageFault=null;
   #tail=Promise.resolve(); #timer; #stopped=false; #fault=null; #sweepQueued=false;
-  constructor(key,world,store,maxEvents,reserve,phase) {
+  constructor(key,world,store,maxEvents,reserve,phase,adaptive) {
     if(key!==MountedRuntime)fail('USE_OPEN');
-    this.#phase=phase;this.#world=world;this.#store=store;this.#maxEvents=maxEvents;this.#reserve=reserve;
+    this.#phase=phase;this.#adaptive=adaptive;this.#world=world;this.#store=store;this.#maxEvents=maxEvents;this.#reserve=reserve;
     this.#timer=setInterval(()=>{
       if(this.#sweepQueued)return;this.#sweepQueued=true;
       void this.#queue(()=>this.#sweep()).catch(error=>{this.#fault=publicError(error).code;})
@@ -108,24 +117,29 @@ export class MountedRuntime {
     },SWEEP_MS);
     this.#timer.unref();
   }
-  static async open({path,store:storeKind='posix',maxEvents=65536,reserve=MIN_RESERVE,phase=false,initializeMaterial}={}) {
-    if(typeof phase!=='boolean'||!['posix','sqlite','memory'].includes(storeKind))fail('INVALID_RUNTIME_OPTIONS');
+  static async open({path,store:storeKind='posix',maxEvents=65536,reserve=MIN_RESERVE,phase=false,adaptive=false,initializeMaterial}={}) {
+    if(typeof phase!=='boolean'||typeof adaptive!=='boolean'||(phase&&adaptive)||!['posix','sqlite','memory'].includes(storeKind))fail('INVALID_RUNTIME_OPTIONS');
     if((storeKind!=='memory'&&(typeof path!=='string'||!isAbsolute(path)))||
       (storeKind==='memory'&&path!==undefined&&path!==null)||!Number.isSafeInteger(maxEvents)||maxEvents>65536||
       !Number.isSafeInteger(reserve)||reserve<MIN_RESERVE||maxEvents<reserve+2)fail('INVALID_RUNTIME_OPTIONS');
-    const store=await MeteredStore.open(path,storeKind,phase);
+    const mode=phase?'phase':adaptive?'adaptive':'world',store=await MeteredStore.open(path,storeKind,mode);
     try {
     const existing=await store.load();
-    let seed=phase?phaseWorkshopSeed():workshopSeed(),materialInitial;
+    let seed=phase?phaseWorkshopSeed():adaptive?adaptiveWorkshopSeed():workshopSeed(),materialInitial;
     if(existing) {
       if(phase)checkMountedPhaseCheckpoint(existing.state?.material?.checkpoint);
+      if(adaptive)checkMountedAdaptiveCheckpoint(existing.state?.material?.checkpoint);
       const snapshot=existing.state?.snapshot;
       const normalized=clone(snapshot);
-      if(phase&&normalized?.spaces?.root){
-        normalized.simulationTime=0;normalized.spaces.root.field.hash=seed.spaces.root.field.hash;
-        for(const [id,e] of Object.entries(normalized.spaces.root.entities??{})){
-          if(!seed.spaces.root.entities[id])fail('WORKSHOP_CHECKPOINT_MISMATCH');
-          Object.assign(e,{q:seed.spaces.root.entities[id].q,v:[0,0,0,0],revision:0});
+      if((phase||adaptive)&&normalized?.spaces?.root){
+        normalized.simulationTime=0;
+        const spaces=phase?['root']:Object.keys(seed.spaces);
+        for(const sid of spaces){
+          normalized.spaces[sid].field.hash=seed.spaces[sid].field.hash;
+          for(const [id,e] of Object.entries(normalized.spaces[sid].entities??{})){
+            if(!seed.spaces[sid].entities[id])fail('WORKSHOP_CHECKPOINT_MISMATCH');
+            Object.assign(e,{q:seed.spaces[sid].entities[id].q,v:Array(e.dimension).fill(0),revision:0});
+          }
         }
       }
       // Capacity proof is for exactly this fixed four-entity, depth-one workshop.
@@ -138,23 +152,26 @@ export class MountedRuntime {
         if(!Object.values(LOCAL_SEATS).includes(eye.actorId)||eye.eyeId!=='main'||eye.stack?.length>1)fail('WORKSHOP_CHECKPOINT_MISMATCH');
       }
     }
-    if(phase&&!existing){
-      if(typeof initializeMaterial!=='function')fail('PHASE_INITIALIZER_REQUIRED');
+    if((phase||adaptive)&&!existing){
+      if(typeof initializeMaterial!=='function')fail('MATERIAL_INITIALIZER_REQUIRED');
       const initialized=await initializeMaterial(clone(seed));
-      keys(initialized,['snapshot','checkpoint']);bounded(initialized,MAX_MATERIAL_BYTES);checkMountedPhaseCheckpoint(initialized.checkpoint);
-      // Driver-derived q/v and field hash are the only permitted seed changes.
-      const normalized=clone(initialized.snapshot);
-      normalized.spaces.root.field.hash=seed.spaces.root.field.hash;
-      for(const [id,e]of Object.entries(normalized.spaces.root.entities)){
-        if(!seed.spaces.root.entities[id])fail('PHASE_INITIALIZER_MISMATCH');
-        Object.assign(e,{q:seed.spaces.root.entities[id].q,v:[0,0,0,0],revision:0});
+      keys(initialized,['snapshot','checkpoint']);bounded(initialized,MAX_MATERIAL_BYTES);
+      if(phase)checkMountedPhaseCheckpoint(initialized.checkpoint);else checkMountedAdaptiveCheckpoint(initialized.checkpoint);
+      const normalized=clone(initialized.snapshot),spaces=phase?['root']:Object.keys(seed.spaces);
+      for(const sid of spaces){
+        normalized.spaces[sid].field.hash=seed.spaces[sid].field.hash;
+        for(const [id,e]of Object.entries(normalized.spaces[sid].entities)){
+          if(!seed.spaces[sid].entities[id])fail('MATERIAL_INITIALIZER_MISMATCH');
+          Object.assign(e,{q:seed.spaces[sid].entities[id].q,v:Array(e.dimension).fill(0),revision:0});
+        }
       }
-      if(JSON.stringify(normalized)!==JSON.stringify(seed))fail('PHASE_INITIALIZER_MISMATCH');
+      if(JSON.stringify(normalized)!==JSON.stringify(seed))fail('MATERIAL_INITIALIZER_MISMATCH');
       seed=initialized.snapshot;materialInitial={spaceId:'root',checkpoint:initialized.checkpoint};
     }
+    const materialProtocol=phase?'vivo.lease-material/1':adaptive?'vivo.lease-adaptive/1':null;
     const world=await LocalLeaseWorld.create({snapshot:seed,store,maxEvents,
-      ...(phase?{materialProtocol:'vivo.lease-material/1',...(materialInitial?{materialInitial}:{})}:{})});
-    return new MountedRuntime(MountedRuntime,world,store,maxEvents,reserve,phase);
+      ...(materialProtocol?{materialProtocol,...(materialInitial?{materialInitial}:{})}:{})});
+    return new MountedRuntime(MountedRuntime,world,store,maxEvents,reserve,phase,adaptive);
     } catch(error) {
       // An owner acquired before validation must never escape a failed startup.
       // Preserve a FIRST close failure: a retry is not proof ownership released.
@@ -185,8 +202,10 @@ export class MountedRuntime {
   }
   #capabilities() {
     const memory=this.#store.kind==='memory';
-    return {materialDynamics:this.#phase,materialLearning:false,remoteMultiplayer:false,localSeats:2,nested:true,
-      material:this.#phase?{profile:'phase',dimension:4,spaceId:'root',resolution:[8,8,8,8],running:this.#materialRunning,simulationStep:.02,wallIntervalMs:500,leaseRevisionProtocol:'vivo.lease-material/1'}:null,
+    const material=this.#phase?{profile:'phase',dimension:4,spaceId:'root',resolution:[8,8,8,8],running:this.#materialRunning,simulationStep:.02,wallIntervalMs:500,leaseRevisionProtocol:'vivo.lease-material/1'}:
+      this.#adaptive?{profile:'adaptive-graph',dimensions:[4,11],spaceId:'root',running:this.#materialRunning,simulationStep:.01,wallIntervalMs:500,leaseRevisionProtocol:'vivo.lease-adaptive/1',modelHashes:['9ab89f46361e397fe41845d86ecc23e38f75561032fd65ae9f8389e9780afdb0']}:null;
+    return {materialDynamics:!!material,materialLearning:this.#adaptive,remoteMultiplayer:false,localSeats:2,nested:true,
+      material,
       persistence:memory?'Session-only volatile memory; no backend world/checkpoint/database file':this.#store.kind==='sqlite'?'SQLite WAL/FULL exclusive checkpoint':'POSIX atomic checkpoint',
       persistenceMode:memory?'session-only':'durable',sessionOnly:memory,
       sessionOnlyGuarantee:memory?'Accepted world, checkpoint and database state exists only while this local server process runs; OS/browser writes are outside this guarantee.':null,
@@ -205,7 +224,7 @@ export class MountedRuntime {
     const s=this.#sessions.get(token);s.lastSeen=Date.now();return s;
   }
   #materialDiagnostics(){
-    if(!this.#phase)return null;
+    if(!(this.#phase||this.#adaptive))return null;
     const event=this.#store.record.state.events.findLast(e=>e.kind==='material-step');
     return {tick:this.#store.record.state.material?.checkpoint?.tick??0,
       diagnostics:clone(event?.payload?.diagnostics??null),fieldDiagnostics:clone(event?.payload?.fieldDiagnostics??[])};
@@ -270,7 +289,7 @@ export class MountedRuntime {
   dispatchMaterial(raw){
     let request;try{keys(raw,['op','args']);bounded(raw,MAX_MATERIAL_BYTES);request=clone(raw);}catch(e){return Promise.reject(e);}
     return this.#queue(async()=>{
-      if(this.#stopped||!this.#phase)fail('MATERIAL_UNAVAILABLE');
+      if(this.#stopped||!(this.#phase||this.#adaptive))fail('MATERIAL_UNAVAILABLE');
       if(this.#storageFault)fail('STORE_FAILED_CLOSED');
       if(request.op==='materialCapture'){
         keys(request.args,['spaceId']);if(request.args.spaceId!=='root')fail('MATERIAL_SPACE');
@@ -278,7 +297,10 @@ export class MountedRuntime {
         return capture;
       }
       if(request.op==='materialApply'){
-        keys(request.args,['proposal']);checkMountedPhaseCheckpoint(request.args.proposal?.fieldState);if(request.args.proposal?.dt!==.02)fail('MOUNTED_PHASE_STEP');if(!this.#materialRunning)fail('MATERIAL_PAUSED');
+        keys(request.args,['proposal']);
+        if(this.#phase){checkMountedPhaseCheckpoint(request.args.proposal?.fieldState);if(request.args.proposal?.dt!==.02)fail('MOUNTED_PHASE_STEP');}
+        else {checkMountedAdaptiveCheckpoint(request.args.proposal?.fieldState);if(request.args.proposal?.dt!==.01)fail('MOUNTED_ADAPTIVE_STEP');}
+        if(!this.#materialRunning)fail('MATERIAL_PAUSED');
         try{this.#gate();}catch(error){if(error.code==='JOURNAL_BACKPRESSURE')this.#materialRunning=false;throw error;}
         const snapshot=await this.#world.applyMaterialProposal(request.args.proposal);
         return snapshot;
@@ -333,7 +355,7 @@ export class MountedRuntime {
       if(s.session.readOnly&&!['state','inspectLease','close','export','nextEpoch'].includes(request.op))fail('READ_ONLY_SESSION');
       switch(request.op) {
         case 'materialRun':
-          keys(args,['running']);if(!this.#phase||typeof args.running!=='boolean')fail('MATERIAL_UNAVAILABLE');
+          keys(args,['running']);if(!(this.#phase||this.#adaptive)||typeof args.running!=='boolean')fail('MATERIAL_UNAVAILABLE');
           if(args.running)this.#gate();this.#materialRunning=args.running;value={running:this.#materialRunning};break;
         case 'state': keys(args);break;
         case 'nextEpoch':
@@ -391,24 +413,26 @@ async function* privateLines(stream){
   if(pending.length||discard)yield {error:'INCOMPLETE_REQUEST'};
 }
 async function main() {
-  let path=null,phase=false,maxEvents=65536,store='posix';const flags=process.argv.slice(2),seen=new Set();
+  let path=null,phase=false,adaptive=false,maxEvents=65536,store='posix';const flags=process.argv.slice(2),seen=new Set();
   while(flags.length) {
     const flag=flags.shift();if(seen.has(flag))fail('INVALID_RUNTIME_OPTIONS');seen.add(flag);
     if(flag==='--phase')phase=true;
+    else if(flag==='--adaptive')adaptive=true;
     else if(flag==='--journal-events'&&flags.length)maxEvents=Number(flags.shift());
     else if(flag==='--store'&&flags.length)store=flags.shift();
     else if(!flag.startsWith('-')&&path===null)path=flag;
     else fail('INVALID_RUNTIME_OPTIONS');
   }
+  if(phase&&adaptive)fail('INVALID_RUNTIME_OPTIONS');
   if(!['posix','sqlite','memory'].includes(store))fail('INVALID_RUNTIME_OPTIONS');
   if(store==='memory') {
     if(path!==null)fail('MEMORY_PATH_UNSUPPORTED');
   } else if(!isAbsolute(path??'')) fail('ABSOLUTE_CHECKPOINT_PATH_REQUIRED');
   const write=value=>new Promise((done,reject)=>process.stdout.write(JSON.stringify(value)+'\n',error=>error?reject(error):done()));
   const lines=privateLines(process.stdin);
-  const runtime=await MountedRuntime.open({path,store,phase,maxEvents,initializeMaterial:async snapshot=>{
-    await write({initializePhase:true,snapshot});const line=await lines.next();
-    if(line.done||line.value.error)fail('PHASE_INITIALIZER_FAILED');return line.value.value;
+  const runtime=await MountedRuntime.open({path,store,phase,adaptive,maxEvents,initializeMaterial:async snapshot=>{
+    await write({initializeMaterial:phase?'phase':'adaptive',snapshot});const line=await lines.next();
+    if(line.done||line.value.error)fail('MATERIAL_INITIALIZER_FAILED');return line.value.value;
   }});
   await write({ready:true,capabilities:runtime.capabilities});let done=false;
   const stop=async()=>{if(done)return;done=true;await runtime.dispatch({op:'shutdown'});};
