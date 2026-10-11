@@ -99,6 +99,7 @@ export class LocalLeaseWorld {
       if (record.schema !== 'vivo.lease-checkpoint/1' || record.digest !== await sha256(record.state)) fail('CHECKPOINT_HASH');
       validateSeed(record.state.snapshot);
       if(Boolean(record.state.material)!==Boolean(material)) fail('MATERIAL_PROTOCOL_MISMATCH');
+      if(material && record.state.material?.protocol!==materialProtocol) fail('MATERIAL_PROTOCOL_MISMATCH');
       if(materialInitial!==undefined) fail('MATERIAL_INITIAL_ON_RESTORE');
       if(material) material.validateMaterialState(record.state,materialProtocol);
       if(record.state.eyes!==undefined) checkEyes(record.state.snapshot,record.state.eyes);
@@ -249,7 +250,7 @@ export class LocalLeaseWorld {
         if(p.inputEpoch<=previous) return reject('STALE_EPOCH',entity);
         const lease={id:'lease.'+uuid(),acquireCommandId:command.id,session:token,actorId:client.session.actorId,spaceId:command.spaceId,
           entityId:p.entityId,source:p.source,inputEpoch:p.inputEpoch,targetSeq:0,expiresAt:now+this.#ttl,target:null};
-        if(this.#material && command.spaceId===s.material.spaceId) Object.assign(lease,{
+        if(this.#material && this.#material.coversSpace(s,command.spaceId)) Object.assign(lease,{
           inputReceiptRevision:entity.revision,materialCoverageRevision:entity.revision,
           materialInvariant:this.#material.invariantFingerprint(s.snapshot,command.spaceId,p.entityId)});
         next.leases[k]=lease;next.epochs[ek]=p.inputEpoch;
