@@ -3,6 +3,7 @@ import { projectForRenderer, detectPhoneCapabilities } from './engine.mjs';
 import { AndroidPhoneBridge } from './bridge.mjs';
 import { AgentToolRegistry } from './agent-tools.mjs';
 import { HandsFreeProjection } from './projection.mjs';
+import { PhoneTwoHandCamera } from './two-hand-camera.mjs';
 
 const $ = id => document.getElementById(id);
 const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
@@ -13,7 +14,7 @@ const shared = window.VivaShared;
 if (!shared?.R || !shared?.S || !shared?.camera) throw new Error('Viva phone integration loaded before the shared renderer.');
 const { R, S, camera } = shared;
 let engine = null, localMode = false, selectedId = null, activeAxis = 0, heldHand = null;
-let pointer = null, pinch = null, projection = new HandsFreeProjection({ bridge, camera });
+let pointer = null, pinch = null, projection = null;
 let persistTimer = null, lastTwoHand = null, latestCapabilities = null, lastPoseAction = -Infinity;
 const lastPoseByHand = new Map();
 let appliedEyeId = null, appliedEyeRevision = -1;
@@ -145,8 +146,63 @@ function handleHandGesture(event) {
     status(`SWIPE · selected ${S.state.entities[selectedId]?.name || selectedId}`);
   }
 }
-const originalGesture = camera.onGesture.bind(camera);
-camera.onGesture = event => localMode ? handleHandGesture(event) : originalGesture(event);
+const sharedCameraGesture = camera.onGesture.bind(camera);
+function handleSharedHandGesture(event) {
+  if (event.type === 'frame') return;
+  if (event.type === 'twohand') {
+    if (event.scale > 0.01 && Number.isFinite(event.scale)) R.distance = clamp(R.distance / event.scale, 4, 22);
+    R.yaw = (R.yaw - event.rotation + Math.PI * 4) % (Math.PI * 2);
+    return;
+  }
+  if (event.type === 'pose' && event.pose === 'point' && !$('panel')?.open && !S.replay) {
+    const hit = R.at(...event.point); if (hit) shared.select?.(hit);
+    return;
+  }
+  if (event.type === 'swipe' && !$('panel')?.open && S.state) {
+    const ids = Object.keys(S.state.entities), index = ids.indexOf(S.selected), direction = event.dx < 0 ? 1 : -1;
+    const target = ids[(index + direction + ids.length) % ids.length];
+    if (target) shared.select?.(target);
+    return;
+  }
+  if (event.type === 'grab') camera.held = true;
+  sharedCameraGesture(event);
+  if (event.type === 'release' || event.type === 'lost') camera.held = false;
+}
+const phoneVideo = Object.assign(document.createElement('video'), { id: 'phoneCameraVideo', muted: true, playsInline: true });
+Object.assign(phoneVideo.style, { position: 'fixed', inset: '0', width: '100%', height: '100%', objectFit: 'cover', display: 'none', zIndex: '0', filter: 'brightness(.68) saturate(.7)' });
+const handOverlay = Object.assign(document.createElement('canvas'), { id: 'phoneHandOverlay', ariaHidden: 'true' });
+const worldCanvas = $('world'), baseOverlay = $('overlay');
+if (worldCanvas) worldCanvas.style.zIndex = '1';
+if (baseOverlay) baseOverlay.style.zIndex = '3';
+document.body.append(phoneVideo, handOverlay);
+const phoneCamera = new PhoneTwoHandCamera({
+  video: phoneVideo, overlay: handOverlay, renderer: R,
+  onState: message => { const view = $('cameraState'); if (view) view.textContent = message; },
+  onGesture: event => { if (localMode) handleHandGesture(event); else handleSharedHandGesture(event); },
+  onHands: hands => { const view = $('cameraState'); if (hands.length && view) view.textContent = 'Tracking ' + hands.length + ' hand(s) · 21 landmarks · all five fingers · local only.'; },
+});
+projection = new HandsFreeProjection({ bridge, camera: phoneCamera });
+async function startPhoneCamera(facing = 'user') {
+  if (camera.video) camera.video.style.display = 'none';
+  try { return await phoneCamera.start(facing); }
+  catch (error) { if (camera.video) camera.video.style.display = ''; throw error; }
+}
+function stopPhoneCamera() {
+  projection?.stop(); phoneCamera.stop();
+  if (camera.video) camera.video.style.display = '';
+}
+const localCameraActions = {
+  frontCamera: () => startPhoneCamera('user'),
+  backCamera: () => startPhoneCamera('environment'),
+  previewCamera: () => startPhoneCamera(phoneCamera.facing || 'user'),
+  stopCamera: stopPhoneCamera,
+};
+for (const [id, action] of Object.entries(localCameraActions)) $(id)?.addEventListener('click', event => {
+  if (!localMode) return;
+  event.preventDefault(); event.stopImmediatePropagation();
+  if (id !== 'stopCamera') $('panel')?.close();
+  Promise.resolve(action()).catch(error => status(error.message));
+}, true);
 
 function addPhoneSurface() {
   const enter = button('enterPhoneLocal', 'Enter local Vivo · works offline', 'primary');
@@ -164,7 +220,8 @@ function addPhoneSurface() {
     <div class="row"><button id="phoneEnterNested">Enter selected inner world</button><button id="phoneExitNested">Return with this Eye</button></div>
     <div class="row"><button id="phoneFork">Create explicit offline branch</button><button id="phoneExport">Export world + Eyes</button></div>
     <hr><h3>Hands-free input & projection</h3><p class="muted">Up to two hands · all 21 landmarks and all five articulated fingers · local inference. Open, point, peace, thumbs-up, fist and pinch poses; two hands zoom and rotate; touch drag/pinch also work. Camera frames stay on this phone.</p>
-    <div class="row"><button id="phoneStartHands">Start front camera + hands</button><button id="phoneStopHands">Stop camera</button></div>
+    <div class="row"><button id="phoneStartHands">Start front camera + hands</button><button id="phoneStartBackHands">Start rear camera + hands</button></div>
+    <div class="row"><button id="phoneStopHands">Stop camera and release it</button></div>
     <div class="row"><button id="phoneProject">Project / cast view</button><button id="phoneStopProject">Stop projection mode</button></div>
     <p id="phoneProjectionState" class="muted">Projection is controlled separately from input. OS support decides whether a route is available.</p>
     <div class="row"><button id="phoneInstallOffline">Install offline shell</button><button id="phoneCacheHands">Cache hand model (large)</button></div>
@@ -192,8 +249,9 @@ function addPhoneSurface() {
     const envelope = await engine.snapshot(), blob = new Blob([JSON.stringify(envelope, null, 2)], { type: 'application/json' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${envelope.snapshot.worldId}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 30000);
   };
-  $('phoneStartHands').onclick = async () => { try { await camera.start('user', true); status('Two-hand tracking active · local worker · camera frames stay on this phone.'); } catch (error) { status(`${error.message} Touch controls remain available.`); } };
-  $('phoneStopHands').onclick = () => { projection.stop(); camera.stop(); status('Camera stopped. Touch controls remain available.'); };
+  $('phoneStartHands').onclick = async () => { try { await startPhoneCamera('user'); status('Two-hand tracking active · local worker · camera frames stay on this phone.'); } catch (error) { status(`${error.message} Touch controls remain available.`); } };
+  $('phoneStartBackHands').onclick = async () => { try { await startPhoneCamera('environment'); status('Rear camera · two-hand tracking active locally.'); } catch (error) { status(`${error.message} Touch controls remain available.`); } };
+  $('phoneStopHands').onclick = () => { stopPhoneCamera(); status('Camera stopped. Touch controls remain available.'); };
   $('phoneProject').onclick = async () => { try { const result = await projection.start(); $('phoneProjectionState').textContent = `Projection route: ${result.route} · camera track ${result.cameraTrack}. OS/browser may pause camera when the page is backgrounded.`; } catch (error) { $('phoneProjectionState').textContent = `${error.message} The camera remains local; touch still works.`; } };
   $('phoneStopProject').onclick = () => { projection.stop(); $('phoneProjectionState').textContent = 'Projection mode stopped; camera can continue until you stop it.'; };
   $('phoneInstallOffline').onclick = installOffline;
@@ -206,8 +264,8 @@ function addPhoneSurface() {
     if (event.detail.kind === 'event' && event.detail.name === 'orientation') window.dispatchEvent(new CustomEvent('vivo:orientation', { detail: event.detail.value }));
     if (event.detail.kind === 'agent-action') {
       const { id, name, args = {} } = event.detail;
-      Promise.resolve(name === 'phone.camera.start' ? camera.start(args.facing === 'environment' ? 'environment' : 'user', true)
-        : name === 'phone.camera.stop' ? camera.stop()
+      Promise.resolve(name === 'phone.camera.start' ? startPhoneCamera(args.facing === 'environment' ? 'environment' : 'user')
+        : name === 'phone.camera.stop' ? stopPhoneCamera()
         : Promise.reject(new Error('Unsupported page-side action')))
         .then(value => value === false ? bridge.reply(id, false, 'Camera did not start') : bridge.reply(id, true, { started: true, framesUploaded: false }))
         .catch(error => bridge.reply(id, false, error));
@@ -304,7 +362,7 @@ window.VivaAgentTools = Object.freeze({ list: () => registry.list(), invoke: (na
 window.VivaPhoneEngine = Object.freeze({
   get active() { return !!engine && localMode; }, get available() { return browserCapabilities.worker; },
   snapshot: () => engine?.snapshot(), translate: (...args) => engine?.translate(...args), setEye: patch => engine?.setEye(patch),
-  forkOffline: label => engine?.forkOffline(label), startCamera: (facing = 'user') => camera.start(facing, true), stopCamera: () => camera.stop(),
+  forkOffline: label => engine?.forkOffline(label), startCamera: (facing = 'user') => startPhoneCamera(facing), stopCamera: stopPhoneCamera,
   capabilities: () => latestCapabilities || browserCapabilities,
 });
 

@@ -40,10 +40,6 @@ export class Renderer{
   }
   if(this.gl&&!this.lost){const g=this.gl;g.clearColor(.02,.07,.09,document.body.classList.contains('camera-live')?0:1);g.clear(g.COLOR_BUFFER_BIT|g.DEPTH_BUFFER_BIT);g.useProgram(this.program);g.bindBuffer(g.ARRAY_BUFFER,this.buffer);g.bufferData(g.ARRAY_BUFFER,new Float32Array(tris),g.DYNAMIC_DRAW);g.drawArrays(g.TRIANGLES,0,tris.length/7);}else if(this.fallback){const c=this.fallback;c.clearRect(0,0,this.w,this.h);if(!document.body.classList.contains('camera-live')){c.fillStyle='#07171d';c.fillRect(0,0,this.w,this.h);}for(let i=0;i<tris.length;i+=21){c.fillStyle=`rgba(${tris[i+3]*255},${tris[i+4]*255},${tris[i+5]*255},${tris[i+6]})`;c.beginPath();for(let k=0;k<3;k++){const j=i+k*7,x=(tris[j]+1)*this.w/2,y=(1-tris[j+1])*this.h/2;k?c.lineTo(x,y):c.moveTo(x,y);}c.fill();}}
   if(this.pointer){ctx.strokeStyle='#f1d39b';ctx.lineWidth=2;ctx.beginPath();ctx.arc(this.pointer[0],this.pointer[1],14,0,Math.PI*2);ctx.stroke();}
-  if(this.hand.length){
-   const bones=[[0,1,0],[1,2,0],[2,3,0],[3,4,0],[0,5,1],[5,6,1],[6,7,1],[7,8,1],[0,9,2],[9,10,2],[10,11,2],[11,12,2],[0,13,3],[13,14,3],[14,15,3],[15,16,3],[0,17,4],[17,18,4],[18,19,4],[19,20,4],[5,9,5],[9,13,5],[13,17,5]];
-   const colors=['#ffd38a','#77d7c1','#85b8ff','#cf9bff','#ff9d9d','#91d0be'];
-   this.hand.forEach((hand,handIndex)=>{const pts=Array.isArray(hand)?hand:hand.landmarks;if(!Array.isArray(pts)||pts.length!==21)return;ctx.lineWidth=handIndex?2.2:2.8;for(const[a,b,finger]of bones){ctx.strokeStyle=colors[finger];ctx.beginPath();ctx.moveTo(pts[a][0],pts[a][1]);ctx.lineTo(pts[b][0],pts[b][1]);ctx.stroke();}for(let i=0;i<pts.length;i++){const tip=[4,8,12,16,20].includes(i);ctx.beginPath();ctx.fillStyle=tip?colors[[4,8,12,16,20].indexOf(i)]:handIndex?'#d2fff1':'#91d0be';ctx.arc(pts[i][0],pts[i][1],tip?5:2.5,0,Math.PI*2);ctx.fill();}ctx.font='11px system-ui';ctx.textAlign='left';ctx.fillStyle='#e8fff6';ctx.fillText((hand.id||`hand-${handIndex+1}`)+' · '+(hand.pose||'tracked'),pts[0][0]+8,pts[0][1]-8);});
-  }
+  if(this.hand.length){ctx.strokeStyle='#91d0be';ctx.lineWidth=2;for(const[a,b]of[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[0,17],[17,18],[18,19],[19,20]]){ctx.beginPath();ctx.moveTo(...this.hand[a]);ctx.lineTo(...this.hand[b]);ctx.stroke();}}
  }
 }

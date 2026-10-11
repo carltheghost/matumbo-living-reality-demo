@@ -4,7 +4,7 @@ Tools are listed only after the in-app capability grant and any required Android
 
 | Capability | Agent tool(s) | App grant | Android/device gate | Scope / fallback |
 | --- | --- | --- | --- | --- |
-| Camera | `phone.camera.start`, `phone.camera.stop` | Camera | Camera runtime permission and WebView video-capture request | Frames stay in browser memory and the local Worker. Camera button remains available in the Pages UI. |
+| Camera | `phone.camera.start`, `phone.camera.stop` | Camera | Camera runtime permission and WebView video-capture request | Frames stay in browser memory and the phone-owned local Worker. The Pages camera remains available for shared mode; phone local mode uses its two-hand tracker. |
 | Torch | `phone.torch.set` | Torch | Camera permission, rear camera flash hardware | Can fail while the camera owns the sensor. Browser touch controls remain available. |
 | Vibration / haptics | `phone.haptics` | Haptics | Vibrator hardware | Short 35 ms confirmation. |
 | Brightness | `phone.brightness` | Brightness | App window | Changes only Vivo's app-window brightness, not the Android system brightness. |
@@ -20,3 +20,4 @@ Tools are listed only after the in-app capability grant and any required Android
 | Navigation / app switching | `phone.navigation` | Accessibility | Explicit app switch and Android Accessibility settings | Back, Home, Recents. System policy decides what is allowed. |
 
 The accessibility service does not expose a screen-tree read tool. It does not inspect or return node text. Password-like focused fields are refused before text input. The app's **Agent UI: off** kill-switch removes all accessibility tools immediately; Android settings can independently revoke the service.
+
