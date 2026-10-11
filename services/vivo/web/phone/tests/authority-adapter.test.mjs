@@ -295,3 +295,166 @@ test('offline branch, permission, material and journal gates reject without a se
   assert.deepEqual((await first.engine.snapshot()).snapshot.spaces.root.entities.relic.q, before);
 });
 
+test('a pending read cannot resurrect the connected message after close', async t => {
+  const {runtime, transports, first, one} = await fixture();
+  t.after(async () => { await one.close(); await first.engine.close(); await runtime.dispatch({op: 'shutdown'}); });
+  await one.connect();
+  const refreshStarted = deferred();
+  const releaseRefresh = deferred();
+  const transport = transports[0];
+  const originalRefresh = transport.refresh.bind(transport);
+  transport.refresh = async () => {
+    refreshStarted.resolve();
+    await releaseRefresh.promise;
+    return originalRefresh();
+  };
+  const pending = one.read();
+  await refreshStarted.promise;
+  await one.close();
+  releaseRefresh.resolve();
+  const result = await pending;
+  assert.equal(result.status, 'rejected');
+  assert.equal(result.code, 'AUTHORITY_SESSION_CHANGED');
+  assert.equal(one.debug().connected, false);
+  assert.match(one.debug().message, /disconnected/i);
+  assert.doesNotMatch(one.debug().message, /refreshed/i);
+});
+
+test('a selection change while refresh is pending cannot retarget the command', async t => {
+  const {runtime, transports, first, one} = await fixture();
+  t.after(async () => { await one.close(); await first.engine.close(); await runtime.dispatch({op: 'shutdown'}); });
+  await one.connect();
+  first.engine.world.spaces.root.entities.relic.q[0] = 1;
+  await one.syncLocal();
+  const refreshStarted = deferred();
+  const releaseRefresh = deferred();
+  const transport = transports[0];
+  const originalRefresh = transport.refresh.bind(transport);
+  transport.refresh = async () => {
+    refreshStarted.resolve();
+    await releaseRefresh.promise;
+    return originalRefresh();
+  };
+  const pending = one.commit();
+  await refreshStarted.promise;
+  await one.selectEntity('workpiece');
+  releaseRefresh.resolve();
+  const result = await pending;
+  assert.equal(result.status, 'rejected');
+  assert.equal(result.code, 'PHONE_LOCAL_STATE_CHANGED');
+  assert.equal(result.action, 'commit');
+  assert.equal(transport.submitCalls.length, 0);
+  assert.equal(one.debug().selectedEntityId, 'workpiece');
+});
+
+test('a remote accepted revision during command loading requires a fresh conflict acknowledgement', async t => {
+  const {runtime, transports, first, second, one, two} = await fixture();
+  t.after(async () => { await one.close(); await two.close(); await first.engine.close(); await second.engine.close(); await runtime.dispatch({op: 'shutdown'}); });
+  await one.connect();
+  await two.connect();
+  first.engine.world.spaces.root.entities.relic.q[0] = 1;
+  await one.syncLocal();
+  second.engine.world.spaces.root.entities.relic.q[0] = 2;
+  await two.syncLocal();
+  await two.commit();
+  await one.read();
+  const armed = await one.commit();
+  assert.equal(armed.code, 'STUDIO_CONFLICT');
+  assert.equal(armed.retryArmed, true);
+
+  const loaderStarted = deferred();
+  const releaseLoader = deferred();
+  one.commandLoader = async () => { loaderStarted.resolve(); return releaseLoader.promise; };
+  const pending = one.commit();
+  await loaderStarted.promise;
+  second.engine.world.spaces.root.entities.relic.q[0] = 3;
+  await two.syncLocal();
+  await two.commit();
+  // The production transport delivers this state through its subscription;
+  // the in-process test transport models that delivery explicitly.
+  one.receive(transports[1].current);
+  releaseLoader.resolve({studioCommitCommand, studioTransformCommand});
+  const result = await pending;
+  assert.equal(result.status, 'rejected');
+  assert.equal(result.code, 'STUDIO_CONFLICT');
+  assert.equal(transports[0].submitCalls.length, 0);
+  assert.equal(result.retryArmed, true, 'the newer accepted state must be acknowledged again');
+  assert.equal(one.debug().conflict?.retryArmed, true);
+  const accepted = await one.commit();
+  assert.equal(accepted.status, 'accepted');
+});
+
+test('a dirty unselected binding keeps its conflict baseline across selection changes', async t => {
+  const {runtime, transports, first, second, one, two} = await fixture();
+  t.after(async () => { await one.close(); await two.close(); await first.engine.close(); await second.engine.close(); await runtime.dispatch({op: 'shutdown'}); });
+  await one.connect();
+  await two.connect();
+  first.engine.world.spaces.root.entities.relic.q[0] = 1;
+  await one.syncLocal();
+  await one.selectEntity('workpiece');
+  second.engine.world.spaces.root.entities.relic.q[0] = 2;
+  await two.syncLocal();
+  await two.commit();
+  await one.read();
+  assert.equal(one.debug().selectedEntityId, 'workpiece');
+  assert.equal(one.debug().conflict, null);
+  await one.selectEntity('relic');
+  assert.equal(one.debug().conflict?.bindingId, 'studio.node.echo');
+  const callsBefore = transports[0].submitCalls.length;
+  const blocked = await one.commit();
+  assert.equal(blocked.code, 'STUDIO_CONFLICT');
+  assert.equal(blocked.retryArmed, true);
+  assert.equal(transports[0].submitCalls.length, callsBefore);
+  const accepted = await one.commit();
+  assert.equal(accepted.status, 'accepted');
+  assert.equal(one.debug().acceptedEntity.q[0], 1);
+});
+
+test('a newer overlapping connect admission wins and disposes the older factory result', async t => {
+  const runtime = await MountedRuntime.open({store: 'memory'});
+  const source = await initialEnvelope('overlapping-connect');
+  const firstFactory = deferred();
+  const secondFactory = deferred();
+  let factoryCalls = 0;
+  const adapter = new PhoneAuthorityAdapter({
+    snapshot: () => source.engine.snapshot(),
+    transportFactory: async () => (++factoryCalls === 1 ? firstFactory.promise : secondFactory.promise),
+  });
+  const makeClient = ({admit = true} = {}) => ({
+    closed: false,
+    closeCalls: 0,
+    admitCalls: 0,
+    current: null,
+    session: null,
+    async admit(seat) {
+      this.admitCalls++;
+      if (!admit) throw new Error('late client must not be admitted');
+      const result = await runtime.dispatch({op: 'open', args: {seat}});
+      this.session = copy(result.session);
+      this.token = result.token;
+      this.current = copy(result.state);
+      return {token: this.token, session: copy(this.session), state: copy(result.state)};
+    },
+    getSnapshot() { return copy(this.current?.snapshot); },
+    async close() { this.closeCalls++; this.closed = true; },
+  });
+  t.after(async () => { await adapter.close(); await source.engine.close(); await runtime.dispatch({op: 'shutdown'}); });
+
+  const older = adapter.connect();
+  await Promise.resolve();
+  const newer = adapter.connect();
+  const winningClient = makeClient();
+  secondFactory.resolve(winningClient);
+  const winningResult = await newer;
+  const losingClient = makeClient({admit: false});
+  firstFactory.resolve(losingClient);
+  const losingResult = await older;
+
+  assert.equal(winningResult.connected, true);
+  assert.equal(losingResult.code, 'AUTHORITY_SESSION_CHANGED');
+  assert.equal(adapter.transport, winningClient);
+  assert.equal(losingClient.admitCalls, 0);
+  assert.equal(losingClient.closeCalls, 1);
+  assert.equal(winningClient.closeCalls, 0);
+});
+

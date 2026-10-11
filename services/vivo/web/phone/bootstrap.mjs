@@ -333,14 +333,22 @@ function addPhoneSurface() {
   };
   $('phoneAuthorityConnect').onclick = async () => {
     if (!authority) { status('Enter the local Vivo engine before connecting the canonical authority.'); return; }
-    try { await authority.connect({ seat: $('phoneAuthoritySeat').value }); updatePhoneAuthorityUI(); status('Canonical authority connected explicitly. Local phone state remains unchanged.'); }
+    try {
+      const result = await authority.connect({ seat: $('phoneAuthoritySeat').value });
+      updatePhoneAuthorityUI();
+      status(result?.status === 'rejected'
+        ? (result.reason || `Canonical authority connection rejected: ${result.code || 'AUTHORITY_UNAVAILABLE'}.`)
+        : 'Canonical authority connected explicitly. Local phone state remains unchanged.');
+    }
     catch (error) { updatePhoneAuthorityUI(); status(`Canonical authority unavailable: ${error.message}`); }
   };
   $('phoneAuthorityRead').onclick = async () => {
     try {
       const result = await authority.read();
       updatePhoneAuthorityUI();
-      status(result?.status === 'rejected'
+      status(result?.code === 'AUTHORITY_SESSION_CHANGED'
+        ? 'Canonical authority closed before the read completed. Local phone state remains unchanged.'
+        : result?.status === 'rejected'
         ? (result.reason || `Canonical read rejected: ${result.code || 'AUTHORITY_UNAVAILABLE'}.`)
         : 'Accepted canonical state refreshed. Local phone state remains unchanged.');
     }
