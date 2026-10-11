@@ -68,6 +68,7 @@ jobs:
           set -euo pipefail
           node --check services/vivo/web/application/remote-bootstrap.mjs
           node --check services/vivo/web/application/remote-transport.mjs
+          node --test services/vivo/tests/application/remote-transport.test.mjs
       - name: Run real two-tab remote browser acceptance
         shell: bash
         run: |

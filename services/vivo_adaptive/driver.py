@@ -52,6 +52,21 @@ def finite_vector(value, dimension, low=-1e6, high=1e6):
     )
 
 
+def bounded_velocity(value, dimension):
+    """Validate the same speed bound used by the integrator."""
+    if not finite_vector(value, dimension, -MAX_SPEED, MAX_SPEED):
+        return False
+    return float(np.linalg.norm(np.asarray(value, dtype=float))) <= MAX_SPEED + 1e-9
+
+
+def same_vector(left, right):
+    """Compare wire-list and internal-tuple vectors by numeric value."""
+    try:
+        return np.array_equal(np.asarray(left, dtype=float), np.asarray(right, dtype=float))
+    except (TypeError, ValueError):
+        return False
+
+
 def _model():
     require(MODEL_PATH.is_file(), "MODEL_MISSING")
     require(hashlib.sha256(MODEL_PATH.read_bytes()).hexdigest() == MODEL_SHA256, "MODEL_HASH")
@@ -74,7 +89,7 @@ def _snapshot_space(snapshot, space_id):
         require(identifier(eid) and isinstance(entity, dict) and entity.get("id") == eid, "ENTITY_ID")
         require(entity.get("spaceId") == space_id and entity.get("dimension") == d, "ENTITY_FRAME")
         require(entity.get("materialProfile") == "adaptive-graph", "PROFILE")
-        require(finite_vector(entity.get("q"), d) and finite_vector(entity.get("v"), d, -MAX_SPEED, MAX_SPEED), "ENTITY_STATE")
+        require(finite_vector(entity.get("q"), d) and bounded_velocity(entity.get("v"), d), "ENTITY_STATE")
         require(type(entity.get("revision")) is int and 0 <= entity["revision"] < 2**53 - 2, "REVISION")
     return space
 
@@ -197,13 +212,17 @@ class AdaptiveGraphDriver:
             for eid, entity in space["entities"].items():
                 require(identifier(eid), "ENTITY_ID")
                 require(set(entity) == {"q", "v", "mass", "revision"}, "ENTITY_FIELDS")
-                require(finite_vector(entity["q"], d) and finite_vector(entity["v"], d, -MAX_SPEED, MAX_SPEED), "ENTITY_STATE")
+                require(finite_vector(entity["q"], d) and bounded_velocity(entity["v"], d), "ENTITY_STATE")
                 require(number(entity["mass"], 0.01, 1000), "MASS")
                 require(type(entity["revision"]) is int and 0 <= entity["revision"] < 2**53 - 2, "REVISION")
-            require(isinstance(space.get("edges"), list), "EDGES")
+            require(isinstance(space.get("edges"), list) and len(space["edges"]) <= MAX_ENTITIES * 4, "EDGE_BUDGET")
+            seen_edges = set()
             for edge in space["edges"]:
                 require(set(edge) == {"a", "b", "rest"}, "EDGE")
                 require(edge["a"] in space["entities"] and edge["b"] in space["entities"] and edge["a"] != edge["b"], "EDGE")
+                pair = tuple(sorted((edge["a"], edge["b"])))
+                require(pair not in seen_edges, "EDGE_DUPLICATE")
+                seen_edges.add(pair)
                 require(number(edge["rest"], 1e-9, 1e9), "EDGE_REST")
         self._state = copy.deepcopy(checkpoint)
 
@@ -267,10 +286,12 @@ class AdaptiveGraphDriver:
         all_edge_diagnostics = []
         total_mass = 0.0
         kinetic = 0.0
+        previous_kinetic = 0.0
         supplied_work = 0.0
         dissipated = 0.0
 
         grouped = {}
+        canonical_spaces = {sid: _snapshot_space(snapshot, sid) for sid in self._state["spaces"]}
         for grip in grips:
             require(isinstance(grip, dict), "GRIP")
             sid, eid = grip.get("spaceId"), grip.get("entityId")
@@ -283,14 +304,16 @@ class AdaptiveGraphDriver:
                 and target.get("dimension") == self._state["spaces"][sid]["dimension"],
                 "TARGET_FRAME",
             )
+            canonical_entity = canonical_spaces[sid]["entities"].get(eid)
+            require(canonical_entity is not None and target.get("chart") == canonical_entity.get("chart"), "TARGET_CHART")
             grouped.setdefault((sid, eid), []).append(grip)
 
         for sid, state_space in self._state["spaces"].items():
-            canonical = _snapshot_space(snapshot, sid)
+            canonical = canonical_spaces[sid]
             for eid, record in state_space["entities"].items():
                 entity = canonical["entities"][eid]
                 require(entity["revision"] == record["revision"], "STALE_REVISION")
-                require(entity["q"] == record["q"] and entity["v"] == record["v"], "STATE_MISMATCH")
+                require(same_vector(entity["q"], record["q"]) and same_vector(entity["v"], record["v"]), "STATE_MISMATCH")
 
             forces, edge_diag = self._learned_internal(state_space)
             all_edge_diagnostics.extend({"spaceId": sid, **d} for d in edge_diag)
@@ -298,7 +321,8 @@ class AdaptiveGraphDriver:
                 q = np.asarray(old["q"], dtype=float)
                 v = np.asarray(old["v"], dtype=float)
                 mass = float(old["mass"])
-                gforce, effort = self._grip_force(old, grouped.get((sid, eid), []))
+                previous_kinetic += 0.5 * mass * float(np.dot(v, v))
+                gforce, _effort = self._grip_force(old, grouped.get((sid, eid), []))
                 force = forces[eid] + gforce - DAMPING * v
                 acceleration = force / mass
                 v2 = v + dt * acceleration
@@ -306,8 +330,8 @@ class AdaptiveGraphDriver:
                 if speed > MAX_SPEED:
                     v2 *= MAX_SPEED / speed
                 q2 = q + dt * v2
-                require(np.isfinite(q2).all() and np.isfinite(v2).all(), "NONFINITE")
-                supplied_work += effort * dt
+                require(finite_vector(q2.tolist(), len(q2)) and bounded_velocity(v2.tolist(), len(v2)), "NONFINITE")
+                supplied_work += float(np.dot(gforce, q2 - q))
                 dissipated += DAMPING * float(np.dot(v, v)) * dt
                 total_mass += mass
                 kinetic += 0.5 * mass * float(np.dot(v2, v2))
@@ -333,7 +357,7 @@ class AdaptiveGraphDriver:
                 "energy": kinetic,
                 "suppliedWork": supplied_work,
                 "dissipatedEnergy": dissipated,
-                "residual": 0.0,
+                "residual": (kinetic - previous_kinetic) - supplied_work + dissipated,
             },
             "edgeDiagnostics": all_edge_diagnostics,
             "lawVersion": LAW_VERSION,
@@ -341,4 +365,4 @@ class AdaptiveGraphDriver:
             "randomState": "deterministic:none",
         }
         self._state = next_state
-        return proposal
+        return copy.deepcopy(proposal)

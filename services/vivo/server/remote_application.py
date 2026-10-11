@@ -40,7 +40,26 @@ RATE_WINDOW = 10.0
 RATE_LIMIT = 120
 OWNER_ACTOR = "remote.owner"
 _ID_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.:-")
+RELEASE_FILES = (
+    "application/device-check.html",
+    "application/device-check.mjs",
+    "application/device-check.css",
+    "camera.js",
+    "hand-worker.js",
+)
 
+
+def release_digest():
+    """Return an immutable digest for the browser evidence surface."""
+    hasher = hashlib.sha256()
+    for relative in RELEASE_FILES:
+        path = WEB_ROOT / relative
+        require(path.is_file(), "RELEASE_FILE_MISSING")
+        hasher.update(relative.encode("utf-8"))
+        hasher.update(b"\0")
+        hasher.update(path.read_bytes())
+        hasher.update(b"\0")
+    return "sha256:" + hasher.hexdigest()
 
 class RemoteError(RuntimeError):
     def __init__(self, code):
@@ -51,6 +70,9 @@ class RemoteError(RuntimeError):
 def require(ok, code):
     if not ok:
         raise RemoteError(code)
+
+
+RELEASE_DIGEST = release_digest()
 
 
 def identifier(value, limit=128):
@@ -94,11 +116,10 @@ class InvitationStore:
 
     def create(self, ttl_seconds=3600):
         require(type(ttl_seconds) is int and 60 <= ttl_seconds <= 7 * 24 * 3600, "INVITE_TTL")
-        active = self.db.execute(
-            "SELECT COUNT(*) FROM invitations WHERE revoked=0 AND expires_at>?",
-            (int(time.time()),),
-        ).fetchone()[0]
-        require(active < 32, "INVITE_LIMIT")
+        # Revocation and expiry are intentionally durable. Counting only active
+        # rows would let an owner create unbounded actor identities over time.
+        durable = self.db.execute("SELECT COUNT(*) FROM invitations").fetchone()[0]
+        require(durable < 32, "INVITE_LIMIT")
         ident = uuid.uuid4().hex
         token = secrets.token_urlsafe(32)
         actor = "remote.invite." + ident
@@ -155,6 +176,7 @@ class RemoteGateway:
                                   adaptive=True, remote_actors=True, store=store)
         self.material = AdaptiveApplicationHost(self.bridge.material_call)
         self.connections = set()
+        self.active = {}
         self.started = False
 
     async def start(self):
@@ -183,6 +205,33 @@ class RemoteGateway:
             return Principal("owner", OWNER_ACTOR, "one")
         invite = self.invites.lookup(token)
         return Principal(invite["role"], invite["actorId"], invite["seat"], invite["id"])
+
+    async def _pause_material_if_last(self):
+        """Keep the private Python pump paused when no admitted session remains."""
+        if any(connection.get("node_token") for connection in self.active.values()):
+            return
+        with contextlib.suppress(Exception):
+            await self.material.set_running(False)
+
+    async def revoke_active_invitation(self, invitation_id):
+        """Disconnect already-admitted editors whose durable invite was revoked."""
+        for ws, connection in list(self.active.items()):
+            principal = connection.get("principal")
+            if not principal or principal.invitation_id != invitation_id:
+                continue
+            connection["closed_by_gateway"] = True
+            node_token = connection.get("node_token")
+            connection["node_token"] = None
+            connection["stop"].set()
+            if connection.get("poll_task"):
+                with contextlib.suppress(Exception):
+                    await connection["poll_task"]
+            if node_token:
+                with contextlib.suppress(Exception):
+                    await self.node("close", token=node_token)
+            with contextlib.suppress(Exception):
+                await ws.close(code=4003, message=b"INVITE_REVOKED")
+        await self._pause_material_if_last()
 
     async def node(self, op, *, token=None, args=None):
         result = await self.bridge.call(op, token=token, args=args or {})
@@ -250,6 +299,7 @@ class RemoteGateway:
         poll_task = None
         stop = asyncio.Event()
         principal = None
+        connection = None
         try:
             try:
                 first = await asyncio.wait_for(ws.receive(), 5)
@@ -267,6 +317,13 @@ class RemoteGateway:
                 admitted = await self.node("open", args={"seat": principal.seat,
                     "actorId": principal.actor_id, "readOnly": False})
                 node_token = admitted["token"]
+                connection = {
+                    "principal": principal,
+                    "node_token": node_token,
+                    "stop": stop,
+                    "closed_by_gateway": False,
+                }
+                self.active[ws] = connection
                 state = self.decorate(admitted["state"])
                 await ws.send_json({"type": "joined", "role": principal.role,
                     "actorId": principal.actor_id, "session": admitted["session"], "state": state})
@@ -278,6 +335,7 @@ class RemoteGateway:
                 return ws
 
             poll_task = asyncio.create_task(self.poll(ws, node_token, stop))
+            connection["poll_task"] = poll_task
             times = deque()
             async for message in ws:
                 if message.type == WSMsgType.ERROR:
@@ -307,6 +365,7 @@ class RemoteGateway:
                     if op == "invite.revoke":
                         require(principal.role == "owner" and set(args) == {"id"}, "FORBIDDEN")
                         value = self.invites.revoke(args["id"])
+                        await self.revoke_active_invitation(args["id"])
                         await ws.send_json({"type": "reply", "id": ident, "value": value})
                         continue
                     if op == "invite.list":
@@ -319,14 +378,26 @@ class RemoteGateway:
                     if principal.role == "owner":
                         allowed.add("materialRun")
                     require(op in allowed, "FORBIDDEN")
+                    if op == "materialRun" and args.get("running") is True:
+                        require(not self.material.status().get("fault"), "MATERIAL_HOST_RESTART_REQUIRED")
                     result = await self.node(op, token=node_token, args=args)
                     if op == "materialRun":
-                        await self.material.set_running(bool(result["value"]["running"]))
+                        running = bool(result["value"]["running"])
+                        try:
+                            await self.material.set_running(running)
+                        except Exception as error:
+                            # The authority may already have accepted the node
+                            # flag. Roll it back if the private host rejects it.
+                            if running:
+                                with contextlib.suppress(Exception):
+                                    await self.node("materialRun", token=node_token, args={"running": False})
+                            raise RemoteError(getattr(error, "code", "MATERIAL_HOST_RESTART_REQUIRED"))
                     state = self.decorate(result["state"]) if result.get("state") else None
                     await ws.send_json({"type": "reply", "id": ident,
                                         "value": result.get("value"), "state": state})
                     if op == "close":
                         node_token = None
+                        connection["node_token"] = None
                         break
                 except RemoteError as exc:
                     await ws.send_json({"type": "reply", "id": body.get("id") if isinstance(locals().get("body"), dict) else None,
@@ -341,10 +412,13 @@ class RemoteGateway:
                 # could strand a valid reply and desynchronize the next request.
                 with contextlib.suppress(Exception):
                     await poll_task
-            if node_token:
+            if node_token and not (connection and connection.get("closed_by_gateway")):
                 with contextlib.suppress(Exception):
                     await self.node("close", token=node_token)
+            if connection:
+                self.active.pop(ws, None)
             self.connections.discard(ws)
+            await self._pause_material_if_last()
         return ws
 
 
@@ -407,7 +481,9 @@ async def make_remote_app(data_dir, owner_token, origin, *, store="posix"):
 
     async def device_check(_request):
         return web.FileResponse(WEB_ROOT / "application" / "device-check.html",
-                                headers={"Cache-Control": "no-cache", "X-Vivo-Application": "physical-device-evidence-1"})
+                                headers={"Cache-Control": "no-cache", "X-Vivo-Application": "physical-device-evidence-1",
+                                         "X-Vivo-Release-Origin": origin,
+                                         "X-Vivo-Release-Digest": RELEASE_DIGEST})
 
     async def grid(request):
         try:

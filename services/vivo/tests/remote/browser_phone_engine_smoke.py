@@ -46,6 +46,9 @@ async def main():
             check("worker sparse compute", caps["compute"] == "worker-sparse", caps["compute"])
             check("IndexedDB persistence", caps["storage"] == "IndexedDB", caps["storage"])
             check("camera frame upload disabled", caps["cameraFramesUploaded"] is False)
+            check("explicit XR capability surface", caps["xr"]["schema"] == "vivo.xr-capabilities/1", caps["xr"])
+            check("XR cannot claim physical validation", caps["xr"]["physicalValidation"] is False, caps["xr"])
+            check("XR frame upload disabled", caps["xr"]["cameraFramesUploaded"] is False, caps["xr"])
 
             before = await page.evaluate("() => window.VivoPhoneEngine.state.nodes[0].q[3]")
             await page.evaluate("() => window.VivoPhoneEngine.constraint(0,[0,0,0,1])")

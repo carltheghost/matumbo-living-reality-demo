@@ -8,7 +8,7 @@ import socket
 import tempfile
 import time
 import unittest
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 from aiohttp import ClientSession, WSMsgType
 
@@ -283,6 +283,34 @@ class RemoteAcceptance(unittest.IsolatedAsyncioTestCase):
             await ws.close()
         finally:
             await session.close()
+
+    async def test_revocation_disconnects_an_already_admitted_editor(self):
+        invite = await self.connect_pair()
+        await self.owner.call("invite.revoke", {"id": invite["id"]})
+        deadline = time.monotonic() + 5
+        while not self.editor.ws.closed and time.monotonic() < deadline:
+            await asyncio.sleep(0.05)
+        self.assertTrue(self.editor.ws.closed)
+
+    async def test_device_evidence_has_origin_and_release_digest_headers(self):
+        request = Request(self.base + "/device-check", method="HEAD")
+        with urlopen(request, timeout=5) as response:
+            self.assertEqual(response.headers.get("X-Vivo-Release-Origin"), self.origin)
+            digest = response.headers.get("X-Vivo-Release-Digest")
+            self.assertRegex(digest or "", r"^sha256:[0-9a-f]{64}$")
+
+    async def test_invitation_identity_cap_counts_revoked_rows(self):
+        owner = await RemoteClient.connect(self.base, self.origin, OWNER_TOKEN)
+        invites = []
+        try:
+            for _ in range(32):
+                invites.append(await owner.call("invite.create", {"ttlSeconds": 3600}))
+            for invite in invites:
+                await owner.call("invite.revoke", {"id": invite["id"]})
+            with self.assertRaisesRegex(RuntimeError, "INVITE_LIMIT"):
+                await owner.call("invite.create", {"ttlSeconds": 3600})
+        finally:
+            await owner.close()
 
     async def test_wrong_origin_is_refused_before_websocket_upgrade(self):
         session = ClientSession()

@@ -164,6 +164,62 @@ class AdaptiveGraphTests(unittest.TestCase):
         with self.assertRaisesRegex(AdaptiveMaterialError, "STALE_REVISION"):
             driver.step(payload(driver, s))
 
+    def test_proposal_is_detached_from_driver_state(self):
+        driver = AdaptiveGraphDriver.initialize(snapshot())
+        result = driver.step(payload(driver, snapshot()))
+        result["fieldState"]["spaces"]["root"]["entities"]["a"]["q"][0] = 999.0
+        result["entityUpdates"][0]["q"][0] = 999.0
+        self.assertNotEqual(driver.checkpoint()["spaces"]["root"]["entities"]["a"]["q"][0], 999.0)
+
+    def test_grip_chart_must_match_canonical_entity(self):
+        s = snapshot()
+        driver = AdaptiveGraphDriver.initialize(s)
+        grip = {
+            "spaceId": "root", "entityId": "a", "source": "touch",
+            "target": {"spaceId": "root", "dimension": 4, "chart": "other", "q": [1.0, 0.0, 0.0, 0.0]},
+        }
+        with self.assertRaisesRegex(AdaptiveMaterialError, "TARGET_CHART"):
+            driver.step(payload(driver, s, [grip]))
+
+    def test_checkpoint_enforces_aggregate_speed(self):
+        driver = AdaptiveGraphDriver.initialize(snapshot())
+        checkpoint = driver.checkpoint()
+        checkpoint["spaces"]["root"]["entities"]["a"]["v"] = [80.0, 80.0, 0.0, 0.0]
+        checkpoint["digest"] = __import__("services.vivo_adaptive.driver", fromlist=["_checkpoint_digest"])._checkpoint_digest(checkpoint)
+        with self.assertRaisesRegex(AdaptiveMaterialError, "ENTITY_STATE"):
+            driver.restore(checkpoint)
+
+    def test_checkpoint_rejects_undirected_duplicate_edges(self):
+        driver = AdaptiveGraphDriver.initialize(snapshot())
+        checkpoint = driver.checkpoint()
+        checkpoint["spaces"]["root"]["edges"].append({"a": "b", "b": "a", "rest": 1.0})
+        checkpoint["digest"] = __import__("services.vivo_adaptive.driver", fromlist=["_checkpoint_digest"])._checkpoint_digest(checkpoint)
+        with self.assertRaisesRegex(AdaptiveMaterialError, "EDGE_DUPLICATE"):
+            driver.restore(checkpoint)
+
+    def test_supplied_work_is_signed_net_force_work(self):
+        s = snapshot()
+        driver = AdaptiveGraphDriver.initialize(s)
+        grips = [
+            {"spaceId": "root", "entityId": "a", "source": "touch",
+             "target": {"spaceId": "root", "dimension": 4, "chart": "flat", "q": [1.0, 0.0, 0.0, 0.0]},
+             "stiffness": 2.0, "maxForce": 2.0},
+            {"spaceId": "root", "entityId": "a", "source": "hand",
+             "target": {"spaceId": "root", "dimension": 4, "chart": "flat", "q": [-1.0, 0.0, 0.0, 0.0]},
+             "stiffness": 2.0, "maxForce": 2.0},
+        ]
+        result = driver.step(payload(driver, s, grips))
+        self.assertAlmostEqual(result["diagnostics"]["suppliedWork"], 0.0)
+
+    def test_snapshot_accepts_tuple_wire_vectors(self):
+        s = snapshot()
+        for entity_value in s["spaces"]["root"]["entities"].values():
+            entity_value["q"] = tuple(entity_value["q"])
+            entity_value["v"] = tuple(entity_value["v"])
+        driver = AdaptiveGraphDriver.initialize(s)
+        result = driver.step(payload(driver, s))
+        self.assertEqual(result["fieldState"]["tick"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

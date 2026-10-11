@@ -32,11 +32,20 @@ async def main():
                 await asyncio.sleep(0.1)
             else:
                 raise AssertionError(f"network check timeout: {network_text!r}")
+            deadline = asyncio.get_running_loop().time() + 5
+            summary = json.loads(await page.locator("#summary").inner_text())
+            while not summary.get("releaseIdentityVerified") and asyncio.get_running_loop().time() < deadline:
+                await asyncio.sleep(0.1)
+                summary = json.loads(await page.locator("#summary").inner_text())
+            assert summary["releaseIdentityVerified"] is True, summary
+            assert summary["testedOrigin"] == BASE.rstrip("/"), summary
             # Mouse click must not become physical-touch evidence.
             await page.click("#touchTarget")
             summary = json.loads(await page.locator("#summary").inner_text())
             assert summary["physicalTouch"] is False, summary
             assert summary["physicalDeviceValidated"] is False, summary
+            assert summary["frontCameraProcessed"] is False, summary
+            assert summary["rearCameraProcessed"] is False, summary
             assert summary["cameraFramesUploaded"] is False, summary
             verdict = await page.locator("#verdict").inner_text()
             assert verdict.startswith("PENDING"), verdict

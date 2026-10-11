@@ -61,7 +61,7 @@ function updateUI(){if(!state)return;const e=currentEntity(),activeRole=role??tr
 }
 async function connect(){if(transport&&!transport.closed)await disconnect();const token=tokenInput.value.trim();if(!token)throw Error('Enter owner or invitation token');
   const socket=(location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws';
-  const client=new RemoteTransport({url:socket,token,onState:receive});transport=client;const admitted=await client.admit();role=admitted.role;receive(admitted.state);
+  const client=new RemoteTransport({url:socket,token,onState:receive,onError:error=>say('Remote: '+(error.code||error.message||'protocol error'))});transport=client;const admitted=await client.admit();role=admitted.role;receive(admitted.state);
   host=await GripHost.open(client,{onPreview:(key,v)=>v?previews.set(key,v):previews.delete(key),onStatus:(_k,e)=>e.code&&say('Grip: '+e.code)});
   inputs=new ApplicationInputs({host,nextEpoch:()=>client.nextEpoch(),project:(entity,anchor,point)=>screenTarget(renderer,entity,anchor,point),onRemove:key=>previews.delete(key)});
   await gridFor(state.eye.dimension);configureAxes();$('welcome').hidden=true;$('toolbar').hidden=false;say('Connected to one canonical Vivo world. Touch, hands and Eye actions use accepted authority state.');

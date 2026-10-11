@@ -31,6 +31,8 @@ jobs:
           node --check src/vivo-phone-engine/engine-worker.mjs
           node --check src/vivo-phone-engine/engine.mjs
           node --check src/vivo-phone-engine/boot.mjs
+          node --check src/vivo-phone-engine/xr.mjs
+          node --test src/vivo-phone-engine/xr.test.mjs
           node --check vivo-phone-sw.js
       - uses: gradle/actions/setup-gradle@v4
         with:

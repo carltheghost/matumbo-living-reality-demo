@@ -587,7 +587,16 @@ def make_local_app(data_dir=None, *, phase=False, adaptive=False, max_events=655
                 return web.json_response({'error': 'MATERIAL_HOST_RESTART_REQUIRED'}, status=409)
             result = await bridge.call(data['op'], token=header[7:], args=data.get('args', {}))
             if material_host and data['op'] == 'materialRun' and isinstance(result, dict):
-                await material_host.set_running(result['value']['running'])
+                try:
+                    await material_host.set_running(result['value']['running'])
+                except Exception:
+                    # The authority flag may have been accepted before the
+                    # private host rejected it. Restore the node-side flag so
+                    # a fault cannot leave the two runtimes disagreeing.
+                    if result['value'].get('running') is True:
+                        with contextlib.suppress(Exception):
+                            await bridge.call('materialRun', token=header[7:], args={'running': False})
+                    raise
         if material_host and isinstance(result, dict) and isinstance(result.get('state'), dict):
             result['state']['materialHost'] = annotate_material(result['state'].get('capabilities'))
         return result if isinstance(result, web.StreamResponse) else web.json_response(result)
