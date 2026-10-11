@@ -1,0 +1,47 @@
+{
+  "suite": "release-browser",
+  "passed": 9,
+  "checks": [
+    {
+      "name": "Readiness names the actual server release",
+      "passed": true
+    },
+    {
+      "name": "Camera remains off after creating a real room",
+      "passed": true
+    },
+    {
+      "name": "Motionless touch hold lasts beyond the five-second lease",
+      "passed": true
+    },
+    {
+      "name": "Worker failure retains live generated video",
+      "passed": true
+    },
+    {
+      "name": "Failed worker is terminated and model is marked off",
+      "passed": true
+    },
+    {
+      "name": "Camera fallback does not steal touch ownership",
+      "passed": true
+    },
+    {
+      "name": "Fallback visibly identifies touch-only state",
+      "passed": true
+    },
+    {
+      "name": "Explicit stop still releases the camera track",
+      "passed": true
+    },
+    {
+      "name": "No uncaught application error",
+      "passed": true
+    }
+  ],
+  "actual_video": "generated Canvas MediaStream",
+  "transport": "test relay to real HTTP/TCP server",
+  "physical_camera": false,
+  "physical_phone": false,
+  "model_inference_tested": false
+}

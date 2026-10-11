@@ -1,0 +1,29 @@
+{
+  "schema": "vivo.baseline-verification/1",
+  "product": "Vivo",
+  "base_main": "b0a59ab4233cb5daa4ea63d43cd73fabc61842f6",
+  "feature_branch": "vivo/chat1-integration-2026-10-10",
+  "utc": "2026-10-10T21:20:01.453136+00:00",
+  "recovered_members": 140,
+  "source_archives": {
+    "matumbo-viva-build-081-source.zip": "6c5b0338f413385fd34934ce290fcc3459a33788c1de7f763316a89061d34a72",
+    "viva-phase-fabric-research.zip": "adcda4383e98903a12711ceeaf6fef48ddfb60214e206a9f502339bdea50f278"
+  },
+  "fresh_passed": 246,
+  "suites": [
+    {"log": "recovered081.log", "passed": 97, "scope": "real loopback HTTP/TCP/TLS and unit tests", "sha256": "473ae0ca2d49a44f5574a3dd583155fd74bad3a2280d193708d095a2538546f0"},
+    {"log": "phase.log", "passed": 26, "scope": "native numerical reference", "sha256": "7b1d2a2414fcb986275eeee80acf0cc93275e04d2b71369afe502af99e095902"},
+    {"log": "mailbox.log", "passed": 9, "scope": "headless transport scheduler", "sha256": "76f2702b2f4d185fd514c47c96d99777c692019ab45aecd9458418c9591251c1"},
+    {"log": "legacy-numerical.log", "passed": 26, "scope": "earlier numerical regression", "sha256": "734f0562e3e327773dc12c3b5798fdc548f35e6af940f7aac86580e87c243218"},
+    {"log": "legacy-studio.log", "passed": 25, "scope": "earlier headless Studio core", "sha256": "d13825310ba089700e24983277bb3f23716586762dc38d374a11833f5dc18d6b"},
+    {"log": "legacy-viva.log", "passed": 37, "scope": "earlier headless Viva core", "sha256": "ac327950f90839da3e1078b0e22870cde20b9883d4cadb0c28db9ce2a48a62f2"},
+    {"log": "contracts.log", "passed": 17, "scope": "new envelope/target/receipt guards", "sha256": "e9037beb8f082c42eb8b2b22cee250784c12b90aa940d213f39b1623deeb0444"},
+    {"log": "intake.log", "passed": 9, "scope": "recovery safety and file ownership", "sha256": "5989a9fc04b8c4030031c0f944c62aa099f84425532bb5cb5d4fab41717c74bf"}
+  ],
+  "integrity": "Original 0.8.1 verify_integrity.py verified 45 pinned source/model files",
+  "environment": {"python": "3.13.5", "node": "v22.16.0", "numpy": "2.3.5", "aiohttp": "3.13.3", "cryptography": "46.0.4"},
+  "not_run": ["new end-to-end two-person material/nested-world acceptance", "physical-phone", "real webcam", "GPU rendering", "public internet deployment", "new neural material training"],
+  "git_scope": "Initial PR publishes recovery/contracts and exact phase solver/scheduler references. The larger 0.8.1 runtime/assets remain a verified artifact-backed overlay in the supplied baseline ZIP, not a complete Git import.",
+  "no_merge": true,
+  "no_deployment": true
+}

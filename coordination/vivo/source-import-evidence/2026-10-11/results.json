@@ -1,0 +1,30 @@
+{
+  "baseCommit": "84832d07ee21bef76c538be8f897b1be637bc3ca",
+  "environment": {
+    "python": "3.12.14",
+    "numpy": "2.3.5",
+    "aiohttp": "3.14.4",
+    "node": "v24.19.0"
+  },
+  "tests": {
+    "originalRuntimeAndLegacy": 185,
+    "phase": 26,
+    "mailbox": 9,
+    "contracts": 17,
+    "intake": 9,
+    "sourceImportAndReadiness": 9,
+    "integrityVerifierFixtures": 10
+  },
+  "totalPassed": 265,
+  "originalMembersVerified": 140,
+  "originalPackageIntegrityVerified": 45,
+  "notRun": [
+    "browser acceptance",
+    "physical phone/camera",
+    "public-network",
+    "mounted app end-to-end",
+    "material training",
+    "deployment"
+  ],
+  "dependencyNote": "Local Python/aiohttp/Node differ from original pins. CI uses Python 3.13, Node 22, aiohttp 3.13.3 and numpy 2.3.5."
+}

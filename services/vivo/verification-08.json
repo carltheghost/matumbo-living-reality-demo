@@ -1,0 +1,207 @@
+{
+  "release": "Viva Shared Workshop 0.8",
+  "generated_utc": "2026-10-10T18:49:33.431654+00:00",
+  "status": "Runnable server/client package, not deployed. Passing component/protocol checks do not establish physical-device acceptance.",
+  "automated_checks_passed": 206,
+  "automated_suites": [
+    {
+      "name": "New geometry/neural/protocol/package tests",
+      "passed": 66,
+      "failed": 0,
+      "evidence": "reports/core-network-packaging.log",
+      "cases": [
+        "test_curved_grid_not_screen_neighbors (tests.test_geometry.GeometryTests.test_curved_grid_not_screen_neighbors)",
+        "test_custom_asymmetric (tests.test_geometry.GeometryTests.test_custom_asymmetric)",
+        "test_custom_curvature (tests.test_geometry.GeometryTests.test_custom_curvature)",
+        "test_custom_negative (tests.test_geometry.GeometryTests.test_custom_negative)",
+        "test_fourth_axis_ray (tests.test_geometry.GeometryTests.test_fourth_axis_ray)",
+        "test_full_d_axes (tests.test_geometry.GeometryTests.test_full_d_axes)",
+        "test_full_d_collision (tests.test_geometry.GeometryTests.test_full_d_collision)",
+        "test_general_metric_fourth_axis (tests.test_geometry.GeometryTests.test_general_metric_fourth_axis)",
+        "test_intrinsic_sphere_distance (tests.test_geometry.GeometryTests.test_intrinsic_sphere_distance)",
+        "test_metrics_spd (tests.test_geometry.GeometryTests.test_metrics_spd)",
+        "test_mobius_bound (tests.test_geometry.GeometryTests.test_mobius_bound)",
+        "test_mobius_double_circuit (tests.test_geometry.GeometryTests.test_mobius_double_circuit)",
+        "test_mobius_mesh_single_boundary (tests.test_geometry.GeometryTests.test_mobius_mesh_single_boundary)",
+        "test_mobius_twist (tests.test_geometry.GeometryTests.test_mobius_twist)",
+        "test_no_expression_execution (tests.test_geometry.GeometryTests.test_no_expression_execution)",
+        "test_preserve_hidden_coordinates_at_seam (tests.test_geometry.GeometryTests.test_preserve_hidden_coordinates_at_seam)",
+        "test_reject_nonfinite (tests.test_geometry.GeometryTests.test_reject_nonfinite)",
+        "test_reject_wrong_dimension (tests.test_geometry.GeometryTests.test_reject_wrong_dimension)",
+        "test_sphere_chart_transition (tests.test_geometry.GeometryTests.test_sphere_chart_transition)",
+        "test_sphere_geodesic_speed (tests.test_geometry.GeometryTests.test_sphere_geodesic_speed)",
+        "test_torus_closed_seam (tests.test_geometry.GeometryTests.test_torus_closed_seam)",
+        "test_torus_mesh_closed (tests.test_geometry.GeometryTests.test_torus_mesh_closed)",
+        "test_blocked_goal_rejected_by_server_contract (tests.test_adaptive.AdaptiveTests.test_blocked_goal_rejected_by_server_contract)",
+        "test_bounded_cost (tests.test_adaptive.AdaptiveTests.test_bounded_cost)",
+        "test_crowd_response (tests.test_adaptive.AdaptiveTests.test_crowd_response)",
+        "test_curved_guide (tests.test_adaptive.AdaptiveTests.test_curved_guide)",
+        "test_matches_dijkstra_for_learned_costs (tests.test_adaptive.AdaptiveTests.test_matches_dijkstra_for_learned_costs)",
+        "test_model_changes_actual_cost (tests.test_adaptive.AdaptiveTests.test_model_changes_actual_cost)",
+        "test_neural_version_gate (tests.test_adaptive.AdaptiveTests.test_neural_version_gate)",
+        "test_propagation_reaches_goal (tests.test_adaptive.AdaptiveTests.test_propagation_reaches_goal)",
+        "test_route_repairs_after_obstacle (tests.test_adaptive.AdaptiveTests.test_route_repairs_after_obstacle)",
+        "test_snapshot_restoration (tests.test_adaptive.AdaptiveTests.test_snapshot_restoration)",
+        "test_trained_not_random (tests.test_adaptive.AdaptiveTests.test_trained_not_random)",
+        "test_turn_off_stops_growth (tests.test_adaptive.AdaptiveTests.test_turn_off_stops_growth)",
+        "test_bad_origin (tests.test_network.NetworkTests.test_bad_origin)",
+        "test_curved_move_uses_metric (tests.test_network.NetworkTests.test_curved_move_uses_metric)",
+        "test_custom_metric_room (tests.test_network.NetworkTests.test_custom_metric_room)",
+        "test_damage_regrows_guidance (tests.test_network.NetworkTests.test_damage_regrows_guidance)",
+        "test_disconnect_releases (tests.test_network.NetworkTests.test_disconnect_releases)",
+        "test_exclusive_grab_and_handoff (tests.test_network.NetworkTests.test_exclusive_grab_and_handoff)",
+        "test_export_requires_invite (tests.test_network.NetworkTests.test_export_requires_invite)",
+        "test_history_and_export_no_tokens (tests.test_network.NetworkTests.test_history_and_export_no_tokens)",
+        "test_invalid_invite (tests.test_network.NetworkTests.test_invalid_invite)",
+        "test_invalid_move_is_atomic (tests.test_network.NetworkTests.test_invalid_move_is_atomic)",
+        "test_lease_expiry (tests.test_network.NetworkTests.test_lease_expiry)",
+        "test_malformed_metric_is_clear_client_error (tests.test_network.NetworkTests.test_malformed_metric_is_clear_client_error)",
+        "test_missing_creation_key (tests.test_network.NetworkTests.test_missing_creation_key)",
+        "test_model_affects_shared_field (tests.test_network.NetworkTests.test_model_affects_shared_field)",
+        "test_neural_model_requires_owner (tests.test_network.NetworkTests.test_neural_model_requires_owner)",
+        "test_nonce_reuse_changed_payload_rejected (tests.test_network.NetworkTests.test_nonce_reuse_changed_payload_rejected)",
+        "test_observer_bad_axis_rejected (tests.test_network.NetworkTests.test_observer_bad_axis_rejected)",
+        "test_observer_geodesic_move_for_viewer (tests.test_network.NetworkTests.test_observer_geodesic_move_for_viewer)",
+        "test_observer_snapshot_does_not_contain_camera (tests.test_network.NetworkTests.test_observer_snapshot_does_not_contain_camera)",
+        "test_persistence_restart (tests.test_network.NetworkTests.test_persistence_restart)",
+        "test_publish_stable_identity (tests.test_network.NetworkTests.test_publish_stable_identity)",
+        "test_repeated_command_is_idempotent (tests.test_network.NetworkTests.test_repeated_command_is_idempotent)",
+        "test_revoke_guest (tests.test_network.NetworkTests.test_revoke_guest)",
+        "test_stale_revision_rejected (tests.test_network.NetworkTests.test_stale_revision_rejected)",
+        "test_two_clients_same_object (tests.test_network.NetworkTests.test_two_clients_same_object)",
+        "test_viewer_cannot_edit (tests.test_network.NetworkTests.test_viewer_cannot_edit)",
+        "test_bridge_explicit_not_silent_sync (tests.test_packaging.PackagingTests.test_bridge_explicit_not_silent_sync)",
+        "test_original_studio_retained_exactly (tests.test_packaging.PackagingTests.test_original_studio_retained_exactly)",
+        "test_private_model_photo_not_in_web (tests.test_packaging.PackagingTests.test_private_model_photo_not_in_web)",
+        "test_public_binding_requires_creation_key (tests.test_packaging.PackagingTests.test_public_binding_requires_creation_key)",
+        "test_recording_does_not_request_microphone (tests.test_packaging.PackagingTests.test_recording_does_not_request_microphone)",
+        "test_vendor_model_present (tests.test_packaging.PackagingTests.test_vendor_model_present)"
+      ]
+    },
+    {
+      "name": "Original numerical reference regression",
+      "passed": 26,
+      "failed": 0,
+      "evidence": "reports/legacy-numerical.log"
+    },
+    {
+      "name": "Original Studio core regression",
+      "passed": 25,
+      "failed": 0,
+      "evidence": "legacy/studio/reports/core.json"
+    },
+    {
+      "name": "Original Viva core regression",
+      "passed": 37,
+      "failed": 0,
+      "evidence": "legacy/studio/reports/viva-core.json"
+    },
+    {
+      "name": "Browser component acceptance",
+      "passed": 41,
+      "failed": 0,
+      "evidence": "reports/browser.json"
+    },
+    {
+      "name": "Original app + additive bridge",
+      "passed": 11,
+      "failed": 0,
+      "evidence": "reports/bridge.json"
+    }
+  ],
+  "javascript_syntax": [
+    {
+      "path": "web/camera.js",
+      "passed": true,
+      "error": ""
+    },
+    {
+      "path": "web/hand-worker.js",
+      "passed": true,
+      "error": ""
+    },
+    {
+      "path": "web/render.js",
+      "passed": true,
+      "error": ""
+    },
+    {
+      "path": "web/shared.js",
+      "passed": true,
+      "error": ""
+    },
+    {
+      "path": "web/studio-bridge.js",
+      "passed": true,
+      "error": ""
+    }
+  ],
+  "real_model_probe": {
+    "probe": "actual pinned MediaPipe worker with user-supplied still image",
+    "model_initialized": true,
+    "real_image_inference_passed": false,
+    "blank_image_inference_verified": false,
+    "error": "MediaPipe image preprocessing could not access WebGL (activeTexture on unavailable graphics context).",
+    "result": "BLOCKED / NOT VALIDATED, excluded from passing checks",
+    "input_privacy": "Provided photo was used only locally for this probe; image is not packaged.",
+    "physical_camera_tested": false,
+    "runtime": "CPU delegate, actual pinned WASM/model; preprocessing still requires graphics support"
+  },
+  "neural_evaluation": {
+    "task": "Synthetic local comfort cost = 1 + .4 curvature\u00b2 + 1.8 crowd + .35 noise\u00b2 + .25 roughness",
+    "training_examples": 6000,
+    "validation_examples": 1000,
+    "test_examples": 2000,
+    "seeds": [
+      801,
+      802,
+      803
+    ],
+    "selection": "validation only; independent test drawn before training, only evaluated after selection",
+    "selected_step": 1180,
+    "validation_mse": 0.0007798498263582587,
+    "test_neural_mse": 0.0007362517062574625,
+    "test_constant_mse": 0.3026220500469208,
+    "test_quadratic_mse": 1.2768636686352627e-14,
+    "parameters": 369,
+    "scope": "Learned local cost rule; graph relaxation itself is explicit, not learned. Analytic/quadratic baseline is better.",
+    "general_intelligence": false,
+    "personal_data": false
+  },
+  "runtime": {
+    "python": "3.13.5 (main, Jul 15 2026, 20:25:40) [GCC 14.2.0]",
+    "platform": "Linux-6.18.44-x86_64-with-glibc2.41",
+    "aiohttp": "3.13.3",
+    "numpy": "2.3.5",
+    "playwright": "1.57.0",
+    "torch_training": "2.10.0+cpu"
+  },
+  "network_test_scope": "Real HTTP/TCP WebSocket sockets and actual server restart on loopback. Browser test uses a disclosed relay instead of native WebSocket transport because navigation/network policies block it.",
+  "render_test_scope": "Actual Canvas 2D fallback rendering at phone and desktop viewport sizes. No WebGL GPU acceptance.",
+  "camera_test_scope": "Generated real MediaStream plus controlled landmarks tested processing and lifecycle. Real pinned model initialized; real image inference failed due unavailable WebGL preprocessing.",
+  "deployment": {
+    "live_url": null,
+    "github_changes": false,
+    "pull_request_created": false,
+    "docker_tested": false,
+    "https_tested": false
+  },
+  "remaining_acceptance": [
+    "Physical phone touch + hand end-to-end responsiveness",
+    "Actual camera tracking in bright/dim lighting",
+    "Real model image inference on supported WebGL runtime",
+    "Native browser HTTP/WSS same-origin permission and reconnection",
+    "Public HTTPS hosting and persistent volume",
+    "WebGL renderer and recovery",
+    "ARCore/world anchoring in the NEW shared mode is not implemented",
+    "Arbitrary global manifold/atlas inference is not implemented",
+    "Open-ended emergent intelligent room construction is not implemented"
+  ],
+  "security_scope": "Prototype bearer capabilities, TTL, revocation, bounded messages/history, exclusive leases. Not audited, not identity verification, not E2EE.",
+  "evidence_assets": {
+    "phone": "reports/curved-mobile.png",
+    "desktop": "reports/curved-desktop.png",
+    "recorded_scene": "reports/curved-demo.webm",
+    "recording_includes_camera": false
+  }
+}

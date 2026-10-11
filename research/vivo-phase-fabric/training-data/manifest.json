@@ -1,0 +1,123 @@
+{
+  "schema": "viva-phase-teacher/1",
+  "source": "synthetic declared mean-field equation, not experiments",
+  "teacher_shape": [
+    16,
+    16,
+    16,
+    16
+  ],
+  "observation_shape": [
+    8,
+    8,
+    8,
+    8
+  ],
+  "teacher_dt": 0.005,
+  "observation_dt": 0.02,
+  "input": "psi[t], potential[t], coupling, dt; potential[t] held over the transition",
+  "target": "psi[t+1]; test losses should include complex state, density, current, rollout and invariants",
+  "sampling_warning": "coarse subsampling omits unresolved state; not a closed exact coarse dynamics guarantee",
+  "neural_training": "not performed",
+  "split_unit": "whole trajectory; no frame-level split",
+  "test_shift": "test coupling drawn from [2.5,3]; train/validation from [.5,2]",
+  "normalization": "fit on training split only; do not tune on final test",
+  "records": [
+    {
+      "file": "train-1601.npz",
+      "split": "train",
+      "seed": 1601,
+      "coupling": 0.8396651086908811,
+      "sha256": "4f0a04c1dce17a330a51455c994fb7f6006396459bf52053e96ba1df6fa66bd4",
+      "teacher_relative_norm_drift": 1.1102230246251565e-15
+    },
+    {
+      "file": "train-1602.npz",
+      "split": "train",
+      "seed": 1602,
+      "coupling": 1.9827143431443006,
+      "sha256": "2bc8a4491e0e5b4a613b0bd0245eb708b6f7f6fd57d1339f5b6317203ae811b6",
+      "teacher_relative_norm_drift": 6.661338147750939e-16
+    },
+    {
+      "file": "train-1603.npz",
+      "split": "train",
+      "seed": 1603,
+      "coupling": 0.6472611999489815,
+      "sha256": "195d0b98115d5fb839d4761a58de8b6c6bdd93279ace4831cfd23c153e46ab60",
+      "teacher_relative_norm_drift": 4.440892098500626e-16
+    },
+    {
+      "file": "train-1604.npz",
+      "split": "train",
+      "seed": 1604,
+      "coupling": 1.8902439228666694,
+      "sha256": "0a40d5e1c1c4dde58838534ed91402796554dd648aa5c654b01c8bba053a3229",
+      "teacher_relative_norm_drift": 4.440892098500626e-16
+    },
+    {
+      "file": "train-1605.npz",
+      "split": "train",
+      "seed": 1605,
+      "coupling": 1.770321108837826,
+      "sha256": "1ca8320e373b7d7da27769587a7351eb737e82f583501e455849873d94b50063",
+      "teacher_relative_norm_drift": 4.440892098500626e-16
+    },
+    {
+      "file": "train-1606.npz",
+      "split": "train",
+      "seed": 1606,
+      "coupling": 0.7093311804177893,
+      "sha256": "ea4cf060f1c470642b1099320bfb8c5f6762d12e8f4419da6636d7d7f5470ebd",
+      "teacher_relative_norm_drift": 4.440892098500626e-16
+    },
+    {
+      "file": "train-1607.npz",
+      "split": "train",
+      "seed": 1607,
+      "coupling": 1.2868989266052178,
+      "sha256": "7edf37bca3a64a0f73790d05bbbb43a9ae9f51a6cd5a216c2b3e4248dfce8247",
+      "teacher_relative_norm_drift": 3.3306690738754696e-16
+    },
+    {
+      "file": "train-1608.npz",
+      "split": "train",
+      "seed": 1608,
+      "coupling": 1.0858249524589607,
+      "sha256": "af43d9d415e6427ea5dbd9fa6b921c9e069afac8dd84dda04229def78bfc9394",
+      "teacher_relative_norm_drift": 4.440892098500626e-16
+    },
+    {
+      "file": "validation-2601.npz",
+      "split": "validation",
+      "seed": 2601,
+      "coupling": 0.8292052069779579,
+      "sha256": "a71fe6958d9b024e0aa69a79f96560da4e35970082e0891992625097d376e222",
+      "teacher_relative_norm_drift": 4.440892098500626e-16
+    },
+    {
+      "file": "validation-2602.npz",
+      "split": "validation",
+      "seed": 2602,
+      "coupling": 0.6303633795461827,
+      "sha256": "cc73e2dfb4a821204710b7141a6b82fde859961907d6106cec827441ae7e0ff2",
+      "teacher_relative_norm_drift": 4.440892098500626e-16
+    },
+    {
+      "file": "test-3601.npz",
+      "split": "test",
+      "seed": 3601,
+      "coupling": 2.9747913576843885,
+      "sha256": "55eb3e00e494ca619ea80e6c6fcc04b8d80c55e3801d05ab016ac8fbd8142a8a",
+      "teacher_relative_norm_drift": 4.440892098500626e-16
+    },
+    {
+      "file": "test-3602.npz",
+      "split": "test",
+      "seed": 3602,
+      "coupling": 2.8430663170019224,
+      "sha256": "18c313a0c8637615658e79f19d1b8eada43be5c282b75e282c57beff997640f1",
+      "teacher_relative_norm_drift": 1.2212453270876722e-15
+    }
+  ]
+}

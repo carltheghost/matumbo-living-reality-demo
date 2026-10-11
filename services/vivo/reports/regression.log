@@ -1,0 +1,163 @@
+test_blocked_goal_rejected_by_server_contract (test_adaptive.AdaptiveTests.test_blocked_goal_rejected_by_server_contract) ... ok
+test_bounded_cost (test_adaptive.AdaptiveTests.test_bounded_cost) ... ok
+test_crowd_response (test_adaptive.AdaptiveTests.test_crowd_response) ... ok
+test_curved_guide (test_adaptive.AdaptiveTests.test_curved_guide) ... ok
+test_matches_dijkstra_for_learned_costs (test_adaptive.AdaptiveTests.test_matches_dijkstra_for_learned_costs) ... ok
+test_model_changes_actual_cost (test_adaptive.AdaptiveTests.test_model_changes_actual_cost) ... ok
+test_neural_version_gate (test_adaptive.AdaptiveTests.test_neural_version_gate) ... ok
+test_propagation_reaches_goal (test_adaptive.AdaptiveTests.test_propagation_reaches_goal) ... ok
+test_route_repairs_after_obstacle (test_adaptive.AdaptiveTests.test_route_repairs_after_obstacle) ... ok
+test_snapshot_restoration (test_adaptive.AdaptiveTests.test_snapshot_restoration) ... ok
+test_trained_not_random (test_adaptive.AdaptiveTests.test_trained_not_random) ... ok
+test_turn_off_stops_growth (test_adaptive.AdaptiveTests.test_turn_off_stops_growth) ... ok
+test_curved_grid_not_screen_neighbors (test_geometry.GeometryTests.test_curved_grid_not_screen_neighbors) ... ok
+test_custom_asymmetric (test_geometry.GeometryTests.test_custom_asymmetric) ... ok
+test_custom_curvature (test_geometry.GeometryTests.test_custom_curvature) ... ok
+test_custom_negative (test_geometry.GeometryTests.test_custom_negative) ... ok
+test_fourth_axis_ray (test_geometry.GeometryTests.test_fourth_axis_ray) ... ok
+test_full_d_axes (test_geometry.GeometryTests.test_full_d_axes) ... ok
+test_full_d_collision (test_geometry.GeometryTests.test_full_d_collision) ... ok
+test_general_metric_fourth_axis (test_geometry.GeometryTests.test_general_metric_fourth_axis) ... ok
+test_intrinsic_sphere_distance (test_geometry.GeometryTests.test_intrinsic_sphere_distance) ... ok
+test_metrics_spd (test_geometry.GeometryTests.test_metrics_spd) ... ok
+test_mobius_bound (test_geometry.GeometryTests.test_mobius_bound) ... ok
+test_mobius_double_circuit (test_geometry.GeometryTests.test_mobius_double_circuit) ... ok
+test_mobius_mesh_single_boundary (test_geometry.GeometryTests.test_mobius_mesh_single_boundary) ... ok
+test_mobius_twist (test_geometry.GeometryTests.test_mobius_twist) ... ok
+test_no_expression_execution (test_geometry.GeometryTests.test_no_expression_execution) ... ok
+test_preserve_hidden_coordinates_at_seam (test_geometry.GeometryTests.test_preserve_hidden_coordinates_at_seam) ... ok
+test_reject_nonfinite (test_geometry.GeometryTests.test_reject_nonfinite) ... ok
+test_reject_wrong_dimension (test_geometry.GeometryTests.test_reject_wrong_dimension) ... ok
+test_sphere_chart_transition (test_geometry.GeometryTests.test_sphere_chart_transition) ... ok
+test_sphere_geodesic_speed (test_geometry.GeometryTests.test_sphere_geodesic_speed) ... ok
+test_torus_closed_seam (test_geometry.GeometryTests.test_torus_closed_seam) ... ok
+test_torus_mesh_closed (test_geometry.GeometryTests.test_torus_mesh_closed) ... ok
+test_bad_origin (test_network.NetworkTests.test_bad_origin) ... /mnt/data/matumbo-viva-build-081/server/app.py:305: NotAppKeyWarning: It is recommended to use web.AppKey instances for keys.
+https://docs.aiohttp.org/en/stable/web_advanced.html#application-s-config
+  app=web.Application(middlewares=[security],client_max_size=64*1024);app['hub']=hub
+ok
+test_curved_move_uses_metric (test_network.NetworkTests.test_curved_move_uses_metric) ... ok
+test_custom_metric_room (test_network.NetworkTests.test_custom_metric_room) ... Executing <Task pending name='Task-33' coro=<RequestHandler.start() running at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:565> wait_for=<Future pending cb=[Task.task_wakeup()] created at /usr/lib/python3.13/asyncio/base_events.py:459> created at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:350> took 0.211 seconds
+ok
+test_damage_regrows_guidance (test_network.NetworkTests.test_damage_regrows_guidance) ... Executing <Task pending name='Task-46' coro=<RequestHandler.start() running at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:565> wait_for=<Future pending cb=[Task.task_wakeup()] created at /usr/lib/python3.13/asyncio/base_events.py:459> created at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:350> took 0.174 seconds
+ok
+test_disconnect_releases (test_network.NetworkTests.test_disconnect_releases) ... Executing <Task pending name='Task-61' coro=<RequestHandler.start() running at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:565> wait_for=<Future pending cb=[Task.task_wakeup()] created at /usr/lib/python3.13/asyncio/base_events.py:459> created at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:350> took 0.173 seconds
+ok
+test_exclusive_grab_and_handoff (test_network.NetworkTests.test_exclusive_grab_and_handoff) ... Executing <Task pending name='Task-86' coro=<RequestHandler.start() running at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:565> wait_for=<Future pending cb=[Task.task_wakeup()] created at /usr/lib/python3.13/asyncio/base_events.py:459> created at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:350> took 0.167 seconds
+Executing <Task pending name='Task-95' coro=<RequestHandler._handle_request() running at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:510> wait_for=<Future pending cb=[Task.task_wakeup()] created at /usr/lib/python3.13/asyncio/base_events.py:459> cb=[Task.task_wakeup()] created at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:598> took 0.165 seconds
+ok
+test_export_requires_invite (test_network.NetworkTests.test_export_requires_invite) ... Executing <Task pending name='Task-115' coro=<RequestHandler.start() running at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:565> wait_for=<Future pending cb=[Task.task_wakeup()] created at /usr/lib/python3.13/asyncio/base_events.py:459> created at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:350> took 0.160 seconds
+ok
+test_history_and_export_no_tokens (test_network.NetworkTests.test_history_and_export_no_tokens) ... Executing <Task pending name='Task-128' coro=<RequestHandler.start() running at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:565> wait_for=<Future pending cb=[Task.task_wakeup()] created at /usr/lib/python3.13/asyncio/base_events.py:459> created at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:350> took 0.161 seconds
+ok
+test_invalid_invite (test_network.NetworkTests.test_invalid_invite) ... Executing <Task pending name='Task-147' coro=<RequestHandler.start() running at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:565> wait_for=<Future pending cb=[Task.task_wakeup()] created at /usr/lib/python3.13/asyncio/base_events.py:459> created at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:350> took 0.155 seconds
+ok
+test_invalid_move_is_atomic (test_network.NetworkTests.test_invalid_move_is_atomic) ... Executing <Task pending name='Task-160' coro=<RequestHandler.start() running at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:565> wait_for=<Future pending cb=[Task.task_wakeup()] created at /usr/lib/python3.13/asyncio/base_events.py:459> created at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:350> took 0.160 seconds
+Executing <Task pending name='Task-163' coro=<RequestHandler._handle_request() running at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:510> wait_for=<Future pending cb=[Task.task_wakeup()] created at /usr/lib/python3.13/asyncio/base_events.py:459> cb=[Task.task_wakeup()] created at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:598> took 0.156 seconds
+ok
+test_lease_expiry (test_network.NetworkTests.test_lease_expiry) ... Executing <Task pending name='Task-175' coro=<RequestHandler.start() running at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:565> wait_for=<Future pending cb=[Task.task_wakeup()] created at /usr/lib/python3.13/asyncio/base_events.py:459> created at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:350> took 0.155 seconds
+ok
+test_malformed_metric_is_clear_client_error (test_network.NetworkTests.test_malformed_metric_is_clear_client_error) ... ok
+test_missing_creation_key (test_network.NetworkTests.test_missing_creation_key) ... ok
+test_model_affects_shared_field (test_network.NetworkTests.test_model_affects_shared_field) ... Executing <Task pending name='Task-224' coro=<RequestHandler.start() running at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:565> wait_for=<Future pending cb=[Task.task_wakeup()] created at /usr/lib/python3.13/asyncio/base_events.py:459> created at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:350> took 0.155 seconds
+ok
+test_neural_model_requires_owner (test_network.NetworkTests.test_neural_model_requires_owner) ... Executing <Task pending name='Task-242' coro=<RequestHandler.start() running at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:565> wait_for=<Future pending cb=[Task.task_wakeup()] created at /usr/lib/python3.13/asyncio/base_events.py:459> created at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:350> took 0.156 seconds
+Executing <Task pending name='Task-247' coro=<RequestHandler._handle_request() running at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:510> wait_for=<Future pending cb=[Task.task_wakeup()] created at /usr/lib/python3.13/asyncio/base_events.py:459> cb=[Task.task_wakeup()] created at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:598> took 0.154 seconds
+ok
+test_nonce_reuse_changed_payload_rejected (test_network.NetworkTests.test_nonce_reuse_changed_payload_rejected) ... Executing <Task pending name='Task-258' coro=<RequestHandler.start() running at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:565> wait_for=<Future pending cb=[Task.task_wakeup()] created at /usr/lib/python3.13/asyncio/base_events.py:459> created at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:350> took 0.156 seconds
+ok
+test_observer_bad_axis_rejected (test_network.NetworkTests.test_observer_bad_axis_rejected) ... Executing <Task pending name='Task-272' coro=<RequestHandler.start() running at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:565> wait_for=<Future pending cb=[Task.task_wakeup()] created at /usr/lib/python3.13/asyncio/base_events.py:459> created at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:350> took 0.166 seconds
+ok
+test_observer_geodesic_move_for_viewer (test_network.NetworkTests.test_observer_geodesic_move_for_viewer) ... ok
+test_observer_snapshot_does_not_contain_camera (test_network.NetworkTests.test_observer_snapshot_does_not_contain_camera) ... Executing <Task pending name='Task-300' coro=<RequestHandler.start() running at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:565> wait_for=<Future pending cb=[Task.task_wakeup()] created at /usr/lib/python3.13/asyncio/base_events.py:459> created at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:350> took 0.153 seconds
+ok
+test_persistence_restart (test_network.NetworkTests.test_persistence_restart) ... Executing <Task pending name='Task-314' coro=<RequestHandler.start() running at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:565> wait_for=<Future pending cb=[Task.task_wakeup()] created at /usr/lib/python3.13/asyncio/base_events.py:459> created at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:350> took 0.156 seconds
+Executing <Task pending name='Task-325' coro=<RequestHandler._handle_request() running at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:510> wait_for=<_GatheringFuture pending cb=[Task.task_wakeup()] created at /usr/lib/python3.13/asyncio/tasks.py:765> cb=[Task.task_wakeup()] created at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:598> took 0.165 seconds
+ok
+test_publish_stable_identity (test_network.NetworkTests.test_publish_stable_identity) ... Executing <Task pending name='Task-336' coro=<RequestHandler.start() running at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:565> wait_for=<Future pending cb=[Task.task_wakeup()] created at /usr/lib/python3.13/asyncio/base_events.py:459> created at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:350> took 0.167 seconds
+ok
+test_repeated_command_is_idempotent (test_network.NetworkTests.test_repeated_command_is_idempotent) ... Executing <Task pending name='Task-349' coro=<RequestHandler.start() running at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:565> wait_for=<Future pending cb=[Task.task_wakeup()] created at /usr/lib/python3.13/asyncio/base_events.py:459> created at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:350> took 0.161 seconds
+ok
+test_revoke_guest (test_network.NetworkTests.test_revoke_guest) ... Executing <Task pending name='Task-364' coro=<RequestHandler.start() running at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:565> wait_for=<Future pending cb=[Task.task_wakeup()] created at /usr/lib/python3.13/asyncio/base_events.py:459> created at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:350> took 0.161 seconds
+ok
+test_stale_revision_rejected (test_network.NetworkTests.test_stale_revision_rejected) ... Executing <Task pending name='Task-384' coro=<RequestHandler.start() running at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:565> wait_for=<Future pending cb=[Task.task_wakeup()] created at /usr/lib/python3.13/asyncio/base_events.py:459> created at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:350> took 0.185 seconds
+Executing <Task pending name='Task-387' coro=<RequestHandler._handle_request() running at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:510> wait_for=<Future pending cb=[Task.task_wakeup()] created at /usr/lib/python3.13/asyncio/base_events.py:459> cb=[Task.task_wakeup()] created at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:598> took 0.168 seconds
+ok
+test_two_clients_same_object (test_network.NetworkTests.test_two_clients_same_object) ... Executing <Task pending name='Task-400' coro=<RequestHandler.start() running at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:565> wait_for=<Future pending cb=[Task.task_wakeup()] created at /usr/lib/python3.13/asyncio/base_events.py:459> created at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:350> took 0.155 seconds
+ok
+test_viewer_cannot_edit (test_network.NetworkTests.test_viewer_cannot_edit) ... Executing <Task pending name='Task-425' coro=<RequestHandler.start() running at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:565> wait_for=<Future pending cb=[Task.task_wakeup()] created at /usr/lib/python3.13/asyncio/base_events.py:459> created at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:350> took 0.163 seconds
+ok
+test_bridge_explicit_not_silent_sync (test_packaging.PackagingTests.test_bridge_explicit_not_silent_sync) ... ok
+test_original_studio_retained_exactly (test_packaging.PackagingTests.test_original_studio_retained_exactly) ... ok
+test_private_model_photo_not_in_web (test_packaging.PackagingTests.test_private_model_photo_not_in_web) ... ok
+test_public_binding_requires_creation_key (test_packaging.PackagingTests.test_public_binding_requires_creation_key) ... ok
+test_recording_does_not_request_microphone (test_packaging.PackagingTests.test_recording_does_not_request_microphone) ... ok
+test_vendor_model_present (test_packaging.PackagingTests.test_vendor_model_present) ... ok
+test_all_required_assets (test_release.ConfigurationTests.test_all_required_assets) ... ok
+test_cli_refuses_public_missing_origin (test_release.ConfigurationTests.test_cli_refuses_public_missing_origin) ... ok
+test_db_not_in_web (test_release.ConfigurationTests.test_db_not_in_web) ... ok
+test_explicit_origin_takes_priority (test_release.ConfigurationTests.test_explicit_origin_takes_priority) ... ok
+test_https_normalization (test_release.ConfigurationTests.test_https_normalization) ... ok
+test_local_http_allowed (test_release.ConfigurationTests.test_local_http_allowed) ... ok
+test_missing_assets_are_not_ready (test_release.ConfigurationTests.test_missing_assets_are_not_ready) ... ok
+test_missing_public_origin (test_release.ConfigurationTests.test_missing_public_origin) ... ok
+test_no_credential_origin (test_release.ConfigurationTests.test_no_credential_origin) ... ok
+test_no_http_public (test_release.ConfigurationTests.test_no_http_public) ... ok
+test_no_path_origin (test_release.ConfigurationTests.test_no_path_origin) ... ok
+test_no_query_origin (test_release.ConfigurationTests.test_no_query_origin) ... ok
+test_old_studio_bytes_unchanged (test_release.ConfigurationTests.test_old_studio_bytes_unchanged) ... ok
+test_railway_domain (test_release.ConfigurationTests.test_railway_domain) ... ok
+test_real_probe_import_has_no_side_effect (test_release.ConfigurationTests.test_real_probe_import_has_no_side_effect) ... ok
+test_safe_public_settings (test_release.ConfigurationTests.test_safe_public_settings) ... ok
+test_sample_public_key (test_release.ConfigurationTests.test_sample_public_key) ... ok
+test_short_public_key (test_release.ConfigurationTests.test_short_public_key) ... ok
+test_changed_goal_wakes (test_release.SettledFieldTests.test_changed_goal_wakes) ... ok
+test_idle_stops_work (test_release.SettledFieldTests.test_idle_stops_work) ... ok
+test_obstacle_wakes_and_blocks (test_release.SettledFieldTests.test_obstacle_wakes_and_blocks) ... ok
+test_settled_checkpoint_restores (test_release.SettledFieldTests.test_settled_checkpoint_restores) ... ok
+test_settles (test_release.SettledFieldTests.test_settles) ... ok
+test_cross_origin_wss_denied (test_release.TLSWorkshopTests.test_cross_origin_wss_denied) ... /mnt/data/matumbo-viva-build-081/server/app.py:305: NotAppKeyWarning: It is recommended to use web.AppKey instances for keys.
+https://docs.aiohttp.org/en/stable/web_advanced.html#application-s-config
+  app=web.Application(middlewares=[security],client_max_size=64*1024);app['hub']=hub
+ok
+test_expired_lease_not_resurrected (test_release.TLSWorkshopTests.test_expired_lease_not_resurrected) ... /mnt/data/matumbo-viva-build-081/server/app.py:305: NotAppKeyWarning: It is recommended to use web.AppKey instances for keys.
+https://docs.aiohttp.org/en/stable/web_advanced.html#application-s-config
+  app=web.Application(middlewares=[security],client_max_size=64*1024);app['hub']=hub
+Executing <Task pending name='Task-452' coro=<RequestHandler.start() running at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:565> wait_for=<Future pending cb=[Task.task_wakeup()] created at /usr/lib/python3.13/asyncio/base_events.py:459> created at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:350> took 0.176 seconds
+ok
+test_https_two_wss_clients_share_x11 (test_release.TLSWorkshopTests.test_https_two_wss_clients_share_x11) ... /mnt/data/matumbo-viva-build-081/server/app.py:305: NotAppKeyWarning: It is recommended to use web.AppKey instances for keys.
+https://docs.aiohttp.org/en/stable/web_advanced.html#application-s-config
+  app=web.Application(middlewares=[security],client_max_size=64*1024);app['hub']=hub
+Executing <Task pending name='Task-466' coro=<RequestHandler.start() running at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:565> wait_for=<Future pending cb=[Task.task_wakeup()] created at /usr/lib/python3.13/asyncio/base_events.py:459> created at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:350> took 0.165 seconds
+ok
+test_idle_expired_invitation_disconnects (test_release.TLSWorkshopTests.test_idle_expired_invitation_disconnects) ... /mnt/data/matumbo-viva-build-081/server/app.py:305: NotAppKeyWarning: It is recommended to use web.AppKey instances for keys.
+https://docs.aiohttp.org/en/stable/web_advanced.html#application-s-config
+  app=web.Application(middlewares=[security],client_max_size=64*1024);app['hub']=hub
+Executing <Task pending name='Task-491' coro=<RequestHandler.start() running at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:565> wait_for=<Future pending cb=[Task.task_wakeup()] created at /usr/lib/python3.13/asyncio/base_events.py:459> created at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:350> took 0.157 seconds
+ok
+test_motionless_grab_renewal (test_release.TLSWorkshopTests.test_motionless_grab_renewal) ... /mnt/data/matumbo-viva-build-081/server/app.py:305: NotAppKeyWarning: It is recommended to use web.AppKey instances for keys.
+https://docs.aiohttp.org/en/stable/web_advanced.html#application-s-config
+  app=web.Application(middlewares=[security],client_max_size=64*1024);app['hub']=hub
+Executing <Task pending name='Task-514' coro=<RequestHandler.start() running at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:565> wait_for=<Future pending cb=[Task.task_wakeup()] created at /usr/lib/python3.13/asyncio/base_events.py:459> created at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:350> took 0.167 seconds
+ok
+test_other_person_cannot_renew_grab (test_release.TLSWorkshopTests.test_other_person_cannot_renew_grab) ... /mnt/data/matumbo-viva-build-081/server/app.py:305: NotAppKeyWarning: It is recommended to use web.AppKey instances for keys.
+https://docs.aiohttp.org/en/stable/web_advanced.html#application-s-config
+  app=web.Application(middlewares=[security],client_max_size=64*1024);app['hub']=hub
+Executing <Task pending name='Task-528' coro=<RequestHandler.start() running at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:565> wait_for=<Future pending cb=[Task.task_wakeup()] created at /usr/lib/python3.13/asyncio/base_events.py:459> created at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:350> took 0.175 seconds
+ok
+test_real_tls_readiness (test_release.TLSWorkshopTests.test_real_tls_readiness) ... /mnt/data/matumbo-viva-build-081/server/app.py:305: NotAppKeyWarning: It is recommended to use web.AppKey instances for keys.
+https://docs.aiohttp.org/en/stable/web_advanced.html#application-s-config
+  app=web.Application(middlewares=[security],client_max_size=64*1024);app['hub']=hub
+ok
+test_tls_server_restart_persists (test_release.TLSWorkshopTests.test_tls_server_restart_persists) ... /mnt/data/matumbo-viva-build-081/server/app.py:305: NotAppKeyWarning: It is recommended to use web.AppKey instances for keys.
+https://docs.aiohttp.org/en/stable/web_advanced.html#application-s-config
+  app=web.Application(middlewares=[security],client_max_size=64*1024);app['hub']=hub
+Executing <Task pending name='Task-556' coro=<TLSWorkshopTests.asyncSetUp() running at /mnt/data/matumbo-viva-build-081/tests/test_release.py:74> wait_for=<_GatheringFuture pending cb=[Task.task_wakeup()] created at /usr/lib/python3.13/asyncio/tasks.py:765> cb=[_run_until_complete_cb() at /usr/lib/python3.13/asyncio/base_events.py:181] created at /usr/lib/python3.13/asyncio/runners.py:100> took 0.106 seconds
+Executing <Task pending name='Task-562' coro=<RequestHandler.start() running at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:565> wait_for=<Future pending cb=[Task.task_wakeup()] created at /usr/lib/python3.13/asyncio/base_events.py:459> created at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:350> took 0.171 seconds
+Executing <Task pending name='Task-573' coro=<RequestHandler._handle_request() running at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:510> wait_for=<_GatheringFuture pending cb=[Task.task_wakeup()] created at /usr/lib/python3.13/asyncio/tasks.py:765> cb=[Task.task_wakeup()] created at /opt/pyvenv/lib/python3.13/site-packages/aiohttp/web_protocol.py:598> took 0.168 seconds
+ok
+
+----------------------------------------------------------------------
+Ran 97 tests in 11.116s
+
+OK

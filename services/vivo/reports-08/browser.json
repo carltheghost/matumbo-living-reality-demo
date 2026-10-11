@@ -1,0 +1,190 @@
+{
+  "suite": "browser-component-acceptance",
+  "passed": 41,
+  "failed": 0,
+  "checks": [
+    {
+      "name": "Explicit create and join reaches real server",
+      "passed": true
+    },
+    {
+      "name": "No horizontal overflow at 430px",
+      "passed": true
+    },
+    {
+      "name": "Camera starts off",
+      "passed": true
+    },
+    {
+      "name": "Camera recording inclusion defaults off",
+      "passed": true
+    },
+    {
+      "name": "Canvas fallback renders",
+      "passed": true
+    },
+    {
+      "name": "Three visible real entity handles",
+      "passed": true
+    },
+    {
+      "name": "Two browser controllers joined through independent TCP sessions",
+      "passed": true
+    },
+    {
+      "name": "Touch pointerdown acquires authoritative grab",
+      "passed": true
+    },
+    {
+      "name": "Missing hand does not cancel a touch-owned grab",
+      "passed": true
+    },
+    {
+      "name": "Second browser cannot steal held object",
+      "passed": true
+    },
+    {
+      "name": "Actual pointer drag changed native object coordinates",
+      "passed": true,
+      "details": {
+        "distance": 0.6240971687268071
+      }
+    },
+    {
+      "name": "Other browser sees same committed coordinates",
+      "passed": true
+    },
+    {
+      "name": "Released object can be handed to second browser",
+      "passed": true
+    },
+    {
+      "name": "x4 controls move native fourth coordinate",
+      "passed": true
+    },
+    {
+      "name": "Object outside slice is not a touch target",
+      "passed": true
+    },
+    {
+      "name": "Eye can follow object into its fourth-coordinate slice",
+      "passed": true
+    },
+    {
+      "name": "Following does not move other observer",
+      "passed": true
+    },
+    {
+      "name": "Observer movement receives metric-aware server result",
+      "passed": true
+    },
+    {
+      "name": "History fetched from durable server",
+      "passed": true
+    },
+    {
+      "name": "Scrubbing enters recorded past",
+      "passed": true
+    },
+    {
+      "name": "Replay refuses edits",
+      "passed": true
+    },
+    {
+      "name": "Return to latest shared state",
+      "passed": true
+    },
+    {
+      "name": "Real MediaRecorder encoded video",
+      "passed": true,
+      "details": {
+        "bytes": 43703,
+        "mime": "video/webm"
+      }
+    },
+    {
+      "name": "Recording stopped and released stream",
+      "passed": true
+    },
+    {
+      "name": "Three fresh open observations arm gesture",
+      "passed": true
+    },
+    {
+      "name": "Normalized pinch changes hand state",
+      "passed": true
+    },
+    {
+      "name": "Stale hand output releases gesture",
+      "passed": true
+    },
+    {
+      "name": "Returning pinched cannot grab without open reacquisition",
+      "passed": true
+    },
+    {
+      "name": "Black camera sample selects low-glow display",
+      "passed": true
+    },
+    {
+      "name": "Black sample inhibits camera gesture",
+      "passed": true
+    },
+    {
+      "name": "Clipped sample selects glare display",
+      "passed": true
+    },
+    {
+      "name": "Clipped sample is reported",
+      "passed": true
+    },
+    {
+      "name": "Stop releases real generated video track",
+      "passed": true
+    },
+    {
+      "name": "Stop clears video and tracking state",
+      "passed": true
+    },
+    {
+      "name": "Unsupported local test context is rejected clearly",
+      "passed": true
+    },
+    {
+      "name": "7D torus product receives chart and extra coordinates",
+      "passed": true
+    },
+    {
+      "name": "Curved surface vertices render finitely",
+      "passed": true
+    },
+    {
+      "name": "Local field grows a usable route",
+      "passed": true
+    },
+    {
+      "name": "Guidance repairs around blocked sample",
+      "passed": true
+    },
+    {
+      "name": "Curved scene video exported",
+      "passed": true
+    },
+    {
+      "name": "No uncaught application script errors",
+      "passed": true,
+      "details": []
+    }
+  ],
+  "renderer": "Canvas 2D fallback",
+  "transport": "test-only browser WebSocket relay to independent real TCP sockets",
+  "camera": "generated real MediaStream, controlled landmarks, permission context rejection",
+  "not_validated": [
+    "physical phone",
+    "native browser transport / public HTTPS",
+    "physical camera inference",
+    "WebGL GPU",
+    "ARCore"
+  ],
+  "success": true
+}

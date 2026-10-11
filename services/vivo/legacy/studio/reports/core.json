@@ -1,0 +1,30 @@
+{
+  "passed": 25,
+  "tests": [
+    "black and white camera samples are measured exactly",
+    "invalid RGBA input rejects",
+    "dim mode uses hysteresis rather than flickering at the threshold",
+    "bright mode and reset return correctly",
+    "2D plane rotation preserves radii and dormant coordinates",
+    "3D plane rotation preserves radii and dormant coordinates",
+    "4D plane rotation preserves radii and dormant coordinates",
+    "5D plane rotation preserves radii and dormant coordinates",
+    "6D plane rotation preserves radii and dormant coordinates",
+    "7D plane rotation preserves radii and dormant coordinates",
+    "8D plane rotation preserves radii and dormant coordinates",
+    "9D plane rotation preserves radii and dormant coordinates",
+    "inactive or duplicate rotation axes reject",
+    "depth cue is centred and bounded, invalid spans do not drive motion",
+    "recorder codec is chosen by capability",
+    "history is opt-in",
+    "capture copies input without retaining mutable references",
+    "rolling frame budget and monotonic clock are enforced",
+    "export distinguishes discrete state from camera video",
+    "history round-trips states",
+    "failed import is atomic",
+    "mixed camera payload format rejects",
+    "underlying state validation failure is atomic",
+    "per-checkpoint memory limit rejects before retention",
+    "a new recording cannot be overwritten by an earlier asynchronous import"
+  ]
+}

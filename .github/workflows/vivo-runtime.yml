@@ -1,0 +1,94 @@
+name: Vivo authority and input integration ports
+on:
+  push:
+    branches: ['vivo/chat1-authority-input-2026-10-10']
+  pull_request:
+    paths:
+      - 'services/vivo/web/authority/**'
+      - 'services/vivo/server/authority/**'
+      - 'services/vivo/tests/authority/**'
+      - 'scripts/vivo/stage_input_dependency.py'
+      - 'scripts/vivo/assert_input_evidence.py'
+      - 'scripts/vivo/test_input_evidence.py'
+      - 'scripts/vivo/transfer_vendor_blobs.py'
+      - 'scripts/vivo/vendor-transfer.json'
+      - '.github/workflows/vivo-runtime.yml'
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  vendor-byte-transfer:
+    if: github.event_name == 'push' && github.repository == 'carltheghost/matumbo-living-reality-demo' && github.ref == 'refs/heads/vivo/chat1-authority-input-2026-10-10' && contains(github.event.head_commit.message, '[transfer-vendor]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Transfer complete hash-verified vendor bytes to detached blobs only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p transfer-evidence
+          python scripts/vivo/transfer_vendor_blobs.py --upload --report transfer-evidence/result.json | tee transfer-evidence/transfer.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vivo-vendor-byte-transfer
+          path: transfer-evidence/
+          retention-days: 7
+  integration-ports:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install aiohttp==3.13.3
+      - name: Read exact unmerged worker sources into disposable test checkout
+        run: |
+          set -euo pipefail
+          mkdir -p test-evidence
+          python scripts/vivo/stage_input_dependency.py | tee test-evidence/dependency.log
+      - name: Prove 102 input tests including 25 falsy and 12 hostile-object cases
+        run: |
+          set -euo pipefail
+          python scripts/vivo/test_input_evidence.py 2>&1 | tee test-evidence/evidence-gate.log
+          node --test services/vivo/tests/input/*.test.mjs | tee test-evidence/input.log
+          python scripts/vivo/assert_input_evidence.py test-evidence/input.log
+      - name: Authority plus actual PR 75 controller
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p test-evidence
+          # SQLite gets the full Node 24.19 composition job in vivo-application.yml.
+          # Keep this historical Node 22 authority/input job entirely POSIX.
+          mapfile -t authority_tests < <(find services/vivo/tests/authority -maxdepth 1 -name '*.test.mjs' ! -name 'sqlite-store.test.mjs' | sort)
+          node --test "${authority_tests[@]}" services/vivo/tests/input/*.test.mjs services/vivo/tests/integration/contracts.test.mjs research/vivo-phase-fabric/tests/target-mailbox.test.mjs | tee test-evidence/node.log
+          python -m unittest discover -s services/vivo/tests/authority -p 'test_*.py' -v 2>&1 | tee test-evidence/http.log
+      - name: Preserve exact replay sources, not just test counts
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p test-evidence/reproduction
+          cp --parents scripts/vivo/stage_input_dependency.py scripts/vivo/assert_input_evidence.py scripts/vivo/test_input_evidence.py services/vivo/contracts/* services/vivo/web/authority/*.mjs services/vivo/web/input/* services/vivo/server/authority/*.py services/vivo/server/authority/*.mjs services/vivo/tests/authority/*.* services/vivo/tests/input/*.mjs services/vivo/tests/integration/contracts.test.mjs research/vivo-phase-fabric/web/target-mailbox.mjs research/vivo-phase-fabric/tests/target-mailbox.test.mjs test-evidence/reproduction/
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vivo-authority-input-evidence
+          path: test-evidence/
+          retention-days: 7
+      - name: Scope
+        run: echo 'Local lease authority, nested Eyes, POSIX checkpoint restart, exact input controller, and real loopback module HTTP. Not a completed source import, material integration, phone UI, remote session or deployment.'

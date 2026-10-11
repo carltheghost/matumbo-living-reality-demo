@@ -1,0 +1,37 @@
+PASS Known network solves 33 by 32 without supplying tile side lengths
+PASS Nine solved sides match the classical example
+PASS Circuit residual is within numerical tolerance
+PASS Independent overlap containment and coverage validation passes
+PASS Voltage scaling doubles every coordinate and side
+PASS Overlapping tiling fails
+PASS Non-square tile fails
+PASS Negative and nonfinite circuit height fail
+PASS Singular circuit fails clearly
+PASS Black identifies missing sensor detail
+PASS White identifies clipping not excellent tracking
+PASS Midtones select balanced display
+PASS Region sampling distinguishes lit hand area from dark room
+PASS Bad image shape rejects
+PASS Nonfinite region rejects
+PASS Display hysteresis rejects single-frame light flicker
+PASS Three bright samples switch profile
+PASS Blackout switches immediately
+PASS Three distinct fresh open observations arm hand control
+PASS Pinched reacquisition never auto-grabs
+PASS Excessive result age disarms control
+PASS Long missing-frame gap disarms even without explicit lost callback
+PASS Duplicate timestamps cannot count as fresh evidence
+PASS Hand-region clipping rejects a false detected hand
+PASS Dark background does not block a usable hand region
+PASS Malformed landmarks reject before navigation
+PASS Long-running browser time remains valid
+PASS Nested route has one consistent ancestry
+PASS Unknown room cannot be entered
+PASS Forged replay route rejects
+PASS Universe validates as a candidate without mutating source
+PASS Duplicate world IDs reject
+PASS Mismatched embedded identity rejects
+PASS Invalid field is delegated to canonical state validation
+PASS Unknown journal events reject
+PASS Nonbyte image input rejects before luminance calculations
+PASS Duplicate or reversed journal sequence rejects

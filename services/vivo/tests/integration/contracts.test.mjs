@@ -1,0 +1,21 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {validateCommand,validateFrame,validateReceipt} from '../../contracts/validate.mjs';
+function target(d=4) { return {schema:'vivo.command/1',id:'cmd:1',worldId:'world:1',spaceId:'space:1',kind:'grab.target',expectedRevision:0,payload:{entityId:'relic:1',leaseId:'lease:1',source:'touch',inputEpoch:1,targetSeq:1,dimension:d,chart:'flat',q:Array(d).fill(0),sampleAgeMs:0}}; }
+test('all 2-11 coordinate dimensions accepted explicitly',()=>{for(let d=2;d<=11;d++) assert.equal(validateCommand(target(d)).payload.q.length,d);});
+test('last coordinate retained',()=>{const c=target(11);c.payload.q[10]=.9;assert.equal(validateCommand(c).payload.q[10],.9);});
+test('dimension and coordinate length must agree',()=>{const c=target();c.payload.q.pop();assert.throws(()=>validateCommand(c));});
+test('time is not accepted as another coordinate label',()=>{const c=target();c.payload.dimension='3+time';assert.throws(()=>validateCommand(c));});
+test('NaN infinity numeric strings and booleans rejected',()=>{for(const bad of [NaN,Infinity,'0',true]){const c=target();c.payload.q[0]=bad;assert.throws(()=>validateCommand(c));}});
+test('client actor cannot impersonate a session',()=>{const c=target();c.actorId='owner';assert.throws(()=>validateCommand(c));});
+test('missing lease rejected',()=>{const c=target();delete c.payload.leaseId;assert.throws(()=>validateCommand(c));});
+test('stale/future-observation age rejected',()=>{for(const age of [-1,151,Infinity]){const c=target();c.payload.sampleAgeMs=age;assert.throws(()=>validateCommand(c));}});
+test('old relative move is not mistaken for target',()=>{const c=target();c.kind='move';assert.throws(()=>validateCommand(c));});
+test('validation never mutates caller coordinates',()=>{const c=target();const s=JSON.stringify(c);validateCommand(c);assert.equal(JSON.stringify(c),s);});
+test('touch/hand origins remain distinct',()=>{for(const source of ['touch','hand']){const c=target();c.payload.source=source;assert.equal(validateCommand(c).payload.source,source);}});
+test('geometry domain budget rejects unsupported direction counts',()=>{for(const d of [1,12,4.5]) assert.throws(()=>validateFrame({spaceId:'s',chart:'flat',dimension:d,q:[]}));});
+test('negative unsafe and fractional revisions rejected',()=>{for(const n of [-1,Number.MAX_SAFE_INTEGER+1,.2]){const c=target();c.expectedRevision=n;assert.throws(()=>validateCommand(c));}});
+test('entry and exit are explicit object/eye references',()=>{const a={...target(),kind:'space.enter',payload:{portalEntityId:'portal:1',eyeId:'eye:1'}};validateCommand(a);validateCommand({...a,kind:'space.exit',payload:{eyeId:'eye:1',returnFrameId:'return:1'}});});
+test('offline fork must carry checkpoint provenance',()=>{const c={...target(),kind:'world.fork',payload:{checkpointHash:'a'.repeat(64),newWorldId:'local:2'}};validateCommand(c);c.payload.checkpointHash='unknown';assert.throws(()=>validateCommand(c));});
+test('accepted receipt carries authority hash; rejection need not',()=>{const r={schema:'vivo.receipt/1',id:'cmd:1',status:'accepted',authorityId:'authority:1',acceptedSequence:1,entityRevision:1,code:'OK',stateHash:'a'.repeat(64),result:{leaseId:'lease:1'}};validateReceipt(r);assert.throws(()=>validateReceipt({...r,stateHash:null}));validateReceipt({...r,status:'rejected',code:'STALE',stateHash:null});});
+test('sparse coordinate arrays are not valid state',()=>{const c=target();c.payload.q=new Array(4);assert.throws(()=>validateCommand(c));});

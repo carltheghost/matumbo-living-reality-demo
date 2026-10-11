@@ -1,0 +1,25 @@
+✔ opt-in is explicit and restore cannot migrate or silently drop phase state (377.003437ms)
+✔ generic authority stays strict; material methods are unavailable on client ports (4.38951ms)
+✔ coherent host capture is detached and retains the actual authority clock and private session provenance (10.344018ms)
+✔ multiple material steps between target receipts preserve fresh inputs, duplicate original receipts, release, reacquisition (812.6483ms)
+✔ same-session competing controller stays held; separate entities have independent cursors (464.529872ms)
+✔ input age/source/epoch/frame/order fences remain active across material ticks (211.770643ms)
+✔ old proposal cannot commit after target, release, or another material step (582.865517ms)
+✔ expiry during compute or during persistence rejects without partial acceptance (408.33862ms)
+✔ failed CAS leaves checkpoint, q/v, event, snapshot, cursors and observer publication unchanged (224.8086ms)
+✔ accepted fields and Eyes survive restart; process leases revoke and history never embeds fields (493.405406ms)
+✔ structural changes and revision gaps cannot be repaired by a later material step (191.698466ms)
+✔ identity/schema/hash/domain/profile/member/revision/qv/diagnostics forgeries reject atomically (227.64421ms)
+✔ phase target domain is half-open, rejected targets preserve lease and cleanup remains possible (19.047143ms)
+✔ privileged structural corruption cannot restore coverage through strict-current target or material step (203.190451ms)
+✔ replay of the same accepted target/release trajectory reproduces field digests (1296.057234ms)
+✔ material diagnostics are detached latest accepted observations and guard promises fail closed (205.472572ms)
+✔ host capture waits behind accepted command persistence and captures one coherent state (11.533302ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5858.366526

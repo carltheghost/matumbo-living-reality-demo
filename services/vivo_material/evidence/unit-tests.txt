@@ -1,0 +1,44 @@
+test_cross_space_target_rejected (test_material.AdapterTests.test_cross_space_target_rejected) ... ok
+test_detached_proposal_changes_neither_authority_nor_checkpoint (test_material.AdapterTests.test_detached_proposal_changes_neither_authority_nor_checkpoint) ... ok
+test_duplicate_lease_unknown_entity_and_source_rejected (test_material.AdapterTests.test_duplicate_lease_unknown_entity_and_source_rejected) ... ok
+test_expired_or_removed_lease_has_no_force (test_material.AdapterTests.test_expired_or_removed_lease_has_no_force) ... ok
+test_malformed_authority_spaces_and_oversized_clock_reject_cleanly (test_material.AdapterTests.test_malformed_authority_spaces_and_oversized_clock_reject_cleanly) ... ok
+test_only_actual_accepted_lease_supplies_forcing (test_material.AdapterTests.test_only_actual_accepted_lease_supplies_forcing) ... ok
+test_stale_authority_sequence_hash_world_and_time_rejected (test_material.AdapterTests.test_stale_authority_sequence_hash_world_and_time_rejected) ... ok
+test_stale_epoch_and_target_sequence_rejected (test_material.AdapterTests.test_stale_epoch_and_target_sequence_rejected) ... ok
+test_untrusted_target_or_snapshot_injection_not_an_api (test_material.AdapterTests.test_untrusted_target_or_snapshot_injection_not_an_api) ... ok
+test_valid_but_unaccepted_checkpoint_rejected (test_material.AdapterTests.test_valid_but_unaccepted_checkpoint_rejected) ... ok
+test_anisotropic_grid_and_periodic_seam_continue_and_restore (test_material.MaterialTests.test_anisotropic_grid_and_periodic_seam_continue_and_restore) ... ok
+test_axis_permutation_and_centroid_velocity_tangent (test_material.MaterialTests.test_axis_permutation_and_centroid_velocity_tangent) ... ok
+test_checkpoint_cannot_forge_centroid_even_with_rehashed_payload (test_material.MaterialTests.test_checkpoint_cannot_forge_centroid_even_with_rehashed_payload) ... ok
+test_checkpoint_hash_and_corruption_rejected (test_material.MaterialTests.test_checkpoint_hash_and_corruption_rejected) ... ok
+test_curved_geometry_and_learned_mode_rejected (test_material.MaterialTests.test_curved_geometry_and_learned_mode_rejected) ... ok
+test_duplicate_field_membership_rejected (test_material.MaterialTests.test_duplicate_field_membership_rejected) ... ok
+test_entity_removal_requires_explicit_mass_disposition (test_material.MaterialTests.test_entity_removal_requires_explicit_mass_disposition) ... ok
+test_exact_initial_mass_and_persistent_identity (test_material.MaterialTests.test_exact_initial_mass_and_persistent_identity) ... ok
+test_exhausted_clock_and_revision_rejected_before_mutation (test_material.MaterialTests.test_exhausted_clock_and_revision_rejected_before_mutation) ... ok
+test_failed_second_entity_does_not_commit_first_entity (test_material.MaterialTests.test_failed_second_entity_does_not_commit_first_entity) ... ok
+test_four_axis_plane_wave_analytic_teacher_fixture (test_material.MaterialTests.test_four_axis_plane_wave_analytic_teacher_fixture) ... ok
+test_fourth_axis_target_changes_actual_density_and_current (test_material.MaterialTests.test_fourth_axis_target_changes_actual_density_and_current) ... ok
+test_hash_codec_is_typed_and_bounded (test_material.MaterialTests.test_hash_codec_is_typed_and_bounded) ... ok
+test_initial_centroid_arbitrary_full_dimensional_location (test_material.MaterialTests.test_initial_centroid_arbitrary_full_dimensional_location) ... ok
+test_invalid_step_is_atomic (test_material.MaterialTests.test_invalid_step_is_atomic) ... ok
+test_malformed_field_records_and_extreme_integers_have_typed_errors (test_material.MaterialTests.test_malformed_field_records_and_extreme_integers_have_typed_errors) ... ok
+test_multiple_populations_conserve_total_mass_without_duplicate_tracers (test_material.MaterialTests.test_multiple_populations_conserve_total_mass_without_duplicate_tracers) ... ok
+test_norm_and_energy_under_bounded_driving (test_material.MaterialTests.test_norm_and_energy_under_bounded_driving) ... ok
+test_observer_slices_are_detached_and_do_not_evolve_field (test_material.MaterialTests.test_observer_slices_are_detached_and_do_not_evolve_field) ... ok
+test_release_removes_potential_without_removing_matter (test_material.MaterialTests.test_release_removes_potential_without_removing_matter) ... ok
+test_resolution_domain_and_allocation_bounds (test_material.MaterialTests.test_resolution_domain_and_allocation_bounds) ... ok
+test_restart_json_and_whole_trajectory_replay_exact (test_material.MaterialTests.test_restart_json_and_whole_trajectory_replay_exact) ... ok
+test_returned_updates_are_detached_from_driver_state (test_material.MaterialTests.test_returned_updates_are_detached_from_driver_state) ... ok
+test_stale_entity_revision_or_transform_rejected (test_material.MaterialTests.test_stale_entity_revision_or_transform_rejected) ... ok
+test_supported_bounds_and_unsupported_profiles (test_material.MaterialTests.test_supported_bounds_and_unsupported_profiles) ... ok
+test_target_acceptance_never_teleports (test_material.MaterialTests.test_target_acceptance_never_teleports) ... ok
+test_teacher_step_exact_equality_for_independent_potential_fixture (test_material.MaterialTests.test_teacher_step_exact_equality_for_independent_potential_fixture) ... ok
+test_timestep_refinement_for_driven_nonlinear_field (test_material.MaterialTests.test_timestep_refinement_for_driven_nonlinear_field) ... ok
+test_zero_force_matches_released_field (test_material.MaterialTests.test_zero_force_matches_released_field) ... ok
+
+----------------------------------------------------------------------
+Ran 39 tests in 2.109s
+
+OK

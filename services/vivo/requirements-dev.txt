@@ -1,0 +1,3 @@
+-r requirements.txt
+playwright==1.57.0
+# Training only: install a Torch build suitable for your machine, then run scripts/train_room.py.
