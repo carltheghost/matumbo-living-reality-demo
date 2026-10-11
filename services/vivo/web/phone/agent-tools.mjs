@@ -5,6 +5,7 @@ export const TOOL_CATALOG = Object.freeze([
   { name: 'vivo.eye.control', capability: 'world.eye', description: 'Change this participant’s Eye or projection.' },
   { name: 'phone.camera.start', capability: 'camera', description: 'Start camera capture after OS/browser permission.' },
   { name: 'phone.camera.stop', capability: 'camera', description: 'Stop camera capture and release the camera track.' },
+  { name: 'phone.torch.set', capability: 'torch', description: 'Turn the rear phone torch on or off after explicit permission.' },
   { name: 'phone.haptics', capability: 'haptics', description: 'Trigger a short haptic confirmation.' },
   { name: 'phone.brightness', capability: 'brightness', description: 'Adjust app-window brightness.' },
   { name: 'phone.volume', capability: 'volume', description: 'Adjust media volume.' },

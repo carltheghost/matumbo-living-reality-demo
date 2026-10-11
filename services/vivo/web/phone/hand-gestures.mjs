@@ -1,5 +1,6 @@
 export const MAX_HANDS = 2;
 export const MAX_HAND_MISSING_FRAMES = 3;
+export const MAX_RESULT_AGE_MS = 300;
 const MATCH_DISTANCE = 0.65;
 const AMBIGUITY_MARGIN = 0.12;
 const LABEL_PENALTY = 4;
@@ -58,10 +59,11 @@ function makeTrack(track, detection, slot) {
   };
 }
 
-function withMatchMeta(matches, { ambiguous = false, ambiguousIds = [], missingIds = [] } = {}) {
+function withMatchMeta(matches, { ambiguous = false, ambiguousIds = [], missingIds = [], conflictingIds = [] } = {}) {
   matches.ambiguous = ambiguous;
   matches.ambiguousIds = [...new Set(ambiguousIds.filter(Boolean))];
   matches.missingIds = [...new Set(missingIds.filter(Boolean))];
+  matches.conflictingIds = [...new Set(conflictingIds.filter(Boolean))];
   return matches;
 }
 
@@ -103,6 +105,22 @@ export function matchHands(detections, previous = [], { handednesses = [] } = {}
     const scored = prior.map((track, slot) => track ? { slot, ...trackScore(track, hands[0]) } : null).filter(Boolean).sort((a, b) => a.score - b.score);
     if (!scored.length) return initialTracks(hands);
     const best = scored[0], alternate = scored[1];
+    if (best.conflictingLabel) {
+      const exact = scored.find(item => item.sameLabel);
+      const conflictingIds = [prior[best.slot]?.id];
+      if (exact && exact.slot !== best.slot) {
+        return withMatchMeta([makeTrack(prior[exact.slot], hands[0], exact.slot)], {
+          missingIds: conflictingIds, conflictingIds,
+        });
+      }
+      const freeSlot = prior.findIndex((track, slot) => !track || slot !== best.slot && (track.missing || 0) > 0);
+      if (freeSlot >= 0) {
+        return withMatchMeta([makeTrack(null, hands[0], freeSlot)], {
+          missingIds: conflictingIds, conflictingIds,
+        });
+      }
+      return withMatchMeta([], { missingIds: conflictingIds, conflictingIds });
+    }
     const exactLabel = best.sameLabel && !best.conflictingLabel;
     const closeTracks = alternate && d2(prior[best.slot].center || [0, 0], prior[alternate.slot].center || [0, 0]) < 0.42;
     if (!exactLabel && alternate && closeTracks && alternate.score - best.score < AMBIGUITY_MARGIN) {

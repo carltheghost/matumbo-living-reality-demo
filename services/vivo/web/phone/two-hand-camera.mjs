@@ -1,4 +1,4 @@
-import { describeHand, matchHands, twoHandTransform, MAX_HAND_MISSING_FRAMES } from './hand-gestures.mjs';
+import { describeHand, matchHands, twoHandTransform, MAX_HAND_MISSING_FRAMES, MAX_RESULT_AGE_MS } from './hand-gestures.mjs';
 
 const BONES = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[0,17],[17,18],[18,19],[19,20]];
 const COLORS = ['#7ee2c3', '#e2ba76'];
@@ -12,12 +12,17 @@ export class PhoneTwoHandCamera {
     this.onGesture = onGesture; this.onHands = onHands; this.scope = scope;
     this.stream = null; this.worker = null; this.ready = false; this.epoch = 0; this.frame = 0;
     this.busy = false; this.sequence = 0; this.lastFrameAt = 0; this.facing = 'user';
+    this.resultFence = 0; this.lastResultTime = -Infinity; this.lastAcceptedResultAt = -Infinity;
     this.previous = [null, null]; this.lastPose = new Map(); this.held = new Set(); this.armed = new Set();
     this.lastTwoHand = null; this.swipeStart = new Map(); this.lastSwipe = 0; this.hands = [];
     this.ctx = overlay?.getContext?.('2d') || null;
     if (overlay) Object.assign(overlay.style, { display: 'none', pointerEvents: 'none' });
     this.onResize = () => this.resizeOverlay();
     this.scope.addEventListener?.('resize', this.onResize);
+    this.onVisibilityChange = () => {
+      if (this.scope.document?.visibilityState === 'hidden' && this.active) this.stop('Hand tracking paused while page was hidden; camera released');
+    };
+    this.scope.document?.addEventListener?.('visibilitychange', this.onVisibilityChange);
     this.scope.addEventListener?.('pagehide', () => this.stop('Page closed; camera released'));
   }
 
@@ -102,9 +107,10 @@ export class PhoneTwoHandCamera {
             return;
           }
           if (data.type === 'error') {
+            const message = data.message || 'Local hand inference failed.';
             this.busy = false;
-            this.onState('Local hand tracker: ' + data.message);
-            if (!this.ready) { this.scope.clearTimeout(timeout); reject(new Error(data.message)); }
+            if (!this.ready) { this.scope.clearTimeout(timeout); reject(new Error(message)); }
+            else this.handleWorkerFailure(message);
             return;
           }
           if (data.type === 'result') {
@@ -113,8 +119,10 @@ export class PhoneTwoHandCamera {
           }
         };
         worker.onerror = error => {
+          const message = error.message || 'Local hand worker failed.';
           this.busy = false; this.scope.clearTimeout(timeout);
-          reject(new Error(error.message || 'Local hand worker failed.'));
+          if (this.ready) this.handleWorkerFailure(message);
+          else reject(new Error(message));
         };
         worker.postMessage({ type: 'init' });
       });
@@ -133,6 +141,9 @@ export class PhoneTwoHandCamera {
   schedule(epoch) {
     if (epoch !== this.epoch || !this.worker || !this.stream) return;
     const now = this.scope.performance?.now?.() ?? Date.now();
+    if (this.held.size && Number.isFinite(this.lastAcceptedResultAt) && now - this.lastAcceptedResultAt > MAX_RESULT_AGE_MS) {
+      this.releaseUnsafeFrame('hand inference timed out');
+    }
     if (!this.busy && now - this.lastFrameAt >= 35 && this.video.readyState >= 2) {
       this.lastFrameAt = now; this.busy = true;
       const sequence = ++this.sequence;
@@ -147,8 +158,36 @@ export class PhoneTwoHandCamera {
     this.frame = this.scope.requestAnimationFrame(() => this.schedule(epoch));
   }
 
+  releaseUnsafeFrame(reason) {
+    for (const handId of this.held) this.onGesture({ type: 'release', handId, reason });
+    this.held.clear(); this.armed.clear(); this.lastPose.clear(); this.swipeStart.clear(); this.lastTwoHand = null;
+    this.resultFence = this.sequence; this.lastResultTime = -Infinity; this.lastAcceptedResultAt = -Infinity;
+    this.previous = [null, null]; this.hands = []; this.renderer.hand = [];
+    this.onHands([]); this.draw();
+    this.onGesture({ type: 'frame', hands: [], landmarksPerHand: 21, reason });
+    this.onGesture({ type: 'lost', reason });
+  }
+
+  handleWorkerFailure(message) {
+    this.busy = false;
+    const reason = `Hand inference failed: ${message}`;
+    if (this.ready) this.stop(reason);
+    else this.onState(reason);
+  }
+
   consume(result) {
+    if (Number.isFinite(result.sequence) && result.sequence <= this.resultFence) return;
     if (result.sequence < this.sequence - 2) return;
+    const now = this.scope.performance?.now?.() ?? Date.now();
+    const resultTime = Number(result.time);
+    if (Number.isFinite(resultTime)) {
+      if (resultTime <= this.lastResultTime || now - resultTime > MAX_RESULT_AGE_MS) {
+        this.releaseUnsafeFrame('stale hand inference result');
+        return;
+      }
+      this.lastResultTime = resultTime;
+    }
+    this.lastAcceptedResultAt = now;
     const detections = (result.hands || result.landmarks || []).filter(hand => Array.isArray(hand) ? hand.length === 21 : Array.isArray(hand?.landmarks) && hand.landmarks.length === 21);
     const matched = matchHands(detections, this.previous, { handednesses: result.handednesses || [] });
     if (matched.ambiguous) {
@@ -161,6 +200,12 @@ export class PhoneTwoHandCamera {
       this.onGesture({ type: 'lost', reason: 'ambiguous hand crossing', handIds });
       return;
     }
+    const conflictingIds = new Set(matched.conflictingIds || []);
+    for (const handId of conflictingIds) {
+      if (this.held.delete(handId)) this.onGesture({ type: 'release', handId, reason: 'contradictory handedness' });
+      this.armed.delete(handId); this.lastPose.delete(handId);
+    }
+    if (conflictingIds.size) for (const track of matched) this.armed.delete(track.id);
     const nextPrevious = [null, null];
     for (const track of this.previous) if (track && (track.missing || 0) < MAX_HAND_MISSING_FRAMES) nextPrevious[track.slot] = { ...track, missing: (track.missing || 0) + 1 };
     const hands = matched.map(item => {
@@ -282,8 +327,9 @@ export class PhoneTwoHandCamera {
     this.stream?.getTracks?.().forEach(track => track.stop()); this.stream = null;
     this.video?.pause?.(); if (this.video) this.video.srcObject = null;
     this.busy = false; this.ready = false; this.hands = []; this.previous = [null, null];
+    this.resultFence = this.sequence; this.lastResultTime = -Infinity; this.lastAcceptedResultAt = -Infinity;
     for (const handId of this.held) this.onGesture({ type: 'release', handId, reason: message });
-    this.held.clear(); this.armed.clear(); this.lastPose.clear(); this.lastTwoHand = null;
+    this.held.clear(); this.armed.clear(); this.lastPose.clear(); this.swipeStart.clear(); this.lastTwoHand = null;
     this.scope.document?.body?.classList?.remove('camera-live');
     if (this.overlay) this.overlay.style.display = 'none';
     if (this.video?.style) this.video.style.display = 'none';

@@ -96,7 +96,7 @@ function updateProjectionState(projectionPatch) {
     eye.projection = { ...eye.projection, ...projectionPatch, scale: R.distance, rotation: R.yaw, tilt: R.pitch };
     await engine.setEye({ projection: eye.projection });
   };
-  clearTimeout(persistTimer); persistTimer = setTimeout(() => write().catch(() => {}), 350);
+  clearTimeout(persistTimer); persistTimer = setTimeout(() => write().catch(error => status(`Local Eye changed but was not saved: ${error.message}. Retry remains available.`)), 350);
 }
 function materialAxisGesture(dx, dy) {
   const scale = 2.8 / Math.max(320, Math.min(innerWidth, innerHeight));
@@ -244,7 +244,13 @@ function addPhoneSurface() {
   };
   $('phoneEnterNested').onclick = async () => { if (R.selected) await engine.enterNested(R.selected); await refreshSnapshot(); };
   $('phoneExitNested').onclick = async () => { await engine.exitNested(); await refreshSnapshot(); };
-  $('phoneFork').onclick = async () => { const branch = await engine.forkOffline('Phone offline branch'); await refreshSnapshot(); status(`Offline branch ${branch.branchId.slice(0, 10)} created. No automatic merge.`); };
+  $('phoneFork').onclick = async () => {
+    try {
+      await engine.forkOffline('Phone offline branch'); const current = await refreshSnapshot();
+      const durable = current?.persistence?.state === 'saved';
+      status(`Offline branch ${current.branchId.slice(0, 10)} ${durable ? 'created and saved' : 'created in memory only'}. No automatic merge.`);
+    } catch (error) { await refreshSnapshot().catch(() => {}); status(`Offline branch remains in memory but was not saved: ${error.message}. Retry remains available.`); }
+  };
   $('phoneExport').onclick = async () => {
     const envelope = await engine.snapshot(), blob = new Blob([JSON.stringify(envelope, null, 2)], { type: 'application/json' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${envelope.snapshot.worldId}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 30000);
@@ -286,6 +292,7 @@ async function startLocal() {
   engine.addEventListener('statechange', event => {
     if (event.detail?.state && localMode) renderEye(event.detail.state);
     if (event.detail?.reason === 'step-error') status(event.detail.error || 'Local material step stopped safely.');
+    if (event.detail?.reason === 'persistence-failed') status(`Local Vivo state changed but was not saved: ${event.detail.state?.persistence?.error || 'storage failed'}. Retry remains available.`);
   });
   const rootDimension = Number($('createD')?.value) || 4;
   const state = await engine.open(getWorldId(), rootDimension);
@@ -308,9 +315,13 @@ async function refreshNativeTools() {
 async function installOffline() {
   try {
     if (!('serviceWorker' in navigator)) throw new Error('This browser does not support service workers.');
-    const result = await navigator.serviceWorker.register(new URL('../vivo-sw.js', import.meta.url), { scope: new URL('../', import.meta.url).pathname });
+    await navigator.serviceWorker.register(new URL('../vivo-sw.js', import.meta.url), { scope: new URL('../', import.meta.url).pathname });
+    const ready = await navigator.serviceWorker.ready;
+    if (!ready.active) throw new Error('Offline shell service worker did not become active.');
+    const shell = await (await caches.open('vivo-phone-shell-2026-10-11-v2')).match(new URL('../index.html', import.meta.url));
+    if (!shell) throw new Error('Offline shell cache did not finish installing.');
     const persisted = await navigator.storage?.persist?.().catch(() => false);
-    $('phoneEngineState').textContent = `Offline shell ready · service worker ${result.active ? 'active' : 'installing'} · persistent storage ${persisted ? 'granted' : 'not granted by browser'}.`;
+    $('phoneEngineState').textContent = `Offline shell ready · service worker active · persistent storage ${persisted ? 'granted' : 'not granted by browser'}.`;
     status('Offline app shell cached. The large hand model is optional and cached separately.');
   } catch (error) { status(`Offline install unavailable: ${error.message}`); }
 }

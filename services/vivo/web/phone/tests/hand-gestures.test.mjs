@@ -50,6 +50,18 @@ test('detector handedness wins over a crossing and preserves held identities', (
   assert.equal(crossed.find(hand => hand.handedness === 'right').id, 'hand-2');
 });
 
+test('strong contradictory handedness is a loss, not continuity on the old hand', () => {
+  const first = matchHands([
+    { landmarks: makeHand({ open: true, offset: 0 }), handedness: 'Left', confidence: 0.99 },
+    { landmarks: makeHand({ open: true, offset: 6 }), handedness: 'Right', confidence: 0.99 },
+  ]);
+  const replacement = matchHands([
+    { landmarks: makeHand({ open: false, offset: 0.45 }), handedness: 'Right', confidence: 0.99 },
+  ], first);
+  assert.deepEqual(replacement.map(hand => hand.id), ['hand-2']);
+  assert.deepEqual(replacement.conflictingIds, ['hand-1']);
+});
+
 test('near-tie crossing is explicitly ambiguous instead of transferring ownership', () => {
   const first = matchHands([makeHand({ open: true, offset: 0.45 }), makeHand({ open: true, offset: 0.55 })]);
   const crossing = matchHands([makeHand({ open: true, offset: 0.5 }), makeHand({ open: true, offset: 0.5 })], first);

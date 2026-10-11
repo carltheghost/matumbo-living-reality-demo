@@ -10,6 +10,7 @@ let clock = null;
 async function dispatch(method, args) {
   if (!['open', 'snapshot', 'translate', 'step', 'setEye', 'createEye', 'selectEye', 'enterNested', 'exitNested', 'forkOffline', 'persist', 'close'].includes(method)) throw new TypeError('Unsupported local engine operation');
   const result = await engine[method](...args);
+  if (['createEye', 'selectEye', 'enterNested', 'exitNested', 'forkOffline'].includes(method)) await engine.lastPersistence;
   if (method === 'translate' && !clock) {
     clock = setInterval(async () => {
       if (!engine.activeIds.size) { clearInterval(clock); clock = null; return; }

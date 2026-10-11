@@ -363,14 +363,32 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     }
     private fun publishTools() { lastReplyProxy?.let { sendTools("", it) } }
 
+    private fun capabilityDialogHeader(): LinearLayout {
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(24), dp(20), dp(24), dp(8))
+        }
+        header.addView(TextView(this).apply {
+            text = "Agent capability grants"
+            textSize = 20f
+            setTextColor(0xffc8fff4.toInt())
+        })
+        header.addView(TextView(this).apply {
+            text = "Only checked capabilities are exposed as native tools. Android may ask separately when a tool uses a protected capability."
+            textSize = 14f
+            setTextColor(0xffb8c1ca.toInt())
+            setPadding(0, dp(6), 0, 0)
+        })
+        return header
+    }
+
     private fun manageCapabilities() {
         val labels = CapabilityPolicy.selectable.map { it.second }.toTypedArray()
         val keys = CapabilityPolicy.selectable.map { it.first }
         val current = rawGrants()
         val checked = BooleanArray(keys.size) { keys[it] in current }
         val next = current.toMutableSet()
-        AlertDialog.Builder(this).setTitle("Agent capability grants")
-            .setMessage("Only checked capabilities are exposed as native tools. Android may ask separately when a tool uses a protected capability.")
+        AlertDialog.Builder(this).setCustomTitle(capabilityDialogHeader())
             .setMultiChoiceItems(labels, checked) { _, index, isChecked -> if (isChecked) next.add(keys[index]) else next.remove(keys[index]) }
             .setPositiveButton("Save grants") { _, _ ->
                 cameraPermissionDismissed = false; notificationPermissionDismissed = false

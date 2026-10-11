@@ -171,7 +171,8 @@ export class LocalVivoEngine {
   constructor({ storage, onChange = () => {}, now = () => Date.now() } = {}) {
     this.storage = storage || null; this.onChange = onChange; this.now = now;
     this.snapshotState = null; this.eyes = {}; this.currentEyeId = null; this.activeIds = new Set();
-    this.activeSpaceId = null; this._tail = Promise.resolve(); this.branchId = uuid(); this.mode = 'local';
+    this.activeSpaceId = null; this._tail = Promise.resolve(); this.lastPersistence = Promise.resolve({ persistent: false });
+    this.persistence = { state: 'unpersisted', error: null }; this.branchId = uuid(); this.mode = 'local';
     this.parentBranchId = null; this.branchLabel = null; this.forkedAt = null;
   }
   async open(worldId, rootDimension = 4) {
@@ -181,6 +182,7 @@ export class LocalVivoEngine {
       this.snapshotState = clone(stored.snapshot); this.eyes = clone(stored.eyes);
       this.currentEyeId = stored.currentEyeId;
       Object.assign(this, restoreBranchMetadata(stored));
+      this.persistence = { state: 'saved', error: null };
     } else {
       this.snapshotState = createPhoneSnapshot({ worldId, now: this.now(), rootDimension });
       const eye = createEye({ dimension: this.snapshotState.spaces.root.dimension });
@@ -197,17 +199,36 @@ export class LocalVivoEngine {
     return {
       snapshot: clone(this.world), eyes: clone(this.eyes), currentEyeId: this.currentEyeId,
       branchId: this.branchId, mode: this.mode, parentBranchId: this.parentBranchId,
-      branchLabel: this.branchLabel, forkedAt: this.forkedAt,
+      branchLabel: this.branchLabel, forkedAt: this.forkedAt, persistence: clone(this.persistence),
     };
   }
   async persist() {
     if (!this.snapshotState) return;
-    this.snapshotState.savedAt = this.now();
-    await this.storage?.save?.(this.world.worldId, this.snapshot());
+    const envelope = this.snapshot(), savedAt = this.now();
+    envelope.snapshot.savedAt = savedAt; delete envelope.persistence;
+    this.persistence = { state: 'saving', error: null };
+    try {
+      if (!this.storage?.save) {
+        this.persistence = { state: 'memory-only', error: null };
+        return { persistent: false };
+      }
+      const result = await this.storage?.save?.(this.world.worldId, envelope);
+      this.snapshotState.savedAt = savedAt;
+      this.persistence = { state: result?.persistent === false ? 'memory-only' : 'saved', error: null };
+      return result;
+    } catch (error) {
+      this.persistence = { state: 'unsaved', error: error?.message || String(error) };
+      this.emit('persistence-failed');
+      throw error;
+    }
   }
   queuePersist() {
-    this._tail = this._tail.then(() => this.persist()).catch(() => {});
-    return this._tail;
+    this.persistence = { state: 'saving', error: null };
+    const operation = this._tail.then(() => this.persist());
+    operation.catch(() => {});
+    this._tail = operation.catch(() => {});
+    this.lastPersistence = operation;
+    return operation;
   }
   emit(reason) { this.onChange({ reason, state: this.snapshot() }); }
   createEye(label = 'New Eye') {
@@ -215,19 +236,19 @@ export class LocalVivoEngine {
     const space = this.world.spaces[this.eye.spaceId];
     const next = createEye({ label, spaceId: space.id, dimension: space.dimension });
     next.q = [...this.eye.q]; next.slice = clone(this.eye.slice); next.projection = clone(this.eye.projection);
-    this.eyes[next.id] = next; this.currentEyeId = next.id; this.queuePersist(); this.emit('eye-created'); return clone(next);
+    this.eyes[next.id] = next; this.currentEyeId = next.id; this.lastPersistence = this.queuePersist(); this.emit('eye-created'); return clone(next);
   }
   selectEye(id) {
     if (!this.eyes[id]) throw new TypeError('Unknown Eye');
     if (this.currentEyeId !== id) { this.activeIds.clear(); this.activeSpaceId = null; }
-    this.currentEyeId = id; this.emit('eye-selected'); this.queuePersist();
+    this.currentEyeId = id; const write = this.queuePersist(); this.emit('eye-selected'); return write;
   }
   setEye(patch) {
     const eye = this.eye;
     if (patch.q) eye.q = finiteVector(patch.q, this.world.spaces[eye.spaceId].dimension, 'Eye q').slice();
     if (patch.slice) eye.slice = clone(patch.slice);
     if (patch.projection) eye.projection = { ...eye.projection, ...patch.projection };
-    eye.revision++; this.queuePersist(); this.emit('eye-updated');
+    eye.revision++; const write = this.queuePersist(); this.emit('eye-updated'); return write;
   }
   translate(entityId, axis, delta) {
     const space = this.world.spaces[this.eye.spaceId], entity = space?.entities[entityId];
@@ -238,7 +259,7 @@ export class LocalVivoEngine {
     entity.v[axis] = 0; entity.revision++; this.activeIds.add(entity.id);
     for (const edge of space.field.edges) if (edge.a === entity.id) this.activeIds.add(edge.b); else if (edge.b === entity.id) this.activeIds.add(edge.a);
     this.activeSpaceId = space.id;
-    this.world.acceptedSequence++; this.emit('object-provisional'); this.queuePersist();
+    this.world.acceptedSequence++; const write = this.queuePersist(); this.emit('object-provisional'); return write;
   }
   async step(dt = FIXED_STEP) {
     const space = this.world.spaces[this.eye.spaceId];
@@ -259,19 +280,20 @@ export class LocalVivoEngine {
     this.eye.q = Array(this.world.spaces[entity.innerSpaceId].dimension).fill(0);
     this.eye.basis = identity(this.world.spaces[entity.innerSpaceId].dimension);
     this.eye.slice = Object.fromEntries(Array.from({ length: Math.max(0, this.eye.q.length - 3) }, (_, i) => [`x${i + 4}`, 0]));
-    this.eye.revision++; this.queuePersist(); this.emit('nested-enter');
+    this.eye.revision++; this.lastPersistence = this.queuePersist(); this.emit('nested-enter');
   }
   exitNested() {
     const prior = this.eye.returnStack.pop(); if (!prior) { this.activeIds.clear(); this.activeSpaceId = null; return false; }
     this.activeIds.clear(); this.activeSpaceId = null;
-    Object.assign(this.eye, prior); this.eye.revision++; this.queuePersist(); this.emit('nested-exit'); return true;
+    Object.assign(this.eye, prior); this.eye.revision++; this.lastPersistence = this.queuePersist(); this.emit('nested-exit'); return true;
   }
   forkOffline(label = 'Offline branch') {
     const parentBranchId = this.branchId;
     this.branchId = uuid(); this.mode = 'offline-branch'; this.parentBranchId = parentBranchId;
     this.branchLabel = String(label).slice(0, 256); this.forkedAt = this.now();
+    this.lastPersistence = this.queuePersist();
     const branch = this.snapshot();
-    this.queuePersist(); this.emit('offline-fork'); return clone(branch);
+    this.emit('offline-fork'); return clone(branch);
   }
   async close() { await this._tail; await this.persist(); this.activeIds.clear(); }
 }

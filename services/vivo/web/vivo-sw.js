@@ -1,5 +1,5 @@
 /* Static app shell cache only. API traffic, camera frames and shared writes are never cached. */
-const SHELL_CACHE = 'vivo-phone-shell-2026-10-11-v1';
+const SHELL_CACHE = 'vivo-phone-shell-2026-10-11-v2';
 const HAND_CACHE = 'vivo-hand-tracker-2026-10';
 const SHELL = [
   'index.html', 'shared.css', 'shared.js', 'render.js', 'camera.js', 'hand-worker.js',
@@ -35,6 +35,17 @@ self.addEventListener('fetch', event => {
     const shell = await caches.open(SHELL_CACHE), cached = await shell.match(request);
     if (cached) return cached;
     try { return await fetch(request); }
-    catch { return new Response('This Vivo resource is not cached on this phone yet.', { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } }); }
+    catch {
+      const scope = new URL(self.registration.scope);
+      const scopePath = scope.pathname.endsWith('/') ? scope.pathname : `${scope.pathname}/`;
+      const canonicalNavigation = request.mode === 'navigate'
+        && url.origin === scope.origin
+        && (url.pathname === scopePath || url.pathname === scopePath.slice(0, -1));
+      if (canonicalNavigation) {
+        const fallback = await shell.match(scoped('index.html'));
+        if (fallback) return fallback;
+      }
+      return new Response('This Vivo resource is not cached on this phone yet.', { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+    }
   })());
 });

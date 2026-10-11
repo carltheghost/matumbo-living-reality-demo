@@ -8,6 +8,14 @@ class MemoryStore {
   async save(id, value) { this.rows.set(id, structuredClone(value)); }
 }
 
+class FaultingStore extends MemoryStore {
+  fail = false;
+  async save(id, value) {
+    if (this.fail) throw new Error('QuotaExceededError: phone storage quota exceeded');
+    return super.save(id, value);
+  }
+}
+
 test('3D through 11D worlds store vectors and sparse edges without dense hyper-grids', () => {
   const snapshot = createPhoneSnapshot({ worldId: 'test-world' });
   validatePhoneSnapshot(snapshot);
@@ -122,4 +130,41 @@ test('offline forks are explicit and renderer projection carries the same object
   assert.equal(view.grid.positions.length, 49);
   assert.equal(view.eye.id, engine.eye.id);
   assert.equal(branch.mode, 'offline-branch');
+});
+
+test('Eye persistence failures are explicit, retain in-memory state, and can be retried', async () => {
+  const store = new FaultingStore(), engine = new LocalVivoEngine({ storage: store, now: () => 100 });
+  await engine.open('eye-persistence-failure');
+  store.fail = true;
+  await assert.rejects(engine.setEye({ q: [1, 2, 3, 4] }), /QuotaExceededError/);
+  let current = await engine.snapshot();
+  assert.deepEqual(current.eyes[current.currentEyeId].q, [1, 2, 3, 4]);
+  assert.equal(current.persistence.state, 'unsaved');
+  assert.match(current.persistence.error, /QuotaExceededError/);
+  store.fail = false;
+  await engine.persist();
+  const reloaded = new LocalVivoEngine({ storage: store });
+  await reloaded.open('eye-persistence-failure');
+  assert.deepEqual(reloaded.eye.q, [1, 2, 3, 4]);
+  assert.equal((await reloaded.snapshot()).persistence.state, 'saved');
+});
+
+test('offline branch persistence failures do not erase provenance and retry durably', async () => {
+  const store = new FaultingStore(), engine = new LocalVivoEngine({ storage: store, now: () => 200 });
+  await engine.open('branch-persistence-failure');
+  const parentBranchId = engine.branchId;
+  store.fail = true;
+  const branch = engine.forkOffline('No-network retry');
+  await assert.rejects(engine.lastPersistence, /QuotaExceededError/);
+  assert.equal(branch.mode, 'offline-branch');
+  assert.equal(engine.mode, 'offline-branch');
+  assert.equal(engine.parentBranchId, parentBranchId);
+  assert.equal((await engine.snapshot()).persistence.state, 'unsaved');
+  store.fail = false;
+  await engine.persist();
+  const reloaded = new LocalVivoEngine({ storage: store });
+  await reloaded.open('branch-persistence-failure');
+  assert.equal(reloaded.mode, 'offline-branch');
+  assert.equal(reloaded.parentBranchId, parentBranchId);
+  assert.equal(reloaded.branchLabel, 'No-network retry');
 });
