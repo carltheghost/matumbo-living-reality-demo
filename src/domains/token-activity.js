@@ -1,6 +1,6 @@
 /** Local activity adapter. All financial postings use the unified QuoteEngine. */
-import { createTokenEngine, assertAccount, isUserAccount, assertAsset, assertFluff } from './token.js?v=20261003-complete8';
-import { FAUCET_DRIP_FLUFF, RIBBON_CAP } from './token-config.js?v=20261003-complete8';
+import { createTokenEngine, assertAccount, isUserAccount, assertAsset, assertFluff } from './token.js';
+import { FAUCET_DRIP_FLUFF, RIBBON_CAP } from './token-config.js';
 
 export class TokenError extends Error {
   constructor(message, code = 'INVALID_PARAM') { super(message); this.name = 'TokenError'; this.code = code; }
@@ -105,13 +105,46 @@ export class TokenActivityLedger {
       { after: () => this._drips.add(dayKey) });
   }
   act(action, args = {}, idem) {
-    const account = this.ensureAccount(args.account ?? args.from);
-    const asset = args.asset ?? 'TUMBO'; assertAsset(asset);
+    const supported = new Set(['presence', 'ribbon-claim', 'hunger-tick', 'tip', 'send', 'lock']);
+    if (!supported.has(action)) throw new TokenError(`unsupported local activity ${action}`, 'UNKNOWN_ACTION');
+    if (!args || typeof args !== 'object') throw new TokenError('activity arguments are required', 'INVALID_PARAM');
+    const rawAccount = args.account ?? args.from;
+    assertAccount(rawAccount);
+    if (!isUserAccount(rawAccount)) throw new TokenError('activity requires a user or bot account', 'INVALID_PARAM');
+    const asset = args.asset ?? 'TUMBO';
+    assertAsset(asset);
+    if (!['presence', 'ribbon-claim', 'hunger-tick'].includes(action) && asset !== 'TUMBO') {
+      throw new TokenError('local activity supports TUMBO only', 'UNKNOWN_ASSET');
+    }
+    // A valid replay must be resolved before the current-day guard. This is
+    // important after a reload: an already committed day-1 presence remains
+    // replayable on day 2, while a new day-1 claim is still rejected below.
+    const prior = typeof idem === 'string' ? this._keys.get(idem) : null;
+    if (action === 'presence' && prior) {
+      return this._commit(action, { account: rawAccount, day: args.day }, idem, [], { meta: { day: args.day } });
+    }
+    if (action === 'presence' && args.day !== this.day) {
+      throw new TokenError('presence day must match the current local day', 'BAD_DAY');
+    }
+    if (action === 'hunger-tick') {
+      for (const value of [args.from, args.to]) {
+        if (!Number.isInteger(value) || value < 0 || value > 100) throw new TokenError('hunger must be 0..100');
+      }
+    }
+    if (action === 'tip' || action === 'send') {
+      assertAccount(args.to);
+      if (!isUserAccount(args.to)) throw new TokenError('activity requires a user or bot account', 'INVALID_PARAM');
+      const amount = assertFluff(args.amount, 'amount');
+      if (!amount) throw new TokenError('amount must be positive');
+      if (typeof (args.memo ?? '') !== 'string' || (args.memo ?? '').length > 240) throw new TokenError('memo must be a string of at most 240 characters');
+    }
+    if (action === 'lock') {
+      const amount = assertFluff(args.amount, 'amount');
+      if (!amount) throw new TokenError('amount must be positive');
+    }
+    const account = this.ensureAccount(rawAccount);
     const noop = [{ account, asset, amount: 0 }];
     if (action === 'presence') {
-      const prior = this._keys.get(idem);
-      if (prior) return this._commit(action, { account, day: args.day }, idem, noop, { meta: { day: args.day } });
-      if (args.day !== this.day) throw new TokenError('presence day must match the current local day', 'BAD_DAY');
       const dayKey = `${account}:${this.day}`;
       if (this._presence.has(dayKey) && !this._keys.has(idem)) throw new TokenError('presence already recorded', 'PRESENCE_ALREADY_RECORDED');
       return this._commit(action, { account, day: this.day }, idem, noop, { meta: { day: this.day }, after: () => this._presence.add(dayKey) });
@@ -123,19 +156,15 @@ export class TokenActivityLedger {
       return this._commit(action, { account }, idem, noop, { meta: { ribbonId, monetized: false, transferable: false }, after: () => this._ribbons.set(account, ribbonId) });
     }
     if (action === 'hunger-tick') {
-      for (const value of [args.from, args.to]) if (!Number.isInteger(value) || value < 0 || value > 100) throw new TokenError('hunger must be 0..100');
       return this._commit(action, { account }, idem, noop, { sameTick: true, meta: { from: args.from, to: args.to } });
     }
     if (action === 'tip' || action === 'send') {
-      const to = this.ensureAccount(args.to), amount = assertFluff(args.amount, 'amount');
-      if (!amount) throw new TokenError('amount must be positive');
-      if (typeof (args.memo ?? '') !== 'string' || (args.memo ?? '').length > 240) throw new TokenError('memo must be a string of at most 240 characters');
+      const to = this.ensureAccount(args.to), amount = args.amount;
       return this._commit(action, { from: account, to, asset, amount, memo: args.memo ?? '' }, idem,
         [{ account, asset, amount: -amount }, { account: to, asset, amount }]);
     }
     if (action === 'lock') {
-      const amount = assertFluff(args.amount, 'amount');
-      if (!amount) throw new TokenError('amount must be positive');
+      const amount = args.amount;
       return this._commit(action, { account, asset, amount }, idem,
         [{ account, asset, amount: -amount }, { account: 'sys:vault', asset, amount }]);
     }

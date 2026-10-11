@@ -1,6 +1,6 @@
 /** Vault positions and savings pockets over the unified local token ledger. */
-import { createTokenEngine, assertAccount, assertAsset, assertFluff, CONFIG, mulDivFloor, fmt, fnv1a64Hex } from './token.js?v=20261003-complete8';
-import { sha256Hex } from './token-sha256.js?v=20261003-complete8';
+import { createTokenEngine, assertAccount, assertAsset, assertFluff, CONFIG, mulDivFloor, fmt, fnv1a64Hex } from './token.js';
+import { sha256Hex } from './token-sha256.js';
 export { mulDivFloor };
 export const sha256HexAscii = sha256Hex;
 export const TOKEN_VAULT_SUPPLY_FLUFF = CONFIG.supply;
@@ -57,12 +57,16 @@ export function createTokenVaultLedger({ engine = null, initialGrants = [] } = {
     }
     return existing.result;
   }
-  function post(action, key, request, postings, extra = {}, position = null) {
+  function post(action, key, request, postings, extra = {}, position = null, commit = null) {
     let journal;
     try { journal = core.ledger.post(postings, { idempotencyKey: `vault:${key}`, action, memo: JSON.stringify(request), authority: 'internal' }); }
     catch (error) { if (/insufficient/.test(error.message)) throw new InsufficientFundsError(error.message); throw error; }
     const result = freeze({ ...journal, position, extra: freeze(extra), proof: freeze({ hash: journal.hash, prevHash: journal.prevHash }), simulation: true });
     requests.set(key, { request: JSON.stringify(request), result });
+    // Mark auxiliary ownership before notifying observers. A receipt listener
+    // can re-enter synchronously, so financial and position state must appear
+    // atomic to every observer.
+    if (typeof commit === 'function') commit(result);
     core._emit('receipt', { receipt: result });
     for (const leg of postings) core._emit('balance-changed', { account: leg.account, asset: leg.asset, balance: core.balance(leg.account, leg.asset) });
     return result;
@@ -107,8 +111,15 @@ export function createTokenVaultLedger({ engine = null, initialGrants = [] } = {
     const owner = user(input.from), code = asset(input.asset ?? 'TUMBO'), amount = positive(input.amountFluff);
     if (kind === 'lock' && (!Number.isSafeInteger(input.unlockTick) || input.unlockTick <= localTick)) throw new InvalidInputError('unlockTick must be a future tick');
     const position = freeze({ id: `vault:${fnv1a64Hex(input.idempotencyKey)}`, owner, asset: code, amountFluff: amount, kind, status: 'open', openedTick: localTick, unlockTick: kind === 'lock' ? input.unlockTick : null, rewardPaidFluff: 0 });
-    const result = post(kind, input.idempotencyKey, { kind, ...input }, [{ account: owner, asset: code, amount: -amount }, { account: 'sys:vault', asset: code, amount }], {}, position);
-    positions.set(position.id, position); return result;
+    return post(
+      kind,
+      input.idempotencyKey,
+      { kind, ...input },
+      [{ account: owner, asset: code, amount: -amount }, { account: 'sys:vault', asset: code, amount }],
+      {},
+      position,
+      () => positions.set(position.id, position),
+    );
   }
   function estimateRewards(id) {
     const position = positions.get(id); if (!position) throw new PositionNotFoundError('unknown position');
@@ -126,15 +137,29 @@ export function createTokenVaultLedger({ engine = null, initialGrants = [] } = {
     const legs = [{ account: 'sys:vault', asset: position.asset, amount: -position.amountFluff }, { account: position.owner, asset: position.asset, amount: position.amountFluff }];
     if (reward) legs.push({ account: source, asset: position.asset, amount: -reward }, { account: position.owner, asset: position.asset, amount: reward });
     const closed = freeze({ ...position, status: 'closed', rewardPaidFluff: reward, closedTick: localTick });
-    const result = post(kind, input.idempotencyKey, { kind, ...input }, legs, { elapsedTicks: localTick - position.openedTick, grossRewardFluff: reward, rewardPaidFluff: reward }, closed);
-    positions.set(position.id, closed); return result;
+    return post(
+      kind,
+      input.idempotencyKey,
+      { kind, ...input },
+      legs,
+      { elapsedTicks: localTick - position.openedTick, grossRewardFluff: reward, rewardPaidFluff: reward },
+      closed,
+      () => positions.set(position.id, closed),
+    );
   }
   function pocketMove(kind, input) {
     const prior = replay(input.idempotencyKey, { kind, ...input }); if (prior) return prior;
     const owner = user(input.owner ?? input.from), pocket = pocketAccount(owner, input.goal), code = asset(input.asset ?? 'TUMBO'), amount = positive(input.amountFluff), savings = corePocket(pocket);
     const from = kind === 'save' ? owner : savings, to = kind === 'save' ? savings : owner;
-    const result = post(kind, input.idempotencyKey, { kind, ...input }, [{ account: from, asset: code, amount: -amount }, { account: to, asset: code, amount }], { pocket });
-    pockets.add(`${pocket}|${code}`); return result;
+    return post(
+      kind,
+      input.idempotencyKey,
+      { kind, ...input },
+      [{ account: from, asset: code, amount: -amount }, { account: to, asset: code, amount }],
+      { pocket },
+      null,
+      () => pockets.add(`${pocket}|${code}`),
+    );
   }
   function conservationTotals() {
     return Object.fromEntries(['TUMBO', 'sMIMAS'].map(code => [code, core.ledger.accounts().filter(row => row.asset === code && row.account !== 'sys:issuance').reduce((total, row) => total + core.balance(row.account, code), 0)]));
@@ -161,8 +186,15 @@ export function createTokenVaultLedger({ engine = null, initialGrants = [] } = {
       const prior = replay(input.idempotencyKey, { kind: 'tick', ...input }); if (prior) return prior;
       positive(input.ticks); assertFluff(localTick + input.ticks, 'tick');
       const toTick = localTick + input.ticks;
-      const result = post('tick', input.idempotencyKey, { kind: 'tick', ...input }, [{ account: 'sys:vault', asset: 'TUMBO', amount: 0 }], { toTick });
-      localTick = toTick; return result;
+      return post(
+        'tick',
+        input.idempotencyKey,
+        { kind: 'tick', ...input },
+        [{ account: 'sys:vault', asset: 'TUMBO', amount: 0 }],
+        { toTick },
+        null,
+        () => { localTick = toTick; },
+      );
     },
     openPositions: ({ owner = null, kind = null } = {}) => [...positions.values()].filter(p => p.status === 'open' && (!owner || p.owner === owner) && (!kind || p.kind === kind)),
     pocketsOf: owner => [...pockets].filter(p => pocketOwner(p.split('|')[0]) === owner).map(entry => { const [pocket, asset] = entry.split('|'); return freeze({ pocket, owner, asset, balance: balance(pocket, asset) }); }),

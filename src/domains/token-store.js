@@ -1,38 +1,46 @@
-/** Local persistence for the canonical TUMBO-SIM QuoteEngine. */
-import { createTokenEngine, CONFIG } from './token.js?v=20261003-complete8';
+/** Local canonical-engine snapshots. Hashes detect corruption; registries are
+ * cross-checked against journal evidence before a snapshot becomes live. */
+import { createTokenEngine, CONFIG, quoteHash, receiptChainHash } from "./token.js";
 
-export const TOKEN_STORAGE_KEY = 'tumbo.token.engine.v2';
+export const TOKEN_STORAGE_KEY = "tumbo.token.engine.v2";
 
-function ownerEngine(owner) {
-  if (owner?.ledger?.post && typeof owner?.quote === 'function' && typeof owner?.execute === 'function') {
-    return owner.engine ?? owner;
-  }
-  return owner?.engine ?? owner?._engine ?? null;
-}
+const ownerEngine = (owner) => typeof owner?.quote === "function" && typeof owner?.execute === "function" && owner?.ledger?.post
+  ? owner
+  : owner?.engine ?? owner?._engine ?? owner;
+
 function localStore() {
-  try { return typeof localStorage === 'undefined' ? null : localStorage; }
+  try { return typeof localStorage === "undefined" ? null : localStorage; }
   catch { return null; }
 }
 
 function assertCanonicalEngine(engine) {
   if (!engine?.ledger?.verifyChain || !engine?._issuedQuoteIds || !engine?.config) {
-    throw new TypeError('store requires the canonical QuoteEngine API');
+    throw new TypeError("store requires the canonical QuoteEngine API");
   }
-  if (!engine.ledger.verifyChain().ok) throw new Error('cannot persist an invalid receipt chain');
+  if (!engine.ledger.verifyChain().ok) throw new Error("cannot persist an invalid receipt chain");
   return engine;
 }
 
-/**
- * Serialize the engine's append-only journals and quote lifecycle registries.
- * The snapshot is local simulation state; it is never a wallet or credential.
- */
+function sameJson(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+function asUniqueStringSet(value, field) {
+  if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string")) throw new Error(`malformed token snapshot: ${field}`);
+  const set = new Set(value);
+  if (set.size !== value.length) throw new Error(`duplicate token snapshot registry entry: ${field}`);
+  return set;
+}
+function exactSet(a, b, label) {
+  if (a.size !== b.size || [...a].some((entry) => !b.has(entry))) throw new Error(`token snapshot ${label} disagrees with journal evidence`);
+}
+
 export function serializeTokenEngine(owner) {
   const engine = assertCanonicalEngine(ownerEngine(owner));
   return JSON.stringify({
-    format: 'tumbo-token-engine-v2',
+    format: "tumbo-token-engine-v2",
     config: engine.config,
     journals: engine.ledger._journals,
+    requests: [...(engine.ledger._requestKeys ?? [])],
     issued: [...engine._issuedQuoteIds],
+    issuedQuotes: [...(engine._issuedQuotes ?? [])],
     executed: [...engine._executedQuoteIds],
     cancelled: [...engine._cancelledQuoteIds],
     reversed: [...engine._reversedJournalKeys],
@@ -41,36 +49,25 @@ export function serializeTokenEngine(owner) {
   });
 }
 
-function sameJson(a, b) {
-  return JSON.stringify(a) === JSON.stringify(b);
-}
-
-function restoreJournal(engine, row) {
-  if (!row || !Array.isArray(row.postings) || typeof row.idempotencyKey !== 'string') {
-    throw new Error('malformed token journal');
-  }
-  const hasVoidCredit = row.postings.some((posting) => posting.account === 'sys:void' && posting.amount > 0);
-  const generated = engine.ledger.post(row.postings, {
-    idempotencyKey: row.idempotencyKey,
+function derivedRequest(row) {
+  const hasTithe = row.postings.some((posting) => posting.account === "sys:void" && posting.amount > 0);
+  return JSON.stringify({
+    postings: row.postings,
     action: row.action,
-    memo: row.memo ?? '',
+    memo: row.memo ?? "",
+    voidCreditReason: hasTithe ? "tithe" : null,
     links: row.links ?? null,
-    voidCreditReason: hasVoidCredit ? 'tithe' : null,
-    authority: 'internal',
+    authority: "internal",
   });
-  const sealed = Object.freeze({
-    ...row,
-    postings: Object.freeze(row.postings.map((posting) => Object.freeze({ ...posting }))),
-    ...(row.links ? { links: Object.freeze({ ...row.links }) } : {}),
-  });
-  const index = engine.ledger._journals.length - 1;
-  engine.ledger._journals[index] = sealed;
-  engine.ledger._receipts.set(row.idempotencyKey, sealed);
-  engine.ledger._lastReceiptHash = sealed.hash;
-  return generated;
 }
 
-function restoreSealedJournal(engine, row, index) {
+function sealJournal(engine, row, index, request) {
+  if (!row || !Array.isArray(row.postings) || typeof row.idempotencyKey !== "string" || typeof row.id !== "string") {
+    throw new Error("malformed token journal");
+  }
+  if (row.hash !== receiptChainHash(row)) throw new Error("token journal hash mismatch");
+  const generated = engine.ledger.post(row.postings, { ...JSON.parse(request), idempotencyKey: row.idempotencyKey });
+  if (generated.action !== row.action || generated.idempotencyKey !== row.idempotencyKey) throw new Error("token journal request mismatch");
   const sealed = Object.freeze({
     ...row,
     postings: Object.freeze(row.postings.map((posting) => Object.freeze({ ...posting }))),
@@ -78,58 +75,179 @@ function restoreSealedJournal(engine, row, index) {
   });
   engine.ledger._journals[index] = sealed;
   engine.ledger._receipts.set(row.idempotencyKey, sealed);
+  engine.ledger._requestKeys.set(row.idempotencyKey, request);
   engine.ledger._lastReceiptHash = sealed.hash;
 }
+
+function validateIssuedQuotes(data, engine) {
+  const issued = asUniqueStringSet(data.issued, "issued");
+  if (!Array.isArray(data.issuedQuotes)) {
+    if (issued.size) throw new Error("token snapshot is missing the issued quote registry");
+    return { issued, quotes: new Map() };
+  }
+  const quotes = new Map();
+  for (const entry of data.issuedQuotes) {
+    if (!Array.isArray(entry) || entry.length !== 2 || typeof entry[0] !== "string" || !entry[1] || typeof entry[1] !== "object") {
+      throw new Error("malformed issued quote registry");
+    }
+    const [id, quote] = entry;
+    if (quotes.has(id) || quote.id !== id || quote.hash !== quoteHash(quote)) throw new Error("malformed issued quote registry");
+    engine._validateQuoteShape(quote);
+    quotes.set(id, Object.freeze({ ...quote }));
+  }
+  exactSet(issued, new Set(quotes.keys()), "issued quotes");
+  return { issued, quotes };
+}
+
+function validateReceiptRegistry(data, journals, issued, executed, cancelled) {
+  if (!Array.isArray(data.receipts)) throw new Error("malformed receipt registry");
+  const receipts = new Map();
+  const derivedExecuted = new Set();
+  const derivedCancelled = new Set();
+  const normalReceiptKeys = new Set();
+  for (const entry of data.receipts) {
+    if (!Array.isArray(entry) || entry.length !== 2 || typeof entry[0] !== "string" || !entry[1] || typeof entry[1] !== "object") {
+      throw new Error("malformed receipt registry");
+    }
+    const [key, receipt] = entry;
+    if (receipts.has(key) || receipt.idempotencyKey !== key) throw new Error("duplicate or mismatched receipt registry key");
+    if (receipt.kind === "cancellation") {
+      if (typeof receipt.quoteId !== "string" || !receipt.cancelled) throw new Error("malformed cancellation receipt");
+      if (!issued.has(receipt.quoteId)) throw new Error("cancellation references an unknown quote");
+      derivedCancelled.add(receipt.quoteId);
+      receipts.set(key, Object.freeze({ ...receipt }));
+      continue;
+    }
+    const journal = journals.get(key);
+    if (!journal || receipt.id !== journal.id || receipt.hash !== journal.hash || receipt.action !== journal.action || receipt.tick !== journal.tick) {
+      throw new Error("receipt registry differs from journal evidence");
+    }
+    if (receipt.postings && !sameJson(receipt.postings, journal.postings)) throw new Error("receipt postings differ from journal evidence");
+    normalReceiptKeys.add(key);
+    if (receipt.quoteId) {
+      const quoteId = receipt.quoteId;
+      if (!issued.has(quoteId) || !executed.has(quoteId)) throw new Error("quote receipt has an unbound lifecycle registry");
+      const quote = data.issuedQuotes?.find((entry) => entry?.[0] === quoteId)?.[1];
+      if (!quote || quote.hash !== receiptHashForQuote(quote)) throw new Error("quote receipt has no matching issued quote");
+      const paid = journal.postings.find((leg) => leg.account === receipt.from && leg.asset === receipt.fromAsset && leg.amount < 0);
+      const received = journal.postings.find((leg) => leg.account === receipt.from && leg.asset === receipt.toAsset && leg.amount > 0);
+      const tithe = journal.postings.filter((leg) => leg.account === "sys:void").reduce((sum, leg) => sum + leg.amount, 0);
+      if (receipt.to !== "sys:market" || paid?.amount !== -receipt.amountIn || received?.amount !== receipt.amountOut || tithe !== receipt.tithe) {
+        throw new Error("quote receipt metadata differs from settled amounts");
+      }
+      derivedExecuted.add(quoteId);
+    }
+    receipts.set(key, Object.freeze({ ...receipt, postings: journal.postings }));
+  }
+  const registryJournalKeys = new Set([...journals.values()]
+    .filter((journal) => ["faucet", "exchange", "buy", "sell"].includes(journal.action))
+    .map((journal) => journal.idempotencyKey));
+  exactSet(registryJournalKeys, normalReceiptKeys, "receipts");
+  exactSet(executed, derivedExecuted, "executed quotes");
+  exactSet(cancelled, derivedCancelled, "cancelled quotes");
+  return receipts;
+}
+
+function receiptHashForQuote(quote) { return quoteHash(quote); }
 
 export function loadTokenEngine(raw, { config = CONFIG } = {}) {
-  const data = typeof raw === 'string' ? JSON.parse(raw) : raw;
+  const data = typeof raw === "string" ? JSON.parse(raw) : raw;
   const allowed = new Set([
-    'format', 'config', 'journals', 'issued', 'executed', 'cancelled',
-    'reversed', 'receipts', 'botPricing',
+    "format", "config", "journals", "requests", "issued", "issuedQuotes", "executed", "cancelled",
+    "reversed", "receipts", "botPricing",
   ]);
-  if (!data || typeof data !== 'object' || Object.keys(data).some((key) => !allowed.has(key))) {
-    throw new Error('unrecognized token snapshot field');
-  }
-  if (data.format !== 'tumbo-token-engine-v2' || !sameJson(data.config, config)) {
-    throw new Error('unsupported token snapshot or configuration');
-  }
-  for (const field of ['journals', 'issued', 'executed', 'cancelled', 'reversed', 'receipts']) {
-    if (!Array.isArray(data[field])) throw new Error(`malformed token snapshot: ${field}`);
-  }
-
+  if (!data || typeof data !== "object" || Object.keys(data).some((key) => !allowed.has(key))) throw new Error("unrecognized token snapshot field");
+  if (data.format !== "tumbo-token-engine-v2" || !sameJson(data.config, config)) throw new Error("unsupported token snapshot or configuration");
+  if (!Array.isArray(data.journals)) throw new Error("malformed token snapshot: journals");
   const engine = createTokenEngine(config);
   const baseline = engine.ledger._journals.slice();
-  if (data.journals.length < baseline.length) throw new Error('token snapshot omits canonical genesis');
-  for (let index = 0; index < baseline.length; index += 1) {
-    const saved = data.journals[index];
-    const expected = baseline[index];
-    if (!saved || saved.tick !== index + 1 ||
-        saved.action !== expected.action ||
-        saved.idempotencyKey !== expected.idempotencyKey ||
-        !sameJson(saved.postings, expected.postings)) {
-      throw new Error('snapshot genesis differs from canonical supply');
+  if (data.journals.length < baseline.length) throw new Error("token snapshot omits canonical genesis");
+
+  const requests = new Map();
+  if (data.requests !== undefined) {
+    if (!Array.isArray(data.requests)) throw new Error("malformed token snapshot: requests");
+    for (const entry of data.requests) {
+      if (!Array.isArray(entry) || entry.length !== 2 || typeof entry[0] !== "string" || typeof entry[1] !== "string" || requests.has(entry[0])) throw new Error("malformed token request registry");
+      requests.set(entry[0], entry[1]);
     }
-    restoreSealedJournal(engine, saved, index);
   }
 
-  // The factory already applied genesis. Replay only user journals so account
-  // balances are rebuilt through the same invariant checks as live posting.
-  for (const row of data.journals.slice(baseline.length)) restoreJournal(engine, row);
-  if (!engine.ledger.verifyChain().ok) throw new Error('token receipt chain is corrupt');
+  const journals = new Map();
+  const ids = new Set();
+  let previousHash = "genesis";
+  for (let index = 0; index < data.journals.length; index += 1) {
+    const row = data.journals[index];
+    if (!row || typeof row.id !== "string" || ids.has(row.id) || journals.has(row.idempotencyKey) || row.tick !== index + 1 || row.prevHash !== previousHash) {
+      throw new Error("invalid token journal order or identity");
+    }
+    ids.add(row.id); journals.set(row.idempotencyKey, row);
+    if (index < baseline.length) {
+      const expected = baseline[index];
+      if (row.action !== expected.action || row.idempotencyKey !== expected.idempotencyKey || !sameJson(row.postings, expected.postings)) {
+        throw new Error("snapshot genesis differs from canonical supply");
+      }
+    } else if (row.action === "genesis") {
+      throw new Error("duplicate genesis is forbidden");
+    }
+    if (row.hash !== receiptChainHash(row)) throw new Error("token journal hash mismatch");
+    previousHash = row.hash;
+  }
 
-  engine._issuedQuoteIds = new Set(data.issued);
-  engine._executedQuoteIds = new Set(data.executed);
-  engine._cancelledQuoteIds = new Set(data.cancelled);
-  engine._reversedJournalKeys = new Set(data.reversed);
-  engine._receipts = new Map(data.receipts);
-  if (engine._receipts.size !== data.receipts.length) throw new Error('duplicate receipt registry key');
+  for (let index = 0; index < data.journals.length; index += 1) {
+    const row = data.journals[index];
+    const request = requests.get(row.idempotencyKey) ?? derivedRequest(row);
+    const parsed = JSON.parse(request);
+    if (!sameJson(parsed.postings, row.postings) || parsed.action !== row.action || parsed.memo !== (row.memo ?? "") || !sameJson(parsed.links ?? null, row.links ?? null)) {
+      throw new Error("journal request does not match receipt");
+    }
+    sealJournal(engine, row, index, request);
+  }
+  if (!engine.ledger.verifyChain().ok) throw new Error("token receipt chain is corrupt");
+
+  const { issued, quotes } = validateIssuedQuotes(data, engine);
+  const executed = asUniqueStringSet(data.executed, "executed");
+  const cancelled = asUniqueStringSet(data.cancelled, "cancelled");
+  const reversed = asUniqueStringSet(data.reversed, "reversed");
+  if ([...executed, ...cancelled].some((id) => !issued.has(id)) || [...executed].some((id) => cancelled.has(id))) {
+    throw new Error("token snapshot lifecycle registry is inconsistent");
+  }
+  const receiptRegistry = validateReceiptRegistry(data, journals, issued, executed, cancelled);
+
+  const derivedReversed = new Set(data.journals.filter((row) => row.action === "reverse" && row.links?.reversesKey).map((row) => row.links.reversesKey));
+  exactSet(reversed, derivedReversed, "reversed journals");
+  for (const key of reversed) {
+    const reversal = journals.get(`reverse:${key}`);
+    if (!reversal || reversal.links?.reversesKey !== key) throw new Error("reversal registry differs from journals");
+  }
+
   const pricing = data.botPricing ?? {};
-  if (!pricing || typeof pricing !== 'object' || Array.isArray(pricing)) throw new Error('invalid local service pricing');
-  for (const price of Object.values(pricing)) {
-    if (!Number.isSafeInteger(price) || price < 0) throw new Error('invalid local service pricing');
-  }
+  if (!pricing || typeof pricing !== "object" || Array.isArray(pricing)) throw new Error("invalid local service pricing");
+  for (const price of Object.values(pricing)) if (!Number.isSafeInteger(price) || price < 0) throw new Error("invalid local service pricing");
+
+  engine._issuedQuoteIds = issued;
+  engine._issuedQuotes = quotes;
+  engine._executedQuoteIds = executed;
+  engine._cancelledQuoteIds = cancelled;
+  engine._reversedJournalKeys = reversed;
+  engine._receipts = receiptRegistry;
   engine.botPricing = { ...pricing };
   return engine;
+}
+
+/** Adopt a validated snapshot into the already-exported shared owner. */
+export function adoptTokenEngine(target, source) {
+  if (!target || !source || target === source) return target ?? source;
+  assertCanonicalEngine(source);
+  target.config = source.config;
+  target.ledger = source.ledger;
+  target._issuedQuoteIds = source._issuedQuoteIds;
+  target._issuedQuotes = source._issuedQuotes;
+  target._executedQuoteIds = source._executedQuoteIds;
+  target._cancelledQuoteIds = source._cancelledQuoteIds;
+  target._reversedJournalKeys = source._reversedJournalKeys;
+  target._receipts = source._receipts;
+  target.botPricing = source.botPricing;
+  return target;
 }
 
 export class LedgerStore {
@@ -142,17 +260,15 @@ export class LedgerStore {
     const raw = localStore()?.getItem(TOKEN_STORAGE_KEY);
     return raw ? loadTokenEngine(raw, options) : null;
   }
-  static clear() {
-    localStore()?.removeItem(TOKEN_STORAGE_KEY);
-  }
+  static clear() { localStore()?.removeItem(TOKEN_STORAGE_KEY); }
 }
 
 export async function saveFile(owner, path) {
-  const fs = await import('node:fs/promises');
-  await fs.writeFile(path, serializeTokenEngine(owner), 'utf8');
+  const fs = await import("node:fs/promises");
+  await fs.writeFile(path, serializeTokenEngine(owner), "utf8");
 }
 
 export async function loadFile(path, options = {}) {
-  const fs = await import('node:fs/promises');
-  return loadTokenEngine(await fs.readFile(path, 'utf8'), options);
+  const fs = await import("node:fs/promises");
+  return loadTokenEngine(await fs.readFile(path, "utf8"), options);
 }

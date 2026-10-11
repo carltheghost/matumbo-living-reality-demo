@@ -19,7 +19,7 @@ import {
   ReverseWindowExpiredError,
   CancelRejectedError,
   JournalNotFoundError,
-} from "../domains/token.js?v=20260922-cache2";
+} from "../domains/token.js";
 
 /**
  * @param {() => import("../domains/token.js").QuoteEngine} engineFactory
