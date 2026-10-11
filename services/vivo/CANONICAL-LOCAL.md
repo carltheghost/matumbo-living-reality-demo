@@ -46,6 +46,15 @@ world and does not restore the Studio field. In `--store memory` the accepted
 world is session-only and resets with the server; POSIX/SQLite modes persist
 accepted state in their private backend files.
 
+The accepted preview's **Fork offline branch** action is an explicit, downloaded
+handoff from the current accepted checkpoint. It preserves object IDs, nested
+space IDs, laws, model metadata and the parent checkpoint hash, then gives the
+branch a distinct world/authority identity; it never appends offline edits to
+the shared history. Material bytes are intentionally not included in this
+public branch descriptor, so a fork starts paused for authority/geometry work
+and needs a separately reviewed material-host export before material evolution
+can resume. Reconnection/merge is not automatic.
+
 For direct Python invocation on a supported POSIX environment:
 
 ```sh
@@ -80,6 +89,7 @@ reloaded automatically.
 - Canonical state remains separate from the original legacy comparison
 - Two session-bound local actors; separate Eye coordinates, basis and slice
 - Explicit mapped root 4D → inner 11D entry and exact outer-Eye return
+- Explicit `vivo.offline-branch/1` fork receipt and downloadable checkpoint handoff
 - Full-dimensional accepted grip targets with capture-time freshness checks
 - Distinct provisional and accepted target markers; solid marks use accepted entity coordinates
 - Final pointer/hand samples, source-specific loss cleanup and explicit reconcile

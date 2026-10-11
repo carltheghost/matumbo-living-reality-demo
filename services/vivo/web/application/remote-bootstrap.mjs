@@ -33,8 +33,9 @@ peopleSheet.querySelector('a').hidden=true;
 const recordSheet=document.querySelector('[data-sheet="record"]');for(const child of [...recordSheet.children])child.hidden=true;
 const materialButton=element('button',{id:'remoteMaterial',textContent:'Run learned material'});
 const exportButton=element('button',{id:'remoteExport',textContent:'Export accepted world JSON'});
+const forkButton=element('button',{id:'remoteForkOffline',textContent:'Fork offline branch'});
 const reconcileButton=element('button',{id:'remoteReconcile',textContent:'Reconcile uncertain grips'});
-recordSheet.append(materialButton,exportButton,reconcileButton,element('p',{className:'muted',textContent:'Exports accepted world/Eye/history only. No invitation tokens, camera frames, microphone or private runtime token.'}));
+recordSheet.append(materialButton,exportButton,forkButton,reconcileButton,element('p',{className:'muted',textContent:'Exports accepted world/Eye/history only. Offline forks are explicit checkpoint handoffs; no invitation tokens, camera frames, microphone or private runtime token.'}));
 const badge=element('div',{id:'localCapabilities',textContent:'REMOTE · disconnected'});document.body.append(badge);
 
 async function gridFor(d){if(!grids.has(d)){const r=await fetch('/api/remote/grid?dimension='+d);if(!r.ok)throw Error(await r.text());grids.set(d,await r.json());}return grids.get(d);}
@@ -124,6 +125,7 @@ async function axisMove(sign){
 for(const [id,sign] of [['axisMinus',-1],['axisPlus',1]])$(id).onclick=safe(()=>axisMove(sign));
 $('remoteMaterial').onclick=safe(async()=>{await transport.materialRun(!state.capabilities.material.running);});
 $('remoteExport').onclick=safe(async()=>{await releaseAll();const data=await transport.export();const u=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)+'\n'],{type:'application/json'}));const a=element('a',{href:u,download:'vivo-remote-accepted.json'});a.click();setTimeout(()=>URL.revokeObjectURL(u),5000);});
+$('remoteForkOffline').onclick=safe(async()=>{await releaseAll();const receipt=await transport.forkOffline();if(receipt.status!=='accepted')throw Error(receipt.code);const branch=receipt.result,u=URL.createObjectURL(new Blob([JSON.stringify(branch,null,2)+'\n'],{type:'application/json'}));const a=element('a',{href:u,download:'vivo-remote-offline-'+branch.worldId.replace(/[^A-Za-z0-9_.-]/g,'_')+'.json'});a.click();setTimeout(()=>URL.revokeObjectURL(u),5000);say('Explicit offline branch created from accepted checkpoint '+branch.checkpointHash.slice(0,12)+'; shared history was not replayed.');});
 $('remoteReconcile').onclick=safe(()=>inputs.reconcileAll());
 $('makeInvite').onclick=safe(async()=>{if(role!=='owner')throw Error('Only owner creates invitations');const inv=await transport.createInvite(3600);const u=new URL(location.href);u.hash='token='+encodeURIComponent(inv.token);$('inviteLink').value=u.toString();say('One-hour editor invitation created. Token is shown once and stored only as a hash on the server.');});
 $('copyInvite').onclick=safe(()=>navigator.clipboard.writeText($('inviteLink').value));$('revokeInvites').onclick=safe(async()=>{if(role!=='owner')throw Error('Owner only');const list=await transport.listInvites();for(const inv of list)if(!inv.revoked&&inv.actorId!==transport.actorId)await transport.revokeInvite(inv.id);say('Guest invitations revoked.');});

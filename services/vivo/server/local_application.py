@@ -415,6 +415,23 @@ def make_local_app(data_dir=None, *, phase=False, adaptive=False, max_events=655
             capabilities['material']['running'] = requested and status['running']
         return status
 
+    async def synchronize_material_host(result):
+        """Fence the private Python pump when Node observes the last seat gone.
+
+        The Node authority owns the accepted running flag and its idle/session
+        sweep can change that flag without an HTTP materialRun request. Keep
+        the Python host in the same paused state before exposing a response;
+        the host also treats a private MATERIAL_PAUSED reply as this normal
+        lifecycle transition for the interval between requests.
+        """
+        if not material_host or not isinstance(result, dict):
+            return
+        state = result.get('state')
+        capabilities = state.get('capabilities') if isinstance(state, dict) else result.get('capabilities')
+        material = capabilities.get('material') if isinstance(capabilities, dict) else None
+        if isinstance(material, dict) and material.get('running') is False and material_host.status()['running']:
+            await material_host.set_running(False)
+
     async def root(request):
         require_local(request)
         raise web.HTTPFound('/local/')
@@ -456,6 +473,7 @@ def make_local_app(data_dir=None, *, phase=False, adaptive=False, max_events=655
         baseline = readiness_report(app['hub'], ROOT)
         ok = alive and python_ok and baseline['ok']
         if isinstance(detail, dict):
+            await synchronize_material_host(detail)
             annotate_material(detail.get('capabilities'))
         return web.json_response({**baseline, 'ok': ok, 'mode': 'canonical-local',
             'node': alive, 'python': python_ok, 'legacyComparisonPersistence': 'volatile memory' if store in ('sqlite', 'memory') else 'SQLite file',
@@ -598,6 +616,7 @@ def make_local_app(data_dir=None, *, phase=False, adaptive=False, max_events=655
                             await bridge.call('materialRun', token=header[7:], args={'running': False})
                     raise
         if material_host and isinstance(result, dict) and isinstance(result.get('state'), dict):
+            await synchronize_material_host(result)
             result['state']['materialHost'] = annotate_material(result['state'].get('capabilities'))
         return result if isinstance(result, web.StreamResponse) else web.json_response(result)
 

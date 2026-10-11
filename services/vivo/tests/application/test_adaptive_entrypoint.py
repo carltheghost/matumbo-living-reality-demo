@@ -76,4 +76,29 @@ class AdaptiveEntrypointTests(unittest.IsolatedAsyncioTestCase):
         self.assertGreater(moved2['snapshot']['spaces']['inner']['entities']['relic']['q'][10],0)
         await self.rpc(a,'materialRun',{'running':False})
 
+    async def test_last_local_session_pauses_adaptive_host_without_fault_and_rejoins(self):
+        opened = await self.open('one')
+        token = opened['token']
+        await self.rpc(token, 'materialRun', {'running': True})
+        running = await self.wait_for(token, lambda state:
+            state['materialHost']['running'] and state['materialHost']['acceptedSteps'] > 0)
+        accepted_before_close = running['materialHost']['acceptedSteps']
+
+        closed = await self.rpc(token, 'close')
+        self.assertFalse(closed['state']['capabilities']['material']['running'])
+
+        rejoined = await self.open('one')
+        state = await self.wait_for(rejoined['token'], lambda current:
+            not current['materialHost']['running'] and current['materialHost']['fault'] is None)
+        self.assertEqual(state['materialHost']['pauseReason'], 'MATERIAL_PAUSED')
+        self.assertGreaterEqual(state['materialHost']['acceptedSteps'], accepted_before_close)
+
+        await self.rpc(rejoined['token'], 'materialRun', {'running': True})
+        resumed = await self.wait_for(rejoined['token'], lambda current:
+            current['materialHost']['running'] and
+            current['materialHost']['acceptedSteps'] > accepted_before_close)
+        self.assertIsNone(resumed['materialHost']['fault'], resumed['materialHost'])
+        await self.rpc(rejoined['token'], 'materialRun', {'running': False})
+        await self.rpc(rejoined['token'], 'close')
+
 if __name__=='__main__':unittest.main()

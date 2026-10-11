@@ -16,6 +16,7 @@ from services.vivo_adaptive.adapter import AcceptedAdaptiveAdapter
 WALL_TICK_HZ = 2.0
 SIMULATION_STEP_SECONDS = .01
 _RACE = {"MATERIAL_STALE_AUTHORITY","MATERIAL_STALE_REVISION","MATERIAL_STALE_CONSTRAINTS"}
+_PAUSE = {"MATERIAL_PAUSED", "JOURNAL_BACKPRESSURE"}
 
 
 class AdaptiveHostError(RuntimeError):
@@ -65,6 +66,8 @@ class AdaptiveApplicationHost:
         self._stopped = False
         self._wake = asyncio.Event()
         self._fault = None
+        self._pause_reason = None
+        self._generation = 0
         self._accepted_steps = 0
         self._discarded_steps = 0
         self._last_sequence = None
@@ -79,7 +82,7 @@ class AdaptiveApplicationHost:
                 "simulationStepSeconds": SIMULATION_STEP_SECONDS, "acceptedSteps": self._accepted_steps,
                 "discardedSteps": self._discarded_steps, "acceptedSequence": self._last_sequence,
                 "tick": self._last_tick, "simulationTime": self._simulation_time,
-                "fault": copy.deepcopy(self._fault)}
+                "pauseReason": self._pause_reason, "fault": copy.deepcopy(self._fault)}
 
     def _fail(self, error, stage):
         code = getattr(error, "code", None)
@@ -88,6 +91,7 @@ class AdaptiveApplicationHost:
         self._fault = {"code": code, "stage": stage,
                        "message": "Adaptive material stopped. Restart after inspecting the local service."}
         self._running = False
+        self._generation += 1
         self._wake.set()
 
     async def start(self):
@@ -110,13 +114,17 @@ class AdaptiveApplicationHost:
             raise AdaptiveHostError("MATERIAL_RUN_FLAG")
         if running and (not self._started or self._stopped or self._fault):
             raise AdaptiveHostError("MATERIAL_HOST_RESTART_REQUIRED")
-        self._running = running
-        self._wake.set()
+        if running != self._running:
+            self._running = running
+            self._pause_reason = None
+            self._generation += 1
+            self._wake.set()
         return self.status()
 
     async def stop(self):
         self._running = False
         self._stopped = True
+        self._generation += 1
         self._wake.set()
         if self._task:
             await self._task
@@ -143,8 +151,12 @@ class AdaptiveApplicationHost:
             next_at = max(next_at + interval, loop.time())
             if not self._running or self._stopped:
                 continue
+            generation = self._generation
             try:
                 capture = await self._call("materialCapture", args={"spaceId": "root"})
+                if not self._running or self._stopped or generation != self._generation:
+                    self._discarded_steps += 1
+                    continue
                 snapshot = capture["snapshot"]
                 validate_adaptive_checkpoint(snapshot, capture["checkpoint"])
                 if snapshot["worldId"] != self._world_id or snapshot["authorityId"] != self._authority_id:
@@ -157,13 +169,25 @@ class AdaptiveApplicationHost:
                     dt=SIMULATION_STEP_SECONDS,
                     tick=capture["checkpoint"]["tick"] + 1,
                 )
+                if not self._running or self._stopped or generation != self._generation:
+                    self._discarded_steps += 1
+                    continue
                 accepted = await self._call("materialApply", args={"proposal": proposal})
                 self._accepted_steps += 1
                 self._last_sequence = accepted["acceptedSequence"]
                 self._last_tick = proposal["fieldState"]["tick"]
                 self._simulation_time = proposal["fieldState"]["simulationTime"]
             except Exception as error:
-                if getattr(error, "code", None) in _RACE:
+                code = getattr(error, "code", None)
+                if code in _PAUSE:
+                    self._discarded_steps += 1
+                    if self._running and not self._stopped and generation == self._generation:
+                        self._running = False
+                        self._pause_reason = code
+                        self._generation += 1
+                        self._wake.set()
+                    continue
+                elif code in _RACE:
                     self._discarded_steps += 1
                     continue
                 self._fail(error, "step")

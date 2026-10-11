@@ -13,6 +13,49 @@ const fail = code => { throw Object.assign(new Error(code), {code}); };
 const key = (...parts) => JSON.stringify(parts);
 const uuid = () => crypto.randomUUID();
 
+async function offlineBranch(state, actorId, payload) {
+  const branchAuthorityId = 'offline.' + (await sha256({
+    parentAuthorityId: state.snapshot.authorityId,
+    parentCheckpointHash: state.snapshot.stateHash,
+    newWorldId: payload.newWorldId,
+  })).slice(0, 32);
+  const snapshot = clone(state.snapshot);
+  snapshot.worldId = payload.newWorldId;
+  snapshot.authorityId = branchAuthorityId;
+  snapshot.acceptedSequence = 0;
+  snapshot.stateHash = '0'.repeat(64);
+  snapshot.branch = {
+    schema: 'vivo.offline-branch/1',
+    mode: 'offline',
+    parentWorldId: state.snapshot.worldId,
+    parentAuthorityId: state.snapshot.authorityId,
+    parentCheckpointHash: state.snapshot.stateHash,
+    parentAcceptedSequence: state.snapshot.acceptedSequence,
+  };
+  const branchState = {snapshot, leases: {}, epochs: {}, receipts: {}, events: [], eyes: {}};
+  snapshot.stateHash = await sha256({snapshot: {...snapshot, stateHash: null}, leases: {}, eyes: {}});
+  const eye = state.eyes[key(actorId, 'main')] ? clone(state.eyes[key(actorId, 'main')]) : null;
+  const material = state.material ? {
+    protocol: state.material.protocol,
+    state: 'paused',
+    checkpointIncluded: false,
+    checkpointDigest: await sha256(state.material.checkpoint),
+  } : null;
+  return {
+    schema: 'vivo.offline-branch/1',
+    mode: 'offline',
+    worldId: snapshot.worldId,
+    authorityId: snapshot.authorityId,
+    parentWorldId: state.snapshot.worldId,
+    parentAuthorityId: state.snapshot.authorityId,
+    checkpointHash: state.snapshot.stateHash,
+    acceptedSequence: snapshot.acceptedSequence,
+    snapshot: clone(branchState.snapshot),
+    eye,
+    material,
+  };
+}
+
 /** Atomic in-process test/personal-session store; explicitly volatile, not disk persistence. */
 export class MemoryAuthorityStore {
   #value = null;
@@ -240,6 +283,22 @@ export class LocalLeaseWorld {
       if(prior) return prior.fingerprint===fingerprint?clone(prior.receipt):reject('COMMAND_ID_REUSE');
       if(['space.enter','space.exit'].includes(command.kind)) return this.#navigate(token,command,fingerprint,requestKey);
       if(client.role!=='editor') return reject('VIEWER');
+      if(command.kind==='world.fork') {
+        if(command.spaceId!==s.snapshot.rootSpaceId) return reject('FORK_ROOT_ONLY');
+        if(command.expectedRevision!==s.snapshot.acceptedSequence) return reject('STALE_WORLD');
+        if(p.checkpointHash!==s.snapshot.stateHash) return reject('FORK_CHECKPOINT_MISMATCH');
+        if(p.newWorldId===s.snapshot.worldId) return reject('FORK_WORLD_ID');
+        const branch=await offlineBranch(s,client.session.actorId,p),next=clone(s);
+        await this.#advance(next,'world-fork',client.session.actorId,{
+          schema:'vivo.offline-branch/1',worldId:branch.worldId,authorityId:branch.authorityId,
+          parentWorldId:branch.parentWorldId,parentAuthorityId:branch.parentAuthorityId,
+          checkpointHash:branch.checkpointHash,
+        });
+        const receipt={...this.#receipt(command,'accepted','OFFLINE_BRANCH',null,branch),
+          acceptedSequence:next.snapshot.acceptedSequence,stateHash:next.snapshot.stateHash};
+        next.receipts[requestKey]={fingerprint,receipt};
+        await this.#save(next);return clone(receipt);
+      }
       if(!['grab.begin','grab.target','grab.end'].includes(command.kind)) return reject('NOT_IMPLEMENTED');
       const space=Object.hasOwn(s.snapshot.spaces,command.spaceId)?s.snapshot.spaces[command.spaceId]:null;
       const entity=space&&Object.hasOwn(space.entities,p.entityId)?space.entities[p.entityId]:null;

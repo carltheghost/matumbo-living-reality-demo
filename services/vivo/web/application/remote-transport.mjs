@@ -1,6 +1,8 @@
 /** Canonical remote Vivo transport over one authenticated WebSocket.
  * The server-owned runtime token is never exposed to this client.
  */
+import {offlineForkCommand} from './offline-branch.mjs';
+
 export class RemoteTransport {
   constructor({url,token,WebSocket:Socket=globalThis.WebSocket,onState=()=>{},onError=()=>{},timeoutMs=7000}={}) {
     if(typeof url!=='string'||!url.length||typeof token!=='string'||token.length<20||typeof Socket!=='function')
@@ -72,6 +74,7 @@ export class RemoteTransport {
   getSnapshot(){if(!this.current)throw Error('NO_SNAPSHOT');return structuredClone(this.current.snapshot);}
   subscribe(listener){this.listeners.add(listener);return()=>this.listeners.delete(listener);}
   submit(command){return this.call('submit',{command});}
+  forkOffline(options={}){return this.submit(offlineForkCommand(this.current?.snapshot,options));}
   inspectLease(spaceId,entityId,criteria={}){return this.call('inspectLease',{spaceId,entityId,...(Object.keys(criteria).length?{criteria}:{})});}
   renewLease(leaseId){return this.call('renewLease',{leaseId});}
   reconcileLease(event){return this.call('reconcileLease',{event});}
