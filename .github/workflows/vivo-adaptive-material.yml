@@ -7,6 +7,12 @@ on:
       - 'services/vivo/server/reference.py'
       - 'services/vivo_material/driver.py'
       - 'coordination/vivo/ADAPTIVE-MATERIAL-STAGE.md'
+      - 'services/vivo/contracts/**'
+      - 'services/vivo/web/authority/**'
+      - 'services/vivo/tests/adaptive-authority/**'
+      - 'services/vivo/server/application/**'
+      - 'services/vivo/server/local_application.py'
+      - 'services/vivo/web/application/**'
       - '.github/workflows/vivo-adaptive-material.yml'
 permissions:
   contents: read
@@ -26,6 +32,7 @@ jobs:
           python -m unittest discover -s services/vivo_adaptive/tests -v
           node --test services/vivo/tests/adaptive-authority/*.test.mjs
           node --test services/vivo/tests/material-authority/*.test.mjs
+          node --test services/vivo/tests/integration/contracts.test.mjs
           python -m unittest services.vivo.tests.application.test_adaptive_entrypoint -v
       - name: Scope
         run: echo 'Learned graph material unit/numerical checks only; authority/app/browser/device integration is separate.'
