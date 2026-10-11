@@ -55,7 +55,8 @@ class MountedApplicationTests(unittest.IsolatedAsyncioTestCase):
             port = sock.getsockname()[1]
         self.base = f'http://127.0.0.1:{port}'
         self.proc = await asyncio.create_subprocess_exec(sys.executable, '-m', 'server.local_application',
-            '--port', str(port), '--data-dir', str(self.data_directory()), '--store', self.store, cwd=ROOT,
+            '--port', str(port), '--data-dir', str(self.data_directory()), '--store', self.store,
+            '--journal-events', str(getattr(self, 'max_events', 65536)), cwd=ROOT,
             stdout=self.log, stderr=self.log)
         for _ in range(100):
             if self.proc.returncode is not None:
@@ -170,6 +171,38 @@ class MountedApplicationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('session-only and resets with the server', text)
         self.assertIn('head-pointer mode is explicitly unavailable', text)
         self.assertNotIn('Open `http://127.0.0.1:8766/`. Choose Seat one.', text)
+
+    async def test_mounted_journal_capacity_revokes_studio_writes_without_mutation(self):
+        await self.stop()
+        self.max_events = 18
+        await self.start()
+        one = await self.open('one')
+        await self.open('two')
+        state = await self.rpc(one, 'state')
+        while state['state']['journal']['remainingEvents'] > 1:
+            eye = state['state']['eye']
+            eye['q'][0] += .01
+            eye['slice']['x1'] = eye['q'][0]
+            state = await self.rpc(one, 'moveEye', {'view': eye, 'expectedRevision': eye['revision']})
+        self.assertTrue(state['state']['journal']['readOnly'])
+        capability = state['state']['capabilities']['studio']['canonicalCommit']
+        self.assertFalse(capability['allowed'])
+        self.assertEqual(capability['rejectionCode'], 'JOURNAL_BACKPRESSURE')
+        self.assertIn('read-only', capability['reason'])
+        before = state['state']['snapshot']
+        binding = before['studioBindings']['studio.node.echo']
+        entity = before['spaces'][binding['spaceId']]['entities'][binding['entityId']]
+        common = {key: binding[key] for key in ('bindingId', 'sourceModel', 'sourceNode', 'entityId', 'dimension', 'chart', 'q', 'metadata')}
+        transform = self.command(one, 'studio.transform', common, revision=before['acceptedSequence'])
+        transform_result = await self.rpc(one, 'submit', {'command': transform}, expected=409)
+        self.assertEqual(transform_result['error'], 'JOURNAL_BACKPRESSURE')
+        commit = self.command(one, 'studio.commit', {**common,
+            'expectedBindingRevision': binding['bindingRevision'],
+            'expectedEntityRevision': entity['revision']}, revision=before['acceptedSequence'])
+        commit_result = await self.rpc(one, 'submit', {'command': commit}, expected=409)
+        self.assertEqual(commit_result['error'], 'JOURNAL_BACKPRESSURE')
+        after = (await self.rpc(one, 'state'))['state']['snapshot']
+        self.assertEqual(after, before)
 
     async def test_actual_entrypoint_serves_entire_browser_esm_import_graph(self):
         queue = ['/application/bootstrap.mjs']

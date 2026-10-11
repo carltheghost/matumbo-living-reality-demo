@@ -50,7 +50,9 @@ async def main():
             assert "driver-authoritative" in capability["reason"]
             assert await page.locator("[data-vivo-authority-commit]").is_disabled()
             rejected = await page.evaluate("window.__vivoStudioAuthorityBridge.commitCanonical()")
-            assert rejected == {"status": "rejected", "code": "STUDIO_MATERIAL_BOUNDARY"}
+            assert rejected["status"] == "rejected"
+            assert rejected["code"] == "STUDIO_MATERIAL_BOUNDARY"
+            assert "driver-authoritative" in rejected["reason"]
             after = await page.evaluate("window.__vivoStudioAuthorityBridge.debug()")
             assert after["acceptedEntityQ"] == before["acceptedEntityQ"]
             assert after["acceptedEntityRevision"] == before["acceptedEntityRevision"]

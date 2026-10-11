@@ -188,8 +188,11 @@ material limit, physics alone consumes at most 7,200 events per wall hour; input
 renewals and Eye movement add records, and byte backpressure may arrive first.
 The journal preserves accepted records with explicit event/byte backpressure.
 Capacity and remaining budget appear in Saved state. New writes become read-only
-before cleanup headroom is consumed; history is never silently truncated. Saved
-seats may be admitted read-only to inspect/export after restart. Long-running
+before cleanup headroom is consumed; history is never silently truncated. At
+that boundary the runtime advertises `JOURNAL_BACKPRESSURE`, and the Full Studio
+bridge disables both `Publish selected` and `Commit canonical`; a race that
+reaches the gate returns a structured rejection without mutating accepted state.
+Saved seats may be admitted read-only to inspect/export after restart. Long-running
 compaction/continuation and sustained high-rate journal performance remain gates.
 
 ## Explicit SQLite backend (separate candidate)

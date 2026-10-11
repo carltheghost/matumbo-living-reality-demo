@@ -262,20 +262,25 @@ export class MountedRuntime {
   }
   #capabilities() {
     const memory=this.#store.kind==='memory';
+    const journal=this.#journal();
     const material=this.#phase?{profile:'phase',dimension:4,spaceId:'root',resolution:[8,8,8,8],running:this.#materialRunning,simulationStep:.02,wallIntervalMs:500,leaseRevisionProtocol:'vivo.lease-material/1'}:
       this.#adaptive?{profile:'adaptive-graph',dimensions:[4,11],spaceId:'root',running:this.#materialRunning,simulationStep:.01,wallIntervalMs:500,leaseRevisionProtocol:'vivo.lease-adaptive/1',modelHashes:['9ab89f46361e397fe41845d86ecc23e38f75561032fd65ae9f8389e9780afdb0']}:null;
+    const journalWriteBlock=journal.readOnly&&!material?{
+      allowed:false,durable:false,rejectionCode:journal.fault??'JOURNAL_BACKPRESSURE',
+      reason:journal.fault?'The durable authority store is read-only; Studio writes are unavailable until the store is restarted and verified.':'Accepted history is read-only at its cleanup reserve; Studio writes are unavailable until a reviewed journal continuation is provisioned.'}:null;
+    const canonicalCommit=material?{allowed:false,durable:false,rejectionCode:'STUDIO_MATERIAL_BOUNDARY',
+      reason:'Material-owned bindings remain driver-authoritative; canonical Studio commit is unavailable.'}:
+      journalWriteBlock??{allowed:true,durable:!memory,rejectionCode:null,
+        reason:memory?'Canonical commits are accepted for this process, but memory mode resets accepted changes when the server restarts.':
+        'Canonical Studio commit is available for unbound authority objects and persists through the configured durable store.'};
     return {materialDynamics:!!material,materialLearning:this.#adaptive,remoteMultiplayer:false,localSeats:2,nested:true,
       material,
-      studio:{projection:true,canonicalCommit:{allowed:!material,durable:!memory,
-        rejectionCode:material?'STUDIO_MATERIAL_BOUNDARY':null,
-        reason:material?'Material-owned bindings remain driver-authoritative; canonical Studio commit is unavailable.':
-          memory?'Canonical commits are accepted for this process, but memory mode resets accepted changes when the server restarts.':
-          'Canonical Studio commit is available for unbound authority objects and persists through the configured durable store.'}},
+      studio:{projection:true,canonicalCommit},
       persistence:memory?'Session-only volatile memory; no backend world/checkpoint/database file':this.#store.kind==='sqlite'?'SQLite WAL/FULL exclusive checkpoint':'POSIX atomic checkpoint',
       persistenceMode:memory?'session-only':'durable',sessionOnly:memory,
       sessionOnlyGuarantee:memory?'Accepted world, checkpoint and database state exists only while this local server process runs; OS/browser writes are outside this guarantee.':null,
       sessionIdleMs:SESSION_IDLE_MS,
-      maxRequestBytes:MAX_LINE_BYTES,leaseMs:3000,journal:this.#journal()};
+      maxRequestBytes:MAX_LINE_BYTES,leaseMs:3000,journal};
   }
   get capabilities() {return this.#capabilities();}
   get closed() {return this.#stopped;}

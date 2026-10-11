@@ -63,6 +63,72 @@ jobs:
           name: vivo-mounted-application-evidence-node-${{ matrix.node }}
           path: application-evidence/
           retention-days: 7
+  browser-studio-authority-capacity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned runtime and browser-test requirements
+        run: python -m pip install -r services/vivo/requirements-dev.txt
+      - name: Install the pinned Playwright Chromium browser
+        run: python -m playwright install --with-deps chromium
+      - name: Stage the exact input dependency
+        run: python scripts/vivo/stage_input_dependency.py
+      - name: Run the mounted journal-capacity and write-race regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p browser-evidence
+          data_dir="$(mktemp -d)"
+          server_pid=''
+          cleanup() {
+            if [ -n "$server_pid" ] && kill -0 "$server_pid" 2>/dev/null; then
+              kill "$server_pid" 2>/dev/null || true
+              wait "$server_pid" 2>/dev/null || true
+            fi
+            rm -rf "$data_dir"
+          }
+          trap cleanup EXIT
+          VIVO_PYTHON=python services/vivo/start-canonical-local.sh --store posix --journal-events 18 --data-dir "$data_dir" --port 8769 >browser-evidence/server-capacity.log 2>&1 &
+          server_pid=$!
+          python - <<'PY'
+          import json
+          import time
+          from urllib.request import urlopen
+
+          url = 'http://127.0.0.1:8769/api/local/ready'
+          deadline = time.monotonic() + 45
+          last = None
+          while time.monotonic() < deadline:
+              try:
+                  with urlopen(url, timeout=2) as response:
+                      body = json.load(response)
+                  if response.status == 200 and body.get('ok') is True:
+                      print('local capacity application ready')
+                      break
+                  last = body
+              except Exception as error:
+                  last = f'{type(error).__name__}: {error}'
+              time.sleep(0.25)
+          else:
+              raise SystemExit(f'local capacity readiness timeout: {last!r}')
+          PY
+          timeout --signal=TERM 90s python services/vivo/tests/application/browser_studio_authority_capacity.py \
+            http://127.0.0.1:8769/local/ browser-evidence/browser-studio-authority-capacity.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vivo-mounted-browser-studio-authority-capacity-evidence
+          path: browser-evidence/
+          retention-days: 7
+      - name: Scope notice
+        run: echo 'This is synthetic Chromium loopback evidence for journal-capacity write gating and race settlement; it does not certify physical camera, hand, head, AR, VR, public networking or deployment behavior.'
   browser-x4:
     runs-on: ubuntu-latest
     timeout-minutes: 10

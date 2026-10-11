@@ -41,7 +41,7 @@ export class StudioAuthorityBridge {
     this.bindingId=bindingId(new URL(location.href).searchParams.get('binding'));
     this.lastApplied=null;this.localDiverged=false;this.pendingRemote=null;this.publishConflict=null;this.publishOverrideArmed=false;
     this.seat=seatId(new URL(location.href).searchParams.get('seat'));
-    this.pollTimer=null;this.closed=false;this.message='Not connected. Accepted state is untouched.';this.xr=null;this.canonicalCommitResult=null;
+    this.pollTimer=null;this.closed=false;this.message='Not connected. Accepted state is untouched.';this.xr=null;this.canonicalCommitResult=null;this.publishResult=null;
     this.mount();
   }
   mount(){
@@ -92,8 +92,18 @@ export class StudioAuthorityBridge {
   bindingName(){return this.currentBinding()?.metadata?.name??this.bindingDefinition().metadata.name;}
   localQ(){try{return mapStudioNodeToCanonical(this.app.snapshot(),this.currentBinding()?.sourceNode??this.bindingDefinition().sourceNode);}catch{return null;}}
   currentBinding(){return this.state?.snapshot?.studioBindings?.[this.bindingId]??null;}
+  journalWriteCapability(){
+    const journal=this.state?.journal;
+    if(!journal?.readOnly&&!journal?.backpressure)return null;
+    return {allowed:false,durable:false,rejectionCode:journal.fault??'JOURNAL_BACKPRESSURE',
+      reason:journal.fault?'The durable authority store is read-only; Studio writes are unavailable until the store is restarted and verified.':'Accepted history is read-only at its cleanup reserve; Studio writes are unavailable until a reviewed journal continuation is provisioned.'};
+  }
   canonicalCommitCapability(){
     const advertised=this.state?.capabilities?.studio?.canonicalCommit;
+    // Material ownership remains the stronger boundary than journal capacity:
+    // the driver, not Studio, owns canonical material updates.
+    if(advertised?.rejectionCode==='STUDIO_MATERIAL_BOUNDARY')return copy(advertised);
+    const journalBlocked=this.journalWriteCapability();if(journalBlocked)return journalBlocked;
     if(advertised&&typeof advertised.allowed==='boolean'){
       const capability=copy(advertised),permissions=this.transport?.session?.capabilities;
       if(capability.allowed&&Array.isArray(permissions)&&!permissions.includes('grab'))return {allowed:false,durable:false,rejectionCode:'STUDIO_PERMISSION_DENIED',reason:'The current authority seat is read-only; canonical Studio commit requires an editor permission.'};
@@ -103,8 +113,23 @@ export class StudioAuthorityBridge {
     return {allowed:false,durable:false,rejectionCode:'STUDIO_COMMIT_UNAVAILABLE',reason:'Authority did not advertise canonical commit capability; this action is fail-closed.'};
   }
   capabilityMessage(capability){
-    if(!capability.allowed)return 'Canonical commit unavailable: '+(capability.reason||capability.rejectionCode||'authority denied it')+'.';
+    const reason=String(capability.reason||capability.rejectionCode||'authority denied it').trim();
+    if(!capability.allowed)return 'Canonical commit unavailable: '+reason+(/[.!?]$/.test(reason)?'':'.');
     return capability.durable?'Canonical commit available; accepted changes persist through the configured durable store.':'Canonical commit available for this session only; memory mode resets accepted changes when the server restarts.';
+  }
+  structuredWriteRejection(action,capability){
+    const result={status:'rejected',code:capability.rejectionCode||'JOURNAL_BACKPRESSURE',reason:capability.reason||'Accepted history is read-only; Studio writes are unavailable.',acceptedSequence:this.state?.snapshot?.acceptedSequence??null};
+    if(action==='commit')this.canonicalCommitResult=copy(result);else this.publishResult=copy(result);
+    this.setMessage((action==='commit'?'Canonical commit':'Publish')+' rejected: '+result.reason,'ERROR');this.updateUI();return result;
+  }
+  async settleJournalBackpressure(action){
+    // A queued observer/read can update capacity after the write gate rejects.
+    // Reconcile it for the UI, but keep the rejected write as an explicit result
+    // even if the refreshed capability is no longer blocked.
+    if(this.transport&&!this.transport.closed){try{await this.transport.refresh();}catch{}}
+    return this.structuredWriteRejection(action,this.journalWriteCapability()??{
+      allowed:false,durable:false,rejectionCode:'JOURNAL_BACKPRESSURE',
+      reason:'Accepted history became read-only while this Studio write was preparing; no mutation was accepted.'});
   }
   populateBindingSelector(){
     const selector=this.root?.querySelector('[data-vivo-authority-binding]');if(!selector)return;
@@ -170,6 +195,7 @@ export class StudioAuthorityBridge {
   }
   async publish(){
     if(!this.transport||this.transport.closed)throw Error('AUTHORITY_NOT_CONNECTED');
+    const journalBlocked=this.journalWriteCapability();if(journalBlocked)return this.structuredWriteRejection('publish',journalBlocked);
     const q=this.markLocalDivergence();if(!q)throw Error('STUDIO_NODE_UNAVAILABLE');
     const conflict=this.publishConflict;
     if(conflict){
@@ -195,8 +221,10 @@ export class StudioAuthorityBridge {
       this.publishOverrideArmed=false;this.setMessage('Accepted '+this.bindingName()+' changed while publish was preparing. Publish again to explicitly replace it, or Apply accepted.','CONFLICT');this.updateUI();return this.blockedPublish();
     }
     const snapshot=this.transport.getSnapshot();const command=studioTransformCommand(snapshot,freshQ,{bindingId:this.bindingId,metadata:freshBinding?.metadata,expectedRevision:snapshot.acceptedSequence,commandId:'studio.transform.'+crypto.randomUUID()});
-    const receipt=await this.transport.submit(command);
+    let receipt;try{receipt=await this.transport.submit(command);}catch(error){if(error.code==='JOURNAL_BACKPRESSURE')return this.settleJournalBackpressure('publish');throw error;}
+    this.publishResult=copy(receipt);
     if(receipt.status!=='accepted'){
+      if(receipt.code==='JOURNAL_BACKPRESSURE')return this.settleJournalBackpressure('publish');
       if(receipt.code==='STALE_WORLD'){
         // The submit response already carries a current state, but make the
         // recovery explicit and never retry the rejected command implicitly.
@@ -222,8 +250,7 @@ export class StudioAuthorityBridge {
     }
     const capability=this.canonicalCommitCapability();
     if(!capability.allowed){
-      const result={status:'rejected',code:capability.rejectionCode||'STUDIO_COMMIT_UNAVAILABLE'};
-      this.canonicalCommitResult=copy(result);this.setMessage(this.capabilityMessage(capability),'ERROR');this.updateUI();return result;
+      return this.structuredWriteRejection('commit',capability);
     }
     if(!this.transport||this.transport.closed)throw Error('AUTHORITY_NOT_CONNECTED');
     if(this.publishConflict){
@@ -246,8 +273,10 @@ export class StudioAuthorityBridge {
     const command=studioCommitCommand(snapshot,freshQ,{bindingId:this.bindingId,metadata:freshBinding.metadata,
       expectedRevision:snapshot.acceptedSequence,expectedBindingRevision:freshBinding.bindingRevision,
       expectedEntityRevision:freshEntity.revision,commandId:'studio.commit.'+crypto.randomUUID()});
-    const receipt=await this.transport.submit(command);this.canonicalCommitResult=copy(receipt);
+    let receipt;try{receipt=await this.transport.submit(command);}catch(error){if(error.code==='JOURNAL_BACKPRESSURE')return this.settleJournalBackpressure('commit');throw error;}
+    this.canonicalCommitResult=copy(receipt);
     if(receipt.status!=='accepted'){
+      if(receipt.code==='JOURNAL_BACKPRESSURE')return this.settleJournalBackpressure('commit');
       this.setMessage('Canonical commit rejected: '+receipt.code+'. Accepted state and local Studio were not changed by this action.','CONFLICT');this.updateUI();return receipt;
     }
     this.localDiverged=false;
@@ -268,13 +297,13 @@ export class StudioAuthorityBridge {
     this.xr={secureContext:secure,webXRAPI:api,arSupported:ar,vrSupported:vr,sessionStarted:false};
     this.setMessage('XR capability only: immersive AR '+(ar?'available':'unavailable')+', VR '+(vr?'available':'unavailable')+'. No camera or XR session was started.');return copy(this.xr);
   }
-  async close(){clearTimeout(this.pollTimer);if(this.transport&&!this.transport.closed)await this.transport.close();this.transport=null;this.state=null;this.remoteBinding=null;this.pendingRemote=null;this.localDiverged=false;this.publishConflict=null;this.publishOverrideArmed=false;this.canonicalCommitResult=null;this.updateUI();}
+  async close(){clearTimeout(this.pollTimer);if(this.transport&&!this.transport.closed)await this.transport.close();this.transport=null;this.state=null;this.remoteBinding=null;this.pendingRemote=null;this.localDiverged=false;this.publishConflict=null;this.publishOverrideArmed=false;this.canonicalCommitResult=null;this.publishResult=null;this.updateUI();}
   updateUI(){
-    if(!this.root)return;this.populateBindingSelector();const connected=!!this.transport&&!this.transport.closed,local=this.markLocalDivergence(),capability=this.canonicalCommitCapability();
+    if(!this.root)return;this.populateBindingSelector();const connected=!!this.transport&&!this.transport.closed,local=this.markLocalDivergence(),journalBlocked=!!this.journalWriteCapability(),capability=this.canonicalCommitCapability();
     this.root.querySelector('[data-vivo-authority-connect]').disabled=connected;
     this.root.querySelector('[data-vivo-authority-refresh]').disabled=!connected;
     this.root.querySelector('[data-vivo-authority-apply]').disabled=!this.remoteBinding;
-    this.root.querySelector('[data-vivo-authority-publish]').disabled=!connected||!local;
+    this.root.querySelector('[data-vivo-authority-publish]').disabled=!connected||!local||journalBlocked;
     this.root.querySelector('[data-vivo-authority-commit]').disabled=!connected||!local||!capability.allowed||!!this.publishConflict;
     this.root.querySelector('[data-vivo-authority-fork]').disabled=!connected;
     const capabilityNode=this.root.querySelector('[data-vivo-authority-capability]');if(capabilityNode)capabilityNode.textContent=this.capabilityMessage(capability);
@@ -286,7 +315,7 @@ export class StudioAuthorityBridge {
       acceptedEntityQ:copy(entity?.q??null),acceptedEntityRevision:entity?.revision??null,selectedEntityId:binding?.entityId??null,selectedSpaceId:binding?.spaceId??null,
       lastApplied:this.lastApplied?copy(this.lastApplied):null,localDiverged:this.localDiverged,pendingRemote:this.pendingRemote?copy(this.pendingRemote):null,
       publishConflict:this.publishConflict?copy(this.publishConflict):null,publishOverrideArmed:this.publishOverrideArmed,
-      canonicalCommitCapability:this.canonicalCommitCapability(),canonicalCommitResult:this.canonicalCommitResult?copy(this.canonicalCommitResult):null,
+      journal:this.state?.journal?copy(this.state.journal):null,canonicalCommitCapability:this.canonicalCommitCapability(),canonicalCommitResult:this.canonicalCommitResult?copy(this.canonicalCommitResult):null,publishResult:this.publishResult?copy(this.publishResult):null,
       authorityEye:copy(this.state?.eye??null),worldEyesIndependent:true,xr:this.xr?copy(this.xr):null};
   }
 }
