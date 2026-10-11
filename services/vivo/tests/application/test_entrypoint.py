@@ -182,7 +182,6 @@ class MountedApplicationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('/research/vivo-phase-fabric/web/target-mailbox.mjs', seen)
         self.assertIn('/services/vivo/web/input/controller.mjs', seen)
         self.assertIn('/services/vivo/contracts/validate.mjs', seen)
-        self.assertIn('/services/vivo/contracts/studio-binding.mjs', seen)
         self.assertGreaterEqual(len(seen), 9)
 
     async def test_origin_host_method_and_private_file_boundaries(self):

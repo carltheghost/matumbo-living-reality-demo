@@ -44,7 +44,7 @@ prior grips and retains its accepted Eye. Tokens are kept in tab sessionStorage,
 never in the checkpoint. A server restart invalidates all old tokens;
 explicitly clear/reopen the expired seat if the UI asks.
 
-The Studio and accepted preview retain separate state models. Studio
+The Studio and accepted preview retain intentionally separate state models. Studio
 browser saves/history/video and JSON exports do not become accepted backend
 state automatically. The optional bridge carries only the versioned Echo
 projection binding through the authority; it does not copy Studio velocities,
