@@ -100,11 +100,44 @@ test('reordered compatible detections still preserve handed identities after the
   assert.deepEqual(reordered.conflictingIds, []);
 });
 
-test('low-confidence contradictory labels do not force a release when motion still supports continuity', () => {
+test('low-confidence contradictory labels preserve the trusted identity until a later strong contradiction', () => {
   const first = matchHands([{ landmarks: makeHand({ open: true, offset: 0 }), handedness: 'Left', confidence: 0.99 }]);
   const uncertain = matchHands([{ landmarks: makeHand({ open: true, offset: 0.02 }), handedness: 'Right', confidence: 0.2 }], first);
   assert.equal(uncertain[0].id, 'hand-1');
+  assert.equal(uncertain[0].handedness, 'left');
   assert.deepEqual(uncertain.conflictingIds, []);
+  const replacement = matchHands([{ landmarks: makeHand({ offset: 0.04 }), handedness: 'Right', confidence: 0.99 }], uncertain);
+  assert.notEqual(replacement[0].id, 'hand-1');
+  assert.deepEqual(replacement.conflictingIds, ['hand-1']);
+});
+
+test('a low-confidence one-to-two bridge cannot erase a trusted identity fence', () => {
+  const first = matchHands([{ landmarks: makeHand({ open: true, offset: 0 }), handedness: 'Left', confidence: 0.99 }]);
+  const uncertain = matchHands([{ landmarks: makeHand({ open: true, offset: 0.02 }), handedness: 'Right', confidence: 0.2 }], first);
+  const replacement = matchHands([
+    { landmarks: makeHand({ offset: 0.04 }), handedness: 'Right', confidence: 0.99 },
+    { landmarks: makeHand({ open: true, offset: 1 }), handedness: 'Right', confidence: 0.99 },
+  ], uncertain);
+  assert.equal(replacement.some(hand => hand.id === 'hand-1'), false);
+  assert.deepEqual(replacement.conflictingIds, ['hand-1']);
+});
+
+test('a low-confidence two-to-two bridge cannot erase either trusted identity fence', () => {
+  const first = matchHands([
+    { landmarks: makeHand({ open: true, offset: 0 }), handedness: 'Left', confidence: 0.99 },
+    { landmarks: makeHand({ open: true, offset: 1 }), handedness: 'Right', confidence: 0.99 },
+  ]);
+  const uncertain = matchHands([
+    { landmarks: makeHand({ open: true, offset: 0.02 }), handedness: 'Right', confidence: 0.2 },
+    { landmarks: makeHand({ open: true, offset: 1.02 }), handedness: 'Right', confidence: 0.99 },
+  ], first);
+  assert.equal(uncertain.find(hand => hand.center[0] < 0.5)?.id, 'hand-1');
+  const replacement = matchHands([
+    { landmarks: makeHand({ offset: 0.04 }), handedness: 'Right', confidence: 0.99 },
+    { landmarks: makeHand({ open: true, offset: 1.04 }), handedness: 'Right', confidence: 0.99 },
+  ], uncertain);
+  assert.equal(replacement.some(hand => hand.id === 'hand-1'), false);
+  assert.deepEqual(replacement.conflictingIds, ['hand-1']);
 });
 
 test('near-tie crossing is explicitly ambiguous instead of transferring ownership', () => {

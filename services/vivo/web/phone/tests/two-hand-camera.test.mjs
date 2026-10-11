@@ -301,3 +301,41 @@ test('explicit stop during worker initialization fences a late ready result', as
   assert.equal(camera.active, false);
 });
 
+test('a delayed error from an old worker cannot stop a newer active session', async () => {
+  const workers = [];
+  class SessionWorker {
+    constructor() { workers.push(this); }
+    postMessage() {}
+    terminate() { this.terminated = true; }
+  }
+  const track = { stopped: 0, stop() { this.stopped++; }, getSettings: () => ({ facingMode: 'user' }) };
+  const { scope } = startScope({ getUserMedia: async () => streamWith(track), Worker: SessionWorker });
+  const camera = new PhoneTwoHandCamera({ video: video(), renderer: {}, scope });
+  const first = camera.start();
+  for (let i = 0; i < 10 && workers.length < 1; i++) await Promise.resolve();
+  assert.equal(workers.length, 1);
+  const firstStopped = assert.rejects(first, /Starting local hand tracker/);
+  const second = camera.start();
+  for (let i = 0; i < 10 && workers.length < 2; i++) await Promise.resolve();
+  assert.equal(workers.length, 2);
+  workers[1].onmessage?.({ data: { type: 'ready' } });
+  assert.equal(await second, true);
+  assert.equal(camera.active, true);
+  workers[0].onerror?.({ message: 'stale worker failure' });
+  assert.equal(camera.active, true);
+  assert.equal(camera.worker, workers[1]);
+  await firstStopped;
+  camera.stop();
+});
+
+test('starting while already hidden rejects before requesting camera permission', async () => {
+  let requested = false;
+  const { scope } = startScope({ getUserMedia: async () => { requested = true; return streamWith({ stop() {} }); } });
+  scope.document.visibilityState = 'hidden';
+  const camera = new PhoneTwoHandCamera({ video: video(), renderer: {}, scope });
+  await assert.rejects(camera.start(), /start canceled while page was hidden/);
+  assert.equal(requested, false);
+  assert.equal(camera.starting, false);
+  assert.equal(camera.active, false);
+});
+

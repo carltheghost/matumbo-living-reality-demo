@@ -62,6 +62,7 @@ export class PhoneTwoHandCamera {
     const epoch = this.epoch;
     this.facing = facing;
     try {
+      if (this.scope.document?.visibilityState === 'hidden') throw new Error('Hand tracking start canceled while page was hidden.');
       if (!['https:', 'http:'].includes(this.scope.location?.protocol) || !this.scope.isSecureContext || !this.scope.navigator?.mediaDevices?.getUserMedia) {
         throw new Error('Use Viva over HTTPS (or localhost) and allow camera access.');
       }
@@ -129,6 +130,7 @@ export class PhoneTwoHandCamera {
           }
         };
         worker.onerror = error => {
+          if (epoch !== this.epoch) return;
           const message = error.message || 'Local hand worker failed.';
           this.busy = false; finish();
           if (this.ready) this.handleWorkerFailure(message);

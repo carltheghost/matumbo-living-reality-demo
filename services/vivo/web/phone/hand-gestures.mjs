@@ -39,15 +39,25 @@ function predictedCenter(track) {
   return [center[0] + (Number(velocity[0]) || 0) * frames, center[1] + (Number(velocity[1]) || 0) * frames];
 }
 
+function trustedHandedness(track) {
+  if (!track) return null;
+  if (Object.prototype.hasOwnProperty.call(track, 'trustedHandedness')) {
+    return Number(track.trustedConfidence) >= HARD_LABEL_CONFIDENCE ? track.trustedHandedness : null;
+  }
+  return Number(track.confidence) >= HARD_LABEL_CONFIDENCE ? track.handedness : null;
+}
+
 function hardLabelConflict(track, detection) {
-  return Boolean(track?.handedness && detection?.handedness && track.handedness !== detection.handedness &&
+  const trusted = trustedHandedness(track);
+  return Boolean(trusted && detection?.handedness && trusted !== detection.handedness &&
     Number.isFinite(detection.confidence) && detection.confidence >= HARD_LABEL_CONFIDENCE);
 }
 
 function trackScore(track, detection) {
   const center = palmCenter(detection.landmarks), distance = d2(center, predictedCenter(track));
-  const sameLabel = track?.handedness && detection.handedness && track.handedness === detection.handedness;
-  const conflictingLabel = track?.handedness && detection.handedness && track.handedness !== detection.handedness;
+  const trusted = trustedHandedness(track);
+  const sameLabel = trusted && detection.handedness && trusted === detection.handedness;
+  const conflictingLabel = trusted && detection.handedness && trusted !== detection.handedness;
   return {
     center, distance, sameLabel, conflictingLabel, hardConflict: hardLabelConflict(track, detection),
     score: distance + (conflictingLabel ? LABEL_PENALTY : sameLabel ? -LABEL_BONUS : 0),
@@ -58,10 +68,15 @@ function makeTrack(track, detection, slot, replacementId = null) {
   const center = palmCenter(detection.landmarks);
   const prior = Array.isArray(track?.center) ? track.center : null;
   const velocity = prior ? [center[0] - prior[0], center[1] - prior[1]] : [0, 0];
+  const priorTrusted = trustedHandedness(track);
+  const strongDetection = Boolean(detection.handedness && Number.isFinite(detection.confidence) && detection.confidence >= HARD_LABEL_CONFIDENCE);
+  const nextTrusted = strongDetection ? detection.handedness : priorTrusted;
+  const nextTrustedConfidence = strongDetection ? detection.confidence : (priorTrusted ? Number(track?.trustedConfidence ?? track?.confidence) : null);
   return {
     id: track?.id || replacementId || `hand-${slot + 1}`, slot, landmarks: detection.landmarks,
-    detectionIndex: detection.detectionIndex, handedness: detection.handedness,
-    confidence: detection.confidence, center, velocity, age: Number(track?.age || 0) + 1, missing: 0,
+    detectionIndex: detection.detectionIndex, handedness: nextTrusted || detection.handedness,
+    confidence: detection.confidence, trustedHandedness: nextTrusted, trustedConfidence: nextTrustedConfidence,
+    center, velocity, age: Number(track?.age || 0) + 1, missing: 0,
   };
 }
 

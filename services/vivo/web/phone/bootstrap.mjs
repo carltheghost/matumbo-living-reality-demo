@@ -5,6 +5,7 @@ import { AgentToolRegistry } from './agent-tools.mjs';
 import { HandsFreeProjection } from './projection.mjs';
 import { PhoneTwoHandCamera } from './two-hand-camera.mjs';
 import { formatPersistenceStatus } from './persistence-status.mjs';
+import { startCameraFromButton } from './camera-start-status.mjs';
 
 const $ = id => document.getElementById(id);
 const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
@@ -271,8 +272,8 @@ function addPhoneSurface() {
     const envelope = await engine.snapshot(), blob = new Blob([JSON.stringify(envelope, null, 2)], { type: 'application/json' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${envelope.snapshot.worldId}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 30000);
   };
-  $('phoneStartHands').onclick = async () => { try { await startPhoneCamera('user'); status('Two-hand tracking active · local worker · camera frames stay on this phone.'); } catch (error) { status(`${error.message} Touch controls remain available.`); } };
-  $('phoneStartBackHands').onclick = async () => { try { await startPhoneCamera('environment'); status('Rear camera · two-hand tracking active locally.'); } catch (error) { status(`${error.message} Touch controls remain available.`); } };
+  $('phoneStartHands').onclick = () => startCameraFromButton({ facing: 'user', start: startPhoneCamera, status, activeMessage: 'Two-hand tracking active · local worker · camera frames stay on this phone.' });
+  $('phoneStartBackHands').onclick = () => startCameraFromButton({ facing: 'environment', start: startPhoneCamera, status, activeMessage: 'Rear camera · two-hand tracking active locally.' });
   $('phoneStopHands').onclick = () => { stopPhoneCamera(); status('Camera stopped. Touch controls remain available.'); };
   $('phoneProject').onclick = async () => { try { const result = await projection.start(); $('phoneProjectionState').textContent = `Projection route: ${result.route} · camera track ${result.cameraTrack}. OS/browser may pause camera when the page is backgrounded.`; } catch (error) { $('phoneProjectionState').textContent = `${error.message} The camera remains local; touch still works.`; } };
   $('phoneStopProject').onclick = () => { projection.stop(); $('phoneProjectionState').textContent = 'Projection mode stopped; camera can continue until you stop it.'; };
