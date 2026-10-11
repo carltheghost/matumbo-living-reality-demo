@@ -104,17 +104,28 @@ class MountedApplicationTests(unittest.IsolatedAsyncioTestCase):
     async def submit(self, session, command):
         return await self.rpc(session, 'submit', {'command': command})
 
-    async def test_real_root_transforms_only_bootstrap_and_preserves_original_assets(self):
+    async def test_real_root_serves_preserved_studio_and_separate_accepted_preview(self):
         async with self.http.get(self.base + '/') as response:
             self.assertEqual(response.status, 200)
             self.assertEqual(response.url.path, '/local/')
             text = await response.text()
-            self.assertIn('/application/bootstrap.mjs', text)
-            self.assertNotIn('src="shared.js"', text)
+            self.assertIn('id="vivoLocalEntry"', text)
+            self.assertIn('href="/local/accepted/"', text)
+            self.assertIn('PRIMARY · FULL STUDIO', text)
+            self.assertNotIn('/application/bootstrap.mjs', text)
             self.assertIn('<base href="/">', text)
+            expected = hashlib.sha256((ROOT / 'web/studio-original.html').read_bytes()).hexdigest()
+            self.assertEqual(response.headers['X-Vivo-Original-Studio-SHA256'], expected)
+            self.assertEqual(response.headers['X-Content-Type-Options'], 'nosniff')
+        async with self.http.get(self.base + '/local/accepted/') as response:
+            self.assertEqual(response.status, 200)
+            text = await response.text()
+            self.assertIn('/application/bootstrap.mjs', text)
+            self.assertIn('data-vivo-stage="accepted-preview"', text)
+            self.assertIn('data-vivo-phase="false"', text)
+            self.assertIn('ACCEPTED BACKEND PREVIEW · BACKEND STAGE', text)
             expected = hashlib.sha256((ROOT / 'web/index.html').read_bytes()).hexdigest()
             self.assertEqual(response.headers['X-Vivo-Imported-Index-SHA256'], expected)
-            self.assertEqual(response.headers['X-Content-Type-Options'], 'nosniff')
         for name in ['render.js', 'camera.js', 'shared.js', 'shared.css']:
             async with self.http.get(self.base + '/' + name) as response:
                 self.assertEqual(response.status, 200)

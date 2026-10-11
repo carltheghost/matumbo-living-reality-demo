@@ -1,11 +1,33 @@
 """Actual phase CLI, private numerical pump, two HTTP seats and durable restart."""
 import asyncio
 import json
+import numpy as np
 from pathlib import Path
 import socket
 import sys
 import unittest
 import test_entrypoint as baseline
+from services.vivo_material.driver import unpack_array
+from services.vivo.server.local_application import phase_slice_index, material_observation_view_matches
+
+
+class PhaseDensityConsistencyTests(unittest.TestCase):
+    def test_cross_language_periodic_slice_fixture_uses_ties_to_even(self):
+        fixtures = ((.5, 4), (2.5, 6), (-5, 7), (-.5, 4), (-1.5, 2),
+                    (-2.5, 2), (-3.5, 0), (-4.5, 0),
+                    (-3.4999999999999996, 1), (-2.5000000000000004, 1))
+        for value, expected in fixtures:
+            self.assertEqual(phase_slice_index(value), expected, value)
+
+    def test_material_observation_view_rejects_inner_eye_pairing(self):
+        observed = {'entityId': 'relic', 'axes': [0, 1], 'spaceId': 'root',
+                    'worldDimension': 4, 'acceptedFieldDigest': 'field',
+                    'materialDigest': 'field'}
+        root = {'spaceId': 'root', 'dimension': 4, 'chart': 'flat',
+                'eyeId': 'main', 'actorId': 'local.one'}
+        inner = {**root, 'spaceId': 'inner', 'dimension': 11}
+        self.assertTrue(material_observation_view_matches(observed, root, root, 'relic', [0, 1]))
+        self.assertFalse(material_observation_view_matches(observed, root, inner, 'relic', [0, 1]))
 
 
 class PhaseMountedApplicationTests(unittest.IsolatedAsyncioTestCase):
@@ -22,6 +44,20 @@ class PhaseMountedApplicationTests(unittest.IsolatedAsyncioTestCase):
     rpc = baseline.MountedApplicationTests.rpc
     command = baseline.MountedApplicationTests.command
     submit = baseline.MountedApplicationTests.submit
+
+    async def test_phase_preview_labels_its_model_and_keeps_studio_primary(self):
+        async with self.http.get(self.base + '/local/') as response:
+            self.assertEqual(response.status, 200)
+            studio = await response.text()
+            self.assertIn('PRIMARY · FULL STUDIO', studio)
+            self.assertIn('href="/local/accepted/"', studio)
+            self.assertNotIn('/application/bootstrap.mjs', studio)
+        async with self.http.get(self.base + '/local/accepted/') as response:
+            self.assertEqual(response.status, 200)
+            preview = await response.text()
+            self.assertIn('data-vivo-phase="true"', preview)
+            self.assertIn('ACCEPTED PHASE PREVIEW · BACKEND STAGE', preview)
+            self.assertIn('Experimental 4D phase material is connected.', preview)
 
     async def start(self):
         with socket.socket() as sock:
@@ -53,6 +89,46 @@ class PhaseMountedApplicationTests(unittest.IsolatedAsyncioTestCase):
                 return state
             await asyncio.sleep(.1)
         self.fail('No accepted numerical progress: ' + json.dumps(state['materialHost']))
+
+    async def test_read_only_density_matches_committed_checkpoint_bytes(self):
+        one = await self.open('one')
+        observed = await self.rpc(one, 'materialObserve', {'entityId': 'relic', 'axes': [0, 1]})
+        value, state = observed['value'], observed['state']
+        exported = (await self.rpc(one, 'export'))['value']
+        checkpoint = exported['material']['checkpoint']
+        psi = unpack_array(checkpoint['fields']['relic']['psi'], tuple(checkpoint['shape']), 'complex')
+        fixed = {int(axis): index for axis, index in value['fixed'].items()}
+        expected = np.abs(psi[:, :, fixed[2], fixed[3]]) ** 2
+        np.testing.assert_allclose(np.asarray(value['density']), expected, rtol=0, atol=1e-15)
+        self.assertEqual(value['projectionSchema'], 'vivo.material-observation/1')
+        self.assertEqual(value['worldDimension'], 4)
+        self.assertEqual(value['resolution'], [8, 8, 8, 8])
+        self.assertEqual(value['densityDefinition'], 'abs(psi)**2')
+        self.assertEqual(value['sampling'], 'exact-lattice; no interpolation')
+        self.assertEqual(value['fixedCoordinates'], {'2': 0.0, '3': 0.0})
+        self.assertEqual(value['materialDigest'], checkpoint['digest'])
+        self.assertEqual(value['materialDigest'], state['snapshot']['spaces']['root']['field']['hash'])
+        self.assertEqual(value['acceptedFieldDigest'], value['materialDigest'])
+        self.assertEqual(value['acceptedStateHash'], state['snapshot']['stateHash'])
+        self.assertEqual(value['shape'], [8, 8])
+        self.assertNotIn('"psi"', json.dumps(value))
+        dv = float(np.prod(np.asarray(checkpoint['lengths']) / np.asarray(checkpoint['shape'])))
+        masses = [float(np.sum(np.abs(unpack_array(field['psi'], tuple(checkpoint['shape']), 'complex')) ** 2) * dv)
+                  for field in checkpoint['fields'].values()]
+        self.assertTrue(all(abs(mass - 1.) < 1e-12 for mass in masses), masses)
+        self.assertAlmostEqual(sum(masses), 3., places=12)
+
+    async def test_density_stays_committed_when_grip_is_only_a_constraint(self):
+        one = await self.open('one')
+        before = (await self.rpc(one, 'materialObserve', {'entityId': 'relic', 'axes': [0, 1]}))['value']
+        grip = await self.grip(one, .9)
+        during = (await self.rpc(one, 'materialObserve', {'entityId': 'relic', 'axes': [0, 1]}))['value']
+        self.assertEqual(during['materialDigest'], before['materialDigest'])
+        np.testing.assert_allclose(np.asarray(during['density']), np.asarray(before['density']), rtol=0, atol=1e-15)
+        await self.release(one, grip)
+        after = (await self.rpc(one, 'materialObserve', {'entityId': 'relic', 'axes': [0, 1]}))['value']
+        np.testing.assert_allclose(np.asarray(after['density']), np.asarray(before['density']), rtol=0, atol=1e-15)
+        await self.rpc(one, 'materialObserve', {'entityId': 'relic', 'axes': [0, 0]}, expected=400)
 
     async def grip(self, session, q4):
         state = (await self.rpc(session, 'state'))['state']
@@ -231,6 +307,8 @@ class PhaseMountedApplicationTests(unittest.IsolatedAsyncioTestCase):
             await self.rpc(one, op, {'proposal': {}}, expected=400)
         await self.rpc(one, 'materialRun', {'running': 'yes'}, expected=409)
         await self.post('/api/local/rpc', {'op': 'materialRun', 'args': {'running': True}}, expected=401)
+        await self.post('/api/local/rpc', {'op': 'materialObserve',
+                                           'args': {'entityId': 'relic', 'axes': [0, 1]}}, expected=401)
         grip = await self.grip(one, .2)
         target = grip[3].copy()
         target['id'] = 'outside.domain'

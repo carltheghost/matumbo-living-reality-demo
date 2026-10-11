@@ -12,6 +12,7 @@ import contextlib
 import hashlib
 import ipaddress
 import json
+import math
 import re
 import shutil
 import sys
@@ -23,6 +24,46 @@ from .app import make_app, ROOT
 from .geometry import Geometry
 from .readiness import report as readiness_report
 from .authority.module_routes import install_module_routes
+
+
+def phase_slice_index(value):
+    """Map a periodic phase coordinate to the nearest 8-cell index.
+
+    The accepted solver's existing Python ``round`` is ties-to-even. Keep
+    that rule explicit and pair it with positive modulo so browser and server
+    agree at half steps and negative wrapped coordinates.
+    """
+    normalized = (float(value) + 4.) % 8
+    lower = math.floor(normalized)
+    fraction = normalized - lower
+    if fraction < .5:
+        rounded = lower
+    elif fraction > .5:
+        rounded = lower + 1
+    else:
+        rounded = lower if lower % 2 == 0 else lower + 1
+    return rounded % 8
+
+
+def material_observation_view_matches(observed, expected_eye, candidate_eye, entity_id, axes):
+    """Keep a root 4D density response paired with its requested Eye only."""
+    return bool(
+        isinstance(observed, dict)
+        and observed.get('entityId') == entity_id
+        and observed.get('axes') == list(axes)
+        and observed.get('spaceId') == 'root'
+        and observed.get('worldDimension') == 4
+        and isinstance(expected_eye, dict)
+        and expected_eye.get('spaceId') == 'root'
+        and expected_eye.get('dimension') == 4
+        and isinstance(candidate_eye, dict)
+        and candidate_eye.get('spaceId') == expected_eye.get('spaceId') == 'root'
+        and candidate_eye.get('dimension') == expected_eye.get('dimension') == 4
+        and candidate_eye.get('chart') == expected_eye.get('chart')
+        and candidate_eye.get('eyeId') == expected_eye.get('eyeId')
+        and candidate_eye.get('actorId') == expected_eye.get('actorId')
+        and observed.get('acceptedFieldDigest') == observed.get('materialDigest')
+    )
 
 
 class LocalBridge:
@@ -164,13 +205,17 @@ def local_index(*, phase=False, store='posix'):
     if text.count(marker) != 1:
         raise RuntimeError('Imported application bootstrap changed; review the local mount')
     text = text.replace('<head>', '<head><base href="/">', 1)
-    text = text.replace('<html lang="en">', f'<html lang="en" data-vivo-store="{store}">', 1)
+    text = text.replace('</head>', '<link rel="icon" href="data:,"></head>', 1)
+    text = text.replace('<html lang="en">',
+                        f'<html lang="en" data-vivo-store="{store}" data-vivo-stage="accepted-preview" data-vivo-phase="{str(phase).lower()}">', 1)
     text = text.replace(marker, '<script type="module" src="/application/bootstrap.mjs"></script>')
     text = text.replace('</head>', '<link rel="stylesheet" href="/application/local.css"></head>', 1)
-    text = text.replace('SHARED WORKSHOP · 0.8.1', 'CANONICAL LOCAL · APPLICATION STAGE')
+    stage_label = 'ACCEPTED PHASE PREVIEW · BACKEND STAGE' if phase else 'ACCEPTED BACKEND PREVIEW · BACKEND STAGE'
+    text = text.replace('SHARED WORKSHOP · 0.8.1', stage_label)
     text = text.replace('Meet inside<br>the mathematics.', 'One saved world.<br>Two independent Eyes.')
     text = text.replace('Move the same objects with another person. Explore curved spaces. Watch a learned local rule grow a guidance field.',
         'Open one of two local seats. Explore saved spatial coordinates and nested space. Grip targets are accepted constraints; material motion and learning are not connected yet.')
+    text = text.replace('Create a room or join with an invitation.', 'Accepted backend preview. Open one of two local seats.')
     text = text.replace('Checking the shared server…', 'Checking the local Python + Node application…')
     text = text.replace('Create shared space', 'Open local seat')
     if store == 'memory':
@@ -180,6 +225,92 @@ def local_index(*, phase=False, store='posix'):
     if phase:
         text = text.replace('Grip targets are accepted constraints; material motion and learning are not connected yet.',
             'Experimental 4D phase material is connected. Press Run phase in '+('Session state' if store == 'memory' else 'Saved state')+' to advance the bounded numerical model; 11D material and learning remain unavailable.')
+    return source, text
+
+
+def studio_index():
+    """Return the preserved Studio as the primary local surface.
+
+    The imported Studio bytes remain untouched on disk.  Only the local mount
+    adds a base URL and an explicit link to the separate accepted-phase
+    backend preview; neither route silently synchronizes the two state models.
+    """
+    source = (ROOT / 'web/studio-original.html').read_bytes()
+    text = source.decode('utf-8')
+    if not text.startswith('<!DOCTYPE html>') or text.count('</body>') != 1:
+        raise RuntimeError('Imported Studio changed; review the local mount')
+    text = text.replace('<head>', '<head><base href="/">', 1)
+    text = text.replace('</head>', '<link rel="icon" href="data:,"></head>', 1)
+    bridge_style = '''<style id="vivoLocalEntryStyle">
+#vivoLocalEntry{position:fixed;right:180px;top:80px;z-index:120;display:flex;align-items:center;gap:8px;max-width:calc(100vw - 24px);padding:6px 8px;border:1px solid rgba(148,235,220,.30);border-radius:9px;background:rgba(8,19,25,.88);backdrop-filter:blur(14px);font:10px ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.04em;color:#9db8b9;box-shadow:0 8px 24px rgba(0,0,0,.18)}
+#vivoLocalEntry span{color:#a9eadc}
+#vivoLocalEntry a{color:#c9eee6;text-decoration:none;border:1px solid rgba(148,235,220,.32);border-radius:6px;padding:6px 8px;white-space:nowrap}
+#vivoLocalEntry a:hover,#vivoLocalEntry a:focus-visible{background:#173a3a;color:#fff;outline:2px solid #94ebdc;outline-offset:2px}
+#vivoStudioTools,#vivoStudioToolsDrawer{display:none}
+@media(max-width:820px){#vivoLocalEntry{top:122px;right:12px;font-size:9px}#vivoLocalEntry span{display:none}#vivoLocalEntry a{padding:4px 6px}}
+@media(max-width:820px) and (orientation:portrait){
+ #vivaLightHud{left:12px!important;right:12px!important;bottom:calc(245px + 58px + 10px + env(safe-area-inset-bottom))!important;max-width:none!important}
+}
+@media(min-width:821px) and (max-height:610px){
+ #vivoLocalEntry{top:70px;right:180px}
+ #studioOpen{top:70px!important;right:12px!important}
+ #studioBadge{top:74px!important;left:12px!important}
+ .experiment{display:none!important}
+ .left-head{left:12px!important;top:112px!important;width:220px!important}
+ .left-head h1,.left-head>p,.left-head .search-box,.left-head .side-tabs,.left-head .view-lenses,.left-head .parent-button{display:none!important}
+ .left-head .eyebrow{display:none!important}
+ #vivaBar{left:12px!important;right:auto!important;top:112px!important;width:225px!important;max-width:225px!important;flex-wrap:wrap}
+ #vivaBar button{flex:1 1 45%;min-height:34px!important;padding:6px 7px!important;font-size:10px!important}
+ #vivaMessage{display:none!important}
+ #vivaLightOpen{left:12px!important;right:auto!important;top:254px!important;min-height:34px!important}
+ #cameraLaunch{left:250px!important;right:auto!important;top:216px!important;bottom:auto!important;transform:none!important;min-width:174px}
+ #vivaLightHud{left:250px!important;right:12px!important;top:280px!important;bottom:auto!important;max-width:390px!important}
+ .touch-state{left:250px!important;right:auto!important;top:103px!important;transform:none!important;max-width:390px!important}
+ .touch-bar{left:12px!important;right:auto!important;bottom:16px!important;width:230px!important}
+ .bottom-stats,.system-note{display:none!important}
+ .bottom-center{left:250px!important;right:12px!important;transform:none!important;bottom:24px!important}
+ .bottom-center .toolbar{justify-content:flex-start;gap:2px}
+ .bottom-center .toolbar button{padding:7px 8px!important;font-size:10px!important}
+ .bottom-center .toolbar .optional{display:none!important}
+ .inspector{top:120px!important;right:12px!important;width:232px!important;height:190px!important;max-height:190px!important;overflow-y:auto!important}
+ #vivoStudioTools{display:block;position:fixed;left:12px;top:300px;z-index:35;min-height:38px;padding:7px 10px;border:1px solid #6e9f98;border-radius:9px;background:#102b34;color:#d6f1e8;font:11px ui-monospace,SFMono-Regular,Consolas,monospace}
+ #vivoStudioToolsDrawer{display:block;position:fixed;left:12px;top:92px;z-index:36;width:225px;max-height:290px;overflow:auto;padding:10px;border:1px solid #6e9f98;border-radius:11px;background:#081820f5;box-shadow:0 14px 40px #0009;font:11px system-ui;color:#d6ebe5}
+ #vivoStudioToolsDrawer[hidden]{display:none!important}
+ #vivoStudioToolsDrawer .vivo-tools-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px;color:#a9eadc;font-weight:600}
+ #vivoStudioToolsDrawer .vivo-tools-head button{min-height:28px;padding:3px 8px}
+ #vivoStudioToolsDrawer input{width:100%;min-height:34px;padding:6px 8px;margin-bottom:7px;border:1px solid #405e64;border-radius:7px;background:#102730;color:#e1f1eb;font:11px system-ui}
+ #vivoStudioToolsDrawer .vivo-tools-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin:5px 0}
+ #vivoStudioToolsDrawer button{min-height:32px;padding:5px 6px;border:1px solid #405e64;border-radius:7px;background:#102b34;color:#d6ebe5;font:10px system-ui}
+ #vivoStudioToolsDrawer button:hover,#vivoStudioToolsDrawer button:focus-visible{border-color:#94ebdc;outline:2px solid #94ebdc;outline-offset:1px}
+ #vivoStudioToolsDrawer .vivo-tools-wide{width:100%;margin-top:5px}
+}
+@media(min-width:821px) and (min-height:611px){
+ #vivaBar{left:37px!important;right:auto!important;top:470px!important;max-width:250px!important;flex-wrap:wrap}
+ #vivaBar button{flex:1 1 45%;min-height:36px!important;padding:7px 8px!important;font-size:11px!important}
+ #vivaMessage{display:none!important}
+ #vivaLightHud{left:37px!important;right:auto!important;top:566px!important;bottom:auto!important;max-width:250px!important}
+}
+</style>'''
+    entry = '''<nav id="vivoLocalEntry" aria-label="Vivo local surfaces">
+  <span>PRIMARY · FULL STUDIO</span>
+  <a href="/local/accepted/">Accepted phase preview ↗</a>
+ </nav>
+ <button id="vivoStudioTools" type="button" aria-expanded="false">Studio tools</button>
+ <aside id="vivoStudioToolsDrawer" hidden aria-label="Compact Studio tools">
+  <div class="vivo-tools-head"><span>STUDIO TOOLS</span><button id="vivoStudioToolsClose" type="button">Close</button></div>
+  <input id="vivoStudioSearch" type="search" placeholder="Find a pattern…" aria-label="Find a landmark">
+  <div class="vivo-tools-grid" aria-label="Field visualization">
+   <button type="button" data-vivo-mode="field">Field</button><button type="button" data-vivo-mode="network">Network</button><button type="button" data-vivo-mode="memory">Memory</button>
+  </div>
+  <div class="vivo-tools-grid" aria-label="Camera projection">
+   <button type="button" data-vivo-lens="2">2D</button><button type="button" data-vivo-lens="3">3D</button><button type="button" data-vivo-lens="all">All axes</button>
+  </div>
+  <button id="vivoStudioParent" class="vivo-tools-wide" type="button">↶ Return to parent checkpoint</button>
+  <button id="vivoStudioExperiment" class="vivo-tools-wide" type="button">Run learning experiment ↗</button>
+ </aside>
+ <script>(function(){const toggle=document.getElementById('vivoStudioTools'),drawer=document.getElementById('vivoStudioToolsDrawer'),close=document.getElementById('vivoStudioToolsClose');if(!toggle||!drawer)return;const setOpen=open=>{drawer.hidden=!open;toggle.setAttribute('aria-expanded',String(open));toggle.textContent=open?'Close tools':'Studio tools';};toggle.addEventListener('click',()=>setOpen(drawer.hidden));close?.addEventListener('click',()=>setOpen(false));const click=selector=>document.querySelector(selector)?.click();document.querySelectorAll('[data-vivo-mode]').forEach(button=>button.addEventListener('click',()=>{click('[data-mode="'+button.dataset.vivoMode+'"]');}));document.querySelectorAll('[data-vivo-lens]').forEach(button=>button.addEventListener('click',()=>{click('[data-lens="'+button.dataset.vivoLens+'"]');}));document.getElementById('vivoStudioParent')?.addEventListener('click',()=>click('#parentBranch'));document.getElementById('vivoStudioExperiment')?.addEventListener('click',()=>{click('#experimentButton');setOpen(false);});const original=document.getElementById('search'),search=document.getElementById('vivoStudioSearch');search?.addEventListener('input',()=>{if(!original)return;original.value=search.value;original.dispatchEvent(new Event('input',{bubbles:true}));});})();</script>'''
+    text = text.replace('</head>', bridge_style + '</head>', 1)
+    text = text.replace('</body>', entry + '</body>', 1)
     return source, text
 
 
@@ -232,10 +363,18 @@ def make_local_app(data_dir=None, *, phase=False, max_events=65536, store='posix
 
     async def index(request):
         require_local(request)
+        original, html = studio_index()
+        return web.Response(text=html, content_type='text/html', headers={
+            'X-Vivo-Original-Studio-SHA256': hashlib.sha256(original).hexdigest(),
+            'X-Vivo-Application': 'canonical-local-studio-1',
+        })
+
+    async def accepted_preview(request):
+        require_local(request)
         original, html = local_index(phase=phase, store=store)
         return web.Response(text=html, content_type='text/html', headers={
             'X-Vivo-Imported-Index-SHA256': hashlib.sha256(original).hexdigest(),
-            'X-Vivo-Application': 'canonical-local-1',
+            'X-Vivo-Application': 'canonical-local-accepted-preview-1',
         })
 
     async def legacy(request):
@@ -299,11 +438,93 @@ def make_local_app(data_dir=None, *, phase=False, max_events=65536, store='posix
                 raise web.HTTPBadRequest(text='Invalid local resume token')
             result = await bridge.call('open', args=data)
         else:
-            if set(data) - {'op', 'args'} or not isinstance(data.get('op'), str) or data['op'] not in ('state', 'submit', 'moveEye', 'inspectLease', 'renewLease', 'reconcileLease', 'close', 'export', 'nextEpoch', 'materialRun'):
+            if set(data) - {'op', 'args'} or not isinstance(data.get('op'), str) or data['op'] not in ('state', 'submit', 'moveEye', 'inspectLease', 'renewLease', 'reconcileLease', 'close', 'export', 'nextEpoch', 'materialRun', 'materialObserve'):
                 raise web.HTTPBadRequest(text='Unsupported operation')
             header = request.headers.get('Authorization', '')
             if not header.startswith('Bearer ') or not 20 <= len(header[7:]) <= 256:
                 raise web.HTTPUnauthorized(text='Local session required')
+            if data['op'] == 'materialObserve':
+                if material_host is None:
+                    return web.json_response({'error': 'MATERIAL_UNAVAILABLE'}, status=409)
+                args = data.get('args', {})
+                if not isinstance(args, dict) or set(args) != {'entityId', 'axes'}:
+                    raise web.HTTPBadRequest(text='materialObserve requires entityId and axes')
+                entity_id, axes = args['entityId'], args['axes']
+                if (not isinstance(entity_id, str) or not re.fullmatch(r'[A-Za-z0-9_.:-]{1,128}', entity_id)
+                        or not isinstance(axes, list) or len(axes) != 2
+                        or any(type(axis) is not int or not 0 <= axis < 4 for axis in axes)
+                        or len(set(axes)) != 2):
+                    raise web.HTTPBadRequest(text='materialObserve expects two distinct phase axes')
+                current = await bridge.call('state', token=header[7:], args={})
+                if isinstance(current, web.StreamResponse):
+                    return current
+                current_state = current.get('state') if isinstance(current, dict) else None
+                eye = current_state.get('eye') if isinstance(current_state, dict) else None
+                snapshot = current_state.get('snapshot') if isinstance(current_state, dict) else None
+                capabilities = current_state.get('capabilities') if isinstance(current_state, dict) else None
+                phase = capabilities.get('material') if isinstance(capabilities, dict) else None
+                if (not isinstance(eye, dict) or eye.get('spaceId') != 'root'
+                        or not isinstance(snapshot, dict) or not isinstance(phase, dict)
+                        or phase.get('dimension') != 4 or phase.get('resolution') != [8, 8, 8, 8]):
+                    raise web.HTTPConflict(text='Material density is only available in the accepted root phase space')
+                try:
+                    root_space = snapshot['spaces']['root']
+                    entity = root_space['entities'][entity_id]
+                    if not isinstance(entity, dict):
+                        raise KeyError(entity_id)
+                    q = eye.get('q')
+                    eye_slice = eye.get('slice', {})
+                    if not isinstance(q, list) or len(q) != 4 or not isinstance(eye_slice, dict):
+                        raise ValueError('MATERIAL_VIEW_FIXED')
+                    fixed = {}
+                    for axis in range(4):
+                        if axis in axes:
+                            continue
+                        value = eye_slice.get('x'+str(axis + 1), q[axis])
+                        if type(value) not in (int, float) or not (value == value and abs(value) < 1e9):
+                            raise ValueError('MATERIAL_VIEW_FIXED')
+                        fixed[axis] = phase_slice_index(value)
+                    aligned_state = None
+                    for _ in range(3):
+                        observed = await material_host.observe(entity_id, axes, fixed)
+                        aligned = await bridge.call('state', token=header[7:], args={})
+                        if isinstance(aligned, web.StreamResponse):
+                            return aligned
+                        candidate = aligned.get('state') if isinstance(aligned, dict) else None
+                        candidate_hash = (candidate.get('snapshot', {}).get('spaces', {}).get('root', {})
+                                          .get('field', {}).get('hash')) if isinstance(candidate, dict) else None
+                        candidate_snapshot = candidate.get('snapshot') if isinstance(candidate, dict) else None
+                        candidate_eye = candidate.get('eye') if isinstance(candidate, dict) else None
+                        candidate_fixed = {}
+                        if isinstance(candidate_eye, dict) and isinstance(candidate_eye.get('q'), list):
+                            candidate_slice = candidate_eye.get('slice', {})
+                            for axis in range(4):
+                                if axis in axes:
+                                    continue
+                                value = candidate_slice.get('x'+str(axis + 1), candidate_eye['q'][axis])
+                                candidate_fixed[axis] = phase_slice_index(value)
+                        consistent = (isinstance(candidate_snapshot, dict)
+                                      and observed.get('acceptedSequence') == candidate_snapshot.get('acceptedSequence')
+                                      and observed.get('acceptedStateHash') == candidate_snapshot.get('stateHash')
+                                      and material_observation_view_matches(observed, eye, candidate_eye, entity_id, axes)
+                                      and candidate_fixed == fixed)
+                        if candidate_hash == observed.get('materialDigest') and consistent:
+                            aligned_state = candidate
+                            break
+                    if aligned_state is None:
+                        return web.json_response({'error': 'MATERIAL_VIEW_RACE'}, status=409)
+                except KeyError as error:
+                    raise web.HTTPBadRequest(text='Unknown accepted phase entity') from error
+                except Exception as error:
+                    code = getattr(error, 'code', None)
+                    if code:
+                        return web.json_response({'error': code}, status=409)
+                    if isinstance(error, ValueError):
+                        raise web.HTTPBadRequest(text='Invalid accepted phase observation') from error
+                    raise
+                result = {'value': observed, 'state': aligned_state}
+                result['state']['materialHost'] = annotate_material(result['state'].get('capabilities'))
+                return web.json_response(result)
             if material_host and data['op'] == 'materialRun' and isinstance(data.get('args'), dict) and data['args'].get('running') is True and material_host.status()['fault']:
                 return web.json_response({'error': 'MATERIAL_HOST_RESTART_REQUIRED'}, status=409)
             result = await bridge.call(data['op'], token=header[7:], args=data.get('args', {}))
@@ -315,6 +536,7 @@ def make_local_app(data_dir=None, *, phase=False, max_events=65536, store='posix
 
     mounted.router.add_get('/', root)
     mounted.router.add_get('/local/', index)
+    mounted.router.add_get('/local/accepted/', accepted_preview)
     mounted.router.add_get('/legacy', legacy)
     mounted.router.add_get('/api/local/ready', ready)
     mounted.router.add_get('/readyz', ready)

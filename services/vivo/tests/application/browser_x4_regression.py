@@ -3,7 +3,7 @@
 Run against the canonical local launcher, for example:
 
     python3 services/vivo/tests/application/browser_x4_regression.py \\
-      http://127.0.0.1:8767/
+      http://127.0.0.1:8767/local/accepted/
 
 This intentionally keeps camera permissions off. It verifies actual accepted
 receipts and returned canonical state for x4 targets, accepted release receipts,
@@ -20,7 +20,11 @@ from pathlib import Path
 from playwright.async_api import async_playwright
 
 
-BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8767/"
+BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8767/local/accepted/"
+if BASE.rstrip("/").endswith("/local/accepted"):
+    PREVIEW_BASE = BASE.rstrip("/") + "/"
+else:
+    PREVIEW_BASE = BASE.rstrip("/") + "/local/accepted/"
 REPORT = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("browser-x4-regression.json")
 EXPECT_SESSION_ONLY = os.environ.get("VIVO_EXPECT_SESSION_ONLY") == "1"
 
@@ -135,7 +139,7 @@ async def open_seat(context, seat, page_errors, requests, responses, response_ta
 
     page.on("request", capture_request)
     page.on("response", capture_response)
-    await page.goto(BASE, wait_until="domcontentloaded", timeout=60000)
+    await page.goto(PREVIEW_BASE, wait_until="domcontentloaded", timeout=60000)
     await wait_text(page, "#serviceReady", "LOCAL SERVER READY")
     await page.select_option("#localSeat", seat)
     await page.click("#createRoom")
@@ -547,7 +551,7 @@ async def main():
             await drain_response_tasks(response_tasks)
             report = {
                 "schema": "vivo.browser-x4-evidence/2",
-                "base": BASE,
+                "base": PREVIEW_BASE,
                 "checks": checks,
                 "passed": sum(1 for item in checks if item["passed"]),
                 "failed": sum(1 for item in checks if not item["passed"]),
