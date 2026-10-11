@@ -1,0 +1,101 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createEye, createPhoneSnapshot, LocalVivoEngine } from '../engine.mjs';
+import {
+  FIELD_WORLD_SCHEMA,
+  FieldWorldController,
+  buildFieldWorld,
+  inspectAcceptedEvents,
+} from '../field-world.mjs';
+
+class MemoryStore {
+  rows = new Map();
+  async load(id) { return structuredClone(this.rows.get(id) || null); }
+  async save(id, value) { this.rows.set(id, structuredClone(value)); return { persistent: true }; }
+}
+
+function envelope(rootDimension = 11) {
+  const snapshot = createPhoneSnapshot({ worldId: 'field-world-test', rootDimension });
+  const eye = createEye({ id: 'field-eye', spaceId: 'root', dimension: rootDimension });
+  return {
+    snapshot,
+    eyes: { [eye.id]: eye },
+    currentEyeId: eye.id,
+    branchId: 'branch-field-test',
+    mode: 'local',
+    parentBranchId: null,
+    branchLabel: null,
+    forkedAt: null,
+  };
+}
+
+test('field-world builds a bounded analytic plane atlas for every 3D..11D space', () => {
+  for (let dimension = 3; dimension <= 11; dimension++) {
+    const model = buildFieldWorld(envelope(dimension), {
+      query: 'relic',
+      relevanceThreshold: 0.18,
+      eyeAxes: [0, 1, dimension - 1],
+      atlasResolution: 99,
+      layout: 'ring',
+      selectedId: 'relic',
+    });
+    assert.equal(model.schema, FIELD_WORLD_SCHEMA);
+    assert.equal(model.dimension, dimension);
+    assert.equal(model.atlas.length, dimension * (dimension - 1) / 2);
+    assert.ok(model.atlas.every(plane => plane.resolution === 12));
+    assert.ok(model.atlas.every(plane => plane.cells.length === 144));
+    assert.deepEqual(model.eye.axes, dimension >= 3 ? [0, 1, dimension - 1] : [0, 1, 2]);
+    assert.ok(model.awakeIds.includes('relic'));
+    assert.equal(model.field.kind, 'analytic-information-mixture');
+    assert.equal(model.field.materialAuthority, 'phone-local-view-only');
+    assert.deepEqual(model.layout.mode, 'ring');
+  }
+});
+
+test('field-world relevance and layout changes are view-only and accepted history is inspectable', () => {
+  const initial = envelope(4);
+  const controller = new FieldWorldController(initial, { query: 'workpiece', layout: 'row' });
+  const before = structuredClone(initial);
+  const first = controller.model;
+  assert.equal(first.layout.mode, 'row');
+  assert.ok(first.awakeIds.includes('workpiece'));
+  assert.equal(inspectAcceptedEvents(initial).branchId, 'branch-field-test');
+  controller.setOptions({ query: 'portal', layout: 'gather', selectedId: 'portal' });
+  assert.equal(controller.model.layout.mode, 'gather');
+  assert.ok(controller.model.awakeIds.includes('portal'));
+  assert.deepEqual(initial, before);
+  assert.equal(controller.commitCandidate(), null);
+});
+
+test('field-world move, mix and turn previews require explicit local application', () => {
+  const state = envelope(4);
+  const controller = new FieldWorldController(state, { selectedId: 'relic' });
+  const move = controller.previewMove('relic', 2, 0.35);
+  assert.equal(move.kind, 'move');
+  assert.equal(move.delta[2], 0.35);
+  assert.equal(controller.commitCandidate().baseRevision, 0);
+  controller.discardPreview();
+  const mix = controller.previewMix('relic');
+  assert.equal(mix.kind, 'mix');
+  assert.ok(mix.mixWith);
+  controller.discardPreview();
+  const turn = controller.previewRotate('relic', Math.PI / 8);
+  assert.equal(turn.kind, 'rotate-view');
+  assert.deepEqual(turn.delta, [0, 0, 0, 0]);
+  assert.deepEqual(state.snapshot.spaces.root.entities.relic.q, [-1.15, -0.1, 0.25, 0]);
+});
+
+test('local field application advances only the selected local object and preserves stable identity', async () => {
+  const engine = new LocalVivoEngine({ storage: new MemoryStore() });
+  await engine.open('field-engine-test', 4);
+  const before = await engine.snapshot();
+  const q = before.snapshot.spaces.root.entities.relic.q;
+  const result = await engine.applyLocalEdit('relic', [0, 0.2, 0, 0]);
+  const after = await engine.snapshot();
+  assert.deepEqual(result, { changed: true, revision: 1 });
+  assert.equal(after.snapshot.spaces.root.entities.relic.id, 'relic');
+  assert.equal(after.snapshot.spaces.root.entities.relic.q[1], q[1] + 0.2);
+  assert.deepEqual(after.snapshot.spaces.root.entities.workpiece.q, before.snapshot.spaces.root.entities.workpiece.q);
+  assert.equal(after.snapshot.spaces.root.entities.relic.v[1], 0);
+  await engine.close();
+});

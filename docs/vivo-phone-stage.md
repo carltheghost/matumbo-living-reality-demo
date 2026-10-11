@@ -14,6 +14,34 @@ GitHub Pages remains the canonical Vivo UI. The Android Companion is a hardened 
 
 The local phone world keeps a stable world ID, object identities, and a persisted branch envelope (`branchId`, mode, parent branch and label). Each Eye has independent view, projection, nested-world return state, and revision; the phone allows at most 64 persisted Eyes. Offline work creates a named branch envelope and does not silently merge with a shared/server world. Nested transitions fence active material updates to the selected space, so a root edit cannot continue driving an inner world after entry or return.
 
+## Local field-world surface
+
+The Pages build also publishes a self-contained phone route at
+`/services/vivo/web/phone/`. It imports the local worker, IndexedDB storage,
+field-world view and spatial interaction fabric with relative URLs, and the
+service worker caches that route for an offline reopen. This route is useful
+when the Python authority is not mounted: it labels itself `PAGES STATIC/OFFLINE`,
+keeps Connect/Publish/Commit disabled, and never attempts a canonical write.
+The normal explicit authority controls remain on the mounted Vivo route.
+
+The field-world view is a bounded local analytic projection over the current
+Eye. It wakes nearby or query-relevant objects, samples every coordinate plane
+for the active 3D through 11D space, and offers Ring, Row and Gather layouts.
+Move and mix are provisional until the user explicitly applies them to local
+phone state; turn is a view-only preview. The accepted-event inspector shows
+the local branch, sequence and current object revisions. Its Gaussian mixture
+is an information visualization, not the material solver or a cross-device
+accepted event.
+
+The spatial interaction fabric keeps a separate identity and constraint for
+each touch, finger, hand, gaze, controller or agent contact. It supports
+selective release, bimanual provisional rotation/scale, coordinate mapping
+through an explicit inverse projection, and an agent kill switch. It does not
+replace the authority CAS, material-contact solver, or physical device
+validation. Camera/head tracking, hardware AR/VR, collaborators/audio, and
+remote accepted material interaction remain unvalidated or out of scope for
+this local slice.
+
 ## Hand input
 
 Use the front camera with palm and fingertips visible. Gestures in local phone mode:

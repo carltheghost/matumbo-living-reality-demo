@@ -1,0 +1,157 @@
+/**
+ * Bounded spatial interaction fabric for the phone surface.
+ *
+ * Every contact owns its identity and constraint.  No global active pointer
+ * exists here: a lost finger/hand/agent releases only its own constraints.
+ * Inputs arrive after the sensor/device/renderer layer has mapped them into
+ * device coordinates; callers must supply the inverse projection used to
+ * produce canonical coordinates before beginning a constraint.
+ */
+export const CONTACT_KINDS = Object.freeze(['touch', 'hand', 'finger', 'gaze', 'controller', 'agent']);
+export const GESTURES = Object.freeze(['hover', 'point', 'touch', 'press', 'pinch', 'grab', 'drag', 'pull', 'push', 'twist', 'rotate', 'scale', 'stretch', 'bend', 'poke', 'throw', 'hold', 'release']);
+
+const clone = value => globalThis.structuredClone ? structuredClone(value) : JSON.parse(JSON.stringify(value));
+const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
+const normalizeId = (value, label) => {
+  if (typeof value !== 'string' || !value || value.length > 160 || /[\u0000-\u001f\u007f]/.test(value)) throw new TypeError(label + ' must be a bounded identity');
+  return value;
+};
+const normalizePoint = (value, label = 'canonicalPoint') => {
+  if (!Array.isArray(value) || value.length < 3 || value.length > 11 || value.some(item => !Number.isFinite(Number(item)) || Math.abs(Number(item)) > 1e6)) throw new TypeError(label + ' must be a bounded 3D..11D canonical point');
+  return value.map(Number);
+};
+const sourceKey = source => {
+  if (typeof source === 'string') return normalizeId(source, 'source');
+  if (!source || typeof source !== 'object') throw new TypeError('source is required');
+  return normalizeId(String(source.kind || 'contact') + ':' + String(source.id || ''), 'source');
+};
+
+/**
+ * Convert a device-space point through a supplied projection inverse.  The
+ * default inverse is deliberately only a normalized device-plane mapping;
+ * production renderers may supply a metric/chart-aware inverse.
+ */
+export function mapDevicePointToCanonical({ devicePoint, viewport, eye, axes = [0, 1], scale = 1, inverseProjection = null } = {}) {
+  if (!devicePoint || !viewport || !eye) throw new TypeError('device point, viewport and Eye are required');
+  const width = finite(viewport.width), height = finite(viewport.height);
+  if (width <= 0 || height <= 0) throw new RangeError('Viewport must be positive');
+  const normalized = {
+    x: clamp((finite(devicePoint.x) - finite(viewport.left)) / width * 2 - 1, -1, 1),
+    y: clamp(1 - (finite(devicePoint.y) - finite(viewport.top)) / height * 2, -1, 1),
+  };
+  const inverse = typeof inverseProjection === 'function'
+    ? inverseProjection({ normalized, eye: clone(eye) })
+    : normalized;
+  if (!inverse || !Number.isFinite(Number(inverse.x)) || !Number.isFinite(Number(inverse.y))) throw new TypeError('Projection inverse did not return finite device coordinates');
+  const q = normalizePoint(Array.isArray(eye.q) ? eye.q : [], 'Eye q');
+  const first = Number(axes[0]), second = Number(axes[1]);
+  if (!Number.isInteger(first) || !Number.isInteger(second) || first === second || first < 0 || second < 0 || first >= q.length || second >= q.length) throw new RangeError('Projection axes are outside the Eye');
+  const factor = finite(scale, 1);
+  q[first] += Number(inverse.x) * factor;
+  q[second] += Number(inverse.y) * factor;
+  return q;
+}
+
+const clamp = (value, lo, hi) => Math.max(lo, Math.min(hi, value));
+
+export class SpatialInteractionFabric {
+  constructor({ now = () => globalThis.performance?.now?.() ?? Date.now(), maxContacts = 64, maxConstraintsPerObject = 16 } = {}) {
+    this.now = now;
+    this.maxContacts = maxContacts;
+    this.maxConstraintsPerObject = maxConstraintsPerObject;
+    this.contacts = new Map();
+    this.constraints = new Map();
+    this.sequence = 0;
+  }
+  begin({ contactId, source, objectId, gesture = 'grab', canonicalPoint, timestamp = this.now(), metadata = null } = {}) {
+    const id = normalizeId(contactId, 'contactId');
+    const object = normalizeId(objectId, 'objectId');
+    const point = normalizePoint(canonicalPoint);
+    if (!GESTURES.includes(gesture)) throw new TypeError('Unsupported interaction gesture');
+    if (this.contacts.has(id)) this.end(id, 'replaced');
+    if (this.contacts.size >= this.maxContacts) throw new RangeError('Interaction contact limit exceeded');
+    const key = sourceKey(source || id);
+    const bucket = this.constraints.get(object) || new Map();
+    if (bucket.size >= this.maxConstraintsPerObject) throw new RangeError('Object interaction constraint limit exceeded');
+    const constraint = {
+      contactId: id, source: key, objectId: object, gesture,
+      anchor: [...point], point: [...point], startedAt: finite(timestamp), updatedAt: finite(timestamp),
+      sequence: ++this.sequence, metadata: metadata ? clone(metadata) : null,
+    };
+    this.contacts.set(id, constraint);
+    bucket.set(id, constraint);
+    this.constraints.set(object, bucket);
+    return clone(constraint);
+  }
+  update(contactId, { canonicalPoint, gesture = null, timestamp = this.now(), metadata = null } = {}) {
+    const id = normalizeId(contactId, 'contactId');
+    const constraint = this.contacts.get(id);
+    if (!constraint) return null;
+    const point = normalizePoint(canonicalPoint);
+    if (gesture !== null && !GESTURES.includes(gesture)) throw new TypeError('Unsupported interaction gesture');
+    constraint.point = [...point];
+    if (gesture) constraint.gesture = gesture;
+    constraint.updatedAt = finite(timestamp);
+    constraint.sequence = ++this.sequence;
+    if (metadata !== null) constraint.metadata = clone(metadata);
+    return clone(constraint);
+  }
+  end(contactId, reason = 'release') {
+    const id = normalizeId(contactId, 'contactId');
+    const constraint = this.contacts.get(id);
+    if (!constraint) return null;
+    this.contacts.delete(id);
+    const bucket = this.constraints.get(constraint.objectId);
+    bucket?.delete(id);
+    if (bucket?.size === 0) this.constraints.delete(constraint.objectId);
+    return { contactId: id, source: constraint.source, objectId: constraint.objectId, reason: String(reason || 'release'), releasedAt: this.now() };
+  }
+  releaseSource(source, reason = 'source-release') {
+    const key = sourceKey(source);
+    return [...this.contacts.values()].filter(item => item.source === key).map(item => this.end(item.contactId, reason));
+  }
+  releaseKind(kind, reason = 'kind-release') {
+    const prefix = normalizeId(String(kind), 'kind') + ':';
+    return [...this.contacts.values()].filter(item => item.source.startsWith(prefix)).map(item => this.end(item.contactId, reason));
+  }
+  killAgent(agentId, reason = 'agent-kill-switch') {
+    const prefix = 'agent:' + normalizeId(agentId, 'agentId');
+    return [...this.contacts.values()].filter(item => item.source === prefix || item.source.startsWith(prefix + ':')).map(item => this.end(item.contactId, reason));
+  }
+  emergencyStop(reason = 'emergency-stop') {
+    return [...this.contacts.keys()].map(id => this.end(id, reason));
+  }
+  forObject(objectId) {
+    const bucket = this.constraints.get(normalizeId(objectId, 'objectId'));
+    return bucket ? [...bucket.values()].map(clone) : [];
+  }
+  preview(objectId, dimension) {
+    const list = this.forObject(objectId);
+    if (!list.length) return null;
+    const safeDimension = Number(dimension);
+    if (!Number.isInteger(safeDimension) || safeDimension < 3 || safeDimension > 11) throw new RangeError('Preview dimension must be 3 through 11');
+    const translation = Array(safeDimension).fill(0);
+    for (const item of list) for (let axis = 0; axis < safeDimension; axis++) translation[axis] += finite(item.point[axis]) - finite(item.anchor[axis]);
+    for (let axis = 0; axis < safeDimension; axis++) translation[axis] /= list.length;
+    let rotation = 0, scale = 1;
+    if (list.length >= 2) {
+      const a = list[0], b = list[1];
+      const initial = [b.anchor[0] - a.anchor[0], b.anchor[1] - a.anchor[1]];
+      const current = [b.point[0] - a.point[0], b.point[1] - a.point[1]];
+      const initialLength = Math.hypot(...initial), currentLength = Math.hypot(...current);
+      if (initialLength > 1e-6 && currentLength > 1e-6) {
+        rotation = Math.atan2(current[1], current[0]) - Math.atan2(initial[1], initial[0]);
+        scale = clamp(currentLength / initialLength, 0.05, 20);
+      }
+    }
+    return { objectId, contactCount: list.length, contactIds: list.map(item => item.contactId), translation, rotation, scale, provisional: true };
+  }
+  snapshot() {
+    return {
+      schema: 'vivo.spatial-interaction-fabric/1',
+      contacts: [...this.contacts.values()].map(clone),
+      constraints: [...this.constraints.entries()].map(([objectId, bucket]) => [objectId, [...bucket.keys()]]),
+      sequence: this.sequence,
+    };
+  }
+}

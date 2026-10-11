@@ -261,6 +261,32 @@ export class LocalVivoEngine {
     this.activeSpaceId = space.id;
     this.world.acceptedSequence++; const write = this.queuePersist(); this.emit('object-provisional'); return write;
   }
+  applyLocalEdit(entityId, delta) {
+    const space = this.world.spaces[this.eye.spaceId], entity = space?.entities[entityId];
+    if (!entity || !Array.isArray(delta) || delta.length !== space.dimension || delta.some(value => !Number.isFinite(value) || Math.abs(value) > 5)) {
+      throw new TypeError('Invalid local field-world edit');
+    }
+    if (this.activeSpaceId && this.activeSpaceId !== space.id) { this.activeIds.clear(); this.activeSpaceId = null; }
+    let changed = false;
+    for (let axis = 0; axis < space.dimension; axis++) {
+      const next = Math.max(-MAX_COORDINATE, Math.min(MAX_COORDINATE, entity.q[axis] + delta[axis]));
+      if (next !== entity.q[axis]) changed = true;
+      entity.q[axis] = next;
+      entity.v[axis] = 0;
+    }
+    if (!changed) return Promise.resolve({ changed: false, revision: entity.revision });
+    entity.revision++;
+    this.activeIds.add(entity.id);
+    for (const edge of space.field.edges) {
+      if (edge.a === entity.id) this.activeIds.add(edge.b);
+      else if (edge.b === entity.id) this.activeIds.add(edge.a);
+    }
+    this.activeSpaceId = space.id;
+    this.world.acceptedSequence++;
+    const write = this.queuePersist();
+    this.emit('object-provisional');
+    return write.then(() => ({ changed: true, revision: entity.revision }));
+  }
   async step(dt = FIXED_STEP) {
     const space = this.world.spaces[this.eye.spaceId];
     if (this.activeSpaceId && this.activeSpaceId !== space.id) { this.activeIds.clear(); this.activeSpaceId = null; }
