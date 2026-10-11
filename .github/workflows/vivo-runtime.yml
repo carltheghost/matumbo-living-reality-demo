@@ -73,7 +73,10 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p test-evidence
-          node --test services/vivo/tests/authority/*.test.mjs services/vivo/tests/input/*.test.mjs services/vivo/tests/integration/contracts.test.mjs research/vivo-phase-fabric/tests/target-mailbox.test.mjs | tee test-evidence/node.log
+          # SQLite gets the full Node 24.19 composition job in vivo-application.yml.
+          # Keep this historical Node 22 authority/input job entirely POSIX.
+          mapfile -t authority_tests < <(find services/vivo/tests/authority -maxdepth 1 -name '*.test.mjs' ! -name 'sqlite-store.test.mjs' | sort)
+          node --test "${authority_tests[@]}" services/vivo/tests/input/*.test.mjs services/vivo/tests/integration/contracts.test.mjs research/vivo-phase-fabric/tests/target-mailbox.test.mjs | tee test-evidence/node.log
           python -m unittest discover -s services/vivo/tests/authority -p 'test_*.py' -v 2>&1 | tee test-evidence/http.log
       - name: Preserve exact replay sources, not just test counts
         if: always()

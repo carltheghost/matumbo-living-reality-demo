@@ -9,6 +9,11 @@ import test_entrypoint as baseline
 
 
 class PhaseMountedApplicationTests(unittest.IsolatedAsyncioTestCase):
+    store = 'posix'
+    data_directory = baseline.MountedApplicationTests.data_directory
+    checkpoint_path = baseline.MountedApplicationTests.checkpoint_path
+    persisted_checkpoint = baseline.MountedApplicationTests.persisted_checkpoint
+    factory = baseline.MountedApplicationTests.factory
     asyncSetUp = baseline.MountedApplicationTests.asyncSetUp
     asyncTearDown = baseline.MountedApplicationTests.asyncTearDown
     stop = baseline.MountedApplicationTests.stop
@@ -24,7 +29,7 @@ class PhaseMountedApplicationTests(unittest.IsolatedAsyncioTestCase):
             port = sock.getsockname()[1]
         self.base = f'http://127.0.0.1:{port}'
         self.proc = await asyncio.create_subprocess_exec(sys.executable, '-m', 'server.local_application',
-            '--port', str(port), '--data-dir', str(self.directory / 'data'), '--material-phase', '--journal-events', str(getattr(self, 'max_events', 65536)), cwd=baseline.ROOT,
+            '--port', str(port), '--data-dir', str(self.data_directory()), '--store', self.store, '--material-phase', '--journal-events', str(getattr(self, 'max_events', 65536)), cwd=baseline.ROOT,
             stdout=self.log, stderr=self.log)
         for _ in range(150):
             if self.proc.returncode is not None:
@@ -120,6 +125,7 @@ class PhaseMountedApplicationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(outer['eye']['q'][3], .5)
         self.assertEqual((await self.rpc(two, 'state'))['state']['eye']['q'][3], -.2)
         final = outer['snapshot']['spaces']['root']['entities']['relic']['q'][:]
+        final_velocity = outer['snapshot']['spaces']['root']['entities']['relic']['v'][:]
         self.assertNotEqual(final, q)
         exported = (await self.rpc(one, 'export'))['value']
         self.assertGreater(len(json.dumps(exported['material']['checkpoint'])), 65536)
@@ -131,10 +137,13 @@ class PhaseMountedApplicationTests(unittest.IsolatedAsyncioTestCase):
         await self.start()
         restored = await self.open('one')
         self.assertEqual(restored['state']['snapshot']['spaces']['root']['entities']['relic']['q'], final)
+        self.assertEqual(restored['state']['snapshot']['spaces']['root']['entities']['relic']['v'], final_velocity)
         self.assertEqual(restored['state']['snapshot']['spaces']['root']['field']['hash'], digest)
         self.assertEqual(restored['state']['eye']['q'][3], .5)
         self.assertFalse(restored['state']['capabilities']['material']['running'])
-        record = json.loads((self.directory / 'data/canonical-phase.json').read_text())
+        record = await self.persisted_checkpoint(restored, phase=True)
+        self.assertEqual(record['state']['material']['checkpoint'], exported['material']['checkpoint'])
+        self.assertEqual((await self.open('two'))['state']['eye']['q'][3], -.2)
         sys.path.insert(0, str(baseline.REPO))
         from services.vivo_material import PhaseMaterialDriver
         driver = PhaseMaterialDriver(record['state']['material']['checkpoint'])
@@ -174,7 +183,7 @@ class PhaseMountedApplicationTests(unittest.IsolatedAsyncioTestCase):
         sys.path.insert(0, str(baseline.ROOT))
         from server.local_application import make_local_app
         from aiohttp import web
-        app = make_local_app(self.directory / 'pause-data', phase=True)
+        app = self.factory('pause-data', phase=True)
         runner = web.AppRunner(app)
         await runner.setup()
         site = web.TCPSite(runner, '127.0.0.1', 0)

@@ -26,8 +26,9 @@ from .authority.module_routes import install_module_routes
 
 
 class LocalBridge:
-    def __init__(self, path, *, phase=False, max_events=65536):
-        self.path = str(Path(path).resolve())
+    def __init__(self, path, *, phase=False, max_events=65536, store='posix'):
+        self.path = str(Path(path)) if store == 'sqlite' else str(Path(path).resolve())
+        self.store = store
         self.phase = phase
         self.max_events = max_events
         self.process = None
@@ -38,9 +39,9 @@ class LocalBridge:
     async def start(self):
         node = shutil.which('node')
         if not node:
-            raise RuntimeError('Canonical local mode requires Node.js 22 or newer')
+            raise RuntimeError('Canonical local mode requires Node.js 22+; SQLite requires Node.js 24.19+ in the Node 24 line')
         self.process = await asyncio.create_subprocess_exec(
-            node, str(ROOT / 'server/application/runtime.mjs'), self.path, *(['--phase'] if self.phase else []), '--journal-events', str(self.max_events),
+            node, str(ROOT / 'server/application/runtime.mjs'), self.path, '--store', self.store, *(['--phase'] if self.phase else []), '--journal-events', str(self.max_events),
             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
             # Errors go to the operator; protocol output never contains raw tokens.
             stderr=None, limit=64 * 1024 * 1024)
@@ -168,15 +169,27 @@ def local_index(*, phase=False):
     return source, text
 
 
-def make_local_app(data_dir, *, phase=False, max_events=65536):
-    if sys.platform == 'win32':
+def make_local_app(data_dir, *, phase=False, max_events=65536, store='posix'):
+    if store not in ('posix', 'sqlite'):
+        raise ValueError('Choose store posix or sqlite')
+    if store == 'posix' and sys.platform == 'win32':
         raise RuntimeError('Native Windows persistence is unsupported: directory fsync fails. A reviewed compatible store is required; no writes were started.')
-    directory = Path(data_dir).resolve()
-    if directory.is_relative_to((ROOT / 'web').resolve()):
-        raise ValueError('Local data must stay outside the web directory')
-    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-    app = make_app(directory / 'comparison.sqlite')
-    bridge = LocalBridge(directory / ('canonical-phase.json' if phase else 'canonical-world.json'), phase=phase, max_events=max_events)
+    directory = Path(data_dir) if store == 'sqlite' else Path(data_dir).resolve()
+    if store == 'sqlite':
+        if not directory.is_absolute() or not directory.is_dir():
+            raise ValueError('SQLite requires an existing absolute private directory outside the checkout')
+        # Keep the supplied path intact: Node must inspect every ancestor/reparse
+        # point and the strict Windows DACL BEFORE any persistent write.
+        if directory.is_relative_to(ROOT.parents[1].resolve()):
+            raise ValueError('SQLite data must stay outside the entire checkout')
+        app = make_app(':memory:')
+    else:
+        if directory.is_relative_to((ROOT / 'web').resolve()):
+            raise ValueError('Local data must stay outside the web directory')
+        directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+        app = make_app(directory / 'comparison.sqlite')
+    checkpoint = ('canonical-phase' if phase else 'canonical-world') + ('.sqlite' if store == 'sqlite' else '.json')
+    bridge = LocalBridge(directory / checkpoint, phase=phase, max_events=max_events, store=store)
     material_host = None
     if phase:
         from .application.material_host import PhaseApplicationHost
@@ -230,7 +243,7 @@ def make_local_app(data_dir, *, phase=False, max_events=65536):
         if isinstance(detail, dict):
             annotate_material(detail.get('capabilities'))
         return web.json_response({**baseline, 'ok': ok, 'mode': 'canonical-local',
-            'node': alive, 'python': python_ok, 'capabilities': detail.get('capabilities') if isinstance(detail, dict) else bridge.capabilities,
+            'node': alive, 'python': python_ok, 'legacyComparisonPersistence': 'volatile memory' if store == 'sqlite' else 'SQLite file', 'capabilities': detail.get('capabilities') if isinstance(detail, dict) else bridge.capabilities,
             'materialHost': material_host.status() if material_host else None,
             'journal': detail.get('journal') if isinstance(detail, dict) else None,
             'physicalDeviceValidated': False, 'publicDeploymentVerified': False,
@@ -323,12 +336,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--port', type=int, default=8766)
     parser.add_argument('--journal-events', type=int, default=65536, help='Retained event capacity (12–65536); default 65536 with cleanup reserve')
+    parser.add_argument('--store', choices=('posix', 'sqlite'), default='posix', help='Explicit canonical backend; SQLite needs Node 24.19+ in the Node 24 line and an existing private directory outside the checkout')
     parser.add_argument('--material-phase', action='store_true', help='Explicit experimental 4D phase mode with separate checkpoint; initially paused')
     parser.add_argument('--data-dir', type=Path, default=ROOT / 'data/canonical-local')
     args = parser.parse_args()
     if not 1 <= args.port <= 65535:
         parser.error('Port must be between 1 and 65535')
-    web.run_app(make_local_app(args.data_dir, phase=args.material_phase, max_events=args.journal_events), host='127.0.0.1', port=args.port, access_log=None)
+    web.run_app(make_local_app(args.data_dir, phase=args.material_phase, max_events=args.journal_events, store=args.store), host='127.0.0.1', port=args.port, access_log=None)
 
 
 if __name__ == '__main__':
