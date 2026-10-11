@@ -3,7 +3,8 @@
  * token persistence, or journal truncation. Node >= 22 (Web Crypto) is required.
  */
 import {randomBytes} from 'node:crypto';
-import {isAbsolute,resolve} from 'node:path';
+import {dirname,isAbsolute,join,resolve} from 'node:path';
+import {lstat} from 'node:fs/promises';
 import {pathToFileURL} from 'node:url';
 import {LocalLeaseWorld} from '../../web/authority/lease-authority.mjs';
 import {FileAuthorityStore} from '../authority/file-store.mjs';
@@ -63,8 +64,24 @@ export function checkMountedPhaseCheckpoint(cp){
 
 /** Metering only: all accepted state, validation, hashing and CAS remain canonical. */
 class MeteredStore {
-  record=null; bytes=0; supportsCommitGuard=true;
-  constructor(path) {this.file=new FileAuthorityStore({path,maxBytes:MAX_BYTES});}
+  record=null; bytes=0;
+  constructor(backend,kind) {this.file=backend;this.kind=kind;}
+  static async open(path,kind,phase) {
+    if(kind==='posix') {
+      if(process.platform==='win32')fail('POSIX_STORE_UNSUPPORTED');
+      return new MeteredStore(new FileAuthorityStore({path,maxBytes:MAX_BYTES}),kind);
+    }
+    // Backend selection is explicit. Never seed a new SQLite world beside a
+    // corresponding JSON world and never interpret JSON as a SQLite migration.
+    const exists=async p=>{try{await lstat(p);return true;}catch(e){if(e.code==='ENOENT')return false;throw e;}};
+    if(!await exists(path)&&await exists(join(dirname(path),phase?'canonical-phase.json':'canonical-world.json')))
+      fail('STORE_LEGACY_CHECKPOINT_PRESENT');
+    const {SQLiteAuthorityStore}=await import('../authority/sqlite-store.mjs');
+    return new MeteredStore(await SQLiteAuthorityStore.open({path,maxBytes:MAX_BYTES}),kind);
+  }
+  get supportsCommitGuard() {return this.file.supportsCommitGuard===true;}
+  get fault() {return this.file.fault??null;}
+  async close() {await this.file.close?.();}
   async load() {
     const record=await this.file.load();
     this.record=record;this.bytes=record?Buffer.byteLength(JSON.stringify(record)+'\n'):0;
@@ -78,7 +95,7 @@ class MeteredStore {
 
 export class MountedRuntime {
   #world; #store; #maxEvents; #reserve; #sessions=new Map(); #seats=new Map();
-  #phase=false; #materialRunning=false; #statusRevision=0;
+  #phase=false; #materialRunning=false; #statusRevision=0; #storageFault=null;
   #tail=Promise.resolve(); #timer; #stopped=false; #fault=null; #sweepQueued=false;
   constructor(key,world,store,maxEvents,reserve,phase) {
     if(key!==MountedRuntime)fail('USE_OPEN');
@@ -90,11 +107,12 @@ export class MountedRuntime {
     },SWEEP_MS);
     this.#timer.unref();
   }
-  static async open({path,maxEvents=65536,reserve=MIN_RESERVE,phase=false,initializeMaterial}={}) {
-    if(typeof phase!=='boolean')fail('INVALID_RUNTIME_OPTIONS');
+  static async open({path,store:storeKind='posix',maxEvents=65536,reserve=MIN_RESERVE,phase=false,initializeMaterial}={}) {
+    if(typeof phase!=='boolean'||!['posix','sqlite'].includes(storeKind))fail('INVALID_RUNTIME_OPTIONS');
     if(typeof path!=='string'||!isAbsolute(path)||!Number.isSafeInteger(maxEvents)||maxEvents>65536||
       !Number.isSafeInteger(reserve)||reserve<MIN_RESERVE||maxEvents<reserve+2)fail('INVALID_RUNTIME_OPTIONS');
-    const store=new MeteredStore(path);
+    const store=await MeteredStore.open(path,storeKind,phase);
+    try {
     const existing=await store.load();
     let seed=phase?phaseWorkshopSeed():workshopSeed(),materialInitial;
     if(existing) {
@@ -135,8 +153,19 @@ export class MountedRuntime {
     const world=await LocalLeaseWorld.create({snapshot:seed,store,maxEvents,
       ...(phase?{materialProtocol:'vivo.lease-material/1',...(materialInitial?{materialInitial}:{})}:{})});
     return new MountedRuntime(MountedRuntime,world,store,maxEvents,reserve,phase);
+    } catch(error) {
+      // An owner acquired before validation must never escape a failed startup.
+      // Preserve a FIRST close failure: a retry is not proof ownership released.
+      await store.close();throw error;
+    }
   }
-  #queue(fn) {const job=this.#tail.then(fn);this.#tail=job.catch(()=>{});return job;}
+  #latchStoreFault() {
+    if(this.#store.fault){this.#storageFault??=this.#store.fault;this.#fault=this.#storageFault;this.#materialRunning=false;}
+  }
+  #queue(fn) {
+    const job=this.#tail.then(async()=>{this.#latchStoreFault();try{return await fn();}finally{this.#latchStoreFault();}});
+    this.#tail=job.catch(()=>{});return job;
+  }
   #journal() {
     const events=this.#store.record.state.events,count=events.length;
     const eventThreshold=this.#maxEvents-this.#reserve;
@@ -147,7 +176,7 @@ export class MountedRuntime {
       checkpointBytes:this.#store.bytes,maxCheckpointBytes:MAX_BYTES,writeByteThreshold:byteThreshold,
       remainingBytes:Math.max(0,byteThreshold-this.#store.bytes),
       backpressure:count>=eventThreshold||this.#store.bytes>=byteThreshold,
-      readOnly:count>=eventThreshold||this.#store.bytes>=byteThreshold,
+      readOnly:!!this.#storageFault||count>=eventThreshold||this.#store.bytes>=byteThreshold,
       firstSequence:events[0]?.sequence??null,lastSequence:events.at(-1)?.sequence??null,
       cleanupReserve:{leases:ENTITY_COUNT,sessions:SEATS.length,sweep:1,restart:1,inFlightOrAdmission:2},
       fault:this.#fault};
@@ -155,11 +184,13 @@ export class MountedRuntime {
   #capabilities() {
     return {materialDynamics:this.#phase,materialLearning:false,remoteMultiplayer:false,localSeats:2,nested:true,
       material:this.#phase?{profile:'phase',dimension:4,spaceId:'root',resolution:[8,8,8,8],running:this.#materialRunning,simulationStep:.02,wallIntervalMs:500,leaseRevisionProtocol:'vivo.lease-material/1'}:null,
-      persistence:'POSIX atomic checkpoint',sessionIdleMs:SESSION_IDLE_MS,
+      persistence:this.#store.kind==='sqlite'?'SQLite WAL/FULL exclusive checkpoint':'POSIX atomic checkpoint',sessionIdleMs:SESSION_IDLE_MS,
       maxRequestBytes:MAX_LINE_BYTES,leaseMs:3000,journal:this.#journal()};
   }
   get capabilities() {return this.#capabilities();}
+  get closed() {return this.#stopped;}
   #gate(cost=1) {
+    if(this.#storageFault)fail('STORE_FAILED_CLOSED');
     const j=this.#journal();
     if(j.backpressure||j.retainedEvents+cost>j.writeThreshold)fail('JOURNAL_BACKPRESSURE');
   }
@@ -188,9 +219,9 @@ export class MountedRuntime {
     if(!this.#seats.size)this.#materialRunning=false;
   }
   async #sweep() {
-    if(this.#stopped)return;
+    if(this.#stopped||this.#storageFault)return;
     for(const s of [...this.#sessions.values()])if(Date.now()-s.lastSeen>=SESSION_IDLE_MS)await this.#close(s);
-    await this.#world.sweepExpired();this.#fault=null;
+    await this.#world.sweepExpired();if(!this.#storageFault)this.#fault=null;
   }
   #events(actorId) {
     return this.#store.record.state.events.map(event=>{
@@ -234,6 +265,7 @@ export class MountedRuntime {
     let request;try{keys(raw,['op','args']);bounded(raw,MAX_MATERIAL_BYTES);request=clone(raw);}catch(e){return Promise.reject(e);}
     return this.#queue(async()=>{
       if(this.#stopped||!this.#phase)fail('MATERIAL_UNAVAILABLE');
+      if(this.#storageFault)fail('STORE_FAILED_CLOSED');
       if(request.op==='materialCapture'){
         keys(request.args,['spaceId']);if(request.args.spaceId!=='root')fail('MATERIAL_SPACE');
         const capture=await this.#world.captureMaterial('root');
@@ -262,16 +294,30 @@ export class MountedRuntime {
       if(this.#stopped)fail('RUNTIME_CLOSED');
       if(request.op==='shutdown') {
         keys(args);if(request.token!==undefined)fail('INVALID_ARGUMENT');
-        for(const s of [...this.#sessions.values()])await this.#close(s);
-        clearInterval(this.#timer);this.#stopped=true;
+        let cleanupError;
+        try {
+          for(const s of [...this.#sessions.values()]) {
+            // No further persistence after an ambiguous storage failure. Any
+            // durable old leases are released by the next lifetime owner.
+            this.#latchStoreFault();if(this.#storageFault)break;
+            try {await this.#close(s);}catch(error){cleanupError??=error;}
+          }
+        } finally {
+          clearInterval(this.#timer);this.#stopped=true;this.#materialRunning=false;
+          this.#sessions.clear();this.#seats.clear();
+          // Always after session cleanup, including a failing cleanup write.
+          await this.#store.close();
+        }
+        if(cleanupError)throw cleanupError;
         return {value:{closed:true},state:null};
       }
       await this.#sweep();
       if(request.op==='ready') {
         keys(args);if(request.token!==undefined)fail('INVALID_ARGUMENT');
-        return {ok:true,capabilities:this.#capabilities(),journal:this.#journal(),
+        return {ok:!this.#storageFault,capabilities:this.#capabilities(),journal:this.#journal(),
       materialDiagnostics:this.#materialDiagnostics()};
       }
+      if(this.#storageFault)fail('STORE_FAILED_CLOSED');
       if(request.op==='open') {
         if(request.token!==undefined)fail('INVALID_ARGUMENT');return this.#open(args);
       }
@@ -340,13 +386,17 @@ async function* privateLines(stream){
 }
 async function main() {
   if(!isAbsolute(process.argv[2]??''))fail('ABSOLUTE_CHECKPOINT_PATH_REQUIRED');
-  let phase=false,maxEvents=65536;const flags=process.argv.slice(3);
-  if(flags[0]==='--phase'){phase=true;flags.shift();}
-  if(flags[0]==='--journal-events'&&flags.length===2){maxEvents=Number(flags[1]);flags.length=0;}
-  if(flags.length)fail('INVALID_RUNTIME_OPTIONS');
+  let phase=false,maxEvents=65536,store='posix';const flags=process.argv.slice(3),seen=new Set();
+  while(flags.length) {
+    const flag=flags.shift();if(seen.has(flag))fail('INVALID_RUNTIME_OPTIONS');seen.add(flag);
+    if(flag==='--phase')phase=true;
+    else if(flag==='--journal-events'&&flags.length)maxEvents=Number(flags.shift());
+    else if(flag==='--store'&&flags.length)store=flags.shift();
+    else fail('INVALID_RUNTIME_OPTIONS');
+  }
   const write=value=>new Promise((done,reject)=>process.stdout.write(JSON.stringify(value)+'\n',error=>error?reject(error):done()));
   const lines=privateLines(process.stdin);
-  const runtime=await MountedRuntime.open({path:process.argv[2],phase,maxEvents,initializeMaterial:async snapshot=>{
+  const runtime=await MountedRuntime.open({path:process.argv[2],store,phase,maxEvents,initializeMaterial:async snapshot=>{
     await write({initializePhase:true,snapshot});const line=await lines.next();
     if(line.done||line.value.error)fail('PHASE_INITIALIZER_FAILED');return line.value.value;
   }});
@@ -356,17 +406,22 @@ async function main() {
   process.once('SIGINT',()=>{void stop().then(()=>process.exit(0),()=>process.exit(1));});
   try{
     for await(const line of lines){
-      let id=null;try{
+      let id=null,shuttingDown=false;try{
         if(line.error)fail(line.error);const request=line.value;
         keys(request,['id','op'],['token','args','queueAgeMs']);
         if(!((typeof request.id==='string'&&request.id.length>0&&request.id.length<=128)||uint(request.id)))fail('INVALID_REQUEST_ID');
-        id=request.id;const {id:_,...body}=request;
+        id=request.id;shuttingDown=request.op==='shutdown';const {id:_,...body}=request;
         const privateMaterial=['materialCapture','materialApply'].includes(request.op);
         if(privateMaterial&&request.token!==undefined)fail('INVALID_ARGUMENT');
         if(!privateMaterial&&line.bytes>MAX_LINE_BYTES)fail('REQUEST_TOO_LARGE');
         const result=privateMaterial?await runtime.dispatchMaterial({op:request.op,args:request.args}):await runtime.dispatch(body);
         await write({id,ok:true,result});if(request.op==='shutdown'){done=true;return;}
-      }catch(error){await write({id,ok:false,error:publicError(error)});}
+      }catch(error){
+        await write({id,ok:false,error:publicError(error)});
+        // A failed close is fatal even if the store later reports closed. Exit
+        // this lifetime owner instead of retrying close or serving stale state.
+        if(shuttingDown&&runtime.closed){done=true;process.exitCode=1;return;}
+      }
     }
   }finally{await stop();}
 }

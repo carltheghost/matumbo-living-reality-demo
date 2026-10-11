@@ -44,7 +44,8 @@ The command binds only `127.0.0.1`. It deliberately has no public-bind flag.
 - Existing index/layout, original WebGL/Canvas renderer and local camera worker
 - Frozen absolute-input controller via GripHost and allowlisted ESM routes
 - Canonical LocalLeaseWorld behind a private supervised Node stdin/stdout pipe
-- Existing POSIX atomic FileAuthorityStore, separate from legacy SQLite state
+- Default POSIX atomic FileAuthorityStore, with an explicit optional SQLite backend
+- Canonical state remains separate from the original legacy comparison
 - Two session-bound local actors; separate saved Eye coordinates, basis and slice
 - Explicit mapped root 4D → inner 11D entry and exact outer-Eye return
 - Full-dimensional accepted grip targets with capture-time freshness checks
@@ -107,8 +108,9 @@ The checkpoint contains accepted snapshot/history and separate Eyes; it is not
 an event-only replay engine. Existing lock directories after a crash must be
 inspected by an operator; the application never steals them. POSIX atomic/fsync
 semantics are tested. Native Windows is explicitly blocked before writes: the
-actual Node 24 probe fails directory fsync with EPERM. A separately reviewed
-compatible storage adapter is required; there is no silent durability downgrade.
+actual Node 24 probe fails directory fsync with EPERM. The optional SQLite adapter
+has a separate strict privacy/native acceptance gate, described below. There is no
+silent fallback or durability downgrade.
 
 The default journal permits 65,536 events, with writes stopped at 65,526. Ten
 cleanup slots cover four entity leases, two sessions, one expiry sweep, one restart
@@ -123,6 +125,60 @@ Capacity and remaining budget appear in Saved state. New writes become read-only
 before cleanup headroom is consumed; history is never silently truncated. Saved
 seats may be admitted read-only to inspect/export after restart. Long-running
 compaction/continuation and sustained high-rate journal performance remain gates.
+
+## Explicit SQLite backend (separate candidate)
+
+The POSIX backend remains the default. Select SQLite deliberately:
+
+```sh
+services/vivo/start-canonical-local.sh --store sqlite --data-dir /absolute/existing/private/directory --port 8766
+# Add --material-phase for the separate, initially paused 4D phase world.
+```
+
+SQLite requires Node **24.19 or later within the Node 24 line**, with its bundled
+SQLite library at least 3.51.3. Supply an already-existing private directory outside
+the entire checkout, including paths that a root static server could expose. The
+launcher does not create that directory or change permissions. Strict path,
+file/sidecar and privacy checks run in Node before any canonical write. A rejected
+path leaves no comparison database: in SQLite mode the original comparison uses
+volatile in-memory SQLite, exposed as `legacyComparisonPersistence: volatile memory`
+in readiness. The original comparison's data does not survive a restart in this mode.
+The POSIX comparison database behavior is unchanged.
+
+Existing SQLite files are identified read-only and revalidated under a writer lock
+before lifetime ownership and world loading. A refused unknown store keeps its
+main/WAL payload bytes; SQLite may update transient SHM lock/index metadata during
+that inspection. Main-file headers alone are not used to reject a valid crash-left
+WAL checkpoint.
+
+Canonical files are `canonical-world.sqlite` and `canonical-phase.sqlite`, separate
+from JSON and comparison data. There is no migration or automatic recovery/reseed.
+A new SQLite file beside the corresponding existing canonical JSON file is refused;
+choose a distinct approved private directory for an explicitly new world.
+
+The SQLite owner is acquired before world loading or restart lease release and is
+held until shutdown finishes session cleanup. Another process cannot read, replace
+or restart-release that owner's world. SQLite uses WAL/FULL and complete checkpoints
+with the same 64 MiB logical limit and event/byte backpressure. A final synchronous
+lease check runs after SQL DML immediately before COMMIT. A fault during storage
+permanently closes readiness and further operations on that runtime; timer sweeps
+never clear it. The server returns readiness 503 rather than representing stale
+memory as a confirmed durable state. Restart must inspect/recover the actual saved
+checkpoint; it must not replay an uncertain request. A failed store close terminates
+the owning Node process, even if a later close call would appear to succeed.
+
+Readiness/capabilities identify `SQLite WAL/FULL exclusive checkpoint`. No private
+path or Node TCP listener is exposed. Normal shutdown closes the store after phase
+pump/session cleanup. A startup validation failure also closes an acquired owner.
+
+These checks are Linux synthetic backend and real loopback HTTP evidence. Native
+Windows usability is **not accepted**: actual strict DACL/private-directory validation
+is still blocked by extra SIDs on the inspected task folder. Do not weaken the gate,
+change ACLs automatically, or infer support from portable SQLite tests. A separately
+approved native path, exact adapter probe, full Python/Node launch and disk/latency
+checks remain necessary. Near-capacity full-checkpoint costs and 64 MiB logical versus
+physical DB/WAL size limits are documented in
+`coordination/vivo/SQLITE-AUTHORITY-STAGE.md`.
 
 ## Verification and deployment contract
 

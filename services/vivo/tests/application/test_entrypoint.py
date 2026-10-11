@@ -18,6 +18,29 @@ REPO = ROOT.parents[1]
 
 
 class MountedApplicationTests(unittest.IsolatedAsyncioTestCase):
+    store = 'posix'
+
+    def data_directory(self, name='data'):
+        directory = self.directory / name
+        if self.store == 'sqlite':
+            directory.mkdir(exist_ok=True, mode=0o700)
+        return directory
+
+    def checkpoint_path(self, phase=False):
+        return self.directory / 'data' / (('canonical-phase' if phase else 'canonical-world') + ('.sqlite' if self.store == 'sqlite' else '.json'))
+
+    async def persisted_checkpoint(self, session, phase=False):
+        if self.store == 'sqlite':
+            # Read through the lifetime owner, never open another SQLite connection.
+            exported = (await self.rpc(session, 'export'))['value']
+            return {'state': {'snapshot': exported['snapshot'], 'material': exported['material']}}
+        return json.loads(self.checkpoint_path(phase).read_text())
+
+    def factory(self, name, **kwargs):
+        sys.path.insert(0, str(ROOT))
+        from server.local_application import make_local_app
+        return make_local_app(self.data_directory(name), store=self.store, **kwargs)
+
     async def asyncSetUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.directory = Path(self.temp.name)
@@ -32,7 +55,7 @@ class MountedApplicationTests(unittest.IsolatedAsyncioTestCase):
             port = sock.getsockname()[1]
         self.base = f'http://127.0.0.1:{port}'
         self.proc = await asyncio.create_subprocess_exec(sys.executable, '-m', 'server.local_application',
-            '--port', str(port), '--data-dir', str(self.directory / 'data'), cwd=ROOT,
+            '--port', str(port), '--data-dir', str(self.data_directory()), '--store', self.store, cwd=ROOT,
             stdout=self.log, stderr=self.log)
         for _ in range(100):
             if self.proc.returncode is not None:
@@ -187,7 +210,7 @@ class MountedApplicationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(returned['state']['snapshot']['simulationTime'], 0)
         exported = await self.rpc(restored, 'export')
         self.assertNotIn(restored['token'], json.dumps(exported['value']))
-        self.assertTrue((self.directory / 'data/canonical-world.json').is_file())
+        self.assertTrue(self.checkpoint_path().is_file())
 
     async def test_node_child_failure_closes_factory_readiness_and_never_replays(self):
         # Other tests launch the CLI. This fault probe uses the same app factory
@@ -196,7 +219,7 @@ class MountedApplicationTests(unittest.IsolatedAsyncioTestCase):
         sys.path.insert(0, str(ROOT))
         from server.local_application import make_local_app
         from aiohttp import web
-        app = make_local_app(self.directory / 'fault-data')
+        app = self.factory('fault-data')
         runner = web.AppRunner(app)
         await runner.setup()
         try:

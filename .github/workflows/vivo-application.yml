@@ -12,6 +12,11 @@ permissions:
   contents: read
 jobs:
   actual-entrypoint:
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22', '24.19.0']
+    name: Mounted application (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -21,7 +26,7 @@ jobs:
           python-version: '3.11'
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: ${{ matrix.node }}
       - run: python -m pip install -r services/vivo/requirements.txt
       - run: python scripts/vivo/stage_input_dependency.py
       - name: Exact imported originals remain unchanged
@@ -30,19 +35,32 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p application-evidence
-          node --test services/vivo/tests/application/*.test.mjs services/vivo/tests/material-authority/*.test.mjs services/vivo_material/tests/*.test.mjs | tee application-evidence/node.log
-          python -m unittest discover -s services/vivo/tests/application -p 'test_*.py' -v 2>&1 | tee application-evidence/http.log
+          # Node 22 retains every POSIX scenario. SQLite is an explicit Node 24.19 backend.
+          if [[ '${{ matrix.node }}' == '22' ]]; then
+            mapfile -t app_tests < <(find services/vivo/tests/application -maxdepth 1 -name '*.test.mjs' ! -name 'sqlite-runtime.test.mjs' | sort)
+            node --test "${app_tests[@]}" services/vivo/tests/material-authority/*.test.mjs services/vivo_material/tests/*.test.mjs | tee application-evidence/node.log
+            mapfile -t py_tests < <(find services/vivo/tests/application -maxdepth 1 -name 'test_*.py' ! -name 'test_sqlite_entrypoint.py' -printf '%f\n' | sed 's/\.py$//' | sort)
+            PYTHONPATH="$PWD/services/vivo/tests/application:$PWD${PYTHONPATH:+:$PYTHONPATH}" python -m unittest "${py_tests[@]}" -v 2>&1 | tee application-evidence/http.log
+          else
+            node --test services/vivo/tests/application/*.test.mjs services/vivo/tests/material-authority/*.test.mjs services/vivo_material/tests/*.test.mjs | tee application-evidence/node.log
+            python -m unittest discover -s services/vivo/tests/application -p 'test_*.py' -v 2>&1 | tee application-evidence/http.log
+          fi
           python -m unittest discover -s services/vivo_material/tests -v 2>&1 | tee application-evidence/material.log
           python -m services.vivo_material.verify > application-evidence/numerical.json
       - name: Original runtime regression and integration contracts
         run: |
           set -euo pipefail
           python scripts/vivo/test_import_stage_a.py 2>&1 | tee application-evidence/import.log
-          node --test services/vivo/tests/authority/*.test.mjs services/vivo/tests/input/*.test.mjs services/vivo/tests/integration/contracts.test.mjs research/vivo-phase-fabric/tests/target-mailbox.test.mjs | tee application-evidence/composition.log
+          if [[ '${{ matrix.node }}' == '22' ]]; then
+            mapfile -t authority_tests < <(find services/vivo/tests/authority -maxdepth 1 -name '*.test.mjs' ! -name 'sqlite-store.test.mjs' | sort)
+          else
+            mapfile -t authority_tests < <(find services/vivo/tests/authority -maxdepth 1 -name '*.test.mjs' | sort)
+          fi
+          node --test "${authority_tests[@]}" services/vivo/tests/input/*.test.mjs services/vivo/tests/integration/contracts.test.mjs research/vivo-phase-fabric/tests/target-mailbox.test.mjs | tee application-evidence/composition.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: vivo-mounted-application-evidence
+          name: vivo-mounted-application-evidence-node-${{ matrix.node }}
           path: application-evidence/
           retention-days: 7
   browser-x4:
