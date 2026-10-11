@@ -5,6 +5,7 @@ import {mkdtemp,rm,writeFile,readdir,mkdir,chmod,symlink} from 'node:fs/promises
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
+import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {DatabaseSync} from 'node:sqlite';
 import {MountedRuntime} from '../../server/application/runtime.mjs';
@@ -15,6 +16,9 @@ import {workshopSeed,entryView} from '../../server/application/seed.mjs';
 const root=fileURLToPath(new URL('../../../../',import.meta.url));
 const runtimeURL=new URL('../../server/application/runtime.mjs',import.meta.url).href;
 const error=code=>e=>e.code===code;
+const canonical=value=>JSON.stringify(value,(_,v)=>v&&typeof v==='object'&&!Array.isArray(v)
+ ?Object.fromEntries(Object.keys(v).sort().map(k=>[k,v[k]])):v);
+const digest=value=>createHash('sha256').update(canonical(value)).digest('hex');
 const command=(kind,payload,id='sqlite.command')=>({schema:'vivo.command/1',id,worldId:'vivo.local.workshop',spaceId:'root',kind,expectedRevision:0,payload});
 async function fixture(t,options={}){
  const dir=await mkdtemp(join(tmpdir(),'vivo-sqlite-mount-')),path=join(dir,options.phase?'canonical-phase.sqlite':'canonical-world.sqlite');
@@ -138,6 +142,16 @@ test('canonical Studio commit survives mounted SQLite shutdown and reopen withou
    binding.bindingRevision+1);
   assert.deepEqual(restored.state.snapshot.studioBindings['studio.node.echo'].q,q);
  } finally { await reopened.dispatch({op:'shutdown'}); }
+});
+
+test('mounted SQLite rejects persisted dynamics on an unbound nested entity',async t=>{
+ const {runtime,path}=await fixture(t);
+ await runtime.dispatch({op:'open',args:{seat:'one'}});await runtime.dispatch({op:'shutdown'});
+ const store=await SQLiteAuthorityStore.open({path}),record=await store.load(),corrupted=structuredClone(record);
+ const nested=corrupted.state.snapshot.spaces.inner.entities.relic;
+ nested.q[0]+=1;nested.revision+=1;corrupted.digest=digest(corrupted.state);
+ await store.compareAndSwap(record.digest,corrupted);await store.close();
+ await assert.rejects(MountedRuntime.open({path,store:'sqlite'}),error('WORKSHOP_CHECKPOINT_MISMATCH'));
 });
 
 for(const afterCommit of [false,true])test(`mounted COMMIT ${afterCommit?'after':'before'} ambiguity stays unavailable through ready and timer sweeps; restart recovers exact durable outcome`,async t=>{

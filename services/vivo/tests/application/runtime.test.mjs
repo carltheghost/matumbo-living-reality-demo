@@ -8,7 +8,9 @@ import {spawn,execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {once} from 'node:events';
 import {createInterface} from 'node:readline';
+import {createHash} from 'node:crypto';
 import {MountedRuntime} from '../../server/application/runtime.mjs';
+import {FileAuthorityStore} from '../../server/authority/file-store.mjs';
 import {workshopSeed,entryView} from '../../server/application/seed.mjs';
 import {studioCommitCommand} from '../../contracts/studio-binding.mjs';
 
@@ -37,6 +39,9 @@ async function fixture(t,options={}) {
   return {runtime,path,one,two};
 }
 const state=(r,s)=>r.dispatch({op:'state',token:s.token});
+const canonical=value=>JSON.stringify(value,(_,v)=>v&&typeof v==='object'&&!Array.isArray(v)
+  ?Object.fromEntries(Object.keys(v).sort().map(k=>[k,v[k]])):v);
+const digest=value=>createHash('sha256').update(canonical(value)).digest('hex');
 
 async function pipe(t,path) {
   const child=spawn(process.execPath,[fileURLToPath(new URL('../../server/application/runtime.mjs',import.meta.url)),path],
@@ -324,4 +329,14 @@ test('canonical Studio commit survives mounted POSIX shutdown and reopen without
       binding.bindingRevision+1);
     assert.deepEqual(restored.state.snapshot.studioBindings['studio.node.echo'].q,q);
   } finally { await reopened.dispatch({op:'shutdown'}); }
+});
+
+test('mounted POSIX rejects persisted dynamics on an unbound nested entity',async t=>{
+  const path=await pathFor(t),runtime=await MountedRuntime.open({path});
+  await runtime.dispatch({op:'shutdown'});
+  const store=new FileAuthorityStore({path}),record=await store.load(),corrupted=structuredClone(record);
+  const nested=corrupted.state.snapshot.spaces.inner.entities.relic;
+  nested.q[0]+=1;nested.revision+=1;corrupted.digest=digest(corrupted.state);
+  await store.compareAndSwap(record.digest,corrupted);
+  await assert.rejects(MountedRuntime.open({path}),/WORKSHOP_CHECKPOINT_MISMATCH/);
 });
