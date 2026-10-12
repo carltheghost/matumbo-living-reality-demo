@@ -79,6 +79,18 @@ export function mapRendererPointToCanonical({ devicePoint, viewport, eye, render
 }
 
 const clamp = (value, lo, hi) => Math.max(lo, Math.min(hi, value));
+const pairTransform = list => {
+  if (list.length < 2) return { rotation: 0, scale: 1 };
+  const [a, b] = list;
+  const initial = [b.anchor[0] - a.anchor[0], b.anchor[1] - a.anchor[1]];
+  const current = [b.point[0] - a.point[0], b.point[1] - a.point[1]];
+  const initialLength = Math.hypot(...initial), currentLength = Math.hypot(...current);
+  if (initialLength <= 1e-6 || currentLength <= 1e-6) return { rotation: 0, scale: 1 };
+  return {
+    rotation: Math.atan2(current[1], current[0]) - Math.atan2(initial[1], initial[0]),
+    scale: clamp(currentLength / initialLength, 0.05, 20),
+  };
+};
 
 export class SpatialInteractionFabric {
   constructor({ now = () => globalThis.performance?.now?.() ?? Date.now(), maxContacts = 64, maxConstraintsPerObject = 16 } = {}) {
@@ -87,6 +99,7 @@ export class SpatialInteractionFabric {
     this.maxConstraintsPerObject = maxConstraintsPerObject;
     this.contacts = new Map();
     this.constraints = new Map();
+    this.aggregates = new Map();
     this.sequence = 0;
   }
   begin({ contactId, source, objectId, gesture = 'grab', canonicalPoint, timestamp = this.now(), metadata = null } = {}) {
@@ -98,6 +111,7 @@ export class SpatialInteractionFabric {
     if (this.contacts.size >= this.maxContacts) throw new RangeError('Interaction contact limit exceeded');
     const key = sourceKey(source || id);
     const bucket = this.constraints.get(object) || new Map();
+    if (!this.constraints.has(object)) this.aggregates.delete(object);
     if (bucket.size >= this.maxConstraintsPerObject) throw new RangeError('Object interaction constraint limit exceeded');
     const constraint = {
       contactId: id, source: key, objectId: object, gesture,
@@ -139,6 +153,26 @@ export class SpatialInteractionFabric {
     if (!constraint) return null;
     this.contacts.delete(id);
     const bucket = this.constraints.get(constraint.objectId);
+    const preserve = sourceKind(constraint.source) === 'touch' && (reason === 'touch-release' || reason === 'release');
+    if (preserve) {
+      const touchContacts = [...bucket.values()].filter(item => sourceKind(item.source) === 'touch');
+      const dimension = Math.max(3, ...touchContacts.map(item => item.point.length), constraint.point.length);
+      const prior = this.aggregates.get(constraint.objectId) || { translation: [], rotation: 0, scale: 1 };
+      const translation = Array(dimension).fill(0);
+      for (let axis = 0; axis < dimension; axis++) translation[axis] = finite(prior.translation[axis]);
+      for (const item of touchContacts) {
+        for (let axis = 0; axis < dimension; axis++) translation[axis] += (finite(item.point[axis]) - finite(item.anchor[axis])) / touchContacts.length;
+      }
+      const transform = pairTransform(touchContacts);
+      this.aggregates.set(constraint.objectId, {
+        translation,
+        rotation: finite(prior.rotation) + transform.rotation,
+        scale: finite(prior.scale, 1) * transform.scale,
+      });
+      for (const item of touchContacts) {
+        if (item.contactId !== id) item.anchor = [...item.point];
+      }
+    }
     bucket?.delete(id);
     if (bucket?.size === 0) this.constraints.delete(constraint.objectId);
     return { contactId: id, source: constraint.source, objectId: constraint.objectId, reason: String(reason || 'release'), releasedAt: this.now() };
@@ -156,7 +190,12 @@ export class SpatialInteractionFabric {
     return [...this.contacts.values()].filter(item => item.source === owner).map(item => this.end(item.contactId, reason));
   }
   emergencyStop(reason = 'emergency-stop') {
-    return [...this.contacts.keys()].map(id => this.end(id, reason));
+    const released = [...this.contacts.keys()].map(id => this.end(id, reason));
+    this.aggregates.clear();
+    return released;
+  }
+  clearObjectAggregate(objectId) {
+    this.aggregates.delete(normalizeId(objectId, 'objectId'));
   }
   forObject(objectId) {
     const bucket = this.constraints.get(normalizeId(objectId, 'objectId'));
@@ -173,30 +212,27 @@ export class SpatialInteractionFabric {
       ? null
       : new Set((Array.isArray(sourceKinds) ? sourceKinds : [sourceKinds]).map(kind => normalizeId(String(kind), 'source kind')));
     const list = this.forObject(objectId).filter(item => !allowedKinds || allowedKinds.has(sourceKind(item.source)));
-    if (!list.length) return null;
+    const carry = this.aggregates.get(objectId);
+    if (!list.length && !carry) return null;
     const safeDimension = Number(dimension);
     if (!Number.isInteger(safeDimension) || safeDimension < 3 || safeDimension > 11) throw new RangeError('Preview dimension must be 3 through 11');
     const translation = Array(safeDimension).fill(0);
-    for (const item of list) for (let axis = 0; axis < safeDimension; axis++) translation[axis] += finite(item.point[axis]) - finite(item.anchor[axis]);
-    for (let axis = 0; axis < safeDimension; axis++) translation[axis] /= list.length;
-    let rotation = 0, scale = 1;
-    if (list.length >= 2) {
-      const a = list[0], b = list[1];
-      const initial = [b.anchor[0] - a.anchor[0], b.anchor[1] - a.anchor[1]];
-      const current = [b.point[0] - a.point[0], b.point[1] - a.point[1]];
-      const initialLength = Math.hypot(...initial), currentLength = Math.hypot(...current);
-      if (initialLength > 1e-6 && currentLength > 1e-6) {
-        rotation = Math.atan2(current[1], current[0]) - Math.atan2(initial[1], initial[0]);
-        scale = clamp(currentLength / initialLength, 0.05, 20);
-      }
-    }
-    return { objectId, contactCount: list.length, contactIds: list.map(item => item.contactId), translation, rotation, scale, provisional: true };
+    if (carry) for (let axis = 0; axis < safeDimension; axis++) translation[axis] = finite(carry.translation[axis]);
+    if (list.length) for (const item of list) for (let axis = 0; axis < safeDimension; axis++) translation[axis] += (finite(item.point[axis]) - finite(item.anchor[axis])) / list.length;
+    const transform = pairTransform(list);
+    return {
+      objectId, contactCount: list.length, contactIds: list.map(item => item.contactId), translation,
+      rotation: finite(carry?.rotation) + transform.rotation,
+      scale: finite(carry?.scale, 1) * transform.scale,
+      provisional: true,
+    };
   }
   snapshot() {
     return {
       schema: 'vivo.spatial-interaction-fabric/1',
       contacts: [...this.contacts.values()].map(clone),
       constraints: [...this.constraints.entries()].map(([objectId, bucket]) => [objectId, [...bucket.keys()]]),
+      aggregates: [...this.aggregates.entries()].map(([objectId, value]) => [objectId, clone(value)]),
       sequence: this.sequence,
     };
   }

@@ -111,6 +111,18 @@ test('repeated move previews accumulate against the unchanged local base', () =>
   assert.ok(Math.abs(controller.commitCandidate().delta[0] - 0.28) < 1e-12);
 });
 
+test('composable mix previews always report delta from immutable base coordinates', () => {
+  const controller = new FieldWorldController(envelope(4), { selectedId: 'relic' });
+  const moved = controller.previewMove('relic', 0, 0.14);
+  const mixedAfterMove = controller.previewMix('relic');
+  assert.equal(mixedAfterMove.baseQ[0], -1.15);
+  assert.notEqual(mixedAfterMove.q[0], moved.q[0]);
+  assert.equal(mixedAfterMove.delta[0], mixedAfterMove.q[0] - mixedAfterMove.baseQ[0]);
+  const mixedAgain = controller.previewMix('relic');
+  assert.notEqual(mixedAgain.q[0], mixedAfterMove.q[0]);
+  assert.equal(mixedAgain.delta[0], mixedAgain.q[0] - mixedAgain.baseQ[0]);
+});
+
 test('field preview operation identity is fresh after persisted reload and duplicate apply remains idempotent', async () => {
   const store = new MemoryStore();
   const firstEngine = new LocalVivoEngine({ storage: store });

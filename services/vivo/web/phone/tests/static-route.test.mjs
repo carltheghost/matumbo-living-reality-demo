@@ -35,6 +35,8 @@ test('Pages publishes a self-contained local phone route without changing the ca
   assert.match(sw, /phone\/static-shared\.js/);
   assert.match(sw, /phone\/field-world\.mjs/);
   assert.match(sw, /phone\/spatial-fabric\.mjs/);
+  assert.match(sw, /phone\/local-operation\.mjs/);
+  assert.match(sw, /phone\/local-edit-queue\.mjs/);
   assert.match(sw, /phoneNavigation/);
   assert.match(sw, /shell\.match\(scoped\('phone\/index\.html'\)\)/);
 });

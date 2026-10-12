@@ -95,7 +95,7 @@ test('mixed hand and touch previews exclude already-accepted hand displacement f
   assert.ok(Math.abs(fabric.preview('relic', 4).translation[0] - 0.1) < 1e-12);
 });
 
-test('released fingers stop contributing while another finger continues the same object gesture', () => {
+test('released fingers preserve the aggregate while another finger continues the same object gesture', () => {
   const fabric = new SpatialInteractionFabric({ now: () => 100 });
   fabric.begin({ contactId: 'touch-1', source: { kind: 'touch', id: '1' }, objectId: 'relic', canonicalPoint: [0, 0, 0, 0] });
   fabric.begin({ contactId: 'touch-2', source: { kind: 'touch', id: '2' }, objectId: 'relic', canonicalPoint: [1, 0, 0, 0] });
@@ -104,7 +104,28 @@ test('released fingers stop contributing while another finger continues the same
   fabric.end('touch-1', 'touch-release');
   const preview = fabric.preview('relic', 4);
   assert.deepEqual(preview.contactIds, ['touch-2']);
-  assert.ok(Math.abs(preview.translation[0] - 0.6) < 1e-12);
+  assert.ok(Math.abs(preview.translation[0] - 0.5) < 1e-12);
+});
+
+test('touch release order preserves the aggregate and rebases remaining-finger continuation', () => {
+  for (const firstRelease of ['moved', 'stationary']) {
+    const fabric = new SpatialInteractionFabric({ now: () => 100 });
+    fabric.begin({ contactId: 'touch-1', source: { kind: 'touch', id: '1' }, objectId: 'relic', canonicalPoint: [0, 0, 0] });
+    fabric.begin({ contactId: 'touch-2', source: { kind: 'touch', id: '2' }, objectId: 'relic', canonicalPoint: [1, 0, 0] });
+    fabric.update('touch-1', { canonicalPoint: [0.2, 0, 0] });
+    assert.ok(Math.abs(fabric.preview('relic', 3).translation[0] - 0.1) < 1e-12);
+    const released = firstRelease === 'moved' ? 'touch-1' : 'touch-2';
+    const remaining = firstRelease === 'moved' ? 'touch-2' : 'touch-1';
+    fabric.end(released, 'touch-release');
+    assert.ok(Math.abs(fabric.preview('relic', 3).translation[0] - 0.1) < 1e-12);
+    const current = firstRelease === 'moved' ? [1.1, 0, 0] : [0.3, 0, 0];
+    fabric.update(remaining, { canonicalPoint: current });
+    assert.ok(Math.abs(fabric.preview('relic', 3).translation[0] - 0.2) < 1e-12);
+    fabric.end(remaining, 'touch-release');
+    assert.ok(Math.abs(fabric.preview('relic', 3).translation[0] - 0.2) < 1e-12);
+    fabric.clearObjectAggregate('relic');
+    assert.equal(fabric.preview('relic', 3), null);
+  }
 });
 
 test('canceling one same-object touch releases only that contact', () => {

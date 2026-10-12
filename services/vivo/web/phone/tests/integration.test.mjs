@@ -80,6 +80,16 @@ test('field touch handlers keep source filtering and selective contact release a
   assert.match(bootstrap, /interactionFabric\?\.rebase\(contactId, appliedPoint\)/);
 });
 
+test('queued hand edits fence future commands across contact stop, camera stop and branch fork', async () => {
+  const bootstrap = await readFile(new URL('phone/bootstrap.mjs', root), 'utf8');
+  assert.match(bootstrap, /new LocalEditQueue\(\)/);
+  assert.match(bootstrap, /contact\.editQueue\.enqueue/);
+  assert.match(bootstrap, /fenceHandEdits\('offline-fork'\)/);
+  assert.match(bootstrap, /fenceHandEdits\('camera-stop'\)/);
+  assert.match(bootstrap, /branchId: contact\.branchId/);
+  assert.match(bootstrap, /if \(handContacts\.get\(contactId\) === contact\)/);
+});
+
 test('the phone-owned tracker detects two complete hands without transporting frames', async () => {
   const [worker, camera, sw] = await Promise.all([
     readFile(new URL('phone/two-hand-worker.mjs', root), 'utf8'),

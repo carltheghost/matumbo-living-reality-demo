@@ -9,6 +9,8 @@ import { startCameraFromButton } from './camera-start-status.mjs';
 import { PhoneAuthorityAdapter } from './authority-adapter.mjs';
 import { FieldWorldController, drawFieldAtlas } from './field-world.mjs';
 import { SpatialInteractionFabric, mapRendererPointToCanonical } from './spatial-fabric.mjs';
+import { LocalOperationIdFactory } from './local-operation.mjs';
+import { LocalEditQueue } from './local-edit-queue.mjs';
 
 const $ = id => document.getElementById(id);
 const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
@@ -23,6 +25,7 @@ let engine = null, authority = null, localMode = false, selectedId = null, activ
 let pinch = null, projection = null, fieldWorld = null, fieldEnvelope = null, interactionFabric = null;
 const handContacts = new Map(), pointerContacts = new Map();
 const touchGestures = new Map();
+const touchOperationIds = new LocalOperationIdFactory('touch-preview');
 let persistTimer = null, lastTwoHand = null, latestCapabilities = null, lastPoseAction = -Infinity;
 const lastPoseByHand = new Map();
 let appliedEyeId = null, appliedEyeRevision = -1;
@@ -279,8 +282,17 @@ function canonicalPointForInput(point, objectId = null) {
     depth: rendererDepthForObject(objectId),
   });
 }
+function fenceHandEdits(reason = 'hand-fence') {
+  for (const [contactId, contact] of handContacts) {
+    contact.editQueue?.stop();
+    interactionFabric?.end(contactId, reason);
+  }
+  handContacts.clear();
+}
 function releaseHandContact(contactId, reason = 'hand-release') {
-  if (!handContacts.has(contactId)) return;
+  const contact = handContacts.get(contactId);
+  if (!contact) return;
+  contact.editQueue?.stop();
   interactionFabric?.end(contactId, reason);
   handContacts.delete(contactId);
 }
@@ -320,7 +332,15 @@ function handleFieldHandGesture(event) {
     if (hit && !handContacts.has(contactId)) {
       const canonicalPoint = canonicalPointForInput(event.point, hit);
       interactionFabric?.begin({ contactId, source: { kind: 'hand', id: event.handId }, objectId: hit, gesture: 'grab', canonicalPoint });
-      handContacts.set(contactId, { id: event.handId, entityId: hit, point: event.point, canonicalPoint });
+      const identity = localObjectIdentity(hit);
+      handContacts.set(contactId, {
+        id: event.handId, entityId: hit, point: event.point, canonicalPoint,
+        worldId: identity?.worldId || fieldEnvelope?.snapshot?.worldId,
+        branchId: identity?.branchId || fieldEnvelope?.branchId || null,
+        eyeId: identity?.eyeId || fieldEnvelope?.currentEyeId,
+        spaceId: identity?.spaceId || fieldEnvelope?.eyes?.[fieldEnvelope?.currentEyeId]?.spaceId,
+        editQueue: new LocalEditQueue(),
+      });
       selectedId = hit; R.selected = hit; status('HAND GRAB ? ' + hit);
     }
     return;
@@ -334,10 +354,18 @@ function handleFieldHandGesture(event) {
     if (activeAxis < dimension) {
       const delta = Array(dimension).fill(0); delta[activeAxis] = materialAxisGesture(dx, dy);
       const appliedPoint = [...contact.canonicalPoint];
-      contact.pending = (contact.pending || Promise.resolve())
-        .then(() => engine.applyLocalEdit(contact.entityId, delta))
-        .then(() => interactionFabric?.rebase(contactId, appliedPoint))
-        .catch(error => status(error.message));
+      contact.pending = contact.editQueue.enqueue({
+        submit: () => engine.applyLocalEdit(contact.entityId, delta, {
+          worldId: contact.worldId, branchId: contact.branchId, eyeId: contact.eyeId,
+          spaceId: contact.spaceId, entityId: contact.entityId,
+        }),
+        afterSubmit: () => {
+          if (handContacts.get(contactId) === contact) interactionFabric?.rebase(contactId, appliedPoint);
+        },
+      }).catch(error => {
+        if (!contact.editQueue.stopped && handContacts.get(contactId) === contact) status(error.message);
+        return { status: 'error', submitted: false, error };
+      });
     }
     return;
   }
@@ -402,6 +430,7 @@ async function startPhoneCamera(facing = 'user') {
   catch (error) { if (camera.video) camera.video.style.display = ''; throw error; }
 }
 function stopPhoneCamera() {
+  fenceHandEdits('camera-stop');
   projection?.stop(); phoneCamera.stop();
   if (camera.video) camera.video.style.display = '';
 }
@@ -481,11 +510,11 @@ function addPhoneSurface() {
     const id = R.selected, axis = Number($('phoneAxis').value); if (!id) return;
     await engine.translate(id, axis, direction * 0.14); await engine.step(1 / 30); status(`Moved ${id} along x${axis + 1}.`);
   };
-  $('phoneEnterNested').onclick = async () => { if (R.selected) await engine.enterNested(R.selected); await refreshSnapshot(); };
-  $('phoneExitNested').onclick = async () => { await engine.exitNested(); await refreshSnapshot(); };
+  $('phoneEnterNested').onclick = async () => { fenceHandEdits('nested-enter'); if (R.selected) await engine.enterNested(R.selected); await refreshSnapshot(); };
+  $('phoneExitNested').onclick = async () => { fenceHandEdits('nested-exit'); await engine.exitNested(); await refreshSnapshot(); };
   $('phoneFork').onclick = async () => {
     try {
-      await engine.forkOffline('Phone offline branch'); const current = await refreshSnapshot();
+      await forkPhoneOffline('Phone offline branch'); const current = await refreshSnapshot();
       const durable = current?.persistence?.state === 'saved';
       status(`Offline branch ${current.branchId.slice(0, 10)} ${durable ? 'created and saved' : 'created in memory only'}. No automatic merge.`);
     } catch (error) { await refreshSnapshot().catch(() => {}); status(`Offline branch remains in memory but was not saved: ${error.message}. Retry remains available.`); }
@@ -526,7 +555,7 @@ function addPhoneSurface() {
   $('phoneFieldDiscard').onclick = () => { fieldWorld?.discardPreview(); updateFieldWorld(); $('phoneFieldApply').disabled = true; $('phoneFieldDiscard').disabled = true; status('Local field preview discarded without changing accepted state.'); };
   $('phoneReleaseContacts').onclick = () => {
     for (const objectId of [...touchGestures.keys()]) cancelObjectTouchGesture(objectId, 'ui-emergency-stop');
-    interactionFabric?.emergencyStop('ui-emergency-stop'); handContacts.clear(); pointerContacts.clear();
+    fenceHandEdits('ui-emergency-stop'); interactionFabric?.emergencyStop('ui-emergency-stop'); pointerContacts.clear();
     status('All local interaction contacts released. No provisional touch edit was committed.');
   };
   $('phoneInstallOffline').onclick = installOffline;
@@ -619,6 +648,10 @@ async function startLocal() {
   status('LOCAL VIVO ? same persistent objects ? independent Eye ? no server required.');
   openPhonePanel();
 }
+async function forkPhoneOffline(label) {
+  fenceHandEdits('offline-fork');
+  return engine?.forkOffline(label);
+}
 async function refreshNativeTools() {
   if (!bridge.available) { $('phoneCapabilityState').textContent = 'Android Companion not connected. Browser engine, storage, camera and touch remain available.'; updateAgentList(); return; }
   try {
@@ -657,7 +690,6 @@ async function cacheHandAssets() {
 // one object-level provisional transform; accepted state changes only once the
 // final contact releases, while cancellation discards the whole object gesture.
 const canvas = $('world');
-let localOperationCounter = 0;
 function objectTouchRecords(objectId) {
   return [...pointerContacts.values()].filter(record => record.target === objectId);
 }
@@ -668,7 +700,7 @@ function beginObjectTouchGesture(objectId) {
   if (!identity) return null;
   gesture = {
     ...identity,
-    operationId: `touch-preview:${identity.worldId}:${identity.branchId || 'local'}:${identity.eyeId}:${identity.spaceId}:${objectId}:${++localOperationCounter}`,
+    operationId: touchOperationIds.next(`${identity.worldId}:${identity.branchId || 'local'}:${identity.eyeId}:${identity.spaceId}:${objectId}`),
     contacts: new Set(),
     lastPreview: null,
   };
@@ -699,20 +731,28 @@ function releaseObjectTouchContact(record, reason) {
 function cancelObjectTouchGesture(objectId, reason = 'touch-cancel') {
   releaseObjectTouchContacts(objectId, reason);
   touchGestures.delete(objectId);
+  interactionFabric?.clearObjectAggregate(objectId);
   status(`LOCAL PROVISIONAL DISCARDED ? ${objectId} ? ${reason}`);
 }
 async function commitObjectTouchGesture(objectId, preview) {
   const gesture = touchGestures.get(objectId);
   touchGestures.delete(objectId);
-  if (!gesture || !preview || !preview.translation?.some(value => value !== 0)) return null;
-  const result = await engine.applyLocalEdit(objectId, preview.translation, {
-    worldId: gesture.worldId, branchId: gesture.branchId, eyeId: gesture.eyeId,
-    spaceId: gesture.spaceId, entityId: gesture.entityId, baseRevision: gesture.baseRevision,
-    operationId: gesture.operationId,
-  });
-  await refreshSnapshot();
-  status(`${result?.replayed ? 'LOCAL PROVISIONAL REPLAY ACKNOWLEDGED' : 'LOCAL PROVISIONAL APPLIED'} ? ${objectId} ? canonical authority was not contacted.`);
-  return result;
+  if (!gesture || !preview || !preview.translation?.some(value => value !== 0)) {
+    interactionFabric?.clearObjectAggregate(objectId);
+    return null;
+  }
+  try {
+    const result = await engine.applyLocalEdit(objectId, preview.translation, {
+      worldId: gesture.worldId, branchId: gesture.branchId, eyeId: gesture.eyeId,
+      spaceId: gesture.spaceId, entityId: gesture.entityId, baseRevision: gesture.baseRevision,
+      operationId: gesture.operationId,
+    });
+    await refreshSnapshot();
+    status(`${result?.replayed ? 'LOCAL PROVISIONAL REPLAY ACKNOWLEDGED' : 'LOCAL PROVISIONAL APPLIED'} ? ${objectId} ? canonical authority was not contacted.`);
+    return result;
+  } finally {
+    interactionFabric?.clearObjectAggregate(objectId);
+  }
 }
 canvas.addEventListener('pointerdown', event => {
   if (!localMode) return;
@@ -775,6 +815,7 @@ const pointerEnd = event => {
       releaseObjectTouchContact(record, reason);
       if (!objectTouchRecords(objectId).length) {
         touchGestures.delete(objectId);
+        interactionFabric?.clearObjectAggregate(objectId);
         status(`LOCAL PROVISIONAL DISCARDED ? ${objectId} ? ${reason}`);
       } else previewObjectTouchGesture(objectId);
     } else {
@@ -799,7 +840,7 @@ window.VivaAgentTools = Object.freeze({ list: () => registry.list(), invoke: (na
 window.VivaPhoneEngine = Object.freeze({
   get active() { return !!engine && localMode; }, get available() { return browserCapabilities.worker; },
   snapshot: () => engine?.snapshot(), translate: (...args) => engine?.translate(...args), applyLocalEdit: (...args) => engine?.applyLocalEdit(...args), setEye: patch => engine?.setEye(patch),
-  forkOffline: label => engine?.forkOffline(label), startCamera: (facing = 'user') => startPhoneCamera(facing), stopCamera: stopPhoneCamera,
+  forkOffline: label => forkPhoneOffline(label), startCamera: (facing = 'user') => startPhoneCamera(facing), stopCamera: stopPhoneCamera,
   authority: () => authority?.debug() || null,
   connectAuthority: options => authority?.connect(options), readAuthority: () => authority?.read(),
   previewAuthority: options => authority?.preview(options), publishAuthority: () => authority?.publish(),

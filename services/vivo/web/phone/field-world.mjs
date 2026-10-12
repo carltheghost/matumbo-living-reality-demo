@@ -6,6 +6,8 @@
  * canonical authority state.  Atlas cells are bounded samples of coordinate
  * planes; an awake object is a view decision, not a change to the envelope.
  */
+import { LocalOperationIdFactory } from './local-operation.mjs';
+
 export const FIELD_WORLD_SCHEMA = 'vivo.phone.field-world/1';
 export const FIELD_LAYOUTS = Object.freeze(['ring', 'row', 'gather']);
 export const MAX_ATLAS_RESOLUTION = 12;
@@ -15,8 +17,6 @@ const clamp = (value, lo, hi) => Math.max(lo, Math.min(hi, value));
 const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const distance = (a, b) => Math.hypot(...a.map((value, index) => value - (b[index] || 0)));
 const tokenize = value => String(value || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
-const uniqueId = () => globalThis.crypto?.randomUUID?.() || `field-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-
 function hashText(value) {
   let hash = 2166136261;
   for (const char of String(value || '')) {
@@ -245,8 +245,7 @@ export class FieldWorldController {
     this.options = { ...options };
     this.envelope = envelope ? clone(envelope) : null;
     this.previewGeneration = 0;
-    this.previewNonce = uniqueId();
-    this.previewCounter = 0;
+    this.previewIds = new LocalOperationIdFactory('field-preview');
     this.preview = null;
     this.model = envelope ? buildFieldWorld(envelope, { ...options, preview: this.preview }) : null;
   }
@@ -271,7 +270,7 @@ export class FieldWorldController {
       ...identity,
       ...values,
       generation: this.previewGeneration,
-      operationId: `field-preview:${this.previewNonce}:${++this.previewCounter}`,
+      operationId: this.previewIds.next('preview'),
     };
     this._buildModel();
     return clone(this.preview);
@@ -314,7 +313,8 @@ export class FieldWorldController {
     const nearest = candidates.sort((a, b) => distance(a.q, entity.q) - distance(b.q, entity.q))[0];
     if (!nearest) throw new TypeError('No neighboring field object to mix');
     const q = entity.q.map((value, index) => (value + nearest.q[index]) / 2);
-    return this._newPreview(entity, { kind: 'mix', baseQ: [...(entity.baseQ || entity.q)], q, delta: q.map((value, index) => value - entity.q[index]), rotation: 0, mixWith: nearest.id });
+    const baseQ = [...(entity.baseQ || entity.q)];
+    return this._newPreview(entity, { kind: 'mix', baseQ, q, delta: q.map((value, index) => value - baseQ[index]), rotation: 0, mixWith: nearest.id });
   }
   discardPreview() {
     this.previewGeneration++;

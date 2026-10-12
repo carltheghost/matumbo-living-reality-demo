@@ -99,21 +99,38 @@ def main(base_url: str) -> None:
         )
         page.wait_for_function("document.querySelector('#phoneFieldPreview').textContent.includes('No local edit preview')")
         print(json.dumps({"step": "edit-applied"}), flush=True)
+        expected_revision = initial["revision"] + 1
+        page.wait_for_function(
+            f"""
+            () => window.VivaPhoneEngine.snapshot().then(snapshot =>
+              (snapshot.snapshot.localOperationResults || []).some(
+                item => item?.result?.changed === true && item.result.revision === {expected_revision}
+              )
+            )
+            """
+        )
         final = page.evaluate(
             """
             async () => {
               const snapshot = await window.VivaPhoneEngine.snapshot();
               const relic = snapshot.snapshot.spaces.root.entities.relic;
+              const operations = (snapshot.snapshot.localOperationResults || [])
+                .filter(item => item?.result?.changed === true);
+              const accepted = operations.at(-1) || null;
               return {
                 q: relic.q,
-                revision: relic.revision,
+                acceptedRevision: accepted?.result?.revision ?? null,
+                currentRevision: relic.revision,
+                operationCount: operations.length,
                 cameraCalls: window.__phoneCameraCalls,
                 controlled: Boolean(navigator.serviceWorker.controller),
               };
             }
             """
         )
-        assert final["revision"] == initial["revision"] + 1
+        assert final["acceptedRevision"] == expected_revision, final
+        assert final["operationCount"] == 1, final
+        assert final["currentRevision"] >= final["acceptedRevision"], final
         assert final["q"][0] != initial["q"][0]
         assert final["cameraCalls"] == 0
         page.get_by_role("button", name="Install offline shell").click()
