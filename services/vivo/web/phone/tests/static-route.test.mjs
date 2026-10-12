@@ -89,3 +89,18 @@ test('Pages build copies the route and exposes its local-only boundary check', a
   assert.match(phoneWorkflow, /browser_field_world_static\.py/);
   assert.match(phoneWorkflow, /browser_bimanual_transform\.py/);
 });
+
+test('Pages live hash verifier covers every changed mounted phone module', async () => {
+  const workflow = await readFile(new URL('../../../../../.github/workflows/deploy-pages.yml', import.meta.url), 'utf8');
+  const block = workflow.match(/for name in \[(.*?)\]:/s)?.[1];
+  assert.ok(block, 'deploy workflow must expose a public HTTPS hash-verifier list');
+  const listed = [...block.matchAll(/'([^']+)'/g)].map((match) => match[1]);
+  const required = [
+    'services/vivo/web/phone/client.mjs',
+    'services/vivo/web/phone/engine.mjs',
+    'services/vivo/web/phone/engine-worker.mjs',
+    'services/vivo/web/phone/two-hand-camera.mjs',
+  ];
+  for (const path of required) assert.ok(listed.includes(path), `${path} must be covered by public HTTPS hash verification`);
+  assert.equal(new Set(listed).size, listed.length, 'public HTTPS hash-verifier list must not contain duplicate paths');
+});
