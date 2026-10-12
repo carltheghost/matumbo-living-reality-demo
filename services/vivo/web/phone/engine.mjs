@@ -53,7 +53,7 @@ export function createPhoneSnapshot({ worldId = uuid(), now = Date.now(), rootDi
   const inner = { innerRelic: entity('innerRelic', 'Inner relic', 11, [0, 0, 0.25, ...Array(8).fill(0)], 0.3) };
   return {
     schema: PHONE_SCHEMA, worldId, authorityId: `local:${worldId}`,
-    acceptedSequence: 0, simulationTime: 0, savedAt: now, rootSpaceId: 'root',
+    acceptedSequence: 0, simulationTime: 0, savedAt: now, rootSpaceId: 'root', localOperationResults: [],
     spaces: {
       root: makeSpace('root', rootDimension, root, rootEdges),
       inner: makeSpace('inner', 11, inner, []),
@@ -95,6 +95,7 @@ export function validatePhoneSnapshot(snapshot) {
   }
   if (entityCount > 16384) throw new RangeError('World entity limit exceeded');
   if (!spaceIds.includes(snapshot.rootSpaceId)) throw new TypeError('Root space is missing');
+  if (snapshot.localOperationResults !== undefined && (!Array.isArray(snapshot.localOperationResults) || snapshot.localOperationResults.length > 128)) throw new RangeError('Local operation result limit exceeded');
   return snapshot;
 }
 
@@ -111,6 +112,10 @@ export function validateEyes(eyes, snapshot) {
 }
 
 const validBranchId = value => typeof value === 'string' && value.length >= 1 && value.length <= 256 && !/[\u0000-\u001f\u007f]/.test(value);
+const validOperationId = value => typeof value === 'string' && value.length >= 1 && value.length <= 256 && !/[\u0000-\u001f\u007f]/.test(value);
+const operationError = (code, message) => { const error = new Error(`${code}: ${message}`); error.code = code; return error; };
+const operationFingerprint = ({ worldId, branchId, eyeId, spaceId, entityId, baseRevision, delta }) => JSON.stringify({ worldId, branchId, eyeId, spaceId, entityId, baseRevision, delta });
+const operationScope = ({ worldId, branchId, eyeId, spaceId, entityId }) => JSON.stringify({ worldId, branchId, eyeId, spaceId, entityId });
 function restoreBranchMetadata(envelope) {
   if (envelope.branchId !== undefined && !validBranchId(envelope.branchId)) throw new TypeError('Invalid phone branch identity');
   if (envelope.mode !== undefined && !BRANCH_MODES.has(envelope.mode)) throw new TypeError('Invalid phone branch mode');
@@ -170,7 +175,7 @@ export function stepSparseSpace(space, dt = FIXED_STEP, activeIds = null) {
 export class LocalVivoEngine {
   constructor({ storage, onChange = () => {}, now = () => Date.now() } = {}) {
     this.storage = storage || null; this.onChange = onChange; this.now = now;
-    this.snapshotState = null; this.eyes = {}; this.currentEyeId = null; this.activeIds = new Set();
+    this.snapshotState = null; this.eyes = {}; this.currentEyeId = null; this.activeIds = new Set(); this.appliedOperations = new Map();
     this.activeSpaceId = null; this._tail = Promise.resolve(); this.lastPersistence = Promise.resolve({ persistent: false });
     this.persistence = { state: 'unpersisted', error: null }; this.branchId = uuid(); this.mode = 'local';
     this.parentBranchId = null; this.branchLabel = null; this.forkedAt = null;
@@ -182,12 +187,14 @@ export class LocalVivoEngine {
       this.snapshotState = clone(stored.snapshot); this.eyes = clone(stored.eyes);
       this.currentEyeId = stored.currentEyeId;
       Object.assign(this, restoreBranchMetadata(stored));
+      this.appliedOperations = new Map((this.snapshotState.localOperationResults || []).filter(item => validOperationId(item?.operationId)).map(item => [item.operationId, clone(item)]));
       this.persistence = { state: 'saved', error: null };
     } else {
       this.snapshotState = createPhoneSnapshot({ worldId, now: this.now(), rootDimension });
       const eye = createEye({ dimension: this.snapshotState.spaces.root.dimension });
       this.eyes = { [eye.id]: eye }; this.currentEyeId = eye.id;
       this.branchId = uuid(); this.mode = 'local'; this.parentBranchId = null; this.branchLabel = null; this.forkedAt = null;
+      this.appliedOperations = new Map();
       await this.persist();
     }
     if (!this.eyes[this.currentEyeId]) this.currentEyeId = Object.keys(this.eyes)[0];
@@ -261,6 +268,55 @@ export class LocalVivoEngine {
     this.activeSpaceId = space.id;
     this.world.acceptedSequence++; const write = this.queuePersist(); this.emit('object-provisional'); return write;
   }
+  applyLocalEdit(entityId, delta, expected = null) {
+    const space = this.world.spaces[this.eye.spaceId], entity = space?.entities[entityId];
+    if (!entity || !Array.isArray(delta) || delta.length !== space.dimension || delta.some(value => !Number.isFinite(value) || Math.abs(value) > 5)) {
+      throw new TypeError('Invalid local field-world edit');
+    }
+    const request = expected && typeof expected === 'object' ? expected : null;
+    const operationId = request?.operationId;
+    if (operationId !== undefined && !validOperationId(operationId)) throw new TypeError('Invalid local operation identity');
+    const scope = { worldId: this.world.worldId, branchId: this.branchId, eyeId: this.currentEyeId, spaceId: space.id, entityId: entity.id };
+    const baseRevision = request?.baseRevision === undefined ? entity.revision : request.baseRevision;
+    const fingerprint = operationFingerprint({ ...scope, baseRevision, delta: delta.map(Number) });
+    const prior = operationId ? this.appliedOperations.get(operationId) : null;
+    if (prior) {
+      if (prior.fingerprint !== fingerprint || prior.scope !== operationScope(scope)) throw operationError('LOCAL_OPERATION_REPLAY_MISMATCH', 'The operation identity belongs to a different local preview.');
+      return Promise.resolve({ ...clone(prior.result), replayed: true });
+    }
+    if (request) {
+      const checks = [
+        ['worldId', this.world.worldId], ['branchId', this.branchId], ['eyeId', this.currentEyeId],
+        ['spaceId', space.id], ['entityId', entity.id], ['baseRevision', entity.revision],
+      ];
+      for (const [key, current] of checks) if (request[key] !== undefined && request[key] !== current) {
+        throw operationError('STALE_LOCAL_PREVIEW', `Local ${key} changed before the preview could be applied.`);
+      }
+    }
+    if (this.activeSpaceId && this.activeSpaceId !== space.id) { this.activeIds.clear(); this.activeSpaceId = null; }
+    const nextQ = entity.q.map((value, axis) => Math.max(-MAX_COORDINATE, Math.min(MAX_COORDINATE, value + delta[axis])));
+    const changed = nextQ.some((value, axis) => value !== entity.q[axis]);
+    if (!changed) return Promise.resolve({ changed: false, revision: entity.revision });
+    entity.q = nextQ;
+    entity.v = entity.v.map(() => 0);
+    entity.revision++;
+    this.activeIds.add(entity.id);
+    for (const edge of space.field.edges) {
+      if (edge.a === entity.id) this.activeIds.add(edge.b);
+      else if (edge.b === entity.id) this.activeIds.add(edge.a);
+    }
+    this.activeSpaceId = space.id;
+    this.world.acceptedSequence++;
+    const result = { changed: true, revision: entity.revision };
+    if (operationId) {
+      const record = { operationId, scope: operationScope(scope), fingerprint, result };
+      this.appliedOperations.set(operationId, record);
+      this.world.localOperationResults = [...this.appliedOperations.values()].slice(-128).map(item => clone(item));
+    }
+    const write = this.queuePersist();
+    this.emit('object-provisional');
+    return write.then(() => result);
+  }
   async step(dt = FIXED_STEP) {
     const space = this.world.spaces[this.eye.spaceId];
     if (this.activeSpaceId && this.activeSpaceId !== space.id) { this.activeIds.clear(); this.activeSpaceId = null; }
@@ -291,6 +347,7 @@ export class LocalVivoEngine {
     const parentBranchId = this.branchId;
     this.branchId = uuid(); this.mode = 'offline-branch'; this.parentBranchId = parentBranchId;
     this.branchLabel = String(label).slice(0, 256); this.forkedAt = this.now();
+    this.appliedOperations = new Map(); this.world.localOperationResults = [];
     this.lastPersistence = this.queuePersist();
     const branch = this.snapshot();
     this.emit('offline-fork'); return clone(branch);

@@ -59,6 +59,37 @@ test('phone authority adapter is cached for offline local startup and keeps shar
   assert.doesNotMatch(adapter, /new LocalTransport\(options\)/);
 });
 
+test('field Apply completion preserves a newer preview generation', async () => {
+  const bootstrap = await readFile(new URL('phone/bootstrap.mjs', root), 'utf8');
+  const start = bootstrap.indexOf("$('phoneFieldApply').onclick");
+  const end = bootstrap.indexOf("$('phoneFieldDiscard').onclick", start);
+  assert.ok(start >= 0 && end > start, 'field action handlers must remain present');
+  const applyHandler = bootstrap.slice(start, end);
+  assert.match(applyHandler, /const candidate = fieldWorld\?\.commitCandidate\(\), completedGeneration = candidate\?\.generation \?\? null/);
+  assert.match(applyHandler, /finally \{ updateFieldActionButtons\(completedGeneration\); \}/);
+  assert.doesNotMatch(applyHandler, /phoneFieldApply.*disabled = true/);
+  assert.doesNotMatch(applyHandler, /phoneFieldDiscard.*disabled = true/);
+  assert.match(bootstrap, /preview && completedGeneration !== null && preview\.generation !== completedGeneration/);
+});
+
+test('field touch handlers keep source filtering and selective contact release at the UI boundary', async () => {
+  const bootstrap = await readFile(new URL('phone/bootstrap.mjs', root), 'utf8');
+  assert.match(bootstrap, /interactionFabric\?\.preview\(objectId, dimension, \{ sourceKinds: \['touch'\] \}\)/);
+  assert.match(bootstrap, /function releaseObjectTouchContact\(record, reason\)/);
+  assert.match(bootstrap, /releaseObjectTouchContact\(record, reason\)/);
+  assert.match(bootstrap, /interactionFabric\?\.rebase\(contactId, appliedPoint\)/);
+});
+
+test('queued hand edits fence future commands across contact stop, camera stop and branch fork', async () => {
+  const bootstrap = await readFile(new URL('phone/bootstrap.mjs', root), 'utf8');
+  assert.match(bootstrap, /new LocalEditQueue\(\)/);
+  assert.match(bootstrap, /contact\.editQueue\.enqueue/);
+  assert.match(bootstrap, /fenceHandEdits\('offline-fork'\)/);
+  assert.match(bootstrap, /fenceHandEdits\('camera-stop'\)/);
+  assert.match(bootstrap, /branchId: contact\.branchId/);
+  assert.match(bootstrap, /if \(handContacts\.get\(contactId\) === contact\)/);
+});
+
 test('the phone-owned tracker detects two complete hands without transporting frames', async () => {
   const [worker, camera, sw] = await Promise.all([
     readFile(new URL('phone/two-hand-worker.mjs', root), 'utf8'),

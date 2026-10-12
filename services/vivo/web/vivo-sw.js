@@ -6,8 +6,8 @@ const SHELL = [
   'application/adapters.mjs', 'authority/grip-host.mjs', 'authority/lease-authority.mjs',
   'authority/material-authority.mjs', 'application/bootstrap.mjs', 'application/transport.mjs',
   'application/interactions.mjs', 'application/density-overlay.mjs',
-  'phone/bootstrap.mjs', 'phone/client.mjs', 'phone/authority-adapter.mjs', 'phone/authority-mapping.mjs', 'phone/two-hand-camera.mjs', 'phone/two-hand-worker.mjs',
-  'phone/engine-worker.mjs', 'phone/engine.mjs', 'phone/storage.mjs', 'phone/agent-tools.mjs', 'phone/persistence-status.mjs', 'phone/camera-start-status.mjs',
+  'phone/index.html', 'phone/bootstrap.mjs', 'phone/client.mjs', 'phone/authority-adapter.mjs', 'phone/authority-mapping.mjs', 'phone/two-hand-camera.mjs', 'phone/two-hand-worker.mjs',
+  'phone/engine-worker.mjs', 'phone/engine.mjs', 'phone/storage.mjs', 'phone/agent-tools.mjs', 'phone/persistence-status.mjs', 'phone/camera-start-status.mjs', 'phone/static-shared.js', 'phone/field-world.mjs', 'phone/spatial-fabric.mjs', 'phone/local-operation.mjs', 'phone/local-edit-queue.mjs',
   'phone/bridge.mjs', 'phone/projection.mjs', 'phone/hand-gestures.mjs',
 ];
 const scoped = relative => new URL(relative, self.registration.scope).href;
@@ -41,8 +41,14 @@ self.addEventListener('fetch', event => {
       const canonicalNavigation = request.mode === 'navigate'
         && url.origin === scope.origin
         && (url.pathname === scopePath || url.pathname === scopePath.slice(0, -1));
-      if (canonicalNavigation) {
-        const fallback = await shell.match(scoped('index.html'));
+      const phonePath = scopePath + 'phone/';
+      const phoneNavigation = request.mode === 'navigate'
+        && url.origin === scope.origin
+        && (url.pathname === phonePath || url.pathname === phonePath.slice(0, -1));
+      if (canonicalNavigation || phoneNavigation) {
+        const fallback = phoneNavigation
+          ? await shell.match(scoped('phone/index.html'))
+          : await shell.match(scoped('index.html'));
         if (fallback) return fallback;
       }
       return new Response('This Vivo resource is not cached on this phone yet.', { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });

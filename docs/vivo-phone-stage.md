@@ -14,6 +14,47 @@ GitHub Pages remains the canonical Vivo UI. The Android Companion is a hardened 
 
 The local phone world keeps a stable world ID, object identities, and a persisted branch envelope (`branchId`, mode, parent branch and label). Each Eye has independent view, projection, nested-world return state, and revision; the phone allows at most 64 persisted Eyes. Offline work creates a named branch envelope and does not silently merge with a shared/server world. Nested transitions fence active material updates to the selected space, so a root edit cannot continue driving an inner world after entry or return.
 
+## Local field-world surface
+
+The Pages build also publishes a self-contained phone route at
+`/services/vivo/web/phone/`. It imports the local worker, IndexedDB storage,
+field-world view and spatial interaction fabric with relative URLs, and the
+service worker caches that route for an offline reopen. This route is useful
+when the Python authority is not mounted: it labels itself `PAGES STATIC/OFFLINE`,
+keeps Connect/Publish/Commit disabled, and never attempts a canonical write or
+backend readiness probe. The static route uses a phone-owned launcher copy with
+the readiness call removed, so a Pages-only browser does not request `/readyz`;
+the canonical shared launcher remains byte-preserved.
+The normal explicit authority controls remain on the mounted Vivo route.
+
+The field-world view is a bounded local analytic projection over the current
+Eye. It wakes nearby or query-relevant objects, samples every coordinate plane
+for the active 3D through 11D space, and offers Ring, Row and Gather layouts.
+Move and mix are provisional until the user explicitly applies them to local
+phone state; turn is a view-only preview that rotates the rendered atlas.
+The selected axes, layout map, and object markers are consumed by the canvas,
+so those controls change visible output rather than only metadata. The
+accepted-event inspector shows
+the local branch, sequence and current object revisions. Its Gaussian mixture
+is an information visualization, not the material solver or a cross-device
+accepted event.
+
+The spatial interaction fabric keeps a separate identity and constraint for
+each touch, finger, hand, gaze, controller or agent contact. It supports
+selective release, bimanual provisional rotation/scale metadata, coordinate
+mapping through the actual renderer yaw/pitch/depth inverse, and an
+object-level provisional transform. A normal final touch release applies the
+aggregate translation once; pointer cancellation discards it without
+committing. Rotation and scale remain provisional view metadata in this slice;
+the local engine accepted-edit command does not persist object orientation or
+scale. The phone UI exposes an emergency local-contact release. The lower-level
+agent kill switch is module-only because this route does not create live agent
+contacts. It does not
+replace the authority CAS, material-contact solver, or physical device
+validation. Camera/head tracking, hardware AR/VR, collaborators/audio, and
+remote accepted material interaction remain unvalidated or out of scope for
+this local slice.
+
 ## Hand input
 
 Use the front camera with palm and fingertips visible. Gestures in local phone mode:
@@ -28,7 +69,7 @@ Use the front camera with palm and fingertips visible. Gestures in local phone m
 | Open-hand swipe | Select the next or previous object |
 | Two pinched hands, change the span between thumb-index pinch points | Zoom the Eye |
 | Two pinched hands, rotate the line between pinch points | Rotate the Eye |
-| Touch drag / two-finger pinch and rotate | Select or move objects; zoom and rotate without the camera |
+| Touch drag / two-finger pinch and rotate | Move objects with an explicit local translation apply; zoom and rotate the Eye/view provisionally without the camera |
 
 The pinned MediaPipe hand landmark task supports up to two hands. Phone mode draws every returned hand and all 21 landmarks per hand, with visible status for thumb, index, middle, ring, and pinky; there is no one-hand-only selection path. Camera tracking and projection are separate controls. Browser and Android lifecycle rules may suspend camera capture when the display is backgrounded.
 

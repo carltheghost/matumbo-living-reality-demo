@@ -71,6 +71,82 @@ jobs:
           PY
           python services/vivo/web/phone/tests/browser_offline_shell.py http://127.0.0.1:9878/
 
+  browser-field-world-static:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install browser test dependency
+        run: python -m pip install playwright==1.57.0
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+      - name: Build the exact static Pages artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf browser-static
+          mkdir -p browser-static/services/vivo/web
+          cp -R services/vivo/web/. browser-static/services/vivo/web/
+          python - <<'PY'
+          from pathlib import Path
+          required = [
+              Path('browser-static/services/vivo/web/phone/index.html'),
+              Path('browser-static/services/vivo/web/phone/bootstrap.mjs'),
+              Path('browser-static/services/vivo/web/phone/static-shared.js'),
+              Path('browser-static/services/vivo/web/phone/field-world.mjs'),
+              Path('browser-static/services/vivo/web/phone/spatial-fabric.mjs'),
+              Path('browser-static/services/vivo/web/vivo-sw.js'),
+          ]
+          missing = [str(path) for path in required if not path.is_file()]
+          if missing:
+              raise SystemExit('missing built phone assets: ' + ', '.join(missing))
+          route = required[0].read_text(encoding='utf-8')
+          bootstrap = required[1].read_text(encoding='utf-8')
+          static_shared = required[2].read_text(encoding='utf-8')
+          if './static-shared.js' not in route or './bootstrap.mjs' not in route:
+              raise SystemExit('static phone route did not preserve its local bootstrap')
+          if 'PAGES STATIC/OFFLINE' not in static_shared or "api('/readyz'" in static_shared:
+              raise SystemExit('static phone launcher still contains a backend readiness call')
+          if 'PAGES STATIC/OFFLINE' not in bootstrap or 'canonical authority unavailable' not in bootstrap:
+              raise SystemExit('static authority boundary is missing')
+          print('built static phone artifact verified')
+          PY
+      - name: Run field-world and offline static browser smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p browser-evidence
+          python -m http.server 9896 --bind 127.0.0.1 --directory browser-static >browser-evidence/server-field-world-static.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          python - <<'PY'
+          import time
+          from urllib.request import urlopen
+          deadline = time.monotonic() + 20
+          while time.monotonic() < deadline:
+              try:
+                  with urlopen('http://127.0.0.1:9896/services/vivo/web/phone/', timeout=2) as response:
+                      if response.status == 200:
+                          break
+              except Exception:
+                  pass
+              time.sleep(0.1)
+          else:
+              raise SystemExit('static artifact server timeout')
+          PY
+          python services/vivo/web/phone/tests/browser_field_world_static.py http://127.0.0.1:9896/ | tee browser-evidence/field-world-static.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vivo-phone-browser-field-world-static-evidence
+          path: browser-evidence/
+          retention-days: 7
+      - name: Scope notice
+        run: echo 'This is synthetic Chromium evidence against the built Pages artifact; it does not certify physical camera, hand, head, Android device, AR, VR, remote authority, or deployment behavior.'
+
   browser-authority-adapter:
     runs-on: ubuntu-latest
     timeout-minutes: 12
