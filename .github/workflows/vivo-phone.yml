@@ -198,6 +198,7 @@ jobs:
           PY
           python services/vivo/web/phone/tests/browser_field_world_static.py http://127.0.0.1:9896/ | tee browser-evidence/field-world-static.json
           python services/vivo/web/phone/tests/browser_economy_mounted.py http://127.0.0.1:9896/ | tee browser-evidence/economy-mounted-built.json
+          python services/vivo/web/phone/tests/browser_bimanual_transform.py http://127.0.0.1:9896/ | tee browser-evidence/bimanual-transform.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:

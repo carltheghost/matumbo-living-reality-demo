@@ -241,3 +241,83 @@ test('local field application advances only the selected local object and preser
   assert.equal(after.snapshot.spaces.root.entities.relic.v[1], 0);
   await engine.close();
 });
+
+test('transform previews keep full-D translation separate from visible shape geometry and support two objects', () => {
+  const controller = new FieldWorldController(envelope(4), { selectedId: 'relic' });
+  const relic = controller.previewTransform('relic', {
+    translation: [0.3, -0.2, 0.4, 0.8],
+    scale: 1.4,
+    rotation: Math.PI / 6,
+    axes: [1, 3],
+  });
+  assert.equal(relic.kind, 'transform');
+  relic.delta.forEach((value, axis) => assert.ok(Math.abs(value - [0.3, -0.2, 0.4, 0.8][axis]) < 1e-12));
+  relic.q.forEach((value, axis) => assert.ok(Math.abs(value - [-0.85, -0.3, 0.65, 0.8][axis]) < 1e-12));
+  assert.deepEqual(relic.geometry, { scale: 1.4, rotation: Math.PI / 6, axes: [1, 3] });
+  assert.deepEqual(controller.entity('relic').baseQ, [-1.15, -0.1, 0.25, 0]);
+  assert.deepEqual(controller.entity('relic').geometry, relic.geometry);
+
+  const workpiece = controller.previewTransform('workpiece', {
+    translation: [-0.1, 0.2, 0, 0],
+    scale: 0.75,
+    rotation: -Math.PI / 8,
+    axes: [0, 1],
+  });
+  assert.equal(controller.model.previews.length, 2);
+  assert.deepEqual(controller.model.previews.map(item => item.entityId), ['relic', 'workpiece']);
+  assert.equal(controller.entity('relic').preview.kind, 'transform');
+  assert.equal(controller.entity('workpiece').preview.kind, 'transform');
+  assert.equal(controller.entity('relic').q[3], 0.8);
+  assert.equal(controller.entity('workpiece').q[3], 0);
+
+  controller.discardPreview({ entityId: 'relic' });
+  assert.equal(controller.entity('relic').preview, null);
+  assert.equal(controller.entity('workpiece').preview.kind, 'transform');
+  assert.equal(controller.model.previews.length, 1);
+});
+
+test('independent transform previews rebase per entity after an accepted solver update', () => {
+  const initial = envelope(4);
+  const controller = new FieldWorldController(initial, { selectedId: 'workpiece' });
+  const relic = controller.previewTransform('relic', {
+    translation: [0.22, -0.04, 0, 0], scale: 1.15, rotation: 0.18, axes: [0, 2],
+  });
+  const workpiece = controller.previewTransform('workpiece', {
+    translation: [-0.12, 0.08, 0, 0], scale: 0.9, rotation: -0.12, axes: [0, 2],
+  });
+  assert.deepEqual(relic.intentDelta, [0.22, -0.04, 0, 0]);
+  assert.deepEqual(workpiece.intentDelta, [-0.12, 0.08, 0, 0]);
+  const accepted = structuredClone(initial);
+  const root = accepted.snapshot.spaces.root.entities;
+  // A portal translation wakes the sparse chain. The accepted snapshot can
+  // therefore advance the portal and both active candidates before either
+  // contact is released.
+  root.portal.q[0] += 0.14;
+  root.portal.revision++;
+  for (const id of ['relic', 'workpiece']) {
+    root[id].q[0] += id === 'relic' ? 0.03 : -0.02;
+    root[id].revision++;
+  }
+
+  const model = controller.refresh(accepted);
+  assert.deepEqual(model.previews.map(item => item.entityId), ['relic', 'workpiece']);
+  assert.equal(controller.commitCandidate().entityId, 'workpiece');
+  assert.equal(controller.commitCandidate().baseRevision, 1);
+  for (const [candidate, id] of [[relic, 'relic'], [workpiece, 'workpiece']]) {
+    const current = root[id];
+    const tracked = controller.previews.get(id);
+    assert.equal(tracked.baseRevision, current.revision);
+    candidate.intentDelta.forEach((delta, axis) => {
+      assert.ok(Math.abs(tracked.q[axis] - (current.q[axis] + delta)) < 1e-12);
+    });
+    assert.equal(controller.entity(id).preview.operationId, tracked.operationId);
+  }
+
+  // A selective discard fence removes only its own candidate; a later refresh
+  // cannot resurrect it while the other active object's intent remains ready.
+  controller.discardPreview({ entityId: 'relic' });
+  assert.equal(controller.isCurrent(relic), false);
+  controller.refresh(accepted);
+  assert.deepEqual(controller.model.previews.map(item => item.entityId), ['workpiece']);
+  assert.equal(controller.commitCandidate().operationId, workpiece.operationId);
+});

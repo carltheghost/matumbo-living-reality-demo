@@ -87,4 +87,5 @@ test('Pages build copies the route and exposes its local-only boundary check', a
   assert.match(workflow, /services\/vivo\/web\/phone\/index\.html/);
   assert.match(phoneWorkflow, /browser-field-world-static/);
   assert.match(phoneWorkflow, /browser_field_world_static\.py/);
+  assert.match(phoneWorkflow, /browser_bimanual_transform\.py/);
 });

@@ -249,3 +249,80 @@ test('offline branch persistence failures do not erase provenance and retry dura
   assert.equal(reloaded.parentBranchId, parentBranchId);
   assert.equal(reloaded.branchLabel, 'No-network retry');
 });
+
+test('bimanual transforms persist geometry separately from canonical coordinates with CAS identity', async () => {
+  const store = new MemoryStore();
+  const engine = new LocalVivoEngine({ storage: store });
+  await engine.open('bimanual-transform-persistence', 4);
+  const before = await engine.snapshot();
+  const entity = before.snapshot.spaces.root.entities.relic;
+  const expected = {
+    worldId: before.snapshot.worldId,
+    branchId: before.branchId,
+    eyeId: before.currentEyeId,
+    spaceId: 'root',
+    entityId: 'relic',
+    baseRevision: entity.revision,
+    operationId: 'bimanual-transform:one',
+  };
+  const geometry = { scale: 1.75, rotation: Math.PI / 4, axes: [0, 2] };
+  const delta = [0.2, -0.1, 0, 0];
+  const accepted = await engine.applyLocalTransform('relic', delta, geometry, expected);
+  assert.equal(accepted.changed, true);
+  assert.deepEqual(accepted.identity, {
+    worldId: before.snapshot.worldId,
+    branchId: before.branchId,
+    eyeId: before.currentEyeId,
+    spaceId: 'root',
+    entityId: 'relic',
+    baseRevision: 0,
+    revision: 1,
+  });
+  assert.deepEqual(accepted.geometry, { scale: 1.75, rotation: Math.PI / 4, axes: [0, 2] });
+  const after = await engine.snapshot();
+  assert.deepEqual(after.snapshot.spaces.root.entities.relic.q, entity.q.map((value, axis) => value + delta[axis]));
+  assert.deepEqual(after.snapshot.spaces.root.entities.relic.geometry, accepted.geometry);
+  assert.equal(after.snapshot.spaces.root.entities.relic.q[3], entity.q[3]);
+
+  const replay = await engine.applyLocalTransform('relic', delta, geometry, expected);
+  assert.equal(replay.replayed, true);
+  assert.throws(
+    () => engine.applyLocalTransform('relic', delta, { ...geometry, scale: 1.8 }, expected),
+    error => error.code === 'LOCAL_OPERATION_REPLAY_MISMATCH',
+  );
+  assert.throws(
+    () => engine.applyLocalTransform('relic', [0, 0, 0, 0], { ...geometry, rotation: 0 }, {
+      ...expected, operationId: 'bimanual-transform:stale', baseRevision: 0,
+    }),
+    error => error.code === 'STALE_LOCAL_PREVIEW',
+  );
+
+  await engine.close();
+  const reloaded = new LocalVivoEngine({ storage: store });
+  await reloaded.open('bimanual-transform-persistence', 4);
+  const reloadedBefore = await reloaded.snapshot();
+  assert.deepEqual(reloadedBefore.snapshot.spaces.root.entities.relic.geometry, accepted.geometry);
+  const replayAfterReload = await reloaded.applyLocalTransform('relic', delta, geometry, expected);
+  assert.equal(replayAfterReload.replayed, true);
+
+  const concurrentBase = await reloaded.snapshot();
+  const concurrentExpected = {
+    worldId: concurrentBase.snapshot.worldId, branchId: concurrentBase.branchId,
+    eyeId: concurrentBase.currentEyeId, spaceId: 'root', entityId: 'relic',
+    baseRevision: concurrentBase.snapshot.spaces.root.entities.relic.revision,
+  };
+  const concurrent = await Promise.allSettled([
+    Promise.resolve().then(() => reloaded.applyLocalTransform('relic', [0.1, 0, 0, 0], { scale: 1.9, rotation: 0.1, axes: [0, 1] }, { ...concurrentExpected, operationId: 'bimanual-transform:a' })),
+    Promise.resolve().then(() => reloaded.applyLocalTransform('relic', [0, 0.1, 0, 0], { scale: 1.6, rotation: -0.1, axes: [0, 1] }, { ...concurrentExpected, operationId: 'bimanual-transform:b' })),
+  ]);
+  assert.equal(concurrent.filter(item => item.status === 'fulfilled').length, 1);
+  assert.equal(concurrent.filter(item => item.status === 'rejected').length, 1);
+  assert.equal(concurrent.find(item => item.status === 'rejected').reason.code, 'STALE_LOCAL_PREVIEW');
+  await reloaded.close();
+  const final = new LocalVivoEngine({ storage: store });
+  await final.open('bimanual-transform-persistence', 4);
+  const finalEntity = (await final.snapshot()).snapshot.spaces.root.entities.relic;
+  assert.equal(finalEntity.revision, 2);
+  assert.ok(finalEntity.geometry.scale === 1.9 || finalEntity.geometry.scale === 1.6);
+  await final.close();
+});

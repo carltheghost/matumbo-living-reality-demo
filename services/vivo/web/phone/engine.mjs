@@ -15,6 +15,30 @@ const FIXED_STEP = 1 / 30;
 const BRANCH_MODES = new Set(['local', 'offline-branch']);
 
 const clone = value => structuredClone(value);
+export const MIN_SHAPE_SCALE = 0.05;
+export const MAX_SHAPE_SCALE = 20;
+const wrapAngle = value => {
+  let angle = Number(value) || 0;
+  while (angle <= -Math.PI) angle += Math.PI * 2;
+  while (angle > Math.PI) angle -= Math.PI * 2;
+  return angle;
+};
+export function normalizeEntityGeometry(value, dimension) {
+  const source = value && typeof value === 'object' ? value : {};
+  const scale = Number(source.scale ?? 1);
+  const rotation = Number(source.rotation ?? 0);
+  const axes = Array.isArray(source.axes) ? source.axes.map(Number).filter(Number.isInteger) : [0, 1];
+  if (!Number.isFinite(scale) || scale < MIN_SHAPE_SCALE || scale > MAX_SHAPE_SCALE) throw new RangeError('Entity shape scale is outside the local bounds');
+  if (!Number.isFinite(rotation) || rotation < -1e6 || rotation > 1e6) throw new RangeError('Entity shape rotation is outside the local bounds');
+  const selected = [];
+  for (const axis of axes) {
+    if (axis >= 0 && axis < dimension && !selected.includes(axis)) selected.push(axis);
+    if (selected.length === 2) break;
+  }
+  for (let axis = 0; selected.length < 2 && axis < dimension; axis++) if (!selected.includes(axis)) selected.push(axis);
+  if (selected.length !== 2) throw new RangeError('Entity shape axes must select two dimensions');
+  return { scale, rotation: wrapAngle(rotation), axes: selected };
+}
 const finiteVector = (value, dimension, label) => {
   if (!Array.isArray(value) || value.length !== dimension || value.some(n => !Number.isFinite(n) || Math.abs(n) > MAX_COORDINATE)) {
     throw new TypeError(`${label} must contain ${dimension} finite bounded coordinates`);
@@ -31,7 +55,7 @@ export function createPhoneSnapshot({ worldId = uuid(), now = Date.now(), rootDi
   const entity = (id, name, dimension, q, radius, innerSpaceId = null) => ({
     id, spaceId: null, dimension, chart: 'flat', q: [...q], v: Array(dimension).fill(0),
     revision: 0, name, radius, materialProfile: 'local-sparse', fieldMembership: [],
-    lineage: [], innerSpaceId,
+    lineage: [], innerSpaceId, geometry: normalizeEntityGeometry(null, dimension),
   });
   const makeSpace = (id, dimension, entities, edges) => {
     for (const item of Object.values(entities)) item.spaceId = id;
@@ -83,6 +107,7 @@ export function validatePhoneSnapshot(snapshot) {
     for (const e of entities) {
       if (e.spaceId !== spaceId || !Number.isFinite(e.radius) || e.radius <= 0 || e.radius > 1000) throw new TypeError('Invalid entity metadata');
       finiteVector(e.q, space.dimension, 'q'); finiteVector(e.v, space.dimension, 'v');
+      e.geometry = normalizeEntityGeometry(e.geometry, space.dimension);
     }
     const edges = space.field?.edges || [];
     if (!Array.isArray(edges) || edges.length > MAX_EDGES_PER_SPACE) throw new RangeError('Sparse edge limit exceeded');
@@ -114,7 +139,7 @@ export function validateEyes(eyes, snapshot) {
 const validBranchId = value => typeof value === 'string' && value.length >= 1 && value.length <= 256 && !/[\u0000-\u001f\u007f]/.test(value);
 const validOperationId = value => typeof value === 'string' && value.length >= 1 && value.length <= 256 && !/[\u0000-\u001f\u007f]/.test(value);
 const operationError = (code, message) => { const error = new Error(`${code}: ${message}`); error.code = code; return error; };
-const operationFingerprint = ({ worldId, branchId, eyeId, spaceId, entityId, baseRevision, delta }) => JSON.stringify({ worldId, branchId, eyeId, spaceId, entityId, baseRevision, delta });
+const operationFingerprint = ({ worldId, branchId, eyeId, spaceId, entityId, baseRevision, delta, geometry = null }) => JSON.stringify({ worldId, branchId, eyeId, spaceId, entityId, baseRevision, delta, geometry });
 const operationScope = ({ worldId, branchId, eyeId, spaceId, entityId }) => JSON.stringify({ worldId, branchId, eyeId, spaceId, entityId });
 function restoreBranchMetadata(envelope) {
   if (envelope.branchId !== undefined && !validBranchId(envelope.branchId)) throw new TypeError('Invalid phone branch identity');
@@ -269,6 +294,13 @@ export class LocalVivoEngine {
     this.world.acceptedSequence++; const write = this.queuePersist(); this.emit('object-provisional'); return write;
   }
   applyLocalEdit(entityId, delta, expected = null) {
+    return this._applyLocalEdit(entityId, delta, expected, false);
+  }
+  applyLocalTransform(entityId, delta, geometry, expected = null) {
+    const request = expected && typeof expected === 'object' ? { ...expected, geometry } : { geometry };
+    return this._applyLocalEdit(entityId, delta, request, true);
+  }
+  _applyLocalEdit(entityId, delta, expected = null, includeTransformResult = false) {
     const space = this.world.spaces[this.eye.spaceId], entity = space?.entities[entityId];
     if (!entity || !Array.isArray(delta) || delta.length !== space.dimension || delta.some(value => !Number.isFinite(value) || Math.abs(value) > 5)) {
       throw new TypeError('Invalid local field-world edit');
@@ -276,12 +308,21 @@ export class LocalVivoEngine {
     const request = expected && typeof expected === 'object' ? expected : null;
     const operationId = request?.operationId;
     if (operationId !== undefined && !validOperationId(operationId)) throw new TypeError('Invalid local operation identity');
+    const requestedGeometry = request?.geometry === undefined || request?.geometry === null
+      ? null
+      : normalizeEntityGeometry(request.geometry, space.dimension);
+    // Pair centroids can leave sub-picometer floating residue after a pure
+    // scale/rotation gesture. Treat that residue as zero so geometry-only
+    // acceptance does not accidentally wake the sparse material solver.
+    const normalizedDelta = delta.map(value => Math.abs(Number(value)) < 1e-12 ? 0 : Number(value));
     const scope = { worldId: this.world.worldId, branchId: this.branchId, eyeId: this.currentEyeId, spaceId: space.id, entityId: entity.id };
     const baseRevision = request?.baseRevision === undefined ? entity.revision : request.baseRevision;
-    const fingerprint = operationFingerprint({ ...scope, baseRevision, delta: delta.map(Number) });
+    const fingerprint = operationFingerprint({ ...scope, baseRevision, delta: normalizedDelta, geometry: requestedGeometry });
+    const legacyFingerprint = JSON.stringify({ ...scope, baseRevision, delta: normalizedDelta });
     const prior = operationId ? this.appliedOperations.get(operationId) : null;
     if (prior) {
-      if (prior.fingerprint !== fingerprint || prior.scope !== operationScope(scope)) throw operationError('LOCAL_OPERATION_REPLAY_MISMATCH', 'The operation identity belongs to a different local preview.');
+      const fingerprintMatches = prior.fingerprint === fingerprint || requestedGeometry === null && prior.fingerprint === legacyFingerprint;
+      if (!fingerprintMatches || prior.scope !== operationScope(scope)) throw operationError('LOCAL_OPERATION_REPLAY_MISMATCH', 'The operation identity belongs to a different local preview.');
       return Promise.resolve({ ...clone(prior.result), replayed: true });
     }
     if (request) {
@@ -294,27 +335,40 @@ export class LocalVivoEngine {
       }
     }
     if (this.activeSpaceId && this.activeSpaceId !== space.id) { this.activeIds.clear(); this.activeSpaceId = null; }
-    const nextQ = entity.q.map((value, axis) => Math.max(-MAX_COORDINATE, Math.min(MAX_COORDINATE, value + delta[axis])));
-    const changed = nextQ.some((value, axis) => value !== entity.q[axis]);
-    if (!changed) return Promise.resolve({ changed: false, revision: entity.revision });
+    const nextQ = entity.q.map((value, axis) => Math.max(-MAX_COORDINATE, Math.min(MAX_COORDINATE, value + normalizedDelta[axis])));
+    const geometryChanged = requestedGeometry && JSON.stringify(requestedGeometry) !== JSON.stringify(entity.geometry);
+    const moved = nextQ.some((value, axis) => value !== entity.q[axis]);
+    const changed = moved || Boolean(geometryChanged);
+    if (!changed) {
+      const unchanged = { changed: false, revision: entity.revision };
+      if (includeTransformResult) { unchanged.identity = { ...scope, baseRevision, revision: entity.revision }; unchanged.geometry = clone(entity.geometry); }
+      return Promise.resolve(unchanged);
+    }
     entity.q = nextQ;
     entity.v = entity.v.map(() => 0);
+    if (requestedGeometry) entity.geometry = requestedGeometry;
     entity.revision++;
-    this.activeIds.add(entity.id);
-    for (const edge of space.field.edges) {
-      if (edge.a === entity.id) this.activeIds.add(edge.b);
-      else if (edge.b === entity.id) this.activeIds.add(edge.a);
+    if (moved) {
+      this.activeIds.add(entity.id);
+      for (const edge of space.field.edges) {
+        if (edge.a === entity.id) this.activeIds.add(edge.b);
+        else if (edge.b === entity.id) this.activeIds.add(edge.a);
+      }
+      this.activeSpaceId = space.id;
     }
-    this.activeSpaceId = space.id;
     this.world.acceptedSequence++;
     const result = { changed: true, revision: entity.revision };
+    if (includeTransformResult) {
+      result.identity = { ...scope, baseRevision, revision: entity.revision };
+      result.geometry = clone(entity.geometry);
+    }
     if (operationId) {
-      const record = { operationId, scope: operationScope(scope), fingerprint, result };
+      const record = { operationId, scope: operationScope(scope), fingerprint, result, identity: { ...scope, baseRevision, revision: entity.revision }, geometry: clone(entity.geometry) };
       this.appliedOperations.set(operationId, record);
       this.world.localOperationResults = [...this.appliedOperations.values()].slice(-128).map(item => clone(item));
     }
     const write = this.queuePersist();
-    this.emit('object-provisional');
+    this.emit(includeTransformResult ? 'object-transform-accepted' : 'object-provisional');
     return write.then(() => result);
   }
   async step(dt = FIXED_STEP) {

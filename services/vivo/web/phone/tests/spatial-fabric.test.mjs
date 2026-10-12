@@ -163,3 +163,72 @@ test('contact identity, bounds and constraint limits are explicit', () => {
   assert.equal(fabric.end('missing'), null);
   assert.equal(fabric.snapshot().contacts.length, 0);
 });
+
+test('touch and synthetic hand contacts share deterministic translation, scale and rotation semantics', () => {
+  const make = sourceKind => {
+    const fabric = new SpatialInteractionFabric({ now: () => 100 });
+    fabric.begin({ contactId: 'a', source: { kind: sourceKind, id: 'a' }, objectId: 'relic', canonicalPoint: [0, 0, 0, 9], metadata: { transformAxes: [0, 1] } });
+    fabric.begin({ contactId: 'b', source: { kind: sourceKind, id: 'b' }, objectId: 'relic', canonicalPoint: [2, 0, 0, 9], metadata: { transformAxes: [0, 1] } });
+    fabric.update('a', { canonicalPoint: [0.5, -0.25, 0, 9], gesture: 'scale' });
+    fabric.update('b', { canonicalPoint: [0.5 + Math.sqrt(2) * 1.5, -0.25 + Math.sqrt(2) * 1.5, 0, 9], gesture: 'rotate' });
+    return fabric.preview('relic', 4);
+  };
+  const touch = make('touch');
+  const hand = make('hand');
+  assert.ok(Math.abs(touch.translation[0] - (0.5 + (Math.sqrt(2) * 1.5 - 1.5)) / 2) < 1e-12);
+  assert.ok(Math.abs(touch.translation[1] - (-0.25 + (Math.sqrt(2) * 1.5 - 0.25)) / 2) < 1e-12);
+  assert.ok(Math.abs(touch.scale - 1.5) < 1e-12);
+  assert.ok(Math.abs(touch.rotation - Math.PI / 4) < 1e-12);
+  assert.deepEqual(touch.geometry.axes, [0, 1]);
+  assert.deepEqual(hand, touch);
+  assert.equal(touch.geometry.scale, touch.scale);
+  assert.equal(touch.geometry.rotation, touch.rotation);
+  assert.equal(touch.translation[3], 0);
+});
+
+test('pair release order preserves the same accepted transform and selective loss keeps the survivor', () => {
+  const resultFor = (firstRelease, reason = 'touch-release') => {
+    const fabric = new SpatialInteractionFabric({ now: () => 100 });
+    fabric.begin({ contactId: 'a', source: { kind: 'touch', id: 'a' }, objectId: 'relic', canonicalPoint: [0, 0, 0] });
+    fabric.begin({ contactId: 'b', source: { kind: 'hand', id: 'b' }, objectId: 'relic', canonicalPoint: [2, 0, 0] });
+    fabric.update('a', { canonicalPoint: [0.5, -0.25, 0] });
+    fabric.update('b', { canonicalPoint: [0.5 + Math.sqrt(2) * 1.5, -0.25 + Math.sqrt(2) * 1.5, 0] });
+    const first = fabric.end(firstRelease, reason);
+    const second = cancelledReasonForTest(reason) ? null : fabric.end(firstRelease === 'a' ? 'b' : 'a', 'touch-release');
+    return { first, second, fabric };
+  };
+  const aFirst = resultFor('a');
+  const bFirst = resultFor('b');
+  assert.deepEqual(aFirst.first.acceptedPreview.geometry, bFirst.first.acceptedPreview.geometry);
+  assert.deepEqual(aFirst.first.acceptedPreview.translation, bFirst.first.acceptedPreview.translation);
+  assert.deepEqual(aFirst.second.acceptedPreview.geometry, aFirst.first.acceptedPreview.geometry);
+  assert.deepEqual(aFirst.second.acceptedPreview.translation, aFirst.first.acceptedPreview.translation);
+
+  const cancelled = resultFor('a', 'hand-lost');
+  assert.equal(cancelled.first.acceptedPreview, null);
+  assert.deepEqual(cancelled.fabric.forObject('relic').map(item => item.contactId), ['b']);
+  const survivor = cancelled.fabric.preview('relic', 3);
+  assert.deepEqual(survivor.contactIds, ['b']);
+  assert.deepEqual(survivor.translation, [Math.sqrt(2) * 1.5 - 1.5, Math.sqrt(2) * 1.5 - 0.25, 0]);
+});
+
+test('independent objects retain contact identity and previews without cross-object transforms', () => {
+  const fabric = new SpatialInteractionFabric({ now: () => 100 });
+  fabric.begin({ contactId: 'left', source: { kind: 'touch', id: 'left' }, objectId: 'relic', canonicalPoint: [-1, 0, 0] });
+  fabric.begin({ contactId: 'right', source: { kind: 'hand', id: 'right' }, objectId: 'workpiece', canonicalPoint: [1, 1, 0] });
+  fabric.update('left', { canonicalPoint: [-0.4, 0.2, 0] });
+  fabric.update('right', { canonicalPoint: [1.2, 1.7, 0] });
+  const left = fabric.preview('relic', 3);
+  const right = fabric.preview('workpiece', 3);
+  assert.deepEqual(left.contactIds, ['left']);
+  assert.deepEqual(right.contactIds, ['right']);
+  assert.deepEqual(left.translation, [0.6, 0.2, 0]);
+  assert.ok(Math.abs(right.translation[0] - 0.2) < 1e-12);
+  assert.ok(Math.abs(right.translation[1] - 0.7) < 1e-12);
+  assert.notEqual(left.objectId, right.objectId);
+  assert.equal(fabric.snapshot().contacts.length, 2);
+});
+
+function cancelledReasonForTest(reason) {
+  return /cancel|lost|missing|fence|stop|hidden|ambiguous|worker|disconnect|replaced|two-hand/i.test(reason);
+}
