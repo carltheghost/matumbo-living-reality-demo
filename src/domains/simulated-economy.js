@@ -477,6 +477,20 @@ function posting(receipt, predicate) {
   return receipt?.postings?.find(predicate) ?? null;
 }
 
+function recordedTradePrice(receipt) {
+  const linkedNum = receipt?.links?.priceNum;
+  const linkedDen = receipt?.links?.priceDen;
+  if (Number.isSafeInteger(linkedNum) && linkedNum > 0 && Number.isSafeInteger(linkedDen) && linkedDen > 0) {
+    return { priceNum: linkedNum, priceDen: linkedDen };
+  }
+  const match = String(receipt?.memo ?? "").match(/\bat\s+(\d+)\/(\d+)\s*$/);
+  if (!match) return null;
+  const priceNum = Number(match[1]);
+  const priceDen = Number(match[2]);
+  if (!Number.isSafeInteger(priceNum) || priceNum <= 0 || !Number.isSafeInteger(priceDen) || priceDen <= 0) return null;
+  return { priceNum, priceDen };
+}
+
 function seedFillDetails(receipt) {
   if (receipt?.action !== "exchange.fill") return null;
   const baseEscrow = posting(receipt, (entry) => entry.account === ECONOMY_ESCROW_ACCOUNT && entry.asset === EXCHANGE_BASE_ASSET && entry.amount < 0);
@@ -486,13 +500,24 @@ function seedFillDetails(receipt) {
   if (!baseEscrow || !quoteEscrow || !buyer || !seller) {
     throw new SimulatedEconomyError("exchange fill receipt is missing canonical postings", "ACCOUNTING_ERROR");
   }
-  const seedSide = seller.account === DEMO_LIQUIDITY_ACCOUNT
+  const price = recordedTradePrice(receipt);
+  if (!price) {
+    throw new EconomyStaleStateError(
+      "exchange fill receipt has no exact simulated price provenance; reload the paired economy snapshot",
+    );
+  }
+  const buyOrderId = typeof receipt.links?.buyOrderId === "string" ? receipt.links.buyOrderId : null;
+  const sellOrderId = typeof receipt.links?.sellOrderId === "string" ? receipt.links.sellOrderId : null;
+  const seedSide = sellOrderId === "order:demo-sell" || (!sellOrderId && seller.account === DEMO_LIQUIDITY_ACCOUNT)
     ? "sell"
-    : buyer.account === DEMO_LIQUIDITY_ACCOUNT ? "buy" : null;
+    : buyOrderId === "order:demo-buy" || (!buyOrderId && buyer.account === DEMO_LIQUIDITY_ACCOUNT) ? "buy" : null;
   return {
     seedSide,
+    buyOrderId,
+    sellOrderId,
     baseAmount: Math.abs(baseEscrow.amount),
     quoteAmount: Math.abs(quoteEscrow.amount),
+    ...price,
     buyer: buyer.account,
     seller: seller.account,
   };
@@ -514,6 +539,41 @@ function referencedSequence(journal) {
     }
   }
   return highest;
+}
+
+function operationMetadata(journal) {
+  const links = journal?.links;
+  if (links?.operationKey === undefined) return null;
+  if (typeof links.operationKey !== "string" || !links.operationKey ||
+      typeof links.operationAction !== "string" || !links.operationAction ||
+      typeof links.operationRequestHash !== "string" || !links.operationRequest || typeof links.operationRequest !== "object") {
+    throw new EconomyStaleStateError("exchange receipt has incomplete operation provenance; reload the paired economy snapshot");
+  }
+  if (requestHash(links.operationRequest) !== links.operationRequestHash) {
+    throw new EconomyStaleStateError("exchange receipt operation provenance does not match its request; reload the paired economy snapshot");
+  }
+  return {
+    key: links.operationKey,
+    action: links.operationAction,
+    requestHash: links.operationRequestHash,
+    request: clone(links.operationRequest),
+  };
+}
+
+function recoveredEvent(journal, now) {
+  return {
+    id: `event:recovered:${journal.id}`,
+    type: journal.action,
+    refType: journal.links?.refType ?? "receipt",
+    refId: journal.links?.refId ?? journal.id,
+    actor: journal.links?.actor ?? journal.postings?.find((entry) => entry.amount < 0)?.account ?? DEMO_LIQUIDITY_ACCOUNT,
+    receiptId: journal.id,
+    hash: journal.hash,
+    at: nowIso(journal.ts ?? now),
+    detail: journal.memo ?? "Recovered from canonical simulated receipt",
+    simulation: true,
+    recovered: true,
+  };
 }
 
 function recoverDemoLiquidity(engine, now) {
@@ -606,14 +666,14 @@ function recoverDemoLiquidity(engine, now) {
     });
   }
 
-  const trades = fillsBySide.sell.concat(fillsBySide.buy).map(({ journal, baseAmount, quoteAmount, seedSide, buyer, seller }) => ({
+  const trades = fillsBySide.sell.concat(fillsBySide.buy).map(({ journal, baseAmount, quoteAmount, seedSide, buyer, seller, buyOrderId, sellOrderId, priceNum, priceDen }) => ({
     id: journal.links?.refId ?? `recovered:${journal.id}`,
-    buyOrderId: seedSide === "buy" ? "order:demo-buy" : null,
-    sellOrderId: seedSide === "sell" ? "order:demo-sell" : null,
+    buyOrderId: buyOrderId ?? (seedSide === "buy" ? "order:demo-buy" : null),
+    sellOrderId: sellOrderId ?? (seedSide === "sell" ? "order:demo-sell" : null),
     baseAmount,
     quoteAmount,
-    priceNum: 1,
-    priceDen: 1,
+    priceNum,
+    priceDen,
     receiptId: journal.id,
     createdAt: journal.ts ?? nowIso(now),
     counterpartyAccount: seedSide === "sell" ? buyer : seller,
@@ -657,6 +717,233 @@ function recoverDemoLiquidity(engine, now) {
   };
 }
 
+function buildRecoveredExchangeOrder({ request, orderId, hold, fills, releases, cancellations, now }) {
+  if (!request || request.action !== "place-exchange-order" || !["buy", "sell"].includes(request.side) ||
+      !request.price || !Number.isSafeInteger(request.price.num) || request.price.num <= 0 ||
+      !Number.isSafeInteger(request.price.den) || request.price.den <= 0 ||
+      !Number.isSafeInteger(request.amountBase) || request.amountBase <= 0) {
+    throw new EconomyStaleStateError(`exchange order ${String(orderId)} has insufficient request provenance; reload the paired economy snapshot`);
+  }
+  const owner = request.owner;
+  const holdAsset = request.side === "sell" ? EXCHANGE_BASE_ASSET : EXCHANGE_QUOTE_ASSET;
+  const holdPosting = hold?.postings?.find((entry) => entry.account === ECONOMY_ESCROW_ACCOUNT && entry.asset === holdAsset && entry.amount > 0);
+  if (!holdPosting) throw new SimulatedEconomyError(`exchange order ${String(orderId)} is missing its escrow hold`, "ACCOUNTING_ERROR");
+  const filledBase = sum(fills.map((entry) => entry.baseAmount));
+  const filledQuote = sum(fills.map((entry) => entry.quoteAmount));
+  const released = sum(releases.map((receipt) => receiptAmountToAccount(receipt, owner, holdAsset)));
+  const initialReserve = holdPosting.amount;
+  const residualBeforeRelease = request.side === "sell" ? initialReserve - filledBase : initialReserve - filledQuote;
+  const cancelled = cancellations.length > 0;
+  if (residualBeforeRelease < 0 || released > residualBeforeRelease) {
+    throw new SimulatedEconomyError(`exchange order ${String(orderId)} has an over-released reserve`, "ACCOUNTING_ERROR");
+  }
+  if (cancelled && released !== residualBeforeRelease) {
+    throw new SimulatedEconomyError(`cancelled exchange order ${String(orderId)} has an unreconciled reserve`, "ACCOUNTING_ERROR");
+  }
+  const remainingBase = request.side === "sell"
+    ? (cancelled ? 0 : initialReserve - filledBase - released)
+    : (cancelled ? 0 : request.amountBase - filledBase);
+  const reservedQuote = request.side === "buy"
+    ? (cancelled ? 0 : initialReserve - filledQuote - released)
+    : 0;
+  if (remainingBase < 0 || reservedQuote < 0) {
+    throw new SimulatedEconomyError(`exchange order ${String(orderId)} has a negative residual`, "ACCOUNTING_ERROR");
+  }
+  const status = cancelled ? "cancelled" : remainingBase === 0 ? "filled" : fills.length ? "partial" : "open";
+  const lifecycle = [hold, ...fills.map((entry) => entry.journal), ...releases, ...cancellations];
+  const updatedAt = lifecycle.reduce((latest, journal) => Math.max(latest, Number(journal?.ts) || 0), Number(hold?.ts) || 0) || nowIso(now);
+  return {
+    id: orderId,
+    owner,
+    side: request.side,
+    baseAsset: EXCHANGE_BASE_ASSET,
+    quoteAsset: EXCHANGE_QUOTE_ASSET,
+    amountBase: request.amountBase,
+    remainingBase,
+    priceNum: request.price.num,
+    priceDen: request.price.den,
+    reservedQuote,
+    status,
+    revision: fills.length + (cancelled ? 1 : 0),
+    holdReceiptId: hold.id,
+    releaseReceiptId: releases.at(-1)?.id ?? null,
+    createdAt: hold.ts ?? nowIso(now),
+    updatedAt,
+    simulation: true,
+    recovered: true,
+  };
+}
+
+function recoveredTradeFromFill(entry, genericOrderIds) {
+  const { journal, baseAmount, quoteAmount, buyer, seller, buyOrderId, sellOrderId, priceNum, priceDen } = entry;
+  const hasGenericOrder = genericOrderIds.has(buyOrderId) || genericOrderIds.has(sellOrderId);
+  if (!hasGenericOrder || !buyOrderId || !sellOrderId) return null;
+  return {
+    id: journal.links?.refId ?? `recovered:${journal.id}`,
+    buyOrderId,
+    sellOrderId,
+    baseAmount,
+    quoteAmount,
+    priceNum,
+    priceDen,
+    receiptId: journal.id,
+    createdAt: journal.ts ?? new Date().toISOString(),
+    counterpartyAccount: genericOrderIds.has(buyOrderId) ? seller : buyer,
+    recovered: true,
+    simulation: true,
+  };
+}
+
+function recoverGenericExchange(engine, now, handledJournalIds) {
+  const journals = engine?.ledger?._journals ?? [];
+  const exchangeActions = new Set([
+    "exchange.order.hold", "exchange.order.open", "exchange.order.cancel", "exchange.order.release", "exchange.fill",
+  ]);
+  const exchangeJournals = journals.filter((journal) => isEconomyJournal(journal) && exchangeActions.has(journal.action));
+  if (!exchangeJournals.length) return null;
+
+  const groups = new Map();
+  const journalGroups = new Map();
+  for (const journal of exchangeJournals) {
+    const metadata = operationMetadata(journal);
+    if (!metadata) continue;
+    const existing = groups.get(metadata.key);
+    if (existing && (existing.action !== metadata.action || existing.requestHash !== metadata.requestHash || canonicalJson(existing.request) !== canonicalJson(metadata.request))) {
+      throw new EconomyStaleStateError(`exchange operation ${metadata.key} has conflicting receipt provenance`);
+    }
+    const group = existing ?? { ...metadata, journals: [] };
+    group.journals.push(journal);
+    groups.set(metadata.key, group);
+    journalGroups.set(journal.id, group);
+  }
+
+  const genericHoldIds = new Set(exchangeJournals
+    .filter((journal) => journal.action === "exchange.order.hold" && !DEMO_SEED_ORDER_SPECS.some((spec) => spec.id === journal.links?.refId))
+    .map((journal) => journal.links?.refId)
+    .filter((id) => typeof id === "string"));
+  const orderGroups = new Map();
+  for (const orderId of genericHoldIds) {
+    const hold = exchangeJournals.find((journal) => journal.action === "exchange.order.hold" && journal.links?.refId === orderId);
+    const holdGroup = journalGroups.get(hold?.id);
+    const request = holdGroup?.action === "place-exchange-order" ? holdGroup.request : null;
+    const open = exchangeJournals.find((journal) => journal.action === "exchange.order.open" && journal.links?.refId === orderId);
+    const openGroup = journalGroups.get(open?.id);
+    if (!holdGroup || !openGroup || holdGroup !== openGroup || holdGroup.action !== "place-exchange-order" ||
+        canonicalJson(holdGroup.request) !== canonicalJson(openGroup.request)) {
+      continue;
+    }
+    orderGroups.set(orderId, { orderId, request, group: holdGroup, hold, open });
+  }
+
+  const fillEntries = [];
+  for (const journal of exchangeJournals.filter((entry) => entry.action === "exchange.fill")) {
+    const details = seedFillDetails(journal);
+    fillEntries.push({ journal, ...details });
+  }
+  const genericOrderIds = new Set(orderGroups.keys());
+  const fillsByOrder = new Map([...genericOrderIds].map((id) => [id, []]));
+  const trades = [];
+  for (const entry of fillEntries) {
+    const trade = recoveredTradeFromFill(entry, genericOrderIds);
+    if (!trade) continue;
+    trades.push(trade);
+    if (genericOrderIds.has(entry.buyOrderId)) fillsByOrder.get(entry.buyOrderId).push(entry);
+    if (genericOrderIds.has(entry.sellOrderId)) fillsByOrder.get(entry.sellOrderId).push(entry);
+    handledJournalIds.add(entry.journal.id);
+  }
+
+  const orders = [];
+  const operations = [];
+  const locked = { TUMBO: 0, sMIMAS: 0 };
+  for (const [orderId, descriptor] of orderGroups) {
+    const fills = fillsByOrder.get(orderId);
+    const releases = exchangeJournals.filter((journal) => journal.action === "exchange.order.release" && journal.links?.refId === orderId);
+    const cancellations = exchangeJournals.filter((journal) => journal.action === "exchange.order.cancel" && journal.links?.refId === orderId);
+    const order = buildRecoveredExchangeOrder({ request: descriptor.request, orderId, hold: descriptor.hold, fills, releases, cancellations, now });
+    orders.push(order);
+    if (order.side === "sell") locked.TUMBO += order.remainingBase;
+    else locked.sMIMAS += order.reservedQuote;
+    for (const journal of descriptor.group.journals) handledJournalIds.add(journal.id);
+    for (const journal of releases) {
+      const group = journalGroups.get(journal.id);
+      if (group && (group === descriptor.group || group.action === "cancel-exchange-order")) handledJournalIds.add(journal.id);
+    }
+    for (const journal of cancellations) {
+      const group = journalGroups.get(journal.id);
+      if (group && group.action === "cancel-exchange-order") {
+        handledJournalIds.add(journal.id);
+        const releaseReceiptId = releases.find((release) => journalGroups.get(release.id) === group)?.id ?? null;
+        operations.push({
+          key: group.key,
+          requestHash: group.requestHash,
+          result: {
+            order: clone(order),
+            releaseReceiptId,
+            receiptId: journal.id,
+            simulation: true,
+          },
+        });
+      }
+    }
+    const placeGroup = descriptor.group;
+    const placeFills = trades.filter((trade) => placeGroup.journals.some((journal) => journal.id === trade.receiptId));
+    operations.push({
+      key: placeGroup.key,
+      requestHash: placeGroup.requestHash,
+      result: { order: clone(order), fills: clone(placeFills), receiptId: descriptor.open.id, simulation: true },
+    });
+  }
+
+  const handledEvents = journals.filter((journal) => handledJournalIds.has(journal.id)).map((journal) => recoveredEvent(journal, now));
+  const unhandledExchange = exchangeJournals.filter((journal) => !handledJournalIds.has(journal.id));
+  const unsupported = journals.filter((journal) => isEconomyJournal(journal) && !handledJournalIds.has(journal.id) && !exchangeActions.has(journal.action));
+  return {
+    orders,
+    trades,
+    locked,
+    seeded: false,
+    receiptId: null,
+    events: handledEvents,
+    operations,
+    handledJournalIds,
+    unsupported,
+    unhandledExchange,
+    nextId: Math.max(0, ...journals.map(referencedSequence)),
+    revision: journals.filter((journal) => journal.action === "exchange.order.open" || journal.action === "exchange.order.cancel").length,
+  };
+}
+
+function recoverExchangeHistory(engine, now) {
+  const demo = recoverDemoLiquidity(engine, now);
+  const handledJournalIds = demo?.handledJournalIds ?? new Set();
+  const generic = recoverGenericExchange(engine, now, handledJournalIds);
+  if (!demo && !generic) return null;
+  const locked = {
+    TUMBO: (demo?.locked.TUMBO ?? 0) + (generic?.locked.TUMBO ?? 0),
+    sMIMAS: (demo?.locked.sMIMAS ?? 0) + (generic?.locked.sMIMAS ?? 0),
+  };
+  const operations = [...(generic?.operations ?? [])];
+  const operationKeys = new Set();
+  return {
+    orders: [...(demo?.orders ?? []), ...(generic?.orders ?? [])],
+    trades: [...(demo?.trades ?? []), ...(generic?.trades ?? [])],
+    locked,
+    seeded: Boolean(demo?.seeded),
+    receiptId: demo?.receiptId ?? null,
+    events: [...(demo?.events ?? []), ...(generic?.events ?? [])],
+    operations: operations.filter((operation) => {
+      if (operationKeys.has(operation.key)) return false;
+      operationKeys.add(operation.key);
+      return true;
+    }),
+    handledJournalIds,
+    unsupported: generic?.unsupported ?? [],
+    unhandledExchange: generic?.unhandledExchange ?? [],
+    nextId: Math.max(demo?.nextId ?? 0, generic?.nextId ?? 0),
+    revision: Math.max(demo?.revision ?? 0, generic?.revision ?? 0),
+  };
+}
+
 function applyRecoveredDemoLiquidity(state, recovery, { adjustBaseline = false } = {}) {
   if (!recovery || state.exchange.seeded) return false;
   if (adjustBaseline) {
@@ -675,8 +962,11 @@ function applyRecoveredDemoLiquidity(state, recovery, { adjustBaseline = false }
   for (const event of recovery.events ?? []) {
     if (!state.events.some((entry) => entry.receiptId === event.receiptId)) state.events.push(event);
   }
+  for (const operation of recovery.operations ?? []) {
+    if (!state.operations.some((entry) => entry.key === operation.key)) state.operations.push(operation);
+  }
   state.nextId = Math.max(state.nextId, recovery.nextId ?? 0);
-  state.exchange.seeded = true;
+  state.exchange.seeded = Boolean(recovery.seeded);
   state.exchange.revision = Math.max(state.exchange.revision, recovery.revision ?? (recovery.orders.length ? 1 : 0));
   return true;
 }
@@ -728,6 +1018,7 @@ export class SimulatedEconomy {
     this.storageKey = storageKey;
     this.now = now;
     this._listeners = new Set();
+    this._operationContext = null;
     this.storageStatus = "in-memory";
 
     let state = null;
@@ -783,7 +1074,7 @@ export class SimulatedEconomy {
     }
 
     if (!state) {
-      const recovery = recoverDemoLiquidity(this.engine, this.now);
+      const recovery = recoverExchangeHistory(this.engine, this.now);
       const economyJournals = this.engine.ledger._journals.filter(isEconomyJournal);
       if (!recovery && economyJournals.length) {
         throw new EconomyStaleStateError(
@@ -807,9 +1098,9 @@ export class SimulatedEconomy {
       for (const asset of [EXCHANGE_BASE_ASSET, EXCHANGE_QUOTE_ASSET]) {
         if (baseline[asset] < 0) throw new SimulatedEconomyError(`cannot reconcile demo liquidity baseline for ${asset}`, "ACCOUNTING_ERROR");
       }
-      if (recovery?.unhandledExchange?.length && (baseline.TUMBO > 0 || baseline.sMIMAS > 0)) {
+      if (recovery?.unhandledExchange?.length) {
         throw new EconomyStaleStateError(
-          "canonical exchange receipts leave an obligation that cannot be reconstructed without the paired simulated economy snapshot",
+          "canonical exchange receipts include lifecycle history that cannot be reconstructed without the paired simulated economy snapshot",
         );
       }
       state = emptyState({
@@ -818,9 +1109,9 @@ export class SimulatedEconomy {
       });
       stateReconciled = applyRecoveredDemoLiquidity(state, recovery);
     } else if (!state.exchange.seeded) {
-      const recovery = recoverDemoLiquidity(this.engine, this.now);
-      if (recovery?.unsupported?.length) {
-        const actions = [...new Set(recovery.unsupported.map((journal) => journal.action))].join(", ");
+      const recovery = recoverExchangeHistory(this.engine, this.now);
+      if (recovery?.unsupported?.length || recovery?.unhandledExchange?.length) {
+        const actions = [...new Set([...(recovery.unsupported ?? []), ...(recovery.unhandledExchange ?? [])].map((journal) => journal.action))].join(", ");
         throw new EconomyStaleStateError(`economy snapshot is missing lifecycle state for canonical receipts (${actions})`);
       }
       stateReconciled = applyRecoveredDemoLiquidity(state, recovery);
@@ -897,6 +1188,16 @@ export class SimulatedEconomy {
     return durable;
   }
 
+  _operationLinks() {
+    if (!this._operationContext) return {};
+    return {
+      operationKey: this._operationContext.key,
+      operationAction: this._operationContext.request.action,
+      operationRequestHash: this._operationContext.requestHash,
+      operationRequest: clone(this._operationContext.request),
+    };
+  }
+
   _operation(key, request, mutate) {
     if (typeof key !== "string" || !key.trim()) throw new TypeError("idempotencyKey must be a non-empty string");
     const normalizedKey = key.trim();
@@ -909,8 +1210,19 @@ export class SimulatedEconomy {
     }
     const stateBefore = clone(this._state);
     const tokenBefore = serializeTokenEngine(this.engine);
+    const previousOperationContext = this._operationContext;
+    this._operationContext = { key: normalizedKey, requestHash: hash, request: clone(request) };
+    let result;
     try {
-      const result = mutate();
+      result = mutate();
+    } catch (error) {
+      this._operationContext = previousOperationContext;
+      try { adoptTokenEngine(this.engine, loadTokenEngine(tokenBefore)); } catch { /* preserve the original failure */ }
+      this._state = stateBefore;
+      throw error;
+    }
+    this._operationContext = previousOperationContext;
+    try {
       this._state.operations.push({ key: normalizedKey, requestHash: hash, result: clone(result) });
       this.verify();
       this._persist();
@@ -957,6 +1269,7 @@ export class SimulatedEconomy {
         refId,
         actor: account,
         simulation: true,
+        ...this._operationLinks(),
       },
     });
     this._state.events.push({
@@ -974,7 +1287,7 @@ export class SimulatedEconomy {
     return receipt;
   }
 
-  _moneyReceipt({ postings, key, action, refType, refId, actor, detail = "" }) {
+  _moneyReceipt({ postings, key, action, refType, refId, actor, detail = "", metadata = null }) {
     const account = normalizeActor(actor);
     const receipt = this._post(postings, {
       idempotencyKey: key,
@@ -987,6 +1300,8 @@ export class SimulatedEconomy {
         refId,
         actor: account,
         simulation: true,
+        ...(metadata && typeof metadata === "object" ? clone(metadata) : {}),
+        ...this._operationLinks(),
       },
     });
     this._state.events.push({
@@ -1089,8 +1404,8 @@ export class SimulatedEconomy {
       if (this._state.exchange.seeded) {
         return { seeded: true, orders: this.exchangeOrders({ owner: DEMO_LIQUIDITY_ACCOUNT }) };
       }
-      const existing = recoverDemoLiquidity(this.engine, this.now);
-      if (existing) {
+      const existing = recoverExchangeHistory(this.engine, this.now);
+      if (existing?.seeded) {
         applyRecoveredDemoLiquidity(this._state, existing);
         return {
           seeded: true,
@@ -1240,6 +1555,12 @@ export class SimulatedEconomy {
         refId: tradeId,
         actor: buy.owner,
         detail: `${baseAmount} TUMBO-SIM at ${sell.priceNum}/${sell.priceDen}`,
+        metadata: {
+          buyOrderId: buy.id,
+          sellOrderId: sell.id,
+          priceNum: sell.priceNum,
+          priceDen: sell.priceDen,
+        },
       });
       sell.remainingBase -= baseAmount;
       buy.remainingBase -= baseAmount;

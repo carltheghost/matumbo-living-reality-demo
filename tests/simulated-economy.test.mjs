@@ -433,6 +433,74 @@ test("partial demo seed recovery restores the remaining order and residual escro
   });
 });
 
+test("missing economy snapshot recovers completed and cancelled user order history with dedupe", () => {
+  const canonicalStorage = new MemoryStorage();
+  withLocalStorage(canonicalStorage, () => {
+    const economyStorage = new MemoryStorage();
+    const first = fixture({ storage: economyStorage, seedLiquidity: true });
+    const placed = first.economy.placeExchangeOrder({
+      owner: "you", side: "sell", amountBase: 1_000, priceNum: 2, priceDen: 1,
+      idempotencyKey: "test:history:place",
+    });
+    const cancelled = first.economy.cancelExchangeOrder({
+      orderId: placed.order.id, owner: "you", expectedRevision: placed.order.revision,
+      idempotencyKey: "test:history:cancel",
+    });
+    const journalCount = LedgerStore.load().ledger.journalCount();
+    economyStorage.removeItem("matumbo.simulated-economy.v1");
+
+    const recovered = createSimulatedEconomy({ engine: createTokenEngine(), storage: economyStorage });
+    const order = recovered.exchangeOrders({ owner: "you" }).find((entry) => entry.id === placed.order.id);
+    assert.equal(order.status, "cancelled");
+    assert.equal(recovered.snapshot().operations.some((entry) => entry.key === "test:history:place"), true);
+    assert.equal(recovered.snapshot().operations.some((entry) => entry.key === "test:history:cancel"), true);
+    assert.equal(recovered.verify().ok, true);
+
+    const replay = recovered.placeExchangeOrder({
+      owner: "you", side: "sell", amountBase: 1_000, priceNum: 2, priceDen: 1,
+      idempotencyKey: "test:history:place",
+    });
+    assert.equal(replay.order.id, placed.order.id);
+    assert.equal(recovered.engine.ledger.journalCount(), journalCount);
+    assert.equal(recovered.exchangeOrders({ owner: "you" }).length, 1);
+    const cancelReplay = recovered.cancelExchangeOrder({
+      orderId: placed.order.id, owner: "you", expectedRevision: placed.order.revision,
+      idempotencyKey: "test:history:cancel",
+    });
+    assert.equal(cancelReplay.order.id, cancelled.order.id);
+    assert.equal(cancelReplay.order.status, "cancelled");
+    assert.equal(recovered.engine.ledger.journalCount(), journalCount);
+  });
+});
+
+test("rational-price exchange fills retain exact recorded price through recovery", () => {
+  const canonicalStorage = new MemoryStorage();
+  withLocalStorage(canonicalStorage, () => {
+    const economyStorage = new MemoryStorage();
+    const first = fixture({ storage: economyStorage, seedLiquidity: true });
+    const placed = first.economy.placeExchangeOrder({
+      owner: "you", side: "sell", amountBase: 10_000, priceNum: 1, priceDen: 2,
+      idempotencyKey: "test:rational:recovery",
+    });
+    assert.equal(placed.fills[0].quoteAmount, 5_000);
+    economyStorage.removeItem("matumbo.simulated-economy.v1");
+
+    const recovered = createSimulatedEconomy({ engine: createTokenEngine(), storage: economyStorage });
+    const trade = recovered.exchangeTrades().find((entry) => entry.id === placed.fills[0].id);
+    assert.deepEqual({ priceNum: trade.priceNum, priceDen: trade.priceDen }, { priceNum: 1, priceDen: 2 });
+    assert.equal(trade.buyOrderId, "order:demo-buy");
+    assert.equal(trade.sellOrderId, placed.order.id);
+    assert.equal(recovered.verify().ok, true);
+    const journalCount = recovered.engine.ledger.journalCount();
+    const replay = recovered.placeExchangeOrder({
+      owner: "you", side: "sell", amountBase: 10_000, priceNum: 1, priceDen: 2,
+      idempotencyKey: "test:rational:recovery",
+    });
+    assert.equal(replay.order.id, placed.order.id);
+    assert.equal(recovered.engine.ledger.journalCount(), journalCount);
+  });
+});
+
 test("zero-value funded contracts cancel with a refunded funding lifecycle", () => {
   const { engine, economy } = fixture();
   const created = economy.createContract({ title: "Zero-value cancel", amountFluff: 0, idempotencyKey: "test:zero:contract" });
