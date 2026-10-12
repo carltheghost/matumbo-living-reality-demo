@@ -15,6 +15,13 @@ import time
 from playwright.sync_api import sync_playwright
 
 
+def open_world_controls(page) -> None:
+    world_context = page.locator(".vivo-companion-world-context")
+    if not world_context.evaluate("node => node.open"):
+        page.locator(".vivo-companion-world-context > summary").click()
+    page.wait_for_function("document.querySelector('.vivo-companion-world-context')?.open === true")
+
+
 def dispatch_pointer(page, kind: str, pointer_id: int, x: float, y: float) -> None:
     page.evaluate(
         """
@@ -50,6 +57,7 @@ def enter_local(page, route: str) -> None:
     assert response is not None and response.status == 200, response
     page.wait_for_selector("#enterPhoneLocal")
     page.get_by_role("button", name="Enter local Vivo").click()
+    open_world_controls(page)
     page.wait_for_selector("#phoneFieldAtlas")
     page.wait_for_function("Boolean(window.VivaPhoneEngine && window.VivaPhoneEngine.active)")
 
@@ -120,6 +128,7 @@ def run_independent_preview_refresh_regression(host_page, route: str) -> dict:
         page.reload(wait_until="domcontentloaded")
         page.wait_for_selector("#enterPhoneLocal")
         page.get_by_role("button", name="Enter local Vivo").click()
+        open_world_controls(page)
         page.wait_for_selector("#phoneFieldAtlas")
         page.wait_for_function("Boolean(window.VivaPhoneEngine && window.VivaPhoneEngine.active)")
         install_pointer_shim(page)
@@ -359,6 +368,7 @@ def run_desktop_flow(page, route: str, requests: list[str], page_errors: list[st
     page.reload(wait_until="domcontentloaded")
     page.wait_for_selector("#enterPhoneLocal")
     page.get_by_role("button", name="Enter local Vivo").click()
+    open_world_controls(page)
     page.wait_for_selector("#phoneFieldAtlas")
     page.wait_for_function("Boolean(window.VivaPhoneEngine && window.VivaPhoneEngine.active)")
     install_pointer_shim(page)
@@ -448,6 +458,7 @@ def run_desktop_flow(page, route: str, requests: list[str], page_errors: list[st
     page.reload(wait_until="domcontentloaded")
     page.wait_for_selector("#enterPhoneLocal")
     page.get_by_role("button", name="Enter local Vivo").click()
+    open_world_controls(page)
     page.wait_for_selector("#phoneFieldAtlas")
     page.wait_for_function("Boolean(window.VivaPhoneEngine && window.VivaPhoneEngine.active)")
 
@@ -499,6 +510,7 @@ def run_desktop_flow(page, route: str, requests: list[str], page_errors: list[st
     page.reload(wait_until="domcontentloaded")
     page.wait_for_selector("#enterPhoneLocal")
     page.get_by_role("button", name="Enter local Vivo").click()
+    open_world_controls(page)
     page.wait_for_selector("#phoneFieldAtlas")
     page.wait_for_function("Boolean(window.VivaPhoneEngine && window.VivaPhoneEngine.active)")
     portal_after_reload = snapshot_entity(page, "portal")
