@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 const root = new URL('../../', import.meta.url);
 
 test('Pages publishes a self-contained local phone route without changing the canonical launcher', async () => {
-  const [canonical, route, staticShared, bootstrap, fieldWorld, fabric, sw, phoneRender, phoneCss, palette] = await Promise.all([
+  const [canonical, route, staticShared, bootstrap, fieldWorld, fabric, sw, phoneRender, phoneCss, palette, economyEntry, economyManifest] = await Promise.all([
     readFile(new URL('index.html', root), 'utf8'),
     readFile(new URL('phone/index.html', root), 'utf8'),
     readFile(new URL('phone/static-shared.js', root), 'utf8'),
@@ -16,6 +16,8 @@ test('Pages publishes a self-contained local phone route without changing the ca
     readFile(new URL('phone/phone-render.mjs', root), 'utf8'),
     readFile(new URL('phone/phone-world.css', root), 'utf8'),
     readFile(new URL('phone/field-palette.mjs', root), 'utf8'),
+    readFile(new URL('phone/economy-entry.mjs', root), 'utf8'),
+    readFile(new URL('phone/vendor/economy/manifest.json', root), 'utf8'),
   ]);
   assert.match(canonical, /src="shared\.js"/);
   assert.doesNotMatch(canonical, /phone\/bootstrap\.mjs/);
@@ -31,6 +33,7 @@ test('Pages publishes a self-contained local phone route without changing the ca
   assert.match(bootstrap, /canonical authority unavailable/);
   assert.match(bootstrap, /STATIC_PHONE_ROUTE \? new URL\('\.\/index\.html'/);
   assert.match(bootstrap, /snapshot: \(\) => refreshSnapshot\(\{ externalSnapshot: true \}\)/);
+  assert.match(bootstrap, /economy-entry\.mjs/);
   assert.match(fieldWorld, /vivo\.phone\.field-world\/1/);
   assert.match(fieldWorld, /analytic-information-mixture/);
   assert.match(fabric, /spatial-interaction-fabric\/1/);
@@ -51,8 +54,26 @@ test('Pages publishes a self-contained local phone route without changing the ca
   assert.match(palette, /fieldTone/);
   assert.match(route, /id="phoneEconomyTrigger"/);
   assert.match(route, /id="phoneEconomyPanelHost"/);
-  assert.match(route, /aria-controls="phoneEconomyPanelHost"/);
+  assert.match(route, /aria-controls="simulated-economy-panel"/);
   assert.match(route, /id="phoneEconomyContext" class="context-slot" hidden/);
+  assert.match(economyEntry, /__vivoPhoneSimulatedEconomyOwner/);
+  assert.match(economyEntry, /No simulated write was attempted/);
+  assert.match(economyManifest, /vivo\.phone\.simulated-economy-stage\/1/);
+});
+
+test('mounted economy staging preserves exact canonical module bytes', async () => {
+  const pairs = [
+    ['src/domains/simulated-economy.js', 'phone/vendor/economy/src/domains/simulated-economy.js'],
+    ['src/domains/token.js', 'phone/vendor/economy/src/domains/token.js'],
+    ['src/domains/token-config.js', 'phone/vendor/economy/src/domains/token-config.js'],
+    ['src/domains/token-store.js', 'phone/vendor/economy/src/domains/token-store.js'],
+    ['src/render/simulated-economy-panel.js', 'phone/vendor/economy/src/render/simulated-economy-panel.js'],
+  ];
+  for (const [canonicalPath, stagedPath] of pairs) {
+    const canonical = await readFile(new URL(`../../../../../${canonicalPath}`, import.meta.url));
+    const staged = await readFile(new URL(stagedPath, root));
+    assert.deepEqual(staged, canonical, `${stagedPath} must be an exact canonical byte mirror`);
+  }
 });
 
 test('Pages build copies the route and exposes its local-only boundary check', async () => {

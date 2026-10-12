@@ -11,6 +11,7 @@ import { FieldWorldController, drawFieldAtlas } from './field-world.mjs';
 import { SpatialInteractionFabric, mapRendererPointToCanonical } from './spatial-fabric.mjs';
 import { LocalOperationIdFactory } from './local-operation.mjs';
 import { LocalEditQueue } from './local-edit-queue.mjs';
+import { mountPhoneEconomyContext } from './economy-entry.mjs';
 
 const $ = id => document.getElementById(id);
 const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
@@ -23,6 +24,7 @@ const { R, S, camera } = shared;
 const STATIC_PHONE_ROUTE = /\/services\/vivo\/web\/phone(?:\/|$)/.test(location.pathname);
 let engine = null, authority = null, localMode = false, selectedId = null, activeAxis = 0;
 let pinch = null, projection = null, fieldWorld = null, fieldEnvelope = null, interactionFabric = null;
+let economyContext = null;
 const handContacts = new Map(), pointerContacts = new Map();
 const touchGestures = new Map();
 const touchOperationIds = new LocalOperationIdFactory('touch-preview');
@@ -89,6 +91,7 @@ function renderEye(envelope, options = {}) {
   if (!state.entities[R.selected]) R.selected = Object.keys(state.entities)[0] || null;
   if (selectedId && state.entities[selectedId]) R.selected = selectedId;
   if (!state.entities[selectedId]) selectedId = R.selected;
+  syncEconomyContext();
   updateEyeControls(envelope);
   fieldEnvelope = envelope;
   updateFieldWorld(envelope, options);
@@ -217,6 +220,7 @@ function selectPhoneEntity(id, { announce = false, discardPending = true } = {})
   selectedId = id;
   R.selected = id;
   if (S) S.selected = id;
+  syncEconomyContext();
   const fieldSelect = $('phoneFieldEntity');
   if (fieldSelect && [...fieldSelect.options].some(option => option.value === id)) fieldSelect.value = id;
   if (fieldWorld && fieldEnvelope) updateFieldWorld(fieldEnvelope);
@@ -226,6 +230,14 @@ function selectPhoneEntity(id, { announce = false, discardPending = true } = {})
   return true;
 }
 function fieldEntityId() { return selectedId || R.selected || $('phoneFieldEntity')?.value || null; }
+function economySelection() {
+  const entityId = fieldEntityId();
+  const entity = (S.state?.entities || {})[entityId]
+    || fieldEnvelope?.snapshot?.spaces?.[fieldEnvelope?.eyes?.[fieldEnvelope?.currentEyeId]?.spaceId]?.entities?.[entityId]
+    || null;
+  return { active: localMode, entityId, name: entity?.name || entityId || 'selected object' };
+}
+function syncEconomyContext() { economyContext?.sync(economySelection()); }
 function localObjectIdentity(entityId) {
   const eye = fieldEnvelope?.eyes?.[fieldEnvelope.currentEyeId], spaceId = eye?.spaceId;
   const entity = fieldEnvelope?.snapshot?.spaces?.[spaceId]?.entities?.[entityId];
@@ -802,7 +814,19 @@ function openPhonePanel() {
   refreshSnapshot().catch(error => status(error.message));
 }
 async function startLocal() {
-  if (engine) { localMode = true; updateLocalGrants(); document.body.classList.add('phone-local'); const state = await engine.snapshot(); renderedSnapshot = snapshotMarker(state); renderEye(state); await authority?.syncLocal(state); updatePhoneAuthorityUI(); return; }
+  if (engine) {
+    localMode = true;
+    updateLocalGrants();
+    document.body.classList.add('phone-local');
+    const state = await engine.snapshot();
+    renderedSnapshot = snapshotMarker(state);
+    renderEye(state);
+    economyContext?.initialize();
+    syncEconomyContext();
+    await authority?.syncLocal(state);
+    updatePhoneAuthorityUI();
+    return;
+  }
   status("Starting the local worker and opening this phone’s saved Vivo world…");
   engine = new PhoneEngineClient();
   engine.addEventListener('statechange', event => {
@@ -818,6 +842,8 @@ async function startLocal() {
   authority = new PhoneAuthorityAdapter({ engine, onState: updatePhoneAuthorityUI });
   await authority.syncLocal(state);
   localMode = true; updateLocalGrants(); document.body.classList.add('phone-local'); renderedSnapshot = snapshotMarker(state); renderEye(state);
+  economyContext?.initialize();
+  syncEconomyContext();
   $('welcome').hidden = true; $('toolbar').hidden = false;
   const caps = await detectPhoneCapabilities(); latestCapabilities = caps;
   $('phoneEngineState').textContent = `Worker ready · ${caps.webgpu ? 'WebGPU available' : caps.webgl2 ? 'WebGL2 renderer' : 'Canvas renderer'} · ${caps.wasm ? 'WASM-ready' : 'JS fallback'} · sparse ${state.snapshot.spaces.root.dimension}D root / ${state.snapshot.spaces.inner.dimension}D nested · IndexedDB ${caps.indexedDb ? 'available' : 'unavailable'}.`;
@@ -843,7 +869,7 @@ async function installOffline() {
     const ready = await navigator.serviceWorker.ready;
     if (!ready.active) throw new Error('Offline shell service worker did not become active.');
     const shellUrl = STATIC_PHONE_ROUTE ? new URL('./index.html', import.meta.url) : new URL('../index.html', import.meta.url);
-    const shell = await (await caches.open('vivo-phone-shell-2026-10-12-v3')).match(shellUrl);
+    const shell = await (await caches.open('vivo-phone-shell-2026-10-12-v4')).match(shellUrl);
     if (!shell) throw new Error('Offline shell cache did not finish installing.');
     const persisted = await navigator.storage?.persist?.().catch(() => false);
     $('phoneEngineState').textContent = `Offline shell ready · service worker active · persistent storage ${persisted ? 'granted' : 'not granted by browser'}.`;
@@ -1032,3 +1058,11 @@ window.VivaPhoneEngine = Object.freeze({
 });
 
 addPhoneSurface();
+economyContext = mountPhoneEconomyContext({
+  documentRoot: document,
+  getSelection: economySelection,
+  onWorldFocus: selection => {
+    if (selection?.selected?.entityId) selectPhoneEntity(selection.selected.entityId, { announce: false, discardPending: false });
+  },
+});
+syncEconomyContext();

@@ -5,6 +5,11 @@ on:
     paths:
       - 'services/vivo/web/**'
       - 'services/vivo/android-companion/**'
+      - 'src/domains/simulated-economy.js'
+      - 'src/domains/token*.js'
+      - 'src/render/simulated-economy-panel.js'
+      - 'scripts/vivo/stage_economy_dependencies.py'
+      - 'services/vivo/web/phone/tests/browser_economy_mounted.py'
       - 'docs/vivo-phone-*.md'
       - '.github/workflows/vivo-phone.yml'
   push:
@@ -13,6 +18,11 @@ on:
     paths:
       - 'services/vivo/web/**'
       - 'services/vivo/android-companion/**'
+      - 'src/domains/simulated-economy.js'
+      - 'src/domains/token*.js'
+      - 'src/render/simulated-economy-panel.js'
+      - 'scripts/vivo/stage_economy_dependencies.py'
+      - 'services/vivo/web/phone/tests/browser_economy_mounted.py'
       - 'docs/vivo-phone-*.md'
       - '.github/workflows/vivo-phone.yml'
 
@@ -34,6 +44,39 @@ jobs:
           node --input-type=module --check < services/vivo/web/camera.js
           node --input-type=module --check < services/vivo/web/hand-worker.js
           node --input-type=module --check < services/vivo/web/render.js
+
+  browser-mounted-economy:
+    name: Mounted simulated economy phone flow
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install pinned Chromium browser test dependency
+        run: |
+          python -m pip install playwright==1.57.0
+          python -m playwright install --with-deps chromium
+      - name: Verify canonical economy dependency staging
+        run: python scripts/vivo/stage_economy_dependencies.py --check
+      - name: Run direct mounted economy flows against the phone source route
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p browser-evidence
+          python -m http.server 9897 --bind 127.0.0.1 --directory . >browser-evidence/server-economy.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          python services/vivo/web/phone/tests/browser_economy_mounted.py http://127.0.0.1:9897/ | tee browser-evidence/economy-mounted.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vivo-phone-mounted-economy-evidence
+          path: browser-evidence/
+          retention-days: 7
+      - name: Scope notice
+        run: echo 'Mounted economy evidence is local simulated TUMBO-SIM state in Chromium; it does not certify remote authority, real funds, external orders, real-money settlement, camera behavior, or deployment by itself.'
 
   browser-offline-shell:
     runs-on: ubuntu-latest
@@ -98,6 +141,16 @@ jobs:
               Path('browser-static/services/vivo/web/phone/static-shared.js'),
               Path('browser-static/services/vivo/web/phone/field-world.mjs'),
               Path('browser-static/services/vivo/web/phone/spatial-fabric.mjs'),
+              Path('browser-static/services/vivo/web/phone/economy-entry.mjs'),
+              Path('browser-static/services/vivo/web/phone/phone-render.mjs'),
+              Path('browser-static/services/vivo/web/phone/phone-world.css'),
+              Path('browser-static/services/vivo/web/phone/field-palette.mjs'),
+              Path('browser-static/services/vivo/web/phone/vendor/economy/manifest.json'),
+              Path('browser-static/services/vivo/web/phone/vendor/economy/src/domains/simulated-economy.js'),
+              Path('browser-static/services/vivo/web/phone/vendor/economy/src/domains/token.js'),
+              Path('browser-static/services/vivo/web/phone/vendor/economy/src/domains/token-config.js'),
+              Path('browser-static/services/vivo/web/phone/vendor/economy/src/domains/token-store.js'),
+              Path('browser-static/services/vivo/web/phone/vendor/economy/src/render/simulated-economy-panel.js'),
               Path('browser-static/services/vivo/web/vivo-sw.js'),
           ]
           missing = [str(path) for path in required if not path.is_file()]
@@ -112,6 +165,12 @@ jobs:
               raise SystemExit('static phone launcher still contains a backend readiness call')
           if 'PAGES STATIC/OFFLINE' not in bootstrap or 'canonical authority unavailable' not in bootstrap:
               raise SystemExit('static authority boundary is missing')
+          if './economy-entry.mjs' not in bootstrap or 'TUMBO-SIM' not in route:
+              raise SystemExit('mounted simulated economy entry is missing')
+          sw = required[-1].read_text(encoding='utf-8')
+          for asset in ('phone/economy-entry.mjs', 'phone/phone-render.mjs', 'phone/phone-world.css', 'phone/field-palette.mjs', 'phone/vendor/economy/manifest.json', 'phone/vendor/economy/src/domains/simulated-economy.js', 'phone/vendor/economy/src/domains/token.js', 'phone/vendor/economy/src/domains/token-config.js', 'phone/vendor/economy/src/domains/token-store.js', 'phone/vendor/economy/src/render/simulated-economy-panel.js'):
+              if asset not in sw:
+                  raise SystemExit('economy phone asset is absent from the offline shell: ' + asset)
           print('built static phone artifact verified')
           PY
       - name: Run field-world and offline static browser smoke
@@ -138,6 +197,7 @@ jobs:
               raise SystemExit('static artifact server timeout')
           PY
           python services/vivo/web/phone/tests/browser_field_world_static.py http://127.0.0.1:9896/ | tee browser-evidence/field-world-static.json
+          python services/vivo/web/phone/tests/browser_economy_mounted.py http://127.0.0.1:9896/ | tee browser-evidence/economy-mounted-built.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:

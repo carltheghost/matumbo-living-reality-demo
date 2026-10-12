@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import sys
 import time
 
@@ -15,7 +17,9 @@ def main(base_url: str) -> None:
     camera_calls: list[str] = []
     requests: list[str] = []
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
+        chromium_path = os.environ.get("VIVO_CHROMIUM_PATH") or shutil.which("chromium") or shutil.which("chromium-browser")
+        browser_options = {"executable_path": chromium_path} if chromium_path else {}
+        browser = playwright.chromium.launch(headless=True, **browser_options)
         camera_init_script = """
             (() => {
               const media = navigator.mediaDevices || (navigator.mediaDevices = {});
