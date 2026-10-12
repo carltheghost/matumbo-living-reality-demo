@@ -97,6 +97,9 @@ test('Pages live hash verifier covers every changed mounted phone module', async
   assert.ok(block, 'deploy workflow must expose a public HTTPS hash-verifier list');
   const listed = [...block.matchAll(/'([^']+)'/g)].map((match) => match[1]);
   const required = [
+    'services/vivo/web/phone/agent-control.mjs',
+    'services/vivo/web/phone/agent-tools.mjs',
+    'services/vivo/web/phone/bridge.mjs',
     'services/vivo/web/phone/client.mjs',
     'services/vivo/web/phone/engine.mjs',
     'services/vivo/web/phone/engine-worker.mjs',
