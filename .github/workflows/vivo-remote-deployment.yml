@@ -34,6 +34,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Install deterministic remote test dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --no-input \
+            --no-cache-dir --requirement services/vivo/requirements.txt
       - name: Frozen source and package integrity
         run: |
           set -euo pipefail
