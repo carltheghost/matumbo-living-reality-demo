@@ -57,8 +57,9 @@
       <p id="phoneFieldPreview" class="field-preview-copy">No local edit preview. Preview never enters accepted history.</p>
     </div>
     <div id="phoneEconomyContext" class="context-slot" hidden aria-label="Selected object economy context">
-      <button id="phoneEconomyTrigger" type="button" aria-controls="phoneEconomyPanelHost" aria-expanded="false">Open object context</button>
-      <div id="phoneEconomyPanelHost" role="region" aria-label="Exchange, prediction market and contracts" aria-live="polite"></div>
+      <button id="phoneEconomyTrigger" type="button" aria-controls="simulated-economy-panel" aria-expanded="false">Open object context</button>
+      <p id="phoneEconomyStatus" class="phone-economy-status" role="status" aria-live="polite">TUMBO-SIM local demo initializes after selecting an object.</p>
+      <div id="phoneEconomyPanelHost" hidden aria-hidden="true"></div>
     </div>
     <div class="field-actions" aria-label="Selected field actions">
       <button id="phoneFieldPreviewMove" type="button">Preview move</button>

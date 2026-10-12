@@ -1,0 +1,41 @@
+{
+  "schema": "vivo.phone.simulated-economy-stage/1",
+  "canonicalRoot": "src",
+  "files": [
+    {
+      "source": "src/domains/simulated-economy.js",
+      "staged": "services/vivo/web/phone/vendor/economy/src/domains/simulated-economy.js",
+      "bytes": 95962,
+      "sha256": "be99e2c56038abfe1b89271779beb0ea41dc3a6214d8dfc783c80c00b3b72d2e",
+      "gitBlob": "ec35b4d64d879d5044aed0b5bdf8cb84fcf8836d"
+    },
+    {
+      "source": "src/domains/token.js",
+      "staged": "services/vivo/web/phone/vendor/economy/src/domains/token.js",
+      "bytes": 59286,
+      "sha256": "4269111fabecb50ab847b0b2f0ebd892e24550de0d0f32c5e930c8f7c1e6cc6d",
+      "gitBlob": "e4ea889ae7b930806096a5dec4657785aaa449b4"
+    },
+    {
+      "source": "src/domains/token-config.js",
+      "staged": "services/vivo/web/phone/vendor/economy/src/domains/token-config.js",
+      "bytes": 3632,
+      "sha256": "46d9f97eeb4494ba61b6e5b6bf72022695a1235ecdb681ce9972b2cb93fd6dec",
+      "gitBlob": "66357e8acc90959431f26a6904dc551e69a0c3ff"
+    },
+    {
+      "source": "src/domains/token-store.js",
+      "staged": "services/vivo/web/phone/vendor/economy/src/domains/token-store.js",
+      "bytes": 15467,
+      "sha256": "528f892a51658eaad07281d0881ce5b80f56092c4b996c3a756afa42b2d27452",
+      "gitBlob": "b295034dbf145840b3b42ddd32241302482cf053"
+    },
+    {
+      "source": "src/render/simulated-economy-panel.js",
+      "staged": "services/vivo/web/phone/vendor/economy/src/render/simulated-economy-panel.js",
+      "bytes": 30562,
+      "sha256": "efb0008202400fdb1e363d9128d265972b9bc90a3195b9acf7ab1e9131f4fb3d",
+      "gitBlob": "0375586d098a4cd8ee79a5e5089de8665a3e440c"
+    }
+  ]
+}

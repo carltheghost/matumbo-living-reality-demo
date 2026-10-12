@@ -1,0 +1,284 @@
+"""Drive the mounted simulated economy through the actual Vivo phone UI."""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+import shutil
+import sys
+import time
+from typing import Any
+
+from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
+
+
+def route_for(base_url: str) -> str:
+    return base_url.rstrip("/") + "/services/vivo/web/phone/"
+
+
+def wait_for_local(page: Page, route: str) -> None:
+    page.goto(route, wait_until="domcontentloaded")
+    page.wait_for_selector("#enterPhoneLocal")
+    page.get_by_role("button", name=re.compile("Enter local Vivo")).click()
+    page.wait_for_function("Boolean(window.VivaPhoneEngine && window.VivaPhoneEngine.active)")
+    page.wait_for_selector("#phoneEconomyContext:not([hidden])")
+    page.wait_for_function("document.querySelector('#phoneEconomyStatus').textContent.includes('TUMBO-SIM')")
+    field_selection = page.locator("#phoneFieldEntity")
+    if field_selection.locator("option").count() > 1:
+        next_option = field_selection.locator("option").nth(1)
+        next_label = next_option.inner_text().split(" · ", 1)[0]
+        field_selection.select_option(next_option.get_attribute("value"))
+        page.wait_for_function(
+            "name => document.querySelector('#phoneEconomyTrigger')?.textContent.includes(name)",
+            arg=next_label,
+        )
+    page.locator("#phoneEconomyTrigger").click()
+    page.wait_for_selector("#simulated-economy-panel:not([hidden])")
+    assert page.locator(".sim-economy-kicker").inner_text() == "FIELD OBJECT · LOCAL REHEARSAL"
+    assert "No live market" in page.locator(".sim-economy-boundary").inner_text()
+
+
+def committed(page: Page) -> None:
+    # The panel action handler is deliberately async so a rapid second click
+    # can be fenced. Allow its busy flag and refresh microtasks to settle
+    # before asserting the visible receipt status.
+    page.wait_for_timeout(250)
+    page.wait_for_function("!document.querySelector('#simulated-economy-panel')?.dataset.busy")
+    page.wait_for_function("document.querySelector('.sim-economy-status')?.textContent.includes('Committed')")
+
+
+def flow(page: Page) -> dict[str, Any]:
+    """Run exchange, prediction and contract flows entirely through controls."""
+    # The seeded local account owns TUMBO-SIM, while the demo market maker
+    # owns the opposing sMIMAS inventory. Sell first to acquire sMIMAS, then
+    # exercise the buy path with the newly available balance.
+    page.locator("#sim-economy-order-side").select_option("sell")
+    page.locator("#sim-economy-order-amount").fill("1000")
+    page.locator("#sim-economy-order-num").fill("1")
+    page.locator("#sim-economy-order-den").fill("1")
+    place = page.locator('[data-action="exchange:place"]')
+    place.click()
+    place.click()
+    committed(page)
+    assert page.locator(".sim-economy-record").filter(has_text="SELL · FILLED").count() == 1
+
+    page.locator("#sim-economy-order-side").select_option("buy")
+    page.locator("#sim-economy-order-amount").fill("100")
+    page.locator("#sim-economy-order-num").fill("1")
+    page.locator("#sim-economy-order-den").fill("1")
+    place.click()
+    place.click()
+    committed(page)
+    assert page.locator(".sim-economy-record").filter(has_text="BUY · FILLED").count() == 1
+
+    page.locator("#sim-economy-order-side").select_option("sell")
+    page.locator("#sim-economy-order-amount").fill("100")
+    page.locator("#sim-economy-order-num").fill("2")
+    page.locator("#sim-economy-order-den").fill("1")
+    place.click()
+    committed(page)
+    open_order = page.locator(".sim-economy-record").filter(has_text="SELL · OPEN").filter(has_text="price 2/1")
+    assert open_order.count() == 1
+    open_order.locator('[data-action^="exchange:cancel:"]').click()
+    committed(page)
+    assert page.locator(".sim-economy-record").filter(has_text="SELL · CANCELLED").filter(has_text="price 2/1").count() == 1
+
+    page.locator('[data-action="tab:prediction"]').click()
+    page.locator("#sim-economy-prediction-title").fill("Will the selected field marker glow?")
+    page.locator("#sim-economy-prediction-outcomes").fill("YES, NO")
+    page.locator("#sim-economy-prediction-price").fill("100")
+    page.locator('[data-action="prediction:create"]').click()
+    committed(page)
+    market = page.locator("[data-market-id]").last
+    market_id = market.get_attribute("data-market-id")
+    assert market_id
+    market.locator('[data-action^="prediction:buy:"]').click()
+    committed(page)
+    market = page.locator(f'[data-market-id="{market_id}"]')
+    market.locator('[data-action^="prediction:settle:"]').click()
+    committed(page)
+    settled_market = page.locator(".sim-economy-record").filter(has_text="Will the selected field marker glow?")
+    assert "SETTLED" in settled_market.inner_text()
+    assert "explicit demo provenance" in settled_market.inner_text()
+
+    page.locator('[data-action="tab:contracts"]').click()
+    page.locator("#sim-economy-contract-title").fill("Complete selected field marker")
+    page.locator("#sim-economy-contract-amount").fill("1000")
+    page.locator('[data-action="contract:create"]').click()
+    committed(page)
+    complete_contract = page.locator(".sim-economy-record").filter(has_text="Complete selected field marker")
+    complete_contract.locator('[data-action^="contract:accept:"]').click()
+    committed(page)
+    complete_contract = page.locator(".sim-economy-record").filter(has_text="Complete selected field marker")
+    complete_contract.locator('[data-action^="contract:fund:"]').click()
+    committed(page)
+    complete_contract = page.locator(".sim-economy-record").filter(has_text="Complete selected field marker")
+    complete_contract.locator('[data-action^="contract:complete:"]').click()
+    committed(page)
+    assert "COMPLETED" in page.locator(".sim-economy-record").filter(has_text="Complete selected field marker").inner_text()
+
+    page.locator("#sim-economy-contract-title").fill("Cancel selected field marker")
+    page.locator("#sim-economy-contract-amount").fill("250")
+    page.locator('[data-action="contract:create"]').click()
+    committed(page)
+    cancel_contract = page.locator(".sim-economy-record").filter(has_text="Cancel selected field marker")
+    cancel_contract.locator('[data-action^="contract:accept:"]').click()
+    committed(page)
+    cancel_contract = page.locator(".sim-economy-record").filter(has_text="Cancel selected field marker")
+    cancel_contract.locator('[data-action^="contract:fund:"]').click()
+    committed(page)
+    cancel_contract = page.locator(".sim-economy-record").filter(has_text="Cancel selected field marker")
+    cancel_contract.locator('[data-action^="contract:cancel:"]').click()
+    committed(page)
+    assert "CANCELLED" in page.locator(".sim-economy-record").filter(has_text="Cancel selected field marker").inner_text()
+
+    state = page.evaluate(
+        """
+        () => {
+          const owner = window.__vivoPhoneSimulatedEconomyOwner;
+          const model = owner?.model;
+          const snapshot = model?.snapshot();
+          return {
+            balances: model?.balances('you')?.available,
+            orders: snapshot?.exchange?.orders,
+            markets: snapshot?.predictions?.markets,
+            positions: snapshot?.predictions?.positions,
+            contracts: snapshot?.contracts,
+            receiptCount: model?.receipts({ limit: 500 })?.length,
+            storageStatus: model?.storageStatus,
+          };
+        }
+        """
+    )
+    assert state["receiptCount"] and state["storageStatus"] not in ("storage-unavailable", "invalid-token-snapshot-skipped")
+    return state
+
+
+def reopen_and_compare(page: Page, route: str, expected: dict[str, Any]) -> dict[str, Any]:
+    page.reload(wait_until="domcontentloaded")
+    wait_for_local(page, route)
+    actual = page.evaluate(
+        """
+        () => {
+          const model = window.__vivoPhoneSimulatedEconomyOwner?.model;
+          const snapshot = model?.snapshot();
+          return {
+            balances: model?.balances('you')?.available,
+            orderStatuses: snapshot?.exchange?.orders?.filter(order => order.owner === 'u:you').map(order => [order.id, order.status, order.remainingBase]),
+            marketStatuses: snapshot?.predictions?.markets?.map(market => [market.id, market.status]),
+            contractStatuses: snapshot?.contracts?.map(contract => [contract.title, contract.status, contract.funding.status]),
+            receiptCount: model?.receipts({ limit: 500 })?.length,
+          };
+        }
+        """
+    )
+    assert actual["balances"] == expected["balances"]
+    assert actual["orderStatuses"] == [[order["id"], order["status"], order["remainingBase"]] for order in expected["orders"] if order["owner"] == "u:you"]
+    assert actual["marketStatuses"] == [[market["id"], market["status"]] for market in expected["markets"]]
+    assert actual["contractStatuses"] == [[contract["title"], contract["status"], contract["funding"]["status"]] for contract in expected["contracts"]]
+    assert actual["receiptCount"] == expected["receiptCount"]
+    return actual
+
+
+def assert_no_unexpected_network(requests: list[str], origin: str) -> None:
+    unexpected = [url for url in requests if not url.startswith(origin) and not url.startswith("data:")]
+    assert not unexpected, unexpected
+    forbidden = [url for url in requests if re.search(r"/(?:api|ws)(?:/|$)", url)]
+    assert not forbidden, forbidden
+
+
+def install_offline(page: Page) -> None:
+    page.locator("#phonePanelButton").click()
+    page.locator("#phoneInstallOffline").click()
+    page.wait_for_function("document.querySelector('#status')?.textContent.includes('Offline app shell cached')")
+    page.locator("#closePanel").click()
+    page.wait_for_function("Boolean(navigator.serviceWorker.controller)")
+
+
+def stale_two_tab(context: BrowserContext, route: str) -> dict[str, Any]:
+    first = context.pages[0]
+    second = context.new_page()
+    wait_for_local(second, route)
+    first.locator('[data-action="tab:exchange"]').click()
+    first.locator("#sim-economy-order-side").select_option("sell")
+    first.locator("#sim-economy-order-amount").fill("75")
+    first.locator("#sim-economy-order-num").fill("3")
+    first.locator("#sim-economy-order-den").fill("1")
+    first.locator('[data-action="exchange:place"]').click()
+    committed(first)
+
+    second.locator('[data-action="tab:exchange"]').click()
+    second.locator("#sim-economy-order-side").select_option("sell")
+    second.locator("#sim-economy-order-amount").fill("80")
+    second.locator("#sim-economy-order-num").fill("4")
+    second.locator("#sim-economy-order-den").fill("1")
+    second.locator('[data-action="exchange:place"]').click()
+    second.wait_for_function("document.querySelector('.sim-economy-status')?.dataset.tone === 'error'")
+    message = second.locator(".sim-economy-status").inner_text()
+    assert "reload" in message.lower() or "stale" in message.lower() or "wrapper" in message.lower(), message
+    second.reload(wait_until="domcontentloaded")
+    wait_for_local(second, route)
+    second.close()
+    return {"message": message, "recovered": True}
+
+
+def run(base_url: str) -> dict[str, Any]:
+    route = route_for(base_url)
+    origin = base_url.rstrip("/").split("/services/", 1)[0]
+    report: dict[str, Any] = {"route": route, "desktop": {}, "mobile": {}}
+    with sync_playwright() as playwright:
+        chromium_path = os.environ.get("VIVO_CHROMIUM_PATH") or shutil.which("chromium") or shutil.which("chromium-browser")
+        browser_options = {"executable_path": chromium_path} if chromium_path else {}
+        browser: Browser = playwright.chromium.launch(headless=True, **browser_options)
+        try:
+            desktop_context = browser.new_context(viewport={"width": 1280, "height": 900}, device_scale_factor=1)
+            desktop_context.set_default_timeout(9000)
+            desktop_requests: list[str] = []
+            desktop_context.on("request", lambda request: desktop_requests.append(request.url))
+            desktop = desktop_context.new_page()
+            wait_for_local(desktop, route)
+            desktop_state = flow(desktop)
+            report["desktop"] = {"receiptCount": desktop_state["receiptCount"], "storageStatus": desktop_state["storageStatus"]}
+            desktop_box = desktop.locator("#simulated-economy-panel").bounding_box()
+            assert desktop_box and desktop_box["x"] >= 0 and desktop_box["x"] + desktop_box["width"] <= 1280, desktop_box
+            reopen_and_compare(desktop, route, desktop_state)
+            stale = stale_two_tab(desktop_context, route)
+            report["desktop"]["staleTwoTab"] = stale
+            install_offline(desktop)
+            desktop_context.set_offline(True)
+            desktop.reload(wait_until="domcontentloaded")
+            wait_for_local(desktop, route)
+            offline_status = desktop.locator("#phoneEconomyStatus").inner_text()
+            assert "TUMBO-SIM" in offline_status and "unavailable" not in offline_status.lower(), offline_status
+            report["desktop"]["offlineReopen"] = True
+            assert_no_unexpected_network(desktop_requests, origin)
+            desktop_context.close()
+
+            mobile_context = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
+            mobile_context.set_default_timeout(9000)
+            mobile_requests: list[str] = []
+            mobile_context.on("request", lambda request: mobile_requests.append(request.url))
+            mobile = mobile_context.new_page()
+            wait_for_local(mobile, route)
+            mobile_state = flow(mobile)
+            panel_box = mobile.locator("#simulated-economy-panel").bounding_box()
+            assert panel_box and panel_box["x"] >= 0 and panel_box["x"] + panel_box["width"] <= 390 and panel_box["y"] + panel_box["height"] <= 844, panel_box
+            assert mobile.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
+            close = mobile.locator('[data-action="close"]')
+            close.click()
+            mobile.wait_for_function("document.querySelector('#simulated-economy-panel')?.hidden === true")
+            mobile.locator("#phoneEconomyTrigger").click()
+            mobile.wait_for_selector("#simulated-economy-panel:not([hidden])")
+            report["mobile"] = {"receiptCount": mobile_state["receiptCount"], "storageStatus": mobile_state["storageStatus"], "bounded": True}
+            assert_no_unexpected_network(mobile_requests, origin)
+            mobile_context.close()
+        finally:
+            browser.close()
+    return report
+
+
+if __name__ == "__main__":
+    base = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:9878/"
+    result = run(base)
+    print(json.dumps({"passed": True, **result}, indent=2))

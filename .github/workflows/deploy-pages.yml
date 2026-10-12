@@ -30,6 +30,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Verify canonical simulated-economy bytes are staged for the phone route
+        run: python3 scripts/vivo/stage_economy_dependencies.py --check
       - name: Build static site without replacing the canonical root
         shell: bash
         run: |
@@ -59,9 +61,19 @@ jobs:
           required = [
               Path('dist/services/vivo/web/phone/index.html'),
               Path('dist/services/vivo/web/phone/bootstrap.mjs'),
+              Path('dist/services/vivo/web/phone/economy-entry.mjs'),
               Path('dist/services/vivo/web/phone/static-shared.js'),
               Path('dist/services/vivo/web/phone/field-world.mjs'),
               Path('dist/services/vivo/web/phone/spatial-fabric.mjs'),
+              Path('dist/services/vivo/web/phone/phone-render.mjs'),
+              Path('dist/services/vivo/web/phone/phone-world.css'),
+              Path('dist/services/vivo/web/phone/field-palette.mjs'),
+              Path('dist/services/vivo/web/phone/vendor/economy/manifest.json'),
+              Path('dist/services/vivo/web/phone/vendor/economy/src/domains/simulated-economy.js'),
+              Path('dist/services/vivo/web/phone/vendor/economy/src/domains/token.js'),
+              Path('dist/services/vivo/web/phone/vendor/economy/src/domains/token-config.js'),
+              Path('dist/services/vivo/web/phone/vendor/economy/src/domains/token-store.js'),
+              Path('dist/services/vivo/web/phone/vendor/economy/src/render/simulated-economy-panel.js'),
               Path('dist/services/vivo/web/vivo-sw.js'),
           ]
           missing = [str(path) for path in required if not path.is_file()]
@@ -71,13 +83,15 @@ jobs:
           if './static-shared.js' not in route or './bootstrap.mjs' not in route or '../shared.css' not in route:
               raise SystemExit('Static Vivo phone route does not use its self-contained relative assets')
           bootstrap = required[1].read_text(encoding='utf-8')
-          static_shared = required[2].read_text(encoding='utf-8')
+          static_shared = required[3].read_text(encoding='utf-8')
           if 'PAGES STATIC/OFFLINE' not in static_shared or "api('/readyz'" in static_shared:
               raise SystemExit('Static phone launcher still contains a backend readiness call')
           if 'PAGES STATIC/OFFLINE' not in bootstrap or 'canonical authority unavailable' not in bootstrap:
               raise SystemExit('Static route authority boundary is not explicit in the phone bootstrap')
-          sw = required[5].read_text(encoding='utf-8')
-          for asset in ('phone/index.html', 'phone/static-shared.js', 'phone/field-world.mjs', 'phone/spatial-fabric.mjs'):
+          if './economy-entry.mjs' not in bootstrap or 'TUMBO-SIM' not in route:
+              raise SystemExit('Static phone launcher did not retain the mounted simulated economy entry')
+          sw = required[-1].read_text(encoding='utf-8')
+          for asset in ('phone/index.html', 'phone/static-shared.js', 'phone/field-world.mjs', 'phone/spatial-fabric.mjs', 'phone/economy-entry.mjs', 'phone/phone-render.mjs', 'phone/phone-world.css', 'phone/field-palette.mjs', 'phone/vendor/economy/manifest.json', 'phone/vendor/economy/src/domains/simulated-economy.js', 'phone/vendor/economy/src/domains/token.js', 'phone/vendor/economy/src/domains/token-config.js', 'phone/vendor/economy/src/domains/token-store.js', 'phone/vendor/economy/src/render/simulated-economy-panel.js'):
               if asset not in sw:
                   raise SystemExit('Phone asset is absent from the offline shell: ' + asset)
           print('Verified static Vivo phone route with local-only authority controls')
@@ -129,7 +143,7 @@ jobs:
           import hashlib, json, pathlib, time, urllib.request
           base = 'https://carltheghost.github.io/matumbo-living-reality-demo/'
           report = []
-          for name in ['field-lab-grab.html', 'src/field-lab/field-lab-touch-repair.js', 'field-lab-studio.html', 'src/field-lab/studio-core.js', 'src/field-lab/studio.js', 'src/field-lab/studio-layout.js', 'src/field-lab/viva-core.js', 'src/field-lab/viva-visibility.js', 'src/field-lab/viva-spaces.js', 'vivo-phone-sw.js', 'src/vivo-phone-engine/boot.mjs', 'src/vivo-phone-engine/engine.mjs', 'src/vivo-phone-engine/engine-worker.mjs', 'src/vivo-phone-engine/agent-runtime.mjs', 'src/vivo-phone-engine/native-tools.mjs', 'src/vivo-phone-engine/storage.mjs', 'services/vivo/web/phone/index.html', 'services/vivo/web/phone/bootstrap.mjs', 'services/vivo/web/phone/static-shared.js', 'services/vivo/web/phone/field-world.mjs', 'services/vivo/web/phone/spatial-fabric.mjs', 'services/vivo/web/vivo-sw.js']:
+          for name in ['field-lab-grab.html', 'src/field-lab/field-lab-touch-repair.js', 'field-lab-studio.html', 'src/field-lab/studio-core.js', 'src/field-lab/studio.js', 'src/field-lab/studio-layout.js', 'src/field-lab/viva-core.js', 'src/field-lab/viva-visibility.js', 'src/field-lab/viva-spaces.js', 'vivo-phone-sw.js', 'src/vivo-phone-engine/boot.mjs', 'src/vivo-phone-engine/engine.mjs', 'src/vivo-phone-engine/engine-worker.mjs', 'src/vivo-phone-engine/agent-runtime.mjs', 'src/vivo-phone-engine/native-tools.mjs', 'src/vivo-phone-engine/storage.mjs', 'services/vivo/web/phone/index.html', 'services/vivo/web/phone/bootstrap.mjs', 'services/vivo/web/phone/economy-entry.mjs', 'services/vivo/web/phone/static-shared.js', 'services/vivo/web/phone/field-world.mjs', 'services/vivo/web/phone/spatial-fabric.mjs', 'services/vivo/web/phone/phone-render.mjs', 'services/vivo/web/phone/phone-world.css', 'services/vivo/web/phone/field-palette.mjs', 'services/vivo/web/phone/vendor/economy/manifest.json', 'services/vivo/web/phone/vendor/economy/src/domains/simulated-economy.js', 'services/vivo/web/phone/vendor/economy/src/domains/token.js', 'services/vivo/web/phone/vendor/economy/src/domains/token-config.js', 'services/vivo/web/phone/vendor/economy/src/domains/token-store.js', 'services/vivo/web/phone/vendor/economy/src/render/simulated-economy-panel.js', 'services/vivo/web/vivo-sw.js']:
               expected = hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest()
               for attempt in range(18):
                   try:
