@@ -107,6 +107,16 @@ def main(base_url: str) -> None:
         mobile_page.get_by_role("button", name="Enter local Vivo").click()
         mobile_page.wait_for_function("Boolean(window.VivaPhoneEngine && window.VivaPhoneEngine.active)")
         mobile_page.wait_for_function("document.querySelector('#phoneFieldStatus').textContent.includes('coordinate planes')")
+        # The companion is the first mobile layer. Navigate through the real
+        # scroll surface to the open World field controls before asserting
+        # their geometry; do not remove or bypass the companion DOM.
+        if not mobile_page.locator(".vivo-companion-world-context").evaluate("node => node.open"):
+            mobile_page.locator(".vivo-companion-world-context > summary").click()
+        mobile_page.locator("#phoneFieldDock").hover()
+        mobile_page.mouse.wheel(0, 1000)
+        mobile_page.wait_for_function(
+            "() => { const dock = document.querySelector('#phoneFieldDock').getBoundingClientRect(); const actions = document.querySelector('.field-actions').getBoundingClientRect(); return actions.top >= dock.top && actions.bottom <= dock.bottom; }"
+        )
         mobile_actions = mobile_page.evaluate(
             """
             () => {
@@ -121,6 +131,10 @@ def main(base_url: str) -> None:
         assert mobile_actions["actionsBottom"] <= mobile_actions["dockBottom"]
         assert mobile_actions["applyTop"] >= mobile_actions["actionsTop"]
         assert mobile_actions["applyWidth"] > 0, mobile_actions
+        mobile_page.locator("#phoneFieldPreviewMove").click()
+        mobile_page.wait_for_function("Boolean(window.VivaPhoneEngine.fieldWorld().preview)")
+        mobile_page.locator("#phoneFieldDiscard").click()
+        mobile_page.wait_for_function("!window.VivaPhoneEngine.fieldWorld().preview")
         mobile_context.close()
 
         before_layout = page.locator("#phoneFieldAtlas").evaluate("node => node.toDataURL()")

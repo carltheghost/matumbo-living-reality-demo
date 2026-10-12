@@ -20,10 +20,10 @@ function projectEntity(renderer, entity, geometry) {
   return renderer.project(embed(entity.q, geometry, entity.chart));
 }
 
-function drawCompanionOccupant(ctx, entity, point, radius, { selected = false, held = false } = {}) {
+function drawCompanionOccupant(ctx, entity, point, radius, { selected = false, held = false, companionFocus = false } = {}) {
   const style = COMPANION_OCCUPANTS[entity.id];
   if (!style || (!selected && !held)) return 0;
-  const size = clamp(radius * (selected ? 3.3 : 1.85), selected ? 46 : 28, selected ? 68 : 44);
+  const size = clamp(radius * (selected ? (companionFocus ? 4.2 : 3.3) : 1.85), selected ? (companionFocus ? 64 : 46) : 28, selected ? (companionFocus ? 84 : 68) : 44);
   const lift = size * .24;
   ctx.save();
   ctx.translate(point.x, point.y - lift);
@@ -135,6 +135,8 @@ export class PhoneRenderer extends Renderer {
     this.materialPatch = null;
     this.materialProvisional = null;
     this.materialNodePoints = [];
+    this.companionFocus = false;
+    this.materialEditing = false;
   }
 
   previewFor(id) {
@@ -180,6 +182,7 @@ export class PhoneRenderer extends Renderer {
   }
 
   drawAxes(ctx) {
+    if (this.companionFocus && !this.materialEditing) return;
     const origin = { x: this.w * 0.5, y: this.h * (this.w < 720 ? 0.41 : 0.56) };
     const axes = [
       { x: 52, y: 0, label: 'x1', color: '#6fa8ff' },
@@ -239,13 +242,13 @@ export class PhoneRenderer extends Renderer {
       ctx.strokeStyle = tone.solid; ctx.globalAlpha = 0.62; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.arc(point.x, point.y, Math.max(19, radius * 1.2) + 9, 0, Math.PI * 2); ctx.stroke();
     }
-    const occupantSize = drawCompanionOccupant(ctx, entity, point, radius, { selected, held });
+    const occupantSize = drawCompanionOccupant(ctx, entity, point, radius, { selected, held, companionFocus: this.companionFocus });
     const labelBase = occupantSize ? occupantSize * .72 : Math.max(17, radius);
     ctx.font = selected ? '600 12px system-ui, sans-serif' : '11px system-ui, sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
     ctx.fillStyle = selected ? '#f4f7fb' : '#c8d7e8';
     ctx.fillText((entity.localPreview ? 'LOCAL PREVIEW · ' : held ? 'HELD · ' : '') + entity.name, point.x, point.y + labelBase + 12);
-    if (selected) {
+    if (selected && !this.companionFocus) {
       ctx.font = '9px ui-monospace, SFMono-Regular, monospace';
       ctx.fillStyle = tone.solid;
       ctx.fillText(tone.label.toUpperCase() + ' · ' + entity.q.slice(0, 3).map(value => finite(value).toFixed(1)).join(' / '), point.x, point.y + labelBase + 28);
@@ -256,6 +259,10 @@ export class PhoneRenderer extends Renderer {
 
   drawMaterialPatch(ctx, body, entity, geometry, { provisional = false } = {}) {
     if (!body?.nodes || !entity) return;
+    // Keep the node hit targets available in companion focus so the existing
+    // material editor remains reachable. Quiet the mesh there, and only
+    // reveal its diagnostic label while the editor is actively previewing.
+    const quietCompanionMesh = this.companionFocus && !this.materialEditing;
     const points = Object.values(body.nodes).map(node => {
       const projected = projectEntity(this, { ...node, radius: entity.radius, chart: entity.chart }, geometry);
       return { ...projected, nodeId: node.id, q: [...node.q], provisional };
@@ -266,7 +273,7 @@ export class PhoneRenderer extends Renderer {
     ctx.lineWidth = provisional ? 1.4 : 1.8;
     ctx.strokeStyle = provisional ? '#f6d18b' : '#72e0c0';
     ctx.fillStyle = provisional ? '#f6d18b' : '#72e0c0';
-    ctx.globalAlpha = provisional ? 0.74 : 0.92;
+    ctx.globalAlpha = quietCompanionMesh ? (provisional ? 0.22 : 0.3) : (provisional ? 0.74 : 0.92);
     ctx.setLineDash(provisional ? [5, 4] : []);
     for (const edge of body.edges || []) {
       const from = byId.get(edge.a), to = byId.get(edge.b);
@@ -282,7 +289,7 @@ export class PhoneRenderer extends Renderer {
       }
     }
     const visible = points.filter(point => point.visible);
-    if (visible.length) {
+    if (visible.length && !quietCompanionMesh) {
       ctx.setLineDash(provisional ? [4, 4] : []);
       ctx.font = '9px ui-monospace, SFMono-Regular, monospace';
       ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
@@ -324,13 +331,13 @@ export class PhoneRenderer extends Renderer {
       // Keep accepted material behind the embodied occupant so the selected
       // identity reads as a resident of the existing world, not a tooltip.
       this.drawMaterialPatch(ctx, this.materialPatch, workpiece, geometry, { provisional: false });
+      if (this.materialProvisional) this.drawMaterialPatch(ctx, this.materialProvisional, workpiece, geometry, { provisional: true });
       for (const source of Object.values(state.entities || {})) {
         const entity = this.displayEntity(source);
         const point = projectEntity(this, entity, geometry);
         const hit = this.drawEntity(ctx, entity, point, geometry);
         if (hit) this.screen.push(hit);
       }
-      if (this.materialProvisional) this.drawMaterialPatch(ctx, this.materialProvisional, workpiece, geometry, { provisional: true });
       for (const participant of state.participants || []) {
         if (!participant.observer || participant.id === this.actor) continue;
         const point = projectEntity(this, participant.observer, geometry);

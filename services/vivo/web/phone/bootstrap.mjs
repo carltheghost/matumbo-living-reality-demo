@@ -1112,6 +1112,7 @@ async function startLocal() {
     getEnvelope: () => engine.snapshot(),
     getViewport: () => canvas?.getBoundingClientRect?.() || { left: 0, top: 0, width: innerWidth || 1, height: innerHeight || 1 },
     onPreview: (preview, record) => {
+      R.materialEditing = Boolean(preview?.provisional);
       if (!preview?.provisional) { R.materialProvisional = null; return; }
       const accepted = fieldEnvelope?.snapshot?.materialBodies?.[PHONE_MATERIAL_ENTITY_ID] || state.snapshot.materialBodies?.[PHONE_MATERIAL_ENTITY_ID] || {};
       R.materialProvisional = {

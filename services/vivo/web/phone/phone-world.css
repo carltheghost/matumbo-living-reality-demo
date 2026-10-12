@@ -341,7 +341,7 @@ body.phone-world:not(.phone-local) #status {
     grid-template-columns: repeat(3, 1fr);
     padding: 8px 0;
     position: sticky;
-    top: -13px;
+    top: 0;
     z-index: 3;
   }
   .field-actions button:nth-child(4) { grid-column: 1 / 2; }
@@ -578,6 +578,10 @@ body.phone-world:not(.phone-local) #status {
 .companion-conversation-summary strong { color: #e4eef8; font-size: 14px; font-weight: 650; }
 .companion-conversation-body { display: grid; gap: 8px; padding-top: 8px; }
 .companion-chat-unavailable { background: rgba(5, 16, 28, .45); border-left: 2px solid rgba(127, 180, 255, .55); color: #9fb4ca; font: 8px/1.35 ui-monospace, SFMono-Regular, Consolas, monospace; margin: 0; padding: 7px 8px; }
+.companion-minimize { align-items: center; display: inline-flex; gap: 5px; }
+.companion-minimize svg { flex: 0 0 auto; height: 12px; width: 12px; }
+.companion-flow span.is-complete { color: #8ee8bd; }
+.field-dock[data-companion-collapsed="true"] { bottom: 84px; height: auto; max-height: none; overflow: visible; top: auto; }
 .vivo-companion[data-collapsed="true"] { gap: 0; min-height: 0; padding-bottom: 8px; padding-top: 8px; }
 .vivo-companion[data-collapsed="true"] > :not(.companion-kicker):not(.companion-heading) { display: none; }
 .vivo-companion[data-collapsed="true"] .companion-heading { justify-content: flex-end; }
@@ -596,7 +600,7 @@ body.phone-world:not(.phone-local) #status {
   .companion-heading h2 { font-size: 16px; margin: 0 0 2px; }
   .companion-heading p { font-size: 9px; line-height: 1.25; max-width: 220px; }
   .companion-minimize { font-size: 8px !important; min-height: 28px !important; padding: 5px 7px !important; }
-  .companion-flow { display: none; }
+  .companion-flow { display: flex; }
   .companion-character-grid { gap: 5px; }
   .companion-character { gap: 3px; min-height: 55px; padding: 4px; }
   .companion-character .companion-avatar { height: 32px; width: 40px; }
@@ -619,4 +623,13 @@ body.phone-world:not(.phone-local) #status {
   .companion-conversation-summary strong { font-size: 11px; }
   .companion-provider-badge { font-size: 7px; padding: 5px 6px; }
   .companion-chat-unavailable { font-size: 7px; padding: 6px 7px; }
+  .field-dock[data-companion-collapsed="true"] { bottom: max(70px, calc(58px + env(safe-area-inset-bottom))); top: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vivo-companion .companion-avatar-core,
+  .vivo-companion .companion-avatar-orbit,
+  .vivo-companion[data-presence="attention"] .companion-avatar-core,
+  .vivo-companion[data-presence="reacting"] .companion-avatar-ring,
+  .vivo-companion[data-presence="reacting"] .companion-avatar-halo { animation: none !important; }
 }
