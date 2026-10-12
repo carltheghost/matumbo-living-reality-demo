@@ -70,6 +70,7 @@ class RemoteDeploymentContractTests(unittest.TestCase):
         self.assertIn("COPY services/vivo/server /app/services/vivo/server", dockerfile)
         self.assertIn("COPY services/vivo/web /app/services/vivo/web", dockerfile)
         self.assertIn("COPY services/vivo_adaptive /app/services/vivo_adaptive", dockerfile)
+        self.assertIn("COPY services/vivo_material /app/services/vivo_material", dockerfile)
         self.assertIn(
             "COPY research/vivo-phase-fabric/web/target-mailbox.mjs "
             "/app/research/vivo-phase-fabric/web/target-mailbox.mjs",

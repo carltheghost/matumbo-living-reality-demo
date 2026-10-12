@@ -15,6 +15,7 @@ on:
       - 'services/vivo/contracts/**'
       - 'services/vivo/models/**'
       - 'services/vivo_adaptive/**'
+      - 'services/vivo_material/**'
       - 'research/vivo-phase-fabric/web/target-mailbox.mjs'
       - 'services/vivo/tests/remote/**'
       - 'services/vivo/docs/REMOTE-DEPLOYMENT*'
