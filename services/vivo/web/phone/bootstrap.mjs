@@ -23,7 +23,7 @@ const shared = window.VivaShared;
 if (!shared?.R || !shared?.S || !shared?.camera) throw new Error('Viva phone integration loaded before the shared renderer.');
 const { R, S, camera } = shared;
 const STATIC_PHONE_ROUTE = /\/services\/vivo\/web\/phone(?:\/|$)/.test(location.pathname);
-let engine = null, authority = null, localMode = false, selectedId = null, activeAxis = 0;
+let engine = null, authority = null, localMode = false, selectedId = null, activeAxis = 0, contactMode = 'surface';
 let pinch = null, projection = null, fieldWorld = null, fieldEnvelope = null, interactionFabric = null;
 const agentController = new LocalAgentController({
   snapshot: () => engine?.snapshot(),
@@ -128,6 +128,14 @@ function updateAgentControlUI() {
 function renderEye(envelope, options = {}) {
   const projected = projectForRenderer({ snapshot: () => envelope });
   const state = projected.state;
+  const priorScope = fieldEnvelope ? snapshotMarker(fieldEnvelope) : null;
+  const nextScope = snapshotMarker(envelope);
+  if (localMode && priorScope && (
+    priorScope.worldId !== nextScope.worldId
+    || priorScope.branchId !== nextScope.branchId
+    || priorScope.eyeId !== nextScope.eyeId
+    || priorScope.spaceId !== nextScope.spaceId
+  )) fenceLocalContacts('scope-transition');
   S.state = state; S.live = state; R.state = state; R.grid = projected.grid; R.actor = projected.eye.id;
   if (appliedEyeId !== projected.eye.id || appliedEyeRevision !== projected.eye.revision) {
     const cameraView = projected.eye.projection || {};
@@ -147,6 +155,7 @@ function renderEye(envelope, options = {}) {
   fieldEnvelope = envelope;
   updateFieldWorld(envelope, options);
   const axis = $('phoneAxis'); if (axis) { axis.replaceChildren(); for (let i = 0; i < state.geometry.dimension; i++) { const option = document.createElement('option'); option.value = String(i); option.textContent = `x${i + 1}${i > 2 ? ' · extra axis' : ''}`; axis.append(option); } axis.value = String(Math.min(activeAxis, state.geometry.dimension - 1)); }
+  updateContactModeControls();
   const eyeInfo = $('phoneEyeInfo'); if (eyeInfo) eyeInfo.textContent = `${projected.eye.label} · ${projected.eye.spaceId} · ${state.geometry.dimension} spatial axes + separate time · world ${envelope.snapshot.worldId}`;
 }
 function snapshotMarker(envelope) {
@@ -297,6 +306,7 @@ function selectPhoneEntity(id, { announce = false, discardPending = true } = {})
   const fieldSelect = $('phoneFieldEntity');
   if (fieldSelect && [...fieldSelect.options].some(option => option.value === id)) fieldSelect.value = id;
   if (fieldWorld && fieldEnvelope) updateFieldWorld(fieldEnvelope);
+  updateEyeControls(fieldEnvelope);
   if (announce) status(discarded
     ? `Retargeted to ${entity.name || id}; the previous ${pending.entityId} preview was discarded.`
     : `Selected ${entity.name || id}.`);
@@ -508,20 +518,34 @@ function updateProjectionState(projectionPatch) {
   };
   clearTimeout(persistTimer); persistTimer = setTimeout(() => write().catch(error => status(`Local Eye changed but was not saved: ${error.message}. Retry remains available.`)), 350);
 }
-function materialAxisGesture(dx, dy) {
-  const scale = 2.8 / Math.max(320, Math.min(innerWidth, innerHeight));
-  const dimension = S.state?.geometry.dimension || 4;
-  const primaryAxis = Math.min(activeAxis, dimension - 1);
-  if (primaryAxis === 0) return dx * scale;
-  if (primaryAxis === 1) return -dy * scale;
-  return (Math.abs(dx) > Math.abs(dy) ? dx : -dy) * scale;
+function updateContactModeControls() {
+  const control = $('phoneContactMode'), state = $('phoneContactModeState');
+  if (!control) return;
+  const dimension = S.state?.geometry?.dimension || 4;
+  const axis = Math.max(0, Math.min(Number(activeAxis) || 0, dimension - 1));
+  const dimensionalOption = control.querySelector('option[value="dimensional"]');
+  if (dimensionalOption) dimensionalOption.disabled = axis < 3;
+  if (axis < 3 && control.value === 'dimensional') control.value = 'surface';
+  contactMode = control.value === 'dimensional' && axis >= 3 ? 'dimensional' : 'surface';
+  if (state) state.textContent = contactMode === 'dimensional'
+    ? `DIMENSIONAL CONTACT · selected x${axis + 1} position only · visible-plane bimanual shape stays separate · held contacts keep this mapping`
+    : 'SURFACE CONTACT · renderer x1/x2/x3 position + ordinary bimanual scale/rotation · held contacts keep their captured mapping';
+}
+function captureContactMapping(dimension = S.state?.geometry?.dimension || 4) {
+  const axis = Math.max(0, Math.min(Number(activeAxis) || 0, dimension - 1));
+  const mode = (($('phoneContactMode')?.value || contactMode) === 'dimensional' && axis >= 3) ? 'dimensional' : 'surface';
+  return Object.freeze({
+    mode, axis,
+    surfaceAxes: Object.freeze([0, 2, 1]),
+    dimensionalAxes: mode === 'dimensional' ? Object.freeze([axis, 2, 1]) : null,
+  });
 }
 function rendererDepthForObject(objectId) {
   const screenPoint = R.screen?.find(point => point.id === objectId);
   if (screenPoint?.k) return Math.max(0.15, Math.min(1e6, Math.min(R.w || innerWidth || 1, R.h || innerHeight || 1) * 1.18 / screenPoint.k));
   return Math.max(0.15, Number(R.distance) || 10.5);
 }
-function canonicalPointForInput(point, objectId = null) {
+function rendererPointForInput(point, objectId, axes) {
   const envelope = fieldEnvelope, eye = envelope?.eyes?.[envelope.currentEyeId];
   const rect = $('world')?.getBoundingClientRect?.() || { left: 0, top: 0, width: innerWidth || 1, height: innerHeight || 1 };
   if (!eye) return [0, 0, 0];
@@ -530,13 +554,27 @@ function canonicalPointForInput(point, objectId = null) {
     viewport: rect,
     eye,
     renderer: R,
-    axes: [0, 2, 1],
+    axes,
     depth: rendererDepthForObject(objectId),
   });
 }
-// The flat renderer embeds canonical q as [q0, q2, q1].  Surface contacts
-// therefore use its visible x1/x3 plane for geometry; the field-atlas axis
-// selectors remain a view choice and never silently change the inverse map.
+function materialAxisGesture(point, objectId, mapping) {
+  if (!mapping?.dimensionalAxes) return null;
+  // The selected extra coordinate is derived from the same camera inverse as
+  // surface contacts. Raw pointer/camera deltas never become canonical q.
+  const mapped = rendererPointForInput(point, objectId, mapping.dimensionalAxes);
+  return mapped[mapping.axis];
+}
+function geometryPointForInput(point, objectId, mapping = captureContactMapping()) {
+  return rendererPointForInput(point, objectId, mapping.surfaceAxes);
+}
+function canonicalPointForInput(point, objectId = null, mapping = captureContactMapping(), anchorPoint = null) {
+  const surface = geometryPointForInput(point, objectId, mapping);
+  if (mapping.mode !== 'dimensional') return surface;
+  const q = Array.isArray(anchorPoint) ? [...anchorPoint] : [...surface];
+  q[mapping.axis] = materialAxisGesture(point, objectId, mapping);
+  return q;
+}
 function selectedTransformAxes(dimension = S.state?.geometry?.dimension || 4) {
   const axes = [0, 2].filter(axis => axis < dimension);
   for (let axis = 0; axes.length < 2 && axis < dimension; axis++) if (!axes.includes(axis)) axes.push(axis);
@@ -547,14 +585,32 @@ function beginLocalContact({ contactId, kind, sourceId, objectId, point, gesture
   if (!objectId || !fieldWorld || !engine) return null;
   const identity = localObjectIdentity(objectId);
   if (!identity) return null;
-  const canonicalPoint = canonicalPointForInput(point, objectId);
-  interactionFabric?.begin({ contactId, source: { kind, id: String(sourceId) }, objectId, gesture, canonicalPoint, metadata: { transformAxes: selectedTransformAxes(canonicalPoint.length) } });
-  const record = { id: sourceId, entityId: objectId, point: [...point], canonicalPoint, ...identity, editQueue: new LocalEditQueue() };
+  const mapping = captureContactMapping(identity.baseQ.length);
+  const geometryPoint = geometryPointForInput(point, objectId, mapping);
+  const canonicalPoint = canonicalPointForInput(point, objectId, mapping);
+  interactionFabric?.begin({
+    contactId, source: { kind, id: String(sourceId) }, objectId, gesture, canonicalPoint, geometryPoint,
+    metadata: {
+      transformAxes: selectedTransformAxes(canonicalPoint.length),
+      positionAxes: mapping.mode === 'dimensional' ? [mapping.axis] : null,
+      contactMode: mapping.mode, activeAxis: mapping.axis,
+      inverseAxes: mapping.mode === 'dimensional' ? [...mapping.dimensionalAxes] : [...mapping.surfaceAxes],
+    },
+  });
+  const record = { id: sourceId, contactId, entityId: objectId, point: [...point], canonicalPoint, anchorCanonicalPoint: [...canonicalPoint], geometryPoint, mapping, ...identity, editQueue: new LocalEditQueue() };
   if (kind === 'hand') handContacts.set(contactId, record);
   const objectGesture = beginObjectTouchGesture(objectId);
   objectGesture?.contacts.add(contactId);
   previewObjectTouchGesture(objectId);
   return record;
+}
+function updateLocalContact(record, point, gesture = 'drag') {
+  if (!record) return null;
+  const canonicalPoint = canonicalPointForInput(point, record.entityId, record.mapping, record.anchorCanonicalPoint);
+  const geometryPoint = geometryPointForInput(point, record.entityId, record.mapping);
+  record.point = [...point]; record.canonicalPoint = canonicalPoint; record.geometryPoint = geometryPoint;
+  interactionFabric?.update(record.contactId || record.id, { canonicalPoint, geometryPoint, gesture });
+  return canonicalPoint;
 }
 function fenceHandEdits(reason = 'hand-fence') {
   for (const contactId of [...handContacts.keys()]) {
@@ -583,8 +639,7 @@ function handleTwoHandObjectGesture(event) {
       beginLocalContact({ contactId, kind: 'hand', sourceId: handId, objectId: hit, point: points[index], gesture: 'pinch' });
     }
     const contact = handContacts.get(contactId); if (!contact) continue;
-    contact.point = [...points[index]]; contact.canonicalPoint = canonicalPointForInput(points[index], contact.entityId);
-    interactionFabric?.update(contactId, { canonicalPoint: contact.canonicalPoint, gesture: 'scale' });
+    updateLocalContact(contact, points[index], 'scale');
     previewObjectTouchGesture(contact.entityId);
   }
   return true;
@@ -635,8 +690,7 @@ function handleFieldHandGesture(event) {
   }
   const contactId = 'hand:' + event.handId, contact = handContacts.get(contactId);
   if (event.type === 'move' && contact) {
-    contact.point = [...event.point]; contact.canonicalPoint = canonicalPointForInput(event.point, contact.entityId);
-    interactionFabric?.update(contactId, { canonicalPoint: contact.canonicalPoint, gesture: 'drag' });
+    updateLocalContact(contact, event.point, 'drag');
     previewObjectTouchGesture(contact.entityId);
     return;
   }
@@ -730,6 +784,7 @@ function addPhoneSurface() {
     <p id="phoneEyeInfo" class="muted"></p>
     <label>Active Eye<select id="phoneEyeSelect"></select></label><div class="row"><button id="phoneNewEye">Create independent Eye</button><button id="phonePersist">Save now</button></div>
     <label>Active material axis<select id="phoneAxis"></select></label><div class="row"><button id="phoneAxisMinus">− Move selected</button><button id="phoneAxisPlus">+ Move selected</button></div>
+    <label>Contact movement mode<select id="phoneContactMode"><option value="surface">Surface contact · x1/x2/x3 + bimanual shape</option><option value="dimensional">Dimensional contact · selected x4+ position</option></select></label><p id="phoneContactModeState" class="muted">Surface contact uses the renderer plane. Choose x4+ to enable dimensional contact.</p>
     <div class="row"><button id="phoneEnterNested">Enter selected inner world</button><button id="phoneExitNested">Return with this Eye</button></div>
     <div class="row"><button id="phoneFork">Create explicit offline branch</button><button id="phoneExport">Export world + Eyes</button></div>
     <hr><h3>Hands-free input & projection</h3><p class="muted">Up to two hands · all 21 landmarks and all five articulated fingers · local inference. Open, point, peace, thumbs-up, fist and pinch poses; two hands zoom and rotate; touch drag/pinch also work. Object scale/rotation uses the visible renderer x1/x3 plane; the atlas axis selectors stay a separate view choice. Camera frames stay on this phone.</p>
@@ -792,7 +847,13 @@ function addPhoneSurface() {
     try { await reportPersistenceStatus('save', engine.persist()); }
     catch (error) { status(`Local Vivo state could not be saved: ${error.message}. Retry remains available.`); }
   };
-  $('phoneAxis').onchange = () => { activeAxis = Number($('phoneAxis').value); };
+  $('phoneAxis').onchange = () => { activeAxis = Number($('phoneAxis').value); updateContactModeControls(); };
+  $('phoneContactMode').onchange = () => {
+    updateContactModeControls();
+    status(contactMode === 'dimensional'
+      ? `DIMENSIONAL CONTACT ARMED · new touch/hand contacts use x${activeAxis + 1}; held contacts keep their captured mapping.`
+      : 'SURFACE CONTACT ARMED · new touch/hand contacts use the visible renderer plane; held contacts keep their captured mapping.');
+  };
   for (const [id, direction] of [['phoneAxisMinus', -1], ['phoneAxisPlus', 1]]) $(id).onclick = async () => {
     const id = R.selected, axis = Number($('phoneAxis').value); if (!id) return;
     await engine.translate(id, axis, direction * 0.14); await engine.step(1 / 30); status(`Moved ${id} along x${axis + 1}.`);
@@ -1055,6 +1116,16 @@ function releaseObjectTouchContact(record, reason) {
   finishLocalContact('touch:' + record.id, reason).catch(error => status(error.message));
   pointerContacts.delete(record.id);
 }
+function fenceLocalContacts(reason = 'scope-transition') {
+  const objectIds = new Set([
+    ...[...pointerContacts.values()].map(record => record.target).filter(Boolean),
+    ...touchGestures.keys(),
+  ]);
+  for (const objectId of objectIds) cancelObjectTouchGesture(objectId, reason);
+  fenceHandEdits(reason);
+  pointerContacts.clear();
+  pinch = null;
+}
 function cancelObjectTouchGesture(objectId, reason = 'touch-cancel') {
   releaseObjectTouchContacts(objectId, reason);
   touchGestures.delete(objectId);
@@ -1163,11 +1234,16 @@ canvas.addEventListener('pointerdown', event => {
   const contactId = 'touch:' + event.pointerId;
   const point = [event.clientX, event.clientY];
   const target = R.at(event.clientX, event.clientY);
-  const record = { id: event.pointerId, x: point[0], y: point[1], target, canonicalPoint: target ? canonicalPointForInput(point, target) : null, released: false };
+  const record = { id: event.pointerId, contactId, x: point[0], y: point[1], target, canonicalPoint: null, mapping: null, anchorCanonicalPoint: null, released: false };
   pointerContacts.set(event.pointerId, record);
   if (target) {
     selectPhoneEntity(target, { announce: true });
-    beginLocalContact({ contactId, kind: 'touch', sourceId: String(event.pointerId), objectId: target, point, gesture: 'touch' });
+    const contact = beginLocalContact({ contactId, kind: 'touch', sourceId: String(event.pointerId), objectId: target, point, gesture: 'touch' });
+    if (contact) {
+      record.canonicalPoint = [...contact.canonicalPoint];
+      record.anchorCanonicalPoint = [...contact.anchorCanonicalPoint];
+      record.mapping = contact.mapping;
+    }
   } else if (pointerContacts.size > 1) {
     const entries = [...pointerContacts.values()].filter(item => !item.target);
     if (entries.length > 1) {
@@ -1184,10 +1260,8 @@ canvas.addEventListener('pointermove', event => {
   const prior = { x: record.x, y: record.y };
   if (record.released) return;
   record.x = event.clientX; record.y = event.clientY;
-  if (record.target && S.state?.entities[record.target]) {
-    const nextPoint = canonicalPointForInput([record.x, record.y], record.target);
-    interactionFabric?.update('touch:' + event.pointerId, { canonicalPoint: nextPoint, gesture: 'drag' });
-    record.canonicalPoint = nextPoint;
+  if (record.target && record.mapping && S.state?.entities[record.target]) {
+    updateLocalContact(record, [record.x, record.y], 'drag');
     previewObjectTouchGesture(record.target);
     return;
   }

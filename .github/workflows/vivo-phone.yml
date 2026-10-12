@@ -10,6 +10,7 @@ on:
       - 'src/render/simulated-economy-panel.js'
       - 'scripts/vivo/stage_economy_dependencies.py'
       - 'services/vivo/web/phone/tests/browser_economy_mounted.py'
+      - 'services/vivo/web/phone/tests/browser_dimensional_contact.py'
       - 'docs/vivo-phone-*.md'
       - '.github/workflows/vivo-phone.yml'
   push:
@@ -23,6 +24,7 @@ on:
       - 'src/render/simulated-economy-panel.js'
       - 'scripts/vivo/stage_economy_dependencies.py'
       - 'services/vivo/web/phone/tests/browser_economy_mounted.py'
+      - 'services/vivo/web/phone/tests/browser_dimensional_contact.py'
       - 'docs/vivo-phone-*.md'
       - '.github/workflows/vivo-phone.yml'
 
@@ -70,6 +72,7 @@ jobs:
           trap 'kill "$server_pid" 2>/dev/null || true' EXIT
           python services/vivo/web/phone/tests/browser_economy_mounted.py http://127.0.0.1:9897/ | tee browser-evidence/economy-mounted.json
           python services/vivo/web/phone/tests/browser_agent_stop.py http://127.0.0.1:9897/ | tee browser-evidence/agent-stop-source.json
+          python services/vivo/web/phone/tests/browser_dimensional_contact.py http://127.0.0.1:9897/ | tee browser-evidence/dimensional-contact-source.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -201,6 +204,7 @@ jobs:
           python services/vivo/web/phone/tests/browser_economy_mounted.py http://127.0.0.1:9896/ | tee browser-evidence/economy-mounted-built.json
           python services/vivo/web/phone/tests/browser_bimanual_transform.py http://127.0.0.1:9896/ | tee browser-evidence/bimanual-transform.json
           python services/vivo/web/phone/tests/browser_agent_stop.py http://127.0.0.1:9896/ | tee browser-evidence/agent-stop-pages.json
+          python services/vivo/web/phone/tests/browser_dimensional_contact.py http://127.0.0.1:9896/ | tee browser-evidence/dimensional-contact-pages.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
