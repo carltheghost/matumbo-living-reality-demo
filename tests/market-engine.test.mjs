@@ -35,3 +35,12 @@ test('single-entry, provenance, rules and clock are validated',()=>{
   assert.throws(()=>createMarket({...spec,closesAt:'2026-01-01'}),/future/);
   assert.throws(()=>enterMarket(createMarket(spec),{participant:'A',outcome:'Yes',now:Date.parse(spec.closesAt)}),/closed/);
 });
+test('market listings can point to an existing local contract without becoming settlement authority',()=>{
+  const market=createMarket({...spec,origin:'authored',author:'Creator',source:null,governingContractId:'contract:42'});
+  assert.equal(market.governingContractId,'contract:42');
+  assert.equal(market.monetary,false);
+  assert.equal(market.settlement,false);
+  const restored=createMarketBook([market]).snapshot()[0];
+  assert.equal(restored.governingContractId,'contract:42');
+  assert.throws(()=>createMarket({...spec,origin:'authored',author:'Creator',source:null,governingContractId:'market:42'}),/Governing contract ID/);
+});
