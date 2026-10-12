@@ -27,6 +27,7 @@ import {
 } from "./token-store.js";
 
 export const SIMULATED_ECONOMY_FORMAT = "matumbo-simulated-economy-v1";
+export const SIMULATED_ECONOMY_SNAPSHOT_VERSION = 2;
 export const SIMULATED_ECONOMY_STORAGE_KEY = "matumbo.simulated-economy.v1";
 export const SIMULATED_ECONOMY_SOURCE = "matumbo-simulated-economy";
 export const SIMULATED_ECONOMY_UNIT = "integer fluff";
@@ -59,8 +60,8 @@ export class EconomyIdempotencyError extends SimulatedEconomyError {
 }
 
 export class EconomyStaleStateError extends SimulatedEconomyError {
-  constructor(message = "simulated economy state is stale; reload before retrying") {
-    super(message, "STALE_STATE");
+  constructor(message = "simulated economy state is stale; reload before retrying", code = "STALE_STATE") {
+    super(message, code);
     this.name = "EconomyStaleStateError";
   }
 }
@@ -330,21 +331,138 @@ function engineJournalInfo(engine) {
   };
 }
 
+function tokenSnapshotInfo(token) {
+  const journals = Array.isArray(token?.journals) ? token.journals : [];
+  return {
+    count: journals.length,
+    hash: journals.at(-1)?.hash ?? "genesis",
+  };
+}
+
+function journalSignature(journal) {
+  return canonicalJson({
+    idempotencyKey: journal?.idempotencyKey ?? null,
+    action: journal?.action ?? null,
+    memo: journal?.memo ?? "",
+    postings: journal?.postings ?? null,
+    links: journal?.links ?? null,
+  });
+}
+
+function journalPrefix(shorter, longer) {
+  const left = shorter?.ledger?._journals ?? shorter?.journals ?? [];
+  const right = longer?.ledger?._journals ?? longer?.journals ?? [];
+  if (left.length > right.length) return false;
+  return left.every((journal, index) => journalSignature(journal) === journalSignature(right[index]));
+}
+
+function journalDelta(shorter, longer) {
+  if (!journalPrefix(shorter, longer)) {
+    throw new SimulatedEconomyError("canonical token snapshots diverge and cannot be reconciled", "CANONICAL_CONFLICT");
+  }
+  const left = shorter?.ledger?._journals ?? shorter?.journals ?? [];
+  const right = longer?.ledger?._journals ?? longer?.journals ?? [];
+  return right.slice(left.length);
+}
+
+function isEconomyJournal(journal) {
+  return journal?.links?.economy === SIMULATED_ECONOMY_SOURCE;
+}
+
+function tokenMarker(engine) {
+  const info = engineJournalInfo(engine);
+  return { journalCount: info.count, tipHash: info.hash };
+}
+
+function snapshotCommit(token, state) {
+  const tokenInfo = tokenSnapshotInfo(token);
+  const value = {
+    version: 1,
+    tokenJournalCount: tokenInfo.count,
+    tokenTipHash: tokenInfo.hash,
+    stateHash: fnv1a64Hex(canonicalJson(state)),
+  };
+  return { ...value, id: fnv1a64Hex(canonicalJson(value)) };
+}
+
+function snapshotMarker(raw) {
+  if (!raw) return null;
+  const commit = raw.commit ?? snapshotCommit(raw.token, raw.state);
+  return {
+    commitId: commit.id,
+    tokenJournalCount: commit.tokenJournalCount,
+    tokenTipHash: commit.tokenTipHash,
+    stateHash: commit.stateHash,
+  };
+}
+
+function durableMarker(raw, canonicalEngine) {
+  return {
+    combined: snapshotMarker(raw),
+    canonical: canonicalEngine ? tokenMarker(canonicalEngine) : null,
+  };
+}
+
+function sameMarker(left, right) {
+  return canonicalJson(left ?? null) === canonicalJson(right ?? null);
+}
+
+function validateSnapshotCommit(raw) {
+  if (raw.commit === undefined) return;
+  if (!raw.commit || typeof raw.commit !== "object" || raw.commit.version !== 1 ||
+      !Number.isSafeInteger(raw.commit.tokenJournalCount) || raw.commit.tokenJournalCount < 0 ||
+      typeof raw.commit.tokenTipHash !== "string" || typeof raw.commit.stateHash !== "string" ||
+      typeof raw.commit.id !== "string") {
+    throw new SimulatedEconomyError("malformed simulated economy commit marker", "INVALID_SNAPSHOT");
+  }
+  const expected = snapshotCommit(raw.token, raw.state);
+  if (!sameMarker(raw.commit, expected)) {
+    throw new SimulatedEconomyError("simulated economy commit marker does not match its token and state", "INVALID_SNAPSHOT");
+  }
+}
+
+function parseEconomySnapshot(raw) {
+  if (!raw) return null;
+  if (raw.format !== SIMULATED_ECONOMY_FORMAT || !raw.token || !raw.state) {
+    throw new SimulatedEconomyError("unsupported simulated economy snapshot", "INVALID_SNAPSHOT");
+  }
+  const rawEngine = loadTokenEngine(raw.token);
+  const rawState = validateState(raw.state);
+  validateSnapshotCommit(raw);
+  return { raw, rawEngine, rawState };
+}
+
+function readCanonicalEngine() {
+  try {
+    return { engine: LedgerStore.load(), error: null };
+  } catch (error) {
+    return { engine: null, error };
+  }
+}
+
 function selectCanonicalEngine(candidates) {
-  let selected = candidates[0];
-  for (const candidate of candidates.slice(1)) {
+  let selected = candidates.find(Boolean);
+  const priority = (source) => source === "canonical-store" ? 3 : source === "economy-snapshot" ? 2 : 1;
+  for (const candidate of candidates.filter(Boolean).slice(1)) {
     const selectedInfo = engineJournalInfo(selected.engine);
     const candidateInfo = engineJournalInfo(candidate.engine);
+    if (candidateInfo.count === selectedInfo.count && journalPrefix(selected.engine, candidate.engine) && journalPrefix(candidate.engine, selected.engine)) {
+      if (priority(candidate.source) > priority(selected.source)) selected = candidate;
+      continue;
+    }
     if (candidateInfo.count > selectedInfo.count) {
+      journalDelta(selected.engine, candidate.engine);
       selected = candidate;
       continue;
     }
-    if (candidateInfo.count === selectedInfo.count && candidateInfo.hash !== selectedInfo.hash) {
-      throw new SimulatedEconomyError(
-        `conflicting canonical token snapshots (${selected.source} vs ${candidate.source})`,
-        "CANONICAL_CONFLICT",
-      );
+    if (selectedInfo.count > candidateInfo.count) {
+      journalDelta(candidate.engine, selected.engine);
+      continue;
     }
+    throw new SimulatedEconomyError(
+      `conflicting canonical token snapshots (${selected.source} vs ${candidate.source})`,
+      "CANONICAL_CONFLICT",
+    );
   }
   return selected;
 }
@@ -355,6 +473,49 @@ function ledgerReceipt(engine, idempotencyKey) {
     ?? null;
 }
 
+function posting(receipt, predicate) {
+  return receipt?.postings?.find(predicate) ?? null;
+}
+
+function seedFillDetails(receipt) {
+  if (receipt?.action !== "exchange.fill") return null;
+  const baseEscrow = posting(receipt, (entry) => entry.account === ECONOMY_ESCROW_ACCOUNT && entry.asset === EXCHANGE_BASE_ASSET && entry.amount < 0);
+  const quoteEscrow = posting(receipt, (entry) => entry.account === ECONOMY_ESCROW_ACCOUNT && entry.asset === EXCHANGE_QUOTE_ASSET && entry.amount < 0);
+  const buyer = posting(receipt, (entry) => entry.account !== ECONOMY_ESCROW_ACCOUNT && entry.asset === EXCHANGE_BASE_ASSET && entry.amount > 0);
+  const seller = posting(receipt, (entry) => entry.account !== ECONOMY_ESCROW_ACCOUNT && entry.asset === EXCHANGE_QUOTE_ASSET && entry.amount > 0);
+  if (!baseEscrow || !quoteEscrow || !buyer || !seller) {
+    throw new SimulatedEconomyError("exchange fill receipt is missing canonical postings", "ACCOUNTING_ERROR");
+  }
+  const seedSide = seller.account === DEMO_LIQUIDITY_ACCOUNT
+    ? "sell"
+    : buyer.account === DEMO_LIQUIDITY_ACCOUNT ? "buy" : null;
+  return {
+    seedSide,
+    baseAmount: Math.abs(baseEscrow.amount),
+    quoteAmount: Math.abs(quoteEscrow.amount),
+    buyer: buyer.account,
+    seller: seller.account,
+  };
+}
+
+function receiptAmountToAccount(receipt, account, asset) {
+  return receipt?.postings?.filter((entry) => entry.account === account && entry.asset === asset && entry.amount > 0)
+    .reduce((total, entry) => total + entry.amount, 0) ?? 0;
+}
+
+function referencedSequence(journal) {
+  const values = [journal?.idempotencyKey, journal?.links?.refId];
+  let highest = 0;
+  for (const value of values) {
+    const match = String(value ?? "").match(/(?:order|trade|market|position|contract):(\d+)(?::|$)/g) || [];
+    for (const part of match) {
+      const number = Number(part.match(/(\d+)(?::)?$/)?.[1]);
+      if (Number.isSafeInteger(number)) highest = Math.max(highest, number);
+    }
+  }
+  return highest;
+}
+
 function recoverDemoLiquidity(engine, now) {
   const seedKeys = [
     "economy:seed-liquidity:inventory:v1",
@@ -362,26 +523,67 @@ function recoverDemoLiquidity(engine, now) {
     ...DEMO_SEED_ORDER_SPECS.map((spec) => spec.holdKey),
   ];
   if (!seedKeys.some((key) => ledgerReceipt(engine, key))) return null;
-
-  // If the canonical journal already contains later exchange lifecycle
-  // records, the old wrapper state cannot safely reconstruct its fills from
-  // receipt keys alone. Treat the current escrow as the canonical baseline;
-  // the durable state from a healthy wrapper remains authoritative when it is
-  // available, and re-entry never invents a second seed.
-  const hasLaterExchangeLifecycle = engine.ledger._journals.some((journal) =>
-    ["exchange.fill", "exchange.order.release"].includes(journal.action));
-  if (hasLaterExchangeLifecycle) {
-    return { orders: [], locked: { TUMBO: 0, sMIMAS: 0 }, seeded: true, receiptId: ledgerReceipt(engine, "economy:seed-liquidity:audit:v1")?.id ?? null };
-  }
-
+  const inventory = ledgerReceipt(engine, "economy:seed-liquidity:inventory:v1");
+  const audit = ledgerReceipt(engine, "economy:seed-liquidity:audit:v1");
   const orders = [];
   const locked = { TUMBO: 0, sMIMAS: 0 };
+  const handledJournalIds = new Set([inventory?.id, audit?.id].filter(Boolean));
+  const fillsBySide = { sell: [], buy: [] };
+  const cancellations = new Set();
+  const journals = engine?.ledger?._journals ?? [];
+
   for (const spec of DEMO_SEED_ORDER_SPECS) {
     const hold = ledgerReceipt(engine, spec.holdKey);
-    const posting = hold?.postings?.find((entry) => entry.account === ECONOMY_ESCROW_ACCOUNT && entry.asset === spec.asset && entry.amount > 0);
-    if (!posting) continue;
-    const amountBase = spec.side === "sell" ? posting.amount : posting.amount;
-    const reservedQuote = spec.side === "buy" ? posting.amount : 0;
+    const holdPosting = hold?.postings?.find((entry) => entry.account === ECONOMY_ESCROW_ACCOUNT && entry.asset === spec.asset && entry.amount > 0);
+    if (!hold || !holdPosting) {
+      throw new EconomyStaleStateError(`demo liquidity receipt ${spec.holdKey} is incomplete; reload the paired economy snapshot`, "STALE_STATE");
+    }
+    handledJournalIds.add(hold.id);
+    const fills = fillsBySide[spec.side];
+    const releases = [];
+    for (const journal of journals) {
+      if (journal.action === "exchange.fill") {
+        const details = seedFillDetails(journal);
+        if (details?.seedSide === spec.side) {
+          fills.push({ journal, ...details });
+          handledJournalIds.add(journal.id);
+        }
+      }
+      if (journal.action === "exchange.order.release" && journal.links?.refId === spec.id) {
+        releases.push(journal);
+        handledJournalIds.add(journal.id);
+      }
+      if (journal.action === "exchange.order.cancel" && journal.links?.refId === spec.id) {
+        cancellations.add(spec.id);
+        handledJournalIds.add(journal.id);
+      }
+      if (journal.action === "exchange.order.open" && journal.links?.refId === spec.id) handledJournalIds.add(journal.id);
+    }
+    const filledBase = sum(fills.map((entry) => entry.baseAmount));
+    const filledQuote = sum(fills.map((entry) => entry.quoteAmount));
+    const released = sum(releases.map((receipt) => receiptAmountToAccount(receipt, DEMO_LIQUIDITY_ACCOUNT, spec.asset)));
+    const initialAmount = holdPosting.amount;
+    const cancelled = cancellations.has(spec.id);
+    const residualBeforeRelease = spec.side === "sell" ? initialAmount - filledBase : initialAmount - filledQuote;
+    if (residualBeforeRelease < 0 || released > residualBeforeRelease) {
+      throw new SimulatedEconomyError(`demo liquidity receipts over-release ${spec.id}`, "ACCOUNTING_ERROR");
+    }
+    if (cancelled && released !== residualBeforeRelease) {
+      throw new SimulatedEconomyError(`cancelled demo order ${spec.id} has an unreconciled reserve`, "ACCOUNTING_ERROR");
+    }
+    const amountBase = initialAmount;
+    const remainingBase = spec.side === "sell"
+      ? (cancelled ? 0 : initialAmount - filledBase - released)
+      : (cancelled ? 0 : initialAmount - filledBase);
+    const reservedQuote = spec.side === "buy"
+      ? (cancelled ? 0 : initialAmount - filledQuote - released)
+      : 0;
+    if (remainingBase < 0 || reservedQuote < 0) throw new SimulatedEconomyError(`demo liquidity order ${spec.id} has negative residual`, "ACCOUNTING_ERROR");
+    const status = cancelled ? "cancelled" : remainingBase === 0 ? "filled" : fills.length ? "partial" : "open";
+    const lifecycle = [hold, ...fills.map((entry) => entry.journal), ...releases, ...journals.filter((journal) => journal.action === "exchange.order.cancel" && journal.links?.refId === spec.id)];
+    const updatedAt = lifecycle.reduce((latest, journal) => Math.max(latest, Number(journal.ts) || 0), Number(hold.ts) || 0) || nowIso(now);
+    if (spec.side === "sell") locked.TUMBO += remainingBase;
+    else locked.sMIMAS += reservedQuote;
     orders.push({
       id: spec.id,
       owner: DEMO_LIQUIDITY_ACCOUNT,
@@ -389,25 +591,69 @@ function recoverDemoLiquidity(engine, now) {
       baseAsset: EXCHANGE_BASE_ASSET,
       quoteAsset: EXCHANGE_QUOTE_ASSET,
       amountBase,
-      remainingBase: amountBase,
+      remainingBase,
       priceNum: spec.priceNum,
       priceDen: spec.priceDen,
       reservedQuote,
-      status: "open",
-      revision: 0,
+      status,
+      revision: fills.length + (cancelled ? 1 : 0),
       holdReceiptId: hold.id,
-      releaseReceiptId: null,
+      releaseReceiptId: releases.at(-1)?.id ?? null,
       createdAt: hold.ts ?? nowIso(now),
-      updatedAt: hold.ts ?? nowIso(now),
+      updatedAt,
       simulation: true,
+      recovered: true,
     });
-    locked[spec.asset] += posting.amount;
   }
+
+  const trades = fillsBySide.sell.concat(fillsBySide.buy).map(({ journal, baseAmount, quoteAmount, seedSide, buyer, seller }) => ({
+    id: journal.links?.refId ?? `recovered:${journal.id}`,
+    buyOrderId: seedSide === "buy" ? "order:demo-buy" : null,
+    sellOrderId: seedSide === "sell" ? "order:demo-sell" : null,
+    baseAmount,
+    quoteAmount,
+    priceNum: 1,
+    priceDen: 1,
+    receiptId: journal.id,
+    createdAt: journal.ts ?? nowIso(now),
+    counterpartyAccount: seedSide === "sell" ? buyer : seller,
+    recovered: true,
+    simulation: true,
+  }));
+
+  const exchangeActions = new Set([
+    "exchange.order.hold", "exchange.order.open", "exchange.order.cancel", "exchange.order.release", "exchange.fill",
+  ]);
+  const unsupported = journals.filter((journal) => isEconomyJournal(journal) && !handledJournalIds.has(journal.id) && !exchangeActions.has(journal.action));
+  const unhandledExchange = journals.filter((journal) => isEconomyJournal(journal) && !handledJournalIds.has(journal.id) && exchangeActions.has(journal.action));
+  const exchangeRevision = 1
+    + journals.filter((journal) => journal.action === "exchange.order.open").length
+    + journals.filter((journal) => journal.action === "exchange.order.cancel").length;
+  const events = journals.filter((journal) => handledJournalIds.has(journal.id)).map((journal) => ({
+    id: `event:recovered:${journal.id}`,
+    type: journal.action,
+    refType: journal.links?.refType ?? "receipt",
+    refId: journal.links?.refId ?? journal.id,
+    actor: journal.links?.actor ?? journal.postings?.find((entry) => entry.amount < 0)?.account ?? DEMO_LIQUIDITY_ACCOUNT,
+    receiptId: journal.id,
+    hash: journal.hash,
+    at: nowIso(journal.ts ?? now),
+    detail: journal.memo ?? "Recovered from canonical simulated receipt",
+    simulation: true,
+    recovered: true,
+  }));
   return {
     orders,
+    trades,
     locked,
     seeded: true,
-    receiptId: ledgerReceipt(engine, "economy:seed-liquidity:audit:v1")?.id ?? null,
+    receiptId: audit?.id ?? null,
+    events,
+    handledJournalIds,
+    unsupported,
+    unhandledExchange,
+    nextId: Math.max(0, ...journals.map(referencedSequence)),
+    revision: exchangeRevision,
   };
 }
 
@@ -423,8 +669,15 @@ function applyRecoveredDemoLiquidity(state, recovery, { adjustBaseline = false }
   for (const order of recovery.orders) {
     if (!state.exchange.orders.some((entry) => entry.id === order.id)) state.exchange.orders.push(order);
   }
+  for (const trade of recovery.trades ?? []) {
+    if (!state.exchange.trades.some((entry) => entry.id === trade.id)) state.exchange.trades.push(trade);
+  }
+  for (const event of recovery.events ?? []) {
+    if (!state.events.some((entry) => entry.receiptId === event.receiptId)) state.events.push(event);
+  }
+  state.nextId = Math.max(state.nextId, recovery.nextId ?? 0);
   state.exchange.seeded = true;
-  state.exchange.revision = Math.max(state.exchange.revision, recovery.orders.length ? 1 : 0);
+  state.exchange.revision = Math.max(state.exchange.revision, recovery.revision ?? (recovery.orders.length ? 1 : 0));
   return true;
 }
 
@@ -480,38 +733,47 @@ export class SimulatedEconomy {
     let state = null;
     let stateReconciled = false;
     let tokenReconciled = false;
-    let rawState = null;
-    let rawEngine = null;
     const raw = readJson(this.storage, this.storageKey);
-    if (raw) {
-      if (raw.format !== SIMULATED_ECONOMY_FORMAT || !raw.token || !raw.state) {
-        throw new SimulatedEconomyError("unsupported simulated economy snapshot", "INVALID_SNAPSHOT");
-      }
-      rawEngine = loadTokenEngine(raw.token);
-      rawState = validateState(raw.state);
-    }
-
-    let canonicalEngine = null;
+    const parsedSnapshot = parseEconomySnapshot(raw);
+    const rawEngine = parsedSnapshot?.rawEngine ?? null;
+    const rawState = parsedSnapshot?.rawState ?? null;
+    const canonicalResult = readCanonicalEngine();
+    const canonicalEngine = canonicalResult.engine;
     // The regular token boot owns this key in the root app. If a Vivo phone
     // opens this module directly, consider its validated canonical snapshot
     // alongside the combined economy snapshot. The canonical store is the
     // durable owner when it exists; a provided in-memory owner may be newer,
     // while the combined token is only a fallback when no canonical store is
     // available. An older economy snapshot must never roll the owner backward.
-    try {
-      canonicalEngine = LedgerStore.load();
-    } catch {
+    if (canonicalResult.error) {
       this.storageStatus = "invalid-token-snapshot-skipped";
     }
 
-    const candidates = [{ source: "provided-engine", engine: this.engine }];
-    if (canonicalEngine) candidates.push({ source: "canonical-store", engine: canonicalEngine });
-    else if (rawEngine) candidates.push({ source: "economy-snapshot", engine: rawEngine });
+    const candidates = [
+      { source: "provided-engine", engine: this.engine },
+      canonicalEngine ? { source: "canonical-store", engine: canonicalEngine } : null,
+      rawEngine ? { source: "economy-snapshot", engine: rawEngine } : null,
+    ];
     const selected = selectCanonicalEngine(candidates);
-    if (selected.engine !== this.engine) adoptTokenEngine(this.engine, selected.engine);
-    if (rawEngine) {
-      tokenReconciled = engineJournalInfo(rawEngine).hash !== engineJournalInfo(this.engine).hash;
+    if (!selected) throw new SimulatedEconomyError("no canonical token engine is available", "INVALID_SNAPSHOT");
+
+    // A newer canonical token chain is safe to adopt only when every journal
+    // added after the paired economy snapshot is non-economic. Economic
+    // receipts carry obligations that cannot be reconstructed from an older
+    // state object without risking a false balance or inaccessible escrow.
+    if (rawEngine && selected.engine !== rawEngine) {
+      const delta = journalDelta(rawEngine, selected.engine);
+      if (delta.some(isEconomyJournal)) {
+        throw new EconomyStaleStateError(
+          "simulated economy snapshot is older than canonical economic receipts; reload the latest economy state before continuing",
+        );
+      }
     }
+
+    this._durableMarker = durableMarker(raw, canonicalEngine);
+    if (selected.engine !== this.engine) adoptTokenEngine(this.engine, selected.engine);
+    if (rawEngine && !sameMarker(tokenMarker(rawEngine), tokenMarker(this.engine))) tokenReconciled = true;
+    if (canonicalEngine && !sameMarker(tokenMarker(canonicalEngine), tokenMarker(this.engine))) tokenReconciled = true;
 
     if (rawState) {
       state = rawState;
@@ -522,13 +784,46 @@ export class SimulatedEconomy {
 
     if (!state) {
       const recovery = recoverDemoLiquidity(this.engine, this.now);
+      const economyJournals = this.engine.ledger._journals.filter(isEconomyJournal);
+      if (!recovery && economyJournals.length) {
+        throw new EconomyStaleStateError(
+          "canonical economic receipts exist without a paired simulated economy snapshot; reload the durable economy state before continuing",
+        );
+      }
+      if (recovery?.unsupported?.length) {
+        const actions = [...new Set(recovery.unsupported.map((journal) => journal.action))].join(", ");
+        throw new EconomyStaleStateError(
+          `canonical economic receipts (${actions}) require their paired simulated economy snapshot; reload before continuing`,
+        );
+      }
+      const actualEscrow = {
+        TUMBO: this.engine.balance(ECONOMY_ESCROW_ACCOUNT, EXCHANGE_BASE_ASSET),
+        sMIMAS: this.engine.balance(ECONOMY_ESCROW_ACCOUNT, EXCHANGE_QUOTE_ASSET),
+      };
+      const baseline = {
+        TUMBO: actualEscrow.TUMBO - (recovery?.locked.TUMBO ?? 0),
+        sMIMAS: actualEscrow.sMIMAS - (recovery?.locked.sMIMAS ?? 0),
+      };
+      for (const asset of [EXCHANGE_BASE_ASSET, EXCHANGE_QUOTE_ASSET]) {
+        if (baseline[asset] < 0) throw new SimulatedEconomyError(`cannot reconcile demo liquidity baseline for ${asset}`, "ACCOUNTING_ERROR");
+      }
+      if (recovery?.unhandledExchange?.length && (baseline.TUMBO > 0 || baseline.sMIMAS > 0)) {
+        throw new EconomyStaleStateError(
+          "canonical exchange receipts leave an obligation that cannot be reconstructed without the paired simulated economy snapshot",
+        );
+      }
       state = emptyState({
-        TUMBO: this.engine.balance(ECONOMY_ESCROW_ACCOUNT, EXCHANGE_BASE_ASSET) - (recovery?.locked.TUMBO ?? 0),
-        sMIMAS: this.engine.balance(ECONOMY_ESCROW_ACCOUNT, EXCHANGE_QUOTE_ASSET) - (recovery?.locked.sMIMAS ?? 0),
+        TUMBO: baseline.TUMBO,
+        sMIMAS: baseline.sMIMAS,
       });
       stateReconciled = applyRecoveredDemoLiquidity(state, recovery);
     } else if (!state.exchange.seeded) {
-      stateReconciled = applyRecoveredDemoLiquidity(state, recoverDemoLiquidity(this.engine, this.now));
+      const recovery = recoverDemoLiquidity(this.engine, this.now);
+      if (recovery?.unsupported?.length) {
+        const actions = [...new Set(recovery.unsupported.map((journal) => journal.action))].join(", ");
+        throw new EconomyStaleStateError(`economy snapshot is missing lifecycle state for canonical receipts (${actions})`);
+      }
+      stateReconciled = applyRecoveredDemoLiquidity(state, recovery);
     }
     this._state = state;
     this.verify();
@@ -560,20 +855,76 @@ export class SimulatedEconomy {
     return `${prefix}:${this._state.nextId}`;
   }
 
+  _readDurableSources() {
+    const raw = readJson(this.storage, this.storageKey);
+    const parsed = parseEconomySnapshot(raw);
+    const canonicalResult = readCanonicalEngine();
+    if (canonicalResult.error) {
+      throw new SimulatedEconomyError("canonical token snapshot is invalid; simulated economy persistence is held", "PERSISTENCE_ERROR");
+    }
+    return {
+      raw,
+      parsed,
+      canonicalEngine: canonicalResult.engine,
+      marker: durableMarker(raw, canonicalResult.engine),
+    };
+  }
+
+  _assertDurableFresh() {
+    const durable = this._readDurableSources();
+    if (sameMarker(this._durableMarker, durable.marker)) return durable;
+
+    // A paired economy snapshot changed: the state and token journal must be
+    // advanced together. Refuse a stale writer rather than overwriting the
+    // newer obligations with this wrapper's in-memory state.
+    if (!sameMarker(this._durableMarker?.combined, durable.marker.combined)) {
+      throw new EconomyStaleStateError("another simulated economy wrapper committed; reload before continuing");
+    }
+
+    const canonical = durable.canonicalEngine;
+    if (!canonical) throw new EconomyStaleStateError("canonical token storage disappeared; reload before continuing");
+    let delta;
+    try {
+      delta = journalDelta(this.engine, canonical);
+    } catch {
+      throw new EconomyStaleStateError("canonical token storage changed incompatibly; reload before continuing");
+    }
+    if (delta.some(isEconomyJournal)) {
+      throw new EconomyStaleStateError("canonical economic receipts advanced outside this wrapper; reload before continuing");
+    }
+    adoptTokenEngine(this.engine, canonical);
+    this._durableMarker = durable.marker;
+    return durable;
+  }
+
   _operation(key, request, mutate) {
     if (typeof key !== "string" || !key.trim()) throw new TypeError("idempotencyKey must be a non-empty string");
     const normalizedKey = key.trim();
+    this._assertDurableFresh();
     const hash = requestHash(request);
     const prior = this._state.operations.find((entry) => entry.key === normalizedKey);
     if (prior) {
       if (prior.requestHash !== hash) throw new EconomyIdempotencyError();
       return clone(prior.result);
     }
-    const result = mutate();
-    this._state.operations.push({ key: normalizedKey, requestHash: hash, result: clone(result) });
-    this._persist();
-    this._emit({ type: "changed", operation: normalizedKey, result: clone(result) });
-    return clone(result);
+    const stateBefore = clone(this._state);
+    const tokenBefore = serializeTokenEngine(this.engine);
+    try {
+      const result = mutate();
+      this._state.operations.push({ key: normalizedKey, requestHash: hash, result: clone(result) });
+      this.verify();
+      this._persist();
+      this._emit({ type: "changed", operation: normalizedKey, result: clone(result) });
+      return clone(result);
+    } catch (error) {
+      // A stale/persistence failure must not leave this wrapper with a token
+      // journal that no longer matches its state. Restore the pre-operation
+      // in-memory pair; durable storage remains untouched or is fenced on the
+      // next call if a lower-level storage failure happened mid-write.
+      try { adoptTokenEngine(this.engine, loadTokenEngine(tokenBefore)); } catch { /* preserve the original failure */ }
+      this._state = stateBefore;
+      throw error;
+    }
   }
 
   _assertRevision(actual, expected, label) {
@@ -654,18 +1005,30 @@ export class SimulatedEconomy {
   }
 
   _persist() {
+    const durable = this._readDurableSources();
+    if (!sameMarker(this._durableMarker, durable.marker)) {
+      throw new EconomyStaleStateError("another simulated economy wrapper committed; reload before continuing");
+    }
+    this.verify();
+    const token = JSON.parse(serializeTokenEngine(this.engine));
+    const state = clone(this._state);
     const snapshot = {
       format: SIMULATED_ECONOMY_FORMAT,
-      version: 1,
-      token: JSON.parse(serializeTokenEngine(this.engine)),
-      state: clone(this._state),
+      version: SIMULATED_ECONOMY_SNAPSHOT_VERSION,
+      commit: snapshotCommit(token, state),
+      token,
+      state,
     };
     const raw = JSON.stringify(snapshot);
     try {
       if (this.storage?.setItem) this.storage.setItem(this.storageKey, raw);
       LedgerStore.save(this.engine);
       this.storageStatus = this.storage ? "persisted-local-snapshot" : "in-memory";
-    } catch {
+      const afterCanonical = readCanonicalEngine();
+      if (afterCanonical.error) throw afterCanonical.error;
+      this._durableMarker = durableMarker(this.storage ? snapshot : null, afterCanonical.engine);
+    } catch (error) {
+      if (error instanceof EconomyStaleStateError || error?.code === "STALE_STATE") throw error;
       // A browser quota/private-mode failure must not erase the committed
       // in-memory journal. The UI can show the status as non-durable.
       this.storageStatus = "storage-unavailable";

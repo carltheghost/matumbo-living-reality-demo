@@ -360,6 +360,79 @@ test("demo liquidity seeding is idempotent across wrappers and canonical re-entr
   });
 });
 
+test("stale wrappers reject before rewinding canonical receipts or economic obligations", () => {
+  const canonicalStorage = new MemoryStorage();
+  withLocalStorage(canonicalStorage, () => {
+    const storageA = new MemoryStorage();
+    const first = fixture({ storage: storageA, seedLiquidity: true });
+    const storageB = new MemoryStorage();
+    storageB.setItem("matumbo.simulated-economy.v1", storageA.getItem("matumbo.simulated-economy.v1"));
+    const second = createSimulatedEconomy({
+      engine: createTokenEngine(),
+      storage: storageB,
+      now: () => "2026-10-12T00:00:00.000Z",
+    });
+    const created = second.createContract({ title: "Wrapper B obligation", amountFluff: 1_000, idempotencyKey: "test:wrappers:b:create" });
+    const accepted = second.acceptContract({ contractId: created.contract.id, idempotencyKey: "test:wrappers:b:accept" });
+    second.fundContract({ contractId: created.contract.id, expectedRevision: accepted.contract.revision, idempotencyKey: "test:wrappers:b:fund" });
+    const committed = LedgerStore.load();
+    const committedJournalCount = committed.ledger.journalCount();
+    assert.equal(committed.balance("sys:escrow", "TUMBO"), 21_000);
+
+    assert.throws(() => first.economy.createContract({ title: "Stale wrapper write", idempotencyKey: "test:wrappers:a:create" }), (error) => {
+      assert.equal(error.code, "STALE_STATE");
+      return error instanceof EconomyStaleStateError;
+    });
+    const afterRejectedWrite = LedgerStore.load();
+    assert.equal(afterRejectedWrite.ledger.journalCount(), committedJournalCount);
+    assert.equal(afterRejectedWrite.balance("sys:escrow", "TUMBO"), 21_000);
+    assert.equal(storageA.getItem("matumbo.simulated-economy.v1").includes("test:wrappers:b:fund"), false);
+
+    assert.throws(() => createSimulatedEconomy({ engine: createTokenEngine(), storage: storageA }), (error) => {
+      assert.equal(error.code, "STALE_STATE");
+      return error instanceof EconomyStaleStateError;
+    });
+    const afterRejectedReload = LedgerStore.load();
+    assert.equal(afterRejectedReload.ledger.journalCount(), committedJournalCount);
+    assert.equal(afterRejectedReload.balance("sys:escrow", "TUMBO"), 21_000);
+  });
+});
+
+test("partial demo seed recovery restores the remaining order and residual escrow", () => {
+  const canonicalStorage = new MemoryStorage();
+  withLocalStorage(canonicalStorage, () => {
+    const economyStorage = new MemoryStorage();
+    const first = fixture({ storage: economyStorage, seedLiquidity: true });
+    first.economy.placeExchangeOrder({
+      owner: "you", side: "buy", amountBase: 10_000, priceNum: 1, priceDen: 1,
+      idempotencyKey: "test:partial-recovery:buy",
+    });
+    const beforeReload = LedgerStore.load();
+    const journalCount = beforeReload.ledger.journalCount();
+    economyStorage.removeItem("matumbo.simulated-economy.v1");
+
+    const recovered = createSimulatedEconomy({
+      engine: createTokenEngine(),
+      storage: economyStorage,
+      seedLiquidity: false,
+      now: () => "2026-10-12T00:00:00.000Z",
+    });
+    const sell = recovered.exchangeOrders({ owner: DEMO_LIQUIDITY_ACCOUNT }).find((order) => order.id === "order:demo-sell");
+    assert.equal(sell.status, "partial");
+    assert.equal(sell.amountBase, 20_000);
+    assert.equal(sell.remainingBase, 10_000);
+    assert.equal(recovered.exchangeTrades()[0].baseAmount, 10_000);
+    assert.equal(recovered.engine.balance("sys:escrow", "TUMBO"), 10_000);
+    assert.equal(recovered.verify().ok, true);
+    assert.equal(LedgerStore.load().ledger.journalCount(), journalCount);
+
+    const seededAgain = recovered.seedDemoLiquidity();
+    assert.equal(seededAgain.rehydrated, undefined);
+    assert.equal(LedgerStore.load().ledger.journalCount(), journalCount);
+    assert.equal(recovered.exchangeOrders({ owner: DEMO_LIQUIDITY_ACCOUNT }).find((order) => order.id === "order:demo-sell").remainingBase, 10_000);
+  });
+});
+
 test("zero-value funded contracts cancel with a refunded funding lifecycle", () => {
   const { engine, economy } = fixture();
   const created = economy.createContract({ title: "Zero-value cancel", amountFluff: 0, idempotencyKey: "test:zero:contract" });
