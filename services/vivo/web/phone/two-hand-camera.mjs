@@ -281,7 +281,7 @@ export class PhoneTwoHandCamera {
       hands.forEach(hand => this.armed.delete(hand.id));
       const transform = twoHandTransform(hands[0].pinchPoint, hands[1].pinchPoint, this.lastTwoHand);
       this.lastTwoHand = transform;
-      if (transform) this.onGesture({ type: 'twohand', ...transform, hands: hands.map(hand => hand.id) });
+      if (transform) this.onGesture({ type: 'twohand', ...transform, points: hands.map(hand => [...hand.pinchPoint]), hands: hands.map(hand => hand.id) });
     } else {
       this.lastTwoHand = null;
       for (const hand of hands) {

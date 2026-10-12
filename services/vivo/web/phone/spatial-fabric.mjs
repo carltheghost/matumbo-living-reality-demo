@@ -26,6 +26,25 @@ const sourceKey = source => {
   return normalizeId(String(source.kind || 'contact') + ':' + String(source.id || ''), 'source');
 };
 const sourceKind = source => String(source || '').split(':', 1)[0];
+const clamp = (value, lo, hi) => Math.max(lo, Math.min(hi, value));
+const wrapAngle = value => {
+  let angle = finite(value);
+  while (angle <= -Math.PI) angle += Math.PI * 2;
+  while (angle > Math.PI) angle -= Math.PI * 2;
+  return angle;
+};
+
+function normalizeAxes(axes, dimension, fallback = [0, 1]) {
+  const result = [];
+  for (const axis of Array.isArray(axes) ? axes : fallback) {
+    const value = Number(axis);
+    if (Number.isInteger(value) && value >= 0 && value < dimension && !result.includes(value)) result.push(value);
+    if (result.length === 2) break;
+  }
+  for (let axis = 0; result.length < 2 && axis < dimension; axis++) if (!result.includes(axis)) result.push(axis);
+  if (result.length !== 2) throw new RangeError('Transform axes must identify two selected dimensions');
+  return result;
+}
 
 /**
  * Convert a device-space point through a supplied projection inverse.  The
@@ -78,19 +97,28 @@ export function mapRendererPointToCanonical({ devicePoint, viewport, eye, render
   return q;
 }
 
-const clamp = (value, lo, hi) => Math.max(lo, Math.min(hi, value));
-const pairTransform = list => {
+const pairTransform = (list, axes = [0, 1], pairContactIds = null) => {
   if (list.length < 2) return { rotation: 0, scale: 1 };
-  const [a, b] = list;
-  const initial = [b.anchor[0] - a.anchor[0], b.anchor[1] - a.anchor[1]];
-  const current = [b.point[0] - a.point[0], b.point[1] - a.point[1]];
+  const pair = pairContactIds?.length === 2
+    ? pairContactIds.map(id => list.find(item => item.contactId === id)).filter(Boolean)
+    : [];
+  const [a, b] = pair.length === 2 ? pair : list.slice(0, 2);
+  const [firstAxis, secondAxis] = axes;
+  const initial = [b.anchor[firstAxis] - a.anchor[firstAxis], b.anchor[secondAxis] - a.anchor[secondAxis]];
+  const current = [b.point[firstAxis] - a.point[firstAxis], b.point[secondAxis] - a.point[secondAxis]];
   const initialLength = Math.hypot(...initial), currentLength = Math.hypot(...current);
   if (initialLength <= 1e-6 || currentLength <= 1e-6) return { rotation: 0, scale: 1 };
   return {
-    rotation: Math.atan2(current[1], current[0]) - Math.atan2(initial[1], initial[0]),
+    rotation: wrapAngle(Math.atan2(current[1], current[0]) - Math.atan2(initial[1], initial[0])),
     scale: clamp(currentLength / initialLength, 0.05, 20),
   };
 };
+
+const cancelledReason = reason => /cancel|lost|missing|fence|stop|hidden|ambiguous|worker|disconnect|replaced|two-hand/i.test(String(reason || ''));
+const preserveReason = reason => !cancelledReason(reason) && /release|rebase|complete|apply|end/i.test(String(reason || ''));
+const blankAggregate = (dimension, axes = [0, 1]) => ({
+  translation: Array(dimension).fill(0), rotation: 0, scale: 1, axes: [...axes], pairContactIds: [],
+});
 
 export class SpatialInteractionFabric {
   constructor({ now = () => globalThis.performance?.now?.() ?? Date.now(), maxContacts = 64, maxConstraintsPerObject = 16 } = {}) {
@@ -111,7 +139,6 @@ export class SpatialInteractionFabric {
     if (this.contacts.size >= this.maxContacts) throw new RangeError('Interaction contact limit exceeded');
     const key = sourceKey(source || id);
     const bucket = this.constraints.get(object) || new Map();
-    if (!this.constraints.has(object)) this.aggregates.delete(object);
     if (bucket.size >= this.maxConstraintsPerObject) throw new RangeError('Object interaction constraint limit exceeded');
     const constraint = {
       contactId: id, source: key, objectId: object, gesture,
@@ -151,31 +178,50 @@ export class SpatialInteractionFabric {
     const id = normalizeId(contactId, 'contactId');
     const constraint = this.contacts.get(id);
     if (!constraint) return null;
-    this.contacts.delete(id);
     const bucket = this.constraints.get(constraint.objectId);
-    const preserve = sourceKind(constraint.source) === 'touch' && (reason === 'touch-release' || reason === 'release');
-    if (preserve) {
-      const touchContacts = [...bucket.values()].filter(item => sourceKind(item.source) === 'touch');
-      const dimension = Math.max(3, ...touchContacts.map(item => item.point.length), constraint.point.length);
-      const prior = this.aggregates.get(constraint.objectId) || { translation: [], rotation: 0, scale: 1 };
-      const translation = Array(dimension).fill(0);
-      for (let axis = 0; axis < dimension; axis++) translation[axis] = finite(prior.translation[axis]);
-      for (const item of touchContacts) {
-        for (let axis = 0; axis < dimension; axis++) translation[axis] += (finite(item.point[axis]) - finite(item.anchor[axis])) / touchContacts.length;
+    const contacts = bucket ? [...bucket.values()] : [];
+    const dimension = Math.max(3, ...contacts.map(item => item.point.length), constraint.point.length);
+    const previous = this.aggregates.get(constraint.objectId) || blankAggregate(dimension);
+    const allAxes = normalizeAxes(constraint.metadata?.transformAxes || previous.axes, dimension);
+    const before = this._compose(constraint.objectId, contacts, dimension, allAxes);
+    const remaining = contacts.filter(item => item.contactId !== id);
+    this.contacts.delete(id);
+    if (cancelledReason(reason)) {
+      // A lost/cancelled contact must never turn its provisional displacement
+      // into accepted state. Remaining contacts continue from their current
+      // points with only their own displacement preserved, so there is no jump.
+      if (remaining.length) {
+        const retained = this._compose(constraint.objectId, remaining, dimension, allAxes);
+        this.aggregates.set(constraint.objectId, {
+          ...retained,
+          pairContactIds: remaining.slice(0, 2).map(item => item.contactId),
+        });
+        for (const item of remaining) item.anchor = [...item.point];
+      } else {
+        this.aggregates.delete(constraint.objectId);
       }
-      const transform = pairTransform(touchContacts);
+    } else if (sourceKind(constraint.source) !== 'touch' && sourceKind(constraint.source) !== 'hand' && !preserveReason(reason)) {
+      // Non-surface agents can release their own constraint without changing
+      // the local surface aggregate.
+      if (remaining.length) for (const item of remaining) item.anchor = [...item.point];
+    } else {
+      // Capture the complete transform before removing the ending contact.
+      // Releasing either member of a pair therefore produces the same
+      // accepted result; remaining contacts continue relative to this state.
       this.aggregates.set(constraint.objectId, {
-        translation,
-        rotation: finite(prior.rotation) + transform.rotation,
-        scale: finite(prior.scale, 1) * transform.scale,
+        ...before,
+        pairContactIds: remaining.slice(0, 2).map(item => item.contactId),
       });
-      for (const item of touchContacts) {
-        if (item.contactId !== id) item.anchor = [...item.point];
-      }
+      for (const item of remaining) item.anchor = [...item.point];
     }
     bucket?.delete(id);
     if (bucket?.size === 0) this.constraints.delete(constraint.objectId);
-    return { contactId: id, source: constraint.source, objectId: constraint.objectId, reason: String(reason || 'release'), releasedAt: this.now() };
+    const after = this.preview(constraint.objectId, dimension);
+    return {
+      contactId: id, source: constraint.source, objectId: constraint.objectId,
+      reason: String(reason || 'release'), releasedAt: this.now(),
+      acceptedPreview: cancelledReason(reason) ? null : clone(after),
+    };
   }
   releaseSource(source, reason = 'source-release') {
     const key = sourceKey(source);
@@ -202,10 +248,9 @@ export class SpatialInteractionFabric {
     return bucket ? [...bucket.values()].map(clone) : [];
   }
   /**
-   * Return a provisional transform. Translation, rotation and scale are
-   * preview metadata; the phone engine's accepted local-edit command currently
-   * commits translation only. Callers must not treat this result as accepted
-   * entity orientation/scale or canonical authority state.
+   * Return a provisional transform. Translation is a full-D canonical delta;
+   * scale and rotation are geometric shape metadata in the selected display
+   * plane. They never become higher-dimensional coordinates.
    */
   preview(objectId, dimension, { sourceKinds = null } = {}) {
     const allowedKinds = sourceKinds === null
@@ -216,15 +261,31 @@ export class SpatialInteractionFabric {
     if (!list.length && !carry) return null;
     const safeDimension = Number(dimension);
     if (!Number.isInteger(safeDimension) || safeDimension < 3 || safeDimension > 11) throw new RangeError('Preview dimension must be 3 through 11');
+    const axes = normalizeAxes(carry?.axes || list[0]?.metadata?.transformAxes, safeDimension);
     const translation = Array(safeDimension).fill(0);
     if (carry) for (let axis = 0; axis < safeDimension; axis++) translation[axis] = finite(carry.translation[axis]);
     if (list.length) for (const item of list) for (let axis = 0; axis < safeDimension; axis++) translation[axis] += (finite(item.point[axis]) - finite(item.anchor[axis])) / list.length;
-    const transform = pairTransform(list);
+    const transform = pairTransform(list, axes, carry?.pairContactIds);
     return {
       objectId, contactCount: list.length, contactIds: list.map(item => item.contactId), translation,
-      rotation: finite(carry?.rotation) + transform.rotation,
-      scale: finite(carry?.scale, 1) * transform.scale,
+      axes,
+      rotation: wrapAngle(finite(carry?.rotation) + transform.rotation),
+      scale: clamp(finite(carry?.scale, 1) * transform.scale, 0.05, 20),
+      geometry: { scale: clamp(finite(carry?.scale, 1) * transform.scale, 0.05, 20), rotation: wrapAngle(finite(carry?.rotation) + transform.rotation), axes: [...axes] },
       provisional: true,
+    };
+  }
+  _compose(objectId, list, dimension, axes) {
+    const carry = this.aggregates.get(objectId) || blankAggregate(dimension, axes);
+    const translation = Array(dimension).fill(0);
+    for (let axis = 0; axis < dimension; axis++) translation[axis] = finite(carry.translation[axis]);
+    if (list.length) for (const item of list) for (let axis = 0; axis < dimension; axis++) translation[axis] += (finite(item.point[axis]) - finite(item.anchor[axis])) / list.length;
+    const transform = pairTransform(list, axes, carry.pairContactIds);
+    return {
+      translation,
+      rotation: wrapAngle(finite(carry.rotation) + transform.rotation),
+      scale: clamp(finite(carry.scale, 1) * transform.scale, 0.05, 20),
+      axes: [...axes],
     };
   }
   snapshot() {

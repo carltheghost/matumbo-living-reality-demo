@@ -41,6 +41,19 @@ export class PhoneRenderer extends Renderer {
     this._lastDraw = 0;
   }
 
+  previewFor(id) {
+    if (Array.isArray(this.localPreview)) return this.localPreview.find(item => item?.entityId === id) || null;
+    return this.localPreview?.entityId === id ? this.localPreview : null;
+  }
+
+  displayEntity(entity) {
+    const preview = this.previewFor(entity.id);
+    if (!preview) return entity;
+    const q = entity.q.map((value, index) => value + Number(preview.delta?.[index] || 0));
+    const scale = Math.max(0.05, Math.min(20, Number(preview.geometry?.scale) || 1));
+    return { ...entity, q, radius: entity.radius * scale, geometry: preview.geometry, localPreview: true };
+  }
+
   project(position) {
     const point = super.project(position);
     // The mobile field dock occupies the lower part of the viewport. Keep the
@@ -117,6 +130,15 @@ export class PhoneRenderer extends Renderer {
     ctx.setLineDash(visible ? [] : [4, 5]);
     ctx.beginPath(); ctx.arc(point.x, point.y, Math.max(14, radius * 0.78) + (selected ? 7 : 4), 0, Math.PI * 2); ctx.stroke();
     ctx.setLineDash([]);
+    if (entity.localPreview) {
+      const angle = finite(entity.geometry?.rotation);
+      const marker = Math.max(14, radius * 0.72);
+      ctx.strokeStyle = '#fff0bd'; ctx.globalAlpha = 0.95; ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(point.x - Math.cos(angle) * marker, point.y - Math.sin(angle) * marker);
+      ctx.lineTo(point.x + Math.cos(angle) * marker, point.y + Math.sin(angle) * marker);
+      ctx.stroke();
+    }
     if (selected || held) {
       ctx.strokeStyle = tone.solid; ctx.globalAlpha = 0.62; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.arc(point.x, point.y, Math.max(19, radius * 1.2) + 9, 0, Math.PI * 2); ctx.stroke();
@@ -124,7 +146,7 @@ export class PhoneRenderer extends Renderer {
     ctx.font = selected ? '600 12px system-ui, sans-serif' : '11px system-ui, sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
     ctx.fillStyle = selected ? '#f4f7fb' : '#c8d7e8';
-    ctx.fillText((held ? 'HELD · ' : '') + entity.name, point.x, point.y + Math.max(17, radius) + 12);
+    ctx.fillText((entity.localPreview ? 'LOCAL PREVIEW · ' : held ? 'HELD · ' : '') + entity.name, point.x, point.y + Math.max(17, radius) + 12);
     if (selected) {
       ctx.font = '9px ui-monospace, SFMono-Regular, monospace';
       ctx.fillStyle = tone.solid;
@@ -151,7 +173,8 @@ export class PhoneRenderer extends Renderer {
       this.drawGrid(ctx, this.grid);
       this.drawAxes(ctx);
       const geometry = state.geometry || { kind: 'flat', R: 2, r: 1 };
-      for (const entity of Object.values(state.entities || {})) {
+      for (const source of Object.values(state.entities || {})) {
+        const entity = this.displayEntity(source);
         const point = projectEntity(this, entity, geometry);
         const hit = this.drawEntity(ctx, entity, point, geometry);
         if (hit) this.screen.push(hit);

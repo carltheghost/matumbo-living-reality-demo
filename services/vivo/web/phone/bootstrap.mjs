@@ -28,6 +28,7 @@ let economyContext = null;
 const handContacts = new Map(), pointerContacts = new Map();
 const touchGestures = new Map();
 const touchOperationIds = new LocalOperationIdFactory('touch-preview');
+let touchApplyTail = Promise.resolve();
 const pendingFieldApplies = [];
 let fieldApplyTail = Promise.resolve(), fieldApplySequence = 0;
 let snapshotTail = Promise.resolve(), snapshotSequence = 0, renderedSnapshot = null;
@@ -144,7 +145,23 @@ function updateEyeControls(envelope) {
   $('phoneExitNested').disabled = nested === 0;
   $('phoneEnterNested').disabled = !S.state?.entities[R.selected]?.innerSpaceId;
 }
-async function refreshSnapshot(options = {}) { if (!engine) return null; return enqueueSnapshot(() => engine.snapshot(), options); }
+async function refreshSnapshot(options = {}) {
+  if (!engine) return null;
+  // Public reads must return the same envelope that feeds the field preview.
+  // State-change events can accumulate while the sparse material worker is
+  // stepping; queueing an external read behind those renders lets the engine
+  // advance beyond the coordinates shown beside the read result.
+  if (options.externalSnapshot) {
+    const sequence = ++snapshotSequence;
+    const envelope = await engine.snapshot();
+    if (localMode && !isOlderSnapshot(envelope, renderedSnapshot)) {
+      renderedSnapshot = snapshotMarker(envelope);
+      renderEye(envelope, { ...options, snapshotSequence: sequence });
+    }
+    return envelope;
+  }
+  return enqueueSnapshot(() => engine.snapshot(), options);
+}
 function fieldAxes() {
   return ['phoneFieldAxisA', 'phoneFieldAxisB', 'phoneFieldAxisC'].map(id => Number($(id)?.value)).filter(Number.isInteger);
 }
@@ -188,6 +205,7 @@ function updateFieldWorld(envelope = fieldEnvelope, options = {}) {
     if (preferred) { selectedId = preferred; R.selected = preferred; if (S) S.selected = preferred; }
   }
   drawFieldAtlas($('phoneFieldAtlas'), model);
+  R.localPreview = model.previews?.filter(item => item.kind === 'transform') || (model.preview?.kind === 'transform' ? [model.preview] : []);
   const preview = updateFieldActionButtons();
   const statusView = $('phoneFieldStatus');
   if (statusView) statusView.textContent = model.awakeIds.length + '/' + model.entities.length + ' objects awake · ' + model.atlas.length + ' coordinate planes · analytic information mix · ' + model.field.materialAuthority;
@@ -215,8 +233,13 @@ function selectPhoneEntity(id, { announce = false, discardPending = true } = {})
   const entity = entities[id] || fieldEntities[id] || modelEntity;
   if (!entity) return false;
   const pending = fieldWorld?.commitCandidate();
-  const discarded = Boolean(discardPending && pending && pending.entityId !== id);
-  if (discarded) fieldWorld.discardPreview();
+  const activeObjects = new Set([
+    ...[...pointerContacts.values()].map(record => record.target).filter(Boolean),
+    ...[...handContacts.values()].map(record => record.entityId).filter(Boolean),
+  ]);
+  activeObjects.add(id);
+  const discardedIds = discardPending ? fieldWorld?.discardPreviewsExcept([...activeObjects]) || [] : [];
+  const discarded = discardedIds.length > 0;
   selectedId = id;
   R.selected = id;
   if (S) S.selected = id;
@@ -250,6 +273,7 @@ function localObjectIdentity(entityId) {
     entityId,
     baseRevision: entity.revision,
     baseQ: [...entity.q],
+    baseGeometry: structuredClone(entity.geometry || { scale: 1, rotation: 0, axes: [0, 1] }),
   };
 }
 function fieldScopeMatches(envelope, candidate) {
@@ -303,11 +327,14 @@ async function runFieldApply(pending) {
           updateFieldWorld(current, { fieldApplyPreflight: pending });
         }
         try {
-          result = await engine.applyLocalEdit(candidate.entityId, candidate.delta, {
+          const expected = {
             worldId: candidate.worldId, branchId: candidate.branchId, eyeId: candidate.eyeId,
             spaceId: candidate.spaceId, entityId: candidate.entityId, baseRevision: candidate.baseRevision,
             operationId: candidate.operationId,
-          });
+          };
+          result = candidate.kind === 'transform'
+            ? await engine.applyLocalTransform(candidate.entityId, candidate.delta, candidate.geometry, expected)
+            : await engine.applyLocalEdit(candidate.entityId, candidate.delta, expected);
         } catch (error) {
           if (!stalePreviewError(error) || applyAttempts >= 3) throw error;
           applyAttempts++;
@@ -457,19 +484,60 @@ function canonicalPointForInput(point, objectId = null) {
     depth: rendererDepthForObject(objectId),
   });
 }
+// The flat renderer embeds canonical q as [q0, q2, q1].  Surface contacts
+// therefore use its visible x1/x3 plane for geometry; the field-atlas axis
+// selectors remain a view choice and never silently change the inverse map.
+function selectedTransformAxes(dimension = S.state?.geometry?.dimension || 4) {
+  const axes = [0, 2].filter(axis => axis < dimension);
+  for (let axis = 0; axes.length < 2 && axis < dimension; axis++) if (!axes.includes(axis)) axes.push(axis);
+  return axes.slice(0, 2);
+}
+function activeObjectContacts(objectId) { return interactionFabric?.forObject(objectId) || []; }
+function beginLocalContact({ contactId, kind, sourceId, objectId, point, gesture = 'grab' } = {}) {
+  if (!objectId || !fieldWorld || !engine) return null;
+  const identity = localObjectIdentity(objectId);
+  if (!identity) return null;
+  const canonicalPoint = canonicalPointForInput(point, objectId);
+  interactionFabric?.begin({ contactId, source: { kind, id: String(sourceId) }, objectId, gesture, canonicalPoint, metadata: { transformAxes: selectedTransformAxes(canonicalPoint.length) } });
+  const record = { id: sourceId, entityId: objectId, point: [...point], canonicalPoint, ...identity, editQueue: new LocalEditQueue() };
+  if (kind === 'hand') handContacts.set(contactId, record);
+  const objectGesture = beginObjectTouchGesture(objectId);
+  objectGesture?.contacts.add(contactId);
+  previewObjectTouchGesture(objectId);
+  return record;
+}
 function fenceHandEdits(reason = 'hand-fence') {
-  for (const [contactId, contact] of handContacts) {
-    contact.editQueue?.stop();
-    interactionFabric?.end(contactId, reason);
+  for (const contactId of [...handContacts.keys()]) {
+    const contact = handContacts.get(contactId); contact?.editQueue?.stop();
+    releaseHandContact(contactId, reason);
   }
   handContacts.clear();
 }
 function releaseHandContact(contactId, reason = 'hand-release') {
   const contact = handContacts.get(contactId);
-  if (!contact) return;
-  contact.editQueue?.stop();
-  interactionFabric?.end(contactId, reason);
-  handContacts.delete(contactId);
+  if (!contact) return Promise.resolve(null);
+  if (/cancel|lost|missing|fence|stop|hidden|ambiguous|worker|disconnect|two-hand/i.test(String(reason))) contact.editQueue?.stop?.();
+  if (handContacts.get(contactId) === contact) return finishLocalContact(contactId, reason);
+  return Promise.resolve({ cancelled: true, status: 'stale-contact' });
+}
+function handleTwoHandObjectGesture(event) {
+  const points = Array.isArray(event.points) ? event.points : [];
+  if (points.length < 2) return false;
+  const hits = points.map(point => R.at(...point));
+  if (!hits.some(Boolean)) return false;
+  for (let index = 0; index < Math.min(2, points.length); index++) {
+    const handId = event.hands?.[index]; if (!handId) continue;
+    const contactId = 'hand:' + handId, hit = hits[index];
+    if (hit && !handContacts.has(contactId)) {
+      selectPhoneEntity(hit, { announce: false });
+      beginLocalContact({ contactId, kind: 'hand', sourceId: handId, objectId: hit, point: points[index], gesture: 'pinch' });
+    }
+    const contact = handContacts.get(contactId); if (!contact) continue;
+    contact.point = [...points[index]]; contact.canonicalPoint = canonicalPointForInput(points[index], contact.entityId);
+    interactionFabric?.update(contactId, { canonicalPoint: contact.canonicalPoint, gesture: 'scale' });
+    previewObjectTouchGesture(contact.entityId);
+  }
+  return true;
 }
 function handleFieldHandGesture(event) {
   if (!localMode) return;
@@ -479,8 +547,12 @@ function handleFieldHandGesture(event) {
     R.pointer = null; lastPoseByHand.clear(); return;
   }
   if (event.type === 'frame') {
-    const active = new Set(event.hands.map(hand => 'hand:' + hand.id));
-    for (const contactId of [...handContacts.keys()]) if (!active.has(contactId)) releaseHandContact(contactId, 'hand-missing');
+    const active = new Map(event.hands.map(hand => ['hand:' + hand.id, hand]));
+    for (const [contactId, contact] of [...handContacts.entries()]) {
+      const hand = active.get(contactId);
+      if (!hand) releaseHandContact(contactId, 'hand-missing');
+      else if (hand.pose !== 'pinch' && activeObjectContacts(contact.entityId).some(item => item.contactId === contactId)) releaseHandContact(contactId, hand.pose || 'hand-release');
+    }
     for (const id of lastPoseByHand.keys()) if (!active.has('hand:' + id)) lastPoseByHand.delete(id);
     return;
   }
@@ -506,56 +578,25 @@ function handleFieldHandGesture(event) {
     const hit = R.at(...event.point), contactId = 'hand:' + event.handId;
     if (hit && !handContacts.has(contactId)) {
       selectPhoneEntity(hit, { announce: false });
-      const canonicalPoint = canonicalPointForInput(event.point, hit);
-      interactionFabric?.begin({ contactId, source: { kind: 'hand', id: event.handId }, objectId: hit, gesture: 'grab', canonicalPoint });
-      const identity = localObjectIdentity(hit);
-      handContacts.set(contactId, {
-        id: event.handId, entityId: hit, point: event.point, canonicalPoint,
-        worldId: identity?.worldId || fieldEnvelope?.snapshot?.worldId,
-        branchId: identity?.branchId || fieldEnvelope?.branchId || null,
-        eyeId: identity?.eyeId || fieldEnvelope?.currentEyeId,
-        spaceId: identity?.spaceId || fieldEnvelope?.eyes?.[fieldEnvelope?.currentEyeId]?.spaceId,
-        editQueue: new LocalEditQueue(),
-      });
+      beginLocalContact({ contactId, kind: 'hand', sourceId: event.handId, objectId: hit, point: event.point, gesture: 'grab' });
       status('HAND GRAB · ' + hit);
     }
     return;
   }
   const contactId = 'hand:' + event.handId, contact = handContacts.get(contactId);
   if (event.type === 'move' && contact) {
-    const prior = contact.point, dx = event.point[0] - prior[0], dy = event.point[1] - prior[1];
-    contact.point = event.point; contact.canonicalPoint = canonicalPointForInput(event.point, contact.entityId);
+    contact.point = [...event.point]; contact.canonicalPoint = canonicalPointForInput(event.point, contact.entityId);
     interactionFabric?.update(contactId, { canonicalPoint: contact.canonicalPoint, gesture: 'drag' });
-    const dimension = S.state?.geometry.dimension || 4;
-    if (activeAxis < dimension) {
-      const delta = Array(dimension).fill(0); delta[activeAxis] = materialAxisGesture(dx, dy);
-      const appliedPoint = [...contact.canonicalPoint];
-      contact.pending = contact.editQueue.enqueue({
-        submit: () => engine.applyLocalEdit(contact.entityId, delta, {
-          worldId: contact.worldId, branchId: contact.branchId, eyeId: contact.eyeId,
-          spaceId: contact.spaceId, entityId: contact.entityId,
-        }),
-        afterSubmit: () => {
-          if (handContacts.get(contactId) === contact) interactionFabric?.rebase(contactId, appliedPoint);
-        },
-      }).catch(error => {
-        if (!contact.editQueue.stopped && handContacts.get(contactId) === contact) status(error.message);
-        return { status: 'error', submitted: false, error };
-      });
-    }
+    previewObjectTouchGesture(contact.entityId);
     return;
   }
-  if (event.type === 'release' && contact) {
-    interactionFabric?.end(contactId, event.reason || 'release');
-    handContacts.delete(contactId);
-    const pending = engine?.lastPersistence;
-    reportPersistenceStatus('release', pending).catch(error => status('Hand released · local persistence status unavailable: ' + error.message + '. Retry remains available.'));
-    return;
-  }
+  if (event.type === 'release' && contact) { releaseHandContact(contactId, event.reason || 'release'); return; }
   if (event.type === 'twohand') {
-    if (event.scale > 0.01 && Number.isFinite(event.scale)) R.distance = clamp(R.distance / event.scale, 4, 22);
-    R.yaw = (R.yaw - event.rotation + Math.PI * 4) % (Math.PI * 2);
-    updateProjectionState({ mode: R.overview ? 'overview' : 'slice', scale: R.distance, rotation: R.yaw });
+    if (!handleTwoHandObjectGesture(event)) {
+      if (event.scale > 0.01 && Number.isFinite(event.scale)) R.distance = clamp(R.distance / event.scale, 4, 22);
+      R.yaw = (R.yaw - event.rotation + Math.PI * 4) % (Math.PI * 2);
+      updateProjectionState({ mode: R.overview ? 'overview' : 'slice', scale: R.distance, rotation: R.yaw });
+    }
     return;
   }
   if (event.type === 'swipe' && !handContacts.size && S.state) {
@@ -641,7 +682,7 @@ function addPhoneSurface() {
     <label>Active material axis<select id="phoneAxis"></select></label><div class="row"><button id="phoneAxisMinus">− Move selected</button><button id="phoneAxisPlus">+ Move selected</button></div>
     <div class="row"><button id="phoneEnterNested">Enter selected inner world</button><button id="phoneExitNested">Return with this Eye</button></div>
     <div class="row"><button id="phoneFork">Create explicit offline branch</button><button id="phoneExport">Export world + Eyes</button></div>
-    <hr><h3>Hands-free input & projection</h3><p class="muted">Up to two hands · all 21 landmarks and all five articulated fingers · local inference. Open, point, peace, thumbs-up, fist and pinch poses; two hands zoom and rotate; touch drag/pinch also work. Camera frames stay on this phone.</p>
+    <hr><h3>Hands-free input & projection</h3><p class="muted">Up to two hands · all 21 landmarks and all five articulated fingers · local inference. Open, point, peace, thumbs-up, fist and pinch poses; two hands zoom and rotate; touch drag/pinch also work. Object scale/rotation uses the visible renderer x1/x3 plane; the atlas axis selectors stay a separate view choice. Camera frames stay on this phone.</p>
     <div class="row"><button id="phoneStartHands">Start front camera + hands</button><button id="phoneStartBackHands">Start rear camera + hands</button></div>
     <div class="row"><button id="phoneStopHands">Stop camera and release it</button></div>
     <div class="row"><button id="phoneProject">Project / cast view</button><button id="phoneStopProject">Stop projection mode</button></div>
@@ -905,57 +946,146 @@ function beginObjectTouchGesture(objectId) {
     ...identity,
     operationId: touchOperationIds.next(`${identity.worldId}:${identity.branchId || 'local'}:${identity.eyeId}:${identity.spaceId}:${objectId}`),
     contacts: new Set(),
+    editQueue: new LocalEditQueue(),
     lastPreview: null,
+    lastCandidate: null,
   };
   touchGestures.set(objectId, gesture);
   return gesture;
 }
+function transformAxesForPreview(objectId, preview) {
+  const geometricChange = Math.abs(Number(preview?.scale || 1) - 1) > 1e-9 || Math.abs(Number(preview?.rotation || 0)) > 1e-9;
+  const entity = fieldWorld?.entity(objectId);
+  return geometricChange ? preview?.axes : (entity?.baseGeometry?.axes || entity?.geometry?.axes || preview?.axes);
+}
 function previewObjectTouchGesture(objectId) {
   const gesture = touchGestures.get(objectId), dimension = S.state?.geometry?.dimension || 4;
-  const preview = interactionFabric?.preview(objectId, dimension, { sourceKinds: ['touch'] }) || null;
+  const hasHand = activeObjectContacts(objectId).some(item => item.source?.startsWith('hand:'));
+  const preview = hasHand
+    ? interactionFabric?.preview(objectId, dimension) || null
+    : interactionFabric?.preview(objectId, dimension, { sourceKinds: ['touch'] }) || null;
   if (gesture) gesture.lastPreview = preview;
-  if (preview) status(`LOCAL PROVISIONAL · ${objectId} · ${preview.contactCount} contact(s) · translation ${preview.translation.map(value => value.toFixed(2)).join(',')} · release to apply or cancel to discard`);
+  if (gesture && preview) {
+    try {
+      gesture.lastCandidate = fieldWorld.previewTransform(objectId, { translation: preview.translation, scale: preview.scale, rotation: preview.rotation, axes: transformAxesForPreview(objectId, preview) });
+      updateFieldWorld();
+      status(`LOCAL PROVISIONAL · ${objectId} · ${preview.contactCount} contact(s) · translation ${preview.translation.map(value => value.toFixed(2)).join(',')} · shape ${preview.scale.toFixed(2)}x / ${(preview.rotation * 180 / Math.PI).toFixed(1)}° · release to apply or cancel to discard`);
+    } catch (error) { status(error.message); }
+  }
   return preview;
 }
 function releaseObjectTouchContacts(objectId, reason) {
-  const gesture = touchGestures.get(objectId);
   for (const record of objectTouchRecords(objectId)) {
-    interactionFabric?.end('touch:' + record.id, reason);
-    gesture?.contacts.delete('touch:' + record.id);
+    finishLocalContact('touch:' + record.id, reason).catch(error => status(error.message));
     pointerContacts.delete(record.id);
   }
 }
 function releaseObjectTouchContact(record, reason) {
   if (!record?.target) return;
-  interactionFabric?.end('touch:' + record.id, reason);
-  touchGestures.get(record.target)?.contacts.delete('touch:' + record.id);
+  finishLocalContact('touch:' + record.id, reason).catch(error => status(error.message));
   pointerContacts.delete(record.id);
 }
 function cancelObjectTouchGesture(objectId, reason = 'touch-cancel') {
   releaseObjectTouchContacts(objectId, reason);
   touchGestures.delete(objectId);
+  fieldWorld?.discardPreview({ entityId: objectId });
   interactionFabric?.clearObjectAggregate(objectId);
+  updateFieldWorld();
   status(`LOCAL PROVISIONAL DISCARDED · ${objectId} · ${reason}`);
+}
+function rebaseAcceptedContact(contactId, appliedPoint) {
+  // The fabric already rebases during a selective release; this guarded hook
+  // keeps an accepted live contact anchored for adapters that finish a commit
+  // without ending the contact first.
+  return interactionFabric?.rebase(contactId, appliedPoint);
 }
 async function commitObjectTouchGesture(objectId, preview) {
   const gesture = touchGestures.get(objectId);
   touchGestures.delete(objectId);
-  if (!gesture || !preview || !preview.translation?.some(value => value !== 0)) {
+  const shapeChanged = Boolean(preview?.geometry && JSON.stringify(preview.geometry) !== JSON.stringify(gesture?.baseGeometry));
+  if (!gesture || !preview || (!preview.delta?.some(value => value !== 0) && !shapeChanged)) {
     interactionFabric?.clearObjectAggregate(objectId);
+    fieldWorld?.discardPreview({ entityId: objectId }); updateFieldWorld();
     return null;
   }
   try {
-    const result = await engine.applyLocalEdit(objectId, preview.translation, {
-      worldId: gesture.worldId, branchId: gesture.branchId, eyeId: gesture.eyeId,
-      spaceId: gesture.spaceId, entityId: gesture.entityId, baseRevision: gesture.baseRevision,
-      operationId: gesture.operationId,
+    const contact = gesture;
+    const queued = await contact.editQueue.enqueue({
+      submit: () => {
+        const operation = touchApplyTail.then(async () => {
+          let candidate = fieldWorld?.previewFor(objectId) || preview;
+          for (let attempt = 0; attempt <= 5; attempt++) {
+            const current = fieldWorld?.previewFor(objectId);
+            if (current && current.operationId !== preview.operationId) return { changed: false, cancelled: true, status: 'newer-preview' };
+            if (!current && fieldWorld?.isDiscarded(preview)) return { changed: false, cancelled: true, status: 'discarded-preview' };
+            candidate = current || candidate || preview;
+            const expected = {
+              worldId: contact.worldId, branchId: contact.branchId, eyeId: contact.eyeId,
+              spaceId: contact.spaceId, entityId: contact.entityId, baseRevision: candidate.baseRevision,
+              operationId: candidate.operationId || contact.operationId,
+            };
+            expected.worldId = candidate.worldId || expected.worldId;
+            expected.branchId = candidate.branchId ?? expected.branchId;
+            expected.eyeId = candidate.eyeId || expected.eyeId;
+            expected.spaceId = candidate.spaceId || expected.spaceId;
+            expected.entityId = candidate.entityId || expected.entityId;
+            try {
+              return await engine.applyLocalTransform(objectId, candidate.delta, candidate.geometry, expected);
+            } catch (error) {
+              if (!stalePreviewError(error) || attempt >= 5) throw error;
+              const currentEnvelope = await refreshSnapshot({ touchApplyRetry: { entityId: objectId, operationId: preview.operationId, attempt } });
+              const refreshed = fieldWorld?.previewFor(objectId);
+              if (refreshed?.operationId === preview.operationId) candidate = refreshed;
+              else {
+                const rebased = fieldWorld?.rebaseCandidate(candidate, currentEnvelope);
+                if (!rebased) throw error;
+                candidate = rebased;
+              }
+            }
+          }
+          throw new Error('Local touch transform remained stale after bounded retries.');
+        });
+        touchApplyTail = operation.catch(() => {});
+        return operation;
+      },
     });
+    if (!queued.submitted) return { cancelled: true, status: queued.status };
+    const result = queued.result;
+    if (fieldWorld?.isCurrent(preview)) fieldWorld.clearAppliedPreview(preview);
     await refreshSnapshot();
     status(`${result?.replayed ? 'LOCAL PROVISIONAL REPLAY ACKNOWLEDGED' : 'LOCAL PROVISIONAL APPLIED'} · ${objectId} · canonical authority was not contacted.`);
+    reportPersistenceStatus('release', engine?.lastPersistence).catch(error => status('Local transform persistence status unavailable: ' + error.message + '. Retry remains available.'));
     return result;
   } finally {
     interactionFabric?.clearObjectAggregate(objectId);
+    const current = fieldWorld?.previewFor(objectId);
+    if (!current || current.operationId === preview?.operationId) fieldWorld?.discardPreview({ entityId: objectId, mark: false });
+    updateFieldWorld();
   }
+}
+function finishLocalContact(contactId, reason = 'release') {
+  const contact = handContacts.get(contactId);
+  const tracked = interactionFabric?.snapshot().contacts.find(item => item.contactId === contactId);
+  const objectId = contact?.entityId || tracked?.objectId;
+  if (!objectId) return Promise.resolve(null);
+  const result = interactionFabric?.end(contactId, reason);
+  handContacts.delete(contactId);
+  touchGestures.get(objectId)?.contacts.delete(contactId);
+  if (activeObjectContacts(objectId).length) {
+    previewObjectTouchGesture(objectId);
+    return Promise.resolve(result);
+  }
+  if (/cancel|lost|missing|fence|stop|hidden|ambiguous|worker|disconnect|two-hand/i.test(String(reason))) {
+    touchGestures.delete(objectId); interactionFabric?.clearObjectAggregate(objectId);
+    fieldWorld?.discardPreview({ entityId: objectId }); updateFieldWorld();
+    return Promise.resolve(result);
+  }
+  const preview = interactionFabric?.preview(objectId, S.state?.geometry?.dimension || 4);
+  const gesture = touchGestures.get(objectId);
+  const candidate = preview
+    ? fieldWorld?.previewTransform(objectId, { translation: preview.translation, scale: preview.scale, rotation: preview.rotation, axes: transformAxesForPreview(objectId, preview) })
+    : gesture?.lastCandidate || null;
+  return commitObjectTouchGesture(objectId, candidate).then(() => result);
 }
 canvas.addEventListener('pointerdown', event => {
   if (!localMode) return;
@@ -966,10 +1096,8 @@ canvas.addEventListener('pointerdown', event => {
   const record = { id: event.pointerId, x: point[0], y: point[1], target, canonicalPoint: target ? canonicalPointForInput(point, target) : null, released: false };
   pointerContacts.set(event.pointerId, record);
   if (target) {
-    const gesture = beginObjectTouchGesture(target);
-    interactionFabric?.begin({ contactId, source: { kind: 'touch', id: String(event.pointerId) }, objectId: target, gesture: 'touch', canonicalPoint: record.canonicalPoint });
-    gesture?.contacts.add(contactId);
     selectPhoneEntity(target, { announce: true });
+    beginLocalContact({ contactId, kind: 'touch', sourceId: String(event.pointerId), objectId: target, point, gesture: 'touch' });
   } else if (pointerContacts.size > 1) {
     const entries = [...pointerContacts.values()].filter(item => !item.target);
     if (entries.length > 1) {
@@ -1023,13 +1151,10 @@ const pointerEnd = event => {
       } else previewObjectTouchGesture(objectId);
     } else {
       const objectId = record.target;
-      const preview = interactionFabric?.preview(objectId, S.state?.geometry?.dimension || 4, { sourceKinds: ['touch'] });
       record.released = true;
       releaseObjectTouchContact(record, 'touch-release');
       const active = objectTouchRecords(objectId);
-      if (!active.length) {
-        commitObjectTouchGesture(objectId, preview).catch(error => status(error.message));
-      } else previewObjectTouchGesture(objectId);
+      if (active.length) previewObjectTouchGesture(objectId);
     }
   } else if (record) {
     pointerContacts.delete(event.pointerId);
@@ -1046,7 +1171,7 @@ window.VivaPhoneEngine = Object.freeze({
   // direct worker snapshot can be newer than the preview model while the
   // sparse solver is still stepping, which makes an active preview appear to
   // drift from the coordinate it is actually based on.
-  snapshot: () => refreshSnapshot({ externalSnapshot: true }), translate: (...args) => engine?.translate(...args), applyLocalEdit: (...args) => engine?.applyLocalEdit(...args), setEye: patch => engine?.setEye(patch),
+  snapshot: () => refreshSnapshot({ externalSnapshot: true }), translate: (...args) => engine?.translate(...args), applyLocalEdit: (...args) => engine?.applyLocalEdit(...args), applyLocalTransform: (...args) => engine?.applyLocalTransform(...args), setEye: patch => engine?.setEye(patch),
   forkOffline: label => forkPhoneOffline(label), startCamera: (facing = 'user') => startPhoneCamera(facing), stopCamera: stopPhoneCamera,
   authority: () => authority?.debug() || null,
   connectAuthority: options => authority?.connect(options), readAuthority: () => authority?.read(),
@@ -1054,6 +1179,11 @@ window.VivaPhoneEngine = Object.freeze({
   commitAuthority: () => authority?.commit(),
   fieldWorld: () => fieldWorld?.model || null,
   interaction: () => interactionFabric?.snapshot() || null,
+  syntheticHandLandmarks: (hands, options = {}) => {
+    if (!localMode) throw new Error('Enter local Vivo before sending synthetic hand landmarks.');
+    phoneCamera.consume({ sequence: ++phoneCamera.sequence, time: performance.now(), hands, handednesses: options.handednesses || [] });
+    return { accepted: true, hands: Array.isArray(hands) ? hands.length : 0, landmarksPerHand: 21 };
+  },
   capabilities: () => latestCapabilities || browserCapabilities,
 });
 

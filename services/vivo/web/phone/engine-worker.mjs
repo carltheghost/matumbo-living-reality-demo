@@ -8,10 +8,10 @@ const engine = new LocalVivoEngine({
 let clock = null;
 
 async function dispatch(method, args) {
-  if (!['open', 'snapshot', 'translate', 'applyLocalEdit', 'step', 'setEye', 'createEye', 'selectEye', 'enterNested', 'exitNested', 'forkOffline', 'persist', 'close'].includes(method)) throw new TypeError('Unsupported local engine operation');
+  if (!['open', 'snapshot', 'translate', 'applyLocalEdit', 'applyLocalTransform', 'step', 'setEye', 'createEye', 'selectEye', 'enterNested', 'exitNested', 'forkOffline', 'persist', 'close'].includes(method)) throw new TypeError('Unsupported local engine operation');
   const result = await engine[method](...args);
   if (['createEye', 'selectEye', 'enterNested', 'exitNested', 'forkOffline'].includes(method)) await engine.lastPersistence;
-  if (['translate', 'applyLocalEdit'].includes(method) && !clock) {
+  if (['translate', 'applyLocalEdit', 'applyLocalTransform'].includes(method) && !clock) {
     clock = setInterval(async () => {
       if (!engine.activeIds.size) { clearInterval(clock); clock = null; return; }
       try { await engine.step(1 / 30); } catch (error) { self.postMessage({ type: 'event', value: { reason: 'step-error', error: error.message } }); }

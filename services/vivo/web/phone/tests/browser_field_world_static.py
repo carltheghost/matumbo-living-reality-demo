@@ -83,12 +83,12 @@ def main(base_url: str) -> None:
         )
         page.mouse.click(workpiece_point["x"], workpiece_point["y"])
         page.wait_for_function(
-            "document.querySelector('#phoneFieldEntity').value === 'workpiece' && !window.VivaPhoneEngine.fieldWorld().preview"
+            "document.querySelector('#phoneFieldEntity').value === 'workpiece' && !window.VivaPhoneEngine.fieldWorld().preview && window.VivaPhoneEngine.fieldWorld().previews.length === 0 && (!window.VivaShared.R.localPreview || window.VivaShared.R.localPreview.length === 0)"
         )
         retargeted = page.evaluate(
-            "() => ({selected: document.querySelector('#phoneFieldEntity').value, rendererSelected: window.VivaShared.R.selected, applyDisabled: document.querySelector('#phoneFieldApply').disabled})"
+            "() => ({selected: document.querySelector('#phoneFieldEntity').value, rendererSelected: window.VivaShared.R.selected, previewCount: window.VivaPhoneEngine.fieldWorld().previews.length, rendererPreviewCount: window.VivaShared.R.localPreview?.length || 0, applyDisabled: document.querySelector('#phoneFieldApply').disabled})"
         )
-        assert retargeted == {"selected": "workpiece", "rendererSelected": "workpiece", "applyDisabled": True}, retargeted
+        assert retargeted == {"selected": "workpiece", "rendererSelected": "workpiece", "previewCount": 0, "rendererPreviewCount": 0, "applyDisabled": True}, retargeted
         page.get_by_role("button", name="Preview move").click()
         page.wait_for_function(
             "window.VivaPhoneEngine.fieldWorld().preview && window.VivaPhoneEngine.fieldWorld().preview.entityId === 'workpiece'"
