@@ -242,6 +242,15 @@ body.phone-world:not(.phone-local) #status {
 .accepted-details summary { color: #91a9c1; cursor: pointer; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
 .accepted-details pre { max-height: 120px; overflow: auto; white-space: pre-wrap; }
 
+.agent-session-list { display: grid; gap: 8px; }
+.agent-session-row { align-items: center; background: rgba(6, 19, 32, .72); border: 1px solid rgba(127, 180, 255, .22); border-radius: 11px; display: flex; gap: 10px; justify-content: space-between; padding: 9px; }
+.agent-session-details { display: grid; gap: 4px; min-width: 0; }
+.agent-session-details strong { color: #e7f1fb; font-size: 11px; overflow-wrap: anywhere; }
+.agent-session-details small { color: #8fa7be; font: 9px/1.35 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.agent-session-row button { flex: 0 0 auto; min-height: 32px; }
+.agent-session-row .agent-stop { border-color: rgba(243, 155, 85, .65); color: #ffd1a9; }
+.agent-session-row .agent-reenable { border-color: rgba(103, 224, 162, .55); color: #b8f4d2; }
+
 .phone-world .welcome {
   background: rgba(13, 27, 42, .92);
   border: 1px solid rgba(127, 180, 255, .36);

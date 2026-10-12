@@ -3,7 +3,7 @@ const ID = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.rand
 /** Origin-limited native message adapter. No fallback uploads or hidden grants. */
 export class AndroidPhoneBridge extends EventTarget {
   constructor(scope = globalThis) {
-    super(); this.scope = scope; this.pending = new Map(); this.tools = [];
+    super(); this.scope = scope; this.pending = new Map(); this.tools = []; this.agentController = null;
     this.native = scope.VivoPhone && typeof scope.VivoPhone.postMessage === 'function' ? scope.VivoPhone : null;
     if (this.native) {
       this.bindNative();
@@ -51,12 +51,12 @@ export class AndroidPhoneBridge extends EventTarget {
   }
   listTools() { return this.request('tools.list'); }
   invoke(name, args = {}) { return this.request('tool.invoke', { name, args }); }
-  async invokeLocal(name, args = {}) {
-    const api = this.scope.VivaPhoneEngine;
-    if (!api) throw new Error('Local Vivo engine is not available');
-    if (name === 'vivo.world.read') return api.snapshot();
-    if (name === 'vivo.world.edit') return api.translate(args.entityId, args.axis, args.delta);
-    if (name === 'vivo.eye.control') return api.setEye(args);
-    throw new Error('Unsupported local Vivo tool');
+  setAgentController(controller) { this.agentController = controller || null; return this; }
+  async invokeLocal(name, args = {}, context = {}) {
+    if (!this.agentController) throw new Error('Local agent control is not available');
+    // World tools are accepted only through the registered session controller.
+    // In particular, never fall back to engine.translate(args.agentId/axis),
+    // which would bypass full-D identity, CAS and operation idempotency.
+    return this.agentController.invokeTool(context.session, name, args);
   }
 }
