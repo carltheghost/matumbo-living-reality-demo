@@ -19,6 +19,8 @@ const MAX_CONTEXT_TEXT = 240;
 const MAX_SESSION_ID = 80;
 const DEFAULT_TIMEOUT_MS = 18_000;
 const MAX_TIMEOUT_MS = 60_000;
+const CONVERSATION_STATUS_PATH = '/api/conversation/status';
+const CONVERSATION_RESPOND_PATH = '/api/conversation/respond';
 
 const clone = value => {
   if (typeof structuredClone === 'function') return structuredClone(value);
@@ -173,12 +175,17 @@ function sameOrigin(value, locationLike) {
   return parsed.origin;
 }
 
-function endpoint(origin, path, code) {
-  if (typeof path !== 'string' || !path.startsWith('/api/conversation/') || path.startsWith('//') || path.includes('://')) {
-    throw transportError(code);
-  }
-  const url = new URL(path, `${origin}/`);
-  if (url.origin !== origin) throw transportError('CONVERSATION_CROSS_ORIGIN_DISABLED');
+function endpoint(origin, path, allowedPath, code) {
+  let url;
+  try { url = new URL(path, `${origin}/`); } catch { throw transportError(code); }
+  if (
+    path !== allowedPath
+    || url.origin !== origin
+    || url.pathname !== allowedPath
+    || url.search
+    || url.hash
+    || url.href !== `${origin}${allowedPath}`
+  ) throw transportError(code);
   return url.href;
 }
 
@@ -217,16 +224,16 @@ export function createRemoteConversationProvider({
   sessionId,
   fetch: fetchImpl = globalThis.fetch,
   crypto: cryptoLike = globalThis.crypto,
-  statusPath = '/api/conversation/status',
-  respondPath = '/api/conversation/respond',
+  statusPath = CONVERSATION_STATUS_PATH,
+  respondPath = CONVERSATION_RESPOND_PATH,
   timeoutMs = DEFAULT_TIMEOUT_MS,
 } = {}) {
   if (typeof token !== 'string' || token.trim().length < 20 || token.trim().length > 256) throw transportError('AUTH_REQUIRED');
   if (typeof fetchImpl !== 'function') throw transportError('CONVERSATION_FETCH_UNAVAILABLE');
   const bearer = token.trim();
   const resolvedOrigin = sameOrigin(origin || pageOrigin(locationLike), locationLike);
-  const statusUrl = endpoint(resolvedOrigin, statusPath, 'CONVERSATION_STATUS_PATH_INVALID');
-  const respondUrl = endpoint(resolvedOrigin, respondPath, 'CONVERSATION_RESPOND_PATH_INVALID');
+  const statusUrl = endpoint(resolvedOrigin, statusPath, CONVERSATION_STATUS_PATH, 'CONVERSATION_STATUS_PATH_INVALID');
+  const respondUrl = endpoint(resolvedOrigin, respondPath, CONVERSATION_RESPOND_PATH, 'CONVERSATION_RESPOND_PATH_INVALID');
   const tabId = identifier(sessionId || generatedSessionId(cryptoLike), 'SESSION_INVALID', { required: true });
   const requestTimeout = Math.max(1, Math.min(MAX_TIMEOUT_MS, Number(timeoutMs) || DEFAULT_TIMEOUT_MS));
   let closed = false;
@@ -277,6 +284,7 @@ export function createRemoteConversationProvider({
         credentials: 'omit',
         cache: 'no-store',
         mode: 'same-origin',
+        redirect: 'error',
         referrerPolicy: 'no-referrer',
         signal: init.signal,
       });

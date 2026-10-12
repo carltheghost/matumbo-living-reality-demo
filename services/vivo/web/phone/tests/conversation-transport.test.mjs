@@ -60,6 +60,40 @@ test('construction is inert and same-origin configuration fails closed', async (
   await remote.close();
 });
 
+test('only canonical normalized conversation routes are accepted before any bearer fetch', async () => {
+  const rejected = [
+    ['/api/conversation/../leak', 'CONVERSATION_RESPOND_PATH_INVALID'],
+    ['/api/conversation/%2e%2e/leak', 'CONVERSATION_RESPOND_PATH_INVALID'],
+    ['/api/conversation//leak', 'CONVERSATION_RESPOND_PATH_INVALID'],
+    ['/api/conversation/\\leak', 'CONVERSATION_RESPOND_PATH_INVALID'],
+    ['/api/conversation/respond?next=/leak', 'CONVERSATION_RESPOND_PATH_INVALID'],
+    ['/api/conversation/respond#leak', 'CONVERSATION_RESPOND_PATH_INVALID'],
+    ['https://vivo.test/api/conversation/respond', 'CONVERSATION_RESPOND_PATH_INVALID'],
+    ['/api/conversation/respond/../leak', 'CONVERSATION_RESPOND_PATH_INVALID'],
+  ];
+  for (const [respondPath, code] of rejected) {
+    let calls = 0;
+    assert.throws(() => provider(async () => { calls += 1; return reply({}); }, { respondPath }), error => error.code === code);
+    assert.equal(calls, 0, `rejected route must not fetch: ${respondPath}`);
+  }
+
+  for (const statusPath of ['/api/conversation/../leak', '/api/conversation/%2e%2e/leak', '/api/conversation//leak', '/api/conversation\\leak', '/api/conversation/status?leak=1', '/api/conversation/status#leak', 'https://vivo.test/api/conversation/status', '/api/conversation/status/../leak']) {
+    let calls = 0;
+    assert.throws(() => provider(async () => { calls += 1; return reply({}); }, { statusPath }), error => error.code === 'CONVERSATION_STATUS_PATH_INVALID');
+    assert.equal(calls, 0, `rejected route must not fetch: ${statusPath}`);
+  }
+
+  const calls = [];
+  const remote = provider(fixtureFetch(readyOrUnavailable, calls), {
+    statusPath: '/api/conversation/status',
+    respondPath: '/api/conversation/respond',
+  });
+  await remote.connect();
+  assert.equal(remote.available, true);
+  await remote.close();
+  assert.deepEqual(calls.map(call => call.url), [`${ORIGIN}/api/conversation/status`]);
+});
+
 test('explicit connect sends only the authorized same-origin contract and sanitizes context', async () => {
   const calls = [];
   const remote = provider(fixtureFetch(readyOrUnavailable, calls));
@@ -74,6 +108,7 @@ test('explicit connect sends only the authorized same-origin contract and saniti
   assert.equal(calls[1].url, `${ORIGIN}/api/conversation/respond`);
   assert.equal(calls[1].init.credentials, 'omit');
   assert.equal(calls[1].init.cache, 'no-store');
+  assert.equal(calls[1].init.redirect, 'error');
   assert.equal(calls[1].init.headers.Authorization, `Bearer ${TOKEN}`);
   assert.equal(calls[1].body.sessionId, 'phone-tab-fixture');
   assert.equal(calls[1].body.companion.color, undefined);
@@ -82,6 +117,29 @@ test('explicit connect sends only the authorized same-origin contract and saniti
   assert.equal(JSON.stringify(calls[1].body).includes(TOKEN), false);
   assert.equal(calls[1].url.includes(TOKEN), false);
   await remote.close();
+});
+
+test('redirected same-origin routes are rejected before a second bearer request', async () => {
+  const calls = [];
+  const server = createServer((request, response) => {
+    calls.push({ url: request.url, authorization: request.headers.authorization });
+    response.writeHead(302, { Location: '/api/conversation/leak' });
+    response.end();
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  const origin = `http://127.0.0.1:${address.port}`;
+  const remote = createRemoteConversationProvider({
+    token: TOKEN, origin, location: { origin }, sessionId: 'redirect-tab', fetch: globalThis.fetch,
+  });
+  try {
+    await assert.rejects(remote.connect(), error => error.code === 'CONVERSATION_NETWORK');
+    assert.deepEqual(calls, [{ url: '/api/conversation/status', authorization: `Bearer ${TOKEN}` }]);
+    assert.equal(remote.available, false);
+  } finally {
+    await remote.close();
+    await new Promise(resolve => server.close(resolve));
+  }
 });
 
 test('a local HTTP server/provider fixture exercises the real fetch boundary', async () => {

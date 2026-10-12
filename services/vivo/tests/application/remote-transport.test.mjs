@@ -86,6 +86,13 @@ test('conversation provider is an explicit admitted-session handoff and closes w
   assert.equal(calls[1].url.includes('x'.repeat(24)),false);
   assert.equal(JSON.stringify(calls[1].body).includes('x'.repeat(24)),false);
 
+  let rejectedFetches=0;
+  assert.throws(()=>transport.conversationProvider({
+    respondPath:'/api/conversation/../leak',
+    fetch:async()=>{rejectedFetches+=1;},
+  }),error=>error.code==='CONVERSATION_RESPOND_PATH_INVALID');
+  assert.equal(rejectedFetches,0);
+
   const closing=transport.close();
   const id=socket.sent.at(-1).id;
   socket.emit({type:'reply',id,value:{closed:true}});
