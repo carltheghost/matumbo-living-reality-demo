@@ -1,0 +1,43 @@
+# Opt-in remote image for start-canonical-remote.sh.
+# The existing services/vivo/Dockerfile remains the original 0.8.1 app image.
+# Build this file from the repository root; the remote authority keeps the
+# repository-relative module routes and the pinned research mailbox intact.
+FROM node:24.19.0-bookworm-slim AS node-runtime
+FROM python:3.13-slim-bookworm
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    VIVO_PYTHON=/opt/vivo-venv/bin/python \
+    PATH=/opt/vivo-venv/bin:$PATH
+
+WORKDIR /app
+
+# The Python base already carries pip/venv and the Node stage contributes only
+# the pinned executable. Compose's init:true supplies the tiny PID-1 reaper.
+COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
+
+COPY services/vivo/requirements.txt /tmp/vivo-requirements.txt
+RUN python3 -m venv /opt/vivo-venv \
+    && /opt/vivo-venv/bin/pip install --no-cache-dir -r /tmp/vivo-requirements.txt \
+    && rm /tmp/vivo-requirements.txt
+
+# remote_application.py resolves the repository root to /app and serves these
+# exact relative module routes. Do not flatten this layout into /app/server.
+COPY services/vivo/contracts /app/services/vivo/contracts
+COPY services/vivo/models /app/services/vivo/models
+COPY services/vivo/server /app/services/vivo/server
+COPY services/vivo/start-canonical-remote.sh /app/services/vivo/start-canonical-remote.sh
+COPY services/vivo/web /app/services/vivo/web
+COPY services/vivo_adaptive /app/services/vivo_adaptive
+COPY services/vivo_material /app/services/vivo_material
+COPY research/vivo-phase-fabric/web/target-mailbox.mjs /app/research/vivo-phase-fabric/web/target-mailbox.mjs
+
+RUN mkdir -p /data \
+    && chmod 0555 /app/services/vivo/start-canonical-remote.sh \
+    && chown -R 10001:10001 /app /data
+
+USER 10001:10001
+WORKDIR /app/services/vivo
+
+EXPOSE 8768
+ENTRYPOINT ["/app/services/vivo/start-canonical-remote.sh"]

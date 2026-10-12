@@ -1,0 +1,8 @@
+{$VIVA_DOMAIN} {
+    reverse_proxy https://vivo-remote:8768 {
+        transport http {
+            tls_trust_pool file /run/secrets/vivo_backend_ca
+            tls_server_name vivo-remote
+        }
+    }
+}

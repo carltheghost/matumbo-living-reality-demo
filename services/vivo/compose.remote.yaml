@@ -1,0 +1,112 @@
+services:
+  vivo-remote:
+    build:
+      context: ../..
+      dockerfile: services/vivo/Dockerfile.remote
+    command:
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8768"
+      - --data-dir
+      - /data
+      - --origin
+      - ${VIVA_PUBLIC_ORIGIN:?Set the exact public HTTPS origin}
+      - --store
+      - posix
+      - --cert
+      - /run/secrets/vivo_backend_cert
+      - --key
+      - /run/secrets/vivo_backend_key
+    environment:
+      VIVO_OWNER_TOKEN: ${VIVO_OWNER_TOKEN:?Set VIVO_OWNER_TOKEN in a secret manager}
+      # Empty by default: conversation remains explicitly unavailable until a
+      # server-side secret is supplied. Never put this in browser configuration.
+      OPENAI_API_KEY: ${OPENAI_API_KEY-}
+      VIVO_OPENAI_MODEL: ${VIVO_OPENAI_MODEL:-gpt-6-luna}
+      VIVO_CONVERSATION_TIMEOUT_SECONDS: ${VIVO_CONVERSATION_TIMEOUT_SECONDS:-18}
+      VIVO_CONVERSATION_MAX_MESSAGE_CHARS: ${VIVO_CONVERSATION_MAX_MESSAGE_CHARS:-400}
+      VIVO_CONVERSATION_MAX_OUTPUT_CHARS: ${VIVO_CONVERSATION_MAX_OUTPUT_CHARS:-4000}
+      VIVO_CONVERSATION_MAX_HISTORY_MESSAGES: ${VIVO_CONVERSATION_MAX_HISTORY_MESSAGES:-24}
+      VIVO_CONVERSATION_MAX_HISTORY_CHARS: ${VIVO_CONVERSATION_MAX_HISTORY_CHARS:-12000}
+      VIVO_OPENAI_MAX_OUTPUT_TOKENS: ${VIVO_OPENAI_MAX_OUTPUT_TOKENS:-240}
+      VIVO_CONVERSATION_REQUESTS_PER_MINUTE: ${VIVO_CONVERSATION_REQUESTS_PER_MINUTE:-12}
+      VIVO_CONVERSATION_MAX_SESSIONS: ${VIVO_CONVERSATION_MAX_SESSIONS:-256}
+      VIVO_CONVERSATION_MAX_SESSIONS_PER_IDENTITY: ${VIVO_CONVERSATION_MAX_SESSIONS_PER_IDENTITY:-32}
+      VIVO_CONVERSATION_MAX_BODY_BYTES: ${VIVO_CONVERSATION_MAX_BODY_BYTES:-16384}
+    expose:
+      - "8768"
+    volumes:
+      - vivo-remote-data:/data
+    secrets:
+      - vivo_backend_cert
+      - vivo_backend_key
+      - vivo_backend_ca
+    healthcheck:
+      test:
+        - CMD
+        - /opt/vivo-venv/bin/python
+        - -c
+        - >-
+          import ssl,sys,urllib.request;
+          context=ssl.create_default_context(cafile='/run/secrets/vivo_backend_ca');
+          response=urllib.request.urlopen('https://127.0.0.1:8768/healthz',context=context,timeout=2);
+          sys.exit(0 if response.status == 200 else 1)
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 20s
+    init: true
+    stop_signal: SIGTERM
+    stop_grace_period: 30s
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+  https:
+    image: caddy:2
+    environment:
+      VIVA_DOMAIN: ${VIVA_DOMAIN:?Set the public DNS hostname}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile.remote:/etc/caddy/Caddyfile:ro
+      - caddy-remote-data:/data
+      - caddy-remote-config:/config
+    secrets:
+      - vivo_backend_ca
+    depends_on:
+      vivo-remote:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - caddy
+        - validate
+        - --config
+        - /etc/caddy/Caddyfile
+        - --adapter
+        - caddyfile
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    init: true
+    stop_signal: SIGTERM
+    stop_grace_period: 30s
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  vivo-remote-data:
+  caddy-remote-data:
+  caddy-remote-config:
+
+secrets:
+  vivo_backend_cert:
+    file: ${VIVO_BACKEND_CERT_FILE:?Set the backend certificate path}
+  vivo_backend_key:
+    file: ${VIVO_BACKEND_KEY_FILE:?Set the backend private-key path}
+  vivo_backend_ca:
+    file: ${VIVO_BACKEND_CA_FILE:?Set the backend CA path}
