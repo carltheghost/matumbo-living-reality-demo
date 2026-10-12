@@ -465,13 +465,13 @@ export class FieldWorldController {
   previewFor(entityId) {
     return entityId ? clone(this.previews.get(entityId) || null) : null;
   }
-  previewMove(entityId, axis, delta) {
+  previewMove(entityId, axis, delta, { rebaseOnRevision = false } = {}) {
     const entity = this.entity(entityId);
     if (!entity || !Number.isInteger(axis) || axis < 0 || axis >= this.model.dimension || !Number.isFinite(delta) || Math.abs(delta) > 5) throw new RangeError('Invalid field-world move preview');
     const baseQ = [...(entity.baseQ || entity.q)];
     const q = [...entity.q];
     q[axis] = clamp(q[axis] + delta, -1e6, 1e6);
-    return this._newPreview(entity, { kind: 'move', baseQ, q, delta: q.map((value, index) => value - baseQ[index]), geometry: entity.geometry, rotation: 0, mixWith: null });
+    return this._newPreview(entity, { kind: 'move', baseQ, q, delta: q.map((value, index) => value - baseQ[index]), geometry: entity.geometry, rotation: 0, mixWith: null, ...(rebaseOnRevision ? { rebaseOnRevision: true } : {}) });
   }
   previewRotate(entityId, radians) {
     const entity = this.entity(entityId);
@@ -498,7 +498,7 @@ export class FieldWorldController {
       rotation: 0, mixWith: null,
     });
   }
-  previewMix(entityId) {
+  previewMix(entityId, { rebaseOnRevision = false } = {}) {
     const entity = this.entity(entityId);
     if (!entity) throw new TypeError('Unknown field-world object');
     const candidates = this.model.entities.filter(item => item.id !== entityId);
@@ -506,7 +506,7 @@ export class FieldWorldController {
     if (!nearest) throw new TypeError('No neighboring field object to mix');
     const q = entity.q.map((value, index) => (value + nearest.q[index]) / 2);
     const baseQ = [...(entity.baseQ || entity.q)];
-    return this._newPreview(entity, { kind: 'mix', baseQ, q, delta: q.map((value, index) => value - baseQ[index]), geometry: entity.geometry, rotation: 0, mixWith: nearest.id });
+    return this._newPreview(entity, { kind: 'mix', baseQ, q, delta: q.map((value, index) => value - baseQ[index]), geometry: entity.geometry, rotation: 0, mixWith: nearest.id, ...(rebaseOnRevision ? { rebaseOnRevision: true } : {}) });
   }
   discardPreview({ mark = true, entityId = null } = {}) {
     const target = entityId ? this.previews.get(entityId) : (this._selectedPreview() || this.preview);

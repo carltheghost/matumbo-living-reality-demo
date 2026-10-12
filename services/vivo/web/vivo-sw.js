@@ -1,5 +1,5 @@
 /* Static app shell cache only. API traffic, camera frames and shared writes are never cached. */
-const SHELL_CACHE = 'vivo-phone-shell-2026-10-12-v5';
+const SHELL_CACHE = 'vivo-phone-shell-2026-10-12-v11';
 const HAND_CACHE = 'vivo-hand-tracker-2026-10';
 const SHELL = [
   'index.html', 'shared.css', 'shared.js', 'render.js', 'camera.js', 'hand-worker.js',
@@ -8,7 +8,7 @@ const SHELL = [
   'application/interactions.mjs', 'application/density-overlay.mjs',
   'phone/index.html', 'phone/bootstrap.mjs', 'phone/client.mjs', 'phone/authority-adapter.mjs', 'phone/authority-mapping.mjs', 'phone/two-hand-camera.mjs', 'phone/two-hand-worker.mjs',
   'phone/engine-worker.mjs', 'phone/engine.mjs', 'phone/storage.mjs', 'phone/material-contract.mjs', 'phone/material-patch.mjs', 'phone/material-input-runtime.mjs', 'phone/fingertip-input.mjs', 'phone/agent-tools.mjs', 'phone/agent-control.mjs', 'phone/persistence-status.mjs', 'phone/camera-start-status.mjs', 'phone/static-shared.js', 'phone/phone-render.mjs', 'phone/phone-world.css', 'phone/field-palette.mjs', 'phone/field-world.mjs', 'phone/spatial-fabric.mjs', 'phone/local-operation.mjs', 'phone/local-edit-queue.mjs', 'phone/economy-entry.mjs', 'phone/vendor/economy/manifest.json', 'phone/vendor/economy/src/domains/simulated-economy.js', 'phone/vendor/economy/src/domains/token.js', 'phone/vendor/economy/src/domains/token-config.js', 'phone/vendor/economy/src/domains/token-store.js', 'phone/vendor/economy/src/render/simulated-economy-panel.js',
-  'phone/bridge.mjs', 'phone/projection.mjs', 'phone/hand-gestures.mjs',
+  'phone/bridge.mjs', 'phone/projection.mjs', 'phone/hand-gestures.mjs', 'phone/companion.mjs',
 ];
 const scoped = relative => new URL(relative, self.registration.scope).href;
 
