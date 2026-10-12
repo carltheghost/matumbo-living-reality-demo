@@ -1,0 +1,478 @@
+/**
+ * Vivo companion surface.
+ *
+ * This is a presentation/controller layer over the existing phone world. It
+ * never allocates a second world, invents an identity, or writes outside the
+ * existing PhoneEngineClient CAS + IndexedDB path. Conversation is an
+ * explicit provider seam; without a configured provider the UI says so and
+ * does not fabricate an assistant reply.
+ */
+
+export const COMPANION_SCHEMA = 'vivo.companion/1';
+export const CONVERSATION_PROVIDER_SCHEMA = 'vivo.conversation-provider/1';
+
+export const COMPANION_CHARACTERS = Object.freeze([
+  Object.freeze({
+    id: 'relic',
+    entityId: 'relic',
+    name: 'Relic',
+    role: 'Keeper of the field',
+    shortRole: 'Keeper',
+    description: 'A steady anchor for the place you already made.',
+    prompt: 'Hold the thread of this world.',
+    color: '#79adff',
+    accent: '#b7d5ff',
+  }),
+  Object.freeze({
+    id: 'workpiece',
+    entityId: 'workpiece',
+    name: 'Workpiece',
+    role: 'Maker of material',
+    shortRole: 'Maker',
+    description: 'A responsive work-surface for shaping local matter.',
+    prompt: 'Give the material a direction.',
+    color: '#f3a35b',
+    accent: '#ffd0a4',
+  }),
+  Object.freeze({
+    id: 'portal',
+    entityId: 'portal',
+    name: 'Inner world',
+    role: 'Guide to the nested space',
+    shortRole: 'Wayfinder',
+    description: 'The doorway that keeps its own return path.',
+    prompt: 'Leave a way back through.',
+    color: '#66dfad',
+    accent: '#b8f7d8',
+  }),
+]);
+
+const INITIAL_WORLD_POSITIONS = Object.freeze({
+  relic: Object.freeze([-1.15, -0.1, 0.25]),
+  workpiece: Object.freeze([0.1, 0.72, 0.25]),
+  portal: Object.freeze([1.3, -0.1, 0.25]),
+});
+
+const PLACEMENT_POSITIONS = Object.freeze({
+  relic: Object.freeze([-0.66, 0.06, 0.25, 0.12]),
+  workpiece: Object.freeze([0, 0.5, 0.25, 0]),
+  portal: Object.freeze([0.66, 0.06, 0.25, -0.12]),
+});
+
+const clone = value => {
+  if (typeof structuredClone === 'function') return structuredClone(value);
+  return JSON.parse(JSON.stringify(value));
+};
+
+const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
+
+export function getCompanion(id) {
+  return COMPANION_CHARACTERS.find(character => character.id === id) || COMPANION_CHARACTERS[0];
+}
+
+export function placementTarget(characterId, dimension = 4) {
+  const character = getCompanion(characterId);
+  const source = PLACEMENT_POSITIONS[character.id] || PLACEMENT_POSITIONS.relic;
+  const target = Array.from({ length: dimension }, (_, axis) => finite(source[axis], 0));
+  if (dimension > 2) target[2] = finite(source[2], 0.25);
+  return target;
+}
+
+export function isPlaced(entity, characterId) {
+  if (!entity || !Array.isArray(entity.q)) return false;
+  const original = INITIAL_WORLD_POSITIONS[characterId] || INITIAL_WORLD_POSITIONS.relic;
+  return entity.q.some((value, axis) => Math.abs(finite(value) - finite(original[axis])) > 0.06);
+}
+
+/**
+ * Build a full-dimensional local edit request. The caller still performs the
+ * actual write through VivaPhoneEngine.applyLocalTransform().
+ */
+export function buildPlacementRequest(envelope, characterId) {
+  const character = getCompanion(characterId);
+  const snapshot = envelope?.snapshot || envelope;
+  const eye = envelope?.eyes?.[envelope?.currentEyeId];
+  const spaceId = eye?.spaceId || snapshot?.rootSpaceId;
+  const space = snapshot?.spaces?.[spaceId];
+  if (!snapshot?.worldId || !eye || !space) return { ok: false, code: 'COMPANION_WORLD_UNAVAILABLE' };
+  if (spaceId !== snapshot.rootSpaceId) {
+    return { ok: false, code: 'COMPANION_ROOT_EYE_REQUIRED', message: 'Return to the root Eye to place this companion.' };
+  }
+  const entity = space.entities?.[character.entityId];
+  if (!entity || !Array.isArray(entity.q) || entity.q.length !== space.dimension) {
+    return { ok: false, code: 'COMPANION_ENTITY_UNAVAILABLE', message: `${character.name} is not present in this world.` };
+  }
+  const target = placementTarget(character.id, space.dimension);
+  const delta = target.map((value, axis) => value - finite(entity.q[axis]));
+  return {
+    ok: true,
+    schema: COMPANION_SCHEMA,
+    characterId: character.id,
+    entityId: entity.id,
+    worldId: snapshot.worldId,
+    branchId: envelope?.branchId || null,
+    eyeId: envelope.currentEyeId,
+    spaceId,
+    dimension: space.dimension,
+    target,
+    delta,
+    geometry: clone(entity.geometry || { scale: 1, rotation: 0, axes: [0, 1] }),
+    expected: {
+      worldId: snapshot.worldId,
+      branchId: envelope?.branchId || null,
+      eyeId: envelope.currentEyeId,
+      spaceId,
+      entityId: entity.id,
+      baseRevision: Number(entity.revision) || 0,
+    },
+  };
+}
+
+export function readConversationProvider(scope = globalThis) {
+  const provider = scope?.VivoConversationProvider;
+  if (!provider || provider.schema !== CONVERSATION_PROVIDER_SCHEMA || typeof provider.respond !== 'function') return null;
+  return provider;
+}
+
+export function normalizeConversationResult(value) {
+  const text = typeof value === 'string' ? value : value?.text;
+  if (typeof text !== 'string' || !text.trim()) return null;
+  const reaction = typeof value?.reaction === 'string' && value.reaction.trim()
+    ? value.reaction.trim().slice(0, 180)
+    : null;
+  return { text: text.trim().slice(0, 4000), reaction };
+}
+
+function element(documentRoot, tag, className = '', text = undefined) {
+  const node = documentRoot.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function avatar(documentRoot, character, large = false) {
+  const shell = element(documentRoot, 'span', `companion-avatar companion-avatar--${character.id}${large ? ' companion-avatar--large' : ''}`);
+  shell.setAttribute('aria-hidden', 'true');
+  const halo = element(documentRoot, 'span', 'companion-avatar-halo');
+  const ring = element(documentRoot, 'span', 'companion-avatar-ring');
+  const core = element(documentRoot, 'span', 'companion-avatar-core');
+  const face = element(documentRoot, 'span', 'companion-avatar-face');
+  face.append(element(documentRoot, 'i', 'companion-avatar-eye'), element(documentRoot, 'i', 'companion-avatar-eye'));
+  core.append(face);
+  shell.append(halo, ring, core);
+  if (character.id === 'portal') shell.append(element(documentRoot, 'span', 'companion-avatar-gate'));
+  return shell;
+}
+
+function safeStorage(scope) {
+  try { return scope.localStorage; } catch { return null; }
+}
+
+function initialSelection(scope) {
+  try {
+    const value = safeStorage(scope)?.getItem('vivo.companion.selection');
+    return COMPANION_CHARACTERS.some(character => character.id === value) ? value : COMPANION_CHARACTERS[0].id;
+  } catch { return COMPANION_CHARACTERS[0].id; }
+}
+
+function persistSelection(scope, id) {
+  try { safeStorage(scope)?.setItem('vivo.companion.selection', id); } catch { /* storage is optional */ }
+}
+
+function worldForProvider(envelope, character) {
+  const snapshot = envelope?.snapshot || envelope;
+  const eye = envelope?.eyes?.[envelope?.currentEyeId];
+  const spaceId = eye?.spaceId || snapshot?.rootSpaceId;
+  const entity = snapshot?.spaces?.[spaceId]?.entities?.[character?.entityId];
+  return {
+    worldId: snapshot?.worldId || null,
+    branchId: envelope?.branchId || null,
+    eyeId: envelope?.currentEyeId || null,
+    spaceId: spaceId || null,
+    dimension: snapshot?.spaces?.[spaceId]?.dimension || null,
+    entity: entity ? { id: entity.id, name: entity.name, q: [...entity.q], revision: entity.revision } : null,
+  };
+}
+
+export function mountVivoCompanion({ documentRoot = globalThis.document, scope = globalThis, pollMs = 700 } = {}) {
+  if (!documentRoot?.getElementById) return null;
+  const dock = documentRoot.getElementById('phoneFieldDock');
+  if (!dock) return null;
+  const existing = scope.VivoCompanion;
+  if (existing?.schema === COMPANION_SCHEMA) return existing;
+
+  const shell = element(documentRoot, 'section', 'vivo-companion');
+  shell.id = 'vivoCompanion';
+  shell.setAttribute('aria-labelledby', 'vivoCompanionTitle');
+  shell.innerHTML = `
+    <div class="companion-kicker"><span class="eyebrow">VIVO / EMBODIED COMPANION</span><span class="companion-live-state" data-companion="persistence">LOCAL · READY</span></div>
+    <div class="companion-heading"><div><h2 id="vivoCompanionTitle">Bring one close.</h2><p>Choose a living identity from this world, place it, then return to find it where you left it.</p></div><button type="button" class="companion-minimize" data-companion="focus" aria-label="Focus the world">↗</button></div>
+    <div class="companion-character-grid" data-companion="roster" role="listbox" aria-label="Choose an embodied world identity"></div>
+    <div class="companion-presence" data-companion="presence">
+      <div class="companion-avatar-stage" data-companion="avatar-stage"></div>
+      <div class="companion-detail"><span class="companion-detail-label" data-companion="role"></span><h3 data-companion="name"></h3><p data-companion="description"></p><div class="companion-coordinates" data-companion="coordinates"></div></div>
+    </div>
+    <div class="companion-actions"><button type="button" class="companion-primary" data-companion="place">Place in world</button><button type="button" data-companion="select-world">Select on field</button></div>
+    <div class="companion-reaction" data-companion="reaction" role="status" aria-live="polite"></div>
+    <section class="companion-conversation" aria-labelledby="companionConversationTitle">
+      <div class="companion-conversation-heading"><div><span class="companion-detail-label">CONVERSATION</span><h3 id="companionConversationTitle">A real voice, when connected.</h3></div><span class="companion-provider-badge" data-companion="provider-badge">BACKEND NOT CONNECTED</span></div>
+      <div class="companion-chat-log" data-companion="chat-log" aria-live="polite"></div>
+      <form class="companion-chat-form" data-companion="chat-form"><input data-companion="chat-input" maxlength="400" autocomplete="off" placeholder="Ask about this place…" aria-label="Message the selected companion"><button type="submit" class="companion-send" data-companion="send">Send</button><button type="button" class="companion-stop" data-companion="stop" hidden>Stop</button></form>
+      <p class="companion-chat-note" data-companion="chat-note"></p>
+    </section>
+  `;
+  dock.prepend(shell);
+
+  const worldContext = element(documentRoot, 'details', 'vivo-companion-world-context');
+  worldContext.open = false;
+  const worldSummary = element(documentRoot, 'summary', '', 'World field · identities & persistence');
+  const worldBody = element(documentRoot, 'div', 'vivo-companion-world-body');
+  for (const child of [...dock.children]) if (child !== shell) worldBody.append(child);
+  worldContext.append(worldSummary, worldBody);
+  dock.append(worldContext);
+
+  const query = key => shell.querySelector(`[data-companion="${key}"]`);
+  const state = {
+    schema: COMPANION_SCHEMA,
+    envelope: null,
+    selectedId: initialSelection(scope),
+    reaction: 'Select an identity to wake its presence.',
+    messages: new Map(),
+    placementBusy: false,
+    responseBusy: false,
+    responseController: null,
+    lastSyncKey: '',
+    providerConnected: false,
+    inFlightSnapshot: null,
+    timer: null,
+  };
+
+  function selected() { return getCompanion(state.selectedId); }
+  function selectWorldEntity(entityId) {
+    if (scope.VivaPhoneEngine?.active && typeof scope.VivaPhoneEngine.select === 'function') return scope.VivaPhoneEngine.select(entityId);
+    return scope.VivaShared?.select?.(entityId);
+  }
+  function currentEntity(envelope, character = selected()) {
+    const snapshot = envelope?.snapshot || envelope;
+    const eye = envelope?.eyes?.[envelope?.currentEyeId];
+    const spaceId = eye?.spaceId || snapshot?.rootSpaceId;
+    return snapshot?.spaces?.[spaceId]?.entities?.[character.entityId] || null;
+  }
+  function setReaction(text, tone = '') {
+    state.reaction = String(text || '');
+    const view = query('reaction');
+    view.textContent = state.reaction;
+    view.dataset.tone = tone;
+  }
+  function stopResponse(reason = 'conversation-stopped') {
+    state.responseController?.abort(reason);
+    state.responseController = null;
+    if (state.responseBusy) {
+      state.responseBusy = false;
+      if (reason !== 'selection-changed' && reason !== 'pagehide') setReaction('Conversation stopped. The world is unchanged.', 'warn');
+      render();
+    }
+  }
+  function renderRoster() {
+    const roster = query('roster');
+    roster.replaceChildren();
+    for (const character of COMPANION_CHARACTERS) {
+      const card = element(documentRoot, 'button', `companion-character${character.id === state.selectedId ? ' is-selected' : ''}`);
+      card.type = 'button'; card.dataset.characterId = character.id; card.setAttribute('role', 'option'); card.setAttribute('aria-selected', character.id === state.selectedId ? 'true' : 'false');
+      card.append(avatar(documentRoot, character), element(documentRoot, 'span', 'companion-character-copy', `${character.name} · ${character.shortRole}`));
+      card.addEventListener('click', () => select(character.id));
+      roster.append(card);
+    }
+  }
+  function renderChat(provider) {
+    const character = selected();
+    const log = query('chat-log');
+    log.replaceChildren();
+    const messages = state.messages.get(character.id) || [];
+    if (!messages.length) {
+      log.append(element(documentRoot, 'p', 'companion-chat-empty', provider ? `Ask ${character.name} something about this place.` : 'Conversation will appear here when a real provider is connected.'));
+    } else {
+      for (const message of messages) {
+        const row = element(documentRoot, 'div', `companion-message companion-message--${message.from}`);
+        row.append(element(documentRoot, 'span', 'companion-message-label', message.from === 'user' ? 'YOU' : character.name));
+        row.append(element(documentRoot, 'p', '', message.text));
+        log.append(row);
+      }
+      log.scrollTop = log.scrollHeight;
+    }
+    const badge = query('provider-badge');
+    badge.textContent = provider ? 'LIVE PROVIDER READY' : 'BACKEND NOT CONNECTED';
+    badge.dataset.connected = provider ? 'true' : 'false';
+    const input = query('chat-input'), send = query('send'), stop = query('stop');
+    input.disabled = !provider || state.responseBusy;
+    send.disabled = !provider || state.responseBusy;
+    stop.hidden = !state.responseBusy;
+    query('chat-note').textContent = provider
+      ? 'Messages use the configured provider and stay scoped to this selected world identity.'
+      : 'No conversational backend is configured in this build. Nothing is being simulated as an AI reply.';
+  }
+  function render(envelope = state.envelope) {
+    state.envelope = envelope || state.envelope;
+    const character = selected();
+    const entity = currentEntity(state.envelope, character);
+    const activeEye = state.envelope?.eyes?.[state.envelope?.currentEyeId];
+    const activeRoot = activeEye?.spaceId === state.envelope?.snapshot?.rootSpaceId;
+    query('avatar-stage').replaceChildren(avatar(documentRoot, character, true));
+    query('role').textContent = character.role.toUpperCase();
+    query('name').textContent = character.name;
+    query('description').textContent = character.description;
+    query('coordinates').textContent = entity
+      ? `${entity.id} · ${activeEye?.spaceId || 'unknown space'} · ${entity.q.slice(0, 4).map((value, axis) => `x${axis + 1} ${finite(value).toFixed(2)}`).join(' · ')}`
+      : activeRoot ? 'Identity unavailable in this saved world.' : 'Return the Eye to root to place this identity.';
+    const placed = isPlaced(entity, character.id);
+    const persistence = query('persistence');
+    persistence.textContent = placed ? 'PLACEMENT · RECOVERED' : 'LOCAL · READY';
+    persistence.dataset.placed = placed ? 'true' : 'false';
+    const place = query('place');
+    place.disabled = state.placementBusy || !entity || !activeRoot;
+    place.textContent = state.placementBusy ? 'Saving placement…' : placed ? 'Re-place in world' : 'Place in world';
+    query('select-world').disabled = !entity;
+    renderRoster();
+    const provider = readConversationProvider(scope);
+    renderChat(provider);
+    shell.dataset.state = state.placementBusy ? 'placing' : placed ? 'placed' : 'ready';
+  }
+  function select(id, { announce = true } = {}) {
+    if (!COMPANION_CHARACTERS.some(character => character.id === id)) return false;
+    if (state.selectedId !== id) stopResponse('selection-changed');
+    state.selectedId = id;
+    persistSelection(scope, id);
+    selectWorldEntity(getCompanion(id).entityId);
+    if (announce) setReaction(`${getCompanion(id).name} is ready. Place it in the world when you are ready.`);
+    render();
+    return true;
+  }
+  async function snapshot() {
+    const engine = scope.VivaPhoneEngine;
+    if (!engine?.active || typeof engine.snapshot !== 'function') return null;
+    if (state.inFlightSnapshot) return state.inFlightSnapshot;
+    state.inFlightSnapshot = Promise.resolve(engine.snapshot()).then(envelope => {
+      const snapshot = envelope?.snapshot || envelope;
+      const eye = envelope?.eyes?.[envelope?.currentEyeId];
+      const entity = currentEntity(envelope);
+      const key = [snapshot?.worldId, envelope?.branchId, envelope?.currentEyeId, eye?.spaceId, entity?.revision, ...(entity?.q || [])].join('|');
+      const providerConnected = Boolean(readConversationProvider(scope));
+      if (key !== state.lastSyncKey || providerConnected !== state.providerConnected) {
+        state.lastSyncKey = key;
+        state.providerConnected = providerConnected;
+        render(envelope);
+      }
+      return envelope;
+    }).finally(() => { state.inFlightSnapshot = null; });
+    return state.inFlightSnapshot;
+  }
+  async function place() {
+    if (state.placementBusy) return null;
+    const envelope = await snapshot();
+    const request = buildPlacementRequest(envelope, state.selectedId);
+    if (!request.ok) { setReaction(request.message || 'The selected identity is not available in the active Eye.', 'warn'); render(); return request; }
+    if (request.delta.every(value => Math.abs(value) < 1e-9)) {
+      setReaction(`${selected().name} is already in its saved place.`, 'success'); render(); return { ...request, unchanged: true };
+    }
+    state.placementBusy = true; render();
+    try {
+      const engine = scope.VivaPhoneEngine;
+      const operationId = `companion-place:${request.worldId}:${request.branchId || 'local'}:${request.characterId}:r${request.expected.baseRevision}`;
+      const result = await engine.applyLocalTransform(request.entityId, request.delta, request.geometry, { ...request.expected, operationId });
+      const next = await snapshot();
+      setReaction(`${selected().name} is in the world. The accepted placement was saved locally.`, 'success');
+      shell.classList.remove('has-reaction'); void shell.offsetWidth; shell.classList.add('has-reaction');
+      render(next);
+      return { request, result, envelope: next };
+    } catch (error) {
+      setReaction(`Placement did not save: ${error?.message || String(error)}`, 'error');
+      render();
+      return { request, error };
+    } finally { state.placementBusy = false; render(); }
+  }
+  async function send(message = query('chat-input').value) {
+    const text = String(message || '').trim();
+    const provider = readConversationProvider(scope);
+    if (!text) return null;
+    if (!provider) { setReaction('Conversation is unavailable until a real provider is connected.', 'warn'); render(); return { status: 'unavailable' }; }
+    query('chat-input').value = '';
+    const character = selected();
+    const messages = state.messages.get(character.id) || [];
+    messages.push({ from: 'user', text: text.slice(0, 400) });
+    state.messages.set(character.id, messages);
+    state.responseBusy = true;
+    state.responseController = new AbortController();
+    render();
+    try {
+      const envelope = await snapshot();
+      const response = await provider.respond({ message: text.slice(0, 400), companion: clone(character), world: worldForProvider(envelope, character), signal: state.responseController.signal });
+      const result = normalizeConversationResult(response);
+      if (!result) throw new Error('Conversation provider returned no readable text.');
+      messages.push({ from: 'companion', text: result.text });
+      setReaction(result.reaction || `${character.name} responded in this world.`, 'success');
+      return result;
+    } catch (error) {
+      if (error?.name !== 'AbortError' && error?.message !== 'selection-changed' && error?.message !== 'pagehide') {
+        setReaction(`Conversation failed: ${error?.message || String(error)}`, 'error');
+      }
+      return { error };
+    } finally {
+      state.responseController = null; state.responseBusy = false; render();
+    }
+  }
+
+  query('place').addEventListener('click', () => { void place(); });
+  query('select-world').addEventListener('click', () => {
+    selectWorldEntity(selected().entityId);
+    setReaction(`${selected().name} is selected on the field. Its world coordinates remain visible above.`, 'success');
+    render();
+  });
+  query('focus').addEventListener('click', () => {
+    selectWorldEntity(selected().entityId);
+    documentRoot.getElementById('world')?.focus?.({ preventScroll: true });
+    setReaction('World focus restored. Touch and dimensional controls remain available below.', 'success');
+    render();
+  });
+  query('chat-form').addEventListener('submit', event => { event.preventDefault(); void send(); });
+  query('stop').addEventListener('click', () => stopResponse('conversation-stopped'));
+
+  const api = {
+    schema: COMPANION_SCHEMA,
+    state,
+    characters: COMPANION_CHARACTERS,
+    refresh: snapshot,
+    select,
+    place,
+    send,
+    stop: stopResponse,
+    provider: () => readConversationProvider(scope),
+    destroy() { stopResponse('pagehide'); if (state.timer) scope.clearInterval?.(state.timer); scope.removeEventListener?.('vivo:phone-local-ready', refreshOnLocalReady); scope.removeEventListener?.('vivo:phone-statechange', refreshOnLocalStateChange); shell.remove(); worldContext.remove(); if (scope.VivoCompanion === api) delete scope.VivoCompanion; },
+  };
+  function refreshOnLocalReady() {
+    snapshot().catch(error => setReaction(`World read failed: ${error?.message || String(error)}`, 'error'));
+  }
+  function refreshOnLocalStateChange() {
+    snapshot().catch(error => setReaction(`World read failed: ${error?.message || String(error)}`, 'error'));
+  }
+  scope.VivoCompanion = api;
+  render();
+  scope.addEventListener?.('vivo:phone-local-ready', refreshOnLocalReady);
+  scope.addEventListener?.('vivo:phone-statechange', refreshOnLocalStateChange);
+  state.timer = scope.setInterval?.(() => { if (scope.VivoPhoneEngine?.active) snapshot().catch(error => setReaction(`World read failed: ${error?.message || String(error)}`, 'error')); }, pollMs) || null;
+  scope.addEventListener?.('pagehide', () => stopResponse('pagehide'), { once: true });
+  return api;
+}
+
+function autoMount(scope = globalThis) {
+  if (!scope.document?.getElementById) return;
+  const attempt = () => {
+    if (scope.VivoCompanion?.schema === COMPANION_SCHEMA) return true;
+    const mounted = mountVivoCompanion({ documentRoot: scope.document, scope });
+    return Boolean(mounted);
+  };
+  if (attempt()) return;
+  const timer = scope.setInterval(() => { if (attempt()) scope.clearInterval(timer); }, 80);
+  scope.setTimeout(() => scope.clearInterval(timer), 10_000);
+}
+
+autoMount();

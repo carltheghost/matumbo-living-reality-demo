@@ -1087,6 +1087,7 @@ async function startLocal() {
     const state = await engine.snapshot();
     renderedSnapshot = snapshotMarker(state);
     renderEye(state);
+    window.dispatchEvent(new CustomEvent('vivo:phone-local-ready', { detail: { worldId: state.snapshot.worldId, branchId: state.branchId } }));
     economyContext?.initialize();
     syncEconomyContext();
     await authority?.syncLocal(state);
@@ -1096,7 +1097,10 @@ async function startLocal() {
   status("Starting the local worker and opening this phone’s saved Vivo world…");
   engine = new PhoneEngineClient();
   engine.addEventListener('statechange', event => {
-    if (event.detail?.state && localMode) enqueueSnapshot(() => event.detail.state, { stateEvent: event.detail.reason }).catch(() => {});
+    if (event.detail?.state && localMode) {
+      window.dispatchEvent(new CustomEvent('vivo:phone-statechange', { detail: { reason: event.detail.reason || null } }));
+      enqueueSnapshot(() => event.detail.state, { stateEvent: event.detail.reason }).catch(() => {});
+    }
     if (event.detail?.state && authority) authority.syncLocal(event.detail.state).catch(() => {});
     if (event.detail?.reason === 'step-error') status(event.detail.error || 'Local material step stopped safely.');
     if (event.detail?.reason === 'persistence-failed') status(`Local Vivo state changed but was not saved: ${event.detail.state?.persistence?.error || 'storage failed'}. Retry remains available.`);
@@ -1125,6 +1129,7 @@ async function startLocal() {
   authority = new PhoneAuthorityAdapter({ engine, onState: updatePhoneAuthorityUI });
   await authority.syncLocal(state);
   localMode = true; updateLocalGrants(); document.body.classList.add('phone-local'); renderedSnapshot = snapshotMarker(state); renderEye(state);
+  window.dispatchEvent(new CustomEvent('vivo:phone-local-ready', { detail: { worldId: state.snapshot.worldId, branchId: state.branchId } }));
   economyContext?.initialize();
   syncEconomyContext();
   $('welcome').hidden = true; $('toolbar').hidden = false;
@@ -1504,7 +1509,7 @@ window.VivaPhoneEngine = Object.freeze({
   // direct worker snapshot can be newer than the preview model while the
   // sparse solver is still stepping, which makes an active preview appear to
   // drift from the coordinate it is actually based on.
-  snapshot: () => refreshSnapshot({ externalSnapshot: true }), translate: (...args) => engine?.translate(...args), applyLocalEdit: (...args) => engine?.applyLocalEdit(...args), applyLocalTransform: (...args) => engine?.applyLocalTransform(...args), setEye: patch => engine?.setEye(patch),
+  snapshot: () => refreshSnapshot({ externalSnapshot: true }), select: id => selectPhoneEntity(id, { announce: false }), translate: (...args) => engine?.translate(...args), applyLocalEdit: (...args) => engine?.applyLocalEdit(...args), applyLocalTransform: (...args) => engine?.applyLocalTransform(...args), setEye: patch => engine?.setEye(patch),
   materialSnapshot: () => engine?.materialSnapshot(),
   materialBegin: payload => engine?.materialBegin(payload),
   materialTarget: payload => engine?.materialTarget(payload),
