@@ -342,6 +342,12 @@ export class LocalVivoEngine {
     if (!changed) {
       const unchanged = { changed: false, revision: entity.revision };
       if (includeTransformResult) { unchanged.identity = { ...scope, baseRevision, revision: entity.revision }; unchanged.geometry = clone(entity.geometry); }
+      if (operationId) {
+        const record = { operationId, scope: operationScope(scope), fingerprint, result: clone(unchanged), identity: { ...scope, baseRevision, revision: entity.revision }, geometry: clone(entity.geometry) };
+        this.appliedOperations.set(operationId, record);
+        this.world.localOperationResults = [...this.appliedOperations.values()].slice(-128).map(item => clone(item));
+        return this.queuePersist().then(() => unchanged);
+      }
       return Promise.resolve(unchanged);
     }
     entity.q = nextQ;

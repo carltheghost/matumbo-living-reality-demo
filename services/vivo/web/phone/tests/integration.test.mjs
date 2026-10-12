@@ -30,6 +30,11 @@ test('the Android Companion extends the canonical GitHub Pages UI at runtime', a
   assert.match(bootstrap, /LocalAgentController/);
   assert.match(bootstrap, /phoneRegisterAgent/);
   assert.match(bootstrap, /agentController\.setFabric/);
+  assert.match(bootstrap, /window\.VivaPhoneAgentAdmin/);
+  assert.match(bootstrap, /role separation within the documented/);
+  assert.match(bootstrap, /maxlength=\"154\"/);
+  const agentSurface = bootstrap.slice(bootstrap.indexOf('window.VivaAgentTools ='), bootstrap.indexOf('window.VivaPhoneAgentAdmin ='));
+  assert.doesNotMatch(agentSurface, /register:|reenable:/);
   assert.match(tools, /Registered local agent session required/);
   assert.match(bridge, /agentController\.invokeTool/);
   assert.doesNotMatch(bridge, /api\.translate/);

@@ -155,16 +155,18 @@ def dispatch_pointer(page, kind: str, pointer_id: int, x: float, y: float) -> No
 def run_desktop(page, route: str) -> dict:
     enter_local(page, route, "vivo.phone.agent-stop-browser-desktop")
     open_agent_panel(page)
-    page.wait_for_function("() => Boolean(window.VivaAgentTools && window.VivaAgentTools.register)")
+    page.wait_for_function(
+        "() => Boolean(window.VivaAgentTools && window.VivaPhoneAgentAdmin && !window.VivaAgentTools.register && !window.VivaAgentTools.reenable)"
+    )
     registered = page.evaluate(
         """
         () => ({
-          worker: window.VivaAgentTools.register({ sourceId: 'worker', capabilities: ['world.read', 'world.edit'] }),
-          workerTwo: window.VivaAgentTools.register({ sourceId: 'worker:2', capabilities: ['world.read', 'world.edit'] }),
+          worker: window.VivaPhoneAgentAdmin.register({ sourceId: 'worker', capabilities: ['world.read', 'world.edit'] }),
+          workerTwo: window.VivaPhoneAgentAdmin.register({ sourceId: 'worker:2', capabilities: ['world.read', 'world.edit'] }),
         })
         """
     )
-    assert {item["sourceId"] for item in page.evaluate("() => window.VivaAgentTools.agents()")} == {"worker", "worker:2"}
+    assert {item["sourceId"] for item in page.evaluate("() => window.VivaPhoneAgentAdmin.agents()")} == {"worker", "worker:2"}
     assert page.locator("#phoneAgentSessions .agent-stop").count() == 2
 
     point = page.evaluate(
@@ -182,13 +184,13 @@ def run_desktop(page, route: str) -> dict:
     page.evaluate(
         """
         ({ worker, workerTwo }) => {
-          window.VivaAgentTools.beginContact(worker.sessionId, {
+          window.VivaPhoneAgentAdmin.beginContact(worker.sessionId, {
             contactId: 'same-object', objectId: 'relic', canonicalPoint: [0, 0, 0, 0], gesture: 'grab'
           });
-          window.VivaAgentTools.beginContact(workerTwo.sessionId, {
+          window.VivaPhoneAgentAdmin.beginContact(workerTwo.sessionId, {
             contactId: 'same-object', objectId: 'relic', canonicalPoint: [1, 0, 0, 0], gesture: 'grab'
           });
-          window.VivaAgentTools.beginContact(workerTwo.sessionId, {
+          window.VivaPhoneAgentAdmin.beginContact(workerTwo.sessionId, {
             contactId: 'other-object', objectId: 'workpiece', canonicalPoint: [0, 0, 0, 0], gesture: 'grab'
           });
         }
@@ -202,12 +204,12 @@ def run_desktop(page, route: str) -> dict:
     )
     assert {item["source"] for item in before_stop} == {"touch:77", "agent:worker", "agent:worker:2"}, before_stop
 
-    stopped = page.evaluate("session => window.VivaAgentTools.stop(session, 'user-stop')", registered["worker"]["sessionId"])
+    stopped = page.evaluate("session => window.VivaPhoneAgentAdmin.stop(session, 'user-stop')", registered["worker"]["sessionId"])
     after_stop = page.evaluate(
         """
         () => ({
           contacts: window.VivaPhoneEngine.interaction().contacts.map(item => ({ source: item.source, objectId: item.objectId })),
-          agents: window.VivaAgentTools.agents(),
+          agents: window.VivaPhoneAgentAdmin.agents(),
           status: document.querySelector('#phoneAgentControlStatus').textContent,
         })
         """,
@@ -223,16 +225,16 @@ def run_desktop(page, route: str) -> dict:
     # turn the stopped worker back on.
     page.locator("[data-local-cap='world.edit']").uncheck(force=True)
     page.locator("[data-local-cap='world.edit']").check(force=True)
-    refreshed = page.evaluate("() => window.VivaAgentTools.agents().find(item => item.sourceId === 'worker')")
+    refreshed = page.evaluate("() => window.VivaPhoneAgentAdmin.agents().find(item => item.sourceId === 'worker')")
     assert refreshed["status"] == "stopped", refreshed
 
     # End the surviving agent constraints selectively, then exercise an
     # explicit fresh generation and real q[3]/q[10] acceptance.
     page.evaluate(
-        "({ workerTwo }) => window.VivaAgentTools.stop(workerTwo.sessionId, 'user-stop')",
+        "({ workerTwo }) => window.VivaPhoneAgentAdmin.stop(workerTwo.sessionId, 'user-stop')",
         registered,
     )
-    fresh_worker = page.evaluate("() => window.VivaAgentTools.reenable('worker')")
+    fresh_worker = page.evaluate("() => window.VivaPhoneAgentAdmin.reenable('worker')")
     assert fresh_worker["generation"] == registered["worker"]["generation"] + 1, fresh_worker
     stale_error = page.evaluate(
         "async session => { try { await window.VivaAgentTools.invokeFor(session, 'vivo.world.edit', {}); return ''; } catch (error) { return error.message; } }",
@@ -245,7 +247,7 @@ def run_desktop(page, route: str) -> dict:
     assert result_q3["status"] == "accepted", result_q3
     assert abs(edit_q3["after"][3] - edit_q3["before"][3] - 0.22) < 0.05, edit_q3
 
-    fresh_worker_two = page.evaluate("() => window.VivaAgentTools.reenable('worker:2')")
+    fresh_worker_two = page.evaluate("() => window.VivaPhoneAgentAdmin.reenable('worker:2')")
     # Switch the registered local Eye into the disconnected 11D nested space
     # so q[10] is exercised without a solver clock changing its CAS under us.
     page.locator("#phoneFieldEntity").select_option("portal")

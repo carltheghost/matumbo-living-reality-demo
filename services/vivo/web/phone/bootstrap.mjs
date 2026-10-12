@@ -823,8 +823,8 @@ function addPhoneSurface() {
     <button id="phoneRefreshTools">Refresh Android Companion grants</button><pre id="phoneAgentTools" class="muted" aria-live="polite"></pre>
     <p class="muted">Native camera permission, accessibility, notifications, files and projection are controlled in the Companion. Accessibility actions remain user-revocable; passwords are never returned or logged.</p>
     <hr><h3>Local agent stop / revoke</h3>
-    <p class="muted">This is an in-app local control. Register an exact source, then stop only that source. Stopped work is fenced; grant refresh never silently re-enables it.</p>
-    <label>Registered source<input id="phoneAgentSource" maxlength="160" value="worker" autocomplete="off" spellcheck="false"></label>
+    <p class="muted">This is an in-app local control. The page user registers, stops and explicitly re-enables exact sources; agent-facing tools cannot acquire a new session. Stopped work is fenced; grant refresh never silently re-enables it. Same-page role separation is not Android/browser permission security.</p>
+    <label>Registered source<input id="phoneAgentSource" maxlength="154" value="worker" autocomplete="off" spellcheck="false"></label>
     <button id="phoneRegisterAgent" type="button">Register / explicitly re-enable source</button>
     <p id="phoneAgentControlStatus" class="muted" role="status" aria-live="polite">No registered local agents.</p>
     <div id="phoneAgentSessions" class="agent-session-list" aria-live="polite"></div>`;
@@ -1308,11 +1308,17 @@ const pointerEnd = event => {
 };
 for (const name of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.addEventListener(name, pointerEnd, { capture: true });
 
+  // This is an agent-facing capability surface. Registration, stop and
+  // re-enable stay on the separate user-admin surface below. Both objects
+  // live in the same page, so this is role separation within the documented
+  // local trust model, not browser/Android OS permission security.
   window.VivaAgentTools = Object.freeze({
     list: () => registry.list(),
     listFor: session => registry.listFor(session),
     invoke: (name, args, context) => registry.invoke(name, args, context),
     invokeFor: (session, name, args) => registry.invokeFor(session, name, args),
+  });
+  window.VivaPhoneAgentAdmin = Object.freeze({
     register: spec => registry.registerAgent(spec),
     stop: (session, reason) => registry.stopAgent(session, reason),
     reenable: sourceOrSession => registry.reenableAgent(sourceOrSession),
