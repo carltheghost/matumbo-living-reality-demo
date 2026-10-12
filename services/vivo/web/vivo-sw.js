@@ -1,5 +1,5 @@
 /* Static app shell cache only. API traffic, camera frames and shared writes are never cached. */
-const SHELL_CACHE = 'vivo-phone-shell-2026-10-12-v6';
+const SHELL_CACHE = 'vivo-phone-shell-2026-10-12-v7';
 const HAND_CACHE = 'vivo-hand-tracker-2026-10';
 const SHELL = [
   'index.html', 'shared.css', 'shared.js', 'render.js', 'camera.js', 'hand-worker.js',

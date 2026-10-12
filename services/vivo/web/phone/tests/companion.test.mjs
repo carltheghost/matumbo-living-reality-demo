@@ -23,6 +23,15 @@ test('companion roster is the existing world identity set', () => {
   assert.deepEqual(placementTarget('portal', 6), [0.66, 0.06, 0.25, -0.12, 0, 0]);
 });
 
+test('each existing identity carries a distinct embodied silhouette and presence state', () => {
+  assert.deepEqual(COMPANION_CHARACTERS.map(character => character.silhouette), ['sentinel', 'maker', 'wayfinder']);
+  for (const character of COMPANION_CHARACTERS) {
+    assert.match(character.idlePresence, /[A-Z]/);
+    assert.match(character.attentionPresence, /[A-Z]/);
+    assert.match(character.reactionPresence, /[A-Z]/);
+  }
+});
+
 test('placement request stays scoped to the active root Eye and full-dimensional CAS', () => {
   const envelope = makeEnvelope();
   const request = buildPlacementRequest(envelope, 'workpiece');

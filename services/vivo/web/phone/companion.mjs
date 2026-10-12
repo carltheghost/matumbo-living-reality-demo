@@ -22,6 +22,10 @@ export const COMPANION_CHARACTERS = Object.freeze([
     prompt: 'Hold the thread of this world.',
     color: '#79adff',
     accent: '#b7d5ff',
+    silhouette: 'sentinel',
+    idlePresence: 'STILL / LISTENING',
+    attentionPresence: 'EYES ON YOU',
+    reactionPresence: 'FIELD ANSWERS',
   }),
   Object.freeze({
     id: 'workpiece',
@@ -33,6 +37,10 @@ export const COMPANION_CHARACTERS = Object.freeze([
     prompt: 'Give the material a direction.',
     color: '#f3a35b',
     accent: '#ffd0a4',
+    silhouette: 'maker',
+    idlePresence: 'HANDS AT REST',
+    attentionPresence: 'READY TO MAKE',
+    reactionPresence: 'MATERIAL MOVES',
   }),
   Object.freeze({
     id: 'portal',
@@ -44,6 +52,10 @@ export const COMPANION_CHARACTERS = Object.freeze([
     prompt: 'Leave a way back through.',
     color: '#66dfad',
     accent: '#b8f7d8',
+    silhouette: 'wayfinder',
+    idlePresence: 'DOOR AJAR',
+    attentionPresence: 'WAY FOUND',
+    reactionPresence: 'PATH OPEN',
   }),
 ]);
 
@@ -154,12 +166,26 @@ function avatar(documentRoot, character, large = false) {
   const shell = element(documentRoot, 'span', `companion-avatar companion-avatar--${character.id}${large ? ' companion-avatar--large' : ''}`);
   shell.setAttribute('aria-hidden', 'true');
   const halo = element(documentRoot, 'span', 'companion-avatar-halo');
+  const orbit = element(documentRoot, 'span', 'companion-avatar-orbit');
+  const ground = element(documentRoot, 'span', 'companion-avatar-ground');
+  const anchor = element(documentRoot, 'span', 'companion-avatar-anchor');
   const ring = element(documentRoot, 'span', 'companion-avatar-ring');
   const core = element(documentRoot, 'span', 'companion-avatar-core');
+  const body = element(documentRoot, 'span', 'companion-avatar-body');
+  const shoulders = element(documentRoot, 'span', 'companion-avatar-shoulders');
+  const crest = element(documentRoot, 'span', 'companion-avatar-crest');
+  const head = element(documentRoot, 'span', 'companion-avatar-head');
   const face = element(documentRoot, 'span', 'companion-avatar-face');
-  face.append(element(documentRoot, 'i', 'companion-avatar-eye'), element(documentRoot, 'i', 'companion-avatar-eye'));
-  core.append(face);
-  shell.append(halo, ring, core);
+  const browLeft = element(documentRoot, 'i', 'companion-avatar-brow companion-avatar-brow--left');
+  const browRight = element(documentRoot, 'i', 'companion-avatar-brow companion-avatar-brow--right');
+  const eyeLeft = element(documentRoot, 'i', 'companion-avatar-eye companion-avatar-eye--left');
+  const eyeRight = element(documentRoot, 'i', 'companion-avatar-eye companion-avatar-eye--right');
+  const mouth = element(documentRoot, 'i', 'companion-avatar-mouth');
+  face.append(browLeft, browRight, eyeLeft, eyeRight, mouth);
+  head.append(face);
+  body.append(shoulders, crest, head);
+  core.append(body);
+  shell.append(halo, orbit, ground, anchor, ring, core);
   if (character.id === 'portal') shell.append(element(documentRoot, 'span', 'companion-avatar-gate'));
   return shell;
 }
@@ -206,16 +232,17 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
   shell.setAttribute('aria-labelledby', 'vivoCompanionTitle');
   shell.innerHTML = `
     <div class="companion-kicker"><span class="eyebrow">VIVO / EMBODIED COMPANION</span><span class="companion-live-state" data-companion="persistence">LOCAL · READY</span></div>
-    <div class="companion-heading"><div><h2 id="vivoCompanionTitle">Bring one close.</h2><p>Choose a living identity from this world, place it, then return to find it where you left it.</p></div><button type="button" class="companion-minimize" data-companion="focus" aria-label="Focus the world">↗</button></div>
+    <div class="companion-heading"><div><h2 id="vivoCompanionTitle">Bring one close.</h2><p>Choose an identity. Place it. Return to find the same occupant where you left it.</p></div><button type="button" class="companion-minimize" data-companion="focus" aria-label="Focus the world">↗</button></div>
+    <div class="companion-flow" aria-label="Vivo companion flow"><span class="is-current">01 / CHOOSE</span><i></i><span>02 / PLACE</span><i></i><span>03 / RETURN</span></div>
     <div class="companion-character-grid" data-companion="roster" role="listbox" aria-label="Choose an embodied world identity"></div>
     <div class="companion-presence" data-companion="presence">
       <div class="companion-avatar-stage" data-companion="avatar-stage"></div>
-      <div class="companion-detail"><span class="companion-detail-label" data-companion="role"></span><h3 data-companion="name"></h3><p data-companion="description"></p><div class="companion-coordinates" data-companion="coordinates"></div></div>
+      <div class="companion-detail"><div class="companion-presence-meta"><span class="companion-presence-state" data-companion="presence-state"></span><span class="companion-detail-label" data-companion="role"></span></div><h3 data-companion="name"></h3><p data-companion="description"></p><div class="companion-anchor-copy" data-companion="anchor-copy"></div><div class="companion-coordinates" data-companion="coordinates"></div></div>
     </div>
-    <div class="companion-actions"><button type="button" class="companion-primary" data-companion="place">Place in world</button><button type="button" data-companion="select-world">Select on field</button></div>
+    <div class="companion-actions"><button type="button" class="companion-primary" data-companion="place">Place / re-place</button><button type="button" data-companion="select-world">Show in field</button></div>
     <div class="companion-reaction" data-companion="reaction" role="status" aria-live="polite"></div>
     <section class="companion-conversation" aria-labelledby="companionConversationTitle">
-      <div class="companion-conversation-heading"><div><span class="companion-detail-label">CONVERSATION</span><h3 id="companionConversationTitle">A real voice, when connected.</h3></div><span class="companion-provider-badge" data-companion="provider-badge">BACKEND NOT CONNECTED</span></div>
+      <div class="companion-conversation-heading"><div><span class="companion-detail-label">CONVERSATION</span><h3 id="companionConversationTitle">Talk, when connected.</h3></div><span class="companion-provider-badge" data-companion="provider-badge">BACKEND NOT CONNECTED</span></div>
       <div class="companion-chat-log" data-companion="chat-log" aria-live="polite"></div>
       <form class="companion-chat-form" data-companion="chat-form"><input data-companion="chat-input" maxlength="400" autocomplete="off" placeholder="Ask about this place…" aria-label="Message the selected companion"><button type="submit" class="companion-send" data-companion="send">Send</button><button type="button" class="companion-stop" data-companion="stop" hidden>Stop</button></form>
       <p class="companion-chat-note" data-companion="chat-note"></p>
@@ -237,6 +264,8 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
     envelope: null,
     selectedId: initialSelection(scope),
     reaction: 'Select an identity to wake its presence.',
+    presence: 'idle',
+    presenceTimer: null,
     messages: new Map(),
     placementBusy: false,
     responseBusy: false,
@@ -248,6 +277,27 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
   };
 
   function selected() { return getCompanion(state.selectedId); }
+  function presenceCopy(character = selected()) {
+    const key = state.presence === 'attention'
+      ? 'attentionPresence'
+      : state.presence === 'reacting'
+        ? 'reactionPresence'
+        : 'idlePresence';
+    return character[key] || 'PRESENT IN THIS WORLD';
+  }
+  function setPresence(next, holdMs = 0) {
+    const allowed = new Set(['idle', 'attention', 'reacting']);
+    state.presence = allowed.has(next) ? next : 'idle';
+    if (state.presenceTimer) scope.clearTimeout?.(state.presenceTimer);
+    state.presenceTimer = null;
+    if (holdMs > 0) {
+      state.presenceTimer = scope.setTimeout?.(() => {
+        state.presence = 'idle';
+        state.presenceTimer = null;
+        render();
+      }, holdMs) || null;
+    }
+  }
   function selectWorldEntity(entityId) {
     if (scope.VivaPhoneEngine?.active && typeof scope.VivaPhoneEngine.select === 'function') return scope.VivaPhoneEngine.select(entityId);
     return scope.VivaShared?.select?.(entityId);
@@ -304,6 +354,7 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
     badge.textContent = provider ? 'LIVE PROVIDER READY' : 'BACKEND NOT CONNECTED';
     badge.dataset.connected = provider ? 'true' : 'false';
     const input = query('chat-input'), send = query('send'), stop = query('stop');
+    input.placeholder = provider ? `Ask ${character.name} about this place…` : 'Conversation unavailable';
     input.disabled = !provider || state.responseBusy;
     send.disabled = !provider || state.responseBusy;
     stop.hidden = !state.responseBusy;
@@ -317,10 +368,15 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
     const entity = currentEntity(state.envelope, character);
     const activeEye = state.envelope?.eyes?.[state.envelope?.currentEyeId];
     const activeRoot = activeEye?.spaceId === state.envelope?.snapshot?.rootSpaceId;
+    shell.dataset.presence = state.presence;
     query('avatar-stage').replaceChildren(avatar(documentRoot, character, true));
     query('role').textContent = character.role.toUpperCase();
     query('name').textContent = character.name;
     query('description').textContent = character.description;
+    query('presence-state').textContent = presenceCopy(character);
+    query('anchor-copy').textContent = activeRoot
+      ? `${activeEye?.spaceId || 'root'} EYE · ${entity?.q?.length || 0}D ANCHOR`
+      : `${activeEye?.spaceId || 'unknown'} SPACE · RETURN TO ROOT`;
     query('coordinates').textContent = entity
       ? `${entity.id} · ${activeEye?.spaceId || 'unknown space'} · ${entity.q.slice(0, 4).map((value, axis) => `x${axis + 1} ${finite(value).toFixed(2)}`).join(' · ')}`
       : activeRoot ? 'Identity unavailable in this saved world.' : 'Return the Eye to root to place this identity.';
@@ -343,7 +399,8 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
     state.selectedId = id;
     persistSelection(scope, id);
     selectWorldEntity(getCompanion(id).entityId);
-    if (announce) setReaction(`${getCompanion(id).name} is ready. Place it in the world when you are ready.`);
+    setPresence('attention', 2600);
+    if (announce) setReaction(`${getCompanion(id).name} is looking back. Place it in the world when you are ready.`);
     render();
     return true;
   }
@@ -374,12 +431,15 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
     if (request.delta.every(value => Math.abs(value) < 1e-9)) {
       setReaction(`${selected().name} is already in its saved place.`, 'success'); render(); return { ...request, unchanged: true };
     }
-    state.placementBusy = true; render();
+    state.placementBusy = true;
+    setPresence('attention');
+    render();
     try {
       const engine = scope.VivaPhoneEngine;
       const operationId = `companion-place:${request.worldId}:${request.branchId || 'local'}:${request.characterId}:r${request.expected.baseRevision}`;
       const result = await engine.applyLocalTransform(request.entityId, request.delta, request.geometry, { ...request.expected, operationId });
       const next = await snapshot();
+      setPresence('reacting', 3600);
       setReaction(`${selected().name} is in the world. The accepted placement was saved locally.`, 'success');
       shell.classList.remove('has-reaction'); void shell.offsetWidth; shell.classList.add('has-reaction');
       render(next);
@@ -424,12 +484,14 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
   query('place').addEventListener('click', () => { void place(); });
   query('select-world').addEventListener('click', () => {
     selectWorldEntity(selected().entityId);
+    setPresence('attention', 2400);
     setReaction(`${selected().name} is selected on the field. Its world coordinates remain visible above.`, 'success');
     render();
   });
   query('focus').addEventListener('click', () => {
     selectWorldEntity(selected().entityId);
     documentRoot.getElementById('world')?.focus?.({ preventScroll: true });
+    setPresence('attention', 2400);
     setReaction('World focus restored. Touch and dimensional controls remain available below.', 'success');
     render();
   });
@@ -446,7 +508,7 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
     send,
     stop: stopResponse,
     provider: () => readConversationProvider(scope),
-    destroy() { stopResponse('pagehide'); if (state.timer) scope.clearInterval?.(state.timer); scope.removeEventListener?.('vivo:phone-local-ready', refreshOnLocalReady); scope.removeEventListener?.('vivo:phone-statechange', refreshOnLocalStateChange); shell.remove(); worldContext.remove(); if (scope.VivoCompanion === api) delete scope.VivoCompanion; },
+    destroy() { stopResponse('pagehide'); if (state.timer) scope.clearInterval?.(state.timer); if (state.presenceTimer) scope.clearTimeout?.(state.presenceTimer); scope.removeEventListener?.('vivo:phone-local-ready', refreshOnLocalReady); scope.removeEventListener?.('vivo:phone-statechange', refreshOnLocalStateChange); shell.remove(); worldContext.remove(); if (scope.VivoCompanion === api) delete scope.VivoCompanion; },
   };
   function refreshOnLocalReady() {
     snapshot().catch(error => setReaction(`World read failed: ${error?.message || String(error)}`, 'error'));
