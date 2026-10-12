@@ -1,28 +1,122 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#07171d"><title>maTumbo Viva · Shared Workshop</title><link rel="stylesheet" href="../shared.css"></head><body>
-<video id="cameraVideo" playsinline muted></video><canvas id="world"></canvas><canvas id="overlay"></canvas>
-<header><div class="brand"><span class="mark">∞</span><div>maTumbo <b>Viva</b><small>SHARED WORKSHOP · 0.8.1</small></div></div><button id="connection" class="pill">Not connected</button></header>
-<div class="world-caption" id="worldCaption"><span id="worldName">One place. Different points of view.</span><div><b id="dimensionBadge">4S + time</b><span id="geometryBadge">Native coordinates</span></div></div>
-<div id="status" role="status" aria-live="polite">Create a room or join with an invitation.</div>
-<div id="selection" hidden><b id="selectedName">Relic</b><span id="selectedCoords"></span></div>
-<div class="toolbar" id="toolbar" hidden><button data-panel="move">↗ Move</button><button data-panel="eye">◎ Eye</button><button data-panel="camera">◉ Camera</button><button data-panel="neural">⋈ Field</button><button data-panel="people">♧ Share</button><button data-panel="record">⏺ Record</button></div>
-<div class="metrics" id="metrics">Camera off · no microphone · no frame uploads</div>
-<section id="welcome" class="welcome">
-  <span class="eyebrow">A SHARED PLACE, NOT A SHARED PICTURE</span><h1>Meet inside<br>the mathematics.</h1>
-  <p>Move the same objects with another person. Explore curved spaces. Watch a learned local rule grow a guidance field.</p>
-  <label>Your display name<input id="displayName" maxlength="32" value="Tumbo" autocomplete="nickname"></label>
-  <div class="row"><label>Space<select id="spaceKind"><option value="flat">Flat workshop</option><option value="sphere">Sphere atlas × extra axes</option><option value="torus">Torus × extra axes</option><option value="mobius">Möbius × extra axes</option><option value="custom">Custom metric chart</option></select></label><label>Spatial axes<select id="createD"></select></label></div>
-  <label id="metricInputLabel" hidden>Metric matrix (JSON, safe expressions)<textarea id="metricInput" rows="3">[["1+0.25*sin(q0)**2",0,0],[0,1,0],[0,0,1]]</textarea></label>
-  <label id="keyLabel" hidden>Server creation key<input id="createKey" type="password" autocomplete="off"></label>
-  <button id="createRoom" class="primary" disabled>Create shared space</button><button id="joinRoom" class="primary" hidden disabled>Join this invited space</button>
-  <p id="serviceReady" role="status">Checking the shared server…</p><p id="inviteNote" class="muted"></p><p class="muted">Only a name, room state and voluntary observer position are shared. Invitation links grant access. Do not share an owner link.</p>
-  <a href="../studio.html">Return to existing Viva Studio 0.7 ↗</a>
-</section>
-<dialog id="panel"><div class="sheet-top"><h2 id="panelTitle">Controls</h2><button id="closePanel" aria-label="Close controls">×</button></div>
-<div class="sheet" data-sheet="move"><p>Tap an object, then drag it. A gold handle means the server accepted your grab. Touch and hand input use the same ownership rules.</p><label>Movement target<select id="moveTarget"><option value="object">Selected object</option><option value="observer">Your observer</option></select></label><label>Active spatial axis<select id="moveAxis"></select></label><div class="row"><button id="axisMinus">− along axis</button><button id="axisPlus">+ along axis</button></div><button id="releaseGrab">Release object</button><p class="muted">Flat spaces: full-dimensional ball contacts. Curved spaces: chart-local handles with metric/geodesic movement; solid curved-body collision is not implemented.</p></div>
-<div class="sheet" data-sheet="eye"><p>The Eye belongs to you. Changing it does not change your collaborator’s viewpoint.</p><label>View<select id="viewMode"><option value="slice">Local slice</option><option value="overview">Overview / hidden objects as ghosts</option></select></label><label>Hidden-axis slice<select id="sliceAxis"></select></label><input id="sliceValue" type="range" min="-3" max="3" step=".02" value="0"><output id="sliceReadout">0</output><div class="row"><button id="homeView">Frame the space</button><button id="followSelected">Meet selected object</button></div><p class="muted">Drag empty space to orbit, pinch or scroll to zoom. Observer axes are explicit. Overview ghosts are a map, not full-dimensional eyesight.</p></div>
-<div class="sheet" data-sheet="camera"><p><b>Camera overlay, not world-anchored AR.</b> Live hand recognition runs locally in a worker. No camera frames are sent to collaborators.</p><div class="row"><button id="frontCamera">Front + hands</button><button id="backCamera">Back + hands</button></div><button id="previewCamera">Camera only / touch</button><button id="stopCamera">Stop camera / release</button><p id="cameraState" role="status">OFF</p><label>Display profile<select id="visibility"><option value="auto">Auto visibility</option><option value="balanced">Balanced</option><option value="bright">Bright / glare</option><option value="dark">Dark / low glow</option></select></label><div class="row"><button id="torch">Toggle rear light</button><button id="exposure">Reduce exposure</button></div><label class="check"><input type="checkbox" id="skeleton" checked> Show hand landmarks</label><p class="muted">Show an open hand first, point, then pinch and move. Missing/stale hands release the object. Darkness does not create usable sensor information. Touch stays available. Eye means observer navigation, not calibrated eye tracking.</p></div>
-<div class="sheet" data-sheet="neural"><h3>A room that responds locally</h3><p>The trained rule estimates movement cost. Neighbor-to-neighbor updates grow a guidance field toward a goal. Blocking a cell forces the field to rebuild.</p><label>Rule<select id="modelMode"><option value="learned">Learned local costs</option><option value="analytic">Analytic teacher / comparison</option><option value="off">Off / ablation</option></select></label><div class="row"><button id="chooseGoal">Tap a destination</button><button id="chooseBlock">Tap to block / unblock</button></div><button id="chooseCrowd">Tap to raise local crowd cost</button><button id="routeFromObject">Trace route from selected object</button><p id="neuralState"></p><p class="muted">369 trained parameters, synthetic task, pinned model. Local organization is emergent from repeated updates; no general intelligence, free-form room generation or online retraining is claimed. No rule moves your work without an edit.</p></div>
-<div class="sheet" data-sheet="people"><div id="peopleList"></div><label>Invitation role<select id="inviteRole"><option value="editor">Collaborator / editor</option><option value="viewer">Viewer only</option></select></label><button id="makeInvite">Create 24-hour invitation</button><textarea id="inviteLink" rows="3" readonly placeholder="Invitation appears here"></textarea><button id="copyInvite">Copy invitation</button><button id="revokeInvites">Revoke guest invitations</button><p class="muted">Links are bearer capabilities. Anyone with the link can use its role. HTTPS protects transport; the server can read shared object state. This is not end-to-end encryption.</p><button id="reconnect">Reconnect to current state</button><button id="leaveRoom">Leave shared space</button><a href="../studio.html">Existing Viva Studio ↗</a></div>
-<div class="sheet" data-sheet="record"><div class="row"><button id="checkpoint">Save checkpoint</button><button id="exportWorld">Export world JSON</button></div><button id="loadHistory">Load recorded history</button><input id="historySlider" type="range" min="0" max="0" value="0" disabled><p id="historyLabel">Live state. Retains latest 301 server checkpoints/events.</p><div class="row"><button id="exitReplay">Return to live</button><button id="exportHistory">Export retained history</button></div><hr><label class="check"><input type="checkbox" id="recordCamera"> Explicitly include camera in local recording</label><div class="row"><button id="recordVideo">Record video</button><button id="stopVideo">Stop video</button><button id="savePNG">Save PNG</button></div><a id="videoDownload" hidden>Save recorded video</a><p class="muted">No microphone. Camera inclusion is off by default. Video stops after 60 seconds, at 32 MB, on hiding the tab or leaving. Checkpoint JSON contains no invitation tokens.</p><button id="diagnostics">Save diagnostic report</button></div>
-</dialog>
-<script type="module" src="./static-shared.js"></script><script type="module" src="./bootstrap.mjs"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#07121d">
+  <meta name="description" content="A local-first field view into one persistent Vivo world.">
+  <title>Vivo World · Local field</title>
+  <link rel="stylesheet" href="../shared.css">
+  <link rel="stylesheet" href="./phone-world.css">
+</head>
+<body class="phone-world">
+  <video id="cameraVideo" playsinline muted></video>
+  <canvas id="world" aria-label="Vivo spatial world"></canvas>
+  <canvas id="overlay" aria-hidden="true"></canvas>
+
+  <header class="phone-header">
+    <div class="brand">
+      <span class="mark" aria-hidden="true">∞</span>
+      <div><b>Vivo</b><small>LOCAL FIELD / ONE WORLD</small></div>
+    </div>
+    <button id="connection" class="pill" type="button">Offline ready</button>
+  </header>
+
+  <div class="world-caption" id="worldCaption">
+    <span id="worldName">One field. Many ways to stand.</span>
+    <div><b id="dimensionBadge">4S + time</b><span id="geometryBadge">Native coordinates</span></div>
+  </div>
+
+  <div class="world-legend" aria-label="Information field legend">
+    <span><i class="tone-dot tone-place"></i>Place</span>
+    <span><i class="tone-dot tone-person"></i>Person</span>
+    <span><i class="tone-dot tone-memory"></i>Memory</span>
+  </div>
+
+  <div id="status" role="status" aria-live="polite">Enter the local world to wake its field.</div>
+  <div id="selection" hidden><b id="selectedName">Relic</b><span id="selectedCoords"></span></div>
+
+  <div class="toolbar" id="toolbar" hidden aria-label="World controls">
+    <button data-panel="move" type="button">Move</button>
+    <button data-panel="eye" type="button">Eye</button>
+    <button data-panel="camera" type="button">Camera</button>
+    <button data-panel="neural" type="button">Field</button>
+    <button data-panel="people" type="button">Share</button>
+    <button data-panel="record" type="button">Record</button>
+  </div>
+  <div class="metrics" id="metrics">Phone-local view · camera off · no frame uploads</div>
+
+  <section id="phoneFieldDock" class="field-dock" aria-label="Vivo field atlas">
+    <div class="field-dock-heading">
+      <div><span class="eyebrow">VIVO WORLD / FIELD VIEW</span><h2>Every plane at once</h2></div>
+      <span class="field-dock-state" id="phoneFieldStatus">Field atlas waits for the local phone engine.</span>
+    </div>
+    <p class="field-dock-intro">Places, people and memories wake as they come near your Eye. Tap a glowing field to select it; the atlas keeps the other planes in view.</p>
+    <div class="field-selection-row">
+      <label class="selected-field-label">Selected field<select id="phoneFieldEntity"></select></label>
+      <p id="phoneFieldPreview" class="field-preview-copy">No local edit preview. Preview never enters accepted history.</p>
+    </div>
+    <div id="phoneEconomyContext" class="context-slot" hidden aria-label="Selected object economy context">
+      <button id="phoneEconomyTrigger" type="button" aria-controls="phoneEconomyPanelHost" aria-expanded="false">Open object context</button>
+      <div id="phoneEconomyPanelHost" role="region" aria-label="Exchange, prediction market and contracts" aria-live="polite"></div>
+    </div>
+    <div class="field-actions" aria-label="Selected field actions">
+      <button id="phoneFieldPreviewMove" type="button">Preview move</button>
+      <button id="phoneFieldPreviewRotate" type="button">Preview turn</button>
+      <button id="phoneFieldPreviewMix" type="button">Preview mix</button>
+      <button id="phoneFieldApply" class="field-apply" type="button" disabled>Apply local edit</button>
+      <button id="phoneFieldDiscard" type="button" disabled>Discard preview</button>
+      <button id="phoneReleaseContacts" class="field-release" type="button">Release contacts</button>
+    </div>
+    <div class="field-query-row">
+      <label>Ask the field<input id="phoneFieldQuery" maxlength="80" placeholder="place, person, memory"></label>
+      <label>Wake threshold<input id="phoneFieldThreshold" type="range" min="0" max="1" step=".05" value=".2"></label>
+      <label>Layout<select id="phoneFieldLayout"><option value="gather">Coordinates</option><option value="ring">Ring</option><option value="row">Row</option></select></label>
+    </div>
+    <div class="field-axis-row" aria-label="Eye axes">
+      <span class="axis-label">Eye axes</span>
+      <label>A<select id="phoneFieldAxisA"></select></label>
+      <label>B<select id="phoneFieldAxisB"></select></label>
+      <label>C<select id="phoneFieldAxisC"></select></label>
+    </div>
+    <canvas id="phoneFieldAtlas" width="720" height="260" aria-label="All coordinate-plane field atlas"></canvas>
+    <details class="accepted-details"><summary>Accepted local history</summary><pre id="phoneFieldAccepted" class="muted"></pre></details>
+  </section>
+
+  <section id="welcome" class="welcome" aria-labelledby="welcomeTitle">
+    <div class="welcome-copy">
+      <span class="eyebrow">LOCAL FIELD / VIVO WORLD</span>
+      <h1 id="welcomeTitle">Step into<br><em>one world.</em></h1>
+      <p>Places, people and memories become visible where your field overlaps them. Your world stays on this device until you explicitly share it.</p>
+    </div>
+    <div class="welcome-card">
+      <label>Your display name<input id="displayName" maxlength="32" value="Tumbo" autocomplete="nickname"></label>
+      <div class="row"><label>Space<select id="spaceKind"><option value="flat">Flat workshop</option><option value="sphere">Sphere atlas × extra axes</option><option value="torus">Torus × extra axes</option><option value="mobius">Möbius × extra axes</option><option value="custom">Custom metric chart</option></select></label><label>Spatial axes<select id="createD"></select></label></div>
+      <label id="metricInputLabel" hidden>Metric matrix (JSON, safe expressions)<textarea id="metricInput" rows="3">[["1+0.25*sin(q0)**2",0,0],[0,1,0],[0,0,1]]</textarea></label>
+      <label id="keyLabel" hidden>Server creation key<input id="createKey" type="password" autocomplete="off"></label>
+      <div class="welcome-actions">
+        <button id="createRoom" class="primary" type="button" disabled>Create shared space</button>
+        <button id="joinRoom" class="primary" type="button" hidden disabled>Join this invited space</button>
+        <p id="serviceReady" role="status">Static local route · server is optional</p>
+        <p id="inviteNote" class="muted"></p>
+      </div>
+    </div>
+    <p class="welcome-footnote">Camera and hand input stay off until you start them. Offline edits are explicit and recoverable.</p>
+    <a href="../studio.html">Open the existing Viva Studio</a>
+  </section>
+
+  <dialog id="panel">
+    <div class="sheet-top"><div><span class="eyebrow">VIVO CONTROLS</span><h2 id="panelTitle">Controls</h2></div><button id="closePanel" aria-label="Close controls" type="button">×</button></div>
+    <div class="sheet" data-sheet="move"><p>Tap an object, then drag it. A gold handle means the server accepted your grab. Touch and hand input use the same ownership rules.</p><label>Movement target<select id="moveTarget"><option value="object">Selected object</option><option value="observer">Your observer</option></select></label><label>Active spatial axis<select id="moveAxis"></select></label><div class="row"><button id="axisMinus" type="button">− along axis</button><button id="axisPlus" type="button">+ along axis</button></div><button id="releaseGrab" type="button">Release object</button><p class="muted">Flat spaces: full-dimensional ball contacts. Curved spaces: chart-local handles with metric/geodesic movement; solid curved-body collision is not implemented.</p></div>
+    <div class="sheet" data-sheet="eye"><p>The Eye belongs to you. Changing it does not change your collaborator’s viewpoint.</p><label>View<select id="viewMode"><option value="slice">Local slice</option><option value="overview">Overview / hidden objects as ghosts</option></select></label><label>Hidden-axis slice<select id="sliceAxis"></select></label><input id="sliceValue" type="range" min="-3" max="3" step=".02" value="0"><output id="sliceReadout">0</output><div class="row"><button id="homeView" type="button">Frame the space</button><button id="followSelected" type="button">Meet selected object</button></div><p class="muted">Drag empty space to orbit, pinch or scroll to zoom. Observer axes are explicit. Overview ghosts are a map, not full-dimensional eyesight.</p></div>
+    <div class="sheet" data-sheet="camera"><p><b>Camera overlay, not world-anchored AR.</b> Live hand recognition runs locally in a worker. No camera frames are sent to collaborators.</p><div class="row"><button id="frontCamera" type="button">Front + hands</button><button id="backCamera" type="button">Back + hands</button></div><button id="previewCamera" type="button">Camera only / touch</button><button id="stopCamera" type="button">Stop camera / release</button><p id="cameraState" role="status">OFF</p><label>Display profile<select id="visibility"><option value="auto">Auto visibility</option><option value="balanced">Balanced</option><option value="bright">Bright / glare</option><option value="dark">Dark / low glow</option></select></label><div class="row"><button id="torch" type="button">Toggle rear light</button><button id="exposure" type="button">Reduce exposure</button></div><label class="check"><input type="checkbox" id="skeleton" checked> Show hand landmarks</label><p class="muted">Show an open hand first, point, then pinch and move. Missing/stale hands release the object. Darkness does not create usable sensor information. Touch stays available. Eye means observer navigation, not calibrated eye tracking.</p></div>
+    <div class="sheet" data-sheet="neural"><h3>A room that responds locally</h3><p>The trained rule estimates movement cost. Neighbor-to-neighbor updates grow a guidance field toward a goal. Blocking a cell forces the field to rebuild.</p><label>Rule<select id="modelMode"><option value="learned">Learned local costs</option><option value="analytic">Analytic teacher / comparison</option><option value="off">Off / ablation</option></select></label><div class="row"><button id="chooseGoal" type="button">Tap a destination</button><button id="chooseBlock" type="button">Tap to block / unblock</button></div><button id="chooseCrowd" type="button">Tap to raise local crowd cost</button><button id="routeFromObject" type="button">Trace route from selected object</button><p id="neuralState"></p><p class="muted">369 trained parameters, synthetic task, pinned model. Local organization is emergent from repeated updates; no general intelligence, free-form room generation or online retraining is claimed. No rule moves your work without an edit.</p></div>
+    <div class="sheet" data-sheet="people"><div id="peopleList"></div><label>Invitation role<select id="inviteRole"><option value="editor">Collaborator / editor</option><option value="viewer">Viewer only</option></select></label><button id="makeInvite" type="button">Create 24-hour invitation</button><textarea id="inviteLink" rows="3" readonly placeholder="Invitation appears here"></textarea><button id="copyInvite" type="button">Copy invitation</button><button id="revokeInvites" type="button">Revoke guest invitations</button><p class="muted">Links are bearer capabilities. Anyone with the link can use its role. HTTPS protects transport; the server can read shared object state. This is not end-to-end encryption.</p><button id="reconnect" type="button">Reconnect to current state</button><button id="leaveRoom" type="button">Leave shared space</button><a href="../studio.html">Existing Viva Studio</a></div>
+    <div class="sheet" data-sheet="record"><div class="row"><button id="checkpoint" type="button">Save checkpoint</button><button id="exportWorld" type="button">Export world JSON</button></div><button id="loadHistory" type="button">Load recorded history</button><input id="historySlider" type="range" min="0" max="0" value="0" disabled><p id="historyLabel">Live state. Retains latest 301 server checkpoints/events.</p><div class="row"><button id="exitReplay" type="button">Return to live</button><button id="exportHistory" type="button">Export retained history</button></div><hr><label class="check"><input type="checkbox" id="recordCamera"> Explicitly include camera in local recording</label><div class="row"><button id="recordVideo" type="button">Record video</button><button id="stopVideo" type="button">Stop video</button><button id="savePNG" type="button">Save PNG</button></div><a id="videoDownload" hidden>Save recorded video</a><p class="muted">No microphone. Camera inclusion is off by default. Video stops after 60 seconds, at 32 MB, on hiding the tab or leaving. Checkpoint JSON contains no invitation tokens.</p><button id="diagnostics" type="button">Save diagnostic report</button></div>
+    <div class="sheet" data-sheet="phone"><h3>Advanced local controls</h3><p id="phoneEngineState" class="muted">Local engine closed. World state and Eyes are stored on this device.</p><p id="phoneEyeInfo" class="muted"></p><label>Active Eye<select id="phoneEyeSelect"></select></label><div class="row"><button id="phoneNewEye" type="button">Create independent Eye</button><button id="phonePersist" type="button">Save now</button></div><label>Active material axis<select id="phoneAxis"></select></label><div class="row"><button id="phoneAxisMinus" type="button">− Move selected</button><button id="phoneAxisPlus" type="button">+ Move selected</button></div><div class="row"><button id="phoneEnterNested" type="button">Enter selected inner world</button><button id="phoneExitNested" type="button">Return with this Eye</button></div><div class="row"><button id="phoneFork" type="button">Create explicit offline branch</button><button id="phoneExport" type="button">Export world + Eyes</button></div><hr><h3>Hands-free input & projection</h3><p class="muted">Up to two hands, all 21 landmarks and all five articulated fingers, local inference. Camera frames stay on this phone.</p><div class="row"><button id="phoneStartHands" type="button">Start front camera + hands</button><button id="phoneStartBackHands" type="button">Start rear camera + hands</button></div><div class="row"><button id="phoneStopHands" type="button">Stop camera and release it</button></div><div class="row"><button id="phoneProject" type="button">Project / cast view</button><button id="phoneStopProject" type="button">Stop projection mode</button></div><p id="phoneProjectionState" class="muted">Projection is controlled separately from input. OS support decides whether a route is available.</p><div class="row"><button id="phoneInstallOffline" type="button">Install offline shell</button><button id="phoneCacheHands" type="button">Cache hand model (large)</button></div><p id="phoneCapabilityState" class="muted"></p><p class="muted">The Field View stays visible while these advanced controls are open. Authority access remains explicit and local state remains independent.</p><hr><h3>Canonical authority (explicit)</h3><p class="muted">The phone remains a local authority. Connect and read are explicit; Preview sends nothing. Publish selected uses <code>studio.transform</code> only. Commit canonical uses <code>studio.commit</code> with global, binding and entity CAS. Offline branches never send and accepted state is never copied back into the phone.</p><label>Authority seat<select id="phoneAuthoritySeat"><option value="one">Seat one</option><option value="two">Seat two</option></select></label><label>Phone object<select id="phoneAuthorityEntity"><option value="relic">Relic → canonical Echo</option><option value="workpiece">Workpiece → canonical Workpiece</option><option value="portal">Portal → canonical Portal</option><option value="innerRelic">Inner relic → local only</option></select></label><div class="row"><button id="phoneAuthorityConnect" type="button">Connect authority</button><button id="phoneAuthorityRead" type="button" disabled>Read accepted</button></div><div class="row"><button id="phoneAuthorityPreview" type="button" disabled>Preview local mapping</button><button id="phoneAuthorityPublish" type="button" disabled>Publish projection</button></div><div class="row"><button id="phoneAuthorityCommit" type="button" disabled>Commit canonical</button></div><p id="phoneAuthorityState" class="muted" aria-live="polite">Enter local Vivo first. Canonical authority is never contacted automatically.</p><pre id="phoneAuthorityDebug" class="muted" aria-live="polite"></pre><hr><h3>Agent tool grants</h3><p class="muted">An agent only receives the capabilities you check here or explicitly grant in the Android Companion.</p><label class="check"><input type="checkbox" data-local-cap="world.read">Allow local agent to read this world</label><label class="check"><input type="checkbox" data-local-cap="world.edit">Allow local agent to move objects</label><label class="check"><input type="checkbox" data-local-cap="world.eye">Allow local agent to change this Eye</label><button id="phoneRefreshTools" type="button">Refresh Android Companion grants</button><pre id="phoneAgentTools" class="muted" aria-live="polite"></pre><p class="muted">Native camera permission, accessibility, notifications, files and projection are controlled in the Companion. Accessibility actions remain user-revocable; passwords are never returned or logged.</p></div>
+  </dialog>
+
+  <script type="module" src="./static-shared.js"></script>
+  <script type="module" src="./bootstrap.mjs"></script>
+</body>
+</html>
