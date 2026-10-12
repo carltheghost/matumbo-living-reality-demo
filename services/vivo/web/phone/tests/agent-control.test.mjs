@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { LocalAgentController } from '../agent-control.mjs';
+import { LocalAgentController, MAX_AGENT_SOURCE_ID_LENGTH } from '../agent-control.mjs';
 import { LocalVivoEngine } from '../engine.mjs';
 import { SpatialInteractionFabric } from '../spatial-fabric.mjs';
 
@@ -284,4 +284,115 @@ test('real LocalVivoEngine replays omitted and explicit geometry from the origin
     /AGENT_OPERATION_REPLAY_MISMATCH/,
   );
   await engine.close();
+});
+
+test('real LocalVivoEngine persists no-op operation receipts across re-enable and reload', async () => {
+  const store = new MemoryStore();
+  const engine = new LocalVivoEngine({ storage: store });
+  await engine.open('agent-controller-noop-receipt', 11);
+  const controller = new LocalAgentController({
+    snapshot: () => engine.snapshot(),
+    applyTransform: (entityId, delta, geometry, expected) => engine.applyLocalTransform(entityId, delta, geometry, expected),
+  });
+  await controller.setGrantedCapabilities(['world.edit']);
+  const worker = controller.register({ sourceId: 'worker', capabilities: ['world.edit'] });
+  const before = await engine.snapshot();
+  const zeroDelta = Array(11).fill(0);
+  const noOpPayload = enginePayload(before, 'engine-noop-reuse', zeroDelta);
+  const first = await controller.submitTransform(worker.sessionId, noOpPayload);
+  assert.equal(first.result.changed, false);
+  const afterNoOp = await engine.snapshot();
+  assert.equal(afterNoOp.snapshot.localOperationResults.length, 1);
+  assert.equal(afterNoOp.snapshot.localOperationResults[0].operationId, 'engine-noop-reuse');
+
+  await controller.stop(worker.sessionId);
+  const fresh = await controller.reenable('worker');
+  const changedDelta = Array(11).fill(0); changedDelta[3] = 0.6;
+  await assert.rejects(
+    controller.submitTransform(fresh.sessionId, enginePayload(before, 'engine-noop-reuse', changedDelta)),
+    /AGENT_OPERATION_REPLAY_MISMATCH/,
+  );
+  assert.equal((await engine.snapshot()).snapshot.spaces.root.entities.relic.revision, 0);
+
+  await engine.close();
+  const reloaded = new LocalVivoEngine({ storage: store });
+  await reloaded.open('agent-controller-noop-receipt', 11);
+  const restartedController = new LocalAgentController({
+    snapshot: () => reloaded.snapshot(),
+    applyTransform: (entityId, delta, geometry, expected) => reloaded.applyLocalTransform(entityId, delta, geometry, expected),
+  });
+  await restartedController.setGrantedCapabilities(['world.edit']);
+  const restarted = restartedController.register({ sourceId: 'worker', capabilities: ['world.edit'] });
+  await assert.rejects(
+    restartedController.submitTransform(restarted.sessionId, enginePayload(await reloaded.snapshot(), 'engine-noop-reuse', changedDelta)),
+    /AGENT_OPERATION_REPLAY_MISMATCH/,
+  );
+  assert.equal((await reloaded.snapshot()).snapshot.spaces.root.entities.relic.revision, 0);
+  await reloaded.close();
+});
+
+test('source IDs stay within fabric bounds and legacy cleanup cannot strand contacts', async () => {
+  const fabric = new SpatialInteractionFabric();
+  const state = makeEnvelope();
+  const controller = new LocalAgentController({ fabric, snapshot: async () => clone(state) });
+  await controller.setGrantedCapabilities(['world.edit']);
+  assert.throws(
+    () => controller.register({ sourceId: 'x'.repeat(MAX_AGENT_SOURCE_ID_LENGTH + 1), capabilities: ['world.edit'] }),
+    /AGENT_INVALID_IDENTITY/,
+  );
+  const worker = controller.register({ sourceId: 'legacy-worker', capabilities: ['world.edit'] });
+  controller.beginContact(worker.sessionId, { contactId: 'legacy-contact', objectId: 'relic', canonicalPoint: [0, 0, 0, 0] });
+  const record = controller.records.get('legacy-worker');
+  record.sourceId = 'x'.repeat(MAX_AGENT_SOURCE_ID_LENGTH + 1);
+  const stopped = await controller.stop(worker.sessionId);
+  assert.equal(stopped.status, 'stopped');
+  assert.equal(stopped.released.length, 1);
+  assert.equal(fabric.snapshot().contacts.length, 0);
+  assert.equal(record.contacts.size, 0);
+});
+
+test('operation terminal transitions emit a fresh controller status', async () => {
+  const state = makeEnvelope();
+  const events = [];
+  let rejectNext = false;
+  const controller = new LocalAgentController({
+    snapshot: async () => clone(state),
+    applyTransform: async (entityId, delta, geometry, expected) => {
+      if (rejectNext) throw Object.assign(new Error('simulated acceptance failure'), { code: 'SIMULATED_REJECT' });
+      return acceptanceResult(state, { entityId, delta, geometry, expected });
+    },
+    onChange: event => events.push(event),
+  });
+  await controller.setGrantedCapabilities(['world.edit']);
+  const worker = controller.register({ sourceId: 'terminal-events', capabilities: ['world.edit'] });
+  const accepted = await controller.submitTransform(worker.sessionId, editPayload(state, 'terminal:accepted', Object.assign(Array(11).fill(0), { 3: 0.2 })));
+  assert.equal(accepted.status, 'accepted');
+  const acceptedEvent = events.find(event => event.reason === 'agent-operation-settled' && event.operationId === 'terminal:accepted');
+  assert.equal(acceptedEvent.status, 'accepted');
+  assert.equal(acceptedEvent.agents.find(item => item.sourceId === 'terminal-events').activeOperations, 0);
+
+  rejectNext = true;
+  await assert.rejects(
+    controller.submitTransform(worker.sessionId, editPayload(state, 'terminal:rejected', Array(11).fill(0))),
+    /simulated acceptance failure/,
+  );
+  const rejectedEvent = events.find(event => event.reason === 'agent-operation-settled' && event.operationId === 'terminal:rejected');
+  assert.equal(rejectedEvent.status, 'rejected');
+  assert.equal(rejectedEvent.agents.find(item => item.sourceId === 'terminal-events').activeOperations, 0);
+});
+
+test('world read rechecks the session after an asynchronous snapshot', async () => {
+  const state = makeEnvelope();
+  let release;
+  const controller = new LocalAgentController({
+    snapshot: () => new Promise(resolve => { release = () => resolve(clone(state)); }),
+  });
+  await controller.setGrantedCapabilities(['world.read']);
+  const worker = controller.register({ sourceId: 'delayed-reader', capabilities: ['world.read'] });
+  const read = controller.invokeTool(worker.sessionId, 'vivo.world.read');
+  await new Promise(resolve => setImmediate(resolve));
+  const stopping = controller.stop(worker.sessionId);
+  release();
+  await assert.rejects(read, /AGENT_STOPPED|AGENT_GENERATION_STALE/);
+  await stopping;
 });

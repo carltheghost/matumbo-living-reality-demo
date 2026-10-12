@@ -14,11 +14,12 @@ export const AGENT_CONTROL_SCHEMA = 'vivo.phone.agent-control/1';
 export const AGENT_CAPABILITIES = Object.freeze(['world.read', 'world.edit', 'world.eye']);
 export const MAX_REGISTERED_AGENTS = 16;
 export const MAX_AGENT_OPERATIONS = 128;
+export const MAX_AGENT_SOURCE_ID_LENGTH = 154;
 
 const clone = value => globalThis.structuredClone ? structuredClone(value) : JSON.parse(JSON.stringify(value));
 const newId = prefix => globalThis.crypto?.randomUUID?.() || `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-const boundedId = (value, label) => {
-  if (typeof value !== 'string' || value.length < 1 || value.length > 256 || /[\u0000-\u001f\u007f]/.test(value)) throw controlError('AGENT_INVALID_IDENTITY', `${label} must be a bounded identity.`);
+const boundedId = (value, label, maxLength = 256) => {
+  if (typeof value !== 'string' || value.length < 1 || value.length > maxLength || /[\u0000-\u001f\u007f]/.test(value)) throw controlError('AGENT_INVALID_IDENTITY', `${label} must be a bounded identity.`);
   return value;
 };
 const controlError = (code, message) => {
@@ -27,7 +28,10 @@ const controlError = (code, message) => {
   return error;
 };
 const operationId = value => boundedId(value, 'operationId');
-const sourceId = value => boundedId(value, 'sourceId');
+// SpatialInteractionFabric prefixes agent sources with `agent:` and caps the
+// complete source key at 160 characters. Keep the registered source bounded
+// before any state is created so contact release cannot fail later.
+const sourceId = value => boundedId(value, 'sourceId', MAX_AGENT_SOURCE_ID_LENGTH);
 const finiteNumber = (value, label) => {
   if (!Number.isFinite(Number(value))) throw controlError('AGENT_INVALID_EDIT', `${label} must be finite.`);
   return Number(value);
@@ -195,7 +199,9 @@ export class LocalAgentController {
     record.generation += 1;
     record.sessionId = newId('agent-session');
     record.status = 'active'; record.stopReason = null; record.stoppedAt = null;
-    record.queue = new LocalEditQueue(); record.operations = new Map(); record.contacts = new Map();
+    // Keep operation fingerprints across generations. The queue and contacts
+    // are generation-scoped; an operation identity is not.
+    record.queue = new LocalEditQueue(); record.contacts = new Map();
     this.sessions.set(record.sessionId, { record, generation: record.generation });
     this._emit('agent-reenabled', { sourceId: record.sourceId });
     return this._public(record);
@@ -255,7 +261,12 @@ export class LocalAgentController {
     const record = this._recordFor(ref);
     if (name === 'vivo.world.read') {
       this._assertCapability(record, 'world.read');
-      return this._snapshot();
+      const submittedSessionId = record.sessionId;
+      const submittedGeneration = record.generation;
+      const result = await this._snapshot();
+      if (record.sessionId !== submittedSessionId || record.generation !== submittedGeneration) throw controlError('AGENT_GENERATION_STALE', 'The registered agent session changed before this world read completed.');
+      if (record.status !== 'active') throw controlError('AGENT_STOPPED', 'This local agent was stopped before the world read completed.');
+      return result;
     }
     if (name === 'vivo.world.edit') {
       this._assertCapability(record, 'world.edit');
@@ -340,18 +351,22 @@ export class LocalAgentController {
     op.completion = queued.then(async value => {
       if (!value.submitted || value.result?.submitted === false) {
         op.state = 'cancelled-before-submission';
+        this._emit('agent-operation-settled', { sourceId: record.sourceId, operationId: op.operationId, status: op.state });
         return { status: 'cancelled-before-submission', submitted: false, operationId: op.operationId, code: value.result?.code || 'AGENT_STOPPED' };
       }
       const result = value.result?.result ?? value.result;
       if (value.status === 'submitted-fenced' || record.status !== 'active' || record.generation !== op.generation) {
         op.state = 'submitted-requires-reconciliation';
+        this._emit('agent-operation-settled', { sourceId: record.sourceId, operationId: op.operationId, status: op.state });
         const reconciliation = await this.reconcile(op);
         return { status: 'submitted-requires-reconciliation', submitted: true, operationId: op.operationId, result: clone(result), reconciliation };
       }
       op.state = 'accepted';
+      this._emit('agent-operation-settled', { sourceId: record.sourceId, operationId: op.operationId, status: op.state });
       return { status: 'accepted', submitted: true, operationId: op.operationId, result: clone(result), replayed: Boolean(result?.replayed) };
     }).catch(error => {
       op.state = 'rejected';
+      this._emit('agent-operation-settled', { sourceId: record.sourceId, operationId: op.operationId, status: op.state, code: error?.code || null });
       throw error;
     });
     this._emit('agent-operation-queued', { sourceId: record.sourceId, operationId: op.operationId });
@@ -419,8 +434,7 @@ export class LocalAgentController {
     if (record.status === 'stopped') return { ...this._public(record), alreadyStopped: true, released: [] };
     record.status = 'stopped'; record.stopReason = String(reason || 'agent-stop'); record.stoppedAt = this.now();
     record.queue.stop();
-    const released = this.fabric?.releaseSource({ kind: 'agent', id: record.sourceId }, 'agent-stop') || [];
-    record.contacts.clear();
+    const released = this._releaseContacts(record, 'agent-stop');
     this._emit('agent-stopped', { sourceId: record.sourceId, released: released.length });
     const operations = [...record.operations.values()].filter(item => item.completion).map(item => item.completion);
     const settled = await Promise.allSettled(operations);
@@ -441,8 +455,29 @@ export class LocalAgentController {
     // This is an exact source fence, not a global emergency stop. It also
     // protects against a late callback from the prior generation restoring a
     // stale constraint before the new session is explicitly enabled.
-    this.fabric?.releaseSource({ kind: 'agent', id: record.sourceId }, 'agent-reenable-fence');
+    this._releaseContacts(record, 'agent-reenable-fence');
     return this._activate(record);
+  }
+
+  _releaseContacts(record, reason) {
+    const contacts = [...record.contacts.values()];
+    let released = [];
+    try {
+      released = this.fabric?.releaseSource({ kind: 'agent', id: record.sourceId }, reason) || [];
+    } catch {
+      // A legacy or externally restored record must not leave the controller
+      // half-stopped. Release each known contact by its bounded contact ID if
+      // the aggregate source key cannot be reconstructed safely.
+      released = [];
+      for (const contact of contacts) {
+        try {
+          const result = this.fabric?.end(contact.fabricContactId, reason);
+          if (result) released.push(result);
+        } catch {}
+      }
+    }
+    record.contacts.clear();
+    return released;
   }
 
   async stopAll(reason = 'grant-revoked') {
