@@ -91,8 +91,11 @@ test('Pages build copies the route and exposes its local-only boundary check', a
   assert.match(workflow, /Verify the static Vivo phone route and local-only boundary/);
   assert.match(workflow, /PAGES STATIC\/OFFLINE/);
   assert.match(workflow, /services\/vivo\/web\/phone\/index\.html/);
+  assert.match(workflow, /services\/vivo\/web\/application\/conversation-transport\.mjs/);
+  assert.match(workflow, /services\/vivo\/web\/application\/remote-transport\.mjs/);
   assert.match(phoneWorkflow, /browser-field-world-static/);
   assert.match(phoneWorkflow, /browser_field_world_static\.py/);
+  assert.match(phoneWorkflow, /browser_conversation_transport\.py/);
   assert.match(phoneWorkflow, /browser_bimanual_transform\.py/);
 });
 
@@ -102,6 +105,8 @@ test('Pages live hash verifier covers every changed mounted phone module', async
   assert.ok(block, 'deploy workflow must expose a public HTTPS hash-verifier list');
   const listed = [...block.matchAll(/'([^']+)'/g)].map((match) => match[1]);
   const required = [
+    'services/vivo/web/application/conversation-transport.mjs',
+    'services/vivo/web/application/remote-transport.mjs',
     'services/vivo/web/phone/companion.mjs',
     'services/vivo/web/phone/fingertip-input.mjs',
     'services/vivo/web/phone/material-contract.mjs',

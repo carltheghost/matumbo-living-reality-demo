@@ -43,6 +43,8 @@ jobs:
       - name: Check browser module syntax
         run: |
           find services/vivo/web/phone -name '*.mjs' -print0 | xargs -0 -n1 node --check
+          node --check services/vivo/web/application/conversation-transport.mjs
+          node --check services/vivo/web/application/remote-transport.mjs
           node --input-type=module --check < services/vivo/web/camera.js
           node --input-type=module --check < services/vivo/web/hand-worker.js
           node --input-type=module --check < services/vivo/web/render.js
@@ -74,6 +76,7 @@ jobs:
           python services/vivo/web/phone/tests/browser_agent_stop.py http://127.0.0.1:9897/ | tee browser-evidence/agent-stop-source.json
           python services/vivo/web/phone/tests/browser_dimensional_contact.py http://127.0.0.1:9897/ | tee browser-evidence/dimensional-contact-source.json
           python services/vivo/web/phone/tests/browser_material_deformation.py http://127.0.0.1:9897/ | tee browser-evidence/material-deformation-source.json
+          python services/vivo/web/phone/tests/browser_conversation_transport.py http://127.0.0.1:9897/ | tee browser-evidence/conversation-transport-source.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -211,6 +214,7 @@ jobs:
           python services/vivo/web/phone/tests/browser_agent_stop.py http://127.0.0.1:9896/ | tee browser-evidence/agent-stop-pages.json
           python services/vivo/web/phone/tests/browser_dimensional_contact.py http://127.0.0.1:9896/ | tee browser-evidence/dimensional-contact-pages.json
           python services/vivo/web/phone/tests/browser_material_deformation.py http://127.0.0.1:9896/ | tee browser-evidence/material-deformation-pages.json
+          python services/vivo/web/phone/tests/browser_conversation_transport.py http://127.0.0.1:9896/ | tee browser-evidence/conversation-transport-pages.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
