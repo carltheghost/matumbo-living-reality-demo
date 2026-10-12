@@ -109,6 +109,7 @@ jobs:
           # The image runs as UID 10001; these files are disposable CI fixtures,
           # not credentials, so the mounted key must be readable by that UID.
           chmod 0644 "$fixture_dir"/*
+          chmod 0755 "$fixture_dir"
 
           docker run --rm --network none --entrypoint caddy \
             --env VIVA_DOMAIN=remote.example.test \
