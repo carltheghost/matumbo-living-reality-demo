@@ -4,11 +4,13 @@ import { readFile } from 'node:fs/promises';
 const root = new URL('../../', import.meta.url);
 
 test('the Android Companion extends the canonical GitHub Pages UI at runtime', async () => {
-  const [html, activity, bootstrap, tools] = await Promise.all([
+  const [html, activity, bootstrap, tools, control, bridge] = await Promise.all([
     readFile(new URL('index.html', root), 'utf8'),
     readFile(new URL('../android-companion/app/src/main/java/com/matumbo/vivo/MainActivity.kt', root), 'utf8'),
     readFile(new URL('phone/bootstrap.mjs', root), 'utf8'),
     readFile(new URL('phone/agent-tools.mjs', root), 'utf8'),
+    readFile(new URL('phone/agent-control.mjs', root), 'utf8'),
+    readFile(new URL('phone/bridge.mjs', root), 'utf8'),
   ]);
   assert.match(html, /SHARED WORKSHOP/);
   assert.match(html, /src="shared\.js"/);
@@ -22,6 +24,15 @@ test('the Android Companion extends the canonical GitHub Pages UI at runtime', a
   assert.match(capabilityDialog, /Only checked capabilities are exposed as native tools/);
   assert.match(activity, /phone\.torch\.set/);
   assert.match(tools, /phone\.torch\.set/);
+  assert.match(control, /vivo\.phone\.agent-control\/1/);
+  assert.match(control, /AGENT_GENERATION_STALE/);
+  assert.match(control, /AGENT_CAS_STALE/);
+  assert.match(bootstrap, /LocalAgentController/);
+  assert.match(bootstrap, /phoneRegisterAgent/);
+  assert.match(bootstrap, /agentController\.setFabric/);
+  assert.match(tools, /Registered local agent session required/);
+  assert.match(bridge, /agentController\.invokeTool/);
+  assert.doesNotMatch(bridge, /api\.translate/);
   assert.match(bootstrap, /navigator\.serviceWorker\.ready/);
   assert.match(bootstrap, /caches\.open\('vivo-phone-shell-2026-10-12-v4'\)/);
   assert.match(bootstrap, /two-hand-camera\.mjs/);
@@ -55,6 +66,7 @@ test('phone authority adapter is cached for offline local startup and keeps shar
   assert.match(adapter, /studioTransformCommand/);
   assert.match(adapter, /loadStudioCommands/);
   assert.match(sw, /phone\/authority-adapter\.mjs/);
+  assert.match(sw, /phone\/agent-control\.mjs/);
   assert.match(sw, /phone\/authority-mapping\.mjs/);
   assert.doesNotMatch(adapter, /new LocalTransport\(options\)/);
 });

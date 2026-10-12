@@ -18,12 +18,30 @@ test('agents receive exactly the granted capabilities and revoked calls stop imm
 test('local agent tools remain hidden until the matching user grant exists', async () => {
   const bridge = { invokeLocal: async () => ({ worldId: 'world-1' }) };
   const registry = new AgentToolRegistry({ bridge, localCapabilities: ['world.read'] });
+  const session = { sessionId: 'registered-session', generation: 1 };
+  registry.setAgentController({
+    setGrantedCapabilities() {},
+    assertActive() {},
+    sessionCapabilities: () => ['world.read'],
+    sessionSource: () => 'worker',
+  });
   registry.updateGrants(['world.read']);
   assert.deepEqual(registry.list().map(item => item.name), ['vivo.world.read']);
-  assert.equal((await registry.invoke('vivo.world.read')).worldId, 'world-1');
+  assert.equal((await registry.invokeFor(session, 'vivo.world.read')).worldId, 'world-1');
   registry.setLocalCapabilities([]);
   assert.deepEqual(registry.list(), []);
-  await assert.rejects(registry.invoke('vivo.world.read'), /unavailable/);
+  await assert.rejects(registry.invokeFor(session, 'vivo.world.read'), /unavailable/);
+});
+
+test('per-session local tool listing does not expose unregistered world capabilities', () => {
+  const registry = new AgentToolRegistry({ localCapabilities: ['world.read', 'world.edit'] });
+  registry.setAgentController({
+    setGrantedCapabilities() {},
+    assertActive() {},
+    sessionCapabilities: () => ['world.read'],
+  });
+  registry.updateGrants(['world.read', 'world.edit']);
+  assert.deepEqual(registry.listFor({ sessionId: 'registered-session', generation: 1 }).map(item => item.name), ['vivo.world.read']);
 });
 
 test('torch is advertised and dispatched only with the explicit torch grant', async () => {
@@ -37,4 +55,16 @@ test('torch is advertised and dispatched only with the explicit torch grant', as
   registry.revokeAll();
   assert.deepEqual(registry.list(), []);
   await assert.rejects(registry.invoke('phone.torch.set', { enabled: true }), /not granted/);
+});
+
+test('revokeAll clears controller grants and leaves explicit stop as the only re-enable path', async () => {
+  const calls = [];
+  const controller = {
+    setGrantedCapabilities: async names => { calls.push(['grants', names]); },
+    stopAll: async reason => { calls.push(['stop', reason]); return ['stopped']; },
+  };
+  const registry = new AgentToolRegistry({ agentController: controller, localCapabilities: ['world.edit'] });
+  await registry.revokeAll();
+  assert.deepEqual(calls, [['grants', []], ['stop', 'grant-revoke-all']]);
+  assert.deepEqual(registry.list(), []);
 });

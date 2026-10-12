@@ -115,7 +115,6 @@ const pairTransform = (list, axes = [0, 1], pairContactIds = null) => {
 };
 
 const cancelledReason = reason => /cancel|lost|missing|fence|stop|hidden|ambiguous|worker|disconnect|replaced|two-hand/i.test(String(reason || ''));
-const preserveReason = reason => !cancelledReason(reason) && /release|rebase|complete|apply|end/i.test(String(reason || ''));
 const blankAggregate = (dimension, axes = [0, 1]) => ({
   translation: Array(dimension).fill(0), rotation: 0, scale: 1, axes: [...axes], pairContactIds: [],
 });
@@ -185,8 +184,32 @@ export class SpatialInteractionFabric {
     const allAxes = normalizeAxes(constraint.metadata?.transformAxes || previous.axes, dimension);
     const before = this._compose(constraint.objectId, contacts, dimension, allAxes);
     const remaining = contacts.filter(item => item.contactId !== id);
+    const selectiveAgentCancellation = sourceKind(constraint.source) === 'agent' && cancelledReason(reason);
     this.contacts.delete(id);
-    if (cancelledReason(reason)) {
+    if (selectiveAgentCancellation) {
+      // Agent cancellation is a source-local fence. Keep the accepted carry
+      // exactly as it was and let the remaining contacts keep their own
+      // point/anchor deltas. Re-composing all contacts here would fold the
+      // stopped agent's provisional movement into the surviving human or
+      // agent constraint, and rebasing their anchors would lose that pending
+      // movement/geometry on the next frame.
+      const pairContactIds = (previous.pairContactIds || [])
+        .filter(pairId => remaining.some(item => item.contactId === pairId))
+        .slice(0, 2);
+      for (const item of remaining) {
+        if (pairContactIds.length >= 2) break;
+        if (!pairContactIds.includes(item.contactId)) pairContactIds.push(item.contactId);
+      }
+      if (remaining.length || this.aggregates.has(constraint.objectId)) {
+        this.aggregates.set(constraint.objectId, {
+          ...previous,
+          axes: [...allAxes],
+          pairContactIds,
+        });
+      } else {
+        this.aggregates.delete(constraint.objectId);
+      }
+    } else if (cancelledReason(reason)) {
       // A lost/cancelled contact must never turn its provisional displacement
       // into accepted state. Remaining contacts continue from their current
       // points with only their own displacement preserved, so there is no jump.
@@ -200,10 +223,6 @@ export class SpatialInteractionFabric {
       } else {
         this.aggregates.delete(constraint.objectId);
       }
-    } else if (sourceKind(constraint.source) !== 'touch' && sourceKind(constraint.source) !== 'hand' && !preserveReason(reason)) {
-      // Non-surface agents can release their own constraint without changing
-      // the local surface aggregate.
-      if (remaining.length) for (const item of remaining) item.anchor = [...item.point];
     } else {
       // Capture the complete transform before removing the ending contact.
       // Releasing either member of a pair therefore produces the same
@@ -231,10 +250,11 @@ export class SpatialInteractionFabric {
     const prefix = normalizeId(String(kind), 'kind') + ':';
     return [...this.contacts.values()].filter(item => item.source.startsWith(prefix)).map(item => this.end(item.contactId, reason));
   }
-  killAgent(agentId, reason = 'agent-kill-switch') {
+  killAgent(agentId, reason = 'agent-stop') {
     const owner = 'agent:' + normalizeId(agentId, 'agentId');
     return [...this.contacts.values()].filter(item => item.source === owner).map(item => this.end(item.contactId, reason));
   }
+  stopAgent(agentId, reason = 'agent-stop') { return this.killAgent(agentId, reason); }
   emergencyStop(reason = 'emergency-stop') {
     const released = [...this.contacts.keys()].map(id => this.end(id, reason));
     this.aggregates.clear();

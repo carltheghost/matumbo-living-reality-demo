@@ -11,6 +11,7 @@ import { FieldWorldController, drawFieldAtlas } from './field-world.mjs';
 import { SpatialInteractionFabric, mapRendererPointToCanonical } from './spatial-fabric.mjs';
 import { LocalOperationIdFactory } from './local-operation.mjs';
 import { LocalEditQueue } from './local-edit-queue.mjs';
+import { LocalAgentController } from './agent-control.mjs';
 import { mountPhoneEconomyContext } from './economy-entry.mjs';
 
 const $ = id => document.getElementById(id);
@@ -24,6 +25,19 @@ const { R, S, camera } = shared;
 const STATIC_PHONE_ROUTE = /\/services\/vivo\/web\/phone(?:\/|$)/.test(location.pathname);
 let engine = null, authority = null, localMode = false, selectedId = null, activeAxis = 0;
 let pinch = null, projection = null, fieldWorld = null, fieldEnvelope = null, interactionFabric = null;
+const agentController = new LocalAgentController({
+  snapshot: () => engine?.snapshot(),
+  applyTransform: (entityId, delta, geometry, expected) => engine?.applyLocalTransform(entityId, delta, geometry, expected),
+  setEye: patch => engine?.setEye(patch),
+  onChange: event => {
+    updateAgentControlUI(event);
+    if (localMode && fieldWorld) updateFieldWorld();
+    if (event.reason === 'agent-stopped') status(`LOCAL AGENT STOPPED · ${event.sourceId} · surviving human/agent contacts preserved`);
+    if (event.reason === 'agent-reenabled') status(`LOCAL AGENT RE-ENABLED · ${event.sourceId} · fresh generation ${event.agents.find(item => item.sourceId === event.sourceId)?.generation || '?'}`);
+  },
+});
+registry.setAgentController(agentController);
+bridge.setAgentController(agentController);
 let economyContext = null;
 const handContacts = new Map(), pointerContacts = new Map();
 const touchGestures = new Map();
@@ -74,6 +88,42 @@ function updateAgentList(nativeTools = bridge.tools) {
   ])];
   const view = $('phoneAgentTools');
   if (view) view.textContent = list.length ? list.join('\n') : 'No agent tools granted. Check only the specific capabilities you want an agent to use.';
+  updateAgentControlUI();
+}
+function updateAgentControlUI() {
+  const statusView = $('phoneAgentControlStatus');
+  const listView = $('phoneAgentSessions');
+  if (!statusView || !listView) return;
+  const agents = agentController.agents();
+  const stoppedCount = agents.filter(agent => agent.status === 'stopped').length;
+  statusView.textContent = agents.length
+    ? `${agents.length} registered local agent${agents.length === 1 ? '' : 's'} · stop/revoke is scoped to its exact source and generation${stoppedCount ? ` · ${stoppedCount} stopped; surviving contacts preserved` : ''}`
+    : 'No registered local agents. Register a source explicitly; agentId arguments cannot create authority.';
+  listView.replaceChildren();
+  for (const agent of agents) {
+    const row = document.createElement('div'); row.className = 'agent-session-row';
+    const details = document.createElement('div'); details.className = 'agent-session-details';
+    const title = document.createElement('strong'); title.textContent = `${agent.label} · ${agent.sourceId}`;
+    const meta = document.createElement('small'); meta.textContent = `${agent.status.toUpperCase()} · generation ${agent.generation} · ${agent.activeContacts} contact(s) · ${agent.activeOperations} queued/submitted`;
+    details.append(title, meta);
+    const action = document.createElement('button'); action.type = 'button'; action.className = agent.status === 'active' ? 'agent-stop' : 'agent-reenable';
+    action.textContent = agent.status === 'active' ? 'Stop this agent' : 'Re-enable fresh generation';
+    action.dataset.agentSource = agent.sourceId;
+    action.onclick = async () => {
+      action.disabled = true;
+      try {
+        if (agent.status === 'active') {
+          const result = await registry.stopAgent(agent.sessionId, 'user-stop');
+          status(`LOCAL AGENT STOPPED · ${agent.sourceId} · ${result.operations?.filter(item => item.status === 'submitted-requires-reconciliation').length || 0} submitted result(s) require reconciliation`);
+        } else {
+          await registry.reenableAgent(agent.sourceId);
+          status(`LOCAL AGENT RE-ENABLED · ${agent.sourceId} · stale constraints were not restored`);
+        }
+      } catch (error) { status(error.message); }
+      finally { updateAgentControlUI(); }
+    };
+    row.append(details, action); listView.append(row);
+  }
 }
 function renderEye(envelope, options = {}) {
   const projected = projectForRenderer({ snapshot: () => envelope });
@@ -716,7 +766,13 @@ function addPhoneSurface() {
     <label class="check"><input type="checkbox" data-local-cap="world.edit">Allow local agent to move objects</label>
     <label class="check"><input type="checkbox" data-local-cap="world.eye">Allow local agent to change this Eye</label>
     <button id="phoneRefreshTools">Refresh Android Companion grants</button><pre id="phoneAgentTools" class="muted" aria-live="polite"></pre>
-    <p class="muted">Native camera permission, accessibility, notifications, files and projection are controlled in the Companion. Accessibility actions remain user-revocable; passwords are never returned or logged.</p>`;
+    <p class="muted">Native camera permission, accessibility, notifications, files and projection are controlled in the Companion. Accessibility actions remain user-revocable; passwords are never returned or logged.</p>
+    <hr><h3>Local agent stop / revoke</h3>
+    <p class="muted">This is an in-app local control. Register an exact source, then stop only that source. Stopped work is fenced; grant refresh never silently re-enables it.</p>
+    <label>Registered source<input id="phoneAgentSource" maxlength="160" value="worker" autocomplete="off" spellcheck="false"></label>
+    <button id="phoneRegisterAgent" type="button">Register / explicitly re-enable source</button>
+    <p id="phoneAgentControlStatus" class="muted" role="status" aria-live="polite">No registered local agents.</p>
+    <div id="phoneAgentSessions" class="agent-session-list" aria-live="polite"></div>`;
   const fieldHeading = [...sheet.querySelectorAll('h3')].find(node => node.textContent.includes('Information field + plane atlas'));
   if (fieldHeading) {
     fieldHeading.previousElementSibling?.remove();
@@ -792,6 +848,15 @@ function addPhoneSurface() {
   $('phoneInstallOffline').onclick = installOffline;
   $('phoneCacheHands').onclick = cacheHandAssets;
   $('phoneRefreshTools').onclick = refreshNativeTools;
+  $('phoneRegisterAgent').onclick = () => {
+    const value = $('phoneAgentSource').value.trim();
+    if (!value) { status('Enter an exact local agent source before registering.'); return; }
+    try {
+      const agent = registry.registerAgent({ sourceId: value, label: value });
+      updateAgentControlUI();
+      status(`${agent.status === 'active' && agent.generation > 1 ? 'LOCAL AGENT RE-ENABLED' : 'LOCAL AGENT REGISTERED'} · ${agent.sourceId} · generation ${agent.generation}`);
+    } catch (error) { status(error.message); }
+  };
   $('phoneAuthorityEntity').onchange = async event => {
     if (!authority) return;
     try { await authority.selectEntity(event.target.value); updatePhoneAuthorityUI(); }
@@ -838,8 +903,11 @@ function addPhoneSurface() {
     if (event.detail.kind === 'tools') { const tools = hostToolCaps(event.detail); updateAgentList(tools); }
     if (event.detail.kind === 'event' && event.detail.name === 'orientation') window.dispatchEvent(new CustomEvent('vivo:orientation', { detail: event.detail.value }));
     if (event.detail.kind === 'agent-action') {
-      const { id, name, args = {} } = event.detail;
-      Promise.resolve(name === 'phone.camera.start' ? startPhoneCamera(args.facing === 'environment' ? 'environment' : 'user')
+      const { id, name, args = {}, sessionId, generation } = event.detail;
+      const session = sessionId ? { sessionId, ...(generation === undefined ? {} : { generation }) } : null;
+      Promise.resolve(name?.startsWith('vivo.')
+        ? registry.invoke(name, args, { session })
+        : name === 'phone.camera.start' ? startPhoneCamera(args.facing === 'environment' ? 'environment' : 'user')
         : name === 'phone.camera.stop' ? stopPhoneCamera()
         : Promise.reject(new Error('Unsupported page-side action')))
         .then(value => value === false ? bridge.reply(id, false, 'Camera did not start') : bridge.reply(id, true, { started: true, framesUploaded: false }))
@@ -857,6 +925,7 @@ function openPhonePanel() {
 async function startLocal() {
   if (engine) {
     localMode = true;
+    agentController.setFabric(interactionFabric);
     updateLocalGrants();
     document.body.classList.add('phone-local');
     const state = await engine.snapshot();
@@ -880,6 +949,7 @@ async function startLocal() {
   const state = await engine.open(getWorldId(), rootDimension);
   fieldWorld = new FieldWorldController(state, { selectedId: selectedId || R.selected || null });
   interactionFabric = new SpatialInteractionFabric();
+  agentController.setFabric(interactionFabric);
   authority = new PhoneAuthorityAdapter({ engine, onState: updatePhoneAuthorityUI });
   await authority.syncLocal(state);
   localMode = true; updateLocalGrants(); document.body.classList.add('phone-local'); renderedSnapshot = snapshotMarker(state); renderEye(state);
@@ -1164,7 +1234,21 @@ const pointerEnd = event => {
 };
 for (const name of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.addEventListener(name, pointerEnd, { capture: true });
 
-window.VivaAgentTools = Object.freeze({ list: () => registry.list(), invoke: (name, args) => registry.invoke(name, args), revokeAll: () => registry.revokeAll(), audit: () => structuredClone(registry.audit) });
+  window.VivaAgentTools = Object.freeze({
+    list: () => registry.list(),
+    listFor: session => registry.listFor(session),
+    invoke: (name, args, context) => registry.invoke(name, args, context),
+    invokeFor: (session, name, args) => registry.invokeFor(session, name, args),
+    register: spec => registry.registerAgent(spec),
+    stop: (session, reason) => registry.stopAgent(session, reason),
+    reenable: sourceOrSession => registry.reenableAgent(sourceOrSession),
+    beginContact: (session, values) => registry.beginContact(session, values),
+    updateContact: (session, contactId, values) => registry.updateContact(session, contactId, values),
+    endContact: (session, contactId, reason) => registry.endContact(session, contactId, reason),
+    agents: () => registry.agents(),
+    revokeAll: () => registry.revokeAll(),
+    audit: () => structuredClone(registry.audit),
+  });
 window.VivaPhoneEngine = Object.freeze({
   get active() { return !!engine && localMode; }, get available() { return browserCapabilities.worker; },
   // Keep the public read paired with the rendered field-world envelope. A
@@ -1179,6 +1263,7 @@ window.VivaPhoneEngine = Object.freeze({
   commitAuthority: () => authority?.commit(),
   fieldWorld: () => fieldWorld?.model || null,
   interaction: () => interactionFabric?.snapshot() || null,
+  agentControl: () => ({ schema: 'vivo.phone.agent-control/1', agents: registry.agents() }),
   syntheticHandLandmarks: (hands, options = {}) => {
     if (!localMode) throw new Error('Enter local Vivo before sending synthetic hand landmarks.');
     phoneCamera.consume({ sequence: ++phoneCamera.sequence, time: performance.now(), hands, handednesses: options.handednesses || [] });

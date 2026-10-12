@@ -1,3 +1,5 @@
+import { AGENT_CAPABILITIES } from './agent-control.mjs';
+
 /** Agents see only tools whose exact capability names the user granted. */
 export const TOOL_CATALOG = Object.freeze([
   { name: 'vivo.world.read', capability: 'world.read', description: 'Read the active local world snapshot.' },
@@ -22,28 +24,115 @@ export const TOOL_CATALOG = Object.freeze([
 ]);
 
 export class AgentToolRegistry {
-  constructor({ bridge = null, localCapabilities = [] } = {}) { this.bridge = bridge; this.localCapabilities = new Set(localCapabilities); this.grants = new Set(); this.audit = []; }
-  updateGrants(names) { this.grants = new Set(Array.isArray(names) ? names.filter(x => typeof x === 'string') : []); }
-  setLocalCapabilities(names) { this.localCapabilities = new Set(Array.isArray(names) ? names.filter(x => typeof x === 'string') : []); }
+  constructor({ bridge = null, localCapabilities = [], agentController = null } = {}) {
+    this.bridge = bridge;
+    this.agentController = agentController;
+    this.localCapabilities = new Set(localCapabilities.filter(name => AGENT_CAPABILITIES.includes(name)));
+    this.nativeGrants = new Set();
+    this.grants = new Set(this.localCapabilities);
+    this.audit = [];
+  }
+  updateGrants(names) {
+    this.nativeGrants = new Set(Array.isArray(names) ? names.filter(x => typeof x === 'string') : []);
+    this.grants = new Set([...this.nativeGrants, ...this.localCapabilities]);
+    // A native grant refresh updates capability visibility only. It never
+    // re-enables a stopped local session; re-enable is an explicit action.
+    return this.grants;
+  }
+  setLocalCapabilities(names) {
+    this.localCapabilities = new Set(Array.isArray(names) ? names.filter(name => AGENT_CAPABILITIES.includes(name)) : []);
+    this.grants = new Set([...this.nativeGrants, ...this.localCapabilities]);
+    return this.agentController?.setGrantedCapabilities([...this.localCapabilities]) || Promise.resolve([]);
+  }
+  setAgentController(controller) {
+    this.agentController = controller || null;
+    this.agentController?.setGrantedCapabilities([...this.localCapabilities]);
+    return this;
+  }
   list() { return TOOL_CATALOG.filter(tool => this.grants.has(tool.capability) && (!tool.capability.startsWith('world.') || this.localCapabilities.has(tool.capability))).map(({ name, description }) => ({ name, description })); }
-  async invoke(name, args = {}) {
+  listFor(session) {
+    // Native tools remain globally visible to the connected Companion, but a
+    // local world tool is visible only when this exact registered session
+    // declared that capability.
+    const visible = new Set(this.list().filter(tool => !tool.name.startsWith('vivo.')).map(tool => tool.name));
+    if (this.agentController) for (const tool of TOOL_CATALOG) {
+      if (!tool.capability.startsWith('world.') || !this.localCapabilities.has(tool.capability)) continue;
+      try { this.agentController.assertActive(session); if (this.agentController.sessionCapabilities(session).includes(tool.capability)) visible.add(tool.name); } catch {}
+    }
+    return TOOL_CATALOG.filter(tool => visible.has(tool.name)).map(({ name, description }) => ({ name, description }));
+  }
+  registerAgent(spec = {}) {
+    if (!this.agentController) throw new Error('Local agent control is unavailable');
+    return this.agentController.register(spec);
+  }
+  stopAgent(session, reason = 'agent-stop') {
+    if (!this.agentController) throw new Error('Local agent control is unavailable');
+    return this.agentController.stop(session, reason);
+  }
+  reenableAgent(sourceOrSession) {
+    if (!this.agentController) throw new Error('Local agent control is unavailable');
+    return this.agentController.reenable(sourceOrSession);
+  }
+  beginContact(session, values) {
+    if (!this.agentController) throw new Error('Local agent control is unavailable');
+    return this.agentController.beginContact(session, values);
+  }
+  updateContact(session, contactId, values) {
+    if (!this.agentController) throw new Error('Local agent control is unavailable');
+    return this.agentController.updateContact(session, contactId, values);
+  }
+  endContact(session, contactId, reason) {
+    if (!this.agentController) throw new Error('Local agent control is unavailable');
+    return this.agentController.endContact(session, contactId, reason);
+  }
+  agents() { return this.agentController?.agents?.() || []; }
+  async invokeFor(session, name, args = {}) {
     const tool = TOOL_CATALOG.find(item => item.name === name);
     if (!tool || !this.grants.has(tool.capability)) throw new Error('Tool is not granted to this agent');
     const startedAt = Date.now(); let result;
     try {
       if (tool.capability.startsWith('world.')) {
         if (!this.localCapabilities.has(tool.capability)) throw new Error('Local world capability is unavailable');
-        result = await this.bridge?.invokeLocal?.(name, args);
+        if (!this.agentController) throw new Error('Local agent control is unavailable');
+        this.agentController.assertActive(session);
+        result = await this.bridge?.invokeLocal?.(name, args, { session });
       } else {
+        this.agentController?.assertActive(session);
         if (!this.bridge?.available) throw new Error('Android Companion is not connected');
         result = await this.bridge.invoke(name, args);
       }
-      this.audit.push({ name, startedAt, finishedAt: Date.now(), outcome: 'accepted' });
+      this.audit.push({ name, sourceId: this.agentController?.sessionSource(session) || null, startedAt, finishedAt: Date.now(), outcome: 'accepted' });
       return result;
     } catch (error) {
-      this.audit.push({ name, startedAt, finishedAt: Date.now(), outcome: 'rejected' });
+      this.audit.push({ name, sourceId: this.agentController?.sessionSource(session) || null, startedAt, finishedAt: Date.now(), outcome: 'rejected', code: error?.code || null });
       throw error;
     }
   }
-  revokeAll() { this.grants.clear(); this.audit.push({ name: 'registry.revoke-all', startedAt: Date.now(), finishedAt: Date.now(), outcome: 'accepted' }); }
+  async invoke(name, args = {}, context = {}) {
+    const tool = TOOL_CATALOG.find(item => item.name === name);
+    if (tool?.capability.startsWith('world.')) {
+      const session = context?.session || context?.sessionId;
+      if (!session) throw new Error('Registered local agent session required; agentId arguments are not accepted');
+      return this.invokeFor(session, name, args);
+    }
+    const startedAt = Date.now();
+    if (!tool || !this.grants.has(tool.capability)) throw new Error('Tool is not granted to this agent');
+    try {
+      if (!this.bridge?.available) throw new Error('Android Companion is not connected');
+      const result = await this.bridge.invoke(name, args);
+      this.audit.push({ name, sourceId: null, startedAt, finishedAt: Date.now(), outcome: 'accepted' });
+      return result;
+    } catch (error) {
+      this.audit.push({ name, sourceId: null, startedAt, finishedAt: Date.now(), outcome: 'rejected', code: error?.code || null });
+      throw error;
+    }
+  }
+  async revokeAll() {
+    this.grants.clear(); this.nativeGrants.clear(); this.localCapabilities.clear();
+    const grantReset = this.agentController?.setGrantedCapabilities?.([]) || Promise.resolve([]);
+    const stopped = this.agentController?.stopAll?.('grant-revoke-all') || [];
+    this.audit.push({ name: 'registry.revoke-all', startedAt: Date.now(), finishedAt: Date.now(), outcome: 'accepted' });
+    await grantReset;
+    return stopped;
+  }
 }
