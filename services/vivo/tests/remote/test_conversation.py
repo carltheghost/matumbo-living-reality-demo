@@ -13,6 +13,7 @@ try:
         ConversationAdapter,
         OpenAIResponsesProvider,
         ProviderError,
+        RateLimiter,
         RESPONSES_URL,
         SCHEMA,
         attach_conversation_routes,
@@ -26,6 +27,7 @@ except ModuleNotFoundError:
         ConversationAdapter,
         OpenAIResponsesProvider,
         ProviderError,
+        RateLimiter,
         RESPONSES_URL,
         SCHEMA,
         attach_conversation_routes,
@@ -91,9 +93,10 @@ class ConversationAdapterTests(unittest.IsolatedAsyncioTestCase):
         values.update(overrides)
         return ConversationConfig(**values)
 
-    async def ask(self, adapter, *, identity="actor-a", request_id="req.1", generation=1, text="hello", world_value=None):
+    async def ask(self, adapter, *, identity="actor-a", session_id="session-a", request_id="req.1", generation=1, text="hello", world_value=None):
         return await adapter.respond(
             identity=identity,
+            session_id=session_id,
             request_id=request_id,
             generation=generation,
             message=text,
@@ -120,7 +123,7 @@ class ConversationAdapterTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_request_reply_correlation_idempotency_and_bounded_payload(self):
         provider = MockProvider([{"output_text": "real mock output"}])
-        adapter = ConversationAdapter(self.config(), provider=provider)
+        adapter = ConversationAdapter(self.config(requests_per_minute=1), provider=provider)
         first = await self.ask(adapter)
         second = await self.ask(adapter)
         self.assertEqual(first["schema"], SCHEMA)
@@ -172,6 +175,60 @@ class ConversationAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("private-a", provider.calls[1][0]["input"][-1]["content"])
         self.assertNotIn("private-a", provider.calls[2][0]["input"][0]["content"])
 
+    async def test_ui_sessions_isolate_generation_and_request_ids(self):
+        provider = MockProvider([
+            {"output_text": "tab a reply"},
+            {"output_text": "tab b reply"},
+        ])
+        adapter = ConversationAdapter(self.config(), provider=provider)
+        first = await self.ask(
+            adapter,
+            session_id="tab-a",
+            request_id="same.1",
+            generation=2,
+            text="private tab a",
+        )
+        second = await self.ask(
+            adapter,
+            session_id="tab-b",
+            request_id="same.1",
+            generation=1,
+            text="private tab b",
+        )
+        self.assertNotEqual(first["conversationId"], second["conversationId"])
+        self.assertEqual(len(provider.calls), 2)
+        self.assertNotIn("private tab a", provider.calls[1][0]["input"][-1]["content"])
+
+    async def test_timeout_retry_replays_cached_failure_without_second_provider_attempt(self):
+        provider = MockProvider([{"output_text": "late"}], wait_first=True)
+        adapter = ConversationAdapter(self.config(timeout_seconds=0.01), provider=provider)
+        with self.assertRaises(ConversationError) as first_error:
+            await self.ask(adapter, request_id="timeout-retry.1")
+        self.assertEqual(first_error.exception.code, "PROVIDER_TIMEOUT")
+        with self.assertRaises(ConversationError) as retry_error:
+            await self.ask(adapter, request_id="timeout-retry.1")
+        self.assertEqual(retry_error.exception.code, "PROVIDER_TIMEOUT")
+        self.assertEqual(len(provider.calls), 1)
+
+    async def test_unexpected_provider_failure_is_redacted_and_not_retried(self):
+        class BrokenProvider:
+            def __init__(self):
+                self.calls = 0
+
+            async def complete(self, payload, correlation_id):
+                self.calls += 1
+                raise RuntimeError("Authorization: Bearer sk-never-return-this")
+
+        provider = BrokenProvider()
+        adapter = ConversationAdapter(self.config(), provider=provider)
+        with self.assertRaises(ConversationError) as first_error:
+            await self.ask(adapter, request_id="broken.1")
+        self.assertEqual(first_error.exception.code, "PROVIDER_UNAVAILABLE")
+        with self.assertRaises(ConversationError) as retry_error:
+            await self.ask(adapter, request_id="broken.1")
+        self.assertEqual(retry_error.exception.code, "PROVIDER_UNAVAILABLE")
+        self.assertEqual(provider.calls, 1)
+
     async def test_unavailable_mode_is_honest_and_never_falls_back(self):
         adapter = ConversationAdapter(ConversationConfig(api_key=None))
         self.assertFalse(adapter.status()["available"])
@@ -194,6 +251,8 @@ class ConversationAdapterTests(unittest.IsolatedAsyncioTestCase):
         diagnostic = redact_secrets("Authorization: Bearer sk-test-secret and api_key=sk-test-secret")
         self.assertNotIn("sk-test-secret", diagnostic)
         self.assertIn("[REDACTED]", diagnostic)
+        diagnostic = redact_secrets("OPENAI_API_KEY=not-sk-shaped-secret")
+        self.assertNotIn("not-sk-shaped-secret", diagnostic)
 
     async def test_stop_selection_and_navigation_abort_do_not_commit_a_turn(self):
         for reason in ("conversation-stopped", "selection-changed", "navigation-changed"):
@@ -204,6 +263,10 @@ class ConversationAdapterTests(unittest.IsolatedAsyncioTestCase):
             task.cancel(reason)
             with self.assertRaises(asyncio.CancelledError):
                 await task
+            with self.assertRaises(ConversationError) as retry_error:
+                await self.ask(adapter, request_id=f"abort.{reason}")
+            self.assertEqual(retry_error.exception.code, "CONVERSATION_CANCELLED")
+            self.assertEqual(len(provider.calls), 1)
             self.assertEqual(len(adapter.store._states), 1)
             state = next(iter(adapter.store._states.values()))
             self.assertEqual(state.history, [])
@@ -232,10 +295,34 @@ class ConversationAdapterTests(unittest.IsolatedAsyncioTestCase):
             await old
         self.assertEqual(error.exception.code, "STALE_GENERATION")
         current = await new
+        with self.assertRaises(ConversationError) as retry_error:
+            await self.ask(adapter, request_id="generation.1", generation=1, text="old")
+        self.assertEqual(retry_error.exception.code, "STALE_GENERATION")
+        self.assertEqual(len(provider.calls), 2)
         self.assertEqual(current["generation"], 2)
         self.assertEqual(current["text"], "current")
         state = next(iter(adapter.store._states.values()))
         self.assertEqual([item[1] for item in state.history], ["new", "current"])
+
+    async def test_store_and_rate_limiter_bound_identity_memory(self):
+        provider = MockProvider([{"output_text": f"reply-{index}"} for index in range(6)])
+        adapter = ConversationAdapter(
+            self.config(max_conversations=2, max_conversations_per_identity=2),
+            provider=provider,
+        )
+        for index in range(4):
+            await self.ask(
+                adapter,
+                identity=f"actor-{index}",
+                session_id=f"tab-{index}",
+                request_id=f"bounded-{index}",
+                text=f"message-{index}",
+            )
+        self.assertLessEqual(adapter.store.count(), 2)
+        limiter = RateLimiter(limit=100, max_identities=2)
+        for index in range(20):
+            limiter.allow(f"identity-{index}")
+        self.assertLessEqual(len(limiter._events), 2)
 
 
 class ConversationRouteTests(unittest.IsolatedAsyncioTestCase):
@@ -274,17 +361,37 @@ class ConversationRouteTests(unittest.IsolatedAsyncioTestCase):
     async def test_status_and_respond_echo_correlation(self):
         response = await self.client.get("/api/conversation/status", headers=self.headers())
         self.assertEqual(response.status, 200)
-        self.assertTrue((await response.json())["available"])
+        status = await response.json()
+        self.assertTrue(status["available"])
+        self.assertTrue(status["sessionIdRequired"])
+        self.assertTrue(status["requestIdRequired"])
         response = await self.client.post(
             "/api/conversation/respond",
             headers={**self.headers(), "Content-Type": "application/json"},
-            json={"requestId": "route.1", "generation": 3, "message": "hello", "companion": companion(), "world": world()},
+            json={"sessionId": "session-route", "requestId": "route.1", "generation": 3, "message": "hello", "companion": companion(), "world": world()},
         )
         self.assertEqual(response.status, 200)
         body = await response.json()
         self.assertEqual(body["requestId"], "route.1")
         self.assertEqual(body["generation"], 3)
         self.assertEqual(body["text"], "route reply")
+
+    async def test_route_requires_explicit_session_and_request_ids(self):
+        base = {"message": "hello", "companion": companion(), "world": world()}
+        response = await self.client.post(
+            "/api/conversation/respond",
+            headers={**self.headers(), "Content-Type": "application/json"},
+            json={**base, "requestId": "missing-session"},
+        )
+        self.assertEqual(response.status, 400)
+        self.assertEqual((await response.json())["error"], "SESSION_INVALID")
+        response = await self.client.post(
+            "/api/conversation/respond",
+            headers={**self.headers(), "Content-Type": "application/json"},
+            json={**base, "sessionId": "session-required"},
+        )
+        self.assertEqual(response.status, 400)
+        self.assertEqual((await response.json())["error"], "REQUEST_ID_INVALID")
 
     async def test_unavailable_route_is_not_scripted(self):
         unavailable = ConversationAdapter(ConversationConfig(api_key=None))
@@ -308,7 +415,7 @@ class ConversationRouteTests(unittest.IsolatedAsyncioTestCase):
             response = await client.post(
                 "/api/conversation/respond",
                 headers={**self.headers(), "Content-Type": "application/json"},
-                json={"requestId": "off.1", "message": "hello", "companion": companion(), "world": world()},
+                json={"sessionId": "session-off", "requestId": "off.1", "message": "hello", "companion": companion(), "world": world()},
             )
             self.assertEqual(response.status, 503)
             self.assertEqual((await response.json())["error"], "CONVERSATION_UNAVAILABLE")

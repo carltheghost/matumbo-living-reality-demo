@@ -14,13 +14,16 @@ seam remains honest when no provider is configured.
 Both require the exact configured `Origin` and the existing Vivo bearer
 capability in `Authorization: Bearer ...`. The bearer is authenticated by the
 remote gateway; it is reduced to a one-way digest before selecting process-local
-conversation state. The raw bearer and `OPENAI_API_KEY` never enter responses,
-browser assets, logs, or receipts.
+conversation state. Each state is also scoped by the client-generated session
+ID and sanitized world/companion scope, so two tabs using the same bearer do
+not share generation fences or request-ID outcomes. The raw bearer and
+`OPENAI_API_KEY` never enter responses, browser assets, logs, or receipts.
 
 The response route accepts only this bounded JSON shape:
 
 ```json
 {
+  "sessionId": "phone-tab-7f4b",
   "requestId": "phone.turn.1",
   "generation": 1,
   "message": "What is this place?",
@@ -36,6 +39,11 @@ The response route accepts only this bounded JSON shape:
 }
 ```
 
+`sessionId` is a client-generated, bounded tab/session identifier. It is
+combined with the authenticated bearer identity; it is not an authorization
+credential. `requestId` is required and must remain unchanged when a client
+retries the same turn.
+
 The server ignores unlisted companion fields, rejects oversized or malformed
 context, caps coordinates to the accepted bounded range, and uses world data
 only as descriptive prompt context. It never uses that data to authorize an
@@ -47,7 +55,7 @@ process-local `conversationId`:
 
 ```json
 {
-  "schema": "vivo.conversation/1",
+  "schema": "vivo.conversation/2",
   "status": "complete",
   "requestId": "phone.turn.1",
   "conversationId": "vivo-conv-...",
@@ -57,11 +65,14 @@ process-local `conversationId`:
 }
 ```
 
-Retries with the same request ID and payload return the cached reply. Reusing a
-request ID for a different payload is rejected. A newer generation fences an
-older in-flight response; cancellation of the HTTP request also cancels the
-provider task and does not commit the turn. This is the server half of the
-companion selection/navigation stop contract.
+Retries with the same session, request ID, and payload replay the cached reply
+or the cached terminal provider error without issuing another provider
+attempt. Reusing a request ID for a different payload is rejected. A newer
+generation fences an older in-flight response; cancellation of the HTTP
+request also cancels the provider task, memoizes the cancelled attempt, and
+does not commit the turn. This is the server half of the companion
+selection/navigation stop contract. The memoization is process-local, so a
+restart remains an operational boundary for exactly-once billing protection.
 
 ## Provider behavior
 
@@ -83,8 +94,9 @@ high-volume choice. Operators may set `VIVO_OPENAI_MODEL` to an approved model
 or snapshot in secret-managed deployment configuration. No client field or
 arbitrary proxy URL can change the provider destination.
 
-Conversation history is bounded and process-local; it resets on process restart
-and is not durable application/world state. Set spend and rate limits in the
+Conversation history, request outcomes, and rate-limit buckets are bounded and
+process-local; they reset on process restart and are not durable
+application/world state. Set spend and rate limits in the
 OpenAI project before enabling a live deployment, then verify with a real
 authorized key and a non-production session. This branch deliberately performs
 no live provider call.
