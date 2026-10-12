@@ -199,7 +199,7 @@ def main(base_url: str) -> None:
             }
             """
         )
-        expected_increment = newer_preview["q"][0] - first_preview[0] if newer_preview["modelPreview"]["baseRevision"] == 0 else newer_preview["modelPreview"]["delta"][0]
+        expected_increment = newer_preview["modelPreview"].get("intentDelta", newer_preview["modelPreview"]["delta"])[0]
         assert "move preview" in rebased_preview["preview"], {"newer": newer_preview, "rebased": rebased_preview}
         assert rebased_preview["applyDisabled"] is False
         assert rebased_preview["delayedApplyCompleted"] is True
@@ -247,6 +247,148 @@ def main(base_url: str) -> None:
         assert race_final["cameraCalls"] == 0
         assert not race_errors, race_errors
         race_context.close()
+
+        for overlap_attempt in range(3):
+            overlap_context = browser.new_context()
+            overlap_context.set_default_timeout(7000)
+            overlap_context.add_init_script(camera_init_script)
+            overlap_context.add_init_script(
+                """
+                (() => {
+                  const NativeWorker = window.Worker;
+                  window.__overlapApplyCount = 0;
+                  window.__overlapFirstApplyResult = false;
+                  window.__overlapSnapshotHeld = false;
+                  window.__overlapHeldEvent = null;
+                  window.__releaseOlderApplySnapshot = () => {
+                    const event = window.__overlapHeldEvent;
+                    if (!event) return false;
+                    window.__overlapHeldEvent = null;
+                    setTimeout(() => window.__overlapOnMessage?.(event), 0);
+                    return true;
+                  };
+                  window.Worker = class VivoOverlapWorker {
+                    constructor(url, options) {
+                      const worker = new NativeWorker(url, options);
+                      let onmessage = null;
+                      let onerror = null;
+                      let firstApplyId = null;
+                      let heldSnapshotId = null;
+                      Object.defineProperties(worker, {
+                        onmessage: { configurable: true, get: () => onmessage, set: value => { onmessage = value; window.__overlapOnMessage = value; } },
+                        onerror: { configurable: true, get: () => onerror, set: value => { onerror = value; } },
+                      });
+                      const postMessage = worker.postMessage.bind(worker);
+                      worker.postMessage = (message, transfer) => {
+                        if (message?.method === 'applyLocalEdit') {
+                          window.__overlapApplyCount += 1;
+                          if (window.__overlapApplyCount === 1) firstApplyId = message.id;
+                        }
+                        if (message?.method === 'snapshot' && window.__overlapFirstApplyResult && !heldSnapshotId) heldSnapshotId = message.id;
+                        return postMessage(message, transfer);
+                      };
+                      worker.addEventListener('message', event => {
+                        if (event.data?.id === firstApplyId) {
+                          window.__overlapFirstApplyResult = true;
+                          onmessage?.call(worker, event);
+                          return;
+                        }
+                        if (event.data?.id === heldSnapshotId) {
+                          window.__overlapSnapshotHeld = true;
+                          window.__overlapHeldEvent = event;
+                          return;
+                        }
+                        onmessage?.call(worker, event);
+                      });
+                      worker.addEventListener('error', event => onerror?.call(worker, event));
+                      return worker;
+                    }
+                  };
+                })();
+                """
+            )
+            overlap_page = overlap_context.new_page()
+            overlap_errors: list[str] = []
+            overlap_page.on("pageerror", lambda error: overlap_errors.append(str(error)))
+            overlap_page.goto(route, wait_until="domcontentloaded")
+            overlap_page.wait_for_selector("#enterPhoneLocal")
+            overlap_page.get_by_role("button", name="Enter local Vivo").click()
+            overlap_page.wait_for_selector("#phoneFieldAtlas")
+            overlap_page.wait_for_function("Boolean(window.VivaPhoneEngine && window.VivaPhoneEngine.active)")
+            overlap_page.get_by_role("button", name="Preview move").click()
+            first_overlap = overlap_page.evaluate(
+                """
+                () => ({
+                  q: window.VivaPhoneEngine.fieldWorld().entities.find(entity => entity.id === 'relic').q,
+                  modelPreview: window.VivaPhoneEngine.fieldWorld().preview,
+                })
+                """
+            )
+            overlap_page.get_by_role("button", name="Apply local edit").click()
+            overlap_page.wait_for_function("window.__overlapSnapshotHeld === true")
+            overlap_page.get_by_role("button", name="Preview move").click()
+            second_overlap = overlap_page.evaluate(
+                """
+                () => ({
+                  q: window.VivaPhoneEngine.fieldWorld().entities.find(entity => entity.id === 'relic').q,
+                  modelPreview: window.VivaPhoneEngine.fieldWorld().preview,
+                  preview: document.querySelector('#phoneFieldPreview').textContent,
+                  applyDisabled: document.querySelector('#phoneFieldApply').disabled,
+                })
+                """
+            )
+            expected_increment = second_overlap["modelPreview"].get("intentDelta", [second_overlap["q"][0] - first_overlap["q"][0]])[0]
+            overlap_page.get_by_role("button", name="Apply local edit").click()
+            overlap_page.wait_for_timeout(150)
+            held = overlap_page.evaluate(
+                """
+                () => ({
+                  applyCount: window.__overlapApplyCount,
+                  preview: document.querySelector('#phoneFieldPreview').textContent,
+                  applyDisabled: document.querySelector('#phoneFieldApply').disabled,
+                })
+                """
+            )
+            assert held["applyCount"] == 1, {"attempt": overlap_attempt, "held": held}
+            assert "move preview" in held["preview"] and held["applyDisabled"] is False, held
+            assert overlap_page.evaluate("window.__releaseOlderApplySnapshot()") is True
+            deadline = time.monotonic() + 7
+            settled_overlap = None
+            while time.monotonic() < deadline:
+                settled_overlap = overlap_page.evaluate(
+                    """
+                    async () => {
+                      const snapshot = await window.VivaPhoneEngine.snapshot();
+                      const operations = (snapshot.snapshot.localOperationResults || []).filter(item => item?.result?.changed === true);
+                      return {
+                        applyCount: window.__overlapApplyCount,
+                        operationCount: operations.length,
+                        preview: document.querySelector('#phoneFieldPreview').textContent,
+                        applyDisabled: document.querySelector('#phoneFieldApply').disabled,
+                        operations,
+                      };
+                    }
+                    """
+                )
+                if settled_overlap["applyCount"] >= 2 and settled_overlap["operationCount"] >= 2 and "No local edit preview" in settled_overlap["preview"]:
+                    break
+                overlap_page.wait_for_timeout(50)
+            else:
+                raise AssertionError({"attempt": overlap_attempt, "second": second_overlap, "settled": settled_overlap})
+            final_overlap = overlap_page.evaluate(
+                """
+                async () => {
+                  const snapshot = await window.VivaPhoneEngine.snapshot();
+                  const operations = (snapshot.snapshot.localOperationResults || []).filter(item => item?.result?.changed === true);
+                  return { operations, q: snapshot.snapshot.spaces.root.entities.relic.q, preview: document.querySelector('#phoneFieldPreview').textContent };
+                }
+                """
+            )
+            second_operation = final_overlap["operations"][-1]
+            second_fingerprint = json.loads(second_operation["fingerprint"])
+            assert abs(second_fingerprint["delta"][0] - expected_increment) < 1e-9, {"attempt": overlap_attempt, "final": final_overlap}
+            assert not overlap_errors, {"attempt": overlap_attempt, "errors": overlap_errors}
+            overlap_context.close()
 
         page.get_by_role("button", name="Preview move").click()
         page.evaluate(

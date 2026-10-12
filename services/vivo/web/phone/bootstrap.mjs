@@ -27,6 +27,8 @@ const handContacts = new Map(), pointerContacts = new Map();
 const touchGestures = new Map();
 const touchOperationIds = new LocalOperationIdFactory('touch-preview');
 const pendingFieldApplies = [];
+let fieldApplyTail = Promise.resolve(), fieldApplySequence = 0;
+let snapshotTail = Promise.resolve(), snapshotSequence = 0, renderedSnapshot = null;
 let persistTimer = null, lastTwoHand = null, latestCapabilities = null, lastPoseAction = -Infinity;
 const lastPoseByHand = new Map();
 let appliedEyeId = null, appliedEyeRevision = -1;
@@ -92,6 +94,42 @@ function renderEye(envelope, options = {}) {
   const axis = $('phoneAxis'); if (axis) { axis.replaceChildren(); for (let i = 0; i < state.geometry.dimension; i++) { const option = document.createElement('option'); option.value = String(i); option.textContent = `x${i + 1}${i > 2 ? ' ? extra axis' : ''}`; axis.append(option); } axis.value = String(Math.min(activeAxis, state.geometry.dimension - 1)); }
   const eyeInfo = $('phoneEyeInfo'); if (eyeInfo) eyeInfo.textContent = `${projected.eye.label} ? ${projected.eye.spaceId} ? ${state.geometry.dimension} spatial axes + separate time ? world ${envelope.snapshot.worldId}`;
 }
+function snapshotMarker(envelope) {
+  const snapshot = envelope?.snapshot;
+  const eye = envelope?.eyes?.[envelope?.currentEyeId];
+  const space = snapshot?.spaces?.[eye?.spaceId || snapshot?.rootSpaceId];
+  return {
+    worldId: snapshot?.worldId || null,
+    branchId: envelope?.branchId || null,
+    eyeId: envelope?.currentEyeId || null,
+    spaceId: eye?.spaceId || snapshot?.rootSpaceId || null,
+    acceptedSequence: Number(snapshot?.acceptedSequence) || 0,
+    eyeRevision: Number(eye?.revision) || 0,
+    entityRevisions: Object.entries(space?.entities || {}).sort(([a], [b]) => a.localeCompare(b)).map(([id, entity]) => [id, Number(entity?.revision) || 0]),
+  };
+}
+function isOlderSnapshot(next, prior) {
+  if (!prior) return false;
+  const current = snapshotMarker(next);
+  if (current.worldId !== prior.worldId || current.branchId !== prior.branchId || current.eyeId !== prior.eyeId || current.spaceId !== prior.spaceId) return false;
+  if (current.acceptedSequence !== prior.acceptedSequence) return current.acceptedSequence < prior.acceptedSequence;
+  if (current.eyeRevision !== prior.eyeRevision) return current.eyeRevision < prior.eyeRevision;
+  const priorRevisions = new Map(prior.entityRevisions);
+  return current.entityRevisions.some(([id, revision]) => revision < (priorRevisions.get(id) || 0));
+}
+function enqueueSnapshot(read, options = {}) {
+  const sequence = ++snapshotSequence;
+  const task = snapshotTail.then(async () => {
+    const envelope = await read();
+    if (localMode && !isOlderSnapshot(envelope, renderedSnapshot)) {
+      renderedSnapshot = snapshotMarker(envelope);
+      renderEye(envelope, { ...options, snapshotSequence: sequence });
+    }
+    return envelope;
+  });
+  snapshotTail = task.catch(() => {});
+  return task;
+}
 function updateEyeControls(envelope) {
   const select = $('phoneEyeSelect'); if (!select) return;
   const prior = select.value;
@@ -102,7 +140,7 @@ function updateEyeControls(envelope) {
   $('phoneExitNested').disabled = nested === 0;
   $('phoneEnterNested').disabled = !S.state?.entities[R.selected]?.innerSpaceId;
 }
-async function refreshSnapshot(options = {}) { if (!engine) return null; const envelope = await engine.snapshot(); if (localMode) renderEye(envelope, options); return envelope; }
+async function refreshSnapshot(options = {}) { if (!engine) return null; return enqueueSnapshot(() => engine.snapshot(), options); }
 function fieldAxes() {
   return ['phoneFieldAxisA', 'phoneFieldAxisB', 'phoneFieldAxisC'].map(id => Number($(id)?.value)).filter(Number.isInteger);
 }
@@ -177,40 +215,130 @@ function localObjectIdentity(entityId) {
     baseQ: [...entity.q],
   };
 }
-async function applyFieldPreview() {
-  const candidate = fieldWorld?.commitCandidate();
-  if (!candidate || !engine) return;
-  const current = await engine.snapshot();
-  if (!fieldWorld?.isCurrent(candidate)) throw new Error('The field preview was discarded or retargeted before Apply; no local edit was submitted.');
-  const spaceId = current.eyes[current.currentEyeId].spaceId;
-  const entity = current.snapshot.spaces[spaceId]?.entities[candidate.entityId];
-  if (!entity || entity.revision !== candidate.baseRevision || current.snapshot.worldId !== candidate.worldId || (current.branchId || null) !== candidate.branchId || current.currentEyeId !== candidate.eyeId || spaceId !== candidate.spaceId) {
-    if (fieldWorld.isCurrent(candidate)) fieldWorld.discardPreview(); updateFieldWorld(current);
-    throw new Error('The selected object changed while the preview was open; preview discarded.');
-  }
-  if (candidate.kind === 'rotate-view') {
-    if (fieldWorld.isCurrent(candidate)) fieldWorld.discardPreview(); updateFieldWorld(current);
-    status('Rotation is a view-only preview; no canonical or local object state was changed.');
-    return;
-  }
-  const pending = { candidate, result: null };
-  pendingFieldApplies.push(pending);
+function fieldScopeMatches(envelope, candidate) {
+  const eye = envelope?.eyes?.[envelope?.currentEyeId];
+  const spaceId = eye?.spaceId;
+  return Boolean(envelope?.snapshot
+    && envelope.snapshot.worldId === candidate?.worldId
+    && (envelope.branchId || null) === candidate?.branchId
+    && envelope.currentEyeId === candidate?.eyeId
+    && spaceId === candidate?.spaceId);
+}
+function appliedLocalOperation(envelope, candidate) {
+  return (envelope?.snapshot?.localOperationResults || []).find(item => item?.operationId === candidate?.operationId) || null;
+}
+function syncPendingCandidate(pending) {
+  const current = fieldWorld?.commitCandidate();
+  if (current?.operationId === pending.candidate?.operationId && !fieldWorld.isDiscarded(pending.candidate)) pending.candidate = current;
+  return pending.candidate;
+}
+function stalePreviewError(error) {
+  return /STALE_LOCAL_PREVIEW|changed before the preview|changed while the preview/i.test(String(error?.message || error));
+}
+async function runFieldApply(pending) {
+  pending.phase = 'running';
+  let candidate = pending.candidate;
+  let current = null;
   try {
-    const result = await engine.applyLocalEdit(candidate.entityId, candidate.delta, {
-      worldId: candidate.worldId, branchId: candidate.branchId, eyeId: candidate.eyeId,
-      spaceId: candidate.spaceId, entityId: candidate.entityId, baseRevision: candidate.baseRevision,
-      operationId: candidate.operationId,
-    });
+    if (pending.cancelled || fieldWorld.isDiscarded(candidate)) return { cancelled: true };
+    current = await refreshSnapshot({ fieldApplyPreflight: pending });
+    if (pending.cancelled || fieldWorld.isDiscarded(candidate)) return { cancelled: true };
+    candidate = syncPendingCandidate(pending);
+    if (!fieldScopeMatches(current, candidate)) {
+      if (fieldWorld.commitCandidate()) fieldWorld.discardPreview();
+      updateFieldWorld(current);
+      throw new Error('The selected object changed branch, Eye or space while the preview was queued; preview discarded.');
+    }
+    let result = appliedLocalOperation(current, candidate);
+    if (result) {
+      result = { ...result.result, replayed: true };
+    } else {
+      let applyAttempts = 0;
+      while (!result) {
+        const eye = current.eyes[current.currentEyeId], spaceId = eye?.spaceId;
+        const entity = current.snapshot.spaces[spaceId]?.entities[candidate.entityId];
+        if (!entity) throw new Error('The selected object is no longer present in the active space; preview discarded.');
+        if (entity.revision !== candidate.baseRevision) {
+          const rebased = fieldWorld.rebaseCandidate(candidate, current);
+          if (!rebased) throw new Error('Local field preview became stale and could not be safely rebased; press Preview again.');
+          candidate = pending.candidate = rebased;
+          fieldEnvelope = current;
+          updateFieldWorld(current, { fieldApplyPreflight: pending });
+        }
+        try {
+          result = await engine.applyLocalEdit(candidate.entityId, candidate.delta, {
+            worldId: candidate.worldId, branchId: candidate.branchId, eyeId: candidate.eyeId,
+            spaceId: candidate.spaceId, entityId: candidate.entityId, baseRevision: candidate.baseRevision,
+            operationId: candidate.operationId,
+          });
+        } catch (error) {
+          if (!stalePreviewError(error) || applyAttempts >= 3) throw error;
+          applyAttempts++;
+          current = await refreshSnapshot({ fieldApplyRetry: pending, retry: applyAttempts });
+          const replay = appliedLocalOperation(current, candidate);
+          if (replay) {
+            result = { ...replay.result, replayed: true };
+            break;
+          }
+          const active = fieldWorld.commitCandidate();
+          const rebaseTarget = active?.operationId === candidate.operationId ? active : candidate;
+          const rebased = fieldWorld.rebaseCandidate(rebaseTarget, current);
+          if (!rebased) throw new Error('Local field preview became stale and could not be safely rebased; press Apply to retry.');
+          candidate = pending.candidate = rebased;
+          fieldEnvelope = current;
+          updateFieldWorld(current, { fieldApplyRetry: pending, retry: applyAttempts });
+        }
+      }
+    }
     pending.result = result;
+    pending.phase = 'settling';
+    if (fieldWorld.isCurrent(candidate)) fieldWorld.clearAppliedPreview(candidate);
+    await refreshSnapshot({ completedApply: { candidate, result }, fieldApply: pending });
     const newerPreview = fieldWorld.commitCandidate();
-    if (fieldWorld.isCurrent(candidate)) fieldWorld.discardPreview();
-    await refreshSnapshot({ completedApply: { candidate, result } });
-    status(`${result?.replayed ? 'Local field edit replay acknowledged' : 'Local field edit applied explicitly'}${newerPreview && newerPreview.generation !== candidate.generation ? '; newer local preview preserved and rebased' : ''}. Canonical authority was not contacted.`);
+    if (result?.cancelled) status('Local field Apply was cancelled without changing accepted state.');
+    else status(`${result?.replayed ? 'Local field edit replay acknowledged' : 'Local field edit applied explicitly'}${newerPreview && newerPreview.operationId !== candidate.operationId ? '; newer local preview preserved and rebased' : ''}. Canonical authority was not contacted.`);
     return result;
+  } catch (error) {
+    if (stalePreviewError(error)) {
+      let retryMessage = null;
+      try {
+        current = await refreshSnapshot({ fieldApplyError: pending });
+        const active = fieldWorld.commitCandidate();
+        if (active && active.operationId === candidate.operationId && fieldScopeMatches(current, active) && !fieldWorld.isDiscarded(active)) {
+          const rebased = fieldWorld.rebaseCandidate(active, current);
+          if (rebased) {
+            pending.candidate = rebased;
+            fieldEnvelope = current;
+            updateFieldWorld(current, { fieldApplyError: pending });
+            retryMessage = 'Local field preview became stale; it was rebased and remains ready. Press Apply to retry.';
+          }
+        }
+      } catch {}
+      if (retryMessage) throw new Error(retryMessage);
+    }
+    throw error;
   } finally {
     const index = pendingFieldApplies.indexOf(pending);
     if (index >= 0) pendingFieldApplies.splice(index, 1);
   }
+}
+function enqueueFieldApply(candidate) {
+  const pending = { candidate, result: null, phase: 'queued', sequence: ++fieldApplySequence, cancelled: false };
+  pendingFieldApplies.push(pending);
+  const operation = fieldApplyTail.then(() => runFieldApply(pending));
+  pending.promise = operation;
+  fieldApplyTail = operation.catch(() => {});
+  return operation;
+}
+async function applyFieldPreview() {
+  const candidate = fieldWorld?.commitCandidate();
+  if (!candidate || !engine) return;
+  if (candidate.kind === 'rotate-view') {
+    if (fieldWorld.isCurrent(candidate)) fieldWorld.discardPreview(); updateFieldWorld(fieldEnvelope);
+    status('Rotation is a view-only preview; no canonical or local object state was changed.');
+    return;
+  }
+  return enqueueFieldApply(candidate);
 }
 function updatePhoneAuthorityUI(detail = null) {
   const debug = detail?.state || authority?.debug();
@@ -634,11 +762,11 @@ function openPhonePanel() {
   refreshSnapshot().catch(error => status(error.message));
 }
 async function startLocal() {
-  if (engine) { localMode = true; updateLocalGrants(); document.body.classList.add('phone-local'); const state = await engine.snapshot(); renderEye(state); await authority?.syncLocal(state); updatePhoneAuthorityUI(); openPhonePanel(); return; }
+  if (engine) { localMode = true; updateLocalGrants(); document.body.classList.add('phone-local'); const state = await engine.snapshot(); renderedSnapshot = snapshotMarker(state); renderEye(state); await authority?.syncLocal(state); updatePhoneAuthorityUI(); openPhonePanel(); return; }
   status("Starting the local worker and opening this phone’s saved Vivo world…");
   engine = new PhoneEngineClient();
   engine.addEventListener('statechange', event => {
-    if (event.detail?.state && localMode) renderEye(event.detail.state);
+    if (event.detail?.state && localMode) enqueueSnapshot(() => event.detail.state, { stateEvent: event.detail.reason }).catch(() => {});
     if (event.detail?.state && authority) authority.syncLocal(event.detail.state).catch(() => {});
     if (event.detail?.reason === 'step-error') status(event.detail.error || 'Local material step stopped safely.');
     if (event.detail?.reason === 'persistence-failed') status(`Local Vivo state changed but was not saved: ${event.detail.state?.persistence?.error || 'storage failed'}. Retry remains available.`);
@@ -649,7 +777,7 @@ async function startLocal() {
   interactionFabric = new SpatialInteractionFabric();
   authority = new PhoneAuthorityAdapter({ engine, onState: updatePhoneAuthorityUI });
   await authority.syncLocal(state);
-  localMode = true; updateLocalGrants(); document.body.classList.add('phone-local'); renderEye(state);
+  localMode = true; updateLocalGrants(); document.body.classList.add('phone-local'); renderedSnapshot = snapshotMarker(state); renderEye(state);
   $('welcome').hidden = true; $('toolbar').hidden = false;
   const caps = await detectPhoneCapabilities(); latestCapabilities = caps;
   $('phoneEngineState').textContent = `Worker ready ? ${caps.webgpu ? 'WebGPU available' : caps.webgl2 ? 'WebGL2 renderer' : 'Canvas renderer'} ? ${caps.wasm ? 'WASM-ready' : 'JS fallback'} ? sparse ${state.snapshot.spaces.root.dimension}D root / ${state.snapshot.spaces.inner.dimension}D nested ? IndexedDB ${caps.indexedDb ? 'available' : 'unavailable'}.`;

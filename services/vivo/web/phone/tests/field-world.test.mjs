@@ -112,6 +112,25 @@ test('a newer same-object preview is rebased after an older Apply completes', ()
   assert.ok(Math.abs(tracked.q[0] - (relic.q[0] + (newer.q[0] - first.q[0]))) < 1e-12);
 });
 
+test('a stale preflight can rebase newer intent without mutating accepted state', () => {
+  const initial = envelope(4);
+  const controller = new FieldWorldController(initial, { selectedId: 'relic' });
+  const first = controller.previewMove('relic', 0, 0.14);
+  const newer = controller.previewMove('relic', 0, 0.14);
+  const accepted = structuredClone(initial);
+  const relic = accepted.snapshot.spaces.root.entities.relic;
+  relic.q[0] += first.delta[0];
+  relic.revision = first.baseRevision + 1;
+
+  controller.refresh(accepted, { pendingApplies: [{ candidate: first }] });
+  const rebased = controller.rebaseCandidate(newer, accepted);
+  assert.equal(rebased.operationId, newer.operationId);
+  assert.equal(rebased.baseRevision, relic.revision);
+  assert.ok(Math.abs(rebased.delta[0] - newer.intentDelta[0]) < 1e-12);
+  assert.ok(Math.abs(rebased.q[0] - (relic.q[0] + newer.intentDelta[0])) < 1e-12);
+  assert.ok(Math.abs(accepted.snapshot.spaces.root.entities.relic.q[0] - (-1.15 + first.delta[0])) < 1e-12);
+});
+
 test('a preview created after the accepted state stays fenced through later solver revisions', () => {
   const initial = envelope(4);
   const controller = new FieldWorldController(initial, { selectedId: 'relic' });

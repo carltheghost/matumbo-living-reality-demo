@@ -241,6 +241,7 @@ export function buildFieldWorld(envelope, {
       operationId: preview.operationId,
       baseRevision: preview.baseRevision,
       delta: [...preview.delta],
+      intentDelta: [...(preview.intentDelta || preview.delta)],
     } : null,
     accepted: inspectAcceptedEvents(envelope, authorityDebug),
   };
@@ -253,6 +254,7 @@ export class FieldWorldController {
     this.previewGeneration = 0;
     this.previewIds = new LocalOperationIdFactory('field-preview');
     this.preview = null;
+    this.discardedPreviewIds = new Set();
     this.model = envelope ? buildFieldWorld(envelope, { ...options, preview: this.preview }) : null;
   }
   _buildModel() {
@@ -269,19 +271,59 @@ export class FieldWorldController {
       baseRevision: Number(entity?.revision) || 0,
     };
   }
+  _entityAt(envelope, candidate) {
+    const eye = envelope?.eyes?.[envelope?.currentEyeId];
+    const spaceId = eye?.spaceId;
+    const entity = envelope?.snapshot?.spaces?.[spaceId]?.entities?.[candidate?.entityId];
+    if (!eye || !spaceId || !entity || envelope.snapshot.worldId !== candidate?.worldId
+      || (envelope.branchId || null) !== candidate?.branchId
+      || envelope.currentEyeId !== candidate?.eyeId || spaceId !== candidate?.spaceId) return null;
+    return { eye, spaceId, entity };
+  }
   _newPreview(entity, values) {
     this.previewGeneration++;
     const identity = this._identity(entity);
+    const prior = this.preview && this.preview.worldId === identity.worldId
+      && this.preview.branchId === identity.branchId && this.preview.eyeId === identity.eyeId
+      && this.preview.spaceId === identity.spaceId && this.preview.entityId === identity.entityId ? this.preview : null;
+    const baseQ = Array.isArray(values.baseQ) ? values.baseQ.slice() : [...entity.q];
+    const referenceQ = prior?.q || baseQ;
+    const intentDelta = values.q.map((value, index) => Number(value) - Number(referenceQ[index] ?? value));
     const carryRebase = this.preview?.rebaseAfterApply === true;
     this.preview = {
       ...identity,
       ...values,
+      baseQ,
+      intentDelta,
       generation: this.previewGeneration,
       operationId: this.previewIds.next('preview'),
+      ...(prior ? { parentOperationId: prior.operationId } : {}),
       ...(carryRebase ? { rebaseAfterApply: true } : {}),
     };
     this._buildModel();
     return clone(this.preview);
+  }
+  rebaseCandidate(candidate, envelope) {
+    const target = this._entityAt(envelope, candidate);
+    if (!target) return null;
+    const baseQ = Array.isArray(target.entity.q) ? target.entity.q.slice() : [];
+    const relative = Array.isArray(candidate.intentDelta)
+      ? candidate.intentDelta.slice()
+      : candidate.q.map((value, index) => Number(value) - Number(candidate.baseQ?.[index] ?? value));
+    const rebased = {
+      ...candidate,
+      baseRevision: Number(target.entity.revision),
+      baseQ,
+      q: baseQ.map((value, index) => clamp(value + Number(relative[index] || 0), -1e6, 1e6)),
+      delta: relative,
+      rebaseAfterApply: true,
+    };
+    if (this.isCurrent(candidate)) {
+      this.preview = { ...this.preview, ...rebased };
+      this._buildModel();
+      return clone(this.preview);
+    }
+    return clone(rebased);
   }
   refresh(envelope, options = {}) {
     const nextEnvelope = clone(envelope);
@@ -295,16 +337,23 @@ export class FieldWorldController {
       && nextSpace === candidate.spaceId
       && nextEntity?.id === candidate.entityId);
     const pendingApplies = Array.isArray(options.pendingApplies) ? options.pendingApplies : [];
-    const pendingNewerPreview = Boolean(this.preview && pendingApplies.some(item => {
+    const pendingOtherPreview = Boolean(this.preview && pendingApplies.some(item => {
       const candidate = item?.candidate || item;
-      return candidate?.generation !== this.preview.generation
-        && sameScope(candidate);
+      return !item?.cancelled && candidate?.operationId !== this.preview.operationId && sameScope(candidate);
     }));
+    const pendingCurrentTransaction = Boolean(this.preview && pendingApplies.some(item => {
+      const candidate = item?.candidate || item;
+      return !item?.cancelled && candidate?.operationId === this.preview.operationId
+        && (item?.phase === 'queued' || item?.phase === 'running');
+    }));
+    const pendingOverlap = pendingOtherPreview || pendingCurrentTransaction;
     const completedApply = options.completedApply;
     let rebased = false;
     const rebasePreview = referenceQ => {
       if (!this.preview || !nextEntity) return;
-      const delta = this.preview.q.map((value, index) => value - Number(referenceQ[index] ?? value));
+      const delta = Array.isArray(this.preview.intentDelta)
+        ? this.preview.intentDelta.slice()
+        : this.preview.q.map((value, index) => value - Number(referenceQ[index] ?? value));
       const baseQ = Array.isArray(nextEntity.q) ? nextEntity.q.slice() : [];
       this.preview = {
         ...this.preview,
@@ -342,7 +391,7 @@ export class FieldWorldController {
       || nextSpace !== this.preview?.spaceId
       || !nextEntity
       || Number(nextEntity.revision) !== this.preview?.baseRevision;
-    if (this.preview && invalid && !pendingNewerPreview && !rebased) this.discardPreview();
+    if (this.preview && invalid && !pendingOverlap && !rebased) this.discardPreview();
     this.envelope = nextEnvelope;
     this.options = { ...this.options, ...options };
     return clone(this._buildModel());
@@ -378,11 +427,25 @@ export class FieldWorldController {
     const baseQ = [...(entity.baseQ || entity.q)];
     return this._newPreview(entity, { kind: 'mix', baseQ, q, delta: q.map((value, index) => value - baseQ[index]), rotation: 0, mixWith: nearest.id });
   }
-  discardPreview() {
+  discardPreview({ mark = true } = {}) {
+    if (mark && this.preview?.operationId) {
+      this.discardedPreviewIds.add(this.preview.operationId);
+      if (this.discardedPreviewIds.size > 128) this.discardedPreviewIds.delete(this.discardedPreviewIds.values().next().value);
+    }
     this.previewGeneration++;
     this.preview = null;
     this._buildModel();
     return null;
+  }
+  clearAppliedPreview(candidate) {
+    if (!this.isCurrent(candidate)) return false;
+    this.previewGeneration++;
+    this.preview = null;
+    this._buildModel();
+    return true;
+  }
+  isDiscarded(candidate) {
+    return Boolean(candidate?.operationId && this.discardedPreviewIds.has(candidate.operationId));
   }
   isCurrent(candidate) {
     return Boolean(candidate && this.preview && candidate.operationId === this.preview.operationId && candidate.generation === this.previewGeneration && candidate.entityId === this.preview.entityId);
