@@ -160,12 +160,16 @@ function restoreBranchMetadata(envelope) {
 }
 
 /** Fixed-step, local-neighborhood simulation. Nothing allocates by D^dimension. */
-export function stepSparseSpace(space, dt = FIXED_STEP, activeIds = null) {
+export function stepSparseSpace(space, dt = FIXED_STEP, activeIds = null, excludedIds = null) {
   if (!Number.isFinite(dt) || dt <= 0 || dt > 0.1) throw new RangeError('Simulation step must be between 0 and 100 ms');
   const entities = space.entities, edges = space.field.edges || [], forces = new Map();
-  const active = activeIds ? new Set(activeIds) : new Set(Object.keys(entities));
+  const excluded = new Set(excludedIds || []);
+  const active = new Set([...(activeIds ? activeIds : Object.keys(entities))].filter(id => !excluded.has(id)));
   if (!active.size) return false;
-  for (const edge of edges) if (active.has(edge.a) || active.has(edge.b)) { active.add(edge.a); active.add(edge.b); }
+  for (const edge of edges) if (active.has(edge.a) || active.has(edge.b)) {
+    if (!excluded.has(edge.a)) active.add(edge.a);
+    if (!excluded.has(edge.b)) active.add(edge.b);
+  }
   for (const id of active) {
     if (!entities[id]) throw new TypeError('Active material node is missing');
     forces.set(id, Array(space.dimension).fill(0));
@@ -377,11 +381,11 @@ export class LocalVivoEngine {
     this.emit(includeTransformResult ? 'object-transform-accepted' : 'object-provisional');
     return write.then(() => result);
   }
-  async step(dt = FIXED_STEP) {
+  async step(dt = FIXED_STEP, excludedIds = []) {
     const space = this.world.spaces[this.eye.spaceId];
     if (this.activeSpaceId && this.activeSpaceId !== space.id) { this.activeIds.clear(); this.activeSpaceId = null; }
     if (!this.activeIds.size) return false;
-    const moving = stepSparseSpace(space, dt, this.activeIds);
+    const moving = stepSparseSpace(space, dt, this.activeIds, excludedIds);
     if (!moving) { this.activeIds.clear(); this.activeSpaceId = null; }
     this.world.simulationTime += dt; this.world.acceptedSequence++;
     this.emit('material-step'); await this.persist(); return moving;
@@ -439,6 +443,7 @@ export function projectForRenderer(engine) {
       simulationTime: snapshot.simulationTime, acceptedSequence: snapshot.acceptedSequence,
     },
     grid: { shape, coords, positions, faces, edges },
+    materialPatch: clone(snapshot.materialBodies?.workpiece || null),
     eye: clone(eye),
   };
 }

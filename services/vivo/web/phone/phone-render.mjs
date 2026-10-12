@@ -39,6 +39,9 @@ export class PhoneRenderer extends Renderer {
     super(canvas, overlay);
     this.backend = 'Phone canvas / field projection';
     this._lastDraw = 0;
+    this.materialPatch = null;
+    this.materialProvisional = null;
+    this.materialNodePoints = [];
   }
 
   previewFor(id) {
@@ -156,6 +159,54 @@ export class PhoneRenderer extends Renderer {
     return { ...point, id: entity.id, interactive: visible, tone: tone.key };
   }
 
+  drawMaterialPatch(ctx, body, entity, geometry, { provisional = false } = {}) {
+    if (!body?.nodes || !entity) return;
+    const points = Object.values(body.nodes).map(node => {
+      const projected = projectEntity(this, { ...node, radius: entity.radius, chart: entity.chart }, geometry);
+      return { ...projected, nodeId: node.id, q: [...node.q], provisional };
+    });
+    this.materialNodePoints = points;
+    const byId = new Map(points.map(point => [point.nodeId, point]));
+    ctx.save();
+    ctx.lineWidth = provisional ? 1.4 : 1.8;
+    ctx.strokeStyle = provisional ? '#f6d18b' : '#72e0c0';
+    ctx.fillStyle = provisional ? '#f6d18b' : '#72e0c0';
+    ctx.globalAlpha = provisional ? 0.74 : 0.92;
+    ctx.setLineDash(provisional ? [5, 4] : []);
+    for (const edge of body.edges || []) {
+      const from = byId.get(edge.a), to = byId.get(edge.b);
+      if (!from?.visible || !to?.visible) continue;
+      ctx.beginPath(); line(ctx, from, to); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    for (const point of points) {
+      if (!point.visible) continue;
+      ctx.beginPath(); ctx.arc(point.x, point.y, provisional ? 3.5 : 4.5, 0, Math.PI * 2); ctx.fill();
+      if (!provisional && body.fixedNodeIds?.includes(point.nodeId)) {
+        ctx.strokeStyle = '#eff8ff'; ctx.lineWidth = 1; ctx.stroke();
+      }
+    }
+    const visible = points.filter(point => point.visible);
+    if (visible.length) {
+      ctx.setLineDash(provisional ? [4, 4] : []);
+      ctx.font = '9px ui-monospace, SFMono-Regular, monospace';
+      ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+      ctx.fillStyle = provisional ? '#f6d18b' : '#72e0c0';
+      ctx.fillText(provisional ? 'MATERIAL PATCH · PROVISIONAL' : `MATERIAL PATCH · ${body.bodyRevision ?? 0}`, visible[0].x + 8, visible[0].y - 8);
+    }
+    ctx.restore();
+  }
+
+  atMaterialNode(x, y) {
+    let best = null, distance = 30;
+    for (const point of this.materialNodePoints || []) {
+      if (!point.visible) continue;
+      const next = Math.hypot(Number(x) - point.x, Number(y) - point.y);
+      if (next < distance) { distance = next; best = point; }
+    }
+    return best ? { ...best } : null;
+  }
+
   draw(now) {
     this.resize();
     const dt = this._lastDraw ? now - this._lastDraw : 33;
@@ -165,6 +216,7 @@ export class PhoneRenderer extends Renderer {
     ctx.clearRect(0, 0, this.w, this.h);
     this.screen = [];
     this.gridPoints = [];
+    this.materialNodePoints = [];
     const state = this.state;
     if (!state) {
       drawIdleField(ctx, this);
@@ -179,6 +231,9 @@ export class PhoneRenderer extends Renderer {
         const hit = this.drawEntity(ctx, entity, point, geometry);
         if (hit) this.screen.push(hit);
       }
+      const workpiece = state.entities?.workpiece;
+      this.drawMaterialPatch(ctx, this.materialPatch, workpiece, geometry, { provisional: false });
+      if (this.materialProvisional) this.drawMaterialPatch(ctx, this.materialProvisional, workpiece, geometry, { provisional: true });
       for (const participant of state.participants || []) {
         if (!participant.observer || participant.id === this.actor) continue;
         const point = projectEntity(this, participant.observer, geometry);

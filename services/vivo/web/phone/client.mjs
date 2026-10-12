@@ -33,6 +33,16 @@ export class PhoneEngineClient extends EventTarget {
   enterNested(entityId) { return this.call('enterNested', entityId); }
   exitNested() { return this.call('exitNested'); }
   forkOffline(label) { return this.call('forkOffline', label); }
+  materialSnapshot() { return this.call('materialSnapshot'); }
+  materialBegin(payload) { return this.call('materialBegin', payload); }
+  materialTarget(payload) { return this.call('materialTarget', payload); }
+  materialEnd(payload) { return this.call('materialEnd', payload); }
+  materialCancel(payload) { return this.call('materialCancel', payload); }
+  materialStopSource(payload) { return this.call('materialStopSource', payload); }
+  materialStep(dt) { return this.call('materialStep', { dt }); }
+  materialPreview(payload) { return this.call('materialPreview', payload); }
+  materialReconcile(payload) { return this.call('materialReconcile', payload); }
+  materialReconcileOperation(operationId) { return this.call('materialReconcileOperation', { operationId }); }
   persist() { return this.call('persist'); }
   async close() { if (this.closed) return; try { await this.call('close'); } finally { this.closed = true; this.worker.terminate(); } }
 }
