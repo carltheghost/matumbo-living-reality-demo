@@ -220,6 +220,12 @@ def main(base_url: str) -> None:
         race_page.get_by_role("button", name="Apply local edit").click()
         race_page.wait_for_function("window.__delayedApplySubmitted === true")
         race_page.get_by_role("button", name="Preview move").click()
+        # The click handler is synchronous, but a worker statechange can paint
+        # the field controls in the same turn. Wait for the observable preview
+        # state rather than sampling between those two browser tasks.
+        race_page.wait_for_function(
+            "window.VivaPhoneEngine.fieldWorld().preview?.entityId === 'relic' && !document.querySelector('#phoneFieldApply').disabled"
+        )
         newer_preview = race_page.evaluate(
             """
             () => ({

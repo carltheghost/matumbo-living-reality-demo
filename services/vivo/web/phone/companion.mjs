@@ -280,6 +280,8 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
     providerConnected: false,
     collapsed: false,
     inFlightSnapshot: null,
+    refreshPromise: null,
+    pendingEnvelope: null,
     timer: null,
   };
 
@@ -479,23 +481,45 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
     render();
     return true;
   }
-  async function snapshot() {
+  function renderSnapshot(envelope) {
+    if (!envelope) return null;
+    const snapshot = envelope?.snapshot || envelope;
+    const eye = envelope?.eyes?.[envelope?.currentEyeId];
+    const entity = currentEntity(envelope);
+    const key = [snapshot?.worldId, envelope?.branchId, envelope?.currentEyeId, eye?.spaceId, entity?.revision, ...(entity?.q || [])].join('|');
+    const providerConnected = Boolean(readConversationProvider(scope));
+    if (key !== state.lastSyncKey || providerConnected !== state.providerConnected) {
+      state.lastSyncKey = key;
+      state.providerConnected = providerConnected;
+      render(envelope);
+    }
+    return envelope;
+  }
+  function scheduleSnapshot(envelope) {
+    if (!envelope) return Promise.resolve(null);
+    state.pendingEnvelope = envelope;
+    if (state.refreshPromise) return state.refreshPromise;
+    state.refreshPromise = Promise.resolve().then(() => {
+      const next = state.pendingEnvelope;
+      state.pendingEnvelope = null;
+      return renderSnapshot(next);
+    }).finally(() => {
+      const pending = state.pendingEnvelope;
+      state.refreshPromise = null;
+      if (pending) scheduleSnapshot(pending);
+    });
+    return state.refreshPromise;
+  }
+  async function snapshot(published = null) {
     const engine = scope.VivaPhoneEngine;
     if (!engine?.active || typeof engine.snapshot !== 'function') return null;
+    // Bootstrap publishes the immutable worker envelope with each statechange.
+    // Read that value instead of opening a competing worker snapshot request
+    // from the companion's render loop.
+    const known = published || engine.publishedSnapshot?.();
+    if (known) return renderSnapshot(known);
     if (state.inFlightSnapshot) return state.inFlightSnapshot;
-    state.inFlightSnapshot = Promise.resolve(engine.snapshot()).then(envelope => {
-      const snapshot = envelope?.snapshot || envelope;
-      const eye = envelope?.eyes?.[envelope?.currentEyeId];
-      const entity = currentEntity(envelope);
-      const key = [snapshot?.worldId, envelope?.branchId, envelope?.currentEyeId, eye?.spaceId, entity?.revision, ...(entity?.q || [])].join('|');
-      const providerConnected = Boolean(readConversationProvider(scope));
-      if (key !== state.lastSyncKey || providerConnected !== state.providerConnected) {
-        state.lastSyncKey = key;
-        state.providerConnected = providerConnected;
-        render(envelope);
-      }
-      return envelope;
-    }).finally(() => { state.inFlightSnapshot = null; });
+    state.inFlightSnapshot = Promise.resolve(engine.snapshot()).then(renderSnapshot).finally(() => { state.inFlightSnapshot = null; });
     return state.inFlightSnapshot;
   }
   async function place() {
@@ -597,17 +621,19 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
     provider: () => readConversationProvider(scope),
     destroy() { stopResponse('pagehide'); if (state.timer) scope.clearInterval?.(state.timer); if (state.presenceTimer) scope.clearTimeout?.(state.presenceTimer); scope.removeEventListener?.('vivo:phone-local-ready', refreshOnLocalReady); scope.removeEventListener?.('vivo:phone-statechange', refreshOnLocalStateChange); shell.remove(); worldContext.remove(); if (scope.VivoCompanion === api) delete scope.VivoCompanion; },
   };
-  function refreshOnLocalReady() {
-    snapshot().catch(error => setReaction(`World read failed: ${error?.message || String(error)}`, 'error'));
+  function refreshOnLocalReady(event) {
+    scheduleSnapshot(event.detail?.state).catch(error => setReaction(`World read failed: ${error?.message || String(error)}`, 'error'));
   }
-  function refreshOnLocalStateChange() {
-    snapshot().catch(error => setReaction(`World read failed: ${error?.message || String(error)}`, 'error'));
+  function refreshOnLocalStateChange(event) {
+    scheduleSnapshot(event.detail?.state).catch(error => setReaction(`World read failed: ${error?.message || String(error)}`, 'error'));
   }
   scope.VivoCompanion = api;
   render();
   scope.addEventListener?.('vivo:phone-local-ready', refreshOnLocalReady);
   scope.addEventListener?.('vivo:phone-statechange', refreshOnLocalStateChange);
-  state.timer = scope.setInterval?.(() => { if (scope.VivoPhoneEngine?.active) snapshot().catch(error => setReaction(`World read failed: ${error?.message || String(error)}`, 'error')); }, pollMs) || null;
+  state.timer = scope.setInterval?.(() => {
+    if (scope.VivaPhoneEngine?.active) snapshot(scope.VivaPhoneEngine.publishedSnapshot?.()).catch(error => setReaction(`World read failed: ${error?.message || String(error)}`, 'error'));
+  }, pollMs) || null;
   scope.addEventListener?.('pagehide', () => stopResponse('pagehide'), { once: true });
   return api;
 }
