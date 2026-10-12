@@ -19,6 +19,15 @@ export const SIMULATED_ECONOMY_PANEL_SOURCE = "simulated-economy-panel";
 export const SIMULATED_ECONOMY_PANEL_OBJECT_ID = "vivo:economy-field-object";
 
 const CSS_ID = "simulated-economy-panel-style";
+let panelMountSequence = 0;
+
+function createPanelOperationNamespace() {
+  panelMountSequence += 1;
+  let entropy = "";
+  try { entropy = globalThis.crypto?.randomUUID?.() ?? ""; } catch { /* optional browser API */ }
+  if (!entropy) entropy = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return `${panelMountSequence}-${entropy}`;
+}
 
 function byId(root, id) {
   return root?.getElementById?.(id) ?? null;
@@ -281,8 +290,20 @@ export function mountSimulatedEconomyPanel({
 
   tabsRoot.append(exchangeTab, predictionTab, contractsTab);
 
+  const operationNamespace = createPanelOperationNamespace();
   let keySequence = 0;
-  const nextKey = (scope) => `${SIMULATED_ECONOMY_PANEL_SOURCE}:${scope}:${++keySequence}`;
+  const pendingIntents = new Map();
+  const operationIntent = (scope, fingerprint) => {
+    const identity = `${scope}:${JSON.stringify(fingerprint)}`;
+    const existing = pendingIntents.get(identity);
+    if (existing) return existing;
+    const entry = Object.freeze({
+      identity,
+      key: `${SIMULATED_ECONOMY_PANEL_SOURCE}:${operationNamespace}:${scope}:${++keySequence}`,
+    });
+    pendingIntents.set(identity, entry);
+    return entry;
+  };
   const show = () => { panel.hidden = false; refresh(); onWorldFocus?.({ objectId: SIMULATED_ECONOMY_PANEL_OBJECT_ID, kind: "simulated-economy" }); };
   const hide = () => { panel.hidden = true; };
   const setStatus = (message, tone = "ok") => { status.textContent = message; status.dataset.tone = tone; };
@@ -367,22 +388,25 @@ export function mountSimulatedEconomyPanel({
   let actionBusy = false;
   let lastActionFinishedAt = -Infinity;
   let lastActionType = null;
-  const run = async (action, actionType = "economy-action") => {
+  const run = async (action, actionType = "economy-action", intent = null) => {
     // A fast double-tap should not enqueue two different economic actions.
     // The domain still enforces idempotency for callers that retry explicitly;
     // this guard keeps the contextual UI quiet until its first action settles.
     if (actionBusy || (actionType === lastActionType && Date.now() - lastActionFinishedAt < 350)) return null;
     actionBusy = true;
     panel.dataset.busy = "true";
+    let committed = false;
     try {
       await action();
       refresh();
       setStatus("Committed to the local simulated receipt ledger.");
+      committed = true;
       return true;
     } catch (error) {
       showError(error);
       return null;
     } finally {
+      if (committed && intent) pendingIntents.delete(intent.identity);
       actionBusy = false;
       lastActionFinishedAt = Date.now();
       lastActionType = actionType;
@@ -401,31 +425,40 @@ export function mountSimulatedEconomyPanel({
       return;
     }
     if (action === "exchange:seed") {
-      run(async () => { model.seedDemoLiquidity(); }, action);
+      const intent = operationIntent("exchange-seed", {});
+      run(async () => { model.seedDemoLiquidity({ idempotencyKey: intent.key }); }, action, intent);
       return;
     }
     if (action === "exchange:place") {
+      const request = {
+        owner: "you",
+        side: exchangeSide.value,
+        amountBase: Number(exchangeAmount.value),
+        priceNum: Number(exchangeNum.value),
+        priceDen: Number(exchangeDen.value),
+      };
+      const intent = operationIntent("exchange-order", request);
       run(async () => {
-        model.placeExchangeOrder({
-          owner: "you", side: exchangeSide.value, amountBase: Number(exchangeAmount.value), priceNum: Number(exchangeNum.value), priceDen: Number(exchangeDen.value), idempotencyKey: nextKey("exchange-order"),
-        });
-      }, action);
+        model.placeExchangeOrder({ ...request, idempotencyKey: intent.key });
+      }, action, intent);
       return;
     }
     if (action === "exchange:quote") {
+      const amountIn = Number(quoteAmount.value);
+      const intent = operationIntent("shared-quote", { amountIn });
       run(async () => {
-        const amountIn = Number(quoteAmount.value);
         const quote = model.token.quote({ action: "buy", from: "u:you", fromAsset: "TUMBO", toAsset: "sMIMAS", amountIn });
-        const receipt = model.token.execute(quote, { idempotencyKey: nextKey("shared-quote") });
+        const receipt = model.token.execute(quote, { idempotencyKey: intent.key });
         setStatus(`Shared local quote settled · ${assetAmount(receipt.amountOut, "sMIMAS")}.`);
-      }, action);
+      }, action, intent);
       return;
     }
     if (action.startsWith("exchange:cancel:")) {
       const orderId = action.slice("exchange:cancel:".length);
       const order = model.exchangeOrders({ owner: "you" }).find((entry) => entry.id === orderId);
       if (!order) return;
-      run(async () => { model.cancelExchangeOrder({ orderId, owner: "you", expectedRevision: order.revision, idempotencyKey: nextKey("exchange-cancel") }); }, action);
+      const intent = operationIntent("exchange-cancel", { orderId, revision: order.revision });
+      run(async () => { model.cancelExchangeOrder({ orderId, owner: "you", expectedRevision: order.revision, idempotencyKey: intent.key }); }, action, intent);
       return;
     }
     if (action.startsWith("prediction:buy:")) {
@@ -433,7 +466,9 @@ export function mountSimulatedEconomyPanel({
       const node = [...marketList.children].find((entry) => entry.dataset.marketId === marketId);
       const controls = node?._simPredictionControls;
       if (!controls) return;
-      run(async () => { model.buyPredictionPosition({ marketId, outcome: controls.outcomeSelect.value, units: Number(controls.units.value), idempotencyKey: nextKey("prediction-buy") }); }, action);
+      const request = { marketId, outcome: controls.outcomeSelect.value, units: Number(controls.units.value) };
+      const intent = operationIntent("prediction-buy", request);
+      run(async () => { model.buyPredictionPosition({ ...request, idempotencyKey: intent.key }); }, action, intent);
       return;
     }
     if (action.startsWith("prediction:settle:")) {
@@ -441,43 +476,54 @@ export function mountSimulatedEconomyPanel({
       const node = [...marketList.children].find((entry) => entry.dataset.marketId === marketId);
       const controls = node?._simPredictionControls;
       if (!controls) return;
-      run(async () => { model.settlePredictionMarket({ marketId, outcome: controls.settleOutcome.value, provenance: { kind: PREDICTION_PROVENANCE_KIND, source: controls.source.value, live: false }, idempotencyKey: nextKey("prediction-settle") }); }, action);
+      const request = { marketId, outcome: controls.settleOutcome.value, source: controls.source.value };
+      const intent = operationIntent("prediction-settle", request);
+      run(async () => { model.settlePredictionMarket({ marketId, outcome: request.outcome, provenance: { kind: PREDICTION_PROVENANCE_KIND, source: request.source, live: false }, idempotencyKey: intent.key }); }, action, intent);
       return;
     }
     if (action === "prediction:create") {
-      run(async () => { model.createPredictionMarket({ title: predictionTitle.value, outcomes: predictionOutcomes.value.split(",").map((value) => value.trim()), priceFluff: Number(predictionPrice.value), idempotencyKey: nextKey("prediction-create") }); }, action);
+      const request = { title: predictionTitle.value, outcomes: predictionOutcomes.value.split(",").map((value) => value.trim()), priceFluff: Number(predictionPrice.value) };
+      const intent = operationIntent("prediction-create", request);
+      run(async () => { model.createPredictionMarket({ ...request, idempotencyKey: intent.key }); }, action, intent);
       return;
     }
     if (action === "contract:create") {
-      run(async () => { model.createContract({ title: contractTitle.value, amountFluff: Number(contractAmount.value), idempotencyKey: nextKey("contract-create") }); }, action);
+      const request = { title: contractTitle.value, amountFluff: Number(contractAmount.value) };
+      const intent = operationIntent("contract-create", request);
+      run(async () => { model.createContract({ ...request, idempotencyKey: intent.key }); }, action, intent);
       return;
     }
     if (action.startsWith("contract:accept:")) {
       const contractId = action.slice("contract:accept:".length);
       const contract = model.contracts().find((entry) => entry.id === contractId);
       if (!contract) return;
-      run(async () => { model.acceptContract({ contractId, actor: "b:guide", expectedRevision: contract.revision, idempotencyKey: nextKey("contract-accept") }); }, action);
+      const intent = operationIntent("contract-accept", { contractId, revision: contract.revision });
+      run(async () => { model.acceptContract({ contractId, actor: "b:guide", expectedRevision: contract.revision, idempotencyKey: intent.key }); }, action, intent);
       return;
     }
     if (action.startsWith("contract:fund:")) {
       const contractId = action.slice("contract:fund:".length);
       const contract = model.contracts().find((entry) => entry.id === contractId);
       if (!contract) return;
-      run(async () => { model.fundContract({ contractId, actor: "you", expectedRevision: contract.revision, idempotencyKey: nextKey("contract-fund") }); }, action);
+      const intent = operationIntent("contract-fund", { contractId, revision: contract.revision });
+      run(async () => { model.fundContract({ contractId, actor: "you", expectedRevision: contract.revision, idempotencyKey: intent.key }); }, action, intent);
       return;
     }
     if (action.startsWith("contract:complete:")) {
       const contractId = action.slice("contract:complete:".length);
       const contract = model.contracts().find((entry) => entry.id === contractId);
       if (!contract) return;
-      run(async () => { model.completeContract({ contractId, actor: "b:guide", evidence: "Local field object marked complete", provenance: { kind: CONTRACT_EVIDENCE_KIND, source: "user-entered-demo-evidence", live: false }, expectedRevision: contract.revision, idempotencyKey: nextKey("contract-complete") }); }, action);
+      const request = { contractId, revision: contract.revision, evidence: "Local field object marked complete", source: "user-entered-demo-evidence" };
+      const intent = operationIntent("contract-complete", request);
+      run(async () => { model.completeContract({ contractId, actor: "b:guide", evidence: request.evidence, provenance: { kind: CONTRACT_EVIDENCE_KIND, source: request.source, live: false }, expectedRevision: request.revision, idempotencyKey: intent.key }); }, action, intent);
       return;
     }
     if (action.startsWith("contract:cancel:")) {
       const contractId = action.slice("contract:cancel:".length);
       const contract = model.contracts().find((entry) => entry.id === contractId);
       if (!contract) return;
-      run(async () => { model.cancelContract({ contractId, actor: "you", expectedRevision: contract.revision, idempotencyKey: nextKey("contract-cancel") }); }, action);
+      const intent = operationIntent("contract-cancel", { contractId, revision: contract.revision });
+      run(async () => { model.cancelContract({ contractId, actor: "you", expectedRevision: contract.revision, idempotencyKey: intent.key }); }, action, intent);
     }
   });
 

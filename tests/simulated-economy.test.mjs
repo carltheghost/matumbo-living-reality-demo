@@ -5,6 +5,7 @@ import {
   createTokenEngine,
   CONFIG,
 } from "../src/domains/token.js";
+import { LedgerStore } from "../src/domains/token-store.js";
 import {
   CONTRACT_EVIDENCE_KIND,
   DEMO_LIQUIDITY_ACCOUNT,
@@ -20,6 +21,18 @@ class MemoryStorage {
   getItem(key) { return this.values.get(key) ?? null; }
   setItem(key, value) { this.values.set(key, String(value)); }
   removeItem(key) { this.values.delete(key); }
+}
+
+function withLocalStorage(storage, callback) {
+  const hadStorage = Object.prototype.hasOwnProperty.call(globalThis, "localStorage");
+  const previous = globalThis.localStorage;
+  Object.defineProperty(globalThis, "localStorage", { configurable: true, writable: true, value: storage });
+  try {
+    return callback();
+  } finally {
+    if (hadStorage) Object.defineProperty(globalThis, "localStorage", { configurable: true, writable: true, value: previous });
+    else delete globalThis.localStorage;
+  }
 }
 
 function fund(engine, account = "u:you", amount = 200_000) {
@@ -289,6 +302,75 @@ test("combined token and economy snapshots restore across a reload without repla
   assert.equal(secondEngine.ledger.journalCount(), firstJournalCount);
   assert.ok(contract.contract.id.startsWith("contract:"));
   assert.equal(secondEngine.ledger.verifyChain().ok, true);
+});
+
+test("reload keeps a newer canonical token owner instead of rolling back to an older economy snapshot", () => {
+  const economyStorage = new MemoryStorage();
+  const canonicalStorage = new MemoryStorage();
+  withLocalStorage(canonicalStorage, () => {
+    const first = fixture({ storage: economyStorage });
+    first.economy.createContract({ title: "Canonical ownership", idempotencyKey: "test:canonical:contract" });
+    const olderJournalCount = first.engine.ledger.journalCount();
+    const olderBalance = first.engine.balance("u:you", "TUMBO");
+
+    first.engine.faucet("u:you", "TUMBO", 321, { idempotencyKey: "test:canonical:advance" });
+    LedgerStore.save(first.engine);
+    assert.equal(first.engine.ledger.journalCount(), olderJournalCount + 1);
+    assert.equal(economyStorage.getItem("matumbo.simulated-economy.v1").includes("test:canonical:advance"), false);
+
+    const reloadedEngine = createTokenEngine();
+    const reloaded = createSimulatedEconomy({ engine: reloadedEngine, storage: economyStorage });
+    assert.equal(reloaded.storageStatus, "restored-canonical-snapshot");
+    assert.equal(reloadedEngine.ledger.journalCount(), olderJournalCount + 1);
+    assert.equal(reloadedEngine.balance("u:you", "TUMBO"), olderBalance + 321);
+    assert.equal(reloadedEngine.ledger._journals.at(-1).idempotencyKey, "test:canonical:advance");
+    assert.equal(reloaded.verify().ok, true);
+  });
+});
+
+test("demo liquidity seeding is idempotent across wrappers and canonical re-entry", () => {
+  const canonicalStorage = new MemoryStorage();
+  withLocalStorage(canonicalStorage, () => {
+    const first = fixture({ seedLiquidity: true });
+    const firstJournalCount = first.engine.ledger.journalCount();
+    const firstBalances = {
+      TUMBO: first.engine.balance("sys:escrow", "TUMBO"),
+      sMIMAS: first.engine.balance("sys:escrow", "sMIMAS"),
+    };
+    const firstOrders = first.economy.exchangeOrders({ owner: DEMO_LIQUIDITY_ACCOUNT });
+
+    const sameEngine = createSimulatedEconomy({ engine: first.engine, seedLiquidity: true });
+    assert.equal(sameEngine.verify().ok, true);
+    assert.equal(first.engine.ledger.journalCount(), firstJournalCount);
+    assert.deepEqual(sameEngine.exchangeOrders({ owner: DEMO_LIQUIDITY_ACCOUNT }), firstOrders);
+    assert.deepEqual({
+      TUMBO: first.engine.balance("sys:escrow", "TUMBO"),
+      sMIMAS: first.engine.balance("sys:escrow", "sMIMAS"),
+    }, firstBalances);
+
+    const freshEngine = createTokenEngine();
+    const durableReentry = createSimulatedEconomy({ engine: freshEngine, seedLiquidity: true });
+    assert.equal(durableReentry.verify().ok, true);
+    assert.equal(freshEngine.ledger.journalCount(), firstJournalCount);
+    assert.deepEqual(durableReentry.exchangeOrders({ owner: DEMO_LIQUIDITY_ACCOUNT }), firstOrders);
+    assert.deepEqual({
+      TUMBO: freshEngine.balance("sys:escrow", "TUMBO"),
+      sMIMAS: freshEngine.balance("sys:escrow", "sMIMAS"),
+    }, firstBalances);
+  });
+});
+
+test("zero-value funded contracts cancel with a refunded funding lifecycle", () => {
+  const { engine, economy } = fixture();
+  const created = economy.createContract({ title: "Zero-value cancel", amountFluff: 0, idempotencyKey: "test:zero:contract" });
+  const accepted = economy.acceptContract({ contractId: created.contract.id, actor: "b:guide", idempotencyKey: "test:zero:accept" });
+  const funded = economy.fundContract({ contractId: created.contract.id, actor: "you", expectedRevision: accepted.contract.revision, idempotencyKey: "test:zero:fund" });
+  assert.equal(funded.contract.funding.status, "funded");
+  const cancelled = economy.cancelContract({ contractId: created.contract.id, actor: "you", expectedRevision: funded.contract.revision, idempotencyKey: "test:zero:cancel" });
+  assert.equal(cancelled.contract.status, "cancelled");
+  assert.equal(cancelled.contract.funding.status, "refunded");
+  assert.equal(engine.balance("sys:escrow", "TUMBO"), 0);
+  assert.equal(economy.verify().ok, true);
 });
 
 test("stale prediction and contract writes fail before a new receipt is committed", () => {
