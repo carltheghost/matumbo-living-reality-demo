@@ -15,6 +15,7 @@ const clamp = (value, lo, hi) => Math.max(lo, Math.min(hi, value));
 const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const distance = (a, b) => Math.hypot(...a.map((value, index) => value - (b[index] || 0)));
 const tokenize = value => String(value || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+const uniqueId = () => globalThis.crypto?.randomUUID?.() || `field-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 
 function hashText(value) {
   let hash = 2166136261;
@@ -244,6 +245,7 @@ export class FieldWorldController {
     this.options = { ...options };
     this.envelope = envelope ? clone(envelope) : null;
     this.previewGeneration = 0;
+    this.previewNonce = uniqueId();
     this.previewCounter = 0;
     this.preview = null;
     this.model = envelope ? buildFieldWorld(envelope, { ...options, preview: this.preview }) : null;
@@ -269,7 +271,7 @@ export class FieldWorldController {
       ...identity,
       ...values,
       generation: this.previewGeneration,
-      operationId: `field-preview:${identity.worldId}:${identity.branchId || 'local'}:${identity.eyeId}:${identity.spaceId}:${identity.entityId}:${++this.previewCounter}`,
+      operationId: `field-preview:${this.previewNonce}:${++this.previewCounter}`,
     };
     this._buildModel();
     return clone(this.preview);
@@ -295,9 +297,10 @@ export class FieldWorldController {
   previewMove(entityId, axis, delta) {
     const entity = this.entity(entityId);
     if (!entity || !Number.isInteger(axis) || axis < 0 || axis >= this.model.dimension || !Number.isFinite(delta) || Math.abs(delta) > 5) throw new RangeError('Invalid field-world move preview');
+    const baseQ = [...(entity.baseQ || entity.q)];
     const q = [...entity.q];
     q[axis] = clamp(q[axis] + delta, -1e6, 1e6);
-    return this._newPreview(entity, { kind: 'move', baseQ: [...(entity.baseQ || entity.q)], q, delta: q.map((value, index) => value - entity.q[index]), rotation: 0, mixWith: null });
+    return this._newPreview(entity, { kind: 'move', baseQ, q, delta: q.map((value, index) => value - baseQ[index]), rotation: 0, mixWith: null });
   }
   previewRotate(entityId, radians) {
     const entity = this.entity(entityId);

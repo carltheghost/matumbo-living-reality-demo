@@ -101,6 +101,47 @@ test('field-world move, mix and turn previews require explicit local application
   assert.deepEqual(state.snapshot.spaces.root.entities.relic.q, [-1.15, -0.1, 0.25, 0]);
 });
 
+test('repeated move previews accumulate against the unchanged local base', () => {
+  const controller = new FieldWorldController(envelope(4), { selectedId: 'relic' });
+  const first = controller.previewMove('relic', 0, 0.14);
+  const second = controller.previewMove('relic', 0, 0.14);
+  assert.ok(Math.abs(first.delta[0] - 0.14) < 1e-12);
+  assert.ok(Math.abs(second.delta[0] - 0.28) < 1e-12);
+  assert.ok(Math.abs(second.q[0] - (-1.15 + 0.28)) < 1e-12);
+  assert.ok(Math.abs(controller.commitCandidate().delta[0] - 0.28) < 1e-12);
+});
+
+test('field preview operation identity is fresh after persisted reload and duplicate apply remains idempotent', async () => {
+  const store = new MemoryStore();
+  const firstEngine = new LocalVivoEngine({ storage: store });
+  await firstEngine.open('field-preview-reload');
+  const firstController = new FieldWorldController(await firstEngine.snapshot(), { selectedId: 'relic' });
+  const first = firstController.previewMove('relic', 0, 0.14);
+  const apply = (engine, candidate) => engine.applyLocalEdit(candidate.entityId, candidate.delta, {
+    worldId: candidate.worldId,
+    branchId: candidate.branchId,
+    eyeId: candidate.eyeId,
+    spaceId: candidate.spaceId,
+    entityId: candidate.entityId,
+    baseRevision: candidate.baseRevision,
+    operationId: candidate.operationId,
+  });
+  await apply(firstEngine, first);
+  await firstEngine.close();
+
+  const reloaded = new LocalVivoEngine({ storage: store });
+  await reloaded.open('field-preview-reload');
+  const secondController = new FieldWorldController(await reloaded.snapshot(), { selectedId: 'relic' });
+  const second = secondController.previewMove('relic', 0, 0.14);
+  assert.notEqual(second.operationId, first.operationId);
+  const accepted = await apply(reloaded, second);
+  assert.deepEqual(accepted, { changed: true, revision: 2 });
+  const replay = await apply(reloaded, second);
+  assert.equal(replay.replayed, true);
+  assert.equal((await reloaded.snapshot()).snapshot.spaces.root.entities.relic.revision, 2);
+  await reloaded.close();
+});
+
 test('local field application advances only the selected local object and preserves stable identity', async () => {
   const engine = new LocalVivoEngine({ storage: new MemoryStore() });
   await engine.open('field-engine-test', 4);

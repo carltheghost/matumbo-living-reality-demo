@@ -43,6 +43,31 @@ test('renderer inverse follows yaw, pitch and camera depth instead of an identit
   assert.notDeepEqual(rotated.slice(0, 3), mapped.slice(0, 3));
 });
 
+test('flat renderer inverse uses q0,q2,q1 embedding and the target depth', () => {
+  const eye = createEye({ id: 'flat-renderer-eye', dimension: 4 });
+  const renderer = { w: 400, h: 800, yaw: 0.55, pitch: 0.68, distance: 10.5, origin: [0, 0, 0] };
+  const projectFlat = q => {
+    const [x, y, z] = [q[0], q[2], q[1]];
+    const ca = Math.cos(renderer.yaw), sa = Math.sin(renderer.yaw), cp = Math.cos(renderer.pitch), sp = Math.sin(renderer.pitch);
+    const xx = ca * x - sa * z, zz = sa * x + ca * z, yy = cp * y - sp * zz;
+    const depth = renderer.distance - (sp * y + cp * zz);
+    const k = Math.min(renderer.w, renderer.h) * 1.18 / depth;
+    return { screen: { x: renderer.w / 2 + xx * k, y: renderer.h * 0.52 - yy * k }, depth };
+  };
+  for (const point of [[-1.15, -0.1, 0.25, 0], [0.3, 0.55, -0.6, 0]]) {
+    const { screen, depth } = projectFlat(point);
+    const mapped = mapRendererPointToCanonical({
+      devicePoint: screen,
+      viewport: { left: 0, top: 0, width: renderer.w, height: renderer.h },
+      eye,
+      renderer,
+      axes: [0, 2, 1],
+      depth,
+    });
+    assert.ok(mapped.slice(0, 3).every((value, index) => Math.abs(value - point[index]) < 1e-9), mapped);
+  }
+});
+
 test('contacts and per-object constraints support independent fingers and bimanual preview', () => {
   let clock = 100;
   const fabric = new SpatialInteractionFabric({ now: () => ++clock });
@@ -57,6 +82,39 @@ test('contacts and per-object constraints support independent fingers and bimanu
   assert.ok(preview.scale > 1);
   assert.equal(preview.provisional, true);
   assert.equal(fabric.snapshot().constraints.length, 1);
+});
+
+test('mixed hand and touch previews exclude already-accepted hand displacement from touch commit', () => {
+  const fabric = new SpatialInteractionFabric({ now: () => 100 });
+  fabric.begin({ contactId: 'hand-a', source: { kind: 'hand', id: 'a' }, objectId: 'relic', canonicalPoint: [0, 0, 0, 0] });
+  fabric.update('hand-a', { canonicalPoint: [1, 0, 0, 0] });
+  fabric.begin({ contactId: 'touch-1', source: { kind: 'touch', id: '1' }, objectId: 'relic', canonicalPoint: [0, 0, 0, 0] });
+  fabric.update('touch-1', { canonicalPoint: [0.2, 0, 0, 0] });
+  assert.ok(Math.abs(fabric.preview('relic', 4, { sourceKinds: ['touch'] }).translation[0] - 0.2) < 1e-12);
+  fabric.rebase('hand-a', [1, 0, 0, 0]);
+  assert.ok(Math.abs(fabric.preview('relic', 4).translation[0] - 0.1) < 1e-12);
+});
+
+test('released fingers stop contributing while another finger continues the same object gesture', () => {
+  const fabric = new SpatialInteractionFabric({ now: () => 100 });
+  fabric.begin({ contactId: 'touch-1', source: { kind: 'touch', id: '1' }, objectId: 'relic', canonicalPoint: [0, 0, 0, 0] });
+  fabric.begin({ contactId: 'touch-2', source: { kind: 'touch', id: '2' }, objectId: 'relic', canonicalPoint: [1, 0, 0, 0] });
+  fabric.update('touch-1', { canonicalPoint: [0.4, 0, 0, 0] });
+  fabric.update('touch-2', { canonicalPoint: [1.6, 0, 0, 0] });
+  fabric.end('touch-1', 'touch-release');
+  const preview = fabric.preview('relic', 4);
+  assert.deepEqual(preview.contactIds, ['touch-2']);
+  assert.ok(Math.abs(preview.translation[0] - 0.6) < 1e-12);
+});
+
+test('canceling one same-object touch releases only that contact', () => {
+  const fabric = new SpatialInteractionFabric({ now: () => 100 });
+  fabric.begin({ contactId: 'touch-1', source: { kind: 'touch', id: '1' }, objectId: 'relic', canonicalPoint: [0, 0, 0] });
+  fabric.begin({ contactId: 'touch-2', source: { kind: 'touch', id: '2' }, objectId: 'relic', canonicalPoint: [1, 0, 0] });
+  fabric.update('touch-2', { canonicalPoint: [1.3, 0, 0] });
+  assert.equal(fabric.end('touch-1', 'touch-cancel').reason, 'touch-cancel');
+  assert.deepEqual(fabric.forObject('relic').map(item => item.contactId), ['touch-2']);
+  assert.ok(Math.abs(fabric.preview('relic', 3).translation[0] - 0.3) < 1e-12);
 });
 
 test('selective tracking loss and agent kill-switch do not release unrelated contacts', () => {

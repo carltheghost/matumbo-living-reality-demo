@@ -41,12 +41,14 @@ accepted event.
 
 The spatial interaction fabric keeps a separate identity and constraint for
 each touch, finger, hand, gaze, controller or agent contact. It supports
-selective release, bimanual provisional rotation/scale, coordinate mapping
-through the actual renderer yaw/pitch/depth inverse, and an object-level
-provisional transform. A normal final touch release applies the aggregate
-constraint once; pointer cancellation discards it without committing. The
-phone UI exposes an emergency local-contact release. The lower-level agent
-kill switch is module-only because this route does not create live agent
+selective release, bimanual provisional rotation/scale metadata, coordinate
+mapping through the actual renderer yaw/pitch/depth inverse, and an
+object-level provisional transform. A normal final touch release applies the
+aggregate translation once; pointer cancellation discards it without
+committing. Rotation and scale remain provisional view metadata in this slice;
+the local engine accepted-edit command does not persist object orientation or
+scale. The phone UI exposes an emergency local-contact release. The lower-level
+agent kill switch is module-only because this route does not create live agent
 contacts. It does not
 replace the authority CAS, material-contact solver, or physical device
 validation. Camera/head tracking, hardware AR/VR, collaborators/audio, and
@@ -67,7 +69,7 @@ Use the front camera with palm and fingertips visible. Gestures in local phone m
 | Open-hand swipe | Select the next or previous object |
 | Two pinched hands, change the span between thumb-index pinch points | Zoom the Eye |
 | Two pinched hands, rotate the line between pinch points | Rotate the Eye |
-| Touch drag / two-finger pinch and rotate | Select or move objects; zoom and rotate without the camera |
+| Touch drag / two-finger pinch and rotate | Move objects with an explicit local translation apply; zoom and rotate the Eye/view provisionally without the camera |
 
 The pinned MediaPipe hand landmark task supports up to two hands. Phone mode draws every returned hand and all 21 landmarks per hand, with visible status for thumb, index, middle, ring, and pinky; there is no one-hand-only selection path. Camera tracking and projection are separate controls. Browser and Android lifecycle rules may suspend camera capture when the display is backgrounded.
 

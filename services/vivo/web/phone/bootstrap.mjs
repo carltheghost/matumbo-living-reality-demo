@@ -139,9 +139,7 @@ function updateFieldWorld(envelope = fieldEnvelope) {
     entitySelect.value = model.entities.some(entity => entity.id === prior) ? prior : (selectedId || model.entities[0]?.id || '');
   }
   drawFieldAtlas($('phoneFieldAtlas'), model);
-  const preview = fieldWorld.commitCandidate();
-  if ($('phoneFieldApply')) $('phoneFieldApply').disabled = !preview;
-  if ($('phoneFieldDiscard')) $('phoneFieldDiscard').disabled = !preview;
+  const preview = updateFieldActionButtons();
   const statusView = $('phoneFieldStatus');
   if (statusView) statusView.textContent = model.awakeIds.length + '/' + model.entities.length + ' objects awake ? ' + model.atlas.length + ' coordinate planes ? analytic information mix ? ' + model.field.materialAuthority;
   const previewView = $('phoneFieldPreview');
@@ -150,6 +148,15 @@ function updateFieldWorld(envelope = fieldEnvelope) {
     : 'No local edit preview. Preview never enters accepted history.';
   const acceptedView = $('phoneFieldAccepted');
   if (acceptedView) acceptedView.textContent = JSON.stringify(model.accepted, null, 2);
+}
+function updateFieldActionButtons(completedGeneration = null) {
+  const preview = fieldWorld?.commitCandidate() || null;
+  const superseded = preview && completedGeneration !== null && preview.generation !== completedGeneration;
+  const enabled = Boolean(preview);
+  if ($('phoneFieldApply')) $('phoneFieldApply').disabled = !enabled;
+  if ($('phoneFieldDiscard')) $('phoneFieldDiscard').disabled = !enabled;
+  if (superseded) status('A newer local field preview is ready; the earlier Apply did not replace it.');
+  return preview;
 }
 function fieldEntityId() { return $('phoneFieldEntity')?.value || selectedId || R.selected || null; }
 function localObjectIdentity(entityId) {
@@ -254,7 +261,12 @@ function materialAxisGesture(dx, dy) {
   if (primaryAxis === 1) return -dy * scale;
   return (Math.abs(dx) > Math.abs(dy) ? dx : -dy) * scale;
 }
-function canonicalPointForInput(point) {
+function rendererDepthForObject(objectId) {
+  const screenPoint = R.screen?.find(point => point.id === objectId);
+  if (screenPoint?.k) return Math.max(0.15, Math.min(1e6, Math.min(R.w || innerWidth || 1, R.h || innerHeight || 1) * 1.18 / screenPoint.k));
+  return Math.max(0.15, Number(R.distance) || 10.5);
+}
+function canonicalPointForInput(point, objectId = null) {
   const envelope = fieldEnvelope, eye = envelope?.eyes?.[envelope.currentEyeId];
   const rect = $('world')?.getBoundingClientRect?.() || { left: 0, top: 0, width: innerWidth || 1, height: innerHeight || 1 };
   if (!eye) return [0, 0, 0];
@@ -263,8 +275,8 @@ function canonicalPointForInput(point) {
     viewport: rect,
     eye,
     renderer: R,
-    axes: [0, 1, 2],
-    depth: Math.max(0.15, Number(R.distance) || 10.5),
+    axes: [0, 2, 1],
+    depth: rendererDepthForObject(objectId),
   });
 }
 function releaseHandContact(contactId, reason = 'hand-release') {
@@ -306,7 +318,7 @@ function handleFieldHandGesture(event) {
   if (event.type === 'grab') {
     const hit = R.at(...event.point), contactId = 'hand:' + event.handId;
     if (hit && !handContacts.has(contactId)) {
-      const canonicalPoint = canonicalPointForInput(event.point);
+      const canonicalPoint = canonicalPointForInput(event.point, hit);
       interactionFabric?.begin({ contactId, source: { kind: 'hand', id: event.handId }, objectId: hit, gesture: 'grab', canonicalPoint });
       handContacts.set(contactId, { id: event.handId, entityId: hit, point: event.point, canonicalPoint });
       selectedId = hit; R.selected = hit; status('HAND GRAB ? ' + hit);
@@ -316,12 +328,16 @@ function handleFieldHandGesture(event) {
   const contactId = 'hand:' + event.handId, contact = handContacts.get(contactId);
   if (event.type === 'move' && contact) {
     const prior = contact.point, dx = event.point[0] - prior[0], dy = event.point[1] - prior[1];
-    contact.point = event.point; contact.canonicalPoint = canonicalPointForInput(event.point);
+    contact.point = event.point; contact.canonicalPoint = canonicalPointForInput(event.point, contact.entityId);
     interactionFabric?.update(contactId, { canonicalPoint: contact.canonicalPoint, gesture: 'drag' });
     const dimension = S.state?.geometry.dimension || 4;
     if (activeAxis < dimension) {
       const delta = Array(dimension).fill(0); delta[activeAxis] = materialAxisGesture(dx, dy);
-      engine.applyLocalEdit(contact.entityId, delta).catch(error => status(error.message));
+      const appliedPoint = [...contact.canonicalPoint];
+      contact.pending = (contact.pending || Promise.resolve())
+        .then(() => engine.applyLocalEdit(contact.entityId, delta))
+        .then(() => interactionFabric?.rebase(contactId, appliedPoint))
+        .catch(error => status(error.message));
     }
     return;
   }
@@ -502,8 +518,10 @@ function addPhoneSurface() {
     catch (error) { status(error.message); }
   };
   $('phoneFieldApply').onclick = async () => {
-    try { await applyFieldPreview(); $('phoneFieldApply').disabled = true; $('phoneFieldDiscard').disabled = true; }
+    const candidate = fieldWorld?.commitCandidate(), completedGeneration = candidate?.generation ?? null;
+    try { await applyFieldPreview(); }
     catch (error) { status(error.message); }
+    finally { updateFieldActionButtons(completedGeneration); }
   };
   $('phoneFieldDiscard').onclick = () => { fieldWorld?.discardPreview(); updateFieldWorld(); $('phoneFieldApply').disabled = true; $('phoneFieldDiscard').disabled = true; status('Local field preview discarded without changing accepted state.'); };
   $('phoneReleaseContacts').onclick = () => {
@@ -659,16 +677,24 @@ function beginObjectTouchGesture(objectId) {
 }
 function previewObjectTouchGesture(objectId) {
   const gesture = touchGestures.get(objectId), dimension = S.state?.geometry?.dimension || 4;
-  const preview = interactionFabric?.preview(objectId, dimension) || null;
+  const preview = interactionFabric?.preview(objectId, dimension, { sourceKinds: ['touch'] }) || null;
   if (gesture) gesture.lastPreview = preview;
   if (preview) status(`LOCAL PROVISIONAL ? ${objectId} ? ${preview.contactCount} contact(s) ? translation ${preview.translation.map(value => value.toFixed(2)).join(',')} ? release to apply or cancel to discard`);
   return preview;
 }
 function releaseObjectTouchContacts(objectId, reason) {
+  const gesture = touchGestures.get(objectId);
   for (const record of objectTouchRecords(objectId)) {
     interactionFabric?.end('touch:' + record.id, reason);
+    gesture?.contacts.delete('touch:' + record.id);
     pointerContacts.delete(record.id);
   }
+}
+function releaseObjectTouchContact(record, reason) {
+  if (!record?.target) return;
+  interactionFabric?.end('touch:' + record.id, reason);
+  touchGestures.get(record.target)?.contacts.delete('touch:' + record.id);
+  pointerContacts.delete(record.id);
 }
 function cancelObjectTouchGesture(objectId, reason = 'touch-cancel') {
   releaseObjectTouchContacts(objectId, reason);
@@ -744,15 +770,22 @@ const pointerEnd = event => {
     if (event.type === 'lostpointercapture' && record.released) return;
     const cancel = event.type !== 'pointerup';
     if (cancel) {
-      cancelObjectTouchGesture(record.target, event.type === 'pointercancel' ? 'touch-cancel' : 'lost-pointer-capture');
+      const objectId = record.target;
+      const reason = event.type === 'pointercancel' ? 'touch-cancel' : 'lost-pointer-capture';
+      releaseObjectTouchContact(record, reason);
+      if (!objectTouchRecords(objectId).length) {
+        touchGestures.delete(objectId);
+        status(`LOCAL PROVISIONAL DISCARDED ? ${objectId} ? ${reason}`);
+      } else previewObjectTouchGesture(objectId);
     } else {
+      const objectId = record.target;
+      const preview = interactionFabric?.preview(objectId, S.state?.geometry?.dimension || 4, { sourceKinds: ['touch'] });
       record.released = true;
-      const active = objectTouchRecords(record.target).filter(item => !item.released);
+      releaseObjectTouchContact(record, 'touch-release');
+      const active = objectTouchRecords(objectId);
       if (!active.length) {
-        const preview = interactionFabric?.preview(record.target, S.state?.geometry?.dimension || 4);
-        releaseObjectTouchContacts(record.target, 'touch-release');
-        commitObjectTouchGesture(record.target, preview).catch(error => status(error.message));
-      }
+        commitObjectTouchGesture(objectId, preview).catch(error => status(error.message));
+      } else previewObjectTouchGesture(objectId);
     }
   } else if (record) {
     pointerContacts.delete(event.pointerId);

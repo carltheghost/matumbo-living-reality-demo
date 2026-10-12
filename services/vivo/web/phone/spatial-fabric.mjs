@@ -25,6 +25,7 @@ const sourceKey = source => {
   if (!source || typeof source !== 'object') throw new TypeError('source is required');
   return normalizeId(String(source.kind || 'contact') + ':' + String(source.id || ''), 'source');
 };
+const sourceKind = source => String(source || '').split(':', 1)[0];
 
 /**
  * Convert a device-space point through a supplied projection inverse.  The
@@ -121,6 +122,17 @@ export class SpatialInteractionFabric {
     if (metadata !== null) constraint.metadata = clone(metadata);
     return clone(constraint);
   }
+  /** Rebase an accepted source movement without discarding its live point. */
+  rebase(contactId, canonicalPoint = null) {
+    const id = normalizeId(contactId, 'contactId');
+    const constraint = this.contacts.get(id);
+    if (!constraint) return null;
+    const point = canonicalPoint === null ? constraint.point : normalizePoint(canonicalPoint);
+    constraint.anchor = [...point];
+    constraint.updatedAt = this.now();
+    constraint.sequence = ++this.sequence;
+    return clone(constraint);
+  }
   end(contactId, reason = 'release') {
     const id = normalizeId(contactId, 'contactId');
     const constraint = this.contacts.get(id);
@@ -150,8 +162,17 @@ export class SpatialInteractionFabric {
     const bucket = this.constraints.get(normalizeId(objectId, 'objectId'));
     return bucket ? [...bucket.values()].map(clone) : [];
   }
-  preview(objectId, dimension) {
-    const list = this.forObject(objectId);
+  /**
+   * Return a provisional transform. Translation, rotation and scale are
+   * preview metadata; the phone engine's accepted local-edit command currently
+   * commits translation only. Callers must not treat this result as accepted
+   * entity orientation/scale or canonical authority state.
+   */
+  preview(objectId, dimension, { sourceKinds = null } = {}) {
+    const allowedKinds = sourceKinds === null
+      ? null
+      : new Set((Array.isArray(sourceKinds) ? sourceKinds : [sourceKinds]).map(kind => normalizeId(String(kind), 'source kind')));
+    const list = this.forObject(objectId).filter(item => !allowedKinds || allowedKinds.has(sourceKind(item.source)));
     if (!list.length) return null;
     const safeDimension = Number(dimension);
     if (!Number.isInteger(safeDimension) || safeDimension < 3 || safeDimension > 11) throw new RangeError('Preview dimension must be 3 through 11');
