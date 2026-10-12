@@ -1,8 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 
 const root = new URL('../../', import.meta.url);
+const execFileAsync = promisify(execFile);
 
 test('Pages publishes a self-contained local phone route without changing the canonical launcher', async () => {
   const [canonical, route, staticShared, bootstrap, fieldWorld, fabric, sw, conversationTransport, phoneRender, phoneCss, palette, economyEntry, economyManifest] = await Promise.all([
@@ -83,13 +89,14 @@ test('mounted economy staging preserves exact canonical module bytes', async () 
 });
 
 test('Pages build copies the route and exposes its local-only boundary check', async () => {
-  const [workflow, phoneWorkflow] = await Promise.all([
+  const [workflow, phoneWorkflow, verifier] = await Promise.all([
     readFile(new URL('../../../../../.github/workflows/deploy-pages.yml', import.meta.url), 'utf8'),
     readFile(new URL('../../../../../.github/workflows/vivo-phone.yml', import.meta.url), 'utf8'),
+    readFile(new URL('./verify_static_route.py', import.meta.url), 'utf8'),
   ]);
   assert.match(workflow, /cp -R services\/vivo\/web\/\. dist\/services\/vivo\/web\//);
   assert.match(workflow, /Verify the static Vivo phone route and local-only boundary/);
-  assert.match(workflow, /PAGES STATIC\/OFFLINE/);
+  assert.match(verifier, /PAGES STATIC\/OFFLINE/);
   assert.match(workflow, /services\/vivo\/web\/phone\/index\.html/);
   assert.match(workflow, /services\/vivo\/web\/application\/conversation-transport\.mjs/);
   assert.match(workflow, /services\/vivo\/web\/application\/remote-transport\.mjs/);
@@ -97,6 +104,24 @@ test('Pages build copies the route and exposes its local-only boundary check', a
   assert.match(phoneWorkflow, /browser_field_world_static\.py/);
   assert.match(phoneWorkflow, /browser_conversation_transport\.py/);
   assert.match(phoneWorkflow, /browser_bimanual_transform\.py/);
+});
+
+test('Pages build verifier executes against a staged web tree without positional paths', async () => {
+  const [workflow, stagedRoot] = await Promise.all([
+    readFile(new URL('../../../../../.github/workflows/deploy-pages.yml', import.meta.url), 'utf8'),
+    mkdtemp(join(tmpdir(), 'vivo-static-route-')),
+  ]);
+  try {
+    const stagedWebRoot = join(stagedRoot, 'services', 'vivo', 'web');
+    await cp(fileURLToPath(root), stagedWebRoot, { recursive: true });
+    const verifier = fileURLToPath(new URL('./verify_static_route.py', import.meta.url));
+    const { stdout } = await execFileAsync('python3', [verifier, stagedWebRoot], { encoding: 'utf8' });
+    assert.match(stdout, /Verified static Vivo phone route with local-only authority controls/);
+    assert.match(workflow, /python3 services\/vivo\/web\/phone\/tests\/verify_static_route\.py dist\/services\/vivo\/web/);
+    assert.doesNotMatch(workflow, /required\[\d+\]\.read_text/);
+  } finally {
+    await rm(stagedRoot, { recursive: true, force: true });
+  }
 });
 
 test('Pages live hash verifier covers every changed mounted phone module', async () => {
@@ -121,5 +146,6 @@ test('Pages live hash verifier covers every changed mounted phone module', async
     'services/vivo/web/phone/two-hand-camera.mjs',
   ];
   for (const path of required) assert.ok(listed.includes(path), `${path} must be covered by public HTTPS hash verification`);
+  assert.equal(listed.length, 46, 'public HTTPS hash-verifier list must preserve all 46 public assets');
   assert.equal(new Set(listed).size, listed.length, 'public HTTPS hash-verifier list must not contain duplicate paths');
 });
