@@ -1016,7 +1016,11 @@ for (const name of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.
 window.VivaAgentTools = Object.freeze({ list: () => registry.list(), invoke: (name, args) => registry.invoke(name, args), revokeAll: () => registry.revokeAll(), audit: () => structuredClone(registry.audit) });
 window.VivaPhoneEngine = Object.freeze({
   get active() { return !!engine && localMode; }, get available() { return browserCapabilities.worker; },
-  snapshot: () => engine?.snapshot(), translate: (...args) => engine?.translate(...args), applyLocalEdit: (...args) => engine?.applyLocalEdit(...args), setEye: patch => engine?.setEye(patch),
+  // Keep the public read paired with the rendered field-world envelope. A
+  // direct worker snapshot can be newer than the preview model while the
+  // sparse solver is still stepping, which makes an active preview appear to
+  // drift from the coordinate it is actually based on.
+  snapshot: () => refreshSnapshot({ externalSnapshot: true }), translate: (...args) => engine?.translate(...args), applyLocalEdit: (...args) => engine?.applyLocalEdit(...args), setEye: patch => engine?.setEye(patch),
   forkOffline: label => forkPhoneOffline(label), startCamera: (facing = 'user') => startPhoneCamera(facing), stopCamera: stopPhoneCamera,
   authority: () => authority?.debug() || null,
   connectAuthority: options => authority?.connect(options), readAuthority: () => authority?.read(),

@@ -30,6 +30,7 @@ test('Pages publishes a self-contained local phone route without changing the ca
   assert.match(bootstrap, /PAGES STATIC\/OFFLINE/);
   assert.match(bootstrap, /canonical authority unavailable/);
   assert.match(bootstrap, /STATIC_PHONE_ROUTE \? new URL\('\.\/index\.html'/);
+  assert.match(bootstrap, /snapshot: \(\) => refreshSnapshot\(\{ externalSnapshot: true \}\)/);
   assert.match(fieldWorld, /vivo\.phone\.field-world\/1/);
   assert.match(fieldWorld, /analytic-information-mixture/);
   assert.match(fabric, /spatial-interaction-fabric\/1/);
