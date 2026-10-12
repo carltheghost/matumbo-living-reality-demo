@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 
 from playwright.sync_api import sync_playwright
 
@@ -15,10 +16,7 @@ def main(base_url: str) -> None:
     requests: list[str] = []
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
-        context = browser.new_context()
-        context.set_default_timeout(7000)
-        context.add_init_script(
-            """
+        camera_init_script = """
             (() => {
               const media = navigator.mediaDevices || (navigator.mediaDevices = {});
               media.getUserMedia = async (...args) => {
@@ -28,7 +26,9 @@ def main(base_url: str) -> None:
               window.__phoneCameraCalls = 0;
             })();
             """
-        )
+        context = browser.new_context()
+        context.set_default_timeout(7000)
+        context.add_init_script(camera_init_script)
         page = context.new_page()
         page.on("pageerror", lambda error: page_errors.append(str(error)))
         page.on("request", lambda request: requests.append(request.url))
@@ -86,6 +86,167 @@ def main(base_url: str) -> None:
         assert rotated_preview != changed_axis, "Turn preview must change rendered atlas pixels"
         page.get_by_role("button", name="Discard preview").click()
         page.wait_for_function("document.querySelector('#phoneFieldPreview').textContent.includes('No local edit preview')")
+
+        race_context = browser.new_context()
+        race_context.set_default_timeout(7000)
+        race_context.add_init_script(camera_init_script)
+        race_context.add_init_script(
+            """
+            (() => {
+              const NativeWorker = window.Worker;
+              window.__delayedApplySubmitted = false;
+              window.__delayedApplyCompleted = false;
+              window.Worker = class VivoDelayedWorker {
+                constructor(url, options) {
+                  const worker = new NativeWorker(url, options);
+                  let onmessage = null;
+                  let onerror = null;
+                  const delayedResponses = new Set();
+                  Object.defineProperties(worker, {
+                    onmessage: { configurable: true, get: () => onmessage, set: value => { onmessage = value; } },
+                    onerror: { configurable: true, get: () => onerror, set: value => { onerror = value; } },
+                  });
+                  const postMessage = worker.postMessage.bind(worker);
+                  worker.postMessage = (message, transfer) => {
+                    if (message?.method === 'applyLocalEdit') {
+                      delayedResponses.add(message.id);
+                      window.__delayedApplySubmitted = true;
+                    }
+                    return postMessage(message, transfer);
+                  };
+                  worker.addEventListener('message', event => {
+                    if (delayedResponses.has(event.data?.id)) {
+                      delayedResponses.delete(event.data.id);
+                      setTimeout(() => { window.__delayedApplyCompleted = true; onmessage?.call(worker, event); }, 350);
+                    }
+                    else onmessage?.call(worker, event);
+                  });
+                  worker.addEventListener('error', event => onerror?.call(worker, event));
+                  return worker;
+                }
+              };
+            })();
+            """
+        )
+        race_page = race_context.new_page()
+        race_errors: list[str] = []
+        race_page.on("pageerror", lambda error: race_errors.append(str(error)))
+        race_page.goto(route, wait_until="domcontentloaded")
+        race_page.wait_for_selector("#enterPhoneLocal")
+        race_page.get_by_role("button", name="Enter local Vivo").click()
+        race_page.wait_for_selector("#phoneFieldAtlas")
+        race_page.wait_for_function("Boolean(window.VivaPhoneEngine && window.VivaPhoneEngine.active)")
+        race_page.get_by_role("button", name="Preview move").click()
+        first_preview = race_page.evaluate(
+            """
+            () => {
+              const model = window.VivaPhoneEngine.fieldWorld();
+              return model.entities.find(entity => entity.id === 'relic').q;
+            }
+            """
+        )
+        race_page.get_by_role("button", name="Apply local edit").click()
+        race_page.wait_for_function("window.__delayedApplySubmitted === true")
+        race_page.get_by_role("button", name="Preview move").click()
+        newer_preview = race_page.evaluate(
+            """
+            () => ({
+              q: window.VivaPhoneEngine.fieldWorld().entities.find(entity => entity.id === 'relic').q,
+              modelPreview: window.VivaPhoneEngine.fieldWorld().preview,
+              preview: document.querySelector('#phoneFieldPreview').textContent,
+              applyDisabled: document.querySelector('#phoneFieldApply').disabled,
+            })
+            """
+        )
+        assert "move preview" in newer_preview["preview"]
+        assert newer_preview["applyDisabled"] is False
+        race_page.wait_for_function(
+            "window.__delayedApplyCompleted === true"
+        )
+        deadline = time.monotonic() + 7
+        settled = None
+        while time.monotonic() < deadline:
+            settled = race_page.evaluate(
+                """
+                async () => {
+                  const snapshot = await window.VivaPhoneEngine.snapshot();
+                  const preview = document.querySelector('#phoneFieldPreview').textContent;
+                  const modelPreview = window.VivaPhoneEngine.fieldWorld().preview;
+                  const accepted = (snapshot.snapshot.localOperationResults || []).some(item => item?.result?.changed === true);
+                  return { accepted, preview, modelPreview, applyDisabled: document.querySelector('#phoneFieldApply').disabled };
+                }
+                """
+            )
+            if settled["accepted"] and settled["modelPreview"] and settled["modelPreview"]["baseRevision"] >= 1 and "move preview" in settled["preview"] and not settled["applyDisabled"]:
+                break
+            race_page.wait_for_timeout(50)
+        else:
+            raise AssertionError({"newer": newer_preview, "settled": settled})
+        rebased_preview = race_page.evaluate(
+            """
+            async () => {
+              const snapshot = await window.VivaPhoneEngine.snapshot();
+              return {
+                engineQ: snapshot.snapshot.spaces.root.entities.relic.q,
+                engineRevision: snapshot.snapshot.spaces.root.entities.relic.revision,
+                delayedApplyCompleted: window.__delayedApplyCompleted,
+                previewQ: window.VivaPhoneEngine.fieldWorld().entities.find(entity => entity.id === 'relic').q,
+                modelPreview: window.VivaPhoneEngine.fieldWorld().preview,
+                preview: document.querySelector('#phoneFieldPreview').textContent,
+                status: document.querySelector('#phoneStatus')?.textContent || '',
+                applyDisabled: document.querySelector('#phoneFieldApply').disabled,
+              };
+            }
+            """
+        )
+        expected_increment = newer_preview["q"][0] - first_preview[0] if newer_preview["modelPreview"]["baseRevision"] == 0 else newer_preview["modelPreview"]["delta"][0]
+        assert "move preview" in rebased_preview["preview"], {"newer": newer_preview, "rebased": rebased_preview}
+        assert rebased_preview["applyDisabled"] is False
+        assert rebased_preview["delayedApplyCompleted"] is True
+        assert abs(rebased_preview["previewQ"][0] - (rebased_preview["engineQ"][0] + expected_increment)) < 1e-9, rebased_preview
+        race_page.evaluate("document.querySelector('#phoneFieldApply').click()")
+        deadline = time.monotonic() + 7
+        settled = None
+        while time.monotonic() < deadline:
+            settled = race_page.evaluate(
+                """
+                async () => {
+                  const snapshot = await window.VivaPhoneEngine.snapshot();
+                  const operations = (snapshot.snapshot.localOperationResults || []).filter(item => item?.result?.changed === true);
+                  return { preview: document.querySelector('#phoneFieldPreview').textContent, operationCount: operations.length };
+                }
+                """
+            )
+            if "No local edit preview" in settled["preview"] and settled["operationCount"] >= 2:
+                break
+            race_page.wait_for_timeout(50)
+        else:
+            raise AssertionError({"rebased": rebased_preview, "settled": settled})
+        race_final = race_page.evaluate(
+            """
+            async () => {
+              const snapshot = await window.VivaPhoneEngine.snapshot();
+              const operations = (snapshot.snapshot.localOperationResults || []).filter(item => item?.result?.changed === true);
+              return {
+                q: snapshot.snapshot.spaces.root.entities.relic.q,
+                revision: snapshot.snapshot.spaces.root.entities.relic.revision,
+                operationCount: operations.length,
+                operations,
+                preview: document.querySelector('#phoneFieldPreview').textContent,
+                status: document.querySelector('#phoneStatus')?.textContent || '',
+                cameraCalls: window.__phoneCameraCalls,
+              };
+            }
+            """
+        )
+        assert race_final["operationCount"] >= 2, race_final
+        second_operation = race_final["operations"][-1]
+        second_fingerprint = json.loads(second_operation["fingerprint"])
+        assert second_operation["result"]["changed"] is True
+        assert abs(second_fingerprint["delta"][0] - expected_increment) < 1e-9, race_final
+        assert race_final["cameraCalls"] == 0
+        assert not race_errors, race_errors
+        race_context.close()
 
         page.get_by_role("button", name="Preview move").click()
         page.evaluate(

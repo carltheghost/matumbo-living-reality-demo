@@ -26,6 +26,7 @@ let pinch = null, projection = null, fieldWorld = null, fieldEnvelope = null, in
 const handContacts = new Map(), pointerContacts = new Map();
 const touchGestures = new Map();
 const touchOperationIds = new LocalOperationIdFactory('touch-preview');
+const pendingFieldApplies = [];
 let persistTimer = null, lastTwoHand = null, latestCapabilities = null, lastPoseAction = -Infinity;
 const lastPoseByHand = new Map();
 let appliedEyeId = null, appliedEyeRevision = -1;
@@ -69,7 +70,7 @@ function updateAgentList(nativeTools = bridge.tools) {
   const view = $('phoneAgentTools');
   if (view) view.textContent = list.length ? list.join('\n') : 'No agent tools granted. Check only the specific capabilities you want an agent to use.';
 }
-function renderEye(envelope) {
+function renderEye(envelope, options = {}) {
   const projected = projectForRenderer({ snapshot: () => envelope });
   const state = projected.state;
   S.state = state; S.live = state; R.state = state; R.grid = projected.grid; R.actor = projected.eye.id;
@@ -87,7 +88,7 @@ function renderEye(envelope) {
   if (selectedId && state.entities[selectedId]) R.selected = selectedId;
   updateEyeControls(envelope);
   fieldEnvelope = envelope;
-  updateFieldWorld(envelope);
+  updateFieldWorld(envelope, options);
   const axis = $('phoneAxis'); if (axis) { axis.replaceChildren(); for (let i = 0; i < state.geometry.dimension; i++) { const option = document.createElement('option'); option.value = String(i); option.textContent = `x${i + 1}${i > 2 ? ' ? extra axis' : ''}`; axis.append(option); } axis.value = String(Math.min(activeAxis, state.geometry.dimension - 1)); }
   const eyeInfo = $('phoneEyeInfo'); if (eyeInfo) eyeInfo.textContent = `${projected.eye.label} ? ${projected.eye.spaceId} ? ${state.geometry.dimension} spatial axes + separate time ? world ${envelope.snapshot.worldId}`;
 }
@@ -101,13 +102,13 @@ function updateEyeControls(envelope) {
   $('phoneExitNested').disabled = nested === 0;
   $('phoneEnterNested').disabled = !S.state?.entities[R.selected]?.innerSpaceId;
 }
-async function refreshSnapshot() { if (!engine) return null; const envelope = await engine.snapshot(); if (localMode) renderEye(envelope); return envelope; }
+async function refreshSnapshot(options = {}) { if (!engine) return null; const envelope = await engine.snapshot(); if (localMode) renderEye(envelope, options); return envelope; }
 function fieldAxes() {
   return ['phoneFieldAxisA', 'phoneFieldAxisB', 'phoneFieldAxisC'].map(id => Number($(id)?.value)).filter(Number.isInteger);
 }
-function updateFieldWorld(envelope = fieldEnvelope) {
+function updateFieldWorld(envelope = fieldEnvelope, options = {}) {
   if (!fieldWorld || !envelope) return;
-  const options = {
+  const fieldOptions = {
     query: $('phoneFieldQuery')?.value || '',
     relevanceThreshold: Number($('phoneFieldThreshold')?.value || 0.2),
     eyeAxes: fieldAxes(),
@@ -115,7 +116,7 @@ function updateFieldWorld(envelope = fieldEnvelope) {
     selectedId: selectedId || R.selected || null,
     authorityDebug: authority?.debug?.() || null,
   };
-  const model = fieldWorld.refresh(envelope, options);
+  const model = fieldWorld.refresh(envelope, { ...fieldOptions, ...options, pendingApplies: pendingFieldApplies });
   const dimensions = model.dimension;
   for (const [index, id] of ['phoneFieldAxisA', 'phoneFieldAxisB', 'phoneFieldAxisC'].entries()) {
     const select = $(id);
@@ -192,15 +193,24 @@ async function applyFieldPreview() {
     status('Rotation is a view-only preview; no canonical or local object state was changed.');
     return;
   }
-  const result = await engine.applyLocalEdit(candidate.entityId, candidate.delta, {
-    worldId: candidate.worldId, branchId: candidate.branchId, eyeId: candidate.eyeId,
-    spaceId: candidate.spaceId, entityId: candidate.entityId, baseRevision: candidate.baseRevision,
-    operationId: candidate.operationId,
-  });
-  if (fieldWorld.isCurrent(candidate)) fieldWorld.discardPreview();
-  await refreshSnapshot();
-  status(`${result?.replayed ? 'Local field edit replay acknowledged' : 'Local field edit applied explicitly'}. Canonical authority was not contacted.`);
-  return result;
+  const pending = { candidate, result: null };
+  pendingFieldApplies.push(pending);
+  try {
+    const result = await engine.applyLocalEdit(candidate.entityId, candidate.delta, {
+      worldId: candidate.worldId, branchId: candidate.branchId, eyeId: candidate.eyeId,
+      spaceId: candidate.spaceId, entityId: candidate.entityId, baseRevision: candidate.baseRevision,
+      operationId: candidate.operationId,
+    });
+    pending.result = result;
+    const newerPreview = fieldWorld.commitCandidate();
+    if (fieldWorld.isCurrent(candidate)) fieldWorld.discardPreview();
+    await refreshSnapshot({ completedApply: { candidate, result } });
+    status(`${result?.replayed ? 'Local field edit replay acknowledged' : 'Local field edit applied explicitly'}${newerPreview && newerPreview.generation !== candidate.generation ? '; newer local preview preserved and rebased' : ''}. Canonical authority was not contacted.`);
+    return result;
+  } finally {
+    const index = pendingFieldApplies.indexOf(pending);
+    if (index >= 0) pendingFieldApplies.splice(index, 1);
+  }
 }
 function updatePhoneAuthorityUI(detail = null) {
   const debug = detail?.state || authority?.debug();

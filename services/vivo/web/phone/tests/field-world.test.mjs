@@ -83,6 +83,60 @@ test('field preview identity is invalidated by discard, retarget and world chang
   assert.equal(controller.commitCandidate(), null);
 });
 
+test('a newer same-object preview is rebased after an older Apply completes', () => {
+  const initial = envelope(4);
+  const controller = new FieldWorldController(initial, { selectedId: 'relic' });
+  const first = controller.previewMove('relic', 0, 0.14);
+  const newer = controller.previewMove('relic', 0, 0.14);
+  const accepted = structuredClone(initial);
+  const relic = accepted.snapshot.spaces.root.entities.relic;
+  relic.q[0] += first.delta[0];
+  relic.revision = first.baseRevision + 1;
+
+  controller.refresh(accepted, { pendingApplies: [{ candidate: first }] });
+  assert.equal(controller.commitCandidate().operationId, newer.operationId);
+  assert.equal(controller.commitCandidate().baseRevision, first.baseRevision);
+
+  controller.refresh(accepted, { completedApply: { candidate: first, result: { changed: true, revision: relic.revision } } });
+  const rebased = controller.commitCandidate();
+  assert.equal(rebased.operationId, newer.operationId);
+  assert.equal(rebased.baseRevision, relic.revision);
+  assert.ok(Math.abs(rebased.q[0] - (relic.q[0] + (newer.q[0] - first.q[0]))) < 1e-12);
+  assert.ok(Math.abs(controller.entity('relic').q[0] - rebased.q[0]) < 1e-12);
+
+  relic.q[0] += 0.02;
+  relic.revision++;
+  controller.refresh(accepted);
+  const tracked = controller.commitCandidate();
+  assert.equal(tracked.baseRevision, relic.revision);
+  assert.ok(Math.abs(tracked.q[0] - (relic.q[0] + (newer.q[0] - first.q[0]))) < 1e-12);
+});
+
+test('a preview created after the accepted state stays fenced through later solver revisions', () => {
+  const initial = envelope(4);
+  const controller = new FieldWorldController(initial, { selectedId: 'relic' });
+  const first = controller.previewMove('relic', 0, 0.14);
+  const accepted = structuredClone(initial);
+  const relic = accepted.snapshot.spaces.root.entities.relic;
+  relic.q[0] += first.delta[0];
+  relic.revision = 1;
+  controller.refresh(accepted, { pendingApplies: [{ candidate: first }] });
+  assert.equal(controller.commitCandidate(), null);
+
+  const newer = controller.previewMove('relic', 0, 0.14);
+  controller.refresh(accepted, {
+    pendingApplies: [{ candidate: first }],
+    completedApply: { candidate: first, result: { changed: true, revision: relic.revision } },
+  });
+  assert.equal(controller.commitCandidate().operationId, newer.operationId);
+  relic.q[0] += 0.02;
+  relic.revision++;
+  controller.refresh(accepted);
+  const tracked = controller.commitCandidate();
+  assert.equal(tracked.baseRevision, relic.revision);
+  assert.ok(Math.abs(tracked.q[0] - (relic.q[0] + newer.delta[0])) < 1e-12);
+});
+
 test('field-world move, mix and turn previews require explicit local application', () => {
   const state = envelope(4);
   const controller = new FieldWorldController(state, { selectedId: 'relic' });

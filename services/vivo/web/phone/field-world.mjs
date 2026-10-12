@@ -235,7 +235,13 @@ export function buildFieldWorld(envelope, {
     atlas,
     layout: layoutEntities(entities.filter(entity => entity.awake), layout),
     viewRotation: finite(preview?.rotation),
-    preview: preview ? { kind: preview.kind, entityId: preview.entityId, operationId: preview.operationId } : null,
+    preview: preview ? {
+      kind: preview.kind,
+      entityId: preview.entityId,
+      operationId: preview.operationId,
+      baseRevision: preview.baseRevision,
+      delta: [...preview.delta],
+    } : null,
     accepted: inspectAcceptedEvents(envelope, authorityDebug),
   };
 }
@@ -266,11 +272,13 @@ export class FieldWorldController {
   _newPreview(entity, values) {
     this.previewGeneration++;
     const identity = this._identity(entity);
+    const carryRebase = this.preview?.rebaseAfterApply === true;
     this.preview = {
       ...identity,
       ...values,
       generation: this.previewGeneration,
       operationId: this.previewIds.next('preview'),
+      ...(carryRebase ? { rebaseAfterApply: true } : {}),
     };
     this._buildModel();
     return clone(this.preview);
@@ -280,7 +288,61 @@ export class FieldWorldController {
     const nextEye = nextEnvelope?.eyes?.[nextEnvelope?.currentEyeId];
     const nextSpace = nextEye?.spaceId || nextEnvelope?.snapshot?.rootSpaceId;
     const nextEntity = nextEnvelope?.snapshot?.spaces?.[nextSpace]?.entities?.[this.preview?.entityId];
-    if (this.preview && (!nextEnvelope?.snapshot || nextEnvelope.snapshot.worldId !== this.preview.worldId || (nextEnvelope.branchId || null) !== this.preview.branchId || nextEnvelope.currentEyeId !== this.preview.eyeId || nextSpace !== this.preview.spaceId || !nextEntity || Number(nextEntity.revision) !== this.preview.baseRevision)) this.discardPreview();
+    const sameScope = candidate => Boolean(candidate && nextEnvelope?.snapshot
+      && nextEnvelope.snapshot.worldId === candidate.worldId
+      && (nextEnvelope.branchId || null) === candidate.branchId
+      && nextEnvelope.currentEyeId === candidate.eyeId
+      && nextSpace === candidate.spaceId
+      && nextEntity?.id === candidate.entityId);
+    const pendingApplies = Array.isArray(options.pendingApplies) ? options.pendingApplies : [];
+    const pendingNewerPreview = Boolean(this.preview && pendingApplies.some(item => {
+      const candidate = item?.candidate || item;
+      return candidate?.generation !== this.preview.generation
+        && sameScope(candidate);
+    }));
+    const completedApply = options.completedApply;
+    let rebased = false;
+    const rebasePreview = referenceQ => {
+      if (!this.preview || !nextEntity) return;
+      const delta = this.preview.q.map((value, index) => value - Number(referenceQ[index] ?? value));
+      const baseQ = Array.isArray(nextEntity.q) ? nextEntity.q.slice() : [];
+      this.preview = {
+        ...this.preview,
+        baseRevision: Number(nextEntity.revision),
+        baseQ,
+        q: baseQ.map((value, index) => clamp(value + Number(delta[index] || 0), -1e6, 1e6)),
+        delta,
+        rebaseAfterApply: true,
+      };
+      rebased = true;
+    };
+    if (this.preview && completedApply?.candidate && completedApply?.result
+      && completedApply.result.changed === true
+      && completedApply.candidate.generation !== this.preview.generation
+      && sameScope(completedApply.candidate)
+      && Number(nextEntity?.revision) >= Number(completedApply.result.revision)) {
+      if (completedApply.candidate.baseRevision === this.preview.baseRevision) {
+        const referenceQ = Array.isArray(completedApply.candidate.q)
+          ? completedApply.candidate.q
+          : (this.preview.baseQ || this.preview.q);
+        rebasePreview(referenceQ);
+      } else {
+        this.preview = { ...this.preview, rebaseAfterApply: true };
+        rebased = true;
+      }
+    }
+    if (!rebased && this.preview?.rebaseAfterApply && sameScope(this.preview)
+      && Number(nextEntity?.revision) > Number(this.preview.baseRevision)) {
+      rebasePreview(this.preview.baseQ || this.preview.q);
+    }
+    const invalid = !nextEnvelope?.snapshot
+      || nextEnvelope.snapshot.worldId !== this.preview?.worldId
+      || (nextEnvelope.branchId || null) !== this.preview?.branchId
+      || nextEnvelope.currentEyeId !== this.preview?.eyeId
+      || nextSpace !== this.preview?.spaceId
+      || !nextEntity
+      || Number(nextEntity.revision) !== this.preview?.baseRevision;
+    if (this.preview && invalid && !pendingNewerPreview && !rebased) this.discardPreview();
     this.envelope = nextEnvelope;
     this.options = { ...this.options, ...options };
     return clone(this._buildModel());
