@@ -1,4 +1,5 @@
 import { describeHand, matchHands, twoHandTransform, MAX_HAND_MISSING_FRAMES, MAX_RESULT_AGE_MS } from './hand-gestures.mjs';
+import { mapFingertipLandmarks } from './fingertip-input.mjs';
 
 const BONES = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[0,17],[17,18],[18,19],[19,20]];
 const COLORS = ['#7ee2c3', '#e2ba76'];
@@ -231,9 +232,13 @@ export class PhoneTwoHandCamera {
       ];
       const center = palmCenter(item.landmarks);
       nextPrevious[item.slot] = item;
+      const fingertips = mapFingertipLandmarks({
+        handId: item.id, landmarks: screenLandmarks,
+        sessionId: `phone-camera:${this.epoch}`, generation: Math.max(1, this.epoch),
+      });
       return { id: item.id, slot: item.slot, pose: details.pose, fingers: details.fingers,
         handedness: item.handedness, confidence: item.confidence, pinchRatio: details.pinchRatio, screenLandmarks, indexPoint, pinchPoint,
-        center: this.screenPoint({ x: center[0], y: center[1] }),
+        center: this.screenPoint({ x: center[0], y: center[1] }), fingertips,
         rawLandmarks: item.landmarks };
     });
     this.previous = nextPrevious;
@@ -243,7 +248,7 @@ export class PhoneTwoHandCamera {
     this.draw();
     this.onGesture({
       type: 'frame',
-      hands: hands.map(({ id, pose, fingers, pinchRatio, handedness, confidence }) => ({ id, pose, fingers: { ...fingers }, pinchRatio, handedness, confidence })),
+      hands: hands.map(({ id, pose, fingers, pinchRatio, handedness, confidence, fingertips }) => ({ id, pose, fingers: { ...fingers }, pinchRatio, handedness, confidence, fingertips })),
       landmarksPerHand: 21,
     });
     this.emitSwipe(hands);
@@ -287,7 +292,7 @@ export class PhoneTwoHandCamera {
       for (const hand of hands) {
         const priorPose = this.lastPose.get(hand.id);
         if (priorPose !== hand.pose) {
-          this.onGesture({ type: 'pose', handId: hand.id, pose: hand.pose, point: hand.indexPoint, fingers: { ...hand.fingers } });
+          this.onGesture({ type: 'pose', handId: hand.id, pose: hand.pose, point: hand.indexPoint, fingers: { ...hand.fingers }, fingertips: hand.fingertips });
           this.lastPose.set(hand.id, hand.pose);
         }
         if (hand.fingers.index) this.onGesture({ type: 'aim', handId: hand.id, point: hand.indexPoint });
@@ -296,9 +301,9 @@ export class PhoneTwoHandCamera {
         if (hand.pose === 'pinch') {
           if (!this.held.has(hand.id) && this.armed.delete(hand.id)) {
             this.held.add(hand.id);
-            this.onGesture({ type: 'grab', handId: hand.id, point: hand.indexPoint });
+            this.onGesture({ type: 'grab', handId: hand.id, point: hand.indexPoint, fingertips: hand.fingertips });
           } else if (this.held.has(hand.id)) {
-            this.onGesture({ type: 'move', handId: hand.id, point: hand.indexPoint });
+            this.onGesture({ type: 'move', handId: hand.id, point: hand.indexPoint, fingertips: hand.fingertips });
           }
         } else if (this.held.delete(hand.id)) {
           this.onGesture({ type: 'release', handId: hand.id, reason: hand.pose });

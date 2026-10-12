@@ -13,6 +13,8 @@ import { LocalOperationIdFactory } from './local-operation.mjs';
 import { LocalEditQueue } from './local-edit-queue.mjs';
 import { LocalAgentController } from './agent-control.mjs';
 import { mountPhoneEconomyContext } from './economy-entry.mjs';
+import { PhoneMaterialInputRuntime } from './material-input-runtime.mjs';
+import { PHONE_MATERIAL_ENTITY_ID } from './material-contract.mjs';
 
 const $ = id => document.getElementById(id);
 const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
@@ -25,6 +27,7 @@ const { R, S, camera } = shared;
 const STATIC_PHONE_ROUTE = /\/services\/vivo\/web\/phone(?:\/|$)/.test(location.pathname);
 let engine = null, authority = null, localMode = false, selectedId = null, activeAxis = 0, contactMode = 'surface';
 let pinch = null, projection = null, fieldWorld = null, fieldEnvelope = null, interactionFabric = null;
+let materialInput = null;
 const agentController = new LocalAgentController({
   snapshot: () => engine?.snapshot(),
   applyTransform: (entityId, delta, geometry, expected) => engine?.applyLocalTransform(entityId, delta, geometry, expected),
@@ -32,6 +35,14 @@ const agentController = new LocalAgentController({
   onChange: event => {
     updateAgentControlUI(event);
     if (localMode && fieldWorld) updateFieldWorld();
+    if (event.reason === 'agent-stopped' && materialInput) {
+      const agent = event.agents?.find(item => item.sourceId === event.sourceId);
+      materialInput.stopSource({
+        kind: 'agent', sourceId: event.sourceId,
+        sessionId: agent?.sessionId || materialInput.sessionId,
+        generation: agent?.generation || 1,
+      }, event.reason || 'agent-stopped').catch(error => status(`Material agent stop reconciliation required: ${error.message}`));
+    }
     if (event.reason === 'agent-stopped') status(`LOCAL AGENT STOPPED · ${event.sourceId} · surviving human/agent contacts preserved`);
     if (event.reason === 'agent-reenabled') status(`LOCAL AGENT RE-ENABLED · ${event.sourceId} · fresh generation ${event.agents.find(item => item.sourceId === event.sourceId)?.generation || '?'}`);
   },
@@ -40,6 +51,7 @@ registry.setAgentController(agentController);
 bridge.setAgentController(agentController);
 let economyContext = null;
 const handContacts = new Map(), pointerContacts = new Map();
+const materialHandContacts = new Map();
 const touchGestures = new Map();
 const touchOperationIds = new LocalOperationIdFactory('touch-preview');
 let touchApplyTail = Promise.resolve();
@@ -137,6 +149,7 @@ function renderEye(envelope, options = {}) {
     || priorScope.spaceId !== nextScope.spaceId
   )) fenceLocalContacts('scope-transition');
   S.state = state; S.live = state; R.state = state; R.grid = projected.grid; R.actor = projected.eye.id;
+  R.materialPatch = projected.materialPatch;
   if (appliedEyeId !== projected.eye.id || appliedEyeRevision !== projected.eye.revision) {
     const cameraView = projected.eye.projection || {};
     R.distance = clamp(Number(cameraView.scale) || 10.5, 4, 22);
@@ -581,6 +594,50 @@ function selectedTransformAxes(dimension = S.state?.geometry?.dimension || 4) {
   return axes.slice(0, 2);
 }
 function activeObjectContacts(objectId) { return interactionFabric?.forObject(objectId) || []; }
+function beginMaterialFinger({ handId, finger, nodeId = null } = {}) {
+  if (!materialInput || !finger?.source || !Array.isArray(finger.point)) return null;
+  const contactId = finger.contactId || `finger:${handId}:${finger.fingerId}`;
+  if (materialInput.snapshot().some(item => item.contactId === contactId)) return materialHandContacts.get(handId)?.get(contactId) || null;
+  const hit = nodeId ? { nodeId } : R.atMaterialNode?.(finger.point[0], finger.point[1]);
+  if (!hit?.nodeId) return null;
+  const record = {
+    contactId, handId, fingerId: finger.fingerId, point: [...finger.point],
+    ready: materialInput.begin({
+      contactId, source: finger.source, point: finger.point, nodeId: hit.nodeId, gesture: 'pinch',
+    }),
+    updates: Promise.resolve(),
+  };
+  record.ready.catch(error => status(`Material finger ${finger.fingerId} could not begin: ${error.message}`));
+  const hand = materialHandContacts.get(handId) || new Map();
+  hand.set(contactId, record); materialHandContacts.set(handId, hand);
+  return record;
+}
+function updateMaterialFinger(record, point) {
+  if (!record || !Array.isArray(point)) return Promise.resolve(null);
+  record.point = [...point];
+  record.updates = record.updates.then(() => record.ready).then(() => materialInput?.update(record.contactId, point)).catch(error => {
+    status(`Material finger update failed: ${error.message}`); return null;
+  });
+  return record.updates;
+}
+function releaseMaterialFinger(record, reason = 'release', { cancel = false } = {}) {
+  if (!record) return Promise.resolve(null);
+  record.releasing = true;
+  return record.updates.then(() => record.ready).then(() => materialInput?.end(record.contactId, reason, { cancel })).finally(() => {
+    const hand = materialHandContacts.get(record.handId);
+    hand?.delete(record.contactId);
+    if (hand?.size === 0) materialHandContacts.delete(record.handId);
+  });
+}
+function releaseMaterialHand(handId, reason = 'hand-release', { cancel = false } = {}) {
+  const hand = materialHandContacts.get(handId);
+  if (!hand) return Promise.resolve([]);
+  return Promise.all([...hand.values()].map(record => releaseMaterialFinger(record, reason, { cancel })));
+}
+function stopMaterialSource(source, reason = 'source-stop') {
+  if (!materialInput) return Promise.resolve(null);
+  return materialInput.stopSource(source, reason).catch(error => { status(`Material source stop reconciliation required: ${error.message}`); return null; });
+}
 function beginLocalContact({ contactId, kind, sourceId, objectId, point, gesture = 'grab' } = {}) {
   if (!objectId || !fieldWorld || !engine) return null;
   const identity = localObjectIdentity(objectId);
@@ -618,6 +675,11 @@ function fenceHandEdits(reason = 'hand-fence') {
     releaseHandContact(contactId, reason);
   }
   handContacts.clear();
+  for (const [handId, contacts] of [...materialHandContacts.entries()]) {
+    const source = [...contacts.values()][0]?.source || { kind: 'hand', sourceId: handId, sessionId: materialInput?.sessionId, generation: 1 };
+    stopMaterialSource({ kind: 'hand', sourceId: handId, sessionId: source.sessionId, generation: source.generation }, reason);
+  }
+  materialHandContacts.clear();
 }
 function releaseHandContact(contactId, reason = 'hand-release') {
   const contact = handContacts.get(contactId);
@@ -649,6 +711,8 @@ function handleFieldHandGesture(event) {
   if (event.type === 'lost') {
     if (event.handId) releaseHandContact('hand:' + event.handId, event.reason || 'hand-lost');
     else for (const contactId of [...handContacts.keys()]) releaseHandContact(contactId, event.reason || 'tracking-lost');
+    if (event.handId) releaseMaterialHand(event.handId, event.reason || 'hand-lost', { cancel: true });
+    else for (const handId of [...materialHandContacts.keys()]) releaseMaterialHand(handId, event.reason || 'tracking-lost', { cancel: true });
     R.pointer = null; lastPoseByHand.clear(); return;
   }
   if (event.type === 'frame') {
@@ -657,6 +721,17 @@ function handleFieldHandGesture(event) {
       const hand = active.get(contactId);
       if (!hand) releaseHandContact(contactId, 'hand-missing');
       else if (hand.pose !== 'pinch' && activeObjectContacts(contact.entityId).some(item => item.contactId === contactId)) releaseHandContact(contactId, hand.pose || 'hand-release');
+    }
+    for (const hand of event.hands) {
+      const contacts = materialHandContacts.get(hand.id);
+      if (!contacts) continue;
+      const fingertips = new Map((hand.fingertips || []).map(finger => [finger.fingerId, finger]));
+      for (const record of [...contacts.values()]) {
+        const finger = fingertips.get(record.fingerId);
+        if (finger) updateMaterialFinger(record, finger.point);
+        else releaseMaterialFinger(record, 'finger-missing', { cancel: true });
+      }
+      if (hand.pose !== 'pinch') releaseMaterialHand(hand.id, hand.pose || 'hand-release');
     }
     for (const id of lastPoseByHand.keys()) if (!active.has('hand:' + id)) lastPoseByHand.delete(id);
     return;
@@ -681,10 +756,26 @@ function handleFieldHandGesture(event) {
   }
   if (event.type === 'grab') {
     const hit = R.at(...event.point), contactId = 'hand:' + event.handId;
+    if (hit === PHONE_MATERIAL_ENTITY_ID && event.fingertips?.length) {
+      const fingers = event.fingertips.map(finger => beginMaterialFinger({ handId: event.handId, finger })).filter(Boolean);
+      if (fingers.length) {
+        selectPhoneEntity(hit, { announce: false });
+        status(`HAND MATERIAL GRAB · ${hit} · ${fingers.length} independent fingertip contact(s)`);
+        return;
+      }
+    }
     if (hit && !handContacts.has(contactId)) {
       selectPhoneEntity(hit, { announce: false });
       beginLocalContact({ contactId, kind: 'hand', sourceId: event.handId, objectId: hit, point: event.point, gesture: 'grab' });
       status('HAND GRAB · ' + hit);
+    }
+    return;
+  }
+  if (event.type === 'move' && materialHandContacts.has(event.handId)) {
+    const contacts = materialHandContacts.get(event.handId);
+    for (const record of contacts.values()) {
+      const finger = event.fingertips?.find(item => item.fingerId === record.fingerId);
+      if (finger) updateMaterialFinger(record, finger.point);
     }
     return;
   }
@@ -694,7 +785,11 @@ function handleFieldHandGesture(event) {
     previewObjectTouchGesture(contact.entityId);
     return;
   }
-  if (event.type === 'release' && contact) { releaseHandContact(contactId, event.reason || 'release'); return; }
+  if (event.type === 'release') {
+    if (materialHandContacts.has(event.handId)) releaseMaterialHand(event.handId, event.reason || 'release', { cancel: /lost|missing|cancel|stop|fence|disconnect|ambiguous|worker/i.test(String(event.reason || '')) });
+    if (contact) releaseHandContact(contactId, event.reason || 'release');
+    return;
+  }
   if (event.type === 'twohand') {
     if (!handleTwoHandObjectGesture(event)) {
       if (event.scale > 0.01 && Number.isFinite(event.scale)) R.distance = clamp(R.distance / event.scale, 4, 22);
@@ -1008,6 +1103,22 @@ async function startLocal() {
   });
   const rootDimension = Number($('createD')?.value) || 4;
   const state = await engine.open(getWorldId(), rootDimension);
+  materialInput = new PhoneMaterialInputRuntime({
+    engine, renderer: R,
+    getEnvelope: () => engine.snapshot(),
+    getViewport: () => canvas?.getBoundingClientRect?.() || { left: 0, top: 0, width: innerWidth || 1, height: innerHeight || 1 },
+    onPreview: (preview, record) => {
+      if (!preview?.provisional) { R.materialProvisional = null; return; }
+      const accepted = fieldEnvelope?.snapshot?.materialBodies?.[PHONE_MATERIAL_ENTITY_ID] || state.snapshot.materialBodies?.[PHONE_MATERIAL_ENTITY_ID] || {};
+      R.materialProvisional = {
+        ...accepted, nodes: preview.nodes, edges: preview.edges,
+        bodyRevision: preview.bodyRevision, physicsTick: preview.physicsTick,
+        provisional: true, contactId: record?.contactId || null,
+      };
+      R.draw(performance.now());
+    },
+    onState: event => { if (event.type === 'material-begin') status(`MATERIAL CONTACT · ${event.nodeId} · ${event.source?.kind || 'source'}`); },
+  });
   fieldWorld = new FieldWorldController(state, { selectedId: selectedId || R.selected || null });
   interactionFabric = new SpatialInteractionFabric();
   agentController.setFabric(interactionFabric);
@@ -1041,7 +1152,7 @@ async function installOffline() {
     const ready = await navigator.serviceWorker.ready;
     if (!ready.active) throw new Error('Offline shell service worker did not become active.');
     const shellUrl = STATIC_PHONE_ROUTE ? new URL('./index.html', import.meta.url) : new URL('../index.html', import.meta.url);
-    const shell = await (await caches.open('vivo-phone-shell-2026-10-12-v4')).match(shellUrl);
+    const shell = await (await caches.open('vivo-phone-shell-2026-10-12-v5')).match(shellUrl);
     if (!shell) throw new Error('Offline shell cache did not finish installing.');
     const persisted = await navigator.storage?.persist?.().catch(() => false);
     $('phoneEngineState').textContent = `Offline shell ready · service worker active · persistent storage ${persisted ? 'granted' : 'not granted by browser'}.`;
@@ -1067,6 +1178,27 @@ async function cacheHandAssets() {
 const canvas = $('world');
 function objectTouchRecords(objectId) {
   return [...pointerContacts.values()].filter(record => record.target === objectId);
+}
+function promoteMaterialTouchRecords(objectId, reason = 'bimanual-rigid-transform') {
+  const records = objectTouchRecords(objectId).filter(record => record.material);
+  for (const record of records) {
+    const contact = beginLocalContact({
+      contactId: record.contactId, kind: 'touch', sourceId: String(record.id),
+      objectId, point: [record.x, record.y], gesture: 'touch',
+    });
+    if (!contact) continue;
+    // A second touch changes the gesture class to the existing rigid
+    // bimanual path. Fence the material actuator after any already-submitted
+    // target, while the captured rigid contact owns subsequent transforms.
+    record.material = false;
+    record.materialUpdates = record.materialUpdates.then(() => record.materialPromise)
+      .then(() => materialInput?.end(record.contactId, reason, { cancel: true }))
+      .catch(error => status(`Material-to-rigid handoff requires reconciliation: ${error.message}`));
+    record.canonicalPoint = [...contact.canonicalPoint];
+    record.anchorCanonicalPoint = [...contact.anchorCanonicalPoint];
+    record.mapping = contact.mapping;
+  }
+  return records.length;
 }
 function beginObjectTouchGesture(objectId) {
   let gesture = touchGestures.get(objectId);
@@ -1107,13 +1239,20 @@ function previewObjectTouchGesture(objectId) {
 }
 function releaseObjectTouchContacts(objectId, reason) {
   for (const record of objectTouchRecords(objectId)) {
-    finishLocalContact('touch:' + record.id, reason).catch(error => status(error.message));
+    if (record.material) {
+      record.released = true;
+      record.materialUpdates = record.materialUpdates.then(() => record.materialPromise).then(() => materialInput?.end(record.contactId, reason, { cancel: true })).catch(error => status(error.message));
+    } else finishLocalContact('touch:' + record.id, reason).catch(error => status(error.message));
     pointerContacts.delete(record.id);
   }
 }
 function releaseObjectTouchContact(record, reason) {
   if (!record?.target) return;
-  finishLocalContact('touch:' + record.id, reason).catch(error => status(error.message));
+  if (record.material) {
+    record.released = true;
+    const cancel = /cancel|lost|missing|fence|stop|hidden|ambiguous|worker|disconnect/i.test(String(reason));
+    record.materialUpdates = record.materialUpdates.then(() => record.materialPromise).then(() => materialInput?.end(record.contactId, reason, { cancel })).catch(error => status(error.message));
+  } else finishLocalContact('touch:' + record.id, reason).catch(error => status(error.message));
   pointerContacts.delete(record.id);
 }
 function fenceLocalContacts(reason = 'scope-transition') {
@@ -1238,11 +1377,27 @@ canvas.addEventListener('pointerdown', event => {
   pointerContacts.set(event.pointerId, record);
   if (target) {
     selectPhoneEntity(target, { announce: true });
-    const contact = beginLocalContact({ contactId, kind: 'touch', sourceId: String(event.pointerId), objectId: target, point, gesture: 'touch' });
-    if (contact) {
-      record.canonicalPoint = [...contact.canonicalPoint];
-      record.anchorCanonicalPoint = [...contact.anchorCanonicalPoint];
-      record.mapping = contact.mapping;
+    const materialPeers = target === PHONE_MATERIAL_ENTITY_ID
+      ? objectTouchRecords(target).filter(item => item.material)
+      : [];
+    const hasExistingRigidTarget = [...pointerContacts.values()].some(item => item.id !== event.pointerId && item.target && !item.material);
+    if (materialPeers.length) promoteMaterialTouchRecords(target);
+    const materialHit = target === PHONE_MATERIAL_ENTITY_ID ? R.atMaterialNode?.(point[0], point[1]) : null;
+    if (materialHit && materialInput && contactMode !== 'dimensional' && !materialPeers.length && !hasExistingRigidTarget) {
+      record.material = true; record.materialNodeId = materialHit.nodeId;
+      record.materialUpdates = Promise.resolve();
+      record.materialPromise = materialInput.begin({
+        contactId, point, nodeId: materialHit.nodeId,
+        source: { kind: 'touch', sourceId: String(event.pointerId), sessionId: materialInput.sessionId },
+        gesture: 'touch',
+      }).catch(error => { status(`Material touch could not begin: ${error.message}`); return null; });
+    } else {
+      const contact = beginLocalContact({ contactId, kind: 'touch', sourceId: String(event.pointerId), objectId: target, point, gesture: 'touch' });
+      if (contact) {
+        record.canonicalPoint = [...contact.canonicalPoint];
+        record.anchorCanonicalPoint = [...contact.anchorCanonicalPoint];
+        record.mapping = contact.mapping;
+      }
     }
   } else if (pointerContacts.size > 1) {
     const entries = [...pointerContacts.values()].filter(item => !item.target);
@@ -1260,6 +1415,10 @@ canvas.addEventListener('pointermove', event => {
   const prior = { x: record.x, y: record.y };
   if (record.released) return;
   record.x = event.clientX; record.y = event.clientY;
+  if (record.material) {
+    record.materialUpdates = record.materialUpdates.then(() => record.materialPromise).then(() => materialInput?.update(record.contactId, [record.x, record.y]));
+    return;
+  }
   if (record.target && record.mapping && S.state?.entities[record.target]) {
     updateLocalContact(record, [record.x, record.y], 'drag');
     previewObjectTouchGesture(record.target);
@@ -1281,6 +1440,16 @@ const pointerEnd = event => {
   if (!localMode) return;
   event.preventDefault(); event.stopImmediatePropagation();
   const record = pointerContacts.get(event.pointerId);
+  if (record?.material) {
+    if (event.type === 'lostpointercapture' && record.released) return;
+    const cancel = event.type !== 'pointerup';
+    record.released = true;
+    const reason = cancel ? (event.type === 'pointercancel' ? 'touch-cancel' : 'lost-pointer-capture') : 'touch-release';
+    record.materialUpdates = record.materialUpdates.then(() => record.materialPromise).then(() => materialInput?.end(record.contactId, reason, { cancel }));
+    record.materialUpdates.catch(error => status(`Material touch release failed: ${error.message}`));
+    pointerContacts.delete(event.pointerId);
+    return;
+  }
   if (record?.target) {
     if (event.type === 'lostpointercapture' && record.released) return;
     const cancel = event.type !== 'pointerup';
@@ -1336,6 +1505,18 @@ window.VivaPhoneEngine = Object.freeze({
   // sparse solver is still stepping, which makes an active preview appear to
   // drift from the coordinate it is actually based on.
   snapshot: () => refreshSnapshot({ externalSnapshot: true }), translate: (...args) => engine?.translate(...args), applyLocalEdit: (...args) => engine?.applyLocalEdit(...args), applyLocalTransform: (...args) => engine?.applyLocalTransform(...args), setEye: patch => engine?.setEye(patch),
+  materialSnapshot: () => engine?.materialSnapshot(),
+  materialBegin: payload => engine?.materialBegin(payload),
+  materialTarget: payload => engine?.materialTarget(payload),
+  materialEnd: payload => engine?.materialEnd(payload),
+  materialCancel: payload => engine?.materialCancel(payload),
+  materialStopSource: payload => engine?.materialStopSource(payload),
+  materialStep: dt => engine?.materialStep(dt),
+  materialPreview: payload => engine?.materialPreview(payload),
+  materialPreviewContact: (contactId, point) => materialInput?.preview(contactId, point),
+  materialReconcile: payload => engine?.materialReconcile(payload),
+  materialReconcileOperation: operationId => engine?.materialReconcileOperation(operationId),
+  materialContacts: () => materialInput?.snapshot() || [],
   forkOffline: label => forkPhoneOffline(label), startCamera: (facing = 'user') => startPhoneCamera(facing), stopCamera: stopPhoneCamera,
   authority: () => authority?.debug() || null,
   connectAuthority: options => authority?.connect(options), readAuthority: () => authority?.read(),

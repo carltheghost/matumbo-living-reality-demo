@@ -39,7 +39,7 @@ test('the Android Companion extends the canonical GitHub Pages UI at runtime', a
   assert.match(bridge, /agentController\.invokeTool/);
   assert.doesNotMatch(bridge, /api\.translate/);
   assert.match(bootstrap, /navigator\.serviceWorker\.ready/);
-  assert.match(bootstrap, /caches\.open\('vivo-phone-shell-2026-10-12-v4'\)/);
+  assert.match(bootstrap, /caches\.open\('vivo-phone-shell-2026-10-12-v5'\)/);
   assert.match(bootstrap, /two-hand-camera\.mjs/);
   assert.match(bootstrap, /camera-start-status\.mjs/);
   assert.match(bootstrap, /phoneStartHands.*startCameraFromButton/);
@@ -133,7 +133,8 @@ test('the phone-owned tracker detects two complete hands without transporting fr
   assert.match(sw, /request\.mode === 'navigate'/);
   assert.match(sw, /scope\.pathname/);
   assert.match(sw, /shell\.match\(scoped\('index\.html'\)\)/);
-  assert.match(sw, /SHELL_CACHE.*v4/);
+  assert.match(sw, /SHELL_CACHE.*v5/);
+  for (const asset of ['phone/material-contract.mjs', 'phone/material-patch.mjs', 'phone/material-input-runtime.mjs', 'phone/fingertip-input.mjs']) assert.match(sw, new RegExp(asset.replaceAll('.', '\\.')));
   assert.doesNotMatch(worker, /\bfetch\s*\(|XMLHttpRequest|WebSocket/);
   assert.doesNotMatch(camera, /\bfetch\s*\(|XMLHttpRequest|WebSocket/);
 });

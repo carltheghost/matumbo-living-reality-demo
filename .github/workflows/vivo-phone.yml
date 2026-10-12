@@ -73,6 +73,7 @@ jobs:
           python services/vivo/web/phone/tests/browser_economy_mounted.py http://127.0.0.1:9897/ | tee browser-evidence/economy-mounted.json
           python services/vivo/web/phone/tests/browser_agent_stop.py http://127.0.0.1:9897/ | tee browser-evidence/agent-stop-source.json
           python services/vivo/web/phone/tests/browser_dimensional_contact.py http://127.0.0.1:9897/ | tee browser-evidence/dimensional-contact-source.json
+          python services/vivo/web/phone/tests/browser_material_deformation.py http://127.0.0.1:9897/ | tee browser-evidence/material-deformation-source.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -149,6 +150,10 @@ jobs:
               Path('browser-static/services/vivo/web/phone/phone-render.mjs'),
               Path('browser-static/services/vivo/web/phone/phone-world.css'),
               Path('browser-static/services/vivo/web/phone/field-palette.mjs'),
+              Path('browser-static/services/vivo/web/phone/material-contract.mjs'),
+              Path('browser-static/services/vivo/web/phone/material-patch.mjs'),
+              Path('browser-static/services/vivo/web/phone/material-input-runtime.mjs'),
+              Path('browser-static/services/vivo/web/phone/fingertip-input.mjs'),
               Path('browser-static/services/vivo/web/phone/vendor/economy/manifest.json'),
               Path('browser-static/services/vivo/web/phone/vendor/economy/src/domains/simulated-economy.js'),
               Path('browser-static/services/vivo/web/phone/vendor/economy/src/domains/token.js'),
@@ -172,7 +177,7 @@ jobs:
           if './economy-entry.mjs' not in bootstrap or 'TUMBO-SIM' not in route:
               raise SystemExit('mounted simulated economy entry is missing')
           sw = required[-1].read_text(encoding='utf-8')
-          for asset in ('phone/economy-entry.mjs', 'phone/phone-render.mjs', 'phone/phone-world.css', 'phone/field-palette.mjs', 'phone/vendor/economy/manifest.json', 'phone/vendor/economy/src/domains/simulated-economy.js', 'phone/vendor/economy/src/domains/token.js', 'phone/vendor/economy/src/domains/token-config.js', 'phone/vendor/economy/src/domains/token-store.js', 'phone/vendor/economy/src/render/simulated-economy-panel.js'):
+          for asset in ('phone/economy-entry.mjs', 'phone/phone-render.mjs', 'phone/phone-world.css', 'phone/field-palette.mjs', 'phone/material-contract.mjs', 'phone/material-patch.mjs', 'phone/material-input-runtime.mjs', 'phone/fingertip-input.mjs', 'phone/vendor/economy/manifest.json', 'phone/vendor/economy/src/domains/simulated-economy.js', 'phone/vendor/economy/src/domains/token.js', 'phone/vendor/economy/src/domains/token-config.js', 'phone/vendor/economy/src/domains/token-store.js', 'phone/vendor/economy/src/render/simulated-economy-panel.js'):
               if asset not in sw:
                   raise SystemExit('economy phone asset is absent from the offline shell: ' + asset)
           print('built static phone artifact verified')
@@ -205,6 +210,7 @@ jobs:
           python services/vivo/web/phone/tests/browser_bimanual_transform.py http://127.0.0.1:9896/ | tee browser-evidence/bimanual-transform.json
           python services/vivo/web/phone/tests/browser_agent_stop.py http://127.0.0.1:9896/ | tee browser-evidence/agent-stop-pages.json
           python services/vivo/web/phone/tests/browser_dimensional_contact.py http://127.0.0.1:9896/ | tee browser-evidence/dimensional-contact-pages.json
+          python services/vivo/web/phone/tests/browser_material_deformation.py http://127.0.0.1:9896/ | tee browser-evidence/material-deformation-pages.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
