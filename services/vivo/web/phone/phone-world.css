@@ -315,7 +315,16 @@ body.phone-world:not(.phone-local) #status {
   .field-axis-row { grid-template-columns: auto repeat(3, 1fr); }
   .field-selection-row { grid-template-columns: 1fr; }
   .context-slot { align-items: stretch; grid-template-columns: 1fr; }
-  .field-actions { grid-template-columns: repeat(3, 1fr); }
+  .field-actions {
+    background: rgba(14, 25, 38, .98);
+    border-bottom: 1px solid rgba(127,180,255,.22);
+    border-top: 1px solid rgba(127,180,255,.18);
+    grid-template-columns: repeat(3, 1fr);
+    padding: 8px 0;
+    position: sticky;
+    top: -13px;
+    z-index: 3;
+  }
   .field-actions button:nth-child(4) { grid-column: 1 / 2; }
   .phone-world .toolbar {
     bottom: max(10px, env(safe-area-inset-bottom));
@@ -327,7 +336,7 @@ body.phone-world:not(.phone-local) #status {
   .phone-world #status { bottom: max(60px, calc(54px + env(safe-area-inset-bottom))); }
   .phone-world .metrics { display: none; }
   .phone-world .welcome {
-    bottom: max(14px, env(safe-area-inset-bottom));
+    bottom: max(4px, env(safe-area-inset-bottom));
     left: 10px;
     max-height: calc(100dvh - 112px);
     padding: 18px;

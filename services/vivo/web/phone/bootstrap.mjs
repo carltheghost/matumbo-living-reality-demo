@@ -88,6 +88,7 @@ function renderEye(envelope, options = {}) {
   for (let i = 3; i < projected.eye.q.length; i++) R.slice[i] = Number(projected.eye.slice?.[`x${i + 1}`] || 0);
   if (!state.entities[R.selected]) R.selected = Object.keys(state.entities)[0] || null;
   if (selectedId && state.entities[selectedId]) R.selected = selectedId;
+  if (!state.entities[selectedId]) selectedId = R.selected;
   updateEyeControls(envelope);
   fieldEnvelope = envelope;
   updateFieldWorld(envelope, options);
@@ -178,7 +179,10 @@ function updateFieldWorld(envelope = fieldEnvelope, options = {}) {
       option.value = entity.id; option.textContent = entity.name + (entity.awake ? ' · awake' : ' · sleeping');
       entitySelect.append(option);
     }
-    entitySelect.value = model.entities.some(entity => entity.id === prior) ? prior : (selectedId || model.entities[0]?.id || '');
+    const preferred = [selectedId, R.selected, prior, model.entities[0]?.id]
+      .find(id => model.entities.some(entity => entity.id === id)) || '';
+    entitySelect.value = preferred;
+    if (preferred) { selectedId = preferred; R.selected = preferred; if (S) S.selected = preferred; }
   }
   drawFieldAtlas($('phoneFieldAtlas'), model);
   const preview = updateFieldActionButtons();
@@ -200,7 +204,28 @@ function updateFieldActionButtons(completedGeneration = null) {
   if (superseded) status('A newer local field preview is ready; the earlier Apply did not replace it.');
   return preview;
 }
-function fieldEntityId() { return $('phoneFieldEntity')?.value || selectedId || R.selected || null; }
+function selectPhoneEntity(id, { announce = false, discardPending = true } = {}) {
+  const entities = S.state?.entities || {};
+  const eye = fieldEnvelope?.eyes?.[fieldEnvelope.currentEyeId];
+  const fieldEntities = fieldEnvelope?.snapshot?.spaces?.[eye?.spaceId]?.entities || {};
+  const modelEntity = fieldWorld?.model?.entities?.find(entity => entity.id === id);
+  const entity = entities[id] || fieldEntities[id] || modelEntity;
+  if (!entity) return false;
+  const pending = fieldWorld?.commitCandidate();
+  const discarded = Boolean(discardPending && pending && pending.entityId !== id);
+  if (discarded) fieldWorld.discardPreview();
+  selectedId = id;
+  R.selected = id;
+  if (S) S.selected = id;
+  const fieldSelect = $('phoneFieldEntity');
+  if (fieldSelect && [...fieldSelect.options].some(option => option.value === id)) fieldSelect.value = id;
+  if (fieldWorld && fieldEnvelope) updateFieldWorld(fieldEnvelope);
+  if (announce) status(discarded
+    ? `Retargeted to ${entity.name || id}; the previous ${pending.entityId} preview was discarded.`
+    : `Selected ${entity.name || id}.`);
+  return true;
+}
+function fieldEntityId() { return selectedId || R.selected || $('phoneFieldEntity')?.value || null; }
 function localObjectIdentity(entityId) {
   const eye = fieldEnvelope?.eyes?.[fieldEnvelope.currentEyeId], spaceId = eye?.spaceId;
   const entity = fieldEnvelope?.snapshot?.spaces?.[spaceId]?.entities?.[entityId];
@@ -454,7 +479,7 @@ function handleFieldHandGesture(event) {
     const now = performance.now(); if (now - lastPoseAction < 650) return;
     if (event.pose === 'point') {
       const hit = R.at(...event.point);
-      if (hit) { selectedId = hit; R.selected = hit; status('POINT · selected ' + (S.state.entities[hit]?.name || hit)); lastPoseAction = now; }
+      if (hit) { selectPhoneEntity(hit, { announce: true }); lastPoseAction = now; }
     } else if (event.pose === 'peace') {
       R.overview = !R.overview; updateProjectionState({ mode: R.overview ? 'overview' : 'slice' });
       status('PEACE · ' + (R.overview ? 'overview' : 'current slice')); lastPoseAction = now;
@@ -468,6 +493,7 @@ function handleFieldHandGesture(event) {
   if (event.type === 'grab') {
     const hit = R.at(...event.point), contactId = 'hand:' + event.handId;
     if (hit && !handContacts.has(contactId)) {
+      selectPhoneEntity(hit, { announce: false });
       const canonicalPoint = canonicalPointForInput(event.point, hit);
       interactionFabric?.begin({ contactId, source: { kind: 'hand', id: event.handId }, objectId: hit, gesture: 'grab', canonicalPoint });
       const identity = localObjectIdentity(hit);
@@ -479,7 +505,7 @@ function handleFieldHandGesture(event) {
         spaceId: identity?.spaceId || fieldEnvelope?.eyes?.[fieldEnvelope?.currentEyeId]?.spaceId,
         editQueue: new LocalEditQueue(),
       });
-      selectedId = hit; R.selected = hit; status('HAND GRAB · ' + hit);
+      status('HAND GRAB · ' + hit);
     }
     return;
   }
@@ -522,8 +548,7 @@ function handleFieldHandGesture(event) {
   }
   if (event.type === 'swipe' && !handContacts.size && S.state) {
     const ids = Object.keys(S.state.entities), i = ids.indexOf(R.selected), step = event.dx < 0 ? 1 : -1;
-    selectedId = ids[(i + step + ids.length) % ids.length]; R.selected = selectedId;
-    status('SWIPE · selected ' + (S.state.entities[selectedId]?.name || selectedId));
+    selectPhoneEntity(ids[(i + step + ids.length) % ids.length], { announce: true });
   }
 }
 const sharedCameraGesture = camera.onGesture.bind(camera);
@@ -686,7 +711,7 @@ function addPhoneSurface() {
   $('phoneFieldThreshold').oninput = refreshFieldControls;
   $('phoneFieldLayout').onchange = refreshFieldControls;
   for (const id of ['phoneFieldAxisA', 'phoneFieldAxisB', 'phoneFieldAxisC']) $(id).onchange = refreshFieldControls;
-  $('phoneFieldEntity').onchange = event => { if (fieldWorld?.commitCandidate()?.entityId !== event.target.value) fieldWorld?.discardPreview(); selectedId = event.target.value; R.selected = selectedId; refreshFieldControls(); };
+  $('phoneFieldEntity').onchange = event => { selectPhoneEntity(event.target.value, { announce: true }); };
   $('phoneFieldPreviewMove').onclick = () => {
     try { fieldWorld.previewMove(fieldEntityId(), Number($('phoneAxis').value || 0), 0.14); updateFieldWorld(); $('phoneFieldApply').disabled = false; $('phoneFieldDiscard').disabled = false; }
     catch (error) { status(error.message); }
@@ -918,7 +943,7 @@ canvas.addEventListener('pointerdown', event => {
     const gesture = beginObjectTouchGesture(target);
     interactionFabric?.begin({ contactId, source: { kind: 'touch', id: String(event.pointerId) }, objectId: target, gesture: 'touch', canonicalPoint: record.canonicalPoint });
     gesture?.contacts.add(contactId);
-    selectedId = target; R.selected = target; status('Selected ' + (S.state.entities[target]?.name || target));
+    selectPhoneEntity(target, { announce: true });
   } else if (pointerContacts.size > 1) {
     const entries = [...pointerContacts.values()].filter(item => !item.target);
     if (entries.length > 1) {

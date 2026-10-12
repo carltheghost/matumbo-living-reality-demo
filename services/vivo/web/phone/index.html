@@ -52,18 +52,6 @@
       <span class="field-dock-state" id="phoneFieldStatus">Field atlas waits for the local phone engine.</span>
     </div>
     <p class="field-dock-intro">Places, people and memories wake as they come near your Eye. Tap a glowing field to select it; the atlas keeps the other planes in view.</p>
-    <div class="field-query-row">
-      <label>Ask the field<input id="phoneFieldQuery" maxlength="80" placeholder="place, person, memory"></label>
-      <label>Wake threshold<input id="phoneFieldThreshold" type="range" min="0" max="1" step=".05" value=".2"></label>
-      <label>Layout<select id="phoneFieldLayout"><option value="gather">Coordinates</option><option value="ring">Ring</option><option value="row">Row</option></select></label>
-    </div>
-    <div class="field-axis-row" aria-label="Eye axes">
-      <span class="axis-label">Eye axes</span>
-      <label>A<select id="phoneFieldAxisA"></select></label>
-      <label>B<select id="phoneFieldAxisB"></select></label>
-      <label>C<select id="phoneFieldAxisC"></select></label>
-    </div>
-    <canvas id="phoneFieldAtlas" width="720" height="260" aria-label="All coordinate-plane field atlas"></canvas>
     <div class="field-selection-row">
       <label class="selected-field-label">Selected field<select id="phoneFieldEntity"></select></label>
       <p id="phoneFieldPreview" class="field-preview-copy">No local edit preview. Preview never enters accepted history.</p>
@@ -80,6 +68,18 @@
       <button id="phoneFieldDiscard" type="button" disabled>Discard preview</button>
       <button id="phoneReleaseContacts" class="field-release" type="button">Release contacts</button>
     </div>
+    <div class="field-query-row">
+      <label>Ask the field<input id="phoneFieldQuery" maxlength="80" placeholder="place, person, memory"></label>
+      <label>Wake threshold<input id="phoneFieldThreshold" type="range" min="0" max="1" step=".05" value=".2"></label>
+      <label>Layout<select id="phoneFieldLayout"><option value="gather">Coordinates</option><option value="ring">Ring</option><option value="row">Row</option></select></label>
+    </div>
+    <div class="field-axis-row" aria-label="Eye axes">
+      <span class="axis-label">Eye axes</span>
+      <label>A<select id="phoneFieldAxisA"></select></label>
+      <label>B<select id="phoneFieldAxisB"></select></label>
+      <label>C<select id="phoneFieldAxisC"></select></label>
+    </div>
+    <canvas id="phoneFieldAtlas" width="720" height="260" aria-label="All coordinate-plane field atlas"></canvas>
     <details class="accepted-details"><summary>Accepted local history</summary><pre id="phoneFieldAccepted" class="muted"></pre></details>
   </section>
 
