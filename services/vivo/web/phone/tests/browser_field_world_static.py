@@ -79,6 +79,11 @@ def main(base_url: str) -> None:
         page.wait_for_timeout(50)
         changed_axis = page.locator("#phoneFieldAtlas").evaluate("node => node.toDataURL()")
         assert changed_axis != ring_layout, "Eye-axis selection must change the rendered atlas"
+        page.fill("#phoneFieldQuery", "memory")
+        page.wait_for_timeout(50)
+        query_atlas = page.locator("#phoneFieldAtlas").evaluate("node => node.toDataURL()")
+        assert query_atlas != changed_axis, "Information query must change the rendered field"
+        page.fill("#phoneFieldQuery", "")
 
         page.get_by_role("button", name="Preview turn").click()
         page.wait_for_timeout(50)
@@ -436,6 +441,7 @@ def main(base_url: str) -> None:
         assert final["currentRevision"] >= final["acceptedRevision"], final
         assert final["q"][0] != initial["q"][0]
         assert final["cameraCalls"] == 0
+        page.get_by_role("button", name="Advanced").click()
         page.get_by_role("button", name="Install offline shell").click()
         page.wait_for_function("document.querySelector('#phoneEngineState').textContent.includes('service worker active')")
         page.reload(wait_until="domcontentloaded")
@@ -446,9 +452,9 @@ def main(base_url: str) -> None:
         reopened.on("pageerror", lambda error: page_errors.append(str(error)))
         offline_response = reopened.goto(route, wait_until="domcontentloaded")
         assert offline_response is not None and offline_response.status == 200, offline_response
-        reopened.wait_for_selector("text=SHARED WORKSHOP")
+        reopened.wait_for_selector("text=LOCAL FIELD / VIVO WORLD")
         offline = reopened.evaluate(
-            "() => ({controlled: Boolean(navigator.serviceWorker.controller), hasCanonicalContent: document.body.innerText.includes('SHARED WORKSHOP'), route: location.pathname})"
+            "() => ({controlled: Boolean(navigator.serviceWorker.controller), hasCanonicalContent: document.body.innerText.includes('LOCAL FIELD / VIVO WORLD'), route: location.pathname})"
         )
         assert offline["controlled"] is True
         assert offline["hasCanonicalContent"] is True
