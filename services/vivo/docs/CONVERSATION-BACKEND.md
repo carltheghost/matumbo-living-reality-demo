@@ -82,7 +82,9 @@ the conversational history. A replay that is still in that fence returns the
 same result without allocating an active slot or making a provider attempt,
 even when another active slot is locked. Fences use a bounded slot budget and
 may themselves be evicted; after that, the old request is no longer covered by
-an exactly-once guarantee. No fence survives a process restart.
+an exactly-once guarantee. An unknown old/equal generation in a retained fence
+is rejected before active-slot allocation; a future generation still follows
+normal capacity rules. No fence survives a process restart.
 
 ## Provider behavior
 

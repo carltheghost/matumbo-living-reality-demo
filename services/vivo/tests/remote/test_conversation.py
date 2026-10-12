@@ -494,6 +494,36 @@ class ConversationAdapterTests(unittest.IsolatedAsyncioTestCase):
             world_value=world("saturated-b"),
         ))
         await provider.second_called.wait()
+        with self.assertRaises(ConversationError) as stale_error:
+            await self.ask(
+                adapter,
+                session_id="saturated-a",
+                request_id="saturated-old.1",
+                generation=0,
+                text="old",
+                world_value=world("saturated-a"),
+            )
+        self.assertEqual(stale_error.exception.code, "STALE_GENERATION")
+        with self.assertRaises(ConversationError) as mismatch_error:
+            await self.ask(
+                adapter,
+                session_id="saturated-a",
+                request_id="saturated.1",
+                generation=1,
+                text="different payload",
+                world_value=world("saturated-a"),
+            )
+        self.assertEqual(mismatch_error.exception.code, "REQUEST_ID_REUSED")
+        with self.assertRaises(ConversationError) as future_error:
+            await self.ask(
+                adapter,
+                session_id="saturated-a",
+                request_id="saturated-future.1",
+                generation=2,
+                text="future",
+                world_value=world("saturated-a"),
+            )
+        self.assertEqual(future_error.exception.code, "CONVERSATION_CAPACITY")
         replay = await self.ask(
             adapter,
             session_id="saturated-a",
@@ -506,6 +536,17 @@ class ConversationAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(provider.calls), 2)
         provider.release_second.set()
         await pending
+        future = await self.ask(
+            adapter,
+            session_id="saturated-a",
+            request_id="saturated-future.1",
+            generation=2,
+            text="future",
+            world_value=world("saturated-a"),
+        )
+        self.assertEqual(future["generation"], 2)
+        self.assertEqual(future["conversationId"], first["conversationId"])
+        self.assertEqual(len(provider.calls), 3)
 
 
 class ConversationRouteTests(unittest.IsolatedAsyncioTestCase):

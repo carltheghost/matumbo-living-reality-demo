@@ -475,23 +475,19 @@ class ConversationStore:
     def fence_count(self) -> int:
         return len(self._fences)
 
-    def fenced_cached_outcome(
+    def fenced_state(
         self,
         identity: str,
         scope: tuple[str, ...],
-        request_id: str,
-    ) -> tuple[str, CachedOutcome] | None:
-        """Return a known fence outcome without allocating an active slot."""
+    ) -> ConversationFence | None:
+        """Return retained fence metadata without allocating an active slot."""
 
         key = (identity, scope)
         fence = self._fences.get(key)
-        if fence is None:
-            return None
-        cached = fence.idempotency.get(request_id)
-        if cached is not None:
+        if fence is not None:
             fence.last_used = time.monotonic()
             self._fences.move_to_end(key)
-        return cached
+        return fence
 
 
 class RateLimiter:
@@ -701,14 +697,26 @@ class ConversationAdapter:
                 separators=(",", ":"),
             ).encode("utf-8")
         ).hexdigest()
-        fenced = self.store.fenced_cached_outcome(identity, scope, request_id)
-        if fenced is not None:
-            if fenced[0] != fingerprint:
+        fence = self.store.fenced_state(identity, scope)
+        if fence is not None:
+            fenced = fence.idempotency.get(request_id)
+            if fenced is not None and fenced[0] != fingerprint:
                 raise ConversationError("REQUEST_ID_REUSED")
-            # Authentication, request validation, and scope construction have
-            # already completed. A known cached reply needs no active slot,
-            # even when all current slots are locked by provider turns.
-            return self._replay_cached(fenced)
+            if fenced is not None:
+                # Authentication, request validation, and scope construction
+                # have completed. A known cached reply needs no active slot,
+                # even when all current slots are locked by provider turns.
+                return self._replay_cached(fenced)
+            if (
+                fence.active_request_id == request_id
+                and fence.active_fingerprint != fingerprint
+            ):
+                raise ConversationError("REQUEST_ID_REUSED")
+            if generation < fence.latest_generation or (
+                generation == fence.latest_generation
+                and fence.active_request_id != request_id
+            ):
+                raise ConversationError("STALE_GENERATION", 409)
         state = self.store.get_or_create(identity, scope)
         admission_owner = object()
         owns_turn = False
