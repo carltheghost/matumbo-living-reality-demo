@@ -990,7 +990,7 @@ function addPhoneSurface() {
   for (const id of ['phoneFieldAxisA', 'phoneFieldAxisB', 'phoneFieldAxisC']) $(id).onchange = refreshFieldControls;
   $('phoneFieldEntity').onchange = event => { selectPhoneEntity(event.target.value, { announce: true }); };
   $('phoneFieldPreviewMove').onclick = () => {
-    try { fieldWorld.previewMove(fieldEntityId(), Number($('phoneAxis').value || 0), 0.14); updateFieldWorld(); $('phoneFieldApply').disabled = false; $('phoneFieldDiscard').disabled = false; }
+    try { fieldWorld.previewMove(fieldEntityId(), Number($('phoneAxis').value || 0), 0.14, { rebaseOnRevision: true }); updateFieldWorld(); $('phoneFieldApply').disabled = false; $('phoneFieldDiscard').disabled = false; }
     catch (error) { status(error.message); }
   };
   $('phoneFieldPreviewRotate').onclick = () => {
@@ -998,7 +998,7 @@ function addPhoneSurface() {
     catch (error) { status(error.message); }
   };
   $('phoneFieldPreviewMix').onclick = () => {
-    try { fieldWorld.previewMix(fieldEntityId()); updateFieldWorld(); $('phoneFieldApply').disabled = false; $('phoneFieldDiscard').disabled = false; }
+    try { fieldWorld.previewMix(fieldEntityId(), { rebaseOnRevision: true }); updateFieldWorld(); $('phoneFieldApply').disabled = false; $('phoneFieldDiscard').disabled = false; }
     catch (error) { status(error.message); }
   };
   $('phoneFieldApply').onclick = async () => {

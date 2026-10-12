@@ -514,6 +514,27 @@ def main(base_url: str) -> None:
         assert final["currentRevision"] >= final["acceptedRevision"], final
         assert final["q"][0] != initial["q"][0]
         assert final["cameraCalls"] == 0
+
+        # Ordinary settled Apply -> Preview must create a fresh non-zero edit
+        # even while the sparse solver continues advancing entity revisions.
+        page.get_by_role("button", name="Preview move").click()
+        page.wait_for_function(
+            "window.VivaPhoneEngine.fieldWorld().preview?.entityId === 'relic' && !document.querySelector('#phoneFieldApply').disabled"
+        )
+        ordinary_preview = page.evaluate(
+            """
+            () => ({
+              preview: window.VivaPhoneEngine.fieldWorld().preview,
+              text: document.querySelector('#phoneFieldPreview').textContent,
+              applyDisabled: document.querySelector('#phoneFieldApply').disabled,
+            })
+            """
+        )
+        assert ordinary_preview["preview"]["delta"][0] > 0
+        assert "move preview for relic" in ordinary_preview["text"]
+        assert ordinary_preview["applyDisabled"] is False
+        page.get_by_role("button", name="Discard preview").click()
+        page.wait_for_function("!window.VivaPhoneEngine.fieldWorld().preview")
         page.get_by_role("button", name="Advanced").click()
         page.get_by_role("button", name="Install offline shell").click()
         page.wait_for_function("document.querySelector('#phoneEngineState').textContent.includes('service worker active')")
