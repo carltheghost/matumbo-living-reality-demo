@@ -188,6 +188,86 @@ def assert_no_unexpected_network(requests: list[str], origin: str) -> None:
     assert not forbidden, forbidden
 
 
+def quota_storage_failure(browser: Browser, route: str) -> dict[str, Any]:
+    """Verify that accepted memory-only economy state is never presented as saved."""
+    context = browser.new_context(viewport={"width": 1280, "height": 900})
+    context.set_default_timeout(9000)
+    context.add_init_script(
+        """
+        (() => {
+          const nativeSetItem = Storage.prototype.setItem;
+          Storage.prototype.setItem = function(key, value) {
+            if (key === 'matumbo.simulated-economy.v1' || key === 'tumbo.token.engine.v2') {
+              throw new DOMException('The simulated storage quota is full.', 'QuotaExceededError');
+            }
+            return nativeSetItem.call(this, key, value);
+          };
+        })();
+        """
+    )
+    try:
+        page = context.new_page()
+        wait_for_local(page, route)
+        status = page.locator("#phoneEconomyStatus")
+        page.wait_for_function("document.querySelector('#phoneEconomyStatus')?.dataset.tone === 'warn'")
+        initial_status = status.inner_text().lower()
+        assert "storage unavailable" in initial_status
+        assert "reload will discard" in initial_status
+        assert "persisted" not in initial_status
+        assert "saved across reload" not in initial_status
+        assert not page.locator("#phoneEconomyTrigger").is_disabled()
+
+        page.locator("#sim-economy-order-side").select_option("sell")
+        page.locator("#sim-economy-order-amount").fill("1000")
+        page.locator("#sim-economy-order-num").fill("1")
+        page.locator("#sim-economy-order-den").fill("1")
+        page.locator('[data-action="exchange:place"]').click()
+        committed(page)
+        page.wait_for_function("document.querySelector('#phoneEconomyStatus')?.dataset.tone === 'warn'")
+        after_action_status = status.inner_text().lower()
+        assert "accepted in memory only" in after_action_status
+        assert "reload will discard" in after_action_status
+        assert "persisted" not in after_action_status
+        assert page.locator(".sim-economy-record").filter(has_text="SELL · FILLED").count() == 1
+        before_reload = page.evaluate(
+            """
+            () => ({
+              storageStatus: window.__vivoPhoneSimulatedEconomyOwner?.model?.storageStatus,
+              userOrders: window.__vivoPhoneSimulatedEconomyOwner?.model?.exchangeOrders({owner: 'you'}),
+            })
+            """
+        )
+        assert before_reload["storageStatus"] == "storage-unavailable"
+        assert len(before_reload["userOrders"]) == 1
+
+        page.reload(wait_until="domcontentloaded")
+        wait_for_local(page, route)
+        page.wait_for_function("document.querySelector('#phoneEconomyStatus')?.dataset.tone === 'warn'")
+        after_reload_status = page.locator("#phoneEconomyStatus").inner_text().lower()
+        assert "storage unavailable" in after_reload_status
+        assert "reload will discard" in after_reload_status
+        assert "persisted" not in after_reload_status
+        after_reload = page.evaluate(
+            """
+            () => ({
+              storageStatus: window.__vivoPhoneSimulatedEconomyOwner?.model?.storageStatus,
+              userOrders: window.__vivoPhoneSimulatedEconomyOwner?.model?.exchangeOrders({owner: 'you'}),
+            })
+            """
+        )
+        assert after_reload["storageStatus"] == "storage-unavailable"
+        assert after_reload["userOrders"] == []
+        return {
+            "initialWarning": initial_status,
+            "afterActionWarning": after_action_status,
+            "afterReloadWarning": after_reload_status,
+            "acceptedInMemory": True,
+            "vanishedAfterReload": True,
+        }
+    finally:
+        context.close()
+
+
 def install_offline(page: Page) -> None:
     page.locator("#phonePanelButton").click()
     page.locator("#phoneInstallOffline").click()
@@ -273,6 +353,7 @@ def run(base_url: str) -> dict[str, Any]:
             report["mobile"] = {"receiptCount": mobile_state["receiptCount"], "storageStatus": mobile_state["storageStatus"], "bounded": True}
             assert_no_unexpected_network(mobile_requests, origin)
             mobile_context.close()
+            report["quotaFailure"] = quota_storage_failure(browser, route)
         finally:
             browser.close()
     return report

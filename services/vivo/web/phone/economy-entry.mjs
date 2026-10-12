@@ -40,10 +40,24 @@ function textForSelection(selection) {
   return name.length > 42 ? `${name.slice(0, 39)}…` : name;
 }
 
+const DURABLE_STORAGE_STATES = new Set([
+  'persisted-local-snapshot',
+  'restored-local-snapshot',
+  'restored-canonical-snapshot',
+  'restored-token-snapshot',
+]);
+
+function persistenceIsDurable(model) {
+  return DURABLE_STORAGE_STATES.has(String(model?.storageStatus || 'unknown'));
+}
+
 function persistenceLabel(model) {
   const state = String(model?.storageStatus || 'unknown');
-  if (state === 'in-memory' || state.includes('invalid')) return `TUMBO-SIM · local only · persistence ${state}`;
-  return `TUMBO-SIM · local receipt ledger · ${state}`;
+  if (persistenceIsDurable(model)) return `TUMBO-SIM · local receipt ledger · ${state}`;
+  if (state === 'storage-unavailable') return 'TUMBO-SIM · local only · storage unavailable; accepted in memory only and not saved';
+  if (state === 'in-memory') return 'TUMBO-SIM · local only · in-memory state is not saved';
+  if (state.includes('invalid')) return `TUMBO-SIM · local only · ${state}; persistence unavailable`;
+  return `TUMBO-SIM · local only · persistence status ${state}; do not assume saved state`;
 }
 
 /**
@@ -104,9 +118,9 @@ export function mountPhoneEconomyContext({
       trigger.disabled = false;
       return;
     }
-    const durable = owner.model.storageStatus !== 'in-memory' && !String(owner.model.storageStatus).includes('invalid');
+    const durable = persistenceIsDurable(owner.model);
     status.dataset.tone = durable ? 'ok' : 'warn';
-    status.textContent = `${persistenceLabel(owner.model)} · simulated only${durable ? '' : ' · reload persistence unavailable'}`;
+    status.textContent = `${persistenceLabel(owner.model)} · simulated only${durable ? '' : ' · reload will discard unsaved state'}`;
     retry.hidden = true;
     trigger.disabled = false;
   }
