@@ -21,6 +21,20 @@ function fundTumbo(engine, account = "u:alice", amount = 20_000) {
   engine.faucet(account, "TUMBO", amount, { idempotencyKey: `fixture:overview:faucet:${account}` });
 }
 
+function marketReceiptFixture() {
+  const engine = createTokenEngine();
+  fundTumbo(engine, "u:alice", 20_000);
+  const quote = engine.quote({
+    action: "buy",
+    from: "u:alice",
+    fromAsset: "TUMBO",
+    toAsset: "sMIMAS",
+    amountIn: 10_001,
+  });
+  engine.execute(quote, { idempotencyKey: "overview:semantic:market" });
+  return { engine, key: "overview:semantic:market" };
+}
+
 test("exact amount boundaries reject binary-float input", () => {
   assert.equal(parseTumboSimExact("1.001"), 1_001);
   assert.equal(parseTumboSimExact(" 7 "), 7_000);
@@ -217,6 +231,56 @@ test("receipt and request registries fail closed on tampered, missing, or extra 
   assert.deepEqual(overview.invariants.idempotency.receiptRegistry.extraRequestKeys, ["overview:registry:extra-request"]);
 });
 
+test("request bindings require the journal-implied Void reason and system authority", () => {
+  const reasonFixture = marketReceiptFixture();
+  const reasonRequest = JSON.parse(reasonFixture.engine.ledger._requestKeys.get(reasonFixture.key));
+  reasonRequest.voidCreditReason = "burn";
+  reasonFixture.engine.ledger._requestKeys.set(reasonFixture.key, JSON.stringify(reasonRequest));
+  let overview = createTokenEconomyOverview({ engine: reasonFixture.engine });
+  assert.equal(overview.invariants.ok, false);
+  assert.deepEqual(
+    overview.invariants.idempotency.receiptRegistry.requestMismatches.find((row) => row.key === reasonFixture.key).fields,
+    ["voidCreditReason"],
+  );
+
+  const authorityFixture = marketReceiptFixture();
+  const authorityRequest = JSON.parse(authorityFixture.engine.ledger._requestKeys.get(authorityFixture.key));
+  authorityRequest.authority = null;
+  authorityFixture.engine.ledger._requestKeys.set(authorityFixture.key, JSON.stringify(authorityRequest));
+  overview = createTokenEconomyOverview({ engine: authorityFixture.engine });
+  assert.equal(overview.invariants.ok, false);
+  assert.deepEqual(
+    overview.invariants.idempotency.receiptRegistry.requestMismatches.find((row) => row.key === authorityFixture.key).fields,
+    ["authority"],
+  );
+});
+
+test("receipt equality rejects non-finite, cyclic, and hostile values without throwing", () => {
+  const mutations = [
+    (receipt) => ({ ...receipt, links: Number.NaN }),
+    (receipt) => {
+      const links = {};
+      links.self = links;
+      return { ...receipt, links };
+    },
+    (receipt) => {
+      const hostile = { ...receipt };
+      Object.defineProperty(hostile, "links", { enumerable: true, get: () => { throw new Error("hostile getter"); } });
+      return hostile;
+    },
+  ];
+  for (const mutate of mutations) {
+    const engine = createTokenEngine();
+    const key = "overview:hostile:receipt";
+    engine.faucet("u:alice", "TUMBO", 100, { idempotencyKey: key });
+    engine.ledger._receipts.set(key, mutate(engine.ledger._receipts.get(key)));
+    let overview;
+    assert.doesNotThrow(() => { overview = createTokenEconomyOverview({ engine }); });
+    assert.equal(overview.invariants.ok, false);
+    assert.equal(overview.invariants.idempotency.receiptRegistry.ok, false);
+  }
+});
+
 test("issuance mirror is an exact conservation invariant, not an ignored system balance", () => {
   for (const corruptedMirror of [0, 1]) {
     const engine = createTokenEngine();
@@ -250,6 +314,53 @@ test("malformed economy snapshots are invalid instead of becoming healthy zero-o
     assert.equal(overview.invariants.ok, false, path);
     assert.match(overview.economy.error, /missing/);
   }
+});
+
+test("economy entry schemas fail closed while retaining canonical optional fields", () => {
+  const engine = createTokenEngine();
+  const source = createSimulatedEconomy({ engine });
+  const state = source.snapshot();
+  const validOrder = {
+    id: "order:overview-schema",
+    owner: "u:alice",
+    side: "sell",
+    amountBase: 1,
+    remainingBase: 0,
+    priceNum: 1,
+    priceDen: 1,
+    reservedQuote: 0,
+    status: "cancelled",
+  };
+  const cases = [
+    ["unknown order side", { exchange: { ...state.exchange, orders: [{ ...validOrder, side: "hold" }] } }],
+    ["missing operation key", { operations: [{ requestHash: "hash-only" }] }],
+    ["invalid position object", {
+      predictions: {
+        ...state.predictions,
+        markets: [{ id: "market:overview-schema", status: "open", priceFluff: 1, poolFluff: 0, outcomes: ["YES", "NO"] }],
+        positions: [{ id: "position:overview-schema" }],
+      },
+    }],
+  ];
+  for (const [label, replacement] of cases) {
+    const malformed = { ...state, ...replacement };
+    const economy = { engine, snapshot: () => malformed };
+    const overview = createTokenEconomyOverview({ engine, economy });
+    assert.equal(overview.economy.status, "invalid", label);
+    assert.equal(overview.economy.ok, false, label);
+    assert.equal(overview.invariants.ok, false, label);
+  }
+
+  const legacy = {
+    ...state,
+    exchange: { ...state.exchange, legacyMode: "historical-fixture" },
+    events: [{ legacy: true, detail: "optional event payload" }],
+  };
+  delete legacy.exchange.revision;
+  const legacyOverview = createTokenEconomyOverview({ engine, economy: { engine, snapshot: () => legacy } });
+  assert.equal(legacyOverview.economy.status, "observed");
+  assert.equal(legacyOverview.economy.ok, true);
+  assert.equal(legacyOverview.invariants.ok, true);
 });
 
 test("adapters must share the same canonical owner", () => {

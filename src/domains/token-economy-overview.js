@@ -10,11 +10,18 @@
 import {
   ASSETS,
   MARKET_ACTIONS,
+  assertAccount,
   assertAsset,
   isUserAccount,
   mulDivFloor,
   receiptChainHash,
 } from "./token.js";
+import {
+  CONTRACT_STATUSES,
+  EXCHANGE_ORDER_STATUSES,
+  PREDICTION_MARKET_STATUSES,
+  PREDICTION_POSITION_STATUSES,
+} from "./simulated-economy.js";
 import { loadTokenEngine } from "./token-store.js";
 
 export const TOKEN_ECONOMY_OVERVIEW_FORMAT = "tumbo-sim-token-economy-overview-v1";
@@ -60,15 +67,59 @@ function safeError(error) {
   return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
 }
 
-function stableJson(value) {
-  if (value === undefined) return "undefined";
-  if (value === null || typeof value !== "object") return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map((child) => stableJson(child)).join(",")}]`;
-  return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(",")}}`;
+function stableJson(value, stack = new Set(), path = "$") {
+  if (value === null) return "null";
+  const type = typeof value;
+  if (type === "string" || type === "boolean") return JSON.stringify(value);
+  if (type === "number") {
+    if (!Number.isFinite(value)) throw new TypeError(`${path} contains a non-finite number`);
+    return JSON.stringify(value);
+  }
+  if (type !== "object") throw new TypeError(`${path} contains an unsupported ${type}`);
+  if (stack.has(value)) throw new TypeError(`${path} contains a cyclic value`);
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null && !Array.isArray(value)) {
+    throw new TypeError(`${path} contains an unsupported object`);
+  }
+  stack.add(value);
+  try {
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    for (const key of Reflect.ownKeys(descriptors)) {
+      if (typeof key === "symbol") throw new TypeError(`${path} contains symbol properties`);
+      if (!("value" in descriptors[key])) throw new TypeError(`${path}.${key} is an accessor`);
+    }
+    if (Array.isArray(value)) {
+      const enumerableKeys = Object.keys(descriptors).filter((key) => descriptors[key].enumerable);
+      for (const key of enumerableKeys) {
+        if (!/^0$|^[1-9]\d*$/.test(key) || Number(key) >= value.length) {
+          throw new TypeError(`${path} contains unsupported array properties`);
+        }
+      }
+      const entries = [];
+      for (let index = 0; index < value.length; index += 1) {
+        const descriptor = descriptors[String(index)];
+        if (!descriptor || !("value" in descriptor)) throw new TypeError(`${path}[${index}] is not a data value`);
+        entries.push(stableJson(descriptor.value, stack, `${path}[${index}]`));
+      }
+      return `[${entries.join(",")}]`;
+    }
+    const entries = [];
+    for (const key of Object.keys(descriptors).sort()) {
+      const descriptor = descriptors[key];
+      entries.push(`${JSON.stringify(key)}:${stableJson(descriptor.value, stack, `${path}.${key}`)}`);
+    }
+    return `{${entries.join(",")}}`;
+  } finally {
+    stack.delete(value);
+  }
 }
 
 function sameValue(left, right) {
-  return stableJson(left) === stableJson(right);
+  try {
+    return stableJson(left) === stableJson(right);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -224,14 +275,14 @@ function receiptConsistency(engine, journals) {
     if (receipts.has(key)) {
       const receipt = receipts.get(key);
       const mismatches = [];
-      for (const field of ["id", "kind", "action", "idempotencyKey", "tick", "prevHash", "postings", "memo", "ts", "hash"]) {
-        if (!sameValue(receipt?.[field], journal[field])) mismatches.push(field);
-      }
-      if (!sameValue(receipt?.links ?? null, journal.links ?? null)) mismatches.push("links");
       try {
+        for (const field of ["id", "kind", "action", "idempotencyKey", "tick", "prevHash", "postings", "memo", "ts", "hash"]) {
+          if (!sameValue(receipt?.[field], journal[field])) mismatches.push(field);
+        }
+        if (!sameValue(receipt?.links ?? null, journal.links ?? null)) mismatches.push("links");
         if (receipt?.hash !== receiptChainHash(receipt)) mismatches.push("receipt-chain-hash");
       } catch (error) {
-        mismatches.push(`receipt-chain-hash:${safeError(error)}`);
+        mismatches.push(`unreadable-receipt:${safeError(error)}`);
       }
       if (mismatches.length) result.receiptMismatches.push({ key, fields: mismatches });
     }
@@ -256,11 +307,13 @@ function receiptConsistency(engine, journals) {
       if (request.memo !== (journal.memo ?? "")) fields.push("memo");
       if (!sameValue(request.links ?? null, journal.links ?? null)) fields.push("links");
       const hasVoidCredit = journal.postings.some((posting) => posting?.account === "sys:void" && posting.amount > 0);
-      const validVoidReason = hasVoidCredit
-        ? (request.voidCreditReason === "tithe" || request.voidCreditReason === "burn")
-        : request.voidCreditReason === null;
-      if (!validVoidReason) fields.push("voidCreditReason");
-      if (request.authority !== null && request.authority !== "internal") fields.push("authority");
+      const expectedVoidCreditReason = hasVoidCredit
+        ? (MARKET_ACTIONS.includes(journal.action) ? "tithe" : "burn")
+        : null;
+      if (request.voidCreditReason !== expectedVoidCreditReason) fields.push("voidCreditReason");
+      const hasSystemPosting = journal.postings.some((posting) => typeof posting?.account === "string" && posting.account.startsWith("sys:"));
+      if (hasSystemPosting && request.authority !== "internal") fields.push("authority");
+      if (!hasSystemPosting && request.authority !== null && request.authority !== "internal") fields.push("authority");
       if (fields.length) result.requestMismatches.push({ key, fields });
     }
   }
@@ -415,6 +468,128 @@ function rewardReport(vault, engine) {
   }
 }
 
+function economyObject(value, field) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new TypeError(`simulated economy snapshot has malformed ${field}`);
+  return value;
+}
+
+function economyString(value, field) {
+  if (typeof value !== "string" || value.length === 0) throw new TypeError(`simulated economy snapshot has malformed ${field}`);
+  return value;
+}
+
+function economyNonNegative(value, field) {
+  return safeInteger(value, field, { signed: false });
+}
+
+function validateEconomySnapshot(state) {
+  if (state.schemaVersion !== 1) throw new TypeError("simulated economy snapshot has an unsupported schemaVersion");
+  economyNonNegative(state.nextId, "nextId");
+  const baseline = economyObject(state.escrowBaseline, "escrowBaseline");
+  for (const asset of ASSETS) economyNonNegative(baseline[asset], `escrowBaseline.${asset}`);
+  const exchange = economyObject(state.exchange, "exchange");
+  const predictions = economyObject(state.predictions, "predictions");
+  if (exchange.revision !== undefined) economyNonNegative(exchange.revision, "exchange.revision");
+
+  const requiredArray = (value, path) => {
+    if (!Array.isArray(value)) throw new TypeError(`simulated economy snapshot is missing ${path}`);
+    return value;
+  };
+  const orders = requiredArray(exchange.orders, "exchange.orders");
+  const trades = requiredArray(exchange.trades, "exchange.trades");
+  const markets = requiredArray(predictions.markets, "predictions.markets");
+  const positions = requiredArray(predictions.positions, "predictions.positions");
+  const contracts = requiredArray(state.contracts, "contracts");
+  const events = requiredArray(state.events, "events");
+  const operations = requiredArray(state.operations, "operations");
+
+  const orderIds = new Set();
+  for (const order of orders) {
+    economyObject(order, "exchange order");
+    const id = economyString(order.id, "exchange order id");
+    if (orderIds.has(id)) throw new TypeError(`simulated economy snapshot has duplicate exchange order ${id}`);
+    orderIds.add(id);
+    if (!EXCHANGE_ORDER_STATUSES.includes(order.status)) throw new TypeError(`simulated economy snapshot has invalid exchange order status for ${id}`);
+    if (order.side !== "buy" && order.side !== "sell") throw new TypeError(`simulated economy snapshot has invalid exchange order side for ${id}`);
+    try { assertAccount(order.owner); } catch { throw new TypeError(`simulated economy snapshot has invalid exchange order owner for ${id}`); }
+    for (const field of ["amountBase", "remainingBase", "reservedQuote", "priceNum", "priceDen"]) {
+      economyNonNegative(order[field], `exchange.orders.${field}`);
+    }
+    if (order.amountBase <= 0 || order.remainingBase > order.amountBase || order.priceNum <= 0 || order.priceDen <= 0) {
+      throw new TypeError(`simulated economy snapshot has invalid exchange order amounts for ${id}`);
+    }
+    if (order.status === "filled" && order.remainingBase !== 0) throw new TypeError(`simulated economy snapshot has a filled order with remaining quantity for ${id}`);
+    if (["open", "partial"].includes(order.status) && order.remainingBase <= 0) throw new TypeError(`simulated economy snapshot has an open order with no remaining quantity for ${id}`);
+    if (order.side === "sell" && order.reservedQuote !== 0) throw new TypeError(`simulated economy snapshot has a sell order with quote reserve for ${id}`);
+    if (order.side === "buy" && order.status !== "cancelled" && order.reservedQuote < mulDivFloor(order.remainingBase, order.priceNum, order.priceDen)) {
+      throw new TypeError(`simulated economy snapshot has an under-reserved buy order for ${id}`);
+    }
+  }
+
+  const tradeIds = new Set();
+  for (const trade of trades) {
+    economyObject(trade, "exchange trade");
+    const id = economyString(trade.id, "exchange trade id");
+    if (tradeIds.has(id)) throw new TypeError(`simulated economy snapshot has duplicate exchange trade ${id}`);
+    tradeIds.add(id);
+    for (const field of ["baseAmount", "quoteAmount", "priceNum", "priceDen"]) economyNonNegative(trade[field], `exchange.trades.${field}`);
+    if (trade.baseAmount <= 0 || trade.quoteAmount <= 0 || trade.priceNum <= 0 || trade.priceDen <= 0) {
+      throw new TypeError(`simulated economy snapshot has invalid exchange trade ${id}`);
+    }
+  }
+
+  const marketIds = new Set();
+  for (const market of markets) {
+    economyObject(market, "prediction market");
+    const id = economyString(market.id, "prediction market id");
+    if (marketIds.has(id)) throw new TypeError(`simulated economy snapshot has duplicate prediction market ${id}`);
+    marketIds.add(id);
+    if (!PREDICTION_MARKET_STATUSES.includes(market.status)) throw new TypeError(`simulated economy snapshot has invalid prediction market status for ${id}`);
+    economyNonNegative(market.priceFluff, "prediction market price");
+    economyNonNegative(market.poolFluff, "prediction market pool");
+    if (!Array.isArray(market.outcomes) || market.outcomes.length < 2 || market.outcomes.length > 6) {
+      throw new TypeError(`simulated economy snapshot has invalid prediction outcomes for ${id}`);
+    }
+  }
+
+  const positionIds = new Set();
+  for (const position of positions) {
+    economyObject(position, "prediction position");
+    const id = economyString(position.id, "prediction position id");
+    if (positionIds.has(id)) throw new TypeError(`simulated economy snapshot has duplicate prediction position ${id}`);
+    positionIds.add(id);
+    if (!marketIds.has(position.marketId) || !PREDICTION_POSITION_STATUSES.includes(position.status)) {
+      throw new TypeError(`simulated economy snapshot has invalid prediction position reference for ${id}`);
+    }
+    economyNonNegative(position.units, "prediction position units");
+    economyNonNegative(position.costFluff, "prediction position cost");
+    economyNonNegative(position.payoutFluff, "prediction position payout");
+    if (!position.units || !position.costFluff) throw new TypeError(`simulated economy snapshot has a non-positive prediction position ${id}`);
+  }
+
+  const contractIds = new Set();
+  for (const contract of contracts) {
+    economyObject(contract, "contract");
+    const id = economyString(contract.id, "contract id");
+    if (contractIds.has(id)) throw new TypeError(`simulated economy snapshot has duplicate contract ${id}`);
+    contractIds.add(id);
+    if (!CONTRACT_STATUSES.includes(contract.status)) throw new TypeError(`simulated economy snapshot has invalid contract status for ${id}`);
+    economyNonNegative(contract.amountFluff, "contract amount");
+    const funding = economyObject(contract.funding, "contract funding");
+    if (!["unfunded", "funded", "released", "refunded"].includes(funding.status)) throw new TypeError(`simulated economy snapshot has invalid contract funding for ${id}`);
+    requiredArray(contract.history, `contract ${id}.history`);
+  }
+
+  const operationKeys = new Set();
+  for (const operation of operations) {
+    economyObject(operation, "economy operation");
+    const key = economyString(operation.key, "economy operation key");
+    if (operationKeys.has(key) || typeof operation.requestHash !== "string") throw new TypeError(`simulated economy snapshot has invalid economy operation registry entry ${key}`);
+    operationKeys.add(key);
+  }
+  return { orders, trades, markets, positions, contracts, events, operations, baseline };
+}
+
 function economyReport(economy, engine) {
   if (economy === null || economy === undefined) {
     return { status: "not-provided", simulation: true, reason: "Pass the shared SimulatedEconomy adapter to include exchange, prediction, and contract obligations." };
@@ -423,22 +598,8 @@ function economyReport(economy, engine) {
   try {
     if (typeof economy.snapshot !== "function") throw new TypeError("simulated economy adapter must expose snapshot()");
     const state = economy.snapshot();
-    if (!state || typeof state !== "object") throw new TypeError("simulated economy snapshot must be an object");
-    if (!state.exchange || typeof state.exchange !== "object") throw new TypeError("simulated economy snapshot is missing exchange state");
-    if (!state.predictions || typeof state.predictions !== "object") throw new TypeError("simulated economy snapshot is missing prediction state");
-    const requiredArray = (value, path) => {
-      if (!Array.isArray(value)) throw new TypeError(`simulated economy snapshot is missing ${path}`);
-      return value;
-    };
-    const orders = requiredArray(state.exchange.orders, "exchange.orders");
-    const trades = requiredArray(state.exchange.trades, "exchange.trades");
-    const markets = requiredArray(state.predictions.markets, "predictions.markets");
-    const positions = requiredArray(state.predictions.positions, "predictions.positions");
-    const contracts = requiredArray(state.contracts, "contracts");
-    const events = requiredArray(state.events, "events");
-    const operations = requiredArray(state.operations, "operations");
-    if (!state.escrowBaseline || typeof state.escrowBaseline !== "object") throw new TypeError("simulated economy snapshot is missing escrowBaseline");
-    for (const asset of ASSETS) safeInteger(state.escrowBaseline[asset], `escrowBaseline.${asset}`, { signed: false });
+    if (!state || typeof state !== "object" || Array.isArray(state)) throw new TypeError("simulated economy snapshot must be an object");
+    const { orders, trades, markets, positions, contracts, events, operations, baseline: escrowBaseline } = validateEconomySnapshot(state);
     const activeOrders = orders.filter((order) => order.status !== "cancelled");
     const obligations = { TUMBO: 0, sMIMAS: 0 };
     for (const order of activeOrders) {
@@ -448,8 +609,8 @@ function economyReport(economy, engine) {
     for (const market of markets) if (market.status === "open") obligations.TUMBO = safeInteger(obligations.TUMBO + market.poolFluff, "TUMBO prediction obligation", { signed: false });
     for (const contract of contracts) if (contract.funding?.status === "funded") obligations.TUMBO = safeInteger(obligations.TUMBO + contract.amountFluff, "TUMBO contract obligation", { signed: false });
     const baseline = {
-      TUMBO: state.escrowBaseline?.TUMBO ?? 0,
-      sMIMAS: state.escrowBaseline?.sMIMAS ?? 0,
+      TUMBO: escrowBaseline.TUMBO,
+      sMIMAS: escrowBaseline.sMIMAS,
     };
     const actual = Object.fromEntries(ASSETS.map((asset) => [asset, engine.balance("sys:escrow", asset)]));
     const expected = Object.fromEntries(ASSETS.map((asset) => [asset, baseline[asset] + obligations[asset]]));
