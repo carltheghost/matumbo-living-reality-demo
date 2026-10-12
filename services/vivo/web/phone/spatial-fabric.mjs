@@ -52,6 +52,31 @@ export function mapDevicePointToCanonical({ devicePoint, viewport, eye, axes = [
   return q;
 }
 
+/** Invert the actual Canvas renderer camera instead of treating the screen as an identity plane. */
+export function mapRendererPointToCanonical({ devicePoint, viewport, eye, renderer, axes = [0, 1, 2], depth = null } = {}) {
+  if (!devicePoint || !viewport || !eye || !renderer) throw new TypeError('device point, viewport, Eye and renderer are required');
+  const width = finite(renderer.w, finite(viewport.width)), height = finite(renderer.h, finite(viewport.height));
+  if (width <= 0 || height <= 0) throw new RangeError('Renderer viewport must be positive');
+  const q = normalizePoint(Array.isArray(eye.q) ? eye.q : [], 'Eye q');
+  const targetAxes = axes.map(Number);
+  if (targetAxes.length !== 3 || new Set(targetAxes).size !== 3 || targetAxes.some(axis => !Number.isInteger(axis) || axis < 0 || axis >= q.length)) throw new RangeError('Renderer axes are outside the Eye');
+  const yaw = finite(renderer.yaw), pitch = finite(renderer.pitch), distance = Math.max(0.15, finite(renderer.distance, 10.5));
+  const viewDepth = Math.max(0.15, finite(depth, distance));
+  const sx = finite(devicePoint.x) - finite(viewport.left), sy = finite(devicePoint.y) - finite(viewport.top);
+  const k = Math.min(width, height) * 1.18 / viewDepth;
+  const xx = (sx - width / 2) / k;
+  const yy = (height * 0.52 - sy) / k;
+  const sp = Math.sin(pitch), cp = Math.cos(pitch), ca = Math.cos(yaw), sa = Math.sin(yaw);
+  const cameraDepth = distance - viewDepth;
+  const y = sp * cameraDepth + cp * yy;
+  const zRotated = cp * cameraDepth - sp * yy;
+  const x = ca * xx + sa * zRotated;
+  const z = -sa * xx + ca * zRotated;
+  const origin = Array.isArray(renderer.origin) ? renderer.origin : [0, 0, 0];
+  q[targetAxes[0]] = x + finite(origin[0]); q[targetAxes[1]] = y + finite(origin[1]); q[targetAxes[2]] = z + finite(origin[2]);
+  return q;
+}
+
 const clamp = (value, lo, hi) => Math.max(lo, Math.min(hi, value));
 
 export class SpatialInteractionFabric {
@@ -115,8 +140,8 @@ export class SpatialInteractionFabric {
     return [...this.contacts.values()].filter(item => item.source.startsWith(prefix)).map(item => this.end(item.contactId, reason));
   }
   killAgent(agentId, reason = 'agent-kill-switch') {
-    const prefix = 'agent:' + normalizeId(agentId, 'agentId');
-    return [...this.contacts.values()].filter(item => item.source === prefix || item.source.startsWith(prefix + ':')).map(item => this.end(item.contactId, reason));
+    const owner = 'agent:' + normalizeId(agentId, 'agentId');
+    return [...this.contacts.values()].filter(item => item.source === owner).map(item => this.end(item.contactId, reason));
   }
   emergencyStop(reason = 'emergency-stop') {
     return [...this.contacts.keys()].map(id => this.end(id, reason));

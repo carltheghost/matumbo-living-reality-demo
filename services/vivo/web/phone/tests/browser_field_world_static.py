@@ -12,6 +12,7 @@ def main(base_url: str) -> None:
     route = base_url.rstrip("/") + "/services/vivo/web/phone/"
     page_errors: list[str] = []
     camera_calls: list[str] = []
+    requests: list[str] = []
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
         context = browser.new_context()
@@ -30,6 +31,7 @@ def main(base_url: str) -> None:
         )
         page = context.new_page()
         page.on("pageerror", lambda error: page_errors.append(str(error)))
+        page.on("request", lambda request: requests.append(request.url))
         print(json.dumps({"step": "goto", "route": route}), flush=True)
         response = page.goto(route, wait_until="domcontentloaded")
         assert response is not None and response.status == 200, response
@@ -66,9 +68,35 @@ def main(base_url: str) -> None:
         assert initial["publishDisabled"] is True
         assert initial["commitDisabled"] is True
         assert initial["atlas"] > 100
+        assert not any(url.rstrip("/").endswith("/readyz") for url in requests), requests
+
+        before_layout = page.locator("#phoneFieldAtlas").evaluate("node => node.toDataURL()")
+        page.select_option("#phoneFieldLayout", "ring")
+        page.wait_for_timeout(50)
+        ring_layout = page.locator("#phoneFieldAtlas").evaluate("node => node.toDataURL()")
+        assert ring_layout != before_layout, "Ring layout must change rendered atlas pixels"
+        page.select_option("#phoneFieldAxisA", "2")
+        page.wait_for_timeout(50)
+        changed_axis = page.locator("#phoneFieldAtlas").evaluate("node => node.toDataURL()")
+        assert changed_axis != ring_layout, "Eye-axis selection must change the rendered atlas"
+
+        page.get_by_role("button", name="Preview turn").click()
+        page.wait_for_timeout(50)
+        rotated_preview = page.locator("#phoneFieldAtlas").evaluate("node => node.toDataURL()")
+        assert rotated_preview != changed_axis, "Turn preview must change rendered atlas pixels"
+        page.get_by_role("button", name="Discard preview").click()
+        page.wait_for_function("document.querySelector('#phoneFieldPreview').textContent.includes('No local edit preview')")
 
         page.get_by_role("button", name="Preview move").click()
-        page.get_by_role("button", name="Apply local edit").click()
+        page.evaluate(
+            """
+            () => {
+              const button = document.querySelector('#phoneFieldApply');
+              button.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+              button.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+            }
+            """
+        )
         page.wait_for_function("document.querySelector('#phoneFieldPreview').textContent.includes('No local edit preview')")
         print(json.dumps({"step": "edit-applied"}), flush=True)
         final = page.evaluate(
@@ -106,7 +134,7 @@ def main(base_url: str) -> None:
         assert offline["hasCanonicalContent"] is True
         assert offline["route"].endswith("/services/vivo/web/phone/")
         assert not page_errors, page_errors
-        print(json.dumps({"route": route, "initial": initial, "final": final, "offline": offline, "pageErrors": page_errors}))
+        print(json.dumps({"route": route, "initial": initial, "final": final, "offline": offline, "pageErrors": page_errors, "backendProbes": [url for url in requests if '/readyz' in url or '/healthz' in url]}))
         browser.close()
 
 

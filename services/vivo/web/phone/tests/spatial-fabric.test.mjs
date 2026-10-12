@@ -4,6 +4,7 @@ import { createEye } from '../engine.mjs';
 import {
   SpatialInteractionFabric,
   mapDevicePointToCanonical,
+  mapRendererPointToCanonical,
 } from '../spatial-fabric.mjs';
 
 test('device coordinates use the supplied inverse projection and Eye axes', () => {
@@ -24,6 +25,22 @@ test('device coordinates use the supplied inverse projection and Eye axes', () =
     eye,
     axes: [0, 4],
   }), /outside the Eye/);
+});
+
+test('renderer inverse follows yaw, pitch and camera depth instead of an identity plane', () => {
+  const eye = createEye({ id: 'renderer-eye', dimension: 4 });
+  const renderer = { w: 1000, h: 800, yaw: 0.6, pitch: 0.4, distance: 8, origin: [0.2, -0.3, 0.5] };
+  const point = [1.1, -0.4, 0.8];
+  const ca = Math.cos(renderer.yaw), sa = Math.sin(renderer.yaw), cp = Math.cos(renderer.pitch), sp = Math.sin(renderer.pitch);
+  const x = point[0] - renderer.origin[0], y = point[1] - renderer.origin[1], z = point[2] - renderer.origin[2];
+  const xx = ca * x - sa * z, zz = sa * x + ca * z, yy = cp * y - sp * zz;
+  const depth = renderer.distance - (sp * y + cp * zz);
+  const k = Math.min(renderer.w, renderer.h) * 1.18 / depth;
+  const screen = { x: renderer.w / 2 + xx * k, y: renderer.h * 0.52 - yy * k };
+  const mapped = mapRendererPointToCanonical({ devicePoint: screen, viewport: { left: 0, top: 0, width: renderer.w, height: renderer.h }, eye, renderer, axes: [0, 1, 2], depth });
+  assert.ok(mapped.slice(0, 3).every((value, index) => Math.abs(value - point[index]) < 1e-9), mapped);
+  const rotated = mapRendererPointToCanonical({ devicePoint: screen, viewport: { left: 0, top: 0, width: renderer.w, height: renderer.h }, eye, renderer: { ...renderer, yaw: renderer.yaw + 0.4 }, axes: [0, 1, 2], depth });
+  assert.notDeepEqual(rotated.slice(0, 3), mapped.slice(0, 3));
 });
 
 test('contacts and per-object constraints support independent fingers and bimanual preview', () => {
@@ -48,12 +65,13 @@ test('selective tracking loss and agent kill-switch do not release unrelated con
   fabric.begin({ contactId: 'finger-a', source: { kind: 'finger', id: 'a' }, objectId: 'workpiece', canonicalPoint: [0, 0, 0] });
   fabric.begin({ contactId: 'agent-a', source: { kind: 'agent', id: 'worker' }, objectId: 'portal', canonicalPoint: [0, 0, 0] });
   fabric.begin({ contactId: 'agent-b', source: { kind: 'agent', id: 'other' }, objectId: 'portal', canonicalPoint: [0, 0, 0] });
+  fabric.begin({ contactId: 'agent-child', source: { kind: 'agent', id: 'worker:2' }, objectId: 'portal', canonicalPoint: [0, 0, 0] });
   assert.equal(fabric.releaseKind('hand').length, 1);
   assert.deepEqual(fabric.forObject('relic'), []);
   assert.equal(fabric.forObject('workpiece').length, 1);
   assert.equal(fabric.killAgent('worker').length, 1);
-  assert.deepEqual(fabric.forObject('portal').map(item => item.contactId), ['agent-b']);
-  assert.equal(fabric.emergencyStop().length, 2);
+  assert.deepEqual(fabric.forObject('portal').map(item => item.contactId), ['agent-b', 'agent-child']);
+  assert.equal(fabric.emergencyStop().length, 3);
   assert.equal(fabric.snapshot().contacts.length, 0);
 });
 

@@ -47,6 +47,87 @@ test('local object edits preserve the full vector and move only the selected spa
   await engine.close();
 });
 
+test('zero-delta local edits are mutation-free, including velocity and persistence fences', async () => {
+  const engine = new LocalVivoEngine({ storage: new MemoryStore() });
+  await engine.open('zero-delta-edit');
+  const entity = engine.world.spaces.root.entities.relic;
+  entity.v = [1, 2, 3, 4];
+  const before = await engine.snapshot();
+  const result = await engine.applyLocalEdit('relic', [0, 0, 0, 0]);
+  const after = await engine.snapshot();
+  assert.deepEqual(result, { changed: false, revision: before.snapshot.spaces.root.entities.relic.revision });
+  assert.deepEqual(after.snapshot.spaces.root.entities.relic.q, before.snapshot.spaces.root.entities.relic.q);
+  assert.deepEqual(after.snapshot.spaces.root.entities.relic.v, [1, 2, 3, 4]);
+  assert.equal(after.snapshot.spaces.root.entities.relic.revision, before.snapshot.spaces.root.entities.relic.revision);
+  assert.equal(after.snapshot.acceptedSequence, before.snapshot.acceptedSequence);
+  await engine.close();
+});
+
+test('local field CAS accepts one concurrent preview and idempotently replays the duplicate', async () => {
+  const engine = new LocalVivoEngine({ storage: new MemoryStore() });
+  await engine.open('local-cas-idempotency');
+  const before = await engine.snapshot();
+  const expected = {
+    worldId: before.snapshot.worldId, branchId: before.branchId, eyeId: before.currentEyeId,
+    spaceId: 'root', entityId: 'relic', baseRevision: before.snapshot.spaces.root.entities.relic.revision,
+    operationId: 'field-preview:one',
+  };
+  const [first, second] = await Promise.all([
+    engine.applyLocalEdit('relic', [0.14, 0, 0, 0], expected),
+    engine.applyLocalEdit('relic', [0.14, 0, 0, 0], expected),
+  ]);
+  const after = await engine.snapshot();
+  assert.equal(first.changed, true);
+  assert.equal(second.replayed, true);
+  assert.equal(after.snapshot.spaces.root.entities.relic.q[0], before.snapshot.spaces.root.entities.relic.q[0] + 0.14);
+  assert.equal(after.snapshot.spaces.root.entities.relic.revision, 1);
+  await engine.close();
+});
+
+test('different stale previews and intervening branch edits cannot partially apply', async () => {
+  const engine = new LocalVivoEngine({ storage: new MemoryStore() });
+  await engine.open('local-cas-stale');
+  const before = await engine.snapshot();
+  const base = {
+    worldId: before.snapshot.worldId, branchId: before.branchId, eyeId: before.currentEyeId,
+    spaceId: 'root', entityId: 'relic', baseRevision: before.snapshot.spaces.root.entities.relic.revision,
+  };
+  const one = Promise.resolve().then(() => engine.applyLocalEdit('relic', [0.14, 0, 0, 0], { ...base, operationId: 'field-preview:first' }));
+  const two = Promise.resolve().then(() => engine.applyLocalEdit('relic', [0.14, 0, 0, 0], { ...base, operationId: 'field-preview:second' }));
+  const results = await Promise.allSettled([one, two]);
+  assert.equal(results.filter(item => item.status === 'fulfilled').length, 1);
+  assert.equal(results.filter(item => item.status === 'rejected').length, 1);
+  assert.match(results.find(item => item.status === 'rejected').reason.message, /STALE_LOCAL_PREVIEW/);
+  const afterOne = await engine.snapshot();
+  assert.equal(afterOne.snapshot.spaces.root.entities.relic.revision, 1);
+  await engine.translate('relic', 0, 0.5);
+  assert.throws(() => engine.applyLocalEdit('relic', [0.14, 0, 0, 0], { ...base, operationId: 'field-preview:third' }), /STALE_LOCAL_PREVIEW/);
+  const afterTwo = await engine.snapshot();
+  assert.equal(afterTwo.snapshot.spaces.root.entities.relic.q[0], before.snapshot.spaces.root.entities.relic.q[0] + 0.14 + 0.5);
+  const branch = engine.forkOffline('stale branch');
+  assert.throws(() => engine.applyLocalEdit('relic', [0.14, 0, 0, 0], { ...base, operationId: 'field-preview:branch' }), /STALE_LOCAL_PREVIEW/);
+  assert.deepEqual((await engine.snapshot()).snapshot.spaces.root.entities.relic.q, branch.snapshot.spaces.root.entities.relic.q);
+  await engine.close();
+});
+
+test('accepted local operation identity remains idempotent after reload', async () => {
+  const store = new MemoryStore(), first = new LocalVivoEngine({ storage: store });
+  await first.open('local-operation-reload');
+  const before = await first.snapshot();
+  const expected = {
+    worldId: before.snapshot.worldId, branchId: before.branchId, eyeId: before.currentEyeId,
+    spaceId: 'root', entityId: 'relic', baseRevision: 0, operationId: 'field-preview:reload',
+  };
+  await first.applyLocalEdit('relic', [0.14, 0, 0, 0], expected);
+  await first.close();
+  const reloaded = new LocalVivoEngine({ storage: store });
+  await reloaded.open('local-operation-reload');
+  const replay = await reloaded.applyLocalEdit('relic', [0.14, 0, 0, 0], expected);
+  assert.equal(replay.replayed, true);
+  assert.equal((await reloaded.snapshot()).snapshot.spaces.root.entities.relic.revision, 1);
+  await reloaded.close();
+});
+
 test('world identity is persistent while two Eyes keep separate view and nested return state', async () => {
   const store = new MemoryStore(), first = new LocalVivoEngine({ storage: store });
   await first.open('world-eye-test');

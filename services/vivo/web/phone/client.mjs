@@ -24,7 +24,7 @@ export class PhoneEngineClient extends EventTarget {
   open(worldId, rootDimension = 4) { return this.call('open', worldId, rootDimension); }
   snapshot() { return this.call('snapshot'); }
   translate(entityId, axis, delta) { return this.call('translate', entityId, axis, delta); }
-  applyLocalEdit(entityId, delta) { return this.call('applyLocalEdit', entityId, delta); }
+  applyLocalEdit(entityId, delta, expected = null) { return this.call('applyLocalEdit', entityId, delta, expected); }
   step(dt) { return this.call('step', dt); }
   setEye(patch) { return this.call('setEye', patch); }
   createEye(label) { return this.call('createEye', label); }

@@ -59,6 +59,7 @@ jobs:
           required = [
               Path('dist/services/vivo/web/phone/index.html'),
               Path('dist/services/vivo/web/phone/bootstrap.mjs'),
+              Path('dist/services/vivo/web/phone/static-route-shield.js'),
               Path('dist/services/vivo/web/phone/field-world.mjs'),
               Path('dist/services/vivo/web/phone/spatial-fabric.mjs'),
               Path('dist/services/vivo/web/vivo-sw.js'),
@@ -67,13 +68,13 @@ jobs:
           if missing:
               raise SystemExit('Missing static Vivo phone assets: ' + ', '.join(missing))
           route = required[0].read_text(encoding='utf-8')
-          if './bootstrap.mjs' not in route or '../shared.css' not in route or '../shared.js' not in route:
+          if './static-route-shield.js' not in route or './bootstrap.mjs' not in route or '../shared.css' not in route or '../shared.js' not in route:
               raise SystemExit('Static Vivo phone route does not use its self-contained relative assets')
           bootstrap = required[1].read_text(encoding='utf-8')
           if 'PAGES STATIC/OFFLINE' not in bootstrap or 'canonical authority unavailable' not in bootstrap:
               raise SystemExit('Static route authority boundary is not explicit in the phone bootstrap')
           sw = required[4].read_text(encoding='utf-8')
-          for asset in ('phone/index.html', 'phone/field-world.mjs', 'phone/spatial-fabric.mjs'):
+          for asset in ('phone/index.html', 'phone/static-route-shield.js', 'phone/field-world.mjs', 'phone/spatial-fabric.mjs'):
               if asset not in sw:
                   raise SystemExit('Phone asset is absent from the offline shell: ' + asset)
           print('Verified static Vivo phone route with local-only authority controls')
@@ -125,7 +126,7 @@ jobs:
           import hashlib, json, pathlib, time, urllib.request
           base = 'https://carltheghost.github.io/matumbo-living-reality-demo/'
           report = []
-          for name in ['field-lab-grab.html', 'src/field-lab/field-lab-touch-repair.js', 'field-lab-studio.html', 'src/field-lab/studio-core.js', 'src/field-lab/studio.js', 'src/field-lab/studio-layout.js', 'src/field-lab/viva-core.js', 'src/field-lab/viva-visibility.js', 'src/field-lab/viva-spaces.js', 'vivo-phone-sw.js', 'src/vivo-phone-engine/boot.mjs', 'src/vivo-phone-engine/engine.mjs', 'src/vivo-phone-engine/engine-worker.mjs', 'src/vivo-phone-engine/agent-runtime.mjs', 'src/vivo-phone-engine/native-tools.mjs', 'src/vivo-phone-engine/storage.mjs', 'services/vivo/web/phone/index.html', 'services/vivo/web/phone/bootstrap.mjs', 'services/vivo/web/phone/field-world.mjs', 'services/vivo/web/phone/spatial-fabric.mjs', 'services/vivo/web/vivo-sw.js']:
+          for name in ['field-lab-grab.html', 'src/field-lab/field-lab-touch-repair.js', 'field-lab-studio.html', 'src/field-lab/studio-core.js', 'src/field-lab/studio.js', 'src/field-lab/studio-layout.js', 'src/field-lab/viva-core.js', 'src/field-lab/viva-visibility.js', 'src/field-lab/viva-spaces.js', 'vivo-phone-sw.js', 'src/vivo-phone-engine/boot.mjs', 'src/vivo-phone-engine/engine.mjs', 'src/vivo-phone-engine/engine-worker.mjs', 'src/vivo-phone-engine/agent-runtime.mjs', 'src/vivo-phone-engine/native-tools.mjs', 'src/vivo-phone-engine/storage.mjs', 'services/vivo/web/phone/index.html', 'services/vivo/web/phone/bootstrap.mjs', 'services/vivo/web/phone/static-route-shield.js', 'services/vivo/web/phone/field-world.mjs', 'services/vivo/web/phone/spatial-fabric.mjs', 'services/vivo/web/vivo-sw.js']:
               expected = hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest()
               for attempt in range(18):
                   try:

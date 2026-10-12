@@ -67,6 +67,22 @@ test('field-world relevance and layout changes are view-only and accepted histor
   assert.equal(controller.commitCandidate(), null);
 });
 
+test('field preview identity is invalidated by discard, retarget and world changes', () => {
+  const initial = envelope(4);
+  const controller = new FieldWorldController(initial, { selectedId: 'relic' });
+  const candidate = controller.previewMove('relic', 0, 0.14);
+  assert.equal(controller.isCurrent(candidate), true);
+  controller.discardPreview();
+  assert.equal(controller.isCurrent(candidate), false);
+  const replacement = controller.previewMove('relic', 0, 0.2);
+  const retargeted = structuredClone(initial);
+  retargeted.currentEyeId = Object.keys(retargeted.eyes)[0];
+  retargeted.branchId = 'another-branch';
+  controller.refresh(retargeted);
+  assert.equal(controller.isCurrent(replacement), false);
+  assert.equal(controller.commitCandidate(), null);
+});
+
 test('field-world move, mix and turn previews require explicit local application', () => {
   const state = envelope(4);
   const controller = new FieldWorldController(state, { selectedId: 'relic' });

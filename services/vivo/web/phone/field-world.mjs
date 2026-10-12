@@ -175,6 +175,7 @@ export function buildFieldWorld(envelope, {
   atlasResolution = 8,
   selectedId = null,
   authorityDebug = null,
+  preview = null,
 } = {}) {
   const snapshot = envelope?.snapshot || envelope;
   if (!snapshot?.spaces || typeof snapshot.spaces !== 'object') throw new TypeError('A phone snapshot is required');
@@ -188,14 +189,17 @@ export function buildFieldWorld(envelope, {
   const eyeQ = Array.from({ length: dimension }, (_, axis) => finite(eye?.q?.[axis]));
   const axes = normalizeAxes(eyeAxes || [0, 1, 2], dimension);
   const entities = Object.values(space.entities || {}).map(entity => {
+    const previewQ = preview?.entityId === entity.id && Array.isArray(preview.q) && preview.q.length === dimension ? preview.q : entity.q;
     const color = informationColor(entity);
-    const relevance = relevanceFor(entity, eyeQ, query);
+    const relevance = relevanceFor({ ...entity, q: previewQ }, eyeQ, query);
     return {
       id: entity.id,
       name: entity.name,
-      q: [...entity.q],
+      q: [...previewQ],
+      baseQ: [...entity.q],
       radius: finite(entity.radius, 0.25),
       revision: Number(entity.revision) || 0,
+      preview: preview?.entityId === entity.id ? { kind: preview.kind, operationId: preview.operationId } : null,
       color,
       ...relevance,
       awake: relevance.relevance >= clamp(finite(relevanceThreshold, 0.2), 0, 1) || entity.id === selectedId,
@@ -229,6 +233,8 @@ export function buildFieldWorld(envelope, {
     },
     atlas,
     layout: layoutEntities(entities.filter(entity => entity.awake), layout),
+    viewRotation: finite(preview?.rotation),
+    preview: preview ? { kind: preview.kind, entityId: preview.entityId, operationId: preview.operationId } : null,
     accepted: inspectAcceptedEvents(envelope, authorityDebug),
   };
 }
@@ -237,15 +243,46 @@ export class FieldWorldController {
   constructor(envelope = null, options = {}) {
     this.options = { ...options };
     this.envelope = envelope ? clone(envelope) : null;
-    this.model = envelope ? buildFieldWorld(envelope, options) : null;
+    this.previewGeneration = 0;
+    this.previewCounter = 0;
     this.preview = null;
+    this.model = envelope ? buildFieldWorld(envelope, { ...options, preview: this.preview }) : null;
+  }
+  _buildModel() {
+    this.model = this.envelope ? buildFieldWorld(this.envelope, { ...this.options, preview: this.preview }) : null;
+    return this.model;
+  }
+  _identity(entity) {
+    return {
+      worldId: this.model?.worldId || null,
+      branchId: this.envelope?.branchId || null,
+      eyeId: this.model?.eye?.id || null,
+      spaceId: this.model?.spaceId || null,
+      entityId: entity?.id || null,
+      baseRevision: Number(entity?.revision) || 0,
+    };
+  }
+  _newPreview(entity, values) {
+    this.previewGeneration++;
+    const identity = this._identity(entity);
+    this.preview = {
+      ...identity,
+      ...values,
+      generation: this.previewGeneration,
+      operationId: `field-preview:${identity.worldId}:${identity.branchId || 'local'}:${identity.eyeId}:${identity.spaceId}:${identity.entityId}:${++this.previewCounter}`,
+    };
+    this._buildModel();
+    return clone(this.preview);
   }
   refresh(envelope, options = {}) {
-    this.envelope = clone(envelope);
+    const nextEnvelope = clone(envelope);
+    const nextEye = nextEnvelope?.eyes?.[nextEnvelope?.currentEyeId];
+    const nextSpace = nextEye?.spaceId || nextEnvelope?.snapshot?.rootSpaceId;
+    const nextEntity = nextEnvelope?.snapshot?.spaces?.[nextSpace]?.entities?.[this.preview?.entityId];
+    if (this.preview && (!nextEnvelope?.snapshot || nextEnvelope.snapshot.worldId !== this.preview.worldId || (nextEnvelope.branchId || null) !== this.preview.branchId || nextEnvelope.currentEyeId !== this.preview.eyeId || nextSpace !== this.preview.spaceId || !nextEntity || Number(nextEntity.revision) !== this.preview.baseRevision)) this.discardPreview();
+    this.envelope = nextEnvelope;
     this.options = { ...this.options, ...options };
-    this.model = buildFieldWorld(this.envelope, this.options);
-    if (this.preview && !this.model.entities.some(entity => entity.id === this.preview.entityId)) this.preview = null;
-    return clone(this.model);
+    return clone(this._buildModel());
   }
   setOptions(options = {}) {
     this.options = { ...this.options, ...options };
@@ -260,14 +297,12 @@ export class FieldWorldController {
     if (!entity || !Number.isInteger(axis) || axis < 0 || axis >= this.model.dimension || !Number.isFinite(delta) || Math.abs(delta) > 5) throw new RangeError('Invalid field-world move preview');
     const q = [...entity.q];
     q[axis] = clamp(q[axis] + delta, -1e6, 1e6);
-    this.preview = { kind: 'move', entityId, baseRevision: entity.revision, baseQ: [...entity.q], q, delta: q.map((value, index) => value - entity.q[index]), rotation: 0, mixWith: null };
-    return clone(this.preview);
+    return this._newPreview(entity, { kind: 'move', baseQ: [...(entity.baseQ || entity.q)], q, delta: q.map((value, index) => value - entity.q[index]), rotation: 0, mixWith: null });
   }
   previewRotate(entityId, radians) {
     const entity = this.entity(entityId);
     if (!entity || !Number.isFinite(radians) || Math.abs(radians) > Math.PI * 4) throw new RangeError('Invalid field-world rotation preview');
-    this.preview = { kind: 'rotate-view', entityId, baseRevision: entity.revision, baseQ: [...entity.q], q: [...entity.q], delta: Array(this.model.dimension).fill(0), rotation: radians, mixWith: null };
-    return clone(this.preview);
+    return this._newPreview(entity, { kind: 'rotate-view', baseQ: [...(entity.baseQ || entity.q)], q: [...entity.q], delta: Array(this.model.dimension).fill(0), rotation: radians, mixWith: null });
   }
   previewMix(entityId) {
     const entity = this.entity(entityId);
@@ -276,12 +311,16 @@ export class FieldWorldController {
     const nearest = candidates.sort((a, b) => distance(a.q, entity.q) - distance(b.q, entity.q))[0];
     if (!nearest) throw new TypeError('No neighboring field object to mix');
     const q = entity.q.map((value, index) => (value + nearest.q[index]) / 2);
-    this.preview = { kind: 'mix', entityId, baseRevision: entity.revision, baseQ: [...entity.q], q, delta: q.map((value, index) => value - entity.q[index]), rotation: 0, mixWith: nearest.id };
-    return clone(this.preview);
+    return this._newPreview(entity, { kind: 'mix', baseQ: [...(entity.baseQ || entity.q)], q, delta: q.map((value, index) => value - entity.q[index]), rotation: 0, mixWith: nearest.id });
   }
   discardPreview() {
+    this.previewGeneration++;
     this.preview = null;
+    this._buildModel();
     return null;
+  }
+  isCurrent(candidate) {
+    return Boolean(candidate && this.preview && candidate.operationId === this.preview.operationId && candidate.generation === this.previewGeneration && candidate.entityId === this.preview.entityId);
   }
   commitCandidate() {
     return this.preview ? clone(this.preview) : null;
@@ -295,10 +334,19 @@ export function drawFieldAtlas(canvas, model) {
   context.clearRect(0, 0, width, height);
   context.fillStyle = '#061117';
   context.fillRect(0, 0, width, height);
-  const columns = Math.max(1, Math.ceil(Math.sqrt(model.atlas.length)));
-  const rows = Math.ceil(model.atlas.length / columns);
+  const selectedAxes = model.eye?.axes?.slice(0, 2) || [];
+  const score = plane => selectedAxes.length === 2 && plane.axes.includes(selectedAxes[0]) && plane.axes.includes(selectedAxes[1]) ? 0 : 1;
+  const planes = [...model.atlas].sort((a, b) => score(a) - score(b));
+  const columns = Math.max(1, Math.ceil(Math.sqrt(planes.length)));
+  const rows = Math.ceil(planes.length / columns);
   const tileWidth = width / columns, tileHeight = height / rows;
-  model.atlas.forEach((plane, index) => {
+  context.save?.();
+  if (model.viewRotation) {
+    context.translate(width / 2, height / 2);
+    context.rotate(model.viewRotation);
+    context.translate(-width / 2, -height / 2);
+  }
+  planes.forEach((plane, index) => {
     const x0 = (index % columns) * tileWidth, y0 = Math.floor(index / columns) * tileHeight;
     const cellWidth = tileWidth / plane.resolution, cellHeight = tileHeight / plane.resolution;
     plane.cells.forEach(cell => {
@@ -310,6 +358,25 @@ export function drawFieldAtlas(canvas, model) {
     context.fillStyle = '#d9f6ff';
     context.font = '10px ui-monospace, monospace';
     context.fillText(plane.labels.join(' / '), x0 + 4, y0 + 12);
+    if (score(plane) === 0) { context.strokeStyle = '#f4d38a'; context.lineWidth = 2; context.strokeRect(x0 + 1, y0 + 1, tileWidth - 2, tileHeight - 2); }
+    for (const entity of model.entities.filter(item => item.awake)) {
+      const xRange = plane.ranges[0], yRange = plane.ranges[1];
+      const x = x0 + clamp((entity.q[plane.axes[0]] - xRange[0]) / Math.max(1e-9, xRange[1] - xRange[0]), 0, 1) * tileWidth;
+      const y = y0 + (1 - clamp((entity.q[plane.axes[1]] - yRange[0]) / Math.max(1e-9, yRange[1] - yRange[0]), 0, 1)) * tileHeight;
+      context.fillStyle = entity.color.css; context.globalAlpha = entity.id === model.preview?.entityId ? 1 : 0.8;
+      context.beginPath(); context.arc(x, y, entity.id === model.preview?.entityId ? 4 : 2.5, 0, Math.PI * 2); context.fill();
+    }
   });
+  context.restore?.();
+  const mapSize = Math.min(58, Math.max(36, height * 0.32));
+  context.fillStyle = 'rgba(3, 12, 18, .86)'; context.fillRect(4, 4, mapSize, mapSize);
+  context.strokeStyle = '#8eb9b2'; context.lineWidth = 1; context.strokeRect(4, 4, mapSize, mapSize);
+  context.fillStyle = '#d9f6ff'; context.font = '9px ui-monospace, monospace'; context.fillText(String(model.layout?.mode || 'gather').toUpperCase(), 8, 14);
+  for (const entity of model.entities.filter(item => item.awake)) {
+    const position = model.layout?.positions?.[entity.id]; if (!position) continue;
+    const x = 4 + mapSize / 2 + clamp(position.x, -1, 1) * (mapSize - 12) / 2;
+    const y = 4 + mapSize / 2 + clamp(position.y, -1, 1) * (mapSize - 18) / 2;
+    context.fillStyle = entity.color.css; context.beginPath(); context.arc(x, y, entity.id === model.preview?.entityId ? 4 : 2.5, 0, Math.PI * 2); context.fill();
+  }
   return true;
 }
