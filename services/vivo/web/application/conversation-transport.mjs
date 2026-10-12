@@ -176,11 +176,11 @@ function sameOrigin(value, locationLike) {
 }
 
 function endpoint(origin, path, allowedPath, code) {
+  if (typeof path !== 'string' || path !== allowedPath) throw transportError(code);
   let url;
   try { url = new URL(path, `${origin}/`); } catch { throw transportError(code); }
   if (
-    path !== allowedPath
-    || url.origin !== origin
+    url.origin !== origin
     || url.pathname !== allowedPath
     || url.search
     || url.hash
