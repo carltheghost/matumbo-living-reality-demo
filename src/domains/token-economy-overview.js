@@ -13,6 +13,7 @@ import {
   assertAsset,
   isUserAccount,
   mulDivFloor,
+  receiptChainHash,
 } from "./token.js";
 import { loadTokenEngine } from "./token-store.js";
 
@@ -57,6 +58,17 @@ function safeInteger(value, field, { signed = true } = {}) {
 
 function safeError(error) {
   return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+}
+
+function stableJson(value) {
+  if (value === undefined) return "undefined";
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map((child) => stableJson(child)).join(",")}]`;
+  return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(",")}}`;
+}
+
+function sameValue(left, right) {
+  return stableJson(left) === stableJson(right);
 }
 
 /**
@@ -107,7 +119,7 @@ function normalizeEngine({ engine = null, token = null, snapshot = null } = {}) 
   const resolved = candidate?.engine ?? candidate?._engine ?? candidate;
   if (!resolved?.ledger || typeof resolved.balance !== "function" || typeof resolved.quote !== "function" || typeof resolved.execute !== "function" ||
       typeof resolved.ledger.verifyChain !== "function" || !Array.isArray(resolved.ledger._journals) || !(resolved.ledger._balances instanceof Map) ||
-      !(resolved.ledger._receipts instanceof Map) || !(resolved.ledger._requestKeys instanceof Map) || !resolved.config) {
+      !resolved.config) {
     throw new TypeError("token economy overview requires the canonical QuoteEngine owner");
   }
   return { engine: resolved, sourceKind: "live-engine", snapshotFormat: null };
@@ -173,6 +185,90 @@ function readBalances(engine, accounts) {
     rows.push({ account, asset, category, balanceFluff: balance });
   }
   return { rows, totals, negativeBalances, invalidBalances };
+}
+
+function receiptConsistency(engine, journals) {
+  const receipts = engine.ledger._receipts;
+  const requests = engine.ledger._requestKeys;
+  const result = {
+    status: "verified",
+    ok: true,
+    journalCount: journals.length,
+    receiptCount: receipts instanceof Map ? receipts.size : null,
+    requestCount: requests instanceof Map ? requests.size : null,
+    missingReceiptKeys: [],
+    extraReceiptKeys: [],
+    receiptMismatches: [],
+    missingRequestKeys: [],
+    extraRequestKeys: [],
+    requestMismatches: [],
+  };
+  if (!(receipts instanceof Map) || !(requests instanceof Map)) {
+    result.status = "unknown";
+    result.ok = false;
+    result.reason = "canonical receipt or request registry is unavailable";
+    return result;
+  }
+
+  const journalByKey = new Map();
+  for (const journal of journals) {
+    if (typeof journal?.idempotencyKey === "string") journalByKey.set(journal.idempotencyKey, journal);
+  }
+  const journalKeys = new Set(journalByKey.keys());
+  result.missingReceiptKeys = [...journalKeys].filter((key) => !receipts.has(key));
+  result.extraReceiptKeys = [...receipts.keys()].filter((key) => !journalKeys.has(key));
+  result.missingRequestKeys = [...journalKeys].filter((key) => !requests.has(key));
+  result.extraRequestKeys = [...requests.keys()].filter((key) => !journalKeys.has(key));
+
+  for (const [key, journal] of journalByKey) {
+    if (receipts.has(key)) {
+      const receipt = receipts.get(key);
+      const mismatches = [];
+      for (const field of ["id", "kind", "action", "idempotencyKey", "tick", "prevHash", "postings", "memo", "ts", "hash"]) {
+        if (!sameValue(receipt?.[field], journal[field])) mismatches.push(field);
+      }
+      if (!sameValue(receipt?.links ?? null, journal.links ?? null)) mismatches.push("links");
+      try {
+        if (receipt?.hash !== receiptChainHash(receipt)) mismatches.push("receipt-chain-hash");
+      } catch (error) {
+        mismatches.push(`receipt-chain-hash:${safeError(error)}`);
+      }
+      if (mismatches.length) result.receiptMismatches.push({ key, fields: mismatches });
+    }
+
+    if (requests.has(key)) {
+      const rawRequest = requests.get(key);
+      let request;
+      try {
+        if (typeof rawRequest !== "string") throw new TypeError("request binding is not a JSON string");
+        request = JSON.parse(rawRequest);
+        if (!request || typeof request !== "object" || Array.isArray(request)) throw new TypeError("request binding is not an object");
+      } catch (error) {
+        result.requestMismatches.push({ key, fields: [safeError(error)] });
+        continue;
+      }
+      const fields = [];
+      const expectedFields = ["postings", "action", "memo", "voidCreditReason", "links", "authority"];
+      const actualFields = Object.keys(request).sort();
+      if (!sameValue(actualFields, [...expectedFields].sort())) fields.push("shape");
+      if (!sameValue(request.postings, journal.postings)) fields.push("postings");
+      if (request.action !== journal.action) fields.push("action");
+      if (request.memo !== (journal.memo ?? "")) fields.push("memo");
+      if (!sameValue(request.links ?? null, journal.links ?? null)) fields.push("links");
+      const hasVoidCredit = journal.postings.some((posting) => posting?.account === "sys:void" && posting.amount > 0);
+      const validVoidReason = hasVoidCredit
+        ? (request.voidCreditReason === "tithe" || request.voidCreditReason === "burn")
+        : request.voidCreditReason === null;
+      if (!validVoidReason) fields.push("voidCreditReason");
+      if (request.authority !== null && request.authority !== "internal") fields.push("authority");
+      if (fields.length) result.requestMismatches.push({ key, fields });
+    }
+  }
+  result.ok = result.missingReceiptKeys.length === 0 && result.extraReceiptKeys.length === 0 &&
+    result.receiptMismatches.length === 0 && result.missingRequestKeys.length === 0 &&
+    result.extraRequestKeys.length === 0 && result.requestMismatches.length === 0;
+  if (!result.ok) result.status = "invalid";
+  return result;
 }
 
 function readJournalEvidence(engine, config) {
@@ -245,7 +341,17 @@ function readJournalEvidence(engine, config) {
   } catch (error) {
     chain = { ok: false, error: safeError(error) };
   }
-  return { journals, journalNet, seenKeys, duplicateKeys, missingReceipts, feeChecks, voidCredits, chain };
+  return {
+    journals,
+    journalNet,
+    seenKeys,
+    duplicateKeys,
+    missingReceipts,
+    feeChecks,
+    voidCredits,
+    chain,
+    receiptConsistency: receiptConsistency(engine, journals),
+  };
 }
 
 function rewardReport(vault, engine) {
@@ -317,10 +423,22 @@ function economyReport(economy, engine) {
   try {
     if (typeof economy.snapshot !== "function") throw new TypeError("simulated economy adapter must expose snapshot()");
     const state = economy.snapshot();
-    const orders = Array.isArray(state?.exchange?.orders) ? state.exchange.orders : [];
-    const markets = Array.isArray(state?.predictions?.markets) ? state.predictions.markets : [];
-    const contracts = Array.isArray(state?.contracts) ? state.contracts : [];
-    const operations = Array.isArray(state?.operations) ? state.operations : [];
+    if (!state || typeof state !== "object") throw new TypeError("simulated economy snapshot must be an object");
+    if (!state.exchange || typeof state.exchange !== "object") throw new TypeError("simulated economy snapshot is missing exchange state");
+    if (!state.predictions || typeof state.predictions !== "object") throw new TypeError("simulated economy snapshot is missing prediction state");
+    const requiredArray = (value, path) => {
+      if (!Array.isArray(value)) throw new TypeError(`simulated economy snapshot is missing ${path}`);
+      return value;
+    };
+    const orders = requiredArray(state.exchange.orders, "exchange.orders");
+    const trades = requiredArray(state.exchange.trades, "exchange.trades");
+    const markets = requiredArray(state.predictions.markets, "predictions.markets");
+    const positions = requiredArray(state.predictions.positions, "predictions.positions");
+    const contracts = requiredArray(state.contracts, "contracts");
+    const events = requiredArray(state.events, "events");
+    const operations = requiredArray(state.operations, "operations");
+    if (!state.escrowBaseline || typeof state.escrowBaseline !== "object") throw new TypeError("simulated economy snapshot is missing escrowBaseline");
+    for (const asset of ASSETS) safeInteger(state.escrowBaseline[asset], `escrowBaseline.${asset}`, { signed: false });
     const activeOrders = orders.filter((order) => order.status !== "cancelled");
     const obligations = { TUMBO: 0, sMIMAS: 0 };
     for (const order of activeOrders) {
@@ -355,10 +473,11 @@ function economyReport(economy, engine) {
       stateRevision: state.exchange?.revision ?? null,
       counts: {
         activeExchangeOrders: activeOrders.length,
-        exchangeTrades: Array.isArray(state.exchange?.trades) ? state.exchange.trades.length : 0,
+        exchangeTrades: trades.length,
         openPredictionMarkets: markets.filter((market) => market.status === "open").length,
-        openPredictionPositions: Array.isArray(state.predictions?.positions) ? state.predictions.positions.filter((position) => position.status === "open").length : 0,
+        openPredictionPositions: positions.filter((position) => position.status === "open").length,
         fundedContracts: contracts.filter((contract) => contract.funding?.status === "funded").length,
+        events: events.length,
         operations: operations.length,
       },
       pendingObligationsFluff: obligations,
@@ -380,7 +499,10 @@ function makeAssetReport(asset, config, totals, journalNet, chain, feeChecks) {
     .reduce((sum, category) => sum + categories[category], 0);
   const circulatingFluff = categories.available + categories.locked + categories.reserved;
   const reconciliationDeltaFluff = nonIssuanceTotalFluff - recordedSupplyFluff;
+  const issuanceMirrorDeltaFluff = categories.issuanceMirror + recordedSupplyFluff;
   const assetFeeChecks = feeChecks.filter((check) => check.asset === asset);
+  const nonIssuanceConservation = reconciliationDeltaFluff === 0;
+  const issuanceMirror = issuanceMirrorDeltaFluff === 0;
   return {
     asset,
     unit: TOKEN_ECONOMY_OVERVIEW_UNIT,
@@ -390,11 +512,14 @@ function makeAssetReport(asset, config, totals, journalNet, chain, feeChecks) {
     circulatingFluff,
     circulatingDisplay: formatAssetAmount(asset, circulatingFluff),
     nonIssuanceTotalFluff,
+    issuanceMirrorDeltaFluff,
     journalNetFluff: journalNet[asset],
     reconciliationDeltaFluff,
     feeChecks: assetFeeChecks,
     invariants: {
-      conservation: reconciliationDeltaFluff === 0,
+      conservation: nonIssuanceConservation && issuanceMirror,
+      nonIssuanceConservation,
+      issuanceMirror,
       journalBalanced: journalNet[asset] === 0,
       marketFeeConsistency: assetFeeChecks.every((check) => check.ok),
       chain: chain.ok === true,
@@ -429,7 +554,7 @@ export function createTokenEconomyOverview({ engine = null, token = null, snapsh
   const reward = rewardReport(vault, canonical);
   const economyState = economyReport(economy, canonical);
   const chain = evidence.chain;
-  const replaySafe = evidence.duplicateKeys.length === 0 && evidence.missingReceipts.length === 0;
+  const replaySafe = evidence.duplicateKeys.length === 0 && evidence.missingReceipts.length === 0 && evidence.receiptConsistency.ok;
   const balancesHealthy = balances.invalidBalances.length === 0 && balances.negativeBalances.length === 0;
   const economyHealthy = economyState.status === "not-provided" || economyState.ok === true;
   const rewardHealthy = reward.status !== "invalid" && (reward.status !== "observed" || reward.ok === true);
@@ -476,7 +601,12 @@ export function createTokenEconomyOverview({ engine = null, token = null, snapsh
       nonNegativeBalances: { ok: balancesHealthy, violations: balances.negativeBalances, invalid: balances.invalidBalances },
       conservation: Object.fromEntries(ASSETS.map((asset) => [asset, assetReports[asset].invariants.conservation])),
       journalBalanced: { ok: journalHealthy, netFluff: evidence.journalNet },
-      idempotency: { ok: replaySafe, duplicateJournalKeys: evidence.duplicateKeys, missingReceipts: evidence.missingReceipts },
+      idempotency: {
+        ok: replaySafe,
+        duplicateJournalKeys: evidence.duplicateKeys,
+        missingReceipts: evidence.missingReceipts,
+        receiptRegistry: evidence.receiptConsistency,
+      },
       marketFees: { ok: feeHealthy, checks: evidence.feeChecks },
       rewards: { ok: rewardHealthy, status: reward.status },
       economy: { ok: economyHealthy, status: economyState.status },

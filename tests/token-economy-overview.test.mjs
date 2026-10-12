@@ -182,6 +182,76 @@ test("the projection surfaces negative-balance corruption instead of hiding it",
   assert.equal(overview.invariants.ok, false);
 });
 
+test("receipt and request registries fail closed on tampered, missing, or extra bindings", () => {
+  const engine = createTokenEngine();
+  const key = "overview:registry:tamper";
+  engine.faucet("u:alice", "TUMBO", 100, { idempotencyKey: key });
+  const receipt = engine.ledger._receipts.get(key);
+  const request = engine.ledger._requestKeys.get(key);
+
+  engine.ledger._receipts.set(key, { ...receipt, action: "tampered" });
+  let overview = createTokenEconomyOverview({ engine });
+  assert.equal(overview.invariants.idempotency.ok, false);
+  assert.equal(overview.invariants.idempotency.receiptRegistry.ok, false);
+  assert.equal(overview.invariants.idempotency.receiptRegistry.receiptMismatches[0].key, key);
+
+  engine.ledger._receipts.set(key, undefined);
+  overview = createTokenEconomyOverview({ engine });
+  assert.equal(overview.invariants.idempotency.receiptRegistry.ok, false);
+  assert.equal(overview.invariants.idempotency.receiptRegistry.receiptMismatches[0].key, key);
+
+  engine.ledger._receipts.set(key, receipt);
+  engine.ledger._requestKeys.delete(key);
+  overview = createTokenEconomyOverview({ engine });
+  assert.equal(overview.invariants.ok, false);
+  assert.deepEqual(overview.invariants.idempotency.receiptRegistry.missingRequestKeys, [key]);
+
+  engine.ledger._requestKeys.set(key, request);
+  engine.ledger._receipts.set("overview:registry:extra-receipt", receipt);
+  overview = createTokenEconomyOverview({ engine });
+  assert.deepEqual(overview.invariants.idempotency.receiptRegistry.extraReceiptKeys, ["overview:registry:extra-receipt"]);
+
+  engine.ledger._receipts.delete("overview:registry:extra-receipt");
+  engine.ledger._requestKeys.set("overview:registry:extra-request", request);
+  overview = createTokenEconomyOverview({ engine });
+  assert.deepEqual(overview.invariants.idempotency.receiptRegistry.extraRequestKeys, ["overview:registry:extra-request"]);
+});
+
+test("issuance mirror is an exact conservation invariant, not an ignored system balance", () => {
+  for (const corruptedMirror of [0, 1]) {
+    const engine = createTokenEngine();
+    engine.ledger._balances.set("sys:issuance|TUMBO", corruptedMirror);
+    const overview = createTokenEconomyOverview({ engine });
+    const report = overview.assets.TUMBO;
+    assert.equal(report.issuanceMirrorDeltaFluff, corruptedMirror + CONFIG.supply.TUMBO);
+    assert.equal(report.invariants.issuanceMirror, false);
+    assert.equal(report.invariants.nonIssuanceConservation, true);
+    assert.equal(report.invariants.conservation, false);
+    assert.equal(overview.invariants.ok, false);
+  }
+});
+
+test("malformed economy snapshots are invalid instead of becoming healthy zero-obligation views", () => {
+  const engine = createTokenEngine();
+  const source = createSimulatedEconomy({ engine });
+  const state = source.snapshot();
+  const cases = [
+    ["exchange.orders", { exchange: { ...state.exchange, orders: undefined } }],
+    ["predictions.markets", { predictions: { ...state.predictions, markets: undefined } }],
+    ["contracts", { contracts: undefined }],
+  ];
+  for (const [path, replacement] of cases) {
+    const malformed = { ...state, ...replacement };
+    const economy = { engine, snapshot: () => malformed };
+    const overview = createTokenEconomyOverview({ engine, economy });
+    assert.equal(overview.economy.status, "invalid", path);
+    assert.equal(overview.economy.ok, false, path);
+    assert.equal(overview.invariants.economy.ok, false, path);
+    assert.equal(overview.invariants.ok, false, path);
+    assert.match(overview.economy.error, /missing/);
+  }
+});
+
 test("adapters must share the same canonical owner", () => {
   const engine = createTokenEngine();
   const otherEngine = createTokenEngine();
