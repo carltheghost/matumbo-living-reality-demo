@@ -164,7 +164,7 @@ jobs:
           assert status['available'] is False, status
           assert status['reason'] == 'provider-not-configured', status
 
-          body = b'{}'
+          body = b'{"sessionId":"ci-session","requestId":"ci.1"}'
           respond_request = Request(
               origin + '/api/conversation/respond', data=body,
               headers={**headers, 'Content-Type': 'application/json'}, method='POST')
