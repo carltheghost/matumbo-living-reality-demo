@@ -1,5 +1,5 @@
 /* Phone-owned Pages launcher copy. The canonical shared.js remains byte-preserved; this route has no backend readiness call. */
-import {Renderer,embed} from '../render.js';
+import {PhoneRenderer as Renderer, embed} from './phone-render.mjs';
 import {Camera} from '../camera.js';
 const $=id=>document.getElementById(id),copy=x=>JSON.parse(JSON.stringify(x));
 const serviceBase=new URL('.',document.baseURI);

@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 const root = new URL('../../', import.meta.url);
 
 test('Pages publishes a self-contained local phone route without changing the canonical launcher', async () => {
-  const [canonical, route, staticShared, bootstrap, fieldWorld, fabric, sw] = await Promise.all([
+  const [canonical, route, staticShared, bootstrap, fieldWorld, fabric, sw, phoneRender, phoneCss, palette] = await Promise.all([
     readFile(new URL('index.html', root), 'utf8'),
     readFile(new URL('phone/index.html', root), 'utf8'),
     readFile(new URL('phone/static-shared.js', root), 'utf8'),
@@ -13,6 +13,9 @@ test('Pages publishes a self-contained local phone route without changing the ca
     readFile(new URL('phone/field-world.mjs', root), 'utf8'),
     readFile(new URL('phone/spatial-fabric.mjs', root), 'utf8'),
     readFile(new URL('vivo-sw.js', root), 'utf8'),
+    readFile(new URL('phone/phone-render.mjs', root), 'utf8'),
+    readFile(new URL('phone/phone-world.css', root), 'utf8'),
+    readFile(new URL('phone/field-palette.mjs', root), 'utf8'),
   ]);
   assert.match(canonical, /src="shared\.js"/);
   assert.doesNotMatch(canonical, /phone\/bootstrap\.mjs/);
@@ -21,12 +24,13 @@ test('Pages publishes a self-contained local phone route without changing the ca
   assert.match(route, /src="\.\/bootstrap\.mjs"/);
   assert.match(route, /src="\.\/static-shared\.js"/);
   assert.match(staticShared, /PAGES STATIC\/OFFLINE/);
-  assert.match(staticShared, /from '\.\.\/render\.js'/);
+  assert.match(staticShared, /from '\.\/phone-render\.mjs'/);
   assert.match(staticShared, /from '\.\.\/camera\.js'/);
   assert.doesNotMatch(staticShared, /api\('\/readyz'/);
   assert.match(bootstrap, /PAGES STATIC\/OFFLINE/);
   assert.match(bootstrap, /canonical authority unavailable/);
   assert.match(bootstrap, /STATIC_PHONE_ROUTE \? new URL\('\.\/index\.html'/);
+  assert.match(bootstrap, /snapshot: \(\) => refreshSnapshot\(\{ externalSnapshot: true \}\)/);
   assert.match(fieldWorld, /vivo\.phone\.field-world\/1/);
   assert.match(fieldWorld, /analytic-information-mixture/);
   assert.match(fabric, /spatial-interaction-fabric\/1/);
@@ -34,11 +38,21 @@ test('Pages publishes a self-contained local phone route without changing the ca
   assert.match(sw, /phone\/index\.html/);
   assert.match(sw, /phone\/static-shared\.js/);
   assert.match(sw, /phone\/field-world\.mjs/);
+  assert.match(sw, /phone\/phone-render\.mjs/);
+  assert.match(sw, /phone\/phone-world\.css/);
+  assert.match(sw, /phone\/field-palette\.mjs/);
   assert.match(sw, /phone\/spatial-fabric\.mjs/);
   assert.match(sw, /phone\/local-operation\.mjs/);
   assert.match(sw, /phone\/local-edit-queue\.mjs/);
   assert.match(sw, /phoneNavigation/);
   assert.match(sw, /shell\.match\(scoped\('phone\/index\.html'\)\)/);
+  assert.match(phoneRender, /class PhoneRenderer/);
+  assert.match(phoneCss, /\.field-dock/);
+  assert.match(palette, /fieldTone/);
+  assert.match(route, /id="phoneEconomyTrigger"/);
+  assert.match(route, /id="phoneEconomyPanelHost"/);
+  assert.match(route, /aria-controls="phoneEconomyPanelHost"/);
+  assert.match(route, /id="phoneEconomyContext" class="context-slot" hidden/);
 });
 
 test('Pages build copies the route and exposes its local-only boundary check', async () => {

@@ -7,6 +7,7 @@
  * planes; an awake object is a view decision, not a change to the envelope.
  */
 import { LocalOperationIdFactory } from './local-operation.mjs';
+import { informationColor } from './field-palette.mjs';
 
 export const FIELD_WORLD_SCHEMA = 'vivo.phone.field-world/1';
 export const FIELD_LAYOUTS = Object.freeze(['ring', 'row', 'gather']);
@@ -17,36 +18,6 @@ const clamp = (value, lo, hi) => Math.max(lo, Math.min(hi, value));
 const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const distance = (a, b) => Math.hypot(...a.map((value, index) => value - (b[index] || 0)));
 const tokenize = value => String(value || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
-function hashText(value) {
-  let hash = 2166136261;
-  for (const char of String(value || '')) {
-    hash ^= char.charCodeAt(0);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-}
-
-function informationColor(entity) {
-  const seed = hashText([
-    entity.id, entity.name, entity.materialProfile,
-    ...(entity.fieldMembership || []), ...(entity.lineage || []),
-  ].join('|'));
-  const hue = seed % 360;
-  const saturation = 62 + (seed % 18);
-  const lightness = 48 + ((seed >>> 8) % 14);
-  return {
-    hue,
-    saturation,
-    lightness,
-    css: 'hsl(' + hue + ' ' + saturation + '% ' + lightness + '%)',
-    rgb: [
-      0.5 + 0.5 * Math.cos(hue * Math.PI / 180),
-      0.5 + 0.5 * Math.cos((hue + 120) * Math.PI / 180),
-      0.5 + 0.5 * Math.cos((hue + 240) * Math.PI / 180),
-    ],
-  };
-}
-
 function normalizeAxes(axes, dimension) {
   const result = [];
   for (const axis of Array.isArray(axes) ? axes : []) {
@@ -95,7 +66,8 @@ function sampleField(point, entities) {
   let total = 0;
   const mix = [0, 0, 0];
   for (const entity of entities) {
-    const weight = gaussian(point, entity);
+    const queryWeight = entity.queryActive ? 0.3 + 0.7 * clamp(finite(entity.information), 0, 1) : 1;
+    const weight = gaussian(point, entity) * queryWeight;
     total += weight;
     for (let channel = 0; channel < 3; channel++) mix[channel] += weight * entity.color.rgb[channel];
   }
@@ -189,6 +161,7 @@ export function buildFieldWorld(envelope, {
   const safeResolution = clamp(Math.trunc(finite(atlasResolution, 8)), 4, MAX_ATLAS_RESOLUTION);
   const eyeQ = Array.from({ length: dimension }, (_, axis) => finite(eye?.q?.[axis]));
   const axes = normalizeAxes(eyeAxes || [0, 1, 2], dimension);
+  const queryActive = tokenize(query).length > 0;
   const entities = Object.values(space.entities || {}).map(entity => {
     const previewQ = preview?.entityId === entity.id && Array.isArray(preview.q) && preview.q.length === dimension ? preview.q : entity.q;
     const color = informationColor(entity);
@@ -203,6 +176,7 @@ export function buildFieldWorld(envelope, {
       preview: preview?.entityId === entity.id ? { kind: preview.kind, operationId: preview.operationId } : null,
       color,
       ...relevance,
+      queryActive,
       awake: relevance.relevance >= clamp(finite(relevanceThreshold, 0.2), 0, 1) || entity.id === selectedId,
       information: {
         materialProfile: entity.materialProfile || null,
@@ -460,7 +434,7 @@ export function drawFieldAtlas(canvas, model) {
   if (!context || !model?.atlas?.length) return false;
   const width = canvas.width || 320, height = canvas.height || 180;
   context.clearRect(0, 0, width, height);
-  context.fillStyle = '#061117';
+  context.fillStyle = '#07121d';
   context.fillRect(0, 0, width, height);
   const selectedAxes = model.eye?.axes?.slice(0, 2) || [];
   const score = plane => selectedAxes.length === 2 && plane.axes.includes(selectedAxes[0]) && plane.axes.includes(selectedAxes[1]) ? 0 : 1;
@@ -483,10 +457,12 @@ export function drawFieldAtlas(canvas, model) {
       context.fillRect(x0 + cell.column * cellWidth, y0 + cell.row * cellHeight, cellWidth + 0.5, cellHeight + 0.5);
     });
     context.globalAlpha = 1;
-    context.fillStyle = '#d9f6ff';
-    context.font = '10px ui-monospace, monospace';
-    context.fillText(plane.labels.join(' / '), x0 + 4, y0 + 12);
-    if (score(plane) === 0) { context.strokeStyle = '#f4d38a'; context.lineWidth = 2; context.strokeRect(x0 + 1, y0 + 1, tileWidth - 2, tileHeight - 2); }
+    context.fillStyle = '#d8e8f7';
+    context.font = '600 10px ui-monospace, monospace';
+    context.fillText(plane.labels.join(' · '), x0 + 6, y0 + 13);
+    context.strokeStyle = score(plane) === 0 ? '#7fb4ff' : 'rgba(142, 181, 220, .32)';
+    context.lineWidth = score(plane) === 0 ? 2 : 1;
+    context.strokeRect(x0 + 1, y0 + 1, tileWidth - 2, tileHeight - 2);
     for (const entity of model.entities.filter(item => item.awake)) {
       const xRange = plane.ranges[0], yRange = plane.ranges[1];
       const x = x0 + clamp((entity.q[plane.axes[0]] - xRange[0]) / Math.max(1e-9, xRange[1] - xRange[0]), 0, 1) * tileWidth;
@@ -496,10 +472,10 @@ export function drawFieldAtlas(canvas, model) {
     }
   });
   context.restore?.();
-  const mapSize = Math.min(58, Math.max(36, height * 0.32));
-  context.fillStyle = 'rgba(3, 12, 18, .86)'; context.fillRect(4, 4, mapSize, mapSize);
-  context.strokeStyle = '#8eb9b2'; context.lineWidth = 1; context.strokeRect(4, 4, mapSize, mapSize);
-  context.fillStyle = '#d9f6ff'; context.font = '9px ui-monospace, monospace'; context.fillText(String(model.layout?.mode || 'gather').toUpperCase(), 8, 14);
+  const mapSize = Math.min(72, Math.max(48, height * 0.34));
+  context.fillStyle = 'rgba(4, 15, 26, .9)'; context.fillRect(4, 4, mapSize, mapSize);
+  context.strokeStyle = '#6f9ccc'; context.lineWidth = 1; context.strokeRect(4, 4, mapSize, mapSize);
+  context.fillStyle = '#d8e8f7'; context.font = '600 9px ui-monospace, monospace'; context.fillText(String(model.layout?.mode || 'gather').toUpperCase(), 8, 15);
   for (const entity of model.entities.filter(item => item.awake)) {
     const position = model.layout?.positions?.[entity.id]; if (!position) continue;
     const x = 4 + mapSize / 2 + clamp(position.x, -1, 1) * (mapSize - 12) / 2;

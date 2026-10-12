@@ -23,7 +23,7 @@ test('the Android Companion extends the canonical GitHub Pages UI at runtime', a
   assert.match(activity, /phone\.torch\.set/);
   assert.match(tools, /phone\.torch\.set/);
   assert.match(bootstrap, /navigator\.serviceWorker\.ready/);
-  assert.match(bootstrap, /caches\.open\('vivo-phone-shell-2026-10-11-v2'\)/);
+  assert.match(bootstrap, /caches\.open\('vivo-phone-shell-2026-10-12-v3'\)/);
   assert.match(bootstrap, /two-hand-camera\.mjs/);
   assert.match(bootstrap, /camera-start-status\.mjs/);
   assert.match(bootstrap, /phoneStartHands.*startCameraFromButton/);
@@ -116,7 +116,7 @@ test('the phone-owned tracker detects two complete hands without transporting fr
   assert.match(sw, /request\.mode === 'navigate'/);
   assert.match(sw, /scope\.pathname/);
   assert.match(sw, /shell\.match\(scoped\('index\.html'\)\)/);
-  assert.match(sw, /SHELL_CACHE.*v2/);
+  assert.match(sw, /SHELL_CACHE.*v3/);
   assert.doesNotMatch(worker, /\bfetch\s*\(|XMLHttpRequest|WebSocket/);
   assert.doesNotMatch(camera, /\bfetch\s*\(|XMLHttpRequest|WebSocket/);
 });

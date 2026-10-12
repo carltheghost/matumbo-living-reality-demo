@@ -88,11 +88,12 @@ function renderEye(envelope, options = {}) {
   for (let i = 3; i < projected.eye.q.length; i++) R.slice[i] = Number(projected.eye.slice?.[`x${i + 1}`] || 0);
   if (!state.entities[R.selected]) R.selected = Object.keys(state.entities)[0] || null;
   if (selectedId && state.entities[selectedId]) R.selected = selectedId;
+  if (!state.entities[selectedId]) selectedId = R.selected;
   updateEyeControls(envelope);
   fieldEnvelope = envelope;
   updateFieldWorld(envelope, options);
-  const axis = $('phoneAxis'); if (axis) { axis.replaceChildren(); for (let i = 0; i < state.geometry.dimension; i++) { const option = document.createElement('option'); option.value = String(i); option.textContent = `x${i + 1}${i > 2 ? ' ? extra axis' : ''}`; axis.append(option); } axis.value = String(Math.min(activeAxis, state.geometry.dimension - 1)); }
-  const eyeInfo = $('phoneEyeInfo'); if (eyeInfo) eyeInfo.textContent = `${projected.eye.label} ? ${projected.eye.spaceId} ? ${state.geometry.dimension} spatial axes + separate time ? world ${envelope.snapshot.worldId}`;
+  const axis = $('phoneAxis'); if (axis) { axis.replaceChildren(); for (let i = 0; i < state.geometry.dimension; i++) { const option = document.createElement('option'); option.value = String(i); option.textContent = `x${i + 1}${i > 2 ? ' · extra axis' : ''}`; axis.append(option); } axis.value = String(Math.min(activeAxis, state.geometry.dimension - 1)); }
+  const eyeInfo = $('phoneEyeInfo'); if (eyeInfo) eyeInfo.textContent = `${projected.eye.label} · ${projected.eye.spaceId} · ${state.geometry.dimension} spatial axes + separate time · world ${envelope.snapshot.worldId}`;
 }
 function snapshotMarker(envelope) {
   const snapshot = envelope?.snapshot;
@@ -134,7 +135,7 @@ function updateEyeControls(envelope) {
   const select = $('phoneEyeSelect'); if (!select) return;
   const prior = select.value;
   select.replaceChildren();
-  for (const eye of Object.values(envelope.eyes)) { const option = document.createElement('option'); option.value = eye.id; option.textContent = `${eye.label} ? ${eye.spaceId}`; select.append(option); }
+  for (const eye of Object.values(envelope.eyes)) { const option = document.createElement('option'); option.value = eye.id; option.textContent = `${eye.label} · ${eye.spaceId}`; select.append(option); }
   select.value = envelope.currentEyeId || prior;
   const nested = envelope.eyes[envelope.currentEyeId]?.returnStack?.length || 0;
   $('phoneExitNested').disabled = nested === 0;
@@ -175,18 +176,21 @@ function updateFieldWorld(envelope = fieldEnvelope, options = {}) {
     entitySelect.replaceChildren();
     for (const entity of model.entities) {
       const option = document.createElement('option');
-      option.value = entity.id; option.textContent = entity.name + (entity.awake ? ' ? awake' : ' ? sleeping');
+      option.value = entity.id; option.textContent = entity.name + (entity.awake ? ' · awake' : ' · sleeping');
       entitySelect.append(option);
     }
-    entitySelect.value = model.entities.some(entity => entity.id === prior) ? prior : (selectedId || model.entities[0]?.id || '');
+    const preferred = [selectedId, R.selected, prior, model.entities[0]?.id]
+      .find(id => model.entities.some(entity => entity.id === id)) || '';
+    entitySelect.value = preferred;
+    if (preferred) { selectedId = preferred; R.selected = preferred; if (S) S.selected = preferred; }
   }
   drawFieldAtlas($('phoneFieldAtlas'), model);
   const preview = updateFieldActionButtons();
   const statusView = $('phoneFieldStatus');
-  if (statusView) statusView.textContent = model.awakeIds.length + '/' + model.entities.length + ' objects awake ? ' + model.atlas.length + ' coordinate planes ? analytic information mix ? ' + model.field.materialAuthority;
+  if (statusView) statusView.textContent = model.awakeIds.length + '/' + model.entities.length + ' objects awake · ' + model.atlas.length + ' coordinate planes · analytic information mix · ' + model.field.materialAuthority;
   const previewView = $('phoneFieldPreview');
   if (previewView) previewView.textContent = preview
-    ? preview.kind + ' preview for ' + preview.entityId + ' ? local only ? ' + (preview.mixWith ? 'mixed with ' + preview.mixWith + ' ? ' : '') + 'apply explicitly or discard'
+    ? preview.kind + ' preview for ' + preview.entityId + ' · local only · ' + (preview.mixWith ? 'mixed with ' + preview.mixWith + ' · ' : '') + 'apply explicitly or discard'
     : 'No local edit preview. Preview never enters accepted history.';
   const acceptedView = $('phoneFieldAccepted');
   if (acceptedView) acceptedView.textContent = JSON.stringify(model.accepted, null, 2);
@@ -200,7 +204,28 @@ function updateFieldActionButtons(completedGeneration = null) {
   if (superseded) status('A newer local field preview is ready; the earlier Apply did not replace it.');
   return preview;
 }
-function fieldEntityId() { return $('phoneFieldEntity')?.value || selectedId || R.selected || null; }
+function selectPhoneEntity(id, { announce = false, discardPending = true } = {}) {
+  const entities = S.state?.entities || {};
+  const eye = fieldEnvelope?.eyes?.[fieldEnvelope.currentEyeId];
+  const fieldEntities = fieldEnvelope?.snapshot?.spaces?.[eye?.spaceId]?.entities || {};
+  const modelEntity = fieldWorld?.model?.entities?.find(entity => entity.id === id);
+  const entity = entities[id] || fieldEntities[id] || modelEntity;
+  if (!entity) return false;
+  const pending = fieldWorld?.commitCandidate();
+  const discarded = Boolean(discardPending && pending && pending.entityId !== id);
+  if (discarded) fieldWorld.discardPreview();
+  selectedId = id;
+  R.selected = id;
+  if (S) S.selected = id;
+  const fieldSelect = $('phoneFieldEntity');
+  if (fieldSelect && [...fieldSelect.options].some(option => option.value === id)) fieldSelect.value = id;
+  if (fieldWorld && fieldEnvelope) updateFieldWorld(fieldEnvelope);
+  if (announce) status(discarded
+    ? `Retargeted to ${entity.name || id}; the previous ${pending.entityId} preview was discarded.`
+    : `Selected ${entity.name || id}.`);
+  return true;
+}
+function fieldEntityId() { return selectedId || R.selected || $('phoneFieldEntity')?.value || null; }
 function localObjectIdentity(entityId) {
   const eye = fieldEnvelope?.eyes?.[fieldEnvelope.currentEyeId], spaceId = eye?.spaceId;
   const entity = fieldEnvelope?.snapshot?.spaces?.[spaceId]?.entities?.[entityId];
@@ -351,13 +376,13 @@ function updatePhoneAuthorityUI(detail = null) {
   const mapping = debug.mapping || {};
   const capability = debug.capabilities?.canonicalCommit || {};
   const statusText = STATIC_PHONE_ROUTE
-    ? 'PAGES STATIC/OFFLINE ? canonical authority unavailable on this route; local phone state remains independent'
+    ? 'PAGES STATIC/OFFLINE · canonical authority unavailable on this route; local phone state remains independent'
     : mapping.status !== 'available'
-    ? (debug.connected ? 'CONNECTED' : 'OFFLINE') + ' ? ' + (mapping.code || 'PHONE_OBJECT_UNAVAILABLE') + ' ? ' + (mapping.reason || 'Local object is not mapped.')
-    : (debug.connected ? 'CONNECTED' : 'OFFLINE') + ' ? ' + (debug.local?.mode || 'local') + ' ? ' + (debug.local?.dimension || '?') + 'D root ? ' + (debug.authorityPersistence?.durable ? 'authority durable' : 'authority memory/session') + ' ? ' + (capability.allowed ? 'canonical commit available' : (capability.rejectionCode || 'canonical commit unavailable'));
+    ? (debug.connected ? 'CONNECTED' : 'OFFLINE') + ' · ' + (mapping.code || 'PHONE_OBJECT_UNAVAILABLE') + ' · ' + (mapping.reason || 'Local object is not mapped.')
+    : (debug.connected ? 'CONNECTED' : 'OFFLINE') + ' · ' + (debug.local?.mode || 'local') + ' · ' + (debug.local?.dimension || '?') + 'D root · ' + (debug.authorityPersistence?.durable ? 'authority durable' : 'authority memory/session') + ' · ' + (capability.allowed ? 'canonical commit available' : (capability.rejectionCode || 'canonical commit unavailable'));
   if (state) state.textContent = debug.conflict
-    ? `CONFLICT ? ${debug.message}`
-    : statusText + (debug.message ? ` ? ${debug.message}` : '');
+    ? `CONFLICT · ${debug.message}`
+    : statusText + (debug.message ? ` · ${debug.message}` : '');
   if (output) output.textContent = JSON.stringify({
     mapping: debug.mapping,
     local: debug.local,
@@ -454,20 +479,21 @@ function handleFieldHandGesture(event) {
     const now = performance.now(); if (now - lastPoseAction < 650) return;
     if (event.pose === 'point') {
       const hit = R.at(...event.point);
-      if (hit) { selectedId = hit; R.selected = hit; status('POINT ? selected ' + (S.state.entities[hit]?.name || hit)); lastPoseAction = now; }
+      if (hit) { selectPhoneEntity(hit, { announce: true }); lastPoseAction = now; }
     } else if (event.pose === 'peace') {
       R.overview = !R.overview; updateProjectionState({ mode: R.overview ? 'overview' : 'slice' });
-      status('PEACE ? ' + (R.overview ? 'overview' : 'current slice')); lastPoseAction = now;
+      status('PEACE · ' + (R.overview ? 'overview' : 'current slice')); lastPoseAction = now;
     } else if (event.pose === 'thumbs-up') {
       activeAxis = (activeAxis + 1) % (S.state?.geometry.dimension || 4);
       const axis = $('phoneAxis'); if (axis) axis.value = String(activeAxis);
-      status('THUMBS-UP ? move axis x' + (activeAxis + 1)); lastPoseAction = now;
+      status('THUMBS-UP · move axis x' + (activeAxis + 1)); lastPoseAction = now;
     }
     return;
   }
   if (event.type === 'grab') {
     const hit = R.at(...event.point), contactId = 'hand:' + event.handId;
     if (hit && !handContacts.has(contactId)) {
+      selectPhoneEntity(hit, { announce: false });
       const canonicalPoint = canonicalPointForInput(event.point, hit);
       interactionFabric?.begin({ contactId, source: { kind: 'hand', id: event.handId }, objectId: hit, gesture: 'grab', canonicalPoint });
       const identity = localObjectIdentity(hit);
@@ -479,7 +505,7 @@ function handleFieldHandGesture(event) {
         spaceId: identity?.spaceId || fieldEnvelope?.eyes?.[fieldEnvelope?.currentEyeId]?.spaceId,
         editQueue: new LocalEditQueue(),
       });
-      selectedId = hit; R.selected = hit; status('HAND GRAB ? ' + hit);
+      status('HAND GRAB · ' + hit);
     }
     return;
   }
@@ -511,7 +537,7 @@ function handleFieldHandGesture(event) {
     interactionFabric?.end(contactId, event.reason || 'release');
     handContacts.delete(contactId);
     const pending = engine?.lastPersistence;
-    reportPersistenceStatus('release', pending).catch(error => status('Hand released ? local persistence status unavailable: ' + error.message + '. Retry remains available.'));
+    reportPersistenceStatus('release', pending).catch(error => status('Hand released · local persistence status unavailable: ' + error.message + '. Retry remains available.'));
     return;
   }
   if (event.type === 'twohand') {
@@ -522,8 +548,7 @@ function handleFieldHandGesture(event) {
   }
   if (event.type === 'swipe' && !handContacts.size && S.state) {
     const ids = Object.keys(S.state.entities), i = ids.indexOf(R.selected), step = event.dx < 0 ? 1 : -1;
-    selectedId = ids[(i + step + ids.length) % ids.length]; R.selected = selectedId;
-    status('SWIPE ? selected ' + (S.state.entities[selectedId]?.name || selectedId));
+    selectPhoneEntity(ids[(i + step + ids.length) % ids.length], { announce: true });
   }
 }
 const sharedCameraGesture = camera.onGesture.bind(camera);
@@ -559,7 +584,7 @@ const phoneCamera = new PhoneTwoHandCamera({
   video: phoneVideo, overlay: handOverlay, renderer: R,
   onState: message => { const view = $('cameraState'); if (view) view.textContent = message; },
   onGesture: event => { if (localMode) handleFieldHandGesture(event); else handleSharedHandGesture(event); },
-  onHands: hands => { const view = $('cameraState'); if (hands.length && view) view.textContent = 'Tracking ' + hands.length + ' hand(s) ? 21 landmarks ? all five fingers ? local only.'; },
+  onHands: hands => { const view = $('cameraState'); if (hands.length && view) view.textContent = 'Tracking ' + hands.length + ' hand(s) · 21 landmarks · all five fingers · local only.'; },
 });
 projection = new HandsFreeProjection({ bridge, camera: phoneCamera });
 async function startPhoneCamera(facing = 'user') {
@@ -586,13 +611,17 @@ for (const [id, action] of Object.entries(localCameraActions)) $(id)?.addEventLi
 }, true);
 
 function addPhoneSurface() {
-  const enter = button('enterPhoneLocal', 'Enter local Vivo ? works offline', 'primary');
+  const enter = button('enterPhoneLocal', 'Enter local Vivo · works offline', 'primary');
   enter.setAttribute('aria-describedby', 'phoneLocalNote');
   const note = Object.assign(document.createElement('p'), { id: 'phoneLocalNote', className: 'muted', textContent: 'Phone engine runs locally. Objects keep stable IDs; each Eye and projection stays independent. Camera stays off until you start it.' });
   $('createRoom')?.before(enter, note);
   enter.onclick = () => startLocal().catch(error => status(error.message));
-  const nav = button('phonePanelButton', '📱 Phone', 'secondary');
+  const nav = button('phonePanelButton', 'Advanced', 'secondary');
   nav.type = 'button'; nav.onclick = openPhonePanel; $('toolbar')?.append(nav);
+  // The phone route owns a compact field dock in the page shell. Keep one
+  // advanced sheet instance so the existing controls retain their IDs and
+  // handlers without duplicating the field controls.
+  document.querySelector('#panel .sheet[data-sheet="phone"]')?.remove();
   const sheet = document.createElement('div'); sheet.className = 'sheet'; sheet.dataset.sheet = 'phone'; sheet.innerHTML = `
     <h3>Viva Phone Engine</h3><p id="phoneEngineState" class="muted">Local engine closed. World state and Eyes are stored on this device.</p>
     <p id="phoneEyeInfo" class="muted"></p>
@@ -600,7 +629,7 @@ function addPhoneSurface() {
     <label>Active material axis<select id="phoneAxis"></select></label><div class="row"><button id="phoneAxisMinus">− Move selected</button><button id="phoneAxisPlus">+ Move selected</button></div>
     <div class="row"><button id="phoneEnterNested">Enter selected inner world</button><button id="phoneExitNested">Return with this Eye</button></div>
     <div class="row"><button id="phoneFork">Create explicit offline branch</button><button id="phoneExport">Export world + Eyes</button></div>
-    <hr><h3>Hands-free input & projection</h3><p class="muted">Up to two hands ? all 21 landmarks and all five articulated fingers ? local inference. Open, point, peace, thumbs-up, fist and pinch poses; two hands zoom and rotate; touch drag/pinch also work. Camera frames stay on this phone.</p>
+    <hr><h3>Hands-free input & projection</h3><p class="muted">Up to two hands · all 21 landmarks and all five articulated fingers · local inference. Open, point, peace, thumbs-up, fist and pinch poses; two hands zoom and rotate; touch drag/pinch also work. Camera frames stay on this phone.</p>
     <div class="row"><button id="phoneStartHands">Start front camera + hands</button><button id="phoneStartBackHands">Start rear camera + hands</button></div>
     <div class="row"><button id="phoneStopHands">Stop camera and release it</button></div>
     <div class="row"><button id="phoneProject">Project / cast view</button><button id="phoneStopProject">Stop projection mode</button></div>
@@ -635,6 +664,17 @@ function addPhoneSurface() {
     <label class="check"><input type="checkbox" data-local-cap="world.eye">Allow local agent to change this Eye</label>
     <button id="phoneRefreshTools">Refresh Android Companion grants</button><pre id="phoneAgentTools" class="muted" aria-live="polite"></pre>
     <p class="muted">Native camera permission, accessibility, notifications, files and projection are controlled in the Companion. Accessibility actions remain user-revocable; passwords are never returned or logged.</p>`;
+  const fieldHeading = [...sheet.querySelectorAll('h3')].find(node => node.textContent.includes('Information field + plane atlas'));
+  if (fieldHeading) {
+    fieldHeading.previousElementSibling?.remove();
+    let node = fieldHeading;
+    while (node) {
+      const next = node.nextElementSibling;
+      if (node.tagName === 'HR' && next?.textContent.includes('Canonical authority')) break;
+      node.remove();
+      node = next;
+    }
+  }
   $('panel')?.append(sheet);
   document.querySelectorAll('[data-local-cap]').forEach(input => { input.checked = localGrants().includes(input.dataset.localCap); input.addEventListener('change', updateLocalGrants); });
   $('phoneEyeSelect').onchange = () => engine?.selectEye($('phoneEyeSelect').value).catch(error => status(error.message));
@@ -661,17 +701,17 @@ function addPhoneSurface() {
     const envelope = await engine.snapshot(), blob = new Blob([JSON.stringify(envelope, null, 2)], { type: 'application/json' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${envelope.snapshot.worldId}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 30000);
   };
-  $('phoneStartHands').onclick = () => startCameraFromButton({ facing: 'user', start: startPhoneCamera, status, activeMessage: 'Two-hand tracking active ? local worker ? camera frames stay on this phone.' });
-  $('phoneStartBackHands').onclick = () => startCameraFromButton({ facing: 'environment', start: startPhoneCamera, status, activeMessage: 'Rear camera ? two-hand tracking active locally.' });
+  $('phoneStartHands').onclick = () => startCameraFromButton({ facing: 'user', start: startPhoneCamera, status, activeMessage: 'Two-hand tracking active · local worker · camera frames stay on this phone.' });
+  $('phoneStartBackHands').onclick = () => startCameraFromButton({ facing: 'environment', start: startPhoneCamera, status, activeMessage: 'Rear camera · two-hand tracking active locally.' });
   $('phoneStopHands').onclick = () => { stopPhoneCamera(); status('Camera stopped. Touch controls remain available.'); };
-  $('phoneProject').onclick = async () => { try { const result = await projection.start(); $('phoneProjectionState').textContent = `Projection route: ${result.route} ? camera track ${result.cameraTrack}. OS/browser may pause camera when the page is backgrounded.`; } catch (error) { $('phoneProjectionState').textContent = `${error.message} The camera remains local; touch still works.`; } };
+  $('phoneProject').onclick = async () => { try { const result = await projection.start(); $('phoneProjectionState').textContent = `Projection route: ${result.route} · camera track ${result.cameraTrack}. OS/browser may pause camera when the page is backgrounded.`; } catch (error) { $('phoneProjectionState').textContent = `${error.message} The camera remains local; touch still works.`; } };
   $('phoneStopProject').onclick = () => { projection.stop(); $('phoneProjectionState').textContent = 'Projection mode stopped; camera can continue until you stop it.'; };
   const refreshFieldControls = () => updateFieldWorld(fieldEnvelope);
   $('phoneFieldQuery').oninput = refreshFieldControls;
   $('phoneFieldThreshold').oninput = refreshFieldControls;
   $('phoneFieldLayout').onchange = refreshFieldControls;
   for (const id of ['phoneFieldAxisA', 'phoneFieldAxisB', 'phoneFieldAxisC']) $(id).onchange = refreshFieldControls;
-  $('phoneFieldEntity').onchange = event => { if (fieldWorld?.commitCandidate()?.entityId !== event.target.value) fieldWorld?.discardPreview(); selectedId = event.target.value; R.selected = selectedId; refreshFieldControls(); };
+  $('phoneFieldEntity').onchange = event => { selectPhoneEntity(event.target.value, { announce: true }); };
   $('phoneFieldPreviewMove').onclick = () => {
     try { fieldWorld.previewMove(fieldEntityId(), Number($('phoneAxis').value || 0), 0.14); updateFieldWorld(); $('phoneFieldApply').disabled = false; $('phoneFieldDiscard').disabled = false; }
     catch (error) { status(error.message); }
@@ -739,7 +779,7 @@ function addPhoneSurface() {
     try { const result = await authority.commit(); updatePhoneAuthorityUI(); status(result.reason || (result.status === 'accepted' ? 'Canonical commit accepted.' : 'Canonical commit rejected.')); }
     catch (error) { updatePhoneAuthorityUI(); status(`Canonical commit failed: ${error.message}`); }
   };
-  projection.addEventListener('change', event => { $('phoneProjectionState').textContent = `Projection ${event.detail.type} ? ${event.detail.route} ? camera ${event.detail.cameraTrack} ? frames uploaded: no`; });
+  projection.addEventListener('change', event => { $('phoneProjectionState').textContent = `Projection ${event.detail.type} · ${event.detail.route} · camera ${event.detail.cameraTrack} · frames uploaded: no`; });
   bridge.addEventListener('ready', refreshNativeTools);
   bridge.addEventListener('message', event => {
     if (event.detail.kind === 'tools') { const tools = hostToolCaps(event.detail); updateAgentList(tools); }
@@ -762,7 +802,7 @@ function openPhonePanel() {
   refreshSnapshot().catch(error => status(error.message));
 }
 async function startLocal() {
-  if (engine) { localMode = true; updateLocalGrants(); document.body.classList.add('phone-local'); const state = await engine.snapshot(); renderedSnapshot = snapshotMarker(state); renderEye(state); await authority?.syncLocal(state); updatePhoneAuthorityUI(); openPhonePanel(); return; }
+  if (engine) { localMode = true; updateLocalGrants(); document.body.classList.add('phone-local'); const state = await engine.snapshot(); renderedSnapshot = snapshotMarker(state); renderEye(state); await authority?.syncLocal(state); updatePhoneAuthorityUI(); return; }
   status("Starting the local worker and opening this phone’s saved Vivo world…");
   engine = new PhoneEngineClient();
   engine.addEventListener('statechange', event => {
@@ -780,11 +820,10 @@ async function startLocal() {
   localMode = true; updateLocalGrants(); document.body.classList.add('phone-local'); renderedSnapshot = snapshotMarker(state); renderEye(state);
   $('welcome').hidden = true; $('toolbar').hidden = false;
   const caps = await detectPhoneCapabilities(); latestCapabilities = caps;
-  $('phoneEngineState').textContent = `Worker ready ? ${caps.webgpu ? 'WebGPU available' : caps.webgl2 ? 'WebGL2 renderer' : 'Canvas renderer'} ? ${caps.wasm ? 'WASM-ready' : 'JS fallback'} ? sparse ${state.snapshot.spaces.root.dimension}D root / ${state.snapshot.spaces.inner.dimension}D nested ? IndexedDB ${caps.indexedDb ? 'available' : 'unavailable'}.`;
-  $('phoneCapabilityState').textContent = `Browser capabilities: ${Object.entries(caps).filter(([, value]) => value === true).map(([name]) => name).join(' ? ') || 'touch only'}. Graphics capability is detected independently from the sparse worker solver.`;
+  $('phoneEngineState').textContent = `Worker ready · ${caps.webgpu ? 'WebGPU available' : caps.webgl2 ? 'WebGL2 renderer' : 'Canvas renderer'} · ${caps.wasm ? 'WASM-ready' : 'JS fallback'} · sparse ${state.snapshot.spaces.root.dimension}D root / ${state.snapshot.spaces.inner.dimension}D nested · IndexedDB ${caps.indexedDb ? 'available' : 'unavailable'}.`;
+  $('phoneCapabilityState').textContent = `Browser capabilities: ${Object.entries(caps).filter(([, value]) => value === true).map(([name]) => name).join(' · ') || 'touch only'}. Graphics capability is detected independently from the sparse worker solver.`;
   if (bridge.available) await refreshNativeTools().catch(() => {});
-  status('LOCAL VIVO ? same persistent objects ? independent Eye ? no server required.');
-  openPhonePanel();
+  status('LOCAL VIVO · same persistent objects · independent Eye · no server required.');
 }
 async function forkPhoneOffline(label) {
   fenceHandEdits('offline-fork');
@@ -794,7 +833,7 @@ async function refreshNativeTools() {
   if (!bridge.available) { $('phoneCapabilityState').textContent = 'Android Companion not connected. Browser engine, storage, camera and touch remain available.'; updateAgentList(); return; }
   try {
     const result = await bridge.listTools(); const tools = hostToolCaps(result); updateAgentList(tools);
-    $('phoneCapabilityState').textContent = `Android Companion connected ? ${tools.length} granted native tools. Capability status is OS-checked; frames are never in the bridge.`;
+    $('phoneCapabilityState').textContent = `Android Companion connected · ${tools.length} granted native tools. Capability status is OS-checked; frames are never in the bridge.`;
   } catch (error) { $('phoneCapabilityState').textContent = `Android Companion bridge unavailable: ${error.message}`; }
 }
 async function installOffline() {
@@ -804,10 +843,10 @@ async function installOffline() {
     const ready = await navigator.serviceWorker.ready;
     if (!ready.active) throw new Error('Offline shell service worker did not become active.');
     const shellUrl = STATIC_PHONE_ROUTE ? new URL('./index.html', import.meta.url) : new URL('../index.html', import.meta.url);
-    const shell = await (await caches.open('vivo-phone-shell-2026-10-11-v2')).match(shellUrl);
+    const shell = await (await caches.open('vivo-phone-shell-2026-10-12-v3')).match(shellUrl);
     if (!shell) throw new Error('Offline shell cache did not finish installing.');
     const persisted = await navigator.storage?.persist?.().catch(() => false);
-    $('phoneEngineState').textContent = `Offline shell ready ? service worker active ? persistent storage ${persisted ? 'granted' : 'not granted by browser'}.`;
+    $('phoneEngineState').textContent = `Offline shell ready · service worker active · persistent storage ${persisted ? 'granted' : 'not granted by browser'}.`;
     status('Offline app shell cached. The large hand model is optional and cached separately.');
   } catch (error) { status(`Offline install unavailable: ${error.message}`); }
 }
@@ -849,7 +888,7 @@ function previewObjectTouchGesture(objectId) {
   const gesture = touchGestures.get(objectId), dimension = S.state?.geometry?.dimension || 4;
   const preview = interactionFabric?.preview(objectId, dimension, { sourceKinds: ['touch'] }) || null;
   if (gesture) gesture.lastPreview = preview;
-  if (preview) status(`LOCAL PROVISIONAL ? ${objectId} ? ${preview.contactCount} contact(s) ? translation ${preview.translation.map(value => value.toFixed(2)).join(',')} ? release to apply or cancel to discard`);
+  if (preview) status(`LOCAL PROVISIONAL · ${objectId} · ${preview.contactCount} contact(s) · translation ${preview.translation.map(value => value.toFixed(2)).join(',')} · release to apply or cancel to discard`);
   return preview;
 }
 function releaseObjectTouchContacts(objectId, reason) {
@@ -870,7 +909,7 @@ function cancelObjectTouchGesture(objectId, reason = 'touch-cancel') {
   releaseObjectTouchContacts(objectId, reason);
   touchGestures.delete(objectId);
   interactionFabric?.clearObjectAggregate(objectId);
-  status(`LOCAL PROVISIONAL DISCARDED ? ${objectId} ? ${reason}`);
+  status(`LOCAL PROVISIONAL DISCARDED · ${objectId} · ${reason}`);
 }
 async function commitObjectTouchGesture(objectId, preview) {
   const gesture = touchGestures.get(objectId);
@@ -886,7 +925,7 @@ async function commitObjectTouchGesture(objectId, preview) {
       operationId: gesture.operationId,
     });
     await refreshSnapshot();
-    status(`${result?.replayed ? 'LOCAL PROVISIONAL REPLAY ACKNOWLEDGED' : 'LOCAL PROVISIONAL APPLIED'} ? ${objectId} ? canonical authority was not contacted.`);
+    status(`${result?.replayed ? 'LOCAL PROVISIONAL REPLAY ACKNOWLEDGED' : 'LOCAL PROVISIONAL APPLIED'} · ${objectId} · canonical authority was not contacted.`);
     return result;
   } finally {
     interactionFabric?.clearObjectAggregate(objectId);
@@ -904,7 +943,7 @@ canvas.addEventListener('pointerdown', event => {
     const gesture = beginObjectTouchGesture(target);
     interactionFabric?.begin({ contactId, source: { kind: 'touch', id: String(event.pointerId) }, objectId: target, gesture: 'touch', canonicalPoint: record.canonicalPoint });
     gesture?.contacts.add(contactId);
-    selectedId = target; R.selected = target; status('Selected ' + (S.state.entities[target]?.name || target));
+    selectPhoneEntity(target, { announce: true });
   } else if (pointerContacts.size > 1) {
     const entries = [...pointerContacts.values()].filter(item => !item.target);
     if (entries.length > 1) {
@@ -954,7 +993,7 @@ const pointerEnd = event => {
       if (!objectTouchRecords(objectId).length) {
         touchGestures.delete(objectId);
         interactionFabric?.clearObjectAggregate(objectId);
-        status(`LOCAL PROVISIONAL DISCARDED ? ${objectId} ? ${reason}`);
+        status(`LOCAL PROVISIONAL DISCARDED · ${objectId} · ${reason}`);
       } else previewObjectTouchGesture(objectId);
     } else {
       const objectId = record.target;
@@ -977,7 +1016,11 @@ for (const name of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.
 window.VivaAgentTools = Object.freeze({ list: () => registry.list(), invoke: (name, args) => registry.invoke(name, args), revokeAll: () => registry.revokeAll(), audit: () => structuredClone(registry.audit) });
 window.VivaPhoneEngine = Object.freeze({
   get active() { return !!engine && localMode; }, get available() { return browserCapabilities.worker; },
-  snapshot: () => engine?.snapshot(), translate: (...args) => engine?.translate(...args), applyLocalEdit: (...args) => engine?.applyLocalEdit(...args), setEye: patch => engine?.setEye(patch),
+  // Keep the public read paired with the rendered field-world envelope. A
+  // direct worker snapshot can be newer than the preview model while the
+  // sparse solver is still stepping, which makes an active preview appear to
+  // drift from the coordinate it is actually based on.
+  snapshot: () => refreshSnapshot({ externalSnapshot: true }), translate: (...args) => engine?.translate(...args), applyLocalEdit: (...args) => engine?.applyLocalEdit(...args), setEye: patch => engine?.setEye(patch),
   forkOffline: label => forkPhoneOffline(label), startCamera: (facing = 'user') => startPhoneCamera(facing), stopCamera: stopPhoneCamera,
   authority: () => authority?.debug() || null,
   connectAuthority: options => authority?.connect(options), readAuthority: () => authority?.read(),

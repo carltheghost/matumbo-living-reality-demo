@@ -70,6 +70,55 @@ def main(base_url: str) -> None:
         assert initial["atlas"] > 100
         assert not any(url.rstrip("/").endswith("/readyz") for url in requests), requests
 
+        page.get_by_role("button", name="Preview move").click()
+        page.wait_for_function(
+            "window.VivaPhoneEngine.fieldWorld().preview && window.VivaPhoneEngine.fieldWorld().preview.entityId === 'relic'"
+        )
+        workpiece_point = page.evaluate(
+            "() => { const point = window.VivaShared.R.screen.find(item => item.id === 'workpiece'); return {x: point.x, y: point.y}; }"
+        )
+        page.mouse.click(workpiece_point["x"], workpiece_point["y"])
+        page.wait_for_function(
+            "document.querySelector('#phoneFieldEntity').value === 'workpiece' && !window.VivaPhoneEngine.fieldWorld().preview"
+        )
+        retargeted = page.evaluate(
+            "() => ({selected: document.querySelector('#phoneFieldEntity').value, rendererSelected: window.VivaShared.R.selected, applyDisabled: document.querySelector('#phoneFieldApply').disabled})"
+        )
+        assert retargeted == {"selected": "workpiece", "rendererSelected": "workpiece", "applyDisabled": True}, retargeted
+        page.get_by_role("button", name="Preview move").click()
+        page.wait_for_function(
+            "window.VivaPhoneEngine.fieldWorld().preview && window.VivaPhoneEngine.fieldWorld().preview.entityId === 'workpiece'"
+        )
+        page.get_by_role("button", name="Discard preview").click()
+        page.wait_for_function("!window.VivaPhoneEngine.fieldWorld().preview")
+        page.select_option("#phoneFieldEntity", "relic")
+        page.wait_for_function("document.querySelector('#phoneFieldEntity').value === 'relic'")
+
+        mobile_context = browser.new_context(viewport={"width": 390, "height": 844})
+        mobile_context.set_default_timeout(7000)
+        mobile_context.add_init_script(camera_init_script)
+        mobile_page = mobile_context.new_page()
+        mobile_page.goto(route, wait_until="domcontentloaded")
+        mobile_page.wait_for_selector("#enterPhoneLocal")
+        mobile_page.get_by_role("button", name="Enter local Vivo").click()
+        mobile_page.wait_for_function("Boolean(window.VivaPhoneEngine && window.VivaPhoneEngine.active)")
+        mobile_page.wait_for_function("document.querySelector('#phoneFieldStatus').textContent.includes('coordinate planes')")
+        mobile_actions = mobile_page.evaluate(
+            """
+            () => {
+              const dock = document.querySelector('#phoneFieldDock').getBoundingClientRect();
+              const actions = document.querySelector('.field-actions').getBoundingClientRect();
+              const apply = document.querySelector('#phoneFieldApply').getBoundingClientRect();
+              return {dockTop: dock.top, dockBottom: dock.bottom, actionsTop: actions.top, actionsBottom: actions.bottom, applyTop: apply.top, applyWidth: apply.width};
+            }
+            """
+        )
+        assert mobile_actions["actionsTop"] >= mobile_actions["dockTop"]
+        assert mobile_actions["actionsBottom"] <= mobile_actions["dockBottom"]
+        assert mobile_actions["applyTop"] >= mobile_actions["actionsTop"]
+        assert mobile_actions["applyWidth"] > 0, mobile_actions
+        mobile_context.close()
+
         before_layout = page.locator("#phoneFieldAtlas").evaluate("node => node.toDataURL()")
         page.select_option("#phoneFieldLayout", "ring")
         page.wait_for_timeout(50)
@@ -79,6 +128,11 @@ def main(base_url: str) -> None:
         page.wait_for_timeout(50)
         changed_axis = page.locator("#phoneFieldAtlas").evaluate("node => node.toDataURL()")
         assert changed_axis != ring_layout, "Eye-axis selection must change the rendered atlas"
+        page.fill("#phoneFieldQuery", "memory")
+        page.wait_for_timeout(50)
+        query_atlas = page.locator("#phoneFieldAtlas").evaluate("node => node.toDataURL()")
+        assert query_atlas != changed_axis, "Information query must change the rendered field"
+        page.fill("#phoneFieldQuery", "")
 
         page.get_by_role("button", name="Preview turn").click()
         page.wait_for_timeout(50)
@@ -436,6 +490,7 @@ def main(base_url: str) -> None:
         assert final["currentRevision"] >= final["acceptedRevision"], final
         assert final["q"][0] != initial["q"][0]
         assert final["cameraCalls"] == 0
+        page.get_by_role("button", name="Advanced").click()
         page.get_by_role("button", name="Install offline shell").click()
         page.wait_for_function("document.querySelector('#phoneEngineState').textContent.includes('service worker active')")
         page.reload(wait_until="domcontentloaded")
@@ -446,9 +501,9 @@ def main(base_url: str) -> None:
         reopened.on("pageerror", lambda error: page_errors.append(str(error)))
         offline_response = reopened.goto(route, wait_until="domcontentloaded")
         assert offline_response is not None and offline_response.status == 200, offline_response
-        reopened.wait_for_selector("text=SHARED WORKSHOP")
+        reopened.wait_for_selector("text=LOCAL FIELD / VIVO WORLD")
         offline = reopened.evaluate(
-            "() => ({controlled: Boolean(navigator.serviceWorker.controller), hasCanonicalContent: document.body.innerText.includes('SHARED WORKSHOP'), route: location.pathname})"
+            "() => ({controlled: Boolean(navigator.serviceWorker.controller), hasCanonicalContent: document.body.innerText.includes('LOCAL FIELD / VIVO WORLD'), route: location.pathname})"
         )
         assert offline["controlled"] is True
         assert offline["hasCanonicalContent"] is True
