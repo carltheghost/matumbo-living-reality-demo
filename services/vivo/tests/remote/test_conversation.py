@@ -222,6 +222,29 @@ class ConversationAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(first_result, second_result)
         self.assertEqual(len(provider.calls), 1)
 
+    async def test_duplicate_waiter_cancellation_does_not_cancel_owner(self):
+        provider = MockProvider([{"output_text": "owner response"}], wait_first=True)
+        adapter = ConversationAdapter(self.config(timeout_seconds=2), provider=provider)
+        owner = asyncio.create_task(self.ask(adapter, request_id="owner.1"))
+        await provider.first_called.wait()
+        duplicate = asyncio.create_task(self.ask(adapter, request_id="owner.1"))
+        state = next(iter(adapter.store._states.values()))
+        for _ in range(20):
+            waiters = getattr(state.turn_lock, "_waiters", ()) or ()
+            if len(waiters) >= 1:
+                break
+            await asyncio.sleep(0)
+        else:
+            self.fail("duplicate request did not reach the turn-lock queue")
+        duplicate.cancel("selection-changed")
+        with self.assertRaises(asyncio.CancelledError):
+            await duplicate
+        provider.release_first.set()
+        owner_result = await owner
+        replay = await self.ask(adapter, request_id="owner.1")
+        self.assertEqual(replay, owner_result)
+        self.assertEqual(len(provider.calls), 1)
+
     async def test_unexpected_provider_failure_is_redacted_and_not_retried(self):
         class BrokenProvider:
             def __init__(self):
@@ -434,6 +457,55 @@ class ConversationAdapterTests(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(stale_error.exception.code, "STALE_GENERATION")
         self.assertEqual(len(provider.calls), 2)
+
+    async def test_fenced_replay_bypasses_capacity_while_other_slot_is_locked(self):
+        class BlockSecondProvider:
+            def __init__(self):
+                self.calls = []
+                self.second_called = asyncio.Event()
+                self.release_second = asyncio.Event()
+
+            async def complete(self, payload, correlation_id):
+                self.calls.append((payload, correlation_id))
+                if len(self.calls) == 2:
+                    self.second_called.set()
+                    await self.release_second.wait()
+                return {"output_text": f"reply-{len(self.calls)}"}
+
+        provider = BlockSecondProvider()
+        adapter = ConversationAdapter(
+            self.config(max_conversations=1, requests_per_minute=100, timeout_seconds=2),
+            provider=provider,
+        )
+        first = await self.ask(
+            adapter,
+            session_id="saturated-a",
+            request_id="saturated.1",
+            generation=1,
+            text="first",
+            world_value=world("saturated-a"),
+        )
+        pending = asyncio.create_task(self.ask(
+            adapter,
+            session_id="saturated-b",
+            request_id="saturated-b.1",
+            generation=1,
+            text="second",
+            world_value=world("saturated-b"),
+        ))
+        await provider.second_called.wait()
+        replay = await self.ask(
+            adapter,
+            session_id="saturated-a",
+            request_id="saturated.1",
+            generation=1,
+            text="first",
+            world_value=world("saturated-a"),
+        )
+        self.assertEqual(replay, first)
+        self.assertEqual(len(provider.calls), 2)
+        provider.release_second.set()
+        await pending
 
 
 class ConversationRouteTests(unittest.IsolatedAsyncioTestCase):

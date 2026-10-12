@@ -369,6 +369,8 @@ class ConversationState:
     # out of the bounded cache.
     latest_generation: int = -1
     active_request_id: str | None = None
+    active_fingerprint: str | None = None
+    active_owner: object | None = None
     last_used: float = field(default_factory=time.monotonic)
     state_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     turn_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
@@ -382,6 +384,7 @@ class ConversationFence:
     idempotency: OrderedDict[str, tuple[str, CachedOutcome]]
     latest_generation: int
     active_request_id: str | None
+    active_fingerprint: str | None
     last_used: float
 
 
@@ -405,6 +408,7 @@ class ConversationStore:
             idempotency=state.idempotency,
             latest_generation=state.latest_generation,
             active_request_id=state.active_request_id,
+            active_fingerprint=state.active_fingerprint,
             last_used=state.last_used,
         )
         self._fences.move_to_end(key)
@@ -452,6 +456,7 @@ class ConversationStore:
                 idempotency=saved.idempotency,
                 latest_generation=saved.latest_generation,
                 active_request_id=saved.active_request_id,
+                active_fingerprint=saved.active_fingerprint,
                 last_used=time.monotonic(),
             )
             self._states[key] = state
@@ -469,6 +474,24 @@ class ConversationStore:
 
     def fence_count(self) -> int:
         return len(self._fences)
+
+    def fenced_cached_outcome(
+        self,
+        identity: str,
+        scope: tuple[str, ...],
+        request_id: str,
+    ) -> tuple[str, CachedOutcome] | None:
+        """Return a known fence outcome without allocating an active slot."""
+
+        key = (identity, scope)
+        fence = self._fences.get(key)
+        if fence is None:
+            return None
+        cached = fence.idempotency.get(request_id)
+        if cached is not None:
+            fence.last_used = time.monotonic()
+            self._fences.move_to_end(key)
+        return cached
 
 
 class RateLimiter:
@@ -543,6 +566,8 @@ class ConversationAdapter:
             state.idempotency.popitem(last=False)
         if state.active_request_id == request_id:
             state.active_request_id = None
+            state.active_fingerprint = None
+            state.active_owner = None
         state.last_used = time.monotonic()
 
     async def _remember_failure(
@@ -584,6 +609,7 @@ class ConversationAdapter:
         state: ConversationState,
         request_id: str,
         fingerprint: str,
+        owns_turn: bool,
     ):
         acquired = False
         try:
@@ -594,8 +620,9 @@ class ConversationAdapter:
             except asyncio.CancelledError:
                 # This also covers cancellation while queued behind another
                 # provider turn, before the body reaches its inner handler.
-                failure = ConversationError("CONVERSATION_CANCELLED", 499)
-                await self._remember_failure(state, request_id, fingerprint, failure)
+                if owns_turn:
+                    failure = ConversationError("CONVERSATION_CANCELLED", 499)
+                    await self._remember_failure(state, request_id, fingerprint, failure)
                 raise
         finally:
             if acquired:
@@ -660,7 +687,6 @@ class ConversationAdapter:
             world["spaceId"],
             companion["id"] or "",
         )
-        state = self.store.get_or_create(identity, scope)
         fingerprint = hashlib.sha256(
             json.dumps(
                 {
@@ -675,12 +701,28 @@ class ConversationAdapter:
                 separators=(",", ":"),
             ).encode("utf-8")
         ).hexdigest()
+        fenced = self.store.fenced_cached_outcome(identity, scope, request_id)
+        if fenced is not None:
+            if fenced[0] != fingerprint:
+                raise ConversationError("REQUEST_ID_REUSED")
+            # Authentication, request validation, and scope construction have
+            # already completed. A known cached reply needs no active slot,
+            # even when all current slots are locked by provider turns.
+            return self._replay_cached(fenced)
+        state = self.store.get_or_create(identity, scope)
+        admission_owner = object()
+        owns_turn = False
         async with state.state_lock:
             cached = state.idempotency.get(request_id)
             if cached is not None:
                 if cached[0] != fingerprint:
                     raise ConversationError("REQUEST_ID_REUSED")
                 return self._replay_cached(cached)
+            if (
+                state.active_request_id == request_id
+                and state.active_fingerprint != fingerprint
+            ):
+                raise ConversationError("REQUEST_ID_REUSED")
             if generation < state.latest_generation:
                 raise ConversationError("STALE_GENERATION", 409)
             if generation == state.latest_generation and state.active_request_id != request_id:
@@ -691,7 +733,16 @@ class ConversationAdapter:
                 self.rate.allow(identity)
                 state.latest_generation = generation
                 state.active_request_id = request_id
-        async with self._turn_scope(state, request_id, fingerprint):
+                state.active_fingerprint = fingerprint
+                state.active_owner = admission_owner
+                owns_turn = True
+            elif state.active_owner is None:
+                # A restored state may retain an admitted request after a
+                # pre-provider construction failure. This invocation can
+                # safely resume ownership; a live duplicate cannot.
+                state.active_owner = admission_owner
+                owns_turn = True
+        async with self._turn_scope(state, request_id, fingerprint, owns_turn):
             async with state.state_lock:
                 cached = state.idempotency.get(request_id)
                 if cached is not None:
@@ -703,6 +754,8 @@ class ConversationAdapter:
                     and state.active_request_id != request_id
                 ):
                     raise ConversationError("STALE_GENERATION", 409)
+                if not owns_turn:
+                    raise ConversationError("REQUEST_NOT_REPLAYABLE", 409)
                 history = list(state.history)
             payload = build_provider_payload(history, message, companion, world, self.config)
             correlation_id = "vivo-" + hashlib.sha256(
@@ -715,7 +768,11 @@ class ConversationAdapter:
                 )
                 text = parse_provider_response(raw, max_chars=self.config.max_output_chars)
                 async with state.state_lock:
-                    if generation != state.latest_generation or state.active_request_id != request_id:
+                    if (
+                        generation != state.latest_generation
+                        or state.active_request_id != request_id
+                        or state.active_owner is not admission_owner
+                    ):
                         failure = ConversationError("STALE_GENERATION", 409)
                         self._remember_outcome_locked(
                             state,
