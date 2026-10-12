@@ -71,8 +71,10 @@ jobs:
           container="vivo-remote-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           volume="vivo-remote-ci-data-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           port=18768
-          origin="http://127.0.0.1:${port}"
-          # Deliberately nonsecret, ephemeral fixture capability. It is never
+          container_port=8768
+          origin="https://127.0.0.1:${port}"
+          fixture_dir="$(mktemp -d)"
+          # Deliberately nonsecret, ephemeral fixture material. It is never
           # persisted, uploaded, or used outside this runner-local container.
           owner_token='ci-fixture-owner-0123456789abcdef0123456789'
           result=0
@@ -86,35 +88,63 @@ jobs:
               docker rm -f "$container" >/dev/null 2>&1 || true
             fi
             docker volume rm "$volume" >/dev/null 2>&1 || true
+            rm -rf "$fixture_dir"
             exit "$result"
           }
           trap cleanup EXIT
 
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+            -keyout "$fixture_dir/ca.key" -out "$fixture_dir/ca.pem" \
+            -subj '/CN=Vivo CI CA' >/dev/null 2>&1
+          openssl req -new -newkey rsa:2048 -nodes \
+            -keyout "$fixture_dir/server.key" -out "$fixture_dir/server.csr" \
+            -subj '/CN=vivo-remote' >/dev/null 2>&1
+          printf '%s\n' 'subjectAltName=DNS:vivo-remote,IP:127.0.0.1' \
+            > "$fixture_dir/server.ext"
+          openssl x509 -req -in "$fixture_dir/server.csr" \
+            -CA "$fixture_dir/ca.pem" -CAkey "$fixture_dir/ca.key" -CAcreateserial \
+            -out "$fixture_dir/server.pem" -days 1 -sha256 \
+            -extfile "$fixture_dir/server.ext" >/dev/null 2>&1
+          # The image runs as UID 10001; these files are disposable CI fixtures,
+          # not credentials, so the mounted key must be readable by that UID.
+          chmod 0644 "$fixture_dir"/*
+
+          docker run --rm --network none --entrypoint caddy \
+            --env VIVA_DOMAIN=remote.example.test \
+            --mount "type=bind,src=${GITHUB_WORKSPACE}/services/vivo/Caddyfile.remote,dst=/etc/caddy/Caddyfile,readonly" \
+            --mount "type=bind,src=${fixture_dir}/ca.pem,dst=/run/secrets/vivo_backend_ca,readonly" \
+            caddy:2 validate --config /etc/caddy/Caddyfile --adapter caddyfile
+
           docker volume create "$volume" >/dev/null
-          # Host networking is restricted to the loopback bind below; no -p
-          # mapping or public listener is created by this smoke test.
-          docker run --detach --name "$container" --init --network host \
+          # Publish only the runner loopback. The service itself exercises the
+          # production non-loopback TLS bind; no public listener is created.
+          docker run --detach --name "$container" --init \
+            --publish "127.0.0.1:${port}:${container_port}" \
             --mount "type=volume,src=${volume},dst=/data" \
+            --mount "type=bind,src=${fixture_dir},dst=/run/fixture,readonly" \
             --env VIVO_OWNER_TOKEN="$owner_token" \
             --env OPENAI_API_KEY= \
             "$image" \
-            --host 127.0.0.1 --port "$port" --data-dir /data \
-            --origin "$origin" --store posix --allow-insecure-loopback >/dev/null
+            --host 0.0.0.0 --port "$container_port" --data-dir /data \
+            --origin "$origin" --store posix \
+            --cert /run/fixture/server.pem --key /run/fixture/server.key >/dev/null
 
-          python - "$origin" "$owner_token" <<'PY'
+          python - "$origin" "$owner_token" "$fixture_dir/ca.pem" <<'PY'
           import json
+          import ssl
           import sys
           import time
           from urllib.error import HTTPError
           from urllib.request import Request, urlopen
 
-          origin, owner = sys.argv[1:]
+          origin, owner, ca_file = sys.argv[1:]
+          context = ssl.create_default_context(cafile=ca_file)
           health_url = origin + '/healthz'
           deadline = time.monotonic() + 90
           last = None
           while time.monotonic() < deadline:
               try:
-                  with urlopen(health_url, timeout=3) as response:
+                  with urlopen(health_url, context=context, timeout=3) as response:
                       body = json.load(response)
                   if response.status == 200 and body.get('ok') is True:
                       break
@@ -127,7 +157,7 @@ jobs:
 
           headers = {'Origin': origin, 'Authorization': 'Bearer ' + owner}
           status_request = Request(origin + '/api/conversation/status', headers=headers)
-          with urlopen(status_request, timeout=5) as response:
+          with urlopen(status_request, context=context, timeout=5) as response:
               status = json.load(response)
           assert status['available'] is False, status
           assert status['reason'] == 'provider-not-configured', status
@@ -137,7 +167,7 @@ jobs:
               origin + '/api/conversation/respond', data=body,
               headers={**headers, 'Content-Type': 'application/json'}, method='POST')
           try:
-              urlopen(respond_request, timeout=5)
+              urlopen(respond_request, context=context, timeout=5)
           except HTTPError as error:
               assert error.code == 503, error
               response = json.load(error)

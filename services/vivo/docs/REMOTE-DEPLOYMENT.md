@@ -17,11 +17,14 @@ The deployment has two containers:
 
 * `vivo-remote` is built from `Dockerfile.remote`. It contains Node 24.19.x,
   Python, the existing remote launcher, the authority, the allowlisted browser
-  modules, and the exact research mailbox dependency. Its port 8768 is exposed
-  only on the Compose network.
+  modules, and the exact research mailbox dependency. It binds `0.0.0.0:8768`
+  with the operator-provided backend certificate and key, and its port 8768 is
+  exposed only on the Compose network.
 * `https` is the only public listener. Caddy terminates HTTPS, obtains and
   renews the certificate for `VIVA_DOMAIN`, and reverse-proxies HTTP,
-  WebSocket, and conversation requests to `vivo-remote:8768`.
+  WebSocket, and conversation requests over a separately authenticated HTTPS
+  hop to `vivo-remote:8768`. Caddy trusts only the supplied backend CA and
+  verifies the backend name `vivo-remote`.
 
 No hosting account, DNS record, certificate, volume, credential, or public
 endpoint is created by this repository change.
@@ -36,6 +39,12 @@ starting the service:
   `VIVA_PUBLIC_ORIGIN` must be exactly `https://` plus that hostname, with no
   path and no trailing slash. A mismatch is an origin failure, not a supported
   fallback.
+* `VIVO_BACKEND_CERT_FILE`, `VIVO_BACKEND_KEY_FILE`, and
+  `VIVO_BACKEND_CA_FILE` point to secret-managed files. The backend certificate
+  must be signed by the supplied CA and include `vivo-remote` as a DNS SAN and
+  `127.0.0.1` as an IP SAN for the container healthcheck. Caddy uses that CA
+  and name for its private HTTPS hop. Do not replace this with
+  `tls_insecure_skip_verify` or an HTTP backend.
 * `VIVO_OWNER_TOKEN` is the existing remote owner capability and must contain
   at least 32 random characters. The operator must generate and rotate it in a
   secret manager. The image and launcher never generate, print, or persist it.
@@ -73,9 +82,10 @@ without a local env file.
 ## Health and graceful shutdown
 
 `vivo-remote` is healthy only when the Python gateway and its private Node
-authority are ready. The Compose healthcheck polls `http://127.0.0.1:8768/healthz`;
-the Caddy healthcheck validates the loaded Caddyfile. From an authorized host,
-the public probe is:
+authority are ready. Its Compose healthcheck polls
+`https://127.0.0.1:8768/healthz` with the supplied backend CA; the Caddy
+healthcheck validates the loaded Caddyfile. From an authorized host, the public
+probe is:
 
 ```sh
 curl --fail https://YOUR-REMOTE-HOST.example/healthz

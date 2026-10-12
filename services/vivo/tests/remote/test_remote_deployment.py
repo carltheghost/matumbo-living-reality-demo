@@ -2,11 +2,17 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import shutil
+import socket
+import ssl
 import subprocess
+import sys
 import tempfile
+import time
 import unittest
+from urllib.request import Request, urlopen
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -25,6 +31,12 @@ class RemoteDeploymentContractTests(unittest.TestCase):
         self.assertIn("context: ../..", remote)
         self.assertIn("- --origin", remote)
         self.assertIn("${VIVA_PUBLIC_ORIGIN:?Set the exact public HTTPS origin}", remote)
+        self.assertIn("--cert", remote)
+        self.assertIn("/run/secrets/vivo_backend_cert", remote)
+        self.assertIn("--key", remote)
+        self.assertIn("/run/secrets/vivo_backend_key", remote)
+        self.assertIn("https://127.0.0.1:8768/healthz", remote)
+        self.assertIn("cafile='/run/secrets/vivo_backend_ca'", remote)
         self.assertIn('expose:\n      - "8768"', remote)
         self.assertNotIn("\n    ports:", remote)
         self.assertIn("vivo-remote-data:/data", remote)
@@ -68,9 +80,128 @@ class RemoteDeploymentContractTests(unittest.TestCase):
     def test_caddy_and_launcher_contracts_are_explicit(self):
         caddy = CADDYFILE.read_text()
         self.assertIn("{$VIVA_DOMAIN}", caddy)
-        self.assertIn("reverse_proxy vivo-remote:8768", caddy)
+        self.assertIn("reverse_proxy https://vivo-remote:8768", caddy)
+        self.assertIn("tls_trust_pool file /run/secrets/vivo_backend_ca", caddy)
+        self.assertIn("tls_server_name vivo-remote", caddy)
         subprocess.run(["sh", "-n", str(LAUNCHER)], check=True)
         self.assertIn("VIVO_OWNER_TOKEN", LAUNCHER.read_text())
+
+    @unittest.skipUnless(
+        shutil.which("openssl") and shutil.which("node"),
+        "OpenSSL and Node.js are required for the TLS startup fixture",
+    )
+    def test_tls_bound_recipe_server_starts_and_stops(self):
+        """Exercise the same non-loopback TLS binding used by Compose."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            data_dir = root / "data"
+            data_dir.mkdir()
+            ca_key = root / "ca.key"
+            ca_cert = root / "ca.pem"
+            server_key = root / "server.key"
+            server_csr = root / "server.csr"
+            server_cert = root / "server.pem"
+            extensions = root / "server.ext"
+            subprocess.run(
+                [
+                    "openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
+                    "-days", "1", "-keyout", str(ca_key), "-out", str(ca_cert),
+                    "-subj", "/CN=Vivo CI CA",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            subprocess.run(
+                [
+                    "openssl", "req", "-new", "-newkey", "rsa:2048", "-nodes",
+                    "-keyout", str(server_key), "-out", str(server_csr),
+                    "-subj", "/CN=vivo-remote",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            extensions.write_text("subjectAltName=DNS:vivo-remote,IP:127.0.0.1\n")
+            subprocess.run(
+                [
+                    "openssl", "x509", "-req", "-in", str(server_csr),
+                    "-CA", str(ca_cert), "-CAkey", str(ca_key), "-CAcreateserial",
+                    "-out", str(server_cert), "-days", "1", "-sha256",
+                    "-extfile", str(extensions),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            with socket.socket() as probe:
+                probe.bind(("127.0.0.1", 0))
+                port = probe.getsockname()[1]
+
+            origin = f"https://127.0.0.1:{port}"
+            token = "fixture-owner-token-0123456789abcdef"
+            environment = os.environ.copy()
+            environment.update(
+                {
+                    "OPENAI_API_KEY": "",
+                    "PYTHONPATH": str(ROOT),
+                    "VIVO_OWNER_TOKEN": token,
+                }
+            )
+            process = subprocess.Popen(
+                [
+                    sys.executable, "-m", "server.remote_application",
+                    "--host", "0.0.0.0", "--port", str(port),
+                    "--data-dir", str(data_dir), "--origin", origin,
+                    "--store", "posix", "--cert", str(server_cert),
+                    "--key", str(server_key),
+                ],
+                cwd=ROOT,
+                env=environment,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            context = ssl.create_default_context(cafile=str(ca_cert))
+            try:
+                deadline = time.monotonic() + 20
+                last_error = None
+                while time.monotonic() < deadline:
+                    if process.poll() is not None:
+                        break
+                    try:
+                        with urlopen(origin + "/healthz", context=context, timeout=2) as response:
+                            health = json.load(response)
+                        if response.status == 200 and health.get("ok") is True:
+                            break
+                    except Exception as error:  # startup race only
+                        last_error = f"{type(error).__name__}: {error}"
+                    time.sleep(0.25)
+                else:
+                    self.fail(f"TLS recipe server did not become healthy: {last_error}")
+                self.assertIsNone(process.poll(), "TLS recipe server exited during startup")
+
+                request = Request(
+                    origin + "/api/conversation/status",
+                    headers={"Origin": origin, "Authorization": f"Bearer {token}"},
+                )
+                with urlopen(request, context=context, timeout=3) as response:
+                    status = json.load(response)
+                self.assertFalse(status["available"])
+                self.assertEqual(status["reason"], "provider-not-configured")
+            finally:
+                process.terminate()
+                try:
+                    process.wait(timeout=15)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=5)
+                stdout, stderr = process.communicate()
+                self.assertEqual(
+                    process.returncode,
+                    0,
+                    f"TLS recipe server did not stop cleanly: {stdout[-1000:]} {stderr[-1000:]}",
+                )
 
     @unittest.skipUnless(shutil.which("docker"), "Docker is not available")
     def test_compose_renders_with_nonsecret_fixture(self):
@@ -79,9 +210,14 @@ class RemoteDeploymentContractTests(unittest.TestCase):
             env.write_text(
                 "VIVA_DOMAIN=remote.example.test\n"
                 "VIVA_PUBLIC_ORIGIN=https://remote.example.test\n"
+                f"VIVO_BACKEND_CERT_FILE={Path(directory) / 'backend.crt'}\n"
+                f"VIVO_BACKEND_KEY_FILE={Path(directory) / 'backend.key'}\n"
+                f"VIVO_BACKEND_CA_FILE={Path(directory) / 'backend-ca.pem'}\n"
                 "VIVO_OWNER_TOKEN=fixture-owner-token-0123456789abcdef\n"
                 "OPENAI_API_KEY=\n"
             )
+            for name in ("backend.crt", "backend.key", "backend-ca.pem"):
+                (Path(directory) / name).write_text("fixture\n")
             result = subprocess.run(
                 [
                     "docker", "compose", "--env-file", str(env),
@@ -95,7 +231,15 @@ class RemoteDeploymentContractTests(unittest.TestCase):
             remote = rendered["services"]["vivo-remote"]
             self.assertNotIn("ports", remote)
             self.assertEqual(remote["expose"], ["8768"])
+            self.assertEqual(
+                {item["source"] for item in remote["secrets"]},
+                {"vivo_backend_ca", "vivo_backend_cert", "vivo_backend_key"},
+            )
             self.assertEqual(remote["command"][remote["command"].index("--origin") + 1], "https://remote.example.test")
+            self.assertEqual(
+                [item["source"] for item in rendered["services"]["https"]["secrets"]],
+                ["vivo_backend_ca"],
+            )
             self.assertEqual(
                 [port["published"] for port in rendered["services"]["https"]["ports"]],
                 ["80", "443"],
