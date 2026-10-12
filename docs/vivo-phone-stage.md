@@ -22,8 +22,9 @@ field-world view and spatial interaction fabric with relative URLs, and the
 service worker caches that route for an offline reopen. This route is useful
 when the Python authority is not mounted: it labels itself `PAGES STATIC/OFFLINE`,
 keeps Connect/Publish/Commit disabled, and never attempts a canonical write or
-backend readiness probe. The static route intercepts the shared launcher's
-readiness check locally so a Pages-only browser does not request `/readyz`.
+backend readiness probe. The static route uses a phone-owned launcher copy with
+the readiness call removed, so a Pages-only browser does not request `/readyz`;
+the canonical shared launcher remains byte-preserved.
 The normal explicit authority controls remain on the mounted Vivo route.
 
 The field-world view is a bounded local analytic projection over the current

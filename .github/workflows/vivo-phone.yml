@@ -95,7 +95,7 @@ jobs:
           required = [
               Path('browser-static/services/vivo/web/phone/index.html'),
               Path('browser-static/services/vivo/web/phone/bootstrap.mjs'),
-              Path('browser-static/services/vivo/web/phone/static-route-shield.js'),
+              Path('browser-static/services/vivo/web/phone/static-shared.js'),
               Path('browser-static/services/vivo/web/phone/field-world.mjs'),
               Path('browser-static/services/vivo/web/phone/spatial-fabric.mjs'),
               Path('browser-static/services/vivo/web/vivo-sw.js'),
@@ -105,8 +105,11 @@ jobs:
               raise SystemExit('missing built phone assets: ' + ', '.join(missing))
           route = required[0].read_text(encoding='utf-8')
           bootstrap = required[1].read_text(encoding='utf-8')
-          if './static-route-shield.js' not in route or './bootstrap.mjs' not in route:
+          static_shared = required[2].read_text(encoding='utf-8')
+          if './static-shared.js' not in route or './bootstrap.mjs' not in route:
               raise SystemExit('static phone route did not preserve its local bootstrap')
+          if 'PAGES STATIC/OFFLINE' not in static_shared or "api('/readyz'" in static_shared:
+              raise SystemExit('static phone launcher still contains a backend readiness call')
           if 'PAGES STATIC/OFFLINE' not in bootstrap or 'canonical authority unavailable' not in bootstrap:
               raise SystemExit('static authority boundary is missing')
           print('built static phone artifact verified')
