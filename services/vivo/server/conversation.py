@@ -362,7 +362,12 @@ class ConversationState:
     conversation_id: str
     history: list[tuple[str, str]] = field(default_factory=list)
     idempotency: OrderedDict[str, tuple[str, CachedOutcome]] = field(default_factory=OrderedDict)
-    latest_generation: int = 0
+    # -1 permits the first client turn to use generation 0. Once a turn has
+    # been admitted, an uncached request at the same or an older generation
+    # cannot create another provider attempt after its idempotency entry ages
+    # out of the bounded cache.
+    latest_generation: int = -1
+    active_request_id: str | None = None
     last_used: float = field(default_factory=time.monotonic)
     state_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     turn_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
@@ -473,6 +478,8 @@ class ConversationAdapter:
         state.idempotency[request_id] = (fingerprint, outcome)
         while len(state.idempotency) > 32:
             state.idempotency.popitem(last=False)
+        if state.active_request_id == request_id:
+            state.active_request_id = None
         state.last_used = time.monotonic()
 
     async def _remember_failure(
@@ -590,11 +597,14 @@ class ConversationAdapter:
                 return self._replay_cached(cached)
             if generation < state.latest_generation:
                 raise ConversationError("STALE_GENERATION", 409)
+            if generation == state.latest_generation and state.active_request_id != request_id:
+                raise ConversationError("STALE_GENERATION", 409)
             # Rate-limit only new attempts. Replaying a completed or failed
             # request ID must remain idempotent and must not consume quota.
-            self.rate.allow(identity)
             if generation > state.latest_generation:
+                self.rate.allow(identity)
                 state.latest_generation = generation
+                state.active_request_id = request_id
         async with state.turn_lock:
             async with state.state_lock:
                 cached = state.idempotency.get(request_id)
@@ -602,7 +612,10 @@ class ConversationAdapter:
                     if cached[0] != fingerprint:
                         raise ConversationError("REQUEST_ID_REUSED")
                     return self._replay_cached(cached)
-                if generation < state.latest_generation:
+                if generation < state.latest_generation or (
+                    generation == state.latest_generation
+                    and state.active_request_id != request_id
+                ):
                     raise ConversationError("STALE_GENERATION", 409)
                 history = list(state.history)
             payload = build_provider_payload(history, message, companion, world, self.config)
@@ -616,7 +629,7 @@ class ConversationAdapter:
                 )
                 text = parse_provider_response(raw, max_chars=self.config.max_output_chars)
                 async with state.state_lock:
-                    if generation != state.latest_generation:
+                    if generation != state.latest_generation or state.active_request_id != request_id:
                         failure = ConversationError("STALE_GENERATION", 409)
                         self._remember_outcome_locked(
                             state,

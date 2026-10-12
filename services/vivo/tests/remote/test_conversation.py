@@ -210,6 +210,18 @@ class ConversationAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(retry_error.exception.code, "PROVIDER_TIMEOUT")
         self.assertEqual(len(provider.calls), 1)
 
+    async def test_concurrent_same_request_id_waits_and_replays_once(self):
+        provider = MockProvider([{"output_text": "one response"}], wait_first=True)
+        adapter = ConversationAdapter(self.config(timeout_seconds=2), provider=provider)
+        first = asyncio.create_task(self.ask(adapter, request_id="concurrent.1"))
+        await provider.first_called.wait()
+        second = asyncio.create_task(self.ask(adapter, request_id="concurrent.1"))
+        await asyncio.sleep(0)
+        provider.release_first.set()
+        first_result, second_result = await asyncio.gather(first, second)
+        self.assertEqual(first_result, second_result)
+        self.assertEqual(len(provider.calls), 1)
+
     async def test_unexpected_provider_failure_is_redacted_and_not_retried(self):
         class BrokenProvider:
             def __init__(self):
@@ -323,6 +335,27 @@ class ConversationAdapterTests(unittest.IsolatedAsyncioTestCase):
         for index in range(20):
             limiter.allow(f"identity-{index}")
         self.assertLessEqual(len(limiter._events), 2)
+
+    async def test_generation_fence_prevents_rebill_after_idempotency_eviction(self):
+        provider = MockProvider([{"output_text": f"reply-{index}"} for index in range(34)])
+        adapter = ConversationAdapter(self.config(requests_per_minute=100), provider=provider)
+        for generation in range(34):
+            await self.ask(
+                adapter,
+                request_id=f"evicted.{generation}",
+                generation=generation,
+                text=f"turn-{generation}",
+            )
+        self.assertEqual(len(provider.calls), 34)
+        with self.assertRaises(ConversationError) as error:
+            await self.ask(
+                adapter,
+                request_id="evicted.0",
+                generation=0,
+                text="turn-0",
+            )
+        self.assertEqual(error.exception.code, "STALE_GENERATION")
+        self.assertEqual(len(provider.calls), 34)
 
 
 class ConversationRouteTests(unittest.IsolatedAsyncioTestCase):

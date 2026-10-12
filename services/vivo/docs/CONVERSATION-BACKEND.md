@@ -42,7 +42,9 @@ The response route accepts only this bounded JSON shape:
 `sessionId` is a client-generated, bounded tab/session identifier. It is
 combined with the authenticated bearer identity; it is not an authorization
 credential. `requestId` is required and must remain unchanged when a client
-retries the same turn.
+retries the same turn. New turns must advance `generation` within that
+session; this lets the bounded idempotency cache reject an old uncached retry
+without issuing another provider attempt.
 
 The server ignores unlisted companion fields, rejects oversized or malformed
 context, caps coordinates to the accepted bounded range, and uses world data
