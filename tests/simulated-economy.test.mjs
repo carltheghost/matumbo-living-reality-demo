@@ -460,15 +460,14 @@ test("missing economy snapshot recovers completed and cancelled user order histo
       owner: "you", side: "sell", amountBase: 1_000, priceNum: 2, priceDen: 1,
       idempotencyKey: "test:history:place",
     });
-    assert.equal(replay.order.id, placed.order.id);
+    assert.deepEqual(replay, placed);
     assert.equal(recovered.engine.ledger.journalCount(), journalCount);
     assert.equal(recovered.exchangeOrders({ owner: "you" }).length, 1);
     const cancelReplay = recovered.cancelExchangeOrder({
       orderId: placed.order.id, owner: "you", expectedRevision: placed.order.revision,
       idempotencyKey: "test:history:cancel",
     });
-    assert.equal(cancelReplay.order.id, cancelled.order.id);
-    assert.equal(cancelReplay.order.status, "cancelled");
+    assert.deepEqual(cancelReplay, cancelled);
     assert.equal(recovered.engine.ledger.journalCount(), journalCount);
   });
 });
@@ -496,8 +495,63 @@ test("rational-price exchange fills retain exact recorded price through recovery
       owner: "you", side: "sell", amountBase: 10_000, priceNum: 1, priceDen: 2,
       idempotencyKey: "test:rational:recovery",
     });
-    assert.equal(replay.order.id, placed.order.id);
+    assert.deepEqual(replay, placed);
     assert.equal(recovered.engine.ledger.journalCount(), journalCount);
+  });
+});
+
+test("recovered exchange operation commits replay exact seller, buyer, and partial-fill results", () => {
+  withLocalStorage(new MemoryStorage(), () => {
+    const storage = new MemoryStorage();
+    const first = fixture({ storage });
+    const seller = first.economy.placeExchangeOrder({
+      owner: "alice", side: "sell", amountBase: 10_000, priceNum: 1, priceDen: 1,
+      idempotencyKey: "test:exact:seller",
+    });
+    first.economy.placeExchangeOrder({
+      owner: "you", side: "buy", amountBase: 10_000, priceNum: 1, priceDen: 1,
+      idempotencyKey: "test:exact:seller:counterparty",
+    });
+    storage.removeItem("matumbo.simulated-economy.v1");
+    const recovered = createSimulatedEconomy({ engine: createTokenEngine(), storage });
+    assert.deepEqual(recovered.placeExchangeOrder({
+      owner: "alice", side: "sell", amountBase: 10_000, priceNum: 1, priceDen: 1,
+      idempotencyKey: "test:exact:seller",
+    }), seller);
+  });
+
+  withLocalStorage(new MemoryStorage(), () => {
+    const storage = new MemoryStorage();
+    const first = fixture({ storage });
+    first.economy.placeExchangeOrder({
+      owner: "alice", side: "sell", amountBase: 10_000, priceNum: 1, priceDen: 1,
+      idempotencyKey: "test:exact:buyer:counterparty",
+    });
+    const buyer = first.economy.placeExchangeOrder({
+      owner: "you", side: "buy", amountBase: 10_000, priceNum: 1, priceDen: 1,
+      idempotencyKey: "test:exact:buyer",
+    });
+    storage.removeItem("matumbo.simulated-economy.v1");
+    const recovered = createSimulatedEconomy({ engine: createTokenEngine(), storage });
+    assert.deepEqual(recovered.placeExchangeOrder({
+      owner: "you", side: "buy", amountBase: 10_000, priceNum: 1, priceDen: 1,
+      idempotencyKey: "test:exact:buyer",
+    }), buyer);
+  });
+
+  withLocalStorage(new MemoryStorage(), () => {
+    const storage = new MemoryStorage();
+    const first = fixture({ storage, seedLiquidity: true });
+    const partial = first.economy.placeExchangeOrder({
+      owner: "you", side: "buy", amountBase: 25_000, priceNum: 1, priceDen: 1,
+      idempotencyKey: "test:exact:partial",
+    });
+    storage.removeItem("matumbo.simulated-economy.v1");
+    const recovered = createSimulatedEconomy({ engine: createTokenEngine(), storage });
+    assert.deepEqual(recovered.placeExchangeOrder({
+      owner: "you", side: "buy", amountBase: 25_000, priceNum: 1, priceDen: 1,
+      idempotencyKey: "test:exact:partial",
+    }), partial);
   });
 });
 

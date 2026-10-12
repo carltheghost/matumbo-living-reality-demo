@@ -99,6 +99,12 @@ const DEMO_SEED_ORDER_SPECS = Object.freeze([
   }),
 ]);
 
+const EXCHANGE_OPERATION_ACTIONS = new Set([
+  "place-exchange-order",
+  "cancel-exchange-order",
+  "seed-demo-liquidity",
+]);
+
 function clone(value) {
   return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 }
@@ -552,11 +558,15 @@ function operationMetadata(journal) {
   if (requestHash(links.operationRequest) !== links.operationRequestHash) {
     throw new EconomyStaleStateError("exchange receipt operation provenance does not match its request; reload the paired economy snapshot");
   }
+  if (links.operationResult !== undefined && (!links.operationResult || typeof links.operationResult !== "object" || Array.isArray(links.operationResult))) {
+    throw new EconomyStaleStateError("exchange receipt has malformed operation result provenance; reload the paired economy snapshot");
+  }
   return {
     key: links.operationKey,
     action: links.operationAction,
     requestHash: links.operationRequestHash,
     request: clone(links.operationRequest),
+    result: links.operationResult === undefined ? null : clone(links.operationResult),
   };
 }
 
@@ -682,7 +692,7 @@ function recoverDemoLiquidity(engine, now) {
   }));
 
   const exchangeActions = new Set([
-    "exchange.order.hold", "exchange.order.open", "exchange.order.cancel", "exchange.order.release", "exchange.fill",
+    "exchange.order.hold", "exchange.order.open", "exchange.order.cancel", "exchange.order.release", "exchange.fill", "exchange.operation.commit",
   ]);
   const unsupported = journals.filter((journal) => isEconomyJournal(journal) && !handledJournalIds.has(journal.id) && !exchangeActions.has(journal.action));
   const unhandledExchange = journals.filter((journal) => isEconomyJournal(journal) && !handledJournalIds.has(journal.id) && exchangeActions.has(journal.action));
@@ -797,7 +807,7 @@ function recoveredTradeFromFill(entry, genericOrderIds) {
 function recoverGenericExchange(engine, now, handledJournalIds) {
   const journals = engine?.ledger?._journals ?? [];
   const exchangeActions = new Set([
-    "exchange.order.hold", "exchange.order.open", "exchange.order.cancel", "exchange.order.release", "exchange.fill",
+    "exchange.order.hold", "exchange.order.open", "exchange.order.cancel", "exchange.order.release", "exchange.fill", "exchange.operation.commit",
   ]);
   const exchangeJournals = journals.filter((journal) => isEconomyJournal(journal) && exchangeActions.has(journal.action));
   if (!exchangeJournals.length) return null;
@@ -812,6 +822,12 @@ function recoverGenericExchange(engine, now, handledJournalIds) {
       throw new EconomyStaleStateError(`exchange operation ${metadata.key} has conflicting receipt provenance`);
     }
     const group = existing ?? { ...metadata, journals: [] };
+    if (metadata.result) {
+      if (group.result && canonicalJson(group.result) !== canonicalJson(metadata.result)) {
+        throw new EconomyStaleStateError(`exchange operation ${metadata.key} has conflicting result provenance`);
+      }
+      group.result = metadata.result;
+    }
     group.journals.push(journal);
     groups.set(metadata.key, group);
     journalGroups.set(journal.id, group);
@@ -855,6 +871,12 @@ function recoverGenericExchange(engine, now, handledJournalIds) {
   const orders = [];
   const operations = [];
   const locked = { TUMBO: 0, sMIMAS: 0 };
+  for (const group of groups.values()) {
+    if (group.action === "seed-demo-liquidity" && group.result) {
+      for (const journal of group.journals) handledJournalIds.add(journal.id);
+      operations.push({ key: group.key, requestHash: group.requestHash, result: clone(group.result) });
+    }
+  }
   for (const [orderId, descriptor] of orderGroups) {
     const fills = fillsByOrder.get(orderId);
     const releases = exchangeJournals.filter((journal) => journal.action === "exchange.order.release" && journal.links?.refId === orderId);
@@ -863,37 +885,33 @@ function recoverGenericExchange(engine, now, handledJournalIds) {
     orders.push(order);
     if (order.side === "sell") locked.TUMBO += order.remainingBase;
     else locked.sMIMAS += order.reservedQuote;
-    for (const journal of descriptor.group.journals) handledJournalIds.add(journal.id);
+    if (descriptor.group.result) {
+      for (const journal of descriptor.group.journals) handledJournalIds.add(journal.id);
+    }
     for (const journal of releases) {
       const group = journalGroups.get(journal.id);
-      if (group && (group === descriptor.group || group.action === "cancel-exchange-order")) handledJournalIds.add(journal.id);
+      if (group && (group === descriptor.group || (group.action === "cancel-exchange-order" && group.result))) handledJournalIds.add(journal.id);
     }
     for (const journal of cancellations) {
       const group = journalGroups.get(journal.id);
-      if (group && group.action === "cancel-exchange-order") {
-        handledJournalIds.add(journal.id);
-        const releaseReceiptId = releases.find((release) => journalGroups.get(release.id) === group)?.id ?? null;
+      if (group && group.action === "cancel-exchange-order" && group.result) {
+        for (const operationJournal of group.journals) handledJournalIds.add(operationJournal.id);
         operations.push({
           key: group.key,
           requestHash: group.requestHash,
-          result: {
-            order: clone(order),
-            releaseReceiptId,
-            receiptId: journal.id,
-            simulation: true,
-          },
+          result: clone(group.result),
         });
       }
     }
     const placeGroup = descriptor.group;
-    const placeFills = trades.filter((trade) => placeGroup.journals.some((journal) => journal.id === trade.receiptId));
-    operations.push({
-      key: placeGroup.key,
-      requestHash: placeGroup.requestHash,
-      result: { order: clone(order), fills: clone(placeFills), receiptId: descriptor.open.id, simulation: true },
-    });
+    if (placeGroup.result) {
+      operations.push({
+        key: placeGroup.key,
+        requestHash: placeGroup.requestHash,
+        result: clone(placeGroup.result),
+      });
+    }
   }
-
   const handledEvents = journals.filter((journal) => handledJournalIds.has(journal.id)).map((journal) => recoveredEvent(journal, now));
   const unhandledExchange = exchangeJournals.filter((journal) => !handledJournalIds.has(journal.id));
   const unsupported = journals.filter((journal) => isEconomyJournal(journal) && !handledJournalIds.has(journal.id) && !exchangeActions.has(journal.action));
@@ -1198,6 +1216,41 @@ export class SimulatedEconomy {
     };
   }
 
+  _recordExchangeOperation({ key, request, requestHash: hash, result }) {
+    const actor = normalizeActor(request.owner ?? request.account ?? "you");
+    const receipt = this._post([
+      { account: actor, asset: EXCHANGE_BASE_ASSET, amount: 0 },
+      { account: "sys:market", asset: EXCHANGE_BASE_ASSET, amount: 0 },
+    ], {
+      idempotencyKey: `economy:exchange:operation:${fnv1a64Hex(`${key}:${hash}`)}`,
+      action: "exchange.operation.commit",
+      memo: `Committed simulated exchange operation ${request.action}`,
+      authority: "internal",
+      links: {
+        economy: SIMULATED_ECONOMY_SOURCE,
+        refType: "exchange-operation",
+        refId: key,
+        actor,
+        simulation: true,
+        ...this._operationLinks(),
+        operationResult: clone(result),
+      },
+    });
+    this._state.events.push({
+      id: this._nextId("event"),
+      type: "exchange.operation.commit",
+      refType: "exchange-operation",
+      refId: key,
+      actor,
+      receiptId: receipt.id,
+      hash: receipt.hash,
+      at: nowIso(this.now),
+      detail: `Committed simulated exchange operation ${request.action}`,
+      simulation: true,
+    });
+    return receipt;
+  }
+
   _operation(key, request, mutate) {
     if (typeof key !== "string" || !key.trim()) throw new TypeError("idempotencyKey must be a non-empty string");
     const normalizedKey = key.trim();
@@ -1215,6 +1268,9 @@ export class SimulatedEconomy {
     let result;
     try {
       result = mutate();
+      if (EXCHANGE_OPERATION_ACTIONS.has(request.action)) {
+        this._recordExchangeOperation({ key: normalizedKey, request, requestHash: hash, result });
+      }
     } catch (error) {
       this._operationContext = previousOperationContext;
       try { adoptTokenEngine(this.engine, loadTokenEngine(tokenBefore)); } catch { /* preserve the original failure */ }
