@@ -250,7 +250,18 @@ def run_desktop(page, route: str) -> dict:
     fresh_worker_two = page.evaluate("() => window.VivaPhoneAgentAdmin.reenable('worker:2')")
     # Switch the registered local Eye into the disconnected 11D nested space
     # so q[10] is exercised without a solver clock changing its CAS under us.
+    if page.locator("#panel[open]").count():
+        page.locator("#closePanel").click()
+    if not page.locator(".vivo-companion-world-context").evaluate("node => node.open"):
+        page.locator(".vivo-companion-world-context > summary").click()
+    page.locator("#phoneFieldDock").hover()
+    page.mouse.wheel(0, 1000)
+    page.wait_for_function(
+        "() => { const dock = document.querySelector('#phoneFieldDock').getBoundingClientRect(); const field = document.querySelector('#phoneFieldEntity').getBoundingClientRect(); return field.top >= dock.top && field.bottom <= dock.bottom; }"
+    )
     page.locator("#phoneFieldEntity").select_option("portal")
+    page.locator("#phonePanelButton").click()
+    page.wait_for_selector("#phoneEnterNested")
     page.locator("#phoneEnterNested").click()
     page.wait_for_function(
         "async () => { const value = await window.VivaPhoneEngine.snapshot(); return value.eyes[value.currentEyeId].spaceId === 'inner'; }"
