@@ -1,0 +1,90 @@
+name: Simulated economy token panel gate
+
+on:
+  pull_request:
+    paths:
+      - 'src/domains/simulated-economy.js'
+      - 'src/render/simulated-economy-panel.js'
+      - 'src/domains/token*.js'
+      - 'tests/simulated-economy.test.mjs'
+      - 'tests/browser-simulated-economy-panel.mjs'
+      - 'tests/token-*.test.mjs'
+      - 'package.json'
+      - '.github/workflows/simulated-economy-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  focused-simulated-economy-token-panel:
+    name: Focused simulated economy/token/panel checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Run simulated economy accounting and persistence tests
+        run: node --test tests/simulated-economy.test.mjs
+
+      - name: Run complete token ledger test command
+        run: npm run test:token
+
+      - name: Install the pinned browser regression dependency
+        run: |
+          npm install --no-save --package-lock=false playwright@1.57.0
+          npx playwright install --with-deps chromium
+
+      - name: Run existing actual simulated-economy panel browser regression
+        env:
+          MATUMBO_NODE_DEPENDENCIES: ${{ github.workspace }}/package.json
+        run: |
+          set -euo pipefail
+          mkdir -p browser-evidence
+          repo_dir="$(basename "$GITHUB_WORKSPACE")"
+          export MATUMBO_REPO_DIR="$repo_dir"
+          python3 -m http.server 8123 --bind 127.0.0.1 --directory "$GITHUB_WORKSPACE/.." >browser-evidence/server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          python3 - <<'PY'
+          import os
+          import time
+          from urllib.request import urlopen
+
+          url = f"http://127.0.0.1:8123/{os.environ['MATUMBO_REPO_DIR']}/field-lab-phone.html"
+          deadline = time.monotonic() + 20
+          last = None
+          while time.monotonic() < deadline:
+              try:
+                  with urlopen(url, timeout=2) as response:
+                      if response.status == 200:
+                          print(f"static preview ready: {url}")
+                          break
+              except Exception as error:
+                  last = error
+              time.sleep(0.25)
+          else:
+              raise SystemExit(f"static preview readiness timeout: {last!r}")
+          PY
+          export MATUMBO_PREVIEW_URL="http://127.0.0.1:8123/${repo_dir}/field-lab-phone.html"
+          export MATUMBO_CHROMIUM="$(node -e 'const { chromium } = require("playwright"); process.stdout.write(chromium.executablePath())')"
+          node tests/browser-simulated-economy-panel.mjs | tee browser-evidence/simulated-economy-panel.json
+
+      - name: Focused-gate scope notice
+        run: |
+          echo 'This required gate covers only simulated economy, token ledger, and the existing panel browser regression.'
+          echo 'It intentionally does not run the full npm test suite; the repository currently has 42 known baseline failures, which remain separately reported and are not masked by this focused gate.'
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: simulated-economy-panel-browser-evidence
+          path: browser-evidence/
+          retention-days: 7
