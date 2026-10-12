@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 const root = new URL('../../', import.meta.url);
 
 test('Pages publishes a self-contained local phone route without changing the canonical launcher', async () => {
-  const [canonical, route, staticShared, bootstrap, fieldWorld, fabric, sw, phoneRender, phoneCss, palette, economyEntry, economyManifest] = await Promise.all([
+  const [canonical, route, staticShared, bootstrap, fieldWorld, fabric, sw, conversationTransport, phoneRender, phoneCss, palette, economyEntry, economyManifest] = await Promise.all([
     readFile(new URL('index.html', root), 'utf8'),
     readFile(new URL('phone/index.html', root), 'utf8'),
     readFile(new URL('phone/static-shared.js', root), 'utf8'),
@@ -13,6 +13,7 @@ test('Pages publishes a self-contained local phone route without changing the ca
     readFile(new URL('phone/field-world.mjs', root), 'utf8'),
     readFile(new URL('phone/spatial-fabric.mjs', root), 'utf8'),
     readFile(new URL('vivo-sw.js', root), 'utf8'),
+    readFile(new URL('application/conversation-transport.mjs', root), 'utf8'),
     readFile(new URL('phone/phone-render.mjs', root), 'utf8'),
     readFile(new URL('phone/phone-world.css', root), 'utf8'),
     readFile(new URL('phone/field-palette.mjs', root), 'utf8'),
@@ -46,6 +47,7 @@ test('Pages publishes a self-contained local phone route without changing the ca
   assert.match(sw, /phone\/field-palette\.mjs/);
   assert.match(sw, /phone\/spatial-fabric\.mjs/);
   assert.match(sw, /phone\/local-operation\.mjs/);
+  assert.match(sw, /application\/conversation-transport\.mjs/);
   assert.match(sw, /phone\/local-edit-queue\.mjs/);
   assert.match(sw, /phone\/agent-control\.mjs/);
   assert.match(sw, /phoneNavigation/);
@@ -60,6 +62,9 @@ test('Pages publishes a self-contained local phone route without changing the ca
   assert.match(economyEntry, /__vivoPhoneSimulatedEconomyOwner/);
   assert.match(economyEntry, /No simulated write was attempted/);
   assert.match(economyManifest, /vivo\.phone\.simulated-economy-stage\/1/);
+  assert.match(conversationTransport, /vivo\.conversation-provider\/1/);
+  assert.match(conversationTransport, /credentials: 'omit'/);
+  assert.match(conversationTransport, /cache: 'no-store'/);
 });
 
 test('mounted economy staging preserves exact canonical module bytes', async () => {
@@ -86,8 +91,11 @@ test('Pages build copies the route and exposes its local-only boundary check', a
   assert.match(workflow, /Verify the static Vivo phone route and local-only boundary/);
   assert.match(workflow, /PAGES STATIC\/OFFLINE/);
   assert.match(workflow, /services\/vivo\/web\/phone\/index\.html/);
+  assert.match(workflow, /services\/vivo\/web\/application\/conversation-transport\.mjs/);
+  assert.match(workflow, /services\/vivo\/web\/application\/remote-transport\.mjs/);
   assert.match(phoneWorkflow, /browser-field-world-static/);
   assert.match(phoneWorkflow, /browser_field_world_static\.py/);
+  assert.match(phoneWorkflow, /browser_conversation_transport\.py/);
   assert.match(phoneWorkflow, /browser_bimanual_transform\.py/);
 });
 
@@ -97,6 +105,8 @@ test('Pages live hash verifier covers every changed mounted phone module', async
   assert.ok(block, 'deploy workflow must expose a public HTTPS hash-verifier list');
   const listed = [...block.matchAll(/'([^']+)'/g)].map((match) => match[1]);
   const required = [
+    'services/vivo/web/application/conversation-transport.mjs',
+    'services/vivo/web/application/remote-transport.mjs',
     'services/vivo/web/phone/companion.mjs',
     'services/vivo/web/phone/fingertip-input.mjs',
     'services/vivo/web/phone/material-contract.mjs',

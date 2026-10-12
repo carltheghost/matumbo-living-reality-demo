@@ -2,6 +2,7 @@
  * The server-owned runtime token is never exposed to this client.
  */
 import {offlineForkCommand} from './offline-branch.mjs';
+import {createRemoteConversationProvider} from './conversation-transport.mjs';
 
 export class RemoteTransport {
   constructor({url,token,WebSocket:Socket=globalThis.WebSocket,onState=()=>{},onError=()=>{},timeoutMs=7000}={}) {
@@ -9,7 +10,7 @@ export class RemoteTransport {
       throw new TypeError('Remote transport configuration required');
     this.url=url;this.invitationToken=token;this.Socket=Socket;this.onState=onState;this.onError=onError;this.timeoutMs=timeoutMs;
     this.socket=null;this.session=null;this.actorId=null;this.role=null;this.current=null;
-    this.pending=new Map();this.listeners=new Set();this.serial=0;this.closed=true;
+    this.pending=new Map();this.listeners=new Set();this.conversationProviders=new Set();this.serial=0;this.closed=true;
   }
   receive(state) {
     if(!state)return;
@@ -24,7 +25,7 @@ export class RemoteTransport {
       let timer=setTimeout(()=>{try{ws.close();}catch{};reject(Object.assign(new Error('Remote join timeout'),{code:'REMOTE_TIMEOUT'}));},this.timeoutMs);
       const fail=error=>{clearTimeout(timer);this.closed=true;reject(error instanceof Error?error:new Error(String(error)));};
       ws.onerror=()=>fail(Object.assign(new Error('Remote socket failed'),{code:'REMOTE_SOCKET'}));
-      ws.onclose=()=>{this.closed=true;this._rejectPending('REMOTE_CLOSED','Remote socket closed');};
+      ws.onclose=()=>{this.closed=true;this._rejectPending('REMOTE_CLOSED','Remote socket closed');void this._closeConversationProviders();};
       ws.onopen=()=>ws.send(JSON.stringify({type:'join',token:this.invitationToken}));
       ws.onmessage=event=>{
         let msg;try{msg=JSON.parse(event.data);}catch{return;}
@@ -83,11 +84,34 @@ export class RemoteTransport {
   nextEpoch(){return this.call('nextEpoch');}
   export(){return this.call('export');}
   materialRun(running){return this.call('materialRun',{running});}
+  conversationProvider(options={}){
+    if(this.closed||!this.session)throw Object.assign(new Error('REMOTE_ADMISSION_REQUIRED'),{code:'REMOTE_ADMISSION_REQUIRED'});
+    const remoteOrigin=new URL(this.url).origin.replace(/^ws/,'http');
+    const provider=createRemoteConversationProvider({
+      ...options,
+      token:this.invitationToken,
+      origin:options.origin||remoteOrigin,
+    });
+    this.conversationProviders.add(provider);
+    return provider;
+  }
+  async connectConversationProvider(options={}){
+    const provider=this.conversationProvider(options);
+    try{await provider.connect();return provider;}catch(error){this.conversationProviders.delete(provider);await provider.close().catch(()=>{});throw error;}
+  }
+  async _closeConversationProviders(){
+    const providers=[...this.conversationProviders];
+    this.conversationProviders.clear();
+    await Promise.all(providers.map(provider=>provider.close().catch(()=>{})));
+  }
   createInvite(ttlSeconds=3600){return this.call('invite.create',{ttlSeconds});}
   revokeInvite(id){return this.call('invite.revoke',{id});}
   listInvites(){return this.call('invite.list',{});}
   async close(){
     if(this.closed)return;
-    try{if(this.session)await this.call('close',{});}finally{this.closed=true;this.listeners.clear();try{this.socket?.close();}catch{}}
+    try{if(this.session)await this.call('close',{});}finally{
+      await this._closeConversationProviders();
+      this.closed=true;this.listeners.clear();try{this.socket?.close();}catch{}
+    }
   }
 }
