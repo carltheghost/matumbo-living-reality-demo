@@ -1,0 +1,3 @@
+{$VIVA_DOMAIN} {
+    reverse_proxy vivo-remote:8768
+}
