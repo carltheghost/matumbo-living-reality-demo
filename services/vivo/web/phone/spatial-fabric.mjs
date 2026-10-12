@@ -46,6 +46,17 @@ function normalizeAxes(axes, dimension, fallback = [0, 1]) {
   return result;
 }
 
+function normalizePositionAxes(axes, dimension) {
+  if (!Array.isArray(axes)) return null;
+  const result = [];
+  for (const axis of axes) {
+    const value = Number(axis);
+    if (Number.isInteger(value) && value >= 0 && value < dimension && !result.includes(value)) result.push(value);
+  }
+  if (!result.length) throw new RangeError('Position axes must identify at least one selected dimension');
+  return result;
+}
+
 /**
  * Convert a device-space point through a supplied projection inverse.  The
  * default inverse is deliberately only a normalized device-plane mapping;
@@ -104,8 +115,13 @@ const pairTransform = (list, axes = [0, 1], pairContactIds = null) => {
     : [];
   const [a, b] = pair.length === 2 ? pair : list.slice(0, 2);
   const [firstAxis, secondAxis] = axes;
-  const initial = [b.anchor[firstAxis] - a.anchor[firstAxis], b.anchor[secondAxis] - a.anchor[secondAxis]];
-  const current = [b.point[firstAxis] - a.point[firstAxis], b.point[secondAxis] - a.point[secondAxis]];
+  // Dimensional contacts may lock canonical position to one higher axis while
+  // still providing the visible inverse-projected points used for ordinary
+  // bimanual scale/rotation. Keep those two concerns separate.
+  const aAnchor = a.geometryAnchor || a.anchor, bAnchor = b.geometryAnchor || b.anchor;
+  const aPoint = a.geometryPoint || a.point, bPoint = b.geometryPoint || b.point;
+  const initial = [bAnchor[firstAxis] - aAnchor[firstAxis], bAnchor[secondAxis] - aAnchor[secondAxis]];
+  const current = [bPoint[firstAxis] - aPoint[firstAxis], bPoint[secondAxis] - aPoint[secondAxis]];
   const initialLength = Math.hypot(...initial), currentLength = Math.hypot(...current);
   if (initialLength <= 1e-6 || currentLength <= 1e-6) return { rotation: 0, scale: 1 };
   return {
@@ -129,10 +145,11 @@ export class SpatialInteractionFabric {
     this.aggregates = new Map();
     this.sequence = 0;
   }
-  begin({ contactId, source, objectId, gesture = 'grab', canonicalPoint, timestamp = this.now(), metadata = null } = {}) {
+  begin({ contactId, source, objectId, gesture = 'grab', canonicalPoint, geometryPoint = null, timestamp = this.now(), metadata = null } = {}) {
     const id = normalizeId(contactId, 'contactId');
     const object = normalizeId(objectId, 'objectId');
     const point = normalizePoint(canonicalPoint);
+    const geometry = geometryPoint === null ? [...point] : normalizePoint(geometryPoint, 'geometryPoint');
     if (!GESTURES.includes(gesture)) throw new TypeError('Unsupported interaction gesture');
     if (this.contacts.has(id)) this.end(id, 'replaced');
     if (this.contacts.size >= this.maxContacts) throw new RangeError('Interaction contact limit exceeded');
@@ -142,6 +159,7 @@ export class SpatialInteractionFabric {
     const constraint = {
       contactId: id, source: key, objectId: object, gesture,
       anchor: [...point], point: [...point], startedAt: finite(timestamp), updatedAt: finite(timestamp),
+      geometryAnchor: [...geometry], geometryPoint: [...geometry],
       sequence: ++this.sequence, metadata: metadata ? clone(metadata) : null,
     };
     this.contacts.set(id, constraint);
@@ -149,13 +167,14 @@ export class SpatialInteractionFabric {
     this.constraints.set(object, bucket);
     return clone(constraint);
   }
-  update(contactId, { canonicalPoint, gesture = null, timestamp = this.now(), metadata = null } = {}) {
+  update(contactId, { canonicalPoint, geometryPoint = null, gesture = null, timestamp = this.now(), metadata = null } = {}) {
     const id = normalizeId(contactId, 'contactId');
     const constraint = this.contacts.get(id);
     if (!constraint) return null;
     const point = normalizePoint(canonicalPoint);
     if (gesture !== null && !GESTURES.includes(gesture)) throw new TypeError('Unsupported interaction gesture');
     constraint.point = [...point];
+    constraint.geometryPoint = geometryPoint === null ? [...point] : normalizePoint(geometryPoint, 'geometryPoint');
     if (gesture) constraint.gesture = gesture;
     constraint.updatedAt = finite(timestamp);
     constraint.sequence = ++this.sequence;
@@ -163,12 +182,14 @@ export class SpatialInteractionFabric {
     return clone(constraint);
   }
   /** Rebase an accepted source movement without discarding its live point. */
-  rebase(contactId, canonicalPoint = null) {
+  rebase(contactId, canonicalPoint = null, geometryPoint = null) {
     const id = normalizeId(contactId, 'contactId');
     const constraint = this.contacts.get(id);
     if (!constraint) return null;
     const point = canonicalPoint === null ? constraint.point : normalizePoint(canonicalPoint);
     constraint.anchor = [...point];
+    const geometry = geometryPoint === null ? constraint.geometryPoint : normalizePoint(geometryPoint, 'geometryPoint');
+    constraint.geometryAnchor = [...geometry];
     constraint.updatedAt = this.now();
     constraint.sequence = ++this.sequence;
     return clone(constraint);
@@ -219,7 +240,10 @@ export class SpatialInteractionFabric {
           ...retained,
           pairContactIds: remaining.slice(0, 2).map(item => item.contactId),
         });
-        for (const item of remaining) item.anchor = [...item.point];
+        for (const item of remaining) {
+          item.anchor = [...item.point];
+          item.geometryAnchor = [...item.geometryPoint];
+        }
       } else {
         this.aggregates.delete(constraint.objectId);
       }
@@ -231,7 +255,10 @@ export class SpatialInteractionFabric {
         ...before,
         pairContactIds: remaining.slice(0, 2).map(item => item.contactId),
       });
-      for (const item of remaining) item.anchor = [...item.point];
+      for (const item of remaining) {
+        item.anchor = [...item.point];
+        item.geometryAnchor = [...item.geometryPoint];
+      }
     }
     bucket?.delete(id);
     if (bucket?.size === 0) this.constraints.delete(constraint.objectId);
@@ -268,9 +295,11 @@ export class SpatialInteractionFabric {
     return bucket ? [...bucket.values()].map(clone) : [];
   }
   /**
-   * Return a provisional transform. Translation is a full-D canonical delta;
-   * scale and rotation are geometric shape metadata in the selected display
-   * plane. They never become higher-dimensional coordinates.
+   * Return a provisional transform. Translation is a canonical delta, either
+   * across all axes for a surface contact or constrained by a contact's
+   * positionAxes for dimensional contact. Scale and rotation remain geometric
+   * shape metadata in the selected display plane; they never become
+   * higher-dimensional coordinates.
    */
   preview(objectId, dimension, { sourceKinds = null } = {}) {
     const allowedKinds = sourceKinds === null
@@ -284,7 +313,13 @@ export class SpatialInteractionFabric {
     const axes = normalizeAxes(carry?.axes || list[0]?.metadata?.transformAxes, safeDimension);
     const translation = Array(safeDimension).fill(0);
     if (carry) for (let axis = 0; axis < safeDimension; axis++) translation[axis] = finite(carry.translation[axis]);
-    if (list.length) for (const item of list) for (let axis = 0; axis < safeDimension; axis++) translation[axis] += (finite(item.point[axis]) - finite(item.anchor[axis])) / list.length;
+    if (list.length) for (const item of list) {
+      const positionAxes = normalizePositionAxes(item.metadata?.positionAxes, safeDimension);
+      for (let axis = 0; axis < safeDimension; axis++) {
+        if (positionAxes && !positionAxes.includes(axis)) continue;
+        translation[axis] += (finite(item.point[axis]) - finite(item.anchor[axis])) / list.length;
+      }
+    }
     const transform = pairTransform(list, axes, carry?.pairContactIds);
     return {
       objectId, contactCount: list.length, contactIds: list.map(item => item.contactId), translation,
@@ -299,7 +334,13 @@ export class SpatialInteractionFabric {
     const carry = this.aggregates.get(objectId) || blankAggregate(dimension, axes);
     const translation = Array(dimension).fill(0);
     for (let axis = 0; axis < dimension; axis++) translation[axis] = finite(carry.translation[axis]);
-    if (list.length) for (const item of list) for (let axis = 0; axis < dimension; axis++) translation[axis] += (finite(item.point[axis]) - finite(item.anchor[axis])) / list.length;
+    if (list.length) for (const item of list) {
+      const positionAxes = normalizePositionAxes(item.metadata?.positionAxes, dimension);
+      for (let axis = 0; axis < dimension; axis++) {
+        if (positionAxes && !positionAxes.includes(axis)) continue;
+        translation[axis] += (finite(item.point[axis]) - finite(item.anchor[axis])) / list.length;
+      }
+    }
     const transform = pairTransform(list, axes, carry.pairContactIds);
     return {
       translation,

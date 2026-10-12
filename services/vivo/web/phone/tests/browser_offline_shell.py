@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import sys
 
 from playwright.sync_api import sync_playwright
@@ -14,7 +16,11 @@ def main(base_url: str) -> None:
     page_errors: list[str] = []
 
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
+        launch_options = {"headless": True}
+        executable = os.environ.get("VIVO_CHROMIUM_PATH") or shutil.which("chromium") or shutil.which("chromium-browser")
+        if executable:
+            launch_options["executable_path"] = executable
+        browser = playwright.chromium.launch(**launch_options)
         context = browser.new_context()
         page = context.new_page()
         page.on("pageerror", lambda error: page_errors.append(str(error)))

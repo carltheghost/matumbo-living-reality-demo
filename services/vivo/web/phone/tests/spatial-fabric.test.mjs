@@ -186,6 +186,77 @@ test('touch and synthetic hand contacts share deterministic translation, scale a
   assert.equal(touch.translation[3], 0);
 });
 
+test('dimensional contact constrains canonical position while preserving visible bimanual shape', () => {
+  const fabric = new SpatialInteractionFabric({ now: () => 100 });
+  const metadata = {
+    transformAxes: [0, 2],
+    positionAxes: [3],
+    contactMode: 'dimensional',
+    activeAxis: 3,
+    inverseAxes: [3, 2, 1],
+  };
+  fabric.begin({
+    contactId: 'dim-a', source: { kind: 'touch', id: 'a' }, objectId: 'relic',
+    canonicalPoint: [0, 0, 0, 0], geometryPoint: [0, 0, 0, 0], metadata,
+  });
+  fabric.begin({
+    contactId: 'dim-b', source: { kind: 'hand', id: 'b' }, objectId: 'relic',
+    canonicalPoint: [0, 0, 0, 0], geometryPoint: [2, 0, 0, 0], metadata,
+  });
+  fabric.update('dim-a', {
+    canonicalPoint: [0, 0, 0, 0.5], geometryPoint: [0.5, 0, -0.25, 0], gesture: 'scale',
+  });
+  fabric.update('dim-b', {
+    canonicalPoint: [0, 0, 0, 0.5],
+    geometryPoint: [0.5 + Math.sqrt(2) * 1.5, 0, -0.25 + Math.sqrt(2) * 1.5, 0],
+    gesture: 'rotate',
+  });
+  const preview = fabric.preview('relic', 4);
+  assert.deepEqual(preview.translation, [0, 0, 0, 0.5]);
+  assert.ok(Math.abs(preview.scale - 1.5) < 1e-12);
+  assert.ok(Math.abs(preview.rotation - Math.PI / 4) < 1e-12);
+  assert.deepEqual(preview.geometry.axes, [0, 2]);
+  assert.deepEqual(fabric.snapshot().contacts.map(item => item.metadata.positionAxes), [[3], [3]]);
+});
+
+test('dimensional pair release rebases canonical and geometry anchors independently', () => {
+  const fabric = new SpatialInteractionFabric({ now: () => 100 });
+  const metadata = { transformAxes: [0, 2], positionAxes: [4], contactMode: 'dimensional', activeAxis: 4 };
+  fabric.begin({ contactId: 'a', source: { kind: 'touch', id: 'a' }, objectId: 'relic', canonicalPoint: [0, 0, 0, 0, 0], geometryPoint: [0, 0, 0, 0, 0], metadata });
+  fabric.begin({ contactId: 'b', source: { kind: 'touch', id: 'b' }, objectId: 'relic', canonicalPoint: [0, 0, 0, 0, 0], geometryPoint: [2, 0, 0, 0, 0], metadata });
+  fabric.update('a', { canonicalPoint: [0, 0, 0, 0, 0.4], geometryPoint: [0.5, 0, 0, 0, 0] });
+  fabric.update('b', { canonicalPoint: [0, 0, 0, 0, 0.4], geometryPoint: [3.5, 0, 0, 0, 0] });
+  const beforeRelease = fabric.preview('relic', 5);
+  assert.deepEqual(beforeRelease.translation, [0, 0, 0, 0, 0.4]);
+  assert.ok(Math.abs(beforeRelease.scale - 1.5) < 1e-12);
+  fabric.end('a', 'touch-release');
+  const afterRelease = fabric.preview('relic', 5);
+  assert.deepEqual(afterRelease.translation, beforeRelease.translation);
+  assert.ok(Math.abs(afterRelease.scale - beforeRelease.scale) < 1e-12);
+  fabric.update('b', { canonicalPoint: [0, 0, 0, 0, 0.7], geometryPoint: [3.5, 0, 0, 0, 0] });
+  const continued = fabric.preview('relic', 5);
+  assert.deepEqual(continued.translation, [0, 0, 0, 0, 0.7]);
+  assert.ok(Math.abs(continued.scale - beforeRelease.scale) < 1e-12);
+});
+
+test('dimensional hand loss is selective and keeps the surviving axis intent', () => {
+  const fabric = new SpatialInteractionFabric({ now: () => 100 });
+  const metadata = { transformAxes: [0, 2], positionAxes: [10], contactMode: 'dimensional', activeAxis: 10 };
+  fabric.begin({ contactId: 'dim-a', source: { kind: 'hand', id: 'a' }, objectId: 'relic', canonicalPoint: Array(11).fill(0), metadata });
+  fabric.begin({ contactId: 'dim-b', source: { kind: 'hand', id: 'b' }, objectId: 'relic', canonicalPoint: Array(11).fill(0), metadata });
+  fabric.begin({ contactId: 'other', source: { kind: 'touch', id: 'other' }, objectId: 'workpiece', canonicalPoint: Array(11).fill(0) });
+  const a = Array(11).fill(0), b = Array(11).fill(0), other = Array(11).fill(0);
+  a[10] = 0.3; b[10] = 0.5; other[0] = 0.2;
+  fabric.update('dim-a', { canonicalPoint: a });
+  fabric.update('dim-b', { canonicalPoint: b });
+  fabric.update('other', { canonicalPoint: other });
+  fabric.end('dim-a', 'hand-lost');
+  const survivor = fabric.preview('relic', 11);
+  assert.deepEqual(survivor.contactIds, ['dim-b']);
+  assert.deepEqual(survivor.translation, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.5]);
+  assert.deepEqual(fabric.preview('workpiece', 11).contactIds, ['other']);
+});
+
 test('pair release order preserves the same accepted transform and selective loss keeps the survivor', () => {
   const resultFor = (firstRelease, reason = 'touch-release') => {
     const fabric = new SpatialInteractionFabric({ now: () => 100 });

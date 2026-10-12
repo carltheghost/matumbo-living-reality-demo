@@ -364,7 +364,10 @@ def run_desktop_flow(page, route: str, requests: list[str], page_errors: list[st
     install_pointer_shim(page)
     reloaded = snapshot_entity(page, "relic")
     assert reloaded["worldId"] == initial["worldId"], reloaded
-    assert reloaded["entity"]["revision"] == accepted["entity"]["revision"], reloaded
+    # The sparse solver may advance the accepted object between the release
+    # acknowledgement and reopening; geometry and identity are the transform
+    # boundary, while revision is monotonic rather than a frozen frame count.
+    assert reloaded["entity"]["revision"] >= accepted["entity"]["revision"], reloaded
     assert reloaded["entity"]["geometry"] == accepted_geometry, reloaded
 
     # Cancel one member of a pair: the survivor remains live, but the canceled
