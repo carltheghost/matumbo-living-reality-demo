@@ -142,6 +142,7 @@ export class PhoneRenderer extends Renderer {
     this.materialProvisional = null;
     this.materialNodePoints = [];
     this.companionFocus = false;
+    this.companionWorldView = false;
     this.materialEditing = false;
   }
 
@@ -213,6 +214,7 @@ export class PhoneRenderer extends Renderer {
     const visible = visibleInSlice(this, entity);
     const selected = entity.id === this.selected;
     const held = entity.id === this.held;
+    const quietDiagnostics = (this.companionFocus || this.companionWorldView) && !this.materialEditing;
     const radius = Math.max(9, (visible ? this.sliceRadius(entity) : entity.radius) * point.k);
     const haloRadius = radius * (held ? 2.3 : selected ? (this.companionFocus ? 1.5 : 2.05) : 1.72);
     const alpha = visible ? 1 : 0.22;
@@ -250,15 +252,15 @@ export class PhoneRenderer extends Renderer {
     }
     const occupantSize = drawCompanionOccupant(ctx, entity, point, radius, { selected, held, companionFocus: this.companionFocus });
     const labelBase = occupantSize ? occupantSize * .72 : Math.max(17, radius);
-    // In companion focus the selected resident carries the identity; hiding
-    // the other labels keeps the field readable and leaves material controls
-    // available without letting diagnostic text cover the occupant.
-    if (!this.companionFocus || selected || held) {
+    // In companion or collapsed world view the selected resident carries the
+    // identity; hiding the other labels keeps the field readable and leaves
+    // material controls available without letting diagnostic text cover it.
+    if (!quietDiagnostics || selected || held) {
       ctx.font = selected ? '600 12px system-ui, sans-serif' : '11px system-ui, sans-serif';
       ctx.textAlign = 'center'; ctx.textBaseline = 'top';
       ctx.fillStyle = selected ? '#f4f7fb' : '#c8d7e8';
       ctx.fillText((entity.localPreview ? 'LOCAL PREVIEW · ' : held ? 'HELD · ' : '') + entity.name, point.x, point.y + labelBase + 12);
-      if (selected && !this.companionFocus) {
+      if (selected && !quietDiagnostics) {
         ctx.font = '9px ui-monospace, SFMono-Regular, monospace';
         ctx.fillStyle = tone.solid;
         ctx.fillText(tone.label.toUpperCase() + ' · ' + entity.q.slice(0, 3).map(value => finite(value).toFixed(1)).join(' / '), point.x, point.y + labelBase + 28);
@@ -270,10 +272,10 @@ export class PhoneRenderer extends Renderer {
 
   drawMaterialPatch(ctx, body, entity, geometry, { provisional = false } = {}) {
     if (!body?.nodes || !entity) return;
-    // Keep the node hit targets available in companion focus so the existing
-    // material editor remains reachable. Quiet the mesh there, and only
-    // reveal its diagnostic label while the editor is actively previewing.
-    const quietCompanionMesh = this.companionFocus && !this.materialEditing;
+    // Keep the node hit targets available in companion/world view so the
+    // existing material editor remains reachable. Quiet the mesh there, and
+    // only reveal its diagnostic label while the editor is actively previewing.
+    const quietCompanionMesh = (this.companionFocus || this.companionWorldView) && !this.materialEditing;
     const points = Object.values(body.nodes).map(node => {
       const projected = projectEntity(this, { ...node, radius: entity.radius, chart: entity.chart }, geometry);
       return { ...projected, nodeId: node.id, q: [...node.q], provisional };

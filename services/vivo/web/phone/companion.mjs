@@ -314,6 +314,7 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
     renderer.slice = [...entity.q];
     renderer.distance = Math.min(Number(renderer.distance) || 10.5, 9.4);
     renderer.companionFocus = !state.collapsed;
+    renderer.companionWorldView = state.collapsed;
     // Reframe only this personal camera. The selected resident sits in the
     // unobstructed portion of the canvas when the desktop companion panel is
     // open; canonical q/revisions and the saved world never move.
@@ -334,8 +335,10 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
     const renderer = scope.VivaShared?.R;
     if (!renderer) return;
     const nextFocus = !state.collapsed;
-    if (renderer.companionFocus === nextFocus) return;
+    const nextWorldView = state.collapsed;
+    if (renderer.companionFocus === nextFocus && renderer.companionWorldView === nextWorldView) return;
     renderer.companionFocus = nextFocus;
+    renderer.companionWorldView = nextWorldView;
     if (!nextFocus) frameSelectedCharacter();
     else renderer.draw?.(performance.now());
   }

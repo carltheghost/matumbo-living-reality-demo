@@ -45,7 +45,7 @@ def install_guards(page: Page) -> None:
     page.add_init_script(
         """
         (() => {
-          const checks = { fetchUrls: [], cameraCalls: 0 };
+          const checks = { fetchUrls: [], cameraCalls: 0, canvasTexts: [] };
           window.__vivoCompanionChecks = checks;
           const originalFetch = window.fetch;
           window.fetch = (...args) => {
@@ -57,6 +57,14 @@ def install_guards(page: Page) -> None:
             media.getUserMedia = async () => {
               checks.cameraCalls += 1;
               throw new Error('camera/microphone access is forbidden in this smoke test');
+            };
+          }
+          const canvasContext = window.CanvasRenderingContext2D?.prototype;
+          const originalFillText = canvasContext?.fillText;
+          if (originalFillText) {
+            canvasContext.fillText = function (text, ...args) {
+              checks.canvasTexts.push(String(text));
+              return originalFillText.call(this, text, ...args);
             };
           }
         })();
@@ -136,6 +144,10 @@ def companion_state(page: Page) -> dict[str, object]:
           chatNote: document.querySelector('[data-companion="chat-note"]')?.textContent || '',
           chatDisabled: document.querySelector('[data-companion="chat-input"]')?.disabled === true,
           provider: window.VivoCompanion?.provider?.() || null,
+          rendererWorldView: window.VivaShared?.R?.companionWorldView === true,
+          materialEditing: window.VivaShared?.R?.materialEditing === true,
+          materialNodes: window.VivaShared?.R?.materialNodePoints?.length || 0,
+          canvasTexts: window.__vivoCompanionChecks?.canvasTexts || [],
           activeRole: document.activeElement?.getAttribute('role') || '',
           activeCharacter: document.activeElement?.dataset?.characterId || '',
           guards: window.__vivoCompanionChecks,
@@ -181,12 +193,20 @@ def main() -> None:
             assert "saved locally" in str(placed["reaction"]).lower(), placed
             assert_layout(page, label="mobile placed")
 
+            page.evaluate("window.__vivoCompanionChecks.canvasTexts.length = 0")
             page.locator('[data-companion="focus"]').click()
             page.wait_for_function("document.querySelector('#vivoCompanion')?.dataset.collapsed === 'true'")
             returned = companion_state(page)
             page.screenshot(path=str(EVIDENCE / "mobile-returned.png"))
             assert returned["focusLabel"] == "OPEN COMPANION" and returned["focusAria"] == "Open companion chooser", returned
             assert returned["worldOpen"] is False and returned["collapsed"] is True, returned
+            assert returned["rendererWorldView"] is True and returned["materialEditing"] is False, returned
+            assert returned["materialNodes"] > 0, returned
+            collapsed_texts = returned["canvasTexts"]
+            assert any(text == "Relic" for text in collapsed_texts), collapsed_texts
+            assert not any("MATERIAL PATCH" in text for text in collapsed_texts), collapsed_texts
+            assert not any(text == "MEMORY" or text.startswith("MEMORY ·") for text in collapsed_texts), collapsed_texts
+            assert not any(text in {"Workpiece", "Inner world"} for text in collapsed_texts), collapsed_texts
             assert_layout(page, label="mobile returned")
 
             page.locator('[data-companion="focus"]').click()
