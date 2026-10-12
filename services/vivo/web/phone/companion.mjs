@@ -1,4 +1,8 @@
 import { embed } from './phone-render.mjs';
+import {
+  CONVERSATION_PROVIDER_SCHEMA,
+  CONVERSATION_REACTIONS,
+} from '../application/conversation-transport.mjs';
 
 /**
  * Vivo companion surface.
@@ -11,7 +15,7 @@ import { embed } from './phone-render.mjs';
  */
 
 export const COMPANION_SCHEMA = 'vivo.companion/1';
-export const CONVERSATION_PROVIDER_SCHEMA = 'vivo.conversation-provider/1';
+export { CONVERSATION_PROVIDER_SCHEMA };
 
 export const COMPANION_CHARACTERS = Object.freeze([
   Object.freeze({
@@ -144,15 +148,15 @@ export function buildPlacementRequest(envelope, characterId) {
 
 export function readConversationProvider(scope = globalThis) {
   const provider = scope?.VivoConversationProvider;
-  if (!provider || provider.schema !== CONVERSATION_PROVIDER_SCHEMA || typeof provider.respond !== 'function') return null;
+  if (!provider || provider.schema !== CONVERSATION_PROVIDER_SCHEMA || provider.available === false || typeof provider.respond !== 'function') return null;
   return provider;
 }
 
 export function normalizeConversationResult(value) {
   const text = typeof value === 'string' ? value : value?.text;
   if (typeof text !== 'string' || !text.trim()) return null;
-  const reaction = typeof value?.reaction === 'string' && value.reaction.trim()
-    ? value.reaction.trim().slice(0, 180)
+  const reaction = typeof value?.reaction === 'string' && CONVERSATION_REACTIONS.includes(value.reaction.trim())
+    ? value.reaction.trim()
     : null;
   return { text: text.trim().slice(0, 4000), reaction };
 }
@@ -275,6 +279,7 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
     placementBusy: false,
     responseBusy: false,
     responseController: null,
+    responseAttempt: 0,
     lastSyncKey: '',
     lastFrameKey: '',
     providerConnected: false,
@@ -359,11 +364,12 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
     view.dataset.tone = tone;
   }
   function stopResponse(reason = 'conversation-stopped') {
+    state.responseAttempt += 1;
     state.responseController?.abort(reason);
     state.responseController = null;
     if (state.responseBusy) {
       state.responseBusy = false;
-      if (reason !== 'selection-changed' && reason !== 'pagehide') setReaction('Conversation stopped. The world is unchanged.', 'warn');
+      if (!['selection-changed', 'navigation-changed', 'pagehide'].includes(reason)) setReaction('Conversation stopped. The world is unchanged.', 'warn');
       render();
     }
   }
@@ -560,29 +566,39 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
     const messages = state.messages.get(character.id) || [];
     messages.push({ from: 'user', text: text.slice(0, 400) });
     state.messages.set(character.id, messages);
+    const attempt = ++state.responseAttempt;
+    const controller = new AbortController();
     state.responseBusy = true;
-    state.responseController = new AbortController();
+    state.responseController = controller;
     render();
     try {
       const envelope = await snapshot();
-      const response = await provider.respond({ message: text.slice(0, 400), companion: clone(character), world: worldForProvider(envelope, character), signal: state.responseController.signal });
+      if (attempt !== state.responseAttempt || controller.signal.aborted) return { status: 'cancelled' };
+      const response = await provider.respond({ message: text.slice(0, 400), companion: clone(character), world: worldForProvider(envelope, character), signal: controller.signal });
+      if (attempt !== state.responseAttempt || controller.signal.aborted) return { status: 'cancelled' };
       const result = normalizeConversationResult(response);
       if (!result) throw new Error('Conversation provider returned no readable text.');
       messages.push({ from: 'companion', text: result.text });
       setReaction(result.reaction || `${character.name} responded in this world.`, 'success');
       return result;
     } catch (error) {
-      if (error?.name !== 'AbortError' && error?.message !== 'selection-changed' && error?.message !== 'pagehide') {
+      const stale = attempt !== state.responseAttempt || controller.signal.aborted || error?.name === 'AbortError' || ['selection-changed', 'navigation-changed', 'pagehide'].includes(error?.message);
+      if (!stale) {
         setReaction(`Conversation failed: ${error?.message || String(error)}`, 'error');
       }
       return { error };
     } finally {
-      state.responseController = null; state.responseBusy = false; render();
+      if (attempt === state.responseAttempt) {
+        state.responseController = null;
+        state.responseBusy = false;
+        render();
+      }
     }
   }
 
   query('place').addEventListener('click', () => { void place(); });
   query('select-world').addEventListener('click', () => {
+    stopResponse('navigation-changed');
     selectWorldEntity(selected().entityId);
     frameSelectedCharacter();
     setPresence('attention', 2400);
@@ -590,6 +606,7 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
     render();
   });
   query('focus').addEventListener('click', () => {
+    stopResponse('navigation-changed');
     if (state.collapsed) {
       state.collapsed = false;
       worldContext.open = true;

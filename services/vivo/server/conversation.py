@@ -21,6 +21,7 @@ import re
 import secrets
 import time
 from typing import Any, Awaitable, Callable, Mapping
+from urllib.parse import urlsplit
 
 from aiohttp import ClientSession, ClientTimeout, web
 
@@ -857,8 +858,29 @@ def attach_conversation_routes(
 ) -> None:
     """Install same-origin bearer-authenticated status/respond routes."""
 
+    configured_netloc = urlsplit(origin).netloc.lower()
+
+    def origin_allowed(request: web.Request) -> bool:
+        """Accept the exact Origin, plus browser same-origin proof for GET.
+
+        Chromium intentionally omits ``Origin`` on a same-origin GET. The
+        status route is read-only, so a browser request with the exact
+        configured Host and ``Sec-Fetch-Site: same-origin`` is the equivalent
+        origin proof. POST response requests still require the exact Origin
+        header. The bearer remains mandatory in both cases.
+        """
+
+        if request.headers.get("Origin") == origin:
+            return True
+        return (
+            request.method == "GET"
+            and request.headers.get("Origin") is None
+            and request.headers.get("Sec-Fetch-Site") == "same-origin"
+            and request.host.lower() == configured_netloc
+        )
+
     async def authorize(request: web.Request) -> tuple[str, Any] | None:
-        if request.headers.get("Origin") != origin:
+        if not origin_allowed(request):
             return None
         header = request.headers.get("Authorization", "")
         if not header.startswith("Bearer ") or len(header[7:]) < 20 or len(header[7:]) > 256:
@@ -875,7 +897,7 @@ def attach_conversation_routes(
 
     async def status(request: web.Request) -> web.Response:
         auth = await authorize(request)
-        if request.headers.get("Origin") != origin:
+        if not origin_allowed(request):
             return _error_response("ORIGIN_NOT_ALLOWED", 403)
         if auth is None:
             return _error_response("AUTH_REQUIRED", 401)
@@ -897,7 +919,7 @@ def attach_conversation_routes(
 
     async def respond(request: web.Request) -> web.Response:
         auth = await authorize(request)
-        if request.headers.get("Origin") != origin:
+        if not origin_allowed(request):
             return _error_response("ORIGIN_NOT_ALLOWED", 403)
         if auth is None:
             return _error_response("AUTH_REQUIRED", 401)

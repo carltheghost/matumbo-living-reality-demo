@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 const root = new URL('../../', import.meta.url);
 
 test('Pages publishes a self-contained local phone route without changing the canonical launcher', async () => {
-  const [canonical, route, staticShared, bootstrap, fieldWorld, fabric, sw, phoneRender, phoneCss, palette, economyEntry, economyManifest] = await Promise.all([
+  const [canonical, route, staticShared, bootstrap, fieldWorld, fabric, sw, conversationTransport, phoneRender, phoneCss, palette, economyEntry, economyManifest] = await Promise.all([
     readFile(new URL('index.html', root), 'utf8'),
     readFile(new URL('phone/index.html', root), 'utf8'),
     readFile(new URL('phone/static-shared.js', root), 'utf8'),
@@ -13,6 +13,7 @@ test('Pages publishes a self-contained local phone route without changing the ca
     readFile(new URL('phone/field-world.mjs', root), 'utf8'),
     readFile(new URL('phone/spatial-fabric.mjs', root), 'utf8'),
     readFile(new URL('vivo-sw.js', root), 'utf8'),
+    readFile(new URL('application/conversation-transport.mjs', root), 'utf8'),
     readFile(new URL('phone/phone-render.mjs', root), 'utf8'),
     readFile(new URL('phone/phone-world.css', root), 'utf8'),
     readFile(new URL('phone/field-palette.mjs', root), 'utf8'),
@@ -46,6 +47,7 @@ test('Pages publishes a self-contained local phone route without changing the ca
   assert.match(sw, /phone\/field-palette\.mjs/);
   assert.match(sw, /phone\/spatial-fabric\.mjs/);
   assert.match(sw, /phone\/local-operation\.mjs/);
+  assert.match(sw, /application\/conversation-transport\.mjs/);
   assert.match(sw, /phone\/local-edit-queue\.mjs/);
   assert.match(sw, /phone\/agent-control\.mjs/);
   assert.match(sw, /phoneNavigation/);
@@ -60,6 +62,9 @@ test('Pages publishes a self-contained local phone route without changing the ca
   assert.match(economyEntry, /__vivoPhoneSimulatedEconomyOwner/);
   assert.match(economyEntry, /No simulated write was attempted/);
   assert.match(economyManifest, /vivo\.phone\.simulated-economy-stage\/1/);
+  assert.match(conversationTransport, /vivo\.conversation-provider\/1/);
+  assert.match(conversationTransport, /credentials: 'omit'/);
+  assert.match(conversationTransport, /cache: 'no-store'/);
 });
 
 test('mounted economy staging preserves exact canonical module bytes', async () => {

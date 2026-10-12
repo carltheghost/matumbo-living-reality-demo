@@ -600,6 +600,21 @@ class ConversationRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(body["generation"], 3)
         self.assertEqual(body["text"], "route reply")
 
+    async def test_browser_same_origin_status_without_get_origin_header(self):
+        # Chromium omits Origin on a same-origin GET. The read-only status
+        # route accepts the browser's same-origin Fetch Metadata + Host proof;
+        # the bearer remains required.
+        response = await self.client.get(
+            "/api/conversation/status",
+            headers={
+                "Authorization": "Bearer " + TOKEN,
+                "Sec-Fetch-Site": "same-origin",
+                "Host": "vivo.test",
+            },
+        )
+        self.assertEqual(response.status, 200)
+        self.assertEqual((await response.json())["status"], "ready")
+
     async def test_route_requires_explicit_session_and_request_ids(self):
         base = {"message": "hello", "companion": companion(), "world": world()}
         response = await self.client.post(

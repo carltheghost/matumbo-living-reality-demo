@@ -4,6 +4,31 @@ This is an optional server capability for the canonical remote Vivo process. It
 does not make the GitHub Pages phone route dynamic. The browser-side companion
 seam remains honest when no provider is configured.
 
+## Browser handoff
+
+The remote UI may create the browser provider only after the existing
+`RemoteTransport.admit()` succeeds. The handoff is explicit and in memory:
+
+```js
+const provider = await transport.connectConversationProvider({
+  // Optional test/session configuration; production derives the exact
+  // same-origin HTTP origin from the admitted WebSocket URL.
+  sessionId: 'phone-tab-local',
+});
+window.VivoConversationProvider = provider;
+await window.VivoCompanion?.refresh();
+```
+
+`RemoteTransport` supplies the already-admitted bearer to the provider
+closure; the provider sends it only as an `Authorization` header to the fixed
+same-origin `/api/conversation/*` routes. It does not place credentials in a
+URL, body, browser storage, or logs. The provider starts unavailable and does
+not perform a status request until `connectConversationProvider()` is called.
+GitHub Pages and the local static phone route therefore stay disabled unless a
+same-origin authorized server is explicitly present. A caller must remove the
+global provider and close the transport on disconnect; no browser camera,
+microphone, or XR permission is involved.
+
 ## Boundary
 
 `server.remote_application` exposes two same-origin routes:
@@ -11,9 +36,11 @@ seam remains honest when no provider is configured.
 * `GET /api/conversation/status`
 * `POST /api/conversation/respond`
 
-Both require the exact configured `Origin` and the existing Vivo bearer
-capability in `Authorization: Bearer ...`. The bearer is authenticated by the
-remote gateway; it is reduced to a one-way digest before selecting process-local
+The response route requires the exact configured `Origin`; the read-only status
+GET also accepts the browser's same-origin Fetch Metadata + Host proof because
+Chromium omits `Origin` on same-origin GET requests. Both require the existing
+Vivo bearer capability in `Authorization: Bearer ...`. The bearer is
+authenticated by the remote gateway; it is reduced to a one-way digest before selecting process-local
 conversation state. Each state is also scoped by the client-generated session
 ID and sanitized world/companion scope, so two tabs using the same bearer do
 not share generation fences or request-ID outcomes. The raw bearer and

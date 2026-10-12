@@ -66,8 +66,10 @@ test('conversation seam accepts only a configured provider and readable result',
   assert.equal(readConversationProvider({}), null);
   const provider = { schema: CONVERSATION_PROVIDER_SCHEMA, respond() {} };
   assert.equal(readConversationProvider({ VivoConversationProvider: provider }), provider);
+  assert.equal(readConversationProvider({ VivoConversationProvider: { ...provider, available: false } }), null);
   assert.deepEqual(normalizeConversationResult({ text: '  hello  ', reaction: '  pulse  ' }), { text: 'hello', reaction: 'pulse' });
   assert.deepEqual(normalizeConversationResult('plain response'), { text: 'plain response', reaction: null });
+  assert.deepEqual(normalizeConversationResult({ text: 'unknown reaction is ignored', reaction: 'launch-world-command' }), { text: 'unknown reaction is ignored', reaction: null });
   assert.equal(normalizeConversationResult({ text: '   ' }), null);
   assert.equal(normalizeConversationResult({ text: 42 }), null);
 });
