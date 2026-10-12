@@ -1,0 +1,150 @@
+name: Vivo opt-in remote deployment recipe
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/vivo-remote-deployment.yml'
+      - 'services/vivo/Dockerfile.remote'
+      - 'services/vivo/Caddyfile.remote'
+      - 'services/vivo/compose.remote.yaml'
+      - 'services/vivo/.dockerignore'
+      - 'services/vivo/start-canonical-remote.sh'
+      - 'services/vivo/requirements.txt'
+      - 'services/vivo/server/**'
+      - 'services/vivo/web/**'
+      - 'services/vivo/contracts/**'
+      - 'services/vivo/models/**'
+      - 'services/vivo_adaptive/**'
+      - 'research/vivo-phase-fabric/web/target-mailbox.mjs'
+      - 'services/vivo/tests/remote/**'
+      - 'services/vivo/docs/REMOTE-DEPLOYMENT*'
+      - 'scripts/vivo/verify_source_import.py'
+      - 'services/vivo/scripts/verify_integrity.py'
+      - 'services/vivo/source-import.json'
+
+permissions:
+  contents: read
+
+jobs:
+  recipe-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Frozen source and package integrity
+        run: |
+          set -euo pipefail
+          python scripts/vivo/verify_source_import.py
+          python services/vivo/scripts/verify_integrity.py
+          PYTHONPATH="$PWD/scripts/vivo" python -m unittest scripts/vivo/test_source_import.py -v
+      - name: Remote deployment contract tests
+        run: |
+          set -euo pipefail
+          PYTHONPATH="$PWD" python -m unittest discover \
+            -s services/vivo/tests/remote -p 'test_*.py' -v
+      - name: Scope
+        run: echo 'Recipe, immutable-source and negative-fixture validation only; no image push, credentials, provider call or public deployment.'
+
+  image-loopback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the remote image locally only
+        run: |
+          set -euo pipefail
+          docker build --pull --file services/vivo/Dockerfile.remote \
+            --tag "vivo-remote:ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" .
+      - name: Start, health-check, exercise disabled conversation, and stop on runner loopback
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="vivo-remote:ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          container="vivo-remote-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          volume="vivo-remote-ci-data-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          port=18768
+          origin="http://127.0.0.1:${port}"
+          # Deliberately nonsecret, ephemeral fixture capability. It is never
+          # persisted, uploaded, or used outside this runner-local container.
+          owner_token='ci-fixture-owner-0123456789abcdef0123456789'
+          result=0
+          cleanup() {
+            result=$?
+            if docker inspect "$container" >/dev/null 2>&1; then
+              docker stop --time 30 "$container" >/dev/null 2>&1 || true
+              if [ "$result" -ne 0 ]; then
+                docker logs "$container" 2>&1 | sed "s/${owner_token}/[fixture-redacted]/g" || true
+              fi
+              docker rm -f "$container" >/dev/null 2>&1 || true
+            fi
+            docker volume rm "$volume" >/dev/null 2>&1 || true
+            exit "$result"
+          }
+          trap cleanup EXIT
+
+          docker volume create "$volume" >/dev/null
+          # Host networking is restricted to the loopback bind below; no -p
+          # mapping or public listener is created by this smoke test.
+          docker run --detach --name "$container" --init --network host \
+            --mount "type=volume,src=${volume},dst=/data" \
+            --env VIVO_OWNER_TOKEN="$owner_token" \
+            --env OPENAI_API_KEY= \
+            "$image" \
+            --host 127.0.0.1 --port "$port" --data-dir /data \
+            --origin "$origin" --store posix --allow-insecure-loopback >/dev/null
+
+          python - "$origin" "$owner_token" <<'PY'
+          import json
+          import sys
+          import time
+          from urllib.error import HTTPError
+          from urllib.request import Request, urlopen
+
+          origin, owner = sys.argv[1:]
+          health_url = origin + '/healthz'
+          deadline = time.monotonic() + 90
+          last = None
+          while time.monotonic() < deadline:
+              try:
+                  with urlopen(health_url, timeout=3) as response:
+                      body = json.load(response)
+                  if response.status == 200 and body.get('ok') is True:
+                      break
+                  last = body
+              except Exception as error:
+                  last = f'{type(error).__name__}: {error}'
+              time.sleep(.5)
+          else:
+              raise SystemExit(f'container health timeout: {last!r}')
+
+          headers = {'Origin': origin, 'Authorization': 'Bearer ' + owner}
+          status_request = Request(origin + '/api/conversation/status', headers=headers)
+          with urlopen(status_request, timeout=5) as response:
+              status = json.load(response)
+          assert status['available'] is False, status
+          assert status['reason'] == 'provider-not-configured', status
+
+          body = b'{}'
+          respond_request = Request(
+              origin + '/api/conversation/respond', data=body,
+              headers={**headers, 'Content-Type': 'application/json'}, method='POST')
+          try:
+              urlopen(respond_request, timeout=5)
+          except HTTPError as error:
+              assert error.code == 503, error
+              response = json.load(error)
+              assert response['error'] == 'CONVERSATION_UNAVAILABLE', response
+          else:
+              raise AssertionError('disabled conversation unexpectedly succeeded')
+          print('loopback health and provider-disabled conversation passed')
+          PY
+
+          docker stop --time 30 "$container" >/dev/null
+          exit_code="$(docker inspect --format '{{.State.ExitCode}}' "$container")"
+          test "$exit_code" = 0
+          echo "graceful container shutdown passed with exit code ${exit_code}"
+      - name: Scope
+        run: echo 'Local image build and runner-loopback health/shutdown smoke only; no image push, secrets, persistent tokens, public port, TLS deployment or live provider call.'
