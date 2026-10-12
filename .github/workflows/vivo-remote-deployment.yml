@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/vivo-remote-deployment.yml'
       - 'services/vivo/Dockerfile.remote'
+      - 'services/vivo/Dockerfile.remote.dockerignore'
       - 'services/vivo/Caddyfile.remote'
       - 'services/vivo/compose.remote.yaml'
       - 'services/vivo/.dockerignore'
@@ -32,6 +33,8 @@ jobs:
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -59,6 +62,8 @@ jobs:
     timeout-minutes: 18
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Build the remote image locally only
         run: |
           set -euo pipefail

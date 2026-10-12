@@ -1,0 +1,43 @@
+# This file is selected only for Dockerfile.remote. The build context is the
+# repository root, so keep VCS/agent metadata and operator material out of it.
+
+.git
+.git/**
+.github
+.github/**
+.agents
+.agents/**
+.codex
+.codex/**
+.tumbo
+.tumbo/**
+coordination
+coordination/**
+evidence
+evidence/**
+
+# Operator configuration and private key/certificate material. Tracked
+# examples use .env.example and remain available to repository tooling.
+**/.env
+**/*.env
+**/.env.*
+**/*.key
+**/*.pem
+**/*.crt
+**/*.cer
+**/*.der
+**/*.p12
+**/*.pfx
+**/*.jks
+**/*secret*
+**/*credential*
+**/*owner*token*
+**/*api[-_]key*
+
+# The documented untracked deployment file is sensitive even if renamed with
+# a nonstandard suffix; keep the examples above and exclude this exact path.
+services/vivo/docs/REMOTE-DEPLOYMENT.env
+
+!services/vivo/.env.example
+!services/vivo/docs/REMOTE-DEPLOYMENT.env.example
+!services/vivo/docs/CONVERSATION-ENV.example

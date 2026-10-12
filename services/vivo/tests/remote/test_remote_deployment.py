@@ -12,15 +12,19 @@ import sys
 import tempfile
 import time
 import unittest
+import uuid
 from urllib.request import Request, urlopen
 
 
 ROOT = Path(__file__).resolve().parents[2]
+REPOSITORY = ROOT.parents[1]
 COMPOSE = ROOT / "compose.remote.yaml"
 DOCKERFILE = ROOT / "Dockerfile.remote"
+DOCKERIGNORE = ROOT / "Dockerfile.remote.dockerignore"
 CADDYFILE = ROOT / "Caddyfile.remote"
 ENV_EXAMPLE = ROOT / "docs" / "REMOTE-DEPLOYMENT.env.example"
 LAUNCHER = ROOT / "start-canonical-remote.sh"
+WORKFLOW = REPOSITORY / ".github" / "workflows" / "vivo-remote-deployment.yml"
 
 
 class RemoteDeploymentContractTests(unittest.TestCase):
@@ -65,6 +69,7 @@ class RemoteDeploymentContractTests(unittest.TestCase):
 
     def test_remote_image_preserves_repository_relative_module_routes(self):
         dockerfile = DOCKERFILE.read_text()
+        dockerignore = DOCKERIGNORE.read_text()
         self.assertIn("FROM node:24.19.0-bookworm-slim", dockerfile)
         self.assertIn("COPY services/vivo/contracts /app/services/vivo/contracts", dockerfile)
         self.assertIn("COPY services/vivo/server /app/services/vivo/server", dockerfile)
@@ -77,6 +82,78 @@ class RemoteDeploymentContractTests(unittest.TestCase):
             dockerfile,
         )
         self.assertIn('ENTRYPOINT ["/app/services/vivo/start-canonical-remote.sh"]', dockerfile)
+        for pattern in (
+            ".git",
+            ".git/**",
+            "**/*.env",
+            "**/*.key",
+            "**/*.pem",
+            "**/*.crt",
+            "**/*secret*",
+            "**/*credential*",
+            "services/vivo/docs/REMOTE-DEPLOYMENT.env",
+        ):
+            self.assertIn(pattern, dockerignore)
+        for example in (
+            "!services/vivo/.env.example",
+            "!services/vivo/docs/REMOTE-DEPLOYMENT.env.example",
+            "!services/vivo/docs/CONVERSATION-ENV.example",
+        ):
+            self.assertIn(example, dockerignore)
+
+    def test_ci_checkout_does_not_persist_repository_credentials(self):
+        workflow = WORKFLOW.read_text()
+        self.assertEqual(workflow.count("uses: actions/checkout@v4"), 2)
+        self.assertEqual(workflow.count("persist-credentials: false"), 2)
+        self.assertIn("services/vivo/Dockerfile.remote.dockerignore", workflow)
+        self.assertNotIn("pull_request_target", workflow)
+
+    @unittest.skipUnless(shutil.which("docker"), "Docker is not available")
+    def test_dockerfile_specific_context_rejects_fake_operator_material(self):
+        """Prove fake env/key/secret names never enter this Docker context."""
+        forbidden = (
+            "operator.env",
+            "backend.key",
+            "backend.pem",
+            "owner-secrets.json",
+            "provider-credentials.json",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            context = Path(directory)
+            ignore = context / "Dockerfile.remote.dockerignore"
+            ignore.write_text(DOCKERIGNORE.read_text())
+            example = context / "services" / "vivo" / "docs" / "REMOTE-DEPLOYMENT.env.example"
+            example.parent.mkdir(parents=True)
+            example.write_text("nonsecret example only\n")
+            docker_environment = os.environ.copy()
+            docker_environment["DOCKER_CONFIG"] = str(context / "docker-config")
+            (context / "docker-config").mkdir()
+            for index, name in enumerate(forbidden):
+                (context / name).write_text("FAKE_SENTINEL_NOT_A_CREDENTIAL\n")
+                dockerfile = context / "Dockerfile.remote"
+                dockerfile.write_text(
+                    "FROM scratch\n"
+                    "COPY services/vivo/docs/REMOTE-DEPLOYMENT.env.example /example\n"
+                    f"COPY {name} /forbidden\n"
+                )
+                tag = f"vivo-context-regression-{uuid.uuid4().hex}"
+                try:
+                    result = subprocess.run(
+                        ["docker", "build", "--file", str(dockerfile), "--tag", tag, str(context)],
+                        capture_output=True,
+                        text=True,
+                        env=docker_environment,
+                    )
+                    output = result.stdout + result.stderr
+                    self.assertNotEqual(result.returncode, 0, f"ignored sentinel was available: {name}")
+                    self.assertIn(name, output)
+                finally:
+                    subprocess.run(
+                        ["docker", "image", "rm", "--force", tag],
+                        capture_output=True,
+                        text=True,
+                        env=docker_environment,
+                    )
 
     def test_caddy_and_launcher_contracts_are_explicit(self):
         caddy = CADDYFILE.read_text()
