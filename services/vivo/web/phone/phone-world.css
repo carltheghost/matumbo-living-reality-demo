@@ -562,3 +562,61 @@ body.phone-world:not(.phone-local) #status {
   .vivo-companion[data-presence="reacting"] .companion-avatar-ring,
   .vivo-companion[data-presence="reacting"] .companion-avatar-halo { animation: none; }
 }
+
+/* Keep the field in view while the companion remains a usable control surface. */
+.companion-character-copy { display: grid; gap: 2px; min-width: 0; }
+.companion-character-name { color: #e8f2fc; font-size: 9px; line-height: 1.1; white-space: nowrap; }
+.companion-character-role { color: #8fa8c1; font: 7px/1.1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .08em; text-transform: uppercase; }
+.companion-reaction[hidden],
+.companion-chat-unavailable[hidden] { display: none; }
+.companion-conversation { border-top: 1px solid rgba(127, 180, 255, .16); display: block; padding-top: 8px; }
+.companion-conversation-summary { align-items: center; color: #e4eef8; cursor: pointer; display: flex; gap: 8px; justify-content: space-between; list-style: none; min-height: 31px; }
+.companion-conversation-summary::-webkit-details-marker { display: none; }
+.companion-conversation-summary::after { color: #86a9cf; content: '+'; font: 16px/1 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.companion-conversation[open] .companion-conversation-summary::after { content: '−'; }
+.companion-conversation-summary > span:first-child { display: grid; gap: 3px; min-width: 0; }
+.companion-conversation-summary strong { color: #e4eef8; font-size: 14px; font-weight: 650; }
+.companion-conversation-body { display: grid; gap: 8px; padding-top: 8px; }
+.companion-chat-unavailable { background: rgba(5, 16, 28, .45); border-left: 2px solid rgba(127, 180, 255, .55); color: #9fb4ca; font: 8px/1.35 ui-monospace, SFMono-Regular, Consolas, monospace; margin: 0; padding: 7px 8px; }
+.vivo-companion[data-collapsed="true"] { gap: 0; min-height: 0; padding-bottom: 8px; padding-top: 8px; }
+.vivo-companion[data-collapsed="true"] > :not(.companion-kicker):not(.companion-heading) { display: none; }
+.vivo-companion[data-collapsed="true"] .companion-heading { justify-content: flex-end; }
+.vivo-companion[data-collapsed="true"] .companion-heading > div { display: none; }
+.vivo-companion[data-collapsed="true"] .companion-minimize { min-height: 27px !important; }
+
+@media (max-width: 760px) {
+  .field-dock {
+    max-height: min(46dvh, calc(100dvh - 310px));
+    padding: 9px;
+  }
+  .vivo-companion { border-radius: 14px; gap: 7px; padding: 9px; }
+  .companion-kicker .eyebrow { font-size: 7px; }
+  .companion-live-state { font-size: 7px; padding: 5px 6px; }
+  .companion-heading { gap: 8px; }
+  .companion-heading h2 { font-size: 16px; margin: 0 0 2px; }
+  .companion-heading p { font-size: 9px; line-height: 1.25; max-width: 220px; }
+  .companion-minimize { font-size: 8px !important; min-height: 28px !important; padding: 5px 7px !important; }
+  .companion-flow { display: none; }
+  .companion-character-grid { gap: 5px; }
+  .companion-character { gap: 3px; min-height: 55px; padding: 4px; }
+  .companion-character .companion-avatar { height: 32px; width: 40px; }
+  .companion-character-name { font-size: 8px; }
+  .companion-character-role { font-size: 6px; }
+  .companion-presence { gap: 7px; min-height: 76px; padding: 6px; }
+  .companion-avatar-stage { flex-basis: 65px; min-height: 65px; }
+  .companion-avatar--large { flex-basis: 68px; height: 68px; width: 68px; }
+  .companion-detail h3 { font-size: 14px; margin: 2px 0; }
+  .companion-detail p { font-size: 9px; line-height: 1.2; margin: 0 0 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .companion-presence-state,
+  .companion-detail-label { font-size: 7px; }
+  .companion-anchor-copy,
+  .companion-coordinates { font-size: 6.5px; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .companion-actions { gap: 5px; }
+  .companion-actions button { font-size: 9px; min-height: 32px !important; padding: 6px 6px !important; }
+  .companion-reaction { font-size: 8px; line-height: 1.25; min-height: 26px; padding: 6px 7px; }
+  .companion-conversation { padding-top: 5px; }
+  .companion-conversation-summary { min-height: 26px; }
+  .companion-conversation-summary strong { font-size: 11px; }
+  .companion-provider-badge { font-size: 7px; padding: 5px 6px; }
+  .companion-chat-unavailable { font-size: 7px; padding: 6px 7px; }
+}

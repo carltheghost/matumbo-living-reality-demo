@@ -5,6 +5,12 @@ const clamp = (value, lo, hi) => Math.max(lo, Math.min(hi, value));
 const line = (ctx, a, b) => { ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); };
 const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 
+const COMPANION_OCCUPANTS = Object.freeze({
+  relic: Object.freeze({ color: '#79adff', accent: '#c5dcff', kind: 'sentinel' }),
+  workpiece: Object.freeze({ color: '#f3a35b', accent: '#ffd2a8', kind: 'maker' }),
+  portal: Object.freeze({ color: '#66dfad', accent: '#c4f9de', kind: 'wayfinder' }),
+});
+
 function visibleInSlice(renderer, entity) {
   if (renderer.overview) return true;
   return renderer.inSlice(entity);
@@ -12,6 +18,93 @@ function visibleInSlice(renderer, entity) {
 
 function projectEntity(renderer, entity, geometry) {
   return renderer.project(embed(entity.q, geometry, entity.chart));
+}
+
+function drawCompanionOccupant(ctx, entity, point, radius, { selected = false, held = false } = {}) {
+  const style = COMPANION_OCCUPANTS[entity.id];
+  if (!style || (!selected && !held)) return 0;
+  const size = clamp(radius * (selected ? 3.3 : 1.85), selected ? 46 : 28, selected ? 68 : 44);
+  const lift = size * .24;
+  ctx.save();
+  ctx.translate(point.x, point.y - lift);
+  ctx.globalCompositeOperation = 'screen';
+  ctx.globalAlpha = selected ? 1 : .82;
+  ctx.shadowColor = style.color;
+  ctx.shadowBlur = selected ? 16 : 9;
+  ctx.fillStyle = style.color;
+  ctx.strokeStyle = style.accent;
+  ctx.lineWidth = selected ? 1.7 : 1.2;
+
+  ctx.beginPath();
+  ctx.ellipse(0, size * .58, size * .48, size * .11, -.08, 0, Math.PI * 2);
+  ctx.fillStyle = `${style.color}66`;
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(0, size * .48);
+  ctx.lineTo(0, size * .68);
+  ctx.strokeStyle = `${style.accent}aa`;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.fillStyle = style.color;
+  ctx.strokeStyle = style.accent;
+  if (style.kind === 'wayfinder') {
+    ctx.beginPath();
+    ctx.arc(0, size * .04, size * .38, Math.PI, 0);
+    ctx.lineTo(size * .38, size * .44);
+    ctx.lineTo(-size * .38, size * .44);
+    ctx.closePath();
+    ctx.globalAlpha = selected ? .82 : .65;
+    ctx.fill();
+    ctx.stroke();
+  } else if (style.kind === 'maker') {
+    ctx.beginPath();
+    ctx.moveTo(-size * .4, size * .02);
+    ctx.lineTo(size * .28, -size * .12);
+    ctx.lineTo(size * .46, size * .38);
+    ctx.lineTo(-size * .27, size * .46);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(-size * .32, -size * .02);
+    ctx.quadraticCurveTo(-size * .4, size * .28, -size * .28, size * .46);
+    ctx.lineTo(size * .28, size * .46);
+    ctx.quadraticCurveTo(size * .4, size * .28, size * .32, -size * .02);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = style.accent;
+  ctx.beginPath();
+  ctx.arc(0, -size * .22, size * .24, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = style.accent;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = '#071321';
+  ctx.beginPath(); ctx.ellipse(-size * .09, -size * .23, size * .035, size * .06, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(size * .09, -size * .23, size * .035, size * .06, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#071321';
+  ctx.beginPath();
+  ctx.arc(0, -size * .12, size * .08, 0, Math.PI);
+  ctx.stroke();
+  if (style.kind === 'sentinel') {
+    ctx.strokeStyle = style.accent;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(0, -size * .48); ctx.lineTo(0, -size * .66); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, -size * .68, size * .035, 0, Math.PI * 2); ctx.fillStyle = style.accent; ctx.fill();
+  } else if (style.kind === 'maker') {
+    ctx.save(); ctx.rotate(.6); ctx.fillStyle = style.accent; ctx.fillRect(size * .31, -size * .39, size * .12, size * .22); ctx.restore();
+  } else {
+    ctx.strokeStyle = style.accent;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.arc(0, -size * .23, size * .35, Math.PI, 0); ctx.stroke();
+  }
+  ctx.restore();
+  return size;
 }
 
 function drawIdleField(ctx, renderer) {
@@ -146,14 +239,16 @@ export class PhoneRenderer extends Renderer {
       ctx.strokeStyle = tone.solid; ctx.globalAlpha = 0.62; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.arc(point.x, point.y, Math.max(19, radius * 1.2) + 9, 0, Math.PI * 2); ctx.stroke();
     }
+    const occupantSize = drawCompanionOccupant(ctx, entity, point, radius, { selected, held });
+    const labelBase = occupantSize ? occupantSize * .72 : Math.max(17, radius);
     ctx.font = selected ? '600 12px system-ui, sans-serif' : '11px system-ui, sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
     ctx.fillStyle = selected ? '#f4f7fb' : '#c8d7e8';
-    ctx.fillText((entity.localPreview ? 'LOCAL PREVIEW · ' : held ? 'HELD · ' : '') + entity.name, point.x, point.y + Math.max(17, radius) + 12);
+    ctx.fillText((entity.localPreview ? 'LOCAL PREVIEW · ' : held ? 'HELD · ' : '') + entity.name, point.x, point.y + labelBase + 12);
     if (selected) {
       ctx.font = '9px ui-monospace, SFMono-Regular, monospace';
       ctx.fillStyle = tone.solid;
-      ctx.fillText(tone.label.toUpperCase() + ' · ' + entity.q.slice(0, 3).map(value => finite(value).toFixed(1)).join(' / '), point.x, point.y + Math.max(17, radius) + 28);
+      ctx.fillText(tone.label.toUpperCase() + ' · ' + entity.q.slice(0, 3).map(value => finite(value).toFixed(1)).join(' / '), point.x, point.y + labelBase + 28);
     }
     ctx.restore();
     return { ...point, id: entity.id, interactive: visible, tone: tone.key };
@@ -225,14 +320,16 @@ export class PhoneRenderer extends Renderer {
       this.drawGrid(ctx, this.grid);
       this.drawAxes(ctx);
       const geometry = state.geometry || { kind: 'flat', R: 2, r: 1 };
+      const workpiece = state.entities?.workpiece;
+      // Keep accepted material behind the embodied occupant so the selected
+      // identity reads as a resident of the existing world, not a tooltip.
+      this.drawMaterialPatch(ctx, this.materialPatch, workpiece, geometry, { provisional: false });
       for (const source of Object.values(state.entities || {})) {
         const entity = this.displayEntity(source);
         const point = projectEntity(this, entity, geometry);
         const hit = this.drawEntity(ctx, entity, point, geometry);
         if (hit) this.screen.push(hit);
       }
-      const workpiece = state.entities?.workpiece;
-      this.drawMaterialPatch(ctx, this.materialPatch, workpiece, geometry, { provisional: false });
       if (this.materialProvisional) this.drawMaterialPatch(ctx, this.materialProvisional, workpiece, geometry, { provisional: true });
       for (const participant of state.participants || []) {
         if (!participant.observer || participant.id === this.actor) continue;

@@ -232,21 +232,24 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
   shell.setAttribute('aria-labelledby', 'vivoCompanionTitle');
   shell.innerHTML = `
     <div class="companion-kicker"><span class="eyebrow">VIVO / EMBODIED COMPANION</span><span class="companion-live-state" data-companion="persistence">LOCAL · READY</span></div>
-    <div class="companion-heading"><div><h2 id="vivoCompanionTitle">Bring one close.</h2><p>Choose an identity. Place it. Return to find the same occupant where you left it.</p></div><button type="button" class="companion-minimize" data-companion="focus" aria-label="Focus the world">↗</button></div>
+    <div class="companion-heading"><div><h2 id="vivoCompanionTitle">Choose a companion.</h2><p>Place it in this field. Return to find the same occupant where you left it.</p></div><button type="button" class="companion-minimize" data-companion="focus" aria-label="Return to the world">WORLD ↗</button></div>
     <div class="companion-flow" aria-label="Vivo companion flow"><span class="is-current">01 / CHOOSE</span><i></i><span>02 / PLACE</span><i></i><span>03 / RETURN</span></div>
     <div class="companion-character-grid" data-companion="roster" role="listbox" aria-label="Choose an embodied world identity"></div>
     <div class="companion-presence" data-companion="presence">
       <div class="companion-avatar-stage" data-companion="avatar-stage"></div>
       <div class="companion-detail"><div class="companion-presence-meta"><span class="companion-presence-state" data-companion="presence-state"></span><span class="companion-detail-label" data-companion="role"></span></div><h3 data-companion="name"></h3><p data-companion="description"></p><div class="companion-anchor-copy" data-companion="anchor-copy"></div><div class="companion-coordinates" data-companion="coordinates"></div></div>
     </div>
-    <div class="companion-actions"><button type="button" class="companion-primary" data-companion="place">Place / re-place</button><button type="button" data-companion="select-world">Show in field</button></div>
+    <div class="companion-actions"><button type="button" class="companion-primary" data-companion="place">Place in world</button><button type="button" data-companion="select-world">Return to field</button></div>
     <div class="companion-reaction" data-companion="reaction" role="status" aria-live="polite"></div>
-    <section class="companion-conversation" aria-labelledby="companionConversationTitle">
-      <div class="companion-conversation-heading"><div><span class="companion-detail-label">CONVERSATION</span><h3 id="companionConversationTitle">Talk, when connected.</h3></div><span class="companion-provider-badge" data-companion="provider-badge">BACKEND NOT CONNECTED</span></div>
-      <div class="companion-chat-log" data-companion="chat-log" aria-live="polite"></div>
-      <form class="companion-chat-form" data-companion="chat-form"><input data-companion="chat-input" maxlength="400" autocomplete="off" placeholder="Ask about this place…" aria-label="Message the selected companion"><button type="submit" class="companion-send" data-companion="send">Send</button><button type="button" class="companion-stop" data-companion="stop" hidden>Stop</button></form>
-      <p class="companion-chat-note" data-companion="chat-note"></p>
-    </section>
+    <details class="companion-conversation" data-companion="conversation">
+      <summary class="companion-conversation-summary"><span><span class="companion-detail-label">CONVERSATION</span><strong id="companionConversationTitle">Talk when connected.</strong></span><span class="companion-provider-badge" data-companion="provider-badge">BACKEND NOT CONNECTED</span></summary>
+      <div class="companion-conversation-body">
+        <p class="companion-chat-unavailable" data-companion="chat-unavailable">No backend connected · conversation unavailable.</p>
+        <div class="companion-chat-log" data-companion="chat-log" aria-live="polite"></div>
+        <form class="companion-chat-form" data-companion="chat-form"><input data-companion="chat-input" maxlength="400" autocomplete="off" placeholder="Ask about this place…" aria-label="Message the selected companion"><button type="submit" class="companion-send" data-companion="send">Send</button><button type="button" class="companion-stop" data-companion="stop" hidden>Stop</button></form>
+        <p class="companion-chat-note" data-companion="chat-note"></p>
+      </div>
+    </details>
   `;
   dock.prepend(shell);
 
@@ -272,6 +275,7 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
     responseController: null,
     lastSyncKey: '',
     providerConnected: false,
+    collapsed: false,
     inFlightSnapshot: null,
     timer: null,
   };
@@ -312,6 +316,7 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
     state.reaction = String(text || '');
     const view = query('reaction');
     view.textContent = state.reaction;
+    view.hidden = !state.reaction;
     view.dataset.tone = tone;
   }
   function stopResponse(reason = 'conversation-stopped') {
@@ -329,7 +334,9 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
     for (const character of COMPANION_CHARACTERS) {
       const card = element(documentRoot, 'button', `companion-character${character.id === state.selectedId ? ' is-selected' : ''}`);
       card.type = 'button'; card.dataset.characterId = character.id; card.setAttribute('role', 'option'); card.setAttribute('aria-selected', character.id === state.selectedId ? 'true' : 'false');
-      card.append(avatar(documentRoot, character), element(documentRoot, 'span', 'companion-character-copy', `${character.name} · ${character.shortRole}`));
+      const copy = element(documentRoot, 'span', 'companion-character-copy');
+      copy.append(element(documentRoot, 'span', 'companion-character-name', character.name), element(documentRoot, 'span', 'companion-character-role', character.shortRole));
+      card.append(avatar(documentRoot, character), copy);
       card.addEventListener('click', () => select(character.id));
       roster.append(card);
     }
@@ -353,11 +360,19 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
     const badge = query('provider-badge');
     badge.textContent = provider ? 'LIVE PROVIDER READY' : 'BACKEND NOT CONNECTED';
     badge.dataset.connected = provider ? 'true' : 'false';
+    const conversation = query('conversation');
+    conversation.dataset.connected = provider ? 'true' : 'false';
+    const unavailable = query('chat-unavailable');
+    unavailable.hidden = Boolean(provider);
     const input = query('chat-input'), send = query('send'), stop = query('stop');
     input.placeholder = provider ? `Ask ${character.name} about this place…` : 'Conversation unavailable';
     input.disabled = !provider || state.responseBusy;
     send.disabled = !provider || state.responseBusy;
     stop.hidden = !state.responseBusy;
+    log.hidden = !provider;
+    query('chat-form').hidden = !provider;
+    query('chat-note').hidden = !provider;
+    if (provider && (state.messages.get(character.id) || []).length) conversation.open = true;
     query('chat-note').textContent = provider
       ? 'Messages use the configured provider and stay scoped to this selected world identity.'
       : 'No conversational backend is configured in this build. Nothing is being simulated as an AI reply.';
@@ -369,6 +384,7 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
     const activeEye = state.envelope?.eyes?.[state.envelope?.currentEyeId];
     const activeRoot = activeEye?.spaceId === state.envelope?.snapshot?.rootSpaceId;
     shell.dataset.presence = state.presence;
+    shell.dataset.collapsed = state.collapsed ? 'true' : 'false';
     query('avatar-stage').replaceChildren(avatar(documentRoot, character, true));
     query('role').textContent = character.role.toUpperCase();
     query('name').textContent = character.name;
@@ -380,6 +396,9 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
     query('coordinates').textContent = entity
       ? `${entity.id} · ${activeEye?.spaceId || 'unknown space'} · ${entity.q.slice(0, 4).map((value, axis) => `x${axis + 1} ${finite(value).toFixed(2)}`).join(' · ')}`
       : activeRoot ? 'Identity unavailable in this saved world.' : 'Return the Eye to root to place this identity.';
+    const reaction = query('reaction');
+    reaction.textContent = state.reaction;
+    reaction.hidden = !state.reaction;
     const placed = isPlaced(entity, character.id);
     const persistence = query('persistence');
     persistence.textContent = placed ? 'PLACEMENT · RECOVERED' : 'LOCAL · READY';
@@ -391,6 +410,8 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
     renderRoster();
     const provider = readConversationProvider(scope);
     renderChat(provider);
+    query('focus').textContent = state.collapsed ? 'OPEN COMPANION' : 'WORLD ↗';
+    query('focus').setAttribute('aria-label', state.collapsed ? 'Open companion chooser' : 'Return to the world');
     shell.dataset.state = state.placementBusy ? 'placing' : placed ? 'placed' : 'ready';
   }
   function select(id, { announce = true } = {}) {
@@ -489,8 +510,14 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
     render();
   });
   query('focus').addEventListener('click', () => {
+    if (state.collapsed) {
+      state.collapsed = false;
+      render();
+      return;
+    }
     selectWorldEntity(selected().entityId);
     documentRoot.getElementById('world')?.focus?.({ preventScroll: true });
+    state.collapsed = true;
     setPresence('attention', 2400);
     setReaction('World focus restored. Touch and dimensional controls remain available below.', 'success');
     render();
