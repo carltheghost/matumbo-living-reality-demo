@@ -43,7 +43,7 @@ def committed(page: Page) -> None:
     # The panel action handler is deliberately async so a rapid second click
     # can be fenced. Allow its busy flag and refresh microtasks to settle
     # before asserting the visible receipt status.
-    page.wait_for_timeout(250)
+    page.wait_for_timeout(500)
     page.wait_for_function("!document.querySelector('#simulated-economy-panel')?.dataset.busy")
     page.wait_for_function("document.querySelector('.sim-economy-status')?.textContent.includes('Committed')")
 

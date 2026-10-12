@@ -314,6 +314,10 @@ body.phone-world:not(.phone-local) #status {
   .field-dock-heading { gap: 7px; }
   .field-dock h2 { font-size: 16px; }
   .field-dock-intro { font-size: 11px; }
+  .field-dock-heading { order: -4; }
+  .field-dock-intro { order: -3; }
+  .field-selection-row { order: -2; }
+  .field-actions { order: -1; }
   .field-query-row { grid-template-columns: 1.2fr .75fr; }
   .field-query-row label:last-child { grid-column: 1 / -1; }
   .field-axis-row { grid-template-columns: auto repeat(3, 1fr); }
