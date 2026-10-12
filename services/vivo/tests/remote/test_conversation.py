@@ -283,6 +283,35 @@ class ConversationAdapterTests(unittest.IsolatedAsyncioTestCase):
             state = next(iter(adapter.store._states.values()))
             self.assertEqual(state.history, [])
 
+    async def test_queued_cancellation_is_memoized_before_turn_lock(self):
+        provider = MockProvider([
+            {"output_text": "old response"},
+            {"output_text": "must not retry"},
+        ], wait_first=True)
+        adapter = ConversationAdapter(self.config(timeout_seconds=2), provider=provider)
+        old = asyncio.create_task(self.ask(adapter, request_id="old.1", generation=1, text="old"))
+        await provider.first_called.wait()
+        queued = asyncio.create_task(self.ask(adapter, request_id="new.1", generation=2, text="new"))
+        state = next(iter(adapter.store._states.values()))
+        for _ in range(20):
+            if state.active_request_id == "new.1" and state.turn_lock.locked():
+                break
+            await asyncio.sleep(0)
+        else:
+            self.fail("new generation did not reach the turn-lock queue")
+        queued.cancel("selection-changed")
+        with self.assertRaises(asyncio.CancelledError):
+            await queued
+        provider.release_first.set()
+        with self.assertRaises(ConversationError) as old_error:
+            await old
+        self.assertEqual(old_error.exception.code, "STALE_GENERATION")
+        with self.assertRaises(ConversationError) as retry_error:
+            await self.ask(adapter, request_id="new.1", generation=2, text="new")
+        self.assertEqual(retry_error.exception.code, "CONVERSATION_CANCELLED")
+        self.assertEqual(len(provider.calls), 1)
+        self.assertIsNone(state.active_request_id)
+
     async def test_timeout_returns_stable_error(self):
         provider = MockProvider([{"output_text": "late"}], wait_first=True)
         adapter = ConversationAdapter(self.config(timeout_seconds=0.01), provider=provider)
@@ -356,6 +385,55 @@ class ConversationAdapterTests(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(error.exception.code, "STALE_GENERATION")
         self.assertEqual(len(provider.calls), 34)
+
+    async def test_eviction_retains_bounded_replay_fence(self):
+        provider = MockProvider([
+            {"output_text": "first"},
+            {"output_text": "second"},
+            {"output_text": "must not be called"},
+        ])
+        adapter = ConversationAdapter(
+            self.config(max_conversations=1, requests_per_minute=100),
+            provider=provider,
+        )
+        first = await self.ask(
+            adapter,
+            session_id="eviction-a",
+            request_id="evict.1",
+            generation=1,
+            text="first",
+            world_value=world("world-a"),
+        )
+        await self.ask(
+            adapter,
+            session_id="eviction-b",
+            request_id="evict-other.1",
+            generation=1,
+            text="second",
+            world_value=world("world-b"),
+        )
+        replay = await self.ask(
+            adapter,
+            session_id="eviction-a",
+            request_id="evict.1",
+            generation=1,
+            text="first",
+            world_value=world("world-a"),
+        )
+        self.assertEqual(replay, first)
+        self.assertEqual(len(provider.calls), 2)
+        self.assertLessEqual(adapter.store.fence_count(), 1)
+        with self.assertRaises(ConversationError) as stale_error:
+            await self.ask(
+                adapter,
+                session_id="eviction-a",
+                request_id="evict-unknown.1",
+                generation=1,
+                text="another old turn",
+                world_value=world("world-a"),
+            )
+        self.assertEqual(stale_error.exception.code, "STALE_GENERATION")
+        self.assertEqual(len(provider.calls), 2)
 
 
 class ConversationRouteTests(unittest.IsolatedAsyncioTestCase):

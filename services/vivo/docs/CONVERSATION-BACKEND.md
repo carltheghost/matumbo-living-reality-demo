@@ -76,6 +76,13 @@ does not commit the turn. This is the server half of the companion
 selection/navigation stop contract. The memoization is process-local, so a
 restart remains an operational boundary for exactly-once billing protection.
 
+When an inactive conversation slot is evicted, a bounded fence retains its
+conversation ID, generation fence, and recent request outcomes while dropping
+the conversational history. A replay that is still in that fence returns the
+same result without a provider attempt. Fences use a bounded slot budget and
+may themselves be evicted; after that, the old request is no longer covered by
+an exactly-once guarantee. No fence survives a process restart.
+
 ## Provider behavior
 
 When `OPENAI_API_KEY` is absent, status is explicitly:

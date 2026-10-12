@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import OrderedDict, deque
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 import hashlib
 import json
@@ -373,10 +374,53 @@ class ConversationState:
     turn_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
+@dataclass
+class ConversationFence:
+    """Bounded identity/generation fence retained after state eviction."""
+
+    conversation_id: str
+    idempotency: OrderedDict[str, tuple[str, CachedOutcome]]
+    latest_generation: int
+    active_request_id: str | None
+    last_used: float
+
+
 class ConversationStore:
     def __init__(self, config: ConversationConfig):
         self.config = config
         self._states: dict[tuple[str, tuple[str, ...]], ConversationState] = {}
+        # Fences use the same slot budget as active states. They retain only
+        # bounded request outcomes and generation identity; conversation
+        # history is intentionally dropped when a state is evicted.
+        self._fences: OrderedDict[tuple[str, tuple[str, ...]], ConversationFence] = OrderedDict()
+
+    def _identity_slot_count(self, identity: str) -> int:
+        active = sum(1 for state in self._states.values() if state.identity == identity)
+        fenced = sum(1 for key in self._fences if key[0] == identity)
+        return active + fenced
+
+    def _remember_fence(self, key: tuple[str, tuple[str, ...]], state: ConversationState) -> None:
+        self._fences[key] = ConversationFence(
+            conversation_id=state.conversation_id,
+            idempotency=state.idempotency,
+            latest_generation=state.latest_generation,
+            active_request_id=state.active_request_id,
+            last_used=state.last_used,
+        )
+        self._fences.move_to_end(key)
+        while len(self._fences) > self.config.max_conversations:
+            self._fences.popitem(last=False)
+
+    def _evict_one(self) -> None:
+        candidates = [
+            (key, state) for key, state in self._states.items()
+            if not state.turn_lock.locked() and not state.state_lock.locked()
+        ]
+        if not candidates:
+            raise ConversationError("CONVERSATION_CAPACITY", 429, retry_after=60)
+        key, oldest = min(candidates, key=lambda item: item[1].last_used)
+        self._states.pop(key, None)
+        self._remember_fence(key, oldest)
 
     def get_or_create(self, identity: str, scope: tuple[str, ...]) -> ConversationState:
         key = (identity, scope)
@@ -384,18 +428,34 @@ class ConversationStore:
         if current is not None:
             current.last_used = time.monotonic()
             return current
-        identity_count = sum(1 for state in self._states.values() if state.identity == identity)
-        if identity_count >= self.config.max_conversations_per_identity:
+        saved = self._fences.get(key)
+        identity_count = self._identity_slot_count(identity)
+        if saved is None and identity_count >= self.config.max_conversations_per_identity:
             raise ConversationError("CONVERSATION_CAPACITY", 429, retry_after=60)
         if len(self._states) >= self.config.max_conversations:
-            candidates = [
-                state for state in self._states.values()
-                if not state.turn_lock.locked() and not state.state_lock.locked()
-            ]
-            if not candidates:
-                raise ConversationError("CONVERSATION_CAPACITY", 429, retry_after=60)
-            oldest = min(candidates, key=lambda state: state.last_used)
-            self._states.pop((oldest.identity, oldest.scope), None)
+            # Reserve the requested fence while another active state is
+            # moved into the bounded fence set. Otherwise a one-slot store
+            # could evict the very fence being replayed.
+            saved = self._fences.pop(key, None)
+            try:
+                self._evict_one()
+            except BaseException:
+                if saved is not None:
+                    self._fences[key] = saved
+                raise
+        self._fences.pop(key, None)
+        if saved is not None:
+            state = ConversationState(
+                identity=identity,
+                scope=scope,
+                conversation_id=saved.conversation_id,
+                idempotency=saved.idempotency,
+                latest_generation=saved.latest_generation,
+                active_request_id=saved.active_request_id,
+                last_used=time.monotonic(),
+            )
+            self._states[key] = state
+            return state
         state = ConversationState(
             identity=identity,
             scope=scope,
@@ -406,6 +466,9 @@ class ConversationStore:
 
     def count(self) -> int:
         return len(self._states)
+
+    def fence_count(self) -> int:
+        return len(self._fences)
 
 
 class RateLimiter:
@@ -515,6 +578,29 @@ class ConversationAdapter:
             return ConversationError("PROVIDER_INVALID_RESPONSE", 502)
         return ConversationError("PROVIDER_UNAVAILABLE", 503)
 
+    @asynccontextmanager
+    async def _turn_scope(
+        self,
+        state: ConversationState,
+        request_id: str,
+        fingerprint: str,
+    ):
+        acquired = False
+        try:
+            try:
+                await state.turn_lock.acquire()
+                acquired = True
+                yield
+            except asyncio.CancelledError:
+                # This also covers cancellation while queued behind another
+                # provider turn, before the body reaches its inner handler.
+                failure = ConversationError("CONVERSATION_CANCELLED", 499)
+                await self._remember_failure(state, request_id, fingerprint, failure)
+                raise
+        finally:
+            if acquired:
+                state.turn_lock.release()
+
     def status(self) -> dict[str, Any]:
         if not self.config.enabled or self.provider is None:
             return {
@@ -605,7 +691,7 @@ class ConversationAdapter:
                 self.rate.allow(identity)
                 state.latest_generation = generation
                 state.active_request_id = request_id
-        async with state.turn_lock:
+        async with self._turn_scope(state, request_id, fingerprint):
             async with state.state_lock:
                 cached = state.idempotency.get(request_id)
                 if cached is not None:
@@ -666,14 +752,6 @@ class ConversationAdapter:
                 failure = ConversationError("PROVIDER_TIMEOUT", 504)
                 await self._remember_failure(state, request_id, fingerprint, failure)
                 raise failure from None
-            except asyncio.CancelledError:
-                # Client stop/selection/navigation cancellation must cancel the
-                # in-flight provider request and must not commit this turn. The
-                # terminal outcome is memoized so a retry with the same request
-                # ID cannot accidentally issue a second billable attempt.
-                failure = ConversationError("CONVERSATION_CANCELLED", 499)
-                await self._remember_failure(state, request_id, fingerprint, failure)
-                raise
             except ProviderError as error:
                 failure = self._provider_failure(error)
                 await self._remember_failure(state, request_id, fingerprint, failure)
