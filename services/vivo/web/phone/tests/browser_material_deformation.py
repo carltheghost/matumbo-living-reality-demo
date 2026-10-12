@@ -125,6 +125,11 @@ def run_mounted_worker_regressions(page) -> dict:
             const { identity } = await current();
             return engine.materialStopSource({ operationId, source, identity, observedAt: 102, receivedAt: 103, reason: 'mounted-regression' });
           };
+          const operationState = material => ({
+            activeContacts: material.activeContacts,
+            receipts: material.body?.receipts,
+            inputCursor: material.body?.inputCursor,
+          });
 
           const rapidBefore = await current();
           const rapidSource = { kind: 'touch', sourceId: 'mounted-rapid', sessionId: 'mounted-regression', generation: 1 };
@@ -164,16 +169,43 @@ def run_mounted_worker_regressions(page) -> dict:
           await stop(replayOperation, agent1);
           await begin('mounted:agent:fresh', agent2, nodeIds[0]);
           const beforeConflict = await engine.materialSnapshot();
+          const beforeConflictOperationState = operationState(beforeConflict);
           let conflictMessage = '';
           try { await stop(replayOperation, agent2); } catch (error) { conflictMessage = String(error?.message || error); }
           const afterConflict = await engine.materialSnapshot();
+          const afterConflictOperationState = operationState(afterConflict);
+          // Physics may advance between these two worker reads while the
+          // fresh contact keeps the clock alive. Compare only state the
+          // rejected operation could mutate, then probe the source fence by
+          // admitting a different contact in the same generation.
+          let sameGenerationAccepted = false;
+          let sameGenerationError = '';
+          try {
+            const admitted = await begin('mounted:agent:same-generation-after-reject', agent2, nodeIds[1]);
+            sameGenerationAccepted = admitted.status === 'accepted';
+            if (sameGenerationAccepted) {
+              const { identity } = await current();
+              await engine.materialCancel({
+                operationId: nextOperation('cancel:agent:same-generation-after-reject'),
+                contactId: admitted.contact.contactId, source: agent2,
+                identity: { ...identity, bodyRevision: admitted.receipt.bodyRevision },
+                observedAt: 204, receivedAt: 205, reason: 'mounted-regression-cleanup',
+              });
+            }
+          } catch (error) { sameGenerationError = String(error?.message || error); }
           await stop(nextOperation('stop:agent:fresh'), agent2);
           return {
             handStopReleased: handStop.released?.map(item => item.contactId) || [],
             handContacts,
             handFenceAccepted: handFence.status === 'accepted',
             conflictMessage,
-            conflictStateUnchanged: JSON.stringify(beforeConflict) === JSON.stringify(afterConflict),
+            conflictOperationStateUnchanged: JSON.stringify(beforeConflictOperationState) === JSON.stringify(afterConflictOperationState),
+            sameGenerationAccepted,
+            sameGenerationError,
+            conflictPhysicsTickBefore: beforeConflict.body.physicsTick,
+            conflictPhysicsTickAfter: afterConflict.body.physicsTick,
+            conflictBodyRevisionBefore: beforeConflict.body.bodyRevision,
+            conflictBodyRevisionAfter: afterConflict.body.bodyRevision,
             cleanupContacts: (await engine.materialSnapshot()).activeContacts.length,
             rapidBodyRevisionBefore: rapidBefore.material.body.bodyRevision,
             rapidBodyRevisionAfter: rapidAfter.material.body.bodyRevision,
@@ -298,7 +330,9 @@ def run_flow(page, route: str, world_id: str, include_hand: bool) -> dict:
     assert mounted_regressions["handContacts"] == ["mounted:finger:fresh"], mounted_regressions
     assert mounted_regressions["handFenceAccepted"] is True, mounted_regressions
     assert "MATERIAL_OPERATION_REPLAY_MISMATCH" in mounted_regressions["conflictMessage"], mounted_regressions
-    assert mounted_regressions["conflictStateUnchanged"] is True, mounted_regressions
+    assert mounted_regressions["conflictOperationStateUnchanged"] is True, mounted_regressions
+    assert mounted_regressions["sameGenerationAccepted"] is True, mounted_regressions
+    assert mounted_regressions["sameGenerationError"] == "", mounted_regressions
     assert mounted_regressions["cleanupContacts"] == 0, mounted_regressions
 
     hand_result = None
