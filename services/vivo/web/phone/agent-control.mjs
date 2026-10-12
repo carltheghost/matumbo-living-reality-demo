@@ -40,7 +40,7 @@ const editFingerprint = value => JSON.stringify({
   entityId: value.entityId,
   baseRevision: value.baseRevision,
   delta: value.delta,
-  geometry: value.geometry,
+  geometry: value.geometry ?? null,
 });
 
 function snapshotOf(envelope) {
@@ -63,7 +63,10 @@ function priorOperation(envelope, id) {
  * Validate the full local acceptance envelope before an agent edit is queued.
  * The optional `allowIdempotentReplay` path still requires the current world,
  * branch, Eye, space and entity scope to match; only the entity CAS revision
- * may differ when the operation record already exists.
+ * may differ when the operation record already exists.  An omitted geometry
+ * is represented by `null` in the canonical request.  It must not be filled
+ * from the entity's mutable geometry because that would make a replay's
+ * fingerprint change after an unrelated geometry-only acceptance.
  */
 export function validateAgentEditPayload(payload, envelope, { allowIdempotentReplay = true } = {}) {
   snapshotOf(envelope);
@@ -99,12 +102,12 @@ export function validateAgentEditPayload(payload, envelope, { allowIdempotentRep
   const delta = payload.delta.map((value, axis) => {
     const result = finiteNumber(value, `delta[${axis}]`);
     if (Math.abs(result) > 5) throw controlError('AGENT_INVALID_EDIT', 'Each local edit delta is bounded to five units.');
-    return result;
+    return Math.abs(result) < 1e-12 ? 0 : result;
   });
   const prior = priorOperation(envelope, expected.operationId);
   if (expected.baseRevision !== Number(entity.revision) && !(allowIdempotentReplay && prior)) throw controlError('AGENT_CAS_STALE', 'The local entity revision changed before this edit was accepted.');
   const geometry = payload.geometry === undefined || payload.geometry === null
-    ? clone(entity.geometry)
+    ? null
     : normalizeEntityGeometry(payload.geometry, dimension);
   return {
     ...expected,
@@ -284,11 +287,14 @@ export class LocalAgentController {
     if (record.sessionId !== submittedSessionId || record.generation !== submittedGeneration) throw controlError('AGENT_GENERATION_STALE', 'The registered agent session changed before this edit was queued.');
     if (record.status !== 'active') return { status: 'cancelled-before-submission', submitted: false, code: 'AGENT_STOPPED' };
     const validated = validateAgentEditPayload(payload, current);
+    const requestFingerprint = editFingerprint(validated);
     const existing = record.operations.get(validated.operationId);
     if (existing) {
-      if (editFingerprint(existing.validated) !== editFingerprint(validated)) throw controlError('AGENT_OPERATION_REPLAY_MISMATCH', 'The operation identity was already used for a different local edit.');
+      const originalFingerprint = existing.requestFingerprint || editFingerprint(existing.validated);
+      if (originalFingerprint !== requestFingerprint) throw controlError('AGENT_OPERATION_REPLAY_MISMATCH', 'The operation identity was already used for a different local edit.');
       return existing.completion;
     }
+    if (validated.prior?.fingerprint && validated.prior.fingerprint !== requestFingerprint) throw controlError('AGENT_OPERATION_REPLAY_MISMATCH', 'The operation identity was already used for a different local edit.');
     const foreign = [...this.records.values()].flatMap(item => [...item.operations.values()]).find(item => item.operationId === validated.operationId && item.record !== record);
     if (foreign) throw controlError('AGENT_OPERATION_OWNER_MISMATCH', 'The operation identity is already bound to another registered agent.');
     if (record.operations.size >= this.maxOperations) {
@@ -301,6 +307,7 @@ export class LocalAgentController {
       generation: record.generation,
       payload: clone(payload),
       validated,
+      requestFingerprint,
       state: 'queued',
       submitted: false,
       completion: null,

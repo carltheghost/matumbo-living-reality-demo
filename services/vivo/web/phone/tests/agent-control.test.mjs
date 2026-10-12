@@ -1,9 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { LocalAgentController } from '../agent-control.mjs';
+import { LocalVivoEngine } from '../engine.mjs';
 import { SpatialInteractionFabric } from '../spatial-fabric.mjs';
 
 const clone = value => structuredClone(value);
+
+class MemoryStore {
+  rows = new Map();
+  async load(id) { return clone(this.rows.get(id) || null); }
+  async save(id, value) { this.rows.set(id, clone(value)); }
+}
 
 function makeEnvelope({ worldId = 'agent-world', branchId = 'branch-a', eyeId = 'eye-a', revision = 0 } = {}) {
   const dimension = 11;
@@ -25,7 +32,7 @@ function makeEnvelope({ worldId = 'agent-world', branchId = 'branch-a', eyeId = 
 function acceptanceResult(state, { entityId, delta, geometry, expected }) {
   const entity = state.snapshot.spaces.root.entities[entityId];
   entity.q = entity.q.map((value, axis) => value + delta[axis]);
-  entity.geometry = clone(geometry);
+  if (geometry !== null && geometry !== undefined) entity.geometry = clone(geometry);
   entity.revision++;
   state.snapshot.acceptedSequence++;
   state.snapshot.localOperationResults.push({
@@ -34,6 +41,23 @@ function acceptanceResult(state, { entityId, delta, geometry, expected }) {
     result: { changed: true, revision: entity.revision },
   });
   return { changed: true, revision: entity.revision, identity: { ...expected, revision: entity.revision }, geometry: clone(entity.geometry) };
+}
+
+function enginePayload(envelope, operationId, delta, geometry = undefined) {
+  const spaceId = envelope.eyes[envelope.currentEyeId].spaceId;
+  const entity = envelope.snapshot.spaces[spaceId].entities.relic;
+  const payload = {
+    worldId: envelope.snapshot.worldId,
+    branchId: envelope.branchId,
+    eyeId: envelope.currentEyeId,
+    spaceId,
+    entityId: entity.id,
+    baseRevision: entity.revision,
+    operationId,
+    delta,
+  };
+  if (geometry !== undefined) payload.geometry = geometry;
+  return payload;
 }
 
 function editPayload(state, operationId, delta = null, overrides = {}) {
@@ -180,4 +204,84 @@ test('full scope rejects Eye and branch changes and duplicate operation ids are 
   await assert.rejects(controller.submitTransform(worker.sessionId, staleEye), /AGENT_SCOPE_CHANGED/);
   state.currentEyeId = 'eye-a'; state.branchId = 'branch-forked';
   await assert.rejects(controller.submitTransform(worker.sessionId, editPayload({ ...state, branchId: 'branch-a' }, 'branch-stale')), /AGENT_SCOPE_CHANGED/);
+});
+
+test('real LocalVivoEngine replays omitted and explicit geometry from the original request fingerprint', async () => {
+  const engine = new LocalVivoEngine({ storage: new MemoryStore() });
+  await engine.open('agent-controller-engine-fingerprint', 11);
+  const calls = [];
+  const controller = new LocalAgentController({
+    snapshot: () => engine.snapshot(),
+    applyTransform: (entityId, delta, geometry, expected) => {
+      calls.push(expected.operationId);
+      return engine.applyLocalTransform(entityId, delta, geometry, expected);
+    },
+  });
+  await controller.setGrantedCapabilities(['world.edit']);
+  const worker = controller.register({ sourceId: 'worker', capabilities: ['world.edit'] });
+
+  const initial = await engine.snapshot();
+  const omittedDelta = Array(11).fill(0); omittedDelta[3] = 0.24;
+  const omittedPayload = enginePayload(initial, 'engine-replay:omitted', omittedDelta);
+  const omittedFirst = await controller.submitTransform(worker.sessionId, omittedPayload);
+  assert.equal(omittedFirst.status, 'accepted');
+  const afterOmitted = await engine.snapshot();
+  assert.equal(afterOmitted.snapshot.spaces.root.entities.relic.q[3], initial.snapshot.spaces.root.entities.relic.q[3] + 0.24);
+
+  const geometryOnlyBase = await engine.snapshot();
+  const geometryOnlyDelta = Array(11).fill(0);
+  const geometryOnly = await controller.submitTransform(worker.sessionId, enginePayload(
+    geometryOnlyBase,
+    'engine-replay:geometry-only',
+    geometryOnlyDelta,
+    { scale: 1.55, rotation: 0.3, axes: [0, 2] },
+  ));
+  assert.equal(geometryOnly.status, 'accepted');
+  const beforeOmittedReplay = await engine.snapshot();
+  const omittedReplay = await controller.submitTransform(worker.sessionId, omittedPayload);
+  const afterOmittedReplay = await engine.snapshot();
+  assert.equal(omittedReplay.status, 'accepted');
+  assert.deepEqual(afterOmittedReplay.snapshot.spaces.root.entities.relic.q, beforeOmittedReplay.snapshot.spaces.root.entities.relic.q);
+  assert.equal(afterOmittedReplay.snapshot.spaces.root.entities.relic.revision, beforeOmittedReplay.snapshot.spaces.root.entities.relic.revision);
+  assert.equal(afterOmittedReplay.snapshot.acceptedSequence, beforeOmittedReplay.snapshot.acceptedSequence);
+  assert.deepEqual(calls, ['engine-replay:omitted', 'engine-replay:geometry-only']);
+  await assert.rejects(
+    controller.submitTransform(worker.sessionId, { ...omittedPayload, geometry: { scale: 1, rotation: 0, axes: [0, 1] } }),
+    /AGENT_OPERATION_REPLAY_MISMATCH/,
+  );
+
+  const explicitBase = await engine.snapshot();
+  const explicitDelta = Array(11).fill(0); explicitDelta[10] = -0.35;
+  const explicitGeometry = { scale: 1.25, rotation: -0.2, axes: [1, 3] };
+  const explicitPayload = enginePayload(explicitBase, 'engine-replay:explicit', explicitDelta, explicitGeometry);
+  const explicitFirst = await controller.submitTransform(worker.sessionId, explicitPayload);
+  assert.equal(explicitFirst.status, 'accepted');
+  const explicitGeometryBase = await engine.snapshot();
+  const explicitGeometryOnly = await controller.submitTransform(worker.sessionId, enginePayload(
+    explicitGeometryBase,
+    'engine-replay:explicit-geometry-only',
+    Array(11).fill(0),
+    { scale: 1.8, rotation: 0.7, axes: [2, 4] },
+  ));
+  assert.equal(explicitGeometryOnly.status, 'accepted');
+  const beforeExplicitReplay = await engine.snapshot();
+  const explicitReplay = await controller.submitTransform(worker.sessionId, explicitPayload);
+  const afterExplicitReplay = await engine.snapshot();
+  assert.equal(explicitReplay.status, 'accepted');
+  assert.deepEqual(afterExplicitReplay.snapshot.spaces.root.entities.relic.q, beforeExplicitReplay.snapshot.spaces.root.entities.relic.q);
+  assert.equal(afterExplicitReplay.snapshot.spaces.root.entities.relic.revision, beforeExplicitReplay.snapshot.spaces.root.entities.relic.revision);
+  assert.equal(afterExplicitReplay.snapshot.acceptedSequence, beforeExplicitReplay.snapshot.acceptedSequence);
+  assert.deepEqual(calls, [
+    'engine-replay:omitted',
+    'engine-replay:geometry-only',
+    'engine-replay:explicit',
+    'engine-replay:explicit-geometry-only',
+  ]);
+  const omittedExplicitRetry = { ...explicitPayload };
+  delete omittedExplicitRetry.geometry;
+  await assert.rejects(
+    controller.submitTransform(worker.sessionId, omittedExplicitRetry),
+    /AGENT_OPERATION_REPLAY_MISMATCH/,
+  );
+  await engine.close();
 });
