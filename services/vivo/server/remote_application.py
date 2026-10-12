@@ -28,6 +28,7 @@ from aiohttp import WSMsgType, web
 from .local_application import LocalBridge
 from .application.adaptive_host import AdaptiveApplicationHost
 from .authority.module_routes import install_module_routes
+from .conversation import ConversationAdapter, attach_conversation_routes
 from .geometry import Geometry
 
 WEB_ROOT = Path(__file__).resolve().parents[1] / "web"
@@ -441,8 +442,9 @@ def remote_index():
     return source
 
 
-async def make_remote_app(data_dir, owner_token, origin, *, store="posix"):
+async def make_remote_app(data_dir, owner_token, origin, *, store="posix", conversation_adapter=None):
     gateway = RemoteGateway(Path(data_dir), owner_token, origin, store=store)
+    conversation = conversation_adapter or ConversationAdapter.from_env()
 
     @web.middleware
     async def security(request, handler):
@@ -462,6 +464,7 @@ async def make_remote_app(data_dir, owner_token, origin, *, store="posix"):
 
     app = web.Application(client_max_size=MAX_MESSAGE, middlewares=[security])
     app["gateway"] = gateway
+    app["conversation"] = conversation
     install_module_routes(app, REPOSITORY)
     grids = {d: Geometry("flat", d).sample_grid() for d in (4, 11)}
 
@@ -495,6 +498,20 @@ async def make_remote_app(data_dir, owner_token, origin, *, store="posix"):
             raise web.HTTPBadRequest(text="Remote Vivo supports the canonical 4D root and 11D inner world")
         return web.json_response(value)
 
+    def conversation_identity(token, principal):
+        # The bearer is reduced to a one-way digest before it enters the
+        # process-local conversation key.  Neither token nor key material is
+        # returned to the browser or written to a log/receipt.
+        return f"{principal.actor_id}:{token_hash(token).hex()}"
+
+    attach_conversation_routes(
+        app,
+        adapter=conversation,
+        origin=origin,
+        authenticate=gateway.authenticate,
+        identity_for_token=conversation_identity,
+    )
+
     async def asset(_request, name):
         data = (WEB_ROOT / name).read_bytes()
         content_type = "text/css" if name.endswith(".css") else "text/javascript"
@@ -516,6 +533,11 @@ async def make_remote_app(data_dir, owner_token, origin, *, store="posix"):
     app.router.add_static("/vendor/", WEB_ROOT / "vendor", show_index=False, follow_symlinks=False)
     app.on_startup.append(lambda _app: gateway.start())
     app.on_shutdown.append(lambda _app: gateway.stop())
+
+    async def close_conversation(_app):
+        await conversation.close()
+
+    app.on_cleanup.append(close_conversation)
     return app
 
 
