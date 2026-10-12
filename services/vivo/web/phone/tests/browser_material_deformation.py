@@ -57,6 +57,139 @@ def material_snapshot(page) -> dict:
     return page.evaluate("() => window.VivaPhoneEngine.materialSnapshot()")
 
 
+def coherent_material_state(page) -> dict:
+    return page.evaluate(
+        """
+        async () => {
+          const material = await window.VivaPhoneEngine.materialSnapshot();
+          const snapshot = await window.VivaPhoneEngine.snapshot();
+          const body = material.body;
+          const entity = snapshot.snapshot.spaces.root.entities.workpiece;
+          return {
+            bodyRevision: body.bodyRevision,
+            entityRevision: body.entityRevision,
+            bodyCentroid: body.centroid,
+            bodySimulationTime: body.simulationTime,
+            bodyAcceptedSequence: body.acceptedSequence,
+            entity,
+            worldSimulationTime: snapshot.snapshot.simulationTime,
+            worldAcceptedSequence: snapshot.snapshot.acceptedSequence,
+          };
+        }
+        """
+    )
+
+
+def assert_coherent_material_state(state: dict) -> None:
+    assert state["entity"]["q"] == state["bodyCentroid"]["q"], state
+    assert state["entity"]["v"] == state["bodyCentroid"]["v"], state
+    assert state["entity"]["revision"] == state["entityRevision"], state
+    assert state["worldSimulationTime"] == state["bodySimulationTime"], state
+    assert state["worldAcceptedSequence"] == state["bodyAcceptedSequence"], state
+
+
+def run_mounted_worker_regressions(page) -> dict:
+    return page.evaluate(
+        """
+        async () => {
+          const { capturedInverseMapping } = await import('/services/vivo/web/phone/material-patch.mjs');
+          const engine = window.VivaPhoneEngine;
+          const actuator = { maxForce: 2, stiffness: 3, damping: 0.4 };
+          const nodeIds = ['workpiece.patch.v1.r0c2', 'workpiece.patch.v1.r1c2', 'workpiece.patch.v1.r2c2', 'workpiece.patch.v1.r0c3'];
+          let operation = 0;
+          const nextOperation = label => `mounted-material-regression:${label}:${++operation}`;
+          const current = async () => {
+            const material = await engine.materialSnapshot();
+            return { material, identity: material.body.identity };
+          };
+          const attachment = (body, nodeId) => {
+            const q = body.nodes[nodeId].q;
+            return {
+              nodeId, capturedCanonicalPoint: [...q], capturedAt: 100,
+              inverseMapping: capturedInverseMapping({
+                devicePoint: [100, 100], viewport: { left: 0, top: 0, width: 400, height: 400 },
+                renderer: { w: 400, h: 400, yaw: 0.55, pitch: 0.68, distance: 10.5, origin: [0, 0, 0] },
+                axes: [0, 2, 1], depth: 10.5, canonicalQ: q,
+              }),
+            };
+          };
+          const begin = async (contactId, source, nodeId) => {
+            const { material, identity } = await current();
+            return engine.materialBegin({
+              operationId: nextOperation(`begin:${contactId}`), contactId, source,
+              identity, attachment: attachment(material.body, nodeId), actuator,
+              observedAt: 100, receivedAt: 101,
+            });
+          };
+          const stop = async (operationId, source) => {
+            const { identity } = await current();
+            return engine.materialStopSource({ operationId, source, identity, observedAt: 102, receivedAt: 103, reason: 'mounted-regression' });
+          };
+
+          const rapidBefore = await current();
+          const rapidSource = { kind: 'touch', sourceId: 'mounted-rapid', sessionId: 'mounted-regression', generation: 1 };
+          const rapidNodeId = 'workpiece.patch.v1.r1c2';
+          const rapidBegin = await begin('mounted:rapid', rapidSource, rapidNodeId);
+          const rapidAttachment = attachment(rapidBefore.material.body, rapidNodeId);
+          const rapidQ = rapidBefore.material.body.nodes[rapidNodeId].q.map((value, axis) => value + (axis === 0 ? 0.45 : axis === 2 ? 0.08 : 0));
+          const rapidTarget = {
+            schema: 'vivo.phone.material-target/1', operationId: nextOperation('target:rapid'), contactId: rapidBegin.contact.contactId,
+            identity: { ...rapidBefore.identity, bodyRevision: rapidBegin.receipt.bodyRevision }, source: rapidSource, targetSeq: 1,
+            q: rapidQ, attachment: rapidAttachment, actuator, observedAt: 104, receivedAt: 105,
+          };
+          const rapidTargetPromise = engine.materialTarget(rapidTarget);
+          const rapidEndPromise = engine.materialEnd({
+            operationId: nextOperation('end:rapid'), contactId: rapidBegin.contact.contactId, source: rapidSource,
+            identity: { ...rapidBefore.identity, bodyRevision: rapidBegin.receipt.bodyRevision }, observedAt: 106, receivedAt: 107,
+          });
+          const [rapidTargetResult, rapidEnd] = await Promise.all([rapidTargetPromise, rapidEndPromise]);
+          const rapidAfter = await current();
+          const rapidAfterSnapshot = await engine.snapshot();
+          const rapidEntity = rapidAfterSnapshot.snapshot.spaces.root.entities.workpiece;
+
+          const oldSource = { kind: 'finger', sourceId: 'mounted-hand:index', parentSourceId: 'mounted-hand', fingerId: 'index', sessionId: 'mounted-regression', generation: 1 };
+          const freshSource = { kind: 'finger', sourceId: 'mounted-hand:middle', parentSourceId: 'mounted-hand', fingerId: 'middle', sessionId: 'mounted-regression', generation: 2 };
+          await begin('mounted:finger:old', oldSource, nodeIds[0]);
+          await begin('mounted:finger:fresh', freshSource, nodeIds[1]);
+          const handStop = await stop(nextOperation('stop:hand:old'), { kind: 'hand', sourceId: 'mounted-hand', sessionId: 'mounted-regression', generation: 1 });
+          const afterHandStop = await engine.materialSnapshot();
+          const handContacts = afterHandStop.activeContacts.map(item => item.contactId);
+          const handFence = await begin('mounted:finger:newer', { ...freshSource, sourceId: 'mounted-hand:ring', fingerId: 'ring' }, nodeIds[2]);
+          await stop(nextOperation('stop:hand:fresh'), { kind: 'hand', sourceId: 'mounted-hand', sessionId: 'mounted-regression', generation: 2 });
+
+          const agent1 = { kind: 'agent', sourceId: 'mounted-agent', sessionId: 'mounted-regression', generation: 1 };
+          const agent2 = { ...agent1, generation: 2 };
+          await begin('mounted:agent:old', agent1, nodeIds[3]);
+          const replayOperation = nextOperation('stop:agent:original');
+          await stop(replayOperation, agent1);
+          await begin('mounted:agent:fresh', agent2, nodeIds[0]);
+          const beforeConflict = await engine.materialSnapshot();
+          let conflictMessage = '';
+          try { await stop(replayOperation, agent2); } catch (error) { conflictMessage = String(error?.message || error); }
+          const afterConflict = await engine.materialSnapshot();
+          await stop(nextOperation('stop:agent:fresh'), agent2);
+          return {
+            handStopReleased: handStop.released?.map(item => item.contactId) || [],
+            handContacts,
+            handFenceAccepted: handFence.status === 'accepted',
+            conflictMessage,
+            conflictStateUnchanged: JSON.stringify(beforeConflict) === JSON.stringify(afterConflict),
+            cleanupContacts: (await engine.materialSnapshot()).activeContacts.length,
+            rapidBodyRevisionBefore: rapidBefore.material.body.bodyRevision,
+            rapidBodyRevisionAfter: rapidAfter.material.body.bodyRevision,
+            rapidPhysicsAdvanced: rapidEnd.physicsAdvanced === true,
+            rapidTargetAccepted: rapidTargetResult.status === 'accepted',
+            rapidCoherent: rapidEntity.revision === rapidAfter.material.body.entityRevision &&
+              JSON.stringify(rapidEntity.q) === JSON.stringify(rapidAfter.material.body.centroid.q) &&
+              JSON.stringify(rapidEntity.v) === JSON.stringify(rapidAfter.material.body.centroid.v),
+            rapidWorldTime: rapidAfterSnapshot.snapshot.simulationTime,
+            rapidBodyTime: rapidAfter.material.body.simulationTime,
+          };
+        }
+        """
+    )
+
+
 def node_point(page, suffix: str = "r1c2") -> dict[str, float]:
     page.wait_for_function(
         "suffix => Boolean(window.VivaShared.R.materialNodePoints.find(point => point.nodeId.endsWith(suffix) && window.VivaShared.R.at(point.x, point.y) === 'workpiece'))",
@@ -141,6 +274,7 @@ def run_flow(page, route: str, world_id: str, include_hand: bool) -> dict:
     assert geometry_scale == page.evaluate("() => window.VivaPhoneEngine.snapshot().then(value => value.snapshot.spaces.root.entities.workpiece.geometry.scale)")
     assert body_after["edges"] and body_after["topologyId"] == "workpiece.patch.grid-4x3"
     assert page.evaluate("() => window.VivaShared.R.materialProvisional === null")
+    assert_coherent_material_state(coherent_material_state(page))
 
     # A new phone session retains accepted nodes but revives no contacts.
     page.reload(wait_until="domcontentloaded")
@@ -152,6 +286,20 @@ def run_flow(page, route: str, world_id: str, include_hand: bool) -> dict:
     reloaded = material_snapshot(page)
     assert reloaded["body"]["bodyRevision"] >= body_after["bodyRevision"], reloaded
     assert reloaded["body"]["nodes"][point["nodeId"]]["q"] == body_after["nodes"][point["nodeId"]]["q"], reloaded
+    assert_coherent_material_state(coherent_material_state(page))
+
+    mounted_regressions = run_mounted_worker_regressions(page)
+    assert mounted_regressions["rapidBodyRevisionAfter"] > mounted_regressions["rapidBodyRevisionBefore"], mounted_regressions
+    assert mounted_regressions["rapidPhysicsAdvanced"] is True, mounted_regressions
+    assert mounted_regressions["rapidTargetAccepted"] is True, mounted_regressions
+    assert mounted_regressions["rapidCoherent"] is True, mounted_regressions
+    assert mounted_regressions["rapidWorldTime"] == mounted_regressions["rapidBodyTime"], mounted_regressions
+    assert mounted_regressions["handStopReleased"] == ["mounted:finger:old"], mounted_regressions
+    assert mounted_regressions["handContacts"] == ["mounted:finger:fresh"], mounted_regressions
+    assert mounted_regressions["handFenceAccepted"] is True, mounted_regressions
+    assert "MATERIAL_OPERATION_REPLAY_MISMATCH" in mounted_regressions["conflictMessage"], mounted_regressions
+    assert mounted_regressions["conflictStateUnchanged"] is True, mounted_regressions
+    assert mounted_regressions["cleanupContacts"] == 0, mounted_regressions
 
     hand_result = None
     if include_hand:

@@ -65,16 +65,28 @@ function syncMaterialScope({ reopenOnFence = true } = {}) {
   }
 }
 
-function syncMaterialEntity(result) {
-  if (!result?.entity || !materialAuthority?.body) return;
-  const space = engine.world.spaces[materialAuthority.body.identity.spaceId];
+function syncMaterialState(result = {}) {
+  if (!materialAuthority?.body) return;
+  const body = materialAuthority.body;
+  const space = engine.world.spaces[body.identity.spaceId];
   const entity = space?.entities?.[PHONE_MATERIAL_ENTITY_ID];
   if (!entity) return;
-  entity.q = [...result.entity.q];
-  entity.v = [...result.entity.v];
-  entity.revision = Number(result.entity.revision);
-  materialAuthority.body.entityRevision = entity.revision;
-  engine.world.materialBodies[PHONE_MATERIAL_ENTITY_ID] = materialAuthority.body;
+  // All fields below are committed synchronously before persistence starts.
+  // The material body remains authority-owned; the result is its detached
+  // response/checkpoint, not a second mutable body.
+  if (result.entity) {
+    entity.q = [...result.entity.q];
+    entity.v = [...result.entity.v];
+    entity.revision = Number(result.entity.revision);
+    body.entityRevision = entity.revision;
+  }
+  engine.world.materialBodies[PHONE_MATERIAL_ENTITY_ID] = body;
+  if (result.physicsAdvanced && Number.isFinite(Number(result.worldTime))) {
+    engine.world.simulationTime = Number(result.worldTime);
+  }
+  if (Number.isSafeInteger(Number(result.acceptedSequence))) {
+    engine.world.acceptedSequence = Number(result.acceptedSequence);
+  }
 }
 
 function markAcceptedInMemory(result, error) {
@@ -128,7 +140,7 @@ async function materialMutation(method, payload = {}) {
   syncMaterialScope();
   const input = { ...payload, envelope: liveEnvelope(), nextSequence: nextMaterialSequence };
   const result = materialAuthority[method](input);
-  syncMaterialEntity(result);
+  syncMaterialState(result);
   const accepted = await persistMaterial(result);
   engine.emit(`material-${method}`);
   return accepted;
@@ -139,7 +151,7 @@ async function materialStep(dt) {
   const scope = syncMaterialScope();
   if (!scope.available) return { status: 'unavailable', available: false, body: materialClone(materialAuthority.body) };
   const result = materialAuthority.step({ envelope: liveEnvelope(), dt, nextSequence: nextMaterialSequence });
-  syncMaterialEntity(result);
+  syncMaterialState(result);
   if (!result.changed) return result;
   const accepted = await persistMaterial(result);
   engine.emit('material-step');

@@ -210,11 +210,76 @@ test('normal release flushes newest absolute target, removes only its actuator, 
   const before = clone(context.authority.body);
   const ended = context.authority.end({ envelope: context.envelope, operationId: 'end:release:a', contactId: first.contact.contactId, identity: { ...context.identity, bodyRevision: context.authority.body.bodyRevision }, observedAt: 40, receivedAt: 41, nextSequence: context.nextSequence });
   assert.equal(ended.status, 'accepted');
+  assert.equal(ended.physicsAdvanced, true);
+  assert.deepEqual(ended.entity.q, ended.body.centroid.q);
+  assert.deepEqual(ended.entity.v, ended.body.centroid.v);
+  assert.equal(ended.entity.revision, ended.body.entityRevision);
+  assert.equal(ended.worldTime, ended.body.simulationTime);
+  assert.equal(ended.acceptedSequence, ended.body.acceptedSequence);
   assert.equal(context.authority.snapshot().activeContacts.length, 1);
   assert.ok(context.authority.body.nodes[second.contact.attachment.nodeId].v.some(value => Math.abs(value) > 0));
   assert.ok(context.authority.body.physicsTick > before.physicsTick);
   const endedSecond = context.authority.end({ envelope: context.envelope, operationId: 'end:release:b', contactId: second.contact.contactId, identity: { ...context.identity, bodyRevision: context.authority.body.bodyRevision }, observedAt: 42, receivedAt: 43, nextSequence: context.nextSequence });
   assert.equal(endedSecond.status, 'accepted');
+});
+
+test('a stale hand stop only releases old child-finger generations and fences the complete finger group', () => {
+  const context = openAuthority();
+  const old = beginContact(context, {
+    operationId: 'begin:hand-old', contactId: 'finger:old',
+    source: source('finger', 'hand-group:index', 1, { parentSourceId: 'hand-group', fingerId: 'index' }),
+  });
+  const fresh = beginContact(context, {
+    operationId: 'begin:hand-fresh', contactId: 'finger:fresh',
+    source: source('finger', 'hand-group:middle', 2, { parentSourceId: 'hand-group', fingerId: 'middle' }),
+  });
+  const stopped = context.authority.stopSource({
+    envelope: context.envelope, operationId: 'stop:hand-generation-1',
+    source: source('hand', 'hand-group', 1), identity: { ...context.identity, bodyRevision: context.authority.body.bodyRevision },
+    observedAt: 50, receivedAt: 51, nextSequence: context.nextSequence,
+  });
+  assert.deepEqual(stopped.released.map(item => item.contactId), [old.contact.contactId]);
+  assert.deepEqual(context.authority.snapshot().activeContacts.map(item => item.contactId), [fresh.contact.contactId]);
+  assert.throws(() => beginContact(context, {
+    operationId: 'begin:hand-fenced', contactId: 'finger:fenced',
+    source: source('finger', 'hand-group:ring', 1, { parentSourceId: 'hand-group', fingerId: 'ring' }),
+  }), /MATERIAL_SOURCE_STOPPED/);
+  const newer = beginContact(context, {
+    operationId: 'begin:hand-newer', contactId: 'finger:newer',
+    source: source('finger', 'hand-group:ring', 2, { parentSourceId: 'hand-group', fingerId: 'ring' }),
+  });
+  assert.equal(newer.status, 'accepted');
+});
+
+test('a conflicting stop retry rejects before changing fences, contacts, receipts, or accepted time', () => {
+  const context = openAuthority();
+  beginContact(context, {
+    operationId: 'begin:stop-replay', contactId: 'agent:old', source: source('agent', 'agent-replay', 1),
+  });
+  context.authority.stopSource({
+    envelope: context.envelope, operationId: 'stop:replay', source: source('agent', 'agent-replay', 1),
+    identity: { ...context.identity, bodyRevision: context.authority.body.bodyRevision },
+    observedAt: 60, receivedAt: 61, nextSequence: context.nextSequence,
+  });
+  const fresh = beginContact(context, {
+    operationId: 'begin:stop-replay-fresh', contactId: 'agent:fresh', source: source('agent', 'agent-replay', 2),
+  });
+  const before = {
+    body: clone(context.authority.body),
+    snapshot: clone(context.authority.snapshot()),
+    fences: [...context.authority.sourceFences.entries()],
+    sequence: context.sequence,
+  };
+  assert.throws(() => context.authority.stopSource({
+    envelope: context.envelope, operationId: 'stop:replay', source: source('agent', 'agent-replay', 2),
+    identity: { ...context.identity, bodyRevision: context.authority.body.bodyRevision },
+    observedAt: 62, receivedAt: 63, nextSequence: context.nextSequence,
+  }), /MATERIAL_OPERATION_REPLAY_MISMATCH/);
+  assert.deepEqual(context.authority.body, before.body);
+  assert.deepEqual(context.authority.snapshot(), before.snapshot);
+  assert.deepEqual([...context.authority.sourceFences.entries()], before.fences);
+  assert.equal(context.sequence, before.sequence);
+  assert.deepEqual(context.authority.snapshot().activeContacts.map(item => item.contactId), [fresh.contact.contactId]);
 });
 
 test('cancel and selective source stop remove only their actuators and preserve exact other source intent', () => {

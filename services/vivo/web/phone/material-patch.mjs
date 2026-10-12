@@ -221,10 +221,32 @@ function anyVelocity(body) {
   return Object.values(body.nodes).some(node => node.v.some(value => Math.abs(value) > 1e-5));
 }
 
+function sourceFenceKey(source) {
+  const normalized = normalizeMaterialSource(source);
+  return `${sourceOwnerKey(normalized)}:${normalized.sessionId}`;
+}
+
+function sourceFenceGeneration(fences, source) {
+  const normalized = normalizeMaterialSource(source);
+  const keys = [sourceFenceKey(normalized)];
+  // A hand fence owns the whole generation-scoped finger group. Keeping this
+  // relationship here means a new finger cannot slip through simply because
+  // its direct source owner is `finger:hand:fingerId` instead of `hand:hand`.
+  if (normalized.kind === 'finger' && normalized.parentSourceId) {
+    keys.push(sourceFenceKey({
+      kind: 'hand', sourceId: normalized.parentSourceId,
+      sessionId: normalized.sessionId, generation: normalized.generation,
+    }));
+  }
+  return Math.max(0, ...keys.map(key => Number(fences.get(key) || 0)));
+}
+
 function activeSourceOwner(contact, source) {
   const requested = normalizeMaterialSource(source);
-  if (contact.source.kind === requested.kind && contact.source.sourceId === requested.sourceId) return true;
-  return requested.kind === 'hand' && contact.source.parentSourceId === requested.sourceId;
+  const current = normalizeMaterialSource(contact.source);
+  if (current.sessionId !== requested.sessionId || current.generation > requested.generation) return false;
+  if (current.kind === requested.kind && current.sourceId === requested.sourceId) return true;
+  return requested.kind === 'hand' && current.kind === 'finger' && current.parentSourceId === requested.sourceId;
 }
 
 function applyExternalForces(body, contacts, dt) {
@@ -236,10 +258,14 @@ function applyExternalForces(body, contacts, dt) {
   }
 }
 
+function hasPhysicsWork(body, contacts) {
+  return body.solver.enabled && ([...contacts.values()].some(contact => contact.lastTarget) || anyVelocity(body));
+}
+
 function advanceBody(body, contacts, { dt = DEFAULT_DT, solver = stepSparseSpace } = {}) {
   const safeDt = boundedDt(dt);
   if (!body.solver.enabled) return { changed: false, solverEnabled: false, centroid: materialClone(body.centroid), moving: false };
-  const hasWork = [...contacts.values()].some(contact => contact.lastTarget) || anyVelocity(body);
+  const hasWork = hasPhysicsWork(body, contacts);
   if (!hasWork) return { changed: false, solverEnabled: true, centroid: materialClone(body.centroid), moving: false };
   applyExternalForces(body, contacts, safeDt);
   const view = {
@@ -419,6 +445,29 @@ export class PhoneMaterialAuthority {
     return sequence;
   }
 
+  _bodyState({ physicsAdvanced = false } = {}) {
+    const state = {
+      body: materialClone(this.body),
+      centroid: materialClone(this.body.centroid),
+      entity: {
+        q: [...this.body.centroid.q],
+        v: [...this.body.centroid.v],
+        revision: this.body.entityRevision,
+      },
+      acceptedSequence: this.body.acceptedSequence,
+      entityRevision: this.body.entityRevision,
+      physicsAdvanced,
+    };
+    if (physicsAdvanced) {
+      // A material tick advances the same local simulation clock that the
+      // phone envelope persists. The worker commits this clock alongside the
+      // body and centroid/entity projection.
+      state.worldTime = this.body.simulationTime;
+      state.simulationTime = this.body.simulationTime;
+    }
+    return state;
+  }
+
   _receipt({ operationId, kind, fingerprint, identity, source = null, attachment = null, observedAt, receivedAt, nextSequence, code = 'MATERIAL_ACCEPTED', result = null }) {
     const acceptedSequence = this._sequence(nextSequence);
     const receipt = {
@@ -484,7 +533,7 @@ export class PhoneMaterialAuthority {
     if (!contactId || contactId.length > 160 || /[\u0000-\u001f\u007f]/.test(contactId)) throw materialError('MATERIAL_CONTACT_INVALID', 'Contact identity is invalid.');
     const node = this.body.nodes[attachment.nodeId];
     if (!node) throw materialError('MATERIAL_NODE_OWNERSHIP', 'The captured material node is not owned by this Workpiece topology.');
-    const fence = this.sourceFences.get(sourceOwnerKey(source));
+    const fence = sourceFenceGeneration(this.sourceFences, source);
     if (fence && source.generation <= fence) throw materialError('MATERIAL_SOURCE_STOPPED', 'The source generation was stopped; explicitly create a fresh generation.');
     if (this.contacts.has(contactId)) throw materialError('MATERIAL_CONTACT_REPLAY', 'The contact identity is already active.');
     const contact = {
@@ -542,21 +591,29 @@ export class PhoneMaterialAuthority {
 
   _stepWithEnvelope(envelope, { dt = DEFAULT_DT, nextSequence = null } = {}) {
     this._requireAvailable(envelope);
+    if (hasPhysicsWork(this.body, this.contacts)) {
+      const worldTime = Number(envelope?.snapshot?.simulationTime);
+      if (Number.isFinite(worldTime) && worldTime > this.body.simulationTime) this.body.simulationTime = worldTime;
+    }
     const previousRevision = this.body.bodyRevision;
     const result = advanceBody(this.body, this.contacts, { dt, solver: this.solver });
-    if (!result.changed) return { ...result, acceptedSequence: this.body.acceptedSequence, entityRevision: this.body.entityRevision };
+    if (!result.changed) return { ...result, physicsAdvanced: false, acceptedSequence: this.body.acceptedSequence, entityRevision: this.body.entityRevision };
     this._sequence(nextSequence);
     this.body.entityRevision = Number(this.body.entityRevision) + 1;
-    return { ...result, acceptedSequence: this.body.acceptedSequence, entityRevision: this.body.entityRevision, previousBodyRevision: previousRevision };
+    return {
+      ...result, physicsAdvanced: true, acceptedSequence: this.body.acceptedSequence,
+      entityRevision: this.body.entityRevision, previousBodyRevision: previousRevision,
+    };
   }
 
   step({ envelope, dt = DEFAULT_DT, nextSequence = null } = {}) {
     const result = this._stepWithEnvelope(envelope, { dt, nextSequence });
+    const state = this._bodyState({ physicsAdvanced: result.physicsAdvanced });
     return {
       status: result.changed ? 'accepted' : 'unchanged',
       ...result,
-      body: materialClone(this.body),
-      entity: result.changed ? { q: [...this.body.centroid.q], v: [...this.body.centroid.v], revision: this.body.entityRevision } : null,
+      ...state,
+      entity: result.changed ? state.entity : null,
     };
   }
 
@@ -580,7 +637,11 @@ export class PhoneMaterialAuthority {
       nextSequence: payload.nextSequence,
       result: { contactId, reason: String(payload.reason || 'release'), flushed: Boolean(flush.changed), solverEnabled: flush.solverEnabled },
     });
-    return { status: 'accepted', receipt: materialClone(receipt), flush, released: materialClone(contact), replayed: false };
+    return {
+      status: 'accepted', receipt: materialClone(receipt), flush,
+      ...this._bodyState({ physicsAdvanced: flush.physicsAdvanced }),
+      released: materialClone(contact), replayed: false,
+    };
   }
 
   cancel(payload = {}) {
@@ -607,18 +668,22 @@ export class PhoneMaterialAuthority {
   stopSource(payload = {}) {
     const prepared = this._validateContactPayload({ ...payload, envelope: payload.envelope }, 'stop');
     const source = normalizeMaterialSource(payload.source, 'stop.source');
+    const fingerprint = receiptFingerprint({ kind: 'stop', identity: staticScope(prepared.identity), source, reason: String(payload.reason || 'source-stop') });
+    // Replay validation must be the first operation-specific decision. A
+    // conflicting retry is rejected without changing fences, contacts,
+    // receipts, or accepted time/sequence.
+    const replay = this._replayOrMismatch(prepared.operationId, fingerprint);
+    if (replay) return replay;
     const owner = sourceOwnerKey(source);
-    const priorFence = this.sourceFences.get(owner) || 0;
-    this.sourceFences.set(owner, Math.max(priorFence, source.generation));
+    const fenceKey = sourceFenceKey(source);
+    const priorFence = this.sourceFences.get(fenceKey) || 0;
+    this.sourceFences.set(fenceKey, Math.max(priorFence, source.generation));
     const released = [];
     for (const [contactId, contact] of this.contacts) {
       if (!activeSourceOwner(contact, source)) continue;
       this.contacts.delete(contactId);
       released.push({ contactId, source: materialClone(contact.source), nodeId: contact.attachment.nodeId, acceptedHistoryPreserved: true });
     }
-    const fingerprint = receiptFingerprint({ kind: 'stop', identity: staticScope(prepared.identity), source, reason: String(payload.reason || 'source-stop') });
-    const replay = this._replayOrMismatch(prepared.operationId, fingerprint);
-    if (replay) return replay;
     const receipt = this._receipt({
       operationId: prepared.operationId, kind: 'stop', fingerprint, identity: prepared.identity, source,
       observedAt: prepared.observedAt, receivedAt: prepared.receivedAt, nextSequence: payload.nextSequence,
