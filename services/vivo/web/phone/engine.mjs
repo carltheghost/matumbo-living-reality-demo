@@ -321,11 +321,25 @@ export class LocalVivoEngine {
     const normalizedDelta = delta.map(value => Math.abs(Number(value)) < 1e-12 ? 0 : Number(value));
     const scope = { worldId: this.world.worldId, branchId: this.branchId, eyeId: this.currentEyeId, spaceId: space.id, entityId: entity.id };
     const baseRevision = request?.baseRevision === undefined ? entity.revision : request.baseRevision;
-    const fingerprint = operationFingerprint({ ...scope, baseRevision, delta: normalizedDelta, geometry: requestedGeometry });
-    const legacyFingerprint = JSON.stringify({ ...scope, baseRevision, delta: normalizedDelta });
+    // A UI gesture can be explicitly rebased when the local sparse solver has
+    // advanced the same entity between preview and the serialized worker
+    // command. Scope and operation identity remain strict; only the accepted
+    // entity revision may advance for this opt-in intent.
+    const rebaseOnRevision = request?.rebaseOnRevision === true;
+    const fingerprintBaseRevision = rebaseOnRevision ? null : baseRevision;
+    const fingerprint = operationFingerprint({ ...scope, baseRevision: fingerprintBaseRevision, delta: normalizedDelta, geometry: requestedGeometry });
+    const legacyFingerprint = JSON.stringify({ ...scope, baseRevision: fingerprintBaseRevision, delta: normalizedDelta });
     const prior = operationId ? this.appliedOperations.get(operationId) : null;
     if (prior) {
-      const fingerprintMatches = prior.fingerprint === fingerprint || requestedGeometry === null && prior.fingerprint === legacyFingerprint;
+      // A transform accepted with explicit UI rebasing must replay by its
+      // stable operation identity even if an older adapter omits the optional
+      // rebase marker on retry.
+      const rebasedFingerprint = operationFingerprint({ ...scope, baseRevision: null, delta: normalizedDelta, geometry: requestedGeometry });
+      const rebasedLegacyFingerprint = JSON.stringify({ ...scope, baseRevision: null, delta: normalizedDelta });
+      const fingerprintMatches = prior.fingerprint === fingerprint
+        || prior.rebaseOnRevision === true && prior.fingerprint === rebasedFingerprint
+        || requestedGeometry === null && prior.fingerprint === legacyFingerprint
+        || requestedGeometry === null && prior.rebaseOnRevision === true && prior.fingerprint === rebasedLegacyFingerprint;
       if (!fingerprintMatches || prior.scope !== operationScope(scope)) throw operationError('LOCAL_OPERATION_REPLAY_MISMATCH', 'The operation identity belongs to a different local preview.');
       return Promise.resolve({ ...clone(prior.result), replayed: true });
     }
@@ -334,10 +348,12 @@ export class LocalVivoEngine {
         ['worldId', this.world.worldId], ['branchId', this.branchId], ['eyeId', this.currentEyeId],
         ['spaceId', space.id], ['entityId', entity.id], ['baseRevision', entity.revision],
       ];
-      for (const [key, current] of checks) if (request[key] !== undefined && request[key] !== current) {
+      for (const [key, current] of checks) if (request[key] !== undefined && request[key] !== current
+        && !(key === 'baseRevision' && request.rebaseOnRevision === true)) {
         throw operationError('STALE_LOCAL_PREVIEW', `Local ${key} changed before the preview could be applied.`);
       }
     }
+    const appliedBaseRevision = entity.revision;
     if (this.activeSpaceId && this.activeSpaceId !== space.id) { this.activeIds.clear(); this.activeSpaceId = null; }
     const nextQ = entity.q.map((value, axis) => Math.max(-MAX_COORDINATE, Math.min(MAX_COORDINATE, value + normalizedDelta[axis])));
     const geometryChanged = requestedGeometry && JSON.stringify(requestedGeometry) !== JSON.stringify(entity.geometry);
@@ -345,9 +361,9 @@ export class LocalVivoEngine {
     const changed = moved || Boolean(geometryChanged);
     if (!changed) {
       const unchanged = { changed: false, revision: entity.revision };
-      if (includeTransformResult) { unchanged.identity = { ...scope, baseRevision, revision: entity.revision }; unchanged.geometry = clone(entity.geometry); }
+      if (includeTransformResult) { unchanged.identity = { ...scope, baseRevision: appliedBaseRevision, revision: entity.revision }; unchanged.geometry = clone(entity.geometry); }
       if (operationId) {
-        const record = { operationId, scope: operationScope(scope), fingerprint, result: clone(unchanged), identity: { ...scope, baseRevision, revision: entity.revision }, geometry: clone(entity.geometry) };
+        const record = { operationId, scope: operationScope(scope), fingerprint, rebaseOnRevision, result: clone(unchanged), identity: { ...scope, baseRevision: appliedBaseRevision, revision: entity.revision }, geometry: clone(entity.geometry) };
         this.appliedOperations.set(operationId, record);
         this.world.localOperationResults = [...this.appliedOperations.values()].slice(-128).map(item => clone(item));
         return this.queuePersist().then(() => unchanged);
@@ -369,11 +385,11 @@ export class LocalVivoEngine {
     this.world.acceptedSequence++;
     const result = { changed: true, revision: entity.revision };
     if (includeTransformResult) {
-      result.identity = { ...scope, baseRevision, revision: entity.revision };
+      result.identity = { ...scope, baseRevision: appliedBaseRevision, revision: entity.revision };
       result.geometry = clone(entity.geometry);
     }
     if (operationId) {
-      const record = { operationId, scope: operationScope(scope), fingerprint, result, identity: { ...scope, baseRevision, revision: entity.revision }, geometry: clone(entity.geometry) };
+      const record = { operationId, scope: operationScope(scope), fingerprint, rebaseOnRevision, result, identity: { ...scope, baseRevision: appliedBaseRevision, revision: entity.revision }, geometry: clone(entity.geometry) };
       this.appliedOperations.set(operationId, record);
       this.world.localOperationResults = [...this.appliedOperations.values()].slice(-128).map(item => clone(item));
     }

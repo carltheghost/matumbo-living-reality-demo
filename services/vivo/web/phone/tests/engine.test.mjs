@@ -110,6 +110,33 @@ test('different stale previews and intervening branch edits cannot partially app
   await engine.close();
 });
 
+test('explicit UI rebase accepts solver revision drift without relaxing scope or replay identity', async () => {
+  const engine = new LocalVivoEngine({ storage: new MemoryStore() });
+  await engine.open('local-cas-explicit-rebase');
+  const before = await engine.snapshot();
+  const expected = {
+    worldId: before.snapshot.worldId, branchId: before.branchId, eyeId: before.currentEyeId,
+    spaceId: 'root', entityId: 'relic', baseRevision: 0,
+    operationId: 'field-preview:explicit-rebase', rebaseOnRevision: true,
+  };
+  await engine.translate('relic', 0, 0.2);
+  const accepted = await engine.applyLocalEdit('relic', [0.14, 0, 0, 0], expected);
+  assert.equal(accepted.changed, true);
+  const after = await engine.snapshot();
+  assert.deepEqual(after.snapshot.localOperationResults.at(-1).identity, {
+    worldId: before.snapshot.worldId, branchId: before.branchId, eyeId: before.currentEyeId,
+    spaceId: 'root', entityId: 'relic', baseRevision: 1, revision: 2,
+  });
+  assert.ok(Math.abs(after.snapshot.spaces.root.entities.relic.q[0] - (before.snapshot.spaces.root.entities.relic.q[0] + 0.34)) < 1e-12);
+  const replay = await engine.applyLocalEdit('relic', [0.14, 0, 0, 0], expected);
+  assert.equal(replay.replayed, true);
+  const legacyReplayExpected = { ...expected };
+  delete legacyReplayExpected.rebaseOnRevision;
+  const legacyReplay = await engine.applyLocalEdit('relic', [0.14, 0, 0, 0], legacyReplayExpected);
+  assert.equal(legacyReplay.replayed, true);
+  await engine.close();
+});
+
 test('accepted local operation identity remains idempotent after reload', async () => {
   const store = new MemoryStore(), first = new LocalVivoEngine({ storage: store });
   await first.open('local-operation-reload');

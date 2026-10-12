@@ -107,6 +107,16 @@ def main(base_url: str) -> None:
         mobile_page.get_by_role("button", name="Enter local Vivo").click()
         mobile_page.wait_for_function("Boolean(window.VivaPhoneEngine && window.VivaPhoneEngine.active)")
         mobile_page.wait_for_function("document.querySelector('#phoneFieldStatus').textContent.includes('coordinate planes')")
+        # The companion is the first mobile layer. Navigate through the real
+        # scroll surface to the open World field controls before asserting
+        # their geometry; do not remove or bypass the companion DOM.
+        if not mobile_page.locator(".vivo-companion-world-context").evaluate("node => node.open"):
+            mobile_page.locator(".vivo-companion-world-context > summary").click()
+        mobile_page.locator("#phoneFieldDock").hover()
+        mobile_page.mouse.wheel(0, 1000)
+        mobile_page.wait_for_function(
+            "() => { const dock = document.querySelector('#phoneFieldDock').getBoundingClientRect(); const actions = document.querySelector('.field-actions').getBoundingClientRect(); return actions.top >= dock.top && actions.bottom <= dock.bottom; }"
+        )
         mobile_actions = mobile_page.evaluate(
             """
             () => {
@@ -121,6 +131,10 @@ def main(base_url: str) -> None:
         assert mobile_actions["actionsBottom"] <= mobile_actions["dockBottom"]
         assert mobile_actions["applyTop"] >= mobile_actions["actionsTop"]
         assert mobile_actions["applyWidth"] > 0, mobile_actions
+        mobile_page.locator("#phoneFieldPreviewMove").click()
+        mobile_page.wait_for_function("Boolean(window.VivaPhoneEngine.fieldWorld().preview)")
+        mobile_page.locator("#phoneFieldDiscard").click()
+        mobile_page.wait_for_function("!window.VivaPhoneEngine.fieldWorld().preview")
         mobile_context.close()
 
         before_layout = page.locator("#phoneFieldAtlas").evaluate("node => node.toDataURL()")
@@ -206,6 +220,12 @@ def main(base_url: str) -> None:
         race_page.get_by_role("button", name="Apply local edit").click()
         race_page.wait_for_function("window.__delayedApplySubmitted === true")
         race_page.get_by_role("button", name="Preview move").click()
+        # The click handler is synchronous, but a worker statechange can paint
+        # the field controls in the same turn. Wait for the observable preview
+        # state rather than sampling between those two browser tasks.
+        race_page.wait_for_function(
+            "window.VivaPhoneEngine.fieldWorld().preview?.entityId === 'relic' && !document.querySelector('#phoneFieldApply').disabled"
+        )
         newer_preview = race_page.evaluate(
             """
             () => ({
@@ -494,6 +514,27 @@ def main(base_url: str) -> None:
         assert final["currentRevision"] >= final["acceptedRevision"], final
         assert final["q"][0] != initial["q"][0]
         assert final["cameraCalls"] == 0
+
+        # Ordinary settled Apply -> Preview must create a fresh non-zero edit
+        # even while the sparse solver continues advancing entity revisions.
+        page.get_by_role("button", name="Preview move").click()
+        page.wait_for_function(
+            "window.VivaPhoneEngine.fieldWorld().preview?.entityId === 'relic' && !document.querySelector('#phoneFieldApply').disabled"
+        )
+        ordinary_preview = page.evaluate(
+            """
+            () => ({
+              preview: window.VivaPhoneEngine.fieldWorld().preview,
+              text: document.querySelector('#phoneFieldPreview').textContent,
+              applyDisabled: document.querySelector('#phoneFieldApply').disabled,
+            })
+            """
+        )
+        assert ordinary_preview["preview"]["delta"][0] > 0
+        assert "move preview for relic" in ordinary_preview["text"]
+        assert ordinary_preview["applyDisabled"] is False
+        page.get_by_role("button", name="Discard preview").click()
+        page.wait_for_function("!window.VivaPhoneEngine.fieldWorld().preview")
         page.get_by_role("button", name="Advanced").click()
         page.get_by_role("button", name="Install offline shell").click()
         page.wait_for_function("document.querySelector('#phoneEngineState').textContent.includes('service worker active')")

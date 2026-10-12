@@ -48,6 +48,17 @@ def committed(page: Page) -> None:
     page.wait_for_function("document.querySelector('.sim-economy-status')?.textContent.includes('Committed')")
 
 
+def dispatch_clicks_same_task(page: Page, locator) -> None:
+    """Dispatch two genuine click events synchronously to exercise duplicate fencing."""
+    locator.evaluate(
+        """element => {
+          const init = { bubbles: true, cancelable: true, view: window };
+          element.dispatchEvent(new MouseEvent('click', init));
+          element.dispatchEvent(new MouseEvent('click', init));
+        }"""
+    )
+
+
 def flow(page: Page) -> dict[str, Any]:
     """Run exchange, prediction and contract flows entirely through controls."""
     # The seeded local account owns TUMBO-SIM, while the demo market maker
@@ -58,17 +69,24 @@ def flow(page: Page) -> dict[str, Any]:
     page.locator("#sim-economy-order-num").fill("1")
     page.locator("#sim-economy-order-den").fill("1")
     place = page.locator('[data-action="exchange:place"]')
-    place.click()
-    place.click()
+    dispatch_clicks_same_task(page, place)
     committed(page)
     assert page.locator(".sim-economy-record").filter(has_text="SELL · FILLED").count() == 1
+
+    # A gap beyond the 350ms duplicate fence is two intentionally distinct actions.
+    page.locator("#sim-economy-order-amount").fill("25")
+    place.click()
+    committed(page)
+    page.wait_for_timeout(400)
+    place.click()
+    committed(page)
+    assert page.locator(".sim-economy-record").filter(has_text="SELL · FILLED").count() == 3
 
     page.locator("#sim-economy-order-side").select_option("buy")
     page.locator("#sim-economy-order-amount").fill("100")
     page.locator("#sim-economy-order-num").fill("1")
     page.locator("#sim-economy-order-den").fill("1")
-    place.click()
-    place.click()
+    dispatch_clicks_same_task(page, place)
     committed(page)
     assert page.locator(".sim-economy-record").filter(has_text="BUY · FILLED").count() == 1
 

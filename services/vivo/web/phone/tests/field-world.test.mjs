@@ -156,6 +156,31 @@ test('a preview created after the accepted state stays fenced through later solv
   assert.ok(Math.abs(tracked.q[0] - (relic.q[0] + newer.delta[0])) < 1e-12);
 });
 
+test('an explicit UI move preview survives solver revisions after a settled Apply', () => {
+  const initial = envelope(4);
+  const controller = new FieldWorldController(initial, { selectedId: 'relic' });
+  const first = controller.previewMove('relic', 0, 0.14);
+  const accepted = structuredClone(initial);
+  const acceptedRelic = accepted.snapshot.spaces.root.entities.relic;
+  acceptedRelic.q[0] += first.delta[0];
+  acceptedRelic.revision = first.baseRevision + 1;
+  controller.clearAppliedPreview(first);
+  controller.refresh(accepted, { completedApply: { candidate: first, result: { changed: true, revision: acceptedRelic.revision } } });
+  assert.equal(controller.commitCandidate(), null);
+
+  const newer = controller.previewMove('relic', 0, 0.14, { rebaseOnRevision: true });
+  assert.equal(newer.rebaseOnRevision, true);
+  const advanced = structuredClone(accepted);
+  const advancedRelic = advanced.snapshot.spaces.root.entities.relic;
+  advancedRelic.q[0] += 0.02;
+  advancedRelic.revision++;
+  controller.refresh(advanced);
+  const tracked = controller.commitCandidate();
+  assert.equal(tracked.operationId, newer.operationId);
+  assert.equal(tracked.baseRevision, advancedRelic.revision);
+  assert.ok(Math.abs(tracked.q[0] - (advancedRelic.q[0] + newer.intentDelta[0])) < 1e-12);
+});
+
 test('field-world move, mix and turn previews require explicit local application', () => {
   const state = envelope(4);
   const controller = new FieldWorldController(state, { selectedId: 'relic' });

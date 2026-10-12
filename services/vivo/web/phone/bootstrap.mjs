@@ -57,7 +57,7 @@ const touchOperationIds = new LocalOperationIdFactory('touch-preview');
 let touchApplyTail = Promise.resolve();
 const pendingFieldApplies = [];
 let fieldApplyTail = Promise.resolve(), fieldApplySequence = 0;
-let snapshotTail = Promise.resolve(), snapshotSequence = 0, renderedSnapshot = null;
+let snapshotTail = Promise.resolve(), snapshotSequence = 0, renderedSnapshot = null, publishedEnvelope = null;
 let persistTimer = null, lastTwoHand = null, latestCapabilities = null, lastPoseAction = -Infinity;
 const lastPoseByHand = new Map();
 let appliedEyeId = null, appliedEyeRevision = -1;
@@ -185,6 +185,11 @@ function snapshotMarker(envelope) {
     entityRevisions: Object.entries(space?.entities || {}).sort(([a], [b]) => a.localeCompare(b)).map(([id, entity]) => [id, Number(entity?.revision) || 0]),
   };
 }
+function publishEnvelope(envelope) {
+  if (!envelope) return publishedEnvelope;
+  if (!publishedEnvelope || !isOlderSnapshot(envelope, snapshotMarker(publishedEnvelope))) publishedEnvelope = envelope;
+  return publishedEnvelope;
+}
 function isOlderSnapshot(next, prior) {
   if (!prior) return false;
   const current = snapshotMarker(next);
@@ -197,7 +202,7 @@ function isOlderSnapshot(next, prior) {
 function enqueueSnapshot(read, options = {}) {
   const sequence = ++snapshotSequence;
   const task = snapshotTail.then(async () => {
-    const envelope = await read();
+    const envelope = publishEnvelope(await read());
     if (localMode && !isOlderSnapshot(envelope, renderedSnapshot)) {
       renderedSnapshot = snapshotMarker(envelope);
       renderEye(envelope, { ...options, snapshotSequence: sequence });
@@ -225,7 +230,7 @@ async function refreshSnapshot(options = {}) {
   // advance beyond the coordinates shown beside the read result.
   if (options.externalSnapshot) {
     const sequence = ++snapshotSequence;
-    const envelope = await engine.snapshot();
+    const envelope = publishEnvelope(await engine.snapshot());
     if (localMode && !isOlderSnapshot(envelope, renderedSnapshot)) {
       renderedSnapshot = snapshotMarker(envelope);
       renderEye(envelope, { ...options, snapshotSequence: sequence });
@@ -369,13 +374,19 @@ function syncPendingCandidate(pending) {
 function stalePreviewError(error) {
   return /STALE_LOCAL_PREVIEW|changed before the preview|changed while the preview/i.test(String(error?.message || error));
 }
+function refreshFieldApplySnapshot(options = {}) {
+  // Apply lifecycle reads are transactional coordination points, not paint
+  // work. Bypass the ordinary render queue so a continuous solver/statechange
+  // stream cannot leave a second explicit Apply waiting behind stale frames.
+  return refreshSnapshot({ ...options, externalSnapshot: true });
+}
 async function runFieldApply(pending) {
   pending.phase = 'running';
   let candidate = pending.candidate;
   let current = null;
   try {
     if (pending.cancelled || fieldWorld.isDiscarded(candidate)) return { cancelled: true };
-    current = await refreshSnapshot({ fieldApplyPreflight: pending });
+    current = await refreshFieldApplySnapshot({ fieldApplyPreflight: pending });
     if (pending.cancelled || fieldWorld.isDiscarded(candidate)) return { cancelled: true };
     candidate = syncPendingCandidate(pending);
     if (!fieldScopeMatches(current, candidate)) {
@@ -404,6 +415,7 @@ async function runFieldApply(pending) {
             worldId: candidate.worldId, branchId: candidate.branchId, eyeId: candidate.eyeId,
             spaceId: candidate.spaceId, entityId: candidate.entityId, baseRevision: candidate.baseRevision,
             operationId: candidate.operationId,
+            rebaseOnRevision: true,
           };
           result = candidate.kind === 'transform'
             ? await engine.applyLocalTransform(candidate.entityId, candidate.delta, candidate.geometry, expected)
@@ -411,7 +423,7 @@ async function runFieldApply(pending) {
         } catch (error) {
           if (!stalePreviewError(error) || applyAttempts >= 3) throw error;
           applyAttempts++;
-          current = await refreshSnapshot({ fieldApplyRetry: pending, retry: applyAttempts });
+          current = await refreshFieldApplySnapshot({ fieldApplyRetry: pending, retry: applyAttempts });
           const replay = appliedLocalOperation(current, candidate);
           if (replay) {
             result = { ...replay.result, replayed: true };
@@ -430,7 +442,7 @@ async function runFieldApply(pending) {
     pending.result = result;
     pending.phase = 'settling';
     if (fieldWorld.isCurrent(candidate)) fieldWorld.clearAppliedPreview(candidate);
-    await refreshSnapshot({ completedApply: { candidate, result }, fieldApply: pending });
+    await refreshFieldApplySnapshot({ completedApply: { candidate, result }, fieldApply: pending });
     const newerPreview = fieldWorld.commitCandidate();
     if (result?.cancelled) status('Local field Apply was cancelled without changing accepted state.');
     else status(`${result?.replayed ? 'Local field edit replay acknowledged' : 'Local field edit applied explicitly'}${newerPreview && newerPreview.operationId !== candidate.operationId ? '; newer local preview preserved and rebased' : ''}. Canonical authority was not contacted.`);
@@ -439,7 +451,7 @@ async function runFieldApply(pending) {
     if (stalePreviewError(error)) {
       let retryMessage = null;
       try {
-        current = await refreshSnapshot({ fieldApplyError: pending });
+        current = await refreshFieldApplySnapshot({ fieldApplyError: pending });
         const active = fieldWorld.commitCandidate();
         if (active && active.operationId === candidate.operationId && fieldScopeMatches(current, active) && !fieldWorld.isDiscarded(active)) {
           const rebased = fieldWorld.rebaseCandidate(active, current);
@@ -978,7 +990,7 @@ function addPhoneSurface() {
   for (const id of ['phoneFieldAxisA', 'phoneFieldAxisB', 'phoneFieldAxisC']) $(id).onchange = refreshFieldControls;
   $('phoneFieldEntity').onchange = event => { selectPhoneEntity(event.target.value, { announce: true }); };
   $('phoneFieldPreviewMove').onclick = () => {
-    try { fieldWorld.previewMove(fieldEntityId(), Number($('phoneAxis').value || 0), 0.14); updateFieldWorld(); $('phoneFieldApply').disabled = false; $('phoneFieldDiscard').disabled = false; }
+    try { fieldWorld.previewMove(fieldEntityId(), Number($('phoneAxis').value || 0), 0.14, { rebaseOnRevision: true }); updateFieldWorld(); $('phoneFieldApply').disabled = false; $('phoneFieldDiscard').disabled = false; }
     catch (error) { status(error.message); }
   };
   $('phoneFieldPreviewRotate').onclick = () => {
@@ -986,7 +998,7 @@ function addPhoneSurface() {
     catch (error) { status(error.message); }
   };
   $('phoneFieldPreviewMix').onclick = () => {
-    try { fieldWorld.previewMix(fieldEntityId()); updateFieldWorld(); $('phoneFieldApply').disabled = false; $('phoneFieldDiscard').disabled = false; }
+    try { fieldWorld.previewMix(fieldEntityId(), { rebaseOnRevision: true }); updateFieldWorld(); $('phoneFieldApply').disabled = false; $('phoneFieldDiscard').disabled = false; }
     catch (error) { status(error.message); }
   };
   $('phoneFieldApply').onclick = async () => {
@@ -1085,8 +1097,10 @@ async function startLocal() {
     updateLocalGrants();
     document.body.classList.add('phone-local');
     const state = await engine.snapshot();
+    publishedEnvelope = state;
     renderedSnapshot = snapshotMarker(state);
     renderEye(state);
+    window.dispatchEvent(new CustomEvent('vivo:phone-local-ready', { detail: { worldId: state.snapshot.worldId, branchId: state.branchId, state } }));
     economyContext?.initialize();
     syncEconomyContext();
     await authority?.syncLocal(state);
@@ -1096,7 +1110,13 @@ async function startLocal() {
   status("Starting the local worker and opening this phone’s saved Vivo world…");
   engine = new PhoneEngineClient();
   engine.addEventListener('statechange', event => {
-    if (event.detail?.state && localMode) enqueueSnapshot(() => event.detail.state, { stateEvent: event.detail.reason }).catch(() => {});
+    if (event.detail?.state && localMode) {
+      const published = publishEnvelope(event.detail.state);
+      window.dispatchEvent(new CustomEvent('vivo:phone-statechange', {
+        detail: { reason: event.detail.reason || null, state: published },
+      }));
+      enqueueSnapshot(() => published, { stateEvent: event.detail.reason }).catch(() => {});
+    }
     if (event.detail?.state && authority) authority.syncLocal(event.detail.state).catch(() => {});
     if (event.detail?.reason === 'step-error') status(event.detail.error || 'Local material step stopped safely.');
     if (event.detail?.reason === 'persistence-failed') status(`Local Vivo state changed but was not saved: ${event.detail.state?.persistence?.error || 'storage failed'}. Retry remains available.`);
@@ -1108,6 +1128,7 @@ async function startLocal() {
     getEnvelope: () => engine.snapshot(),
     getViewport: () => canvas?.getBoundingClientRect?.() || { left: 0, top: 0, width: innerWidth || 1, height: innerHeight || 1 },
     onPreview: (preview, record) => {
+      R.materialEditing = Boolean(preview?.provisional);
       if (!preview?.provisional) { R.materialProvisional = null; return; }
       const accepted = fieldEnvelope?.snapshot?.materialBodies?.[PHONE_MATERIAL_ENTITY_ID] || state.snapshot.materialBodies?.[PHONE_MATERIAL_ENTITY_ID] || {};
       R.materialProvisional = {
@@ -1124,7 +1145,8 @@ async function startLocal() {
   agentController.setFabric(interactionFabric);
   authority = new PhoneAuthorityAdapter({ engine, onState: updatePhoneAuthorityUI });
   await authority.syncLocal(state);
-  localMode = true; updateLocalGrants(); document.body.classList.add('phone-local'); renderedSnapshot = snapshotMarker(state); renderEye(state);
+  localMode = true; updateLocalGrants(); document.body.classList.add('phone-local'); publishedEnvelope = state; renderedSnapshot = snapshotMarker(state); renderEye(state);
+  window.dispatchEvent(new CustomEvent('vivo:phone-local-ready', { detail: { worldId: state.snapshot.worldId, branchId: state.branchId, state } }));
   economyContext?.initialize();
   syncEconomyContext();
   $('welcome').hidden = true; $('toolbar').hidden = false;
@@ -1152,7 +1174,9 @@ async function installOffline() {
     const ready = await navigator.serviceWorker.ready;
     if (!ready.active) throw new Error('Offline shell service worker did not become active.');
     const shellUrl = STATIC_PHONE_ROUTE ? new URL('./index.html', import.meta.url) : new URL('../index.html', import.meta.url);
-    const shell = await (await caches.open('vivo-phone-shell-2026-10-12-v5')).match(shellUrl);
+    // The active worker owns the cache version. Match by URL so this page
+    // cannot drift from a renamed shell cache during a fresh install.
+    const shell = await caches.match(shellUrl);
     if (!shell) throw new Error('Offline shell cache did not finish installing.');
     const persisted = await navigator.storage?.persist?.().catch(() => false);
     $('phoneEngineState').textContent = `Offline shell ready · service worker active · persistent storage ${persisted ? 'granted' : 'not granted by browser'}.`;
@@ -1303,6 +1327,7 @@ async function commitObjectTouchGesture(objectId, preview) {
               worldId: contact.worldId, branchId: contact.branchId, eyeId: contact.eyeId,
               spaceId: contact.spaceId, entityId: contact.entityId, baseRevision: candidate.baseRevision,
               operationId: candidate.operationId || contact.operationId,
+              rebaseOnRevision: candidate.rebaseOnRevision === true,
             };
             expected.worldId = candidate.worldId || expected.worldId;
             expected.branchId = candidate.branchId ?? expected.branchId;
@@ -1504,7 +1529,7 @@ window.VivaPhoneEngine = Object.freeze({
   // direct worker snapshot can be newer than the preview model while the
   // sparse solver is still stepping, which makes an active preview appear to
   // drift from the coordinate it is actually based on.
-  snapshot: () => refreshSnapshot({ externalSnapshot: true }), translate: (...args) => engine?.translate(...args), applyLocalEdit: (...args) => engine?.applyLocalEdit(...args), applyLocalTransform: (...args) => engine?.applyLocalTransform(...args), setEye: patch => engine?.setEye(patch),
+  snapshot: () => refreshSnapshot({ externalSnapshot: true }), select: id => selectPhoneEntity(id, { announce: false }), translate: (...args) => engine?.translate(...args), applyLocalEdit: (...args) => engine?.applyLocalEdit(...args), applyLocalTransform: (...args) => engine?.applyLocalTransform(...args), setEye: patch => engine?.setEye(patch),
   materialSnapshot: () => engine?.materialSnapshot(),
   materialBegin: payload => engine?.materialBegin(payload),
   materialTarget: payload => engine?.materialTarget(payload),
@@ -1523,6 +1548,7 @@ window.VivaPhoneEngine = Object.freeze({
   previewAuthority: options => authority?.preview(options), publishAuthority: () => authority?.publish(),
   commitAuthority: () => authority?.commit(),
   fieldWorld: () => fieldWorld?.model || null,
+  publishedSnapshot: () => publishedEnvelope,
   interaction: () => interactionFabric?.snapshot() || null,
   agentControl: () => ({ schema: 'vivo.phone.agent-control/1', agents: registry.agents() }),
   syntheticHandLandmarks: (hands, options = {}) => {
