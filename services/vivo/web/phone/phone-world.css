@@ -234,6 +234,13 @@ body.phone-world:not(.phone-local) #status {
 .context-slot { align-items: center; background: rgba(9, 25, 40, .72); border: 1px solid rgba(243, 210, 142, .28); border-radius: 11px; display: grid; gap: 8px; grid-template-columns: auto 1fr; padding: 8px; }
 .context-slot button { color: #f3d28e; min-height: 32px; }
 .context-slot [role="region"] { color: #9db0c4; font-size: 11px; min-width: 0; }
+.local-economy-nav { background: rgba(8, 29, 39, .78); border: 1px solid rgba(103, 224, 162, .3); border-radius: 11px; display: grid; gap: 8px; order: -1; padding: 10px; }
+.local-economy-nav[hidden] { display: none; }
+.local-economy-heading { align-items: center; color: #90cbb0; display: flex; font: 9px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; justify-content: space-between; letter-spacing: .08em; text-transform: uppercase; }
+.local-economy-heading > span:last-child { color: #6c9e89; font-size: 8px; }
+.local-economy-actions { display: grid; gap: 7px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.local-economy-actions button { border-color: rgba(103, 224, 162, .38); color: #b9f2d3; min-height: 34px; }
+.local-economy-nav p { color: #8daea1; font: 9px/1.35 ui-monospace, SFMono-Regular, Consolas, monospace; margin: 0; }
 .phone-economy-status { color: #a8c4db; font: 9px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; grid-column: 1 / -1; margin: 0; }
 .phone-economy-status[data-tone="warn"] { color: #f3d28e; }
 .phone-economy-status[data-tone="error"] { color: #ffb7c0; }

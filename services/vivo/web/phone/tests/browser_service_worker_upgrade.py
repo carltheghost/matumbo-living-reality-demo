@@ -1,4 +1,4 @@
-"""Exercise real v13 -> v14 and v14 -> v16 service-worker upgrades.
+"""Exercise real v13 -> v14 and v14 -> v17 service-worker upgrades.
 
 The test serves three deployments from one origin. The first two deployments
 are extracted from pinned repository commits, so the v13 shell is the actual
@@ -29,7 +29,7 @@ from playwright.sync_api import BrowserContext, Page, sync_playwright
 SCOPE_PATH = "/services/vivo/web/"
 V13_CACHE = "vivo-phone-shell-2026-10-13-v13"
 V14_CACHE = "vivo-phone-shell-2026-10-13-v14"
-V16_CACHE = "vivo-phone-shell-2026-10-13-v16"
+V17_CACHE = "vivo-phone-shell-2026-10-13-v17"
 HISTORICAL_V13_COMMIT = "9f17fac9fd3b5a97ca528c5c1b3bf6abf97ac647"
 HISTORICAL_V14_COMMIT = "a8d5e021671f3c77fc4e3619c1c9e94aee35a892"
 HISTORICAL_WEB_PREFIX = "services/vivo/web"
@@ -381,12 +381,12 @@ def run() -> dict[str, Any]:
                 context.set_offline(False)
                 legacy_v14 = mark_legacy_cache(page, V14_CACHE, "/* retired v14 cache marker */")
                 set_deployment(server, web_root)
-                upgraded_v16 = wait_for_upgrade(page, V14_CACHE, V16_CACHE)
-                assert_exact_cached_assets(upgraded_v16, expected_cached_assets(web_root))
+                upgraded_v17 = wait_for_upgrade(page, V14_CACHE, V17_CACHE)
+                assert_exact_cached_assets(upgraded_v17, expected_cached_assets(web_root))
                 context.set_offline(True)
-                after_v16 = reopen_pool_offline(page, route, before)
-                assert after_v16["availableTumbo"] == before["availableTumbo"], {"before": before, "after": after_v16}
-                assert after_v16["pool"] == before["pool"], {"before": before, "after": after_v16}
+                after_v17 = reopen_pool_offline(page, route, before)
+                assert after_v17["availableTumbo"] == before["availableTumbo"], {"before": before, "after": after_v17}
+                assert after_v17["pool"] == before["pool"], {"before": before, "after": after_v17}
                 assert not page_errors, page_errors
                 result = {
                     "v13ToV14": {
@@ -400,23 +400,23 @@ def run() -> dict[str, Any]:
                         "housePoolReopenedOffline": after_v14["pool"] == before["pool"],
                         "cacheNames": upgraded_v14["names"],
                     },
-                        "v14ToV16": {
+                        "v14ToV17": {
                         "historicalCommit": HISTORICAL_V14_COMMIT,
-                        "oldCacheRetired": V14_CACHE not in upgraded_v16["names"],
-                        "newCachePresent": V16_CACHE in upgraded_v16["names"],
+                        "oldCacheRetired": V14_CACHE not in upgraded_v17["names"],
+                        "newCachePresent": V17_CACHE in upgraded_v17["names"],
                         "exactHistoricalAssets": True,
                         "legacyAssetsObserved": all("retired v14 cache marker" in value for value in legacy_v14["assets"].values()),
                         "exactCurrentAssets": True,
-                        "newPanelCached": "house-pool:create" in upgraded_v16["assets"][PANEL_PATH],
-                        "newModelCached": "createHousePool" in upgraded_v16["assets"][MODEL_PATH],
-                        "housePoolReopenedOffline": after_v16["pool"] == before["pool"],
-                        "cacheNames": upgraded_v16["names"],
+                        "newPanelCached": "house-pool:create" in upgraded_v17["assets"][PANEL_PATH],
+                        "newModelCached": "createHousePool" in upgraded_v17["assets"][MODEL_PATH],
+                        "housePoolReopenedOffline": after_v17["pool"] == before["pool"],
+                        "cacheNames": upgraded_v17["names"],
                     },
-                    "persistedBalancePreserved": after_v16["availableTumbo"] == before["availableTumbo"],
-                    "persistedReceiptPreserved": set(before["receiptIds"]).issubset(after_v16["receiptIds"]),
+                    "persistedBalancePreserved": after_v17["availableTumbo"] == before["availableTumbo"],
+                    "persistedReceiptPreserved": set(before["receiptIds"]).issubset(after_v17["receiptIds"]),
                     "housePoolReopenedOffline": True,
-                    "cacheNames": upgraded_v16["names"],
-                    "pool": after_v16["pool"],
+                    "cacheNames": upgraded_v17["names"],
+                    "pool": after_v17["pool"],
                     "pageErrors": page_errors,
                 }
                 print(json.dumps(result, indent=2))
