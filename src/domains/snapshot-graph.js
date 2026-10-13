@@ -3,7 +3,7 @@
  *
  * Supported snapshot values are the JSON data model only: null, finite
  * numbers, strings, booleans, ordinary/null-prototype objects, and ordinary
- * or null-prototype arrays. Accessors, symbols, functions, undefined,
+ * arrays. Accessors, symbols, functions, undefined,
  * BigInt, non-finite numbers, custom prototypes, sparse arrays, and cycles are
  * rejected before any caller compares, hashes, clones, or persists a graph.
  * The walk reads property descriptors and never invokes a getter or mutates
@@ -33,8 +33,10 @@ export function stableJson(value, stack = new Set(), path = "$") {
 
   const isArray = Array.isArray(value);
   const prototype = Object.getPrototypeOf(value);
-  const expectedPrototype = isArray ? Array.prototype : Object.prototype;
-  if (prototype !== expectedPrototype && prototype !== null) {
+  const supportedPrototype = isArray
+    ? prototype === Array.prototype
+    : prototype === Object.prototype || prototype === null;
+  if (!supportedPrototype) {
     throw graphError(path, "contains an unsupported prototype");
   }
 

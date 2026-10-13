@@ -294,6 +294,51 @@ test("the shared snapshot graph validator covers receipt arrays and nested econo
   assert.equal(receiptOverview.invariants.idempotency.receiptRegistry.ok, false);
   assert.equal(Object.getPrototypeOf(customPostings), customArrayPrototype, "validation must not normalize the hostile array");
 
+  const receiptCases = [
+    ["top-level receipt prototype", (receipt) => {
+      const hostile = { ...receipt };
+      const prototype = Object.create(Object.prototype);
+      Object.setPrototypeOf(hostile, prototype);
+      return { value: hostile, after: () => assert.equal(Object.getPrototypeOf(hostile), prototype) };
+    }],
+    ["nested links prototype", (receipt) => {
+      const links = { ...receipt.links };
+      const prototype = Object.create(Object.prototype);
+      Object.setPrototypeOf(links, prototype);
+      const hostile = { ...receipt, links };
+      return { value: hostile, after: () => assert.equal(Object.getPrototypeOf(links), prototype) };
+    }],
+    ["links accessor", (receipt) => {
+      let invoked = false;
+      const hostile = { ...receipt };
+      Object.defineProperty(hostile, "links", {
+        enumerable: true,
+        get() {
+          invoked = true;
+          return receipt.links;
+        },
+      });
+      return { value: hostile, after: () => assert.equal(invoked, false, "receipt graph validation must not invoke links getters") };
+    }],
+    ["null-prototype postings array", (receipt) => {
+      const postings = receipt.postings.slice();
+      Object.setPrototypeOf(postings, null);
+      const hostile = { ...receipt, postings };
+      return { value: hostile, after: () => assert.equal(Object.getPrototypeOf(postings), null) };
+    }],
+  ];
+  for (const [label, mutate] of receiptCases) {
+    const engine = createTokenEngine();
+    const key = `overview:graph:receipt:${label.replaceAll(" ", "-")}`;
+    engine.faucet("u:alice", "TUMBO", 100, { idempotencyKey: key });
+    const original = engine.ledger._receipts.get(key);
+    const { value, after } = mutate(original);
+    engine.ledger._receipts.set(key, value);
+    const overview = createTokenEconomyOverview({ engine });
+    assert.equal(overview.invariants.idempotency.receiptRegistry.ok, false, label);
+    after();
+  }
+
   const cases = [
     ["custom event array prototype", (state) => {
       const events = [];
@@ -301,6 +346,12 @@ test("the shared snapshot graph validator covers receipt arrays and nested econo
       Object.setPrototypeOf(events, prototype);
       state.events = events;
       return () => assert.equal(Object.getPrototypeOf(state.events), prototype);
+    }],
+    ["null-prototype event array", (state) => {
+      const events = [];
+      Object.setPrototypeOf(events, null);
+      state.events = events;
+      return () => assert.equal(Object.getPrototypeOf(state.events), null);
     }],
     ["cyclic event entry", (state) => {
       const events = [];

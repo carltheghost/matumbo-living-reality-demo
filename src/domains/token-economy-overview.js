@@ -222,6 +222,11 @@ function receiptConsistency(engine, journals) {
       const receipt = receipts.get(key);
       const mismatches = [];
       try {
+        // Validate the receipt container before touching any field. This
+        // catches a custom top-level prototype or accessor-backed nested
+        // value without invoking a hostile getter or accepting equal-looking
+        // projected fields.
+        assertSnapshotGraph(receipt, `receipt ${key}`);
         for (const field of ["id", "kind", "action", "idempotencyKey", "tick", "prevHash", "postings", "memo", "ts", "hash"]) {
           if (!sameSnapshotValue(receipt?.[field], journal[field])) mismatches.push(field);
         }
@@ -240,6 +245,7 @@ function receiptConsistency(engine, journals) {
         if (typeof rawRequest !== "string") throw new TypeError("request binding is not a JSON string");
         request = JSON.parse(rawRequest);
         if (!request || typeof request !== "object" || Array.isArray(request)) throw new TypeError("request binding is not an object");
+        assertSnapshotGraph(request, `request ${key}`);
       } catch (error) {
         result.requestMismatches.push({ key, fields: [safeError(error)] });
         continue;
