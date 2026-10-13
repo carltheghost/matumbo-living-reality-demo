@@ -35,6 +35,13 @@ function marketReceiptFixture() {
   return { engine, key: "overview:semantic:market" };
 }
 
+class MemoryStorage {
+  constructor() { this.values = new Map(); }
+  getItem(key) { return this.values.get(key) ?? null; }
+  setItem(key, value) { this.values.set(key, String(value)); }
+  removeItem(key) { this.values.delete(key); }
+}
+
 test("exact amount boundaries reject binary-float input", () => {
   assert.equal(parseTumboSimExact("1.001"), 1_001);
   assert.equal(parseTumboSimExact(" 7 "), 7_000);
@@ -231,6 +238,113 @@ test("economy adapter exposes escrow obligations and operation uniqueness", () =
   assert.equal(overview.economy.pendingObligationsFluff.TUMBO, 500);
   assert.deepEqual(overview.economy.escrow.TUMBO, { actualFluff: 500, expectedFluff: 500, deltaFluff: 0, ok: true });
   assert.equal(overview.economy.operationRegistry.unique, true);
+  assert.equal(overview.economy.ok, true);
+  assert.equal(overview.invariants.ok, true);
+});
+
+test("house-pool reservations are included in the read-only escrow obligation audit", () => {
+  const engine = createTokenEngine();
+  fundTumbo(engine, "u:you", 96_500);
+  const storage = new MemoryStorage();
+  const economy = createSimulatedEconomy({ engine, storage });
+  const created = economy.createHousePool({
+    name: "QA-only house pool",
+    capacityFluff: 10_000,
+    idempotencyKey: "overview:house-pool:create",
+  });
+  const reserved = economy.reserveHousePoolContribution({
+    poolId: created.pool.id,
+    contributor: "you",
+    amountFluff: 1_000,
+    idempotencyKey: "overview:house-pool:reserve",
+  });
+
+  assert.equal(economy.balances("you").available.TUMBO, 95_500);
+  assert.equal(reserved.pool.totalUnits, 1_000);
+  assert.equal(reserved.pool.availableCapacityFluff, 9_000);
+  assert.equal(economy.verify().ok, true);
+
+  const overview = createTokenEconomyOverview({ engine, economy });
+  assert.equal(overview.economy.counts.housePools, 1);
+  assert.equal(overview.economy.counts.activeHousePoolContributions, 1);
+  assert.equal(overview.economy.pendingObligationsFluff.TUMBO, 1_000);
+  assert.deepEqual(overview.economy.escrow.TUMBO, {
+    actualFluff: 1_000,
+    expectedFluff: 1_000,
+    deltaFluff: 0,
+    ok: true,
+  });
+  assert.equal(overview.economy.ok, true);
+  assert.equal(overview.invariants.ok, true);
+
+  const reloaded = createSimulatedEconomy({ engine: createTokenEngine(), storage });
+  const reloadedOverview = createTokenEconomyOverview({ engine: reloaded.engine, economy: reloaded });
+  assert.equal(reloaded.balances("you").available.TUMBO, 95_500);
+  assert.equal(reloaded.getHousePool(created.pool.id).totalUnits, 1_000);
+  assert.equal(reloadedOverview.economy.pendingObligationsFluff.TUMBO, 1_000);
+  assert.equal(reloadedOverview.economy.escrow.TUMBO.ok, true);
+  assert.equal(reloadedOverview.invariants.ok, true);
+
+  const released = reloaded.releaseHousePoolContribution({
+    poolId: created.pool.id,
+    contributionId: reserved.contribution.id,
+    actor: "you",
+    expectedRevision: reloaded.getHousePool(created.pool.id).revision,
+    idempotencyKey: "overview:house-pool:release",
+  });
+  assert.equal(released.pool.totalUnits, 0);
+  assert.equal(released.pool.availableCapacityFluff, 10_000);
+  assert.equal(reloaded.balances("you").available.TUMBO, 96_500);
+  const releasedOverview = createTokenEconomyOverview({ engine: reloaded.engine, economy: reloaded });
+  assert.equal(releasedOverview.economy.pendingObligationsFluff.TUMBO, 0);
+  assert.deepEqual(releasedOverview.economy.escrow.TUMBO, {
+    actualFluff: 0,
+    expectedFluff: 0,
+    deltaFluff: 0,
+    ok: true,
+  });
+  assert.equal(releasedOverview.economy.ok, true);
+  assert.equal(releasedOverview.invariants.ok, true);
+
+  const reloadedAfterRelease = createSimulatedEconomy({ engine: createTokenEngine(), storage });
+  const finalOverview = createTokenEconomyOverview({ engine: reloadedAfterRelease.engine, economy: reloadedAfterRelease });
+  assert.equal(reloadedAfterRelease.balances("you").available.TUMBO, 96_500);
+  assert.equal(reloadedAfterRelease.getHousePool(created.pool.id).totalUnits, 0);
+  assert.equal(finalOverview.economy.pendingObligationsFluff.TUMBO, 0);
+  assert.equal(finalOverview.economy.ok, true);
+  assert.equal(finalOverview.invariants.ok, true);
+});
+
+test("committed house-pool contributions count as one active escrow obligation", () => {
+  const engine = createTokenEngine();
+  fundTumbo(engine, "u:you", 20_000);
+  const economy = createSimulatedEconomy({ engine });
+  const created = economy.createHousePool({
+    name: "Committed house pool",
+    capacityFluff: 10_000,
+    idempotencyKey: "overview:committed-pool:create",
+  });
+  const reserved = economy.reserveHousePoolContribution({
+    poolId: created.pool.id,
+    contributor: "you",
+    amountFluff: 2_000,
+    idempotencyKey: "overview:committed-pool:reserve",
+  });
+  const committed = economy.commitHousePoolContribution({
+    poolId: created.pool.id,
+    contributionId: reserved.contribution.id,
+    actor: "you",
+    outcomeId: "outcome:yes",
+    expectedRevision: reserved.pool.revision,
+    idempotencyKey: "overview:committed-pool:commit",
+  });
+
+  const overview = createTokenEconomyOverview({ engine, economy });
+  assert.equal(committed.contribution.status, "committed");
+  assert.equal(overview.economy.counts.activeHousePoolContributions, 1);
+  assert.equal(overview.economy.pendingObligationsFluff.TUMBO, 2_000);
+  assert.equal(overview.economy.escrow.TUMBO.actualFluff, 2_000);
+  assert.equal(overview.economy.escrow.TUMBO.expectedFluff, 2_000);
   assert.equal(overview.economy.ok, true);
   assert.equal(overview.invariants.ok, true);
 });

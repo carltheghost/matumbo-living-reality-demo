@@ -48,6 +48,10 @@ function ensureOverviewStyles(documentRoot) {
 .sim-economy-panel .token-economy-overview__checks{display:flex;flex-wrap:wrap;gap:6px;color:#9de6c8!important;font-size:9px!important}
 .sim-economy-panel .token-economy-overview__definitions{border-top:1px solid rgba(137,222,247,.14);padding-top:7px;color:#9ebbc6;font-size:9px}
 .sim-economy-panel .token-economy-overview__definitions summary{cursor:pointer;color:#83d9f0;font-weight:700}
+.sim-economy-panel .token-economy-overview-audit{margin:0;padding:7px 9px;border:1px solid rgba(137,222,247,.22);border-radius:9px;background:rgba(7,36,51,.52);color:#b7d4dc;font-size:9px;line-height:1.4}
+.sim-economy-panel .token-economy-overview-audit[data-state="pending"]{border-color:rgba(255,208,112,.48);background:rgba(108,75,18,.2);color:#ffe0a0}
+.sim-economy-panel .token-economy-overview-audit[data-state="current"]{border-color:rgba(113,228,183,.3);background:rgba(39,137,114,.1);color:#b8ead6}
+.sim-economy-panel .token-economy-overview-audit[data-state="error"]{border-color:rgba(255,125,125,.45);background:rgba(116,28,38,.2);color:#ffc0c0}
 @media(max-width:520px){.sim-economy-panel .token-economy-overview__assets{grid-template-columns:1fr}.sim-economy-panel .token-economy-overview__status-list{grid-template-columns:1fr}}
 `;
   documentRoot.head.append(style);
@@ -160,10 +164,10 @@ export function mountPhoneEconomyContext({
   let panelObserver = null;
   let ownerOff = null;
   let overviewHost = null;
+  let overviewAuditStatus = null;
   let latestOverview = null;
   let overviewRefreshTimer = null;
   let overviewDirty = false;
-  let lastOverviewRefreshAt = 0;
   let requestOverviewRefresh = () => {};
   const onRetry = () => { initError = null; trigger.disabled = false; open(); };
 
@@ -206,6 +210,27 @@ export function mountPhoneEconomyContext({
       overviewHost.className = 'sim-economy-form token-economy-overview-host';
       mounted.element?.append(overviewHost);
       const timerHost = documentRoot.defaultView || globalThis;
+      const setOverviewAuditState = state => {
+        if (!overviewHost) return;
+        if (!overviewAuditStatus) {
+          overviewAuditStatus = documentRoot.createElement('p');
+          overviewAuditStatus.className = 'token-economy-overview-audit';
+          overviewAuditStatus.setAttribute('role', 'status');
+          overviewAuditStatus.setAttribute('aria-live', 'polite');
+        }
+        const normalizedState = state === 'current' || state === 'error' ? state : 'pending';
+        overviewHost.dataset.auditState = normalizedState;
+        overviewHost.setAttribute('aria-busy', String(normalizedState === 'pending'));
+        overviewAuditStatus.dataset.state = normalizedState;
+        overviewAuditStatus.textContent = normalizedState === 'current'
+          ? 'Overview current · full local audit complete.'
+          : normalizedState === 'error'
+            ? 'Overview audit unavailable · local state needs review.'
+            : 'Overview refresh pending · showing the last audited local state.';
+        if (overviewAuditStatus.parentNode !== overviewHost) {
+          overviewHost.insertBefore(overviewAuditStatus, overviewHost.firstChild || null);
+        }
+      };
       const showOverviewError = error => {
         overviewHost?.replaceChildren(documentRoot.createElement('p'));
         const message = overviewHost?.firstElementChild;
@@ -213,6 +238,7 @@ export function mountPhoneEconomyContext({
           message.className = 'token-economy-overview__status';
           message.textContent = `Economy overview unavailable: ${error instanceof Error ? error.message : String(error)}.`;
         }
+        setOverviewAuditState('error');
         latestOverview = null;
       };
       const refreshOverview = () => {
@@ -223,12 +249,13 @@ export function mountPhoneEconomyContext({
         });
         latestOverview = decorateTokenEconomyOverview(baseOverview);
         renderTokenEconomyOverview(overviewHost, latestOverview);
+        setOverviewAuditState('current');
         overviewDirty = false;
-        lastOverviewRefreshAt = Date.now();
         return latestOverview;
       };
       requestOverviewRefresh = ({ immediate = false } = {}) => {
         overviewDirty = true;
+        setOverviewAuditState('pending');
         // Hidden panels do not need a full journal audit. The next explicit
         // open performs one fresh projection before the user reads it.
         if (!mounted?.element || mounted.element.hidden) return;
@@ -237,16 +264,18 @@ export function mountPhoneEconomyContext({
             timerHost.clearTimeout(overviewRefreshTimer);
             overviewRefreshTimer = null;
           }
-          try { refreshOverview(); } catch (error) { showOverviewError(error); overviewDirty = false; lastOverviewRefreshAt = Date.now(); }
+          try { refreshOverview(); } catch (error) { showOverviewError(error); overviewDirty = false; }
           return;
         }
         if (overviewRefreshTimer !== null) return;
-        const elapsed = Date.now() - lastOverviewRefreshAt;
-        const delay = Math.max(0, VIVO_PHONE_ECONOMY_OVERVIEW_REFRESH_INTERVAL_MS - elapsed);
+        // Keep the pending/stale state observable even after an idle period.
+        // A zero-delay refresh would make the old projection look current
+        // again before the browser can paint the audit boundary.
+        const delay = VIVO_PHONE_ECONOMY_OVERVIEW_REFRESH_INTERVAL_MS;
         overviewRefreshTimer = timerHost.setTimeout(() => {
           overviewRefreshTimer = null;
           if (!overviewDirty || !mounted?.element || mounted.element.hidden) return;
-          try { refreshOverview(); } catch (error) { showOverviewError(error); overviewDirty = false; lastOverviewRefreshAt = Date.now(); }
+          try { refreshOverview(); } catch (error) { showOverviewError(error); overviewDirty = false; }
         }, delay);
       };
       trigger.setAttribute('aria-controls', mounted.element?.id || panelHost.id);
@@ -262,6 +291,7 @@ export function mountPhoneEconomyContext({
       });
       initError = null;
       renderStatus();
+      setOverviewAuditState('pending');
       refreshOverview();
       return owner.model;
     } catch (error) {
@@ -324,6 +354,7 @@ export function mountPhoneEconomyContext({
       retry.removeEventListener('click', onRetry);
       mounted?.destroy?.();
       overviewHost = null;
+      overviewAuditStatus = null;
       latestOverview = null;
       mounted = null;
       owner = null;

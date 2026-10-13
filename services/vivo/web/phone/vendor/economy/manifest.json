@@ -40,9 +40,9 @@
     {
       "source": "src/domains/token-economy-overview.js",
       "staged": "services/vivo/web/phone/vendor/economy/src/domains/token-economy-overview.js",
-      "bytes": 36760,
-      "sha256": "bbda3cc4465141dca65cda4be183ccafd942ac4f1ad20c436c28bb0b9a7dec0d",
-      "gitBlob": "5556cfb39bf6f6a014a1562555e3528004467f03"
+      "bytes": 42018,
+      "sha256": "ed76027fce901126924aec6a79459e62471f1593d5caf319fdc93c15cb27ae11",
+      "gitBlob": "739459fa20c45a2ec4b22b33eb122b5e6a1c527d"
     },
     {
       "source": "src/domains/token-store.js",
