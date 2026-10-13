@@ -721,8 +721,11 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
     stopResponse('navigation-changed');
     if (state.collapsed) {
       state.collapsed = false;
-      frameSelectedCharacter();
       render();
+      // Apply the expanded dock geometry before reading its top edge. The
+      // previous order framed against the collapsed dock, so a desktop
+      // collapse -> narrow resize -> reopen could hide the resident label.
+      frameSelectedCharacter();
       return;
     }
     selectWorldEntity(selected().entityId);
