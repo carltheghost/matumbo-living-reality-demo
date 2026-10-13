@@ -307,8 +307,20 @@ test('placed transforms expose an unsaved acknowledgement on IndexedDB failure a
   assert.match(unsaved.persistence.error, /QuotaExceededError/);
   assert.equal(unsaved.snapshot.spaces.root.entities.workpiece.q[1], 0.5);
   store.fail = false;
-  await engine.persist();
-  assert.equal((await engine.snapshot()).persistence.state, 'saved');
+  await engine.applyLocalTransform('workpiece', [0, 0, 0, 0], { scale: 1, rotation: 0, axes: [0, 1] }, {
+    worldId: unsaved.snapshot.worldId,
+    branchId: unsaved.branchId,
+    eyeId: unsaved.currentEyeId,
+    spaceId: 'root',
+    entityId: 'workpiece',
+    baseRevision: unsaved.snapshot.spaces.root.entities.workpiece.revision,
+    operationId: 'failed-placement-persistence:workpiece:retry',
+  });
+  const retried = await engine.snapshot();
+  assert.equal(retried.persistence.state, 'saved');
+  const reloaded = new LocalVivoEngine({ storage: store });
+  await reloaded.open('failed-placement-persistence');
+  assert.equal((await reloaded.snapshot()).snapshot.spaces.root.entities.workpiece.q[1], 0.5);
 });
 
 test('offline branch persistence failures do not erase provenance and retry durably', async () => {

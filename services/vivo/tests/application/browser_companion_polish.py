@@ -73,7 +73,53 @@ def install_guards(page: Page) -> None:
     )
 
 
-def open_phone(browser, *, width: int, height: int, reduced_motion: bool = False):
+def install_storage_profile(context, profile: dict[str, int]) -> None:
+    """Inject deterministic IndexedDB save failures/delay into the real worker.
+
+    The production worker remains untouched. Playwright rewrites only this
+    browser test's worker response, retaining the real IndexedDbWorldStore
+    for successful saves and exercising the same client/worker/UI boundary.
+    """
+    failures = max(0, min(int(profile.get("failures", 0)), 5))
+    skip_saves = max(0, min(int(profile.get("skip_saves", 0)), 5))
+    delay_ms = max(0, min(int(profile.get("delay_ms", 0)), 2_000))
+    source = (REPO / "services" / "vivo" / "web" / "phone" / "engine-worker.mjs").read_text()
+    marker = "const engine = new LocalVivoEngine({\n  storage: new IndexedDbWorldStore(self),"
+    injected = f"""const storage = (() => {{
+  const backing = new IndexedDbWorldStore(self);
+  let failures = {failures};
+  let saves = 0;
+  const delayMs = {delay_ms};
+  return {{
+    load: (...args) => backing.load(...args),
+    async save(...args) {{
+      saves += 1;
+      if (delayMs > 0) await new Promise(resolve => setTimeout(resolve, delayMs));
+      if (saves > {skip_saves} && failures > 0) {{
+        failures -= 1;
+        throw new DOMException('Injected IndexedDB quota exceeded for browser regression.', 'QuotaExceededError');
+      }}
+      return backing.save(...args);
+    }},
+    remove: (...args) => backing.remove(...args),
+    estimate: (...args) => backing.estimate(...args),
+    requestPersistence: (...args) => backing.requestPersistence(...args),
+    close: (...args) => backing.close(...args),
+  }};
+}})();
+const engine = new LocalVivoEngine({{
+  storage,"""
+    if marker not in source:
+        raise AssertionError("engine worker storage marker changed; update the browser injection seam")
+    transformed = source.replace(marker, injected, 1)
+
+    def fulfill(route) -> None:
+        route.fulfill(status=200, content_type="text/javascript", body=transformed)
+
+    context.route("**/engine-worker.mjs*", fulfill)
+
+
+def open_phone(browser, *, width: int, height: int, reduced_motion: bool = False, storage_profile: dict[str, int] | None = None):
     context = browser.new_context(
         viewport={"width": width, "height": height},
         device_scale_factor=1,
@@ -81,6 +127,8 @@ def open_phone(browser, *, width: int, height: int, reduced_motion: bool = False
         is_mobile=width <= 430,
         reduced_motion="reduce" if reduced_motion else "no-preference",
     )
+    if storage_profile:
+        install_storage_profile(context, storage_profile)
     page = context.new_page()
     page.set_default_timeout(8000)
     page.set_default_navigation_timeout(12000)

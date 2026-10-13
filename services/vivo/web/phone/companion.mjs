@@ -298,6 +298,7 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
     presenceTimer: null,
     messages: new Map(),
     placementBusy: false,
+    placementAttempt: 0,
     responseBusy: false,
     responseController: null,
     responseAttempt: 0,
@@ -629,15 +630,22 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
     const envelope = await snapshot();
     const request = buildPlacementRequest(envelope, state.selectedId);
     if (!request.ok) { setReaction(request.message || 'The selected identity is not available in the active Eye.', 'warn'); render(); return request; }
-    if (request.delta.every(value => Math.abs(value) < 1e-9)) {
+    const unchanged = request.delta.every(value => Math.abs(value) < 1e-9);
+    const retryingPersistence = ['unsaved', 'memory-only'].includes(envelope?.persistence?.state);
+    if (unchanged && !retryingPersistence) {
       setReaction(`${selected().name} is already in its saved place.`, 'success'); render(); return { ...request, unchanged: true };
     }
     state.placementBusy = true;
+    const placementAttempt = ++state.placementAttempt;
     setPresence('attention');
     render();
     try {
       const engine = scope.VivaPhoneEngine;
-      const operationId = `companion-place:${request.worldId}:${request.branchId || 'local'}:${request.characterId}:r${request.expected.baseRevision}`;
+      const operationId = `companion-place:${request.worldId}:${request.branchId || 'local'}:${request.characterId}:r${request.expected.baseRevision}:a${placementAttempt}`;
+      // A failed placement leaves the entity at its target with an unsaved
+      // envelope. Keep the zero-delta operation explicit on retry so the
+      // engine records a fresh persistence fence instead of treating the
+      // retry as a UI-only no-op.
       const result = await engine.applyLocalTransform(request.entityId, request.delta, request.geometry, { ...request.expected, operationId });
       const next = await waitForPersistenceAcknowledgement(await freshSnapshot());
       frameSelectedCharacter();
@@ -645,7 +653,7 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
       setReaction(placementReaction(selected(), next?.persistence), persistenceTone(next?.persistence));
       shell.classList.remove('has-reaction'); void shell.offsetWidth; shell.classList.add('has-reaction');
       render(next);
-      return { request, result, envelope: next };
+      return { request, result, envelope: next, retried: unchanged && retryingPersistence };
     } catch (error) {
       let current = state.envelope;
       try { current = await freshSnapshot(); } catch { /* keep the last honest state */ }
