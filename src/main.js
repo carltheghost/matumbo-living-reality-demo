@@ -3562,7 +3562,14 @@ try {
     },
   });
   // Re-publish only when the domain changes; quiet ticks do not rebuild UI.
-  contractAutomation.subscribe(publishContractWorld);
+  // The Marketplace owns a separate render tree, so refresh its governing
+  // contract options from the same post-persistence snapshot that updates the
+  // shared world. This keeps a contract created after mount selectable without
+  // inventing a second contract list in the Marketplace surface.
+  contractAutomation.subscribe((snapshot) => {
+    publishContractWorld(snapshot);
+    contractsMarkets?.refreshMarketplaceContracts?.();
+  });
   contractWorkspace.subscribe(()=>{publishContractWorld();contractAtelierConsole?.refresh();});
   queueMicrotask(publishContractWorld);
 } catch (error) {

@@ -142,6 +142,23 @@ test('native draft review shows a deterministic no-write forecast', () => {
   assert.match(fixture.root.textContent, /TRIGGERED/);
   api.destroy();
 });
+test('editing a draft after preview invalidates the old forecast until it is recomputed', () => {
+  const fixture = documentFixture();
+  const engine = createContractAutomation();
+  const api = mountContractWorkbench({ ...fixture, engine });
+  button(fixture.root, 'Create contract').click();
+  named(fixture.root, 'title').value = 'Forecast before edit';
+  named(fixture.root, 'preview-evidence').value = '{"accepted":true}';
+  button(fixture.root, 'Preview simulated lifecycle').click();
+  assert.match(fixture.root.textContent, /PREVIEW ONLY · NO STATE CHANGED/);
+  assert.match(fixture.root.textContent, /TRIGGERED/);
+
+  named(fixture.root, 'title').value = 'Forecast after edit';
+  named(fixture.root, 'title').dispatch('input');
+  assert.match(fixture.root.textContent, /Draft changed after this forecast/);
+  assert.doesNotMatch(fixture.root.textContent, /TRIGGERED/);
+  api.destroy();
+});
 test('create -> required approvals -> local evidence invokes real handlers and displays receipt', () => {
   const fixture = setup(); create(fixture);
   named(fixture.root, 'actor').value = 'owner'; button(fixture.root, 'Approve as selected role').click();

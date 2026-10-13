@@ -310,10 +310,19 @@ export function mountContractWorkbench({ root, engine, onSelect = null, onRefres
       return;
     }
     if (!result) return;
+    const savedForecast = result.source === 'saved';
     const heading = node('div', 'cw-preview-heading');
-    heading.append(node('strong', '', 'PREVIEW ONLY · NO STATE CHANGED'), node('span', 'cw-hint', `${result.approvals.remaining} local approval${result.approvals.remaining === 1 ? '' : 's'} still required`));
+    heading.append(
+      node('strong', '', savedForecast ? 'SAVED-STATE FORECAST · NO STATE CHANGED' : 'PREVIEW ONLY · NO STATE CHANGED'),
+      node('span', 'cw-hint', `${result.approvals.remaining} local approval${result.approvals.remaining === 1 ? '' : 's'} still required`),
+    );
     parent.append(heading, node('p', 'cw-hint', result.boundary));
-    const assumptions = node('pre', 'cw-preview-assumptions', `Assumed evidence: ${JSON.stringify(result.assumptions)}`);
+    if (savedForecast) {
+      parent.append(node('p', 'cw-hint', `Saved status: ${result.status} · actual approvals ${result.approvals.recorded}/${result.approvals.required} · saved receipts ${result.receipts.length}.`));
+      const timestamps = result.evidence.map((evidence) => `${evidence.source} @ ${new Date(evidence.observedAt).toISOString()}`).join(' · ');
+      parent.append(node('p', 'cw-hint', `Actual evidence timestamps preserved: ${timestamps || 'none recorded'}.`));
+    }
+    const assumptions = node('pre', 'cw-preview-assumptions', `${savedForecast ? 'Hypothetical assumptions' : 'Assumed evidence'}: ${JSON.stringify(result.assumptions)}`);
     parent.append(assumptions);
     const rules = node('div', 'cw-preview-rules');
     for (const rule of result.rules) {
@@ -325,10 +334,20 @@ export function mountContractWorkbench({ root, engine, onSelect = null, onRefres
     parent.append(rules, node('p', 'cw-preview-total', `Projected simulated points: ${result.totalProjectedPoints}. ${result.nextAction}`));
   }
 
-  function previewAssumptionsFor(record) {
-    const assumptions = {};
-    for (const evidence of [...(record?.evidence ?? [])].sort((a, b) => a.observedAt - b.observedAt)) assumptions[evidence.source] = evidence.value;
-    return assumptions;
+  function renderDraftPreviewStale() {
+    previewOutput.replaceChildren(node('p', 'cw-preview-stale', 'Draft changed after this forecast. Preview again to refresh the forecast.'));
+  }
+
+  function invalidateDraftPreview() {
+    if (!previewResult) return;
+    previewResult = null;
+    renderDraftPreviewStale();
+  }
+
+  function watchDraftControl(control) {
+    if (!control) return;
+    listen(control, 'input', invalidateDraftPreview);
+    listen(control, 'change', invalidateDraftPreview);
   }
 
   function filteredRecords(records) {
@@ -399,6 +418,7 @@ export function mountContractWorkbench({ root, engine, onSelect = null, onRefres
   }
   function syncPredicateGuidance() { for (const row of ruleRows) row.syncPredicate?.(); }
   function addSource(source) {
+    invalidateDraftPreview();
     const wrap = node('div', 'cw-source-row');
     const row = {
       wrap, id: input('source-id', source.id), label: input('source-label', source.label ?? source.id),
@@ -408,6 +428,7 @@ export function mountContractWorkbench({ root, engine, onSelect = null, onRefres
       age: input('source-max-age', Number(source.maxAgeMs ?? 86400000) / 60000, 'number'),
       original: clone(source),
     };
+    [row.id, row.label, row.type, row.provider, row.eventId, row.age].forEach(watchDraftControl);
     row.age.min = '0.001';
     row.age.step = 'any';
     row.eventId.maxLength = 160;
@@ -472,6 +493,7 @@ export function mountContractWorkbench({ root, engine, onSelect = null, onRefres
     syncPredicateGuidance();
   }
   function addRule(rule) {
+    invalidateDraftPreview();
     const wrap = node('div', 'cw-rule-row');
     const simple = rule.when && typeof rule.when.source === 'string' && !Array.isArray(rule.when.conditions);
     const row = {
@@ -485,6 +507,7 @@ export function mountContractWorkbench({ root, engine, onSelect = null, onRefres
       runs: input('rule-runs', rule.schedule?.maxRuns ?? 1, 'number'),
       effects: [],
     };
+    [row.id, row.label, row.after, row.source, row.op, row.value, row.every, row.runs].forEach(watchDraftControl);
     row.every.min = '0'; row.every.step = 'any'; row.runs.min = '1'; row.runs.max = '1000';
     wrap.append(node('span', 'cw-segment-index', `RULE ${ruleRows.length + 1}`), field('Milestone / rule name', row.label), field('Rule key', row.id), field('After these rule keys (optional)', row.after, 'Comma-separated keys of earlier rules; each must complete before this rule runs. Forward references and cycles are rejected.'));
     if (simple) {
@@ -511,6 +534,7 @@ export function mountContractWorkbench({ root, engine, onSelect = null, onRefres
     }
     const effectsHost = node('div', 'cw-effects');
     function addEffect(effect = { type: 'record', label: 'Record completion' }) {
+      invalidateDraftPreview();
       const effectWrap = node('div', 'cw-effect-row');
       const controls = {
         original: clone(effect), wrap: effectWrap,
@@ -521,6 +545,7 @@ export function mountContractWorkbench({ root, engine, onSelect = null, onRefres
         subject: input('effect-subject', effect.subject ?? 'reviewer'), resource: input('effect-resource', effect.resource ?? 'workspace'),
         duration: input('effect-duration', effect.durationMs ? effect.durationMs / 60000 : '', 'number'),
       };
+      Object.values(controls).filter((control) => control?.tagName).forEach(watchDraftControl);
       controls.amount.min = '0'; controls.duration.min = '0';
       const money = node('div', 'cw-effect-fields');
       money.append(field('From local role', controls.from), field('To local role', controls.to), field('Simulated points', controls.amount));
@@ -643,6 +668,14 @@ export function mountContractWorkbench({ root, engine, onSelect = null, onRefres
     return terms;
   }
   listen(templateSelect, 'change', loadTemplate);
+  [templateSelect, titleInput, creatorInput, partiesInput, startsInput, expiresInput, budgetInput, executionsInput,
+    predictionOutcomes, predictionResult, predictionPositions, advancedEnabled, advancedText, previewEvidence].forEach(watchDraftControl);
+  // Native browsers bubble these events, so future dynamic source/rule/effect
+  // controls also invalidate the forecast. The direct listeners above keep the
+  // same contract in the small deterministic DOM fixture used by unit tests.
+  listen(form, 'input', (event) => { if (event.target !== previewButton) invalidateDraftPreview(); });
+  listen(form, 'change', (event) => { if (event.target !== previewButton) invalidateDraftPreview(); });
+  listen(form, 'click', (event) => { if (event.target !== previewButton) invalidateDraftPreview(); });
   listen(form, 'submit', (event) => {
     event.preventDefault();
     action(() => {
@@ -786,7 +819,7 @@ export function mountContractWorkbench({ root, engine, onSelect = null, onRefres
         title: record.title,
         terms: record.terms,
         parties: record.parties,
-        assumedEvidence: previewAssumptionsFor(record),
+        state: record,
       }));
     } catch (error) {
       renderPreview(savedPreviewOutput, null, error.message);
