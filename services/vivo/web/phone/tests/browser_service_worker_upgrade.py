@@ -26,8 +26,20 @@ SCOPE_PATH = "/services/vivo/web/"
 V13_CACHE = "vivo-phone-shell-2026-10-13-v13"
 V14_CACHE = "vivo-phone-shell-2026-10-13-v14"
 V15_CACHE = "vivo-phone-shell-2026-10-13-v15"
+ECONOMY_ENTRY_PATH = "phone/economy-entry.mjs"
+MANIFEST_PATH = "phone/vendor/economy/manifest.json"
+OVERVIEW_PATH = "phone/vendor/economy/src/domains/token-economy-overview.js"
+STORE_PATH = "phone/vendor/economy/src/domains/token-store.js"
 PANEL_PATH = "phone/vendor/economy/src/render/simulated-economy-panel.js"
 MODEL_PATH = "phone/vendor/economy/src/domains/simulated-economy.js"
+CACHE_ASSERT_PATHS = [
+    ECONOMY_ENTRY_PATH,
+    MANIFEST_PATH,
+    OVERVIEW_PATH,
+    STORE_PATH,
+    PANEL_PATH,
+    MODEL_PATH,
+]
 
 
 class DeploymentServer(ThreadingHTTPServer):
@@ -186,9 +198,9 @@ def mark_legacy_cache(page: Page, cache_name: str, marker: str) -> dict[str, Any
           }
         }
         """,
-        [cache_name, [PANEL_PATH, MODEL_PATH], marker],
+        [cache_name, CACHE_ASSERT_PATHS, marker],
     )
-    legacy = cache_snapshot(page, cache_name, [PANEL_PATH, MODEL_PATH])
+    legacy = cache_snapshot(page, cache_name, CACHE_ASSERT_PATHS)
     assert all(marker in value for value in legacy["assets"].values()), legacy
     return legacy
 
@@ -223,13 +235,32 @@ def wait_for_upgrade(page: Page, old_cache: str, new_cache: str) -> dict[str, An
           throw new Error(`service-worker upgrade did not retire ${oldCache}`);
         }
         """,
-        [old_cache, new_cache, [PANEL_PATH, MODEL_PATH]],
+        [old_cache, new_cache, CACHE_ASSERT_PATHS],
     )
     assert old_cache not in upgraded["names"], upgraded
     assert new_cache in upgraded["names"], upgraded
     assert "house-pool:create" in upgraded["assets"][PANEL_PATH], upgraded
     assert "createHousePool" in upgraded["assets"][MODEL_PATH], upgraded
     return upgraded
+
+
+def expected_cached_assets(web_root: Path) -> dict[str, str]:
+    return {
+        asset_path: (web_root / asset_path).read_text(encoding="utf-8")
+        for asset_path in CACHE_ASSERT_PATHS
+    }
+
+
+def assert_exact_cached_assets(upgraded: dict[str, Any], expected: dict[str, str]) -> None:
+    assert upgraded["assets"] == expected, {
+        asset_path: {
+            "expectedLength": len(expected[asset_path]),
+            "actualLength": len(upgraded["assets"].get(asset_path) or ""),
+            "exact": upgraded["assets"].get(asset_path) == expected[asset_path],
+        }
+        for asset_path in CACHE_ASSERT_PATHS
+        if upgraded["assets"].get(asset_path) != expected[asset_path]
+    }
 
 
 def reopen_pool_offline(page: Page, route: str, expected: dict[str, Any]) -> dict[str, Any]:
@@ -299,7 +330,7 @@ def run() -> dict[str, Any]:
                 wait_for_local(page, route)
                 before = open_and_create_pool(page)
 
-                legacy_v13 = mark_legacy_cache(page, V13_CACHE, "/* legacy v13 staged economy placeholder */")
+                legacy_v13 = mark_legacy_cache(page, V13_CACHE, "/* legacy v13 PR132 economy shell placeholder */")
                 set_deployment(server, v14_root)
                 upgraded_v14 = wait_for_upgrade(page, V13_CACHE, V14_CACHE)
                 context.set_offline(True)
@@ -308,9 +339,10 @@ def run() -> dict[str, Any]:
                 assert after_v14["pool"] == before["pool"], {"before": before, "after": after_v14}
 
                 context.set_offline(False)
-                legacy_v14 = mark_legacy_cache(page, V14_CACHE, "/* legacy v14 staged economy placeholder */")
+                legacy_v14 = mark_legacy_cache(page, V14_CACHE, "/* legacy v14 PR132 economy shell placeholder */")
                 set_deployment(server, web_root)
                 upgraded_v15 = wait_for_upgrade(page, V14_CACHE, V15_CACHE)
+                assert_exact_cached_assets(upgraded_v15, expected_cached_assets(web_root))
                 context.set_offline(True)
                 after_v15 = reopen_pool_offline(page, route, before)
                 assert after_v15["availableTumbo"] == before["availableTumbo"], {"before": before, "after": after_v15}
@@ -320,7 +352,7 @@ def run() -> dict[str, Any]:
                     "v13ToV14": {
                         "oldCacheRetired": V13_CACHE not in upgraded_v14["names"],
                         "newCachePresent": V14_CACHE in upgraded_v14["names"],
-                        "legacyAssetsObserved": all("legacy v13" in value for value in legacy_v13["assets"].values()),
+                        "legacyAssetsObserved": all("legacy v13 PR132" in value for value in legacy_v13["assets"].values()),
                         "newPanelCached": "house-pool:create" in upgraded_v14["assets"][PANEL_PATH],
                         "newModelCached": "createHousePool" in upgraded_v14["assets"][MODEL_PATH],
                         "housePoolReopenedOffline": after_v14["pool"] == before["pool"],
@@ -329,7 +361,8 @@ def run() -> dict[str, Any]:
                     "v14ToV15": {
                         "oldCacheRetired": V14_CACHE not in upgraded_v15["names"],
                         "newCachePresent": V15_CACHE in upgraded_v15["names"],
-                        "legacyAssetsObserved": all("legacy v14" in value for value in legacy_v14["assets"].values()),
+                        "legacyAssetsObserved": all("legacy v14 PR132" in value for value in legacy_v14["assets"].values()),
+                        "exactCurrentAssets": True,
                         "newPanelCached": "house-pool:create" in upgraded_v15["assets"][PANEL_PATH],
                         "newModelCached": "createHousePool" in upgraded_v15["assets"][MODEL_PATH],
                         "housePoolReopenedOffline": after_v15["pool"] == before["pool"],

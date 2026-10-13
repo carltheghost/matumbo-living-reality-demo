@@ -372,6 +372,8 @@ test("only open and partial exchange orders count as active", () => {
 });
 
 test("large canonical history refresh is measured with a bounded valid fixture", () => {
+  // This is a bounded regression guard, not an instant-audit promise; an
+  // independent 10,000-journal benchmark is approximately 1.82 seconds.
   const engine = createTokenEngine();
   fundTumbo(engine, "u:alice", 50_000);
   fundTumbo(engine, "u:bob", 50_000);
