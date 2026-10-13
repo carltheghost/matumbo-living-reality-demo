@@ -106,6 +106,10 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   // its actual projection. Geometry owns the surface; text never gets scaled
   // down to fit an arbitrary desktop raster.
   const SURFACE_PIXELS_PER_UNIT=160;
+  // The asset-token plaque is a compact reading companion, not the geometric
+  // face. Offset it on the same CSS3D surface so the T emblem remains legible
+  // in the default desktop and narrow compositions.
+  const ASSET_TOKEN_FRONT_SURFACE_OFFSET=Object.freeze({x:0,y:-.38,z:.04});
   const latinShapes={phone:'Telephonum',square:'Quadratum',rectangle:'Rectangulum',sphere:'Sphaera',cylinder:'Cylindrus',cube:'Cubus',wave:'Unda'};
   const shapeOptions=Object.entries(REALITY_TAB_FORMS).map(([id])=>`<option value="${id}">${latinShapes[id]??id}</option>`).join('');
   const primary=['block-world','contracts','person','rooms','academy','world-events','multi-sport-events','asset-market'];
@@ -341,7 +345,13 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     }
     record.surfaces.forEach(item=>{
       const face=layout.find(candidate=>candidate.id===item.id),object3d=item.object3d;if(!face||!object3d)return;
-      object3d.position.set(...face.position);object3d.rotation.set(...face.rotation);object3d.updateMatrixWorld(true);
+      const offset=record.featureId==='asset-token'&&item.id==='front'?ASSET_TOKEN_FRONT_SURFACE_OFFSET:null;
+      object3d.position.set(
+        face.position[0]+(offset?.x??0),
+        face.position[1]+(offset?.y??0),
+        face.position[2]+(offset?.z??0),
+      );
+      object3d.rotation.set(...face.rotation);object3d.updateMatrixWorld(true);
       const faceWorld=object3d.getWorldPosition(new THREE.Vector3()),normal=new THREE.Vector3(0,0,1).applyQuaternion(object3d.getWorldQuaternion(new THREE.Quaternion())).normalize();
       const towardCamera=cameraWorld.clone().sub(faceWorld).normalize(),facesCamera=normal.dot(towardCamera)>.06;
       object3d.visible=realityObjectSurfaceEngine.shouldShowFace({faceId:item.id,facesCamera,focusIsolated:lensState.focusIsolated,focusedId:lensState.focusedId,featureId:record.featureId,stage:node.revealStage??0,objectVisible:node.root.visible});
@@ -595,8 +605,8 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   }
   for(const feature of ordered){
     const groupId=resolveRealityLensGroup(feature.id),domain=catalogSections.get(groupId);
-    const visibleLabel=labelFor(feature),button=document.createElement('button');button.type='button';button.textContent=visibleLabel;button.setAttribute('aria-label',feature.id==='asset-token'?'Select TUMBO-SIM coin · simulation only':`Select ${visibleLabel}`);button.onclick=guard(()=>{select(feature.id);if(interaction!=='move')enter(feature.id);if(root.classList.contains('assembly-directory-open'))setDirectory(false,{restoreFocus:true});});(domain?.children??find('.assembly-catalog')).append(button);catalog.set(feature.id,button);
-    const label=document.createElement('button');label.type='button';label.className='assembly-node-label';label.textContent=visibleLabel;label.dataset.group=groupId;label.setAttribute('aria-label',feature.id==='asset-token'?'Focus TUMBO-SIM coin · simulation only':`Aperi ${visibleLabel} · instrumentum`);label.onclick=guard(()=>{select(feature.id);if(interaction!=='move')enter(feature.id);});label.onpointerenter=()=>{hovered=feature.id;render();};label.onpointerleave=()=>{hovered=null;render();};find('.assembly-labels').append(label);labels.set(feature.id,label);
+    const visibleLabel=labelFor(feature),button=document.createElement('button');button.type='button';button.textContent=visibleLabel;button.setAttribute('aria-label',feature.id==='asset-token'?'Select TUMBO Asset Token · simulation only':`Select ${visibleLabel}`);button.onclick=guard(()=>{select(feature.id);if(interaction!=='move')enter(feature.id);if(root.classList.contains('assembly-directory-open'))setDirectory(false,{restoreFocus:true});});(domain?.children??find('.assembly-catalog')).append(button);catalog.set(feature.id,button);
+    const label=document.createElement('button');label.type='button';label.className='assembly-node-label';label.textContent=visibleLabel;label.dataset.group=groupId;label.setAttribute('aria-label',feature.id==='asset-token'?'Focus TUMBO Asset Token · simulation only':`Aperi ${visibleLabel} · instrumentum`);label.onclick=guard(()=>{select(feature.id);if(interaction!=='move')enter(feature.id);});label.onpointerenter=()=>{hovered=feature.id;render();};label.onpointerleave=()=>{hovered=null;render();};find('.assembly-labels').append(label);labels.set(feature.id,label);
   }
   const catalogSearch=find('[data-search]'),quickSearch=find('[data-quick-search]');
   const applySearch=queryValue=>{

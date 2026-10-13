@@ -21,6 +21,9 @@ test("asset-token route exposes canonical simulation/policy supply without the s
   assert.match(launchSource, /MAX \$\{TUMBO_INTENDED_MAXIMUM_LABEL\}/);
   assert.match(html, /id="asset-policy-max"/);
   assert.match(html, /id="asset-supply-note"/);
+  assert.match(html, /TUMBO Asset Token simulation display/);
+  assert.match(html, /id="asset-launch-details"/);
+  assert.doesNotMatch(html, /TUMBO-SIM\s+coin/i);
   assert.doesNotMatch(mainSource, /fixed\s+\$\{formatAssetUnits\(distributionExplorer\.getSnapshot\(\)\.totalSupply\)\}/);
   assert.doesNotMatch(navigatorSource, /1,000,000,000\s+TUMBO-SIM/);
   assert.doesNotMatch(html, /1,000,000,000\s+TUMBO-SIM/);
@@ -37,4 +40,10 @@ test("asset-token route keeps the full registry visible and bounded in assembly 
   assert.match(css, /transform:none!important/);
   assert.match(css, /\[data-compact="true"\]\s*>\s*:not\(\.surface-grip\)/);
   assert.match(css, /asset-registry-open[\s\S]*visibility:hidden!important/);
+  assert.match(css, /#asset-launch\[data-lens-surface-attached=true\][\s\S]*height:min\(176px/);
+  assert.match(css, /#asset-launch\[data-lens-surface-attached=true\][\s\S]*height:min\(168px/);
+  assert.match(css, /data-lens-surface-attached=true\][\s\S]*\.asset-launch-strap[^}]*display:none/);
+  const assembly = await readFile(new URL("../src/render/reality-assembly.js", import.meta.url), "utf8");
+  assert.match(assembly, /ASSET_TOKEN_FRONT_SURFACE_OFFSET/);
+  assert.match(assembly, /record\.featureId==='asset-token'&&item\.id==='front'/);
 });

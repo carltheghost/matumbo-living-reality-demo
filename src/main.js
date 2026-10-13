@@ -4533,7 +4533,7 @@ const distributionList=document.getElementById('distribution-list');
 const integerFormatter=new Intl.NumberFormat('en-US');
 const assetPolicyMaxEl=document.getElementById('asset-policy-max');
 const assetSupplyNoteEl=document.getElementById('asset-supply-note');
-const assetCoinStateEl=document.getElementById('asset-coin-state');
+const assetTokenStateEl=document.getElementById('asset-token-state');
 
 function formatAssetUnits(value){return Number.isSafeInteger(value)?integerFormatter.format(value):'—'}
 function formatExactPolicyUnits(value){return typeof value==='string'&&/^\d+$/.test(value)?value.replace(/\B(?=(\d{3})+(?!\d))/g,','):'—'}
@@ -4630,7 +4630,7 @@ function renderDistributionPanel(snapshot=distributionExplorer.getSnapshot()){
   if(assetSupplyEl)assetSupplyEl.textContent=coinState.currentIssuedLabel.replace(/\s+TUMBO-SIM$/,'');
   if(assetPolicyMaxEl)assetPolicyMaxEl.textContent=formatExactPolicyUnits(coinState.intendedMaximum.wholeTumbo);
   if(assetAllocationCountEl)assetAllocationCountEl.textContent=String(snapshot.allocationCount??0);
-  if(assetCoinStateEl)assetCoinStateEl.textContent=`${coinState.currentIssuedLabel} issued · ${coinState.ledgerLabel}`;
+  if(assetTokenStateEl)assetTokenStateEl.textContent=`${coinState.currentIssuedLabel} issued · ${coinState.ledgerLabel}`;
   if(assetSupplyNoteEl)assetSupplyNoteEl.textContent=`1 TUMBO-SIM = ${coinState.fluffPerTumboLabel} fluff · intended maximum ${coinState.intendedMaximumPolicyLabel} is policy metadata only; balances and ledger stay unchanged.`;
   if(assetLaunchStatus){
     const state=snapshot.launchState?.launched?'SIMULATED MAP ACTIVE':'SIMULATED MAP READY';

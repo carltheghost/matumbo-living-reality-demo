@@ -148,6 +148,14 @@
     #asset-launch .asset-launch-identity-copy{display:grid;min-width:0;gap:2px}
     #asset-launch .asset-launch-identity-copy strong{color:#f2e2b6;font-size:12px;letter-spacing:.08em;text-transform:uppercase}
     #asset-launch .asset-launch-identity-copy small{color:#b7c5bf;font-size:8px;line-height:1.35;letter-spacing:.04em;overflow-wrap:anywhere}
+    #asset-launch .asset-launch-strap{margin:0;color:#b8b0c9;font-size:10px;line-height:1.35}
+    #asset-launch .asset-launch-details{margin-top:8px;border-top:1px solid rgba(232,201,121,.22);padding-top:7px}
+    #asset-launch .asset-launch-details summary{display:flex;align-items:center;min-height:40px;padding:7px 8px;border:1px solid rgba(232,201,121,.28);border-radius:9px;background:rgba(232,201,121,.08);color:#f0dfb2;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;list-style:none}
+    #asset-launch .asset-launch-details summary::-webkit-details-marker{display:none}
+    #asset-launch .asset-launch-details summary::before{content:'+';margin-right:7px;color:#e8c979;font-size:16px;line-height:1}
+    #asset-launch .asset-launch-details[open] summary::before{content:'−'}
+    #asset-launch .asset-launch-details-body{display:grid;gap:8px;padding-top:8px}
+    #asset-launch .asset-launch-details-body p{font-size:10px}
     /* Cube-first mode keeps the field readable instead of stacking the old
        rounded selector rails and launch map over the interaction surface.
        The feature directory remains available through OPEN FEATURES / F. */
@@ -2291,26 +2299,32 @@
       <div id="readout-meta" class="meta"></div>
     </div>
     <aside id="asset-launch" aria-labelledby="asset-launch-title">
-      <div class="asset-launch-identity" aria-label="TUMBO-SIM simulation coin">
+      <div class="asset-launch-identity" aria-label="TUMBO Asset Token simulation display">
         <span class="asset-launch-emblem" aria-hidden="true">T</span>
         <div class="asset-launch-identity-copy">
-          <strong>TUMBO-SIM coin</strong>
-          <small id="asset-coin-state">Simulation policy metadata · no mint or transfer</small>
+          <strong>TUMBO Asset Token</strong>
+          <small id="asset-token-state">TUMBO-SIM display unit · policy metadata only</small>
         </div>
       </div>
       <div class="eyebrow">Social experiment · space explorer</div>
       <h2 id="asset-launch-title">TUMBO Asset Token</h2>
-      <p>Inspect the fictional allocation map and the local simulation state. No wallet, claim, mint, or external transfer is available.</p>
+      <p class="asset-launch-strap">Fictional allocation map · local simulation only · no wallet, claim, mint, or external transfer.</p>
       <div class="launch-metrics" aria-label="TUMBO asset-token summary">
         <div class="metric"><b id="asset-supply">—</b><span>issued simulation</span></div>
         <div class="metric"><b id="asset-policy-max">—</b><span>intended max · policy</span></div>
         <div class="metric"><b id="asset-allocation-count">—</b><span>aggregate pools</span></div>
       </div>
       <p id="asset-supply-note" class="asset-supply-note">Exact unit and supply policy load from the local simulation.</p>
-      <button id="asset-launch-button" type="button">Preview launch map</button>
-      <button id="launch-console-open" type="button" aria-controls="launch-console" aria-expanded="false">Open full launch registry</button>
-      <div id="asset-launch-status" role="status" aria-live="polite">SIMULATED MAP READY · NO WALLET · NO TRANSFER</div>
-      <div id="distribution-list" role="group" aria-label="Simulated TUMBO allocation pools"></div>
+      <details id="asset-launch-details" class="asset-launch-details">
+        <summary>Inspect allocation map and controls</summary>
+        <div class="asset-launch-details-body">
+          <p>Rows are aggregate fictional cohorts in the local launch registry. Replay stays in this browser; no issuance or transfer occurs.</p>
+          <button id="asset-launch-button" type="button">Preview launch map</button>
+          <button id="launch-console-open" type="button" aria-controls="launch-console" aria-expanded="false">Open full launch registry</button>
+          <div id="asset-launch-status" role="status" aria-live="polite">SIMULATED MAP READY · NO WALLET · NO TRANSFER</div>
+          <div id="distribution-list" role="group" aria-label="Simulated TUMBO allocation pools"></div>
+        </div>
+      </details>
     </aside>
     <aside id="launch-console" hidden aria-hidden="true" aria-labelledby="launch-console-title">
       <div id="launch-console-head">
@@ -2360,7 +2374,7 @@
         <button type="button" data-launch-coverage-lens="grants" aria-pressed="false">GRANTS</button>
         <button type="button" data-launch-coverage-lens="reserves" aria-pressed="false">RESERVES</button>
       </div>
-      <div id="launch-console-coverage-lens-status" role="status" aria-live="polite">COVERAGE · ALL · 18/18 ROWS · 10,000 BP · registry rehearsal · issued simulation/policy shown on coin surface · CANONICAL TOTALS UNCHANGED</div>
+      <div id="launch-console-coverage-lens-status" role="status" aria-live="polite">COVERAGE · ALL · 18/18 ROWS · 10,000 BP · registry rehearsal · issued simulation/policy shown on Asset Token surface · CANONICAL TOTALS UNCHANGED</div>
       <div id="launch-console-event" aria-label="Deterministic launch event">—</div>
       <div id="launch-console-reconciliation" role="status" aria-live="polite">RECONCILIATION PENDING</div>
       <div id="launch-console-rehearsal-status" role="status" aria-live="polite" data-status="pending">FULL REGISTRY REHEARSAL NOT RUN · SELECT THE ACTION TO CHECK EVERY ROW</div>

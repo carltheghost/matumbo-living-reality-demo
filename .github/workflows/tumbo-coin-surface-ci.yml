@@ -1,0 +1,46 @@
+name: TUMBO Asset Token surface regressions
+
+on:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'src/main.js'
+      - 'src/domains/token-supply-policy.js'
+      - 'src/domains/paycore.js'
+      - 'src/render/feature-navigator.js'
+      - 'src/render/launch-console.js'
+      - 'src/render/reality-assembly-scene.js'
+      - 'src/render/reality-assembly.js'
+      - 'src/render/reality-assembly.css'
+      - 'src/render/tumbo-coin.js'
+      - 'tests/asset-token-nomenclature.test.mjs'
+      - 'tests/asset-token-route-supply.test.mjs'
+      - 'tests/paycore-render.test.mjs'
+      - 'tests/reality-assembly-scene.test.mjs'
+      - 'tests/tumbo-coin.test.mjs'
+      - '.github/workflows/tumbo-coin-surface-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  direct-surface-regressions:
+    name: Direct coin, route, and disposal checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run direct minimal-read coin and nomenclature checks
+        run: node --test tests/tumbo-coin.test.mjs tests/asset-token-nomenclature.test.mjs tests/paycore-render.test.mjs
+      - name: Run direct route and disposal regressions
+        run: node --test tests/asset-token-route-supply.test.mjs tests/reality-assembly-scene.test.mjs
+      - name: Syntax-check the touched surface modules
+        run: |
+          node --check src/main.js
+          node --check src/render/reality-assembly.js
+          node --check src/render/reality-assembly-scene.js
+          node --check src/render/launch-console.js
