@@ -208,6 +208,7 @@ test("context is allowlisted per member and authority/secrets never enter adapte
   const result = await council.runTask(task.id);
   assert.equal(result.status, "completed");
   for (const call of observed) {
+    assert.deepEqual(call.context.scopes, ["task.request", "context.public"]);
     assert.equal(call.task.prompt, undefined);
     assert.equal(call.context.request, "Decide which local demo direction is safest.");
     assert.equal(call.context["context.public"].safe, true);
@@ -475,6 +476,84 @@ test("revocation during synthesis fences the selected response and actions", asy
   assert.equal(result.contributions.some((entry) => entry.provenance.memberId === "lead"), false);
   assert.equal(result.pendingActionRequests.some((request) => request.sourceMemberId === "lead"), false);
   assert.ok(result.records.some((record) => record.phase === "synthesis" && record.memberId === "lead" && record.status === "fenced"));
+});
+
+test("transitive ancestry invalidation fences multi-hop derived outputs while retaining an independent branch", async () => {
+  const observed = [];
+  let resolveLead;
+  const adapters = deterministicAdapters(observed);
+  adapters.unapproved = {
+    provider: "mock:independent",
+    async propose(args) {
+      observed.push({ memberId: args.member.id, phase: args.phase, inputs: clone(args.inputs), context: clone(args.context), task: clone(args.task) });
+      return { responseId: "independent-proposal", text: "independent branch remains available" };
+    },
+  };
+  adapters.lead.synthesize = (args) => {
+    observed.push({ memberId: args.member.id, phase: args.phase, inputs: clone(args.inputs), context: clone(args.context), task: clone(args.task) });
+    return new Promise((resolve) => { resolveLead = resolve; });
+  };
+  const { council, authority, registry } = makeCouncil({ adapters, limits: { requestTimeoutMs: 80 } });
+  authority.states.get("scout").authorityCapabilities = ["world.announce"];
+  registry.update("scout", { toolCapabilities: ["world.announce"] });
+  const baseConsent = taskInput().consent;
+  const input = taskInput({
+    specialistIds: ["scout", "unapproved"],
+    consent: {
+      ...baseConsent,
+      approvedMemberIds: ["lead", "scout", "unapproved", "critic"],
+      capabilitiesByMember: {
+        ...baseConsent.capabilitiesByMember,
+        unapproved: ["council.propose"],
+      },
+      contextScopesByMember: {
+        ...baseConsent.contextScopesByMember,
+        unapproved: ["task.request", "context.public"],
+      },
+      actionCapabilitiesByMember: { scout: ["world.announce"] },
+    },
+  });
+  const task = council.createTask(input);
+  const handle = council.startTask(task.id);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(typeof resolveLead, "function");
+  const leadCall = observed.find((call) => call.memberId === "lead" && call.phase === "synthesis");
+  assert.deepEqual(leadCall.inputs.contributions.map((entry) => entry.memberId), ["scout", "unapproved", "critic"]);
+  handle.revokeMember("scout", "invalidate source ancestry");
+  resolveLead({
+    responseId: "derived-lead",
+    text: "must be discarded because source ancestry was revoked",
+    actionRequests: [{ action: "world.announce", params: {}, effectKey: "derived-lead-effect" }],
+  });
+  const result = await handle.promise;
+  assert.equal(result.finalResponse, null);
+  assert.deepEqual(result.contributions.map((entry) => entry.provenance.memberId), ["unapproved"]);
+  assert.equal(result.provenance.some((entry) => ["scout", "critic", "lead"].includes(entry.memberId)), false);
+  assert.equal(result.records.some((record) => record.contribution?.provenance?.memberId === "scout" || record.contribution?.provenance?.memberId === "critic" || record.contribution?.provenance?.memberId === "lead"), false);
+  assert.equal(result.pendingActionRequests.some((request) => ["scout", "critic", "lead"].includes(request.sourceMemberId)), false);
+  assert.ok(result.fencedContributions.some((entry) => entry.memberId === "scout" && entry.reason === "member-revoked-in-flight"));
+  assert.ok(result.fencedContributions.some((entry) => entry.memberId === "critic" && entry.reason === "ancestor-contribution-fenced"));
+  assert.ok(result.fencedContributions.some((entry) => entry.memberId === "lead" && entry.reason === "ancestor-contribution-fenced"));
+  assert.equal(result.review.verifiedClaimCount, 0);
+});
+
+test("revoked reviewer output is discarded without replacing the surviving proposal", async () => {
+  let resolveCritic;
+  const observed = [];
+  const adapters = deterministicAdapters(observed);
+  adapters.critic.critique = () => new Promise((resolve) => { resolveCritic = resolve; });
+  const { council } = makeCouncil({ adapters, limits: { requestTimeoutMs: 80 } });
+  const task = council.createTask(taskInput());
+  const handle = council.startTask(task.id);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(typeof resolveCritic, "function");
+  handle.revokeMember("critic", "reviewer revoked before response");
+  resolveCritic({ responseId: "revoked-review", text: "must not review" });
+  const result = await handle.promise;
+  assert.equal(result.contributions.some((entry) => entry.provenance.memberId === "critic"), false);
+  assert.equal(result.pendingActionRequests.some((request) => request.sourceMemberId === "critic"), false);
+  assert.ok(result.records.some((record) => record.phase === "critique" && record.memberId === "critic" && record.status === "fenced"));
+  assert.equal(result.finalResponse?.speakerId, "lead");
 });
 
 test("cancellation fences in-flight results and does not run later phases", async () => {

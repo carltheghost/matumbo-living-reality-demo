@@ -511,7 +511,10 @@ function sanitizeTaskContext(value, maxChars) {
 
 function contextForMember(task, member, limits) {
   const taskScopes = task.consent.contextScopesByMember[member.id] || [];
-  const scopes = member.contextScopes.filter((scope) => taskScopes.includes(scope));
+  const scopes = member.contextScopes.filter((scope) => (
+    taskScopes.includes(scope)
+    && (scope === "task.request" || Object.prototype.hasOwnProperty.call(CONTEXT_SCOPE_SCHEMAS, scope))
+  ));
   const visible = { taskId: task.id, scopes: [...scopes] };
   if (scopes.includes("task.request")) visible.request = task.prompt;
   for (const scope of scopes) {
@@ -988,7 +991,7 @@ export function createCouncilOrchestrator({ authority, registry = null, adapters
     return { ok: true };
   }
 
-  function staleContributionReason(run, contribution) {
+  function directStaleContributionReason(run, contribution) {
     const memberId = contribution.provenance.memberId;
     if (run.cancelled) return "run-cancelled";
     if (run.revokedMembers.has(memberId)) return "member-revoked-in-flight";
@@ -1004,38 +1007,58 @@ export function createCouncilOrchestrator({ authority, registry = null, adapters
   }
 
   function fenceStaleContributions(run) {
-    for (const contribution of run.contributions) {
-      if (run.fencedContributionIds.has(contribution.contributionId)) continue;
-      const reason = staleContributionReason(run, contribution);
-      if (!reason) continue;
-      run.fencedContributionIds.add(contribution.contributionId);
-      run.fencedContributionReasons.set(contribution.contributionId, reason);
-      for (const record of run.records) {
-        if (record.contribution?.contributionId !== contribution.contributionId) continue;
-        delete record.contribution;
-        record.fencedContributionId = contribution.contributionId;
-        record.fencedContribution = true;
-        record.fenceReason = reason;
-      }
-      run.records.push(makeRecord(
-        run,
-        contribution.provenance.phase,
-        contribution.provenance.memberId,
-        "fenced",
-        reason,
-        {
+    const contributionsById = new Map(run.contributions.map((contribution) => [contribution.contributionId, contribution]));
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const contribution of run.contributions) {
+        if (run.fencedContributionIds.has(contribution.contributionId)) continue;
+        let reason = directStaleContributionReason(run, contribution);
+        if (!reason) {
+          for (const parentContributionId of contribution.provenance.parentContributionIds || []) {
+            if (!contributionsById.has(parentContributionId)) {
+              reason = "ancestor-contribution-missing";
+              break;
+            }
+            if (run.fencedContributionIds.has(parentContributionId)) {
+              reason = "ancestor-contribution-fenced";
+              break;
+            }
+          }
+        }
+        if (!reason) continue;
+        run.fencedContributionIds.add(contribution.contributionId);
+        run.fencedContributionReasons.set(contribution.contributionId, reason);
+        for (const record of run.records) {
+          if (record.contribution?.contributionId !== contribution.contributionId) continue;
+          delete record.contribution;
+          record.fencedContributionId = contribution.contributionId;
+          record.fencedContribution = true;
+          record.fenceReason = reason;
+        }
+        run.records.push(makeRecord(
+          run,
+          contribution.provenance.phase,
+          contribution.provenance.memberId,
+          "fenced",
+          reason,
+          {
+            contributionId: contribution.contributionId,
+            staleContributionFence: true,
+            staleAuthorityFence: reason === "authority-capabilities-changed",
+            ancestorContributionIds: [...(contribution.provenance.parentContributionIds || [])],
+          },
+        ));
+        run.events.push({
+          type: "stale-contribution-fenced",
           contributionId: contribution.contributionId,
-          staleContributionFence: true,
-          staleAuthorityFence: reason === "authority-capabilities-changed",
-        },
-      ));
-      run.events.push({
-        type: "stale-contribution-fenced",
-        contributionId: contribution.contributionId,
-        memberId: contribution.provenance.memberId,
-        reason,
-        at: nowIso(now),
-      });
+          memberId: contribution.provenance.memberId,
+          reason,
+          parentContributionIds: [...(contribution.provenance.parentContributionIds || [])],
+          at: nowIso(now),
+        });
+        changed = true;
+      }
     }
   }
 
@@ -1126,7 +1149,7 @@ export function createCouncilOrchestrator({ authority, registry = null, adapters
     const responseKey = `${memberId}:${phase}:${normalized.responseId || normalized.fingerprint}`;
     if (run.seenResponses.has(responseKey)) return makeRecord(run, phase, memberId, "duplicate", "duplicate-response", { invocationId, reservation, responseKey });
     run.seenResponses.add(responseKey);
-    const contributionId = `contribution:${run.runId}:${run.contributions.length.toString(36)}`;
+    const contributionId = `contribution:${run.runId}:${(run.contributionCounter++).toString(36)}`;
     const contribution = deepFreeze({
       contributionId,
       text: normalized.text,
@@ -1183,6 +1206,7 @@ export function createCouncilOrchestrator({ authority, registry = null, adapters
       if (result.duplicateRecords) run.records.push(...result.duplicateRecords);
       if (result.status === "accepted" && result.contribution) run.contributions.push(result.contribution);
     }
+    fenceStaleContributions(run);
     return results;
   }
 
@@ -1297,6 +1321,7 @@ export function createCouncilOrchestrator({ authority, registry = null, adapters
       revokedMembers: new Set(),
       controllers: new Set(),
       seenResponses: new Set(),
+      contributionCounter: 0,
       fencedContributionIds: new Set(),
       fencedContributionReasons: new Map(),
       memberCapabilityBaselines: new Map(participantIds.map((memberId) => [
