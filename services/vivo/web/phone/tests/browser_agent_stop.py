@@ -14,6 +14,13 @@ import sys
 from playwright.sync_api import sync_playwright
 
 
+def open_world_controls(page) -> None:
+    world_context = page.locator(".vivo-companion-world-context")
+    if not world_context.evaluate("node => node.open"):
+        page.locator(".vivo-companion-world-context > summary").click()
+    page.wait_for_function("document.querySelector('.vivo-companion-world-context')?.open === true")
+
+
 def install_pointer_shim(page) -> None:
     page.evaluate(
         """
@@ -34,6 +41,7 @@ def enter_local(page, route: str, world_id: str) -> None:
     if page.locator("#createD").count():
         page.locator("#createD").select_option("11")
     page.get_by_role("button", name="Enter local Vivo").click()
+    open_world_controls(page)
     page.wait_for_selector("#phoneFieldAtlas")
     page.wait_for_function("Boolean(window.VivaPhoneEngine && window.VivaPhoneEngine.active)")
     install_pointer_shim(page)
