@@ -149,6 +149,7 @@ function renderEye(envelope, options = {}) {
     || priorScope.spaceId !== nextScope.spaceId
   )) fenceLocalContacts('scope-transition');
   S.state = state; S.live = state; R.state = state; R.grid = projected.grid; R.actor = projected.eye.id;
+  if (localMode) shared.setLocalState?.(state);
   R.materialPatch = projected.materialPatch;
   if (appliedEyeId !== projected.eye.id || appliedEyeRevision !== projected.eye.revision) {
     const cameraView = projected.eye.projection || {};
@@ -338,7 +339,7 @@ function economySelection() {
     || null;
   return { active: localMode, entityId, name: entity?.name || entityId || 'selected object' };
 }
-function syncEconomyContext() { economyContext?.sync(economySelection()); }
+function syncEconomyContext() { economyContext?.sync(economySelection()); const nav = $('phoneEconomyNav'); if (nav) nav.hidden = !localMode; }
 function localObjectIdentity(entityId) {
   const eye = fieldEnvelope?.eyes?.[fieldEnvelope.currentEyeId], spaceId = eye?.spaceId;
   const entity = fieldEnvelope?.snapshot?.spaces?.[spaceId]?.entities?.[entityId];
@@ -852,19 +853,36 @@ const phoneCamera = new PhoneTwoHandCamera({
 });
 projection = new HandsFreeProjection({ bridge, camera: phoneCamera });
 async function startPhoneCamera(facing = 'user') {
+  camera.stop('Switching to local hand tracking…');
   if (camera.video) camera.video.style.display = 'none';
   try { return await phoneCamera.start(facing); }
   catch (error) { if (camera.video) camera.video.style.display = ''; throw error; }
 }
+async function startPhonePreview(facing = 'user') {
+  fenceHandEdits('camera-preview');
+  projection?.stop();
+  phoneCamera.stop('Hand tracking off · camera-only preview');
+  if (phoneVideo) phoneVideo.style.display = 'none';
+  try {
+    const started = await camera.start(facing, false);
+    status(started ? 'CAMERA ONLY · touch controls remain active; hand tracking is off.' : $('cameraState')?.textContent || 'Camera did not start.');
+    return started;
+  } catch (error) {
+    if (camera.video) camera.video.style.display = '';
+    throw error;
+  }
+}
 function stopPhoneCamera() {
   fenceHandEdits('camera-stop');
   projection?.stop(); phoneCamera.stop();
+  camera.stop();
   if (camera.video) camera.video.style.display = '';
+  if (phoneVideo) phoneVideo.style.display = 'none';
 }
 const localCameraActions = {
   frontCamera: () => startPhoneCamera('user'),
   backCamera: () => startPhoneCamera('environment'),
-  previewCamera: () => startPhoneCamera(phoneCamera.facing || 'user'),
+  previewCamera: () => startPhonePreview(phoneCamera.facing || camera.facing || 'user'),
   stopCamera: stopPhoneCamera,
 };
 for (const [id, action] of Object.entries(localCameraActions)) $(id)?.addEventListener('click', event => {
@@ -1542,7 +1560,7 @@ window.VivaPhoneEngine = Object.freeze({
   materialReconcile: payload => engine?.materialReconcile(payload),
   materialReconcileOperation: operationId => engine?.materialReconcileOperation(operationId),
   materialContacts: () => materialInput?.snapshot() || [],
-  forkOffline: label => forkPhoneOffline(label), startCamera: (facing = 'user') => startPhoneCamera(facing), stopCamera: stopPhoneCamera,
+  forkOffline: label => forkPhoneOffline(label), step: dt => engine?.step(dt), startCamera: (facing = 'user') => startPhoneCamera(facing), stopCamera: stopPhoneCamera,
   authority: () => authority?.debug() || null,
   connectAuthority: options => authority?.connect(options), readAuthority: () => authority?.read(),
   previewAuthority: options => authority?.preview(options), publishAuthority: () => authority?.publish(),
@@ -1566,5 +1584,10 @@ economyContext = mountPhoneEconomyContext({
   onWorldFocus: selection => {
     if (selection?.selected?.entityId) selectPhoneEntity(selection.selected.entityId, { announce: false, discardPending: false });
   },
+});
+for (const [id, tab] of [['phoneOpenExchange', 'exchange'], ['phoneOpenContracts', 'contracts']]) $(id)?.addEventListener('click', () => {
+  if (!localMode) { status('Enter local Vivo before opening the local economy.'); return; }
+  if (economyContext?.openTab(tab)) status(`LOCAL TUMBO-SIM · ${tab === 'exchange' ? 'exchange' : 'contracts'} opened · simulation only; no live venue or settlement.`);
+  else status('The local economy panel is unavailable; no simulated write was attempted.');
 });
 syncEconomyContext();

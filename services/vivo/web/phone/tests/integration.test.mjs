@@ -4,13 +4,14 @@ import { readFile } from 'node:fs/promises';
 const root = new URL('../../', import.meta.url);
 
 test('the Android Companion extends the canonical GitHub Pages UI at runtime', async () => {
-  const [html, activity, bootstrap, tools, control, bridge] = await Promise.all([
+  const [html, activity, bootstrap, tools, control, bridge, companion] = await Promise.all([
     readFile(new URL('index.html', root), 'utf8'),
     readFile(new URL('../android-companion/app/src/main/java/com/matumbo/vivo/MainActivity.kt', root), 'utf8'),
     readFile(new URL('phone/bootstrap.mjs', root), 'utf8'),
     readFile(new URL('phone/agent-tools.mjs', root), 'utf8'),
     readFile(new URL('phone/agent-control.mjs', root), 'utf8'),
     readFile(new URL('phone/bridge.mjs', root), 'utf8'),
+    readFile(new URL('phone/companion.mjs', root), 'utf8'),
   ]);
   assert.match(html, /SHARED WORKSHOP/);
   assert.match(html, /src="shared\.js"/);
@@ -45,6 +46,10 @@ test('the Android Companion extends the canonical GitHub Pages UI at runtime', a
   assert.match(bootstrap, /camera-start-status\.mjs/);
   assert.match(bootstrap, /phoneStartHands.*startCameraFromButton/);
   assert.match(bootstrap, /phoneStartBackHands.*startCameraFromButton/);
+  assert.match(bootstrap, /startPhonePreview/);
+  assert.match(bootstrap, /camera\.start\(facing, false\)/);
+  assert.match(bootstrap, /phoneOpenContracts/);
+  assert.match(companion, /child !== localEconomyNav/);
   assert.match(bootstrap, /persistence-status\.mjs/);
   assert.match(bootstrap, /reportPersistenceStatus\('release'/);
   assert.match(bootstrap, /reportPersistenceStatus\('save'/);
@@ -134,7 +139,7 @@ test('the phone-owned tracker detects two complete hands without transporting fr
   assert.match(sw, /request\.mode === 'navigate'/);
   assert.match(sw, /scope\.pathname/);
   assert.match(sw, /shell\.match\(scoped\('index\.html'\)\)/);
-  assert.match(sw, /SHELL_CACHE.*v16/);
+  assert.match(sw, /SHELL_CACHE.*v17/);
   for (const asset of ['phone/material-contract.mjs', 'phone/material-patch.mjs', 'phone/material-input-runtime.mjs', 'phone/fingertip-input.mjs', 'application/conversation-transport.mjs', 'phone/companion.mjs']) assert.match(sw, new RegExp(asset.replaceAll('.', '\\.')));
   assert.doesNotMatch(worker, /\bfetch\s*\(|XMLHttpRequest|WebSocket/);
   assert.doesNotMatch(camera, /\bfetch\s*\(|XMLHttpRequest|WebSocket/);

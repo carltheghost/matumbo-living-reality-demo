@@ -316,6 +316,25 @@ export function mountPhoneEconomyContext({
     return true;
   }
 
+  function openTab(tabId) {
+    if (!['exchange', 'prediction', 'contracts', 'house-pool'].includes(tabId)) return false;
+    const model = initialize();
+    if (!model || !mounted) return false;
+    // The phone-local nav is an explicit entry point, so it may open the
+    // canonical local panel even before a field object context is selected.
+    context.hidden = false;
+    if (!selected?.active || !selected?.entityId) {
+      trigger.textContent = 'Open local economy';
+      trigger.title = 'Open the simulated local economy';
+      renderStatus();
+    }
+    mounted.open();
+    const tab = mounted.element?.querySelector(`[data-action="tab:${tabId}"]`);
+    if (!tab) return false;
+    tab.click();
+    return true;
+  }
+
   function sync(nextSelection = getSelection()) {
     selected = nextSelection ? { ...nextSelection } : null;
     const active = Boolean(selected?.active && selected?.entityId);
@@ -339,6 +358,7 @@ export function mountPhoneEconomyContext({
     source: VIVO_PHONE_ECONOMY_SOURCE,
     initialize,
     open,
+    openTab,
     sync,
     get economy() { return owner?.model || null; },
     get panel() { return mounted; },

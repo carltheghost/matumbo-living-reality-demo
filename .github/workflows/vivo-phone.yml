@@ -87,6 +87,7 @@ jobs:
           python services/vivo/web/phone/tests/browser_agent_stop.py http://127.0.0.1:9897/ | tee browser-evidence/agent-stop-source.json
           python services/vivo/web/phone/tests/browser_dimensional_contact.py http://127.0.0.1:9897/ | tee browser-evidence/dimensional-contact-source.json
           python services/vivo/web/phone/tests/browser_material_deformation.py http://127.0.0.1:9897/ | tee browser-evidence/material-deformation-source.json
+          python services/vivo/web/phone/tests/browser_phone_route_repair.py http://127.0.0.1:9897/ | tee browser-evidence/phone-route-repair-source.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -102,8 +103,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # The upgrade regression extracts the pinned 9f17fac (v13) and
-          # a8d5e02 (v14) web trees instead of relabelling current assets.
+          # The upgrade regression extracts pinned v13, v14, and exact-base
+          # v16 web trees instead of relabelling current assets.
           fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
@@ -136,7 +137,7 @@ jobs:
           PY
           python services/vivo/web/phone/tests/browser_offline_shell.py http://127.0.0.1:9878/
 
-      - name: Run v13 to v14 and v14 to v16 service-worker upgrade browser regression
+      - name: Run v13 to v14 to v16 to v17 service-worker upgrade browser regression
         shell: bash
         run: |
           set -euo pipefail
@@ -244,6 +245,7 @@ jobs:
           python services/vivo/web/phone/tests/browser_conversation_transport.py http://127.0.0.1:9896/ | tee browser-evidence/conversation-transport-pages.json
           python services/vivo/web/phone/tests/browser_economy_mounted.py http://127.0.0.1:9896/ | tee browser-evidence/economy-mounted-built.json
           python services/vivo/web/phone/tests/browser_bimanual_transform.py http://127.0.0.1:9896/ | tee browser-evidence/bimanual-transform.json
+          python services/vivo/web/phone/tests/browser_phone_route_repair.py http://127.0.0.1:9896/ | tee browser-evidence/phone-route-repair-pages.json
           python services/vivo/web/phone/tests/browser_agent_stop.py http://127.0.0.1:9896/ | tee browser-evidence/agent-stop-pages.json
           python services/vivo/web/phone/tests/browser_dimensional_contact.py http://127.0.0.1:9896/ | tee browser-evidence/dimensional-contact-pages.json
           python services/vivo/web/phone/tests/browser_material_deformation.py http://127.0.0.1:9896/ | tee browser-evidence/material-deformation-pages.json

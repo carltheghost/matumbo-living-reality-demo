@@ -284,7 +284,10 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
   const worldSummary = element(documentRoot, 'summary', '', 'Open field controls · saved state');
   worldSummary.setAttribute('aria-label', 'Open field controls and saved state');
   const worldBody = element(documentRoot, 'div', 'vivo-companion-world-body');
-  for (const child of [...dock.children]) if (child !== shell) worldBody.append(child);
+  const localEconomyNav = documentRoot.getElementById('phoneEconomyNav');
+  // Keep the local Exchange/Contracts entry point outside the collapsed field
+  // controls disclosure. The existing field controls remain one owned body.
+  for (const child of [...dock.children]) if (child !== shell && child !== localEconomyNav) worldBody.append(child);
   worldContext.append(worldSummary, worldBody);
   dock.append(worldContext);
 
