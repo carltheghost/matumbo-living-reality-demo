@@ -50,14 +50,23 @@ export function serializeTokenEngine(owner) {
 }
 
 function derivedRequest(row) {
-  const hasTithe = row.postings.some((posting) => posting.account === "sys:void" && posting.amount > 0);
+  const hasVoidCredit = row.postings.some((posting) => posting.account === "sys:void" && posting.amount > 0);
+  const voidCreditReason = !hasVoidCredit
+    ? null
+    : MARKET_ACTIONS.includes(row.action)
+      ? "tithe"
+      : row.action === "burn"
+        ? "burn"
+        : null;
+  const hasSystemDebit = row.postings.some((posting) =>
+    typeof posting?.account === "string" && posting.account.startsWith("sys:") && posting.amount < 0);
   return JSON.stringify({
     postings: row.postings,
     action: row.action,
     memo: row.memo ?? "",
-    voidCreditReason: hasTithe ? "tithe" : null,
+    voidCreditReason,
     links: row.links ?? null,
-    authority: "internal",
+    authority: hasSystemDebit ? "internal" : null,
   });
 }
 

@@ -40,16 +40,16 @@
     {
       "source": "src/domains/token-economy-overview.js",
       "staged": "services/vivo/web/phone/vendor/economy/src/domains/token-economy-overview.js",
-      "bytes": 36429,
-      "sha256": "d0b48356be6fd37e6765ab418a5c9952a03c8fc6642b7d107f64124b5b43165f",
-      "gitBlob": "364d20c2627027d6a811e1f31bb0300ec1bae326"
+      "bytes": 42018,
+      "sha256": "ed76027fce901126924aec6a79459e62471f1593d5caf319fdc93c15cb27ae11",
+      "gitBlob": "739459fa20c45a2ec4b22b33eb122b5e6a1c527d"
     },
     {
       "source": "src/domains/token-store.js",
       "staged": "services/vivo/web/phone/vendor/economy/src/domains/token-store.js",
-      "bytes": 15467,
-      "sha256": "528f892a51658eaad07281d0881ce5b80f56092c4b996c3a756afa42b2d27452",
-      "gitBlob": "b295034dbf145840b3b42ddd32241302482cf053"
+      "bytes": 15802,
+      "sha256": "a0d1b611d1aaaceb245a681c87ba1d99c5ec5bde5f11a944f83120ba9e437de2",
+      "gitBlob": "facf408067c1f1196925b89c2cc8cda547080fad"
     },
     {
       "source": "src/render/simulated-economy-panel.js",
