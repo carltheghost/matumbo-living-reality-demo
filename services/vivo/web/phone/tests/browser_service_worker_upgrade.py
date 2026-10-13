@@ -1,17 +1,21 @@
-"""Exercise real v13 -> v14 and v14 -> v15 service-worker upgrades.
+"""Exercise real v13 -> v14 and v14 -> v16 service-worker upgrades.
 
-The test serves three deployments from one origin. It persists a local
-simulated-economy contribution under v13, verifies the v13 -> v14 retirement,
-then verifies the v14 -> v15 retirement and reopens the phone route offline
-after each upgrade. Each old cache is made observable with legacy responses
-for the changed staged economy modules before it is retired.
+The test serves three deployments from one origin. The first two deployments
+are extracted from pinned repository commits, so the v13 shell is the actual
+pre-house-pool release and the v14 shell is the actual house-pool release.
+It verifies each historical cache before poisoning it, retires both caches,
+creates and preserves a v14 house-pool contribution, and reopens the phone
+route offline after each upgrade.
 """
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import shutil
+import subprocess
+import tarfile
 import tempfile
 import threading
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -25,7 +29,10 @@ from playwright.sync_api import BrowserContext, Page, sync_playwright
 SCOPE_PATH = "/services/vivo/web/"
 V13_CACHE = "vivo-phone-shell-2026-10-13-v13"
 V14_CACHE = "vivo-phone-shell-2026-10-13-v14"
-V15_CACHE = "vivo-phone-shell-2026-10-13-v15"
+V16_CACHE = "vivo-phone-shell-2026-10-13-v16"
+HISTORICAL_V13_COMMIT = "9f17fac9fd3b5a97ca528c5c1b3bf6abf97ac647"
+HISTORICAL_V14_COMMIT = "a8d5e021671f3c77fc4e3619c1c9e94aee35a892"
+HISTORICAL_WEB_PREFIX = "services/vivo/web"
 ECONOMY_ENTRY_PATH = "phone/economy-entry.mjs"
 MANIFEST_PATH = "phone/vendor/economy/manifest.json"
 OVERVIEW_PATH = "phone/vendor/economy/src/domains/token-economy-overview.js"
@@ -95,13 +102,14 @@ def wait_for_local(page: Page, route: str) -> None:
     page.wait_for_function("document.querySelector('#phoneEconomyStatus')?.textContent.includes('TUMBO-SIM')")
 
 
-def wait_for_committed(page: Page) -> None:
+def wait_for_committed(page: Page, require_current_audit: bool = True) -> None:
     page.wait_for_timeout(350)
     page.wait_for_function("!document.querySelector('#simulated-economy-panel')?.dataset.busy")
     page.wait_for_function("document.querySelector('.sim-economy-status')?.textContent.includes('Committed')")
-    page.wait_for_function(
-        "document.querySelector('.token-economy-overview-host')?.dataset.auditState === 'current'"
-    )
+    if require_current_audit:
+        page.wait_for_function(
+            "document.querySelector('.token-economy-overview-host')?.dataset.auditState === 'current'"
+        )
 
 
 def economy_state(page: Page) -> dict[str, Any]:
@@ -132,28 +140,30 @@ def economy_state(page: Page) -> dict[str, Any]:
     )
 
 
-def open_and_create_pool(page: Page) -> dict[str, Any]:
+def open_and_create_pool(page: Page, require_current_audit: bool = True) -> dict[str, Any]:
     page.locator("#phoneEconomyTrigger").click()
     page.wait_for_selector("#simulated-economy-panel:not([hidden])")
     page.locator('[data-action="tab:house-pool"]').click()
     page.locator("#sim-economy-house-pool-name").fill("Upgrade pool")
     page.locator("#sim-economy-house-pool-capacity").fill("3000")
     page.locator('[data-action="house-pool:create"]').click()
-    page.wait_for_function(
-        "document.querySelector('.token-economy-overview-host')?.dataset.auditState === 'pending'"
-    )
-    assert "pending" in page.locator(".token-economy-overview-audit").inner_text().lower()
-    wait_for_committed(page)
+    if require_current_audit:
+        page.wait_for_function(
+            "document.querySelector('.token-economy-overview-host')?.dataset.auditState === 'pending'"
+        )
+        assert "pending" in page.locator(".token-economy-overview-audit").inner_text().lower()
+    wait_for_committed(page, require_current_audit=require_current_audit)
     page.locator("#sim-economy-house-pool-amount").fill("750")
     page.locator('[data-action="house-pool:reserve"]').click()
-    wait_for_committed(page)
+    wait_for_committed(page, require_current_audit=require_current_audit)
     state = economy_state(page)
     assert state["storageStatus"] == "persisted-local-snapshot", state
     assert state["pool"]["totalUnits"] == 750, state
     assert state["pool"]["contributions"][0]["status"] == "reserved", state
     assert state["receiptIds"], state
-    overview_text = page.locator(".token-economy-overview").inner_text()
-    assert "Overall accounting" in overview_text and "healthy" in overview_text, overview_text
+    if require_current_audit:
+        overview_text = page.locator(".token-economy-overview").inner_text()
+        assert "Overall accounting" in overview_text and "healthy" in overview_text, overview_text
     return state
 
 
@@ -174,14 +184,36 @@ def cache_snapshot(page: Page, cache_name: str, paths: list[str]) -> dict[str, A
     )
 
 
-def make_deployment(web_root: Path, temp_root: Path, directory: str, cache_name: str) -> Path:
+def make_historical_deployment(repo_root: Path, temp_root: Path, directory: str, commit: str, cache_name: str) -> Path:
+    """Extract an exact historical web tree instead of copying current assets."""
+    archive = subprocess.run(
+        ["git", "-C", str(repo_root), "archive", "--format=tar", commit, HISTORICAL_WEB_PREFIX],
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
     deployment_root = temp_root / directory
-    shutil.copytree(web_root, deployment_root)
+    prefix = Path(HISTORICAL_WEB_PREFIX)
+    with tarfile.open(fileobj=io.BytesIO(archive.stdout), mode="r:") as fixture:
+        for member in fixture.getmembers():
+            if not member.isfile():
+                continue
+            member_path = Path(member.name)
+            try:
+                relative = member_path.relative_to(prefix)
+            except ValueError as error:
+                raise AssertionError(f"historical fixture escaped {HISTORICAL_WEB_PREFIX}: {member.name}") from error
+            target = deployment_root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            source = fixture.extractfile(member)
+            if source is None:
+                raise AssertionError(f"historical fixture member was not readable: {member.name}")
+            target.write_bytes(source.read())
     worker = deployment_root / "vivo-sw.js"
-    content = worker.read_text(encoding="utf-8")
-    updated = content.replace(V15_CACHE, cache_name)
-    assert updated != content, f"the current worker must be {V15_CACHE} before making {cache_name}"
-    worker.write_text(updated, encoding="utf-8")
+    assert worker.is_file(), f"historical {commit} fixture omitted vivo-sw.js"
+    assert cache_name in worker.read_text(encoding="utf-8"), (
+        f"historical {commit} worker is not pinned to {cache_name}"
+    )
     return deployment_root
 
 
@@ -287,8 +319,8 @@ def run() -> dict[str, Any]:
     web_root = repo_root / "services" / "vivo" / "web"
     with tempfile.TemporaryDirectory(prefix="vivo-sw-upgrade-") as temporary:
         temporary_root = Path(temporary)
-        v13_root = make_deployment(web_root, temporary_root, "v13", V13_CACHE)
-        v14_root = make_deployment(web_root, temporary_root, "v14", V14_CACHE)
+        v13_root = make_historical_deployment(repo_root, temporary_root, "v13", HISTORICAL_V13_COMMIT, V13_CACHE)
+        v14_root = make_historical_deployment(repo_root, temporary_root, "v14", HISTORICAL_V14_COMMIT, V14_CACHE)
         server = DeploymentServer(("127.0.0.1", 0), DeploymentHandler)
         set_deployment(server, v13_root)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -324,55 +356,67 @@ def run() -> dict[str, Any]:
                 assert registration == {"scope": SCOPE_PATH, "active": True}, registration
                 page.reload(wait_until="domcontentloaded")
                 page.wait_for_function("Boolean(navigator.serviceWorker.controller)")
-                initial_cache = cache_snapshot(page, V13_CACHE, [PANEL_PATH, MODEL_PATH])
+                historical_v13_assets = expected_cached_assets(v13_root)
+                initial_cache = cache_snapshot(page, V13_CACHE, CACHE_ASSERT_PATHS)
                 assert V13_CACHE in initial_cache["names"], initial_cache
+                assert_exact_cached_assets(initial_cache, historical_v13_assets)
 
                 wait_for_local(page, route)
-                before = open_and_create_pool(page)
 
-                legacy_v13 = mark_legacy_cache(page, V13_CACHE, "/* legacy v13 PR132 economy shell placeholder */")
+                legacy_v13 = mark_legacy_cache(page, V13_CACHE, "/* retired v13 cache marker */")
                 set_deployment(server, v14_root)
                 upgraded_v14 = wait_for_upgrade(page, V13_CACHE, V14_CACHE)
+                historical_v14_assets = expected_cached_assets(v14_root)
+                assert_exact_cached_assets(
+                    cache_snapshot(page, V14_CACHE, CACHE_ASSERT_PATHS),
+                    historical_v14_assets,
+                )
                 context.set_offline(True)
+                wait_for_local(page, route)
+                before = open_and_create_pool(page, require_current_audit=False)
                 after_v14 = reopen_pool_offline(page, route, before)
                 assert after_v14["availableTumbo"] == before["availableTumbo"], {"before": before, "after": after_v14}
                 assert after_v14["pool"] == before["pool"], {"before": before, "after": after_v14}
 
                 context.set_offline(False)
-                legacy_v14 = mark_legacy_cache(page, V14_CACHE, "/* legacy v14 PR132 economy shell placeholder */")
+                legacy_v14 = mark_legacy_cache(page, V14_CACHE, "/* retired v14 cache marker */")
                 set_deployment(server, web_root)
-                upgraded_v15 = wait_for_upgrade(page, V14_CACHE, V15_CACHE)
-                assert_exact_cached_assets(upgraded_v15, expected_cached_assets(web_root))
+                upgraded_v16 = wait_for_upgrade(page, V14_CACHE, V16_CACHE)
+                assert_exact_cached_assets(upgraded_v16, expected_cached_assets(web_root))
                 context.set_offline(True)
-                after_v15 = reopen_pool_offline(page, route, before)
-                assert after_v15["availableTumbo"] == before["availableTumbo"], {"before": before, "after": after_v15}
-                assert after_v15["pool"] == before["pool"], {"before": before, "after": after_v15}
+                after_v16 = reopen_pool_offline(page, route, before)
+                assert after_v16["availableTumbo"] == before["availableTumbo"], {"before": before, "after": after_v16}
+                assert after_v16["pool"] == before["pool"], {"before": before, "after": after_v16}
                 assert not page_errors, page_errors
                 result = {
                     "v13ToV14": {
+                        "historicalCommit": HISTORICAL_V13_COMMIT,
                         "oldCacheRetired": V13_CACHE not in upgraded_v14["names"],
                         "newCachePresent": V14_CACHE in upgraded_v14["names"],
-                        "legacyAssetsObserved": all("legacy v13 PR132" in value for value in legacy_v13["assets"].values()),
+                        "exactHistoricalAssets": True,
+                        "legacyAssetsObserved": all("retired v13 cache marker" in value for value in legacy_v13["assets"].values()),
                         "newPanelCached": "house-pool:create" in upgraded_v14["assets"][PANEL_PATH],
                         "newModelCached": "createHousePool" in upgraded_v14["assets"][MODEL_PATH],
                         "housePoolReopenedOffline": after_v14["pool"] == before["pool"],
                         "cacheNames": upgraded_v14["names"],
                     },
-                    "v14ToV15": {
-                        "oldCacheRetired": V14_CACHE not in upgraded_v15["names"],
-                        "newCachePresent": V15_CACHE in upgraded_v15["names"],
-                        "legacyAssetsObserved": all("legacy v14 PR132" in value for value in legacy_v14["assets"].values()),
+                        "v14ToV16": {
+                        "historicalCommit": HISTORICAL_V14_COMMIT,
+                        "oldCacheRetired": V14_CACHE not in upgraded_v16["names"],
+                        "newCachePresent": V16_CACHE in upgraded_v16["names"],
+                        "exactHistoricalAssets": True,
+                        "legacyAssetsObserved": all("retired v14 cache marker" in value for value in legacy_v14["assets"].values()),
                         "exactCurrentAssets": True,
-                        "newPanelCached": "house-pool:create" in upgraded_v15["assets"][PANEL_PATH],
-                        "newModelCached": "createHousePool" in upgraded_v15["assets"][MODEL_PATH],
-                        "housePoolReopenedOffline": after_v15["pool"] == before["pool"],
-                        "cacheNames": upgraded_v15["names"],
+                        "newPanelCached": "house-pool:create" in upgraded_v16["assets"][PANEL_PATH],
+                        "newModelCached": "createHousePool" in upgraded_v16["assets"][MODEL_PATH],
+                        "housePoolReopenedOffline": after_v16["pool"] == before["pool"],
+                        "cacheNames": upgraded_v16["names"],
                     },
-                    "persistedBalancePreserved": after_v15["availableTumbo"] == before["availableTumbo"],
-                    "persistedReceiptPreserved": set(before["receiptIds"]).issubset(after_v15["receiptIds"]),
+                    "persistedBalancePreserved": after_v16["availableTumbo"] == before["availableTumbo"],
+                    "persistedReceiptPreserved": set(before["receiptIds"]).issubset(after_v16["receiptIds"]),
                     "housePoolReopenedOffline": True,
-                    "cacheNames": upgraded_v15["names"],
-                    "pool": after_v15["pool"],
+                    "cacheNames": upgraded_v16["names"],
+                    "pool": after_v16["pool"],
                     "pageErrors": page_errors,
                 }
                 print(json.dumps(result, indent=2))
