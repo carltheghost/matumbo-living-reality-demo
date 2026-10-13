@@ -24,6 +24,18 @@ export const CONTRACT_ATELIER_MAX_PROPOSITION_LENGTH = 200;
 export const CONTRACT_ATELIER_MAX_OUTCOMES = 6;
 export const CONTRACT_ATELIER_MAX_STAKE = 10000;
 export const CONTRACT_ATELIER_STAKE_UNIT = "rehearsal credits";
+export const CONTRACT_ATELIER_MAX_HOUSE_ID_LENGTH = 64;
+export const CONTRACT_ATELIER_MAX_HOUSE_OPERATION_ID_LENGTH = 128;
+// House-pool accounting deliberately reuses the existing fictional stake
+// unit. One credit is represented as 100 integer subunits so ownership never
+// depends on floating-point capital or an invented price feed.
+export const CONTRACT_ATELIER_HOUSE_POOL_UNIT = "rehearsal-credit subunits";
+export const CONTRACT_ATELIER_HOUSE_POOL_UNIT_SCALE = 100;
+export const CONTRACT_ATELIER_HOUSE_POOL_MODES = Object.freeze(["single", "pool"]);
+export const CONTRACT_ATELIER_MAX_HOUSE_POOL_CAPACITY = CONTRACT_ATELIER_MAX_STAKE;
+export const CONTRACT_ATELIER_MAX_HOUSE_CONTRIBUTORS = 64;
+export const CONTRACT_ATELIER_HOUSE_POOL_INVESTOR_PAYOUT_UNAVAILABLE =
+  "Investor payouts are unavailable: this feature records local house-pool accounting only.";
 
 export const CONTRACT_ATELIER_MARKET_TYPES = Object.freeze(["binary", "pool", "multi"]);
 export const CONTRACT_ATELIER_ROLES = Object.freeze(["house", "player"]);
@@ -31,7 +43,7 @@ export const CONTRACT_ATELIER_TOPICS = Object.freeze(["sports", "politics", "wea
 export const CONTRACT_ATELIER_LOGIC_KINDS = Object.freeze(["condition", "and", "or", "if_else"]);
 
 export const CONTRACT_ATELIER_BOUNDARY =
-  "Contract Atelier is a fictional local rehearsal. Anyone may open a pool, binary, or multi-outcome contract as house or player and stake rehearsal credits, but every stake is simulated: no wallet, no chain, no custody, no settlement, no wagering, and no real money exists here. Resolutions are rehearsal outcomes only; nothing staked has value outside this page session.";
+  "Contract Atelier is a fictional local rehearsal. Anyone may open a pool, binary, or multi-outcome contract as house or player and stake rehearsal credits, but every stake and house-pool contribution is simulated: no wallet, no chain, no custody, no settlement, no wagering, and no real money exists here. Declared house capital is unbacked session accounting and does not reserve an existing balance. Resolutions are rehearsal outcomes only; house-pool investor payouts are unavailable and nothing staked has value outside this page session.";
 
 /** Fictional unit label carried on every stake so no real-money reading is possible. */
 export const CONTRACT_ATELIER_NO_VALUE = "Stakes are rehearsal credits with zero real value.";
@@ -84,6 +96,230 @@ function boundedProposition(proposition) {
   const normalized = safeText(proposition).trim().replace(/\s+/g, " ").slice(0, CONTRACT_ATELIER_MAX_PROPOSITION_LENGTH);
   if (!normalized) throw new TypeError("logic proposition must be a non-empty string");
   return normalized;
+}
+
+function boundedHouseId(value, field = "house") {
+  if (typeof value !== "string" || !value) throw new TypeError(`${field} must be a non-empty string`);
+  if (value.length > CONTRACT_ATELIER_MAX_HOUSE_ID_LENGTH) {
+    throw new TypeError(`${field} must be at most ${CONTRACT_ATELIER_MAX_HOUSE_ID_LENGTH} characters`);
+  }
+  if (value.trim() !== value) throw new TypeError(`${field} must not have leading or trailing whitespace`);
+  return value;
+}
+
+function requiredOperationId(value) {
+  if (typeof value !== "string" || !value) throw new TypeError("operationId must be a non-empty string");
+  if (value.length > CONTRACT_ATELIER_MAX_HOUSE_OPERATION_ID_LENGTH) {
+    throw new TypeError(`operationId must be at most ${CONTRACT_ATELIER_MAX_HOUSE_OPERATION_ID_LENGTH} characters`);
+  }
+  if (value.trim() !== value) throw new TypeError("operationId must not have leading or trailing whitespace");
+  return value;
+}
+
+const CANONICAL_HOUSE_POOL_CREDITS = /^(?:0|[1-9]\d*)(?:\.(\d{1,2}))?$/;
+
+function exactHousePoolUnits(value, field, maxUnits) {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new TypeError(`${field} must be a positive integer number of ${CONTRACT_ATELIER_HOUSE_POOL_UNIT}`);
+  }
+  if (value > maxUnits) {
+    throw new TypeError(`${field} may not exceed ${maxUnits} ${CONTRACT_ATELIER_HOUSE_POOL_UNIT}`);
+  }
+  return value;
+}
+
+// This parser is local rehearsal-credit accounting only. A future TUMBO-backed
+// integration must accept explicit integer amountFluff through SimulatedEconomy;
+// it must not convert these rehearsal units or call a token ledger here.
+function rehearsalCreditUnits(value, field, maxCredits = CONTRACT_ATELIER_MAX_STAKE) {
+  const maxUnits = maxCredits * CONTRACT_ATELIER_HOUSE_POOL_UNIT_SCALE;
+  let units;
+  if (typeof value === "number") {
+    if (!Number.isSafeInteger(value) || value <= 0) {
+      throw new TypeError(`${field} must be an exact whole-credit number, a canonical decimal string, or explicit integer units`);
+    }
+    units = value * CONTRACT_ATELIER_HOUSE_POOL_UNIT_SCALE;
+  } else if (typeof value === "string") {
+    if (value.trim() !== value || !CANONICAL_HOUSE_POOL_CREDITS.test(value)) {
+      throw new TypeError(`${field} must be a canonical decimal string with at most two fractional digits`);
+    }
+    const [whole, fractional = ""] = value.split(".");
+    units = Number(whole) * CONTRACT_ATELIER_HOUSE_POOL_UNIT_SCALE + Number(`${fractional}00`.slice(0, 2));
+  } else {
+    throw new TypeError(`${field} must be an exact whole-credit number, a canonical decimal string, or explicit integer units`);
+  }
+  if (!Number.isSafeInteger(units) || units <= 0) {
+    throw new TypeError(`${field} must resolve to at least one ${CONTRACT_ATELIER_HOUSE_POOL_UNIT}`);
+  }
+  if (units > maxUnits) {
+    throw new TypeError(`${field} may not exceed ${maxCredits} ${CONTRACT_ATELIER_STAKE_UNIT}`);
+  }
+  return units;
+}
+
+function resolveHousePoolUnits({ value, units, field, maxCredits }) {
+  const hasValue = value !== null && value !== undefined;
+  const hasUnits = units !== null && units !== undefined;
+  if (hasValue === hasUnits) {
+    throw new TypeError(`${field} requires exactly one of a credit amount or integer units`);
+  }
+  return hasUnits
+    ? exactHousePoolUnits(units, `${field} units`, maxCredits * CONTRACT_ATELIER_HOUSE_POOL_UNIT_SCALE)
+    : rehearsalCreditUnits(value, field, maxCredits);
+}
+
+function creditsFromUnits(units) {
+  return units / CONTRACT_ATELIER_HOUSE_POOL_UNIT_SCALE;
+}
+
+function sameHouse(left, right) {
+  return left.toLowerCase() === right.toLowerCase();
+}
+
+function operationReplayKey(contractId, operationId) {
+  return JSON.stringify([contractId, operationId]);
+}
+
+function sumHousePoolUnits(rows, field = "units") {
+  return rows.reduce((total, row) => total + row[field], 0);
+}
+
+function housePoolSnapshot({ mode, capacityUnits, registrations = [], contributions = [] }) {
+  if (!CONTRACT_ATELIER_HOUSE_POOL_MODES.includes(mode)) {
+    throw new TypeError(`unknown house-pool mode: ${mode || "(missing)"}`);
+  }
+  if (!Number.isSafeInteger(capacityUnits) || capacityUnits <= 0) {
+    throw new TypeError("house-pool capacity must be a positive integer number of subunits");
+  }
+  const normalizedRegistrations = registrations.map((entry) => ({
+    house: boundedHouseId(entry.house),
+    capitalUnits: entry.capitalUnits,
+    operationId: entry.operationId === null || entry.operationId === undefined ? null : requiredOperationId(entry.operationId),
+  }));
+  if (mode === "single" && normalizedRegistrations.length > 1) {
+    throw new TypeError("single house pools accept one registered house");
+  }
+  if (normalizedRegistrations.length > CONTRACT_ATELIER_MAX_HOUSE_CONTRIBUTORS) {
+    throw new TypeError(`house pools accept at most ${CONTRACT_ATELIER_MAX_HOUSE_CONTRIBUTORS} registered houses`);
+  }
+  for (let index = 0; index < normalizedRegistrations.length; index += 1) {
+    const current = normalizedRegistrations[index];
+    if (!Number.isSafeInteger(current.capitalUnits) || current.capitalUnits <= 0) {
+      throw new TypeError("registered house capital must be a positive integer number of subunits");
+    }
+    if (normalizedRegistrations.slice(0, index).some((entry) => sameHouse(entry.house, current.house))) {
+      throw new TypeError(`house is already registered: ${current.house}`);
+    }
+  }
+  const declaredCapitalUnits = sumHousePoolUnits(normalizedRegistrations, "capitalUnits");
+  if (declaredCapitalUnits > capacityUnits) {
+    throw new TypeError("registered house capital exceeds the house-pool capacity");
+  }
+
+  const registrationByHouse = new Map(normalizedRegistrations.map((entry) => [entry.house.toLowerCase(), entry]));
+  const normalizedContributions = contributions.map((entry) => ({
+    id: safeText(entry.id),
+    house: boundedHouseId(entry.house),
+    units: entry.units,
+    at: safeText(entry.at),
+    operationId: entry.operationId === null || entry.operationId === undefined ? null : requiredOperationId(entry.operationId),
+  }));
+  const seenContributionIds = new Set();
+  for (const contribution of normalizedContributions) {
+    if (!contribution.id || seenContributionIds.has(contribution.id)) {
+      throw new TypeError("house-pool contribution IDs must be unique");
+    }
+    seenContributionIds.add(contribution.id);
+    if (!Number.isSafeInteger(contribution.units) || contribution.units <= 0) {
+      throw new TypeError("house-pool contribution units must be positive integers");
+    }
+    const registration = registrationByHouse.get(contribution.house.toLowerCase());
+    if (!registration) throw new TypeError(`house is not registered: ${contribution.house}`);
+  }
+  const committedByHouse = new Map();
+  for (const contribution of normalizedContributions) {
+    const key = contribution.house.toLowerCase();
+    committedByHouse.set(key, (committedByHouse.get(key) ?? 0) + contribution.units);
+  }
+  for (const registration of normalizedRegistrations) {
+    const committed = committedByHouse.get(registration.house.toLowerCase()) ?? 0;
+    if (committed > registration.capitalUnits) {
+      throw new TypeError(`house contributions exceed declared capital: ${registration.house}`);
+    }
+  }
+  const committedUnits = sumHousePoolUnits(normalizedContributions);
+  if (committedUnits > capacityUnits) throw new TypeError("house contributions exceed pool capacity");
+  const availableCapitalUnits = declaredCapitalUnits - committedUnits;
+  const totalUnits = committedUnits;
+  const contributors = normalizedRegistrations.map((registration) => {
+    const committed = committedByHouse.get(registration.house.toLowerCase()) ?? 0;
+    const ownership = totalUnits > 0 ? committed / totalUnits : 0;
+    return {
+      house: registration.house,
+      declaredCapital: creditsFromUnits(registration.capitalUnits),
+      declaredCapitalUnits: registration.capitalUnits,
+      committedCapital: creditsFromUnits(committed),
+      committedCapitalUnits: committed,
+      availableCapital: creditsFromUnits(registration.capitalUnits - committed),
+      availableCapitalUnits: registration.capitalUnits - committed,
+      units: committed,
+      ownership,
+      ownershipNumerator: committed,
+      ownershipDenominator: totalUnits,
+      registrationOperationId: registration.operationId,
+      simulation: true,
+    };
+  });
+
+  return freeze({
+    mode,
+    unit: CONTRACT_ATELIER_HOUSE_POOL_UNIT,
+    unitScale: CONTRACT_ATELIER_HOUSE_POOL_UNIT_SCALE,
+    capacity: creditsFromUnits(capacityUnits),
+    capacityUnits,
+    declaredCapital: creditsFromUnits(declaredCapitalUnits),
+    declaredCapitalUnits,
+    committedCapital: creditsFromUnits(committedUnits),
+    committedCapitalUnits: committedUnits,
+    availableCapital: creditsFromUnits(availableCapitalUnits),
+    availableCapitalUnits,
+    remainingCapacity: creditsFromUnits(capacityUnits - committedUnits),
+    remainingCapacityUnits: capacityUnits - committedUnits,
+    totalUnits,
+    contributors,
+    contributions: normalizedContributions.map((contribution) => ({
+      ...contribution,
+      amount: creditsFromUnits(contribution.units),
+      unit: CONTRACT_ATELIER_HOUSE_POOL_UNIT,
+      simulation: true,
+    })),
+    investorPayouts: {
+      available: false,
+      status: "unavailable",
+      reason: CONTRACT_ATELIER_HOUSE_POOL_INVESTOR_PAYOUT_UNAVAILABLE,
+    },
+    simulation: true,
+    localOnly: true,
+  });
+}
+
+function normalizeHousePoolConfig(config, role) {
+  if (config === null || config === undefined) return null;
+  if (role !== "house") throw new TypeError("house-pool accounting requires the house role");
+  if (!config || typeof config !== "object" || Array.isArray(config)) {
+    throw new TypeError("housePool must be an object");
+  }
+  const mode = safeText(config.mode).trim();
+  if (!CONTRACT_ATELIER_HOUSE_POOL_MODES.includes(mode)) {
+    throw new TypeError(`unknown house-pool mode: ${mode || "(missing)"}`);
+  }
+  const capacityUnits = resolveHousePoolUnits({
+    value: config.capacity,
+    units: config.capacityUnits,
+    field: "house-pool capacity",
+    maxCredits: CONTRACT_ATELIER_MAX_HOUSE_POOL_CAPACITY,
+  });
+  return housePoolSnapshot({ mode, capacityUnits });
 }
 
 /**
@@ -211,6 +447,7 @@ export function createContractAtelier({ seed = "local-contracts", now = null } =
   const atelierSeed = safeText(seed) || "local-contracts";
   let counter = 0;
   const contracts = new Map();
+  const houseOperationReplay = new Map();
   const trace = [];
   let sequence = 0;
 
@@ -227,7 +464,7 @@ export function createContractAtelier({ seed = "local-contracts", now = null } =
     return sequence;
   }
 
-  function buildContract({ key, type, role, topic, title, logic, outcomes }) {
+  function buildContract({ key, type, role, topic, title, logic, outcomes, housePool = null }) {
     const marketType = safeText(type);
     if (!CONTRACT_ATELIER_MARKET_TYPES.includes(marketType)) {
       throw new TypeError(`unknown market type: ${marketType || "(missing)"}`);
@@ -240,6 +477,7 @@ export function createContractAtelier({ seed = "local-contracts", now = null } =
     if (!CONTRACT_ATELIER_TOPICS.includes(contractTopic)) {
       throw new TypeError(`unknown topic: ${contractTopic || "(missing)"}`);
     }
+    const normalizedHousePool = normalizeHousePoolConfig(housePool, creatorRole);
     counter += 1;
     const tokenHash = hashContractAtelierSeed(`${atelierSeed}:${counter}:${title}`);
     const id = `ctr:${tokenHash.slice(0, 8)}:${String(counter).padStart(4, "0")}`;
@@ -255,6 +493,7 @@ export function createContractAtelier({ seed = "local-contracts", now = null } =
       logicSummary: describeContractLogic(normalizedLogic),
       outcomes: normalizeOutcomes(marketType, outcomes),
       stakes: freeze([]),
+      housePool: normalizedHousePool,
       status: "open",
       resolution: null,
       createdAt: nowIso(now),
@@ -304,6 +543,131 @@ export function createContractAtelier({ seed = "local-contracts", now = null } =
     contracts.set(contract.id, updated);
     recordTrace("stake", contract.id, `${stake.amount} ${CONTRACT_ATELIER_STAKE_UNIT} on ${stake.side}`);
     return stake;
+  }
+
+  function housePoolFor(contractId) {
+    const contract = get(contractId);
+    if (!contract) throw new TypeError("unknown contract id");
+    if (!contract.housePool) throw new TypeError("contract has no house-pool accounting configuration");
+    return contract.housePool;
+  }
+
+  function replaceHousePool(contract, registrations, contributions) {
+    const updated = freeze({
+      ...contract,
+      housePool: housePoolSnapshot({
+        mode: contract.housePool.mode,
+        capacityUnits: contract.housePool.capacityUnits,
+        registrations,
+        contributions,
+      }),
+    });
+    contracts.set(contract.id, updated);
+    return updated;
+  }
+
+  /**
+   * Declare a local house's available capital budget. This is not a wallet
+   * deposit and does not move or reserve real value; it only establishes the
+   * cap against which later house-pool contributions are checked.
+   */
+  function registerHouse({ contractId, house, capital, capitalUnits, operationId } = {}) {
+    const contract = get(contractId);
+    if (!contract) throw new TypeError("unknown contract id");
+    const pool = housePoolFor(contractId);
+    const houseId = boundedHouseId(house);
+    const units = resolveHousePoolUnits({
+      value: capital,
+      units: capitalUnits,
+      field: "house capital",
+      maxCredits: CONTRACT_ATELIER_MAX_HOUSE_POOL_CAPACITY,
+    });
+    const requestId = requiredOperationId(operationId);
+    const replayId = operationReplayKey(contract.id, requestId);
+    const prior = houseOperationReplay.get(replayId);
+    if (prior) {
+      if (prior.kind !== "register" || !sameHouse(prior.house, houseId) || prior.units !== units) {
+        throw new TypeError("operationId was already used with different house-registration parameters");
+      }
+      return contract.housePool;
+    }
+    if (contract.status !== "open") throw new TypeError("house registration is closed after resolution");
+    const registrations = pool.contributors.map((entry) => ({
+      house: entry.house,
+      capitalUnits: entry.declaredCapitalUnits,
+      operationId: entry.registrationOperationId,
+    }));
+    if (registrations.some((entry) => sameHouse(entry.house, houseId))) {
+      throw new TypeError(`house is already registered: ${houseId}`);
+    }
+    registrations.push({ house: houseId, capitalUnits: units, operationId: requestId });
+    const contributions = pool.contributions.map((entry) => ({
+      id: entry.id,
+      house: entry.house,
+      units: entry.units,
+      at: entry.at,
+      operationId: entry.operationId,
+    }));
+    const updated = replaceHousePool(contract, registrations, contributions);
+    houseOperationReplay.set(replayId, { house: houseId, units, kind: "register" });
+    recordTrace("house-register", contract.id, `${houseId} · ${creditsFromUnits(units)} ${CONTRACT_ATELIER_STAKE_UNIT} available`);
+    return updated.housePool;
+  }
+
+  /**
+   * Commit a registered house's declared capital to the existing contract's
+   * pool. Ownership is derived only from integer contribution units; no quote,
+   * fee, sale, payout, or second accounting engine is introduced.
+   */
+  function joinHousePool({ contractId, house = null, participant = null, amount, amountUnits, operationId } = {}) {
+    const contract = get(contractId);
+    if (!contract) throw new TypeError("unknown contract id");
+    const pool = housePoolFor(contractId);
+    const houseId = boundedHouseId(house ?? participant, "house");
+    const units = resolveHousePoolUnits({
+      value: amount,
+      units: amountUnits,
+      field: "house-pool contribution",
+      maxCredits: CONTRACT_ATELIER_MAX_HOUSE_POOL_CAPACITY,
+    });
+    const requestId = requiredOperationId(operationId);
+    const replayId = operationReplayKey(contract.id, requestId);
+    const prior = houseOperationReplay.get(replayId);
+    if (prior) {
+      if (prior.kind !== "contribute" || !sameHouse(prior.house, houseId) || prior.units !== units) {
+        throw new TypeError("operationId was already used with different house-contribution parameters");
+      }
+      return contract.housePool;
+    }
+    if (contract.status !== "open") throw new TypeError("house-pool contributions are closed after resolution");
+    const contributor = pool.contributors.find((entry) => sameHouse(entry.house, houseId));
+    if (!contributor) throw new TypeError(`house is not registered: ${houseId}`);
+    if (units > contributor.availableCapitalUnits) {
+      throw new TypeError(`house contribution exceeds available capital for ${houseId}`);
+    }
+    if (units > pool.remainingCapacityUnits) {
+      throw new TypeError("house contribution exceeds remaining pool capacity");
+    }
+    const contribution = {
+      id: `${contract.id}:house-contribution-${pool.contributions.length + 1}`,
+      house: contributor.house,
+      units,
+      operationId: requestId,
+      at: nowIso(now),
+    };
+    const registrations = pool.contributors.map((entry) => ({
+      house: entry.house,
+      capitalUnits: entry.declaredCapitalUnits,
+      operationId: entry.registrationOperationId,
+    }));
+    const contributions = [
+      ...pool.contributions.map((entry) => ({ id: entry.id, house: entry.house, units: entry.units, at: entry.at, operationId: entry.operationId })),
+      contribution,
+    ];
+    const updated = replaceHousePool(contract, registrations, contributions);
+    houseOperationReplay.set(replayId, { house: contributor.house, units, kind: "contribute", contributionId: contribution.id });
+    recordTrace("house-contribute", contract.id, `${contributor.house} · ${creditsFromUnits(units)} ${CONTRACT_ATELIER_STAKE_UNIT} committed`);
+    return updated.housePool;
   }
 
   function totalStaked(contract) {
@@ -376,6 +740,7 @@ export function createContractAtelier({ seed = "local-contracts", now = null } =
       facts: freeze({ ...(facts && typeof facts === "object" ? facts : {}) }),
       totalStaked: Math.round(total * 100) / 100,
       payouts,
+      ...(contract.housePool ? { housePool: contract.housePool } : {}),
       at: nowIso(now),
       simulation: true,
       note: "Rehearsal resolution. No real payout, settlement, or value transfer occurs.",
@@ -388,6 +753,7 @@ export function createContractAtelier({ seed = "local-contracts", now = null } =
 
   function reset() {
     contracts.clear();
+    houseOperationReplay.clear();
     trace.length = 0;
     counter = 0;
     sequence = 0;
@@ -417,6 +783,7 @@ export function createContractAtelier({ seed = "local-contracts", now = null } =
         topic: contract.topic,
         status: contract.status,
         outcomes: contract.outcomes,
+        housePool: contract.housePool,
         totalStaked: Math.round(totalStaked(contract) * 100) / 100,
         stakeCount: contract.stakes.length,
       })),
@@ -448,6 +815,7 @@ export function createContractAtelier({ seed = "local-contracts", now = null } =
         role: contract.role,
         topic: contract.topic,
         status: contract.status,
+        housePool: contract.housePool,
         simulation: true,
       })),
       evidence: [{
@@ -456,7 +824,12 @@ export function createContractAtelier({ seed = "local-contracts", now = null } =
         contractIds: all.map((contract) => contract.id),
         status: "local",
       }],
-      capabilities: [{ id: "contract-atelier.stake", mode: "local-rehearsal", authority: "none", executable: false }],
+      capabilities: [
+        { id: "contract-atelier.stake", mode: "local-rehearsal", authority: "none", executable: false },
+        ...(all.some((contract) => contract.housePool)
+          ? [{ id: "contract-atelier.house-pool-accounting", mode: "local-rehearsal", authority: "none", executable: false }]
+          : []),
+      ],
       boundary: CONTRACT_ATELIER_BOUNDARY,
     });
   }
@@ -472,6 +845,9 @@ export function createContractAtelier({ seed = "local-contracts", now = null } =
     get,
     list,
     placeStake,
+    registerHouse,
+    joinHousePool,
+    getHousePool: housePoolFor,
     resolveContract,
     reset,
     getSnapshot,
