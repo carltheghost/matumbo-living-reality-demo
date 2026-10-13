@@ -57,6 +57,28 @@ CAMERA_INIT = r"""
 """
 
 
+HAND_WORKER_READY_INIT = r"""
+(() => {
+  const PreviousWorker = window.Worker;
+  window.Worker = class {
+    constructor(url, options) {
+      const marker = String(options?.name || url);
+      if (!marker.includes('two-hand')) return new PreviousWorker(url, options);
+      window.__phoneHandWorkerCalls += 1;
+      this.onmessage = null;
+      this.onerror = null;
+    }
+    postMessage(message) {
+      if (message?.type === 'init') {
+        setTimeout(() => this.onmessage?.({data: {type: 'ready', maxHands: 2, landmarksPerHand: 21}}), 0);
+      }
+    }
+    terminate() {}
+  };
+})();
+"""
+
+
 def snapshot_relic(page: Page) -> dict[str, Any]:
     return page.evaluate(
         """
@@ -65,6 +87,27 @@ def snapshot_relic(page: Page) -> dict[str, Any]:
           const space = envelope.snapshot.spaces[envelope.eyes[envelope.currentEyeId].spaceId];
           const entity = space.entities.relic;
           return { q: entity.q, revision: entity.revision, dimension: space.dimension };
+        }
+        """
+    )
+
+
+def snapshot_view(page: Page) -> dict[str, Any]:
+    return page.evaluate(
+        """
+        async () => {
+          const envelope = await window.VivaPhoneEngine.snapshot();
+          const eye = envelope.eyes[envelope.currentEyeId];
+          const participant = window.VivaShared.S.state?.participants?.find(item => item.id === eye.id)
+            || window.VivaShared.S.state?.participants?.[0];
+          return {
+            eyeId: envelope.currentEyeId,
+            eyeQ: eye.q,
+            participantQ: participant?.observer?.q,
+            sharedQ: window.VivaShared.S.observer?.q,
+            origin: window.VivaShared.R.origin,
+            expectedOrigin: [eye.q[0], eye.q[2], eye.q[1]],
+          };
         }
         """
     )
@@ -115,6 +158,54 @@ def run(base_url: str) -> dict[str, Any]:
         assert abs(reloaded["q"][10] - after["q"][10]) < 0.001, {"after": after, "reloaded": reloaded}
         assert reloaded["revision"] >= after["revision"], {"after": after, "reloaded": reloaded}
 
+        page.get_by_role("button", name="Move", exact=True).click()
+        page.wait_for_function("document.querySelectorAll('#moveAxis option').length === 11")
+        page.locator("#moveTarget").select_option("observer")
+        page.locator("#moveAxis").select_option("0")
+        before_view = snapshot_view(page)
+        page.locator("#axisPlus").click()
+        page.wait_for_function("document.querySelector('#status')?.textContent.includes('LOCAL EYE MOVE')")
+        moved_view = snapshot_view(page)
+        assert moved_view["eyeQ"] == moved_view["participantQ"] == moved_view["sharedQ"], moved_view
+        assert moved_view["origin"] == moved_view["expectedOrigin"], moved_view
+        page.locator("#closePanel").click()
+
+        page.reload(wait_until="domcontentloaded")
+        page.locator("#enterPhoneLocal").click()
+        page.wait_for_function("Boolean(window.VivaPhoneEngine && window.VivaPhoneEngine.active)")
+        page.wait_for_function("document.querySelectorAll('#moveAxis option').length === 11")
+        reloaded_view = snapshot_view(page)
+        assert reloaded_view["eyeQ"] == moved_view["eyeQ"], {"moved": moved_view, "reloaded": reloaded_view}
+        assert reloaded_view["participantQ"] == reloaded_view["eyeQ"], reloaded_view
+        assert reloaded_view["sharedQ"] == reloaded_view["eyeQ"], reloaded_view
+        assert reloaded_view["origin"] == reloaded_view["expectedOrigin"], reloaded_view
+
+        page.locator("#phonePanelButton").click()
+        page.wait_for_selector("#phoneEyeSelect")
+        old_eye = page.locator("#phoneEyeSelect").input_value()
+        page.locator("#phoneNewEye").click()
+        page.wait_for_function("document.querySelectorAll('#phoneEyeSelect option').length >= 2")
+        new_eye = page.locator("#phoneEyeSelect").input_value()
+        new_q = [0.41, 0.12, 0.25] + [0] * 8
+        page.evaluate("q => window.VivaPhoneEngine.setEye({q})", new_q)
+        page.wait_for_function(
+            "q => window.VivaPhoneEngine.snapshot().then(s => s.eyes[s.currentEyeId].q[0] === q[0])",
+            arg=new_q,
+        )
+        changed_eye = snapshot_view(page)
+        assert changed_eye["eyeId"] == new_eye, changed_eye
+        assert changed_eye["participantQ"] == changed_eye["eyeQ"], changed_eye
+        assert changed_eye["sharedQ"] == changed_eye["eyeQ"], changed_eye
+        assert changed_eye["origin"] == changed_eye["expectedOrigin"], changed_eye
+        page.locator("#phoneEyeSelect").select_option(old_eye)
+        page.wait_for_function("value => window.VivaPhoneEngine.snapshot().then(s => s.currentEyeId === value)", arg=old_eye)
+        switched_eye = snapshot_view(page)
+        assert switched_eye["eyeId"] == old_eye, switched_eye
+        assert switched_eye["participantQ"] == switched_eye["eyeQ"], switched_eye
+        assert switched_eye["sharedQ"] == switched_eye["eyeQ"], switched_eye
+        assert switched_eye["origin"] == switched_eye["expectedOrigin"], switched_eye
+        page.locator("#closePanel").click()
+
         page.get_by_role("button", name="Camera", exact=True).click()
         page.locator("#previewCamera").click()
         page.wait_for_function("document.querySelector('#cameraState')?.textContent.includes('VIDEO READY')")
@@ -149,9 +240,65 @@ def run(base_url: str) -> dict[str, Any]:
         )
         assert denied["live"] is False and denied["calls"] == 3 and denied["handWorkers"] == 0, denied
 
+        hand_context = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True)
+        hand_context.set_default_timeout(10000)
+        hand_context.add_init_script(CAMERA_INIT + HAND_WORKER_READY_INIT)
+        hand_page = hand_context.new_page()
+        hand_page.goto(route, wait_until="domcontentloaded")
+        hand_page.locator("#enterPhoneLocal").click()
+        hand_page.wait_for_function("Boolean(window.VivaPhoneEngine && window.VivaPhoneEngine.active)")
+        hand_page.get_by_role("button", name="Camera", exact=True).click()
+        hand_page.locator("#frontCamera").click()
+        hand_page.wait_for_function("document.querySelector('#phoneCameraVideo')?.style.display === 'block'")
+        after_hands = hand_page.evaluate(
+            """() => ({
+              cameraVideoDisplay: document.querySelector('#cameraVideo')?.style.display,
+              phoneVideoDisplay: document.querySelector('#phoneCameraVideo')?.style.display,
+              live: document.body.classList.contains('camera-live'),
+              handWorkers: window.__phoneHandWorkerCalls,
+            })"""
+        )
+        hand_page.get_by_role("button", name="Camera", exact=True).click()
+        hand_page.locator("#previewCamera").click()
+        hand_page.wait_for_function("document.querySelector('#cameraState')?.textContent.includes('VIDEO READY')")
+        hands_to_preview = hand_page.evaluate(
+            """() => ({
+              state: document.querySelector('#cameraState')?.textContent,
+              cameraVideoDisplay: document.querySelector('#cameraVideo')?.style.display,
+              phoneVideoDisplay: document.querySelector('#phoneCameraVideo')?.style.display,
+              live: document.body.classList.contains('camera-live'),
+              handWorkers: window.__phoneHandWorkerCalls,
+            })"""
+        )
+        assert after_hands["cameraVideoDisplay"] == "none" and after_hands["phoneVideoDisplay"] == "block", after_hands
+        assert hands_to_preview["cameraVideoDisplay"] == "", hands_to_preview
+        assert hands_to_preview["phoneVideoDisplay"] == "none" and hands_to_preview["live"] is True, hands_to_preview
+        hand_page.close()
+        hand_context.close()
+
         page.locator("#phoneOpenExchange").click()
         page.wait_for_selector("#simulated-economy-panel:not([hidden])")
         page.wait_for_function("document.querySelector('#sim-economy-tab-exchange')?.hidden === false")
+        page.locator("[data-action='tab:house-pool']").click()
+        page.locator("#sim-economy-house-pool-name").fill("Review direct audit pool")
+        page.locator("#sim-economy-house-pool-capacity").fill("3000")
+        page.locator("[data-action='house-pool:create']").click()
+        page.wait_for_function(
+            "document.querySelector('.sim-economy-house-pool-card')?.textContent.includes('Review direct audit pool')"
+        )
+        page.locator("#simulated-economy-panel [data-action='close']").click()
+        page.wait_for_function("document.querySelector('#simulated-economy-panel')?.hidden === true")
+        page.wait_for_timeout(350)
+        page.locator("#phoneOpenExchange").click()
+        page.wait_for_selector("#simulated-economy-panel:not([hidden])")
+        page.wait_for_function("document.querySelector('#sim-economy-tab-exchange')?.hidden === false")
+        audit_after_direct_reopen = page.evaluate(
+            """() => ({
+              auditState: document.querySelector('.token-economy-overview-host')?.dataset.auditState,
+              auditLabel: document.querySelector('.token-economy-overview-audit')?.textContent,
+            })"""
+        )
+        assert audit_after_direct_reopen["auditState"] == "current", audit_after_direct_reopen
         exchange = {
             "panel": True,
             "exchangeTab": not page.locator("#sim-economy-tab-exchange").is_hidden(),
@@ -171,8 +318,9 @@ def run(base_url: str) -> dict[str, Any]:
         result = {
             "route": route,
             "movement": {"before": before, "after": after, "reloaded": reloaded},
-            "camera": {"preview": preview, "repeated": repeated, "denied": denied},
-            "economy": {"exchange": exchange, "contracts": contracts},
+            "view": {"before": before_view, "moved": moved_view, "reloaded": reloaded_view, "changedEye": changed_eye, "switchedEye": switched_eye},
+            "camera": {"preview": preview, "repeated": repeated, "denied": denied, "handsToPreview": hands_to_preview},
+            "economy": {"exchange": exchange, "contracts": contracts, "directReopenAudit": audit_after_direct_reopen},
             "mobile": {"viewport": [390, 844], "economyEntryInViewport": True},
             "restrictedRequests": restricted_requests,
             "pageErrors": page_errors,
