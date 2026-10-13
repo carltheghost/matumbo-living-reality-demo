@@ -267,9 +267,9 @@ function effectsFor(record, entry, at) {
 }
 
 /**
- * Evaluate a draft without creating a contract, event, receipt, or storage
- * write. Assumed evidence is labelled as such and never enters the canonical
- * evidence log.
+ * Evaluate a draft or saved contract without creating a contract, event,
+ * receipt, or storage write. Assumed evidence is labelled as hypothetical and
+ * never enters the canonical evidence log.
  */
 export function previewContractTerms({
   contractId = 'preview:contract',
@@ -277,19 +277,25 @@ export function previewContractTerms({
   terms,
   parties = ['owner', 'reviewer'],
   assumedEvidence = {},
+  state = null,
   at = Date.now(),
 } = {}) {
   const clock = integer(at, 'preview time');
   const normalizedParties = unique(array(parties, 'parties', 1, 16).map((entry) => text(entry, 'party', 80)), 'parties');
   const normalizedTerms = normalizeTerms(terms, normalizedParties);
+  const saved = state !== null;
+  if (saved) {
+    object(state, 'saved contract');
+    if (state.id !== contractId) fail('Saved contract id must match the preview contract id');
+  }
   checkJSON(assumedEvidence);
   object(assumedEvidence, 'assumed evidence');
   const declared = new Map(normalizedTerms.sources.map((source) => [source.id, source]));
-  const evidence = [];
+  const hypotheticalEvidence = [];
   for (const [sourceId, value] of Object.entries(assumedEvidence)) {
     const source = declared.get(sourceId);
     if (!source) fail(`Unknown preview evidence source ${sourceId}`);
-    evidence.push({
+    hypotheticalEvidence.push({
       id: `preview:${sourceId}`,
       contractId,
       source: sourceId,
@@ -297,22 +303,44 @@ export function previewContractTerms({
       observedAt: clock,
       provider: source.provider,
       preview: true,
+      hypothetical: true,
     });
   }
+  // Saved evidence and receipts are inputs to a forecast, not fresh assumed
+  // facts. In particular, retaining observedAt is what lets a saved forecast
+  // remain UNKNOWN when an observation has gone stale.
+  const actualEvidence = saved ? copy(state.evidence ?? []) : [];
+  const actualReceipts = saved ? copy(state.receipts ?? []) : [];
   const record = {
     id: contractId,
     title: text(title, 'contract title', 160),
     parties: normalizedParties,
     terms: normalizedTerms,
-    evidence,
-    receipts: [],
+    evidence: [...actualEvidence, ...hypotheticalEvidence],
+    receipts: actualReceipts,
   };
-  const completed = new Set();
+  const receiptCounts = new Map(normalizedTerms.rules.map((entry) => [entry.id, actualReceipts.filter((receipt) => receipt.ruleId === entry.id).length]));
+  const projectedCounts = new Map(receiptCounts);
   const projectedEffects = [];
+  const savedPointsCents = actualReceipts.flatMap((receipt) => receipt.effects ?? []).reduce((sum, effect) => sum + (effect.amountCents ?? effect.poolCents ?? 0), 0);
   let projectedPointsCents = 0;
   const rules = [];
+  const canProject = !saved || state.status === 'active';
   for (const entry of normalizedTerms.rules) {
-    if ((entry.after ?? []).some((id) => !completed.has(id))) {
+    const maxRuns = entry.schedule?.maxRuns ?? 1;
+    const currentRuns = projectedCounts.get(entry.id) ?? 0;
+    if (currentRuns >= maxRuns) {
+      rules.push({ id: entry.id, label: entry.label, state: 'done', reason: 'Saved receipts already complete this rule', effects: [] });
+      continue;
+    }
+    if (saved && !canProject) {
+      rules.push({ id: entry.id, label: entry.label, state: 'waiting', reason: `Saved contract is ${state.status}; no new effects are forecast`, effects: [] });
+      continue;
+    }
+    if ((entry.after ?? []).some((id) => {
+      const prior = normalizedTerms.rules.find((candidate) => candidate.id === id);
+      return (projectedCounts.get(id) ?? 0) < (prior?.schedule?.maxRuns ?? 1);
+    })) {
       rules.push({ id: entry.id, label: entry.label, state: 'waiting', reason: 'Waiting for prior milestone', effects: [] });
       continue;
     }
@@ -324,12 +352,19 @@ export function previewContractTerms({
       rules.push({ id: entry.id, label: entry.label, state: 'skipped', reason: 'Outside the approved execution window', effects: [] });
       continue;
     }
+    if (saved && entry.schedule) {
+      const scheduledAt = Math.max(normalizedTerms.startsAt ?? 0, state.activatedAt ?? 0) + entry.schedule.everyMs * currentRuns;
+      if (clock < scheduledAt) {
+        rules.push({ id: entry.id, label: entry.label, state: 'waiting', reason: 'Waiting for next scheduled cycle', nextAt: scheduledAt, effects: [] });
+        continue;
+      }
+    }
     const evaluated = evaluate(entry.when, record, clock);
     if (evaluated.state !== 'true') {
       rules.push({
         id: entry.id,
         label: entry.label,
-        state: evaluated.state === 'unknown' ? 'waiting' : 'skipped',
+        state: evaluated.state === 'unknown' ? (saved ? 'unknown' : 'waiting') : 'skipped',
         reason: evaluated.reason || 'Condition not satisfied',
         effects: [],
       });
@@ -343,16 +378,24 @@ export function previewContractTerms({
       continue;
     }
     const costCents = effects.reduce((sum, effect) => sum + (effect.amountCents ?? effect.poolCents ?? 0), 0);
-    if (projectedPointsCents + costCents > cents(normalizedTerms.limits.maxTotalPoints)) {
+    if (savedPointsCents + projectedPointsCents + costCents > cents(normalizedTerms.limits.maxTotalPoints)) {
       rules.push({ id: entry.id, label: entry.label, state: 'skipped', reason: 'Projected effects exceed the approved point limit', effects: [] });
       continue;
     }
-    const projected = effects.map((effect) => ({ ...effect, ruleId: entry.id, preview: true }));
+    const projected = effects.map((effect) => ({ ...effect, ruleId: entry.id, preview: true, hypothetical: true }));
     projectedEffects.push(...projected);
     projectedPointsCents += costCents;
-    completed.add(entry.id);
-    rules.push({ id: entry.id, label: entry.label, state: 'triggered', reason: 'Assumed evidence satisfies this condition', effects: projected });
+    projectedCounts.set(entry.id, currentRuns + 1);
+    rules.push({ id: entry.id, label: entry.label, state: 'triggered', reason: saved ? 'Current evidence satisfies the next local execution' : 'Assumed evidence satisfies this condition', effects: projected });
   }
+  const assumptions = Object.freeze(Object.fromEntries(hypotheticalEvidence.map((entry) => [entry.source, entry.value])));
+  const savedState = saved ? {
+    status: state.status,
+    activatedAt: state.activatedAt ?? null,
+    approvals: copy(state.approvals ?? []),
+    receipts: actualReceipts,
+    evidence: actualEvidence,
+  } : null;
   return publicCopy({
     contractId,
     title: record.title,
@@ -360,13 +403,19 @@ export function previewContractTerms({
     localOnly: true,
     persisted: false,
     mutated: false,
-    assumptions: Object.freeze(Object.fromEntries(evidence.map((entry) => [entry.source, entry.value]))),
-    approvals: { required: normalizedParties.length, recorded: 0, remaining: normalizedParties.length },
+    source: saved ? 'saved' : 'draft',
+    status: saved ? state.status : 'draft',
+    savedState,
+    evidence: actualEvidence,
+    receipts: actualReceipts,
+    hypotheticalEvidence,
+    assumptions,
+    approvals: { required: normalizedParties.length, recorded: saved ? state.approvals?.length ?? 0 : 0, remaining: saved ? Math.max(0, normalizedParties.length - (state.approvals?.length ?? 0)) : normalizedParties.length },
     rules,
     projectedEffects,
     totalProjectedPoints: projectedPointsCents / 100,
-    nextAction: 'Review this preview, then create the contract to freeze terms and request local approvals.',
-    boundary: 'Preview only. No contract, evidence, receipt, balance, access grant, or ledger entry was created.',
+    nextAction: saved ? 'Forecast only. Review the saved status, approvals, receipts and evidence freshness before taking any separate local action.' : 'Review this preview, then create the contract to freeze terms and request local approvals.',
+    boundary: saved ? 'Saved-state forecast only. Actual approvals, status, receipts and evidence timestamps are preserved; supplied assumptions are hypothetical and do not update saved state.' : 'Preview only. No contract, evidence, receipt, balance, access grant, or ledger entry was created.',
   });
 }
 
@@ -815,14 +864,13 @@ export function createContractAutomation({ now = () => Date.now(), storage = nul
     preview(id, { assumedEvidence = {}, at = clock() } = {}) {
       const record = state.contracts.find((entry) => entry.id === id);
       if (!record) throw new Error(`Unknown contract ${id}`);
-      const current = {};
-      for (const evidence of [...record.evidence].sort((a, b) => a.observedAt - b.observedAt)) current[evidence.source] = evidence.value;
       return previewContractTerms({
         contractId: record.id,
         title: record.title,
         terms: record.terms,
         parties: record.parties,
-        assumedEvidence: { ...current, ...assumedEvidence },
+        assumedEvidence,
+        state: record,
         at,
       });
     },

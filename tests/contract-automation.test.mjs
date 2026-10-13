@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createContractAutomation, CONTRACT_AUTOMATION_STORAGE_KEY } from '../src/domains/contract-automation.js';
+import { createContractAutomation, CONTRACT_AUTOMATION_STORAGE_KEY, previewContractTerms } from '../src/domains/contract-automation.js';
 
 const BASE = Date.parse('2026-09-24T12:00:00Z');
 function harness(options = {}) {
@@ -306,6 +306,62 @@ test('restore uses observation arrival order for corrections in the same millise
   assert.equal(h.engine.get(record.id).receipts.length, 1);
   const restored = createContractAutomation({ now: h.now, storage: h.storage });
   assert.equal(restored.get(record.id).receipts.length, 1);
+});
+
+test('preview dependencies require every bounded predecessor run, not only one preview receipt', () => {
+  const result = previewContractTerms({
+    contractId: 'preview:recurring-dependency',
+    title: 'Recurring predecessor',
+    terms: {
+      startsAt: null,
+      expiresAt: null,
+      sources: [{ id: 'ready', label: 'Ready', type: 'boolean', maxAgeMs: 86400000, provider: 'manual' }],
+      rules: [
+        { id: 'repeat', label: 'Repeat twice', when: { op: 'eq', source: 'ready', value: true }, actions: [{ type: 'record', label: 'Repeat' }], schedule: { everyMs: 60000, maxRuns: 2 } },
+        { id: 'after-repeat', label: 'After repeat', after: ['repeat'], when: { op: 'eq', source: 'ready', value: true }, actions: [{ type: 'record', label: 'After' }] },
+      ],
+      limits: { maxTotalPoints: 1000, maxExecutions: 10 },
+    },
+    assumedEvidence: { ready: true },
+    at: BASE,
+  });
+  assert.equal(result.rules.find((rule) => rule.id === 'repeat').state, 'triggered');
+  assert.equal(result.rules.find((rule) => rule.id === 'after-repeat').state, 'waiting');
+  assert.match(result.rules.find((rule) => rule.id === 'after-repeat').reason, /prior milestone/);
+});
+
+test('saved forecasts preserve actual approvals, status, receipts and evidence timestamps while stale evidence stays unknown', () => {
+  let at = BASE;
+  const engine = createContractAutomation({ now: () => at });
+  const record = engine.create({
+    templateId: 'recurring',
+    terms: { sources: [{ id: 'enabled', type: 'boolean', maxAgeMs: 1000 }], rules: [{ id: 'cycle', when: { op: 'eq', source: 'enabled', value: true }, actions: [{ type: 'record', label: 'Cycle' }], schedule: { everyMs: 60000, maxRuns: 3 } }] },
+  });
+  const observedAt = at;
+  engine.observe({ id: 'preapproval-evidence', contractId: record.id, source: 'enabled', value: true, observedAt, provider: 'manual' });
+  engine.approve(record.id, { actor: 'owner' });
+  engine.approve(record.id, { actor: 'reviewer' });
+  const saved = engine.get(record.id);
+  assert.equal(saved.status, 'active');
+  assert.equal(saved.approvals.length, 2);
+  assert.equal(saved.receipts.length, 1);
+  at += 60001;
+
+  const result = engine.preview(record.id, { at });
+  assert.equal(result.source, 'saved');
+  assert.equal(result.status, 'active');
+  assert.equal(result.approvals.recorded, 2);
+  assert.equal(result.receipts.length, 1);
+  assert.equal(result.evidence[0].observedAt, observedAt);
+  assert.equal(result.assumptions && Object.keys(result.assumptions).length, 0);
+  assert.equal(result.rules[0].state, 'unknown');
+  assert.match(result.rules[0].reason, /Stale/);
+
+  const hypothetical = engine.preview(record.id, { at, assumedEvidence: { enabled: true } });
+  assert.deepEqual(hypothetical.assumptions, { enabled: true });
+  assert.equal(hypothetical.evidence[0].observedAt, observedAt);
+  assert.equal(hypothetical.hypotheticalEvidence[0].observedAt, at);
+  assert.equal(hypothetical.receipts.length, 1, 'forecasting must not duplicate saved receipts');
 });
 
 test('prediction result evidence is traceable even when the custom rule uses another trigger', () => {

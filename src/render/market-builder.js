@@ -318,8 +318,11 @@ export function mountMarketBuilder({
   }
 
   function setStatus(message, error = false) {
-    status.textContent = message;
-    status.dataset.tone = error ? 'error' : 'info';
+    const notice = storageState !== 'ready' && storageMessage && !String(message).includes(storageMessage)
+      ? ` ${storageMessage}`
+      : '';
+    status.textContent = `${message}${notice}`;
+    status.dataset.tone = error || Boolean(notice) || storageState !== 'ready' ? 'error' : 'info';
   }
 
   function updateSourceReadout() {
@@ -522,11 +525,17 @@ export function mountMarketBuilder({
 
   composer.addEventListener('submit', (event) => {
     event.preventDefault();
+    const previousSelection = selected;
+    const id = recordId();
     try {
       assertStorageCurrent();
       const source = getSource?.();
+      selected = id;
       const market = book.create({
-        id: recordId(),
+        // Select before create() notifies synchronously. Otherwise the
+        // subscriber renders once with the previous card selected and the
+        // detail render can overwrite the new selection.
+        id,
         origin: origin.value,
         author: author.value,
         terms: terms.value,
@@ -540,7 +549,10 @@ export function mountMarketBuilder({
       });
       selected = market.id;
       setStatus('Local listing created. Review its terms and governing contract; no transaction was created.');
-    } catch (error) { setStatus(error.message, true); }
+    } catch (error) {
+      selected = previousSelection;
+      setStatus(error.message, true);
+    }
   });
 
   normalButton.addEventListener('click', () => {
