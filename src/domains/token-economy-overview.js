@@ -263,9 +263,14 @@ function receiptConsistency(engine, journals) {
         ? (MARKET_ACTIONS.includes(journal.action) ? "tithe" : "burn")
         : null;
       if (request.voidCreditReason !== expectedVoidCreditReason) fields.push("voidCreditReason");
-      const hasSystemPosting = journal.postings.some((posting) => typeof posting?.account === "string" && posting.account.startsWith("sys:"));
-      if (hasSystemPosting && request.authority !== "internal") fields.push("authority");
-      if (!hasSystemPosting && request.authority !== null && request.authority !== "internal") fields.push("authority");
+      // System-account credits are valid public-facing legs (for example a
+      // user deposit into treasury or escrow). Only a debit out of a system
+      // account needs the ledger's internal authority; matching every
+      // sys:* posting here incorrectly rejects those valid credits.
+      const hasSystemDebit = journal.postings.some((posting) =>
+        typeof posting?.account === "string" && posting.account.startsWith("sys:") && posting.amount < 0);
+      if (hasSystemDebit && request.authority !== "internal") fields.push("authority");
+      if (!hasSystemDebit && request.authority !== null && request.authority !== "internal") fields.push("authority");
       if (fields.length) result.requestMismatches.push({ key, fields });
     }
   }
@@ -556,7 +561,7 @@ function economyReport(economy, engine) {
     const state = economy.snapshot();
     if (!state || typeof state !== "object" || Array.isArray(state)) throw new TypeError("simulated economy snapshot must be an object");
     const { orders, trades, markets, positions, contracts, events, operations, baseline: escrowBaseline } = validateEconomySnapshot(state);
-    const activeOrders = orders.filter((order) => order.status !== "cancelled");
+    const activeOrders = orders.filter((order) => ["open", "partial"].includes(order.status));
     const obligations = { TUMBO: 0, sMIMAS: 0 };
     for (const order of activeOrders) {
       if (order.side === "sell") obligations.TUMBO = safeInteger(obligations.TUMBO + order.remainingBase, "TUMBO exchange obligation", { signed: false });

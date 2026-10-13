@@ -7,7 +7,7 @@ import {
   createTokenEngine,
   seedDemoWallet,
 } from "../src/domains/token.js";
-import { serializeTokenEngine } from "../src/domains/token-store.js";
+import { loadTokenEngine, serializeTokenEngine } from "../src/domains/token-store.js";
 import { createTokenVaultLedger } from "../src/domains/token-vault.js";
 import { createSimulatedEconomy } from "../src/domains/simulated-economy.js";
 import {
@@ -155,6 +155,54 @@ test("authorized simulated burns are explicit and remain in the conservation anc
   assert.equal(overview.invariants.ok, true);
 });
 
+test("valid user-to-system credits do not require internal debit authority", () => {
+  const engine = createTokenEngine();
+  fundTumbo(engine, "u:alice", 1_000);
+  engine.ledger.post([
+    { account: "u:alice", asset: "TUMBO", amount: -250 },
+    { account: "sys:treasury", asset: "TUMBO", amount: 250 },
+  ], { idempotencyKey: "overview:treasury-deposit", action: "deposit" });
+
+  const overview = createTokenEconomyOverview({ engine });
+  assert.equal(overview.invariants.ok, true);
+  assert.deepEqual(
+    overview.invariants.idempotency.receiptRegistry.requestMismatches
+      .find((row) => row.key === "overview:treasury-deposit"),
+    undefined,
+  );
+});
+
+test("legacy v2 snapshots reconstruct supported burns without a requests registry", () => {
+  const source = createTokenEngine();
+  fundTumbo(source, "u:alice", 1_000);
+  source.ledger.post([
+    { account: "u:alice", asset: "TUMBO", amount: -123 },
+    { account: "sys:void", asset: "TUMBO", amount: 123 },
+  ], { idempotencyKey: "overview:legacy-burn", action: "burn", voidCreditReason: "burn" });
+
+  const legacy = JSON.parse(serializeTokenEngine(source));
+  delete legacy.requests;
+  const loaded = loadTokenEngine(legacy);
+  const overview = createTokenEconomyOverview({ engine: loaded });
+
+  assert.equal(JSON.parse(loaded.ledger._requestKeys.get("overview:legacy-burn")).voidCreditReason, "burn");
+  assert.equal(overview.invariants.ok, true);
+  assert.equal(overview.assets.TUMBO.categories.burned, 123);
+});
+
+test("legacy reconstruction rejects unsupported Void-credit actions instead of guessing", () => {
+  const source = createTokenEngine();
+  fundTumbo(source, "u:alice", 1_000);
+  source.ledger.post([
+    { account: "u:alice", asset: "TUMBO", amount: -123 },
+    { account: "sys:void", asset: "TUMBO", amount: 123 },
+  ], { idempotencyKey: "overview:legacy-unknown-void", action: "legacy-void-credit", voidCreditReason: "burn" });
+
+  const legacy = JSON.parse(serializeTokenEngine(source));
+  delete legacy.requests;
+  assert.throws(() => loadTokenEngine(legacy), /sys:void|void|request/i);
+});
+
 test("serialized snapshots are read-only projections and do not roll forward", () => {
   const engine = createTokenEngine();
   fundTumbo(engine);
@@ -185,6 +233,51 @@ test("economy adapter exposes escrow obligations and operation uniqueness", () =
   assert.equal(overview.economy.operationRegistry.unique, true);
   assert.equal(overview.economy.ok, true);
   assert.equal(overview.invariants.ok, true);
+});
+
+test("only open and partial exchange orders count as active", () => {
+  const engine = createTokenEngine();
+  fundTumbo(engine, "u:alice", 20_000);
+  const economy = createSimulatedEconomy({ engine, seedLiquidity: true });
+  const filled = economy.placeExchangeOrder({
+    owner: "alice", side: "sell", amountBase: 1_000, priceNum: 1, priceDen: 1,
+    idempotencyKey: "overview:active:filled",
+  });
+  const open = economy.placeExchangeOrder({
+    owner: "alice", side: "sell", amountBase: 100, priceNum: 2, priceDen: 1,
+    idempotencyKey: "overview:active:open",
+  });
+  assert.equal(filled.order.status, "filled");
+  assert.equal(open.order.status, "open");
+
+  const overview = createTokenEconomyOverview({ engine, economy });
+  const expectedActive = economy.snapshot().exchange.orders.filter((order) => ["open", "partial"].includes(order.status)).length;
+  assert.equal(overview.economy.counts.activeExchangeOrders, expectedActive);
+  assert.equal(overview.economy.counts.activeExchangeOrders, economy.snapshot().exchange.orders.length - 1);
+});
+
+test("large canonical history refresh is measured with a bounded valid fixture", () => {
+  const engine = createTokenEngine();
+  fundTumbo(engine, "u:alice", 50_000);
+  fundTumbo(engine, "u:bob", 50_000);
+  const transferPairs = 4_997; // 4 genesis + 2 funding + 9,994 transfers = 10,000 journals.
+  for (let index = 0; index < transferPairs; index += 1) {
+    engine.ledger.post([
+      { account: "u:alice", asset: "TUMBO", amount: -1 },
+      { account: "u:bob", asset: "TUMBO", amount: 1 },
+    ], { idempotencyKey: `overview:history:ab:${index}`, action: "send" });
+    engine.ledger.post([
+      { account: "u:bob", asset: "TUMBO", amount: -1 },
+      { account: "u:alice", asset: "TUMBO", amount: 1 },
+    ], { idempotencyKey: `overview:history:ba:${index}`, action: "send" });
+  }
+
+  const startedAt = performance.now();
+  const overview = createTokenEconomyOverview({ engine });
+  const elapsedMs = performance.now() - startedAt;
+  assert.equal(overview.source.journalCount, 10_000);
+  assert.equal(overview.invariants.ok, true);
+  assert.ok(elapsedMs < 5_000, `10,000-journal overview refresh took ${elapsedMs.toFixed(1)} ms`);
 });
 
 test("the projection surfaces negative-balance corruption instead of hiding it", () => {

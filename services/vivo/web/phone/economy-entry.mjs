@@ -19,6 +19,10 @@ import {
 
 export const VIVO_PHONE_ECONOMY_SOURCE = 'vivo-phone-economy-entry';
 export const VIVO_PHONE_ECONOMY_OWNER_KEY = '__vivoPhoneSimulatedEconomyOwner';
+// Full overview construction remains the explicit audit path. The phone
+// listener coalesces visible refreshes behind this interval so a burst of
+// receipts cannot synchronously rebuild the entire history once per event.
+export const VIVO_PHONE_ECONOMY_OVERVIEW_REFRESH_INTERVAL_MS = 250;
 const OVERVIEW_STYLE_ID = 'vivo-token-economy-overview-style';
 
 function ensureOverviewStyles(documentRoot) {
@@ -157,6 +161,10 @@ export function mountPhoneEconomyContext({
   let ownerOff = null;
   let overviewHost = null;
   let latestOverview = null;
+  let overviewRefreshTimer = null;
+  let overviewDirty = false;
+  let lastOverviewRefreshAt = 0;
+  let requestOverviewRefresh = () => {};
   const onRetry = () => { initError = null; trigger.disabled = false; open(); };
 
   function renderStatus() {
@@ -197,6 +205,16 @@ export function mountPhoneEconomyContext({
       overviewHost = documentRoot.createElement('div');
       overviewHost.className = 'sim-economy-form token-economy-overview-host';
       mounted.element?.append(overviewHost);
+      const timerHost = documentRoot.defaultView || globalThis;
+      const showOverviewError = error => {
+        overviewHost?.replaceChildren(documentRoot.createElement('p'));
+        const message = overviewHost?.firstElementChild;
+        if (message) {
+          message.className = 'token-economy-overview__status';
+          message.textContent = `Economy overview unavailable: ${error instanceof Error ? error.message : String(error)}.`;
+        }
+        latestOverview = null;
+      };
       const refreshOverview = () => {
         if (!overviewHost || !owner?.model) return null;
         const baseOverview = createTokenEconomyOverview({
@@ -205,7 +223,31 @@ export function mountPhoneEconomyContext({
         });
         latestOverview = decorateTokenEconomyOverview(baseOverview);
         renderTokenEconomyOverview(overviewHost, latestOverview);
+        overviewDirty = false;
+        lastOverviewRefreshAt = Date.now();
         return latestOverview;
+      };
+      requestOverviewRefresh = ({ immediate = false } = {}) => {
+        overviewDirty = true;
+        // Hidden panels do not need a full journal audit. The next explicit
+        // open performs one fresh projection before the user reads it.
+        if (!mounted?.element || mounted.element.hidden) return;
+        if (immediate) {
+          if (overviewRefreshTimer !== null) {
+            timerHost.clearTimeout(overviewRefreshTimer);
+            overviewRefreshTimer = null;
+          }
+          try { refreshOverview(); } catch (error) { showOverviewError(error); overviewDirty = false; lastOverviewRefreshAt = Date.now(); }
+          return;
+        }
+        if (overviewRefreshTimer !== null) return;
+        const elapsed = Date.now() - lastOverviewRefreshAt;
+        const delay = Math.max(0, VIVO_PHONE_ECONOMY_OVERVIEW_REFRESH_INTERVAL_MS - elapsed);
+        overviewRefreshTimer = timerHost.setTimeout(() => {
+          overviewRefreshTimer = null;
+          if (!overviewDirty || !mounted?.element || mounted.element.hidden) return;
+          try { refreshOverview(); } catch (error) { showOverviewError(error); overviewDirty = false; lastOverviewRefreshAt = Date.now(); }
+        }, delay);
       };
       trigger.setAttribute('aria-controls', mounted.element?.id || panelHost.id);
       if (mounted.element && typeof MutationObserver === 'function') {
@@ -216,15 +258,7 @@ export function mountPhoneEconomyContext({
       }
       ownerOff = owner.model.on(() => {
         renderStatus();
-        try { refreshOverview(); } catch (error) {
-          overviewHost?.replaceChildren(documentRoot.createElement('p'));
-          const message = overviewHost?.firstElementChild;
-          if (message) {
-            message.className = 'token-economy-overview__status';
-            message.textContent = `Economy overview unavailable: ${error instanceof Error ? error.message : String(error)}.`;
-          }
-          latestOverview = null;
-        }
+        requestOverviewRefresh();
       });
       initError = null;
       renderStatus();
@@ -245,6 +279,9 @@ export function mountPhoneEconomyContext({
     const model = initialize();
     if (!model || !mounted) return false;
     mounted.open();
+    // A transaction while the panel was hidden marks the projection dirty;
+    // opening is the explicit read boundary that schedules its full audit.
+    if (overviewDirty) requestOverviewRefresh({ immediate: true });
     trigger.setAttribute('aria-expanded', 'true');
     return true;
   }
@@ -277,6 +314,10 @@ export function mountPhoneEconomyContext({
     get panel() { return mounted; },
     get overview() { return latestOverview; },
     destroy() {
+      if (overviewRefreshTimer !== null) {
+        (documentRoot.defaultView || globalThis).clearTimeout(overviewRefreshTimer);
+        overviewRefreshTimer = null;
+      }
       panelObserver?.disconnect();
       ownerOff?.();
       trigger.removeEventListener('click', open);
@@ -286,6 +327,7 @@ export function mountPhoneEconomyContext({
       latestOverview = null;
       mounted = null;
       owner = null;
+      requestOverviewRefresh = () => {};
     },
   });
 }
