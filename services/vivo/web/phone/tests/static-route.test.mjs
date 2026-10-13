@@ -110,6 +110,8 @@ test('Pages build copies the route and exposes its local-only boundary check', a
   assert.match(phoneWorkflow, /browser_field_world_static\.py/);
   assert.match(phoneWorkflow, /browser_conversation_transport\.py/);
   assert.match(phoneWorkflow, /browser_bimanual_transform\.py/);
+  assert.match(workflow, /python3 scripts\/vivo\/verify_economy_asset_coverage\.py/);
+  assert.match(phoneWorkflow, /python3 scripts\/vivo\/verify_economy_asset_coverage\.py/);
 });
 
 test('Pages build verifier executes against a staged web tree without positional paths', async () => {
@@ -150,8 +152,19 @@ test('Pages live hash verifier covers every changed mounted phone module', async
     'services/vivo/web/phone/engine.mjs',
     'services/vivo/web/phone/engine-worker.mjs',
     'services/vivo/web/phone/two-hand-camera.mjs',
+    'services/vivo/web/phone/vendor/economy/src/domains/snapshot-graph.js',
+    'services/vivo/web/phone/vendor/economy/src/domains/token-supply-policy.js',
+    'services/vivo/web/phone/vendor/economy/src/domains/token-economy-overview.js',
+    'services/vivo/web/phone/vendor/economy/src/render/token-economy-overview.js',
   ];
   for (const path of required) assert.ok(listed.includes(path), `${path} must be covered by public HTTPS hash verification`);
-  assert.equal(listed.length, 46, 'public HTTPS hash-verifier list must preserve all 46 public assets');
+  assert.equal(listed.length, 50, 'public HTTPS hash-verifier list must preserve all 50 public assets');
   assert.equal(new Set(listed).size, listed.length, 'public HTTPS hash-verifier list must not contain duplicate paths');
+});
+
+test('economy manifest assets stay covered by the service worker and phone workflows', async () => {
+  const repositoryRoot = fileURLToPath(new URL('../../../../../', import.meta.url));
+  const verifier = fileURLToPath(new URL('../../../../../scripts/vivo/verify_economy_asset_coverage.py', import.meta.url));
+  const { stdout } = await execFileAsync('python3', [verifier], { cwd: repositoryRoot, encoding: 'utf8' });
+  assert.match(stdout, /Verified economy asset coverage for 9 manifest entries/);
 });
