@@ -18,6 +18,8 @@ import { formatSimAmount } from "../domains/token.js";
 export const SIMULATED_ECONOMY_PANEL_SOURCE = "simulated-economy-panel";
 export const SIMULATED_ECONOMY_PANEL_OBJECT_ID = "vivo:economy-field-object";
 
+const HOUSE_POOL_CURRENT_ACCOUNT = "u:you";
+
 const CSS_ID = "simulated-economy-panel-style";
 let panelMountSequence = 0;
 
@@ -100,13 +102,19 @@ function persistenceSummary(model) {
 function housePoolOwnActiveFluff(model) {
   if (typeof model?.housePools !== "function") return null;
   try {
-    return model.housePools({ owner: "you" })
+    return model.housePools()
       .flatMap((pool) => pool.contributions)
-      .filter((contribution) => ["reserved", "committed"].includes(contribution.status))
+      .filter((contribution) => contribution.contributor === HOUSE_POOL_CURRENT_ACCOUNT && ["reserved", "committed"].includes(contribution.status))
       .reduce((total, contribution) => total + contribution.amountFluff, 0);
   } catch {
     return null;
   }
+}
+
+function housePoolLatestReceipt(contribution) {
+  if (contribution?.status === "committed") return contribution.commitment?.receiptId ?? contribution.reserveReceiptId;
+  if (contribution?.status === "released") return contribution.releaseReceiptId ?? contribution.reserveReceiptId;
+  return contribution?.reserveReceiptId ?? "—";
 }
 
 function exactShare(entry) {
@@ -491,7 +499,7 @@ export function mountSimulatedEconomyPanel({
       return;
     }
 
-    const pools = model.housePools({ owner: "you" });
+    const pools = model.housePools();
     const previousPoolId = housePoolSelect.value;
     housePoolSelect.replaceChildren();
     housePoolSelect.append(text(documentRoot, "option", pools.length ? "Select a house pool" : "Create a house pool first"));
@@ -522,7 +530,7 @@ export function mountSimulatedEconomyPanel({
       const poolNode = record(
         documentRoot,
         pool.name,
-        `${pool.status.toUpperCase()} · ${assetAmount(pool.totalUnits, "TUMBO")} in this pool / ${assetAmount(pool.capacityFluff, "TUMBO")} capacity · ${assetAmount(pool.availableCapacityFluff, "TUMBO")} remaining`,
+        `${pool.status.toUpperCase()} · owner ${pool.owner} · ${assetAmount(pool.totalUnits, "TUMBO")} in this pool / ${assetAmount(pool.capacityFluff, "TUMBO")} capacity · ${assetAmount(pool.availableCapacityFluff, "TUMBO")} remaining`,
         children,
       );
       poolNode.classList.add("sim-economy-house-pool-card");
@@ -538,7 +546,7 @@ export function mountSimulatedEconomyPanel({
           contributionNode.dataset.contributionId = contribution.id;
           contributionNode.append(
             text(documentRoot, "strong", `${contribution.status.toUpperCase()} · ${assetAmount(contribution.amountFluff, "TUMBO-SIM")}`),
-            text(documentRoot, "span", `Receipt · ${contribution.status === "released" ? contribution.releaseReceiptId : contribution.reserveReceiptId}`),
+            text(documentRoot, "span", `Receipt · ${housePoolLatestReceipt(contribution)}`),
             text(documentRoot, "span", `Pool share · ${exactShare(own)} · revision ${pool.revision}`),
           );
           if (contribution.status === "reserved") {
@@ -674,7 +682,7 @@ export function mountSimulatedEconomyPanel({
     }
     if (action === "house-pool:reserve") {
       if (typeof model.housePools !== "function" || !housePoolSelect.value) return;
-      const pool = model.housePools({ owner: "you" }).find((entry) => entry.id === housePoolSelect.value);
+      const pool = model.housePools().find((entry) => entry.id === housePoolSelect.value);
       if (!pool) return;
       const request = {
         poolId: pool.id,
@@ -690,9 +698,9 @@ export function mountSimulatedEconomyPanel({
       if (typeof model.housePools !== "function") return;
       const poolId = event.target?.dataset?.poolId;
       const contributionId = event.target?.dataset?.contributionId;
-      const pool = model.housePools({ owner: "you" }).find((entry) => entry.id === poolId);
+      const pool = model.housePools().find((entry) => entry.id === poolId);
       const contribution = pool?.contributions.find((entry) => entry.id === contributionId);
-      if (!pool || !contribution || contribution.status !== "reserved") return;
+      if (!pool || !contribution || contribution.contributor !== HOUSE_POOL_CURRENT_ACCOUNT || contribution.status !== "reserved") return;
       const request = { poolId, contributionId, actor: "you", expectedRevision: pool.revision };
       const intent = operationIntent("house-pool-release", request);
       run(async () => { model.releaseHousePoolContribution({ ...request, idempotencyKey: intent.key }); }, action, intent);

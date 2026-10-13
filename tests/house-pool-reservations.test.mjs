@@ -263,6 +263,82 @@ test("commitment is an owner-only lock with no payout or release lifecycle", () 
   assert.equal(economy.verify().escrow.TUMBO, 2_000);
 });
 
+test("multi-owner pools stay visible while personal attribution and release authorization remain scoped", () => {
+  const { engine, economy } = fixture();
+  const alicePool = createPool(economy, {
+    name: "Alice's shared pool",
+    owner: "alice",
+    idempotencyKey: "house-pool:multi-owner:create:alice",
+  });
+  const youPool = createPool(economy, {
+    name: "You's shared pool",
+    owner: "you",
+    idempotencyKey: "house-pool:multi-owner:create:you",
+  });
+  const yourForeignPoolContribution = economy.reserveHousePoolContribution({
+    poolId: alicePool.pool.id,
+    contributor: "you",
+    amountFluff: 1_000,
+    idempotencyKey: "house-pool:multi-owner:reserve:you-in-alice",
+  });
+  const aliceOwnedPoolContribution = economy.reserveHousePoolContribution({
+    poolId: youPool.pool.id,
+    contributor: "alice",
+    amountFluff: 2_000,
+    idempotencyKey: "house-pool:multi-owner:reserve:alice-in-you",
+  });
+  const yourOwnedPoolContribution = economy.reserveHousePoolContribution({
+    poolId: youPool.pool.id,
+    contributor: "you",
+    amountFluff: 500,
+    expectedRevision: aliceOwnedPoolContribution.pool.revision,
+    idempotencyKey: "house-pool:multi-owner:reserve:you-in-you",
+  });
+  const committed = economy.commitHousePoolContribution({
+    poolId: alicePool.pool.id,
+    contributionId: yourForeignPoolContribution.contribution.id,
+    actor: "you",
+    outcomeId: "shared-outcome",
+    expectedRevision: yourForeignPoolContribution.pool.revision,
+    idempotencyKey: "house-pool:multi-owner:commit:you",
+  });
+
+  assert.deepEqual(economy.housePools().map((pool) => [pool.name, pool.owner]), [
+    ["Alice's shared pool", "u:alice"],
+    ["You's shared pool", "u:you"],
+  ]);
+  assert.deepEqual(economy.housePools({ owner: "you" }).map((pool) => pool.name), ["You's shared pool"]);
+  const allContributions = economy.housePools().flatMap((pool) => pool.contributions);
+  assert.equal(allContributions.filter((entry) => entry.contributor === "u:you" && ["reserved", "committed"].includes(entry.status))
+    .reduce((total, entry) => total + entry.amountFluff, 0), 1_500);
+  assert.equal(allContributions.filter((entry) => entry.contributor !== "u:you" && ["reserved", "committed"].includes(entry.status))
+    .reduce((total, entry) => total + entry.amountFluff, 0), 2_000);
+  assert.equal(committed.contribution.commitment.receiptId, committed.receiptId);
+
+  const journalCount = engine.ledger.journalCount();
+  assert.throws(() => economy.releaseHousePoolContribution({
+    poolId: youPool.pool.id,
+    contributionId: aliceOwnedPoolContribution.contribution.id,
+    actor: "you",
+    expectedRevision: yourOwnedPoolContribution.pool.revision,
+    idempotencyKey: "house-pool:multi-owner:release:foreign",
+  }), (error) => error.code === "NOT_OWNER");
+  assert.equal(engine.ledger.journalCount(), journalCount);
+
+  const released = economy.releaseHousePoolContribution({
+    poolId: youPool.pool.id,
+    contributionId: yourOwnedPoolContribution.contribution.id,
+    actor: "you",
+    expectedRevision: yourOwnedPoolContribution.pool.revision,
+    idempotencyKey: "house-pool:multi-owner:release:own",
+  });
+  assert.equal(released.contribution.status, "released");
+  assert.equal(released.balances.available.TUMBO, 19_000);
+  assert.equal(economy.balances("alice").available.TUMBO, 10_000);
+  assert.equal(economy.verify().escrow.TUMBO, 3_000);
+  assert.equal(economy.verify().ok, true);
+});
+
 test("house-pool reservations survive reload and preserve operation replays", () => {
   const storage = new MemoryStorage();
   const first = fixture({ storage });

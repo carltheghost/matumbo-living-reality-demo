@@ -75,7 +75,76 @@ try {
   assert.equal(remount.keys.length, 3);
   assert.notEqual(remount.keys[2], remount.keys[0], "a remount creates a fresh operation namespace");
   assert.match(remount.status, /Committed/);
-  console.log(JSON.stringify({ passed: true, retry, remount }));
+
+  await page.evaluate(async () => {
+    const { mountSimulatedEconomyPanel } = await import("/matumbo-living-reality-demo/src/render/simulated-economy-panel.js");
+    window.__simulatedEconomyPanelTest.mount.destroy();
+    window.__simulatedEconomyPanelTest.trigger.remove();
+    const pools = [
+      {
+        id: "pool:alice",
+        name: "Alice shared pool",
+        owner: "u:alice",
+        status: "open",
+        revision: 1,
+        capacityFluff: 5_000,
+        totalUnits: 1_000,
+        availableCapacityFluff: 4_000,
+        contributors: [{ account: "u:you", units: 1_000, reservedUnits: 1_000, committedUnits: 0, ownershipNumerator: 1_000, ownershipDenominator: 1_000 }],
+        contributions: [{ id: "contribution:you-in-alice", contributor: "u:you", amountFluff: 1_000, status: "reserved", reserveReceiptId: "reserve:alice-pool", releaseReceiptId: null, commitment: null }],
+      },
+      {
+        id: "pool:you",
+        name: "You shared pool",
+        owner: "u:you",
+        status: "open",
+        revision: 2,
+        capacityFluff: 5_000,
+        totalUnits: 2_500,
+        availableCapacityFluff: 2_500,
+        contributors: [{ account: "u:you", units: 1_500, reservedUnits: 500, committedUnits: 1_000, ownershipNumerator: 1_500, ownershipDenominator: 2_500 }],
+        contributions: [
+          { id: "contribution:alice-in-you", contributor: "u:alice", amountFluff: 1_000, status: "reserved", reserveReceiptId: "reserve:foreign", releaseReceiptId: null, commitment: null },
+          { id: "contribution:you-in-you", contributor: "u:you", amountFluff: 500, status: "reserved", reserveReceiptId: "reserve:you-pool", releaseReceiptId: null, commitment: null },
+          { id: "contribution:you-committed", contributor: "u:you", amountFluff: 1_000, status: "committed", reserveReceiptId: "reserve:committed", releaseReceiptId: null, commitment: { receiptId: "commit:you-pool", outcomeId: "outcome:shared" } },
+        ],
+      },
+    ];
+    const queries = [];
+    const model = {
+      balances: () => ({ available: { TUMBO: 8_500, sMIMAS: 10_000 } }),
+      exchangeOrders: () => [],
+      predictionMarkets: () => [],
+      contracts: () => [],
+      housePools: (...args) => { queries.push(args); return pools; },
+      on: () => () => {},
+      storageStatus: "in-memory",
+      token: { quote: () => ({}), execute: () => ({ amountOut: 1 }) },
+    };
+    const trigger = document.createElement("button");
+    trigger.id = "economy-trigger-house-pool";
+    document.body.append(trigger);
+    const mount = mountSimulatedEconomyPanel({ documentRoot: document, economy: model, trigger, seedLiquidity: false });
+    window.__simulatedEconomyPanelTest = { model, trigger, mount, queries };
+    trigger.click();
+  });
+  await page.locator('[data-action="tab:house-pool"]').click();
+  const housePoolUi = await page.evaluate(() => ({
+    options: [...document.querySelectorAll("#sim-economy-house-pool-select option")].map(option => option.textContent),
+    cards: [...document.querySelectorAll(".sim-economy-house-pool-card")].map(card => card.innerText),
+    reservedSummary: document.querySelectorAll(".sim-economy-balance-card")[2]?.innerText,
+    releaseButtons: document.querySelectorAll('[data-action="house-pool:release"]').length,
+    queries: window.__simulatedEconomyPanelTest.queries,
+  }));
+  assert.deepEqual(housePoolUi.options, ["Select a house pool", "Alice shared pool · 1.000 TUMBO-SIM / 5.000 TUMBO-SIM", "You shared pool · 2.500 TUMBO-SIM / 5.000 TUMBO-SIM"]);
+  assert.equal(housePoolUi.cards.length, 2, "the panel lists pools owned by other accounts");
+  assert.match(housePoolUi.reservedSummary, /2\.500 TUMBO-SIM/);
+  assert.equal(housePoolUi.releaseButtons, 2, "release controls only cover the current user's reserved contributions");
+  const committedCard = housePoolUi.cards.find(card => card.includes("COMMITTED · 1.000"));
+  assert.match(committedCard, /Receipt · commit:you-pool/);
+  assert.doesNotMatch(committedCard, /reserve:committed/);
+  assert.ok(housePoolUi.queries.length > 0 && housePoolUi.queries.every(args => args.length === 0), "panel pool lookups are not owner-filtered");
+  console.log(JSON.stringify({ passed: true, retry, remount, housePoolUi }));
 } finally {
   await browser.close();
 }

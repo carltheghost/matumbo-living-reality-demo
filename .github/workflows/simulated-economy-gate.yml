@@ -7,6 +7,7 @@ on:
       - 'src/render/simulated-economy-panel.js'
       - 'src/domains/token*.js'
       - 'tests/simulated-economy.test.mjs'
+      - 'tests/house-pool-reservations.test.mjs'
       - 'tests/browser-simulated-economy-panel.mjs'
       - 'tests/token-*.test.mjs'
       - 'package.json'
@@ -33,6 +34,9 @@ jobs:
 
       - name: Run simulated economy accounting and persistence tests
         run: node --test tests/simulated-economy.test.mjs
+
+      - name: Run house-pool ownership and escrow tests
+        run: node --test tests/house-pool-reservations.test.mjs
 
       - name: Run complete token ledger test command
         run: npm run test:token
