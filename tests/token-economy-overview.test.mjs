@@ -7,7 +7,7 @@ import {
   createTokenEngine,
   seedDemoWallet,
 } from "../src/domains/token.js";
-import { serializeTokenEngine } from "../src/domains/token-store.js";
+import { loadTokenEngine, serializeTokenEngine } from "../src/domains/token-store.js";
 import { createTokenVaultLedger } from "../src/domains/token-vault.js";
 import { createSimulatedEconomy } from "../src/domains/simulated-economy.js";
 import {
@@ -33,6 +33,13 @@ function marketReceiptFixture() {
   });
   engine.execute(quote, { idempotencyKey: "overview:semantic:market" });
   return { engine, key: "overview:semantic:market" };
+}
+
+class MemoryStorage {
+  constructor() { this.values = new Map(); }
+  getItem(key) { return this.values.get(key) ?? null; }
+  setItem(key, value) { this.values.set(key, String(value)); }
+  removeItem(key) { this.values.delete(key); }
 }
 
 test("exact amount boundaries reject binary-float input", () => {
@@ -155,6 +162,54 @@ test("authorized simulated burns are explicit and remain in the conservation anc
   assert.equal(overview.invariants.ok, true);
 });
 
+test("valid user-to-system credits do not require internal debit authority", () => {
+  const engine = createTokenEngine();
+  fundTumbo(engine, "u:alice", 1_000);
+  engine.ledger.post([
+    { account: "u:alice", asset: "TUMBO", amount: -250 },
+    { account: "sys:treasury", asset: "TUMBO", amount: 250 },
+  ], { idempotencyKey: "overview:treasury-deposit", action: "deposit" });
+
+  const overview = createTokenEconomyOverview({ engine });
+  assert.equal(overview.invariants.ok, true);
+  assert.deepEqual(
+    overview.invariants.idempotency.receiptRegistry.requestMismatches
+      .find((row) => row.key === "overview:treasury-deposit"),
+    undefined,
+  );
+});
+
+test("legacy v2 snapshots reconstruct supported burns without a requests registry", () => {
+  const source = createTokenEngine();
+  fundTumbo(source, "u:alice", 1_000);
+  source.ledger.post([
+    { account: "u:alice", asset: "TUMBO", amount: -123 },
+    { account: "sys:void", asset: "TUMBO", amount: 123 },
+  ], { idempotencyKey: "overview:legacy-burn", action: "burn", voidCreditReason: "burn" });
+
+  const legacy = JSON.parse(serializeTokenEngine(source));
+  delete legacy.requests;
+  const loaded = loadTokenEngine(legacy);
+  const overview = createTokenEconomyOverview({ engine: loaded });
+
+  assert.equal(JSON.parse(loaded.ledger._requestKeys.get("overview:legacy-burn")).voidCreditReason, "burn");
+  assert.equal(overview.invariants.ok, true);
+  assert.equal(overview.assets.TUMBO.categories.burned, 123);
+});
+
+test("legacy reconstruction rejects unsupported Void-credit actions instead of guessing", () => {
+  const source = createTokenEngine();
+  fundTumbo(source, "u:alice", 1_000);
+  source.ledger.post([
+    { account: "u:alice", asset: "TUMBO", amount: -123 },
+    { account: "sys:void", asset: "TUMBO", amount: 123 },
+  ], { idempotencyKey: "overview:legacy-unknown-void", action: "legacy-void-credit", voidCreditReason: "burn" });
+
+  const legacy = JSON.parse(serializeTokenEngine(source));
+  delete legacy.requests;
+  assert.throws(() => loadTokenEngine(legacy), /sys:void|void|request/i);
+});
+
 test("serialized snapshots are read-only projections and do not roll forward", () => {
   const engine = createTokenEngine();
   fundTumbo(engine);
@@ -185,6 +240,161 @@ test("economy adapter exposes escrow obligations and operation uniqueness", () =
   assert.equal(overview.economy.operationRegistry.unique, true);
   assert.equal(overview.economy.ok, true);
   assert.equal(overview.invariants.ok, true);
+});
+
+test("house-pool reservations are included in the read-only escrow obligation audit", () => {
+  const engine = createTokenEngine();
+  fundTumbo(engine, "u:you", 95_500);
+  const storage = new MemoryStorage();
+  const economy = createSimulatedEconomy({ engine, storage });
+  const created = economy.createHousePool({
+    name: "QA-only house pool",
+    capacityFluff: 10_000,
+    idempotencyKey: "overview:house-pool:create",
+  });
+  assert.equal(economy.balances("you").available.TUMBO, 95_500);
+  const reserved = economy.reserveHousePoolContribution({
+    poolId: created.pool.id,
+    contributor: "you",
+    amountFluff: 1_000,
+    idempotencyKey: "overview:house-pool:reserve",
+  });
+
+  assert.equal(economy.balances("you").available.TUMBO, 94_500);
+  assert.equal(reserved.pool.totalUnits, 1_000);
+  assert.equal(reserved.pool.availableCapacityFluff, 9_000);
+  assert.equal(economy.verify().ok, true);
+
+  const overview = createTokenEconomyOverview({ engine, economy });
+  assert.equal(overview.economy.counts.housePools, 1);
+  assert.equal(overview.economy.counts.activeHousePoolContributions, 1);
+  assert.equal(overview.economy.pendingObligationsFluff.TUMBO, 1_000);
+  assert.deepEqual(overview.economy.escrow.TUMBO, {
+    actualFluff: 1_000,
+    expectedFluff: 1_000,
+    deltaFluff: 0,
+    ok: true,
+  });
+  assert.equal(overview.economy.ok, true);
+  assert.equal(overview.invariants.ok, true);
+
+  const reloaded = createSimulatedEconomy({ engine: createTokenEngine(), storage });
+  const reloadedOverview = createTokenEconomyOverview({ engine: reloaded.engine, economy: reloaded });
+  assert.equal(reloaded.balances("you").available.TUMBO, 94_500);
+  assert.equal(reloaded.getHousePool(created.pool.id).totalUnits, 1_000);
+  assert.equal(reloadedOverview.economy.pendingObligationsFluff.TUMBO, 1_000);
+  assert.equal(reloadedOverview.economy.escrow.TUMBO.ok, true);
+  assert.equal(reloadedOverview.invariants.ok, true);
+
+  const released = reloaded.releaseHousePoolContribution({
+    poolId: created.pool.id,
+    contributionId: reserved.contribution.id,
+    actor: "you",
+    expectedRevision: reloaded.getHousePool(created.pool.id).revision,
+    idempotencyKey: "overview:house-pool:release",
+  });
+  assert.equal(released.pool.totalUnits, 0);
+  assert.equal(released.pool.availableCapacityFluff, 10_000);
+  assert.equal(reloaded.balances("you").available.TUMBO, 95_500);
+  const releasedOverview = createTokenEconomyOverview({ engine: reloaded.engine, economy: reloaded });
+  assert.equal(releasedOverview.economy.pendingObligationsFluff.TUMBO, 0);
+  assert.deepEqual(releasedOverview.economy.escrow.TUMBO, {
+    actualFluff: 0,
+    expectedFluff: 0,
+    deltaFluff: 0,
+    ok: true,
+  });
+  assert.equal(releasedOverview.economy.ok, true);
+  assert.equal(releasedOverview.invariants.ok, true);
+
+  const reloadedAfterRelease = createSimulatedEconomy({ engine: createTokenEngine(), storage });
+  const finalOverview = createTokenEconomyOverview({ engine: reloadedAfterRelease.engine, economy: reloadedAfterRelease });
+  assert.equal(reloadedAfterRelease.balances("you").available.TUMBO, 95_500);
+  assert.equal(reloadedAfterRelease.getHousePool(created.pool.id).totalUnits, 0);
+  assert.equal(finalOverview.economy.pendingObligationsFluff.TUMBO, 0);
+  assert.equal(finalOverview.economy.ok, true);
+  assert.equal(finalOverview.invariants.ok, true);
+});
+
+test("committed house-pool contributions count as one active escrow obligation", () => {
+  const engine = createTokenEngine();
+  fundTumbo(engine, "u:you", 20_000);
+  const economy = createSimulatedEconomy({ engine });
+  const created = economy.createHousePool({
+    name: "Committed house pool",
+    capacityFluff: 10_000,
+    idempotencyKey: "overview:committed-pool:create",
+  });
+  const reserved = economy.reserveHousePoolContribution({
+    poolId: created.pool.id,
+    contributor: "you",
+    amountFluff: 2_000,
+    idempotencyKey: "overview:committed-pool:reserve",
+  });
+  const committed = economy.commitHousePoolContribution({
+    poolId: created.pool.id,
+    contributionId: reserved.contribution.id,
+    actor: "you",
+    outcomeId: "outcome:yes",
+    expectedRevision: reserved.pool.revision,
+    idempotencyKey: "overview:committed-pool:commit",
+  });
+
+  const overview = createTokenEconomyOverview({ engine, economy });
+  assert.equal(committed.contribution.status, "committed");
+  assert.equal(overview.economy.counts.activeHousePoolContributions, 1);
+  assert.equal(overview.economy.pendingObligationsFluff.TUMBO, 2_000);
+  assert.equal(overview.economy.escrow.TUMBO.actualFluff, 2_000);
+  assert.equal(overview.economy.escrow.TUMBO.expectedFluff, 2_000);
+  assert.equal(overview.economy.ok, true);
+  assert.equal(overview.invariants.ok, true);
+});
+
+test("only open and partial exchange orders count as active", () => {
+  const engine = createTokenEngine();
+  fundTumbo(engine, "u:alice", 20_000);
+  const economy = createSimulatedEconomy({ engine, seedLiquidity: true });
+  const filled = economy.placeExchangeOrder({
+    owner: "alice", side: "sell", amountBase: 1_000, priceNum: 1, priceDen: 1,
+    idempotencyKey: "overview:active:filled",
+  });
+  const open = economy.placeExchangeOrder({
+    owner: "alice", side: "sell", amountBase: 100, priceNum: 2, priceDen: 1,
+    idempotencyKey: "overview:active:open",
+  });
+  assert.equal(filled.order.status, "filled");
+  assert.equal(open.order.status, "open");
+
+  const overview = createTokenEconomyOverview({ engine, economy });
+  const expectedActive = economy.snapshot().exchange.orders.filter((order) => ["open", "partial"].includes(order.status)).length;
+  assert.equal(overview.economy.counts.activeExchangeOrders, expectedActive);
+  assert.equal(overview.economy.counts.activeExchangeOrders, economy.snapshot().exchange.orders.length - 1);
+});
+
+test("large canonical history refresh is measured with a bounded valid fixture", () => {
+  // This is a bounded regression guard, not an instant-audit promise; an
+  // independent 10,000-journal benchmark is approximately 1.82 seconds.
+  const engine = createTokenEngine();
+  fundTumbo(engine, "u:alice", 50_000);
+  fundTumbo(engine, "u:bob", 50_000);
+  const transferPairs = 4_997; // 4 genesis + 2 funding + 9,994 transfers = 10,000 journals.
+  for (let index = 0; index < transferPairs; index += 1) {
+    engine.ledger.post([
+      { account: "u:alice", asset: "TUMBO", amount: -1 },
+      { account: "u:bob", asset: "TUMBO", amount: 1 },
+    ], { idempotencyKey: `overview:history:ab:${index}`, action: "send" });
+    engine.ledger.post([
+      { account: "u:bob", asset: "TUMBO", amount: -1 },
+      { account: "u:alice", asset: "TUMBO", amount: 1 },
+    ], { idempotencyKey: `overview:history:ba:${index}`, action: "send" });
+  }
+
+  const startedAt = performance.now();
+  const overview = createTokenEconomyOverview({ engine });
+  const elapsedMs = performance.now() - startedAt;
+  assert.equal(overview.source.journalCount, 10_000);
+  assert.equal(overview.invariants.ok, true);
+  assert.ok(elapsedMs < 5_000, `10,000-journal overview refresh took ${elapsedMs.toFixed(1)} ms`);
 });
 
 test("the projection surfaces negative-balance corruption instead of hiding it", () => {

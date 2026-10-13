@@ -19,6 +19,10 @@ import {
 import {
   CONTRACT_STATUSES,
   EXCHANGE_ORDER_STATUSES,
+  HOUSE_POOL_ASSET,
+  HOUSE_POOL_CONTRIBUTION_STATUSES,
+  HOUSE_POOL_MAX_CAPACITY_FLUFF,
+  HOUSE_POOL_MAX_CONTRIBUTIONS,
   PREDICTION_MARKET_STATUSES,
   PREDICTION_POSITION_STATUSES,
 } from "./simulated-economy.js";
@@ -263,9 +267,14 @@ function receiptConsistency(engine, journals) {
         ? (MARKET_ACTIONS.includes(journal.action) ? "tithe" : "burn")
         : null;
       if (request.voidCreditReason !== expectedVoidCreditReason) fields.push("voidCreditReason");
-      const hasSystemPosting = journal.postings.some((posting) => typeof posting?.account === "string" && posting.account.startsWith("sys:"));
-      if (hasSystemPosting && request.authority !== "internal") fields.push("authority");
-      if (!hasSystemPosting && request.authority !== null && request.authority !== "internal") fields.push("authority");
+      // System-account credits are valid public-facing legs (for example a
+      // user deposit into treasury or escrow). Only a debit out of a system
+      // account needs the ledger's internal authority; matching every
+      // sys:* posting here incorrectly rejects those valid credits.
+      const hasSystemDebit = journal.postings.some((posting) =>
+        typeof posting?.account === "string" && posting.account.startsWith("sys:") && posting.amount < 0);
+      if (hasSystemDebit && request.authority !== "internal") fields.push("authority");
+      if (!hasSystemDebit && request.authority !== null && request.authority !== "internal") fields.push("authority");
       if (fields.length) result.requestMismatches.push({ key, fields });
     }
   }
@@ -456,6 +465,7 @@ function validateEconomySnapshot(state) {
   const markets = requiredArray(predictions.markets, "predictions.markets");
   const positions = requiredArray(predictions.positions, "predictions.positions");
   const contracts = requiredArray(state.contracts, "contracts");
+  const housePools = requiredArray(state.housePools, "housePools");
   const events = requiredArray(state.events, "events");
   const operations = requiredArray(state.operations, "operations");
 
@@ -536,6 +546,69 @@ function validateEconomySnapshot(state) {
     requiredArray(contract.history, `contract ${id}.history`);
   }
 
+  const housePoolIds = new Set();
+  const housePoolContributionIds = new Set();
+  for (const pool of housePools) {
+    economyObject(pool, "house pool");
+    const id = economyString(pool.id, "house pool id");
+    if (housePoolIds.has(id)) throw new TypeError(`simulated economy snapshot has duplicate house pool ${id}`);
+    housePoolIds.add(id);
+    if (typeof pool.name !== "string" || !pool.name || pool.name.trim() !== pool.name || pool.name.length > 120) {
+      throw new TypeError(`simulated economy snapshot has invalid house-pool name for ${id}`);
+    }
+    try { assertAccount(pool.owner); } catch { throw new TypeError(`simulated economy snapshot has invalid house-pool owner for ${id}`); }
+    if (!isUserAccount(pool.owner) || pool.asset !== HOUSE_POOL_ASSET || pool.status !== "open") {
+      throw new TypeError(`simulated economy snapshot has invalid house-pool identity or status for ${id}`);
+    }
+    economyNonNegative(pool.capacityFluff, `housePools.${id}.capacityFluff`);
+    economyNonNegative(pool.revision, `housePools.${id}.revision`);
+    if (pool.capacityFluff <= 0 || pool.capacityFluff > HOUSE_POOL_MAX_CAPACITY_FLUFF) {
+      throw new TypeError(`simulated economy snapshot has invalid house-pool capacity for ${id}`);
+    }
+    const contributions = requiredArray(pool.contributions, `house pool ${id}.contributions`);
+    if (contributions.length > HOUSE_POOL_MAX_CONTRIBUTIONS) {
+      throw new TypeError(`simulated economy snapshot has too many contributions for house pool ${id}`);
+    }
+    let activeAmount = 0;
+    for (const contribution of contributions) {
+      economyObject(contribution, "house-pool contribution");
+      const contributionId = economyString(contribution.id, "house-pool contribution id");
+      if (housePoolContributionIds.has(contributionId)) {
+        throw new TypeError(`simulated economy snapshot has duplicate house-pool contribution ${contributionId}`);
+      }
+      housePoolContributionIds.add(contributionId);
+      if (contribution.poolId !== id || !isUserAccount(contribution.contributor)) {
+        throw new TypeError(`simulated economy snapshot has invalid house-pool contribution owner or reference for ${contributionId}`);
+      }
+      economyNonNegative(contribution.amountFluff, `house-pool contribution ${contributionId}.amountFluff`);
+      if (contribution.amountFluff <= 0 || contribution.amountFluff > HOUSE_POOL_MAX_CAPACITY_FLUFF || contribution.amountFluff > pool.capacityFluff) {
+        throw new TypeError(`simulated economy snapshot has invalid house-pool contribution amount for ${contributionId}`);
+      }
+      if (!HOUSE_POOL_CONTRIBUTION_STATUSES.includes(contribution.status) || typeof contribution.reserveReceiptId !== "string") {
+        throw new TypeError(`simulated economy snapshot has invalid house-pool contribution lifecycle for ${contributionId}`);
+      }
+      if (contribution.status === "released") {
+        if (typeof contribution.releaseReceiptId !== "string" || contribution.commitment !== null) {
+          throw new TypeError(`simulated economy snapshot has unreconciled released house-pool contribution ${contributionId}`);
+        }
+      } else {
+        activeAmount = safeInteger(activeAmount + contribution.amountFluff, `house pool ${id} active contribution total`, { signed: false });
+        if (contribution.releaseReceiptId !== null) {
+          throw new TypeError(`simulated economy snapshot has a release receipt on active house-pool contribution ${contributionId}`);
+        }
+        if (contribution.status === "reserved" && contribution.commitment !== null) {
+          throw new TypeError(`simulated economy snapshot has a commitment on reserved house-pool contribution ${contributionId}`);
+        }
+        if (contribution.status === "committed" && (!contribution.commitment || typeof contribution.commitment !== "object" ||
+            typeof contribution.commitment.outcomeId !== "string" || !contribution.commitment.outcomeId ||
+            typeof contribution.commitment.receiptId !== "string")) {
+          throw new TypeError(`simulated economy snapshot has an invalid commitment on house-pool contribution ${contributionId}`);
+        }
+      }
+    }
+    if (activeAmount > pool.capacityFluff) throw new TypeError(`simulated economy snapshot has over-capacity house pool ${id}`);
+  }
+
   const operationKeys = new Set();
   for (const operation of operations) {
     economyObject(operation, "economy operation");
@@ -543,7 +616,7 @@ function validateEconomySnapshot(state) {
     if (operationKeys.has(key) || typeof operation.requestHash !== "string") throw new TypeError(`simulated economy snapshot has invalid economy operation registry entry ${key}`);
     operationKeys.add(key);
   }
-  return { orders, trades, markets, positions, contracts, events, operations, baseline };
+  return { orders, trades, markets, positions, contracts, housePools, events, operations, baseline };
 }
 
 function economyReport(economy, engine) {
@@ -555,8 +628,8 @@ function economyReport(economy, engine) {
     if (typeof economy.snapshot !== "function") throw new TypeError("simulated economy adapter must expose snapshot()");
     const state = economy.snapshot();
     if (!state || typeof state !== "object" || Array.isArray(state)) throw new TypeError("simulated economy snapshot must be an object");
-    const { orders, trades, markets, positions, contracts, events, operations, baseline: escrowBaseline } = validateEconomySnapshot(state);
-    const activeOrders = orders.filter((order) => order.status !== "cancelled");
+    const { orders, trades, markets, positions, contracts, housePools, events, operations, baseline: escrowBaseline } = validateEconomySnapshot(state);
+    const activeOrders = orders.filter((order) => ["open", "partial"].includes(order.status));
     const obligations = { TUMBO: 0, sMIMAS: 0 };
     for (const order of activeOrders) {
       if (order.side === "sell") obligations.TUMBO = safeInteger(obligations.TUMBO + order.remainingBase, "TUMBO exchange obligation", { signed: false });
@@ -564,6 +637,17 @@ function economyReport(economy, engine) {
     }
     for (const market of markets) if (market.status === "open") obligations.TUMBO = safeInteger(obligations.TUMBO + market.poolFluff, "TUMBO prediction obligation", { signed: false });
     for (const contract of contracts) if (contract.funding?.status === "funded") obligations.TUMBO = safeInteger(obligations.TUMBO + contract.amountFluff, "TUMBO contract obligation", { signed: false });
+    for (const pool of housePools) {
+      for (const contribution of pool.contributions) {
+        if (contribution.status === "reserved" || contribution.status === "committed") {
+          obligations[HOUSE_POOL_ASSET] = safeInteger(
+            obligations[HOUSE_POOL_ASSET] + contribution.amountFluff,
+            `${HOUSE_POOL_ASSET} house-pool obligation`,
+            { signed: false },
+          );
+        }
+      }
+    }
     const baseline = {
       TUMBO: escrowBaseline.TUMBO,
       sMIMAS: escrowBaseline.sMIMAS,
@@ -594,6 +678,11 @@ function economyReport(economy, engine) {
         openPredictionMarkets: markets.filter((market) => market.status === "open").length,
         openPredictionPositions: positions.filter((position) => position.status === "open").length,
         fundedContracts: contracts.filter((contract) => contract.funding?.status === "funded").length,
+        housePools: housePools.length,
+        activeHousePoolContributions: housePools.reduce(
+          (count, pool) => count + pool.contributions.filter((contribution) => ["reserved", "committed"].includes(contribution.status)).length,
+          0,
+        ),
         events: events.length,
         operations: operations.length,
       },
@@ -695,7 +784,7 @@ export function createTokenEconomyOverview({ engine = null, token = null, snapsh
       unit: TOKEN_ECONOMY_OVERVIEW_UNIT,
       available: "Balances in u:/b: accounts, including savings pockets represented as user accounts.",
       locked: "The canonical sys:vault balance; wallet locks and token-vault positions share this account.",
-      reserved: "The canonical sys:escrow balance; exchange, prediction, and contract obligations are included when their adapter is supplied.",
+      reserved: "The canonical sys:escrow balance; exchange, prediction, contract, and house-pool obligations are included when their adapter is supplied.",
       burned: "The positive sys:void balance. It remains in the configured conservation anchor; it is not spendable.",
       circulating: "available + locked + reserved; excludes treasury, faucet, market inventory, issuance mirror, and burned balance.",
       recordedSupply: "The runtime conservation anchor from the canonical token configuration; this view does not choose a public supply allocation.",

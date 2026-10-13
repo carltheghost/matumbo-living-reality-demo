@@ -61,6 +61,7 @@ def main() -> None:
                 page.locator(f'[data-companion="roster"] [data-character-id="{character_id}"]').click()
                 page.locator('[data-companion="place"]').click()
                 page.wait_for_function(
+                    "document.querySelector('[data-companion=\"persistence\"]')?.dataset.placed === 'true' && "
                     "document.querySelector('[data-companion=\"persistence\"]')?.dataset.state === 'saved'"
                 )
 
@@ -98,7 +99,10 @@ def main() -> None:
             fresh_context, fresh, fresh_errors = polish.open_phone(browser, width=500, height=757)
             fresh.locator('[data-companion="roster"] [data-character-id="relic"]').click()
             fresh.locator('[data-companion="place"]').click()
-            fresh.wait_for_function("document.querySelector('[data-companion=\"persistence\"]')?.dataset.state === 'saved'")
+            fresh.wait_for_function(
+                "document.querySelector('[data-companion=\"persistence\"]')?.dataset.placed === 'true' && "
+                "document.querySelector('[data-companion=\"persistence\"]')?.dataset.state === 'saved'"
+            )
             fresh_state = inspect_narrow_state(fresh)
             fresh.screenshot(path=str(EVIDENCE / "relic-fresh-narrow-expanded.png"))
             failures.extend(

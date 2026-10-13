@@ -43,9 +43,13 @@ def wait_for_local(page: Page, route: str) -> None:
     page.wait_for_function(
         "document.querySelector('.token-economy-overview')?.textContent.includes('Intended fixed maximum: 42,000,000,000,000 TUMBO')"
     )
+    page.wait_for_function(
+        "document.querySelector('.token-economy-overview-host')?.dataset.auditState === 'current'"
+    )
     assert page.locator(".sim-economy-kicker").inner_text() == "FIELD OBJECT · LOCAL REHEARSAL"
     assert "No live market" in page.locator(".sim-economy-boundary").inner_text()
     overview_text = page.locator(".token-economy-overview").inner_text()
+    assert re.search(r"Overall accounting\s+healthy", overview_text), overview_text
     assert "Current issued simulation supply: 10,000,000 TUMBO-SIM (10,000,000,000 fluff)" in overview_text
     assert "Intended fixed maximum: 42,000,000,000,000 TUMBO (42,000,000,000,000,000 fluff)" in overview_text
     assert re.search(r"Rewards\s+not-observed", overview_text)
@@ -68,6 +72,9 @@ def committed(page: Page) -> None:
     page.wait_for_timeout(500)
     page.wait_for_function("!document.querySelector('#simulated-economy-panel')?.dataset.busy")
     page.wait_for_function("document.querySelector('.sim-economy-status')?.textContent.includes('Committed')")
+    page.wait_for_function(
+        "document.querySelector('.token-economy-overview-host')?.dataset.auditState === 'current'"
+    )
 
 
 def dispatch_clicks_same_task(page: Page, locator) -> None:
@@ -220,6 +227,10 @@ def house_pool_flow(page: Page) -> dict[str, Any]:
     page.locator("#sim-economy-house-pool-name").fill("Mounted house pool")
     page.locator("#sim-economy-house-pool-capacity").fill("3000")
     page.locator('[data-action="house-pool:create"]').click()
+    page.wait_for_function(
+        "document.querySelector('.token-economy-overview-host')?.dataset.auditState === 'pending'"
+    )
+    assert "pending" in page.locator(".token-economy-overview-audit").inner_text().lower()
     committed(page)
     pool = page.locator(".sim-economy-house-pool-card").filter(has_text="Mounted house pool")
     assert pool.count() == 1
@@ -236,6 +247,8 @@ def house_pool_flow(page: Page) -> dict[str, Any]:
     assert "available" in pool_text.lower() and "reserved" in pool_text.lower()
     persistence = page.locator(".sim-economy-house-pool-storage").inner_text().lower()
     assert "durable local snapshot" in persistence or "persisted-local-snapshot" in persistence, persistence
+    overview_text = page.locator(".token-economy-overview").inner_text()
+    assert re.search(r"Overall accounting\s+healthy", overview_text), overview_text
 
     return page.evaluate(
         """
@@ -262,6 +275,8 @@ def release_house_pool_contributions(page: Page) -> dict[str, Any]:
     pool = page.locator(".sim-economy-house-pool-card").filter(has_text="Mounted house pool")
     assert "RELEASED" in pool.inner_text()
     assert not page.locator('[data-action="house-pool:release"]').count()
+    overview_text = page.locator(".token-economy-overview").inner_text()
+    assert re.search(r"Overall accounting\s+healthy", overview_text), overview_text
     return page.evaluate(
         """
         () => {

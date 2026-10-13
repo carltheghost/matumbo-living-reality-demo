@@ -1,0 +1,68 @@
+name: Council orchestration simulation
+
+on:
+  pull_request:
+    paths:
+      - "src/domains/council-orchestrator.js"
+      - "tests/council-orchestrator.test.mjs"
+      - "scripts/council-demo.mjs"
+      - "docs/COUNCIL-SIMULATION.md"
+      - ".github/workflows/council-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  council:
+    name: Focused council simulation checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Check council syntax
+        run: |
+          node --check src/domains/council-orchestrator.js
+          node --check scripts/council-demo.mjs
+
+      - name: Run focused council regressions
+        run: node --test tests/council-orchestrator.test.mjs
+
+      - name: Verify deterministic no-external-effects demo
+        shell: bash
+        run: |
+          set -euo pipefail
+          report="$(mktemp)"
+          trap 'rm -f "$report"' EXIT
+          node scripts/council-demo.mjs >"$report"
+          grep -q '^SIMULATION ONLY' "$report"
+          COUNCIL_DEMO_REPORT="$report" node --input-type=module <<'NODE'
+          import fs from "node:fs";
+
+          const report = fs.readFileSync(process.env.COUNCIL_DEMO_REPORT, "utf8");
+          const jsonStart = report.indexOf("{");
+          if (jsonStart < 0) throw new Error("demo JSON missing");
+          const result = JSON.parse(report.slice(jsonStart));
+          if (result.task?.status !== "completed") throw new Error("demo did not complete");
+          if (result.noExternalEffects !== true) throw new Error("external-effects boundary failed");
+          if (!result.boundary?.includes("No provider login")) throw new Error("provider-login boundary failed");
+          if (result.connectionStates?.some((state) => state.status !== "manual-setup-required" || state.apiKeyEntry !== false)) {
+            throw new Error("demo reported an unapproved provider setup state");
+          }
+          if (result.pendingActionRequests?.some((request) => request.executed !== false || request.status !== "proposal-only")) {
+            throw new Error("demo reported an executed external action");
+          }
+          console.log(JSON.stringify({
+            status: result.task.status,
+            noExternalEffects: result.noExternalEffects,
+            connectionCount: result.connectionStates?.length ?? 0,
+            pendingActionCount: result.pendingActionRequests?.length ?? 0,
+          }));
+          NODE
