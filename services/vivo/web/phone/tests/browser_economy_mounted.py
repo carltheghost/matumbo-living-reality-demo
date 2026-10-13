@@ -22,6 +22,10 @@ def wait_for_local(page: Page, route: str) -> None:
     page.wait_for_selector("#enterPhoneLocal")
     page.get_by_role("button", name=re.compile("Enter local Vivo")).click()
     page.wait_for_function("Boolean(window.VivaPhoneEngine && window.VivaPhoneEngine.active)")
+    world_context = page.locator(".vivo-companion-world-context")
+    if not world_context.evaluate("node => node.open"):
+        page.locator(".vivo-companion-world-context > summary").click()
+    page.wait_for_function("document.querySelector('.vivo-companion-world-context')?.open === true")
     page.wait_for_selector("#phoneEconomyContext:not([hidden])")
     page.wait_for_function("document.querySelector('#phoneEconomyStatus').textContent.includes('TUMBO-SIM')")
     field_selection = page.locator("#phoneFieldEntity")
