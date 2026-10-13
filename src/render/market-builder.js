@@ -1,89 +1,584 @@
-import {summarizeMarket,createMarketBook} from '../domains/market-engine.js?v=20260922-cache2';
+import { createMarketBook } from '../domains/market-engine.js?v=20260922-cache2';
 
-export function mountMarketBuilder({documentRoot,panel,getSource}) {
+const STORAGE_KEY = 'matumbo.contract-workshop.v1';
+const MAX_QUERY = 160;
+
+const clone = (value) => typeof structuredClone === 'function'
+  ? structuredClone(value)
+  : JSON.parse(JSON.stringify(value));
+
+function text(value, fallback = '—') {
+  return value === null || value === undefined || value === '' ? fallback : String(value);
+}
+
+function appendText(documentRoot, tag, value, className = '') {
+  const element = documentRoot.createElement(tag);
+  if (className) element.className = className;
+  element.textContent = text(value);
+  return element;
+}
+
+function safeDate(value) {
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? new Date(parsed).toLocaleString() : 'Not set';
+}
+
+function localDateInput(value) {
+  const at = typeof value === 'number' ? value : Date.parse(value);
+  if (!Number.isFinite(at)) return '';
+  return new Date(at - new Date(at).getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+
+function recordId() {
+  return globalThis.crypto?.randomUUID?.()
+    ?? `market:${Date.now()}:${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function hasFormSupport(documentRoot) {
   // Minimal DOM fixtures intentionally omit native form APIs.
-  if(!documentRoot.defaultView?.HTMLFormElement)return null;
-  const root=documentRoot.createElement('details');root.id='market-builder';root.open=true;
-  root.style.cssText='flex-shrink:0;padding:12px;border:1px solid #815267;border-radius:10px;background:#091521';
-  const heading=documentRoot.createElement('summary');heading.textContent='Contract Workshop · personal markets, pools and child contracts';root.append(heading);
-  const note=documentRoot.createElement('p');note.textContent='Your authored terms or a public sports observation. Shared records across normal and cube views; saved on this browser. Not shared accounts, authenticated people, wagering or settlement.';root.append(note);
-  const sourceLink=documentRoot.createElement('a');sourceLink.href='?feature=multi-sport-events';sourceLink.textContent='Open all connected sports → choose a provider record → create contract';root.append(sourceLink);
-  const form=documentRoot.createElement('form');form.style.cssText='display:grid;gap:8px';root.append(form);
-  function field(title,tag='input',type='text') {
-    const label=documentRoot.createElement('label');label.textContent=title;
-    const control=documentRoot.createElement(tag);control.setAttribute('aria-label',title);if(tag==='input')control.type=type;
-    control.style.cssText='display:block;width:100%;box-sizing:border-box;padding:8px;background:#0d2233;color:#eef6ff;border:1px solid #456175;border-radius:5px';label.append(control);form.append(label);return control;
+  return Boolean(documentRoot.defaultView?.HTMLFormElement);
+}
+
+export function mountMarketBuilder({
+  documentRoot,
+  panel,
+  getSource,
+  getContracts = () => [],
+  onOpenContract = null,
+} = {}) {
+  if (!hasFormSupport(documentRoot)) return null;
+
+  const root = documentRoot.createElement('details');
+  root.id = 'market-builder';
+  root.className = 'marketplace-surface';
+  root.open = true;
+  const heading = documentRoot.createElement('summary');
+  heading.textContent = 'Marketplace · local listings';
+  root.append(heading);
+
+  const note = appendText(documentRoot, 'p', 'Browse local contract-linked listings and inspect their terms. This workspace is simulation-only: no purchase, custody, payout, signing, trade or settlement is available.');
+  note.className = 'marketplace-boundary';
+  root.append(note);
+
+  const sourceLink = documentRoot.createElement('a');
+  sourceLink.href = '?feature=multi-sport-events';
+  sourceLink.textContent = 'Open public sports evidence → select a record for provenance';
+  sourceLink.className = 'marketplace-source-link';
+  root.append(sourceLink);
+
+  const status = appendText(documentRoot, 'p', '');
+  status.className = 'marketplace-status';
+  status.setAttribute('role', 'status');
+  root.append(status);
+
+  const workspace = documentRoot.createElement('div');
+  workspace.className = 'marketplace-layout';
+  root.append(workspace);
+
+  const composer = documentRoot.createElement('form');
+  composer.className = 'marketplace-composer';
+  composer.noValidate = true;
+  composer.append(
+    appendText(documentRoot, 'h3', 'Create a local listing'),
+    appendText(documentRoot, 'p', 'Create a reviewable listing from authored terms or a selected public observation. Creating a listing does not create a contract or authorize any transaction.', 'marketplace-hint'),
+  );
+
+  function field(labelText, tag = 'input', type = 'text') {
+    const label = documentRoot.createElement('label');
+    label.className = 'marketplace-field';
+    label.append(appendText(documentRoot, 'span', labelText, 'marketplace-label'));
+    const control = documentRoot.createElement(tag);
+    control.setAttribute('aria-label', labelText);
+    if (tag === 'input') control.type = type;
+    label.append(control);
+    composer.append(label);
+    return control;
   }
-  function option(select,value,text){const o=documentRoot.createElement('option');o.value=value;o.textContent=text;select.append(o);}
-  const origin=field('Source mode','select');option(origin,'authored','Personal · authored terms');option(origin,'provider','Selected public sports observation');
-  const author=field('Creator label');author.maxLength=64;
-  const parent=field('Parent contract','select');
-  const kind=field('Contract type','select');for(const value of ['single','pool']){const o=documentRoot.createElement('option');o.value=value;o.textContent=value==='single'?'Single entry':'Pool · multiple local entries';kind.append(o);}
-  const question=field('Your market question');question.maxLength=160;
-  const terms=field('Terms and completion criteria','textarea');terms.maxLength=4000;
-  const outcomes=field('Outcomes · one per line','textarea');outcomes.rows=3;
-  const closes=field('Close entries at','input','datetime-local');
-  const create=documentRoot.createElement('button');create.type='submit';create.textContent='Create rule-based market';form.append(create);
-  const status=documentRoot.createElement('p');status.setAttribute('role','status');root.append(status);
-  const list=documentRoot.createElement('div');root.append(list);
-  let book,storageBlocked=false,selected=null,view=null;
-  const storageKey='matumbo.contract-workshop.v1';
-  try{book=createMarketBook(JSON.parse(documentRoot.defaultView.localStorage.getItem(storageKey)||'[]'));}catch{book=createMarketBook();storageBlocked=true;status.textContent='Saved workspace could not be read; existing storage will not be overwritten. Export new work before leaving.';}
-  let markets=book.snapshot();
-  const viewport=documentRoot.createElement('div');viewport.style.cssText='height:320px;position:relative;overflow:hidden;border:1px solid #456175';viewport.hidden=true;root.insertBefore(viewport,list);
-  const controls=documentRoot.createElement('div');root.insertBefore(controls,viewport);
-  const workspace=documentRoot.createElement('div');workspace.className='contract-workshop-layout';root.append(workspace);workspace.append(form,controls,viewport,list);form.className='contract-workshop-form';controls.className='contract-workshop-controls';viewport.className='contract-workshop-viewport';list.className='contract-workshop-records';
-  const styles=documentRoot.createElement('style');styles.textContent=`
-    #contracts-markets-console:has(#market-builder){width:min(1120px,calc(100vw - 32px))!important;max-width:calc(100vw - 24px)!important;}
-    #market-builder{color:#e5eff9;font:14px/1.5 system-ui;border-color:#8d764f!important;background:linear-gradient(140deg,#112637,#081321)!important;}
-    #market-builder summary{font-size:20px;font-weight:650;color:#f1d4a1;cursor:pointer;}
-    #market-builder a{color:#83d7fa;}
-    #market-builder button{background:#16384b;color:#f0e3c7;border:1px solid #4a6d7c;border-radius:6px;padding:9px 12px;cursor:pointer;min-height:44px;}
-    #market-builder button:hover,#market-builder button:focus-visible{background:#25506a;outline:2px solid #d7b673;outline-offset:2px;}
-    #market-builder input,#market-builder select{max-width:100%;box-sizing:border-box;background:#0d2233;color:#edf6ff;border:1px solid #547084;border-radius:5px;padding:8px;}
-    .contract-workshop-layout{display:grid;grid-template-columns:minmax(230px,320px) minmax(0,1fr);gap:12px;align-items:start;}
-    .contract-workshop-form{grid-column:1;grid-row:1 / span 3;}
-    .contract-workshop-controls{grid-column:2;grid-row:1;}
-    .contract-workshop-viewport{grid-column:2;grid-row:2;background:radial-gradient(ellipse at center,#183b58,#06101e);}
-    .contract-workshop-records{grid-column:2;grid-row:3;max-height:420px;overflow:auto;overflow-wrap:anywhere;padding:0 8px;}
-    @media(max-width:700px){.contract-workshop-layout{display:flex;flex-direction:column}.contract-workshop-layout>*{width:100%;box-sizing:border-box}.contract-workshop-records{max-height:none;overflow:visible}}
-  `;root.append(styles);
-  action('Normal view',()=>{viewport.hidden=true;view?.setVisible(false);},controls);
-  action('Export workspace',()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(book.snapshot(),null,2)],{type:'application/json'}));const link=documentRoot.createElement('a');link.href=url;link.download='matumbo-contract-workspace.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);},controls);
-  action('Cube view',()=>{viewport.hidden=false;if(view){view.setVisible(true);return;}status.textContent='Loading contract geometry…';import('./market-constellation.js?v=20260922-cache2').then(({mountMarketConstellation})=>{if(!view)view=mountMarketConstellation({host:viewport,onSelect:id=>{selected=id;render();list.querySelector('[data-selected="true"]')?.scrollIntoView({block:'nearest'});}});view.update(markets,selected);}).catch(error=>{viewport.hidden=true;status.textContent='3D unavailable: '+error.message;});},controls);
-  book.subscribe(records=>{markets=records;try{if(storageBlocked)throw Error();documentRoot.defaultView.localStorage.setItem(storageKey,JSON.stringify(records));}catch{storageBlocked=true;}root.dataset.previewDirty=storageBlocked?'true':'false';render();});
-  function action(title,fn,parent) {const b=documentRoot.createElement('button');b.type='button';b.textContent=title;b.style.cssText='margin:4px;min-height:44px';b.onclick=()=>{try{fn();status.textContent=storageBlocked?'Storage unavailable: export work before leaving.':'Saved on this browser · both views use the same records';render();}catch(e){status.textContent=e.message;}};parent.append(b);}
-  function render(){
+
+  function addOption(select, value, label) {
+    const option = documentRoot.createElement('option');
+    option.value = value;
+    option.textContent = label;
+    select.append(option);
+  }
+
+  const origin = field('Source mode', 'select');
+  addOption(origin, 'authored', 'Personal · authored terms');
+  addOption(origin, 'provider', 'Public observation · selected evidence');
+  const author = field('Creator label');
+  author.maxLength = 64;
+  const parent = field('Parent listing (optional)', 'select');
+  const governing = field('Governing contract (optional)', 'select');
+  const kind = field('Listing type', 'select');
+  addOption(kind, 'single', 'Single local entry');
+  addOption(kind, 'pool', 'Pool · multiple local entries');
+  const question = field('Listing question');
+  question.maxLength = 160;
+  const terms = field('Terms and completion criteria', 'textarea');
+  terms.maxLength = 4000;
+  terms.rows = 5;
+  const outcomes = field('Outcomes · one per line', 'textarea');
+  outcomes.maxLength = 1000;
+  outcomes.rows = 3;
+  const closes = field('Close entries at', 'input', 'datetime-local');
+  closes.value = localDateInput(Date.now() + 86400000);
+  const sourceReadout = appendText(documentRoot, 'p', 'Authored listing · no public observation selected', 'marketplace-source-readout');
+  composer.append(sourceReadout);
+  const create = documentRoot.createElement('button');
+  create.type = 'submit';
+  create.className = 'marketplace-button marketplace-primary';
+  create.textContent = 'Create local listing';
+  composer.append(create);
+  workspace.append(composer);
+
+  const browse = documentRoot.createElement('section');
+  browse.className = 'marketplace-browse';
+  browse.append(appendText(documentRoot, 'h3', 'Browse listings'));
+  const filters = documentRoot.createElement('div');
+  filters.className = 'marketplace-filters';
+  const searchLabel = documentRoot.createElement('label');
+  searchLabel.className = 'marketplace-field';
+  searchLabel.append(appendText(documentRoot, 'span', 'Search', 'marketplace-label'));
+  const search = documentRoot.createElement('input');
+  search.type = 'search';
+  search.name = 'marketplace-search';
+  search.placeholder = 'Question, terms or contract ID';
+  search.maxLength = MAX_QUERY;
+  searchLabel.append(search);
+  filters.append(searchLabel);
+  const state = documentRoot.createElement('select');
+  state.name = 'marketplace-state';
+  state.setAttribute('aria-label', 'Listing state');
+  addOption(state, 'all', 'All states');
+  addOption(state, 'open', 'Open');
+  addOption(state, 'closed', 'Closed');
+  filters.append(state);
+  const provenance = documentRoot.createElement('select');
+  provenance.name = 'marketplace-provenance';
+  provenance.setAttribute('aria-label', 'Listing provenance');
+  addOption(provenance, 'all', 'All provenance');
+  addOption(provenance, 'authored', 'Authored');
+  addOption(provenance, 'provider', 'Public observation');
+  filters.append(provenance);
+  browse.append(filters);
+  const summary = documentRoot.createElement('p');
+  summary.className = 'marketplace-summary';
+  browse.append(summary);
+  const list = documentRoot.createElement('div');
+  list.className = 'marketplace-list';
+  list.setAttribute('aria-label', 'Local marketplace listings');
+  browse.append(list);
+  workspace.append(browse);
+
+  const detail = documentRoot.createElement('section');
+  detail.className = 'marketplace-detail';
+  detail.setAttribute('aria-live', 'polite');
+  detail.append(appendText(documentRoot, 'h3', 'Listing detail'));
+  workspace.append(detail);
+
+  const controls = documentRoot.createElement('div');
+  controls.className = 'marketplace-controls';
+  const normalButton = documentRoot.createElement('button');
+  normalButton.type = 'button';
+  normalButton.className = 'marketplace-button';
+  normalButton.textContent = 'List view';
+  controls.append(normalButton);
+  const cubeButton = documentRoot.createElement('button');
+  cubeButton.type = 'button';
+  cubeButton.className = 'marketplace-button';
+  cubeButton.textContent = 'Cube view';
+  controls.append(cubeButton);
+  const exportButton = documentRoot.createElement('button');
+  exportButton.type = 'button';
+  exportButton.className = 'marketplace-button';
+  exportButton.textContent = 'Export workspace';
+  controls.append(exportButton);
+  root.append(controls);
+
+  const viewport = documentRoot.createElement('div');
+  viewport.className = 'marketplace-cube-viewport';
+  viewport.hidden = true;
+  root.append(viewport);
+
+  let book;
+  let markets = [];
+  let contracts = [];
+  let selected = null;
+  let searchQuery = '';
+  let stateFilter = 'all';
+  let provenanceFilter = 'all';
+  let view = null;
+  let storageRaw = null;
+  let storageState = 'ready';
+  let storageMessage = '';
+  let unsubscribe = null;
+
+  function storage() {
+    try { return documentRoot.defaultView?.localStorage ?? null; } catch { return null; }
+  }
+
+  function readStorage() {
+    const store = storage();
+    if (!store) {
+      storageState = 'unavailable';
+      storageMessage = 'Browser storage is unavailable; new work remains memory-only. Export before leaving.';
+      return [];
+    }
+    try {
+      storageRaw = store.getItem(STORAGE_KEY);
+      if (!storageRaw) return [];
+      const parsed = JSON.parse(storageRaw);
+      return createMarketBook(parsed).snapshot();
+    } catch (error) {
+      storageState = 'invalid';
+      storageMessage = `Saved workspace could not be read (${error.message}); existing storage was not overwritten. Export new work before leaving.`;
+      return [];
+    }
+  }
+
+  function assertStorageCurrent() {
+    if (storageState === 'stale') throw new Error('Saved workspace changed in another tab; refresh before changing local listings.');
+    if (storageState !== 'ready') return;
+    const current = storage()?.getItem(STORAGE_KEY) ?? null;
+    if (current !== storageRaw) {
+      storageState = 'stale';
+      storageMessage = 'Saved workspace changed in another tab; this view is read-only until refreshed. Export any unsaved memory before leaving.';
+      throw new Error(storageMessage);
+    }
+  }
+
+  function setStorage(records) {
+    if (storageState !== 'ready') return;
+    const serialized = JSON.stringify(records);
+    try {
+      storage()?.setItem(STORAGE_KEY, serialized);
+      storageRaw = serialized;
+    } catch (error) {
+      storageState = 'unavailable';
+      storageMessage = `Workspace is memory-only (${error.message}); export before leaving.`;
+    }
+  }
+
+  function safeContracts() {
+    try {
+      const value = getContracts?.();
+      return Array.isArray(value) ? value.filter((record) => /^contract:[a-z0-9:_-]{1,160}$/i.test(record?.id ?? '')) : [];
+    } catch { return []; }
+  }
+
+  function linkedContract(id) {
+    return contracts.find((record) => record.id === id) ?? null;
+  }
+
+  function renderContractOptions() {
+    const old = governing.value;
+    governing.replaceChildren();
+    addOption(governing, '', 'None · inspection only');
+    for (const contract of contracts) addOption(governing, contract.id, `${contract.title} · ${contract.status}`);
+    governing.value = contracts.some((record) => record.id === old) ? old : '';
+  }
+
+  function renderParentOptions() {
+    const old = parent.value;
+    parent.replaceChildren();
+    addOption(parent, '', 'None · root listing');
+    for (const market of markets) addOption(parent, market.id, `${market.question} · ${market.state}`);
+    parent.value = markets.some((market) => market.id === old) ? old : '';
+  }
+
+  function refreshContracts() {
+    contracts = safeContracts();
+    renderContractOptions();
+    render();
+  }
+
+  function selectedMarket() {
+    return markets.find((market) => market.id === selected) ?? markets[0] ?? null;
+  }
+
+  function filteredMarkets() {
+    const query = searchQuery.trim().toLowerCase();
+    return markets.filter((market) => {
+      if (stateFilter !== 'all' && market.state !== stateFilter) return false;
+      if (provenanceFilter !== 'all' && market.origin !== provenanceFilter) return false;
+      if (!query) return true;
+      const governingRecord = linkedContract(market.governingContractId);
+      const haystack = [
+        market.id,
+        market.question,
+        market.terms,
+        market.author,
+        market.source?.title,
+        market.source?.provider,
+        market.governingContractId,
+        governingRecord?.title,
+      ].join(' ').toLowerCase();
+      return haystack.includes(query);
+    });
+  }
+
+  function setStatus(message, error = false) {
+    status.textContent = message;
+    status.dataset.tone = error ? 'error' : 'info';
+  }
+
+  function updateSourceReadout() {
+    const source = getSource?.();
+    if (origin.value === 'provider') {
+      sourceReadout.textContent = source
+        ? `Public observation · ${text(source.title, source.id)} · ${text(source.provider)} · ${text(source.retrievedAt)}`
+        : 'No public sports record selected. Choose one before creating a provider listing.';
+      author.disabled = true;
+    } else {
+      sourceReadout.textContent = 'Authored listing · source is the creator’s local statement, not a provider observation.';
+      author.disabled = false;
+    }
+  }
+
+  function exportJSON(filename, value) {
+    const urlAPI = documentRoot.defaultView?.URL ?? globalThis.URL;
+    if (!urlAPI?.createObjectURL || typeof Blob !== 'function') throw new Error('Downloads are unavailable in this environment.');
+    const link = documentRoot.createElement('a');
+    const url = urlAPI.createObjectURL(new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' }));
+    link.href = url;
+    link.download = filename;
+    documentRoot.body?.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => urlAPI.revokeObjectURL(url), 1000);
+  }
+
+  function actionButton(label, action, className = '') {
+    const button = documentRoot.createElement('button');
+    button.type = 'button';
+    button.className = `marketplace-button ${className}`.trim();
+    button.textContent = label;
+    button.addEventListener('click', () => {
+      try { action(); render(); }
+      catch (error) { setStatus(error.message, true); }
+    });
+    return button;
+  }
+
+  function renderSummary(visible) {
+    const closed = markets.filter((market) => market.state === 'closed').length;
+    const linked = markets.filter((market) => market.governingContractId).length;
+    summary.textContent = `${visible.length} shown · ${markets.length} saved · ${linked} linked to contracts · ${closed} closed · local simulation only`;
+  }
+
+  function renderList(visible) {
     list.replaceChildren();
-    const oldParent=parent.value;parent.replaceChildren();option(parent,'','No parent · root contract');for(const m of markets)option(parent,m.id,m.question);parent.value=markets.some(m=>m.id===oldParent)?oldParent:'';
-    if(!markets.length){const empty=documentRoot.createElement('p');empty.textContent='No contracts yet. Personal contracts do not require a sports record.';list.append(empty);}
-    for(const market of markets){
-      const card=documentRoot.createElement('section');card.style.cssText='border-top:1px solid #486176;padding:10px 0';
-      const title=documentRoot.createElement('h3');title.textContent=market.question;card.append(title);
-      card.dataset.contractId=market.id;card.dataset.selected=String(selected===market.id);if(selected===market.id)card.style.border='1px solid #e6bc73';
-      action('Inspect cube',()=>{selected=market.id;},card);
-      const provenance=documentRoot.createElement(market.source.sourceUrl?'a':'p');if(market.source.sourceUrl){provenance.href=market.source.sourceUrl;provenance.target='_blank';provenance.rel='noopener noreferrer';}provenance.textContent=market.source.title+' · '+market.source.provider;card.append(provenance);
-      const description=documentRoot.createElement('p');description.textContent=market.terms;card.append(description);
-      if(market.parentId){const p=markets.find(m=>m.id===market.parentId);action('↑ Parent: '+p.question,()=>{selected=p.id;},card);}
-      for(const child of markets.filter(m=>m.parentId===market.id))action('↳ Child: '+child.question,()=>{selected=child.id;},card);
-      action('Create child contract',()=>{parent.value=market.id;closes.value=new Date(Date.parse(market.closesAt)-new Date(market.closesAt).getTimezoneOffset()*60000).toISOString().slice(0,16);question.value='';question.focus();form.scrollIntoView({block:'nearest'});},card);
-      const stats=documentRoot.createElement('p');const s=summarizeMarket(market);stats.textContent=`${market.kind} · ${s.state} · ${s.participants} local entries · ${s.outcomes.map(o=>o.outcome+': '+o.entries).join(' / ')}`;card.append(stats);
-      const name=documentRoot.createElement('input');name.placeholder='Local participant label';name.setAttribute('aria-label','Local participant label');name.maxLength=64;card.append(name);
-      const choice=documentRoot.createElement('select');choice.setAttribute('aria-label','Entry outcome');for(const value of market.outcomes){const o=documentRoot.createElement('option');o.textContent=value;choice.append(o);}card.append(choice);
-      action('Add local entry',()=>book.enter(market.id,{participant:name.value,outcome:choice.value}),card);
-      action('Close entries',()=>book.close(market.id),card);
-      action('Export rules + entries',()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(market,null,2)],{type:'application/json'}));const a=documentRoot.createElement('a');a.href=url;a.download='matumbo-local-market.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);},card);
+    if (!visible.length) {
+      list.append(appendText(documentRoot, 'p', markets.length ? 'No listings match these filters.' : 'No local listings yet. Create one to make the marketplace surface useful.', 'marketplace-empty'));
+      return;
+    }
+    for (const market of visible) {
+      const card = documentRoot.createElement('article');
+      card.className = 'marketplace-card';
+      card.dataset.marketId = market.id;
+      card.dataset.selected = String(selected === market.id);
+      const select = actionButton('Inspect listing', () => { selected = market.id; }, selected === market.id ? 'marketplace-selected' : '');
+      select.setAttribute('aria-pressed', String(selected === market.id));
+      card.append(select);
+      card.append(appendText(documentRoot, 'h4', market.question));
+      card.append(appendText(documentRoot, 'p', `${market.state.toUpperCase()} · ${market.origin === 'authored' ? 'AUTHORED' : 'PUBLIC OBSERVATION'} · ${market.kind}`, 'marketplace-meta'));
+      card.append(appendText(documentRoot, 'p', market.governingContractId ? `Governing contract · ${linkedContract(market.governingContractId)?.title ?? market.governingContractId}` : 'No governing contract linked · inspection only', 'marketplace-meta'));
+      if (market.parentId) card.append(appendText(documentRoot, 'p', `Parent listing · ${markets.find((candidate) => candidate.id === market.parentId)?.question ?? market.parentId}`, 'marketplace-meta'));
+      card.append(appendText(documentRoot, 'p', market.terms || 'No additional terms supplied.', 'marketplace-terms'));
       list.append(card);
     }
-    view?.update(markets,selected);
   }
-  form.addEventListener('submit',e=>{e.preventDefault();try{
-    const market=book.create({id:crypto.randomUUID(),origin:origin.value,author:author.value,terms:terms.value,parentId:parent.value||null,source:getSource(),kind:kind.value,question:question.value,outcomes:outcomes.value.split('\n').map(v=>v.trim()).filter(Boolean),closesAt:closes.value});
-    selected=market.id;status.textContent=storageBlocked?'Created, but storage unavailable. Export before leaving.':'Contract created and saved on this browser.';render();
-  }catch(error){status.textContent=error.message;}});
-  const legacy=documentRoot.createElement('details');const legacyTitle=documentRoot.createElement('summary');legacyTitle.textContent='Earlier scenario inspector and provider draft tools';legacy.append(legacyTitle);
-  const header=documentRoot.getElementById('contracts-markets-head');
-  for(const child of [...panel.children])if(child!==header)legacy.append(child);
-  panel.append(root,legacy);
-  render();const api={getSnapshot:()=>structuredClone(markets),getSelection:()=>selected,getCubeSnapshot:()=>view?.getSnapshot()??null};documentRoot.defaultView.__TUMBO_MARKET_WORKSHOP__=api;return api;
+
+  function renderDetail() {
+    const market = selectedMarket();
+    detail.replaceChildren(appendText(documentRoot, 'h3', 'Listing detail'));
+    if (!market) {
+      detail.append(appendText(documentRoot, 'p', 'Select a listing to inspect its governing contract, provenance, terms and simulated entries.', 'marketplace-empty'));
+      return;
+    }
+    selected = market.id;
+    const head = documentRoot.createElement('div');
+    head.className = 'marketplace-detail-head';
+    head.append(appendText(documentRoot, 'h4', market.question));
+    const badge = appendText(documentRoot, 'span', market.state, 'marketplace-badge');
+    badge.dataset.state = market.state;
+    head.append(badge);
+    detail.append(head);
+    detail.append(appendText(documentRoot, 'p', 'Inspection only · no buy, trade, payout, custody, signing or settlement action is available.', 'marketplace-boundary'));
+
+    const termsSection = documentRoot.createElement('section');
+    termsSection.className = 'marketplace-detail-section';
+    termsSection.append(appendText(documentRoot, 'h5', 'Terms & outcomes'));
+    termsSection.append(appendText(documentRoot, 'p', market.terms || 'No additional terms supplied.'));
+    const outcomeList = documentRoot.createElement('div');
+    outcomeList.className = 'marketplace-outcomes';
+    for (const outcome of market.outcomes) outcomeList.append(appendText(documentRoot, 'span', outcome, 'marketplace-outcome'));
+    termsSection.append(outcomeList);
+    detail.append(termsSection);
+
+    const provenanceSection = documentRoot.createElement('section');
+    provenanceSection.className = 'marketplace-detail-section';
+    provenanceSection.append(appendText(documentRoot, 'h5', 'Provenance & timing'));
+    provenanceSection.append(appendText(documentRoot, 'p', `${market.origin === 'authored' ? 'Creator' : 'Provider'} · ${text(market.source?.title)} · ${text(market.source?.provider)}`));
+    provenanceSection.append(appendText(documentRoot, 'p', `Created ${safeDate(market.createdAt)} · entries close ${safeDate(market.closesAt)}`));
+    if (market.parentId) provenanceSection.append(appendText(documentRoot, 'p', `Parent listing · ${markets.find((candidate) => candidate.id === market.parentId)?.question ?? market.parentId}`));
+    const children = markets.filter((candidate) => candidate.parentId === market.id);
+    if (children.length) provenanceSection.append(appendText(documentRoot, 'p', `Child listings · ${children.map((child) => child.question).join(' · ')}`));
+    if (market.source?.sourceUrl) {
+      const source = documentRoot.createElement('a');
+      source.href = market.source.sourceUrl;
+      source.target = '_blank';
+      source.rel = 'noopener noreferrer';
+      source.textContent = 'Open recorded public source';
+      provenanceSection.append(source);
+    }
+    detail.append(provenanceSection);
+
+    const contractSection = documentRoot.createElement('section');
+    contractSection.className = 'marketplace-detail-section';
+    contractSection.append(appendText(documentRoot, 'h5', 'Governing contract'));
+    const contract = linkedContract(market.governingContractId);
+    if (!market.governingContractId) {
+      contractSection.append(appendText(documentRoot, 'p', 'No governing contract is linked. This listing remains a standalone inspection record.', 'marketplace-hint'));
+    } else if (!contract) {
+      contractSection.append(appendText(documentRoot, 'p', `Linked ID ${market.governingContractId} is not present in the current Contract Atelier workspace. No contract was fabricated.`, 'marketplace-hint'));
+    } else {
+      contractSection.append(appendText(documentRoot, 'p', `${contract.title} · ${contract.status} · ${contract.approvals?.length ?? 0}/${contract.parties?.length ?? 0} approvals`));
+      contractSection.append(actionButton('Open governing contract', () => onOpenContract?.({ contractId: contract.id, market: clone(market) }), 'marketplace-primary'));
+    }
+    detail.append(contractSection);
+
+    const entriesSection = documentRoot.createElement('section');
+    entriesSection.className = 'marketplace-detail-section';
+    entriesSection.append(appendText(documentRoot, 'h5', `Simulated entries · ${market.entries.length}`));
+    if (!market.entries.length) entriesSection.append(appendText(documentRoot, 'p', 'No local entries. Any entry here is a fictional rehearsal record, not a position or purchase.', 'marketplace-hint'));
+    for (const entry of market.entries) entriesSection.append(appendText(documentRoot, 'p', `${entry.participant} → ${entry.outcome} · ${safeDate(entry.enteredAt)}`, 'marketplace-entry'));
+    if (market.state === 'open') {
+      const entryForm = documentRoot.createElement('form');
+      entryForm.className = 'marketplace-entry-form';
+      entryForm.noValidate = true;
+      const participant = documentRoot.createElement('input');
+      participant.name = 'participant';
+      participant.maxLength = 64;
+      participant.placeholder = 'Local participant label';
+      participant.setAttribute('aria-label', 'Local participant label');
+      const choice = documentRoot.createElement('select');
+      choice.name = 'outcome';
+      choice.setAttribute('aria-label', 'Simulated outcome');
+      for (const outcome of market.outcomes) addOption(choice, outcome, outcome);
+      const enter = documentRoot.createElement('button');
+      enter.type = 'submit';
+      enter.className = 'marketplace-button';
+      enter.textContent = 'Add simulated entry';
+      entryForm.append(participant, choice, enter);
+      entryForm.addEventListener('submit', (event) => {
+        event.preventDefault();
+        try {
+          assertStorageCurrent();
+          book.enter(market.id, { participant: participant.value, outcome: choice.value });
+          setStatus('Simulated entry recorded locally. No balance or settlement changed.');
+        } catch (error) { setStatus(error.message, true); }
+      });
+      entriesSection.append(entryForm);
+      entriesSection.append(actionButton('Close listing entries', () => {
+        assertStorageCurrent();
+        book.close(market.id);
+        setStatus('Listing closed for simulated entries. It remains inspectable and unsettled.');
+      }, 'marketplace-warning'));
+    }
+    entriesSection.append(actionButton('Export listing JSON', () => exportJSON('matumbo-local-listing.json', market)));
+    detail.append(entriesSection);
+  }
+
+  function render() {
+    markets = book.snapshot();
+    if (!markets.some((market) => market.id === selected)) selected = markets[0]?.id ?? null;
+    renderParentOptions();
+    const visible = filteredMarkets();
+    renderSummary(visible);
+    renderList(visible);
+    renderDetail();
+    updateSourceReadout();
+    root.dataset.storageState = storageState;
+    root.dataset.previewDirty = storageState === 'ready' ? 'false' : 'true';
+    if (storageMessage) setStatus(storageMessage, true);
+    view?.update(markets, selected);
+  }
+
+  markets = readStorage();
+  book = createMarketBook(markets);
+  unsubscribe = book.subscribe((records) => {
+    markets = records;
+    setStorage(records);
+    render();
+  });
+  contracts = safeContracts();
+  renderContractOptions();
+
+  origin.addEventListener('change', updateSourceReadout);
+  search.addEventListener('input', () => { searchQuery = search.value.slice(0, MAX_QUERY); render(); });
+  state.addEventListener('change', () => { stateFilter = state.value; render(); });
+  provenance.addEventListener('change', () => { provenanceFilter = provenance.value; render(); });
+
+  composer.addEventListener('submit', (event) => {
+    event.preventDefault();
+    try {
+      assertStorageCurrent();
+      const source = getSource?.();
+      const market = book.create({
+        id: recordId(),
+        origin: origin.value,
+        author: author.value,
+        terms: terms.value,
+        parentId: parent.value || null,
+        governingContractId: governing.value || null,
+        source: origin.value === 'provider' ? source : null,
+        kind: kind.value,
+        question: question.value,
+        outcomes: outcomes.value.split('\n').map((value) => value.trim()).filter(Boolean),
+        closesAt: closes.value,
+      });
+      selected = market.id;
+      setStatus('Local listing created. Review its terms and governing contract; no transaction was created.');
+    } catch (error) { setStatus(error.message, true); }
+  });
+
+  normalButton.addEventListener('click', () => {
+    viewport.hidden = true;
+    view?.setVisible(false);
+    setStatus('List view · one saved market book feeds both views.');
+  });
+  cubeButton.addEventListener('click', () => {
+    viewport.hidden = false;
+    if (view) { view.setVisible(true); view.update(markets, selected); return; }
+    setStatus('Loading local listing geometry…');
+    import('./market-constellation.js?v=20260922-cache2').then(({ mountMarketConstellation }) => {
+      if (!view) view = mountMarketConstellation({ host: viewport, onSelect: (id) => { selected = id; render(); } });
+      view.update(markets, selected);
+    }).catch((error) => { viewport.hidden = true; setStatus(`3D unavailable: ${error.message}`, true); });
+  });
+  exportButton.addEventListener('click', () => {
+    try { exportJSON('matumbo-contract-workspace.json', markets); setStatus('Workspace export requested. The file contains local listing history only.'); }
+    catch (error) { setStatus(error.message, true); }
+  });
+
+  const legacy = documentRoot.createElement('details');
+  const legacyTitle = documentRoot.createElement('summary');
+  legacyTitle.textContent = 'Earlier graph inspector and provider draft tools';
+  legacy.append(legacyTitle);
+  const header = documentRoot.getElementById('contracts-markets-head');
+  for (const child of [...panel.children]) if (child !== header) legacy.append(child);
+  panel.append(root, legacy);
+
+  render();
+  const api = {
+    getSnapshot: () => clone(markets),
+    getSelection: () => selected,
+    getCubeSnapshot: () => view?.getSnapshot?.() ?? null,
+    refreshContracts,
+    refresh: render,
+    destroy: () => { unsubscribe?.(); view?.destroy?.(); root.remove(); legacy.remove(); },
+  };
+  documentRoot.defaultView.__TUMBO_MARKET_WORKSHOP__ = api;
+  return api;
 }

@@ -265,6 +265,111 @@ function effectsFor(record, entry, at) {
     return { ...action, simulation: true, ...(['simulated_transfer', 'release_escrow'].includes(action.type) ? { amountCents: cents(action.amount), unit: 'simulated TUMBO points' } : {}), ...(action.type === 'grant_access' ? { expiresAt: action.durationMs ? at + action.durationMs : null } : {}) };
   });
 }
+
+/**
+ * Evaluate a draft without creating a contract, event, receipt, or storage
+ * write. Assumed evidence is labelled as such and never enters the canonical
+ * evidence log.
+ */
+export function previewContractTerms({
+  contractId = 'preview:contract',
+  title = 'Draft contract',
+  terms,
+  parties = ['owner', 'reviewer'],
+  assumedEvidence = {},
+  at = Date.now(),
+} = {}) {
+  const clock = integer(at, 'preview time');
+  const normalizedParties = unique(array(parties, 'parties', 1, 16).map((entry) => text(entry, 'party', 80)), 'parties');
+  const normalizedTerms = normalizeTerms(terms, normalizedParties);
+  checkJSON(assumedEvidence);
+  object(assumedEvidence, 'assumed evidence');
+  const declared = new Map(normalizedTerms.sources.map((source) => [source.id, source]));
+  const evidence = [];
+  for (const [sourceId, value] of Object.entries(assumedEvidence)) {
+    const source = declared.get(sourceId);
+    if (!source) fail(`Unknown preview evidence source ${sourceId}`);
+    evidence.push({
+      id: `preview:${sourceId}`,
+      contractId,
+      source: sourceId,
+      value: typed(value, source.type, 'Preview evidence'),
+      observedAt: clock,
+      provider: source.provider,
+      preview: true,
+    });
+  }
+  const record = {
+    id: contractId,
+    title: text(title, 'contract title', 160),
+    parties: normalizedParties,
+    terms: normalizedTerms,
+    evidence,
+    receipts: [],
+  };
+  const completed = new Set();
+  const projectedEffects = [];
+  let projectedPointsCents = 0;
+  const rules = [];
+  for (const entry of normalizedTerms.rules) {
+    if ((entry.after ?? []).some((id) => !completed.has(id))) {
+      rules.push({ id: entry.id, label: entry.label, state: 'waiting', reason: 'Waiting for prior milestone', effects: [] });
+      continue;
+    }
+    if (normalizedTerms.startsAt !== null && clock < normalizedTerms.startsAt) {
+      rules.push({ id: entry.id, label: entry.label, state: 'waiting', reason: 'Waiting for approved start time', effects: [] });
+      continue;
+    }
+    if (normalizedTerms.expiresAt !== null && clock >= normalizedTerms.expiresAt) {
+      rules.push({ id: entry.id, label: entry.label, state: 'skipped', reason: 'Outside the approved execution window', effects: [] });
+      continue;
+    }
+    const evaluated = evaluate(entry.when, record, clock);
+    if (evaluated.state !== 'true') {
+      rules.push({
+        id: entry.id,
+        label: entry.label,
+        state: evaluated.state === 'unknown' ? 'waiting' : 'skipped',
+        reason: evaluated.reason || 'Condition not satisfied',
+        effects: [],
+      });
+      continue;
+    }
+    let effects;
+    try {
+      effects = effectsFor(record, entry, clock);
+    } catch (error) {
+      rules.push({ id: entry.id, label: entry.label, state: 'waiting', reason: String(error?.message ?? error), effects: [] });
+      continue;
+    }
+    const costCents = effects.reduce((sum, effect) => sum + (effect.amountCents ?? effect.poolCents ?? 0), 0);
+    if (projectedPointsCents + costCents > cents(normalizedTerms.limits.maxTotalPoints)) {
+      rules.push({ id: entry.id, label: entry.label, state: 'skipped', reason: 'Projected effects exceed the approved point limit', effects: [] });
+      continue;
+    }
+    const projected = effects.map((effect) => ({ ...effect, ruleId: entry.id, preview: true }));
+    projectedEffects.push(...projected);
+    projectedPointsCents += costCents;
+    completed.add(entry.id);
+    rules.push({ id: entry.id, label: entry.label, state: 'triggered', reason: 'Assumed evidence satisfies this condition', effects: projected });
+  }
+  return publicCopy({
+    contractId,
+    title: record.title,
+    simulation: true,
+    localOnly: true,
+    persisted: false,
+    mutated: false,
+    assumptions: Object.freeze(Object.fromEntries(evidence.map((entry) => [entry.source, entry.value]))),
+    approvals: { required: normalizedParties.length, recorded: 0, remaining: normalizedParties.length },
+    rules,
+    projectedEffects,
+    totalProjectedPoints: projectedPointsCents / 100,
+    nextAction: 'Review this preview, then create the contract to freeze terms and request local approvals.',
+    boundary: 'Preview only. No contract, evidence, receipt, balance, access grant, or ledger entry was created.',
+  });
+}
+
 function makeProjection(record, at) {
   const balances = Object.fromEntries(record.parties.map((party) => [party, 0]));
   const access = new Map();
@@ -707,6 +812,20 @@ export function createContractAutomation({ now = () => Date.now(), storage = nul
       });
     },
     get(id) { const record = state.contracts.find((entry) => entry.id === id); return record ? view(record) : null; },
+    preview(id, { assumedEvidence = {}, at = clock() } = {}) {
+      const record = state.contracts.find((entry) => entry.id === id);
+      if (!record) throw new Error(`Unknown contract ${id}`);
+      const current = {};
+      for (const evidence of [...record.evidence].sort((a, b) => a.observedAt - b.observedAt)) current[evidence.source] = evidence.value;
+      return previewContractTerms({
+        contractId: record.id,
+        title: record.title,
+        terms: record.terms,
+        parties: record.parties,
+        assumedEvidence: { ...current, ...assumedEvidence },
+        at,
+      });
+    },
     list: () => state.contracts.map(view),
     snapshot,
     subscribe(listener) { if (typeof listener !== 'function') fail('Subscriber must be a function'); listeners.add(listener); return () => listeners.delete(listener); },
