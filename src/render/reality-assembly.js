@@ -475,10 +475,11 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   function render(){
     const state=owner.getSnapshot(),feature=featureMap.get(state.selectedId),object=state.objects.find(item=>item.id===state.selectedId);
     spatial.apply(state,{viewMode,hoveredId:hovered});
+    const spatialSnapshot=spatial.getSnapshot(),coinState=feature.id==='asset-token'?spatialSnapshot.coinState:null;
     const detail=readFeature(feature.id),surface=realityObjectSurfaceEngine.describe({feature,object,stage:spatial.getSnapshot().selectedStage,summary:detail?.summary,readOnly:state.mode==='past'});
     find('[data-title]').textContent=labelFor(feature);find('[data-description]').textContent=copyFor(surface.description);
     find('[data-stage-badge]').textContent=`${surface.stageLabel} · ${latinShapes[surface.shape]??surface.shape}`;
-    objectSymbol.textContent=({phone:'▯',square:'▦',rectangle:'▭',sphere:'◉',cylinder:'◍',cube:'⬡',wave:'∿'})[surface.shape]??'◇';
+    objectSymbol.textContent=feature.id==='asset-token'?'T':({phone:'▯',square:'▦',rectangle:'▭',sphere:'◉',cylinder:'◍',cube:'⬡',wave:'∿'})[surface.shape]??'◇';
     find('[data-object-id]').textContent=visibleId(feature.id);find('[data-coordinate]').textContent=surface.positionLabel;
     find('[data-open-state]').textContent=surface.state;
     const anchor=object.anchor===true,immutable=object.locked===true,editingDisabled=anchor||immutable||state.mode==='past';
@@ -493,7 +494,9 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
     find('[data-source-count]').textContent=String(surface.sourceCount);find('[data-boundary]').textContent=surface.boundary;
     const sourceContainer=find('[data-sources]');sourceContainer.replaceChildren();
     for(const source of surface.sourceRefs.length?surface.sourceRefs:['Navigatio instrumentorum']){const code=document.createElement('code');code.textContent=copyFor(source);sourceContainer.append(code);}
-    find('[data-source-detail]').textContent=surface.summary;
+    find('[data-source-detail]').textContent=coinState
+      ? `${surface.summary} Current local simulation metadata: ${coinState.currentIssuedLabel} issued · policy maximum ${coinState.intendedMaximumLabel} · ${coinState.ledgerLabel} · policy metadata only.`
+      : surface.summary;
     all('[data-open],[data-open-secondary]').forEach(button=>{button.disabled=state.mode==='past';});find('[data-open]').textContent=object.open?'Claude':'Aperi';
     const sideId=sideRealityByFeature.get(sideRealityKey(workspace.activeId,state.selectedId));
     const sideButton=find('[data-side-reality]');
@@ -592,8 +595,8 @@ export function createRealityAssembly({THREE,renderer,scene,camera,controls,worl
   }
   for(const feature of ordered){
     const groupId=resolveRealityLensGroup(feature.id),domain=catalogSections.get(groupId);
-    const visibleLabel=labelFor(feature),button=document.createElement('button');button.type='button';button.textContent=visibleLabel;button.onclick=guard(()=>{select(feature.id);if(interaction!=='move')enter(feature.id);if(root.classList.contains('assembly-directory-open'))setDirectory(false,{restoreFocus:true});});(domain?.children??find('.assembly-catalog')).append(button);catalog.set(feature.id,button);
-    const label=document.createElement('button');label.type='button';label.className='assembly-node-label';label.textContent=visibleLabel;label.dataset.group=groupId;label.setAttribute('aria-label',`Aperi ${visibleLabel} · instrumentum`);label.onclick=guard(()=>{select(feature.id);if(interaction!=='move')enter(feature.id);});label.onpointerenter=()=>{hovered=feature.id;render();};label.onpointerleave=()=>{hovered=null;render();};find('.assembly-labels').append(label);labels.set(feature.id,label);
+    const visibleLabel=labelFor(feature),button=document.createElement('button');button.type='button';button.textContent=visibleLabel;button.setAttribute('aria-label',feature.id==='asset-token'?'Select TUMBO-SIM coin · simulation only':`Select ${visibleLabel}`);button.onclick=guard(()=>{select(feature.id);if(interaction!=='move')enter(feature.id);if(root.classList.contains('assembly-directory-open'))setDirectory(false,{restoreFocus:true});});(domain?.children??find('.assembly-catalog')).append(button);catalog.set(feature.id,button);
+    const label=document.createElement('button');label.type='button';label.className='assembly-node-label';label.textContent=visibleLabel;label.dataset.group=groupId;label.setAttribute('aria-label',feature.id==='asset-token'?'Focus TUMBO-SIM coin · simulation only':`Aperi ${visibleLabel} · instrumentum`);label.onclick=guard(()=>{select(feature.id);if(interaction!=='move')enter(feature.id);});label.onpointerenter=()=>{hovered=feature.id;render();};label.onpointerleave=()=>{hovered=null;render();};find('.assembly-labels').append(label);labels.set(feature.id,label);
   }
   const catalogSearch=find('[data-search]'),quickSearch=find('[data-quick-search]');
   const applySearch=queryValue=>{

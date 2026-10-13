@@ -1,6 +1,7 @@
 import {REALITY_TAB_FORMS} from '../domains/reality-tab-layout.js?v=20260923-spatial-tabs16';
 import {REALITY_LENS_GROUPS,realityLensEngine,resolveRealityLensGroup} from '../domains/reality-lens-engine.js?v=20260923-lens-engine9';
 import {createLivingSurfaceMap} from '../domains/living-surface-layout-engine.js';
+import {createTumboCoinVisual,readTumboCoinState} from './tumbo-coin.js';
 
 /** Shape-changing, image-bearing feature tabs only; the former central cube is
  * now the same status and geometry as every other Reality Lens object. */
@@ -56,6 +57,7 @@ function wavePanelShape(THREE,width,height){
   shape.closePath();return shape;
 }
 function tabSurfaceDepth(node,x,y,extra=.012){
+  if(node.coinVisual?.surfaceDepth)return node.coinVisual.surfaceDepth(x,y,extra);
   const form=REALITY_TAB_FORMS[node.shape]??REALITY_TAB_FORMS.rectangle;
   if(node.shape==='sphere'){
     const radius=Math.min(form.width,form.height,form.depth)/2;
@@ -331,20 +333,34 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[],rela
       }
     });
     const width=form.width,height=form.height,depth=form.depth;
-    const curved=['sphere','cylinder'].includes(shapeName),art=drawFeatureArtwork(THREE,node.feature,node.accent.color,shapeName);if(art)textures.add(art);
+    const isTumboCoin=node.feature.id==='asset-token'&&shapeName==='cylinder';
+    const curved=['sphere','cylinder'].includes(shapeName),art=isTumboCoin?null:drawFeatureArtwork(THREE,node.feature,node.accent.color,shapeName);if(art)textures.add(art);
     const sphereForm=shapeName==='sphere';
-    const shell=makeMaterial(sphereForm?'#a8874c':'#0c1c2c',{metalness:sphereForm?.72:.45,roughness:sphereForm?.24:.3,transparent:true,opacity:sphereForm?.64:curved?.42:.76,emissive:sphereForm?'#715625':'#000000',emissiveIntensity:sphereForm?.38:0,depthWrite:false,side:THREE.DoubleSide});
+    let shell=isTumboCoin?null:makeMaterial(sphereForm?'#a8874c':'#0c1c2c',{metalness:sphereForm?.72:.45,roughness:sphereForm?.24:.3,transparent:true,opacity:sphereForm?.64:curved?.42:.76,emissive:sphereForm?'#715625':'#000000',emissiveIntensity:sphereForm?.38:0,depthWrite:false,side:THREE.DoubleSide});
     const artMaterial=art?makeMaterial('#b99154',{map:art,metalness:.03,roughness:.52,transparent:true,opacity:.78,depthWrite:false,side:THREE.DoubleSide}):null;
     const parts=[];
-    let bodyGeometry;
-    if(shapeName==='sphere')bodyGeometry=new THREE.SphereGeometry(Math.min(width,height,depth)/2,24,18);
+    let bodyGeometry,body,edgeMaterial,coinVisual=null;
+    if(isTumboCoin){
+      const cap=createLivingSurfaceMap('cylinder').primary.position[2]-.018;
+      coinVisual=createTumboCoinVisual(THREE,{radius:Math.min(width,height,depth)/2,thickness:Math.min(.22,depth*.18),frontZ:cap});
+      bodyGeometry=coinVisual.body.geometry;
+      coinVisual.parts.forEach(part=>{if(part.geometry)geometry.add(part.geometry);});
+      body=coinVisual.body;
+      shell=body.material;
+      edgeMaterial=coinVisual.details.edgeMaterial;
+      body.userData.assemblyId=node.feature.id;
+      body.name=`${node.feature.id}/tumbo-sim-coin`;
+      body.renderOrder=20;body.castShadow=false;body.receiveShadow=false;
+      node.root.add(coinVisual.root);
+      parts.push(...coinVisual.parts);
+    }else if(shapeName==='sphere')bodyGeometry=new THREE.SphereGeometry(Math.min(width,height,depth)/2,24,18);
     else if(shapeName==='cylinder')bodyGeometry=new THREE.CylinderGeometry(Math.min(width,depth)/2,Math.min(width,depth)/2,height,24,1,false);
     else if(shapeName==='cube')bodyGeometry=new THREE.BoxGeometry(width,height,depth);
     else{
       const outline=shapeName==='wave'?wavePanelShape(THREE,width,height):roundedPanelShape(THREE,width,height,form.radius);
       bodyGeometry=new THREE.ExtrudeGeometry(outline,{depth,bevelEnabled:true,bevelSegments:3,bevelSize:.035,bevelThickness:.035,curveSegments:10});
     }
-    if(curved){
+    if(curved&&!isTumboCoin){
       // A machined reading facet is part of this body. Clipping its front
       // vertices creates a flush cap instead of floating a browser plaque
       // beyond the sphere/cylinder's tangent. The rear silhouette remains.
@@ -353,27 +369,31 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[],rela
       for(let index=0;index<positions.count;index++)positions.setZ(index,Math.min(positions.getZ(index),cap));
       positions.needsUpdate=true;bodyGeometry.computeVertexNormals();
     }
-    geometry.add(bodyGeometry);
-    // Information belongs to the object. Planar extrusions use their own cap
-    // as the artwork surface instead of spawning a second PlaneGeometry card.
-    const bodyMaterial=shapeName==='cube'
-      ?[shell,shell,shell,shell,artMaterial??shell,shell]
-      :(!curved&&artMaterial?[artMaterial,shell]:shell);
-    const body=new THREE.Mesh(bodyGeometry,bodyMaterial);body.userData.assemblyId=node.feature.id;body.name=`${node.feature.id}/spatial-tab/${shapeName}`;
-    body.renderOrder=20;body.castShadow=false;body.receiveShadow=false;node.root.add(body);targets.push(body);selectable.add(body);tabSelectable.add(body);parts.push(body);
-    const edgeGeometry=new THREE.EdgesGeometry(bodyGeometry,18);geometry.add(edgeGeometry);
-    const edgeMaterial=new THREE.LineBasicMaterial({color:sphereForm?'#e4c878':node.accent.color,transparent:true,opacity:sphereForm?.82:.58,depthWrite:false,depthTest:true});materials.add(edgeMaterial);
-    const edges=new THREE.LineSegments(edgeGeometry,edgeMaterial);edges.renderOrder=22;node.root.add(edges);parts.push(edges);
+    if(!isTumboCoin){
+      geometry.add(bodyGeometry);
+      // Information belongs to the object. Planar extrusions use their own cap
+      // as the artwork surface instead of spawning a second PlaneGeometry card.
+      const bodyMaterial=shapeName==='cube'
+        ?[shell,shell,shell,shell,artMaterial??shell,shell]
+        :(!curved&&artMaterial?[artMaterial,shell]:shell);
+      body=new THREE.Mesh(bodyGeometry,bodyMaterial);body.userData.assemblyId=node.feature.id;body.name=`${node.feature.id}/spatial-tab/${shapeName}`;
+      body.renderOrder=20;body.castShadow=false;body.receiveShadow=false;node.root.add(body);parts.push(body);
+      const edgeGeometry=new THREE.EdgesGeometry(bodyGeometry,18);geometry.add(edgeGeometry);
+      edgeMaterial=new THREE.LineBasicMaterial({color:sphereForm?'#e4c878':node.accent.color,transparent:true,opacity:sphereForm?.82:.58,depthWrite:false,depthTest:true});materials.add(edgeMaterial);
+      const edges=new THREE.LineSegments(edgeGeometry,edgeMaterial);edges.renderOrder=22;node.root.add(edges);parts.push(edges);
+    }
+    targets.push(body);selectable.add(body);tabSelectable.add(body);
     const indicatorGeometry=new THREE.SphereGeometry(.09,12,10);geometry.add(indicatorGeometry);
     const indicatorMaterial=makeMaterial(node.locked?'#d1ae70':'#659b91',{emissive:node.locked?'#9e7134':'#316e68',emissiveIntensity:.72,metalness:.1,roughness:.4});
     const indicator=mesh(indicatorGeometry,indicatorMaterial,[width*.36,height*.36,depth*.52+.08],[1,1,1],node.root);indicator.name=`${node.feature.id}/tab-lock-state`;
-    node.formParts=[...parts,indicator];node.tabMesh=body;node.artMaterial=artMaterial;node.artTexture=art;node.shellMaterial=shell;node.edgeMaterial=edgeMaterial;node.indicator=indicator;node.shape=shapeName;positionEmbeddedData(node);
+    node.formParts=[...parts,indicator];node.tabMesh=body;node.artMaterial=artMaterial;node.artTexture=art;node.shellMaterial=shell;node.edgeMaterial=edgeMaterial;node.indicator=indicator;node.shape=shapeName;node.coinVisual=coinVisual;positionEmbeddedData(node);
     applyTabDepthMode(node);
     prepareFadeMaterials(node);
     node.artMaterial=node.fadeMap.get(artMaterial)??artMaterial;
     node.shellMaterial=node.fadeMap.get(shell)??shell;
     node.edgeMaterial=node.fadeMap.get(edgeMaterial)??edgeMaterial;
     node.indicator.material=node.fadeMap.get(indicatorMaterial)??indicatorMaterial;
+    node.coinState=coinVisual?readTumboCoinState():null;
     node.artworkSuppressed=false;
   }
 function applyTabDepthMode(node){
@@ -382,6 +402,11 @@ function applyTabDepthMode(node){
     for(const material of list){if(material&&'depthTest'in material){material.depthTest=true;material.depthWrite=false;material.needsUpdate=true;}}
     }
     for(const part of node.formParts??[])part.renderOrder=part===node.tabMesh?20:22;
+    // The coin is a depth-built object, not a flat tab. Keep its nested body,
+    // rim, emblem, and ledger markers in the normal transparent sort so the
+    // face can sit in front of the blank while the whole coin remains one
+    // selectable assembly object.
+    if(node.coinVisual?.root)node.coinVisual.root.traverse(part=>{part.renderOrder=0;});
     if(node.root)node.root.renderOrder=18;
   }
   function setLensMode(enabled){
@@ -788,6 +813,11 @@ function applyTabDepthMode(node){
         node.root.rotation.y=reducedMotion?0:Math.sin(time*.18+node.traits.phase)*.025;
         node.root.rotation.x=reducedMotion?0:Math.sin(time*.13+node.traits.phase)*.012;
         if(node.indicator){node.indicator.visible=!node.surfaceReading;const pulse=reducedMotion?1:.9+.1*Math.sin(time*.92+node.traits.phase);node.indicator.scale.setScalar(pulse);if(node.indicator.material?.emissiveIntensity!==undefined)node.indicator.material.emissiveIntensity=node.surfaceReading||reducedMotion?.28:.28+.18*(.5+.5*Math.sin(time*1.3+node.traits.phase));}
+        if(node.coinVisual){
+          if(time-(node.coinStateAt??-Infinity)>.5){node.coinState=readTumboCoinState();node.coinStateAt=time;}
+          node.coinVisual.update(node.coinState,{selected:id===selected,hovered:id===hovered});
+          node.coinVisual.animate({time,reducedMotion});
+        }
         // At close focus the object itself owns attention. The attached
         // controls are only its interactive skin, not a replacement panel.
         const panelOwnsAttention=response.isSelected&&response.focusStrength>.6;
@@ -865,7 +895,7 @@ function applyTabDepthMode(node){
     const lod=approachBlend<.04?'nucleus':approachBlend<.98?'unfolding':'field';
     const groupIds=[...new Set([...nodes.values()].map(node=>node.lensGroup).filter(Boolean))];
     const formerCenter=nodes.get('block-world');
-    return {geometryOnly:true,referenceImagesUsedAsTextures:false,funnelGuideVisible:funnelGuide.visible,nodeIds:[...nodes.keys()],nodeCount:nodes.size,tabCount:[...nodes.values()].filter(node=>node.isTab).length,visibleFeatureIds:[...nodes.values()].filter(node=>node.isTab&&node.root.visible).map(node=>node.feature.id),visibleTabCount:[...nodes.values()].filter(node=>node.isTab&&node.root.visible&&node.tabReveal>.35&&node.contextOpacity>.05).length,groupIds,visibleGroupCount:[...groupParents.values()].filter(marker=>marker.root.visible).length,activeGroupId,focusedId:focusId,focusStrength:Number(activeFocusStrength.toFixed(3)),focusIsolated:activeFocusIsolated,focusDistance:Number.isFinite(activeFocusDistance)?Number(activeFocusDistance.toFixed(2)):null,selectedStage:nodes.get(focusId)?.revealStage??0,approachProgress:Number(approachBlend.toFixed(3)),anchorOpen:formerCenter?.isTab?0:Number((formerCenter?.open??0).toFixed(3)),edgeCount:edges.length,relationshipSource:'authored feature navigation graph',connectionsVisible:connections.visible,connectionPairs:edges.map(pair=>[...pair]),viewMode:mode,selectedId:selected,historyMode:viewState?.mode??'present',designedArchitecture:true,equalAxisCubes:false,singleFixedAnchorCube:[...nodes.values()].some(node=>!node.isTab&&node.feature.id==='block-world'),formerCenterIsMovableTab:formerCenter?.isTab===true,lensMode,lod};
+    return {geometryOnly:true,referenceImagesUsedAsTextures:false,funnelGuideVisible:funnelGuide.visible,nodeIds:[...nodes.keys()],nodeCount:nodes.size,tabCount:[...nodes.values()].filter(node=>node.isTab).length,visibleFeatureIds:[...nodes.values()].filter(node=>node.isTab&&node.root.visible).map(node=>node.feature.id),visibleTabCount:[...nodes.values()].filter(node=>node.isTab&&node.root.visible&&node.tabReveal>.35&&node.contextOpacity>.05).length,groupIds,visibleGroupCount:[...groupParents.values()].filter(marker=>marker.root.visible).length,activeGroupId,focusedId:focusId,focusStrength:Number(activeFocusStrength.toFixed(3)),focusIsolated:activeFocusIsolated,focusDistance:Number.isFinite(activeFocusDistance)?Number(activeFocusDistance.toFixed(2)):null,selectedStage:nodes.get(focusId)?.revealStage??0,approachProgress:Number(approachBlend.toFixed(3)),anchorOpen:formerCenter?.isTab?0:Number((formerCenter?.open??0).toFixed(3)),edgeCount:edges.length,relationshipSource:'authored feature navigation graph',connectionsVisible:connections.visible,connectionPairs:edges.map(pair=>[...pair]),viewMode:mode,selectedId:selected,historyMode:viewState?.mode??'present',designedArchitecture:true,equalAxisCubes:false,singleFixedAnchorCube:[...nodes.values()].some(node=>!node.isTab&&node.feature.id==='block-world'),formerCenterIsMovableTab:formerCenter?.isTab===true,lensMode,lod,coinState:nodes.get('asset-token')?.coinState??null};
   }
   return {layer,nodes,groupParents,worldBlock,backdrop,apply,update,getSnapshot,setLensMode,setActiveGroup,getGroupPosition:id=>groupParents.get(id)?.root.position??null,focus:id=>{focusId=nodes.has(id)?id:null;},resolve:object=>object?.userData?.assemblyId??null,
     destroy(){selectable.forEach(object=>{const i=targets.indexOf(object);if(i>=0)targets.splice(i,1);});geometry.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());textures.forEach(t=>t.dispose());layer.removeFromParent();}};
