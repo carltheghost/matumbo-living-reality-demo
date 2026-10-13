@@ -633,3 +633,80 @@ body.phone-world:not(.phone-local) #status {
   .vivo-companion[data-presence="reacting"] .companion-avatar-ring,
   .vivo-companion[data-presence="reacting"] .companion-avatar-halo { animation: none !important; }
 }
+
+/* Final companion polish: keep the field disclosure quiet, make state honest,
+   and give keyboard users a reliable focus target. */
+.vivo-companion { gap: 9px; isolation: isolate; padding: 12px; }
+.companion-heading > div { flex: 1 1 auto; min-width: 0; }
+.companion-heading h2 { font-size: 21px; line-height: 1.15; }
+.companion-minimize { font-size: 9px !important; padding: 5px 7px !important; }
+.field-dock .companion-character { gap: 4px; min-height: 0; padding: 4px; }
+.field-dock .companion-character .companion-avatar { height: 36px; width: 46px; }
+.companion-presence { gap: 10px; min-height: 118px; padding: 9px; }
+.companion-avatar-stage { flex-basis: 88px; min-height: 88px; }
+.companion-avatar--large { flex-basis: 104px; height: 104px; width: 104px; }
+.companion-detail h3 { font-size: 16px; line-height: 1.2; margin: 3px 0 2px; }
+.companion-detail p { font-size: 10px; line-height: 1.25; margin-bottom: 5px; }
+.companion-anchor-copy,
+.companion-coordinates { line-height: 1.15; }
+.companion-reaction { min-height: 27px; padding: 6px 8px; }
+.companion-conversation { padding-top: 4px; }
+.companion-conversation-summary { min-height: 26px; }
+.companion-live-state[data-state="saved"] { border-color: rgba(103, 224, 162, .5); color: #b9f2d3; }
+.companion-live-state[data-state="saving"] { border-color: rgba(243, 210, 142, .58); color: #f6dfaa; }
+.companion-live-state[data-state="memory-only"],
+.companion-live-state[data-state="unsaved"] { border-color: rgba(255, 157, 169, .58); color: #ffc4cc; }
+.vivo-companion-world-context { margin-top: -2px; padding-top: 7px; }
+.vivo-companion-world-context > summary {
+  align-items: center;
+  background: rgba(7, 19, 34, .48);
+  border: 1px solid rgba(127, 180, 255, .16);
+  border-radius: 9px;
+  display: flex;
+  justify-content: space-between;
+  min-height: 0;
+  padding: 5px 9px;
+  white-space: nowrap;
+}
+.vivo-companion-world-context > summary::-webkit-details-marker { display: none; }
+.vivo-companion-world-context > summary::after { color: #86a9cf; content: '+'; font: 16px/1 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.vivo-companion-world-context[open] > summary::after { content: '−'; }
+.companion-minimize { white-space: nowrap; }
+.vivo-companion button:focus-visible,
+.vivo-companion summary:focus-visible,
+.vivo-companion input:focus-visible {
+  outline: 2px solid #d6eaff;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 4px rgba(127, 180, 255, .2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vivo-companion *,
+  .vivo-companion *::before,
+  .vivo-companion *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0s !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .field-dock { max-height: min(50dvh, calc(100dvh - 276px)); }
+  .vivo-companion { gap: 5px; padding: 8px; }
+  .companion-heading h2 { font-size: 16px; line-height: 1.15; }
+  .field-dock .companion-character { gap: 2px; min-height: 0; padding: 3px; }
+  .field-dock .companion-character .companion-avatar { height: 28px; width: 36px; }
+  .companion-presence { gap: 6px; min-height: 70px; padding: 5px; }
+  .companion-avatar-stage { flex-basis: 58px; min-height: 58px; }
+  .companion-avatar--large { flex-basis: 58px; height: 58px; width: 58px; }
+  .companion-detail h3 { font-size: 14px; line-height: 1.15; margin: 2px 0 1px; }
+  .companion-detail p { font-size: 9px; line-height: 1.1; margin-bottom: 1px; }
+  .companion-anchor-copy,
+  .companion-coordinates { line-height: 1.05; }
+  .companion-reaction { min-height: 22px; padding: 5px 7px; }
+  .companion-conversation { padding-top: 3px; }
+  .companion-conversation-summary { min-height: 22px; }
+  .vivo-companion-world-context { padding-top: 5px; }
+  .vivo-companion-world-context > summary { padding: 4px 8px; }
+}
