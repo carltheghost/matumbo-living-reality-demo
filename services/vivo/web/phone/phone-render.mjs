@@ -28,9 +28,9 @@ function drawCompanionOccupant(ctx, entity, point, radius, { selected = false, h
   ctx.save();
   ctx.translate(point.x, point.y - lift);
   ctx.globalCompositeOperation = 'screen';
-  ctx.globalAlpha = selected ? 1 : .82;
+  ctx.globalAlpha = selected ? (companionFocus ? .92 : 1) : .82;
   ctx.shadowColor = style.color;
-  ctx.shadowBlur = selected ? 16 : 9;
+  ctx.shadowBlur = selected ? (companionFocus ? 8 : 16) : 9;
   ctx.fillStyle = style.color;
   ctx.strokeStyle = style.accent;
   ctx.lineWidth = selected ? 1.7 : 1.2;
@@ -58,14 +58,20 @@ function drawCompanionOccupant(ctx, entity, point, radius, { selected = false, h
     ctx.fill();
     ctx.stroke();
   } else if (style.kind === 'maker') {
+    // The maker is a material block first, with a small expressive face —
+    // keep the orange identity legible beside the CSS roster avatar.
     ctx.beginPath();
-    ctx.moveTo(-size * .4, size * .02);
-    ctx.lineTo(size * .28, -size * .12);
-    ctx.lineTo(size * .46, size * .38);
-    ctx.lineTo(-size * .27, size * .46);
+    ctx.moveTo(-size * .42, size * .02);
+    ctx.lineTo(size * .32, -size * .1);
+    ctx.lineTo(size * .42, size * .42);
+    ctx.lineTo(-size * .34, size * .5);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
+    ctx.globalAlpha = selected ? .56 : .38;
+    ctx.beginPath(); ctx.moveTo(-size * .18, size * .02); ctx.lineTo(-size * .12, size * .47); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(size * .08, -.04 * size); ctx.lineTo(size * .13, size * .45); ctx.stroke();
+    ctx.globalAlpha = selected ? (companionFocus ? .92 : 1) : .82;
   } else {
     ctx.beginPath();
     ctx.moveTo(-size * .32, -size * .02);
@@ -136,6 +142,7 @@ export class PhoneRenderer extends Renderer {
     this.materialProvisional = null;
     this.materialNodePoints = [];
     this.companionFocus = false;
+    this.companionWorldView = false;
     this.materialEditing = false;
   }
 
@@ -207,8 +214,9 @@ export class PhoneRenderer extends Renderer {
     const visible = visibleInSlice(this, entity);
     const selected = entity.id === this.selected;
     const held = entity.id === this.held;
+    const quietDiagnostics = (this.companionFocus || this.companionWorldView) && !this.materialEditing;
     const radius = Math.max(9, (visible ? this.sliceRadius(entity) : entity.radius) * point.k);
-    const haloRadius = radius * (held ? 2.3 : selected ? 2.05 : 1.72);
+    const haloRadius = radius * (held ? 2.3 : selected ? (this.companionFocus ? 1.5 : 2.05) : 1.72);
     const alpha = visible ? 1 : 0.22;
     ctx.save();
     ctx.globalCompositeOperation = 'screen';
@@ -238,20 +246,25 @@ export class PhoneRenderer extends Renderer {
       ctx.lineTo(point.x + Math.cos(angle) * marker, point.y + Math.sin(angle) * marker);
       ctx.stroke();
     }
-    if (selected || held) {
+    if ((selected || held) && !this.companionFocus) {
       ctx.strokeStyle = tone.solid; ctx.globalAlpha = 0.62; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.arc(point.x, point.y, Math.max(19, radius * 1.2) + 9, 0, Math.PI * 2); ctx.stroke();
     }
     const occupantSize = drawCompanionOccupant(ctx, entity, point, radius, { selected, held, companionFocus: this.companionFocus });
     const labelBase = occupantSize ? occupantSize * .72 : Math.max(17, radius);
-    ctx.font = selected ? '600 12px system-ui, sans-serif' : '11px system-ui, sans-serif';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    ctx.fillStyle = selected ? '#f4f7fb' : '#c8d7e8';
-    ctx.fillText((entity.localPreview ? 'LOCAL PREVIEW · ' : held ? 'HELD · ' : '') + entity.name, point.x, point.y + labelBase + 12);
-    if (selected && !this.companionFocus) {
-      ctx.font = '9px ui-monospace, SFMono-Regular, monospace';
-      ctx.fillStyle = tone.solid;
-      ctx.fillText(tone.label.toUpperCase() + ' · ' + entity.q.slice(0, 3).map(value => finite(value).toFixed(1)).join(' / '), point.x, point.y + labelBase + 28);
+    // In companion or collapsed world view the selected resident carries the
+    // identity; hiding the other labels keeps the field readable and leaves
+    // material controls available without letting diagnostic text cover it.
+    if (!quietDiagnostics || selected || held) {
+      ctx.font = selected ? '600 12px system-ui, sans-serif' : '11px system-ui, sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.fillStyle = selected ? '#f4f7fb' : '#c8d7e8';
+      ctx.fillText((entity.localPreview ? 'LOCAL PREVIEW · ' : held ? 'HELD · ' : '') + entity.name, point.x, point.y + labelBase + 12);
+      if (selected && !quietDiagnostics) {
+        ctx.font = '9px ui-monospace, SFMono-Regular, monospace';
+        ctx.fillStyle = tone.solid;
+        ctx.fillText(tone.label.toUpperCase() + ' · ' + entity.q.slice(0, 3).map(value => finite(value).toFixed(1)).join(' / '), point.x, point.y + labelBase + 28);
+      }
     }
     ctx.restore();
     return { ...point, id: entity.id, interactive: visible, tone: tone.key };
@@ -259,10 +272,10 @@ export class PhoneRenderer extends Renderer {
 
   drawMaterialPatch(ctx, body, entity, geometry, { provisional = false } = {}) {
     if (!body?.nodes || !entity) return;
-    // Keep the node hit targets available in companion focus so the existing
-    // material editor remains reachable. Quiet the mesh there, and only
-    // reveal its diagnostic label while the editor is actively previewing.
-    const quietCompanionMesh = this.companionFocus && !this.materialEditing;
+    // Keep the node hit targets available in companion/world view so the
+    // existing material editor remains reachable. Quiet the mesh there, and
+    // only reveal its diagnostic label while the editor is actively previewing.
+    const quietCompanionMesh = (this.companionFocus || this.companionWorldView) && !this.materialEditing;
     const points = Object.values(body.nodes).map(node => {
       const projected = projectEntity(this, { ...node, radius: entity.radius, chart: entity.chart }, geometry);
       return { ...projected, nodeId: node.id, q: [...node.q], provisional };
