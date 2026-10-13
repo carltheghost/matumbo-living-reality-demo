@@ -123,8 +123,24 @@ const ROLE_SET = new Set(COUNCIL_ROLES);
 const CAPABILITY_SET = new Set(COUNCIL_CAPABILITIES);
 const ADAPTER_METHODS = Object.freeze({ proposal: "propose", critique: "critique", synthesis: "synthesize" });
 const SENSITIVE_KEY = /(?:secret|token|password|cookie|credential|api[-_]?key|authorization|session|private)/i;
-const AUTHORITY_KEY = /(?:authority|authorit(?:y|ies)|capabilit(?:y|ies)|permission(?:s)?|grant(?:s)?|security|entitlement(?:s)?|connection[_-]?status|approved|approval|consent|revok(?:e|ed)|enabled|epoch|role(?:s)?|tool(?:s|[_-]?(?:capabilit(?:y|ies)|calls)?))/i;
-const FORBIDDEN_CONTEXT_SCOPE = /(?:^|[._:-])(?:secret|secrets|token|tokens|password|cookie|cookies|credential|credentials|api[-_]?key|authorization|session|authority|authorit(?:y|ies)|capabilit(?:y|ies)|permission(?:s)?|grant(?:s)?|security|entitlement(?:s)?|connection[_-]?status|approved|approval|consent|revok(?:e|ed)|enabled|epoch|role(?:s)?|tool(?:s|[_-]?(?:capabilit(?:y|ies)|calls)?))(?:$|[._:-])/i;
+const AUTHORITY_KEY = /(?:authority|authorit(?:y|ies)|capabilit(?:y|ies)|permission(?:s)?|grant(?:s)?|security|entitlement(?:s)?|connection[_-]?status|approved|approval|consent|revok(?:e|ed)|enabled|epoch|role(?:s)?|tool(?:s|[_-]?(?:capabilit(?:y|ies)|calls)?)|subject[_-]?id|account[_-]?id|user[_-]?id|provider[_-]?id)/i;
+const CONTEXT_SCOPE_SCHEMAS = Object.freeze({
+  "context.public": new Set([
+    "brief", "safe", "safeNested", "label", "summary", "title", "description", "text", "question",
+    "objective", "goal", "constraints", "constraint", "options", "option", "facts", "fact",
+    "observations", "observation", "items", "item", "data", "value", "values", "count", "total",
+    "status", "state", "category", "categories", "source", "sources", "sourceRefs", "refs",
+    "externalCalls", "mode", "kind", "name", "step", "steps", "plan", "priority", "risk",
+    "result", "results", "unknowns", "claims", "nested",
+  ]),
+  "context.private": new Set([
+    "note", "notes", "summary", "details", "text", "question", "objective", "goal", "constraints",
+    "constraint", "options", "option", "facts", "fact", "observations", "observation", "items", "item",
+    "data", "value", "values", "count", "total", "status", "state", "category", "categories", "source",
+    "sources", "sourceRefs", "refs", "mode", "kind", "name", "step", "steps", "plan", "priority", "risk",
+    "result", "results", "unknowns", "claims", "nested", "safeNested",
+  ]),
+});
 const ID_PATTERN = /^[a-z0-9][a-z0-9._:-]{0,95}$/i;
 const UNTRUSTED_CONNECTION_STATUSES = new Set(["simulation", "manual-setup-required", "unavailable", "revoked"]);
 
@@ -231,17 +247,44 @@ function normalizeConnectionStatus(value) {
   return UNTRUSTED_CONNECTION_STATUSES.has(status) ? status : "unavailable";
 }
 
-function normalizeConnectionEvidence(value) {
+function normalizeConnectionRequest(memberId, value) {
+  if (!isRecord(value)) {
+    throw new CouncilError("CONNECTION_REQUEST_INVALID", "connection verification requires provider and subject binding");
+  }
+  return deepFreeze({
+    memberId,
+    providerId: identifier(value.providerId, "connection request provider id"),
+    subjectId: identifier(value.subjectId, "connection request subject id"),
+    entitlement: value.entitlement === undefined ? null : cleanText(value.entitlement, 160, "connection request entitlement"),
+  });
+}
+
+function normalizeConnectionEvidence(value, requested) {
   if (!isRecord(value) || value.verified !== true) {
     throw new CouncilError("CONNECTION_NOT_VERIFIED", "connection evidence was not verified by the authority boundary");
   }
-  return deepFreeze({
+  const normalized = {
+    memberId: identifier(value.memberId, "connection evidence member id"),
     providerId: identifier(value.providerId, "connection evidence provider id"),
     subjectId: identifier(value.subjectId, "connection evidence subject id"),
     entitlement: cleanText(value.entitlement, 160, "connection evidence entitlement", { required: true }),
     verifiedAt: cleanText(value.verifiedAt || "", 64, "connection evidence verifiedAt", { required: true }),
     verifiedBy: cleanText(value.verifiedBy || "authority", 96, "connection evidence verifier", { required: true }),
-  });
+  };
+  const mismatch = ["memberId", "providerId", "subjectId"]
+    .find((field) => normalized[field] !== requested[field]);
+  if (mismatch || (requested.entitlement !== null && normalized.entitlement !== requested.entitlement)) {
+    throw new CouncilError("CONNECTION_TARGET_MISMATCH", "verified connection evidence does not match the requested member, provider, subject, or entitlement", {
+      requested,
+      received: {
+        memberId: normalized.memberId,
+        providerId: normalized.providerId,
+        subjectId: normalized.subjectId,
+        entitlement: normalized.entitlement,
+      },
+    });
+  }
+  return deepFreeze(normalized);
 }
 
 export class CouncilError extends Error {
@@ -393,13 +436,14 @@ export function createCouncilMemberRegistry({ authority, now = null } = {}) {
     if (typeof authority.verifyConnectionEvidence !== "function") {
       throw new CouncilError("CONNECTION_VERIFIER_UNAVAILABLE", "no authority-owned connection verifier is installed");
     }
+    const requested = normalizeConnectionRequest(current.id, evidence);
     let verified;
     try {
-      verified = authority.verifyConnectionEvidence(evidence);
+      verified = authority.verifyConnectionEvidence(requested, evidence);
     } catch (error) {
       throw new CouncilError("CONNECTION_VERIFICATION_FAILED", cleanText(error?.message || error, 240, "connection verification error"));
     }
-    const connectionEvidence = normalizeConnectionEvidence(verified);
+    const connectionEvidence = normalizeConnectionEvidence(verified, requested);
     const next = {
       ...current,
       connectionStatus: "connected",
@@ -440,16 +484,16 @@ export function createCouncilMemberRegistry({ authority, now = null } = {}) {
   });
 }
 
-function sanitizeContextValue(value, maxChars, depth = 0) {
+function projectContextValue(value, allowedKeys, maxChars, depth = 0) {
   if (depth > 4) return "[redacted:depth-limit]";
   if (typeof value === "string") return value.slice(0, maxChars);
   if (typeof value === "number" || typeof value === "boolean" || value === null) return value;
-  if (Array.isArray(value)) return value.slice(0, 32).map((item) => sanitizeContextValue(item, maxChars, depth + 1));
+  if (Array.isArray(value)) return value.slice(0, 32).map((item) => projectContextValue(item, allowedKeys, maxChars, depth + 1));
   if (!isRecord(value)) return null;
   const output = {};
   for (const [key, child] of Object.entries(value).slice(0, 64)) {
-    if (isForbiddenContextKey(key)) continue;
-    output[key.slice(0, 96)] = sanitizeContextValue(child, maxChars, depth + 1);
+    if (!allowedKeys.has(key)) continue;
+    output[key.slice(0, 96)] = projectContextValue(child, allowedKeys, maxChars, depth + 1);
   }
   return output;
 }
@@ -458,11 +502,9 @@ function sanitizeTaskContext(value, maxChars) {
   if (!isRecord(value)) return {};
   const output = {};
   for (const [scope, child] of Object.entries(value).slice(0, 24)) {
-    // `context.private` is a legitimate allowlisted scope; its child keys
-    // are still recursively redacted. Dedicated secret/credential/authority
-    // scopes are never retained, even if a caller tries to authorize them.
-    if (FORBIDDEN_CONTEXT_SCOPE.test(scope)) continue;
-    output[scope.slice(0, 96)] = sanitizeContextValue(child, maxChars);
+    const allowedKeys = CONTEXT_SCOPE_SCHEMAS[scope];
+    if (!allowedKeys) continue;
+    output[scope.slice(0, 96)] = projectContextValue(child, allowedKeys, maxChars);
   }
   return output;
 }
@@ -475,7 +517,9 @@ function contextForMember(task, member, limits) {
   for (const scope of scopes) {
     if (scope === "task.request") continue;
     if (!Object.prototype.hasOwnProperty.call(task.context, scope)) continue;
-    visible[scope] = sanitizeContextValue(task.context[scope], limits.maxContextChars);
+    const allowedKeys = CONTEXT_SCOPE_SCHEMAS[scope];
+    if (!allowedKeys) continue;
+    visible[scope] = projectContextValue(task.context[scope], allowedKeys, limits.maxContextChars);
   }
   visible.redactions = [
     ...Object.keys(task.context).filter((scope) => !scopes.includes(scope)),
@@ -944,28 +988,52 @@ export function createCouncilOrchestrator({ authority, registry = null, adapters
     return { ok: true };
   }
 
+  function staleContributionReason(run, contribution) {
+    const memberId = contribution.provenance.memberId;
+    if (run.cancelled) return "run-cancelled";
+    if (run.revokedMembers.has(memberId)) return "member-revoked-in-flight";
+    const member = memberRegistry.getMember(memberId);
+    if (!member) return "member-not-registered";
+    if (member.revoked) return "member-revoked-in-flight";
+    if (!member.userConsent) return "member-consent-revoked";
+    if (!member.enabled) return "member-disabled";
+    if (member.epoch !== contribution.provenance.memberEpochAtAdmission) return "member-epoch-changed";
+    const expected = contribution.provenance.effectiveToolCapabilitiesAtAdmission || [];
+    if (!sameStringSet(member.effectiveToolCapabilities, expected)) return "authority-capabilities-changed";
+    return null;
+  }
+
   function fenceStaleContributions(run) {
     for (const contribution of run.contributions) {
       if (run.fencedContributionIds.has(contribution.contributionId)) continue;
-      const member = memberRegistry.getMember(contribution.provenance.memberId);
-      const expected = contribution.provenance.effectiveToolCapabilitiesAtAdmission || [];
-      if (member && sameStringSet(member.effectiveToolCapabilities, expected)) continue;
+      const reason = staleContributionReason(run, contribution);
+      if (!reason) continue;
       run.fencedContributionIds.add(contribution.contributionId);
+      run.fencedContributionReasons.set(contribution.contributionId, reason);
+      for (const record of run.records) {
+        if (record.contribution?.contributionId !== contribution.contributionId) continue;
+        delete record.contribution;
+        record.fencedContributionId = contribution.contributionId;
+        record.fencedContribution = true;
+        record.fenceReason = reason;
+      }
       run.records.push(makeRecord(
         run,
         contribution.provenance.phase,
         contribution.provenance.memberId,
         "fenced",
-        "authority-capabilities-changed",
+        reason,
         {
           contributionId: contribution.contributionId,
-          staleAuthorityFence: true,
+          staleContributionFence: true,
+          staleAuthorityFence: reason === "authority-capabilities-changed",
         },
       ));
       run.events.push({
-        type: "stale-authority-fenced",
+        type: "stale-contribution-fenced",
         contributionId: contribution.contributionId,
         memberId: contribution.provenance.memberId,
+        reason,
         at: nowIso(now),
       });
     }
@@ -1086,6 +1154,7 @@ export function createCouncilOrchestrator({ authority, registry = null, adapters
         adapter: cleanText(adapter.provider || adapter.id || "mock-adapter", 96, "adapter id"),
         responseId: normalized.responseId || null,
         contextScopes: [...(args.context.scopes || [])],
+        memberEpochAtAdmission: member.epoch,
         effectiveToolCapabilitiesAtAdmission: [...member.effectiveToolCapabilities],
         parentContributionIds: prior.map((entry) => entry.contributionId),
         untrusted: true,
@@ -1158,8 +1227,17 @@ export function createCouncilOrchestrator({ authority, registry = null, adapters
         contributionId: entry.contributionId,
         memberId: entry.provenance.memberId,
         phase: entry.provenance.phase,
-        reason: "authority-capabilities-changed",
+        reason: run.fencedContributionReasons.get(entry.contributionId) || "stale-contribution",
       }));
+    const summarizePhaseRecord = (record) => {
+      const contributionId = record.contribution?.contributionId || record.fencedContributionId;
+      const fencedReason = contributionId ? run.fencedContributionReasons.get(contributionId) : null;
+      return {
+        memberId: record.memberId,
+        status: fencedReason ? "fenced" : record.status,
+        reason: fencedReason || record.reason,
+      };
+    };
     const finalResponse = synthesis ? {
       speakerId: task.speaker.memberId,
       speakerMode: task.speaker.mode,
@@ -1177,8 +1255,8 @@ export function createCouncilOrchestrator({ authority, registry = null, adapters
       runId: run.runId,
       status,
       selection: { ...task.speaker },
-      proposalResults: proposalResults.map((record) => ({ memberId: record.memberId, status: record.status, reason: record.reason })),
-      synthesisResults: synthesisResults.map((record) => ({ memberId: record.memberId, status: record.status, reason: record.reason })),
+      proposalResults: proposalResults.map(summarizePhaseRecord),
+      synthesisResults: synthesisResults.map(summarizePhaseRecord),
       finalResponse,
       contributions: currentContributions,
       provenance: currentContributions.map((entry) => entry.provenance),
@@ -1220,6 +1298,7 @@ export function createCouncilOrchestrator({ authority, registry = null, adapters
       controllers: new Set(),
       seenResponses: new Set(),
       fencedContributionIds: new Set(),
+      fencedContributionReasons: new Map(),
       memberCapabilityBaselines: new Map(participantIds.map((memberId) => [
         memberId,
         [...(memberRegistry.getMember(memberId)?.effectiveToolCapabilities || [])],

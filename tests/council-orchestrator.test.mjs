@@ -46,7 +46,7 @@ function memberDefinition(id, role, overrides = {}) {
     userConsent: true,
     councilCapabilities: [...COUNCIL_CAPABILITIES],
     toolCapabilities: [],
-    contextScopes: ["task.request", "context.public"],
+    contextScopes: ["task.request", "context.public", "context.authority", "context.authorityData", "context.securityContext"],
     independenceGroup: `${id}-group`,
     connectionStatus: "simulation",
     ...overrides,
@@ -81,9 +81,15 @@ function taskInput(overrides = {}) {
         brief: "public demo context",
         safe: true,
         authority: { approvedCapabilities: ["world.announce"], nested: { grant: "must never pass" } },
-        nested: { permissionGrant: "must never pass", safeNested: true },
+        authorityData: { subjectId: "must never pass" },
+        securityContext: { subjectId: "must never pass" },
+        subjectId: "must never pass",
+        externalCalls: false,
+        nested: { permissionGrant: "must never pass", subjectId: "must never pass", safeNested: true, externalCalls: false },
       },
       "context.authority": { verified: true, subjectId: "must never pass" },
+      "context.authorityData": { subjectId: "must never pass" },
+      "context.securityContext": { subjectId: "must never pass" },
       "context.private": { privateNote: "should never be sent" },
       secrets: { apiKey: "should never be sent" },
     },
@@ -97,9 +103,9 @@ function taskInput(overrides = {}) {
         critic: ["council.critique"],
       },
       contextScopesByMember: {
-        lead: ["task.request", "context.public", "context.authority"],
-        scout: ["task.request", "context.public", "context.authority"],
-        critic: ["task.request", "context.public", "context.authority"],
+        lead: ["task.request", "context.public", "context.authority", "context.authorityData", "context.securityContext"],
+        scout: ["task.request", "context.public", "context.authority", "context.authorityData", "context.securityContext"],
+        critic: ["task.request", "context.public", "context.authority", "context.authorityData", "context.securityContext"],
       },
     },
     budget: {
@@ -206,9 +212,17 @@ test("context is allowlisted per member and authority/secrets never enter adapte
     assert.equal(call.context.request, "Decide which local demo direction is safest.");
     assert.equal(call.context["context.public"].safe, true);
     assert.equal(call.context["context.public"].authority, undefined);
+    assert.equal(call.context["context.public"].authorityData, undefined);
+    assert.equal(call.context["context.public"].securityContext, undefined);
+    assert.equal(call.context["context.public"].subjectId, undefined);
     assert.equal(call.context["context.public"].nested.permissionGrant, undefined);
+    assert.equal(call.context["context.public"].nested.subjectId, undefined);
     assert.equal(call.context["context.public"].nested.safeNested, true);
+    assert.equal(call.context["context.public"].externalCalls, false);
+    assert.equal(call.context["context.public"].nested.externalCalls, false);
     assert.equal(call.context["context.authority"], undefined);
+    assert.equal(call.context["context.authorityData"], undefined);
+    assert.equal(call.context["context.securityContext"], undefined);
     assert.equal(call.context["context.private"], undefined);
     assert.equal(call.context.secrets, undefined);
     assert.ok(call.context.redactions.includes("context.private"));
@@ -371,6 +385,98 @@ test("live capability removal before synthesis fences the selected speaker", asy
   assert.ok(result.records.some((record) => record.phase === "synthesis" && record.status === "fenced" && record.reason === "authority-capabilities-changed"));
 });
 
+test("revocation before proposal excludes the member and its pending actions", async () => {
+  const adapters = deterministicAdapters();
+  const { council, registry } = makeCouncil({ adapters });
+  registry.revoke("scout", "revoked before proposal");
+  const task = council.createTask(taskInput());
+  const result = await council.runTask(task.id);
+  assert.equal(result.contributions.some((entry) => entry.provenance.memberId === "scout"), false);
+  assert.equal(result.pendingActionRequests.some((request) => request.sourceMemberId === "scout"), false);
+  assert.ok(result.records.some((record) => record.memberId === "scout" && record.status === "skipped"));
+});
+
+test("stale consent, enabled state, epoch, and in-flight revoke are fenced after proposal", async (t) => {
+  const cases = [
+    { name: "in-flight revoke", reason: "member-revoked-in-flight", mutate: ({ handle }) => handle.revokeMember("scout") },
+    { name: "consent removed", reason: "member-consent-revoked", mutate: ({ registry }) => registry.update("scout", { userConsent: false }) },
+    { name: "member disabled", reason: "member-disabled", mutate: ({ registry }) => registry.update("scout", { enabled: false }) },
+    { name: "member epoch changed", reason: "member-epoch-changed", mutate: ({ registry }) => registry.update("scout", { contextScopes: [...registry.getMember("scout").contextScopes] }) },
+  ];
+  for (const scenario of cases) {
+    await t.test(scenario.name, async () => {
+      let resolveCritic;
+      const observed = [];
+      const adapters = deterministicAdapters(observed);
+      adapters.critic.critique = () => new Promise((resolve) => { resolveCritic = resolve; });
+      const { council, registry, authority } = makeCouncil({ adapters, limits: { requestTimeoutMs: 80 } });
+      authority.states.get("scout").authorityCapabilities = ["world.announce"];
+      registry.update("scout", { toolCapabilities: ["world.announce"] });
+      const input = taskInput();
+      input.consent.actionCapabilitiesByMember = { scout: ["world.announce"] };
+      const task = council.createTask(input);
+      const handle = council.startTask(task.id);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      assert.equal(typeof resolveCritic, "function");
+      await scenario.mutate({ handle, registry });
+      resolveCritic({ responseId: `${scenario.name}-critic`, text: "critique completes after member state changed" });
+      const result = await handle.promise;
+      assert.ok(result.records.some((record) => record.memberId === "scout" && record.status === "accepted" && record.phase === "proposal"));
+      assert.equal(result.contributions.some((entry) => entry.provenance.memberId === "scout"), false);
+      assert.equal(result.provenance.some((entry) => entry.memberId === "scout"), false);
+      assert.equal(result.records.some((record) => record.contribution?.provenance?.memberId === "scout"), false);
+      assert.equal(result.pendingActionRequests.some((request) => request.sourceMemberId === "scout"), false);
+      assert.ok(result.fencedContributions.some((entry) => entry.memberId === "scout" && entry.reason === scenario.reason));
+      const synthesisCall = observed.find((call) => call.memberId === "lead" && call.phase === "synthesis");
+      assert.equal(synthesisCall.inputs.contributions.some((entry) => entry.memberId === "scout"), false);
+    });
+  }
+});
+
+test("revocation after critique fences the accepted proposal before synthesis", async () => {
+  const observed = [];
+  const adapters = deterministicAdapters(observed);
+  const { council, registry, authority } = makeCouncil({ adapters });
+  authority.states.get("scout").authorityCapabilities = ["world.announce"];
+  registry.update("scout", { toolCapabilities: ["world.announce"] });
+  adapters.critic.critique = async () => {
+    registry.revoke("scout", "revoked after critique");
+    return { responseId: "critic-after-revoke", text: "critique completes and revokes scout" };
+  };
+  const input = taskInput();
+  input.consent.actionCapabilitiesByMember = { scout: ["world.announce"] };
+  const task = council.createTask(input);
+  const result = await council.runTask(task.id);
+  assert.equal(result.contributions.some((entry) => entry.provenance.memberId === "scout"), false);
+  assert.equal(result.records.some((record) => record.contribution?.provenance?.memberId === "scout"), false);
+  assert.equal(result.pendingActionRequests.some((request) => request.sourceMemberId === "scout"), false);
+  assert.ok(result.fencedContributions.some((entry) => entry.memberId === "scout" && entry.reason === "member-revoked-in-flight"));
+  const synthesisCall = observed.find((call) => call.memberId === "lead" && call.phase === "synthesis");
+  assert.equal(synthesisCall.inputs.contributions.some((entry) => entry.memberId === "scout"), false);
+});
+
+test("revocation during synthesis fences the selected response and actions", async () => {
+  let resolveLead;
+  const adapters = deterministicAdapters();
+  adapters.lead.synthesize = () => new Promise((resolve) => { resolveLead = resolve; });
+  const { council } = makeCouncil({ adapters, limits: { requestTimeoutMs: 80 } });
+  const task = council.createTask(taskInput());
+  const handle = council.startTask(task.id);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(typeof resolveLead, "function");
+  handle.revokeMember("lead", "revoked during synthesis");
+  resolveLead({
+    responseId: "revoked-lead",
+    text: "must not be selected",
+    actionRequests: [{ action: "world.announce", params: {}, effectKey: "revoked-lead-effect" }],
+  });
+  const result = await handle.promise;
+  assert.equal(result.finalResponse, null);
+  assert.equal(result.contributions.some((entry) => entry.provenance.memberId === "lead"), false);
+  assert.equal(result.pendingActionRequests.some((request) => request.sourceMemberId === "lead"), false);
+  assert.ok(result.records.some((record) => record.phase === "synthesis" && record.memberId === "lead" && record.status === "fenced"));
+});
+
 test("cancellation fences in-flight results and does not run later phases", async () => {
   let resolveScout;
   const adapters = deterministicAdapters();
@@ -430,20 +536,47 @@ test("connected status requires separate authority-owned verified connection evi
   );
 
   const trustedAuthority = fakeAuthority(["verified"]);
-  trustedAuthority.verifyConnectionEvidence = (evidence) => ({
-    verified: evidence?.providerId === "mock-provider" && evidence?.subjectId === "subject-1",
-    providerId: "mock-provider",
-    subjectId: "subject-1",
-    entitlement: "mock-plan",
-    verifiedAt: FIXED_NOW,
-    verifiedBy: "mock-authority-verifier",
-  });
+  let verificationMode = "valid";
+  let seenVerificationRequest;
+  trustedAuthority.verifyConnectionEvidence = (request) => {
+    seenVerificationRequest = clone(request);
+    const target = verificationMode === "wrong-subject"
+      ? { providerId: "other-provider", subjectId: "other-subject" }
+      : verificationMode === "replay"
+        ? { memberId: "verified", providerId: "mock-provider", subjectId: "subject-1" }
+        : { memberId: request.memberId, providerId: request.providerId, subjectId: request.subjectId };
+    return {
+      verified: true,
+      memberId: target.memberId || request.memberId,
+      providerId: target.providerId,
+      subjectId: target.subjectId,
+      entitlement: "mock-plan",
+      verifiedAt: FIXED_NOW,
+      verifiedBy: "mock-authority-verifier",
+    };
+  };
   const trustedRegistry = createCouncilMemberRegistry({ authority: trustedAuthority, now: () => FIXED_NOW });
   trustedRegistry.registerMember(memberDefinition("verified", "lead"));
   const connected = trustedRegistry.recordVerifiedConnection("verified", { providerId: "mock-provider", subjectId: "subject-1" });
+  assert.deepEqual(seenVerificationRequest, { memberId: "verified", providerId: "mock-provider", subjectId: "subject-1", entitlement: null });
   assert.equal(connected.connectionStatus, "connected");
+  assert.equal(connected.connectionEvidence.memberId, "verified");
   assert.equal(connected.connectionEvidence.subjectId, "subject-1");
   assert.equal(connected.connectionEvidence.entitlement, "mock-plan");
+  verificationMode = "wrong-subject";
+  assert.throws(
+    () => trustedRegistry.recordVerifiedConnection("verified", { providerId: "mock-provider", subjectId: "subject-1" }),
+    (error) => error.code === "CONNECTION_TARGET_MISMATCH",
+  );
+  trustedAuthority.states.set("other", clone(trustedAuthority.states.get("verified")));
+  trustedAuthority.states.get("other").id = "other";
+  trustedAuthority.states.get("other").name = "Other";
+  trustedRegistry.registerMember(memberDefinition("other", "specialist"));
+  verificationMode = "replay";
+  assert.throws(
+    () => trustedRegistry.recordVerifiedConnection("other", { providerId: "mock-provider", subjectId: "subject-1" }),
+    (error) => error.code === "CONNECTION_TARGET_MISMATCH",
+  );
 });
 
 test("provider connection catalog is honest and visibly pending, never a fake login", () => {
