@@ -77,7 +77,13 @@ function taskInput(overrides = {}) {
     specialistIds: ["scout"],
     criticIds: ["critic"],
     context: {
-      "context.public": { brief: "public demo context", safe: true },
+      "context.public": {
+        brief: "public demo context",
+        safe: true,
+        authority: { approvedCapabilities: ["world.announce"], nested: { grant: "must never pass" } },
+        nested: { permissionGrant: "must never pass", safeNested: true },
+      },
+      "context.authority": { verified: true, subjectId: "must never pass" },
       "context.private": { privateNote: "should never be sent" },
       secrets: { apiKey: "should never be sent" },
     },
@@ -91,9 +97,9 @@ function taskInput(overrides = {}) {
         critic: ["council.critique"],
       },
       contextScopesByMember: {
-        lead: ["task.request", "context.public"],
-        scout: ["task.request", "context.public"],
-        critic: ["task.request", "context.public"],
+        lead: ["task.request", "context.public", "context.authority"],
+        scout: ["task.request", "context.public", "context.authority"],
+        critic: ["task.request", "context.public", "context.authority"],
       },
     },
     budget: {
@@ -199,10 +205,15 @@ test("context is allowlisted per member and authority/secrets never enter adapte
     assert.equal(call.task.prompt, undefined);
     assert.equal(call.context.request, "Decide which local demo direction is safest.");
     assert.equal(call.context["context.public"].safe, true);
+    assert.equal(call.context["context.public"].authority, undefined);
+    assert.equal(call.context["context.public"].nested.permissionGrant, undefined);
+    assert.equal(call.context["context.public"].nested.safeNested, true);
+    assert.equal(call.context["context.authority"], undefined);
     assert.equal(call.context["context.private"], undefined);
     assert.equal(call.context.secrets, undefined);
     assert.ok(call.context.redactions.includes("context.private"));
     assert.ok(call.context.redactions.includes("secrets-and-authority-fields"));
+    assert.ok(call.context.redactions.includes("authority-and-security-fields"));
   }
 });
 
@@ -316,6 +327,50 @@ test("revocation in flight fences a late member result", async () => {
   assert.ok(result.records.some((record) => record.memberId === "scout" && record.status === "fenced"));
 });
 
+test("live Bot Plaza capability removal fences a delayed result and its action proposal", async () => {
+  let resolveScout;
+  const adapters = deterministicAdapters();
+  adapters.scout.propose = () => new Promise((resolve) => { resolveScout = resolve; });
+  const { council, registry, authority } = makeCouncil({ adapters, limits: { requestTimeoutMs: 80 } });
+  authority.states.get("scout").authorityCapabilities = ["world.announce"];
+  registry.update("scout", { toolCapabilities: ["world.announce"] });
+  const input = taskInput();
+  input.consent.actionCapabilitiesByMember = { scout: ["world.announce"] };
+  const task = council.createTask(input);
+  const handle = council.startTask(task.id);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(typeof resolveScout, "function");
+  authority.states.get("scout").authorityCapabilities = [];
+  resolveScout({
+    responseId: "stale-authority",
+    text: "must be fenced",
+    actionRequests: [{ action: "world.announce", params: {}, effectKey: "stale-effect" }],
+  });
+  const result = await handle.promise;
+  assert.equal(result.contributions.some((entry) => entry.provenance.memberId === "scout"), false);
+  assert.equal(result.pendingActionRequests.length, 0);
+  assert.ok(result.records.some((record) => record.memberId === "scout" && record.status === "fenced" && record.reason === "authority-capabilities-changed"));
+  assert.ok(result.events.some((event) => ["stale-authority-fenced", "authority-capabilities-fenced"].includes(event.type) || event.reason === "authority-capabilities-changed"));
+});
+
+test("live capability removal before synthesis fences the selected speaker", async () => {
+  let resolveCritic;
+  const adapters = deterministicAdapters();
+  adapters.critic.critique = () => new Promise((resolve) => { resolveCritic = resolve; });
+  const { council, registry, authority } = makeCouncil({ adapters, limits: { requestTimeoutMs: 80 } });
+  authority.states.get("lead").authorityCapabilities = ["world.announce"];
+  registry.update("lead", { toolCapabilities: ["world.announce"] });
+  const task = council.createTask(taskInput());
+  const handle = council.startTask(task.id);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(typeof resolveCritic, "function");
+  authority.states.get("lead").authorityCapabilities = [];
+  resolveCritic({ responseId: "critic-before-synthesis", text: "lead capability changed" });
+  const result = await handle.promise;
+  assert.equal(result.finalResponse, null);
+  assert.ok(result.records.some((record) => record.phase === "synthesis" && record.status === "fenced" && record.reason === "authority-capabilities-changed"));
+});
+
 test("cancellation fences in-flight results and does not run later phases", async () => {
   let resolveScout;
   const adapters = deterministicAdapters();
@@ -349,6 +404,46 @@ test("approved specialist can be selected explicitly, while a rogue speaker fiel
   const result = await council.runTask(task.id);
   assert.equal(result.finalResponse.speakerId, "scout");
   assert.equal(result.finalResponse.text, "Specialist synthesis, explicitly approved by the user.");
+});
+
+test("connected status requires separate authority-owned verified connection evidence", () => {
+  const { registry } = makeCouncil();
+  assert.throws(
+    () => registry.update("scout", { connectionStatus: "connected" }),
+    (error) => error.code === "CONNECTION_EVIDENCE_REQUIRED",
+  );
+  assert.throws(
+    () => registry.update("scout", { connectionEvidence: { verified: true } }),
+    (error) => error.code === "CONNECTION_EVIDENCE_TRUSTED_ONLY",
+  );
+  assert.equal(registry.getMember("scout").connectionStatus, "simulation");
+  assert.throws(
+    () => registry.recordVerifiedConnection("scout", { providerId: "mock", subjectId: "user", entitlement: "plan" }),
+    (error) => error.code === "CONNECTION_VERIFIER_UNAVAILABLE",
+  );
+
+  const untrustedAuthority = fakeAuthority(["fresh"]);
+  const untrustedRegistry = createCouncilMemberRegistry({ authority: untrustedAuthority, now: () => FIXED_NOW });
+  assert.throws(
+    () => untrustedRegistry.registerMember(memberDefinition("fresh", "lead", { connectionStatus: "connected" })),
+    (error) => error.code === "CONNECTION_EVIDENCE_REQUIRED",
+  );
+
+  const trustedAuthority = fakeAuthority(["verified"]);
+  trustedAuthority.verifyConnectionEvidence = (evidence) => ({
+    verified: evidence?.providerId === "mock-provider" && evidence?.subjectId === "subject-1",
+    providerId: "mock-provider",
+    subjectId: "subject-1",
+    entitlement: "mock-plan",
+    verifiedAt: FIXED_NOW,
+    verifiedBy: "mock-authority-verifier",
+  });
+  const trustedRegistry = createCouncilMemberRegistry({ authority: trustedAuthority, now: () => FIXED_NOW });
+  trustedRegistry.registerMember(memberDefinition("verified", "lead"));
+  const connected = trustedRegistry.recordVerifiedConnection("verified", { providerId: "mock-provider", subjectId: "subject-1" });
+  assert.equal(connected.connectionStatus, "connected");
+  assert.equal(connected.connectionEvidence.subjectId, "subject-1");
+  assert.equal(connected.connectionEvidence.entitlement, "mock-plan");
 });
 
 test("provider connection catalog is honest and visibly pending, never a fake login", () => {

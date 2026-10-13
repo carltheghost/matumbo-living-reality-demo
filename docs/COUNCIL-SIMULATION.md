@@ -14,8 +14,10 @@ The output begins with `SIMULATION ONLY`. It uses deterministic in-process mock 
 
 - `createBotPlazaCouncilAuthority()` reads the existing Bot Plaza registry. Bot Plaza remains authoritative for identity, enabled state, and approved tool capabilities.
 - `createCouncilMemberRegistry()` stores the user’s explicit council membership, role, context scopes, orchestration capabilities, connection state, and revocation epoch. It cannot add capabilities to the Bot Plaza authority.
+- `connectionStatus` is an untrusted setup/mock state (`simulation`, `manual-setup-required`, `unavailable`, or `revoked`). Normal registration/update calls cannot assert `connected`; only a separate authority-owned verifier can record verified subject, provider, and entitlement evidence.
 - `createCouncilOrchestrator()` requires explicit per-member and per-task consent, creates redacted context views, runs bounded proposal/critic/synthesis phases, and returns an auditable result.
-- Adapter results are untrusted data. `permissions`, `budget`, `credentials`, tool calls, and delegation requests in a bot response are recorded or rejected; they are never authority.
+- Adapter context strips authority, capability, permission, grant, credential, security, and secret fields even when a caller allowlists the containing scope. Adapter results are untrusted data. `permissions`, `budget`, `credentials`, tool calls, and delegation requests in a bot response are recorded or rejected; they are never authority.
+- Live Bot Plaza effective tool capabilities are rechecked at result admission and before synthesis/final action collection. A changed capability set fences stale contributions and proposals.
 - Action requests are proposal-only records. The council never calls `createWorldActionExecutor`, a provider SDK, a browser, a login flow, or an external service.
 
 No `index.html`, `src/main.js`, `src/render/*`, Vivo transport/provider file, contract/token/economy/house-pool file, or shared entrypoint is changed. A future UI integration must be separately approved by the parent/control tower.

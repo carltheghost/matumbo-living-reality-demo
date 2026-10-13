@@ -123,8 +123,10 @@ const ROLE_SET = new Set(COUNCIL_ROLES);
 const CAPABILITY_SET = new Set(COUNCIL_CAPABILITIES);
 const ADAPTER_METHODS = Object.freeze({ proposal: "propose", critique: "critique", synthesis: "synthesize" });
 const SENSITIVE_KEY = /(?:secret|token|password|cookie|credential|api[-_]?key|authorization|session|private)/i;
+const AUTHORITY_KEY = /(?:authority|authorit(?:y|ies)|capabilit(?:y|ies)|permission(?:s)?|grant(?:s)?|security|entitlement(?:s)?|connection[_-]?status|approved|approval|consent|revok(?:e|ed)|enabled|epoch|role(?:s)?|tool(?:s|[_-]?(?:capabilit(?:y|ies)|calls)?))/i;
+const FORBIDDEN_CONTEXT_SCOPE = /(?:^|[._:-])(?:secret|secrets|token|tokens|password|cookie|cookies|credential|credentials|api[-_]?key|authorization|session|authority|authorit(?:y|ies)|capabilit(?:y|ies)|permission(?:s)?|grant(?:s)?|security|entitlement(?:s)?|connection[_-]?status|approved|approval|consent|revok(?:e|ed)|enabled|epoch|role(?:s)?|tool(?:s|[_-]?(?:capabilit(?:y|ies)|calls)?))(?:$|[._:-])/i;
 const ID_PATTERN = /^[a-z0-9][a-z0-9._:-]{0,95}$/i;
-const STATUS_VALUES = new Set(["connected", "simulation", "manual-setup-required", "unavailable", "revoked"]);
+const UNTRUSTED_CONNECTION_STATUSES = new Set(["simulation", "manual-setup-required", "unavailable", "revoked"]);
 
 function deepFreeze(value, seen = new Set()) {
   if (!value || typeof value !== "object" || seen.has(value)) return value;
@@ -195,6 +197,10 @@ function isRecord(value) {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
+function isForbiddenContextKey(key) {
+  return SENSITIVE_KEY.test(key) || AUTHORITY_KEY.test(key);
+}
+
 function safeJson(value, depth = 0) {
   if (depth > 4 || value === null || value === undefined) return value ?? null;
   if (typeof value === "string") return value.slice(0, 500);
@@ -203,7 +209,7 @@ function safeJson(value, depth = 0) {
   if (!isRecord(value)) return null;
   const output = {};
   for (const [key, child] of Object.entries(value).slice(0, 32)) {
-    if (SENSITIVE_KEY.test(key)) continue;
+    if (isForbiddenContextKey(key)) continue;
     output[key.slice(0, 96)] = safeJson(child, depth + 1);
   }
   return output;
@@ -219,7 +225,23 @@ function assertCapabilityList(value, field) {
 
 function normalizeConnectionStatus(value) {
   const status = asText(value || "simulation").trim();
-  return STATUS_VALUES.has(status) ? status : "unavailable";
+  if (status === "connected") {
+    throw new CouncilError("CONNECTION_EVIDENCE_REQUIRED", "connected status requires authority-owned verified connection evidence");
+  }
+  return UNTRUSTED_CONNECTION_STATUSES.has(status) ? status : "unavailable";
+}
+
+function normalizeConnectionEvidence(value) {
+  if (!isRecord(value) || value.verified !== true) {
+    throw new CouncilError("CONNECTION_NOT_VERIFIED", "connection evidence was not verified by the authority boundary");
+  }
+  return deepFreeze({
+    providerId: identifier(value.providerId, "connection evidence provider id"),
+    subjectId: identifier(value.subjectId, "connection evidence subject id"),
+    entitlement: cleanText(value.entitlement, 160, "connection evidence entitlement", { required: true }),
+    verifiedAt: cleanText(value.verifiedAt || "", 64, "connection evidence verifiedAt", { required: true }),
+    verifiedBy: cleanText(value.verifiedBy || "authority", 96, "connection evidence verifier", { required: true }),
+  });
 }
 
 export class CouncilError extends Error {
@@ -302,6 +324,9 @@ export function createCouncilMemberRegistry({ authority, now = null } = {}) {
     const id = identifier(input.id, "member id");
     const live = liveMember(id);
     if (!live) throw new CouncilError("MEMBER_NOT_FOUND", `member ${id} is not present in the authority registry`);
+    if (input.connectionEvidence !== undefined) {
+      throw new CouncilError("CONNECTION_EVIDENCE_TRUSTED_ONLY", "connection evidence must come from the authority verifier");
+    }
     if (members.size >= COUNCIL_DEFAULT_LIMITS.maxMembers && !members.has(id)) {
       throw new CouncilError("MEMBER_LIMIT", "council member limit reached");
     }
@@ -322,6 +347,7 @@ export function createCouncilMemberRegistry({ authority, now = null } = {}) {
       blockedToolCapabilities: notGranted,
       contextScopes,
       connectionStatus: normalizeConnectionStatus(input.connectionStatus),
+      connectionEvidence: null,
       userConsent: input.userConsent === true,
       enabled: input.enabled !== false,
       revoked: false,
@@ -342,14 +368,44 @@ export function createCouncilMemberRegistry({ authority, now = null } = {}) {
   function update(id, patch = {}) {
     const current = members.get(asText(id));
     if (!current) throw new CouncilError("MEMBER_NOT_REGISTERED", `member ${id} is not registered with the council`);
+    if (patch.connectionEvidence !== undefined) {
+      throw new CouncilError("CONNECTION_EVIDENCE_TRUSTED_ONLY", "connection evidence must come from the authority verifier");
+    }
     const next = { ...current };
     if (patch.userConsent !== undefined) next.userConsent = patch.userConsent === true;
     if (patch.enabled !== undefined) next.enabled = patch.enabled === true;
     if (patch.contextScopes !== undefined) next.contextScopes = uniqueStrings(patch.contextScopes, 16, "context scopes");
     if (patch.councilCapabilities !== undefined) next.councilCapabilities = assertCapabilityList(patch.councilCapabilities, "council");
     if (patch.toolCapabilities !== undefined) next.toolCapabilities = uniqueStrings(patch.toolCapabilities, 64, "tool");
-    if (patch.connectionStatus !== undefined) next.connectionStatus = normalizeConnectionStatus(patch.connectionStatus);
+    if (patch.connectionStatus !== undefined) {
+      next.connectionStatus = normalizeConnectionStatus(patch.connectionStatus);
+      next.connectionEvidence = null;
+    }
     next.epoch += 1;
+    members.set(current.id, next);
+    version += 1;
+    return snapshot(current.id);
+  }
+
+  function recordVerifiedConnection(id, evidence) {
+    const current = members.get(asText(id));
+    if (!current) throw new CouncilError("MEMBER_NOT_REGISTERED", `member ${id} is not registered with the council`);
+    if (typeof authority.verifyConnectionEvidence !== "function") {
+      throw new CouncilError("CONNECTION_VERIFIER_UNAVAILABLE", "no authority-owned connection verifier is installed");
+    }
+    let verified;
+    try {
+      verified = authority.verifyConnectionEvidence(evidence);
+    } catch (error) {
+      throw new CouncilError("CONNECTION_VERIFICATION_FAILED", cleanText(error?.message || error, 240, "connection verification error"));
+    }
+    const connectionEvidence = normalizeConnectionEvidence(verified);
+    const next = {
+      ...current,
+      connectionStatus: "connected",
+      connectionEvidence,
+      epoch: current.epoch + 1,
+    };
     members.set(current.id, next);
     version += 1;
     return snapshot(current.id);
@@ -361,6 +417,7 @@ export function createCouncilMemberRegistry({ authority, now = null } = {}) {
     current.revoked = true;
     current.userConsent = false;
     current.connectionStatus = "revoked";
+    current.connectionEvidence = null;
     current.revocationReason = cleanText(reason, 240, "revocation reason") || "user revoked member consent";
     current.epoch += 1;
     members.set(current.id, current);
@@ -372,6 +429,7 @@ export function createCouncilMemberRegistry({ authority, now = null } = {}) {
     source: COUNCIL_SOURCE,
     registerMember,
     update,
+    recordVerifiedConnection,
     revoke,
     getMember: snapshot,
     requireMember,
@@ -390,7 +448,7 @@ function sanitizeContextValue(value, maxChars, depth = 0) {
   if (!isRecord(value)) return null;
   const output = {};
   for (const [key, child] of Object.entries(value).slice(0, 64)) {
-    if (SENSITIVE_KEY.test(key)) continue;
+    if (isForbiddenContextKey(key)) continue;
     output[key.slice(0, 96)] = sanitizeContextValue(child, maxChars, depth + 1);
   }
   return output;
@@ -401,9 +459,9 @@ function sanitizeTaskContext(value, maxChars) {
   const output = {};
   for (const [scope, child] of Object.entries(value).slice(0, 24)) {
     // `context.private` is a legitimate allowlisted scope; its child keys
-    // are still recursively redacted. Dedicated secret/credential scopes are
-    // never retained, even if a caller tries to authorize them.
-    if (/^(?:secret|secrets|credential|credentials|token|tokens|cookie|cookies)(?:[._:-]|$)/i.test(scope)) continue;
+    // are still recursively redacted. Dedicated secret/credential/authority
+    // scopes are never retained, even if a caller tries to authorize them.
+    if (FORBIDDEN_CONTEXT_SCOPE.test(scope)) continue;
     output[scope.slice(0, 96)] = sanitizeContextValue(child, maxChars);
   }
   return output;
@@ -422,6 +480,7 @@ function contextForMember(task, member, limits) {
   visible.redactions = [
     ...Object.keys(task.context).filter((scope) => !scopes.includes(scope)),
     "secrets-and-authority-fields",
+    "authority-and-security-fields",
   ];
   return deepFreeze(visible);
 }
@@ -791,6 +850,12 @@ function invokeWithTimeout(fn, args, timeoutMs, onLate) {
   });
 }
 
+function sameStringSet(left = [], right = []) {
+  const a = [...new Set(left)].sort();
+  const b = [...new Set(right)].sort();
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+
 export function createUnavailableProviderAdapter({ provider, reason = "manual setup required" } = {}) {
   const providerId = cleanText(provider, 96, "provider", { required: true });
   const explanation = cleanText(reason, 240, "provider reason", { required: true });
@@ -867,13 +932,48 @@ export function createCouncilOrchestrator({ authority, registry = null, adapters
     };
   }
 
-  function isCurrent(run, memberId, epoch) {
+  function isCurrent(run, memberId, epoch, expectedEffectiveToolCapabilities = []) {
     if (run.cancelled) return { ok: false, reason: "run-cancelled" };
     if (run.revokedMembers.has(memberId)) return { ok: false, reason: "member-revoked-in-flight" };
     const member = memberRegistry.getMember(memberId);
     if (!member || !member.enabled || !member.userConsent) return { ok: false, reason: "member-revoked-in-flight" };
     if (member.epoch !== epoch) return { ok: false, reason: "member-epoch-changed" };
+    if (!sameStringSet(member.effectiveToolCapabilities, expectedEffectiveToolCapabilities)) {
+      return { ok: false, reason: "authority-capabilities-changed" };
+    }
     return { ok: true };
+  }
+
+  function fenceStaleContributions(run) {
+    for (const contribution of run.contributions) {
+      if (run.fencedContributionIds.has(contribution.contributionId)) continue;
+      const member = memberRegistry.getMember(contribution.provenance.memberId);
+      const expected = contribution.provenance.effectiveToolCapabilitiesAtAdmission || [];
+      if (member && sameStringSet(member.effectiveToolCapabilities, expected)) continue;
+      run.fencedContributionIds.add(contribution.contributionId);
+      run.records.push(makeRecord(
+        run,
+        contribution.provenance.phase,
+        contribution.provenance.memberId,
+        "fenced",
+        "authority-capabilities-changed",
+        {
+          contributionId: contribution.contributionId,
+          staleAuthorityFence: true,
+        },
+      ));
+      run.events.push({
+        type: "stale-authority-fenced",
+        contributionId: contribution.contributionId,
+        memberId: contribution.provenance.memberId,
+        at: nowIso(now),
+      });
+    }
+  }
+
+  function activeContributions(run) {
+    fenceStaleContributions(run);
+    return run.contributions.filter((contribution) => !run.fencedContributionIds.has(contribution.contributionId));
   }
 
   async function invokeMember(run, phase, memberId) {
@@ -883,6 +983,11 @@ export function createCouncilOrchestrator({ authority, registry = null, adapters
     if (run.task.maxRounds < phaseRound(phase)) return makeRecord(run, phase, memberId, "skipped", "round-limit", { invocationId });
     if (run.cancelled) return makeRecord(run, phase, memberId, "fenced", "run-cancelled", { invocationId });
     const member = gate.member;
+    const baselineCapabilities = run.memberCapabilityBaselines.get(memberId) || [];
+    if (!sameStringSet(member.effectiveToolCapabilities, baselineCapabilities)) {
+      run.events.push({ type: "authority-capabilities-fenced", invocationId, memberId, phase, at: nowIso(now) });
+      return makeRecord(run, phase, memberId, "fenced", "authority-capabilities-changed", { invocationId });
+    }
     const reservation = reservationFor(run.task, member);
     if (run.budget.tokensRemaining < reservation.tokens || run.budget.costRemaining < reservation.costUnits) {
       run.budget.exhausted = true;
@@ -899,9 +1004,9 @@ export function createCouncilOrchestrator({ authority, registry = null, adapters
     run.controllers.add(controller);
     const context = contextForMember(run.task, member, effectiveLimits);
     const prior = phase === "critique"
-      ? run.contributions.filter((entry) => entry.provenance.phase === "proposal").map(contributionForInput)
+      ? activeContributions(run).filter((entry) => entry.provenance.phase === "proposal").map(contributionForInput)
       : phase === "synthesis"
-        ? run.contributions.map(contributionForInput)
+        ? activeContributions(run).map(contributionForInput)
         : [];
     const args = {
       invocationId,
@@ -910,7 +1015,7 @@ export function createCouncilOrchestrator({ authority, registry = null, adapters
       round: phaseRound(phase),
       member: publicMember(member),
       context,
-      inputs: deepFreeze({ contributions: prior, review: phase === "synthesis" ? buildReview(run.contributions, run.records) : null }),
+      inputs: deepFreeze({ contributions: prior, review: phase === "synthesis" ? buildReview(activeContributions(run), run.records) : null }),
       budget: deepFreeze({ maxOutputTokens: reservation.tokens, maxCostUnits: reservation.costUnits }),
       signal: controller.signal,
     };
@@ -927,15 +1032,23 @@ export function createCouncilOrchestrator({ authority, registry = null, adapters
     }
     if (response.kind === "timeout") return makeRecord(run, phase, memberId, "timeout", "adapter-timeout", { invocationId, reservation, lateResultFence: true });
     if (response.kind === "error") {
-      const current = isCurrent(run, memberId, gate.epoch);
+      const current = isCurrent(run, memberId, gate.epoch, gate.member.effectiveToolCapabilities);
+      if (!current.ok && current.reason === "authority-capabilities-changed") {
+        run.events.push({ type: "authority-capabilities-fenced", invocationId, memberId, phase, at: nowIso(now) });
+      }
       return makeRecord(run, phase, memberId, current.ok ? "failure" : "fenced", current.ok ? "adapter-failure" : current.reason, {
         invocationId,
         reservation,
         detail: cleanText(response.error?.message || response.error || "adapter failure", 240, "adapter failure"),
       });
     }
-    const current = isCurrent(run, memberId, gate.epoch);
-    if (!current.ok) return makeRecord(run, phase, memberId, "fenced", current.reason, { invocationId, reservation });
+    const current = isCurrent(run, memberId, gate.epoch, gate.member.effectiveToolCapabilities);
+    if (!current.ok) {
+      if (current.reason === "authority-capabilities-changed") {
+        run.events.push({ type: "authority-capabilities-fenced", invocationId, memberId, phase, at: nowIso(now) });
+      }
+      return makeRecord(run, phase, memberId, "fenced", current.reason, { invocationId, reservation });
+    }
     let normalized;
     try {
       normalized = normalizeAdapterResponse(response.value, member, run.task, phase, effectiveLimits);
@@ -973,6 +1086,7 @@ export function createCouncilOrchestrator({ authority, registry = null, adapters
         adapter: cleanText(adapter.provider || adapter.id || "mock-adapter", 96, "adapter id"),
         responseId: normalized.responseId || null,
         contextScopes: [...(args.context.scopes || [])],
+        effectiveToolCapabilitiesAtAdmission: [...member.effectiveToolCapabilities],
         parentContributionIds: prior.map((entry) => entry.contributionId),
         untrusted: true,
         simulation: true,
@@ -992,6 +1106,7 @@ export function createCouncilOrchestrator({ authority, registry = null, adapters
 
   async function runPhase(run, phase, memberIds) {
     if (run.cancelled) return [];
+    fenceStaleContributions(run);
     const ids = [...new Set(memberIds)];
     const results = await runWithConcurrency(ids, effectiveLimits.maxConcurrency, (memberId) => invokeMember(run, phase, memberId));
     for (const result of results) {
@@ -1026,16 +1141,25 @@ export function createCouncilOrchestrator({ authority, registry = null, adapters
     const task = run.task;
     const proposalResults = await runPhase(run, "proposal", task.specialistIds);
     if (!run.cancelled) await runPhase(run, "critique", task.criticIds);
-    const reviewBeforeSynthesis = buildReview(run.contributions, run.records);
+    const reviewBeforeSynthesis = buildReview(activeContributions(run), run.records);
     let synthesisResults = [];
     if (!run.cancelled) synthesisResults = await runPhase(run, "synthesis", [task.speaker.memberId]);
-    const synthesis = run.contributions.find((entry) => entry.provenance.phase === "synthesis" && entry.provenance.memberId === task.speaker.memberId) || null;
+    const currentContributions = activeContributions(run);
+    const synthesis = currentContributions.find((entry) => entry.provenance.phase === "synthesis" && entry.provenance.memberId === task.speaker.memberId) || null;
     const status = run.cancelled
       ? "cancelled"
       : synthesis
         ? (run.records.some((record) => ["failure", "timeout", "fenced"].includes(record.status)) ? "partial" : "completed")
         : (run.records.some((record) => record.reason === "task-consent-required" || record.reason === "member-not-approved-for-task") ? "blocked" : "partial");
-    const review = buildReview(run.contributions, run.records);
+    const review = buildReview(currentContributions, run.records);
+    const fencedContributions = run.contributions
+      .filter((entry) => run.fencedContributionIds.has(entry.contributionId))
+      .map((entry) => ({
+        contributionId: entry.contributionId,
+        memberId: entry.provenance.memberId,
+        phase: entry.provenance.phase,
+        reason: "authority-capabilities-changed",
+      }));
     const finalResponse = synthesis ? {
       speakerId: task.speaker.memberId,
       speakerMode: task.speaker.mode,
@@ -1056,8 +1180,9 @@ export function createCouncilOrchestrator({ authority, registry = null, adapters
       proposalResults: proposalResults.map((record) => ({ memberId: record.memberId, status: record.status, reason: record.reason })),
       synthesisResults: synthesisResults.map((record) => ({ memberId: record.memberId, status: record.status, reason: record.reason })),
       finalResponse,
-      contributions: [...run.contributions],
-      provenance: run.contributions.map((entry) => entry.provenance),
+      contributions: currentContributions,
+      provenance: currentContributions.map((entry) => entry.provenance),
+      fencedContributions,
       review,
       budget: {
         configured: task.budget,
@@ -1067,7 +1192,7 @@ export function createCouncilOrchestrator({ authority, registry = null, adapters
         remainingCostUnits: run.budget.costRemaining,
         exhausted: run.budget.exhausted,
       },
-      pendingActionRequests: collectActionRequests(run.contributions),
+      pendingActionRequests: collectActionRequests(currentContributions),
       records: [...run.records],
       events: [...run.events],
       unknowns: review.unknowns,
@@ -1086,6 +1211,7 @@ export function createCouncilOrchestrator({ authority, registry = null, adapters
     const task = tasks.get(asText(taskId));
     if (!task) throw new CouncilError("TASK_NOT_FOUND", `task ${taskId} is not known`);
     const runId = `run:${(++runCounter).toString(36)}:${hash(`${task.id}:${runCounter}`)}`;
+    const participantIds = [...new Set([task.leadId, ...task.specialistIds, ...task.criticIds])];
     const run = {
       runId,
       task,
@@ -1093,6 +1219,11 @@ export function createCouncilOrchestrator({ authority, registry = null, adapters
       revokedMembers: new Set(),
       controllers: new Set(),
       seenResponses: new Set(),
+      fencedContributionIds: new Set(),
+      memberCapabilityBaselines: new Map(participantIds.map((memberId) => [
+        memberId,
+        [...(memberRegistry.getMember(memberId)?.effectiveToolCapabilities || [])],
+      ])),
       contributions: [],
       records: [],
       events: [],
