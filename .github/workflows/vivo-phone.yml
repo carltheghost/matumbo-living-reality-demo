@@ -101,6 +101,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The upgrade regression extracts the pinned 9f17fac (v13) and
+          # a8d5e02 (v14) web trees instead of relabelling current assets.
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -132,7 +136,7 @@ jobs:
           PY
           python services/vivo/web/phone/tests/browser_offline_shell.py http://127.0.0.1:9878/
 
-      - name: Run v13 to v14 and v14 to v15 service-worker upgrade browser regression
+      - name: Run v13 to v14 and v14 to v16 service-worker upgrade browser regression
         shell: bash
         run: |
           set -euo pipefail

@@ -54,9 +54,9 @@
     {
       "source": "src/render/simulated-economy-panel.js",
       "staged": "services/vivo/web/phone/vendor/economy/src/render/simulated-economy-panel.js",
-      "bytes": 43634,
-      "sha256": "898e5b509cdd2429fef6adcf76a0dcca65836067dd8b7401cd07ba685c91c5fc",
-      "gitBlob": "b66d487377124dd9abfa38db922fb829b5ab1ad5"
+      "bytes": 44029,
+      "sha256": "9eb52d5f98cfd39a5d6bfa050a2af6a100861bc7b698a4cd0bee2b1230857529",
+      "gitBlob": "a47a690b767339f1bd2ac5f395fb8b3bdc271bf7"
     },
     {
       "source": "src/render/token-economy-overview.js",
