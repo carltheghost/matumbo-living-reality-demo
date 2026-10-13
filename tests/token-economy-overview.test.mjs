@@ -244,7 +244,7 @@ test("economy adapter exposes escrow obligations and operation uniqueness", () =
 
 test("house-pool reservations are included in the read-only escrow obligation audit", () => {
   const engine = createTokenEngine();
-  fundTumbo(engine, "u:you", 96_500);
+  fundTumbo(engine, "u:you", 95_500);
   const storage = new MemoryStorage();
   const economy = createSimulatedEconomy({ engine, storage });
   const created = economy.createHousePool({
@@ -252,6 +252,7 @@ test("house-pool reservations are included in the read-only escrow obligation au
     capacityFluff: 10_000,
     idempotencyKey: "overview:house-pool:create",
   });
+  assert.equal(economy.balances("you").available.TUMBO, 95_500);
   const reserved = economy.reserveHousePoolContribution({
     poolId: created.pool.id,
     contributor: "you",
@@ -259,7 +260,7 @@ test("house-pool reservations are included in the read-only escrow obligation au
     idempotencyKey: "overview:house-pool:reserve",
   });
 
-  assert.equal(economy.balances("you").available.TUMBO, 95_500);
+  assert.equal(economy.balances("you").available.TUMBO, 94_500);
   assert.equal(reserved.pool.totalUnits, 1_000);
   assert.equal(reserved.pool.availableCapacityFluff, 9_000);
   assert.equal(economy.verify().ok, true);
@@ -279,7 +280,7 @@ test("house-pool reservations are included in the read-only escrow obligation au
 
   const reloaded = createSimulatedEconomy({ engine: createTokenEngine(), storage });
   const reloadedOverview = createTokenEconomyOverview({ engine: reloaded.engine, economy: reloaded });
-  assert.equal(reloaded.balances("you").available.TUMBO, 95_500);
+  assert.equal(reloaded.balances("you").available.TUMBO, 94_500);
   assert.equal(reloaded.getHousePool(created.pool.id).totalUnits, 1_000);
   assert.equal(reloadedOverview.economy.pendingObligationsFluff.TUMBO, 1_000);
   assert.equal(reloadedOverview.economy.escrow.TUMBO.ok, true);
@@ -294,7 +295,7 @@ test("house-pool reservations are included in the read-only escrow obligation au
   });
   assert.equal(released.pool.totalUnits, 0);
   assert.equal(released.pool.availableCapacityFluff, 10_000);
-  assert.equal(reloaded.balances("you").available.TUMBO, 96_500);
+  assert.equal(reloaded.balances("you").available.TUMBO, 95_500);
   const releasedOverview = createTokenEconomyOverview({ engine: reloaded.engine, economy: reloaded });
   assert.equal(releasedOverview.economy.pendingObligationsFluff.TUMBO, 0);
   assert.deepEqual(releasedOverview.economy.escrow.TUMBO, {
@@ -308,7 +309,7 @@ test("house-pool reservations are included in the read-only escrow obligation au
 
   const reloadedAfterRelease = createSimulatedEconomy({ engine: createTokenEngine(), storage });
   const finalOverview = createTokenEconomyOverview({ engine: reloadedAfterRelease.engine, economy: reloadedAfterRelease });
-  assert.equal(reloadedAfterRelease.balances("you").available.TUMBO, 96_500);
+  assert.equal(reloadedAfterRelease.balances("you").available.TUMBO, 95_500);
   assert.equal(reloadedAfterRelease.getHousePool(created.pool.id).totalUnits, 0);
   assert.equal(finalOverview.economy.pendingObligationsFluff.TUMBO, 0);
   assert.equal(finalOverview.economy.ok, true);
