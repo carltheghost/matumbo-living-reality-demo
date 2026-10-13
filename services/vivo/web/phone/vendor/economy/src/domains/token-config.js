@@ -15,9 +15,24 @@ export const FLUFF_PER_TUMBO = 1000;
 
 /**
  * Total TUMBO supply in fluff (safe integer). Internal conservation anchor
- * only — never quoted publicly; the user has not chosen a public figure.
+ * only — this is the currently issued simulation supply, not the intended
+ * maximum policy value below.
  */
 export const TOKEN_TOTAL_SUPPLY = 10_000_000_000;
+
+/**
+ * Intended fixed maximum in whole TUMBO-SIM units. This is policy metadata
+ * only: it does not mint, allocate, or replace the current simulation supply.
+ * Keep the exact-unit representation as BigInt because the equivalent fluff
+ * amount is larger than Number.MAX_SAFE_INTEGER.
+ */
+export const TUMBO_INTENDED_MAX_SUPPLY_TUMBO = 42_000_000_000_000n;
+export const TUMBO_INTENDED_MAX_SUPPLY_FLUFF =
+  TUMBO_INTENDED_MAX_SUPPLY_TUMBO * BigInt(FLUFF_PER_TUMBO);
+export const TUMBO_INTENDED_MAX_SUPPLY_TUMBO_DECIMAL =
+  TUMBO_INTENDED_MAX_SUPPLY_TUMBO.toString();
+export const TUMBO_INTENDED_MAX_SUPPLY_FLUFF_DECIMAL =
+  TUMBO_INTENDED_MAX_SUPPLY_FLUFF.toString();
 
 /** Total sMIMAS supply in fluff (safe integer). Internal only. */
 export const SMIMAS_TOTAL_SUPPLY = 100_000_000_000;

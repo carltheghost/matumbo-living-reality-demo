@@ -5,9 +5,16 @@
     {
       "source": "src/domains/simulated-economy.js",
       "staged": "services/vivo/web/phone/vendor/economy/src/domains/simulated-economy.js",
-      "bytes": 95962,
-      "sha256": "be99e2c56038abfe1b89271779beb0ea41dc3a6214d8dfc783c80c00b3b72d2e",
-      "gitBlob": "ec35b4d64d879d5044aed0b5bdf8cb84fcf8836d"
+      "bytes": 96092,
+      "sha256": "63b0e6387b418610007d3685aa7447dd27a27ec368321cc4ed8cb81263d13bbe",
+      "gitBlob": "75e0e853c9e6f1453e3ece5e6cdf1882841a9c46"
+    },
+    {
+      "source": "src/domains/snapshot-graph.js",
+      "staged": "services/vivo/web/phone/vendor/economy/src/domains/snapshot-graph.js",
+      "bytes": 3864,
+      "sha256": "9d14959f8d2c4b74a56c6a127383ce9bc5d474b2215b437169106ad43e65d6c8",
+      "gitBlob": "e1a3321a5b4b15b6bf2f41fa6ea4230c0599ce5f"
     },
     {
       "source": "src/domains/token.js",
@@ -19,9 +26,23 @@
     {
       "source": "src/domains/token-config.js",
       "staged": "services/vivo/web/phone/vendor/economy/src/domains/token-config.js",
-      "bytes": 3632,
-      "sha256": "46d9f97eeb4494ba61b6e5b6bf72022695a1235ecdb681ce9972b2cb93fd6dec",
-      "gitBlob": "66357e8acc90959431f26a6904dc551e69a0c3ff"
+      "bytes": 4333,
+      "sha256": "67f33a69ff16b71861185ace1aea52716fd1b6894b8c085f59f76fff5c7dbfb5",
+      "gitBlob": "07f18e49ac31e0c743cd37559790ad0998ca556a"
+    },
+    {
+      "source": "src/domains/token-supply-policy.js",
+      "staged": "services/vivo/web/phone/vendor/economy/src/domains/token-supply-policy.js",
+      "bytes": 5908,
+      "sha256": "8753900ddff83d5a8dc70cf6c3f73012bf426d6bde6b4e9f8b58ff3fd972f384",
+      "gitBlob": "e33c199e69b63d2a89cd954163582ddfe3dbf3d2"
+    },
+    {
+      "source": "src/domains/token-economy-overview.js",
+      "staged": "services/vivo/web/phone/vendor/economy/src/domains/token-economy-overview.js",
+      "bytes": 36429,
+      "sha256": "d0b48356be6fd37e6765ab418a5c9952a03c8fc6642b7d107f64124b5b43165f",
+      "gitBlob": "364d20c2627027d6a811e1f31bb0300ec1bae326"
     },
     {
       "source": "src/domains/token-store.js",
@@ -36,6 +57,13 @@
       "bytes": 30562,
       "sha256": "efb0008202400fdb1e363d9128d265972b9bc90a3195b9acf7ab1e9131f4fb3d",
       "gitBlob": "0375586d098a4cd8ee79a5e5089de8665a3e440c"
+    },
+    {
+      "source": "src/render/token-economy-overview.js",
+      "staged": "services/vivo/web/phone/vendor/economy/src/render/token-economy-overview.js",
+      "bytes": 6409,
+      "sha256": "257862ea41169f61ea5e752d0e911d86aa6432221547839c43b17dc7871720df",
+      "gitBlob": "c0d7836a6fe0daa43cb7588c7587b2a90d493cf0"
     }
   ]
 }
