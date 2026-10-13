@@ -11,6 +11,13 @@ import time
 from playwright.sync_api import sync_playwright
 
 
+def open_world_controls(page) -> None:
+    world_context = page.locator(".vivo-companion-world-context")
+    if not world_context.evaluate("node => node.open"):
+        page.locator(".vivo-companion-world-context > summary").click()
+    page.wait_for_function("document.querySelector('.vivo-companion-world-context')?.open === true")
+
+
 def main(base_url: str) -> None:
     route = base_url.rstrip("/") + "/services/vivo/web/phone/"
     page_errors: list[str] = []
@@ -42,6 +49,7 @@ def main(base_url: str) -> None:
         page.wait_for_selector("#enterPhoneLocal")
         print(json.dumps({"step": "enter-local"}), flush=True)
         page.get_by_role("button", name="Enter local Vivo").click()
+        open_world_controls(page)
         page.wait_for_selector("#phoneFieldAtlas")
         page.wait_for_function("Boolean(window.VivaPhoneEngine && window.VivaPhoneEngine.active)")
         page.wait_for_function("document.querySelector('#phoneFieldStatus').textContent.includes('coordinate planes')")
@@ -110,8 +118,7 @@ def main(base_url: str) -> None:
         # The companion is the first mobile layer. Navigate through the real
         # scroll surface to the open World field controls before asserting
         # their geometry; do not remove or bypass the companion DOM.
-        if not mobile_page.locator(".vivo-companion-world-context").evaluate("node => node.open"):
-            mobile_page.locator(".vivo-companion-world-context > summary").click()
+        open_world_controls(mobile_page)
         mobile_page.locator("#phoneFieldDock").hover()
         mobile_page.mouse.wheel(0, 1000)
         mobile_page.wait_for_function(
@@ -206,6 +213,7 @@ def main(base_url: str) -> None:
         race_page.goto(route, wait_until="domcontentloaded")
         race_page.wait_for_selector("#enterPhoneLocal")
         race_page.get_by_role("button", name="Enter local Vivo").click()
+        open_world_controls(race_page)
         race_page.wait_for_selector("#phoneFieldAtlas")
         race_page.wait_for_function("Boolean(window.VivaPhoneEngine && window.VivaPhoneEngine.active)")
         race_page.get_by_role("button", name="Preview move").click()
@@ -391,6 +399,7 @@ def main(base_url: str) -> None:
             overlap_page.goto(route, wait_until="domcontentloaded")
             overlap_page.wait_for_selector("#enterPhoneLocal")
             overlap_page.get_by_role("button", name="Enter local Vivo").click()
+            open_world_controls(overlap_page)
             overlap_page.wait_for_selector("#phoneFieldAtlas")
             overlap_page.wait_for_function("Boolean(window.VivaPhoneEngine && window.VivaPhoneEngine.active)")
             overlap_page.get_by_role("button", name="Preview move").click()
