@@ -23,6 +23,7 @@ import {
   PREDICTION_POSITION_STATUSES,
 } from "./simulated-economy.js";
 import { loadTokenEngine } from "./token-store.js";
+import { assertSnapshotGraph, sameSnapshotValue } from "./snapshot-graph.js";
 
 export const TOKEN_ECONOMY_OVERVIEW_FORMAT = "tumbo-sim-token-economy-overview-v1";
 export const TOKEN_ECONOMY_OVERVIEW_UNIT = "integer fluff";
@@ -65,61 +66,6 @@ function safeInteger(value, field, { signed = true } = {}) {
 
 function safeError(error) {
   return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-}
-
-function stableJson(value, stack = new Set(), path = "$") {
-  if (value === null) return "null";
-  const type = typeof value;
-  if (type === "string" || type === "boolean") return JSON.stringify(value);
-  if (type === "number") {
-    if (!Number.isFinite(value)) throw new TypeError(`${path} contains a non-finite number`);
-    return JSON.stringify(value);
-  }
-  if (type !== "object") throw new TypeError(`${path} contains an unsupported ${type}`);
-  if (stack.has(value)) throw new TypeError(`${path} contains a cyclic value`);
-  const prototype = Object.getPrototypeOf(value);
-  if (prototype !== Object.prototype && prototype !== null && !Array.isArray(value)) {
-    throw new TypeError(`${path} contains an unsupported object`);
-  }
-  stack.add(value);
-  try {
-    const descriptors = Object.getOwnPropertyDescriptors(value);
-    for (const key of Reflect.ownKeys(descriptors)) {
-      if (typeof key === "symbol") throw new TypeError(`${path} contains symbol properties`);
-      if (!("value" in descriptors[key])) throw new TypeError(`${path}.${key} is an accessor`);
-    }
-    if (Array.isArray(value)) {
-      const enumerableKeys = Object.keys(descriptors).filter((key) => descriptors[key].enumerable);
-      for (const key of enumerableKeys) {
-        if (!/^0$|^[1-9]\d*$/.test(key) || Number(key) >= value.length) {
-          throw new TypeError(`${path} contains unsupported array properties`);
-        }
-      }
-      const entries = [];
-      for (let index = 0; index < value.length; index += 1) {
-        const descriptor = descriptors[String(index)];
-        if (!descriptor || !("value" in descriptor)) throw new TypeError(`${path}[${index}] is not a data value`);
-        entries.push(stableJson(descriptor.value, stack, `${path}[${index}]`));
-      }
-      return `[${entries.join(",")}]`;
-    }
-    const entries = [];
-    for (const key of Object.keys(descriptors).sort()) {
-      const descriptor = descriptors[key];
-      entries.push(`${JSON.stringify(key)}:${stableJson(descriptor.value, stack, `${path}.${key}`)}`);
-    }
-    return `{${entries.join(",")}}`;
-  } finally {
-    stack.delete(value);
-  }
-}
-
-function sameValue(left, right) {
-  try {
-    return stableJson(left) === stableJson(right);
-  } catch {
-    return false;
-  }
 }
 
 /**
@@ -277,9 +223,9 @@ function receiptConsistency(engine, journals) {
       const mismatches = [];
       try {
         for (const field of ["id", "kind", "action", "idempotencyKey", "tick", "prevHash", "postings", "memo", "ts", "hash"]) {
-          if (!sameValue(receipt?.[field], journal[field])) mismatches.push(field);
+          if (!sameSnapshotValue(receipt?.[field], journal[field])) mismatches.push(field);
         }
-        if (!sameValue(receipt?.links ?? null, journal.links ?? null)) mismatches.push("links");
+        if (!sameSnapshotValue(receipt?.links ?? null, journal.links ?? null)) mismatches.push("links");
         if (receipt?.hash !== receiptChainHash(receipt)) mismatches.push("receipt-chain-hash");
       } catch (error) {
         mismatches.push(`unreadable-receipt:${safeError(error)}`);
@@ -301,11 +247,11 @@ function receiptConsistency(engine, journals) {
       const fields = [];
       const expectedFields = ["postings", "action", "memo", "voidCreditReason", "links", "authority"];
       const actualFields = Object.keys(request).sort();
-      if (!sameValue(actualFields, [...expectedFields].sort())) fields.push("shape");
-      if (!sameValue(request.postings, journal.postings)) fields.push("postings");
+      if (!sameSnapshotValue(actualFields, [...expectedFields].sort())) fields.push("shape");
+      if (!sameSnapshotValue(request.postings, journal.postings)) fields.push("postings");
       if (request.action !== journal.action) fields.push("action");
       if (request.memo !== (journal.memo ?? "")) fields.push("memo");
-      if (!sameValue(request.links ?? null, journal.links ?? null)) fields.push("links");
+      if (!sameSnapshotValue(request.links ?? null, journal.links ?? null)) fields.push("links");
       const hasVoidCredit = journal.postings.some((posting) => posting?.account === "sys:void" && posting.amount > 0);
       const expectedVoidCreditReason = hasVoidCredit
         ? (MARKET_ACTIONS.includes(journal.action) ? "tithe" : "burn")
@@ -483,6 +429,10 @@ function economyNonNegative(value, field) {
 }
 
 function validateEconomySnapshot(state) {
+  // Validate the complete graph before reading any nested branch. This keeps
+  // optional event/history payloads under the same prototype, accessor,
+  // non-JSON, sparse-array, and cycle rules as receipt evidence.
+  assertSnapshotGraph(state, "economy snapshot");
   if (state.schemaVersion !== 1) throw new TypeError("simulated economy snapshot has an unsupported schemaVersion");
   economyNonNegative(state.nextId, "nextId");
   const baseline = economyObject(state.escrowBaseline, "escrowBaseline");

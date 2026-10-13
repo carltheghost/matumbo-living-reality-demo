@@ -281,6 +281,78 @@ test("receipt equality rejects non-finite, cyclic, and hostile values without th
   }
 });
 
+test("the shared snapshot graph validator covers receipt arrays and nested economy branches", () => {
+  const receiptEngine = createTokenEngine();
+  const receiptKey = "overview:graph:receipt-array-prototype";
+  receiptEngine.faucet("u:alice", "TUMBO", 100, { idempotencyKey: receiptKey });
+  const receipt = receiptEngine.ledger._receipts.get(receiptKey);
+  const customPostings = receipt.postings.slice();
+  const customArrayPrototype = Object.create(Array.prototype);
+  Object.setPrototypeOf(customPostings, customArrayPrototype);
+  receiptEngine.ledger._receipts.set(receiptKey, { ...receipt, postings: customPostings });
+  const receiptOverview = createTokenEconomyOverview({ engine: receiptEngine });
+  assert.equal(receiptOverview.invariants.idempotency.receiptRegistry.ok, false);
+  assert.equal(Object.getPrototypeOf(customPostings), customArrayPrototype, "validation must not normalize the hostile array");
+
+  const cases = [
+    ["custom event array prototype", (state) => {
+      const events = [];
+      const prototype = Object.create(Array.prototype);
+      Object.setPrototypeOf(events, prototype);
+      state.events = events;
+      return () => assert.equal(Object.getPrototypeOf(state.events), prototype);
+    }],
+    ["cyclic event entry", (state) => {
+      const events = [];
+      events.push(events);
+      state.events = events;
+      return () => assert.equal(state.events[0], state.events);
+    }],
+    ["cyclic contract history", (state) => {
+      const history = [];
+      history.push(history);
+      state.contracts = [{
+        id: "contract:overview:graph",
+        status: "draft",
+        amountFluff: 1,
+        funding: { status: "unfunded" },
+        history,
+      }];
+      return () => assert.equal(state.contracts[0].history[0], state.contracts[0].history);
+    }],
+    ["non-JSON event value", (state) => {
+      state.events = [{ value: 1n }];
+      return () => {};
+    }],
+    ["hostile nested accessor", (state) => {
+      let invoked = false;
+      const event = {};
+      Object.defineProperty(event, "detail", {
+        enumerable: true,
+        get() {
+          invoked = true;
+          throw new Error("hostile event getter");
+        },
+      });
+      state.events = [event];
+      return () => assert.equal(invoked, false, "descriptor validation must not invoke hostile getters");
+    }],
+  ];
+
+  for (const [label, mutate] of cases) {
+    const engine = createTokenEngine();
+    const source = createSimulatedEconomy({ engine });
+    const state = JSON.parse(JSON.stringify(source.snapshot()));
+    const assertUnchanged = mutate(state);
+    const economy = { engine, snapshot: () => state };
+    const overview = createTokenEconomyOverview({ engine, economy });
+    assert.equal(overview.economy.status, "invalid", label);
+    assert.equal(overview.economy.ok, false, label);
+    assert.equal(overview.invariants.economy.ok, false, label);
+    assertUnchanged();
+  }
+});
+
 test("issuance mirror is an exact conservation invariant, not an ignored system balance", () => {
   for (const corruptedMirror of [0, 1]) {
     const engine = createTokenEngine();

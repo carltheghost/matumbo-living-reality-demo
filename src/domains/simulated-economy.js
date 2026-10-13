@@ -25,6 +25,7 @@ import {
   loadTokenEngine,
   serializeTokenEngine,
 } from "./token-store.js";
+import { assertSnapshotGraph, stableJson } from "./snapshot-graph.js";
 
 export const SIMULATED_ECONOMY_FORMAT = "matumbo-simulated-economy-v1";
 export const SIMULATED_ECONOMY_SNAPSHOT_VERSION = 2;
@@ -115,13 +116,7 @@ function deepFreeze(value) {
   return Object.freeze(value);
 }
 
-function canonicalJson(value) {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  if (value && typeof value === "object") {
-    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
+const canonicalJson = stableJson;
 
 function requestHash(value) {
   return fnv1a64Hex(canonicalJson(value));
@@ -226,6 +221,13 @@ function assertSafeNonNegative(value, field) {
 }
 
 function validateState(raw) {
+  try {
+    // The same graph walk used by overview evidence must guard the canonical
+    // restore path too, before clone() or any nested branch is inspected.
+    assertSnapshotGraph(raw, "economy snapshot");
+  } catch (error) {
+    throw new SimulatedEconomyError(`malformed economy snapshot: ${error.message}`, "INVALID_SNAPSHOT");
+  }
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     throw new SimulatedEconomyError("malformed economy state", "INVALID_SNAPSHOT");
   }
