@@ -4531,8 +4531,20 @@ const assetSupplyEl=document.getElementById('asset-supply');
 const assetAllocationCountEl=document.getElementById('asset-allocation-count');
 const distributionList=document.getElementById('distribution-list');
 const integerFormatter=new Intl.NumberFormat('en-US');
+const assetPolicyMaxEl=document.getElementById('asset-policy-max');
+const assetSupplyNoteEl=document.getElementById('asset-supply-note');
+const assetCoinStateEl=document.getElementById('asset-coin-state');
 
 function formatAssetUnits(value){return Number.isSafeInteger(value)?integerFormatter.format(value):'—'}
+function formatExactPolicyUnits(value){return typeof value==='string'&&/^\d+$/.test(value)?value.replace(/\B(?=(\d{3})+(?!\d))/g,','):'—'}
+function readAssetRoutePolicy(){
+  const state=readTumboCoinState();
+  return Object.freeze({
+    ...state,
+    intendedMaximumPolicyLabel:`${formatExactPolicyUnits(state.intendedMaximum.wholeTumbo)} TUMBO`,
+    fluffPerTumboLabel:formatExactPolicyUnits(state.fluffPerTumbo),
+  });
+}
 
 function showDistributionReadout(target){
   if (portalCubeSubstrateActive || blockWorldPresentationActive) {
@@ -4541,10 +4553,12 @@ function showDistributionReadout(target){
   }
   const allocation=target?.allocation;
   if(!allocation)return;
+  const coinState=readAssetRoutePolicy();
   const percentage=allocation.percent??allocation.percentage??0;
+  const basisPoints=allocation.basisPoints??Math.round(Number(percentage)*100);
   eyebrowEl.textContent='TUMBO ASSET TOKEN · ALLOCATION PREVIEW';
   titleEl.textContent=allocation.label??allocation.recipientClass??'Aggregate cohort';
-  bodyEl.textContent=`${percentage}% of the fixed ${formatAssetUnits(distributionExplorer.getSnapshot().totalSupply)} ${distributionExplorer.getSnapshot().unit} supply · ${formatAssetUnits(allocation.tokenUnits)} units. ${allocation.purpose??'Fictional aggregate cohort in the local demo.'} No transfer occurs.`;
+  bodyEl.textContent=`${percentage}% allocation share · ${basisPoints} bp · current issued simulation supply ${coinState.currentIssuedLabel} · intended maximum ${coinState.intendedMaximumPolicyLabel} (policy metadata only). ${allocation.purpose??'Fictional aggregate cohort in the local demo.'} No mint or transfer occurs.`;
   metaEl.innerHTML='';
   ['simulation only','aggregate cohort','no transfer',`${percentage}%`].forEach((tag)=>{const s=document.createElement('span');s.className='pill';s.textContent=tag;metaEl.appendChild(s)});
   readout.classList.add('visible');
@@ -4612,11 +4626,15 @@ function showBlockReadout(block,action='select',contentFocus=null){
 
 function renderDistributionPanel(snapshot=distributionExplorer.getSnapshot()){
   if(!snapshot)return;
-  if(assetSupplyEl)assetSupplyEl.textContent=formatAssetUnits(snapshot.totalSupply);
+  const coinState=readAssetRoutePolicy();
+  if(assetSupplyEl)assetSupplyEl.textContent=coinState.currentIssuedLabel.replace(/\s+TUMBO-SIM$/,'');
+  if(assetPolicyMaxEl)assetPolicyMaxEl.textContent=formatExactPolicyUnits(coinState.intendedMaximum.wholeTumbo);
   if(assetAllocationCountEl)assetAllocationCountEl.textContent=String(snapshot.allocationCount??0);
+  if(assetCoinStateEl)assetCoinStateEl.textContent=`${coinState.currentIssuedLabel} issued · ${coinState.ledgerLabel}`;
+  if(assetSupplyNoteEl)assetSupplyNoteEl.textContent=`1 TUMBO-SIM = ${coinState.fluffPerTumboLabel} fluff · intended maximum ${coinState.intendedMaximumPolicyLabel} is policy metadata only; balances and ledger stay unchanged.`;
   if(assetLaunchStatus){
     const state=snapshot.launchState?.launched?'SIMULATED MAP ACTIVE':'SIMULATED MAP READY';
-    assetLaunchStatus.textContent=`${state} · NO WALLET · NO TRANSFER`;
+    assetLaunchStatus.textContent=`${state} · POLICY METADATA ONLY · NO WALLET · NO TRANSFER`;
   }
   if(assetLaunchButton)assetLaunchButton.textContent=snapshot.launchState?.launched?'Replay launch preview':'Preview launch map';
   if(!distributionList)return;
@@ -4629,7 +4647,7 @@ function renderDistributionPanel(snapshot=distributionExplorer.getSnapshot()){
     item.dataset.allocationId=allocation.id;
     item.innerHTML=`<span class="distribution-row-label"></span><span class="distribution-row-value"></span>`;
     item.querySelector('.distribution-row-label').textContent=allocation.label;
-    item.querySelector('.distribution-row-value').textContent=`${allocation.percent??allocation.percentage??0}% · ${formatAssetUnits(allocation.tokenUnits)}`;
+    item.querySelector('.distribution-row-value').textContent=`${allocation.percent??allocation.percentage??0}% · ${allocation.basisPoints??'—'} bp`;
     item.addEventListener('click',()=>{
       const next=distributionExplorer.selectAllocation(allocation.id);
       showDistributionReadout({id:allocation.id,allocation:next.selectedAllocation??allocation});

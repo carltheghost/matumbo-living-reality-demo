@@ -323,14 +323,17 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[],rela
   const tabShapes=Object.keys(REALITY_TAB_FORMS),tabSelectable=new Set();
   function makeTabForm(node,shapeName){
     const form=REALITY_TAB_FORMS[shapeName]??REALITY_TAB_FORMS.rectangle;
+    const oldGeometries=new Set(),oldMaterials=new Set();
     node.formParts?.forEach(part=>{
       part.removeFromParent();
       if(part.userData?.assemblyId){const targetIndex=targets.indexOf(part);if(targetIndex>=0)targets.splice(targetIndex,1);tabSelectable.delete(part);selectable.delete(part);}
-      if(part.geometry){geometry.delete(part.geometry);part.geometry.dispose();}
-      for(const material of (Array.isArray(part.material)?part.material:[part.material]))if(material){
-        if(material.map){textures.delete(material.map);material.map.dispose();}
-        materials.delete(material);node.fadeMaterials?.delete(material);node.fadeMap?.delete(material.userData?.realityLensFadeSource);material.dispose();
-      }
+      if(part.geometry)oldGeometries.add(part.geometry);
+      for(const material of (Array.isArray(part.material)?part.material:[part.material]))if(material)oldMaterials.add(material);
+    });
+    oldGeometries.forEach(oldGeometry=>{geometry.delete(oldGeometry);oldGeometry.dispose();});
+    oldMaterials.forEach(material=>{
+      if(material.map){textures.delete(material.map);material.map.dispose();}
+      materials.delete(material);node.fadeMaterials?.delete(material);node.fadeMap?.delete(material.userData?.realityLensFadeSource);material.dispose();
     });
     const width=form.width,height=form.height,depth=form.depth;
     const isTumboCoin=node.feature.id==='asset-token'&&shapeName==='cylinder';
@@ -345,6 +348,8 @@ export function buildRealityAssemblyScene({THREE,parent,features,targets=[],rela
       coinVisual=createTumboCoinVisual(THREE,{radius:Math.min(width,height,depth)/2,thickness:Math.min(.22,depth*.18),frontZ:cap});
       bodyGeometry=coinVisual.body.geometry;
       coinVisual.parts.forEach(part=>{if(part.geometry)geometry.add(part.geometry);});
+      coinVisual.geometries?.forEach(ownedGeometry=>geometry.add(ownedGeometry));
+      coinVisual.materials?.forEach(ownedMaterial=>materials.add(ownedMaterial));
       body=coinVisual.body;
       shell=body.material;
       edgeMaterial=coinVisual.details.edgeMaterial;

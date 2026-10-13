@@ -335,6 +335,12 @@ export function createTumboCoinVisual(THREE, options = {}) {
   const details = createTumboCoinDetails(THREE, resolved);
   root.add(details.root);
   const parts = [root, body, ...details.parts.filter((part) => part !== details.root)];
+  // The complete visual owns the body blank plus the six detail resources
+  // (face, two rims, emblem, shared pip, and state ring). Expose one
+  // de-duplicated ownership ledger so scene owners can dispose the same
+  // resources exactly once, including shared pip geometry/materials.
+  const geometries = [body.geometry, ...details.geometries];
+  const materials = [bodyMaterial, ...details.materials];
   const update = (state, interaction) => details.update(state, interaction);
   const animate = (frame) => details.animate(frame);
   update();
@@ -345,6 +351,8 @@ export function createTumboCoinVisual(THREE, options = {}) {
     body,
     parts,
     details,
+    geometries,
+    materials,
     bodyMaterial,
     update,
     animate,
