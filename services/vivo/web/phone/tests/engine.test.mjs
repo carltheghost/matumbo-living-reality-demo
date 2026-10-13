@@ -16,6 +16,14 @@ class FaultingStore extends MemoryStore {
   }
 }
 
+class SlowStore extends MemoryStore {
+  delay = 35;
+  async save(id, value) {
+    await new Promise(resolve => setTimeout(resolve, this.delay));
+    return super.save(id, value);
+  }
+}
+
 test('3D through 11D worlds store vectors and sparse edges without dense hyper-grids', () => {
   const snapshot = createPhoneSnapshot({ worldId: 'test-world' });
   validatePhoneSnapshot(snapshot);
@@ -255,6 +263,64 @@ test('Eye persistence failures are explicit, retain in-memory state, and can be 
   await reloaded.open('eye-persistence-failure');
   assert.deepEqual(reloaded.eye.q, [1, 2, 3, 4]);
   assert.equal((await reloaded.snapshot()).persistence.state, 'saved');
+});
+
+test('placed transforms stay pending during a slow local save and become saved only after acknowledgement', async () => {
+  const store = new SlowStore(), engine = new LocalVivoEngine({ storage: store });
+  await engine.open('slow-placement-persistence');
+  const before = await engine.snapshot();
+  const write = engine.applyLocalTransform('portal', [0.1, 0, 0, 0], { scale: 1, rotation: 0, axes: [0, 1] }, {
+    worldId: before.snapshot.worldId,
+    branchId: before.branchId,
+    eyeId: before.currentEyeId,
+    spaceId: 'root',
+    entityId: 'portal',
+    baseRevision: before.snapshot.spaces.root.entities.portal.revision,
+    operationId: 'slow-placement-persistence:portal',
+  });
+  assert.equal((await engine.snapshot()).persistence.state, 'saving');
+  await write;
+  const saved = await engine.snapshot();
+  assert.equal(saved.persistence.state, 'saved');
+  assert.ok(Math.abs(saved.snapshot.spaces.root.entities.portal.q[0] - 1.4) < 1e-12);
+});
+
+test('placed transforms expose an unsaved acknowledgement on IndexedDB failure and can be retried', async () => {
+  const store = new FaultingStore(), engine = new LocalVivoEngine({ storage: store });
+  await engine.open('failed-placement-persistence');
+  store.fail = true;
+  const before = await engine.snapshot();
+  await assert.rejects(
+    engine.applyLocalTransform('workpiece', [0, -0.22, 0, 0], { scale: 1, rotation: 0, axes: [0, 1] }, {
+      worldId: before.snapshot.worldId,
+      branchId: before.branchId,
+      eyeId: before.currentEyeId,
+      spaceId: 'root',
+      entityId: 'workpiece',
+      baseRevision: before.snapshot.spaces.root.entities.workpiece.revision,
+      operationId: 'failed-placement-persistence:workpiece',
+    }),
+    /QuotaExceededError/,
+  );
+  const unsaved = await engine.snapshot();
+  assert.equal(unsaved.persistence.state, 'unsaved');
+  assert.match(unsaved.persistence.error, /QuotaExceededError/);
+  assert.equal(unsaved.snapshot.spaces.root.entities.workpiece.q[1], 0.5);
+  store.fail = false;
+  await engine.applyLocalTransform('workpiece', [0, 0, 0, 0], { scale: 1, rotation: 0, axes: [0, 1] }, {
+    worldId: unsaved.snapshot.worldId,
+    branchId: unsaved.branchId,
+    eyeId: unsaved.currentEyeId,
+    spaceId: 'root',
+    entityId: 'workpiece',
+    baseRevision: unsaved.snapshot.spaces.root.entities.workpiece.revision,
+    operationId: 'failed-placement-persistence:workpiece:retry',
+  });
+  const retried = await engine.snapshot();
+  assert.equal(retried.persistence.state, 'saved');
+  const reloaded = new LocalVivoEngine({ storage: store });
+  await reloaded.open('failed-placement-persistence');
+  assert.equal((await reloaded.snapshot()).snapshot.spaces.root.entities.workpiece.q[1], 0.5);
 });
 
 test('offline branch persistence failures do not erase provenance and retry durably', async () => {

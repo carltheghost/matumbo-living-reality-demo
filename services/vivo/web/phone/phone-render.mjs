@@ -20,17 +20,84 @@ function projectEntity(renderer, entity, geometry) {
   return renderer.project(embed(entity.q, geometry, entity.chart));
 }
 
-function drawCompanionOccupant(ctx, entity, point, radius, { selected = false, held = false, companionFocus = false } = {}) {
+function roundedPath(ctx, x, y, width, height, radius) {
+  const r = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + width - r, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+  ctx.lineTo(x + width, y + height - r);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  ctx.lineTo(x + r, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function drawSentinelFace(ctx, size, style) {
+  ctx.fillStyle = style.accent;
+  ctx.beginPath();
+  ctx.arc(0, -size * .22, size * .24, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = style.accent;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = '#071321';
+  ctx.beginPath(); ctx.ellipse(-size * .09, -size * .23, size * .035, size * .06, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(size * .09, -size * .23, size * .035, size * .06, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#071321';
+  ctx.beginPath(); ctx.arc(0, -size * .12, size * .08, 0, Math.PI); ctx.stroke();
+}
+
+function drawMakerFace(ctx, size, style) {
+  // A dark inset panel keeps the orange workpiece readable at small sizes and
+  // follows the block-like roster avatar instead of becoming a second head.
+  roundedPath(ctx, -size * .2, size * .08, size * .42, size * .2, size * .035);
+  ctx.fillStyle = 'rgba(7, 19, 33, .78)';
+  ctx.fill();
+  ctx.strokeStyle = `${style.accent}cc`;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = style.accent;
+  ctx.beginPath(); ctx.arc(-size * .09, size * .15, size * .028, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(size * .09, size * .15, size * .028, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = style.accent;
+  ctx.beginPath(); ctx.moveTo(-size * .08, size * .22); ctx.lineTo(size * .08, size * .22); ctx.stroke();
+}
+
+function drawWayfinderFace(ctx, size, style) {
+  // The inner world is a doorway first. Its readable dark opening replaces the
+  // generic floating head while retaining a small expressive signal inside.
+  ctx.beginPath();
+  ctx.arc(0, size * .08, size * .27, Math.PI, 0);
+  ctx.lineTo(size * .27, size * .4);
+  ctx.lineTo(-size * .27, size * .4);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(7, 27, 34, .82)';
+  ctx.fill();
+  ctx.strokeStyle = style.accent;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = style.accent;
+  ctx.beginPath(); ctx.arc(-size * .085, size * .14, size * .025, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(size * .085, size * .14, size * .025, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = style.accent;
+  ctx.beginPath(); ctx.arc(0, size * .22, size * .07, 0, Math.PI); ctx.stroke();
+}
+
+function drawCompanionOccupant(ctx, entity, point, radius, { selected = false, held = false, companionFocus = false, companionWorldView = false } = {}) {
   const style = COMPANION_OCCUPANTS[entity.id];
   if (!style || (!selected && !held)) return 0;
   const size = clamp(radius * (selected ? (companionFocus ? 4.2 : 3.3) : 1.85), selected ? (companionFocus ? 64 : 46) : 28, selected ? (companionFocus ? 84 : 68) : 44);
   const lift = size * .24;
+  const presentationView = companionFocus || companionWorldView;
   ctx.save();
   ctx.translate(point.x, point.y - lift);
-  ctx.globalCompositeOperation = 'screen';
-  ctx.globalAlpha = selected ? (companionFocus ? .92 : 1) : .82;
+  ctx.globalCompositeOperation = presentationView ? 'source-over' : 'screen';
+  ctx.globalAlpha = selected ? (companionFocus ? .94 : .9) : .82;
   ctx.shadowColor = style.color;
-  ctx.shadowBlur = selected ? (companionFocus ? 8 : 16) : 9;
+  ctx.shadowBlur = selected ? (presentationView ? 4 : 9) : 6;
   ctx.fillStyle = style.color;
   ctx.strokeStyle = style.accent;
   ctx.lineWidth = selected ? 1.7 : 1.2;
@@ -54,9 +121,11 @@ function drawCompanionOccupant(ctx, entity, point, radius, { selected = false, h
     ctx.lineTo(size * .38, size * .44);
     ctx.lineTo(-size * .38, size * .44);
     ctx.closePath();
-    ctx.globalAlpha = selected ? .82 : .65;
+    ctx.globalAlpha = selected ? (companionFocus ? .9 : .86) : .65;
     ctx.fill();
     ctx.stroke();
+    ctx.globalAlpha = selected ? (companionFocus ? .94 : .9) : .82;
+    drawWayfinderFace(ctx, size, style);
   } else if (style.kind === 'maker') {
     // The maker is a material block first, with a small expressive face —
     // keep the orange identity legible beside the CSS roster avatar.
@@ -71,7 +140,8 @@ function drawCompanionOccupant(ctx, entity, point, radius, { selected = false, h
     ctx.globalAlpha = selected ? .56 : .38;
     ctx.beginPath(); ctx.moveTo(-size * .18, size * .02); ctx.lineTo(-size * .12, size * .47); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(size * .08, -.04 * size); ctx.lineTo(size * .13, size * .45); ctx.stroke();
-    ctx.globalAlpha = selected ? (companionFocus ? .92 : 1) : .82;
+    ctx.globalAlpha = selected ? (companionFocus ? .94 : .9) : .82;
+    drawMakerFace(ctx, size, style);
   } else {
     ctx.beginPath();
     ctx.moveTo(-size * .32, -size * .02);
@@ -81,22 +151,9 @@ function drawCompanionOccupant(ctx, entity, point, radius, { selected = false, h
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
+    drawSentinelFace(ctx, size, style);
   }
 
-  ctx.fillStyle = style.accent;
-  ctx.beginPath();
-  ctx.arc(0, -size * .22, size * .24, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = style.accent;
-  ctx.lineWidth = 1;
-  ctx.stroke();
-  ctx.fillStyle = '#071321';
-  ctx.beginPath(); ctx.ellipse(-size * .09, -size * .23, size * .035, size * .06, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(size * .09, -size * .23, size * .035, size * .06, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = '#071321';
-  ctx.beginPath();
-  ctx.arc(0, -size * .12, size * .08, 0, Math.PI);
-  ctx.stroke();
   if (style.kind === 'sentinel') {
     ctx.strokeStyle = style.accent;
     ctx.lineWidth = 1.4;
@@ -189,7 +246,7 @@ export class PhoneRenderer extends Renderer {
   }
 
   drawAxes(ctx) {
-    if (this.companionFocus && !this.materialEditing) return;
+    if ((this.companionFocus || this.companionWorldView) && !this.materialEditing) return;
     const origin = { x: this.w * 0.5, y: this.h * (this.w < 720 ? 0.41 : 0.56) };
     const axes = [
       { x: 52, y: 0, label: 'x1', color: '#6fa8ff' },
@@ -215,14 +272,15 @@ export class PhoneRenderer extends Renderer {
     const selected = entity.id === this.selected;
     const held = entity.id === this.held;
     const quietDiagnostics = (this.companionFocus || this.companionWorldView) && !this.materialEditing;
+    const companionPresentation = this.companionFocus || this.companionWorldView;
     const radius = Math.max(9, (visible ? this.sliceRadius(entity) : entity.radius) * point.k);
-    const haloRadius = radius * (held ? 2.3 : selected ? (this.companionFocus ? 1.5 : 2.05) : 1.72);
+    const haloRadius = radius * (held ? 2.3 : selected ? (this.companionFocus ? 1.35 : this.companionWorldView ? 1.28 : 2.05) : 1.72);
     const alpha = visible ? 1 : 0.22;
     ctx.save();
-    ctx.globalCompositeOperation = 'screen';
+    ctx.globalCompositeOperation = companionPresentation ? 'source-over' : 'screen';
     const glow = ctx.createRadialGradient(point.x, point.y, 0, point.x, point.y, haloRadius);
-    glow.addColorStop(0, tone.glow.replace('0.82', visible ? '0.54' : '0.16'));
-    glow.addColorStop(0.42, tone.glow.replace('0.82', visible ? '0.17' : '0.06'));
+    glow.addColorStop(0, tone.glow.replace('0.82', visible ? (companionPresentation ? '0.3' : '0.54') : '0.16'));
+    glow.addColorStop(0.42, tone.glow.replace('0.82', visible ? (companionPresentation ? '0.1' : '0.17') : '0.06'));
     glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
     ctx.fillStyle = glow; ctx.globalAlpha = alpha;
     ctx.beginPath(); ctx.arc(point.x, point.y, haloRadius, 0, Math.PI * 2); ctx.fill();
@@ -232,8 +290,9 @@ export class PhoneRenderer extends Renderer {
     ctx.globalAlpha = alpha;
     ctx.fillStyle = tone.solid;
     ctx.beginPath(); ctx.arc(point.x, point.y, clamp(radius * 0.42, 5, 18), 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = held ? '#f7d58c' : selected ? '#eff8ff' : tone.solid;
-    ctx.lineWidth = held ? 2.5 : selected ? 2 : 1;
+    ctx.globalAlpha = alpha * (companionPresentation && selected ? .38 : 1);
+    ctx.strokeStyle = held ? '#f7d58c' : selected ? (companionPresentation ? tone.solid : '#eff8ff') : tone.solid;
+    ctx.lineWidth = held ? 2.5 : selected ? (companionPresentation ? 1.35 : 2) : 1;
     ctx.setLineDash(visible ? [] : [4, 5]);
     ctx.beginPath(); ctx.arc(point.x, point.y, Math.max(14, radius * 0.78) + (selected ? 7 : 4), 0, Math.PI * 2); ctx.stroke();
     ctx.setLineDash([]);
@@ -246,11 +305,13 @@ export class PhoneRenderer extends Renderer {
       ctx.lineTo(point.x + Math.cos(angle) * marker, point.y + Math.sin(angle) * marker);
       ctx.stroke();
     }
-    if ((selected || held) && !this.companionFocus) {
+    if ((selected || held) && !this.companionFocus && !this.companionWorldView) {
       ctx.strokeStyle = tone.solid; ctx.globalAlpha = 0.62; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.arc(point.x, point.y, Math.max(19, radius * 1.2) + 9, 0, Math.PI * 2); ctx.stroke();
     }
-    const occupantSize = drawCompanionOccupant(ctx, entity, point, radius, { selected, held, companionFocus: this.companionFocus });
+    const occupantSize = drawCompanionOccupant(ctx, entity, point, radius, {
+      selected, held, companionFocus: this.companionFocus, companionWorldView: this.companionWorldView,
+    });
     const labelBase = occupantSize ? occupantSize * .72 : Math.max(17, radius);
     // In companion or collapsed world view the selected resident carries the
     // identity; hiding the other labels keeps the field readable and leaves

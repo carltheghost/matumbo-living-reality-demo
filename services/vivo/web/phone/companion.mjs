@@ -84,6 +84,26 @@ const clone = value => {
 
 const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 
+export function formatCompanionPlacementStatus(name, persistence = {}, { pending = false } = {}) {
+  const characterName = String(name || 'The companion');
+  const persistenceState = persistence?.state || 'ready';
+  if (pending && persistenceState !== 'unsaved' && persistenceState !== 'memory-only') {
+    return `${characterName} is being placed. Waiting for the local save acknowledgement…`;
+  }
+  if (persistenceState === 'saved') return `${characterName} is in the world. The accepted placement is saved locally.`;
+  if (persistenceState === 'memory-only') return `${characterName} is in the world, but this placement is memory-only and will not survive reload. Retry remains available.`;
+  if (persistenceState === 'unsaved') return `${characterName} is in the world, but the placement was not saved: ${persistence?.error || 'storage failed'}. Retry remains available.`;
+  if (persistenceState === 'saving' || pending) return `${characterName} is being placed. Waiting for the local save acknowledgement…`;
+  return `${characterName} is being placed. Waiting for the local persistence acknowledgement…`;
+}
+
+export function companionPersistenceTone(persistence = {}, { pending = false } = {}) {
+  if (pending && persistence?.state !== 'unsaved' && persistence?.state !== 'memory-only') return 'info';
+  if (persistence?.state === 'saved') return 'success';
+  if (persistence?.state === 'memory-only' || persistence?.state === 'unsaved') return 'warn';
+  return 'info';
+}
+
 export function getCompanion(id) {
   return COMPANION_CHARACTERS.find(character => character.id === id) || COMPANION_CHARACTERS[0];
 }
@@ -278,6 +298,7 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
     presenceTimer: null,
     messages: new Map(),
     placementBusy: false,
+    placementAttempt: 0,
     responseBusy: false,
     responseController: null,
     responseAttempt: 0,
@@ -328,6 +349,25 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
       const right = [Math.cos(Number(renderer.yaw) || 0), 0, -Math.sin(Number(renderer.yaw) || 0)];
       const viewShift = shift / scale;
       renderer.origin = baseOrigin.map((value, axis) => value + right[axis] * viewShift);
+    }
+    // On a narrow viewport the expanded dock starts high enough to cover the
+    // lower half of the canvas. Reframe the selected resident vertically so
+    // its full silhouette and identity label remain visible above that dock.
+    // This is a camera-origin shift only; canonical q values and hit testing
+    // continue to use the same projected point.
+    if (renderer.companionFocus && (renderer.w || scope.innerWidth || 0) < 760) {
+      const height = Number(renderer.h) || Number(scope.innerHeight) || 0;
+      const dockTop = Number(dock.getBoundingClientRect?.().top);
+      const point = renderer.project(embed(entity.q, geometry, entity.chart));
+      const targetY = Number.isFinite(dockTop) && dockTop > 0
+        ? Math.max(104, Math.min(dockTop - 112, height * .38))
+        : height * .3;
+      const shift = targetY - point.y;
+      const scale = Math.max(.15, Number(point.k) || 1);
+      const yaw = Number(renderer.yaw) || 0;
+      const pitch = Number(renderer.pitch) || 0;
+      const up = [-Math.sin(pitch) * Math.sin(yaw), Math.cos(pitch), -Math.sin(pitch) * Math.cos(yaw)];
+      renderer.origin = renderer.origin.map((value, axis) => value + up[axis] * (shift / scale));
     }
     renderer.draw?.(performance.now());
   }
@@ -385,6 +425,28 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
     view.textContent = state.reaction;
     view.hidden = !state.reaction;
     view.dataset.tone = tone;
+  }
+  function placementReaction(character, persistence = {}, { pending = false } = {}) {
+    return formatCompanionPlacementStatus(character.name, persistence, { pending });
+  }
+  function persistenceTone(persistence = {}, options = {}) {
+    return companionPersistenceTone(persistence, options);
+  }
+  async function freshSnapshot() {
+    const engine = scope.VivaPhoneEngine;
+    if (!engine?.active || typeof engine.snapshot !== 'function') return state.envelope;
+    const envelope = await engine.snapshot();
+    return renderSnapshot(envelope) || envelope;
+  }
+  async function waitForPersistenceAcknowledgement(envelope) {
+    let current = envelope || state.envelope;
+    const deadline = Date.now() + 30_000;
+    while (current?.persistence?.state === 'saving' && Date.now() < deadline) {
+      render(current);
+      await new Promise(resolve => scope.setTimeout?.(resolve, 150));
+      current = await freshSnapshot();
+    }
+    return current;
   }
   function stopResponse(reason = 'conversation-stopped') {
     state.responseAttempt += 1;
@@ -466,14 +528,9 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
     query('coordinates').textContent = entity
       ? `${entity.id} · ${activeEye?.spaceId || 'unknown space'} · ${entity.q.slice(0, 4).map((value, axis) => `x${axis + 1} ${finite(value).toFixed(2)}`).join(' · ')}`
       : activeRoot ? 'Identity unavailable in this saved world.' : 'Return the Eye to root to place this identity.';
-    const reaction = query('reaction');
-    reaction.textContent = state.reaction;
-    reaction.hidden = !state.reaction;
     const placed = isPlaced(entity, character.id);
     if (placed && state.reaction === 'Select an identity to wake its presence.') state.reaction = `${character.name} is in the world. Saved placement is active in this field.`;
     renderFlow(placed);
-    reaction.textContent = state.reaction;
-    reaction.hidden = !state.reaction;
     const persistence = query('persistence');
     const persistenceState = state.envelope?.persistence?.state || 'ready';
     const persistenceLabels = {
@@ -485,6 +542,15 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
     persistence.textContent = persistenceLabels[persistenceState] || (placed ? 'PLACEMENT · READY' : 'LOCAL · READY');
     persistence.dataset.placed = placed ? 'true' : 'false';
     persistence.dataset.state = persistenceState;
+    const reaction = query('reaction');
+    const reactionText = state.placementBusy
+      ? placementReaction(character, state.envelope?.persistence, { pending: true })
+      : state.reaction;
+    reaction.textContent = reactionText;
+    reaction.hidden = !reactionText;
+    reaction.dataset.tone = state.placementBusy
+      ? persistenceTone(state.envelope?.persistence, { pending: true })
+      : (reaction.dataset.tone || '');
     const place = query('place');
     place.disabled = state.placementBusy || !entity || !activeRoot;
     place.textContent = state.placementBusy ? 'Saving placement…' : placed ? 'Re-place in world' : 'Place in world';
@@ -564,26 +630,41 @@ export function mountVivoCompanion({ documentRoot = globalThis.document, scope =
     const envelope = await snapshot();
     const request = buildPlacementRequest(envelope, state.selectedId);
     if (!request.ok) { setReaction(request.message || 'The selected identity is not available in the active Eye.', 'warn'); render(); return request; }
-    if (request.delta.every(value => Math.abs(value) < 1e-9)) {
+    const unchanged = request.delta.every(value => Math.abs(value) < 1e-9);
+    const retryingPersistence = ['unsaved', 'memory-only'].includes(envelope?.persistence?.state);
+    if (unchanged && !retryingPersistence) {
       setReaction(`${selected().name} is already in its saved place.`, 'success'); render(); return { ...request, unchanged: true };
     }
     state.placementBusy = true;
+    const placementAttempt = ++state.placementAttempt;
     setPresence('attention');
     render();
     try {
       const engine = scope.VivaPhoneEngine;
-      const operationId = `companion-place:${request.worldId}:${request.branchId || 'local'}:${request.characterId}:r${request.expected.baseRevision}`;
+      const operationId = `companion-place:${request.worldId}:${request.branchId || 'local'}:${request.characterId}:r${request.expected.baseRevision}:a${placementAttempt}`;
+      // A failed placement leaves the entity at its target with an unsaved
+      // envelope. Keep the zero-delta operation explicit on retry so the
+      // engine records a fresh persistence fence instead of treating the
+      // retry as a UI-only no-op.
       const result = await engine.applyLocalTransform(request.entityId, request.delta, request.geometry, { ...request.expected, operationId });
-      const next = await snapshot();
+      const next = await waitForPersistenceAcknowledgement(await freshSnapshot());
       frameSelectedCharacter();
       setPresence('reacting', 3600);
-      setReaction(`${selected().name} is in the world. The accepted placement was saved locally.`, 'success');
+      setReaction(placementReaction(selected(), next?.persistence), persistenceTone(next?.persistence));
       shell.classList.remove('has-reaction'); void shell.offsetWidth; shell.classList.add('has-reaction');
       render(next);
-      return { request, result, envelope: next };
+      return { request, result, envelope: next, retried: unchanged && retryingPersistence };
     } catch (error) {
-      setReaction(`Placement did not save: ${error?.message || String(error)}`, 'error');
-      render();
+      let current = state.envelope;
+      try { current = await freshSnapshot(); } catch { /* keep the last honest state */ }
+      const persistence = current?.persistence;
+      setReaction(
+        persistence?.state === 'unsaved' || persistence?.state === 'memory-only'
+          ? placementReaction(selected(), persistence)
+          : `Placement did not save: ${error?.message || String(error)}`,
+        persistenceTone(persistence),
+      );
+      render(current);
       return { request, error };
     } finally { state.placementBusy = false; render(); }
   }
