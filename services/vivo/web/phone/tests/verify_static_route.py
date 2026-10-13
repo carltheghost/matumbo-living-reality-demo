@@ -22,10 +22,14 @@ def verify(web_root: Path) -> None:
     field_palette = phone_root / "field-palette.mjs"
     economy_manifest = phone_root / "vendor/economy/manifest.json"
     simulated_economy = phone_root / "vendor/economy/src/domains/simulated-economy.js"
+    snapshot_graph = phone_root / "vendor/economy/src/domains/snapshot-graph.js"
     token = phone_root / "vendor/economy/src/domains/token.js"
     token_config = phone_root / "vendor/economy/src/domains/token-config.js"
+    token_supply_policy = phone_root / "vendor/economy/src/domains/token-supply-policy.js"
+    token_economy_overview = phone_root / "vendor/economy/src/domains/token-economy-overview.js"
     token_store = phone_root / "vendor/economy/src/domains/token-store.js"
     economy_panel = phone_root / "vendor/economy/src/render/simulated-economy-panel.js"
+    overview_renderer = phone_root / "vendor/economy/src/render/token-economy-overview.js"
     service_worker = web_root / "vivo-sw.js"
 
     required = [
@@ -42,10 +46,14 @@ def verify(web_root: Path) -> None:
         field_palette,
         economy_manifest,
         simulated_economy,
+        snapshot_graph,
         token,
         token_config,
+        token_supply_policy,
+        token_economy_overview,
         token_store,
         economy_panel,
+        overview_renderer,
         service_worker,
     ]
     missing = [str(path) for path in required if not path.is_file()]
@@ -82,10 +90,14 @@ def verify(web_root: Path) -> None:
         "phone/field-palette.mjs",
         "phone/vendor/economy/manifest.json",
         "phone/vendor/economy/src/domains/simulated-economy.js",
+        "phone/vendor/economy/src/domains/snapshot-graph.js",
         "phone/vendor/economy/src/domains/token.js",
         "phone/vendor/economy/src/domains/token-config.js",
+        "phone/vendor/economy/src/domains/token-supply-policy.js",
+        "phone/vendor/economy/src/domains/token-economy-overview.js",
         "phone/vendor/economy/src/domains/token-store.js",
         "phone/vendor/economy/src/render/simulated-economy-panel.js",
+        "phone/vendor/economy/src/render/token-economy-overview.js",
     ):
         if asset not in service_worker_text:
             raise SystemExit("Phone asset is absent from the offline shell: " + asset)

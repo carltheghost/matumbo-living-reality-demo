@@ -67,6 +67,8 @@ test('Pages publishes a self-contained local phone route without changing the ca
   assert.match(route, /id="phoneEconomyContext" class="context-slot" hidden/);
   assert.match(economyEntry, /__vivoPhoneSimulatedEconomyOwner/);
   assert.match(economyEntry, /No simulated write was attempted/);
+  assert.match(economyEntry, /getTumboSupplyPolicy/);
+  assert.match(economyEntry, /intendedMaximum/);
   assert.match(economyManifest, /vivo\.phone\.simulated-economy-stage\/1/);
   assert.match(conversationTransport, /vivo\.conversation-provider\/1/);
   assert.match(conversationTransport, /credentials: 'omit'/);
@@ -76,10 +78,14 @@ test('Pages publishes a self-contained local phone route without changing the ca
 test('mounted economy staging preserves exact canonical module bytes', async () => {
   const pairs = [
     ['src/domains/simulated-economy.js', 'phone/vendor/economy/src/domains/simulated-economy.js'],
+    ['src/domains/snapshot-graph.js', 'phone/vendor/economy/src/domains/snapshot-graph.js'],
     ['src/domains/token.js', 'phone/vendor/economy/src/domains/token.js'],
     ['src/domains/token-config.js', 'phone/vendor/economy/src/domains/token-config.js'],
+    ['src/domains/token-supply-policy.js', 'phone/vendor/economy/src/domains/token-supply-policy.js'],
+    ['src/domains/token-economy-overview.js', 'phone/vendor/economy/src/domains/token-economy-overview.js'],
     ['src/domains/token-store.js', 'phone/vendor/economy/src/domains/token-store.js'],
     ['src/render/simulated-economy-panel.js', 'phone/vendor/economy/src/render/simulated-economy-panel.js'],
+    ['src/render/token-economy-overview.js', 'phone/vendor/economy/src/render/token-economy-overview.js'],
   ];
   for (const [canonicalPath, stagedPath] of pairs) {
     const canonical = await readFile(new URL(`../../../../../${canonicalPath}`, import.meta.url));

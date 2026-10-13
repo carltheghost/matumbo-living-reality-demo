@@ -19,10 +19,14 @@ ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / "services/vivo/web/phone/vendor/economy/manifest.json"
 FILES = (
     ("src/domains/simulated-economy.js", "services/vivo/web/phone/vendor/economy/src/domains/simulated-economy.js"),
+    ("src/domains/snapshot-graph.js", "services/vivo/web/phone/vendor/economy/src/domains/snapshot-graph.js"),
     ("src/domains/token.js", "services/vivo/web/phone/vendor/economy/src/domains/token.js"),
     ("src/domains/token-config.js", "services/vivo/web/phone/vendor/economy/src/domains/token-config.js"),
+    ("src/domains/token-supply-policy.js", "services/vivo/web/phone/vendor/economy/src/domains/token-supply-policy.js"),
+    ("src/domains/token-economy-overview.js", "services/vivo/web/phone/vendor/economy/src/domains/token-economy-overview.js"),
     ("src/domains/token-store.js", "services/vivo/web/phone/vendor/economy/src/domains/token-store.js"),
     ("src/render/simulated-economy-panel.js", "services/vivo/web/phone/vendor/economy/src/render/simulated-economy-panel.js"),
+    ("src/render/token-economy-overview.js", "services/vivo/web/phone/vendor/economy/src/render/token-economy-overview.js"),
 )
 
 
@@ -49,11 +53,13 @@ def safe_read(path: Path, label: str) -> bytes:
     return path.read_bytes()
 
 
-def ensure_exact(path: Path, expected: bytes, label: str, check_only: bool) -> None:
+def ensure_exact(path: Path, expected: bytes, label: str, check_only: bool, refresh: bool) -> None:
     if path.exists():
         actual = safe_read(path, label)
-        if actual != expected:
+        if actual != expected and (check_only or not refresh):
             raise ValueError(f"staged economy dependency differs from canonical source: {label}")
+        if actual != expected:
+            path.write_bytes(expected)
         return
     if check_only:
         raise ValueError(f"staged economy dependency is missing: {label}")
@@ -64,6 +70,7 @@ def ensure_exact(path: Path, expected: bytes, label: str, check_only: bool) -> N
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--check", action="store_true", help="verify staged files without creating missing files")
+    parser.add_argument("--refresh", action="store_true", help="replace mismatched staged mirrors with canonical bytes")
     args = parser.parse_args()
 
     entries = []
@@ -71,7 +78,7 @@ def main() -> None:
         source_path = ROOT / source
         staged_path = ROOT / staged
         data = safe_read(source_path, source)
-        ensure_exact(staged_path, data, staged, args.check)
+        ensure_exact(staged_path, data, staged, args.check, args.refresh)
         entries.append(entry(source, staged, data))
 
     manifest_value = {
@@ -82,7 +89,9 @@ def main() -> None:
     manifest_data = (json.dumps(manifest_value, indent=2, sort_keys=False) + "\n").encode("utf-8")
     if MANIFEST.exists():
         if safe_read(MANIFEST, str(MANIFEST.relative_to(ROOT))) != manifest_data:
-            raise ValueError("staged economy manifest differs from canonical dependency bytes")
+            if args.check or not args.refresh:
+                raise ValueError("staged economy manifest differs from canonical dependency bytes")
+            MANIFEST.write_bytes(manifest_data)
     elif args.check:
         raise ValueError("staged economy manifest is missing")
     else:
