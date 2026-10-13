@@ -45,7 +45,7 @@ def install_guards(page: Page) -> None:
     page.add_init_script(
         """
         (() => {
-          const checks = { fetchUrls: [], cameraCalls: 0, canvasTexts: [] };
+          const checks = { fetchUrls: [], cameraCalls: 0, canvasTexts: [], canvasTextDraws: [] };
           window.__vivoCompanionChecks = checks;
           const originalFetch = window.fetch;
           window.fetch = (...args) => {
@@ -64,6 +64,7 @@ def install_guards(page: Page) -> None:
           if (originalFillText) {
             canvasContext.fillText = function (text, ...args) {
               checks.canvasTexts.push(String(text));
+              checks.canvasTextDraws.push({ text: String(text), x: Number(args[0]), y: Number(args[1]) });
               return originalFillText.call(this, text, ...args);
             };
           }
@@ -128,7 +129,10 @@ def assert_layout(page: Page, *, label: str) -> dict[str, object]:
 def companion_state(page: Page) -> dict[str, object]:
     return page.evaluate(
         """
-        () => ({
+        () => {
+          const renderer = window.VivaShared?.R;
+          const selectedPoint = renderer?.screen?.find(point => point.id === renderer.selected) || null;
+          return {
           persistence: document.querySelector('[data-companion="persistence"]')?.textContent || '',
           persistenceState: document.querySelector('[data-companion="persistence"]')?.dataset.state || '',
           placed: document.querySelector('[data-companion="persistence"]')?.dataset.placed === 'true',
@@ -145,13 +149,19 @@ def companion_state(page: Page) -> dict[str, object]:
           chatDisabled: document.querySelector('[data-companion="chat-input"]')?.disabled === true,
           provider: window.VivoCompanion?.provider?.() || null,
           rendererWorldView: window.VivaShared?.R?.companionWorldView === true,
+          rendererFocus: window.VivaShared?.R?.companionFocus === true,
+          rendererSelected: renderer?.selected || null,
+          selectedScreen: selectedPoint ? { x: selectedPoint.x, y: selectedPoint.y } : null,
+          selectedHit: selectedPoint ? renderer.at(selectedPoint.x, selectedPoint.y) : null,
           materialEditing: window.VivaShared?.R?.materialEditing === true,
           materialNodes: window.VivaShared?.R?.materialNodePoints?.length || 0,
           canvasTexts: window.__vivoCompanionChecks?.canvasTexts || [],
+          canvasTextDraws: window.__vivoCompanionChecks?.canvasTextDraws || [],
           activeRole: document.activeElement?.getAttribute('role') || '',
           activeCharacter: document.activeElement?.dataset?.characterId || '',
           guards: window.__vivoCompanionChecks,
-        })
+          };
+        }
         """
     )
 
@@ -184,7 +194,10 @@ def main() -> None:
             assert page.locator('[data-companion="reaction"]').inner_text().startswith("Relic is looking back")
 
             page.locator('[data-companion="place"]').click()
-            page.wait_for_function("document.querySelector('[data-companion=\"persistence\"]')?.dataset.placed === 'true'")
+            page.wait_for_function(
+                "document.querySelector('[data-companion=\"persistence\"]')?.dataset.placed === 'true' && "
+                "document.querySelector('[data-companion=\"persistence\"]')?.dataset.state === 'saved'"
+            )
             page.wait_for_timeout(150)
             placed = companion_state(page)
             page.screenshot(path=str(EVIDENCE / "mobile-placed.png"))
@@ -269,6 +282,85 @@ def main() -> None:
             assert offline["guards"]["cameraCalls"] == 0, offline
             results["mobile"] = {"initial": initial, "placed": placed, "returned": returned, "reloaded": reloaded, "offline": offline}
             context.close()
+
+            # Each existing world identity gets a placed and recovered render.
+            # The assertions keep the visual evidence tied to the selected
+            # entity, its canonical hit target, and the durable local state.
+            identity_evidence = EVIDENCE / "identity-matrix"
+            identity_evidence.mkdir(parents=True, exist_ok=True)
+            identity_results: dict[str, object] = {}
+            for character_id in ("relic", "workpiece", "portal"):
+                identity_context, identity_page, identity_errors = open_phone(browser, width=1280, height=900)
+                card = identity_page.locator(f'[data-companion="roster"] [data-character-id="{character_id}"]')
+                card.click()
+                identity_page.locator('[data-companion="place"]').click()
+                identity_page.wait_for_function(
+                    "document.querySelector('[data-companion=\"persistence\"]')?.dataset.placed === 'true' && "
+                    "document.querySelector('[data-companion=\"persistence\"]')?.dataset.state === 'saved'"
+                )
+                placed_identity = companion_state(identity_page)
+                assert placed_identity["rendererSelected"] == character_id, placed_identity
+                assert placed_identity["selectedHit"] == character_id, placed_identity
+                assert placed_identity["rendererFocus"] is True and placed_identity["rendererWorldView"] is False, placed_identity
+                identity_page.screenshot(path=str(identity_evidence / f"{character_id}-placed-expanded.png"))
+                assert (identity_evidence / f"{character_id}-placed-expanded.png").stat().st_size > 10_000
+
+                identity_page.reload(wait_until="domcontentloaded")
+                identity_page.locator("#enterPhoneLocal").click()
+                identity_page.locator("body.phone-local #vivoCompanion").wait_for()
+                identity_page.wait_for_function(
+                    "document.querySelector('[data-companion=\"persistence\"]')?.dataset.placed === 'true' && "
+                    "document.querySelector('[data-companion=\"persistence\"]')?.dataset.state === 'saved'"
+                )
+                recovered_identity = companion_state(identity_page)
+                assert recovered_identity["rendererSelected"] == character_id, recovered_identity
+                assert recovered_identity["selectedHit"] == character_id, recovered_identity
+                assert recovered_identity["persistence"] == "PLACEMENT · SAVED LOCALLY", recovered_identity
+                identity_page.screenshot(path=str(identity_evidence / f"{character_id}-reloaded-expanded.png"))
+                assert (identity_evidence / f"{character_id}-reloaded-expanded.png").stat().st_size > 10_000
+                identity_page.locator('[data-companion="focus"]').click()
+                identity_page.wait_for_function("document.querySelector('#vivoCompanion')?.dataset.collapsed === 'true'")
+                collapsed_identity = companion_state(identity_page)
+                assert collapsed_identity["rendererSelected"] == character_id, collapsed_identity
+                assert collapsed_identity["selectedHit"] == character_id, collapsed_identity
+                identity_page.screenshot(path=str(identity_evidence / f"{character_id}-reloaded-collapsed.png"))
+                assert (identity_evidence / f"{character_id}-reloaded-collapsed.png").stat().st_size > 10_000
+                assert not identity_errors, f"{character_id} page errors: {identity_errors}"
+                identity_results[character_id] = {
+                    "placed": placed_identity,
+                    "reloaded": recovered_identity,
+                    "collapsed": collapsed_identity,
+                }
+                identity_context.close()
+
+            # The expanded narrow chooser must keep the selected doorway and
+            # label above the dock, while the same point remains interactive.
+            narrow_context, narrow, narrow_errors = open_phone(browser, width=500, height=757)
+            narrow.locator('[data-companion="roster"] [data-character-id="portal"]').click()
+            narrow.locator('[data-companion="place"]').click()
+            narrow.wait_for_function(
+                "document.querySelector('[data-companion=\"persistence\"]')?.dataset.placed === 'true' && "
+                "document.querySelector('[data-companion=\"persistence\"]')?.dataset.state === 'saved'"
+            )
+            narrow.evaluate("window.__vivoCompanionChecks.canvasTextDraws.length = 0")
+            narrow.wait_for_timeout(80)
+            narrow_state = companion_state(narrow)
+            narrow_layout = layout(narrow)
+            assert narrow_layout["scrollWidth"] <= narrow_layout["innerWidth"], narrow_layout
+            assert narrow_layout["companionBottom"] <= narrow_layout["dockBottom"] + 1, narrow_layout
+            assert narrow_state["rendererSelected"] == "portal" and narrow_state["selectedHit"] == "portal", narrow_state
+            assert narrow_state["selectedScreen"]["y"] < narrow_layout["dock"]["top"] - 80, {"state": narrow_state, "layout": narrow_layout}
+            narrow_axes = [
+                draw for draw in narrow_state["canvasTextDraws"]
+                if draw["text"] in {"x1", "x2", "x3"}
+            ]
+            assert not narrow_axes, narrow_axes
+            narrow.screenshot(path=str(identity_evidence / "portal-placed-expanded-500x757.png"))
+            assert (identity_evidence / "portal-placed-expanded-500x757.png").stat().st_size > 10_000
+            assert not narrow_errors, f"narrow page errors: {narrow_errors}"
+            narrow_context.close()
+            results["identityMatrix"] = identity_results
+            results["narrowPortal"] = {"state": narrow_state, "layout": narrow_layout}
 
             # Desktop reframe and resize assertion.
             desktop_context, desktop, desktop_errors = open_phone(browser, width=1180, height=757)

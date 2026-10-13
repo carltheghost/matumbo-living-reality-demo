@@ -4,7 +4,9 @@ import { createEye, createPhoneSnapshot } from '../engine.mjs';
 import {
   COMPANION_CHARACTERS,
   CONVERSATION_PROVIDER_SCHEMA,
+  companionPersistenceTone,
   buildPlacementRequest,
+  formatCompanionPlacementStatus,
   isPlaced,
   normalizeConversationResult,
   placementTarget,
@@ -60,6 +62,23 @@ test('placement recovery distinguishes the original position from a saved move',
   entity.q[0] = -0.66;
   entity.q[1] = 0.06;
   assert.equal(isPlaced(entity, 'relic'), true);
+});
+
+test('placement copy follows the same persistence acknowledgement as the badge', () => {
+  const saved = formatCompanionPlacementStatus('Inner world', { state: 'saved' });
+  const pending = formatCompanionPlacementStatus('Inner world', { state: 'saved' }, { pending: true });
+  const saving = formatCompanionPlacementStatus('Inner world', { state: 'saving' });
+  const failed = formatCompanionPlacementStatus('Inner world', { state: 'unsaved', error: 'QuotaExceededError' });
+  assert.match(saved, /saved locally/);
+  assert.doesNotMatch(pending, /saved locally/);
+  assert.match(pending, /Waiting for the local save acknowledgement/);
+  assert.doesNotMatch(saving, /saved locally/);
+  assert.match(saving, /Waiting for the local save acknowledgement/);
+  assert.match(failed, /was not saved: QuotaExceededError/);
+  assert.equal(companionPersistenceTone({ state: 'saved' }), 'success');
+  assert.equal(companionPersistenceTone({ state: 'saved' }, { pending: true }), 'info');
+  assert.equal(companionPersistenceTone({ state: 'saving' }), 'info');
+  assert.equal(companionPersistenceTone({ state: 'unsaved' }), 'warn');
 });
 
 test('conversation seam accepts only a configured provider and readable result', () => {
