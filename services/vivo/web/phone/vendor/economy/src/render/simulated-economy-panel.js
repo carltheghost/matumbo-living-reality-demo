@@ -81,6 +81,42 @@ function assetAmount(amount, asset) {
   return `${formatSimAmount(amount)} ${asset === "TUMBO" ? "TUMBO-SIM" : asset}`;
 }
 
+const DURABLE_STORAGE_STATES = new Set([
+  "persisted-local-snapshot",
+  "restored-local-snapshot",
+  "restored-canonical-snapshot",
+  "restored-token-snapshot",
+]);
+
+function persistenceSummary(model) {
+  const state = String(model?.storageStatus || "unknown");
+  if (DURABLE_STORAGE_STATES.has(state)) return `durable local snapshot · ${state}`;
+  if (state === "storage-unavailable") return "not saved · storage unavailable; reload may discard this state";
+  if (state === "in-memory") return "not saved · in-memory state only";
+  if (state.includes("invalid")) return `not saved · ${state}`;
+  return `persistence status · ${state}`;
+}
+
+function housePoolOwnActiveFluff(model) {
+  if (typeof model?.housePools !== "function") return null;
+  try {
+    return model.housePools({ owner: "you" })
+      .flatMap((pool) => pool.contributions)
+      .filter((contribution) => ["reserved", "committed"].includes(contribution.status))
+      .reduce((total, contribution) => total + contribution.amountFluff, 0);
+  } catch {
+    return null;
+  }
+}
+
+function exactShare(entry) {
+  const numerator = Number(entry?.ownershipNumerator);
+  const denominator = Number(entry?.ownershipDenominator);
+  if (!Number.isSafeInteger(numerator) || !Number.isSafeInteger(denominator) || denominator <= 0) return "—";
+  const percent = ((numerator / denominator) * 100).toFixed(3);
+  return `${numerator.toLocaleString("en-US")}/${denominator.toLocaleString("en-US")} units · ${percent}%`;
+}
+
 function addStyles(documentRoot) {
   if (!documentRoot?.head || byId(documentRoot, CSS_ID)) return;
   const style = documentRoot.createElement("style");
@@ -93,11 +129,11 @@ function addStyles(documentRoot) {
 .sim-economy-kicker{margin:0 0 3px;color:#83d9f0;font-size:9px;font-weight:800;letter-spacing:.16em;text-transform:uppercase}
 .sim-economy-boundary{margin:4px 0 0;color:#9ebbc6;font-size:10px;line-height:1.4}
 .sim-economy-close{margin-left:auto;min-width:42px!important;min-height:42px!important;padding:6px!important;border:1px solid rgba(153,225,244,.3)!important;background:rgba(59,137,172,.13)!important;color:#d8f8ff!important;font-size:20px!important;line-height:1!important}
-.sim-economy-balance{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.sim-economy-balance{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
 .sim-economy-balance-card{padding:8px;border:1px solid rgba(137,222,247,.16);border-radius:10px;background:rgba(33,110,145,.12)}
 .sim-economy-balance-card strong{display:block;color:#e9fbff;font-size:14px;font-variant-numeric:tabular-nums}
 .sim-economy-balance-card span{display:block;margin-top:2px;color:#83afbd;font-size:8px;letter-spacing:.12em;text-transform:uppercase}
-.sim-economy-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.sim-economy-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
 .sim-economy-tabs button[aria-selected=true]{border-color:#75e0f6;background:rgba(52,153,182,.3);color:#fff}
 .sim-economy-tab[hidden]{display:none}
 .sim-economy-form{display:grid;gap:7px;padding:10px;border:1px solid rgba(137,222,247,.14);border-radius:12px;background:rgba(7,36,51,.58)}
@@ -114,11 +150,22 @@ function addStyles(documentRoot) {
 .sim-economy-record{display:grid;gap:5px;padding:9px;border:1px solid rgba(137,222,247,.14);border-radius:10px;background:rgba(3,20,30,.72)}
 .sim-economy-record strong{color:#e9fbff;font-size:11px}
 .sim-economy-meta{color:#8db6c1;font-size:9px;line-height:1.35}
+.sim-economy-house-pool-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.sim-economy-house-pool-card{display:grid;gap:4px;padding:8px;border:1px solid rgba(137,222,247,.14);border-radius:10px;background:rgba(3,20,30,.72)}
+.sim-economy-house-pool-card strong{color:#e9fbff;font-size:11px}
+.sim-economy-house-pool-card span{color:#9ebbc6;font-size:9px;line-height:1.35}
+.sim-economy-house-pool-ratio{color:#b8f3df!important;font-variant-numeric:tabular-nums}
+.sim-economy-house-pool-storage{padding:8px;border:1px solid rgba(137,222,247,.18);border-radius:9px;color:#b8d9e2;font-size:9px;line-height:1.4;background:rgba(7,36,51,.42)}
+.sim-economy-house-pool-storage[data-durable=true]{border-color:rgba(113,228,183,.32);color:#b8f3df;background:rgba(39,137,114,.1)}
+.sim-economy-house-pool-unavailable{padding:8px;border:1px dashed rgba(255,210,122,.34);border-radius:9px;color:#f0d9a2;font-size:9px;line-height:1.4;background:rgba(121,75,40,.09)}
+.sim-economy-house-pool-contribution{display:grid;gap:4px;padding:8px;border:1px solid rgba(137,222,247,.12);border-radius:9px;background:rgba(3,15,23,.72)}
+.sim-economy-house-pool-contribution strong{color:#e9fbff;font-size:10px}
+.sim-economy-house-pool-contribution span{color:#9ebbc6;font-size:9px;line-height:1.35}
 .sim-economy-empty{padding:10px;border:1px dashed rgba(137,222,247,.22);border-radius:9px;color:#8db6c1;font-size:10px}
 .sim-economy-status{min-height:18px;color:#9de6c8;font-size:10px}
 .sim-economy-status[data-tone=error]{color:#ffb7c0}
 .sim-economy-note{margin:0;color:#91b1bc;font-size:9px;line-height:1.45}
-@media(max-width:700px){.sim-economy-panel{inset:auto 8px 8px;width:auto;max-height:calc(100vh - 16px);padding:11px;border-radius:14px}.sim-economy-head h2{font-size:16px}.sim-economy-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.sim-economy-actions button{width:100%}}
+@media(max-width:700px){.sim-economy-panel{inset:auto 8px 8px;width:auto;max-height:calc(100vh - 16px);padding:11px;border-radius:14px}.sim-economy-head h2{font-size:16px}.sim-economy-balance{grid-template-columns:repeat(2,minmax(0,1fr))}.sim-economy-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}.sim-economy-house-pool-grid{grid-template-columns:1fr}.sim-economy-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.sim-economy-actions button{width:100%}}
 `;
   documentRoot.head.append(style);
 }
@@ -198,6 +245,7 @@ export function mountSimulatedEconomyPanel({
     ["exchange", "Exchange"],
     ["prediction", "Prediction"],
     ["contracts", "Contracts"],
+    ["house-pool", "House pool"],
   ].map(([id, label], index) => {
     const tab = button(documentRoot, label, `tab:${id}`);
     tab.dataset.tab = id;
@@ -288,7 +336,53 @@ export function mountSimulatedEconomyPanel({
   contractList.className = "sim-economy-records";
   contractsTab.append(contractList);
 
-  tabsRoot.append(exchangeTab, predictionTab, contractsTab);
+  const housePoolTab = documentRoot.createElement("div");
+  housePoolTab.id = "sim-economy-tab-house-pool";
+  housePoolTab.className = "sim-economy-tab";
+  housePoolTab.hidden = true;
+  housePoolTab.setAttribute("role", "tabpanel");
+
+  const housePoolName = input(documentRoot, "text", "Local house pool");
+  const housePoolCapacity = input(documentRoot, "number", "10000");
+  housePoolCapacity.min = "1";
+  housePoolCapacity.step = "1";
+  const housePoolCreate = button(documentRoot, "Create house pool", "house-pool:create", "sim-economy-primary");
+  const housePoolCreateForm = documentRoot.createElement("div");
+  housePoolCreateForm.append(
+    field(documentRoot, "Pool name", housePoolName, "sim-economy-house-pool-name"),
+    field(documentRoot, "Capacity · integer fluff", housePoolCapacity, "sim-economy-house-pool-capacity"),
+    actions(documentRoot, [housePoolCreate]),
+    text(documentRoot, "p", "Capacity is explicit TUMBO-SIM integer fluff. Atelier rehearsal credits never enter this pool.", "sim-economy-note"),
+  );
+  housePoolTab.append(section(documentRoot, "Create a local house pool", housePoolCreateForm));
+
+  const housePoolStorage = text(documentRoot, "div", "Receipt persistence status · checking…", "sim-economy-house-pool-storage");
+  housePoolStorage.setAttribute("role", "status");
+  housePoolStorage.setAttribute("aria-live", "polite");
+  housePoolTab.append(housePoolStorage);
+
+  const housePoolUnavailable = text(documentRoot, "p", "Outcome commitment locking and settlement are unavailable in this mounted panel. Reserved contributions can be released; imported committed contributions remain locked until a supported lifecycle exists.", "sim-economy-house-pool-unavailable");
+  housePoolTab.append(housePoolUnavailable);
+
+  const housePoolSelect = select(documentRoot, [{ value: "", label: "Select a house pool" }], "");
+  const housePoolAmount = input(documentRoot, "number", "1000");
+  housePoolAmount.min = "1";
+  housePoolAmount.step = "1";
+  const housePoolReserve = button(documentRoot, "Reserve my TUMBO-SIM", "house-pool:reserve", "sim-economy-primary");
+  const housePoolReserveForm = documentRoot.createElement("div");
+  housePoolReserveForm.append(
+    field(documentRoot, "House pool", housePoolSelect, "sim-economy-house-pool-select"),
+    field(documentRoot, "My contribution · integer fluff", housePoolAmount, "sim-economy-house-pool-amount"),
+    actions(documentRoot, [housePoolReserve]),
+    text(documentRoot, "p", "The reserve moves your available TUMBO-SIM into the canonical local escrow account and returns an auditable receipt.", "sim-economy-note"),
+  );
+  housePoolTab.append(section(documentRoot, "Reserve your own available balance", housePoolReserveForm));
+
+  const housePoolList = documentRoot.createElement("div");
+  housePoolList.className = "sim-economy-records";
+  housePoolTab.append(housePoolList);
+
+  tabsRoot.append(exchangeTab, predictionTab, contractsTab, housePoolTab);
 
   const operationNamespace = createPanelOperationNamespace();
   let keySequence = 0;
@@ -308,12 +402,20 @@ export function mountSimulatedEconomyPanel({
   const hide = () => { panel.hidden = true; };
   const setStatus = (message, tone = "ok") => { status.textContent = message; status.dataset.tone = tone; };
   const showError = (error) => setStatus(error?.message || String(error), "error");
+  const committedStatus = () => {
+    const state = String(model?.storageStatus || "unknown");
+    if (state === "storage-unavailable") return "Committed to the local simulated receipt ledger in memory; local save unavailable, so reload may discard it.";
+    if (state === "in-memory") return "Committed to the local simulated receipt ledger in memory; no durable local snapshot is configured.";
+    return "Committed to the local simulated receipt ledger and local snapshot.";
+  };
 
   function refreshBalance() {
     const snapshot = model.balances("you");
+    const reservedFluff = housePoolOwnActiveFluff(model);
     balance.replaceChildren(
       (() => { const node = documentRoot.createElement("div"); node.className = "sim-economy-balance-card"; node.append(text(documentRoot, "strong", assetAmount(snapshot.available.TUMBO, "TUMBO")), text(documentRoot, "span", "available TUMBO-SIM")); return node; })(),
       (() => { const node = documentRoot.createElement("div"); node.className = "sim-economy-balance-card"; node.append(text(documentRoot, "strong", assetAmount(snapshot.available.sMIMAS, "sMIMAS")), text(documentRoot, "span", "available sMIMAS")); return node; })(),
+      (() => { const node = documentRoot.createElement("div"); node.className = "sim-economy-balance-card"; node.append(text(documentRoot, "strong", reservedFluff === null ? "—" : assetAmount(reservedFluff, "TUMBO")), text(documentRoot, "span", "reserved in house pools")); return node; })(),
     );
   }
 
@@ -378,11 +480,88 @@ export function mountSimulatedEconomyPanel({
     }
   }
 
+  function refreshHousePools() {
+    if (typeof model.housePools !== "function") {
+      housePoolStorage.textContent = "House-pool reservations are unavailable in this economy model.";
+      housePoolStorage.dataset.durable = "false";
+      housePoolSelect.replaceChildren(select(documentRoot, [{ value: "", label: "House pools unavailable" }], "").firstChild);
+      housePoolSelect.disabled = true;
+      housePoolReserve.disabled = true;
+      housePoolList.replaceChildren(text(documentRoot, "div", "No house-pool lifecycle is mounted in this model.", "sim-economy-empty"));
+      return;
+    }
+
+    const pools = model.housePools({ owner: "you" });
+    const previousPoolId = housePoolSelect.value;
+    housePoolSelect.replaceChildren();
+    housePoolSelect.append(text(documentRoot, "option", pools.length ? "Select a house pool" : "Create a house pool first"));
+    housePoolSelect.firstChild.value = "";
+    for (const pool of pools) {
+      const option = text(documentRoot, "option", `${pool.name} · ${assetAmount(pool.totalUnits, "TUMBO")} / ${assetAmount(pool.capacityFluff, "TUMBO")}`);
+      option.value = pool.id;
+      housePoolSelect.append(option);
+    }
+    const selectedPoolId = pools.some((pool) => pool.id === previousPoolId) ? previousPoolId : pools[0]?.id ?? "";
+    housePoolSelect.value = selectedPoolId;
+    housePoolSelect.disabled = pools.length === 0;
+    housePoolReserve.disabled = !selectedPoolId;
+    const storage = persistenceSummary(model);
+    housePoolStorage.textContent = `Receipt persistence · ${storage}`;
+    housePoolStorage.dataset.durable = String(DURABLE_STORAGE_STATES.has(String(model.storageStatus || "unknown")));
+
+    housePoolList.replaceChildren();
+    if (!pools.length) {
+      housePoolList.append(text(documentRoot, "div", "No local house pools yet. Create one with an explicit capacity above.", "sim-economy-empty"));
+      return;
+    }
+    for (const pool of pools) {
+      const own = pool.contributors.find((entry) => entry.account === "u:you") ?? null;
+      const ownReserved = own?.reservedUnits ?? 0;
+      const ownCommitted = own?.committedUnits ?? 0;
+      const children = [];
+      const poolNode = record(
+        documentRoot,
+        pool.name,
+        `${pool.status.toUpperCase()} · ${assetAmount(pool.totalUnits, "TUMBO")} in this pool / ${assetAmount(pool.capacityFluff, "TUMBO")} capacity · ${assetAmount(pool.availableCapacityFluff, "TUMBO")} remaining`,
+        children,
+      );
+      poolNode.classList.add("sim-economy-house-pool-card");
+      poolNode.dataset.poolId = pool.id;
+      poolNode.append(
+        text(documentRoot, "span", `My balance · available ${assetAmount(model.balances("you").available.TUMBO, "TUMBO")} · reserved ${assetAmount(ownReserved + ownCommitted, "TUMBO")}`),
+        text(documentRoot, "span", `My units · reserved ${ownReserved.toLocaleString("en-US")} · committed ${ownCommitted.toLocaleString("en-US")} · share ${exactShare(own)}`, "sim-economy-house-pool-ratio"),
+      );
+      if (pool.contributions.length) {
+        for (const contribution of pool.contributions.filter((entry) => entry.contributor === "u:you")) {
+          const contributionNode = documentRoot.createElement("div");
+          contributionNode.className = "sim-economy-house-pool-contribution";
+          contributionNode.dataset.contributionId = contribution.id;
+          contributionNode.append(
+            text(documentRoot, "strong", `${contribution.status.toUpperCase()} · ${assetAmount(contribution.amountFluff, "TUMBO-SIM")}`),
+            text(documentRoot, "span", `Receipt · ${contribution.status === "released" ? contribution.releaseReceiptId : contribution.reserveReceiptId}`),
+            text(documentRoot, "span", `Pool share · ${exactShare(own)} · revision ${pool.revision}`),
+          );
+          if (contribution.status === "reserved") {
+            const release = button(documentRoot, "Release uncommitted contribution", "house-pool:release", "sim-economy-danger");
+            release.dataset.poolId = pool.id;
+            release.dataset.contributionId = contribution.id;
+            contributionNode.append(actions(documentRoot, [release]));
+          } else if (contribution.status === "committed") {
+            contributionNode.append(text(documentRoot, "span", "Commitment lock unavailable here; no release or settlement action is exposed.", "sim-economy-house-pool-unavailable"));
+          }
+          poolNode.append(contributionNode);
+        }
+      }
+      housePoolList.append(poolNode);
+    }
+  }
+
   function refresh() {
     refreshBalance();
     refreshOrders();
     refreshMarkets();
     refreshContracts();
+    refreshHousePools();
   }
 
   let actionBusy = false;
@@ -399,7 +578,7 @@ export function mountSimulatedEconomyPanel({
     try {
       await action();
       refresh();
-      setStatus("Committed to the local simulated receipt ledger.");
+      setStatus(committedStatus());
       committed = true;
       return true;
     } catch (error) {
@@ -421,7 +600,7 @@ export function mountSimulatedEconomyPanel({
     if (action.startsWith("tab:")) {
       const tabId = action.slice(4);
       for (const tab of tabButtons) tab.setAttribute("aria-selected", tab.dataset.tab === tabId ? "true" : "false");
-      for (const node of [exchangeTab, predictionTab, contractsTab]) node.hidden = node.id !== `sim-economy-tab-${tabId}`;
+      for (const node of [exchangeTab, predictionTab, contractsTab, housePoolTab]) node.hidden = node.id !== `sim-economy-tab-${tabId}`;
       return;
     }
     if (action === "exchange:seed") {
@@ -485,6 +664,38 @@ export function mountSimulatedEconomyPanel({
       const request = { title: predictionTitle.value, outcomes: predictionOutcomes.value.split(",").map((value) => value.trim()), priceFluff: Number(predictionPrice.value) };
       const intent = operationIntent("prediction-create", request);
       run(async () => { model.createPredictionMarket({ ...request, idempotencyKey: intent.key }); }, action, intent);
+      return;
+    }
+    if (action === "house-pool:create") {
+      const request = { name: housePoolName.value, capacityFluff: Number(housePoolCapacity.value), owner: "you" };
+      const intent = operationIntent("house-pool-create", request);
+      run(async () => { model.createHousePool({ ...request, idempotencyKey: intent.key }); }, action, intent);
+      return;
+    }
+    if (action === "house-pool:reserve") {
+      if (typeof model.housePools !== "function" || !housePoolSelect.value) return;
+      const pool = model.housePools({ owner: "you" }).find((entry) => entry.id === housePoolSelect.value);
+      if (!pool) return;
+      const request = {
+        poolId: pool.id,
+        contributor: "you",
+        amountFluff: Number(housePoolAmount.value),
+        expectedRevision: pool.revision,
+      };
+      const intent = operationIntent("house-pool-reserve", request);
+      run(async () => { model.reserveHousePoolContribution({ ...request, idempotencyKey: intent.key }); }, action, intent);
+      return;
+    }
+    if (action === "house-pool:release") {
+      if (typeof model.housePools !== "function") return;
+      const poolId = event.target?.dataset?.poolId;
+      const contributionId = event.target?.dataset?.contributionId;
+      const pool = model.housePools({ owner: "you" }).find((entry) => entry.id === poolId);
+      const contribution = pool?.contributions.find((entry) => entry.id === contributionId);
+      if (!pool || !contribution || contribution.status !== "reserved") return;
+      const request = { poolId, contributionId, actor: "you", expectedRevision: pool.revision };
+      const intent = operationIntent("house-pool-release", request);
+      run(async () => { model.releaseHousePoolContribution({ ...request, idempotencyKey: intent.key }); }, action, intent);
       return;
     }
     if (action === "contract:create") {
