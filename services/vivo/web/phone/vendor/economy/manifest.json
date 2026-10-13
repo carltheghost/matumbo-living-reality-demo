@@ -5,9 +5,9 @@
     {
       "source": "src/domains/simulated-economy.js",
       "staged": "services/vivo/web/phone/vendor/economy/src/domains/simulated-economy.js",
-      "bytes": 96092,
-      "sha256": "63b0e6387b418610007d3685aa7447dd27a27ec368321cc4ed8cb81263d13bbe",
-      "gitBlob": "75e0e853c9e6f1453e3ece5e6cdf1882841a9c46"
+      "bytes": 112676,
+      "sha256": "203581c4092fbfb8c45dae6d690c127e246eaf0a1c78895466a66ab7aa63bd56",
+      "gitBlob": "795eaae2808bdb1e305a524215aebe7ae12e0759"
     },
     {
       "source": "src/domains/snapshot-graph.js",
@@ -54,9 +54,9 @@
     {
       "source": "src/render/simulated-economy-panel.js",
       "staged": "services/vivo/web/phone/vendor/economy/src/render/simulated-economy-panel.js",
-      "bytes": 30562,
-      "sha256": "efb0008202400fdb1e363d9128d265972b9bc90a3195b9acf7ab1e9131f4fb3d",
-      "gitBlob": "0375586d098a4cd8ee79a5e5089de8665a3e440c"
+      "bytes": 43634,
+      "sha256": "898e5b509cdd2429fef6adcf76a0dcca65836067dd8b7401cd07ba685c91c5fc",
+      "gitBlob": "b66d487377124dd9abfa38db922fb829b5ab1ad5"
     },
     {
       "source": "src/render/token-economy-overview.js",
