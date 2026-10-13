@@ -25,6 +25,7 @@ import {
   loadTokenEngine,
   serializeTokenEngine,
 } from "./token-store.js";
+import { assertSnapshotGraph, stableJson } from "./snapshot-graph.js";
 
 export const SIMULATED_ECONOMY_FORMAT = "matumbo-simulated-economy-v1";
 export const SIMULATED_ECONOMY_SNAPSHOT_VERSION = 2;
@@ -37,6 +38,9 @@ export const ECONOMY_ESCROW_ACCOUNT = "sys:escrow";
 export const DEMO_LIQUIDITY_ACCOUNT = "b:liquidity";
 export const PREDICTION_PROVENANCE_KIND = "explicit-demo-outcome";
 export const CONTRACT_EVIDENCE_KIND = "explicit-demo-evidence";
+export const HOUSE_POOL_ASSET = EXCHANGE_BASE_ASSET;
+export const HOUSE_POOL_CONTRIBUTION_STATUSES = Object.freeze(["reserved", "committed", "released"]);
+export const HOUSE_POOL_MAX_CONTRIBUTIONS = 256;
 
 export const EXCHANGE_ORDER_STATUSES = Object.freeze(["open", "partial", "filled", "cancelled"]);
 export const PREDICTION_MARKET_STATUSES = Object.freeze(["open", "settled"]);
@@ -79,6 +83,7 @@ const MAX_OUTCOMES = 6;
 const MAX_ORDER_BASE = 1_000_000_000;
 const MAX_POSITION_UNITS = 1_000_000;
 const MAX_CONTRACT_AMOUNT = 1_000_000_000;
+export const HOUSE_POOL_MAX_CAPACITY_FLUFF = MAX_CONTRACT_AMOUNT;
 
 const DEMO_SEED_ORDER_SPECS = Object.freeze([
   Object.freeze({
@@ -115,13 +120,7 @@ function deepFreeze(value) {
   return Object.freeze(value);
 }
 
-function canonicalJson(value) {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  if (value && typeof value === "object") {
-    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
+const canonicalJson = stableJson;
 
 function requestHash(value) {
   return fnv1a64Hex(canonicalJson(value));
@@ -146,6 +145,14 @@ function optionalText(value, field, max = MAX_NOTE_LENGTH) {
   const text = String(value).trim().replace(/\s+/g, " ");
   if (text.length > max) throw new TypeError(`${field} exceeds ${max} characters`);
   return text;
+}
+
+function requiredIdentifier(value, field, max = MAX_LABEL_LENGTH) {
+  if (typeof value !== "string" || !value || value.trim() !== value) {
+    throw new TypeError(`${field} must be a non-empty identifier without surrounding whitespace`);
+  }
+  if (value.length > max) throw new TypeError(`${field} exceeds ${max} characters`);
+  return value;
 }
 
 function positiveFluff(value, field, maximum = Number.MAX_SAFE_INTEGER) {
@@ -209,6 +216,7 @@ function emptyState(escrowBaseline) {
     exchange: { orders: [], trades: [], seeded: false, revision: 0 },
     predictions: { markets: [], positions: [] },
     contracts: [],
+    housePools: [],
     events: [],
     operations: [],
   };
@@ -226,6 +234,13 @@ function assertSafeNonNegative(value, field) {
 }
 
 function validateState(raw) {
+  try {
+    // The same graph walk used by overview evidence must guard the canonical
+    // restore path too, before clone() or any nested branch is inspected.
+    assertSnapshotGraph(raw, "economy snapshot");
+  } catch (error) {
+    throw new SimulatedEconomyError(`malformed economy snapshot: ${error.message}`, "INVALID_SNAPSHOT");
+  }
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     throw new SimulatedEconomyError("malformed economy state", "INVALID_SNAPSHOT");
   }
@@ -238,6 +253,7 @@ function validateState(raw) {
     assertSafeNonNegative(raw.escrowBaseline[asset], `escrowBaseline.${asset}`);
   }
   const state = clone(raw);
+  if (state.housePools === undefined) state.housePools = [];
   const orders = assertArray(state.exchange?.orders, "exchange.orders");
   if (state.exchange.revision === undefined) state.exchange.revision = 0;
   else assertSafeNonNegative(state.exchange.revision, "exchange.revision");
@@ -299,6 +315,69 @@ function validateState(raw) {
     assertSafeNonNegative(contract.amountFluff, "contract amount");
     if (!contract.funding || !["unfunded", "funded", "released", "refunded"].includes(contract.funding.status)) throw new SimulatedEconomyError("invalid contract funding", "INVALID_SNAPSHOT");
     assertArray(contract.history, "contract.history");
+  }
+  const housePools = assertArray(state.housePools, "housePools");
+  const housePoolIds = new Set();
+  const housePoolContributionIds = new Set();
+  for (const pool of housePools) {
+    if (!pool || typeof pool.id !== "string" || !pool.id || housePoolIds.has(pool.id)) {
+      throw new SimulatedEconomyError("duplicate or malformed house pool", "INVALID_SNAPSHOT");
+    }
+    housePoolIds.add(pool.id);
+    if (typeof pool.name !== "string" || !pool.name || pool.name.trim() !== pool.name || pool.name.length > MAX_LABEL_LENGTH) {
+      throw new SimulatedEconomyError("invalid house-pool name", "INVALID_SNAPSHOT");
+    }
+    try { assertAccount(pool.owner); } catch { throw new SimulatedEconomyError("invalid house-pool owner", "INVALID_SNAPSHOT"); }
+    if (!isUserAccount(pool.owner) || pool.asset !== HOUSE_POOL_ASSET || pool.status !== "open") {
+      throw new SimulatedEconomyError("invalid house-pool identity or status", "INVALID_SNAPSHOT");
+    }
+    assertSafeNonNegative(pool.capacityFluff, "house-pool capacity");
+    assertSafeNonNegative(pool.revision, "house-pool revision");
+    if (pool.capacityFluff <= 0 || pool.capacityFluff > HOUSE_POOL_MAX_CAPACITY_FLUFF) {
+      throw new SimulatedEconomyError("house-pool capacity is outside the simulated bound", "INVALID_SNAPSHOT");
+    }
+    const contributions = assertArray(pool.contributions, "house-pool contributions");
+    if (contributions.length > HOUSE_POOL_MAX_CONTRIBUTIONS) {
+      throw new SimulatedEconomyError("house-pool has too many contributions", "INVALID_SNAPSHOT");
+    }
+    const activeAmounts = [];
+    for (const contribution of contributions) {
+      if (!contribution || typeof contribution.id !== "string" || !contribution.id || housePoolContributionIds.has(contribution.id)) {
+        throw new SimulatedEconomyError("duplicate or malformed house-pool contribution", "INVALID_SNAPSHOT");
+      }
+      housePoolContributionIds.add(contribution.id);
+      if (contribution.poolId !== pool.id || !isUserAccount(contribution.contributor)) {
+        throw new SimulatedEconomyError("invalid house-pool contribution owner or reference", "INVALID_SNAPSHOT");
+      }
+      assertSafeNonNegative(contribution.amountFluff, "house-pool contribution amount");
+      if (contribution.amountFluff <= 0 || contribution.amountFluff > HOUSE_POOL_MAX_CAPACITY_FLUFF || contribution.amountFluff > pool.capacityFluff) {
+        throw new SimulatedEconomyError("house-pool contribution amount is outside the simulated bound", "INVALID_SNAPSHOT");
+      }
+      if (!HOUSE_POOL_CONTRIBUTION_STATUSES.includes(contribution.status) || typeof contribution.reserveReceiptId !== "string") {
+        throw new SimulatedEconomyError("invalid house-pool contribution lifecycle", "INVALID_SNAPSHOT");
+      }
+      if (contribution.status === "released") {
+        if (typeof contribution.releaseReceiptId !== "string" || contribution.commitment !== null) {
+          throw new SimulatedEconomyError("released house-pool contribution is not reconciled", "INVALID_SNAPSHOT");
+        }
+      } else {
+        activeAmounts.push(contribution.amountFluff);
+        if (contribution.releaseReceiptId !== null) {
+          throw new SimulatedEconomyError("active house-pool contribution has a release receipt", "INVALID_SNAPSHOT");
+        }
+        if (contribution.status === "reserved" && contribution.commitment !== null) {
+          throw new SimulatedEconomyError("reserved house-pool contribution has a commitment", "INVALID_SNAPSHOT");
+        }
+        if (contribution.status === "committed" && (!contribution.commitment || typeof contribution.commitment !== "object" ||
+            typeof contribution.commitment.outcomeId !== "string" || !contribution.commitment.outcomeId ||
+            typeof contribution.commitment.receiptId !== "string")) {
+          throw new SimulatedEconomyError("committed house-pool contribution has no outcome commitment", "INVALID_SNAPSHOT");
+        }
+      }
+    }
+    if (sum(activeAmounts) > pool.capacityFluff) {
+      throw new SimulatedEconomyError("house-pool contributions exceed capacity", "INVALID_SNAPSHOT");
+    }
   }
   assertArray(state.events, "events");
   assertArray(state.operations, "operations");
@@ -1004,6 +1083,66 @@ function sum(values) {
   return total;
 }
 
+function isActiveHousePoolContribution(contribution) {
+  return contribution?.status === "reserved" || contribution?.status === "committed";
+}
+
+function housePoolActiveFluff(pool) {
+  return sum((pool?.contributions ?? [])
+    .filter(isActiveHousePoolContribution)
+    .map((contribution) => contribution.amountFluff));
+}
+
+function housePoolProjection(pool) {
+  const contributions = clone(pool.contributions);
+  const active = contributions.filter(isActiveHousePoolContribution);
+  const totalUnits = sum(active.map((contribution) => contribution.amountFluff));
+  const reservedFluff = sum(active
+    .filter((contribution) => contribution.status === "reserved")
+    .map((contribution) => contribution.amountFluff));
+  const committedFluff = sum(active
+    .filter((contribution) => contribution.status === "committed")
+    .map((contribution) => contribution.amountFluff));
+  const byContributor = new Map();
+  for (const contribution of active) {
+    const current = byContributor.get(contribution.contributor) ?? {
+      account: contribution.contributor,
+      units: 0,
+      reservedUnits: 0,
+      committedUnits: 0,
+      simulation: true,
+    };
+    current.units += contribution.amountFluff;
+    if (contribution.status === "reserved") current.reservedUnits += contribution.amountFluff;
+    else current.committedUnits += contribution.amountFluff;
+    byContributor.set(contribution.contributor, current);
+  }
+  const contributors = [...byContributor.values()].map((entry) => ({
+    ...entry,
+    ownership: totalUnits > 0 ? entry.units / totalUnits : 0,
+    ownershipNumerator: entry.units,
+    ownershipDenominator: totalUnits,
+  }));
+  return deepFreeze({
+    ...clone(pool),
+    unit: SIMULATED_ECONOMY_UNIT,
+    asset: HOUSE_POOL_ASSET,
+    totalUnits,
+    reservedFluff,
+    committedFluff,
+    availableCapacityFluff: pool.capacityFluff - totalUnits,
+    contributors,
+    contributions,
+    investorPayouts: {
+      available: false,
+      status: "unavailable",
+      reason: "No house-pool payout or settlement lifecycle is enabled.",
+    },
+    simulation: true,
+    localOnly: true,
+  });
+}
+
 function proportionalAllocation(total, rows, weightField) {
   assertFluff(total, "total");
   const weightTotal = sum(rows.map((row) => row[weightField]));
@@ -1309,7 +1448,7 @@ export class SimulatedEconomy {
     return receipt;
   }
 
-  _audit({ key, action, actor, refType, refId, detail = "" }) {
+  _audit({ key, action, actor, refType, refId, detail = "", metadata = null }) {
     const account = normalizeActor(actor);
     const receipt = this._post([
       { account, asset: EXCHANGE_BASE_ASSET, amount: 0 },
@@ -1325,6 +1464,7 @@ export class SimulatedEconomy {
         refId,
         actor: account,
         simulation: true,
+        ...(metadata && typeof metadata === "object" ? clone(metadata) : {}),
         ...this._operationLinks(),
       },
     });
@@ -1452,6 +1592,236 @@ export class SimulatedEconomy {
 
   contracts() {
     return deepFreeze(clone(this._state.contracts));
+  }
+
+  _housePool(poolId) {
+    const pool = this._state.housePools.find((entry) => entry.id === poolId);
+    if (!pool) throw new SimulatedEconomyError(`unknown house pool ${String(poolId)}`, "UNKNOWN_HOUSE_POOL");
+    return pool;
+  }
+
+  housePools({ owner = null } = {}) {
+    const account = owner === null ? null : normalizeOwner(owner, "owner");
+    return deepFreeze(this._state.housePools
+      .filter((pool) => !account || pool.owner === account)
+      .map(housePoolProjection));
+  }
+
+  getHousePool(poolId) {
+    const id = requiredIdentifier(poolId, "poolId");
+    return housePoolProjection(this._housePool(id));
+  }
+
+  createHousePool({ name, capacityFluff, owner = "you", idempotencyKey } = {}) {
+    const poolName = boundedText(name, "name");
+    const account = normalizeOwner(owner, "owner");
+    const capacity = positiveFluff(capacityFluff, "capacityFluff", HOUSE_POOL_MAX_CAPACITY_FLUFF);
+    const request = {
+      action: "create-house-pool",
+      name: poolName,
+      capacityFluff: capacity,
+      owner: account,
+    };
+    return this._operation(idempotencyKey, request, () => {
+      const id = this._nextId("house-pool");
+      const audit = this._audit({
+        key: `economy:house-pool:${id}:create`,
+        action: "house-pool.create",
+        actor: account,
+        refType: "house-pool",
+        refId: id,
+        detail: poolName,
+        metadata: { name: poolName, capacityFluff: capacity, asset: HOUSE_POOL_ASSET },
+      });
+      const pool = {
+        id,
+        name: poolName,
+        owner: account,
+        asset: HOUSE_POOL_ASSET,
+        capacityFluff: capacity,
+        status: "open",
+        revision: 0,
+        contributions: [],
+        createdAt: nowIso(this.now),
+        simulation: true,
+      };
+      this._state.housePools.push(pool);
+      return { pool: housePoolProjection(pool), receiptId: audit.id, simulation: true };
+    });
+  }
+
+  reserveHousePoolContribution({ poolId, contributor = "you", amountFluff, expectedRevision = null, idempotencyKey } = {}) {
+    const id = requiredIdentifier(poolId, "poolId");
+    const account = normalizeOwner(contributor, "contributor");
+    const amount = positiveFluff(amountFluff, "amountFluff", HOUSE_POOL_MAX_CAPACITY_FLUFF);
+    const request = {
+      action: "reserve-house-pool-contribution",
+      poolId: id,
+      contributor: account,
+      amountFluff: amount,
+      expectedRevision,
+    };
+    return this._operation(idempotencyKey, request, () => {
+      const pool = this._housePool(id);
+      this._assertRevision(pool.revision, expectedRevision, `house pool ${pool.id}`);
+      if (pool.status !== "open") throw new EconomyStateError(`house pool ${pool.id} is ${pool.status}`);
+      const active = housePoolActiveFluff(pool);
+      if (amount > pool.capacityFluff - active) {
+        throw new SimulatedEconomyError("house-pool contribution exceeds remaining capacity", "CAPACITY_EXCEEDED");
+      }
+      if (pool.contributions.length >= HOUSE_POOL_MAX_CONTRIBUTIONS) {
+        throw new SimulatedEconomyError("house pool has reached its contribution limit", "CAPACITY_EXCEEDED");
+      }
+      const contributionId = this._nextId("house-pool-contribution");
+      const receipt = this._moneyReceipt({
+        postings: [
+          { account, asset: HOUSE_POOL_ASSET, amount: -amount },
+          { account: ECONOMY_ESCROW_ACCOUNT, asset: HOUSE_POOL_ASSET, amount },
+        ],
+        key: `economy:house-pool:${pool.id}:contribution:${contributionId}:reserve`,
+        action: "house-pool.reserve",
+        refType: "house-pool-contribution",
+        refId: contributionId,
+        actor: account,
+        detail: `Reserved ${amount} integer fluff in ${pool.name}`,
+        metadata: {
+          poolId: pool.id,
+          poolName: pool.name,
+          contributor: account,
+          amountFluff: amount,
+          asset: HOUSE_POOL_ASSET,
+          reservationStatus: "reserved",
+        },
+      });
+      const contribution = {
+        id: contributionId,
+        poolId: pool.id,
+        contributor: account,
+        amountFluff: amount,
+        status: "reserved",
+        reserveReceiptId: receipt.id,
+        releaseReceiptId: null,
+        commitment: null,
+        createdAt: nowIso(this.now),
+        releasedAt: null,
+        simulation: true,
+      };
+      pool.contributions.push(contribution);
+      pool.revision += 1;
+      return {
+        pool: housePoolProjection(pool),
+        contribution: clone(contribution),
+        receiptId: receipt.id,
+        balances: this.balances(account),
+        simulation: true,
+      };
+    });
+  }
+
+  commitHousePoolContribution({ poolId, contributionId, actor = "you", outcomeId, expectedRevision = null, idempotencyKey } = {}) {
+    const id = requiredIdentifier(poolId, "poolId");
+    const contributionRef = requiredIdentifier(contributionId, "contributionId");
+    const account = normalizeActor(actor);
+    const outcome = boundedText(outcomeId, "outcomeId");
+    const request = {
+      action: "commit-house-pool-contribution",
+      poolId: id,
+      contributionId: contributionRef,
+      actor: account,
+      outcomeId: outcome,
+      expectedRevision,
+    };
+    return this._operation(idempotencyKey, request, () => {
+      const pool = this._housePool(id);
+      this._assertRevision(pool.revision, expectedRevision, `house pool ${pool.id}`);
+      const contribution = pool.contributions.find((entry) => entry.id === contributionRef);
+      if (!contribution) throw new SimulatedEconomyError(`unknown house-pool contribution ${contributionRef}`, "UNKNOWN_HOUSE_POOL_CONTRIBUTION");
+      if (contribution.contributor !== account) throw new SimulatedEconomyError("only the contribution owner can commit it", "NOT_OWNER");
+      if (contribution.status !== "reserved") {
+        throw new EconomyStateError(`house-pool contribution ${contribution.id} is ${contribution.status}`);
+      }
+      const audit = this._audit({
+        key: `economy:house-pool:${pool.id}:contribution:${contribution.id}:commit`,
+        action: "house-pool.commit",
+        actor: account,
+        refType: "house-pool-contribution",
+        refId: contribution.id,
+        detail: `Locked contribution to ${outcome}`,
+        metadata: {
+          poolId: pool.id,
+          contributionId: contribution.id,
+          outcomeId: outcome,
+          amountFluff: contribution.amountFluff,
+          asset: HOUSE_POOL_ASSET,
+          reservationStatus: "committed",
+        },
+      });
+      contribution.status = "committed";
+      contribution.commitment = { outcomeId: outcome, receiptId: audit.id, at: nowIso(this.now) };
+      pool.revision += 1;
+      return {
+        pool: housePoolProjection(pool),
+        contribution: clone(contribution),
+        receiptId: audit.id,
+        balances: this.balances(account),
+        simulation: true,
+      };
+    });
+  }
+
+  releaseHousePoolContribution({ poolId, contributionId, actor = "you", expectedRevision = null, idempotencyKey } = {}) {
+    const id = requiredIdentifier(poolId, "poolId");
+    const contributionRef = requiredIdentifier(contributionId, "contributionId");
+    const account = normalizeActor(actor);
+    const request = {
+      action: "release-house-pool-contribution",
+      poolId: id,
+      contributionId: contributionRef,
+      actor: account,
+      expectedRevision,
+    };
+    return this._operation(idempotencyKey, request, () => {
+      const pool = this._housePool(id);
+      this._assertRevision(pool.revision, expectedRevision, `house pool ${pool.id}`);
+      const contribution = pool.contributions.find((entry) => entry.id === contributionRef);
+      if (!contribution) throw new SimulatedEconomyError(`unknown house-pool contribution ${contributionRef}`, "UNKNOWN_HOUSE_POOL_CONTRIBUTION");
+      if (contribution.contributor !== account) throw new SimulatedEconomyError("only the contribution owner can release it", "NOT_OWNER");
+      if (contribution.status !== "reserved") {
+        throw new EconomyStateError(`house-pool contribution ${contribution.id} is ${contribution.status} and cannot be released`);
+      }
+      const receipt = this._moneyReceipt({
+        postings: [
+          { account: ECONOMY_ESCROW_ACCOUNT, asset: HOUSE_POOL_ASSET, amount: -contribution.amountFluff },
+          { account, asset: HOUSE_POOL_ASSET, amount: contribution.amountFluff },
+        ],
+        key: `economy:house-pool:${pool.id}:contribution:${contribution.id}:release`,
+        action: "house-pool.release",
+        refType: "house-pool-contribution",
+        refId: contribution.id,
+        actor: account,
+        detail: `Released ${contribution.amountFluff} integer fluff from ${pool.name}`,
+        metadata: {
+          poolId: pool.id,
+          poolName: pool.name,
+          contributor: account,
+          amountFluff: contribution.amountFluff,
+          asset: HOUSE_POOL_ASSET,
+          reservationStatus: "released",
+          reversesReceiptId: contribution.reserveReceiptId,
+        },
+      });
+      contribution.status = "released";
+      contribution.releaseReceiptId = receipt.id;
+      contribution.releasedAt = nowIso(this.now);
+      pool.revision += 1;
+      return {
+        pool: housePoolProjection(pool),
+        contribution: clone(contribution),
+        receiptId: receipt.id,
+        balances: this.balances(account),
+        simulation: true,
+      };
+    });
   }
 
   seedDemoLiquidity({ idempotencyKey = "economy:seed-liquidity:v1" } = {}) {
@@ -2133,6 +2503,9 @@ export class SimulatedEconomy {
         ...this._state.exchange.orders.filter((order) => order.status !== "cancelled" && order.side === "buy").map(() => 0),
         ...this._state.predictions.markets.filter((market) => market.status === "open").map((market) => market.poolFluff),
         ...this._state.contracts.filter((contract) => contract.funding.status === "funded").map((contract) => contract.amountFluff),
+        ...this._state.housePools.flatMap((pool) => pool.contributions
+          .filter(isActiveHousePoolContribution)
+          .map((contribution) => contribution.amountFluff)),
       ]),
       sMIMAS: sum(this._state.exchange.orders.filter((order) => order.status !== "cancelled" && order.side === "buy").map((order) => order.reservedQuote)),
     };

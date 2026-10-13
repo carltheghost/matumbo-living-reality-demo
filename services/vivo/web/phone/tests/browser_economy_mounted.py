@@ -39,8 +39,26 @@ def wait_for_local(page: Page, route: str) -> None:
         )
     page.locator("#phoneEconomyTrigger").click()
     page.wait_for_selector("#simulated-economy-panel:not([hidden])")
+    page.wait_for_selector(".token-economy-overview")
+    page.wait_for_function(
+        "document.querySelector('.token-economy-overview')?.textContent.includes('Intended fixed maximum: 42,000,000,000,000 TUMBO')"
+    )
     assert page.locator(".sim-economy-kicker").inner_text() == "FIELD OBJECT · LOCAL REHEARSAL"
     assert "No live market" in page.locator(".sim-economy-boundary").inner_text()
+    overview_text = page.locator(".token-economy-overview").inner_text()
+    assert "Current issued simulation supply: 10,000,000 TUMBO-SIM (10,000,000,000 fluff)" in overview_text
+    assert "Intended fixed maximum: 42,000,000,000,000 TUMBO (42,000,000,000,000,000 fluff)" in overview_text
+    assert re.search(r"Rewards\s+not-observed", overview_text)
+    counts = page.evaluate(
+        """
+        () => ({
+          ownerCount: Number(Boolean(window.__vivoPhoneSimulatedEconomyOwner)),
+          panelCount: document.querySelectorAll('#simulated-economy-panel').length,
+          overviewCount: document.querySelectorAll('.token-economy-overview').length,
+        })
+        """
+    )
+    assert counts == {"ownerCount": 1, "panelCount": 1, "overviewCount": 1}
 
 
 def committed(page: Page) -> None:
@@ -154,6 +172,12 @@ def flow(page: Page) -> dict[str, Any]:
     cancel_contract.locator('[data-action^="contract:cancel:"]').click()
     committed(page)
     assert "CANCELLED" in page.locator(".sim-economy-record").filter(has_text="Cancel selected field marker").inner_text()
+
+    overview_text = page.locator(".token-economy-overview").inner_text()
+    assert "Current issued simulation supply: 10,000,000 TUMBO-SIM" in overview_text
+    assert "Intended fixed maximum: 42,000,000,000,000 TUMBO" in overview_text
+    assert "not-observed" in overview_text
+    assert page.locator(".token-economy-overview").count() == 1
 
     state = page.evaluate(
         """

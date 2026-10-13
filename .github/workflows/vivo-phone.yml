@@ -6,9 +6,12 @@ on:
       - 'services/vivo/web/**'
       - 'services/vivo/android-companion/**'
       - 'src/domains/simulated-economy.js'
+      - 'src/domains/snapshot-graph.js'
       - 'src/domains/token*.js'
       - 'src/render/simulated-economy-panel.js'
+      - 'src/render/token-economy-overview.js'
       - 'scripts/vivo/stage_economy_dependencies.py'
+      - 'scripts/vivo/verify_economy_asset_coverage.py'
       - 'services/vivo/web/phone/tests/browser_economy_mounted.py'
       - 'services/vivo/web/phone/tests/browser_dimensional_contact.py'
       - 'docs/vivo-phone-*.md'
@@ -20,9 +23,12 @@ on:
       - 'services/vivo/web/**'
       - 'services/vivo/android-companion/**'
       - 'src/domains/simulated-economy.js'
+      - 'src/domains/snapshot-graph.js'
       - 'src/domains/token*.js'
       - 'src/render/simulated-economy-panel.js'
+      - 'src/render/token-economy-overview.js'
       - 'scripts/vivo/stage_economy_dependencies.py'
+      - 'scripts/vivo/verify_economy_asset_coverage.py'
       - 'services/vivo/web/phone/tests/browser_economy_mounted.py'
       - 'services/vivo/web/phone/tests/browser_dimensional_contact.py'
       - 'docs/vivo-phone-*.md'
@@ -39,6 +45,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      - name: Verify staged economy asset coverage
+        run: python3 scripts/vivo/verify_economy_asset_coverage.py
       - run: node --test services/vivo/web/phone/tests/*.test.mjs
       - name: Check browser module syntax
         run: |
@@ -159,10 +167,14 @@ jobs:
               Path('browser-static/services/vivo/web/phone/fingertip-input.mjs'),
               Path('browser-static/services/vivo/web/phone/vendor/economy/manifest.json'),
               Path('browser-static/services/vivo/web/phone/vendor/economy/src/domains/simulated-economy.js'),
+              Path('browser-static/services/vivo/web/phone/vendor/economy/src/domains/snapshot-graph.js'),
               Path('browser-static/services/vivo/web/phone/vendor/economy/src/domains/token.js'),
               Path('browser-static/services/vivo/web/phone/vendor/economy/src/domains/token-config.js'),
+              Path('browser-static/services/vivo/web/phone/vendor/economy/src/domains/token-supply-policy.js'),
+              Path('browser-static/services/vivo/web/phone/vendor/economy/src/domains/token-economy-overview.js'),
               Path('browser-static/services/vivo/web/phone/vendor/economy/src/domains/token-store.js'),
               Path('browser-static/services/vivo/web/phone/vendor/economy/src/render/simulated-economy-panel.js'),
+              Path('browser-static/services/vivo/web/phone/vendor/economy/src/render/token-economy-overview.js'),
               Path('browser-static/services/vivo/web/vivo-sw.js'),
           ]
           missing = [str(path) for path in required if not path.is_file()]
@@ -180,7 +192,7 @@ jobs:
           if './economy-entry.mjs' not in bootstrap or 'TUMBO-SIM' not in route:
               raise SystemExit('mounted simulated economy entry is missing')
           sw = required[-1].read_text(encoding='utf-8')
-          for asset in ('phone/economy-entry.mjs', 'phone/phone-render.mjs', 'phone/phone-world.css', 'phone/field-palette.mjs', 'phone/material-contract.mjs', 'phone/material-patch.mjs', 'phone/material-input-runtime.mjs', 'phone/fingertip-input.mjs', 'phone/vendor/economy/manifest.json', 'phone/vendor/economy/src/domains/simulated-economy.js', 'phone/vendor/economy/src/domains/token.js', 'phone/vendor/economy/src/domains/token-config.js', 'phone/vendor/economy/src/domains/token-store.js', 'phone/vendor/economy/src/render/simulated-economy-panel.js'):
+          for asset in ('phone/economy-entry.mjs', 'phone/phone-render.mjs', 'phone/phone-world.css', 'phone/field-palette.mjs', 'phone/material-contract.mjs', 'phone/material-patch.mjs', 'phone/material-input-runtime.mjs', 'phone/fingertip-input.mjs', 'phone/vendor/economy/manifest.json', 'phone/vendor/economy/src/domains/simulated-economy.js', 'phone/vendor/economy/src/domains/snapshot-graph.js', 'phone/vendor/economy/src/domains/token.js', 'phone/vendor/economy/src/domains/token-config.js', 'phone/vendor/economy/src/domains/token-supply-policy.js', 'phone/vendor/economy/src/domains/token-economy-overview.js', 'phone/vendor/economy/src/domains/token-store.js', 'phone/vendor/economy/src/render/simulated-economy-panel.js', 'phone/vendor/economy/src/render/token-economy-overview.js'):
               if asset not in sw:
                   raise SystemExit('economy phone asset is absent from the offline shell: ' + asset)
           print('built static phone artifact verified')
