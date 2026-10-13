@@ -7,6 +7,12 @@
  * can describe a future capability, but this surface never grants one.
  */
 
+import { formatExactInteger, getTumboSupplyPolicy } from "../domains/token-supply-policy.js";
+
+const TUMBO_POLICY = getTumboSupplyPolicy();
+const TUMBO_CURRENT_ISSUED_LABEL = `${formatExactInteger(BigInt(TUMBO_POLICY.currentIssued.wholeTumbo))} ${TUMBO_POLICY.asset}`;
+const TUMBO_INTENDED_MAXIMUM_LABEL = `${formatExactInteger(BigInt(TUMBO_POLICY.intendedMaximum.wholeTumbo))} TUMBO`;
+
 export const FEATURE_DEFINITIONS = Object.freeze([
   Object.freeze({
     id: "reality-lens",
@@ -68,7 +74,7 @@ export const FEATURE_DEFINITIONS = Object.freeze([
     kicker: "fixed allocation",
     focusOrganId: "asset-token",
     sources: ["tumbo-asset-token"],
-    description: "Inspect the fixed 1,000,000,000 TUMBO-SIM schedule and its eight aggregate allocation cohorts.",
+    description: `Inspect ${TUMBO_CURRENT_ISSUED_LABEL} currently issued in the simulation, the ${TUMBO_INTENDED_MAXIMUM_LABEL} intended maximum policy, and eight aggregate allocation cohorts.`,
     boundary: "This is a fictional social-experiment projection. No wallet, issuance, custody, transfer, settlement, or money exists.",
   }),
   Object.freeze({
@@ -449,9 +455,10 @@ export const FEATURE_SURFACE_ROUTES = Object.freeze({
     Object.freeze(["LOCAL DRAFT", "apply without files or execution"]),
   ]),
   "asset-token": Object.freeze([
-    Object.freeze(["FIXED SUPPLY", "1,000,000,000 TUMBO-SIM units"]),
+    Object.freeze(["ISSUED SIMULATION", `${TUMBO_CURRENT_ISSUED_LABEL} currently issued`]),
+    Object.freeze(["POLICY MAXIMUM", `${TUMBO_INTENDED_MAXIMUM_LABEL} · metadata only`]),
     Object.freeze(["ALLOCATION MAP", "eight aggregate cohorts"]),
-    Object.freeze(["LAUNCH BOUNDARY", "preview only · no transfer"]),
+    Object.freeze(["LAUNCH BOUNDARY", "preview only · no mint or transfer"]),
   ]),
   "asset-market": Object.freeze([
     Object.freeze(["PUBLIC SNAPSHOT", "bounded CoinGecko peer read"]),
