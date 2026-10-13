@@ -329,6 +329,7 @@ export function mountPhoneEconomyContext({
       renderStatus();
     }
     mounted.open();
+    if (overviewDirty) requestOverviewRefresh({ immediate: true });
     const tab = mounted.element?.querySelector(`[data-action="tab:${tabId}"]`);
     if (!tab) return false;
     tab.click();

@@ -42,6 +42,55 @@ def dispatch_pointer(page, kind: str, pointer_id: int, x: float, y: float) -> No
     )
 
 
+def dispatch_object_pointer(
+    page, kind: str, pointer_id: int, object_id: str, offset_x: float = 0, offset_y: float = 0
+) -> dict[str, float]:
+    return page.evaluate(
+        """
+        ({ kind, pointerId, objectId, offsetX, offsetY }) => {
+          const point = window.VivaShared.R.screen.find(item => item.id === objectId);
+          if (!point) throw new Error(`missing live screen point for ${objectId}`);
+          const x = point.x + offsetX, y = point.y + offsetY;
+          document.querySelector('#world').dispatchEvent(new PointerEvent(kind, {
+            bubbles: true,
+            cancelable: true,
+            pointerId,
+            pointerType: 'touch',
+            isPrimary: pointerId === 1,
+            clientX: x,
+            clientY: y,
+            buttons: kind === 'pointerup' || kind === 'pointercancel' ? 0 : 1,
+          }));
+          return { x, y };
+        }
+        """,
+        {
+            "kind": kind,
+            "pointerId": pointer_id,
+            "objectId": object_id,
+            "offsetX": offset_x,
+            "offsetY": offset_y,
+        },
+    )
+
+
+def wait_contact(page, contact_id: str, object_id: str) -> None:
+    page.wait_for_function(
+        """
+        ({ contactId, objectId }) => {
+          const rigid = window.VivaPhoneEngine.interaction().contacts.some(contact =>
+            contact.contactId === contactId && contact.objectId === objectId);
+          // Workpiece begins on the separate material-input path and is
+          // promoted to the rigid aggregate when its second contact arrives.
+          const material = window.VivaPhoneEngine.materialContacts().some(contact =>
+            contact.contactId === contactId);
+          return rigid || material;
+        }
+        """,
+        arg={"contactId": contact_id, "objectId": object_id},
+    )
+
+
 def object_point(page, object_id: str) -> dict[str, float]:
     page.wait_for_function(
         f"() => Boolean(window.VivaShared?.R?.screen?.find(point => point.id === {json.dumps(object_id)}))"
@@ -98,13 +147,17 @@ def wait_revision(page, object_id: str, revision: int) -> dict:
 
 
 def begin_pair(page, object_id: str, first_id: int, second_id: int) -> tuple[dict, dict]:
-    point = object_point(page, object_id)
-    first = {"x": point["x"] - 12, "y": point["y"]}
-    second = {"x": point["x"] + 12, "y": point["y"]}
-    dispatch_pointer(page, "pointerdown", first_id, first["x"], first["y"])
-    dispatch_pointer(page, "pointerdown", second_id, second["x"], second["y"])
-    dispatch_pointer(page, "pointermove", first_id, point["x"] - 20, point["y"] + 16)
-    dispatch_pointer(page, "pointermove", second_id, point["x"] + 20, point["y"] - 16)
+    first = dispatch_object_pointer(page, "pointerdown", first_id, object_id, -12)
+    wait_contact(page, f"touch:{first_id}", object_id)
+    # A material-backed object may finish its first contact on a separate
+    # adapter path and redraw before the second synthetic event. Read and hit
+    # the object's live point in the same browser task as the second down.
+    second = dispatch_object_pointer(page, "pointerdown", second_id, object_id, 8)
+    wait_contact(page, f"touch:{second_id}", object_id)
+    center_x = (first["x"] + second["x"]) / 2
+    center_y = (first["y"] + second["y"]) / 2
+    dispatch_pointer(page, "pointermove", first_id, center_x - 20, center_y + 16)
+    dispatch_pointer(page, "pointermove", second_id, center_x + 20, center_y - 16)
     page.wait_for_function("() => Boolean(window.VivaPhoneEngine.fieldWorld()?.previews?.length)")
     return first, second
 
@@ -135,15 +188,21 @@ def run_independent_preview_refresh_regression(host_page, route: str) -> dict:
 
         relic_before = snapshot_entity(page, "relic")
         workpiece_before = snapshot_entity(page, "workpiece")
-        relic_point = object_point(page, "relic")
-        workpiece_point = object_point(page, "workpiece")
 
         # Two separate one-contact object gestures create two candidates while
         # the second selection is active. This is the exact state that used to
         # be reduced to one global field-world preview.
-        dispatch_pointer(page, "pointerdown", 40, relic_point["x"], relic_point["y"])
+        relic_point = dispatch_object_pointer(page, "pointerdown", 40, "relic")
+        wait_contact(page, "touch:40", "relic")
         dispatch_pointer(page, "pointermove", 40, relic_point["x"] + 16, relic_point["y"] + 10)
-        dispatch_pointer(page, "pointerdown", 41, workpiece_point["x"], workpiece_point["y"])
+        page.wait_for_function(
+            "() => window.VivaPhoneEngine.fieldWorld().previews.some(item => item.entityId === 'relic')"
+        )
+        # The first preview can finish a render between synthetic events. Read
+        # the second object's live screen point immediately before its down so
+        # this remains a hit test, not a lucky reuse of a stale frame.
+        workpiece_point = dispatch_object_pointer(page, "pointerdown", 41, "workpiece")
+        wait_contact(page, "touch:41", "workpiece")
         dispatch_pointer(page, "pointermove", 41, workpiece_point["x"] - 14, workpiece_point["y"] - 12)
         page.wait_for_function(
             "() => window.VivaPhoneEngine.interaction().contacts.length === 2 && window.VivaPhoneEngine.fieldWorld().previews.length === 2"

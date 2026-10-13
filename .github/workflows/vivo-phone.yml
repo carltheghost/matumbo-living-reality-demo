@@ -137,7 +137,7 @@ jobs:
           PY
           python services/vivo/web/phone/tests/browser_offline_shell.py http://127.0.0.1:9878/
 
-      - name: Run v13 to v14 to v16 to v17 service-worker upgrade browser regression
+      - name: Run v13 to v14 to v16 to v17 to v18 service-worker upgrade browser regression
         shell: bash
         run: |
           set -euo pipefail

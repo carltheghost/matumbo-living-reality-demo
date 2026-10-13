@@ -863,6 +863,7 @@ async function startPhonePreview(facing = 'user') {
   projection?.stop();
   phoneCamera.stop('Hand tracking off · camera-only preview');
   if (phoneVideo) phoneVideo.style.display = 'none';
+  if (camera.video) camera.video.style.display = '';
   try {
     const started = await camera.start(facing, false);
     status(started ? 'CAMERA ONLY · touch controls remain active; hand tracking is off.' : $('cameraState')?.textContent || 'Camera did not start.');
