@@ -139,7 +139,7 @@ test('the phone-owned tracker detects two complete hands without transporting fr
   assert.match(sw, /request\.mode === 'navigate'/);
   assert.match(sw, /scope\.pathname/);
   assert.match(sw, /shell\.match\(scoped\('index\.html'\)\)/);
-  assert.match(sw, /SHELL_CACHE.*v17/);
+  assert.match(sw, /SHELL_CACHE.*v18/);
   for (const asset of ['phone/material-contract.mjs', 'phone/material-patch.mjs', 'phone/material-input-runtime.mjs', 'phone/fingertip-input.mjs', 'application/conversation-transport.mjs', 'phone/companion.mjs']) assert.match(sw, new RegExp(asset.replaceAll('.', '\\.')));
   assert.doesNotMatch(worker, /\bfetch\s*\(|XMLHttpRequest|WebSocket/);
   assert.doesNotMatch(camera, /\bfetch\s*\(|XMLHttpRequest|WebSocket/);
