@@ -471,47 +471,69 @@ class V03FiveBrain:
             "memory": np.asarray(runtime["memory"], dtype=np.float64).copy(),
         }
 
-    def _numeric_forward(self, runtime: dict, vector: np.ndarray, *, ablate=None, erase_memory_before_action=False) -> tuple[dict, dict]:
+    def _numeric_forward(
+        self,
+        runtime: dict,
+        vector: np.ndarray,
+        *,
+        ablate=None,
+        erase_memory_before_action=False,
+        collect_diagnostics: bool = False,
+    ) -> tuple[dict, dict]:
         runtime = self.copy_runtime(runtime)
         messages = []
         peripheral = []
+        peripheral_pre = []
+        peripheral_message_pre = []
         for brain in range(self.PERIPHERALS):
             prefix = f"p{brain}."
             if ablate == brain:
                 hidden = np.zeros(self.PERIPH_HIDDEN, dtype=np.float64)
                 message = 0.0
+                hidden_pre = np.zeros(self.PERIPH_HIDDEN, dtype=np.float64)
+                message_pre = np.zeros(1, dtype=np.float64)
             else:
-                hidden = np.tanh(
+                hidden_pre = (
                     self.params[prefix + "W_in"] @ vector
                     + self.params[prefix + "W_rec"] @ runtime["peripheral"][brain]
                     + self.params[prefix + "b"]
                 )
-                message = float(np.tanh(self.params[prefix + "W_msg"] @ hidden + self.params[prefix + "b_msg"])[0])
+                hidden = np.tanh(hidden_pre)
+                message_pre = self.params[prefix + "W_msg"] @ hidden + self.params[prefix + "b_msg"]
+                message = float(np.tanh(message_pre)[0])
             peripheral.append(hidden)
             messages.append(message)
+            peripheral_pre.append(np.asarray(hidden_pre, dtype=np.float64).copy())
+            peripheral_message_pre.append(np.asarray(message_pre, dtype=np.float64).copy())
         messages_array = np.asarray(messages, dtype=np.float64)
         memory_before = runtime["memory"]
         prior_key = np.tanh(self.params["c.W_key"] @ runtime["central"])
         read_weights_before = _softmax((memory_before @ prior_key) / 0.75)
         read_before = read_weights_before @ memory_before
         center_input = np.concatenate((vector, messages_array, read_before))
+        center_candidate_pre = np.zeros(self.CENTER_HIDDEN, dtype=np.float64)
+        center_update_pre = np.zeros(self.CENTER_HIDDEN, dtype=np.float64)
+        update = np.zeros(self.CENTER_HIDDEN, dtype=np.float64)
         if ablate == "center":
             central = np.zeros(self.CENTER_HIDDEN, dtype=np.float64)
         else:
-            candidate = np.tanh(
+            center_candidate_pre = (
                 self.params["c.W_in"] @ center_input
                 + self.params["c.W_rec"] @ runtime["central"]
                 + self.params["c.b"]
             )
-            update = 1.0 / (1.0 + np.exp(-(
+            center_update_pre = (
                 self.params["c.W_gate_in"] @ center_input
                 + self.params["c.W_gate_rec"] @ runtime["central"]
                 + self.params["c.b_gate"]
-            )))
+            )
+            candidate = np.tanh(center_candidate_pre)
+            update = 1.0 / (1.0 + np.exp(-center_update_pre))
             central = update * candidate + (1.0 - update) * runtime["central"]
         key = np.tanh(self.params["c.W_key"] @ central)
         write_weights = _softmax(self.params["c.W_addr"] @ central)
-        write_gate = float(_sigmoid(self.params["c.W_write_gate"] @ central + self.params["c.b_write_gate"])[0])
+        write_gate_pre = self.params["c.W_write_gate"] @ central + self.params["c.b_write_gate"]
+        write_gate = float(_sigmoid(write_gate_pre)[0])
         write_value = np.tanh(self.params["c.W_value"] @ central + self.params["c.b_value"])
         memory = memory_before + write_gate * write_weights[:, None] * (write_value[None, :] - memory_before)
         if erase_memory_before_action:
@@ -519,8 +541,10 @@ class V03FiveBrain:
         read_weights_after = _softmax((memory @ key) / 0.75)
         read_after = read_weights_after @ memory
         action_features = np.concatenate((central, read_after))
-        gate_probs = _softmax(self.params["c.W_action_gate"] @ action_features + self.params["c.b_action_gate"])
-        frequency_probs = _softmax(self.params["c.W_action_frequency"] @ action_features + self.params["c.b_action_frequency"])
+        action_gate_logits = self.params["c.W_action_gate"] @ action_features + self.params["c.b_action_gate"]
+        action_frequency_logits = self.params["c.W_action_frequency"] @ action_features + self.params["c.b_action_frequency"]
+        gate_probs = _softmax(action_gate_logits)
+        frequency_probs = _softmax(action_frequency_logits)
         next_runtime = {"peripheral": peripheral, "central": central, "memory": memory}
         trace = {
             "messages": messages_array,
@@ -535,15 +559,35 @@ class V03FiveBrain:
             "frequency_probs": frequency_probs,
             "drive_frequency": float(PROBE_FREQUENCIES[int(np.argmax(frequency_probs))]),
         }
+        if collect_diagnostics:
+            trace["diagnostics"] = {
+                "peripheral_pre": peripheral_pre,
+                "peripheral_message_pre": peripheral_message_pre,
+                "center_candidate_pre": center_candidate_pre.copy(),
+                "center_update_pre": center_update_pre.copy(),
+                "center_update_gate": update.copy(),
+                "write_gate_pre": np.asarray(write_gate_pre, dtype=np.float64).copy(),
+                "action_gate_logits": np.asarray(action_gate_logits, dtype=np.float64).copy(),
+                "action_frequency_logits": np.asarray(action_frequency_logits, dtype=np.float64).copy(),
+            }
         return next_runtime, trace
 
-    def raw_step(self, runtime: dict, policy_observation: dict, *, ablate=None, erase_memory_before_action=False) -> tuple[dict, dict]:
+    def raw_step(
+        self,
+        runtime: dict,
+        policy_observation: dict,
+        *,
+        ablate=None,
+        erase_memory_before_action=False,
+        collect_diagnostics: bool = False,
+    ) -> tuple[dict, dict]:
         vector = _model_vector(policy_observation, self.input_normalization)
         return self._numeric_forward(
             runtime,
             vector,
             ablate=ablate,
             erase_memory_before_action=erase_memory_before_action,
+            collect_diagnostics=collect_diagnostics,
         )
 
     def action_from_trace(self, trace: dict) -> tuple[int, float, int]:
@@ -798,7 +842,15 @@ class V03SingleRecurrentMemory:
     def _softmax(value: np.ndarray) -> np.ndarray:
         return _softmax(value)
 
-    def raw_step(self, runtime: dict, policy_observation: dict, *, ablate=None, erase_memory_before_action=False) -> tuple[dict, dict]:
+    def raw_step(
+        self,
+        runtime: dict,
+        policy_observation: dict,
+        *,
+        ablate=None,
+        erase_memory_before_action=False,
+        collect_diagnostics: bool = False,
+    ) -> tuple[dict, dict]:
         del ablate
         vector = _model_vector(policy_observation, self.input_normalization)
         runtime = self.copy_runtime(runtime)
@@ -806,10 +858,12 @@ class V03SingleRecurrentMemory:
         prior_key = np.tanh(self.params["W_key"] @ runtime["hidden"])
         read_weights_before = _softmax((memory_before @ prior_key) / 0.75)
         read_before = read_weights_before @ memory_before
-        hidden = np.tanh(self.params["W_in"] @ vector + self.params["W_rec"] @ runtime["hidden"] + self.params["b"])
+        hidden_pre = self.params["W_in"] @ vector + self.params["W_rec"] @ runtime["hidden"] + self.params["b"]
+        hidden = np.tanh(hidden_pre)
         key = np.tanh(self.params["W_key"] @ hidden)
         write_weights = _softmax(self.params["W_addr"] @ hidden)
-        write_gate = float(_sigmoid(self.params["W_write_gate"] @ hidden + self.params["b_write_gate"])[0])
+        write_gate_pre = self.params["W_write_gate"] @ hidden + self.params["b_write_gate"]
+        write_gate = float(_sigmoid(write_gate_pre)[0])
         write_value = np.tanh(self.params["W_value"] @ hidden + self.params["b_value"])
         memory = runtime["memory"] + write_gate * write_weights[:, None] * (write_value[None, :] - runtime["memory"])
         if erase_memory_before_action:
@@ -818,9 +872,11 @@ class V03SingleRecurrentMemory:
         read_after = read_weights_after @ memory
         action_memory = read_before + read_after
         action_features = np.concatenate((hidden, action_memory))
-        gate_probs = _softmax(self.params["W_action_gate"] @ action_features + self.params["b_action_gate"])
-        frequency_probs = _softmax(self.params["W_action_frequency"] @ action_features + self.params["b_action_frequency"])
-        return {"hidden": hidden, "memory": memory}, {
+        action_gate_logits = self.params["W_action_gate"] @ action_features + self.params["b_action_gate"]
+        action_frequency_logits = self.params["W_action_frequency"] @ action_features + self.params["b_action_frequency"]
+        gate_probs = _softmax(action_gate_logits)
+        frequency_probs = _softmax(action_frequency_logits)
+        trace = {
             "hidden": hidden.copy(),
             "memory": memory.copy(),
             "read_weights_before": read_weights_before.copy(),
@@ -832,6 +888,14 @@ class V03SingleRecurrentMemory:
             "frequency_probs": frequency_probs,
             "drive_frequency": float(PROBE_FREQUENCIES[int(np.argmax(frequency_probs))]),
         }
+        if collect_diagnostics:
+            trace["diagnostics"] = {
+                "hidden_pre": np.asarray(hidden_pre, dtype=np.float64).copy(),
+                "write_gate_pre": np.asarray(write_gate_pre, dtype=np.float64).copy(),
+                "action_gate_logits": np.asarray(action_gate_logits, dtype=np.float64).copy(),
+                "action_frequency_logits": np.asarray(action_frequency_logits, dtype=np.float64).copy(),
+            }
+        return {"hidden": hidden, "memory": memory}, trace
 
     def action_from_trace(self, trace: dict) -> tuple[int, float, int]:
         frequency_index = int(np.argmax(trace["frequency_probs"]))
