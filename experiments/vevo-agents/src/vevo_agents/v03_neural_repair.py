@@ -408,6 +408,38 @@ def _failure_cause(episode: CorrectedEpisode) -> str | None:
     return "goal_or_action_mismatch"
 
 
+def _erase_recurrent_state(model, runtime: dict) -> None:
+    """Clear the recurrent state for the model's runtime architecture."""
+
+    if isinstance(model, V03FiveBrain):
+        recurrent_values = [runtime["central"], *runtime["peripheral"]]
+    elif isinstance(model, V03SingleRecurrentMemory):
+        recurrent_values = [runtime["hidden"]]
+    else:
+        raise TypeError(f"unsupported retention model: {type(model).__name__}")
+    for value in recurrent_values:
+        value.fill(0.0)
+
+
+def _apply_retention_erasure(model, runtime: dict, erasure: str | None) -> None:
+    """Apply one bounded retention intervention to a copied model runtime."""
+
+    if erasure is None:
+        return
+    if erasure in {"slot", "slot0"}:
+        runtime["memory"][0].fill(0.0)
+    elif erasure == "slot1":
+        runtime["memory"][1].fill(0.0)
+    elif erasure in {"both", "slots"}:
+        runtime["memory"].fill(0.0)
+    elif erasure in {"recurrent", "all"}:
+        _erase_recurrent_state(model, runtime)
+        if erasure == "all":
+            runtime["memory"].fill(0.0)
+    else:
+        raise ValueError(f"unsupported retention erasure: {erasure}")
+
+
 def run_retention_episode(model, spec: dict, *, erasure: str | None = None) -> dict:
     """Show the note once, hide its payload, delay, then measure and act."""
 
@@ -444,21 +476,7 @@ def run_retention_episode(model, spec: dict, *, erasure: str | None = None) -> d
 
     episode.execute_diagnostic(0)
     spectrum_input = _strip_goal_bearing_note(episode.policy_observation())
-    if erasure in {"slot", "slot0"}:
-        runtime["memory"][0].fill(0.0)
-    elif erasure == "slot1":
-        runtime["memory"][1].fill(0.0)
-    elif erasure in {"both", "slots"}:
-        runtime["memory"].fill(0.0)
-    elif erasure == "recurrent":
-        runtime["central"].fill(0.0)
-        for value in runtime["peripheral"]:
-            value.fill(0.0)
-    elif erasure == "all":
-        runtime["central"].fill(0.0)
-        for value in runtime["peripheral"]:
-            value.fill(0.0)
-        runtime["memory"].fill(0.0)
+    _apply_retention_erasure(model, runtime, erasure)
     runtime, trace = model.raw_step(runtime, spectrum_input)
     gate, frequency, frequency_index = model.action_from_trace(trace)
     result = episode.execute_actuation(gate, drive_frequency=frequency)

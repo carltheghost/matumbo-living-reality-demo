@@ -36,6 +36,7 @@ from vevo_agents.v03_neural_repair import (
     _validate_target_only_note_edit,
     mid_sequence_continuation_check,
     numeric_autograd_parity,
+    run_retention_episode,
     targeted_gradient_checks,
 )
 from vevo_agents.v03_protocol import CorrectedEpisode
@@ -148,8 +149,11 @@ class V03NeuralIntegrationTests(unittest.TestCase):
         for model in (V03FiveBrain(7), V03SingleRecurrentMemory(41)):
             before = model.state_dict()
             malformed = copy.deepcopy(before)
+            early_name = model.parameter_names()[0]
+            malformed[early_name] = (np.asarray(malformed[early_name], dtype=np.float64) + 1.0).tolist()
             late_name = model.parameter_names()[-1]
             malformed[late_name] = np.zeros((1, 1)).tolist()
+            self.assertFalse(np.array_equal(malformed[early_name], before[early_name]))
             with self.assertRaises(ValueError):
                 model.load_state_dict(malformed)
             self.assertEqual(model.state_dict(), before)
@@ -190,9 +194,11 @@ class V03NeuralIntegrationTests(unittest.TestCase):
         revision_index = NOTE_FEATURE_START + 1
         self.assertEqual(normalized_revised[revision_index], raw_revised[revision_index])
         raw_training = np.stack([encode_policy_observation(item) for item in observations])
+        present_note_rows = raw_training[raw_training[:, NOTE_PAYLOAD_MASK_INDEX] > 0.5]
+        self.assertGreater(len(present_note_rows), 0)
         scales = np.asarray(normalization["scale"])
         for index in range(NOTE_BYTE_FEATURE_START, NOTE_BYTE_FEATURE_END):
-            if np.isclose(np.std(raw_training[:, index]), 0.0, rtol=0.0, atol=1e-12):
+            if np.isclose(np.std(present_note_rows[:, index]), 0.0, rtol=0.0, atol=1e-12):
                 self.assertEqual(scales[index], 1.0)
 
     def test_goal_byte_offsets_target_note_digit_for_center_and_controller(self):
@@ -312,6 +318,57 @@ class V03NeuralIntegrationTests(unittest.TestCase):
         self.assertEqual(wrong["failure"], "wrong_note_input")
         self.assertEqual(shuffled["failure"], "shuffled_measurement_input")
         self.assertEqual(erased["failure"], "neural_memory_erased")
+
+    def test_retention_erasures_cover_both_runtime_architectures(self):
+        spec = self.splits["test"][0]
+        cases = (
+            (None, "normal_retention"),
+            ("slot0", "slot0_retention_erase"),
+            ("slot1", "slot1_retention_erase"),
+            ("both", "both_retention_erase"),
+            ("recurrent", "recurrent_retention_erase"),
+            ("all", "all_retention_erase"),
+        )
+        for model_class, seed in ((V03FiveBrain, 7), (V03SingleRecurrentMemory, 41)):
+            captured = {}
+            for erasure, expected_condition in cases:
+                model = model_class(seed)
+                observed_runtimes = []
+                original_raw_step = model.raw_step
+
+                def capture_runtime(runtime, policy_observation, *args, **kwargs):
+                    observed_runtimes.append(model.copy_runtime(runtime))
+                    return original_raw_step(runtime, policy_observation, *args, **kwargs)
+
+                with mock.patch.object(model, "raw_step", side_effect=capture_runtime):
+                    result = run_retention_episode(model, spec, erasure=erasure)
+                self.assertEqual(result["condition"], expected_condition)
+                self.assertEqual(len(observed_runtimes), 5)
+                captured[erasure] = observed_runtimes[-1]
+
+            baseline = captured[None]
+            self.assertGreater(float(np.max(np.abs(baseline["memory"]))), 0.0)
+
+            def recurrent_values(runtime):
+                if model_class is V03FiveBrain:
+                    return [runtime["central"], *runtime["peripheral"]]
+                return [runtime["hidden"]]
+
+            for erasure in ("slot0", "slot1", "both"):
+                for before, after in zip(recurrent_values(baseline), recurrent_values(captured[erasure])):
+                    np.testing.assert_array_equal(after, before)
+            for current in recurrent_values(captured["recurrent"]):
+                self.assertTrue(np.all(current == 0.0))
+            for current in recurrent_values(captured["all"]):
+                self.assertTrue(np.all(current == 0.0))
+
+            np.testing.assert_array_equal(captured["slot0"]["memory"][0], 0.0)
+            np.testing.assert_array_equal(captured["slot1"]["memory"][1], 0.0)
+            np.testing.assert_array_equal(captured["slot0"]["memory"][1], baseline["memory"][1])
+            np.testing.assert_array_equal(captured["slot1"]["memory"][0], baseline["memory"][0])
+            np.testing.assert_array_equal(captured["both"]["memory"], 0.0)
+            np.testing.assert_array_equal(captured["recurrent"]["memory"], baseline["memory"])
+            np.testing.assert_array_equal(captured["all"]["memory"], 0.0)
 
 
 if __name__ == "__main__":
