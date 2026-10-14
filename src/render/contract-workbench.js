@@ -3,6 +3,8 @@
  * mutation; this surface renders snapshots and never treats a button as a
  * signature, an identity check, a payment, or a verified external observation.
  */
+import { previewContractTerms } from '../domains/contract-automation.js';
+
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const readable = (value) => String(value ?? '').replaceAll('_', ' ');
 const dateLabel = (value) => value == null ? 'Not set' : new Date(value).toLocaleString();
@@ -69,6 +71,9 @@ export function mountContractWorkbench({ root, engine, onSelect = null, onRefres
   const detailDrafts = new Map();
   let renderedRecordId = null;
   let localActionDepth = 0;
+  let listQuery = '';
+  let listStatus = 'all';
+  let previewResult = null;
 
   function node(tag, className, text) {
     const el = documentRoot.createElement(tag);
@@ -197,13 +202,29 @@ export function mountContractWorkbench({ root, engine, onSelect = null, onRefres
   }, 'Validated backup imported. Original local history is preserved.'));
   portability.append(download, field('Choose a backup file', backupFile), field('Or paste backup JSON', backupText), restore);
   const library = node('div', 'cw-library');
+  const librarySummary = node('div', 'cw-library-summary');
+  const librarySearch = input('contract-search');
+  librarySearch.placeholder = 'Search title, role, terms or contract ID';
+  librarySearch.maxLength = 160;
+  const libraryStatus = select('contract-status', [
+    { value: 'all', label: 'All statuses' },
+    { value: 'pending_approval', label: 'Needs review' },
+    { value: 'active', label: 'Active' },
+    { value: 'paused', label: 'Paused' },
+    { value: 'disputed', label: 'Disputed' },
+    { value: 'completed', label: 'Completed' },
+    { value: 'cancelled', label: 'Cancelled' },
+    { value: 'expired', label: 'Expired' },
+  ], 'all');
+  const libraryTools = node('div', 'cw-library-tools');
+  libraryTools.append(field('Find a saved contract', librarySearch), field('Filter status', libraryStatus));
   const list = node('div', 'cw-list');
   list.setAttribute('aria-label', 'Saved contracts');
   const libraryPicker = node('details', 'cw-library-picker');
   const pickerSummary = node('summary', '', 'Switch contract');
   libraryPicker.append(pickerSummary, list);
   const detail = node('div', 'cw-detail');
-  library.append(libraryPicker, detail);
+  library.append(librarySummary, libraryTools, libraryPicker, detail);
   const form = node('form', 'cw-composer');
   form.hidden = true;
   form.noValidate = true;
@@ -247,11 +268,101 @@ export function mountContractWorkbench({ root, engine, onSelect = null, onRefres
   advanced.append(field('Use JSON instead of the fields above', advancedEnabled), field('Terms JSON', advancedText, 'The engine validates these terms. Enabling this uses the JSON exactly, including dates and rules.'));
   advanced.append(button('Copy current fields into JSON', () => action(() => { advancedText.value = JSON.stringify(readTerms(false), null, 2); }, 'Current terms copied into the JSON editor.')));
   timing.append(advanced);
+  const previewGroup = group('05 / Review the draft', 'Preview is read-only. Assumed evidence can show which rules would trigger, but it never creates a contract, receipt, balance change or access grant.');
+  const previewEvidence = node('textarea');
+  previewEvidence.name = 'preview-evidence';
+  previewEvidence.rows = 4;
+  previewEvidence.maxLength = 12000;
+  previewEvidence.spellcheck = false;
+  const previewEvidenceField = field('Assumed evidence JSON (optional)', previewEvidence, 'Use source keys from section 02, for example {"accepted":true}. Unlisted sources remain waiting.');
+  const previewButton = button('Preview simulated lifecycle', () => {
+    try {
+      const draft = buildWorkbenchContract({ templateId: currentTemplate.id, title: titleInput.value, creator: creatorInput.value, parties: partiesInput.value, terms: readTerms() });
+      let assumptions = {};
+      if (previewEvidence.value.trim()) {
+        assumptions = JSON.parse(previewEvidence.value);
+        if (!assumptions || typeof assumptions !== 'object' || Array.isArray(assumptions)) throw new TypeError('Assumed evidence must be a JSON object.');
+      }
+      previewResult = previewContractTerms({ contractId: 'preview:draft', title: draft.title, terms: draft.terms, parties: draft.parties, assumedEvidence: assumptions });
+      renderPreview(previewOutput, previewResult);
+      announce('Preview complete. No contract or receipt was written.');
+    } catch (error) {
+      previewResult = null;
+      renderPreview(previewOutput, null, error.message);
+      announce(error.message, true);
+    }
+  }, 'cw-subtle');
+  const previewOutput = node('div', 'cw-preview-output');
+  previewGroup.append(previewEvidenceField, previewButton, previewOutput);
+  timing.append(previewGroup);
   const submit = node('button', 'cw-button cw-primary', 'Create & request approvals');
   submit.type = 'submit';
   form.append(identity, sourcesGroup, rulesGroup, timing, submit);
   shell.append(head, selectedSummary, boundary, tabs, storageAlert, feedback, deferredUpdate, library, form, portability);
   root.append(shell);
+  listen(librarySearch, 'input', () => { listQuery = librarySearch.value; listRevision = ''; refresh({ force: true }); });
+  listen(libraryStatus, 'change', () => { listStatus = libraryStatus.value; listRevision = ''; refresh({ force: true }); });
+
+  function renderPreview(parent, result, error = null) {
+    parent.replaceChildren();
+    if (error) {
+      parent.append(node('p', 'cw-preview-error', `Preview unavailable: ${error}`));
+      return;
+    }
+    if (!result) return;
+    const heading = node('div', 'cw-preview-heading');
+    heading.append(node('strong', '', 'PREVIEW ONLY · NO STATE CHANGED'), node('span', 'cw-hint', `${result.approvals.remaining} local approval${result.approvals.remaining === 1 ? '' : 's'} still required`));
+    parent.append(heading, node('p', 'cw-hint', result.boundary));
+    const assumptions = node('pre', 'cw-preview-assumptions', `Assumed evidence: ${JSON.stringify(result.assumptions)}`);
+    parent.append(assumptions);
+    const rules = node('div', 'cw-preview-rules');
+    for (const rule of result.rules) {
+      const item = node('article', `cw-preview-rule cw-preview-${rule.state}`);
+      item.append(node('strong', '', `${rule.label} · ${rule.state.toUpperCase()}`), node('span', 'cw-hint', rule.reason));
+      if (rule.effects.length) item.append(node('span', 'cw-hint', `Projected: ${rule.effects.map((effect) => effect.label ?? effect.type).join(' · ')}`));
+      rules.append(item);
+    }
+    parent.append(rules, node('p', 'cw-preview-total', `Projected simulated points: ${result.totalProjectedPoints}. ${result.nextAction}`));
+  }
+
+  function previewAssumptionsFor(record) {
+    const assumptions = {};
+    for (const evidence of [...(record?.evidence ?? [])].sort((a, b) => a.observedAt - b.observedAt)) assumptions[evidence.source] = evidence.value;
+    return assumptions;
+  }
+
+  function filteredRecords(records) {
+    const query = listQuery.trim().toLowerCase();
+    return records.filter((record) => {
+      if (listStatus !== 'all' && record.status !== listStatus) return false;
+      if (!query) return true;
+      const terms = record.terms ?? {};
+      const haystack = [
+        record.id,
+        record.title,
+        record.templateId,
+        ...(record.parties ?? []),
+        ...(terms.rules ?? []).flatMap((rule) => [rule.id, rule.label, ...(rule.actions ?? []).map((effect) => effect.label ?? effect.type)]),
+      ].join(' ').toLowerCase();
+      return haystack.includes(query);
+    });
+  }
+
+  function renderLibrarySummary(records, visible) {
+    librarySummary.replaceChildren();
+    const counts = [
+      [records.length, 'saved'],
+      [records.filter((record) => record.status === 'pending_approval').length, 'needs review'],
+      [records.filter((record) => ['active', 'paused', 'disputed'].includes(record.status)).length, 'in motion'],
+      [records.filter((record) => ['completed', 'cancelled', 'expired'].includes(record.status)).length, 'closed'],
+    ];
+    for (const [value, label] of counts) {
+      const metric = node('div', 'cw-library-metric');
+      metric.append(node('strong', '', value), node('span', 'cw-hint', label));
+      librarySummary.append(metric);
+    }
+    if (visible !== records.length) librarySummary.append(node('span', 'cw-library-filter-note', `${visible} shown`));
+  }
 
   function showTab(tab) {
     activeTab = tab;
@@ -462,6 +573,9 @@ export function mountContractWorkbench({ root, engine, onSelect = null, onRefres
     syncPredictionEditor();
     advancedEnabled.checked = false;
     advancedText.value = JSON.stringify(currentTemplate.defaults, null, 2);
+    previewEvidence.value = '';
+    previewResult = null;
+    renderPreview(previewOutput, null);
   }
   function readTerms(honorAdvanced = true) {
     if (honorAdvanced && advancedEnabled.checked) return JSON.parse(advancedText.value);
@@ -609,6 +723,7 @@ export function mountContractWorkbench({ root, engine, onSelect = null, onRefres
     detail.append(segments, node('p', 'cw-evaluation', record.evaluation?.reason ?? 'Awaiting evaluation.'));
     const facts = node('div', 'cw-facts');
     appendFact(facts, 'Approvals', `${record.approvals.length} / ${record.parties.length}`);
+    appendFact(facts, 'Parties', record.parties.join(' · '));
     appendFact(facts, 'Local receipts', String(record.receipts.length));
     appendFact(facts, 'Expires', dateLabel(record.terms.expiresAt));
     detail.append(facts, reuseTerms);
@@ -660,6 +775,24 @@ export function mountContractWorkbench({ root, engine, onSelect = null, onRefres
       rules.append(segment);
     }
     detail.append(rules);
+
+    const savedPreview = node('details', 'cw-preview cw-current-preview');
+    restoreSection(savedPreview, 'preview', draft);
+    savedPreview.append(node('summary', '', 'Review forecast · current evidence only'));
+    const savedPreviewOutput = node('div', 'cw-preview-output');
+    try {
+      renderPreview(savedPreviewOutput, previewContractTerms({
+        contractId: record.id,
+        title: record.title,
+        terms: record.terms,
+        parties: record.parties,
+        assumedEvidence: previewAssumptionsFor(record),
+      }));
+    } catch (error) {
+      renderPreview(savedPreviewOutput, null, error.message);
+    }
+    savedPreview.append(savedPreviewOutput);
+    detail.append(savedPreview);
 
     const manualSources = record.terms.sources.filter((source) => !source.provider || source.provider === 'manual');
     if (manualSources.length && !terminal) {
@@ -778,17 +911,28 @@ export function mountContractWorkbench({ root, engine, onSelect = null, onRefres
     if (!selectedId || !records.some((record) => record.id === selectedId)) selectedId = records[0]?.id ?? null;
     libraryPicker.hidden = records.length < 2;
     pickerSummary.textContent = `Switch contract · ${records.length} saved`;
-    const nextListRevision = JSON.stringify(records.map((record) => [record.id, record.title, record.status, record.approvals.length, record.receipts.length, selectedId === record.id]));
+    const visibleRecords = filteredRecords(records);
+    renderLibrarySummary(records, visibleRecords.length);
+    const nextListRevision = JSON.stringify([
+      listQuery,
+      listStatus,
+      ...visibleRecords.map((record) => [record.id, record.title, record.status, record.approvals.length, record.receipts.length, selectedId === record.id]),
+    ]);
     if (listRevision !== nextListRevision) {
       listRevision = nextListRevision;
       list.replaceChildren();
-      for (const record of records) {
+      for (const record of visibleRecords) {
         const item = button('', () => selectRecord(record.id), 'cw-list-item');
         item.setAttribute('aria-pressed', String(record.id === selectedId));
-        item.append(node('strong', '', record.title), node('span', 'cw-hint', `${readable(record.status)} · ${record.receipts.length} receipts`));
+        item.append(
+          node('strong', '', record.title),
+          node('span', 'cw-hint', `${readable(record.status)} · ${record.approvals.length}/${record.parties.length} approvals · ${record.receipts.length} receipts`),
+          node('span', 'cw-hint', record.parties.join(' · ')),
+        );
         list.append(item);
       }
-      if (!records.length) list.append(node('p', 'cw-hint', 'No saved contracts yet.'));
+      if (!records.length) list.append(node('p', 'cw-hint', 'No saved contracts yet. Create an agreement to begin a local review.'));
+      else if (!visibleRecords.length) list.append(node('p', 'cw-hint', 'No saved contracts match this search or status filter.'));
     }
     const record = records.find((item) => item.id === selectedId);
     syncSelectedChrome(record);

@@ -2585,6 +2585,12 @@ contractsMarkets = createContractsMarketsConsole({
   documentRoot: document,
   projection: livingRealityWorld,
   onOpenSportsEvidence: ({ method } = {}) => openSportsEvidenceFromContracts(method),
+  getContracts: () => globalThis.__TUMBO_CONTRACT_AUTOMATION__?.list?.() ?? [],
+  onOpenContract: ({ contractId } = {}) => {
+    if (!contractId) return;
+    featureNavigator?.select?.('contract-atelier', 'marketplace-governing-contract');
+    queueMicrotask(() => contractWorkbench?.select?.(contractId));
+  },
   onSelect: (snapshot) => {
     const organ = organs.find((candidate) => candidate.id === 'contract');
     if (organ) focusOrgan(organ, `contracts-select:${snapshot.recordId}`);
@@ -3567,6 +3573,7 @@ try {
 window.__TUMBO_CONTRACT_AUTOMATION__ = contractAutomation;
 window.__TUMBO_CONTRACT_WORKBENCH__ = contractWorkbench;
 window.__TUMBO_CONTRACT_ORGANISM__ = contractOrganism;
+contractsMarkets?.refreshMarketplaceContracts?.();
 const contractAutomationAlert = document.createElement('p');
 contractAutomationAlert.setAttribute('role','alert'); contractAutomationAlert.hidden=true;
 contractWorkbenchHost.before(contractAutomationAlert);

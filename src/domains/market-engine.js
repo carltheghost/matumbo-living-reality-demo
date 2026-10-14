@@ -1,7 +1,13 @@
 /** User-authored, non-monetary rules. Provider observations are not settlement authority. */
 const freeze = value => {if(value&&typeof value==='object'){Object.values(value).forEach(freeze);Object.freeze(value);}return value;};
 function label(value,name,max=160){if(typeof value!=='string'||!value.trim()||value.trim().length>max)throw Error(`${name} must contain 1–${max} characters`);return value.trim();}
-export function createMarket({id,source,kind='single',question,outcomes,closesAt,origin='provider',author,terms='',parentId=null,now=Date.now()}) {
+function governingId(value){
+  if(value===null||value===undefined||value==='')return null;
+  const id=label(value,'Governing contract ID',160);
+  if(!/^contract:[a-z0-9:_-]{1,160}$/i.test(id))throw Error('Governing contract ID must identify a local contract record');
+  return id;
+}
+export function createMarket({id,source,kind='single',question,outcomes,closesAt,origin='provider',author,terms='',parentId=null,governingContractId=null,now=Date.now()}) {
   if(!['single','pool'].includes(kind))throw Error('Choose single or pool');
   if(!['provider','authored'].includes(origin))throw Error('Unknown provenance mode');
   let provenance;
@@ -15,12 +21,13 @@ export function createMarket({id,source,kind='single',question,outcomes,closesAt
   }
   if(typeof terms!=='string'||terms.length>4000)throw Error('Terms must be at most 4000 characters');
   if(parentId!==null)parentId=label(parentId,'Parent ID');
+  governingContractId=governingId(governingContractId);
   if(!Array.isArray(outcomes)||outcomes.length<2||outcomes.length>12)throw Error('Provide 2–12 outcomes');
   const choices=outcomes.map(o=>label(o,'Outcome',80));
   if(new Set(choices.map(o=>o.toLowerCase())).size!==choices.length)throw Error('Outcomes must be distinct');
   const closes=Date.parse(closesAt);if(!Number.isFinite(closes)||closes<=now)throw Error('Closing time must be in the future');
   return freeze({schemaVersion:1,id:label(id,'ID'),kind,question:label(question,'Question'),outcomes:choices,closesAt:new Date(closes).toISOString(),createdAt:new Date(now).toISOString(),
-    source:provenance,origin,author:origin==='authored'?provenance.title:null,terms:terms.trim(),parentId,
+    source:provenance,origin,author:origin==='authored'?provenance.title:null,terms:terms.trim(),parentId,governingContractId,
     entries:[],state:'open',result:null,localOnly:true,monetary:false,settlement:false});
 }
 

@@ -236,6 +236,8 @@ export function createContractsMarketsConsole({
   onDraftInspect = null,
   onDraftCopy = null,
   onOpenSportsEvidence = null,
+  getContracts = () => [],
+  onOpenContract = null,
 } = {}) {
   if (!documentRoot?.getElementById) throw new Error("Contracts + Pools console needs a document-like owner");
   const panel = documentRoot.getElementById("contracts-markets-console");
@@ -275,7 +277,13 @@ export function createContractsMarketsConsole({
   let draftRouteError = null;
   let draftCopyStatus = null;
   let localDraft = null;
-  mountMarketBuilder({documentRoot,panel,getSource:()=>draftSource});
+  const marketplace = mountMarketBuilder({
+    documentRoot,
+    panel,
+    getSource: () => draftSource,
+    getContracts,
+    onOpenContract,
+  });
   // The host markup predates linked-graph inspection, so mount one optional
   // native details rail at runtime. It is deliberately outside the rerendered
   // list/current nodes and remains usable in compact/static DOM test hosts.
@@ -1248,6 +1256,7 @@ export function createContractsMarketsConsole({
     hydrateGraphRouteState,
     syncProjection,
     setProjection: syncProjection,
+    refreshMarketplaceContracts: () => marketplace?.refreshContracts?.(),
     getSnapshot,
     destroy: () => {},
   });
