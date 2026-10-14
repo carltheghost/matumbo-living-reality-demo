@@ -86,7 +86,10 @@ class ResonantWorld:
         self.damping = 0.055
         self.geometry_damping = 0.035
         self.tick = 0
+        # Signed external work is used by the energy balance. Positive
+        # supplied work is a separate monotone resource counter for budgets.
         self.work = 0.0
+        self.supplied_work = 0.0
         self.dissipated = 0.0
         self.initial_energy = self.energy()
         self.events: list[dict] = []
@@ -144,7 +147,7 @@ class ResonantWorld:
             drive[1 - self.target] += 0.16 * math.sin(0.37 * self.tick + 1.0)
         return drive
 
-    def step(self, port_drives=None, *, external=None, include_cue: bool = True) -> dict:
+    def step(self, port_drives=None, *, external=None, internal=None, include_cue: bool = True) -> dict:
         """Advance one bounded step and return diagnostic accounting."""
 
         if port_drives is None:
@@ -153,12 +156,15 @@ class ResonantWorld:
         ext = np.zeros(self.NODES, dtype=np.float64) if external is None else _finite_array(
             external, (self.NODES,), "external drive", 2.0
         )
+        internal_force = np.zeros(self.NODES, dtype=np.float64) if internal is None else _finite_array(
+            internal, (self.NODES,), "internal force", 2.0
+        )
         ext = ext + self._external_drive(include_cue=include_cue)
         before = self.energy()
         geometry_force, oscillator_force = self.edge_forces()
         oscillator_accel = oscillator_force - self.omega**2 * self.u - self.quartic * self.u**3
         oscillator_accel -= self.damping * self.du
-        oscillator_accel += ports + ext
+        oscillator_accel += ports + ext + internal_force
         geometry_accel = geometry_force - self.geometry_damping * self.v
 
         # Semi-implicit Euler keeps the small proof stable and exposes all
@@ -167,7 +173,10 @@ class ResonantWorld:
         self.u += self.DT * self.du
         self.v += self.DT * geometry_accel
         self.q += self.DT * self.v
-        self.work += float(np.dot(ports + ext, self.du) * self.DT)
+        external_work_delta = float(np.dot(ports + ext, self.du) * self.DT)
+        supplied_work_delta = max(external_work_delta, 0.0)
+        self.work += external_work_delta
+        self.supplied_work += supplied_work_delta
         self.dissipated += float(
             self.DT * (self.damping * np.dot(self.du, self.du) + self.geometry_damping * np.dot(self.v, self.v))
         )
@@ -179,6 +188,9 @@ class ResonantWorld:
                 "type": "world.step",
                 "port_norm": float(np.linalg.norm(ports)),
                 "external_norm": float(np.linalg.norm(ext)),
+                "internal_norm": float(np.linalg.norm(internal_force)),
+                "external_work_delta": external_work_delta,
+                "supplied_work_delta": supplied_work_delta,
                 "energy": after,
             }
         )
@@ -186,6 +198,9 @@ class ResonantWorld:
             "energy_before": before,
             "energy_after": after,
             "work": self.work,
+            "supplied_work": self.supplied_work,
+            "external_work_delta": external_work_delta,
+            "supplied_work_delta": supplied_work_delta,
             "dissipated": self.dissipated,
             "residual": self.residual,
         }
@@ -255,6 +270,7 @@ class ResonantWorld:
             "omega": self.omega.tolist(),
             "tick": self.tick,
             "work": self.work,
+            "supplied_work": self.supplied_work,
             "dissipated": self.dissipated,
             "initial_energy": self.initial_energy,
             "events": list(self.events[-256:]),
@@ -271,8 +287,11 @@ class ResonantWorld:
             raise ValueError("invalid world tick")
         obj.tick = state["tick"]
         obj.work = float(state["work"])
+        obj.supplied_work = float(state.get("supplied_work", 0.0))
         obj.dissipated = float(state["dissipated"])
         obj.initial_energy = float(state["initial_energy"])
+        if not math.isfinite(obj.supplied_work) or obj.supplied_work < 0.0:
+            raise ValueError("invalid supplied work accounting")
         if not all(math.isfinite(x) for x in (obj.work, obj.dissipated, obj.initial_energy)):
             raise ValueError("invalid energy accounting")
         obj.events = list(state.get("events", []))[-256:]

@@ -49,10 +49,10 @@
   episode save/reload/replay equal; normal episodes stayed within 0.30 work
   and 12/64 physics steps; maximum normal absolute world residual was
   0.0066757. Runtime was 11.63 seconds and 45,228 KB maximum RSS in this run.
-- All 14 repository tests pass. The report is written to
-  `artifacts/v02-proof-report.json` (ignored generated artifact); no external
-  apps, credentials, network actions, arbitrary tools, or third-party code
-  were used.
+- All 14 repository tests pass. The original report was written to
+  `artifacts/v02-proof-report.json`; this preservation copy stores it as
+  `reports/imported/v02-proof-report.json`. No external apps, credentials,
+  network actions, arbitrary tools, or third-party code were used.
 
 ## v0.3 corrected-protocol review gate
 
@@ -102,3 +102,23 @@
   `v0.3-protocol-review-r2` (`b15169b`) plus the source/tests/docs in the
   shared workspace; the earlier `v0.3-protocol-review` tag remains the
   pre-correction baseline.
+
+## v0.3 independent-review repair
+
+- Repaired the evaluator: success now requires an accepted physical actuation
+  of the gate whose resonance matches the accepted note's requested
+  `target_hz`; opening an arbitrary gate no longer succeeds.
+- Enforced the v0.3 tool-call, live-physics-step, virtual-probe-step and
+  supplied-work budgets before or during consumption. A resource violation
+  invalidates success. Virtual probe cost includes both gate and field-port
+  drive work.
+- Corrected the gate quartic force to `-4*q*x^3` for potential `q*x^4`, and
+  routed reciprocal coupling through an internal-force channel so it is not
+  counted as external supplied work. Signed balance work and positive budget
+  work are reported separately.
+- Added a measurement-only gate/frequency baseline and a strict policy-input
+  whitelist excluding seed, resonance arrays, calibration, world snapshots,
+  and detailed gate state. Checkpoint snapshots retain those fields only for
+  deterministic restore, not as policy inputs.
+- Added targeted regressions for all repairs, whole-system timestep
+  refinement, and port-inclusive virtual work. No neural training was run.

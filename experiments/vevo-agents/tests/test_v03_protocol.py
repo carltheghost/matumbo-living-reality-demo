@@ -6,7 +6,9 @@ import numpy as np
 from vevo_agents.v03_protocol import (
     ContinuousGateWorld,
     CorrectedEpisode,
+    GATE_QUARTIC_COEFFICIENT,
     PROBE_FREQUENCIES,
+    measurement_only_action,
     null_policy_action,
     null_rollout,
     oracle_rollout,
@@ -130,6 +132,182 @@ class CorrectedProtocolTests(unittest.TestCase):
         result = episode.execute_actuation(1, drive_frequency=0.55)
         self.assertFalse(result["gate_opened"])
         self.assertFalse(np.any(episode.world.gate_open))
+
+    def test_success_requires_the_note_matched_physical_gate(self):
+        wrong_goal = CorrectedEpisode(
+            3502,
+            note_text="target_hz=0.75; target_phase=0.0; rule=max-response-at-target",
+            gate_resonance_hz=PROBE_FREQUENCIES,
+        )
+        _prepare(wrong_goal)
+        wrong_result = wrong_goal.execute_actuation(0, drive_frequency=0.55)
+        self.assertTrue(wrong_result["gate_opened"])
+        self.assertFalse(wrong_goal.success())
+
+        right_goal = CorrectedEpisode(
+            3503,
+            note_text="target_hz=0.55; target_phase=0.0; rule=max-response-at-target",
+            gate_resonance_hz=PROBE_FREQUENCIES,
+        )
+        _prepare(right_goal)
+        right_result = right_goal.execute_actuation(0, drive_frequency=0.55)
+        self.assertTrue(right_result["gate_opened"])
+        self.assertTrue(right_goal.success())
+
+    def test_tool_budget_rejects_before_a_fourth_tool_call(self):
+        episode = CorrectedEpisode(3504)
+        episode.advance(np.zeros(4))
+        episode.execute_note()
+        episode.execute_diagnostic(0)
+        episode.execute_actuation(episode.oracle_action(), drive_frequency=0.55)
+        before = episode.world.snapshot()
+        result = episode.execute_note()
+        self.assertFalse(result["accepted"])
+        self.assertEqual(result["error"], "tool_budget_exceeded")
+        self.assertEqual(episode.tool_calls, episode.MAX_TOOL_CALLS)
+        self.assertEqual(before, episode.world.snapshot())
+
+    def test_physics_budget_rejects_before_actuation_consumption(self):
+        episode = CorrectedEpisode(3505)
+        _prepare(episode)
+        episode.world.physics_steps = episode.MAX_PHYSICS_STEPS - 1
+        before = episode.world.snapshot()
+        result = episode.execute_actuation(0, drive_frequency=0.55)
+        self.assertFalse(result["accepted"])
+        self.assertEqual(result["error"], "physics_step_budget_exceeded")
+        self.assertEqual(before, episode.world.snapshot())
+        self.assertFalse(episode.success())
+
+    def test_work_budget_rejects_before_actuation_consumption(self):
+        episode = CorrectedEpisode(3506)
+        _prepare(episode)
+        episode.world.gate_supplied_work = episode.WORK_BUDGET
+        before = episode.world.snapshot()
+        result = episode.execute_actuation(0, drive_frequency=0.55)
+        self.assertFalse(result["accepted"])
+        self.assertEqual(result["error"], "work_budget_exceeded")
+        self.assertEqual(before, episode.world.snapshot())
+        self.assertFalse(episode.success())
+
+    def test_live_work_budget_stops_actuation_before_crossing_limit(self):
+        episode = CorrectedEpisode(3506)
+        _prepare(episode)
+        episode.WORK_BUDGET = 0.0
+        result = episode.execute_actuation(0, drive_frequency=0.55)
+        self.assertFalse(result["accepted"])
+        self.assertEqual(result["error"], "work_budget_exceeded")
+        self.assertLessEqual(episode.world.work_spent, episode.WORK_BUDGET)
+        self.assertFalse(episode.success())
+
+    def test_virtual_work_budget_is_enforced_during_cloned_probe_steps(self):
+        episode = CorrectedEpisode(3507)
+        episode.advance(np.zeros(4))
+        episode.execute_note()
+        episode.VIRTUAL_WORK_BUDGET = 0.0
+        before = episode.world.snapshot()
+        result = episode.execute_diagnostic(0)
+        self.assertFalse(result["accepted"])
+        self.assertEqual(result["error"], "virtual_probe_work_budget_exceeded")
+        self.assertEqual(episode.virtual_steps, 0)
+        self.assertEqual(episode.virtual_work, 0.0)
+        self.assertEqual(before, episode.world.snapshot())
+
+    def test_virtual_probe_work_includes_field_port_drive(self):
+        world = ContinuousGateWorld(3507, gate_resonance_hz=PROBE_FREQUENCIES)
+        measurement = world.measure_spectrum(amplitude=0.0)
+        self.assertGreater(measurement["probe_work"], 0.0)
+
+    def test_gate_quartic_force_matches_total_gate_potential(self):
+        world = ContinuousGateWorld(3508, gate_resonance_hz=PROBE_FREQUENCIES)
+        world.field.u[:] = [0.08, -0.03, 0.02, -0.06]
+        world.gate_x[:] = [-0.02, 0.04, -0.01, 0.07]
+        world.gate_v[:] = 0.0
+        epsilon = 1e-6
+
+        def potential():
+            omega = world.gate_omega
+            self_energy = 0.5 * float(np.sum(omega**2 * world.gate_x**2))
+            self_energy += GATE_QUARTIC_COEFFICIENT * float(np.sum(world.gate_x**4))
+            return self_energy + world.coupling_energy()
+
+        numeric = np.zeros(4)
+        for index in range(4):
+            original = world.gate_x[index]
+            world.gate_x[index] = original + epsilon
+            plus = potential()
+            world.gate_x[index] = original - epsilon
+            minus = potential()
+            world.gate_x[index] = original
+            numeric[index] = -(plus - minus) / (2.0 * epsilon)
+        analytic = (
+            world.COUPLING_K * (world.field.u - world.gate_x)
+            - world.gate_omega**2 * world.gate_x
+            - 4.0 * GATE_QUARTIC_COEFFICIENT * world.gate_x**3
+        )
+        np.testing.assert_allclose(numeric, analytic, rtol=0.0, atol=1e-9)
+
+    def test_internal_coupling_is_not_external_or_supplied_work(self):
+        world = ContinuousGateWorld(3509, gate_resonance_hz=PROBE_FREQUENCIES)
+        world.field.u[:] = [0.08, -0.03, 0.02, -0.06]
+        world.gate_x[:] = [-0.02, 0.04, -0.01, 0.07]
+        world.step()
+        self.assertAlmostEqual(world.field.work, 0.0, places=14)
+        self.assertAlmostEqual(world.field.supplied_work, 0.0, places=14)
+        self.assertAlmostEqual(world.work, 0.0, places=14)
+        self.assertAlmostEqual(world.work_spent, 0.0, places=14)
+        self.assertTrue(np.isfinite(world.residual))
+
+    def test_whole_system_balance_improves_with_timestep_refinement(self):
+        def run(dt, steps):
+            world = ContinuousGateWorld(3512, gate_resonance_hz=PROBE_FREQUENCIES)
+            world.DT = dt
+            world.field.DT = dt
+            world.field.u[:] = [0.08, -0.03, 0.02, -0.06]
+            world.gate_x[:] = [-0.02, 0.04, -0.01, 0.07]
+            world.initial_energy = world.energy()
+            for _ in range(steps):
+                world.step()
+            return abs(world.residual)
+
+        coarse = run(0.035, 40)
+        refined = run(0.0175, 80)
+        self.assertLess(refined, coarse * 0.8)
+
+    def test_measurement_only_policy_selects_gate_and_frequency(self):
+        first, second = pair_same_note_different_measurements()
+        _, first_measurement = _prepare(first)
+        _, second_measurement = _prepare(second)
+        first_action = measurement_only_action(first_measurement)
+        second_action = measurement_only_action(second_measurement)
+        self.assertEqual(first_action, (0, 0.55))
+        self.assertEqual(second_action, (1, 0.55))
+        self.assertEqual(null_policy_action(first_measurement), first_action[0])
+        blind = null_rollout(CorrectedEpisode(3510))
+        self.assertEqual(blind["result"]["drive_frequency"], blind["null_drive_frequency"])
+
+    def test_policy_observation_excludes_checkpoint_only_internals(self):
+        episode = CorrectedEpisode(3511)
+        _prepare(episode)
+        policy = episode.policy_observation()
+
+        def keys(value):
+            if isinstance(value, dict):
+                output = set(value)
+                for child in value.values():
+                    output.update(keys(child))
+                return output
+            if isinstance(value, list):
+                output = set()
+                for child in value:
+                    output.update(keys(child))
+                return output
+            return set()
+
+        policy_keys = keys(policy)
+        for forbidden in ("seed", "gate_resonance_hz", "calibration", "world_snapshot", "gate_position", "gate_velocity", "gate_energy"):
+            self.assertNotIn(forbidden, policy_keys)
+        self.assertIn("channel_response", policy["measurement"])
+        self.assertIn("text", policy["note"])
 
     def test_parameter_sensitivity_and_numerical_stability(self):
         first = CorrectedEpisode(3300, gate_resonance_hz=np.asarray((0.55, 0.75, 0.95, 1.15)))

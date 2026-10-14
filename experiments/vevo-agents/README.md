@@ -20,7 +20,7 @@ intelligence. Provenance and limits are in
 The additive interactive v0.2 architecture is in
 [`docs/ARCHITECTURE_V02.md`](docs/ARCHITECTURE_V02.md). It runs the same
 field/note/diagnostic/actuation loop during training and held-out evaluation;
-the generated evidence is `artifacts/v02-proof-report.json`.
+the preserved evidence is `reports/imported/v02-proof-report.json`.
 
 The corrected, not-yet-trained v0.3 protocol is in
 [`docs/ARCHITECTURE_V03_CORRECTED.md`](docs/ARCHITECTURE_V03_CORRECTED.md).
@@ -29,7 +29,10 @@ result: diagnostics are pure continuous measurements and runtime gate opening
 comes only from integrated physical position/energy thresholds. Its field/gate
 coupling is derived from one shared energy, virtual cloned-probe cost is
 budgeted separately, and the actuator requires an explicit neural drive
-frequency argument.
+frequency argument. The evaluator requires the opened gate to match the
+note's requested physical resonance; runtime actuation remains goal-blind.
+Signed external work is separate from positive supplied-work budgets, and the
+policy observation whitelist excludes seed/resonance/checkpoint internals.
 
 ## Preserved repository run guide
 

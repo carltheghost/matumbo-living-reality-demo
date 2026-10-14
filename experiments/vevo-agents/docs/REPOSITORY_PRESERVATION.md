@@ -12,6 +12,9 @@ or accept the Vevo experimental results.
 - Target base commit: `4f3c43ccfb8abfdc14422dfddc2b55c8f1660b5c`.
 - Preservation branch: `experiments/vevo-agents-preservation-2026-10-14`.
 - Scope: only the new `experiments/vevo-agents/` subtree.
+- Initial preservation commit: `e21d474`; subsequent independent-review
+  repairs are target-branch changes within this same subtree and are not
+  copied back into the separate source checkout.
 
 No Vivo/Site runtime files, deployment workflows, private notes, user data,
 credentials, or proprietary notes-application code were copied or modified.

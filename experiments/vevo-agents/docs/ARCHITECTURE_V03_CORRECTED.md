@@ -39,6 +39,12 @@ source code.
    position and energy cross thresholds within the work/step budget. No
    evaluator target or answer equality is consulted by runtime actuation.
 
+The evaluator's success predicate is note-conditioned: it requires the
+accepted actuation result to open the gate whose physical resonance matches
+the requested `target_hz` within the stated tolerance. Opening any gate is not
+success. This check is evaluator bookkeeping after the run; the actuator and
+future policy input do not receive the hidden gate-resonance array or seed.
+
 The field/gate coupling is reciprocal. It uses the shared energy
 `E_c = .5*K*sum((gate_x - field_u)^2)`: the field receives
 `K*(gate_x - field_u)` and the gates receive `K*(field_u - gate_x)`. The
@@ -48,13 +54,25 @@ an unaccounted one-way field drive.
 The spectrum query is a bounded virtual simulator probe: 4 gates × 4 probe
 frequencies × 80 cloned integration steps (1,280 virtual steps by default).
 Virtual probe steps/work are counted in separate simulator-tool budgets even
-though the live world snapshot is unchanged. Live actuation has its own
-physics/work budgets.
+though the live world snapshot is unchanged. Probe work includes both gate
+drive and field-port drive supplied work. Live actuation has its own
+physics/work budgets, and calls/steps are rejected before consumption when
+their counters are exhausted; supplied work is enforced during each step.
+
+Signed external work is kept separately for the whole-system energy balance.
+The reciprocal field/gate coupling is an internal force and is not added to
+that external-work ledger. Positive supplied work is the monotone resource
+quantity used for budgets.
 
 The actuator requires an explicit bounded `drive_frequency` argument. It does
 not parse the note to supply a missing argument; omitting the argument is
 rejected. A future neural center must emit both the gate choice and this
 frequency argument, with the exact note remaining available as neural input.
+
+The policy-facing observation is an explicit whitelist of exact note fields,
+raw diagnostic frequencies/response matrix, typed feedback summaries and
+resource counters. It excludes checkpoint-only `seed`, `gate_resonance_hz`,
+`calibration`, world snapshots, and detailed gate position/velocity/energy.
 
 ## Nontriviality evidence
 
@@ -67,9 +85,13 @@ directions of dependence:
 - identical note text with different physical channel spectra require different
   gates.
 
-The null policy takes the largest response anywhere and receives no note. Tests
-also cover pure-measurement state equality, no actuation, wrong physical drive,
-work accounting, reciprocal coupling finite differences, residual stability,
-parameter sensitivity, exact revision checks, randomized oracle/blind/no-drive
-cases, wrong-gate and all-gates-open controls, and the five-brain contract.
+The null policy takes the largest measured response anywhere and chooses both
+the gate and drive frequency from that measurement; it receives no note. Tests
+also cover note-conditioned success, pre-consumption tool/physics/work budget
+rejection, pure-measurement state equality, no actuation, wrong physical drive,
+port-inclusive virtual work, reciprocal coupling and quartic finite
+differences, internal-work separation, timestep refinement, residual
+stability, parameter sensitivity, exact revision checks, randomized
+oracle/blind/no-drive cases, policy-key whitelisting, wrong-gate and
+all-gates-open controls, and the five-brain contract.
 These are solvability/nontriviality tests, not neural-training claims.
