@@ -18,6 +18,11 @@ from vevo_agents.v03_neural_proof import (
     policy_input_audit,
     run_episode,
 )
+from vevo_agents.v03_neural_repair import (
+    mid_sequence_continuation_check,
+    numeric_autograd_parity,
+    targeted_gradient_checks,
+)
 from vevo_agents.v03_protocol import CorrectedEpisode
 
 
@@ -34,7 +39,9 @@ class V03NeuralIntegrationTests(unittest.TestCase):
         self.assertEqual(full.PERIPHERALS, 4)
         self.assertEqual(full.central_memory_shape, control.central_memory_shape)
         self.assertEqual(full.ACTION_DIM, control.ACTION_DIM)
-        self.assertGreater(full.parameter_count(), control.parameter_count())
+        self.assertEqual(full.parameter_count(), 11127)
+        self.assertEqual(control.parameter_count(), 11133)
+        self.assertLessEqual(abs(full.parameter_count() - control.parameter_count()), 16)
         self.assertEqual(encode_policy_observation(self.example["policy_observations"][2]).shape, (POLICY_VECTOR_DIM,))
 
     def test_policy_input_contains_note_and_matrix_but_no_privileged_keys(self):
@@ -74,6 +81,28 @@ class V03NeuralIntegrationTests(unittest.TestCase):
             set(report["checks"]),
             {"p0.W_in", "p1.W_in", "p2.W_in", "p3.W_in", "c.W_in", "memory.initial"},
         )
+
+    def test_repaired_read_write_paths_parity_and_mid_sequence_restore(self):
+        full = V03FiveBrain(7)
+        control = V03SingleRecurrentMemory(41)
+        for model in (full, control):
+            gradients = targeted_gradient_checks(model, self.example)
+            self.assertTrue(gradients["all_finite"])
+            self.assertTrue(gradients["all_nonzero"])
+            self.assertTrue(gradients["all_within_1e-3"])
+            self.assertTrue(numeric_autograd_parity(model, self.example)["passed"])
+            continuation = mid_sequence_continuation_check(model, self.example)
+            self.assertTrue(continuation["passed"])
+
+    def test_model_load_is_atomic_and_control_exposes_parameter_names(self):
+        model = V03SingleRecurrentMemory(41)
+        before = model.state_dict()
+        malformed = copy.deepcopy(before)
+        malformed["W_in"] = np.zeros((1, 1)).tolist()
+        with self.assertRaises(ValueError):
+            model.load_state_dict(malformed)
+        self.assertEqual(model.state_dict(), before)
+        self.assertEqual(set(model.parameter_names()), set(model.params))
 
     def test_episode_snapshot_restore_and_neural_replay(self):
         spec = self.splits["test"][0]

@@ -3,6 +3,7 @@ import unittest
 
 import numpy as np
 
+from vevo_agents.v03_model import encode_policy_observation
 from vevo_agents.v03_protocol import (
     ContinuousGateWorld,
     CorrectedEpisode,
@@ -340,6 +341,51 @@ class CorrectedProtocolTests(unittest.TestCase):
             self.assertNotIn(forbidden, policy_keys)
         self.assertIn("channel_response", policy["measurement"])
         self.assertIn("text", policy["note"])
+
+    def test_policy_projection_and_snapshot_are_deep_detached(self):
+        episode = CorrectedEpisode(3517)
+        _prepare(episode)
+        episode.execute_actuation(episode.oracle_action(), drive_frequency=episode._parse_note().target_hz)
+        before = json.dumps(episode.snapshot(), sort_keys=True)
+        canonical_note = episode.note_result["text"]
+        policy = episode.policy_observation()
+        policy["measurement"]["channel_response"][0][0] = 999.0
+        policy["note"]["text"] = "target_hz=1.15"
+        policy["feedback"]["virtual_work"] = 999.0
+        snapshot = episode.snapshot()
+        snapshot["measurement"]["channel_response"][0][0] = -999.0
+        snapshot["note_result"]["text"] = "target_hz=0.55"
+        snapshot["events"][0]["payload"] = {"mutated": True}
+        self.assertEqual(json.dumps(episode.snapshot(), sort_keys=True), before)
+        self.assertEqual(episode.note_result["text"], canonical_note)
+        self.assertNotEqual(policy["measurement"]["channel_response"][0][0], episode.measurement["channel_response"][0][0])
+
+    def test_reduced_budget_limits_round_trip_and_cannot_be_loosened(self):
+        episode = CorrectedEpisode(3518)
+        episode.MAX_TOOL_CALLS = 2
+        episode.VIRTUAL_STEP_BUDGET = episode.VIRTUAL_STEP_BUDGET - 1
+        episode.VIRTUAL_WORK_BUDGET = episode.VIRTUAL_WORK_BUDGET - 0.5
+        episode.MAX_PHYSICS_STEPS = episode.MAX_PHYSICS_STEPS - 2
+        episode.WORK_BUDGET = episode.WORK_BUDGET - 0.1
+        restored = CorrectedEpisode.restore(json.loads(json.dumps(episode.snapshot(), sort_keys=True)))
+        for name in ("MAX_TOOL_CALLS", "VIRTUAL_STEP_BUDGET", "VIRTUAL_WORK_BUDGET", "MAX_PHYSICS_STEPS", "WORK_BUDGET"):
+            self.assertEqual(getattr(restored, name), getattr(episode, name))
+        widened = episode.snapshot()
+        widened["resources"]["tool_budget"] = CorrectedEpisode.MAX_TOOL_CALLS + 1
+        with self.assertRaises(ValueError):
+            CorrectedEpisode.restore(widened)
+
+    def test_over_window_neural_note_is_rejected_but_exact_storage_survives(self):
+        prefix = " " * 100
+        first = CorrectedEpisode(3519, note_text=prefix + "target_hz=0.55; target_phase=0.0")
+        second = CorrectedEpisode(3519, note_text=prefix + "target_hz=0.75; target_phase=0.0")
+        for episode in (first, second):
+            episode.advance(np.zeros(4))
+            result = episode.execute_note()
+            self.assertTrue(result["accepted"])
+            self.assertTrue(result["text"].startswith(prefix))
+            with self.assertRaises(ValueError):
+                encode_policy_observation(episode.policy_observation())
 
     def test_parameter_sensitivity_and_numerical_stability(self):
         first = CorrectedEpisode(3300, gate_resonance_hz=np.asarray((0.55, 0.75, 0.95, 1.15)))

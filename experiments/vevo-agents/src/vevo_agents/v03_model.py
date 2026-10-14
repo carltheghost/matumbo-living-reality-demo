@@ -27,11 +27,29 @@ MEMORY_DIM = 6
 ACTION_DIM = 4
 PERIPHERAL_COUNT = 4
 
+# The first three features are explicit modality masks.  They replace the
+# old stage one-hot without changing the input width: missing note, spectrum,
+# and feedback values remain zero while the masks tell the policy why.
+NOTE_MASK_INDEX = 0
+SPECTRUM_MASK_INDEX = 1
+FEEDBACK_MASK_INDEX = 2
+NOTE_FEATURE_START = 3
+NOTE_FEATURE_END = NOTE_FEATURE_START + 3 + NOTE_TITLE_BYTES + NOTE_TEXT_BYTES
+SPECTRUM_FEATURE_START = NOTE_FEATURE_END + 1
+SPECTRUM_FEATURE_END = SPECTRUM_FEATURE_START + 4 + 16
+
 
 def _byte_block(value: str, width: int) -> list[float]:
-    """Encode exact visible text bytes without parsing its semantic target."""
+    """Encode exact visible text bytes within the declared neural window.
 
-    encoded = str(value).encode("utf-8")[:width]
+    Authoritative storage may contain longer Unicode text, but a policy input
+    that cannot be represented in full is rejected rather than silently
+    presenting a misleading prefix to the neural computation.
+    """
+
+    encoded = str(value).encode("utf-8")
+    if len(encoded) > width:
+        raise ValueError(f"text exceeds bounded neural input window of {width} UTF-8 bytes")
     result = np.zeros(width, dtype=np.float64)
     if encoded:
         result[: len(encoded)] = np.frombuffer(encoded, dtype=np.uint8).astype(np.float64) / 255.0
@@ -76,14 +94,19 @@ def encode_policy_observation(policy_observation: dict) -> np.ndarray:
     resources = policy_observation.get("resources") or {}
     values: list[float] = []
 
-    stage = _stage_from_policy(policy_observation)
-    values.extend(np.eye(3, dtype=np.float64)[stage].tolist())
+    # Presence is distinct from acceptance.  A rejected typed result is still
+    # an observed modality and must not be confused with an absent result.
+    values.extend([
+        float(policy_observation.get("note") is not None),
+        float(policy_observation.get("measurement") is not None),
+        float(policy_observation.get("feedback") is not None),
+    ])
 
     note_text = str(note.get("text", ""))
     values.extend([
         _number(note.get("accepted", False)),
         _number(note.get("revision", 0), 4.0),
-        _number(len(note_text), float(NOTE_TEXT_BYTES)),
+        _number(len(note_text.encode("utf-8")), float(NOTE_TEXT_BYTES)),
     ])
     values.extend(_byte_block(str(note.get("title", "")), NOTE_TITLE_BYTES))
     values.extend(_byte_block(note_text, NOTE_TEXT_BYTES))
@@ -135,6 +158,77 @@ def encode_policy_observation(policy_observation: dict) -> np.ndarray:
 
 
 POLICY_VECTOR_DIM = 3 + 3 + NOTE_TITLE_BYTES + NOTE_TEXT_BYTES + 1 + 4 + 16 + 6 + 10 + 6
+
+
+def fit_input_normalization(policy_observations: list[dict]) -> dict:
+    """Fit present-modality statistics from training observations only.
+
+    The returned plain dictionary is checkpoint-friendly and deliberately
+    keeps the modality masks and acceptance/resource fields untouched.  Only
+    note payload features and measured spectrum values are standardized.
+    """
+
+    if not policy_observations:
+        raise ValueError("policy observations are required for normalization")
+    raw = np.stack([encode_policy_observation(item) for item in policy_observations])
+    mean = np.zeros(POLICY_VECTOR_DIM, dtype=np.float64)
+    scale = np.ones(POLICY_VECTOR_DIM, dtype=np.float64)
+    counts = {}
+    groups = {
+        "note": (NOTE_MASK_INDEX, np.arange(NOTE_FEATURE_START, NOTE_FEATURE_END)),
+        "spectrum": (SPECTRUM_MASK_INDEX, np.arange(SPECTRUM_FEATURE_START, SPECTRUM_FEATURE_END)),
+    }
+    for name, (mask_index, columns) in groups.items():
+        present = raw[:, mask_index] > 0.5
+        counts[name] = int(np.count_nonzero(present))
+        if not np.any(present):
+            continue
+        selected = raw[present][:, columns]
+        mean[columns] = np.mean(selected, axis=0)
+        scale[columns] = np.maximum(np.std(selected, axis=0), 1e-3)
+    return {
+        "schema": "vevo.v03.input-normalization.v1",
+        "mean": mean.tolist(),
+        "scale": scale.tolist(),
+        "counts": counts,
+        "normalized_groups": {
+            "note": [int(NOTE_FEATURE_START), int(NOTE_FEATURE_END)],
+            "spectrum": [int(SPECTRUM_FEATURE_START), int(SPECTRUM_FEATURE_END)],
+        },
+    }
+
+
+def normalize_policy_vector(vector: np.ndarray, normalization: dict | None) -> np.ndarray:
+    if normalization is None:
+        return np.asarray(vector, dtype=np.float64)
+    if normalization.get("schema") != "vevo.v03.input-normalization.v1":
+        raise ValueError("unsupported input normalization schema")
+    mean = np.asarray(normalization.get("mean"), dtype=np.float64)
+    scale = np.asarray(normalization.get("scale"), dtype=np.float64)
+    if mean.shape != (POLICY_VECTOR_DIM,) or scale.shape != (POLICY_VECTOR_DIM,):
+        raise ValueError("invalid input normalization shape")
+    if not np.isfinite(mean).all() or not np.isfinite(scale).all() or np.any(scale <= 0.0):
+        raise ValueError("invalid input normalization values")
+    result = np.asarray(vector, dtype=np.float64).copy()
+    note_present = result[NOTE_MASK_INDEX] > 0.5
+    spectrum_present = result[SPECTRUM_MASK_INDEX] > 0.5
+    note_columns = slice(NOTE_FEATURE_START, NOTE_FEATURE_END)
+    spectrum_columns = slice(SPECTRUM_FEATURE_START, SPECTRUM_FEATURE_END)
+    if note_present:
+        result[note_columns] = (result[note_columns] - mean[note_columns]) / scale[note_columns]
+    else:
+        result[note_columns] = 0.0
+    if spectrum_present:
+        result[spectrum_columns] = (result[spectrum_columns] - mean[spectrum_columns]) / scale[spectrum_columns]
+    else:
+        result[spectrum_columns] = 0.0
+    if not np.isfinite(result).all():
+        raise ValueError("normalized policy observation is non-finite")
+    return result
+
+
+def _model_vector(policy_observation: dict, normalization: dict | None) -> np.ndarray:
+    return normalize_policy_vector(encode_policy_observation(policy_observation), normalization)
 
 
 @dataclass
@@ -250,6 +344,7 @@ class V03FiveBrain:
         if type(seed) is not int or seed < 0:
             raise ValueError("model seed must be a non-negative integer")
         self.seed = seed
+        self.input_normalization: dict | None = None
         rng = np.random.default_rng(seed)
         self.params: dict[str, np.ndarray] = {}
 
@@ -264,7 +359,7 @@ class V03FiveBrain:
             normal(prefix + "W_msg", (1, self.PERIPH_HIDDEN), 0.22)
             self.params[prefix + "b_msg"] = np.zeros(1, dtype=np.float64)
 
-        center_input = POLICY_VECTOR_DIM + self.PERIPHERALS
+        center_input = POLICY_VECTOR_DIM + self.PERIPHERALS + self.MEMORY_DIM
         normal("c.W_in", (self.CENTER_HIDDEN, center_input), 0.08)
         normal("c.W_rec", (self.CENTER_HIDDEN, self.CENTER_HIDDEN), 0.10)
         normal("c.W_gate_in", (self.CENTER_HIDDEN, center_input), 0.06)
@@ -300,18 +395,34 @@ class V03FiveBrain:
     def state_dict(self) -> dict:
         return {name: value.tolist() for name, value in self.params.items()}
 
+    def set_input_normalization(self, normalization: dict | None) -> None:
+        # Validate and copy so a later caller cannot mutate a trained model's
+        # preprocessing state through a shared dictionary.
+        if normalization is None:
+            self.input_normalization = None
+            return
+        normalize_policy_vector(np.zeros(POLICY_VECTOR_DIM, dtype=np.float64), normalization)
+        self.input_normalization = deepcopy(normalization)
+
+    def normalization_state(self) -> dict | None:
+        return None if self.input_normalization is None else deepcopy(self.input_normalization)
+
     def load_state_dict(self, state: dict) -> None:
         if set(state) != set(self.params):
             raise ValueError("model parameter names do not match")
+        validated = {}
         for name, current in self.params.items():
             candidate = np.asarray(state[name], dtype=np.float64)
             if candidate.shape != current.shape or not np.isfinite(candidate).all():
                 raise ValueError(f"invalid parameter {name}")
-            current[...] = candidate
+            validated[name] = candidate.copy()
+        for name, candidate in validated.items():
+            self.params[name][...] = candidate
 
     def clone(self) -> "V03FiveBrain":
         result = V03FiveBrain(self.seed)
         result.load_state_dict(self.state_dict())
+        result.input_normalization = self.normalization_state()
         return result
 
     def initial_runtime(self, *, memory=None) -> dict:
@@ -349,7 +460,11 @@ class V03FiveBrain:
             peripheral.append(hidden)
             messages.append(message)
         messages_array = np.asarray(messages, dtype=np.float64)
-        center_input = np.concatenate((vector, messages_array))
+        memory_before = runtime["memory"]
+        prior_key = np.tanh(self.params["c.W_key"] @ runtime["central"])
+        read_weights_before = _softmax((memory_before @ prior_key) / 0.75)
+        read_before = read_weights_before @ memory_before
+        center_input = np.concatenate((vector, messages_array, read_before))
         if ablate == "center":
             central = np.zeros(self.CENTER_HIDDEN, dtype=np.float64)
         else:
@@ -365,15 +480,14 @@ class V03FiveBrain:
             )))
             central = update * candidate + (1.0 - update) * runtime["central"]
         key = np.tanh(self.params["c.W_key"] @ central)
-        memory_before = runtime["memory"]
-        read_weights = _softmax((memory_before @ key) / 0.75)
         write_weights = _softmax(self.params["c.W_addr"] @ central)
         write_gate = float(_sigmoid(self.params["c.W_write_gate"] @ central + self.params["c.b_write_gate"])[0])
         write_value = np.tanh(self.params["c.W_value"] @ central + self.params["c.b_value"])
         memory = memory_before + write_gate * write_weights[:, None] * (write_value[None, :] - memory_before)
         if erase_memory_before_action:
             memory = np.zeros_like(memory)
-        read_after = write_weights @ memory
+        read_weights_after = _softmax((memory @ key) / 0.75)
+        read_after = read_weights_after @ memory
         action_features = np.concatenate((central, read_after))
         gate_probs = _softmax(self.params["c.W_action_gate"] @ action_features + self.params["c.b_action_gate"])
         frequency_probs = _softmax(self.params["c.W_action_frequency"] @ action_features + self.params["c.b_action_frequency"])
@@ -382,7 +496,9 @@ class V03FiveBrain:
             "messages": messages_array,
             "central": central.copy(),
             "memory": memory.copy(),
-            "read_weights": read_weights.copy(),
+            "read_weights_before": read_weights_before.copy(),
+            "read_before": read_before.copy(),
+            "read_weights": read_weights_after.copy(),
             "read_after": read_after.copy(),
             "gate_probs": gate_probs,
             "frequency_probs": frequency_probs,
@@ -391,7 +507,7 @@ class V03FiveBrain:
         return next_runtime, trace
 
     def raw_step(self, runtime: dict, policy_observation: dict, *, ablate=None, erase_memory_before_action=False) -> tuple[dict, dict]:
-        vector = encode_policy_observation(policy_observation)
+        vector = _model_vector(policy_observation, self.input_normalization)
         return self._numeric_forward(
             runtime,
             vector,
@@ -454,7 +570,10 @@ class V03FiveBrain:
             next_peripheral.append(hidden)
             messages.append(tanh(params[prefix + "W_msg"] @ hidden + params[prefix + "b_msg"]))
         messages_tensor = concatenate(messages, axis=0)
-        center_input = concatenate((Tensor(vector), messages_tensor), axis=0)
+        prior_key = tanh(params["c.W_key"] @ central)
+        read_weights_before = softmax((memory @ prior_key) / 0.75)
+        read_before = read_weights_before @ memory
+        center_input = concatenate((Tensor(vector), messages_tensor, read_before), axis=0)
         candidate = tanh(
             params["c.W_in"] @ center_input
             + params["c.W_rec"] @ central
@@ -467,14 +586,14 @@ class V03FiveBrain:
         )
         central = update * candidate + (1.0 - update) * central
         key = tanh(params["c.W_key"] @ central)
-        read_weights = softmax((memory @ key) / 0.75)
         write_weights = softmax(params["c.W_addr"] @ central)
         write_gate = sigmoid(params["c.W_write_gate"] @ central + params["c.b_write_gate"])
         write_value = tanh(params["c.W_value"] @ central + params["c.b_value"])
         memory = memory + write_gate * write_weights.reshape(self.MEMORY_SLOTS, 1) * (
             write_value.reshape(1, self.MEMORY_DIM) - memory
         )
-        read_after = write_weights @ memory
+        read_weights_after = softmax((memory @ key) / 0.75)
+        read_after = read_weights_after @ memory
         action_features = concatenate((central, read_after), axis=0)
         gate_probs = softmax(params["c.W_action_gate"] @ action_features + params["c.b_action_gate"])
         frequency_probs = softmax(params["c.W_action_frequency"] @ action_features + params["c.b_action_frequency"])
@@ -482,7 +601,12 @@ class V03FiveBrain:
             "peripheral": next_peripheral,
             "central": central,
             "memory": memory,
-        }, gate_probs, frequency_probs
+        }, gate_probs, frequency_probs, {
+            "read_weights_before": read_weights_before,
+            "read_before": read_before,
+            "read_weights_after": read_weights_after,
+            "read_after": read_after,
+        }
 
     def loss_and_gradients(
         self,
@@ -497,7 +621,7 @@ class V03FiveBrain:
             "target_gate": int(target_gate),
             "target_frequency": int(target_frequency),
         }])
-        vectors = [encode_policy_observation(item) for item in policy_observations]
+        vectors = [_model_vector(item, self.input_normalization) for item in policy_observations]
         params = {name: Tensor(value.copy(), requires_grad=True) for name, value in self.params.items()}
         runtime = {
             "peripheral": [Tensor(np.zeros(self.PERIPH_HIDDEN)) for _ in range(self.PERIPHERALS)],
@@ -514,11 +638,14 @@ class V03FiveBrain:
         trace = []
         gate_probs = frequency_probs = None
         for vector in vectors:
-            runtime, gate_probs, frequency_probs = self._tensor_forward(runtime, vector, params)
+            runtime, gate_probs, frequency_probs, memory_trace = self._tensor_forward(runtime, vector, params)
             trace.append({
                 "gate_probs": gate_probs.data.copy(),
                 "frequency_probs": frequency_probs.data.copy(),
                 "memory": runtime["memory"].data.copy(),
+                "central": runtime["central"].data.copy(),
+                "peripheral": [item.data.copy() for item in runtime["peripheral"]],
+                **{name: value.data.copy() for name, value in memory_trace.items()},
             })
         gate_target = np.zeros(self.ACTION_DIM, dtype=np.float64)
         gate_target[int(target_gate)] = 1.0
@@ -548,7 +675,9 @@ class V03FiveBrain:
 class V03SingleRecurrentMemory:
     """Matched-observation/memory/tool baseline with one recurrent controller."""
 
-    HIDDEN = 12
+    # Keep the control approximately parameter-matched to the repaired
+    # five-brain model while retaining the same memory/tool interface.
+    HIDDEN = 45
     MEMORY_SLOTS = MEMORY_SLOTS
     MEMORY_DIM = MEMORY_DIM
     ACTION_DIM = ACTION_DIM
@@ -558,6 +687,7 @@ class V03SingleRecurrentMemory:
             raise ValueError("model seed must be a non-negative integer")
         self.seed = seed
         rng = np.random.default_rng(seed)
+        self.input_normalization: dict | None = None
         self.params = {
             "W_in": rng.normal(0.0, 0.08, (self.HIDDEN, POLICY_VECTOR_DIM)).astype(np.float64),
             "W_rec": rng.normal(0.0, 0.10, (self.HIDDEN, self.HIDDEN)).astype(np.float64),
@@ -588,14 +718,36 @@ class V03SingleRecurrentMemory:
     def state_dict(self) -> dict:
         return {name: value.tolist() for name, value in self.params.items()}
 
+    def set_input_normalization(self, normalization: dict | None) -> None:
+        if normalization is None:
+            self.input_normalization = None
+            return
+        normalize_policy_vector(np.zeros(POLICY_VECTOR_DIM, dtype=np.float64), normalization)
+        self.input_normalization = deepcopy(normalization)
+
+    def normalization_state(self) -> dict | None:
+        return None if self.input_normalization is None else deepcopy(self.input_normalization)
+
+    def clone(self) -> "V03SingleRecurrentMemory":
+        result = V03SingleRecurrentMemory(self.seed)
+        result.load_state_dict(self.state_dict())
+        result.input_normalization = self.normalization_state()
+        return result
+
     def load_state_dict(self, state: dict) -> None:
         if set(state) != set(self.params):
             raise ValueError("model parameter names do not match")
+        validated = {}
         for name, current in self.params.items():
             candidate = np.asarray(state[name], dtype=np.float64)
             if candidate.shape != current.shape or not np.isfinite(candidate).all():
                 raise ValueError(f"invalid parameter {name}")
-            current[...] = candidate
+            validated[name] = candidate.copy()
+        for name, candidate in validated.items():
+            self.params[name][...] = candidate
+
+    def parameter_names(self) -> list[str]:
+        return list(self.params)
 
     def initial_runtime(self, *, memory=None) -> dict:
         return {
@@ -617,8 +769,12 @@ class V03SingleRecurrentMemory:
 
     def raw_step(self, runtime: dict, policy_observation: dict, *, ablate=None, erase_memory_before_action=False) -> tuple[dict, dict]:
         del ablate
-        vector = encode_policy_observation(policy_observation)
+        vector = _model_vector(policy_observation, self.input_normalization)
         runtime = self.copy_runtime(runtime)
+        memory_before = runtime["memory"]
+        prior_key = np.tanh(self.params["W_key"] @ runtime["hidden"])
+        read_weights_before = _softmax((memory_before @ prior_key) / 0.75)
+        read_before = read_weights_before @ memory_before
         hidden = np.tanh(self.params["W_in"] @ vector + self.params["W_rec"] @ runtime["hidden"] + self.params["b"])
         key = np.tanh(self.params["W_key"] @ hidden)
         write_weights = _softmax(self.params["W_addr"] @ hidden)
@@ -627,14 +783,20 @@ class V03SingleRecurrentMemory:
         memory = runtime["memory"] + write_gate * write_weights[:, None] * (write_value[None, :] - runtime["memory"])
         if erase_memory_before_action:
             memory = np.zeros_like(memory)
-        read_weights = _softmax((memory @ key) / 0.75)
-        read_after = read_weights @ memory
-        action_features = np.concatenate((hidden, read_after))
+        read_weights_after = _softmax((memory @ key) / 0.75)
+        read_after = read_weights_after @ memory
+        action_memory = read_before + read_after
+        action_features = np.concatenate((hidden, action_memory))
         gate_probs = _softmax(self.params["W_action_gate"] @ action_features + self.params["b_action_gate"])
         frequency_probs = _softmax(self.params["W_action_frequency"] @ action_features + self.params["b_action_frequency"])
         return {"hidden": hidden, "memory": memory}, {
             "hidden": hidden.copy(),
             "memory": memory.copy(),
+            "read_weights_before": read_weights_before.copy(),
+            "read_before": read_before.copy(),
+            "read_weights": read_weights_after.copy(),
+            "read_weights_after": read_weights_after.copy(),
+            "read_after": read_after.copy(),
             "gate_probs": gate_probs,
             "frequency_probs": frequency_probs,
             "drive_frequency": float(PROBE_FREQUENCIES[int(np.argmax(frequency_probs))]),
@@ -680,7 +842,7 @@ class V03SingleRecurrentMemory:
             "target_gate": int(target_gate),
             "target_frequency": int(target_frequency),
         }])
-        vectors = [encode_policy_observation(item) for item in policy_observations]
+        vectors = [_model_vector(item, self.input_normalization) for item in policy_observations]
         params = {name: Tensor(value.copy(), requires_grad=True) for name, value in self.params.items()}
         hidden = Tensor(np.zeros(self.HIDDEN))
         memory = Tensor(
@@ -694,6 +856,9 @@ class V03SingleRecurrentMemory:
         trace = []
         gate_probs = frequency_probs = None
         for vector in vectors:
+            prior_key = tanh(params["W_key"] @ hidden)
+            read_weights_before = softmax((memory @ prior_key) / 0.75)
+            read_before = read_weights_before @ memory
             hidden = tanh(params["W_in"] @ Tensor(vector) + params["W_rec"] @ hidden + params["b"])
             key = tanh(params["W_key"] @ hidden)
             write_weights = softmax(params["W_addr"] @ hidden)
@@ -702,15 +867,21 @@ class V03SingleRecurrentMemory:
             memory = memory + write_gate * write_weights.reshape(self.MEMORY_SLOTS, 1) * (
                 write_value.reshape(1, self.MEMORY_DIM) - memory
             )
-            read_weights = softmax((memory @ key) / 0.75)
-            read_after = read_weights @ memory
-            action_features = concatenate((hidden, read_after), axis=0)
+            read_weights_after = softmax((memory @ key) / 0.75)
+            read_after = read_weights_after @ memory
+            action_memory = read_before + read_after
+            action_features = concatenate((hidden, action_memory), axis=0)
             gate_probs = softmax(params["W_action_gate"] @ action_features + params["b_action_gate"])
             frequency_probs = softmax(params["W_action_frequency"] @ action_features + params["b_action_frequency"])
             trace.append({
                 "gate_probs": gate_probs.data.copy(),
                 "frequency_probs": frequency_probs.data.copy(),
                 "memory": memory.data.copy(),
+                "hidden": hidden.data.copy(),
+                "read_weights_before": read_weights_before.data.copy(),
+                "read_before": read_before.data.copy(),
+                "read_weights_after": read_weights_after.data.copy(),
+                "read_after": read_after.data.copy(),
             })
         gate_target = np.zeros(self.ACTION_DIM, dtype=np.float64)
         gate_target[int(target_gate)] = 1.0

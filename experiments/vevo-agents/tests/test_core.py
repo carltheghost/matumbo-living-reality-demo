@@ -1,13 +1,16 @@
+import tempfile
 import unittest
 
 import numpy as np
 
 from vevo_agents.controls import SingleRecurrentNoMemory
+from vevo_agents.autograd import Tensor
 from vevo_agents.fabric import BudgetLedger, SimFabricStore
 from vevo_agents.model import FiveBrain
 from vevo_agents.physics import ResonantWorld, finite_difference_force_error, make_episode_observations
 from vevo_agents.proof import Episode, gradient_checks, workspace_checkpoint_check
 from vevo_agents.tools import ToolExecutor
+from vevo_agents.workspace import NoteWorkspace
 
 
 class PhysicsTests(unittest.TestCase):
@@ -35,6 +38,22 @@ class WorkspaceTests(unittest.TestCase):
         self.assertIn("document.edited", result["event_types"])
         self.assertTrue(result["projection"]["fts5"])
 
+    def test_disk_restore_rejects_nonempty_target_instead_of_merging(self):
+        source = NoteWorkspace()
+        source.create("source", "Source", "exact source", 0)
+        snapshot = source.snapshot()
+        with tempfile.TemporaryDirectory() as directory:
+            path = f"{directory}/workspace.sqlite"
+            target = NoteWorkspace(path)
+            target.create("unrelated", "Unrelated", "must remain", 0)
+            target.close()
+            with self.assertRaises(ValueError):
+                NoteWorkspace.restore(snapshot, db_path=path)
+            reopened = NoteWorkspace(path)
+            self.assertEqual(reopened.search("must remain", exact=True)[0]["note_id"], "unrelated")
+            reopened.close()
+        source.close()
+
 
 class NeuralTests(unittest.TestCase):
     def setUp(self):
@@ -55,6 +74,32 @@ class NeuralTests(unittest.TestCase):
         self.assertEqual(control.parameter_count(), 591)
         self.assertEqual(control.run_sequence(self.observations)[1][-1]["action_probs"].shape, (3,))
 
+    def test_autograd_supported_matmul_and_broadcast_memory_write(self):
+        left = Tensor([[0.2, -0.3, 0.4], [0.5, -0.6, 0.7]], requires_grad=True)
+        vector = Tensor([0.8, -0.9, 1.0], requires_grad=True)
+        matrix = Tensor([[0.1, -0.2], [0.3, -0.4], [0.5, -0.6]], requires_grad=True)
+        # Keep the supported 2-D@2-D path explicit and independent of NumPy
+        # view magic; the engine intentionally has no .T convenience.
+        result = (left @ vector).sum() + (vector @ matrix).sum() + (left @ Tensor([[0.2, 0.1], [-0.1, 0.3], [0.4, -0.2]])).sum()
+        result.backward()
+        self.assertTrue(np.isfinite(left.grad).all())
+        self.assertTrue(np.isfinite(vector.grad).all())
+        self.assertTrue(np.isfinite(matrix.grad).all())
+
+        memory = Tensor(np.asarray([[0.1, -0.2, 0.3], [-0.4, 0.5, -0.6]]), requires_grad=True)
+        weights = Tensor(np.asarray([[0.25], [0.75]]), requires_grad=True)
+        value = Tensor(np.asarray([[0.7, -0.8, 0.9]]), requires_grad=True)
+        write = memory + weights * (value - memory)
+        write.sum().backward()
+        self.assertEqual(memory.grad.shape, memory.data.shape)
+        self.assertTrue(np.isfinite(memory.grad).all())
+
+    def test_autograd_rejects_unsupported_dot_and_batched_matmul(self):
+        with self.assertRaises(NotImplementedError):
+            Tensor([1.0, 2.0]) @ Tensor([3.0, 4.0])
+        with self.assertRaises(NotImplementedError):
+            Tensor(np.zeros((2, 2, 2))) @ Tensor(np.zeros((2, 2, 2)))
+
 
 class BoundaryTests(unittest.TestCase):
     def test_unknown_action_is_typed_rejection(self):
@@ -63,6 +108,29 @@ class BoundaryTests(unittest.TestCase):
         self.assertFalse(result.accepted)
         self.assertEqual(result.error, "action_not_allowlisted")
         self.assertEqual(result.schema, "vevo.tool.result.v1")
+
+    def test_event_budget_rejection_is_atomic_before_world_mutation(self):
+        store = SimFabricStore(
+            ResonantWorld(seed=92),
+            seed=93,
+            budgets=BudgetLedger(max_events=1),
+        )
+        before_world = store.world.digest()
+        before_budgets = store.budgets.snapshot()
+        before_events = list(store.events)
+        with self.assertRaises(RuntimeError):
+            store.advance_world(np.zeros(4))
+        self.assertEqual(store.world.digest(), before_world)
+        self.assertEqual(store.budgets.snapshot(), before_budgets)
+        self.assertEqual(store.events, before_events)
+
+    def test_renderer_projection_deep_detaches_nested_event_payloads(self):
+        store = SimFabricStore(ResonantWorld(seed=94), seed=95, budgets=BudgetLedger())
+        before_digest = store.checkpoint(brains={}, training={}).digest()
+        projection = store.projection()
+        projection["events"][0]["payload"]["seed"] = -1
+        self.assertEqual(store.events[0]["payload"]["seed"], 95)
+        self.assertEqual(store.checkpoint(brains={}, training={}).digest(), before_digest)
 
 
 if __name__ == "__main__":

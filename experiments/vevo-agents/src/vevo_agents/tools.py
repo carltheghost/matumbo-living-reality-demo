@@ -27,6 +27,9 @@ class ToolExecutor:
         self.store = store
 
     def execute(self, action: str) -> TypedToolResult:
+        # Every action records one authoritative event.  Reserve that slot
+        # before any budget/world mutation so a full event log is atomic.
+        self.store.ensure_event_capacity()
         if action not in ALLOWED_ACTIONS:
             result = TypedToolResult(
                 schema="vevo.tool.result.v1",

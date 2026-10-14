@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import copy
 import hashlib
 import json
 from pathlib import Path
@@ -130,15 +131,15 @@ class VevoState:
     def snapshot(self) -> dict:
         return {
             "schema": self.schema,
-            "world": self.world,
-            "brains": self.brains,
-            "tool_results": self.tool_results,
-            "workspace": self.workspace,
-            "events": self.events,
-            "rng_state": self.rng_state,
+            "world": copy.deepcopy(self.world),
+            "brains": copy.deepcopy(self.brains),
+            "tool_results": copy.deepcopy(self.tool_results),
+            "workspace": copy.deepcopy(self.workspace),
+            "events": copy.deepcopy(self.events),
+            "rng_state": copy.deepcopy(self.rng_state),
             "tick": self.tick,
-            "budgets": self.budgets,
-            "training": self.training,
+            "budgets": copy.deepcopy(self.budgets),
+            "training": copy.deepcopy(self.training),
         }
 
     @classmethod
@@ -197,7 +198,14 @@ class SimFabricStore:
         self.events.append(event)
         return event
 
+    def ensure_event_capacity(self) -> None:
+        if len(self.events) >= self.budgets.max_events:
+            raise RuntimeError("event budget exhausted")
+
     def advance_world(self, port_drives=None, *, external=None, include_cue: bool = True) -> dict:
+        # Reserve the event slot before consuming budgets or mutating the
+        # authoritative world.  This makes a full event log a no-op failure.
+        self.ensure_event_capacity()
         self.budgets.consume_tick()
         self.budgets.consume_physics(1)
         result = self.world.step(port_drives, external=external, include_cue=include_cue)
@@ -205,6 +213,7 @@ class SimFabricStore:
         return result
 
     def record_tool_result(self, result: TypedToolResult) -> None:
+        self.ensure_event_capacity()
         self.tool_results.append(result)
         self.append_event("tool.result", result.snapshot())
 
@@ -235,7 +244,7 @@ class SimFabricStore:
                 "residual": self.world.residual,
             },
             "workspace": self.note_projection(),
-            "events": [dict(event) for event in self.events[-32:]],
+            "events": copy.deepcopy(self.events[-32:]),
             "tool_results": [result.snapshot() for result in self.tool_results[-8:]],
             "traces": json_safe(traces or {}),
         }

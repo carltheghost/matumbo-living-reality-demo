@@ -176,3 +176,48 @@
   `storage/checkpoints/v03-neural-control-selected.json`. Re-run from this
   directory with:
   `PYTHONPATH=src python -m vevo_agents.v03_neural_proof --output reports/generated/v03-neural-proof-report.json`.
+
+## v0.3 neural read-path repair and regression audit
+
+- Preserved the historical `dd34d67` source/report/checkpoints and added the
+  separate repair contract `docs/EXPERIMENT_CONTRACT_V03_NEURAL_REPAIR.md`.
+  The repaired full model still has exactly four peripheral recurrent modules
+  plus one distinct gated recurrent center. The center now consumes a
+  content-addressed prior-memory read before its recurrent update and a
+  separate post-write content read in the action heads; address/value/gate
+  parameters remain bounded write paths. Numeric and reverse-mode paths are
+  identical. The matched control uses `HIDDEN=45` (11,133 parameters) versus
+  11,127 for the full model.
+- Added training-only present-modality normalization and explicit note,
+  spectrum, and feedback masks. Titles over 32 UTF-8 bytes or note text over
+  96 UTF-8 bytes are rejected at the neural boundary while exact SQLite text
+  remains intact; no silent prefix is treated as a complete instruction.
+- Added boundary repairs and tests for instance-specific reduced-budget
+  restore, deep-detached policy/snapshot projections, atomic event-budget
+  failures, exact nonempty disk-workspace restore rejection, atomic parameter
+  loading, supported/unsupported autograd matmul primitives, and actual
+  mid-sequence neural continuation after runtime restore.
+- The capped repair run used two worlds × four goals, balanced minibatches,
+  1,000 updates per trial, seeds full `(7,17)` and control `(41,43)`, and
+  completed in 105.60 CPU seconds with 41,048 KB peak RSS. Both selected
+  models reached 8/8 training-world physical successes and 1.0 frequency,
+  gate, and joint accuracy; this is an overfit microset result, not a
+  holdout/generalization result.
+- The evaluator audit passed input-whitelist, all-five-module paths,
+  finite-difference gradients with distinct nonzero memory slots, exact
+  numeric/autograd parity, optimizer movement, typed tool arguments/results,
+  checkpoint normalization/Adam-state persistence, replay, and budget
+  checks. Retention baseline after note stripping/delay succeeded on 2/8
+  selected-full cases; slot erase was also 2/8 and recurrent/all-state erase
+  1/8, so no broad memory-causality claim is made. Wrong-note and coherent
+  matrix-row-permutation interventions changed only their declared payload;
+  resource-only intervention was separate.
+- Deterministic oracle feasibility was 8/8 on the microset and 8/8 on the
+  freshly constructed unlabeled future inputs. Future inputs were not used
+  for optimization. The old report's constant gate-3/1.15 policy and
+  identical ablation trajectories are recorded as a historical audit
+  correction, not rewritten.
+- Full repository regression suite: 56 tests passed. Reviewable artifacts:
+  `reports/generated/v03-neural-repair-report.json`,
+  `storage/checkpoints/v03-neural-repair-full-selected.json`, and
+  `storage/checkpoints/v03-neural-repair-control-selected.json`.

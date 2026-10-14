@@ -511,7 +511,7 @@ class CorrectedEpisode:
     def _project_policy_fields(result: dict | None, fields: tuple[str, ...]) -> dict | None:
         if result is None:
             return None
-        return {key: result[key] for key in fields if key in result}
+        return {key: copy.deepcopy(result[key]) for key in fields if key in result}
 
     def policy_observation(self) -> dict:
         """Whitelist note/spectrum/tool feedback; omit checkpoint-only internals."""
@@ -830,9 +830,9 @@ class CorrectedEpisode:
             "seed": self.seed,
             "world": self.world.snapshot(),
             "workspace": self.workspace.snapshot(),
-            "note_result": self.note_result,
-            "measurement": self.measurement,
-            "last_result": self.last_result,
+            "note_result": copy.deepcopy(self.note_result),
+            "measurement": copy.deepcopy(self.measurement),
+            "last_result": copy.deepcopy(self.last_result),
             "resources": {
                 "tool_calls": self.tool_calls,
                 "tool_budget": self.MAX_TOOL_CALLS,
@@ -846,7 +846,7 @@ class CorrectedEpisode:
                 "live_work_spent": self.world.work_spent,
                 "live_work_budget": self.WORK_BUDGET,
             },
-            "events": list(self.events),
+            "events": copy.deepcopy(self.events),
         }
 
     @classmethod
@@ -862,6 +862,30 @@ class CorrectedEpisode:
         obj.last_result = copy.deepcopy(state.get("last_result"))
         obj.events = copy.deepcopy(state.get("events", []))
         resources = state.get("resources", {})
+        # Preserve instance-specific reduced limits.  A checkpoint may narrow
+        # a budget for a sandboxed continuation, but it may never use restore
+        # to silently widen the class contract.
+        limit_specs = (
+            ("MAX_TOOL_CALLS", "tool_budget", int, 1),
+            ("VIRTUAL_STEP_BUDGET", "virtual_step_budget", int, 1),
+            ("VIRTUAL_WORK_BUDGET", "virtual_work_budget", float, 1e-12),
+            ("MAX_PHYSICS_STEPS", "live_physics_budget", int, 1),
+            ("WORK_BUDGET", "live_work_budget", float, 1e-12),
+        )
+        for attr, key, converter, minimum in limit_specs:
+            default = getattr(cls, attr)
+            raw = resources.get(key, default)
+            try:
+                value = converter(raw)
+            except (TypeError, ValueError, OverflowError):
+                raise ValueError(f"invalid episode limit: {key}") from None
+            if isinstance(raw, bool) or not math.isfinite(float(value)):
+                raise ValueError(f"invalid episode limit: {key}")
+            if converter is int and float(value) != float(raw):
+                raise ValueError(f"invalid episode limit: {key}")
+            if value < minimum or value > default:
+                raise ValueError(f"episode restore cannot loosen or remove limit: {key}")
+            setattr(obj, attr, value)
         obj.tool_calls = int(resources.get("tool_calls", 0))
         obj.virtual_steps = int(resources.get("virtual_steps", 0))
         obj.virtual_work = float(resources.get("virtual_work", 0.0))

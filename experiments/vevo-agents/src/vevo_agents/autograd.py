@@ -135,6 +135,11 @@ class Tensor:
 
     def __matmul__(self, other):
         other = as_tensor(other)
+        if self.data.ndim > 2 or other.data.ndim > 2 or (self.data.ndim == 1 and other.data.ndim == 1):
+            raise NotImplementedError(
+                "autograd matmul supports only 2-D@1-D, 1-D@2-D, and 2-D@2-D; "
+                "dot and batched matmul are intentionally unsupported"
+            )
         data = self.data @ other.data
         out = Tensor(
             data,

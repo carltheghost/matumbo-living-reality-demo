@@ -74,6 +74,26 @@ The recorded run is a weak negative result (2/48 held-out successes for the
 full model versus 1/48 for the matched control); see the report and progress
 log for raw outcomes and the next hypothesis.
 
+## v0.3 neural read-path repair
+
+The bounded repair contract is in
+[`docs/EXPERIMENT_CONTRACT_V03_NEURAL_REPAIR.md`](docs/EXPERIMENT_CONTRACT_V03_NEURAL_REPAIR.md),
+with source in `src/vevo_agents/v03_neural_repair.py`. It repairs the unused
+full-model content read, matches numeric/autograd memory semantics, and runs a
+training-only two-world × four-goal microset. The recorded run used 1,000
+updates per trial and four seeds; both selected models reached 8/8 training
+physical successes, but no holdout or generalization claim is made. The
+end-to-end audit and exact failure/ablation outcomes are in
+`reports/generated/v03-neural-repair-report.json`.
+
+Run the bounded repair only when explicitly reproducing its CPU experiment:
+
+```sh
+PYTHONPATH=src python -m vevo_agents.v03_neural_repair \
+  --output reports/generated/v03-neural-repair-report.json \
+  --wall-clock-cap 300
+```
+
 ## Local storage and backup
 
 The exact user-owned SQLite workspace path for this preserved copy is

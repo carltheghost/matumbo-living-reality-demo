@@ -249,6 +249,14 @@ class NoteWorkspace:
         if state.get("schema") not in {"vevo.note-workspace.v1", "vevo.note-workspace.v2"}:
             raise ValueError("unsupported note workspace schema")
         workspace = cls(db_path, event_sink=event_sink)
+        existing = {
+            "documents": workspace.conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0],
+            "links": workspace.conn.execute("SELECT COUNT(*) FROM links").fetchone()[0],
+            "events": workspace.conn.execute("SELECT COUNT(*) FROM workspace_events").fetchone()[0],
+        }
+        if any(existing.values()):
+            workspace.close()
+            raise ValueError("workspace restore target must be empty")
         with workspace.conn:
             for note_id, payload in state.get("documents", {}).items():
                 workspace.conn.execute(
