@@ -152,7 +152,15 @@ class ContinuousGateWorld:
     def residual(self) -> float:
         return float(self.energy() - self.initial_energy - self.work + self.dissipated)
 
-    def _step_unchecked(self, gate_drive=None, port_drives=None, external=None, *, count_work: bool = True) -> dict:
+    def _step_unchecked(
+        self,
+        gate_drive=None,
+        port_drives=None,
+        external=None,
+        *,
+        count_work: bool = True,
+        include_distractors: bool = True,
+    ) -> dict:
         gate_drive = np.zeros(GATE_COUNT) if gate_drive is None else _finite_vector(gate_drive, GATE_COUNT, "gate drive", 2.0)
         port_drives = np.zeros(4) if port_drives is None else _finite_vector(port_drives, 4, "port drives", 0.2)
         external = np.zeros(4) if external is None else _finite_vector(external, 4, "external drive", 2.0)
@@ -166,6 +174,7 @@ class ContinuousGateWorld:
             external=external,
             internal=field_coupling_force,
             include_cue=False,
+            include_distractors=include_distractors,
         )
         omega = self.gate_omega
         gate_force = (
@@ -202,15 +211,28 @@ class ContinuousGateWorld:
         count_work: bool = True,
         physics_budget: int | None = None,
         work_budget: float | None = None,
+        include_distractors: bool = True,
     ) -> dict:
         """Advance one step, refusing a bounded resource overrun."""
 
         if physics_budget is not None and self.physics_steps + 1 > physics_budget:
             raise RuntimeError("physics_step_budget_exceeded")
         if work_budget is None:
-            return self._step_unchecked(gate_drive, port_drives, external, count_work=count_work)
+            return self._step_unchecked(
+                gate_drive,
+                port_drives,
+                external,
+                count_work=count_work,
+                include_distractors=include_distractors,
+            )
         trial = copy.deepcopy(self)
-        result = trial._step_unchecked(gate_drive, port_drives, external, count_work=count_work)
+        result = trial._step_unchecked(
+            gate_drive,
+            port_drives,
+            external,
+            count_work=count_work,
+            include_distractors=include_distractors,
+        )
         if trial.work_spent > work_budget + 1e-12:
             raise RuntimeError("work_budget_exceeded")
         self.__dict__.update(trial.__dict__)
@@ -390,6 +412,38 @@ class ContinuousGateWorld:
             "physics_steps": self.physics_steps,
             "initial_energy": self.initial_energy,
         }
+
+    @classmethod
+    def restore(cls, state: dict) -> "ContinuousGateWorld":
+        if state.get("schema") != "vevo.v03.continuous-gate-world.v1":
+            raise ValueError("unsupported continuous gate world schema")
+        field_state = copy.deepcopy(state["field"])
+        # v0.3 snapshots deliberately omit the legacy ResonantWorld target;
+        # the corrected field is neutral and therefore restores with target 0.
+        field_state.setdefault("target", 0)
+        obj = cls.__new__(cls)
+        obj.seed = int(state["seed"])
+        obj.field = ResonantWorld.restore(field_state)
+        obj.gate_resonance_hz = _finite_vector(state["gate_resonance_hz"], GATE_COUNT, "gate resonance", 10.0)
+        obj.gate_x = _finite_vector(state["gate_x"], GATE_COUNT, "gate position", 1e4)
+        obj.gate_v = _finite_vector(state["gate_v"], GATE_COUNT, "gate velocity", 1e4)
+        obj.gate_peak_abs = _finite_vector(state["gate_peak_abs"], GATE_COUNT, "gate peak", 1e4)
+        obj.gate_open = np.asarray(state["gate_open"], dtype=bool).reshape(GATE_COUNT).copy()
+        obj.gate_work = float(state["gate_work"])
+        obj.gate_supplied_work = float(state["gate_supplied_work"])
+        obj.gate_dissipated = float(state["gate_dissipated"])
+        obj.physics_steps = int(state["physics_steps"])
+        obj.initial_energy = float(state["initial_energy"])
+        if not all(math.isfinite(value) for value in (
+            obj.gate_work,
+            obj.gate_supplied_work,
+            obj.gate_dissipated,
+            obj.initial_energy,
+        )):
+            raise ValueError("invalid gate energy accounting")
+        if obj.gate_supplied_work < 0.0 or obj.gate_dissipated < 0.0 or obj.physics_steps < 0:
+            raise ValueError("invalid gate world resources")
+        return obj
 
 
 class CorrectedEpisode:
@@ -794,6 +848,26 @@ class CorrectedEpisode:
             },
             "events": list(self.events),
         }
+
+    @classmethod
+    def restore(cls, state: dict) -> "CorrectedEpisode":
+        if state.get("schema") != "vevo.v03.corrected-episode.v1":
+            raise ValueError("unsupported corrected episode schema")
+        obj = cls.__new__(cls)
+        obj.seed = int(state["seed"])
+        obj.world = ContinuousGateWorld.restore(state["world"])
+        obj.workspace = NoteWorkspace.restore(state["workspace"])
+        obj.note_result = copy.deepcopy(state.get("note_result"))
+        obj.measurement = copy.deepcopy(state.get("measurement"))
+        obj.last_result = copy.deepcopy(state.get("last_result"))
+        obj.events = copy.deepcopy(state.get("events", []))
+        resources = state.get("resources", {})
+        obj.tool_calls = int(resources.get("tool_calls", 0))
+        obj.virtual_steps = int(resources.get("virtual_steps", 0))
+        obj.virtual_work = float(resources.get("virtual_work", 0.0))
+        if obj.tool_calls < 0 or obj.virtual_steps < 0 or obj.virtual_work < 0.0:
+            raise ValueError("invalid episode resources")
+        return obj
 
 
 def measurement_only_action(measurement: dict) -> tuple[int, float]:

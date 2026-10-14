@@ -135,3 +135,44 @@
   gate invalidates an otherwise note-matched success. Added regressions cover
   both the accounting distinction and this success boundary. No training was
   run.
+
+## v0.3 neural integration checkpoint
+
+- Added `v03_model.py`: exactly four recurrent peripheral modules plus one
+  structurally different gated recurrent center with differentiable 2 × 6
+  addressable memory. The matched single-controller baseline receives the same
+  encoded policy observations, memory shape, fixed tools/schedule, optimizer,
+  and 180-step budget.
+- Added `v03_neural_proof.py` and the contract
+  `docs/EXPERIMENT_CONTRACT_V03_NEURAL.md`. The fixed first milestone is one
+  zero-drive advance, exact note lookup, fixed diagnostic port 0, then a
+  learned gate and explicit drive-frequency argument from the four declared
+  frequencies. The model input audit found no seed, resonance array,
+  snapshot, target, oracle, or evaluator keys.
+- Disjoint splits contain 32 train, 16 validation, and 48 test episodes over
+  disjoint complete worlds and disjoint note-goal IDs. Oracle actions are
+  supervision labels only; evaluation makes zero oracle calls. Two full-model
+  seeds (7, 17; optimizer 1007, 1017) and two control seeds (41, 43; optimizer
+  1041, 1043) were all reported, with checkpoint selection by validation loss.
+- The selected full model achieved 2/48 held-out authoritative successes
+  (0.0417), versus 1/48 (0.0208) for the matched control. Wrong-note,
+  shuffled-measurement, and neural-memory-erase interventions each also had
+  2/48 successes; disabled actuation had 0/48. These interventions therefore
+  do not establish causal dependence because the learned policy was weak.
+  No superiority or generalization claim is made.
+- All neural gradient checks passed (p0–p3, center, and initial memory),
+  JSON model/runtime/episode replay passed, exact SQLite note/link restore
+  passed, all 46 repository tests passed, and resource/residual accounting
+  stayed within protocol budgets. The corrected timestep test now disables
+  tick-window distractors for its undriven refinement comparison.
+- Specific next hypothesis: the center needs a learned relational inductive
+  bias, such as factorized note-frequency attention against the 4 × 4 response
+  matrix or a bilinear row/column interaction, rather than a single small
+  dense action head. That should be tested on the same split and budget; the
+  current result is a failure to establish reliable neural action selection,
+  not a reason to expose oracle state or change the evaluator.
+- Reviewable result: `reports/generated/v03-neural-proof-report.json`; selected
+  checkpoints: `storage/checkpoints/v03-neural-full-selected.json` and
+  `storage/checkpoints/v03-neural-control-selected.json`. Re-run from this
+  directory with:
+  `PYTHONPATH=src python -m vevo_agents.v03_neural_proof --output reports/generated/v03-neural-proof-report.json`.

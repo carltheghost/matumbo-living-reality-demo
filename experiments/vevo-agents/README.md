@@ -56,6 +56,24 @@ PYTHONPATH=src python -c 'from vevo_agents.v02_proof import run_proof; run_proof
 The project uses Python 3.11+ and NumPy. It does not open a server or require
 credentials, a paid service, a network, or a live external action.
 
+## v0.3 neural milestone
+
+The v0.3 neural experiment contract is in
+[`docs/EXPERIMENT_CONTRACT_V03_NEURAL.md`](docs/EXPERIMENT_CONTRACT_V03_NEURAL.md).
+Its source is `src/vevo_agents/v03_model.py` and its bounded runner is
+`src/vevo_agents/v03_neural_proof.py`. The report and selected CPU checkpoints
+are stored under `reports/generated/` and `storage/checkpoints/` respectively.
+Run the declared experiment with:
+
+```sh
+PYTHONPATH=src python -m vevo_agents.v03_neural_proof \
+  --output reports/generated/v03-neural-proof-report.json
+```
+
+The recorded run is a weak negative result (2/48 held-out successes for the
+full model versus 1/48 for the matched control); see the report and progress
+log for raw outcomes and the next hypothesis.
+
 ## Local storage and backup
 
 The exact user-owned SQLite workspace path for this preserved copy is

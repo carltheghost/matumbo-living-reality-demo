@@ -134,20 +134,28 @@ class ResonantWorld:
             oscillator[edge.b] -= exchange
         return geometry, oscillator
 
-    def _external_drive(self, *, include_cue: bool = True) -> np.ndarray:
+    def _external_drive(self, *, include_cue: bool = True, include_distractors: bool = True) -> np.ndarray:
         drive = np.zeros(self.NODES, dtype=np.float64)
         if include_cue and self.tick < self.CUE_TICKS:
             frequency = self.candidate_frequencies[self.target]
             phase = self.calibration["phase"]
             drive[self.target] += 3.0 * math.sin(2.0 * math.pi * frequency * (self.tick + 1) * self.DT + phase)
         # A repeatable, lower-energy distractor after the cue has disappeared.
-        if 5 <= self.tick <= 16:
+        if include_distractors and 5 <= self.tick <= 16:
             drive[2] += 0.42 * math.sin(0.61 * self.tick + 0.2)
             drive[3] += 0.35 * math.cos(0.47 * self.tick - 0.4)
             drive[1 - self.target] += 0.16 * math.sin(0.37 * self.tick + 1.0)
         return drive
 
-    def step(self, port_drives=None, *, external=None, internal=None, include_cue: bool = True) -> dict:
+    def step(
+        self,
+        port_drives=None,
+        *,
+        external=None,
+        internal=None,
+        include_cue: bool = True,
+        include_distractors: bool = True,
+    ) -> dict:
         """Advance one bounded step and return diagnostic accounting."""
 
         if port_drives is None:
@@ -159,7 +167,10 @@ class ResonantWorld:
         internal_force = np.zeros(self.NODES, dtype=np.float64) if internal is None else _finite_array(
             internal, (self.NODES,), "internal force", 2.0
         )
-        ext = ext + self._external_drive(include_cue=include_cue)
+        ext = ext + self._external_drive(
+            include_cue=include_cue,
+            include_distractors=include_distractors,
+        )
         before = self.energy()
         geometry_force, oscillator_force = self.edge_forces()
         oscillator_accel = oscillator_force - self.omega**2 * self.u - self.quartic * self.u**3

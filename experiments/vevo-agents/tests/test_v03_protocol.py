@@ -298,7 +298,7 @@ class CorrectedProtocolTests(unittest.TestCase):
             world.gate_x[:] = [-0.02, 0.04, -0.01, 0.07]
             world.initial_energy = world.energy()
             for _ in range(steps):
-                world.step()
+                world.step(include_distractors=False)
             return abs(world.residual)
 
         coarse = run(0.035, 40)
