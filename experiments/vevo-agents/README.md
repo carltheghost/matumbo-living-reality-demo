@@ -61,7 +61,7 @@ credentials, a paid service, a network, or a live external action.
 The v0.3 neural experiment contract is in
 [`docs/EXPERIMENT_CONTRACT_V03_NEURAL.md`](docs/EXPERIMENT_CONTRACT_V03_NEURAL.md).
 Its source is `src/vevo_agents/v03_model.py` and its bounded runner is
-`src/vevo_agents/v03_neural_proof.py`. The report and selected CPU checkpoints
+`src/vevo_agents/v03_neural_proof.py`. The report and selected checkpoints
 are stored under `reports/generated/` and `storage/checkpoints/` respectively.
 Run the declared experiment with:
 
@@ -86,7 +86,12 @@ physical successes, but no holdout or generalization claim is made. The
 end-to-end audit and exact failure/ablation outcomes are in
 `reports/generated/v03-neural-repair-report.json`.
 
-Run the bounded repair only when explicitly reproducing its CPU experiment:
+Post-publication source-only corrections, including the retention confound,
+are recorded in
+[`docs/V03_NEURAL_REPAIR_POST_REVIEW.md`](docs/V03_NEURAL_REPAIR_POST_REVIEW.md).
+They do not alter or retrain the preserved report/checkpoints.
+
+Run the bounded repair only when explicitly reproducing its bounded experiment:
 
 ```sh
 PYTHONPATH=src python -m vevo_agents.v03_neural_repair \

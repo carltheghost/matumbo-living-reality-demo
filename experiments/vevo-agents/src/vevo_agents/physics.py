@@ -9,6 +9,7 @@ mathematics, not a copy of the prior Vivo implementation.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import copy
 import hashlib
 import json
 import math
@@ -284,7 +285,7 @@ class ResonantWorld:
             "supplied_work": self.supplied_work,
             "dissipated": self.dissipated,
             "initial_energy": self.initial_energy,
-            "events": list(self.events[-256:]),
+            "events": copy.deepcopy(self.events[-256:]),
         }
 
     @classmethod
@@ -305,7 +306,7 @@ class ResonantWorld:
             raise ValueError("invalid supplied work accounting")
         if not all(math.isfinite(x) for x in (obj.work, obj.dissipated, obj.initial_energy)):
             raise ValueError("invalid energy accounting")
-        obj.events = list(state.get("events", []))[-256:]
+        obj.events = copy.deepcopy(state.get("events", []))[-256:]
         return obj
 
     def digest(self) -> str:

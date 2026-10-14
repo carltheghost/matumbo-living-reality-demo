@@ -28,6 +28,21 @@ class PhysicsTests(unittest.TestCase):
         self.assertNotIn("target", result)
         self.assertEqual(result["tool"], "resonance_probe")
 
+    def test_world_snapshot_and_restore_deep_detach_event_history(self):
+        world = ResonantWorld(seed=73)
+        world.step(np.zeros(world.NODES))
+        before_digest = world.digest()
+        snapshot = world.snapshot()
+        snapshot["events"][0]["energy"] = -999.0
+        snapshot["q"][0] = -999.0
+        self.assertEqual(world.digest(), before_digest)
+
+        restored = ResonantWorld.restore(world.snapshot())
+        restored_digest = restored.digest()
+        restored_snapshot = restored.snapshot()
+        restored_snapshot["events"][0]["energy"] = -998.0
+        self.assertEqual(restored.digest(), restored_digest)
+
 
 class WorkspaceTests(unittest.TestCase):
     def test_sqlite_notes_revisions_links_and_exact_search_survive_checkpoint(self):
@@ -120,6 +135,34 @@ class BoundaryTests(unittest.TestCase):
         before_events = list(store.events)
         with self.assertRaises(RuntimeError):
             store.advance_world(np.zeros(4))
+        self.assertEqual(store.world.digest(), before_world)
+        self.assertEqual(store.budgets.snapshot(), before_budgets)
+        self.assertEqual(store.events, before_events)
+
+    def test_exhausted_physics_budget_rejection_is_atomic(self):
+        store = SimFabricStore(
+            ResonantWorld(seed=96),
+            seed=97,
+            budgets=BudgetLedger(max_physics_steps=0),
+        )
+        before_world = store.world.digest()
+        before_budgets = store.budgets.snapshot()
+        with self.assertRaises(RuntimeError):
+            store.advance_world(np.zeros(4))
+        self.assertEqual(store.world.digest(), before_world)
+        self.assertEqual(store.budgets.snapshot(), before_budgets)
+
+    def test_exhausted_event_budget_rejects_tool_probe_atomically(self):
+        store = SimFabricStore(
+            ResonantWorld(seed=98),
+            seed=99,
+            budgets=BudgetLedger(max_events=1),
+        )
+        before_world = store.world.digest()
+        before_budgets = store.budgets.snapshot()
+        before_events = list(store.events)
+        with self.assertRaises(RuntimeError):
+            ToolExecutor(store).execute("probe_a")
         self.assertEqual(store.world.digest(), before_world)
         self.assertEqual(store.budgets.snapshot(), before_budgets)
         self.assertEqual(store.events, before_events)

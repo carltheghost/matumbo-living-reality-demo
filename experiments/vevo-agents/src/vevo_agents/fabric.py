@@ -40,19 +40,34 @@ class BudgetLedger:
     tool_calls: int = 0
 
     def consume_tick(self) -> None:
-        if self.ticks >= self.max_ticks:
-            raise RuntimeError("tick budget exhausted")
-        self.ticks += 1
+        self.consume_many(ticks=1)
 
     def consume_tool(self) -> None:
-        if self.tool_calls >= self.max_tool_calls:
-            raise RuntimeError("tool budget exhausted")
-        self.tool_calls += 1
+        self.consume_many(tool_calls=1)
 
     def consume_physics(self, steps: int = 1) -> None:
-        if type(steps) is not int or steps < 0 or self.physics_steps + steps > self.max_physics_steps:
+        self.consume_many(physics_steps=steps)
+
+    def validate(self, *, ticks: int = 0, physics_steps: int = 0, tool_calls: int = 0) -> None:
+        """Validate a multi-budget reservation without mutating counters."""
+
+        values = (ticks, physics_steps, tool_calls)
+        if not all(type(value) is int and value >= 0 for value in values):
+            raise ValueError("budget reservations must be non-negative integers")
+        if self.ticks + ticks > self.max_ticks:
+            raise RuntimeError("tick budget exhausted")
+        if self.physics_steps + physics_steps > self.max_physics_steps:
             raise RuntimeError("physics-step budget exhausted")
-        self.physics_steps += steps
+        if self.tool_calls + tool_calls > self.max_tool_calls:
+            raise RuntimeError("tool budget exhausted")
+
+    def consume_many(self, *, ticks: int = 0, physics_steps: int = 0, tool_calls: int = 0) -> None:
+        """Atomically consume a validated combination of resource counters."""
+
+        self.validate(ticks=ticks, physics_steps=physics_steps, tool_calls=tool_calls)
+        self.ticks += ticks
+        self.physics_steps += physics_steps
+        self.tool_calls += tool_calls
 
     def snapshot(self) -> dict:
         return {
@@ -206,8 +221,7 @@ class SimFabricStore:
         # Reserve the event slot before consuming budgets or mutating the
         # authoritative world.  This makes a full event log a no-op failure.
         self.ensure_event_capacity()
-        self.budgets.consume_tick()
-        self.budgets.consume_physics(1)
+        self.budgets.consume_many(ticks=1, physics_steps=1)
         result = self.world.step(port_drives, external=external, include_cue=include_cue)
         self.append_event("world.advanced", result)
         return result

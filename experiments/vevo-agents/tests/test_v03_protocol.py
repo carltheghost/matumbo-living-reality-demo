@@ -375,6 +375,24 @@ class CorrectedProtocolTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             CorrectedEpisode.restore(widened)
 
+    def test_zero_budget_limits_round_trip_as_deny_all(self):
+        episode = CorrectedEpisode(3518)
+        episode.MAX_TOOL_CALLS = 0
+        episode.VIRTUAL_STEP_BUDGET = 0
+        episode.VIRTUAL_WORK_BUDGET = 0.0
+        episode.MAX_PHYSICS_STEPS = 0
+        episode.WORK_BUDGET = 0.0
+        restored = CorrectedEpisode.restore(json.loads(json.dumps(episode.snapshot(), sort_keys=True)))
+        self.assertEqual(restored.MAX_TOOL_CALLS, 0)
+        self.assertEqual(restored.VIRTUAL_STEP_BUDGET, 0)
+        self.assertEqual(restored.VIRTUAL_WORK_BUDGET, 0.0)
+        self.assertEqual(restored.MAX_PHYSICS_STEPS, 0)
+        self.assertEqual(restored.WORK_BUDGET, 0.0)
+        before_world = json.dumps(restored.world.snapshot(), sort_keys=True)
+        with self.assertRaises(RuntimeError):
+            restored.advance(np.zeros(4))
+        self.assertEqual(json.dumps(restored.world.snapshot(), sort_keys=True), before_world)
+
     def test_over_window_neural_note_is_rejected_but_exact_storage_survives(self):
         prefix = " " * 100
         first = CorrectedEpisode(3519, note_text=prefix + "target_hz=0.55; target_phase=0.0")

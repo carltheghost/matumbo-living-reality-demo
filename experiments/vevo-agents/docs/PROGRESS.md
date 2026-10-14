@@ -186,8 +186,8 @@
   content-addressed prior-memory read before its recurrent update and a
   separate post-write content read in the action heads; address/value/gate
   parameters remain bounded write paths. Numeric and reverse-mode paths are
-  identical. The matched control uses `HIDDEN=45` (11,133 parameters) versus
-  11,127 for the full model.
+  identical. The historical selected checkpoints used `HIDDEN=45`
+  (11,133 parameters) versus 11,127 for the full model.
 - Added training-only present-modality normalization and explicit note,
   spectrum, and feedback masks. Titles over 32 UTF-8 bytes or note text over
   96 UTF-8 bytes are rejected at the neural boundary while exact SQLite text
@@ -197,9 +197,10 @@
   failures, exact nonempty disk-workspace restore rejection, atomic parameter
   loading, supported/unsupported autograd matmul primitives, and actual
   mid-sequence neural continuation after runtime restore.
-- The capped repair run used two worlds × four goals, balanced minibatches,
+- The capped repair run used two worlds × four goals, balanced size-one
+  minibatches,
   1,000 updates per trial, seeds full `(7,17)` and control `(41,43)`, and
-  completed in 105.60 CPU seconds with 41,048 KB peak RSS. Both selected
+  completed in 105.60 wall-clock seconds with 41,048 KB peak RSS. Both selected
   models reached 8/8 training-world physical successes and 1.0 frequency,
   gate, and joint accuracy; this is an overfit microset result, not a
   holdout/generalization result.
@@ -217,7 +218,37 @@
   for optimization. The old report's constant gate-3/1.15 policy and
   identical ablation trajectories are recorded as a historical audit
   correction, not rewritten.
-- Full repository regression suite: 56 tests passed. Reviewable artifacts:
+- The post-review source-only repository regression suite runs 64 tests. The
+  reviewable historical artifacts remain:
   `reports/generated/v03-neural-repair-report.json`,
   `storage/checkpoints/v03-neural-repair-full-selected.json`, and
   `storage/checkpoints/v03-neural-repair-control-selected.json`.
+
+## v0.3 post-publication source-only review corrections
+
+- No training was rerun and the published repair JSON/checkpoints remain
+  preserved historical artifacts. Its retention result (2/8 baseline, with
+  slot/recurrent/all-state comparisons) is now explicitly classified as an
+  out-of-distribution schedule confound, not a clean memory-necessity result:
+  the hidden note kept a note object and therefore `note_present=1`, while
+  present-note normalization converted the cleared payload into large
+  negative features.
+- Added a separate `note_payload_present` neural mask. Hidden payloads now
+  normalize to neutral zeros while a valid empty stored note remains distinct
+  through its authoritative content digest. Future retention code enumerates
+  slot 0, slot 1, both slots, recurrent-only, all-state, and matched-control
+  comparisons; causal eligibility requires paired outcome, probability, and
+  action changes, not merely one baseline success.
+- Wrong-note donors now replace only the equal-width `target_hz` substring;
+  source/variant/metadata/other bytes are asserted unchanged. Physics event
+  snapshots/restores are recursively detached. Zero deny-all v0.3 budgets
+  round-trip and retain rejection behavior.
+- Legacy SIMFABRIC advance/tool budget reservations are now prevalidated and
+  atomic across event, tick, physics, and tool counters. Regression coverage
+  includes exhausted physics/event budgets and nested projection/history
+  mutation isolation.
+- Checkpoints now persist shuffle order and next minibatch position in
+  addition to optimizer moments/RNG, but exact trainer resume remains
+  explicitly unverified. The historical 105.60-second figure is wall-clock
+  time, not CPU time; the future oracle feasibility reference is not a sealed
+  untouched test set.

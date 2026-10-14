@@ -27,13 +27,15 @@ MEMORY_DIM = 6
 ACTION_DIM = 4
 PERIPHERAL_COUNT = 4
 
-# The first three features are explicit modality masks.  They replace the
-# old stage one-hot without changing the input width: missing note, spectrum,
-# and feedback values remain zero while the masks tell the policy why.
+# The first four features are explicit modality/payload masks.  They replace
+# the old stage one-hot: a note may be present while its goal-bearing payload
+# is intentionally hidden, and that state must not be normalized as a present
+# target-bearing note.
 NOTE_MASK_INDEX = 0
 SPECTRUM_MASK_INDEX = 1
 FEEDBACK_MASK_INDEX = 2
-NOTE_FEATURE_START = 3
+NOTE_PAYLOAD_MASK_INDEX = 3
+NOTE_FEATURE_START = 4
 NOTE_FEATURE_END = NOTE_FEATURE_START + 3 + NOTE_TITLE_BYTES + NOTE_TEXT_BYTES
 SPECTRUM_FEATURE_START = NOTE_FEATURE_END + 1
 SPECTRUM_FEATURE_END = SPECTRUM_FEATURE_START + 4 + 16
@@ -66,6 +68,20 @@ def _number(value, scale: float = 1.0) -> float:
     return float(np.clip(number / scale, -10.0, 10.0))
 
 
+def _note_payload_available(note: dict, note_present: bool) -> bool:
+    """Distinguish a hidden payload from a valid empty note.
+
+    Retention interventions clear both text and content digest.  A genuinely
+    empty stored note still has its authoritative non-empty content digest,
+    so it remains a valid payload-bearing note rather than being conflated
+    with the hidden intervention.
+    """
+
+    if not note_present:
+        return False
+    return bool(str(note.get("text", "")) or str(note.get("content_digest", "")))
+
+
 def _stage_from_policy(policy_observation: dict) -> int:
     note = policy_observation.get("note")
     measurement = policy_observation.get("measurement")
@@ -96,10 +112,12 @@ def encode_policy_observation(policy_observation: dict) -> np.ndarray:
 
     # Presence is distinct from acceptance.  A rejected typed result is still
     # an observed modality and must not be confused with an absent result.
+    note_present = policy_observation.get("note") is not None
     values.extend([
-        float(policy_observation.get("note") is not None),
+        float(note_present),
         float(policy_observation.get("measurement") is not None),
         float(policy_observation.get("feedback") is not None),
+        float(_note_payload_available(note, note_present)),
     ])
 
     note_text = str(note.get("text", ""))
@@ -157,7 +175,7 @@ def encode_policy_observation(policy_observation: dict) -> np.ndarray:
     return result
 
 
-POLICY_VECTOR_DIM = 3 + 3 + NOTE_TITLE_BYTES + NOTE_TEXT_BYTES + 1 + 4 + 16 + 6 + 10 + 6
+POLICY_VECTOR_DIM = 4 + 3 + NOTE_TITLE_BYTES + NOTE_TEXT_BYTES + 1 + 4 + 16 + 6 + 10 + 6
 
 
 def fit_input_normalization(policy_observations: list[dict]) -> dict:
@@ -175,7 +193,7 @@ def fit_input_normalization(policy_observations: list[dict]) -> dict:
     scale = np.ones(POLICY_VECTOR_DIM, dtype=np.float64)
     counts = {}
     groups = {
-        "note": (NOTE_MASK_INDEX, np.arange(NOTE_FEATURE_START, NOTE_FEATURE_END)),
+        "note_payload": (NOTE_PAYLOAD_MASK_INDEX, np.arange(NOTE_FEATURE_START, NOTE_FEATURE_END)),
         "spectrum": (SPECTRUM_MASK_INDEX, np.arange(SPECTRUM_FEATURE_START, SPECTRUM_FEATURE_END)),
     }
     for name, (mask_index, columns) in groups.items():
@@ -192,7 +210,7 @@ def fit_input_normalization(policy_observations: list[dict]) -> dict:
         "scale": scale.tolist(),
         "counts": counts,
         "normalized_groups": {
-            "note": [int(NOTE_FEATURE_START), int(NOTE_FEATURE_END)],
+            "note_payload": [int(NOTE_FEATURE_START), int(NOTE_FEATURE_END)],
             "spectrum": [int(SPECTRUM_FEATURE_START), int(SPECTRUM_FEATURE_END)],
         },
     }
@@ -210,11 +228,11 @@ def normalize_policy_vector(vector: np.ndarray, normalization: dict | None) -> n
     if not np.isfinite(mean).all() or not np.isfinite(scale).all() or np.any(scale <= 0.0):
         raise ValueError("invalid input normalization values")
     result = np.asarray(vector, dtype=np.float64).copy()
-    note_present = result[NOTE_MASK_INDEX] > 0.5
+    note_payload_available = result[NOTE_PAYLOAD_MASK_INDEX] > 0.5
     spectrum_present = result[SPECTRUM_MASK_INDEX] > 0.5
     note_columns = slice(NOTE_FEATURE_START, NOTE_FEATURE_END)
     spectrum_columns = slice(SPECTRUM_FEATURE_START, SPECTRUM_FEATURE_END)
-    if note_present:
+    if note_payload_available:
         result[note_columns] = (result[note_columns] - mean[note_columns]) / scale[note_columns]
     else:
         result[note_columns] = 0.0

@@ -12,6 +12,7 @@ from collections import Counter
 import copy
 import hashlib
 import json
+import re
 import resource
 from pathlib import Path
 import time
@@ -19,13 +20,17 @@ import time
 import numpy as np
 
 from .v03_model import (
+    NOTE_PAYLOAD_MASK_INDEX,
+    NOTE_FEATURE_END,
     NOTE_TEXT_BYTES,
     NOTE_FEATURE_START,
     NOTE_TITLE_BYTES,
     POLICY_VECTOR_DIM,
     V03FiveBrain,
     V03SingleRecurrentMemory,
+    encode_policy_observation,
     fit_input_normalization,
+    normalize_policy_vector,
 )
 from .v03_neural_proof import (
     _gate_resonances,
@@ -183,6 +188,9 @@ def _balanced_train(model, examples: list[dict], *, seed: int, start_time: float
         "optimizer_first": first,
         "optimizer_second": second,
         "rng_state": rng.bit_generator.state,
+        "shuffle_order": order.tolist(),
+        "next_minibatch_index": int(updates % len(order)),
+        "next_cycle_requires_shuffle": bool(updates % len(order) == 0),
         "stopped_reason": stopped_reason,
     }
 
@@ -230,6 +238,53 @@ def _reference_summary(runs: list[dict]) -> dict:
     }
 
 
+def _paired_ablation_summary(baseline: list[dict], ablation: list[dict]) -> dict:
+    """Require paired outcome, probability, and action evidence."""
+
+    if len(baseline) != len(ablation):
+        raise ValueError("paired retention runs must have equal length")
+    baseline_successes = int(sum(bool(item["success"]) for item in baseline))
+    ablation_successes = int(sum(bool(item["success"]) for item in ablation))
+    paired_success_drop = int(sum(
+        bool(base["success"]) and not bool(ablated["success"])
+        for base, ablated in zip(baseline, ablation)
+    ))
+    paired_action_changes = int(sum(
+        base.get("final_action") != ablated.get("final_action")
+        for base, ablated in zip(baseline, ablation)
+    ))
+    paired_probability_changes = int(sum(
+        not (
+            np.allclose(
+                base.get("gate_probabilities", []),
+                ablated.get("gate_probabilities", []),
+                rtol=0.0,
+                atol=1e-12,
+            )
+            and np.allclose(
+                base.get("frequency_probabilities", []),
+                ablated.get("frequency_probabilities", []),
+                rtol=0.0,
+                atol=1e-12,
+            )
+        )
+        for base, ablated in zip(baseline, ablation)
+    ))
+    return {
+        "baseline_successes": baseline_successes,
+        "ablation_successes": ablation_successes,
+        "paired_success_drop": paired_success_drop,
+        "paired_probability_changes": paired_probability_changes,
+        "paired_action_changes": paired_action_changes,
+        "causal_claim_eligible": bool(
+            baseline_successes > 0
+            and paired_success_drop > 0
+            and paired_probability_changes > 0
+            and paired_action_changes > 0
+        ),
+    }
+
+
 def _strip_goal_bearing_note(policy_input: dict) -> dict:
     result = copy.deepcopy(policy_input)
     note = result.get("note")
@@ -239,6 +294,52 @@ def _strip_goal_bearing_note(policy_input: dict) -> dict:
         note["text"] = ""
         note["content_digest"] = ""
     return result
+
+
+_TARGET_FREQUENCY_RE = re.compile(r"(target_hz=)([0-9]+\.[0-9]+)")
+
+
+def _replace_target_frequency(note_text: str, goal_index: int) -> str:
+    """Change only the fixed-width target frequency substring."""
+
+    match = _TARGET_FREQUENCY_RE.search(str(note_text))
+    if match is None:
+        raise ValueError("note has no fixed-width target_hz payload")
+    replacement = f"target_hz={float(PROBE_FREQUENCIES[goal_index]):.2f}"
+    original = match.group(0)
+    if len(replacement.encode("utf-8")) != len(original.encode("utf-8")):
+        raise ValueError("target frequency replacement changed note width")
+    return str(note_text)[:match.start()] + replacement + str(note_text)[match.end():]
+
+
+def _validate_target_only_note_edit(original: dict, changed: dict) -> None:
+    """Assert wrong-note intervention changes one equal-width text payload."""
+
+    original_note = original.get("note")
+    changed_note = changed.get("note")
+    if not isinstance(original_note, dict) or not isinstance(changed_note, dict):
+        raise AssertionError("note payload is required")
+    if set(original) != set(changed):
+        raise AssertionError("wrong-note intervention changed policy fields")
+    if set(original_note) != set(changed_note):
+        raise AssertionError("wrong-note intervention changed note metadata fields")
+    for key in original:
+        if key != "note" and original[key] != changed[key]:
+            raise AssertionError("wrong-note intervention changed a non-note field")
+    for key in original_note:
+        if key != "text" and original_note.get(key) != changed_note.get(key):
+            raise AssertionError("wrong-note intervention changed note metadata")
+    original_text = str(original_note.get("text", ""))
+    changed_text = str(changed_note.get("text", ""))
+    if len(original_text.encode("utf-8")) != len(changed_text.encode("utf-8")):
+        raise AssertionError("wrong-note intervention changed UTF-8 width")
+    original_vector = encode_policy_observation(original)
+    changed_vector = encode_policy_observation(changed)
+    text_start = NOTE_FEATURE_START + 3 + NOTE_TITLE_BYTES
+    text_end = text_start + NOTE_TEXT_BYTES
+    differing = np.flatnonzero(~np.isclose(original_vector, changed_vector, rtol=0.0, atol=0.0))
+    if np.any((differing < text_start) | (differing >= text_end)):
+        raise AssertionError("wrong-note intervention changed bytes outside note text")
 
 
 def _failure_cause(episode: CorrectedEpisode) -> str | None:
@@ -277,12 +378,24 @@ def run_retention_episode(model, spec: dict, *, erasure: str | None = None) -> d
         episode.advance(np.zeros(4, dtype=np.float64))
         hidden_input = _strip_goal_bearing_note(episode.policy_observation())
         runtime, trace = model.raw_step(runtime, hidden_input)
-        rows.append({"stage": f"goal_independent_delay_{index + 1}", "policy_input_digest": _json_digest(hidden_input)})
+        hidden_vector = encode_policy_observation(hidden_input)
+        hidden_normalized = normalize_policy_vector(hidden_vector, model.normalization_state())
+        rows.append({
+            "stage": f"goal_independent_delay_{index + 1}",
+            "policy_input_digest": _json_digest(hidden_input),
+            "note_present_mask": int(hidden_vector[0]),
+            "note_payload_present_mask": int(hidden_vector[NOTE_PAYLOAD_MASK_INDEX]),
+            "max_normalized_hidden_note_abs": float(np.max(np.abs(hidden_normalized[NOTE_FEATURE_START:NOTE_FEATURE_END]))),
+        })
 
     episode.execute_diagnostic(0)
     spectrum_input = _strip_goal_bearing_note(episode.policy_observation())
-    if erasure == "slot":
+    if erasure in {"slot", "slot0"}:
         runtime["memory"][0].fill(0.0)
+    elif erasure == "slot1":
+        runtime["memory"][1].fill(0.0)
+    elif erasure in {"both", "slots"}:
+        runtime["memory"].fill(0.0)
     elif erasure == "recurrent":
         runtime["central"].fill(0.0)
         for value in runtime["peripheral"]:
@@ -301,6 +414,8 @@ def run_retention_episode(model, spec: dict, *, erasure: str | None = None) -> d
         "selected_gate": int(gate),
         "selected_frequency_index": int(frequency_index),
         "selected_frequency": float(frequency),
+        "gate_probabilities": np.asarray(trace["gate_probs"], dtype=np.float64).tolist(),
+        "frequency_probabilities": np.asarray(trace["frequency_probs"], dtype=np.float64).tolist(),
         "result_schema": result.get("schema"),
         "result_accepted": bool(result.get("accepted")),
     })
@@ -316,6 +431,8 @@ def run_retention_episode(model, spec: dict, *, erasure: str | None = None) -> d
             "frequency": float(frequency),
             "frequency_index": int(frequency_index),
         },
+        "gate_probabilities": np.asarray(trace["gate_probs"], dtype=np.float64).tolist(),
+        "frequency_probabilities": np.asarray(trace["frequency_probs"], dtype=np.float64).tolist(),
         "rows": rows,
         "tool_calls": int(episode.tool_calls),
         "virtual_steps": int(episode.virtual_steps),
@@ -340,7 +457,7 @@ def _donor_plan(specs: list[dict]) -> dict:
         for candidate_goal in range(len(PROBE_FREQUENCIES)):
             if candidate_goal == int(spec["goal_index"]):
                 continue
-            donor_note = _goal_note(candidate_goal, "wrong-note-donor", 0.0)
+            donor_note = _replace_target_frequency(str(spec["note_text"]), candidate_goal)
             donor_spec = dict(spec, goal_index=candidate_goal, note_text=donor_note)
             donor_episode, _ = _prepare_policy_observations(donor_spec)
             donor_gate = int(donor_episode.oracle_action())
@@ -373,10 +490,13 @@ def run_payload_intervention(model, spec: dict, *, prepared: dict, plan: dict, c
     rows = []
     donor_note = plan.get("note_donor")
     donor_measurement = plan.get("measurement_donor")
+    target_only_edit_validated = condition != "wrong_note"
     for stage, base_input in enumerate(prepared["policy_observations"]):
         policy_input = copy.deepcopy(base_input)
         if condition == "wrong_note" and donor_note is not None and stage >= 1:
             policy_input["note"]["text"] = donor_note["note_text"]
+            _validate_target_only_note_edit(base_input, policy_input)
+            target_only_edit_validated = True
         if condition == "shuffled_measurement" and donor_measurement is not None and stage == 2:
             original_matrix = np.asarray(policy_input["measurement"]["channel_response"], dtype=np.float64)
             policy_input["measurement"]["channel_response"] = original_matrix[donor_measurement["row_permutation"]].tolist()
@@ -413,6 +533,7 @@ def run_payload_intervention(model, spec: dict, *, prepared: dict, plan: dict, c
             "measurement.channel_response_rows" if condition == "shuffled_measurement" else
             "resources.virtual_work" if condition == "resource_only" else None
         ),
+        "target_only_edit_validated": target_only_edit_validated,
         "donor": plan.get("note_donor") if condition == "wrong_note" else plan.get("measurement_donor"),
         "success": bool(episode.success()),
         "failure_cause": _failure_cause(episode),
@@ -654,6 +775,9 @@ def _save_checkpoint(path: Path, model, training: dict | None = None) -> str:
         payload["training"] = {
             "updates": int(training["updates"]),
             "rng_state": training["rng_state"],
+            "shuffle_order": training["shuffle_order"],
+            "next_minibatch_index": int(training["next_minibatch_index"]),
+            "next_cycle_requires_shuffle": bool(training["next_cycle_requires_shuffle"]),
             "optimizer_first": {name: value.tolist() for name, value in training["optimizer_first"].items()},
             "optimizer_second": {name: value.tolist() for name, value in training["optimizer_second"].items()},
         }
@@ -678,6 +802,8 @@ def _checkpoint_replay(model, spec: dict, checkpoint_path: Path) -> dict:
             and "optimizer_first" in payload["training"]
             and "optimizer_second" in payload["training"]
         ),
+        "shuffle_order_present": bool("shuffle_order" in payload.get("training", {})),
+        "training_resume_verified": False,
         "replay_same_actions": [row["selected_gate"] for row in original["rows"]] == [row["selected_gate"] for row in replay["rows"]],
         "replay_same_frequencies": [row["selected_frequency_index"] for row in original["rows"]] == [row["selected_frequency_index"] for row in replay["rows"]],
         "replay_same_success": original["success"] == replay["success"],
@@ -867,15 +993,33 @@ def run_repair(*, output_path: str | Path = "reports/generated/v03-neural-repair
         evaluation["control"]["summary"] = _summary(evaluation["control"]["runs"])
         if frequency_learning_succeeded:
             retention["normal"] = [run_retention_episode(full_model, spec) for spec in specs]
+            retention["matched_control_normal"] = [run_retention_episode(control_model, spec) for spec in specs]
             baseline_successes = int(sum(bool(item["success"]) for item in retention["normal"]))
             retention_metadata = {
                 "baseline_successes": baseline_successes,
-                "causal_ablation_claim_eligible": baseline_successes > 0,
+                "causal_ablation_claim_eligible": False,
+                "paired_ablation_evidence": {},
+                "matched_control_baseline_successes": int(sum(
+                    bool(item["success"]) for item in retention["matched_control_normal"]
+                )),
+                "matched_control_paired_comparison": _paired_ablation_summary(
+                    retention["normal"], retention["matched_control_normal"]
+                ),
             }
             if baseline_successes > 0:
-                retention["slot_erase"] = [run_retention_episode(full_model, spec, erasure="slot") for spec in specs]
+                retention["slot0_erase"] = [run_retention_episode(full_model, spec, erasure="slot0") for spec in specs]
+                retention["slot1_erase"] = [run_retention_episode(full_model, spec, erasure="slot1") for spec in specs]
+                retention["both_slots_erase"] = [run_retention_episode(full_model, spec, erasure="both") for spec in specs]
                 retention["recurrent_erase"] = [run_retention_episode(full_model, spec, erasure="recurrent") for spec in specs]
                 retention["all_retained_state_erase"] = [run_retention_episode(full_model, spec, erasure="all") for spec in specs]
+                for condition in ("slot0_erase", "slot1_erase", "both_slots_erase", "recurrent_erase", "all_retained_state_erase"):
+                    retention_metadata["paired_ablation_evidence"][condition] = _paired_ablation_summary(
+                        retention["normal"], retention[condition]
+                    )
+                retention_metadata["causal_ablation_claim_eligible"] = any(
+                    item["causal_claim_eligible"]
+                    for item in retention_metadata["paired_ablation_evidence"].values()
+                )
             else:
                 failures.append("retention baseline has zero physical successes; causal ablations not interpreted")
             plans = _donor_plan(specs)
@@ -954,7 +1098,7 @@ def run_repair(*, output_path: str | Path = "reports/generated/v03-neural-repair
             "memory_shape": list(full_model.central_memory_shape),
             "read_repair": "prior content read -> center input; separate post-write content read -> action heads; address/value/gate remain write paths",
             "control_read_repair": "prior plus post-write content reads -> action heads; separate address/value/gate write paths",
-            "input_masks": ["note_present", "spectrum_present", "feedback_present"],
+            "input_masks": ["note_present", "note_payload_present", "spectrum_present", "feedback_present"],
         },
         "data": {
             "microset_world_seeds": list(MICRO_WORLD_SEEDS),
@@ -963,10 +1107,12 @@ def run_repair(*, output_path: str | Path = "reports/generated/v03-neural-repair
             "training_only_normalization": normalization,
             "labels_for_training_only": True,
             "future_inputs": future_inputs,
+            "future_inputs_sealed": False,
+            "future_oracle_reference_used": True,
             "semantic_holdout_claim": False,
         },
         "training": {
-            "method": "balanced deterministic minibatches; Adam-style reverse-mode updates",
+            "method": "balanced size-one minibatches: deterministic shuffled eight-example cycles; Adam-style reverse-mode updates",
             "max_updates_per_trial": MAX_UPDATES_PER_TRIAL,
             "learning_rate": LEARNING_RATE,
             "gradient_clip_norm": GRADIENT_CLIP_NORM,
@@ -977,6 +1123,7 @@ def run_repair(*, output_path: str | Path = "reports/generated/v03-neural-repair
             "selected_control_seed": int(control_selected["model_seed"]) if control_selected else None,
             "frequency_learning_succeeded": frequency_learning_succeeded,
             "selection": "lowest final training loss; no held-out optimization",
+            "exact_training_resume_verified": False,
             "checkpoints": checkpoints,
         },
         "references": {
@@ -1006,7 +1153,7 @@ def run_repair(*, output_path: str | Path = "reports/generated/v03-neural-repair
             ) if evaluation else False,
         },
         "runtime": {
-            "seconds": time.perf_counter() - start,
+            "wall_clock_seconds": time.perf_counter() - start,
             "max_rss_kb": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
             "failures": failures,
         },

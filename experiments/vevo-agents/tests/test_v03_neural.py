@@ -5,10 +5,15 @@ import unittest
 import numpy as np
 
 from vevo_agents.v03_model import (
+    NOTE_FEATURE_END,
+    NOTE_FEATURE_START,
+    NOTE_PAYLOAD_MASK_INDEX,
     POLICY_VECTOR_DIM,
     V03FiveBrain,
     V03SingleRecurrentMemory,
     encode_policy_observation,
+    fit_input_normalization,
+    normalize_policy_vector,
 )
 from vevo_agents.v03_neural_proof import (
     build_examples,
@@ -19,6 +24,9 @@ from vevo_agents.v03_neural_proof import (
     run_episode,
 )
 from vevo_agents.v03_neural_repair import (
+    _paired_ablation_summary,
+    _replace_target_frequency,
+    _validate_target_only_note_edit,
     mid_sequence_continuation_check,
     numeric_autograd_parity,
     targeted_gradient_checks,
@@ -39,8 +47,8 @@ class V03NeuralIntegrationTests(unittest.TestCase):
         self.assertEqual(full.PERIPHERALS, 4)
         self.assertEqual(full.central_memory_shape, control.central_memory_shape)
         self.assertEqual(full.ACTION_DIM, control.ACTION_DIM)
-        self.assertEqual(full.parameter_count(), 11127)
-        self.assertEqual(control.parameter_count(), 11133)
+        self.assertEqual(full.parameter_count(), 11183)
+        self.assertEqual(control.parameter_count(), 11178)
         self.assertLessEqual(abs(full.parameter_count() - control.parameter_count()), 16)
         self.assertEqual(encode_policy_observation(self.example["policy_observations"][2]).shape, (POLICY_VECTOR_DIM,))
 
@@ -103,6 +111,58 @@ class V03NeuralIntegrationTests(unittest.TestCase):
             model.load_state_dict(malformed)
         self.assertEqual(model.state_dict(), before)
         self.assertEqual(set(model.parameter_names()), set(model.params))
+
+    def test_hidden_note_payload_has_neutral_normalized_features(self):
+        observations = self.example["policy_observations"]
+        normalization = fit_input_normalization(observations)
+        hidden = copy.deepcopy(observations[2])
+        hidden["note"]["text"] = ""
+        hidden["note"]["content_digest"] = ""
+        raw_hidden = encode_policy_observation(hidden)
+        self.assertEqual(raw_hidden[0], 1.0)
+        self.assertEqual(raw_hidden[NOTE_PAYLOAD_MASK_INDEX], 0.0)
+        normalized_hidden = normalize_policy_vector(raw_hidden, normalization)
+        self.assertTrue(np.allclose(normalized_hidden[NOTE_FEATURE_START:NOTE_FEATURE_END], 0.0))
+
+        empty_valid = copy.deepcopy(hidden)
+        empty_valid["note"]["content_digest"] = "authoritative-empty-note-digest"
+        raw_empty = encode_policy_observation(empty_valid)
+        self.assertEqual(raw_empty[NOTE_PAYLOAD_MASK_INDEX], 1.0)
+
+    def test_wrong_note_replacement_is_equal_width_and_target_only(self):
+        original = copy.deepcopy(self.example["policy_observations"][2])
+        changed = copy.deepcopy(original)
+        changed["note"]["text"] = _replace_target_frequency(original["note"]["text"], 1)
+        _validate_target_only_note_edit(original, changed)
+        self.assertEqual(
+            len(original["note"]["text"].encode("utf-8")),
+            len(changed["note"]["text"].encode("utf-8")),
+        )
+
+    def test_causal_ablation_requires_paired_outcome_probability_and_action(self):
+        baseline = [{
+            "success": True,
+            "final_action": {"gate": 1, "frequency_index": 2},
+            "gate_probabilities": [0.1, 0.9],
+            "frequency_probabilities": [0.1, 0.2, 0.7],
+        }]
+        no_probability_change = [{
+            "success": False,
+            "final_action": {"gate": 0, "frequency_index": 1},
+            "gate_probabilities": [0.1, 0.9],
+            "frequency_probabilities": [0.1, 0.2, 0.7],
+        }]
+        summary = _paired_ablation_summary(baseline, no_probability_change)
+        self.assertEqual(summary["paired_success_drop"], 1)
+        self.assertEqual(summary["paired_action_changes"], 1)
+        self.assertEqual(summary["paired_probability_changes"], 0)
+        self.assertFalse(summary["causal_claim_eligible"])
+
+        with_probability_change = copy.deepcopy(no_probability_change)
+        with_probability_change[0]["gate_probabilities"] = [0.8, 0.2]
+        summary = _paired_ablation_summary(baseline, with_probability_change)
+        self.assertEqual(summary["paired_probability_changes"], 1)
+        self.assertTrue(summary["causal_claim_eligible"])
 
     def test_episode_snapshot_restore_and_neural_replay(self):
         spec = self.splits["test"][0]

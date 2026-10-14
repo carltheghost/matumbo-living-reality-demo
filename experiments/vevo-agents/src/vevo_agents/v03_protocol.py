@@ -866,11 +866,11 @@ class CorrectedEpisode:
         # a budget for a sandboxed continuation, but it may never use restore
         # to silently widen the class contract.
         limit_specs = (
-            ("MAX_TOOL_CALLS", "tool_budget", int, 1),
-            ("VIRTUAL_STEP_BUDGET", "virtual_step_budget", int, 1),
-            ("VIRTUAL_WORK_BUDGET", "virtual_work_budget", float, 1e-12),
-            ("MAX_PHYSICS_STEPS", "live_physics_budget", int, 1),
-            ("WORK_BUDGET", "live_work_budget", float, 1e-12),
+            ("MAX_TOOL_CALLS", "tool_budget", int, 0),
+            ("VIRTUAL_STEP_BUDGET", "virtual_step_budget", int, 0),
+            ("VIRTUAL_WORK_BUDGET", "virtual_work_budget", float, 0.0),
+            ("MAX_PHYSICS_STEPS", "live_physics_budget", int, 0),
+            ("WORK_BUDGET", "live_work_budget", float, 0.0),
         )
         for attr, key, converter, minimum in limit_specs:
             default = getattr(cls, attr)

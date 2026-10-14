@@ -51,9 +51,9 @@ class ToolExecutor:
             )
             self.store.record_tool_result(result)
             return result
-        self.store.budgets.consume_tool()
         tool = "resonance_probe"
         if not PermissionPolicy.permits(tool):
+            self.store.budgets.consume_tool()
             result = TypedToolResult(
                 schema="vevo.tool.result.v1",
                 tool=tool,
@@ -67,7 +67,7 @@ class ToolExecutor:
         slot = ACTION_TO_SLOT[action]
         # The tool's eight local integration steps are part of the same
         # explicit compute budget as the outer neural loop.
-        self.store.budgets.consume_physics(8)
+        self.store.budgets.consume_many(tool_calls=1, physics_steps=8)
         payload = self.store.world.apply_probe(slot)
         result = TypedToolResult(
             schema=payload.pop("schema"),

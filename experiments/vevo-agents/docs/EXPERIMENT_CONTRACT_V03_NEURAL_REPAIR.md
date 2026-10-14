@@ -14,8 +14,10 @@ delayed-cue training microset under the same local executor and budgets?
 
 The initial system is exactly five neural modules: four recurrent peripheral
 modules and one structurally different recurrent center. The center contains
-the differentiable addressable memory, learned tool/action selection, and
-feedback-driven state update. Deterministic SIMFABRIC code remains the
+the differentiable addressable memory, learned gate/frequency action
+selection, and feedback-driven state update. Tool choice and scheduling are
+fixed in this proof; this experiment does not claim learned general tool
+selection or a complete tool-argument/result writeback loop. Deterministic SIMFABRIC code remains the
 authority for permissions, budgets, document/graph/event history, world
 mutation, tool execution, and success evaluation. Those constraints cannot be
 learned away. No network, shell, arbitrary tool, growth, credentials,
@@ -75,11 +77,13 @@ privileged answer head. Numeric execution and reverse-mode autograd must use
 the same equations.
 
 The encoder retains the exact bounded byte/matrix representation and adds
-explicit note, spectrum, and feedback presence masks. Present note and
-spectrum features may be normalized only with statistics fitted from the
-training microset; missing features remain zero and their masks remain
-authoritative. No normalization statistic, label, or selection rule may be
-fit from future inputs.
+explicit note, note-payload, spectrum, and feedback presence masks. A hidden
+note payload keeps typed note identity present but sets its payload mask to
+zero; normalization then emits neutral zeros for the note feature block. A
+valid empty stored note remains distinguishable through its authoritative
+content digest. Present note-payload and spectrum features may be normalized
+only with statistics fitted from the training microset; no normalization
+statistic, label, or selection rule may be fit from future inputs.
 
 Authoritative SQLite text is preserved in full. If UTF-8 encoding of a title
 or note exceeds its declared neural window (32 or 96 bytes), policy encoding
@@ -89,7 +93,9 @@ prefix that could hide a target instruction.
 ## Smallest proof and fixed schedule
 
 The first run contains exactly two training worlds × four target goals, with
-the note available during training. Training uses balanced minibatches,
+the note available during training. Training uses balanced size-one
+minibatches: every deterministic cycle shuffles and visits each of the eight
+examples once. It does not establish exact trainer-resume semantics. Training
 two model seeds per architecture, at most 1,000 optimizer updates per trial,
 and a five-minute wall-clock cap for the entire experiment. Every checkpoint
 logs full-microset loss, gate accuracy, frequency accuracy, joint accuracy,
@@ -106,19 +112,22 @@ pass through the real local world mutation and the observed outcome.
 
 If the frequency criterion succeeds, retention evaluation shows the note once,
 strips all goal-bearing note fields before the short delay, then supplies the
-spectrum and final action. Separate interventions erase one memory slot, only
-recurrent states, or all retained neural state while leaving authoritative
-goals/documents unchanged. Wrong-note and shuffled-measurement interventions
-change only the target payload and use donors whose deterministic reference
-action differs; the donor-condition fact is reported separately from the
-actual failure cause.
+spectrum and final action. Separate interventions erase slot 0, slot 1, both
+slots, only recurrent states, or all retained neural state while leaving
+authoritative goals/documents unchanged. A causal memory claim requires
+paired baseline success, paired probability changes, paired action changes,
+and paired outcome changes; baseline success alone is insufficient. Wrong-note and
+shuffled-measurement interventions change only the target payload and use
+donors whose deterministic reference action differs; the donor-condition fact
+is reported separately from the actual failure cause.
 
-Future inputs are freshly constructed and unlabeled. Their split names or
-goal IDs do not establish unseen semantic goals. No future input is used for
-optimization. A deterministic oracle-feasibility reference and an untrained
-random reference use the same evaluator and budgets, with oracle labels kept
-outside policy input and reference scoring explicitly separated from learned
-results.
+Future inputs are freshly constructed and not optimized, but this repair's
+oracle-feasibility reference intentionally inspects their labels; they are
+therefore not a sealed untouched test set. Their split names or goal IDs do
+not establish unseen semantic goals. A deterministic oracle-feasibility
+reference and an untrained random reference use the same evaluator and
+budgets, with oracle labels kept outside policy input and reference scoring
+explicitly separated from learned results.
 
 ## Required checks and reporting
 
@@ -128,12 +137,16 @@ address, write value, write gate, recurrent parameters, action parameters,
 goal-byte input parameters, and initial memory. Also verify numeric/autograd
 trace parity, save/reload/replay, and budget accounting. Compare the full
 five-brain model with the one-controller matched control at approximately
-equal parameter count (`HIDDEN=45`, about 11,133 parameters for the control;
-the full model is about 11k after its center-read input).
+equal parameter count. The historical repair run used `HIDDEN=45` (11,133
+parameters for the control and 11,127 for the full model); the current
+source-only corrected encoder has 11,183 full-model and 11,178 control
+parameters.
 
 The report must state actual parameter counts, data construction, splits,
-seeds, optimizer updates, normalization provenance, CPU time/memory, all
-failures, numerical residual/work/damping, and exact artifact digests. It must
+seeds, optimizer updates, normalization provenance, wall-clock time/memory,
+all failures, numerical residual/work/damping, and exact artifact digests.
+Checkpoints persist optimizer moments, shuffle order, and RNG state, but exact
+training resume remains unverified until a dedicated resume test exists. It must
 not claim consciousness, world-best behavior, universal ability, or
 99.9999%-level performance. Historical constant-policy/audit findings are
 reported as corrections to the old artifact, not silently rewritten.
