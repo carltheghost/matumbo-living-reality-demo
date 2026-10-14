@@ -44,6 +44,10 @@ accepted actuation result to open the gate whose physical resonance matches
 the requested `target_hz` within the stated tolerance. Opening any gate is not
 success. This check is evaluator bookkeeping after the run; the actuator and
 future policy input do not receive the hidden gate-resonance array or seed.
+The review protocol is deliberately single-gate-only: after the one actuation
+slot, any additional open gate invalidates success. This makes the success
+contract explicit instead of relying on the current actuator implementation to
+make extra openings impossible.
 
 The field/gate coupling is reciprocal. It uses the shared energy
 `E_c = .5*K*sum((gate_x - field_u)^2)`: the field receives
@@ -57,7 +61,11 @@ Virtual probe steps/work are counted in separate simulator-tool budgets even
 though the live world snapshot is unchanged. Probe work includes both gate
 drive and field-port drive supplied work. Live actuation has its own
 physics/work budgets, and calls/steps are rejected before consumption when
-their counters are exhausted; supplied work is enforced during each step.
+their counters are exhausted; supplied work is enforced during each step. If a
+cloned probe crosses the virtual work budget during a step, the consumed
+partial steps and work are charged to the episode and returned as typed
+feedback. A virtual-step preflight rejection occurs before any probe work and
+therefore consumes zero virtual resources.
 
 Signed external work is kept separately for the whole-system energy balance.
 The reciprocal field/gate coupling is an internal force and is not added to

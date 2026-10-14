@@ -154,6 +154,19 @@ class CorrectedProtocolTests(unittest.TestCase):
         self.assertTrue(right_result["gate_opened"])
         self.assertTrue(right_goal.success())
 
+    def test_additional_gate_opening_invalidates_single_gate_success(self):
+        episode = CorrectedEpisode(
+            3516,
+            note_text="target_hz=0.55; target_phase=0.0; rule=max-response-at-target",
+            gate_resonance_hz=PROBE_FREQUENCIES,
+        )
+        _prepare(episode)
+        result = episode.execute_actuation(0, drive_frequency=0.55)
+        self.assertTrue(result["gate_opened"])
+        self.assertTrue(episode.success())
+        episode.world.gate_open[1] = True
+        self.assertFalse(episode.success())
+
     def test_tool_budget_rejects_before_a_fourth_tool_call(self):
         episode = CorrectedEpisode(3504)
         episode.advance(np.zeros(4))
@@ -208,8 +221,27 @@ class CorrectedProtocolTests(unittest.TestCase):
         result = episode.execute_diagnostic(0)
         self.assertFalse(result["accepted"])
         self.assertEqual(result["error"], "virtual_probe_work_budget_exceeded")
-        self.assertEqual(episode.virtual_steps, 0)
+        self.assertGreater(result["virtual_steps_consumed"], 0)
+        self.assertGreater(result["virtual_work_consumed"], 0.0)
+        self.assertEqual(episode.virtual_steps, result["virtual_steps_total"])
+        self.assertEqual(episode.virtual_work, result["virtual_work_total"])
+        self.assertGreater(episode.virtual_steps, 0)
+        self.assertGreater(episode.virtual_work, 0.0)
+        self.assertFalse(result["resource_budget_ok"])
+        self.assertEqual(before, episode.world.snapshot())
+
+    def test_virtual_step_preflight_rejects_without_consumption(self):
+        episode = CorrectedEpisode(3515)
+        episode.advance(np.zeros(4))
+        episode.execute_note()
+        episode.virtual_steps = episode.VIRTUAL_STEP_BUDGET
+        before = episode.world.snapshot()
+        result = episode.execute_diagnostic(0)
+        self.assertFalse(result["accepted"])
+        self.assertEqual(result["error"], "virtual_probe_step_budget_exceeded")
+        self.assertEqual(episode.virtual_steps, episode.VIRTUAL_STEP_BUDGET)
         self.assertEqual(episode.virtual_work, 0.0)
+        self.assertNotIn("virtual_steps_consumed", result)
         self.assertEqual(before, episode.world.snapshot())
 
     def test_virtual_probe_work_includes_field_port_drive(self):

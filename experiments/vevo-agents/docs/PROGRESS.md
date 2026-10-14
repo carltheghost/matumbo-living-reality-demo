@@ -122,3 +122,16 @@
   deterministic restore, not as policy inputs.
 - Added targeted regressions for all repairs, whole-system timestep
   refinement, and port-inclusive virtual work. No neural training was run.
+
+## v0.3 virtual failure accounting repair
+
+- A cloned diagnostic that crosses the virtual work budget now reports and
+  charges the partial steps/work consumed before rejection. The live physical
+  world remains unchanged because the probe still runs on cloned state.
+- A virtual-step budget preflight rejection is covered separately and consumes
+  no virtual steps or work. The charged values are included in the typed
+  measurement result and policy observation whitelist.
+- The evaluator contract is explicitly single-gate-only: an additional open
+  gate invalidates an otherwise note-matched success. Added regressions cover
+  both the accounting distinction and this success boundary. No training was
+  run.

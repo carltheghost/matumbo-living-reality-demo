@@ -40,13 +40,23 @@ POLICY_MEASUREMENT_FIELDS = (
     "schema", "stage", "accepted", "selected_port", "probe_frequencies",
     "channel_response", "probe_steps", "probe_work", "pure_measurement",
     "virtual_steps_total", "virtual_work_total", "virtual_step_budget",
-    "virtual_work_budget", "resource_budget_ok", "error",
+    "virtual_work_budget", "resource_budget_ok", "virtual_steps_consumed",
+    "virtual_work_consumed", "error",
 )
 POLICY_FEEDBACK_FIELDS = (
     "schema", "stage", "accepted", "selected_gate", "gate_opened",
     "drive_frequency", "work_delta", "work_budget", "tool_calls",
     "tool_budget", "tool_budget_ok", "virtual_steps", "virtual_work", "error",
 )
+
+
+class VirtualProbeBudgetExceeded(RuntimeError):
+    """A cloned probe stopped after consuming measurable virtual resources."""
+
+    def __init__(self, error: str, *, steps: int, work: float):
+        super().__init__(error)
+        self.steps = int(steps)
+        self.work = float(work)
 
 
 def _digest(text: str) -> str:
@@ -221,6 +231,7 @@ class ContinuousGateWorld:
         amplitude: float,
         work_budget: float | None = None,
         work_used: float = 0.0,
+        steps_used: int = 0,
     ) -> tuple[np.ndarray, float]:
         trial = copy.deepcopy(self)
         response_samples = []
@@ -237,8 +248,13 @@ class ContinuousGateWorld:
                 np.sum(np.abs(gate_drive * trial.gate_v))
                 + np.sum(np.abs(ports * trial.field.du))
             )
+            probe_steps = steps_used + tick + 1
             if work_budget is not None and work_used + probe_work > work_budget + 1e-12:
-                raise RuntimeError("virtual_probe_work_budget_exceeded")
+                raise VirtualProbeBudgetExceeded(
+                    "virtual_probe_work_budget_exceeded",
+                    steps=probe_steps,
+                    work=work_used + probe_work,
+                )
             if tick >= steps // 2:
                 omega = max(2.0 * math.pi * frequency, 1e-6)
                 response_samples.append(np.sqrt(trial.gate_x**2 + (trial.gate_v / omega) ** 2))
@@ -263,19 +279,22 @@ class ContinuousGateWorld:
             raise ValueError("diagnostic step budget exceeded")
         matrix = np.zeros((GATE_COUNT, len(frequencies)), dtype=np.float64)
         probe_work = 0.0
+        probe_steps = 0
         for gate in range(GATE_COUNT):
             for column, frequency in enumerate(frequencies):
                 response, cost = self._probe_response(
                     float(frequency), gate=gate, port=port,
                     steps=steps, amplitude=amplitude,
                     work_budget=work_budget, work_used=probe_work,
+                    steps_used=probe_steps,
                 )
                 matrix[gate, column] = response[gate]
                 probe_work += cost
+                probe_steps += steps
         return {
             "probe_frequencies": frequencies.tolist(),
             "channel_response": matrix.tolist(),
-            "probe_steps": int(steps * len(frequencies) * GATE_COUNT),
+            "probe_steps": int(probe_steps),
             "probe_work": float(probe_work),
             "pure_measurement": True,
             "world_tick": int(self.field.tick),
@@ -381,6 +400,7 @@ class CorrectedEpisode:
     VIRTUAL_STEP_BUDGET = ContinuousGateWorld.MAX_DIAGNOSTIC_STEPS
     VIRTUAL_WORK_BUDGET = 7.00
     MAX_TOOL_CALLS = 3
+    SINGLE_GATE_ONLY = True
 
     def __init__(self, seed: int, *, note_text: str | None = None, gate_resonance_hz=None):
         self.seed = seed
@@ -542,6 +562,27 @@ class CorrectedEpisode:
                             port=selected_port,
                             work_budget=self.VIRTUAL_WORK_BUDGET - self.virtual_work,
                         )
+                    except VirtualProbeBudgetExceeded as exc:
+                        self.virtual_steps += exc.steps
+                        self.virtual_work += exc.work
+                        within_budget = bool(
+                            self.virtual_steps <= self.VIRTUAL_STEP_BUDGET
+                            and self.virtual_work <= self.VIRTUAL_WORK_BUDGET
+                        )
+                        result = {
+                            "schema": "vevo.v03.measurement-result.v1",
+                            "stage": "diagnostic",
+                            "accepted": False,
+                            "pure_measurement": True,
+                            "error": str(exc),
+                            "virtual_steps_consumed": exc.steps,
+                            "virtual_work_consumed": exc.work,
+                            "virtual_steps_total": self.virtual_steps,
+                            "virtual_work_total": self.virtual_work,
+                            "virtual_step_budget": self.VIRTUAL_STEP_BUDGET,
+                            "virtual_work_budget": self.VIRTUAL_WORK_BUDGET,
+                            "resource_budget_ok": within_budget,
+                        }
                     except RuntimeError as exc:
                         result = {
                             "schema": "vevo.v03.measurement-result.v1",
@@ -712,6 +753,8 @@ class CorrectedEpisode:
             return False
         if self.last_result is None or not self.last_result.get("accepted") or not self.last_result.get("gate_opened"):
             return False
+        if self.SINGLE_GATE_ONLY and int(np.count_nonzero(self.world.gate_open)) != 1:
+            return False
         try:
             instruction = self._parse_note()
         except (RuntimeError, ValueError, KeyError, TypeError):
@@ -831,6 +874,7 @@ def protocol_summary() -> dict:
         "actuation": "integrated gate position and energy threshold",
         "runtime_target_access": False,
         "answer_fields_in_measurement": [],
+        "single_gate_only": CorrectedEpisode.SINGLE_GATE_ONLY,
         "policy_input_whitelist": {
             "note": list(POLICY_NOTE_FIELDS),
             "measurement": list(POLICY_MEASUREMENT_FIELDS),
