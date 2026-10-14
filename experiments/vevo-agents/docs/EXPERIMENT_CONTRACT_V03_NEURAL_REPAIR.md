@@ -71,19 +71,23 @@ prior central state and reads the prior memory by softmax similarity. That
 recurrent update. A separate content-addressed read after the bounded write is
 fed to the action heads. Address weights control the write only; value and
 write-gate parameters control the write only. The control has one recurrent
-controller and the same two-slot memory/tool/action semantics; its action
-memory feature combines the pre- and post-write content reads without adding a
-privileged answer head. Numeric execution and reverse-mode autograd must use
-the same equations.
+controller, the same typed tool/action interface, and two differentiable
+memory slots, but its pre- and post-write memory reads feed its action heads
+rather than its recurrent input. It is therefore a whole-architecture
+comparator, not an isolated brain-count control. Numeric execution and
+reverse-mode autograd must use the same equations.
 
 The encoder retains the exact bounded byte/matrix representation and adds
 explicit note, note-payload, spectrum, and feedback presence masks. A hidden
 note payload keeps typed note identity present but sets its payload mask to
 zero; normalization then emits neutral zeros for the note feature block. A
 valid empty stored note remains distinguishable through its authoritative
-content digest. Present note-payload and spectrum features may be normalized
-only with statistics fitted from the training microset; no normalization
-statistic, label, or selection rule may be fit from future inputs.
+content digest. Only note title/text byte features and spectrum features may
+be normalized; acceptance, revision, text-length, masks, and resource fields
+remain on their declared scales. Constant byte columns use unit scale rather
+than an epsilon scale that could amplify ordinary revisions by 1,000x. All
+statistics are fitted from the training microset; no normalization statistic,
+label, or selection rule may be fit from future inputs.
 
 Authoritative SQLite text is preserved in full. If UTF-8 encoding of a title
 or note exceeds its declared neural window (32 or 96 bytes), policy encoding
@@ -116,10 +120,15 @@ spectrum and final action. Separate interventions erase slot 0, slot 1, both
 slots, only recurrent states, or all retained neural state while leaving
 authoritative goals/documents unchanged. A causal memory claim requires
 paired baseline success, paired probability changes, paired action changes,
-and paired outcome changes; baseline success alone is insufficient. Wrong-note and
-shuffled-measurement interventions change only the target payload and use
-donors whose deterministic reference action differs; the donor-condition fact
-is reported separately from the actual failure cause.
+and paired outcome changes; baseline success alone is insufficient. Wrong-note
+and shuffled-measurement interventions change only the target payload and use
+donors whose deterministic reference action differs; exact world/goal identity
+is checked before pairing, and all success transitions plus net change are
+reported. The donor-condition fact is reported separately from the actual
+failure cause. The same memory erasures are run on the matched control when
+the full-model retention baseline permits them; otherwise that comparison is
+explicitly marked unavailable. Architecture comparisons do not receive an
+intervention causal flag.
 
 Future inputs are freshly constructed and not optimized, but this repair's
 oracle-feasibility reference intentionally inspects their labels; they are
@@ -135,7 +144,10 @@ Before interpreting behavior, verify finite-difference agreement and nonzero
 gradients using distinct nonzero memory slots for: content read/key, write
 address, write value, write gate, recurrent parameters, action parameters,
 goal-byte input parameters, and initial memory. Also verify numeric/autograd
-trace parity, save/reload/replay, and budget accounting. Compare the full
+trace parity on both three-step training and five-step retention sequences,
+save/reload/replay, and budget accounting. The sequence validator accepts
+any nonempty validated length; this source-only correction does not train on
+the five-step sequence. Compare the full
 five-brain model with the one-controller matched control at approximately
 equal parameter count. The historical repair run used `HIDDEN=45` (11,133
 parameters for the control and 11,127 for the full model); the current

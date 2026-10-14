@@ -36,7 +36,12 @@ SPECTRUM_MASK_INDEX = 1
 FEEDBACK_MASK_INDEX = 2
 NOTE_PAYLOAD_MASK_INDEX = 3
 NOTE_FEATURE_START = 4
-NOTE_FEATURE_END = NOTE_FEATURE_START + 3 + NOTE_TITLE_BYTES + NOTE_TEXT_BYTES
+NOTE_METADATA_FEATURE_END = NOTE_FEATURE_START + 3
+NOTE_BYTE_FEATURE_START = NOTE_METADATA_FEATURE_END
+NOTE_BYTE_FEATURE_END = NOTE_BYTE_FEATURE_START + NOTE_TITLE_BYTES + NOTE_TEXT_BYTES
+NOTE_FEATURE_END = NOTE_BYTE_FEATURE_END
+NOTE_TEXT_FEATURE_START = NOTE_BYTE_FEATURE_START + NOTE_TITLE_BYTES
+NOTE_TARGET_FREQUENCY_BYTE_INDEX = NOTE_TEXT_FEATURE_START + len("target_hz=")
 SPECTRUM_FEATURE_START = NOTE_FEATURE_END + 1
 SPECTRUM_FEATURE_END = SPECTRUM_FEATURE_START + 4 + 16
 
@@ -182,8 +187,9 @@ def fit_input_normalization(policy_observations: list[dict]) -> dict:
     """Fit present-modality statistics from training observations only.
 
     The returned plain dictionary is checkpoint-friendly and deliberately
-    keeps the modality masks and acceptance/resource fields untouched.  Only
-    note payload features and measured spectrum values are standardized.
+    keeps the modality masks, note metadata, and acceptance/resource fields
+    untouched.  Only note byte payload features and measured spectrum values
+    are standardized.
     """
 
     if not policy_observations:
@@ -193,7 +199,7 @@ def fit_input_normalization(policy_observations: list[dict]) -> dict:
     scale = np.ones(POLICY_VECTOR_DIM, dtype=np.float64)
     counts = {}
     groups = {
-        "note_payload": (NOTE_PAYLOAD_MASK_INDEX, np.arange(NOTE_FEATURE_START, NOTE_FEATURE_END)),
+        "note_bytes": (NOTE_PAYLOAD_MASK_INDEX, np.arange(NOTE_BYTE_FEATURE_START, NOTE_BYTE_FEATURE_END)),
         "spectrum": (SPECTRUM_MASK_INDEX, np.arange(SPECTRUM_FEATURE_START, SPECTRUM_FEATURE_END)),
     }
     for name, (mask_index, columns) in groups.items():
@@ -203,14 +209,19 @@ def fit_input_normalization(policy_observations: list[dict]) -> dict:
             continue
         selected = raw[present][:, columns]
         mean[columns] = np.mean(selected, axis=0)
-        scale[columns] = np.maximum(np.std(selected, axis=0), 1e-3)
+        spread = np.std(selected, axis=0)
+        # Constant columns should remain on their original scale.  Using a
+        # tiny epsilon for a constant revision/byte column would amplify an
+        # ordinary future change by 1,000x.
+        constant = np.isclose(spread, 0.0, rtol=0.0, atol=1e-12)
+        scale[columns] = np.where(constant, 1.0, np.maximum(spread, 1e-3))
     return {
         "schema": "vevo.v03.input-normalization.v1",
         "mean": mean.tolist(),
         "scale": scale.tolist(),
         "counts": counts,
         "normalized_groups": {
-            "note_payload": [int(NOTE_FEATURE_START), int(NOTE_FEATURE_END)],
+            "note_bytes": [int(NOTE_BYTE_FEATURE_START), int(NOTE_BYTE_FEATURE_END)],
             "spectrum": [int(SPECTRUM_FEATURE_START), int(SPECTRUM_FEATURE_END)],
         },
     }
@@ -231,9 +242,10 @@ def normalize_policy_vector(vector: np.ndarray, normalization: dict | None) -> n
     note_payload_available = result[NOTE_PAYLOAD_MASK_INDEX] > 0.5
     spectrum_present = result[SPECTRUM_MASK_INDEX] > 0.5
     note_columns = slice(NOTE_FEATURE_START, NOTE_FEATURE_END)
+    note_byte_columns = slice(NOTE_BYTE_FEATURE_START, NOTE_BYTE_FEATURE_END)
     spectrum_columns = slice(SPECTRUM_FEATURE_START, SPECTRUM_FEATURE_END)
     if note_payload_available:
-        result[note_columns] = (result[note_columns] - mean[note_columns]) / scale[note_columns]
+        result[note_byte_columns] = (result[note_byte_columns] - mean[note_byte_columns]) / scale[note_byte_columns]
     else:
         result[note_columns] = 0.0
     if spectrum_present:
@@ -264,8 +276,8 @@ def _validate_examples(examples: list[dict]) -> None:
         raise ValueError("examples are required")
     for example in examples:
         observations = example.get("policy_observations")
-        if not isinstance(observations, list) or len(observations) != 3:
-            raise ValueError("each example needs three policy observations")
+        if not isinstance(observations, list) or not observations:
+            raise ValueError("each example needs one or more policy observations")
         if type(example.get("target_gate")) is not int or not 0 <= example["target_gate"] < ACTION_DIM:
             raise ValueError("invalid target gate")
         if type(example.get("target_frequency")) is not int or not 0 <= example["target_frequency"] < ACTION_DIM:
@@ -512,6 +524,7 @@ class V03FiveBrain:
         next_runtime = {"peripheral": peripheral, "central": central, "memory": memory}
         trace = {
             "messages": messages_array,
+            "peripheral": [value.copy() for value in peripheral],
             "central": central.copy(),
             "memory": memory.copy(),
             "read_weights_before": read_weights_before.copy(),

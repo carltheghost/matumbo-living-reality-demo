@@ -20,8 +20,10 @@ and present-note normalization produced large out-of-distribution negative
 features. The source now carries a separate `note_payload_present` mask and
 uses neutral zeros for hidden note features. A future retention run must test
 slot 0, slot 1, both slots, recurrent-only, all-state, and matched-control
-pairs; causal eligibility requires paired outcome, probability, and action
-changes.
+pairs with exact split/world/goal identity checks; causal eligibility requires
+paired outcome, probability, and action changes. Each comparison records all
+four success transitions and net success change. Full-versus-control rows are
+architecture comparisons and do not receive an intervention causal flag.
 
 ## Other focused repairs
 
@@ -29,9 +31,13 @@ changes.
 - `CorrectedEpisode.restore()` accepts valid zero deny-all limits and preserves
   their rejection behavior without permitting widened limits.
 - Wrong-note donor interventions replace only the equal-width `target_hz`
-  substring; all other policy fields and encoded bytes are asserted unchanged.
+  substring; the exact text prefix and suffix are preserved, and equal-width
+  variant edits are rejected.
 - Legacy SIMFABRIC advance/tool operations prevalidate multi-budget reservations
   before mutation; exhausted event/physics budgets are atomic failures.
+- The same slot, both-slot, recurrent, and all-state erasures are now emitted
+  for the matched control when full-model retention ablations are eligible;
+  otherwise the report marks that comparative ablation set unavailable.
 - Checkpoints persist optimizer moments, RNG, shuffle order, and next example
   position. Exact trainer resume is still unverified; inference replay is the
   only checkpoint behavior previously executed.
@@ -51,4 +57,18 @@ PYTHONPATH=src python -m py_compile src/vevo_agents/*.py
 PYTHONPATH=src python -m unittest discover -s tests -q
 ```
 
-It completed with 64 tests passing and no training or report regeneration.
+It completed with 66 tests passing and no training or report regeneration.
+
+## Final neural-review closure
+
+- Sequence validation now accepts any nonempty policy sequence; a five-step
+  retention forward/backward numeric/autograd parity test covers all four
+  peripheral states, the center/controller, memory, and action outputs.
+- The center and controller goal-byte checks derive the target digit offset from
+  the note layout rather than using a resource-feature column.
+- Checkpoint and report JSON writes use same-directory temporary files plus
+  atomic replacement; an interruption test preserves the prior checkpoint.
+- Normalization excludes note acceptance/revision/text-length metadata and
+  gives constant byte columns unit scale. Primitive matmul and broadcast
+  gradients now have finite-difference agreement checks, and late-parameter
+  load corruption is tested for both architectures.

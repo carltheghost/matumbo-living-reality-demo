@@ -1,13 +1,19 @@
 import copy
 import json
+from pathlib import Path
+import tempfile
 import unittest
+from unittest import mock
 
 import numpy as np
 
 from vevo_agents.v03_model import (
     NOTE_FEATURE_END,
     NOTE_FEATURE_START,
+    NOTE_BYTE_FEATURE_END,
+    NOTE_BYTE_FEATURE_START,
     NOTE_PAYLOAD_MASK_INDEX,
+    NOTE_TARGET_FREQUENCY_BYTE_INDEX,
     POLICY_VECTOR_DIM,
     V03FiveBrain,
     V03SingleRecurrentMemory,
@@ -24,6 +30,7 @@ from vevo_agents.v03_neural_proof import (
     run_episode,
 )
 from vevo_agents.v03_neural_repair import (
+    _save_checkpoint,
     _paired_ablation_summary,
     _replace_target_frequency,
     _validate_target_only_note_edit,
@@ -102,15 +109,62 @@ class V03NeuralIntegrationTests(unittest.TestCase):
             continuation = mid_sequence_continuation_check(model, self.example)
             self.assertTrue(continuation["passed"])
 
+        spec = self.splits["test"][0]
+        episode = CorrectedEpisode(
+            spec["world_seed"],
+            note_text=spec["note_text"],
+            gate_resonance_hz=np.asarray(spec["gate_resonance_hz"]),
+        )
+        five_step_observations = []
+        episode.advance(np.zeros(4))
+        five_step_observations.append(copy.deepcopy(episode.policy_observation()))
+        episode.execute_note()
+        five_step_observations.append(copy.deepcopy(episode.policy_observation()))
+        for _ in range(2):
+            episode.advance(np.zeros(4))
+            hidden = copy.deepcopy(episode.policy_observation())
+            hidden["note"]["text"] = ""
+            hidden["note"]["content_digest"] = ""
+            five_step_observations.append(hidden)
+        episode.execute_diagnostic(0)
+        final_hidden = copy.deepcopy(episode.policy_observation())
+        final_hidden["note"]["text"] = ""
+        final_hidden["note"]["content_digest"] = ""
+        five_step_observations.append(final_hidden)
+        five_step_example = {
+            "policy_observations": five_step_observations,
+            "target_gate": int(episode.oracle_action()),
+            "target_frequency": int(spec["goal_index"]),
+        }
+        self.assertEqual(len(five_step_observations), 5)
+        for model in (V03FiveBrain(7), V03SingleRecurrentMemory(41)):
+            parity = numeric_autograd_parity(model, five_step_example)
+            self.assertEqual(parity["sequence_length"], 5)
+            self.assertTrue(parity["passed"])
+            if isinstance(model, V03FiveBrain):
+                self.assertIn("peripheral", parity["field_errors"])
+
     def test_model_load_is_atomic_and_control_exposes_parameter_names(self):
-        model = V03SingleRecurrentMemory(41)
-        before = model.state_dict()
-        malformed = copy.deepcopy(before)
-        malformed["W_in"] = np.zeros((1, 1)).tolist()
-        with self.assertRaises(ValueError):
-            model.load_state_dict(malformed)
-        self.assertEqual(model.state_dict(), before)
-        self.assertEqual(set(model.parameter_names()), set(model.params))
+        for model in (V03FiveBrain(7), V03SingleRecurrentMemory(41)):
+            before = model.state_dict()
+            malformed = copy.deepcopy(before)
+            late_name = model.parameter_names()[-1]
+            malformed[late_name] = np.zeros((1, 1)).tolist()
+            with self.assertRaises(ValueError):
+                model.load_state_dict(malformed)
+            self.assertEqual(model.state_dict(), before)
+            self.assertEqual(set(model.parameter_names()), set(model.params))
+
+    def test_checkpoint_save_preserves_prior_file_on_replace_failure(self):
+        model = V03FiveBrain(7)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "checkpoint.json"
+            path.write_text("prior-checkpoint", encoding="utf-8")
+            with mock.patch("vevo_agents.v03_neural_proof.os.replace", side_effect=OSError("simulated interruption")):
+                with self.assertRaises(OSError):
+                    _save_checkpoint(path, model)
+            self.assertEqual(path.read_text(encoding="utf-8"), "prior-checkpoint")
+            self.assertEqual(list(Path(directory).iterdir()), [path])
 
     def test_hidden_note_payload_has_neutral_normalized_features(self):
         observations = self.example["policy_observations"]
@@ -129,6 +183,32 @@ class V03NeuralIntegrationTests(unittest.TestCase):
         raw_empty = encode_policy_observation(empty_valid)
         self.assertEqual(raw_empty[NOTE_PAYLOAD_MASK_INDEX], 1.0)
 
+        revised = copy.deepcopy(observations[2])
+        revised["note"]["revision"] = 4
+        raw_revised = encode_policy_observation(revised)
+        normalized_revised = normalize_policy_vector(raw_revised, normalization)
+        revision_index = NOTE_FEATURE_START + 1
+        self.assertEqual(normalized_revised[revision_index], raw_revised[revision_index])
+        raw_training = np.stack([encode_policy_observation(item) for item in observations])
+        scales = np.asarray(normalization["scale"])
+        for index in range(NOTE_BYTE_FEATURE_START, NOTE_BYTE_FEATURE_END):
+            if np.isclose(np.std(raw_training[:, index]), 0.0, rtol=0.0, atol=1e-12):
+                self.assertEqual(scales[index], 1.0)
+
+    def test_goal_byte_offsets_target_note_digit_for_center_and_controller(self):
+        observation = self.example["policy_observations"][2]
+        text = observation["note"]["text"]
+        digit_index = text.index("target_hz=") + len("target_hz=")
+        encoded = encode_policy_observation(observation)
+        self.assertEqual(
+            encoded[NOTE_TARGET_FREQUENCY_BYTE_INDEX],
+            ord(text[digit_index]) / 255.0,
+        )
+        full_checks = targeted_gradient_checks(V03FiveBrain(7), self.example)["checks"]
+        control_checks = targeted_gradient_checks(V03SingleRecurrentMemory(41), self.example)["checks"]
+        self.assertEqual(full_checks["goal_byte_center"]["index"], [0, NOTE_TARGET_FREQUENCY_BYTE_INDEX])
+        self.assertEqual(control_checks["goal_byte_controller"]["index"], [0, NOTE_TARGET_FREQUENCY_BYTE_INDEX])
+
     def test_wrong_note_replacement_is_equal_width_and_target_only(self):
         original = copy.deepcopy(self.example["policy_observations"][2])
         changed = copy.deepcopy(original)
@@ -138,16 +218,32 @@ class V03NeuralIntegrationTests(unittest.TestCase):
             len(original["note"]["text"].encode("utf-8")),
             len(changed["note"]["text"].encode("utf-8")),
         )
+        variant_changed = copy.deepcopy(original)
+        variant_changed["note"]["text"] = original["note"]["text"].replace("rule=max", "rule=min")
+        self.assertEqual(
+            len(original["note"]["text"].encode("utf-8")),
+            len(variant_changed["note"]["text"].encode("utf-8")),
+        )
+        with self.assertRaises(AssertionError):
+            _validate_target_only_note_edit(original, variant_changed)
 
     def test_causal_ablation_requires_paired_outcome_probability_and_action(self):
         baseline = [{
             "success": True,
+            "split": "test",
+            "world_seed": 1,
+            "goal_index": 0,
+            "note_goal_id": "test-goal-0",
             "final_action": {"gate": 1, "frequency_index": 2},
             "gate_probabilities": [0.1, 0.9],
             "frequency_probabilities": [0.1, 0.2, 0.7],
         }]
         no_probability_change = [{
             "success": False,
+            "split": "test",
+            "world_seed": 1,
+            "goal_index": 0,
+            "note_goal_id": "test-goal-0",
             "final_action": {"gate": 0, "frequency_index": 1},
             "gate_probabilities": [0.1, 0.9],
             "frequency_probabilities": [0.1, 0.2, 0.7],
@@ -156,6 +252,13 @@ class V03NeuralIntegrationTests(unittest.TestCase):
         self.assertEqual(summary["paired_success_drop"], 1)
         self.assertEqual(summary["paired_action_changes"], 1)
         self.assertEqual(summary["paired_probability_changes"], 0)
+        self.assertEqual(summary["transition_counts"], {
+            "success_to_success": 0,
+            "success_to_failure": 1,
+            "failure_to_success": 0,
+            "failure_to_failure": 0,
+        })
+        self.assertEqual(summary["net_success_change"], -1)
         self.assertFalse(summary["causal_claim_eligible"])
 
         with_probability_change = copy.deepcopy(no_probability_change)
@@ -163,6 +266,18 @@ class V03NeuralIntegrationTests(unittest.TestCase):
         summary = _paired_ablation_summary(baseline, with_probability_change)
         self.assertEqual(summary["paired_probability_changes"], 1)
         self.assertTrue(summary["causal_claim_eligible"])
+
+        architecture_summary = _paired_ablation_summary(
+            baseline,
+            with_probability_change,
+            causal_intervention=False,
+        )
+        self.assertNotIn("causal_claim_eligible", architecture_summary)
+
+        reordered = copy.deepcopy(with_probability_change)
+        reordered[0]["world_seed"] = 2
+        with self.assertRaises(ValueError):
+            _paired_ablation_summary(baseline, reordered)
 
     def test_episode_snapshot_restore_and_neural_replay(self):
         spec = self.splits["test"][0]

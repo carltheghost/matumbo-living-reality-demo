@@ -218,7 +218,7 @@
   for optimization. The old report's constant gate-3/1.15 policy and
   identical ablation trajectories are recorded as a historical audit
   correction, not rewritten.
-- The post-review source-only repository regression suite runs 64 tests. The
+- The post-review source-only repository regression suite runs 66 tests. The
   reviewable historical artifacts remain:
   `reports/generated/v03-neural-repair-report.json`,
   `storage/checkpoints/v03-neural-repair-full-selected.json`, and
@@ -237,16 +237,22 @@
   normalize to neutral zeros while a valid empty stored note remains distinct
   through its authoritative content digest. Future retention code enumerates
   slot 0, slot 1, both slots, recurrent-only, all-state, and matched-control
-  comparisons; causal eligibility requires paired outcome, probability, and
-  action changes, not merely one baseline success.
+  comparisons with exact split/world/goal identity checks; causal eligibility
+  requires paired outcome, probability, and action changes, not merely one
+  baseline success. All four success transitions and net change are recorded;
+  full-versus-control rows are not assigned an intervention causal flag.
 - Wrong-note donors now replace only the equal-width `target_hz` substring;
-  source/variant/metadata/other bytes are asserted unchanged. Physics event
+  exact text prefix/suffix and source/variant/metadata/other bytes are
+  asserted unchanged, including a negative equal-width variant test. Physics event
   snapshots/restores are recursively detached. Zero deny-all v0.3 budgets
   round-trip and retain rejection behavior.
 - Legacy SIMFABRIC advance/tool budget reservations are now prevalidated and
   atomic across event, tick, physics, and tool counters. Regression coverage
   includes exhausted physics/event budgets and nested projection/history
   mutation isolation.
+- The same retention erasures are emitted for the matched control when the
+  full-model baseline permits ablations; otherwise comparative memory
+  dependence is explicitly marked unavailable.
 - Checkpoints now persist shuffle order and next minibatch position in
   addition to optimizer moments/RNG, but exact trainer resume remains
   explicitly unverified. The historical 105.60-second figure is wall-clock

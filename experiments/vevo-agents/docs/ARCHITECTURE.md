@@ -163,16 +163,17 @@ observed physical outcome against the episode target after the run.
 The proof uses independent train/validation/test episode seeds, whole
 trajectory holdouts and multiple training seeds. Validation selects the
 checkpoint; test trajectories never select weights or thresholds. It records
-parameter counts, data splits, seeds, update steps, wall-clock CPU time,
+parameter counts, data splits, seeds, update steps, wall-clock time,
 memory budget, tool budgets, work/damping/residual and failures.
 
 ## 8. Controls and paired interventions
 
 The report compares the same episode sets and update/tick/tool budgets for:
 
-- full 4+1 model with memory and learned tool selection;
-- a parameter-budget-matched single recurrent brain with no external neural
-  memory;
+- full 4+1 architecture with memory and the intended learned tool-selection
+  interface (the bounded v0.3 repair schedule fixes the tool choice);
+- a parameter-budget-matched single recurrent architecture with its own
+  differentiable memory integration;
 - a no-memory ablation of the recurrent center;
 - a fixed-tool control that always probes slot A.
 

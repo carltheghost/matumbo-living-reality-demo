@@ -90,24 +90,72 @@ class NeuralTests(unittest.TestCase):
         self.assertEqual(control.run_sequence(self.observations)[1][-1]["action_probs"].shape, (3,))
 
     def test_autograd_supported_matmul_and_broadcast_memory_write(self):
-        left = Tensor([[0.2, -0.3, 0.4], [0.5, -0.6, 0.7]], requires_grad=True)
-        vector = Tensor([0.8, -0.9, 1.0], requires_grad=True)
-        matrix = Tensor([[0.1, -0.2], [0.3, -0.4], [0.5, -0.6]], requires_grad=True)
+        left_data = np.asarray([[0.2, -0.3, 0.4], [0.5, -0.6, 0.7]])
+        vector_data = np.asarray([0.8, -0.9, 1.0])
+        matrix_data = np.asarray([[0.1, -0.2], [0.3, -0.4], [0.5, -0.6]])
+        left = Tensor(left_data, requires_grad=True)
+        vector = Tensor(vector_data, requires_grad=True)
+        matrix = Tensor(matrix_data, requires_grad=True)
+        fixed = np.asarray([[0.2, 0.1], [-0.1, 0.3], [0.4, -0.2]])
         # Keep the supported 2-D@2-D path explicit and independent of NumPy
         # view magic; the engine intentionally has no .T convenience.
-        result = (left @ vector).sum() + (vector @ matrix).sum() + (left @ Tensor([[0.2, 0.1], [-0.1, 0.3], [0.4, -0.2]])).sum()
+        result = (left @ vector).sum() + (vector @ matrix).sum() + (left @ Tensor(fixed)).sum()
         result.backward()
         self.assertTrue(np.isfinite(left.grad).all())
         self.assertTrue(np.isfinite(vector.grad).all())
         self.assertTrue(np.isfinite(matrix.grad).all())
 
-        memory = Tensor(np.asarray([[0.1, -0.2, 0.3], [-0.4, 0.5, -0.6]]), requires_grad=True)
-        weights = Tensor(np.asarray([[0.25], [0.75]]), requires_grad=True)
-        value = Tensor(np.asarray([[0.7, -0.8, 0.9]]), requires_grad=True)
+        def matmul_loss(left_value, vector_value, matrix_value):
+            return float(
+                (left_value @ vector_value).sum()
+                + (vector_value @ matrix_value).sum()
+                + (left_value @ fixed).sum()
+            )
+
+        epsilon = 1e-6
+        for value, analytic in ((left_data, left.grad), (vector_data, vector.grad), (matrix_data, matrix.grad)):
+            numeric = np.zeros_like(value)
+            for index in np.ndindex(value.shape):
+                plus = value.copy()
+                minus = value.copy()
+                plus[index] += epsilon
+                minus[index] -= epsilon
+                if value is left_data:
+                    numeric[index] = (matmul_loss(plus, vector_data, matrix_data) - matmul_loss(minus, vector_data, matrix_data)) / (2.0 * epsilon)
+                elif value is vector_data:
+                    numeric[index] = (matmul_loss(left_data, plus, matrix_data) - matmul_loss(left_data, minus, matrix_data)) / (2.0 * epsilon)
+                else:
+                    numeric[index] = (matmul_loss(left_data, vector_data, plus) - matmul_loss(left_data, vector_data, minus)) / (2.0 * epsilon)
+            np.testing.assert_allclose(analytic, numeric, rtol=1e-6, atol=1e-8)
+
+        memory_data = np.asarray([[0.1, -0.2, 0.3], [-0.4, 0.5, -0.6]])
+        weights_data = np.asarray([[0.25], [0.75]])
+        value_data = np.asarray([[0.7, -0.8, 0.9]])
+        memory = Tensor(memory_data, requires_grad=True)
+        weights = Tensor(weights_data, requires_grad=True)
+        value = Tensor(value_data, requires_grad=True)
         write = memory + weights * (value - memory)
         write.sum().backward()
         self.assertEqual(memory.grad.shape, memory.data.shape)
         self.assertTrue(np.isfinite(memory.grad).all())
+
+        def broadcast_loss(memory_value, weights_value, value_value):
+            return float((memory_value + weights_value * (value_value - memory_value)).sum())
+
+        for value, analytic in ((memory_data, memory.grad), (weights_data, weights.grad), (value_data, value.grad)):
+            numeric = np.zeros_like(value)
+            for index in np.ndindex(value.shape):
+                plus = value.copy()
+                minus = value.copy()
+                plus[index] += epsilon
+                minus[index] -= epsilon
+                if value is memory_data:
+                    numeric[index] = (broadcast_loss(plus, weights_data, value_data) - broadcast_loss(minus, weights_data, value_data)) / (2.0 * epsilon)
+                elif value is weights_data:
+                    numeric[index] = (broadcast_loss(memory_data, plus, value_data) - broadcast_loss(memory_data, minus, value_data)) / (2.0 * epsilon)
+                else:
+                    numeric[index] = (broadcast_loss(memory_data, weights_data, plus) - broadcast_loss(memory_data, weights_data, minus)) / (2.0 * epsilon)
+            np.testing.assert_allclose(analytic, numeric, rtol=1e-6, atol=1e-8)
 
     def test_autograd_rejects_unsupported_dot_and_batched_matmul(self):
         with self.assertRaises(NotImplementedError):

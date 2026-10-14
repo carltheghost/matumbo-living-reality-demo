@@ -6,8 +6,10 @@ from collections import Counter
 import copy
 import hashlib
 import json
+import os
 import resource
 from pathlib import Path
+import tempfile
 import time
 
 import numpy as np
@@ -474,6 +476,32 @@ def _trial_metadata(trials: list[dict]) -> list[dict]:
     return [{key: value for key, value in trial.items() if key != "model"} for trial in trials]
 
 
+def _atomic_write_json(path: Path, payload: dict) -> None:
+    """Write JSON through a same-directory temporary file and replace atomically."""
+
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    serialized = json.dumps(payload, indent=2, sort_keys=True)
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temporary_path = Path(handle.name)
+            handle.write(serialized)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_path, path)
+    finally:
+        if temporary_path is not None and temporary_path.exists():
+            temporary_path.unlink()
+
+
 def _save_checkpoint(path: Path, model) -> str:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
@@ -485,7 +513,7 @@ def _save_checkpoint(path: Path, model) -> str:
         "memory_shape": list(model.central_memory_shape),
         "state": model.state_dict(),
     }
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    _atomic_write_json(path, payload)
     return _json_digest(payload)
 
 
@@ -616,7 +644,7 @@ def run_proof(*, output_path: str | Path = "reports/generated/v03-neural-proof-r
         },
     }
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+    _atomic_write_json(output, report)
     return report
 
 

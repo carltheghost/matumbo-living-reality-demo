@@ -24,7 +24,8 @@ from .v03_model import (
     NOTE_FEATURE_END,
     NOTE_TEXT_BYTES,
     NOTE_FEATURE_START,
-    NOTE_TITLE_BYTES,
+    NOTE_TARGET_FREQUENCY_BYTE_INDEX,
+    NOTE_TEXT_FEATURE_START,
     POLICY_VECTOR_DIM,
     V03FiveBrain,
     V03SingleRecurrentMemory,
@@ -33,6 +34,7 @@ from .v03_model import (
     normalize_policy_vector,
 )
 from .v03_neural_proof import (
+    _atomic_write_json,
     _gate_resonances,
     _goal_note,
     _prepare_policy_observations,
@@ -238,13 +240,53 @@ def _reference_summary(runs: list[dict]) -> dict:
     }
 
 
-def _paired_ablation_summary(baseline: list[dict], ablation: list[dict]) -> dict:
+def _paired_ablation_summary(
+    baseline: list[dict],
+    ablation: list[dict],
+    *,
+    causal_intervention: bool = True,
+) -> dict:
     """Require paired outcome, probability, and action evidence."""
 
     if len(baseline) != len(ablation):
         raise ValueError("paired retention runs must have equal length")
+    for index, (base, ablated) in enumerate(zip(baseline, ablation)):
+        base_identity = (
+            base.get("split"),
+            base.get("world_seed"),
+            base.get("goal_index"),
+            base.get("note_goal_id"),
+        )
+        ablated_identity = (
+            ablated.get("split"),
+            ablated.get("world_seed"),
+            ablated.get("goal_index"),
+            ablated.get("note_goal_id"),
+        )
+        if any(value is None for value in (*base_identity, *ablated_identity)):
+            raise ValueError(f"retention pair {index} lacks world/goal identity")
+        if base_identity != ablated_identity:
+            raise ValueError(f"retention pair {index} has mismatched world/goal identity")
     baseline_successes = int(sum(bool(item["success"]) for item in baseline))
     ablation_successes = int(sum(bool(item["success"]) for item in ablation))
+    transition_counts = {
+        "success_to_success": int(sum(
+            bool(base["success"]) and bool(ablated["success"])
+            for base, ablated in zip(baseline, ablation)
+        )),
+        "success_to_failure": int(sum(
+            bool(base["success"]) and not bool(ablated["success"])
+            for base, ablated in zip(baseline, ablation)
+        )),
+        "failure_to_success": int(sum(
+            not bool(base["success"]) and bool(ablated["success"])
+            for base, ablated in zip(baseline, ablation)
+        )),
+        "failure_to_failure": int(sum(
+            not bool(base["success"]) and not bool(ablated["success"])
+            for base, ablated in zip(baseline, ablation)
+        )),
+    }
     paired_success_drop = int(sum(
         bool(base["success"]) and not bool(ablated["success"])
         for base, ablated in zip(baseline, ablation)
@@ -253,36 +295,39 @@ def _paired_ablation_summary(baseline: list[dict], ablation: list[dict]) -> dict
         base.get("final_action") != ablated.get("final_action")
         for base, ablated in zip(baseline, ablation)
     ))
-    paired_probability_changes = int(sum(
-        not (
-            np.allclose(
-                base.get("gate_probabilities", []),
-                ablated.get("gate_probabilities", []),
-                rtol=0.0,
-                atol=1e-12,
-            )
-            and np.allclose(
-                base.get("frequency_probabilities", []),
-                ablated.get("frequency_probabilities", []),
-                rtol=0.0,
-                atol=1e-12,
-            )
+    def probability_changed(base: dict, ablated: dict) -> bool:
+        base_gate = np.asarray(base.get("gate_probabilities", []), dtype=np.float64)
+        ablated_gate = np.asarray(ablated.get("gate_probabilities", []), dtype=np.float64)
+        base_frequency = np.asarray(base.get("frequency_probabilities", []), dtype=np.float64)
+        ablated_frequency = np.asarray(ablated.get("frequency_probabilities", []), dtype=np.float64)
+        return (
+            base_gate.shape != ablated_gate.shape
+            or base_frequency.shape != ablated_frequency.shape
+            or not np.allclose(base_gate, ablated_gate, rtol=0.0, atol=1e-12)
+            or not np.allclose(base_frequency, ablated_frequency, rtol=0.0, atol=1e-12)
         )
+
+    paired_probability_changes = int(sum(
+        probability_changed(base, ablated)
         for base, ablated in zip(baseline, ablation)
     ))
-    return {
+    result = {
         "baseline_successes": baseline_successes,
         "ablation_successes": ablation_successes,
+        "transition_counts": transition_counts,
+        "net_success_change": ablation_successes - baseline_successes,
         "paired_success_drop": paired_success_drop,
         "paired_probability_changes": paired_probability_changes,
         "paired_action_changes": paired_action_changes,
-        "causal_claim_eligible": bool(
+    }
+    if causal_intervention:
+        result["causal_claim_eligible"] = bool(
             baseline_successes > 0
             and paired_success_drop > 0
             and paired_probability_changes > 0
             and paired_action_changes > 0
-        ),
-    }
+        )
+    return result
 
 
 def _strip_goal_bearing_note(policy_input: dict) -> dict:
@@ -333,9 +378,18 @@ def _validate_target_only_note_edit(original: dict, changed: dict) -> None:
     changed_text = str(changed_note.get("text", ""))
     if len(original_text.encode("utf-8")) != len(changed_text.encode("utf-8")):
         raise AssertionError("wrong-note intervention changed UTF-8 width")
+    original_match = _TARGET_FREQUENCY_RE.search(original_text)
+    changed_match = _TARGET_FREQUENCY_RE.search(changed_text)
+    if original_match is None or changed_match is None:
+        raise AssertionError("wrong-note intervention lacks target frequency payload")
+    if (
+        original_text[:original_match.start()] != changed_text[:changed_match.start()]
+        or original_text[original_match.end():] != changed_text[changed_match.end():]
+    ):
+        raise AssertionError("wrong-note intervention changed note text outside target frequency")
     original_vector = encode_policy_observation(original)
     changed_vector = encode_policy_observation(changed)
-    text_start = NOTE_FEATURE_START + 3 + NOTE_TITLE_BYTES
+    text_start = NOTE_TEXT_FEATURE_START
     text_end = text_start + NOTE_TEXT_BYTES
     differing = np.flatnonzero(~np.isclose(original_vector, changed_vector, rtol=0.0, atol=0.0))
     if np.any((differing < text_start) | (differing >= text_end)):
@@ -422,6 +476,7 @@ def run_retention_episode(model, spec: dict, *, erasure: str | None = None) -> d
     return {
         "split": spec["split"],
         "world_seed": int(spec["world_seed"]),
+        "goal_index": int(spec["goal_index"]),
         "note_goal_id": spec["note_goal_id"],
         "condition": "normal_retention" if erasure is None else f"{erasure}_retention_erase",
         "success": bool(episode.success()),
@@ -566,7 +621,7 @@ def targeted_gradient_checks(model, example: dict) -> dict:
     # The first target-bearing digit in ``target_hz=...`` is a stable, visible
     # note byte for the microset (the leading literal characters can have a
     # zero derivative for a particular final loss).
-    goal_byte = NOTE_FEATURE_START + 3 + NOTE_TITLE_BYTES + len("target_hz=")
+    goal_byte = NOTE_TARGET_FREQUENCY_BYTE_INDEX
     if isinstance(model, V03FiveBrain):
         targets = {
             "read_key": ("c.W_key", (0, 0)),
@@ -577,7 +632,7 @@ def targeted_gradient_checks(model, example: dict) -> dict:
             "action_gate": ("c.W_action_gate", (0, 0)),
             "action_frequency": ("c.W_action_frequency", (0, 0)),
             "goal_byte_peripheral": ("p0.W_in", (0, goal_byte)),
-            "goal_byte_center": ("c.W_in", (0, POLICY_VECTOR_DIM - 1)),
+            "goal_byte_center": ("c.W_in", (0, goal_byte)),
         }
     else:
         targets = {
@@ -679,7 +734,19 @@ def numeric_autograd_parity(model, example: dict) -> dict:
                   for numeric, auto in zip(numeric_trace, autodiff_trace)]
         field_errors[field] = max(errors, default=0.0)
         max_abs = max(max_abs, field_errors[field])
-    return {"max_abs_error": max_abs, "field_errors": field_errors, "passed": bool(max_abs < 1e-10)}
+    if isinstance(model, V03FiveBrain):
+        peripheral_errors = []
+        for numeric, auto in zip(numeric_trace, autodiff_trace):
+            for numeric_state, autodiff_state in zip(numeric["peripheral"], auto["peripheral"]):
+                peripheral_errors.append(float(np.max(np.abs(numeric_state - autodiff_state))))
+        field_errors["peripheral"] = max(peripheral_errors, default=0.0)
+        max_abs = max(max_abs, field_errors["peripheral"])
+    return {
+        "sequence_length": len(example["policy_observations"]),
+        "max_abs_error": max_abs,
+        "field_errors": field_errors,
+        "passed": bool(max_abs < 1e-10),
+    }
 
 
 def mid_sequence_continuation_check(model, example: dict) -> dict:
@@ -781,7 +848,7 @@ def _save_checkpoint(path: Path, model, training: dict | None = None) -> str:
             "optimizer_first": {name: value.tolist() for name, value in training["optimizer_first"].items()},
             "optimizer_second": {name: value.tolist() for name, value in training["optimizer_second"].items()},
         }
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    _atomic_write_json(path, payload)
     return _json_digest(payload)
 
 
@@ -995,33 +1062,52 @@ def run_repair(*, output_path: str | Path = "reports/generated/v03-neural-repair
             retention["normal"] = [run_retention_episode(full_model, spec) for spec in specs]
             retention["matched_control_normal"] = [run_retention_episode(control_model, spec) for spec in specs]
             baseline_successes = int(sum(bool(item["success"]) for item in retention["normal"]))
+            ablation_conditions = (
+                "slot0_erase",
+                "slot1_erase",
+                "both_slots_erase",
+                "recurrent_erase",
+                "all_retained_state_erase",
+            )
             retention_metadata = {
                 "baseline_successes": baseline_successes,
-                "causal_ablation_claim_eligible": False,
                 "paired_ablation_evidence": {},
                 "matched_control_baseline_successes": int(sum(
                     bool(item["success"]) for item in retention["matched_control_normal"]
                 )),
                 "matched_control_paired_comparison": _paired_ablation_summary(
-                    retention["normal"], retention["matched_control_normal"]
+                    retention["normal"],
+                    retention["matched_control_normal"],
+                    causal_intervention=False,
                 ),
+                "matched_control_ablation_evidence": {},
             }
             if baseline_successes > 0:
-                retention["slot0_erase"] = [run_retention_episode(full_model, spec, erasure="slot0") for spec in specs]
-                retention["slot1_erase"] = [run_retention_episode(full_model, spec, erasure="slot1") for spec in specs]
-                retention["both_slots_erase"] = [run_retention_episode(full_model, spec, erasure="both") for spec in specs]
-                retention["recurrent_erase"] = [run_retention_episode(full_model, spec, erasure="recurrent") for spec in specs]
-                retention["all_retained_state_erase"] = [run_retention_episode(full_model, spec, erasure="all") for spec in specs]
-                for condition in ("slot0_erase", "slot1_erase", "both_slots_erase", "recurrent_erase", "all_retained_state_erase"):
+                erasure_names = {
+                    "slot0_erase": "slot0",
+                    "slot1_erase": "slot1",
+                    "both_slots_erase": "both",
+                    "recurrent_erase": "recurrent",
+                    "all_retained_state_erase": "all",
+                }
+                for condition in ablation_conditions:
+                    erasure = erasure_names[condition]
+                    retention[condition] = [run_retention_episode(full_model, spec, erasure=erasure) for spec in specs]
+                    retention[f"matched_control_{condition}"] = [
+                        run_retention_episode(control_model, spec, erasure=erasure)
+                        for spec in specs
+                    ]
                     retention_metadata["paired_ablation_evidence"][condition] = _paired_ablation_summary(
                         retention["normal"], retention[condition]
                     )
-                retention_metadata["causal_ablation_claim_eligible"] = any(
-                    item["causal_claim_eligible"]
-                    for item in retention_metadata["paired_ablation_evidence"].values()
-                )
+                    retention_metadata["matched_control_ablation_evidence"][condition] = _paired_ablation_summary(
+                        retention["matched_control_normal"],
+                        retention[f"matched_control_{condition}"],
+                    )
+                retention_metadata["matched_control_ablation_comparison_available"] = True
             else:
                 failures.append("retention baseline has zero physical successes; causal ablations not interpreted")
+                retention_metadata["matched_control_ablation_comparison_available"] = False
             plans = _donor_plan(specs)
             for condition in ("wrong_note", "shuffled_measurement", "resource_only"):
                 runs = []
@@ -1095,9 +1181,11 @@ def run_repair(*, output_path: str | Path = "reports/generated/v03-neural-repair
             "full_parameter_count": int(full_model.parameter_count()),
             "control_parameter_count": int(control_model.parameter_count()),
             "parameter_gap": abs(int(full_model.parameter_count()) - int(control_model.parameter_count())),
+            "comparison_scope": "whole end-to-end policy architectures under matched episode, optimizer, and resource budgets",
+            "tool_schedule": "fixed resonance-probe schedule in this proof; learned general tool selection remains untested",
             "memory_shape": list(full_model.central_memory_shape),
             "read_repair": "prior content read -> center input; separate post-write content read -> action heads; address/value/gate remain write paths",
-            "control_read_repair": "prior plus post-write content reads -> action heads; separate address/value/gate write paths",
+            "control_read_repair": "single-controller pre- and post-write content reads -> action heads; memory reads do not feed controller recurrence",
             "input_masks": ["note_present", "note_payload_present", "spectrum_present", "feedback_present"],
         },
         "data": {
@@ -1160,7 +1248,7 @@ def run_repair(*, output_path: str | Path = "reports/generated/v03-neural-repair
     }
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+    _atomic_write_json(output, report)
     return report
 
 
