@@ -5,37 +5,40 @@ import unittest
 import numpy as np
 
 from vevo_agents.v03_delayed_factorial_diagnostic import (
+    CHANNEL_RESPONSE_FEATURE_INDICES,
     CELL_DEFINITIONS,
+    CLIP_BOUND,
     NOTE_SUFFIX_RELATIVE_COLUMNS,
+    _authoritative_resonance_gate,
     _cell_specs,
+    _clip_response_coordinates,
     _diagnostic_stats,
     _factor_pair_summary,
     _normalization_audit,
+    _prepare_cache,
     make_factorial_cells,
 )
 from vevo_agents.v03_delayed_memory import _prepare_delayed_episode
-from vevo_agents.v03_model import V03FiveBrain
+from vevo_agents.v03_model import POLICY_VECTOR_DIM, V03FiveBrain
+from vevo_agents.v03_protocol import CorrectedEpisode
 
 
 class V03DelayedFactorialDiagnosticTests(unittest.TestCase):
-    def test_factorial_has_four_cells_and_320_model_evaluations(self):
+    def test_comparison_has_two_world_cells_and_320_total_evaluations(self):
         cells = make_factorial_cells()
         self.assertEqual(set(cells), {item["name"] for item in CELL_DEFINITIONS})
-        self.assertEqual(sum(len(specs) for specs in cells.values()), 80)
-        self.assertEqual(sum(len(specs) for specs in cells.values()) * 4, 320)
+        self.assertEqual(len(CELL_DEFINITIONS), 2)
+        self.assertEqual(sum(len(specs) for specs in cells.values()), 40)
+        self.assertEqual(sum(len(specs) for specs in cells.values()) * 4 * 2, 320)
         self.assertEqual(len(cells["training_worlds_original_format"]), 8)
-        self.assertEqual(len(cells["new_worlds_heldout_format"]), 32)
+        self.assertEqual(len(cells["new_worlds_original_format"]), 32)
 
-    def test_format_factor_changes_only_note_suffix(self):
-        original = _cell_specs(CELL_DEFINITIONS[0])[0]
-        heldout = _cell_specs(CELL_DEFINITIONS[1])[0]
-        self.assertEqual(original["world_seed"], heldout["world_seed"])
-        self.assertEqual(original["goal_index"], heldout["goal_index"])
-        self.assertEqual(original["gate_resonance_hz"], heldout["gate_resonance_hz"])
-        self.assertEqual(original["note_goal_id"], heldout["note_goal_id"])
-        self.assertNotEqual(original["note_text"], heldout["note_text"])
-        self.assertEqual(original["note_variant"], "delayed-train")
-        self.assertEqual(heldout["note_variant"], "delayed-heldout")
+    def test_single_declared_intervention_targets_only_16_response_coordinates(self):
+        vector = np.linspace(-8.0, 8.0, POLICY_VECTOR_DIM, dtype=np.float64)
+        clipped = _clip_response_coordinates(vector)
+        changed = set(np.flatnonzero(clipped != vector).tolist())
+        self.assertEqual(changed, set(CHANNEL_RESPONSE_FEATURE_INDICES))
+        self.assertTrue(np.all(np.abs(clipped[list(CHANNEL_RESPONSE_FEATURE_INDICES)]) <= CLIP_BOUND))
 
     def test_saved_normalization_exposes_declared_hazards(self):
         path = Path("storage/checkpoints/v03-neural-delayed-memory-full-seed-107.json")
@@ -58,6 +61,29 @@ class V03DelayedFactorialDiagnosticTests(unittest.TestCase):
         self.assertTrue(np.isfinite(trace["diagnostics"]["center_candidate_pre"]).all())
         self.assertTrue(np.isfinite(trace["diagnostics"]["center_update_pre"]).all())
         self.assertEqual(model.state_dict(), before)
+
+    def test_authoritative_reference_is_independent_of_spectrum_argmax_and_oracle(self):
+        self.assertEqual(_authoritative_resonance_gate([0.55, 0.95, 0.75, 1.15], 0.95), 1)
+        self.assertNotEqual(
+            _authoritative_resonance_gate([0.55, 0.95, 0.75, 1.15], 0.95),
+            int(np.argmax([0.0, 0.0, 0.0, 1.0])),
+        )
+        spec = _cell_specs(CELL_DEFINITIONS[0])[0]
+        cache = {}
+        original = CorrectedEpisode.oracle_action
+        try:
+            CorrectedEpisode.oracle_action = lambda self: (_ for _ in ()).throw(
+                AssertionError("diagnostic must not call oracle_action")
+            )
+            _prepare_cache([spec], cache)
+        finally:
+            CorrectedEpisode.oracle_action = original
+        prepared = cache[(spec["world_seed"], spec["goal_index"], spec["note_variant"])]
+        self.assertEqual(
+            prepared["authoritative_resonance_gate"],
+            _authoritative_resonance_gate(spec["gate_resonance_hz"], 0.55),
+        )
+        self.assertIn("spectrum_argmax_gate", prepared)
 
     def test_format_pair_summary_validates_identity_and_reports_transitions(self):
         base = {

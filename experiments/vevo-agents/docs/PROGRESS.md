@@ -258,3 +258,22 @@
   explicitly unverified. The historical 105.60-second figure is wall-clock
   time, not CPU time; the future oracle feasibility reference is not a sealed
   untouched test set.
+
+## v0.3 delayed-memory final-input clipping comparison
+
+- Corrected `v03_delayed_factorial_diagnostic.py` so its physical reference is
+  the independent authoritative gate-resonance match. It no longer calls the
+  tautological `oracle_action()` spectrum argmax; a regression fails if that
+  evaluator path is used during preparation.
+- Declared exactly one evaluation-only frozen comparison: saved final
+  normalized input versus clipping only the 16 normalized channel-response
+  coordinates to `[-3,+3]` at the final neural update. The four existing
+  checkpoints, original `delayed-train` note format, training worlds
+  `9200–9201`, and already-inspected development worlds `9300–9307` produce
+  exactly 320 evaluations including baselines.
+- Full evidence and a compact summary are written to
+  `reports/generated/v03-neural-delayed-final-input-clipping-report.json` and
+  `reports/generated/v03-neural-delayed-final-input-clipping-summary.md`.
+  The historical factorial report, imported reports, and all checkpoints are
+  preserved byte-for-byte. The comparison is diagnostic evidence for the
+  inspected worlds only; clipping is lossy and is not a production fix claim.

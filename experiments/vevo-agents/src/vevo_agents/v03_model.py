@@ -261,6 +261,22 @@ def _model_vector(policy_observation: dict, normalization: dict | None) -> np.nd
     return normalize_policy_vector(encode_policy_observation(policy_observation), normalization)
 
 
+def _apply_evaluation_only_input_hook(vector: np.ndarray, hook) -> np.ndarray:
+    """Apply a validated frozen-evaluation input hook to a normalized vector.
+
+    Training and autograd paths never call this helper.  The hook receives a
+    copy, so it cannot mutate the caller's vector or model state, and it must
+    return the same finite policy-vector shape.
+    """
+
+    if hook is None:
+        return vector
+    transformed = np.asarray(hook(np.asarray(vector, dtype=np.float64).copy()), dtype=np.float64)
+    if transformed.shape != (POLICY_VECTOR_DIM,) or not np.isfinite(transformed).all():
+        raise ValueError("evaluation-only input hook returned an invalid policy vector")
+    return transformed.copy()
+
+
 @dataclass
 class V03TrainResult:
     model: object
@@ -580,8 +596,10 @@ class V03FiveBrain:
         ablate=None,
         erase_memory_before_action=False,
         collect_diagnostics: bool = False,
+        evaluation_only_input_hook=None,
     ) -> tuple[dict, dict]:
         vector = _model_vector(policy_observation, self.input_normalization)
+        vector = _apply_evaluation_only_input_hook(vector, evaluation_only_input_hook)
         return self._numeric_forward(
             runtime,
             vector,
@@ -850,9 +868,11 @@ class V03SingleRecurrentMemory:
         ablate=None,
         erase_memory_before_action=False,
         collect_diagnostics: bool = False,
+        evaluation_only_input_hook=None,
     ) -> tuple[dict, dict]:
         del ablate
         vector = _model_vector(policy_observation, self.input_normalization)
+        vector = _apply_evaluation_only_input_hook(vector, evaluation_only_input_hook)
         runtime = self.copy_runtime(runtime)
         memory_before = runtime["memory"]
         prior_key = np.tanh(self.params["W_key"] @ runtime["hidden"])
