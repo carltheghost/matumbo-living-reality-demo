@@ -307,9 +307,9 @@ def _summary_markdown(report: dict) -> str:
     lines = [
         "# Frozen delayed-memory clipping: compact case diagnostic",
         "",
-        f"Input report: `{report['input_report']}`  ",
-        f"Input report SHA-256: `{report['input_report_sha256']}`  ",
-        f"Current source at analysis: `{report['source_sha']}`  ",
+        f"Input report: `{report['input_report']}`",
+        f"Input report SHA-256: `{report['input_report_sha256']}`",
+        f"Current source at analysis: `{report['source_sha']}`",
         "",
         "This is a read-only projection of the historical 320-evaluation report. It does not retrain, reload weights for inference, or overwrite historical artifacts. The compact per-case rows cover the 32 previously inspected new-world cases for each frozen model.",
         "",
