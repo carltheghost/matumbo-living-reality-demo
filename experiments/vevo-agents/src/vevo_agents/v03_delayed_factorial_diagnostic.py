@@ -405,7 +405,9 @@ def _final_input_audit(
         "changed_coordinate_count": int(changed.size),
         "below_clip_bound_count": int(np.count_nonzero(response_before < -CLIP_BOUND)),
         "above_clip_bound_count": int(np.count_nonzero(response_before > CLIP_BOUND)),
-        "at_clip_bound_after_count": int(np.count_nonzero(np.abs(response_after) >= CLIP_BOUND)),
+        # This is intentionally named at-or-beyond: the predicate includes
+        # values strictly beyond the bound as well as values exactly on it.
+        "at_or_beyond_clip_bound_after_count": int(np.count_nonzero(np.abs(response_after) >= CLIP_BOUND)),
         "max_abs_non_response_delta": float(np.max(np.abs(delta[non_response]), initial=0.0)),
         "max_abs_response_delta": float(np.max(np.abs(delta[response_indices]), initial=0.0)),
         "only_declared_coordinates_changed": bool(np.all(delta[non_response] == 0.0)),
@@ -637,7 +639,9 @@ def _clipping_summary(runs: list[dict]) -> dict:
     changed = np.asarray([audit["changed_coordinate_count"] for audit in audits], dtype=np.int64)
     below = np.asarray([audit["below_clip_bound_count"] for audit in audits], dtype=np.int64)
     above = np.asarray([audit["above_clip_bound_count"] for audit in audits], dtype=np.int64)
-    at_bound = np.asarray([audit["at_clip_bound_after_count"] for audit in audits], dtype=np.int64)
+    at_or_beyond = np.asarray(
+        [audit["at_or_beyond_clip_bound_after_count"] for audit in audits], dtype=np.int64
+    )
     response_before = np.asarray(
         [audit["normalized_response_before_hook"] for audit in audits], dtype=np.float64
     )
@@ -652,7 +656,7 @@ def _clipping_summary(runs: list[dict]) -> dict:
         "changed_coordinate_range": _range(changed),
         "below_clip_bound_total": int(np.sum(below)),
         "above_clip_bound_total": int(np.sum(above)),
-        "at_clip_bound_after_total": int(np.sum(at_bound)),
+        "at_or_beyond_clip_bound_after_total": int(np.sum(at_or_beyond)),
         "clipped_coordinate_fraction": float(np.sum(changed) / (len(audits) * len(CHANNEL_RESPONSE_FEATURE_INDICES))),
         "all_only_declared_coordinates_changed": all(
             bool(audit["only_declared_coordinates_changed"]) for audit in audits
@@ -1135,7 +1139,7 @@ def _summary_markdown(report: dict) -> str:
         "",
         "## Clipping and saturation audit",
         "",
-        "| world set | checkpoint | condition | changed response coordinates | below -3 | above +3 | at bound after | only declared coordinates |",
+        "| world set | checkpoint | condition | changed response coordinates | below -3 | above +3 | at-or-beyond ±3 after | only declared coordinates |",
         "|---|---|---:|---:|---:|---:|---:|---:|",
     ])
     for cell in report["factorial_design"]["cells"]:
@@ -1147,7 +1151,7 @@ def _summary_markdown(report: dict) -> str:
                     continue
                 clipping = summary["clipping_audit"]
                 lines.append(
-                    f"| {cell_name} | {model_key} | {condition} | {clipping['changed_coordinate_total']} | {clipping['below_clip_bound_total']} | {clipping['above_clip_bound_total']} | {clipping['at_clip_bound_after_total']} | {clipping['all_only_declared_coordinates_changed']} |"
+                    f"| {cell_name} | {model_key} | {condition} | {clipping['changed_coordinate_total']} | {clipping['below_clip_bound_total']} | {clipping['above_clip_bound_total']} | {clipping['at_or_beyond_clip_bound_after_total']} | {clipping['all_only_declared_coordinates_changed']} |"
                 )
     lines.extend([
         "",

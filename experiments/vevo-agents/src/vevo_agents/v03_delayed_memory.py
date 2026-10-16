@@ -515,10 +515,18 @@ def _historical_digests(project_root: Path) -> dict[str, str]:
     paths = (
         "reports/generated/v03-neural-proof-report.json",
         "reports/generated/v03-neural-repair-report.json",
+        "reports/generated/v03-neural-delayed-memory-report.json",
+        "reports/generated/v03-neural-delayed-factorial-diagnostic-report.json",
+        "reports/generated/v03-neural-delayed-final-input-clipping-report.json",
+        "reports/generated/v03-neural-delayed-final-input-clipping-summary.md",
         "storage/checkpoints/v03-neural-full-selected.json",
         "storage/checkpoints/v03-neural-control-selected.json",
         "storage/checkpoints/v03-neural-repair-full-selected.json",
         "storage/checkpoints/v03-neural-repair-control-selected.json",
+        "storage/checkpoints/v03-neural-delayed-memory-full-seed-107.json",
+        "storage/checkpoints/v03-neural-delayed-memory-full-seed-117.json",
+        "storage/checkpoints/v03-neural-delayed-memory-control-seed-141.json",
+        "storage/checkpoints/v03-neural-delayed-memory-control-seed-143.json",
     )
     return {
         path: _sha256_file(project_root / path)
@@ -526,13 +534,21 @@ def _historical_digests(project_root: Path) -> dict[str, str]:
     }
 
 
-def run_experiment(*, output_path: str | Path = REPORT_PATH, wall_clock_cap: float = WALL_CLOCK_CAP_SECONDS) -> dict:
+def run_experiment(
+    *,
+    output_path: str | Path = REPORT_PATH,
+    wall_clock_cap: float = WALL_CLOCK_CAP_SECONDS,
+    response_scaling: str = "legacy_per_coordinate",
+    checkpoint_prefix: str = CHECKPOINT_PREFIX,
+) -> dict:
     start_wall = time.perf_counter()
     start_cpu = time.process_time()
     deadline = start_wall + float(wall_clock_cap)
     output = Path(output_path)
     if output.exists():
         raise FileExistsError(f"refusing to overwrite report: {output}")
+    if Path(checkpoint_prefix).name != checkpoint_prefix:
+        raise ValueError("checkpoint prefix must be a single filename component")
     project_root = Path(__file__).resolve().parents[2]
     source_sha = _source_sha()
     contract_file = project_root / CONTRACT_PATH
@@ -540,7 +556,10 @@ def run_experiment(*, output_path: str | Path = REPORT_PATH, wall_clock_cap: flo
     train_specs = make_training_specs()
     heldout_specs = make_heldout_specs()
     train_examples = build_delayed_examples(train_specs)
-    normalization = fit_input_normalization(_training_observations(train_examples))
+    normalization = fit_input_normalization(
+        _training_observations(train_examples),
+        response_scaling=response_scaling,
+    )
     hidden_normalization = _validate_hidden_normalization(train_examples, normalization)
     prepared_train = _prepared_by_identity(train_specs)
     failures = []
@@ -578,7 +597,7 @@ def run_experiment(*, output_path: str | Path = REPORT_PATH, wall_clock_cap: flo
         if training["stopped_reason"]:
             cap_termination = True
             failures.append(f"{key}: {training['stopped_reason']}")
-        checkpoint_path = project_root / "storage" / "checkpoints" / f"{CHECKPOINT_PREFIX}-{label}-seed-{model_seed}.json"
+        checkpoint_path = project_root / "storage" / "checkpoints" / f"{checkpoint_prefix}-{label}-seed-{model_seed}.json"
         checkpoint_digest = _save_delayed_checkpoint(checkpoint_path, model, training, normalization, source_sha)
         checkpoint_records[key] = {
             "path": str(checkpoint_path.relative_to(project_root)),
@@ -813,6 +832,7 @@ def run_experiment(*, output_path: str | Path = REPORT_PATH, wall_clock_cap: flo
             "goals_per_world": len(PROBE_FREQUENCIES),
             "training_input_digest": _json_digest(_training_observations(train_examples)),
             "normalization_fit_scope": "five-step delayed training observations only",
+            "response_scaling_mode": response_scaling,
             "normalization": normalization,
             "heldout_world_seeds_predeclared": list(HELDOUT_WORLD_SEEDS),
             "heldout_world_seeds_disjoint_from_historical": not (set(HELDOUT_WORLD_SEEDS) & HISTORICAL_WORLD_SEEDS),
@@ -879,8 +899,19 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", default=REPORT_PATH)
     parser.add_argument("--wall-clock-cap", type=float, default=WALL_CLOCK_CAP_SECONDS)
+    parser.add_argument(
+        "--response-scaling",
+        choices=("legacy_per_coordinate", "shared_max_abs"),
+        default="legacy_per_coordinate",
+    )
+    parser.add_argument("--checkpoint-prefix", default=CHECKPOINT_PREFIX)
     args = parser.parse_args()
-    report = run_experiment(output_path=args.output, wall_clock_cap=args.wall_clock_cap)
+    report = run_experiment(
+        output_path=args.output,
+        wall_clock_cap=args.wall_clock_cap,
+        response_scaling=args.response_scaling,
+        checkpoint_prefix=args.checkpoint_prefix,
+    )
     print(json.dumps({
         "schema": report["schema"],
         "source_sha": report["source_sha"],

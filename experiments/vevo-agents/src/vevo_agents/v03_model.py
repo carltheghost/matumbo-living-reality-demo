@@ -44,6 +44,13 @@ NOTE_TEXT_FEATURE_START = NOTE_BYTE_FEATURE_START + NOTE_TITLE_BYTES
 NOTE_TARGET_FREQUENCY_BYTE_INDEX = NOTE_TEXT_FEATURE_START + len("target_hz=")
 SPECTRUM_FEATURE_START = NOTE_FEATURE_END + 1
 SPECTRUM_FEATURE_END = SPECTRUM_FEATURE_START + 4 + 16
+RESPONSE_FEATURE_START = SPECTRUM_FEATURE_START + 4
+RESPONSE_FEATURE_END = SPECTRUM_FEATURE_END
+RESPONSE_FEATURE_INDICES = tuple(range(RESPONSE_FEATURE_START, RESPONSE_FEATURE_END))
+SPECTRUM_FREQUENCY_FEATURE_INDICES = tuple(range(SPECTRUM_FEATURE_START, RESPONSE_FEATURE_START))
+LEGACY_INPUT_NORMALIZATION_SCHEMA = "vevo.v03.input-normalization.v1"
+SHARED_RESPONSE_INPUT_NORMALIZATION_SCHEMA = "vevo.v03.input-normalization.v2"
+SHARED_RESPONSE_SCALING_METHOD = "shared_max_abs"
 
 
 def _byte_block(value: str, width: int) -> list[float]:
@@ -183,7 +190,148 @@ def encode_policy_observation(policy_observation: dict) -> np.ndarray:
 POLICY_VECTOR_DIM = 4 + 3 + NOTE_TITLE_BYTES + NOTE_TEXT_BYTES + 1 + 4 + 16 + 6 + 10 + 6
 
 
-def fit_input_normalization(policy_observations: list[dict]) -> dict:
+def _fit_present_group_statistics(
+    raw: np.ndarray,
+    *,
+    mask_index: int,
+    columns: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, int]:
+    """Fit the historical per-column statistics for one masked modality."""
+
+    mean = np.zeros(POLICY_VECTOR_DIM, dtype=np.float64)
+    scale = np.ones(POLICY_VECTOR_DIM, dtype=np.float64)
+    present = raw[:, mask_index] > 0.5
+    count = int(np.count_nonzero(present))
+    if not np.any(present):
+        return mean, scale, count
+    selected = raw[present][:, columns]
+    mean[columns] = np.mean(selected, axis=0)
+    spread = np.std(selected, axis=0)
+    # Constant columns should remain on their original scale.  Using a
+    # tiny epsilon for a constant revision/byte column would amplify an
+    # ordinary future change by 1,000x.
+    constant = np.isclose(spread, 0.0, rtol=0.0, atol=1e-12)
+    scale[columns] = np.where(constant, 1.0, np.maximum(spread, 1e-3))
+    return mean, scale, count
+
+
+def _fit_shared_max_abs_scale(values: np.ndarray) -> dict:
+    """Fit one finite max-absolute response scale with explicit fallbacks.
+
+    This helper intentionally does not center, clip, or fit one scale per
+    response coordinate.  Invalid values are excluded from the fit and are
+    counted.  An all-invalid or all-zero fit uses a unit scale so inference
+    remains finite and deterministic; inference itself fails closed if a
+    non-finite vector reaches the normalization boundary.
+    """
+
+    array = np.asarray(values, dtype=np.float64).reshape(-1)
+    finite = np.isfinite(array)
+    finite_values = array[finite]
+    invalid_count = int(np.count_nonzero(~finite))
+    if finite_values.size == 0:
+        return {
+            "scale": 1.0,
+            "max_abs": 0.0,
+            "finite_coordinate_count": 0,
+            "invalid_coordinate_count": invalid_count,
+            "fallback": "unit_scale_no_finite_values",
+        }
+    max_abs = float(np.max(np.abs(finite_values)))
+    if not math.isfinite(max_abs) or max_abs <= 0.0:
+        return {
+            "scale": 1.0,
+            "max_abs": 0.0 if not math.isfinite(max_abs) else max_abs,
+            "finite_coordinate_count": int(finite_values.size),
+            "invalid_coordinate_count": invalid_count,
+            "fallback": "unit_scale_all_finite_values_zero",
+        }
+    return {
+        "scale": max_abs,
+        "max_abs": max_abs,
+        "finite_coordinate_count": int(finite_values.size),
+        "invalid_coordinate_count": invalid_count,
+        "fallback": None,
+    }
+
+
+def fit_shared_max_abs_input_normalization(policy_observations: list[dict]) -> dict:
+    """Fit training-only normalization with one shared response-block scale.
+
+    Note-byte and probe-frequency features retain the established masked
+    statistics.  The 16 response coordinates are the exception: their mean
+    is exactly zero and all are divided by one max-absolute scale fitted over
+    the finite response values from present training measurements only.
+    """
+
+    if not policy_observations:
+        raise ValueError("policy observations are required for normalization")
+    raw = np.stack([encode_policy_observation(item) for item in policy_observations])
+    mean = np.zeros(POLICY_VECTOR_DIM, dtype=np.float64)
+    scale = np.ones(POLICY_VECTOR_DIM, dtype=np.float64)
+    note_mean, note_scale, note_count = _fit_present_group_statistics(
+        raw,
+        mask_index=NOTE_PAYLOAD_MASK_INDEX,
+        columns=np.arange(NOTE_BYTE_FEATURE_START, NOTE_BYTE_FEATURE_END),
+    )
+    mean[NOTE_BYTE_FEATURE_START:NOTE_BYTE_FEATURE_END] = note_mean[
+        NOTE_BYTE_FEATURE_START:NOTE_BYTE_FEATURE_END
+    ]
+    scale[NOTE_BYTE_FEATURE_START:NOTE_BYTE_FEATURE_END] = note_scale[
+        NOTE_BYTE_FEATURE_START:NOTE_BYTE_FEATURE_END
+    ]
+    frequency_mean, frequency_scale, spectrum_count = _fit_present_group_statistics(
+        raw,
+        mask_index=SPECTRUM_MASK_INDEX,
+        columns=np.arange(SPECTRUM_FEATURE_START, RESPONSE_FEATURE_START),
+    )
+    mean[SPECTRUM_FEATURE_START:RESPONSE_FEATURE_START] = frequency_mean[
+        SPECTRUM_FEATURE_START:RESPONSE_FEATURE_START
+    ]
+    scale[SPECTRUM_FEATURE_START:RESPONSE_FEATURE_START] = frequency_scale[
+        SPECTRUM_FEATURE_START:RESPONSE_FEATURE_START
+    ]
+    present = raw[:, SPECTRUM_MASK_INDEX] > 0.5
+    response_values = raw[present][:, np.asarray(RESPONSE_FEATURE_INDICES, dtype=np.int64)]
+    response_fit = _fit_shared_max_abs_scale(response_values)
+    response_scale = float(response_fit["scale"])
+    return {
+        "schema": SHARED_RESPONSE_INPUT_NORMALIZATION_SCHEMA,
+        "mean": mean.tolist(),
+        "scale": scale.tolist(),
+        "counts": {
+            "note_bytes": int(note_count),
+            "spectrum": int(spectrum_count),
+            "response": int(np.count_nonzero(present)),
+        },
+        "normalized_groups": {
+            "note_bytes": [int(NOTE_BYTE_FEATURE_START), int(NOTE_BYTE_FEATURE_END)],
+            "spectrum": [int(SPECTRUM_FEATURE_START), int(SPECTRUM_FEATURE_END)],
+            "spectrum_frequencies": [int(SPECTRUM_FEATURE_START), int(RESPONSE_FEATURE_START)],
+            "response": [int(RESPONSE_FEATURE_START), int(RESPONSE_FEATURE_END)],
+        },
+        "response_scaling": {
+            "method": SHARED_RESPONSE_SCALING_METHOD,
+            "feature_indices": [int(index) for index in RESPONSE_FEATURE_INDICES],
+            "scale": response_scale,
+            "max_abs": float(response_fit["max_abs"]),
+            "fit_scope": "present training observations only",
+            "fit_observation_count": int(np.count_nonzero(present)),
+            "finite_coordinate_count": int(response_fit["finite_coordinate_count"]),
+            "invalid_coordinate_count": int(response_fit["invalid_coordinate_count"]),
+            "fallback": response_fit["fallback"],
+            "zero_or_invalid_fallback_scale": 1.0,
+            "centering": "none",
+            "clipping": "none",
+        },
+    }
+
+
+def fit_input_normalization(
+    policy_observations: list[dict],
+    *,
+    response_scaling: str = "legacy_per_coordinate",
+) -> dict:
     """Fit present-modality statistics from training observations only.
 
     The returned plain dictionary is checkpoint-friendly and deliberately
@@ -192,6 +340,10 @@ def fit_input_normalization(policy_observations: list[dict]) -> dict:
     are standardized.
     """
 
+    if response_scaling == SHARED_RESPONSE_SCALING_METHOD:
+        return fit_shared_max_abs_input_normalization(policy_observations)
+    if response_scaling != "legacy_per_coordinate":
+        raise ValueError(f"unsupported response scaling mode: {response_scaling}")
     if not policy_observations:
         raise ValueError("policy observations are required for normalization")
     raw = np.stack([encode_policy_observation(item) for item in policy_observations])
@@ -216,7 +368,7 @@ def fit_input_normalization(policy_observations: list[dict]) -> dict:
         constant = np.isclose(spread, 0.0, rtol=0.0, atol=1e-12)
         scale[columns] = np.where(constant, 1.0, np.maximum(spread, 1e-3))
     return {
-        "schema": "vevo.v03.input-normalization.v1",
+        "schema": LEGACY_INPUT_NORMALIZATION_SCHEMA,
         "mean": mean.tolist(),
         "scale": scale.tolist(),
         "counts": counts,
@@ -229,8 +381,12 @@ def fit_input_normalization(policy_observations: list[dict]) -> dict:
 
 def normalize_policy_vector(vector: np.ndarray, normalization: dict | None) -> np.ndarray:
     if normalization is None:
-        return np.asarray(vector, dtype=np.float64)
-    if normalization.get("schema") != "vevo.v03.input-normalization.v1":
+        result = np.asarray(vector, dtype=np.float64)
+        if result.shape != (POLICY_VECTOR_DIM,) or not np.isfinite(result).all():
+            raise ValueError("invalid policy vector")
+        return result
+    schema = normalization.get("schema")
+    if schema not in {LEGACY_INPUT_NORMALIZATION_SCHEMA, SHARED_RESPONSE_INPUT_NORMALIZATION_SCHEMA}:
         raise ValueError("unsupported input normalization schema")
     mean = np.asarray(normalization.get("mean"), dtype=np.float64)
     scale = np.asarray(normalization.get("scale"), dtype=np.float64)
@@ -239,17 +395,38 @@ def normalize_policy_vector(vector: np.ndarray, normalization: dict | None) -> n
     if not np.isfinite(mean).all() or not np.isfinite(scale).all() or np.any(scale <= 0.0):
         raise ValueError("invalid input normalization values")
     result = np.asarray(vector, dtype=np.float64).copy()
+    if result.shape != (POLICY_VECTOR_DIM,) or not np.isfinite(result).all():
+        raise ValueError("invalid policy vector")
     note_payload_available = result[NOTE_PAYLOAD_MASK_INDEX] > 0.5
     spectrum_present = result[SPECTRUM_MASK_INDEX] > 0.5
     note_columns = slice(NOTE_FEATURE_START, NOTE_FEATURE_END)
     note_byte_columns = slice(NOTE_BYTE_FEATURE_START, NOTE_BYTE_FEATURE_END)
     spectrum_columns = slice(SPECTRUM_FEATURE_START, SPECTRUM_FEATURE_END)
+    if schema == SHARED_RESPONSE_INPUT_NORMALIZATION_SCHEMA:
+        response_scaling = normalization.get("response_scaling")
+        if not isinstance(response_scaling, dict) or response_scaling.get("method") != SHARED_RESPONSE_SCALING_METHOD:
+            raise ValueError("invalid shared response scaling metadata")
+        if response_scaling.get("feature_indices") != [int(index) for index in RESPONSE_FEATURE_INDICES]:
+            raise ValueError("invalid shared response feature indices")
+        response_scale = float(response_scaling.get("scale", 0.0))
+        if not math.isfinite(response_scale) or response_scale <= 0.0:
+            raise ValueError("invalid shared response scale")
     if note_payload_available:
         result[note_byte_columns] = (result[note_byte_columns] - mean[note_byte_columns]) / scale[note_byte_columns]
     else:
         result[note_columns] = 0.0
     if spectrum_present:
-        result[spectrum_columns] = (result[spectrum_columns] - mean[spectrum_columns]) / scale[spectrum_columns]
+        if schema == SHARED_RESPONSE_INPUT_NORMALIZATION_SCHEMA:
+            frequency_columns = np.asarray(SPECTRUM_FREQUENCY_FEATURE_INDICES, dtype=np.int64)
+            response_columns = np.asarray(RESPONSE_FEATURE_INDICES, dtype=np.int64)
+            result[frequency_columns] = (
+                result[frequency_columns] - mean[frequency_columns]
+            ) / scale[frequency_columns]
+            # The response block is deliberately only divided by a single
+            # train-fitted scalar: no per-coordinate centering or clipping.
+            result[response_columns] = result[response_columns] / response_scale
+        else:
+            result[spectrum_columns] = (result[spectrum_columns] - mean[spectrum_columns]) / scale[spectrum_columns]
     else:
         result[spectrum_columns] = 0.0
     if not np.isfinite(result).all():
