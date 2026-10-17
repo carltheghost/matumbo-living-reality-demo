@@ -114,14 +114,18 @@ test('queued hand edits fence future commands across contact stop, camera stop a
 });
 
 test('phone forward and inverse projection share the phone viewport profile and depth fence', async () => {
-  const [render, phoneRender, fabric, materialInput, bootstrap] = await Promise.all([
+  const [render, projection, phoneRender, fabric, materialInput, bootstrap] = await Promise.all([
     readFile(new URL('render.js', root), 'utf8'),
+    readFile(new URL('phone/projection-parameters.mjs', root), 'utf8'),
     readFile(new URL('phone/phone-render.mjs', root), 'utf8'),
     readFile(new URL('phone/spatial-fabric.mjs', root), 'utf8'),
     readFile(new URL('phone/material-input-runtime.mjs', root), 'utf8'),
     readFile(new URL('phone/bootstrap.mjs', root), 'utf8'),
   ]);
-  assert.match(render, /rendererProjectionParameters/);
+  assert.doesNotMatch(render, /rendererProjectionParameters/);
+  assert.match(projection, /export function rendererProjectionParameters/);
+  assert.match(projection, /export function projectPhonePoint/);
+  assert.match(phoneRender, /from '\.\/projection-parameters\.mjs'/);
   assert.match(phoneRender, /projectionProfile = 'phone'/);
   assert.match(fabric, /rendererProjectionParameters\(renderer/);
   assert.match(materialInput, /projectionProfile: this\.renderer\.projectionProfile === 'phone' \? 'phone' : 'base'/);
@@ -157,7 +161,8 @@ test('the phone-owned tracker detects two complete hands without transporting fr
   assert.match(sw, /request\.mode === 'navigate'/);
   assert.match(sw, /scope\.pathname/);
   assert.match(sw, /shell\.match\(scoped\('index\.html'\)\)/);
-  assert.match(sw, /SHELL_CACHE.*v19/);
+  assert.match(sw, /SHELL_CACHE.*v20/);
+  assert.match(sw, /phone\/projection-parameters\.mjs/);
   for (const asset of ['phone/material-contract.mjs', 'phone/material-patch.mjs', 'phone/material-input-runtime.mjs', 'phone/fingertip-input.mjs', 'application/conversation-transport.mjs', 'phone/companion.mjs']) assert.match(sw, new RegExp(asset.replaceAll('.', '\\.')));
   assert.doesNotMatch(worker, /\bfetch\s*\(|XMLHttpRequest|WebSocket/);
   assert.doesNotMatch(camera, /\bfetch\s*\(|XMLHttpRequest|WebSocket/);

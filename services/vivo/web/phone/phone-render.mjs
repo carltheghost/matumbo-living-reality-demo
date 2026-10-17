@@ -1,5 +1,6 @@
 import { Renderer, embed } from '../render.js';
 import { fieldTone } from './field-palette.mjs';
+import { projectPhonePoint } from './projection-parameters.mjs';
 
 const clamp = (value, lo, hi) => Math.max(lo, Math.min(hi, value));
 const line = (ctx, a, b) => { ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); };
@@ -202,6 +203,10 @@ export class PhoneRenderer extends Renderer {
     this.companionFocus = false;
     this.companionWorldView = false;
     this.materialEditing = false;
+  }
+
+  project(position) {
+    return projectPhonePoint(this, position);
   }
 
   previewFor(id) {

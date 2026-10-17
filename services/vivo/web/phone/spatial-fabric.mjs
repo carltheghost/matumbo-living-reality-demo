@@ -1,4 +1,4 @@
-import { rendererProjectionParameters } from '../render.js';
+import { rendererProjectionParameters } from './projection-parameters.mjs';
 
 /**
  * Bounded spatial interaction fabric for the phone surface.

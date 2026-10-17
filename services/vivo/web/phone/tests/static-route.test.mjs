@@ -153,7 +153,7 @@ test('Pages live hash verifier covers every changed mounted phone module', async
   const required = [
     'services/vivo/web/application/conversation-transport.mjs',
     'services/vivo/web/application/remote-transport.mjs',
-    'services/vivo/web/render.js',
+    'services/vivo/web/phone/projection-parameters.mjs',
     'services/vivo/web/phone/companion.mjs',
     'services/vivo/web/phone/fingertip-input.mjs',
     'services/vivo/web/phone/material-contract.mjs',
