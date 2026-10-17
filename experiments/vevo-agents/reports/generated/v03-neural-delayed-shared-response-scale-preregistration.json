@@ -12,6 +12,13 @@
   "compute_budget": {
     "bounded_trial_count": 4,
     "cpu_only": true,
+    "deadline_enforcement": "cooperative",
+    "deadline_overrun_note": "A currently running model operation or finalization can finish after the deadline; no asynchronous kill is used.",
+    "deadline_overrun_possible": true,
+    "elapsed_measurement_excludes_final_serialization": true,
+    "elapsed_measurement_note": "The runner captures elapsed wall time before final JSON/Markdown serialization, so final filesystem serialization is outside that interval.",
+    "fixed_memory_ceiling_guaranteed": false,
+    "one_blas_or_openmp_thread_guaranteed": false,
     "run_must_stop_for_review_if_cap_or_failure": true,
     "single_process": true,
     "wall_clock_cap_seconds_total": 300.0

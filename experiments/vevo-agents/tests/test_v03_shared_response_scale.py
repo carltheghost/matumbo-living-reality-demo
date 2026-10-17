@@ -139,6 +139,11 @@ class V03SharedResponseScaleTests(unittest.TestCase):
         self.assertEqual(plan["executed_trials"], 0)
         self.assertEqual(len(plan["seeds"]["trials"]), 4)
         self.assertIn("--response-scaling shared_max_abs", plan["execution_command_after_review"])
+        self.assertEqual(plan["compute_budget"]["deadline_enforcement"], "cooperative")
+        self.assertTrue(plan["compute_budget"]["deadline_overrun_possible"])
+        self.assertTrue(plan["compute_budget"]["elapsed_measurement_excludes_final_serialization"])
+        self.assertFalse(plan["compute_budget"]["one_blas_or_openmp_thread_guaranteed"])
+        self.assertFalse(plan["compute_budget"]["fixed_memory_ceiling_guaranteed"])
         self.assertTrue(all(
             "shared-response-scale" in path
             for path in plan["separate_artifacts"]["checkpoint_paths"]

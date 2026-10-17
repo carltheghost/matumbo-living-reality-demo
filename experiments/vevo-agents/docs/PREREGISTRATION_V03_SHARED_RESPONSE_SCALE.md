@@ -34,9 +34,14 @@ or generalization is guaranteed.
 - Existing balanced size-one minibatch Adam-style update, learning rate `0.012`,
   gradient clip norm `3.0`, exactly `1000` updates per trial, with metrics at
   `1,100,250,500,750,1000`.
-- One single-process CPU run with a total 300-second wall-clock cap. Stop and
-  report if the cap or any trial failure occurs; no restart or outcome-based
-  retuning.
+- One single-process CPU run with a total 300-second wall-clock cap. The cap is
+  cooperative: checks occur between updates, cases, and derived-metric stages,
+  so an in-flight model operation or finalization can finish after the deadline;
+  no asynchronous kill is used. The runner captures elapsed wall time before
+  final JSON/Markdown serialization, so final filesystem serialization is outside
+  the reported interval. A single process does not guarantee one BLAS/OpenMP
+  thread or a fixed memory ceiling. Stop and report if the cap or any trial
+  failure occurs; no restart or outcome-based retuning.
 
 ## Normalization rule
 

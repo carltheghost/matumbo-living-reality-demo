@@ -23,8 +23,14 @@ it is not a claim that the current RNN is a complete EvoCell.
   `1000`. Each trial has at most `1,000` balanced size-one Adam-style updates;
   no retuning, restart, or post-outcome seed replacement is permitted.
 - Use one CPU process and a `300` elapsed-second cap for the complete run.
-  Record process CPU time separately from wall time and report any cap
-  termination honestly.
+  The deadline is cooperative: checks occur between updates, cases, and
+  derived-metric stages, so an in-flight model operation or finalization can
+  finish after the deadline; no asynchronous kill is used. The reported elapsed
+  wall time is captured before final JSON/Markdown serialization, so filesystem
+  serialization is outside that measured interval. Single-process CPU execution
+  does not guarantee one BLAS/OpenMP thread or a fixed memory ceiling. Record
+  process CPU time separately from wall time and report any cap termination
+  honestly.
 
 ## Required evidence
 

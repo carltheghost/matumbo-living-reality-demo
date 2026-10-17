@@ -2,17 +2,23 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 
 from vevo_agents.v03_delayed_memory import (
     CheckpointValidationError,
     DELAYED_TRAIN_WORLD_SEEDS,
+    DeadlineExceeded,
     HELDOUT_WORLD_SEEDS,
     HISTORICAL_WORLD_SEEDS,
+    _development_entry_shell,
+    _finalize_development_entry,
+    _finalize_untrained_reference_entry,
     _load_delayed_checkpoint,
     _run_case_batch,
     _save_delayed_checkpoint,
+    _untrained_reference_entry_shell,
     _verify_prediction_parity,
     _prepare_delayed_episode,
     build_delayed_examples,
@@ -165,6 +171,153 @@ class V03DelayedMemoryRunnerTests(unittest.TestCase):
         self.assertEqual(calls, [])
         self.assertEqual(batch["next_case_index"], 0)
 
+    @staticmethod
+    def _development_entry(status="complete"):
+        specs = make_heldout_specs()[:1]
+        example = build_delayed_examples(specs)[0]
+        spec = specs[0]
+        run = {
+            "split": spec["split"],
+            "world_seed": spec["world_seed"],
+            "goal_index": spec["goal_index"],
+            "note_goal_id": spec["note_goal_id"],
+            "success": False,
+            "world_residual": 0.0,
+            "failure_cause": "physical_gate_not_opened",
+            "final_action": {
+                "gate": int(example["target_gate"]),
+                "frequency_index": int(example["target_frequency"]),
+            },
+            "development_loss": 1.0,
+        }
+        batch = {
+            "status": status,
+            "runs": [run],
+            "completed_cases": 1,
+            "expected_cases": 2,
+            "failures": [],
+        }
+        trial = {"label": "full", "model_seed": 107}
+        return (
+            _development_entry_shell(trial, batch),
+            specs,
+            [example],
+            run,
+        )
+
+    def test_development_direct_batch_cap_finalizes_status_and_preserves_prefix(self):
+        for batch_status in ("partial_wall_clock_cap", "complete_budget_exhausted"):
+            with self.subTest(batch_status=batch_status):
+                entry, specs, examples, run = self._development_entry(batch_status)
+                result = _finalize_development_entry(
+                    entry,
+                    development_specs=specs,
+                    development_examples=examples,
+                    model=object(),
+                    historical_successes={(run["world_seed"], run["goal_index"]): False},
+                    deadline=None,
+                    phase_prefix="development_full-seed-107",
+                )
+                self.assertEqual(result["status"], "partial_wall_clock_cap")
+                self.assertIsInstance(result["exception"], DeadlineExceeded)
+                self.assertEqual(entry["status"], "partial_wall_clock_cap")
+                self.assertEqual(entry["completed_cases"], 1)
+                self.assertEqual(entry["runs"], [run])
+                self.assertFalse(entry["comparison_complete"])
+                self.assertNotIn("metrics", entry)
+                self.assertTrue(all(
+                    status == "unavailable_budget_exhausted"
+                    for status in entry["derived_metrics_status"].values()
+                ))
+
+    def test_development_metric_timeout_preserves_completed_prefix(self):
+        entry, specs, examples, run = self._development_entry()
+        with patch(
+            "vevo_agents.v03_delayed_memory._development_metrics",
+            side_effect=DeadlineExceeded("development_metrics"),
+        ):
+            result = _finalize_development_entry(
+                entry,
+                development_specs=specs,
+                development_examples=examples,
+                model=object(),
+                historical_successes={(run["world_seed"], run["goal_index"]): False},
+                deadline=None,
+                phase_prefix="development_full-seed-107",
+            )
+        self.assertEqual(result["status"], "partial_wall_clock_cap")
+        self.assertEqual(entry["completed_cases"], 1)
+        self.assertEqual(entry["derived_metrics_status"]["development_metrics"], "unavailable_budget_exhausted")
+        self.assertFalse(entry["comparison_complete"])
+
+    def test_development_summary_timeout_preserves_completed_prefix(self):
+        entry, specs, examples, run = self._development_entry()
+        with patch(
+            "vevo_agents.v03_delayed_memory._run_summary",
+            side_effect=DeadlineExceeded("development_summary"),
+        ):
+            result = _finalize_development_entry(
+                entry,
+                development_specs=specs,
+                development_examples=examples,
+                model=object(),
+                historical_successes={(run["world_seed"], run["goal_index"]): False},
+                deadline=None,
+                phase_prefix="development_full-seed-107",
+            )
+        self.assertEqual(result["status"], "partial_wall_clock_cap")
+        self.assertEqual(entry["derived_metrics_status"]["development_metrics"], "complete")
+        self.assertEqual(entry["derived_metrics_status"]["summary"], "unavailable_budget_exhausted")
+        self.assertEqual(entry["derived_metrics_status"]["world_clustered"], "unavailable_budget_exhausted")
+        self.assertFalse(entry["comparison_complete"])
+
+    def test_development_historical_overlap_timeout_preserves_completed_prefix(self):
+        entry, specs, examples, run = self._development_entry()
+        with patch(
+            "vevo_agents.v03_delayed_memory._historical_success_overlap",
+            side_effect=DeadlineExceeded("development_historical_overlap"),
+        ):
+            result = _finalize_development_entry(
+                entry,
+                development_specs=specs,
+                development_examples=examples,
+                model=object(),
+                historical_successes={(run["world_seed"], run["goal_index"]): False},
+                deadline=None,
+                phase_prefix="development_full-seed-107",
+            )
+        self.assertEqual(result["status"], "partial_wall_clock_cap")
+        self.assertEqual(entry["derived_metrics_status"]["development_metrics"], "complete")
+        self.assertEqual(entry["derived_metrics_status"]["summary"], "complete")
+        self.assertEqual(entry["derived_metrics_status"]["world_clustered"], "complete")
+        self.assertEqual(entry["derived_metrics_status"]["historical_success_overlap"], "unavailable_budget_exhausted")
+        self.assertFalse(entry["comparison_complete"])
+
+    def test_untrained_reference_cap_preserves_completed_prefix_before_metrics(self):
+        _, _, _, run = self._development_entry()
+        batch = {
+            "status": "partial_wall_clock_cap",
+            "runs": [run],
+            "completed_cases": 1,
+            "expected_cases": 2,
+            "failures": [{"phase": "untrained_reference_full", "error_type": "DeadlineExceeded"}],
+        }
+        entry = _untrained_reference_entry_shell(107, batch)
+        result = _finalize_untrained_reference_entry(
+            entry,
+            model=object(),
+            train_examples=[],
+            deadline=None,
+            phase_prefix="untrained_reference_full",
+        )
+        self.assertEqual(result["status"], "partial_wall_clock_cap")
+        self.assertEqual(entry["status"], "partial_wall_clock_cap")
+        self.assertEqual(entry["completed_cases"], 1)
+        self.assertEqual(entry["runs"], [run])
+        self.assertFalse(entry["comparison_complete"])
+        self.assertNotIn("metrics", entry)
+        self.assertEqual(entry["unavailable_metrics"], ["metrics", "physical_success", "summary"])
+
     def test_zero_cap_writes_structured_json_and_markdown_without_evaluation(self):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "candidate-report.json"
@@ -186,6 +339,10 @@ class V03DelayedMemoryRunnerTests(unittest.TestCase):
             summary_text = summary.read_text(encoding="utf-8")
             self.assertIn("all four models must complete", summary_text)
             self.assertIn("never fresh generalization", summary_text)
+            self.assertIn("cooperative", summary_text)
+            self.assertTrue(report["runtime"]["deadline_overrun_possible"])
+            self.assertTrue(report["runtime"]["elapsed_measurement_excludes_final_serialization"])
+            self.assertTrue(report["runtime"]["single_process_not_single_thread_guarantee"])
             self.assertTrue(report["historical_artifacts"]["unchanged"])
 
     def test_historical_v1_checkpoint_prediction_compatibility(self):

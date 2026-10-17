@@ -958,6 +958,312 @@ def _development_case_record(model, example: dict, spec: dict, prepared: dict, *
     return run
 
 
+_DEVELOPMENT_DERIVED_STAGES = (
+    "development_metrics",
+    "summary",
+    "world_clustered",
+    "historical_success_overlap",
+)
+_UNTRAINED_DERIVED_STAGES = (
+    "metrics",
+    "physical_success",
+    "summary",
+)
+
+
+def _development_entry_shell(trial: dict, batch: dict) -> dict:
+    """Create the report entry before calculating any derived metrics."""
+
+    return {
+        "architecture": trial["label"],
+        "model_seed": trial["model_seed"],
+        "status": batch["status"],
+        "runs": batch["runs"],
+        "completed_cases": batch["completed_cases"],
+        "expected_cases": batch["expected_cases"],
+        "failures": batch["failures"],
+        "comparison_complete": False,
+        "derived_metrics_status": {
+            stage: "not_run"
+            for stage in _DEVELOPMENT_DERIVED_STAGES
+        },
+        "unavailable_metrics": list(_DEVELOPMENT_DERIVED_STAGES),
+    }
+
+
+def _mark_development_entry_unavailable(
+    entry: dict,
+    *,
+    status: str,
+    unavailable_from: int = 0,
+    reason: str,
+    failure: dict | None = None,
+) -> None:
+    """Mark raw evidence as partial without implying a complete comparison."""
+
+    unavailable = list(_DEVELOPMENT_DERIVED_STAGES[unavailable_from:])
+    for stage in unavailable:
+        entry["derived_metrics_status"][stage] = (
+            "unavailable_budget_exhausted"
+            if status == "partial_wall_clock_cap"
+            else "unavailable_due_to_failure"
+        )
+    entry["unavailable_metrics"] = unavailable
+    entry["status"] = status
+    entry["comparison_complete"] = False
+    entry["comparison_note"] = reason
+    if failure is not None:
+        entry["failure"] = failure
+
+
+def _untrained_reference_entry_shell(seed: int, batch: dict) -> dict:
+    """Create the untrained-reference report entry before derived metrics."""
+
+    return {
+        "model_seed": int(seed),
+        "updates": 0,
+        "status": batch["status"],
+        "runs": batch["runs"],
+        "completed_cases": batch["completed_cases"],
+        "expected_cases": batch["expected_cases"],
+        "failures": batch["failures"],
+        "comparison_complete": False,
+        "derived_metrics_status": {
+            stage: "not_run"
+            for stage in _UNTRAINED_DERIVED_STAGES
+        },
+        "unavailable_metrics": list(_UNTRAINED_DERIVED_STAGES),
+    }
+
+
+def _mark_untrained_reference_entry_unavailable(
+    entry: dict,
+    *,
+    status: str,
+    unavailable_from: int = 0,
+    reason: str,
+    failure: dict | None = None,
+) -> None:
+    """Keep a raw reference prefix without implying complete derived evidence."""
+
+    unavailable = list(_UNTRAINED_DERIVED_STAGES[unavailable_from:])
+    for stage in unavailable:
+        entry["derived_metrics_status"][stage] = (
+            "unavailable_budget_exhausted"
+            if status == "partial_wall_clock_cap"
+            else "unavailable_due_to_failure"
+        )
+    entry["unavailable_metrics"] = unavailable
+    entry["status"] = status
+    entry["comparison_complete"] = False
+    entry["comparison_note"] = reason
+    if failure is not None:
+        entry["failure"] = failure
+
+
+def _finalize_untrained_reference_entry(
+    entry: dict,
+    *,
+    model,
+    train_examples: list[dict],
+    deadline: float | None,
+    phase_prefix: str,
+) -> dict:
+    """Derive untrained-reference metrics after raw runs are report-visible."""
+
+    if entry["status"] != "complete":
+        status = (
+            "partial_wall_clock_cap"
+            if entry["status"] in {"partial_wall_clock_cap", "complete_budget_exhausted"}
+            else "partial_failure"
+        )
+        exc = (
+            DeadlineExceeded(phase_prefix, completed_cases=entry["completed_cases"])
+            if status == "partial_wall_clock_cap"
+            else RuntimeError("untrained reference case batch failed")
+        )
+        _mark_untrained_reference_entry_unavailable(
+            entry,
+            status=status,
+            reason="completed case prefix retained; derived reference metrics are unavailable",
+            failure=_exception_record(exc, phase=phase_prefix),
+        )
+        return {"status": status, "exception": exc}
+
+    stages = list(_UNTRAINED_DERIVED_STAGES)
+    try:
+        _check_deadline(deadline, f"{phase_prefix}_metrics", completed_cases=entry["completed_cases"])
+        entry["metrics"] = _prediction_metrics(
+            model,
+            train_examples,
+            deadline=deadline,
+            phase=f"{phase_prefix}_metrics",
+        )
+        entry["derived_metrics_status"]["metrics"] = "complete"
+
+        _check_deadline(deadline, f"{phase_prefix}_physical_success", completed_cases=entry["completed_cases"])
+        entry["physical_success"] = int(sum(bool(run["success"]) for run in entry["runs"]))
+        entry["derived_metrics_status"]["physical_success"] = "complete"
+
+        _check_deadline(deadline, f"{phase_prefix}_summary", completed_cases=entry["completed_cases"])
+        entry["summary"] = _run_summary(
+            entry["runs"],
+            deadline=deadline,
+            phase=f"{phase_prefix}_summary",
+        )
+        entry["derived_metrics_status"]["summary"] = "complete"
+    except DeadlineExceeded as exc:
+        failed_stage = next(
+            (
+                index
+                for index, stage in enumerate(stages)
+                if entry["derived_metrics_status"][stage] == "not_run"
+            ),
+            len(stages) - 1,
+        )
+        failure = _exception_record(exc, phase=exc.phase, case_index=exc.case_index)
+        _mark_untrained_reference_entry_unavailable(
+            entry,
+            status="partial_wall_clock_cap",
+            unavailable_from=failed_stage,
+            reason="completed case batch retained; later reference metrics stopped at the wall-clock cap",
+            failure=failure,
+        )
+        return {"status": "partial_wall_clock_cap", "exception": exc}
+    except Exception as exc:
+        failed_stage = next(
+            (
+                index
+                for index, stage in enumerate(stages)
+                if entry["derived_metrics_status"][stage] == "not_run"
+            ),
+            len(stages) - 1,
+        )
+        failure = _exception_record(exc, phase=f"{phase_prefix}_derived_metrics")
+        _mark_untrained_reference_entry_unavailable(
+            entry,
+            status="partial_failure",
+            unavailable_from=failed_stage,
+            reason="completed case batch retained; later reference metrics stopped after a failure",
+            failure=failure,
+        )
+        return {"status": "partial_failure", "exception": exc}
+
+    entry["unavailable_metrics"] = []
+    entry["comparison_complete"] = True
+    entry["status"] = "complete"
+    entry["comparison_note"] = "complete untrained reference metrics for the training microset"
+    return {"status": "complete", "exception": None}
+
+
+def _finalize_development_entry(
+    entry: dict,
+    *,
+    development_specs: list[dict],
+    development_examples: list[dict],
+    model,
+    historical_successes: dict[tuple[int, int], bool] | None,
+    deadline: float | None,
+    phase_prefix: str,
+) -> dict:
+    """Derive development metrics after raw runs are already report-visible."""
+
+    if entry["status"] != "complete":
+        status = (
+            "partial_wall_clock_cap"
+            if entry["status"] in {"partial_wall_clock_cap", "complete_budget_exhausted"}
+            else "partial_failure"
+        )
+        exc = (
+            DeadlineExceeded(phase_prefix, completed_cases=entry["completed_cases"])
+            if status == "partial_wall_clock_cap"
+            else RuntimeError("development case batch failed")
+        )
+        _mark_development_entry_unavailable(
+            entry,
+            status=status,
+            reason="completed case prefix retained; derived comparison metrics are unavailable",
+            failure=_exception_record(exc, phase=phase_prefix),
+        )
+        return {"status": status, "exception": exc}
+
+    stages = list(_DEVELOPMENT_DERIVED_STAGES)
+    try:
+        _check_deadline(deadline, f"{phase_prefix}_identity_validation", completed_cases=entry["completed_cases"])
+        _validate_run_identities(entry["runs"], development_specs)
+        _check_deadline(deadline, f"{phase_prefix}_metrics", completed_cases=entry["completed_cases"])
+        entry["metrics"] = _development_metrics(
+            model,
+            development_examples,
+            entry["runs"],
+            deadline=deadline,
+        )
+        entry["derived_metrics_status"]["development_metrics"] = "complete"
+
+        _check_deadline(deadline, f"{phase_prefix}_summary", completed_cases=entry["completed_cases"])
+        entry["summary"] = _run_summary(
+            entry["runs"],
+            deadline=deadline,
+            phase=f"{phase_prefix}_summary",
+        )
+        entry["derived_metrics_status"]["summary"] = "complete"
+
+        entry["world_clustered"] = _world_clustered_metrics(
+            entry["runs"],
+            deadline=deadline,
+        )
+        entry["derived_metrics_status"]["world_clustered"] = "complete"
+
+        entry["historical_success_overlap"] = _historical_success_overlap(
+            entry["runs"],
+            historical_successes,
+            deadline=deadline,
+        )
+        entry["derived_metrics_status"]["historical_success_overlap"] = "complete"
+    except DeadlineExceeded as exc:
+        failed_stage = next(
+            (
+                index
+                for index, stage in enumerate(stages)
+                if entry["derived_metrics_status"][stage] == "not_run"
+            ),
+            len(stages) - 1,
+        )
+        failure = _exception_record(exc, phase=exc.phase, case_index=exc.case_index)
+        _mark_development_entry_unavailable(
+            entry,
+            status="partial_wall_clock_cap",
+            unavailable_from=failed_stage,
+            reason="completed case batch retained; later derived metrics stopped at the wall-clock cap",
+            failure=failure,
+        )
+        return {"status": "partial_wall_clock_cap", "exception": exc}
+    except Exception as exc:
+        failed_stage = next(
+            (
+                index
+                for index, stage in enumerate(stages)
+                if entry["derived_metrics_status"][stage] == "not_run"
+            ),
+            len(stages) - 1,
+        )
+        failure = _exception_record(exc, phase=f"{phase_prefix}_derived_metrics")
+        _mark_development_entry_unavailable(
+            entry,
+            status="partial_failure",
+            unavailable_from=failed_stage,
+            reason="completed case batch retained; later derived metrics stopped after a failure",
+            failure=failure,
+        )
+        return {"status": "partial_failure", "exception": exc}
+
+    entry["unavailable_metrics"] = []
+    entry["comparison_complete"] = True
+    entry["status"] = "complete"
+    entry["comparison_note"] = "complete development comparison for the inspected cases"
+    return {"status": "complete", "exception": None}
+
+
 def _development_metrics(model, examples: list[dict], runs: list[dict], *, deadline: float | None) -> dict:
     _check_deadline(deadline, "development_metrics", completed_cases=len(runs))
     if len(runs) != len(examples):
@@ -1103,6 +1409,9 @@ def _markdown_summary(report: dict) -> str:
         "",
         f"- Wall-clock cap: `{runtime.get('wall_clock_cap_seconds')}` seconds; elapsed: `{runtime.get('wall_clock_seconds')}`; CPU: `{runtime.get('process_cpu_seconds')}`.",
         f"- Cap termination: `{runtime.get('cap_termination')}`; within cap: `{runtime.get('within_wall_clock_cap')}`.",
+        f"- Deadline enforcement: `{runtime.get('deadline_enforcement')}`; an in-flight model operation or finalization may finish after the cap: `{runtime.get('deadline_overrun_possible')}`.",
+        f"- Final JSON/Markdown serialization is outside the reported elapsed interval: `{runtime.get('elapsed_measurement_excludes_final_serialization')}`.",
+        f"- Single CPU process does not guarantee one BLAS/OpenMP thread or a fixed memory ceiling: `{runtime.get('single_process_not_single_thread_guarantee')}`.",
         f"- Structured failures: `{len(runtime.get('failures', []))}`.",
     ])
     for failure in runtime.get("failures", []):
@@ -1473,36 +1782,35 @@ def run_experiment(
                     deadline=deadline,
                     phase=f"untrained_reference_{label}",
                 )
-                entry = {
-                    "model_seed": int(seed),
-                    "updates": 0,
-                    "status": reference_batch["status"],
-                    "runs": reference_batch["runs"],
-                    "completed_cases": reference_batch["completed_cases"],
-                    "expected_cases": reference_batch["expected_cases"],
-                    "failures": reference_batch["failures"],
-                }
-                if reference_batch["status"] == "complete":
-                    _check_deadline(deadline, f"untrained_reference_{label}_metrics", completed_cases=len(train_specs))
-                    entry["metrics"] = _prediction_metrics(
-                        model,
-                        train_examples,
-                        deadline=deadline,
-                        phase=f"untrained_reference_{label}_metrics",
-                    )
-                    _check_deadline(deadline, f"untrained_reference_{label}_summary", completed_cases=len(train_specs))
-                    entry["physical_success"] = int(sum(bool(run["success"]) for run in reference_batch["runs"]))
-                    entry["summary"] = _run_summary(
-                        reference_batch["runs"],
-                        deadline=deadline,
-                        phase=f"untrained_reference_{label}_summary",
-                    )
+                entry = _untrained_reference_entry_shell(seed, reference_batch)
+                # Make the raw completed prefix visible before calculating any
+                # derived metric, so a cap cannot erase evidence already run.
                 references["untrained"][label] = entry
-                if reference_batch["status"] != "complete":
-                    if reference_batch["budget_exhausted"]:
-                        stop_with(DeadlineExceeded(f"untrained_reference_{label}", completed_cases=reference_batch["completed_cases"]), phase=f"untrained_reference_{label}")
-                    else:
-                        stop_with(RuntimeError("untrained reference case batch failed"), phase=f"untrained_reference_{label}")
+                finalized = _finalize_untrained_reference_entry(
+                    entry,
+                    model=model,
+                    train_examples=train_examples,
+                    deadline=deadline,
+                    phase_prefix=f"untrained_reference_{label}",
+                )
+                if finalized["status"] == "complete":
+                    _check_deadline(
+                        deadline,
+                        f"untrained_reference_{label}_complete",
+                        completed_cases=entry["completed_cases"],
+                    )
+                if finalized["status"] != "complete":
+                    exc = finalized["exception"]
+                    failure_phase = (
+                        exc.phase
+                        if isinstance(exc, DeadlineExceeded)
+                        else f"untrained_reference_{label}_derived_metrics"
+                    )
+                    stop_with(
+                        exc,
+                        phase=failure_phase,
+                        case_index=exc.case_index if isinstance(exc, DeadlineExceeded) else None,
+                    )
                     break
             except DeadlineExceeded as exc:
                 stop_with(exc, phase=exc.phase, case_index=exc.case_index)
@@ -1552,45 +1860,38 @@ def run_experiment(
                     deadline=deadline,
                     phase=f"development_cases_{trial['key']}",
                 )
-                entry = {
-                    "architecture": trial["label"],
-                    "model_seed": trial["model_seed"],
-                    "status": batch["status"],
-                    "runs": batch["runs"],
-                    "completed_cases": batch["completed_cases"],
-                    "expected_cases": batch["expected_cases"],
-                    "failures": batch["failures"],
-                }
-                if batch["status"] == "complete":
-                    _validate_run_identities(batch["runs"], development_specs)
-                    _check_deadline(deadline, f"development_metrics_{trial['key']}", completed_cases=batch["completed_cases"])
-                    entry["metrics"] = _development_metrics(
-                        trial["model"],
-                        development_examples,
-                        batch["runs"],
-                        deadline=deadline,
-                    )
-                    _check_deadline(deadline, f"development_overlap_{trial['key']}", completed_cases=batch["completed_cases"])
-                    entry["summary"] = _run_summary(
-                        batch["runs"],
-                        deadline=deadline,
-                        phase=f"development_summary_{trial['key']}",
-                    )
-                    entry["world_clustered"] = _world_clustered_metrics(
-                        batch["runs"],
-                        deadline=deadline,
-                    )
-                    entry["historical_success_overlap"] = _historical_success_overlap(
-                        batch["runs"],
-                        historical_successes.get(trial["key"]),
-                        deadline=deadline,
-                    )
+                entry = _development_entry_shell(trial, batch)
+                # Attach raw runs before any derived metric or summary work.
                 development["runs"][trial["key"]] = entry
-                if batch["status"] != "complete":
-                    if batch["budget_exhausted"]:
-                        stop_with(DeadlineExceeded(f"development_cases_{trial['key']}", completed_cases=batch["completed_cases"]), phase=f"development_cases_{trial['key']}")
-                    else:
-                        stop_with(RuntimeError("development case batch failed"), phase=f"development_cases_{trial['key']}")
+                finalized = _finalize_development_entry(
+                    entry,
+                    development_specs=development_specs,
+                    development_examples=development_examples,
+                    model=trial["model"],
+                    historical_successes=historical_successes.get(trial["key"]),
+                    deadline=deadline,
+                    phase_prefix=f"development_{trial['key']}",
+                )
+                if finalized["status"] == "complete":
+                    _check_deadline(
+                        deadline,
+                        f"development_{trial['key']}_complete",
+                        completed_cases=entry["completed_cases"],
+                    )
+                if finalized["status"] != "complete":
+                    development["status"] = finalized["status"]
+                    development["reason"] = entry["comparison_note"]
+                    exc = finalized["exception"]
+                    failure_phase = (
+                        exc.phase
+                        if isinstance(exc, DeadlineExceeded)
+                        else f"development_{trial['key']}_derived_metrics"
+                    )
+                    stop_with(
+                        exc,
+                        phase=failure_phase,
+                        case_index=exc.case_index if isinstance(exc, DeadlineExceeded) else None,
+                    )
                     break
             if not cap_termination and not fatal_failure:
                 development["status"] = "complete"
@@ -1729,6 +2030,9 @@ def run_experiment(
             "Worlds 9300–9307 are previously inspected development cases and never fresh generalization evidence.",
             "The fixed schedule does not establish learned tool selection or complete tool-result writeback learning.",
             "Exact optimizer resume remains unverified.",
+            "The 300-second cap is a cooperative wall-clock deadline: checks occur between updates, cases, and derived-metric stages, so an in-flight model operation or finalization can overrun it; no asynchronous kill is used.",
+            "The reported elapsed wall time is captured before final JSON/Markdown serialization, so final filesystem serialization is outside that measured interval.",
+            "Single-process CPU execution does not guarantee one BLAS/OpenMP thread or a fixed memory ceiling.",
             "No user-PC, production, deployment, paid compute, credentials, merge, or PR action was used.",
         ],
         "runtime": {
@@ -1736,6 +2040,13 @@ def run_experiment(
             "wall_clock_seconds": float(runtime_wall),
             "process_cpu_seconds": float(runtime_cpu),
             "single_cpu_process": True,
+            "single_process_not_single_thread_guarantee": True,
+            "fixed_memory_ceiling": False,
+            "deadline_enforcement": "cooperative",
+            "deadline_overrun_possible": True,
+            "deadline_overrun_note": "A currently running model operation or finalization can finish after the deadline; the runner records the cap at a subsequent cooperative check.",
+            "elapsed_measurement_excludes_final_serialization": True,
+            "elapsed_measurement_note": "wall_clock_seconds is captured before final JSON/Markdown serialization; final filesystem serialization can therefore run outside the reported elapsed interval.",
             "python": platform.python_version(),
             "max_rss_kb": int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss),
             "cap_termination": bool(cap_termination),
