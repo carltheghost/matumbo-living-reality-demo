@@ -1,0 +1,3694 @@
+{
+  "case_plan": {
+    "case_count": 16,
+    "cases": [
+      {
+        "case_index": 0,
+        "frequency_to_gate": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "gate_resonance_hz": [
+          1.15,
+          0.55,
+          0.75,
+          0.95
+        ],
+        "goal_index": 0,
+        "metadata_reference_gate": 1,
+        "note_goal_id": "delayed-train-goal-0",
+        "note_text": "target_hz=0.55; target_phase=0.00; rule=max-response-at-target; variant=delayed-train",
+        "partition": "training_disjoint_never_inspected_mapping_new_world",
+        "target_frequency_hz": 0.55,
+        "world_seed": 20021
+      },
+      {
+        "case_index": 1,
+        "frequency_to_gate": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "gate_resonance_hz": [
+          1.15,
+          0.55,
+          0.75,
+          0.95
+        ],
+        "goal_index": 1,
+        "metadata_reference_gate": 2,
+        "note_goal_id": "delayed-train-goal-1",
+        "note_text": "target_hz=0.75; target_phase=0.00; rule=max-response-at-target; variant=delayed-train",
+        "partition": "training_disjoint_never_inspected_mapping_new_world",
+        "target_frequency_hz": 0.75,
+        "world_seed": 20021
+      },
+      {
+        "case_index": 2,
+        "frequency_to_gate": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "gate_resonance_hz": [
+          1.15,
+          0.55,
+          0.75,
+          0.95
+        ],
+        "goal_index": 2,
+        "metadata_reference_gate": 3,
+        "note_goal_id": "delayed-train-goal-2",
+        "note_text": "target_hz=0.95; target_phase=0.00; rule=max-response-at-target; variant=delayed-train",
+        "partition": "training_disjoint_never_inspected_mapping_new_world",
+        "target_frequency_hz": 0.95,
+        "world_seed": 20021
+      },
+      {
+        "case_index": 3,
+        "frequency_to_gate": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "gate_resonance_hz": [
+          1.15,
+          0.55,
+          0.75,
+          0.95
+        ],
+        "goal_index": 3,
+        "metadata_reference_gate": 0,
+        "note_goal_id": "delayed-train-goal-3",
+        "note_text": "target_hz=1.15; target_phase=0.00; rule=max-response-at-target; variant=delayed-train",
+        "partition": "training_disjoint_never_inspected_mapping_new_world",
+        "target_frequency_hz": 1.15,
+        "world_seed": 20021
+      },
+      {
+        "case_index": 4,
+        "frequency_to_gate": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "gate_resonance_hz": [
+          1.15,
+          0.55,
+          0.75,
+          0.95
+        ],
+        "goal_index": 0,
+        "metadata_reference_gate": 1,
+        "note_goal_id": "delayed-train-goal-0",
+        "note_text": "target_hz=0.55; target_phase=0.00; rule=max-response-at-target; variant=delayed-train",
+        "partition": "training_disjoint_never_inspected_mapping_new_world",
+        "target_frequency_hz": 0.55,
+        "world_seed": 20023
+      },
+      {
+        "case_index": 5,
+        "frequency_to_gate": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "gate_resonance_hz": [
+          1.15,
+          0.55,
+          0.75,
+          0.95
+        ],
+        "goal_index": 1,
+        "metadata_reference_gate": 2,
+        "note_goal_id": "delayed-train-goal-1",
+        "note_text": "target_hz=0.75; target_phase=0.00; rule=max-response-at-target; variant=delayed-train",
+        "partition": "training_disjoint_never_inspected_mapping_new_world",
+        "target_frequency_hz": 0.75,
+        "world_seed": 20023
+      },
+      {
+        "case_index": 6,
+        "frequency_to_gate": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "gate_resonance_hz": [
+          1.15,
+          0.55,
+          0.75,
+          0.95
+        ],
+        "goal_index": 2,
+        "metadata_reference_gate": 3,
+        "note_goal_id": "delayed-train-goal-2",
+        "note_text": "target_hz=0.95; target_phase=0.00; rule=max-response-at-target; variant=delayed-train",
+        "partition": "training_disjoint_never_inspected_mapping_new_world",
+        "target_frequency_hz": 0.95,
+        "world_seed": 20023
+      },
+      {
+        "case_index": 7,
+        "frequency_to_gate": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "gate_resonance_hz": [
+          1.15,
+          0.55,
+          0.75,
+          0.95
+        ],
+        "goal_index": 3,
+        "metadata_reference_gate": 0,
+        "note_goal_id": "delayed-train-goal-3",
+        "note_text": "target_hz=1.15; target_phase=0.00; rule=max-response-at-target; variant=delayed-train",
+        "partition": "training_disjoint_never_inspected_mapping_new_world",
+        "target_frequency_hz": 1.15,
+        "world_seed": 20023
+      },
+      {
+        "case_index": 8,
+        "frequency_to_gate": [
+          3,
+          2,
+          0,
+          1
+        ],
+        "gate_resonance_hz": [
+          0.95,
+          1.15,
+          0.75,
+          0.55
+        ],
+        "goal_index": 0,
+        "metadata_reference_gate": 3,
+        "note_goal_id": "delayed-train-goal-0",
+        "note_text": "target_hz=0.55; target_phase=0.00; rule=max-response-at-target; variant=delayed-train",
+        "partition": "training_disjoint_never_inspected_mapping_new_world",
+        "target_frequency_hz": 0.55,
+        "world_seed": 20049
+      },
+      {
+        "case_index": 9,
+        "frequency_to_gate": [
+          3,
+          2,
+          0,
+          1
+        ],
+        "gate_resonance_hz": [
+          0.95,
+          1.15,
+          0.75,
+          0.55
+        ],
+        "goal_index": 1,
+        "metadata_reference_gate": 2,
+        "note_goal_id": "delayed-train-goal-1",
+        "note_text": "target_hz=0.75; target_phase=0.00; rule=max-response-at-target; variant=delayed-train",
+        "partition": "training_disjoint_never_inspected_mapping_new_world",
+        "target_frequency_hz": 0.75,
+        "world_seed": 20049
+      },
+      {
+        "case_index": 10,
+        "frequency_to_gate": [
+          3,
+          2,
+          0,
+          1
+        ],
+        "gate_resonance_hz": [
+          0.95,
+          1.15,
+          0.75,
+          0.55
+        ],
+        "goal_index": 2,
+        "metadata_reference_gate": 0,
+        "note_goal_id": "delayed-train-goal-2",
+        "note_text": "target_hz=0.95; target_phase=0.00; rule=max-response-at-target; variant=delayed-train",
+        "partition": "training_disjoint_never_inspected_mapping_new_world",
+        "target_frequency_hz": 0.95,
+        "world_seed": 20049
+      },
+      {
+        "case_index": 11,
+        "frequency_to_gate": [
+          3,
+          2,
+          0,
+          1
+        ],
+        "gate_resonance_hz": [
+          0.95,
+          1.15,
+          0.75,
+          0.55
+        ],
+        "goal_index": 3,
+        "metadata_reference_gate": 1,
+        "note_goal_id": "delayed-train-goal-3",
+        "note_text": "target_hz=1.15; target_phase=0.00; rule=max-response-at-target; variant=delayed-train",
+        "partition": "training_disjoint_never_inspected_mapping_new_world",
+        "target_frequency_hz": 1.15,
+        "world_seed": 20049
+      },
+      {
+        "case_index": 12,
+        "frequency_to_gate": [
+          3,
+          2,
+          0,
+          1
+        ],
+        "gate_resonance_hz": [
+          0.95,
+          1.15,
+          0.75,
+          0.55
+        ],
+        "goal_index": 0,
+        "metadata_reference_gate": 3,
+        "note_goal_id": "delayed-train-goal-0",
+        "note_text": "target_hz=0.55; target_phase=0.00; rule=max-response-at-target; variant=delayed-train",
+        "partition": "training_disjoint_never_inspected_mapping_new_world",
+        "target_frequency_hz": 0.55,
+        "world_seed": 20050
+      },
+      {
+        "case_index": 13,
+        "frequency_to_gate": [
+          3,
+          2,
+          0,
+          1
+        ],
+        "gate_resonance_hz": [
+          0.95,
+          1.15,
+          0.75,
+          0.55
+        ],
+        "goal_index": 1,
+        "metadata_reference_gate": 2,
+        "note_goal_id": "delayed-train-goal-1",
+        "note_text": "target_hz=0.75; target_phase=0.00; rule=max-response-at-target; variant=delayed-train",
+        "partition": "training_disjoint_never_inspected_mapping_new_world",
+        "target_frequency_hz": 0.75,
+        "world_seed": 20050
+      },
+      {
+        "case_index": 14,
+        "frequency_to_gate": [
+          3,
+          2,
+          0,
+          1
+        ],
+        "gate_resonance_hz": [
+          0.95,
+          1.15,
+          0.75,
+          0.55
+        ],
+        "goal_index": 2,
+        "metadata_reference_gate": 0,
+        "note_goal_id": "delayed-train-goal-2",
+        "note_text": "target_hz=0.95; target_phase=0.00; rule=max-response-at-target; variant=delayed-train",
+        "partition": "training_disjoint_never_inspected_mapping_new_world",
+        "target_frequency_hz": 0.95,
+        "world_seed": 20050
+      },
+      {
+        "case_index": 15,
+        "frequency_to_gate": [
+          3,
+          2,
+          0,
+          1
+        ],
+        "gate_resonance_hz": [
+          0.95,
+          1.15,
+          0.75,
+          0.55
+        ],
+        "goal_index": 3,
+        "metadata_reference_gate": 1,
+        "note_goal_id": "delayed-train-goal-3",
+        "note_text": "target_hz=1.15; target_phase=0.00; rule=max-response-at-target; variant=delayed-train",
+        "partition": "training_disjoint_never_inspected_mapping_new_world",
+        "target_frequency_hz": 1.15,
+        "world_seed": 20050
+      }
+    ],
+    "goal_indices": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "goals_per_world": 4,
+    "world_count": 4
+  },
+  "evaluation_started": false,
+  "failure_and_cap_reporting": {
+    "allowed_statuses": [
+      "not_started",
+      "complete",
+      "partial_wall_clock_cap",
+      "partial_memory_cap",
+      "partial_failure"
+    ],
+    "do_not_compute_later_metrics_after_cap_or_failure": true,
+    "do_not_retry_or_select_a_different_world": true,
+    "do_not_treat_partial_evidence_as_complete": true,
+    "preserve_partial_raw_prefix": true,
+    "record_completed_case_prefix": true,
+    "record_completed_row_relabel_prefix": true,
+    "record_failure_phase_identity_and_exception": true
+  },
+  "fresh_cases_evaluated": 0,
+  "fresh_model_outcomes_loaded": false,
+  "fresh_world_selection": {
+    "all_feasible_mappings_covered": false,
+    "all_selected_U_mappings_covered": true,
+    "excluded_world_seeds": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      3100,
+      3200,
+      3300,
+      3301,
+      3302,
+      3400,
+      3500,
+      3501,
+      3502,
+      3503,
+      3504,
+      3505,
+      3506,
+      3507,
+      3508,
+      3509,
+      3510,
+      3511,
+      3512,
+      3513,
+      3514,
+      3515,
+      3516,
+      3517,
+      3518,
+      3519,
+      6100,
+      6101,
+      6102,
+      6103,
+      6104,
+      6105,
+      6106,
+      6107,
+      6200,
+      6201,
+      6202,
+      6203,
+      6300,
+      6301,
+      6302,
+      6303,
+      6304,
+      6305,
+      6306,
+      6307,
+      6308,
+      6309,
+      6310,
+      6311,
+      7100,
+      7101,
+      8300,
+      8301,
+      9200,
+      9201,
+      9300,
+      9301,
+      9302,
+      9303,
+      9304,
+      9305,
+      9306,
+      9307,
+      15300,
+      15301,
+      15302,
+      15303,
+      15304,
+      15305,
+      15306,
+      15307,
+      15308,
+      15309,
+      15310,
+      15311
+    ],
+    "if_U_empty_alternative": {
+      "label": "fresh-instance/training-disjoint test, not globally unseen-map evidence",
+      "requires_independent_review": true,
+      "status": "not_applicable_U_nonempty"
+    },
+    "lexicographic_mapping_limit_K": 8,
+    "partition_counts": {
+      "seen_training_mapping_new_world": 0,
+      "training_disjoint_never_inspected_mapping_new_world": 4,
+      "training_disjoint_previously_inspected_mapping_new_world": 0
+    },
+    "seed_range": [
+      20000,
+      30000
+    ],
+    "selected_mapping_count": 2,
+    "selected_mapping_tuples": [
+      [
+        1,
+        2,
+        3,
+        0
+      ],
+      [
+        3,
+        2,
+        0,
+        1
+      ]
+    ],
+    "selection_algorithm": "sort U lexicographically, take the first K=min(8,|U|) mappings, then scan ascending candidate seeds and take the first two unused seeds per mapping after excluding every known world",
+    "selection_metadata": "gate_resonance_hz generated by the fixed simulator seed rule only",
+    "selection_universe": "U = globally_unseen_mapping_tuples from the complete prior inventory",
+    "selection_uses_model_outcomes": false,
+    "unselected_training_disjoint_mapping_tuples": [
+      [
+        0,
+        1,
+        2,
+        3
+      ],
+      [
+        0,
+        1,
+        3,
+        2
+      ],
+      [
+        0,
+        2,
+        3,
+        1
+      ],
+      [
+        0,
+        3,
+        1,
+        2
+      ],
+      [
+        0,
+        3,
+        2,
+        1
+      ],
+      [
+        1,
+        0,
+        2,
+        3
+      ],
+      [
+        1,
+        0,
+        3,
+        2
+      ],
+      [
+        1,
+        2,
+        0,
+        3
+      ],
+      [
+        1,
+        3,
+        0,
+        2
+      ],
+      [
+        1,
+        3,
+        2,
+        0
+      ],
+      [
+        2,
+        0,
+        1,
+        3
+      ],
+      [
+        2,
+        0,
+        3,
+        1
+      ],
+      [
+        2,
+        1,
+        0,
+        3
+      ],
+      [
+        2,
+        1,
+        3,
+        0
+      ],
+      [
+        2,
+        3,
+        0,
+        1
+      ],
+      [
+        2,
+        3,
+        1,
+        0
+      ],
+      [
+        3,
+        0,
+        2,
+        1
+      ],
+      [
+        3,
+        1,
+        0,
+        2
+      ],
+      [
+        3,
+        1,
+        2,
+        0
+      ],
+      [
+        3,
+        2,
+        1,
+        0
+      ]
+    ],
+    "worlds": [
+      {
+        "candidate_pool": [
+          20000,
+          30000
+        ],
+        "candidate_training_mapping": false,
+        "frequency_to_gate": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "gate_resonance_hz": [
+          1.15,
+          0.55,
+          0.75,
+          0.95
+        ],
+        "mapping_was_prior_inspected": false,
+        "partition": "training_disjoint_never_inspected_mapping_new_world",
+        "selection_basis": "ascending world-seed search using gate-resonance metadata only",
+        "world_seed": 20021,
+        "world_was_prior_inspected": false
+      },
+      {
+        "candidate_pool": [
+          20000,
+          30000
+        ],
+        "candidate_training_mapping": false,
+        "frequency_to_gate": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "gate_resonance_hz": [
+          1.15,
+          0.55,
+          0.75,
+          0.95
+        ],
+        "mapping_was_prior_inspected": false,
+        "partition": "training_disjoint_never_inspected_mapping_new_world",
+        "selection_basis": "ascending world-seed search using gate-resonance metadata only",
+        "world_seed": 20023,
+        "world_was_prior_inspected": false
+      },
+      {
+        "candidate_pool": [
+          20000,
+          30000
+        ],
+        "candidate_training_mapping": false,
+        "frequency_to_gate": [
+          3,
+          2,
+          0,
+          1
+        ],
+        "gate_resonance_hz": [
+          0.95,
+          1.15,
+          0.75,
+          0.55
+        ],
+        "mapping_was_prior_inspected": false,
+        "partition": "training_disjoint_never_inspected_mapping_new_world",
+        "selection_basis": "ascending world-seed search using gate-resonance metadata only",
+        "world_seed": 20049,
+        "world_was_prior_inspected": false
+      },
+      {
+        "candidate_pool": [
+          20000,
+          30000
+        ],
+        "candidate_training_mapping": false,
+        "frequency_to_gate": [
+          3,
+          2,
+          0,
+          1
+        ],
+        "gate_resonance_hz": [
+          0.95,
+          1.15,
+          0.75,
+          0.55
+        ],
+        "mapping_was_prior_inspected": false,
+        "partition": "training_disjoint_never_inspected_mapping_new_world",
+        "selection_basis": "ascending world-seed search using gate-resonance metadata only",
+        "world_seed": 20050,
+        "world_was_prior_inspected": false
+      }
+    ],
+    "worlds_per_mapping": 2
+  },
+  "frozen_checkpoints": {
+    "control-seed-141": {
+      "checkpoint_schema": "vevo.v03.neural-delayed-memory-checkpoint.v1",
+      "current_digest": "6bf7be9f6b234e448cbc789dab5a7e800e15c58e75b9ce51bfa9d7c08639d42b",
+      "digest": "6bf7be9f6b234e448cbc789dab5a7e800e15c58e75b9ce51bfa9d7c08639d42b",
+      "expected_gate_head": "shared_row_scorer",
+      "expected_source_sha": "d8a41bfe6e7e38d5319438f2c7171006b2349e51",
+      "family": "candidate",
+      "gate_head": "shared_row_scorer",
+      "label": "control",
+      "model_class": "V03SingleRecurrentMemory",
+      "normalization_digest": "cf43d9f347aca5d7a2339849b850e6d1c234fa8b0977df0459c45dfc0460cbeb",
+      "normalization_exact_to_frozen_fixture": true,
+      "parameter_count": 11179,
+      "path": "storage/checkpoints/v03-neural-shared-row-bundled-screening-control-seed-141.json",
+      "payload_digest": "cb367156ca9ad28fe215618055a1f67b777cf32f43f6af6ddd091ade0330be3f",
+      "seed": 141,
+      "source_sha": "d8a41bfe6e7e38d5319438f2c7171006b2349e51",
+      "training_updates": 1000
+    },
+    "control-seed-143": {
+      "checkpoint_schema": "vevo.v03.neural-delayed-memory-checkpoint.v1",
+      "current_digest": "3825f372f6845185512165bb1ef9c1c5ad8efc41ca36a747f2c602c214aa5acb",
+      "digest": "3825f372f6845185512165bb1ef9c1c5ad8efc41ca36a747f2c602c214aa5acb",
+      "expected_gate_head": "shared_row_scorer",
+      "expected_source_sha": "d8a41bfe6e7e38d5319438f2c7171006b2349e51",
+      "family": "candidate",
+      "gate_head": "shared_row_scorer",
+      "label": "control",
+      "model_class": "V03SingleRecurrentMemory",
+      "normalization_digest": "cf43d9f347aca5d7a2339849b850e6d1c234fa8b0977df0459c45dfc0460cbeb",
+      "normalization_exact_to_frozen_fixture": true,
+      "parameter_count": 11179,
+      "path": "storage/checkpoints/v03-neural-shared-row-bundled-screening-control-seed-143.json",
+      "payload_digest": "6884d8ba415ceb37770ed44fd94178ac736fb07684f9a26f4490692db9e20f40",
+      "seed": 143,
+      "source_sha": "d8a41bfe6e7e38d5319438f2c7171006b2349e51",
+      "training_updates": 1000
+    },
+    "full-seed-107": {
+      "checkpoint_schema": "vevo.v03.neural-delayed-memory-checkpoint.v1",
+      "current_digest": "e5053d3c81165d9b44e7c1706dc372c98976715bad621797f1a7dc8a0e94a3ec",
+      "digest": "e5053d3c81165d9b44e7c1706dc372c98976715bad621797f1a7dc8a0e94a3ec",
+      "expected_gate_head": "shared_row_scorer",
+      "expected_source_sha": "d8a41bfe6e7e38d5319438f2c7171006b2349e51",
+      "family": "candidate",
+      "gate_head": "shared_row_scorer",
+      "label": "full",
+      "model_class": "V03FiveBrain",
+      "normalization_digest": "cf43d9f347aca5d7a2339849b850e6d1c234fa8b0977df0459c45dfc0460cbeb",
+      "normalization_exact_to_frozen_fixture": true,
+      "parameter_count": 11184,
+      "path": "storage/checkpoints/v03-neural-shared-row-bundled-screening-full-seed-107.json",
+      "payload_digest": "fd9fd9f06ae7a27193fe761ca97b76556e0a8d4c006212bf05f58c613ce1c600",
+      "seed": 107,
+      "source_sha": "d8a41bfe6e7e38d5319438f2c7171006b2349e51",
+      "training_updates": 1000
+    },
+    "full-seed-117": {
+      "checkpoint_schema": "vevo.v03.neural-delayed-memory-checkpoint.v1",
+      "current_digest": "a686d2a6b5006bd73c5e9b1ea50b501a513d2ce5842675de5ca3d790ac42baa1",
+      "digest": "a686d2a6b5006bd73c5e9b1ea50b501a513d2ce5842675de5ca3d790ac42baa1",
+      "expected_gate_head": "shared_row_scorer",
+      "expected_source_sha": "d8a41bfe6e7e38d5319438f2c7171006b2349e51",
+      "family": "candidate",
+      "gate_head": "shared_row_scorer",
+      "label": "full",
+      "model_class": "V03FiveBrain",
+      "normalization_digest": "cf43d9f347aca5d7a2339849b850e6d1c234fa8b0977df0459c45dfc0460cbeb",
+      "normalization_exact_to_frozen_fixture": true,
+      "parameter_count": 11184,
+      "path": "storage/checkpoints/v03-neural-shared-row-bundled-screening-full-seed-117.json",
+      "payload_digest": "bf2e97dd9a890e83a8ea4bd2e488f9e17a7a2b72bcd6a516f25cd660b4f69800",
+      "seed": 117,
+      "source_sha": "d8a41bfe6e7e38d5319438f2c7171006b2349e51",
+      "training_updates": 1000
+    },
+    "legacy-control-seed-141": {
+      "checkpoint_schema": "vevo.v03.neural-delayed-memory-checkpoint.v1",
+      "current_digest": "27c195ddce0e7524a464ad28963849d97d90a437b783be0dc34344b24d750095",
+      "digest": "27c195ddce0e7524a464ad28963849d97d90a437b783be0dc34344b24d750095",
+      "expected_gate_head": "legacy_action_matrix",
+      "expected_source_sha": "2d35c0b32c5fb844c94b3909506dbf361d0bc521",
+      "family": "legacy_baseline",
+      "gate_head": "legacy_action_matrix",
+      "label": "control",
+      "model_class": "V03SingleRecurrentMemory",
+      "normalization_digest": "cf43d9f347aca5d7a2339849b850e6d1c234fa8b0977df0459c45dfc0460cbeb",
+      "normalization_exact_to_frozen_fixture": true,
+      "parameter_count": 11178,
+      "path": "storage/checkpoints/v03-neural-delayed-shared-response-scale-control-seed-141.json",
+      "payload_digest": "a38c0d4271f2d7f4af9b9371e39048a8280614779d261addfd3db3b70cb11dc2",
+      "seed": 141,
+      "source_sha": "2d35c0b32c5fb844c94b3909506dbf361d0bc521",
+      "training_updates": 1000
+    },
+    "legacy-control-seed-143": {
+      "checkpoint_schema": "vevo.v03.neural-delayed-memory-checkpoint.v1",
+      "current_digest": "a1f622654e00a8195a202a29a3a70beae3cf1213d77e6900af9324b1d227e94c",
+      "digest": "a1f622654e00a8195a202a29a3a70beae3cf1213d77e6900af9324b1d227e94c",
+      "expected_gate_head": "legacy_action_matrix",
+      "expected_source_sha": "2d35c0b32c5fb844c94b3909506dbf361d0bc521",
+      "family": "legacy_baseline",
+      "gate_head": "legacy_action_matrix",
+      "label": "control",
+      "model_class": "V03SingleRecurrentMemory",
+      "normalization_digest": "cf43d9f347aca5d7a2339849b850e6d1c234fa8b0977df0459c45dfc0460cbeb",
+      "normalization_exact_to_frozen_fixture": true,
+      "parameter_count": 11178,
+      "path": "storage/checkpoints/v03-neural-delayed-shared-response-scale-control-seed-143.json",
+      "payload_digest": "ab1276e01fe633ef7b9af67fde11c2cf5f7711333bba8b5829fe143c50dc2c0c",
+      "seed": 143,
+      "source_sha": "2d35c0b32c5fb844c94b3909506dbf361d0bc521",
+      "training_updates": 1000
+    },
+    "legacy-full-seed-107": {
+      "checkpoint_schema": "vevo.v03.neural-delayed-memory-checkpoint.v1",
+      "current_digest": "5fe3a3a07c2572a2f51cde5699de36af41f6f39263c601b8e130ebcfba9f6ea6",
+      "digest": "5fe3a3a07c2572a2f51cde5699de36af41f6f39263c601b8e130ebcfba9f6ea6",
+      "expected_gate_head": "legacy_action_matrix",
+      "expected_source_sha": "2d35c0b32c5fb844c94b3909506dbf361d0bc521",
+      "family": "legacy_baseline",
+      "gate_head": "legacy_action_matrix",
+      "label": "full",
+      "model_class": "V03FiveBrain",
+      "normalization_digest": "cf43d9f347aca5d7a2339849b850e6d1c234fa8b0977df0459c45dfc0460cbeb",
+      "normalization_exact_to_frozen_fixture": true,
+      "parameter_count": 11183,
+      "path": "storage/checkpoints/v03-neural-delayed-shared-response-scale-full-seed-107.json",
+      "payload_digest": "c2cc0dd9b429741aff4765ba0deae75cf2753fddfca5fddd723c2bc4183d6ba5",
+      "seed": 107,
+      "source_sha": "2d35c0b32c5fb844c94b3909506dbf361d0bc521",
+      "training_updates": 1000
+    },
+    "legacy-full-seed-117": {
+      "checkpoint_schema": "vevo.v03.neural-delayed-memory-checkpoint.v1",
+      "current_digest": "08775a56a4d31c8f7c2bce38aaac105a2169e73619c32aa0890270a3f7223c4d",
+      "digest": "08775a56a4d31c8f7c2bce38aaac105a2169e73619c32aa0890270a3f7223c4d",
+      "expected_gate_head": "legacy_action_matrix",
+      "expected_source_sha": "2d35c0b32c5fb844c94b3909506dbf361d0bc521",
+      "family": "legacy_baseline",
+      "gate_head": "legacy_action_matrix",
+      "label": "full",
+      "model_class": "V03FiveBrain",
+      "normalization_digest": "cf43d9f347aca5d7a2339849b850e6d1c234fa8b0977df0459c45dfc0460cbeb",
+      "normalization_exact_to_frozen_fixture": true,
+      "parameter_count": 11183,
+      "path": "storage/checkpoints/v03-neural-delayed-shared-response-scale-full-seed-117.json",
+      "payload_digest": "b6809215f6b8503f2d0f023d5590289d0577e90fbe7ecf49064b1da9d114ab58",
+      "seed": 117,
+      "source_sha": "2d35c0b32c5fb844c94b3909506dbf361d0bc521",
+      "training_updates": 1000
+    }
+  },
+  "frozen_screening_identity": {
+    "artifact_commit": "00c60a84f3ee90ef661cfd12482d34ef194c4633",
+    "checkpoint_prefix": "v03-neural-shared-row-bundled-screening",
+    "output_digests": {
+      "reports/generated/v03-neural-shared-row-bundled-screening-paired.md": "57b3874be881833d30c6e6b0a8f6040ee6204e550406fa750fee4bf443513f2a",
+      "reports/generated/v03-neural-shared-row-bundled-screening-report.json": "bb60e55cb77f5ffe8f2f968c9a7be837e41b85a54e1c2cc1fa3b572b24f28da4",
+      "reports/generated/v03-neural-shared-row-bundled-screening-report.md": "7b1c19cb64fd56a437d207ddf0edd48b60a4f6ce1a07c68b2823a50deece242d"
+    },
+    "output_filename_deviation": {
+      "actual_screening_checkpoint_prefix": "v03-neural-shared-row-bundled-screening",
+      "actual_screening_report_name": "v03-neural-shared-row-bundled-screening-report.json",
+      "hidden_source_change": false,
+      "prior_scorer_checkpoint_prefix": "v03-neural-shared-row-scorer",
+      "prior_scorer_report_name": "v03-neural-shared-row-scorer-report.json",
+      "reason": "The preregistration records the actual independent screening output name; no hidden source change is implied."
+    },
+    "paired_analysis_path": "reports/generated/v03-neural-shared-row-bundled-screening-paired.md",
+    "report_path": "reports/generated/v03-neural-shared-row-bundled-screening-report.json",
+    "source_sha": "d8a41bfe6e7e38d5319438f2c7171006b2349e51",
+    "summary_path": "reports/generated/v03-neural-shared-row-bundled-screening-report.md"
+  },
+  "mapping_inventory": {
+    "all_feasible_mapping_count": 24,
+    "candidate_training_mapping_tuples": [
+      [
+        0,
+        2,
+        1,
+        3
+      ],
+      [
+        3,
+        0,
+        1,
+        2
+      ]
+    ],
+    "candidate_training_world_seeds": [
+      9200,
+      9201
+    ],
+    "globally_unseen_mapping_count": 2,
+    "globally_unseen_mapping_tuples": [
+      [
+        1,
+        2,
+        3,
+        0
+      ],
+      [
+        3,
+        2,
+        0,
+        1
+      ]
+    ],
+    "groups": {
+      "v03_delayed_memory_development": {
+        "mapping_tuples": [
+          [
+            1,
+            0,
+            2,
+            3
+          ],
+          [
+            1,
+            2,
+            0,
+            3
+          ],
+          [
+            2,
+            0,
+            1,
+            3
+          ],
+          [
+            2,
+            3,
+            0,
+            1
+          ],
+          [
+            2,
+            3,
+            1,
+            0
+          ],
+          [
+            3,
+            1,
+            2,
+            0
+          ],
+          [
+            3,
+            2,
+            1,
+            0
+          ]
+        ],
+        "world_count": 8,
+        "world_seeds": [
+          9300,
+          9301,
+          9302,
+          9303,
+          9304,
+          9305,
+          9306,
+          9307
+        ],
+        "worlds": [
+          {
+            "frequency_to_gate": [
+              3,
+              2,
+              1,
+              0
+            ],
+            "world_seed": 9300
+          },
+          {
+            "frequency_to_gate": [
+              2,
+              3,
+              1,
+              0
+            ],
+            "world_seed": 9301
+          },
+          {
+            "frequency_to_gate": [
+              1,
+              0,
+              2,
+              3
+            ],
+            "world_seed": 9302
+          },
+          {
+            "frequency_to_gate": [
+              2,
+              3,
+              1,
+              0
+            ],
+            "world_seed": 9303
+          },
+          {
+            "frequency_to_gate": [
+              1,
+              2,
+              0,
+              3
+            ],
+            "world_seed": 9304
+          },
+          {
+            "frequency_to_gate": [
+              3,
+              1,
+              2,
+              0
+            ],
+            "world_seed": 9305
+          },
+          {
+            "frequency_to_gate": [
+              2,
+              3,
+              0,
+              1
+            ],
+            "world_seed": 9306
+          },
+          {
+            "frequency_to_gate": [
+              2,
+              0,
+              1,
+              3
+            ],
+            "world_seed": 9307
+          }
+        ]
+      },
+      "v03_delayed_memory_training": {
+        "mapping_tuples": [
+          [
+            0,
+            2,
+            1,
+            3
+          ],
+          [
+            3,
+            0,
+            1,
+            2
+          ]
+        ],
+        "world_count": 2,
+        "world_seeds": [
+          9200,
+          9201
+        ],
+        "worlds": [
+          {
+            "frequency_to_gate": [
+              3,
+              0,
+              1,
+              2
+            ],
+            "world_seed": 9200
+          },
+          {
+            "frequency_to_gate": [
+              0,
+              2,
+              1,
+              3
+            ],
+            "world_seed": 9201
+          }
+        ]
+      },
+      "v03_neural_proof_test": {
+        "mapping_tuples": [
+          [
+            0,
+            1,
+            2,
+            3
+          ],
+          [
+            0,
+            1,
+            3,
+            2
+          ],
+          [
+            0,
+            3,
+            1,
+            2
+          ],
+          [
+            0,
+            3,
+            2,
+            1
+          ],
+          [
+            1,
+            0,
+            3,
+            2
+          ],
+          [
+            1,
+            3,
+            2,
+            0
+          ],
+          [
+            2,
+            0,
+            3,
+            1
+          ],
+          [
+            2,
+            1,
+            0,
+            3
+          ],
+          [
+            3,
+            0,
+            1,
+            2
+          ],
+          [
+            3,
+            1,
+            0,
+            2
+          ]
+        ],
+        "world_count": 12,
+        "world_seeds": [
+          6300,
+          6301,
+          6302,
+          6303,
+          6304,
+          6305,
+          6306,
+          6307,
+          6308,
+          6309,
+          6310,
+          6311
+        ],
+        "worlds": [
+          {
+            "frequency_to_gate": [
+              0,
+              3,
+              2,
+              1
+            ],
+            "world_seed": 6300
+          },
+          {
+            "frequency_to_gate": [
+              3,
+              1,
+              0,
+              2
+            ],
+            "world_seed": 6301
+          },
+          {
+            "frequency_to_gate": [
+              2,
+              1,
+              0,
+              3
+            ],
+            "world_seed": 6302
+          },
+          {
+            "frequency_to_gate": [
+              1,
+              0,
+              3,
+              2
+            ],
+            "world_seed": 6303
+          },
+          {
+            "frequency_to_gate": [
+              0,
+              1,
+              3,
+              2
+            ],
+            "world_seed": 6304
+          },
+          {
+            "frequency_to_gate": [
+              3,
+              0,
+              1,
+              2
+            ],
+            "world_seed": 6305
+          },
+          {
+            "frequency_to_gate": [
+              0,
+              3,
+              2,
+              1
+            ],
+            "world_seed": 6306
+          },
+          {
+            "frequency_to_gate": [
+              1,
+              3,
+              2,
+              0
+            ],
+            "world_seed": 6307
+          },
+          {
+            "frequency_to_gate": [
+              0,
+              3,
+              1,
+              2
+            ],
+            "world_seed": 6308
+          },
+          {
+            "frequency_to_gate": [
+              2,
+              0,
+              3,
+              1
+            ],
+            "world_seed": 6309
+          },
+          {
+            "frequency_to_gate": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "world_seed": 6310
+          },
+          {
+            "frequency_to_gate": [
+              1,
+              0,
+              3,
+              2
+            ],
+            "world_seed": 6311
+          }
+        ]
+      },
+      "v03_neural_proof_test_donor_measurements": {
+        "mapping_tuples": [
+          [
+            1,
+            0,
+            2,
+            3
+          ],
+          [
+            1,
+            2,
+            0,
+            3
+          ],
+          [
+            2,
+            0,
+            3,
+            1
+          ],
+          [
+            2,
+            1,
+            0,
+            3
+          ],
+          [
+            2,
+            1,
+            3,
+            0
+          ],
+          [
+            2,
+            3,
+            0,
+            1
+          ],
+          [
+            3,
+            0,
+            2,
+            1
+          ],
+          [
+            3,
+            1,
+            2,
+            0
+          ]
+        ],
+        "world_count": 12,
+        "world_seeds": [
+          15300,
+          15301,
+          15302,
+          15303,
+          15304,
+          15305,
+          15306,
+          15307,
+          15308,
+          15309,
+          15310,
+          15311
+        ],
+        "worlds": [
+          {
+            "frequency_to_gate": [
+              1,
+              2,
+              0,
+              3
+            ],
+            "world_seed": 15300
+          },
+          {
+            "frequency_to_gate": [
+              2,
+              1,
+              0,
+              3
+            ],
+            "world_seed": 15301
+          },
+          {
+            "frequency_to_gate": [
+              3,
+              1,
+              2,
+              0
+            ],
+            "world_seed": 15302
+          },
+          {
+            "frequency_to_gate": [
+              3,
+              0,
+              2,
+              1
+            ],
+            "world_seed": 15303
+          },
+          {
+            "frequency_to_gate": [
+              2,
+              0,
+              3,
+              1
+            ],
+            "world_seed": 15304
+          },
+          {
+            "frequency_to_gate": [
+              2,
+              3,
+              0,
+              1
+            ],
+            "world_seed": 15305
+          },
+          {
+            "frequency_to_gate": [
+              2,
+              3,
+              0,
+              1
+            ],
+            "world_seed": 15306
+          },
+          {
+            "frequency_to_gate": [
+              1,
+              2,
+              0,
+              3
+            ],
+            "world_seed": 15307
+          },
+          {
+            "frequency_to_gate": [
+              1,
+              0,
+              2,
+              3
+            ],
+            "world_seed": 15308
+          },
+          {
+            "frequency_to_gate": [
+              3,
+              1,
+              2,
+              0
+            ],
+            "world_seed": 15309
+          },
+          {
+            "frequency_to_gate": [
+              2,
+              1,
+              3,
+              0
+            ],
+            "world_seed": 15310
+          },
+          {
+            "frequency_to_gate": [
+              1,
+              2,
+              0,
+              3
+            ],
+            "world_seed": 15311
+          }
+        ]
+      },
+      "v03_neural_proof_train": {
+        "mapping_tuples": [
+          [
+            0,
+            2,
+            1,
+            3
+          ],
+          [
+            1,
+            0,
+            3,
+            2
+          ],
+          [
+            2,
+            1,
+            0,
+            3
+          ],
+          [
+            2,
+            1,
+            3,
+            0
+          ],
+          [
+            3,
+            0,
+            1,
+            2
+          ],
+          [
+            3,
+            1,
+            2,
+            0
+          ],
+          [
+            3,
+            2,
+            1,
+            0
+          ]
+        ],
+        "world_count": 8,
+        "world_seeds": [
+          6100,
+          6101,
+          6102,
+          6103,
+          6104,
+          6105,
+          6106,
+          6107
+        ],
+        "worlds": [
+          {
+            "frequency_to_gate": [
+              1,
+              0,
+              3,
+              2
+            ],
+            "world_seed": 6100
+          },
+          {
+            "frequency_to_gate": [
+              0,
+              2,
+              1,
+              3
+            ],
+            "world_seed": 6101
+          },
+          {
+            "frequency_to_gate": [
+              3,
+              1,
+              2,
+              0
+            ],
+            "world_seed": 6102
+          },
+          {
+            "frequency_to_gate": [
+              3,
+              0,
+              1,
+              2
+            ],
+            "world_seed": 6103
+          },
+          {
+            "frequency_to_gate": [
+              2,
+              1,
+              0,
+              3
+            ],
+            "world_seed": 6104
+          },
+          {
+            "frequency_to_gate": [
+              2,
+              1,
+              3,
+              0
+            ],
+            "world_seed": 6105
+          },
+          {
+            "frequency_to_gate": [
+              3,
+              1,
+              2,
+              0
+            ],
+            "world_seed": 6106
+          },
+          {
+            "frequency_to_gate": [
+              3,
+              2,
+              1,
+              0
+            ],
+            "world_seed": 6107
+          }
+        ]
+      },
+      "v03_neural_proof_validation": {
+        "mapping_tuples": [
+          [
+            0,
+            3,
+            1,
+            2
+          ],
+          [
+            1,
+            2,
+            0,
+            3
+          ],
+          [
+            2,
+            3,
+            1,
+            0
+          ],
+          [
+            3,
+            0,
+            1,
+            2
+          ]
+        ],
+        "world_count": 4,
+        "world_seeds": [
+          6200,
+          6201,
+          6202,
+          6203
+        ],
+        "worlds": [
+          {
+            "frequency_to_gate": [
+              2,
+              3,
+              1,
+              0
+            ],
+            "world_seed": 6200
+          },
+          {
+            "frequency_to_gate": [
+              3,
+              0,
+              1,
+              2
+            ],
+            "world_seed": 6201
+          },
+          {
+            "frequency_to_gate": [
+              0,
+              3,
+              1,
+              2
+            ],
+            "world_seed": 6202
+          },
+          {
+            "frequency_to_gate": [
+              1,
+              2,
+              0,
+              3
+            ],
+            "world_seed": 6203
+          }
+        ]
+      },
+      "v03_neural_repair_future_audit": {
+        "mapping_tuples": [
+          [
+            1,
+            0,
+            2,
+            3
+          ],
+          [
+            2,
+            1,
+            0,
+            3
+          ]
+        ],
+        "world_count": 2,
+        "world_seeds": [
+          8300,
+          8301
+        ],
+        "worlds": [
+          {
+            "frequency_to_gate": [
+              2,
+              1,
+              0,
+              3
+            ],
+            "world_seed": 8300
+          },
+          {
+            "frequency_to_gate": [
+              1,
+              0,
+              2,
+              3
+            ],
+            "world_seed": 8301
+          }
+        ]
+      },
+      "v03_neural_repair_microtrain": {
+        "mapping_tuples": [
+          [
+            1,
+            3,
+            0,
+            2
+          ],
+          [
+            3,
+            0,
+            2,
+            1
+          ]
+        ],
+        "world_count": 2,
+        "world_seeds": [
+          7100,
+          7101
+        ],
+        "worlds": [
+          {
+            "frequency_to_gate": [
+              3,
+              0,
+              2,
+              1
+            ],
+            "world_seed": 7100
+          },
+          {
+            "frequency_to_gate": [
+              1,
+              3,
+              0,
+              2
+            ],
+            "world_seed": 7101
+          }
+        ]
+      },
+      "v03_protocol_audit_fixtures": {
+        "mapping_tuples": [
+          [
+            0,
+            1,
+            2,
+            3
+          ],
+          [
+            0,
+            1,
+            3,
+            2
+          ],
+          [
+            0,
+            2,
+            1,
+            3
+          ],
+          [
+            0,
+            2,
+            3,
+            1
+          ],
+          [
+            0,
+            3,
+            2,
+            1
+          ],
+          [
+            1,
+            0,
+            2,
+            3
+          ],
+          [
+            1,
+            0,
+            3,
+            2
+          ],
+          [
+            1,
+            2,
+            0,
+            3
+          ],
+          [
+            1,
+            3,
+            0,
+            2
+          ],
+          [
+            1,
+            3,
+            2,
+            0
+          ],
+          [
+            2,
+            0,
+            3,
+            1
+          ],
+          [
+            2,
+            1,
+            0,
+            3
+          ],
+          [
+            2,
+            1,
+            3,
+            0
+          ],
+          [
+            2,
+            3,
+            0,
+            1
+          ],
+          [
+            2,
+            3,
+            1,
+            0
+          ],
+          [
+            3,
+            0,
+            2,
+            1
+          ],
+          [
+            3,
+            1,
+            0,
+            2
+          ],
+          [
+            3,
+            2,
+            1,
+            0
+          ]
+        ],
+        "world_count": 38,
+        "world_seeds": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          3100,
+          3200,
+          3300,
+          3301,
+          3302,
+          3400,
+          3500,
+          3501,
+          3502,
+          3503,
+          3504,
+          3505,
+          3506,
+          3507,
+          3508,
+          3509,
+          3510,
+          3511,
+          3512,
+          3513,
+          3514,
+          3515,
+          3516,
+          3517,
+          3518,
+          3519
+        ],
+        "worlds": [
+          {
+            "frequency_to_gate": [
+              0,
+              1,
+              3,
+              2
+            ],
+            "world_seed": 0
+          },
+          {
+            "frequency_to_gate": [
+              0,
+              2,
+              3,
+              1
+            ],
+            "world_seed": 1
+          },
+          {
+            "frequency_to_gate": [
+              0,
+              1,
+              3,
+              2
+            ],
+            "world_seed": 2
+          },
+          {
+            "frequency_to_gate": [
+              1,
+              2,
+              0,
+              3
+            ],
+            "world_seed": 3
+          },
+          {
+            "frequency_to_gate": [
+              3,
+              1,
+              0,
+              2
+            ],
+            "world_seed": 4
+          },
+          {
+            "frequency_to_gate": [
+              2,
+              3,
+              0,
+              1
+            ],
+            "world_seed": 5
+          },
+          {
+            "frequency_to_gate": [
+              0,
+              2,
+              3,
+              1
+            ],
+            "world_seed": 6
+          },
+          {
+            "frequency_to_gate": [
+              0,
+              3,
+              2,
+              1
+            ],
+            "world_seed": 7
+          },
+          {
+            "frequency_to_gate": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "world_seed": 8
+          },
+          {
+            "frequency_to_gate": [
+              0,
+              2,
+              3,
+              1
+            ],
+            "world_seed": 9
+          },
+          {
+            "frequency_to_gate": [
+              1,
+              0,
+              3,
+              2
+            ],
+            "world_seed": 10
+          },
+          {
+            "frequency_to_gate": [
+              0,
+              2,
+              3,
+              1
+            ],
+            "world_seed": 11
+          },
+          {
+            "frequency_to_gate": [
+              3,
+              0,
+              2,
+              1
+            ],
+            "world_seed": 3100
+          },
+          {
+            "frequency_to_gate": [
+              0,
+              1,
+              3,
+              2
+            ],
+            "world_seed": 3200
+          },
+          {
+            "frequency_to_gate": [
+              0,
+              2,
+              1,
+              3
+            ],
+            "world_seed": 3300
+          },
+          {
+            "frequency_to_gate": [
+              0,
+              2,
+              1,
+              3
+            ],
+            "world_seed": 3301
+          },
+          {
+            "frequency_to_gate": [
+              3,
+              1,
+              0,
+              2
+            ],
+            "world_seed": 3302
+          },
+          {
+            "frequency_to_gate": [
+              1,
+              0,
+              3,
+              2
+            ],
+            "world_seed": 3400
+          },
+          {
+            "frequency_to_gate": [
+              2,
+              1,
+              0,
+              3
+            ],
+            "world_seed": 3500
+          },
+          {
+            "frequency_to_gate": [
+              0,
+              1,
+              3,
+              2
+            ],
+            "world_seed": 3501
+          },
+          {
+            "frequency_to_gate": [
+              2,
+              3,
+              1,
+              0
+            ],
+            "world_seed": 3502
+          },
+          {
+            "frequency_to_gate": [
+              3,
+              0,
+              2,
+              1
+            ],
+            "world_seed": 3503
+          },
+          {
+            "frequency_to_gate": [
+              3,
+              0,
+              2,
+              1
+            ],
+            "world_seed": 3504
+          },
+          {
+            "frequency_to_gate": [
+              2,
+              1,
+              0,
+              3
+            ],
+            "world_seed": 3505
+          },
+          {
+            "frequency_to_gate": [
+              3,
+              2,
+              1,
+              0
+            ],
+            "world_seed": 3506
+          },
+          {
+            "frequency_to_gate": [
+              3,
+              1,
+              0,
+              2
+            ],
+            "world_seed": 3507
+          },
+          {
+            "frequency_to_gate": [
+              0,
+              1,
+              3,
+              2
+            ],
+            "world_seed": 3508
+          },
+          {
+            "frequency_to_gate": [
+              2,
+              1,
+              3,
+              0
+            ],
+            "world_seed": 3509
+          },
+          {
+            "frequency_to_gate": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "world_seed": 3510
+          },
+          {
+            "frequency_to_gate": [
+              3,
+              1,
+              0,
+              2
+            ],
+            "world_seed": 3511
+          },
+          {
+            "frequency_to_gate": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "world_seed": 3512
+          },
+          {
+            "frequency_to_gate": [
+              0,
+              1,
+              3,
+              2
+            ],
+            "world_seed": 3513
+          },
+          {
+            "frequency_to_gate": [
+              2,
+              1,
+              3,
+              0
+            ],
+            "world_seed": 3514
+          },
+          {
+            "frequency_to_gate": [
+              1,
+              3,
+              2,
+              0
+            ],
+            "world_seed": 3515
+          },
+          {
+            "frequency_to_gate": [
+              1,
+              0,
+              2,
+              3
+            ],
+            "world_seed": 3516
+          },
+          {
+            "frequency_to_gate": [
+              1,
+              3,
+              0,
+              2
+            ],
+            "world_seed": 3517
+          },
+          {
+            "frequency_to_gate": [
+              0,
+              1,
+              3,
+              2
+            ],
+            "world_seed": 3518
+          },
+          {
+            "frequency_to_gate": [
+              2,
+              0,
+              3,
+              1
+            ],
+            "world_seed": 3519
+          }
+        ]
+      }
+    },
+    "inventory_note": "The 24 feasible bijections are not all globally unseen: the prior inventory covers 22/24 mappings. Fresh worlds for the other training-disjoint mappings remain useful transfer cases but are not globally unseen-map evidence.",
+    "known_prior_world_seed_count": 88,
+    "prior_inspected_mapping_count": 22,
+    "prior_inspected_mapping_tuples": [
+      [
+        0,
+        1,
+        2,
+        3
+      ],
+      [
+        0,
+        1,
+        3,
+        2
+      ],
+      [
+        0,
+        2,
+        1,
+        3
+      ],
+      [
+        0,
+        2,
+        3,
+        1
+      ],
+      [
+        0,
+        3,
+        1,
+        2
+      ],
+      [
+        0,
+        3,
+        2,
+        1
+      ],
+      [
+        1,
+        0,
+        2,
+        3
+      ],
+      [
+        1,
+        0,
+        3,
+        2
+      ],
+      [
+        1,
+        2,
+        0,
+        3
+      ],
+      [
+        1,
+        3,
+        0,
+        2
+      ],
+      [
+        1,
+        3,
+        2,
+        0
+      ],
+      [
+        2,
+        0,
+        1,
+        3
+      ],
+      [
+        2,
+        0,
+        3,
+        1
+      ],
+      [
+        2,
+        1,
+        0,
+        3
+      ],
+      [
+        2,
+        1,
+        3,
+        0
+      ],
+      [
+        2,
+        3,
+        0,
+        1
+      ],
+      [
+        2,
+        3,
+        1,
+        0
+      ],
+      [
+        3,
+        0,
+        1,
+        2
+      ],
+      [
+        3,
+        0,
+        2,
+        1
+      ],
+      [
+        3,
+        1,
+        0,
+        2
+      ],
+      [
+        3,
+        1,
+        2,
+        0
+      ],
+      [
+        3,
+        2,
+        1,
+        0
+      ]
+    ],
+    "training_disjoint_mapping_count": 22,
+    "training_disjoint_mapping_tuples": [
+      [
+        0,
+        1,
+        2,
+        3
+      ],
+      [
+        0,
+        1,
+        3,
+        2
+      ],
+      [
+        0,
+        2,
+        3,
+        1
+      ],
+      [
+        0,
+        3,
+        1,
+        2
+      ],
+      [
+        0,
+        3,
+        2,
+        1
+      ],
+      [
+        1,
+        0,
+        2,
+        3
+      ],
+      [
+        1,
+        0,
+        3,
+        2
+      ],
+      [
+        1,
+        2,
+        0,
+        3
+      ],
+      [
+        1,
+        2,
+        3,
+        0
+      ],
+      [
+        1,
+        3,
+        0,
+        2
+      ],
+      [
+        1,
+        3,
+        2,
+        0
+      ],
+      [
+        2,
+        0,
+        1,
+        3
+      ],
+      [
+        2,
+        0,
+        3,
+        1
+      ],
+      [
+        2,
+        1,
+        0,
+        3
+      ],
+      [
+        2,
+        1,
+        3,
+        0
+      ],
+      [
+        2,
+        3,
+        0,
+        1
+      ],
+      [
+        2,
+        3,
+        1,
+        0
+      ],
+      [
+        3,
+        0,
+        2,
+        1
+      ],
+      [
+        3,
+        1,
+        0,
+        2
+      ],
+      [
+        3,
+        1,
+        2,
+        0
+      ],
+      [
+        3,
+        2,
+        0,
+        1
+      ],
+      [
+        3,
+        2,
+        1,
+        0
+      ]
+    ]
+  },
+  "metrics": {
+    "frequency_target": "goal index from the original note/task construction",
+    "gate_target": "metadata-derived gate matching the target frequency; not supplied to policy input",
+    "loss_definition": "gate and frequency cross-entropies from frozen model probabilities; joint_mean_loss is their arithmetic mean",
+    "no_selection_or_tuning_from_outcomes": true,
+    "per_case": [
+      "gate_loss",
+      "frequency_loss",
+      "joint_mean_loss",
+      "gate_correct",
+      "frequency_correct",
+      "joint_correct",
+      "physical_success"
+    ],
+    "per_mapping": "aggregate both selected worlds carrying the same frequency_to_gate tuple, preserving the never-inspected mapping label",
+    "per_partition": "report the selected never-inspected mapping partition; retain explicit zero counts for seen-training and training-disjoint previously-inspected partitions",
+    "per_world": "aggregate all four goals for each selected world and each frozen checkpoint family member",
+    "physical_success_definition": "unchanged CorrectedEpisode.success after the model-selected gate and frequency actuation"
+  },
+  "normalization": {
+    "candidate_and_baseline_digests_equal": true,
+    "candidate_shared_row": {
+      "digest": "cf43d9f347aca5d7a2339849b850e6d1c234fa8b0977df0459c45dfc0460cbeb",
+      "fit_scope": "candidate training observations from worlds 9200 and 9201 only",
+      "fit_world_seeds": [
+        9200,
+        9201
+      ],
+      "fixture": {
+        "counts": {
+          "note_bytes": 8,
+          "response": 8,
+          "spectrum": 8
+        },
+        "mean": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.3215686274509804,
+          0.396078431372549,
+          0.45098039215686275,
+          0.43529411764705883,
+          0.43137254901960786,
+          0.3803921568627451,
+          0.43137254901960786,
+          0.4549019607843137,
+          0.12549019607843137,
+          0.4117647058823529,
+          0.43137254901960786,
+          0.45098039215686275,
+          0.4549019607843137,
+          0.4470588235294118,
+          0.4588235294117647,
+          0.38823529411764707,
+          0.4549019607843137,
+          0.4117647058823529,
+          0.43529411764705883,
+          0.43137254901960786,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.4549019607843137,
+          0.3803921568627451,
+          0.4470588235294118,
+          0.403921568627451,
+          0.396078431372549,
+          0.4549019607843137,
+          0.37254901960784315,
+          0.40784313725490196,
+          0.47843137254901963,
+          0.23921568627450981,
+          0.1892156862745098,
+          0.1803921568627451,
+          0.20980392156862748,
+          0.20784313725490197,
+          0.23137254901960785,
+          0.12549019607843137,
+          0.4549019607843137,
+          0.3803921568627451,
+          0.4470588235294118,
+          0.403921568627451,
+          0.396078431372549,
+          0.4549019607843137,
+          0.37254901960784315,
+          0.4392156862745098,
+          0.40784313725490196,
+          0.3803921568627451,
+          0.45098039215686275,
+          0.396078431372549,
+          0.23921568627450981,
+          0.18823529411764706,
+          0.1803921568627451,
+          0.18823529411764706,
+          0.18823529411764706,
+          0.23137254901960785,
+          0.12549019607843137,
+          0.4470588235294118,
+          0.4588235294117647,
+          0.4235294117647059,
+          0.396078431372549,
+          0.23921568627450981,
+          0.42745098039215684,
+          0.3803921568627451,
+          0.47058823529411764,
+          0.17647058823529413,
+          0.4470588235294118,
+          0.396078431372549,
+          0.45098039215686275,
+          0.4392156862745098,
+          0.43529411764705883,
+          0.43137254901960786,
+          0.45098039215686275,
+          0.396078431372549,
+          0.17647058823529413,
+          0.3803921568627451,
+          0.4549019607843137,
+          0.17647058823529413,
+          0.4549019607843137,
+          0.3803921568627451,
+          0.4470588235294118,
+          0.403921568627451,
+          0.396078431372549,
+          0.4549019607843137,
+          0.23137254901960785,
+          0.12549019607843137,
+          0.4627450980392157,
+          0.3803921568627451,
+          0.4470588235294118,
+          0.4117647058823529,
+          0.3803921568627451,
+          0.43137254901960786,
+          0.4549019607843137,
+          0.23921568627450981,
+          0.39215686274509803,
+          0.396078431372549,
+          0.4235294117647059,
+          0.3803921568627451,
+          0.4745098039215686,
+          0.396078431372549,
+          0.39215686274509803,
+          0.17647058823529413,
+          0.4549019607843137,
+          0.4470588235294118,
+          0.3803921568627451,
+          0.4117647058823529,
+          0.43137254901960786,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.275,
+          0.375,
+          0.475,
+          0.575,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "normalized_groups": {
+          "note_bytes": [
+            7,
+            135
+          ],
+          "response": [
+            140,
+            156
+          ],
+          "spectrum": [
+            136,
+            156
+          ],
+          "spectrum_frequencies": [
+            136,
+            140
+          ]
+        },
+        "response_scaling": {
+          "centering": "none",
+          "clipping": "none",
+          "fallback": null,
+          "feature_indices": [
+            140,
+            141,
+            142,
+            143,
+            144,
+            145,
+            146,
+            147,
+            148,
+            149,
+            150,
+            151,
+            152,
+            153,
+            154,
+            155
+          ],
+          "finite_coordinate_count": 128,
+          "fit_observation_count": 8,
+          "fit_scope": "present training observations only",
+          "invalid_coordinate_count": 0,
+          "max_abs": 0.2555065496401963,
+          "method": "shared_max_abs",
+          "scale": 0.2555065496401963,
+          "zero_or_invalid_fallback_scale": 1.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0016980890270283171,
+          1.0,
+          0.011600156437450227,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "schema": "vevo.v03.input-normalization.v2"
+      },
+      "mode": "shared_max_abs",
+      "model_outcomes_used": false,
+      "schema": "vevo.v03.input-normalization.v2"
+    },
+    "fit_at_preregistration_only": true,
+    "fit_during_fresh_evaluation": false,
+    "legacy_baseline": {
+      "digest": "cf43d9f347aca5d7a2339849b850e6d1c234fa8b0977df0459c45dfc0460cbeb",
+      "fit_scope": "same frozen candidate training observations from worlds 9200 and 9201",
+      "fixture": {
+        "counts": {
+          "note_bytes": 8,
+          "response": 8,
+          "spectrum": 8
+        },
+        "mean": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.3215686274509804,
+          0.396078431372549,
+          0.45098039215686275,
+          0.43529411764705883,
+          0.43137254901960786,
+          0.3803921568627451,
+          0.43137254901960786,
+          0.4549019607843137,
+          0.12549019607843137,
+          0.4117647058823529,
+          0.43137254901960786,
+          0.45098039215686275,
+          0.4549019607843137,
+          0.4470588235294118,
+          0.4588235294117647,
+          0.38823529411764707,
+          0.4549019607843137,
+          0.4117647058823529,
+          0.43529411764705883,
+          0.43137254901960786,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.4549019607843137,
+          0.3803921568627451,
+          0.4470588235294118,
+          0.403921568627451,
+          0.396078431372549,
+          0.4549019607843137,
+          0.37254901960784315,
+          0.40784313725490196,
+          0.47843137254901963,
+          0.23921568627450981,
+          0.1892156862745098,
+          0.1803921568627451,
+          0.20980392156862748,
+          0.20784313725490197,
+          0.23137254901960785,
+          0.12549019607843137,
+          0.4549019607843137,
+          0.3803921568627451,
+          0.4470588235294118,
+          0.403921568627451,
+          0.396078431372549,
+          0.4549019607843137,
+          0.37254901960784315,
+          0.4392156862745098,
+          0.40784313725490196,
+          0.3803921568627451,
+          0.45098039215686275,
+          0.396078431372549,
+          0.23921568627450981,
+          0.18823529411764706,
+          0.1803921568627451,
+          0.18823529411764706,
+          0.18823529411764706,
+          0.23137254901960785,
+          0.12549019607843137,
+          0.4470588235294118,
+          0.4588235294117647,
+          0.4235294117647059,
+          0.396078431372549,
+          0.23921568627450981,
+          0.42745098039215684,
+          0.3803921568627451,
+          0.47058823529411764,
+          0.17647058823529413,
+          0.4470588235294118,
+          0.396078431372549,
+          0.45098039215686275,
+          0.4392156862745098,
+          0.43529411764705883,
+          0.43137254901960786,
+          0.45098039215686275,
+          0.396078431372549,
+          0.17647058823529413,
+          0.3803921568627451,
+          0.4549019607843137,
+          0.17647058823529413,
+          0.4549019607843137,
+          0.3803921568627451,
+          0.4470588235294118,
+          0.403921568627451,
+          0.396078431372549,
+          0.4549019607843137,
+          0.23137254901960785,
+          0.12549019607843137,
+          0.4627450980392157,
+          0.3803921568627451,
+          0.4470588235294118,
+          0.4117647058823529,
+          0.3803921568627451,
+          0.43137254901960786,
+          0.4549019607843137,
+          0.23921568627450981,
+          0.39215686274509803,
+          0.396078431372549,
+          0.4235294117647059,
+          0.3803921568627451,
+          0.4745098039215686,
+          0.396078431372549,
+          0.39215686274509803,
+          0.17647058823529413,
+          0.4549019607843137,
+          0.4470588235294118,
+          0.3803921568627451,
+          0.4117647058823529,
+          0.43137254901960786,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.275,
+          0.375,
+          0.475,
+          0.575,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "normalized_groups": {
+          "note_bytes": [
+            7,
+            135
+          ],
+          "response": [
+            140,
+            156
+          ],
+          "spectrum": [
+            136,
+            156
+          ],
+          "spectrum_frequencies": [
+            136,
+            140
+          ]
+        },
+        "response_scaling": {
+          "centering": "none",
+          "clipping": "none",
+          "fallback": null,
+          "feature_indices": [
+            140,
+            141,
+            142,
+            143,
+            144,
+            145,
+            146,
+            147,
+            148,
+            149,
+            150,
+            151,
+            152,
+            153,
+            154,
+            155
+          ],
+          "finite_coordinate_count": 128,
+          "fit_observation_count": 8,
+          "fit_scope": "present training observations only",
+          "invalid_coordinate_count": 0,
+          "max_abs": 0.2555065496401963,
+          "method": "shared_max_abs",
+          "scale": 0.2555065496401963,
+          "zero_or_invalid_fallback_scale": 1.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0016980890270283171,
+          1.0,
+          0.011600156437450227,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "schema": "vevo.v03.input-normalization.v2"
+      },
+      "mode": "shared_max_abs",
+      "model_outcomes_used": false,
+      "schema": "vevo.v03.input-normalization.v2"
+    }
+  },
+  "paired_inference": {
+    "baseline_artifact_commit": "c35c2e6729dc867b516de8229ddd99adb88bcc44",
+    "baseline_source_sha": "2d35c0b32c5fb844c94b3909506dbf361d0bc521",
+    "candidate_and_baseline_normalization_fitting_during_evaluation": false,
+    "candidate_and_baseline_use_frozen_checkpoint_payload_normalization": true,
+    "candidate_checkpoint_family": [
+      "control-seed-141",
+      "control-seed-143",
+      "full-seed-107",
+      "full-seed-117"
+    ],
+    "identical_case_manifest": true,
+    "legacy_baseline_checkpoint_family": [
+      "legacy-control-seed-141",
+      "legacy-control-seed-143",
+      "legacy-full-seed-107",
+      "legacy-full-seed-117"
+    ]
+  },
+  "prohibited_actions": [
+    "fresh-world evaluation before independent review",
+    "new training",
+    "checkpoint mutation",
+    "PC training",
+    "new paid resources",
+    "credentials or account permission changes",
+    "merge",
+    "deploy",
+    "PR creation"
+  ],
+  "protocol": {
+    "episode_class": "CorrectedEpisode",
+    "measurement": "existing pure four-channel continuous response matrix",
+    "no_wording_or_delay_factor_in_this_evaluation": true,
+    "note_format_template": "target_hz={goal_frequency:.2f}; target_phase=0.00; rule=max-response-at-target; variant=delayed-train",
+    "note_payload_masks": [
+      0,
+      1,
+      0,
+      0,
+      0
+    ],
+    "note_shown_once": true,
+    "physics_goal_measurement_protocol_unchanged": true,
+    "probe_frequencies_hz": [
+      0.55,
+      0.75,
+      0.95,
+      1.15
+    ],
+    "retention_delay_steps": 2,
+    "schedule_stages": [
+      "before_note",
+      "note_shown_once",
+      "goal_independent_delay_1",
+      "goal_independent_delay_2",
+      "spectrum_and_action"
+    ],
+    "target_gate_for_scoring": "authoritative inverse frequency_to_gate mapping from gate_resonance_hz metadata; never read from model success"
+  },
+  "question": "Does the frozen shared-row candidate transfer learned frequency-to-gate behavior to deterministic fresh worlds from the first lexicographic K globally never-inspected mappings?",
+  "resource_budget": {
+    "additional_memory_cap_kb": 524288,
+    "cooperative_deadline_checks": [
+      "before each case",
+      "between cases",
+      "before each row-relabel block",
+      "between derived metric stages"
+    ],
+    "fixed_bounded_case_plan": true,
+    "frozen_checkpoint_count": 8,
+    "maximum_cases_per_checkpoint": 64,
+    "maximum_mappings_if_U_is_large": 8,
+    "maximum_prediction_blocks": 1664,
+    "maximum_primary_evaluations_if_U_is_large": 512,
+    "maximum_worlds_if_U_is_large": 16,
+    "no_metrics_after_budget_exhaustion": true,
+    "no_retry_tuning_or_seed_substitution": true,
+    "primary_model_evaluations": 128,
+    "primary_physical_cases": 16,
+    "row_relabel_counterfactual_checks": 1536,
+    "single_cpu_process": true,
+    "wall_clock_cap_seconds": 300.0
+  },
+  "review_gates": [
+    "Do not evaluate any fresh case before independent review of this source-only record.",
+    "Do not retrain or alter the four frozen shared-row or four c35c2e legacy baseline checkpoints.",
+    "Use the frozen shared_max_abs normalization payload exactly for both families; fit no normalization during paired inference.",
+    "Use only original note wording and the existing two-step delayed schedule in this evaluation.",
+    "Keep seen-training mappings, training-disjoint previously-inspected mappings, and training-disjoint never-inspected mappings separate in every report.",
+    "Do not call training-disjoint previously-inspected mappings globally unseen-map evidence.",
+    "Use simulator resonance metadata, never model success, to select worlds and derive gate targets.",
+    "Report frequency, gate, joint, physical-success, and loss metrics per case, world, mapping, and partition.",
+    "Require row-relabel probability equivariance and action remapping; mark near-tie selected-index checks not-applicable.",
+    "Stop on cap or failure with structured partial evidence and no later metrics.",
+    "Vary wording or delay only in a separately reviewed later design."
+  ],
+  "row_relabel_consistency": {
+    "checks_per_candidate_checkpoint": 384,
+    "expected_frequency_probability": "permuted_frequency_probs == baseline_frequency_probs",
+    "expected_gate_probability": "permuted_gate_probs == baseline_gate_probs[p]",
+    "expected_selected_gate": "p.index(baseline_selected_gate) when the baseline top gate is unique",
+    "model_outcomes_available_at_preregistration": false,
+    "near_tie_selected_gate_status": "not_applicable_tie; do not count as a selected-index pass",
+    "permutation_count": 24,
+    "permutations": [
+      [
+        0,
+        1,
+        2,
+        3
+      ],
+      [
+        0,
+        1,
+        3,
+        2
+      ],
+      [
+        0,
+        2,
+        1,
+        3
+      ],
+      [
+        0,
+        2,
+        3,
+        1
+      ],
+      [
+        0,
+        3,
+        1,
+        2
+      ],
+      [
+        0,
+        3,
+        2,
+        1
+      ],
+      [
+        1,
+        0,
+        2,
+        3
+      ],
+      [
+        1,
+        0,
+        3,
+        2
+      ],
+      [
+        1,
+        2,
+        0,
+        3
+      ],
+      [
+        1,
+        2,
+        3,
+        0
+      ],
+      [
+        1,
+        3,
+        0,
+        2
+      ],
+      [
+        1,
+        3,
+        2,
+        0
+      ],
+      [
+        2,
+        0,
+        1,
+        3
+      ],
+      [
+        2,
+        0,
+        3,
+        1
+      ],
+      [
+        2,
+        1,
+        0,
+        3
+      ],
+      [
+        2,
+        1,
+        3,
+        0
+      ],
+      [
+        2,
+        3,
+        0,
+        1
+      ],
+      [
+        2,
+        3,
+        1,
+        0
+      ],
+      [
+        3,
+        0,
+        1,
+        2
+      ],
+      [
+        3,
+        0,
+        2,
+        1
+      ],
+      [
+        3,
+        1,
+        0,
+        2
+      ],
+      [
+        3,
+        1,
+        2,
+        0
+      ],
+      [
+        3,
+        2,
+        0,
+        1
+      ],
+      [
+        3,
+        2,
+        1,
+        0
+      ]
+    ],
+    "probability_allclose_atol": 1e-12,
+    "probability_allclose_rtol": 0.0,
+    "response_relabel_definition": "replace final response rows with rows[p] for each permutation p",
+    "retained_context_expected_unchanged": true,
+    "row_relabel_checkpoint_family": "candidate shared-row checkpoints only; legacy per-gate baseline is retained for paired primary metrics, not expected to satisfy shared-row equivariance"
+  },
+  "schema": "vevo.v03.neural-fresh-mapping-transfer-preregistration.v1",
+  "scope_boundary": {
+    "fresh_worlds_are_not_generalization_claims_until_reviewed_and_run": true,
+    "no_candidate_outcomes_inspected_on_fresh_worlds": true,
+    "no_fresh_case_evaluation": true,
+    "no_new_training": true,
+    "original_note_format_only": true,
+    "source_only": true,
+    "varied_wording_or_delays_deferred": true
+  },
+  "separate_artifacts_after_review": {
+    "candidate_checkpoints_are_read_only": true,
+    "evaluation_report": "reports/generated/v03-neural-fresh-mapping-transfer-evaluation.json",
+    "evaluation_summary": "reports/generated/v03-neural-fresh-mapping-transfer-evaluation.md",
+    "historical_and_screening_artifacts_must_remain_byte_for_byte": true,
+    "preregistration": "reports/generated/v03-neural-fresh-mapping-transfer-preregistration.json"
+  },
+  "source_sha_at_registration": "0da12c67284b48fb2af8a12a97f0ebc21d90eb42",
+  "status": "awaiting_independent_review_before_fresh_evaluation",
+  "training_started": false
+}
