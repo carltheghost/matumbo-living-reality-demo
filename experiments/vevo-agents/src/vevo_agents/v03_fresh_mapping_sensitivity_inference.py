@@ -70,8 +70,8 @@ from .v03_protocol import CorrectedEpisode
 
 
 DESIGN_PATH = str(SENSITIVITY_PREREGISTRATION_PATH)
-EXPECTED_PREREGISTRATION_SOURCE_SHA = "__SENSITIVITY_SOURCE_SHA__"
-EXPECTED_DESIGN_FILE_SHA256 = "__SENSITIVITY_DESIGN_SHA256__"
+EXPECTED_PREREGISTRATION_SOURCE_SHA = "4d99c285286a668c3dacbe51fa68ac3c877f620a"
+EXPECTED_DESIGN_FILE_SHA256 = "90e9d06290b9f249e2e93240327e01b79b5cc2613854c8d12550a479e64d175b"
 EXPECTED_BASE_EVALUATION_REPORT_SHA256 = BASE_EVALUATION_REPORT_SHA256
 EXPECTED_CASE_MANIFEST_SHA256 = BASE_EXPECTED_CASE_MANIFEST_SHA256
 EXPECTED_WORLD_MANIFEST_SHA256 = BASE_EXPECTED_WORLD_MANIFEST_SHA256
@@ -809,6 +809,8 @@ def run_sensitivity_inference(
                 checkpoint=active_checkpoint,
             ))
         status = "partial_failure"
+        if report["baseline_action_replay"]["status"] == "running":
+            report["baseline_action_replay"]["status"] = "partial"
         if active_arm is not None:
             report["arms"][active_arm["id"]]["status"] = "partial_failure"
         report["derived_metrics_status"] = "unavailable_due_to_failure"

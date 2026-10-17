@@ -7,6 +7,12 @@ have now been inspected by the completed frozen mapping-transfer evaluation.
 It is not a fresh-mapping or generalization study. No variant outcome is
 loaded or executed while writing this record.
 
+The machine-readable preregistration is
+`reports/generated/v03-neural-fresh-mapping-transfer-sensitivity-preregistration.json`.
+It is sealed to source commit `4d99c285286a668c3dacbe51fa68ac3c877f620a` and
+file SHA-256
+`90e9d06290b9f249e2e93240327e01b79b5cc2613854c8d12550a479e64d175b`.
+
 ## Frozen baseline and cases
 
 The completed baseline is frozen by the following identities:

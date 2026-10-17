@@ -121,6 +121,60 @@ class V03FreshMappingSensitivityInferenceTests(unittest.TestCase):
             self.assertTrue(output.exists())
             self.assertTrue(output.with_suffix(".md").exists())
 
+    def test_baseline_replay_mismatch_stops_before_variant_arms(self):
+        case = copy.deepcopy(self.plan["case_manifest"][0])
+        arms = copy.deepcopy(self.plan["arms"])
+        expected_run = {
+            "final_action": {"gate": 0, "frequency_index": 0, "frequency": 0.55},
+            "gate_probabilities": [0.7, 0.1, 0.1, 0.1],
+            "frequency_probabilities": [0.7, 0.1, 0.1, 0.1],
+        }
+        actual_run = copy.deepcopy(expected_run)
+        actual_run["frequency_probabilities"][0] = 0.6
+        actual_run.update({
+            "success": True,
+            "failure_cause": None,
+        })
+        baseline_report = {
+            "status": "complete",
+            "completed_case_count": 16,
+            "completed_row_relabel_count": 1536,
+            "failures": [],
+            "cases": [{
+                "results": {"full-seed-107": {"raw_run": expected_run}},
+            }],
+        }
+
+        class _Episode:
+            def snapshot(self):
+                return {"synthetic": True}
+
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(inference, "CANDIDATE_EVALUATION_ORDER", ("full-seed-107",)), \
+                patch.object(inference, "_load_sensitivity_design", return_value=({}, "synthetic-design")), \
+                patch.object(inference, "_load_baseline_report", return_value=baseline_report), \
+                patch.object(inference, "_load_design", return_value=({
+                    "normalization": {"candidate_shared_row": {"fixture": {}}},
+                }, "synthetic-base-design")), \
+                patch.object(inference, "_validate_case_manifest", return_value={"cases": [case], "world_order": [case["world_seed"]]}), \
+                patch.object(inference, "_validate_frozen_artifacts", return_value={
+                    "normalization_digest": "synthetic-normalization",
+                    "screening_artifacts_verified": True,
+                }), \
+                patch.object(inference, "_validate_sensitivity_design", return_value={"cases": [case], "arms": arms}), \
+                patch.object(inference, "_load_delayed_checkpoint", return_value=(object(), {"schema": "synthetic", "source_sha": None, "training": {"updates": 1000}})), \
+                patch.object(inference, "_prepare_sensitivity_episode", return_value=(_Episode(), [], {"stage_names": [], "hidden_rows": []})), \
+                patch.object(inference, "run_delayed_episode", return_value=actual_run) as run_mock:
+            report = inference.run_sensitivity_inference(output_path=Path(directory) / "mismatch.json")
+
+        self.assertEqual(report["status"], "partial_failure")
+        self.assertEqual(run_mock.call_count, 1)
+        self.assertEqual(report["baseline_action_replay"]["status"], "partial")
+        self.assertEqual(report["failures"][0]["phase"], "baseline_action_replay")
+        self.assertEqual(report["failures"][0]["checkpoint"], "full-seed-107")
+        self.assertEqual(report["arms"]["hidden_delay_4"]["status"], "not_started")
+        self.assertIsNone(report["derived_metrics"])
+
 
 if __name__ == "__main__":
     unittest.main()

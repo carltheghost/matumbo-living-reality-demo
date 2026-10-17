@@ -38,7 +38,13 @@ class V03FreshMappingPreregistrationTests(unittest.TestCase):
         self.assertFalse(self.plan["evaluation_started"])
         self.assertEqual(self.plan["fresh_cases_evaluated"], 0)
         self.assertFalse(self.plan["fresh_model_outcomes_loaded"])
-        self.assertFalse((self.root / FRESH_EVALUATION_REPORT_PATH).exists())
+        fresh_report = self.root / FRESH_EVALUATION_REPORT_PATH
+        if fresh_report.exists():
+            report = json.loads(fresh_report.read_text(encoding="utf-8"))
+            self.assertEqual(report["status"], "complete")
+            self.assertEqual(report["completed_case_count"], 16)
+            self.assertEqual(report["completed_row_relabel_count"], 1536)
+            self.assertFalse(report["failures"])
 
     def test_checkpoint_manifest_freezes_candidate_and_legacy_pairs(self):
         self.assertEqual(len(FROZEN_INFERENCE_CHECKPOINTS), 8)
