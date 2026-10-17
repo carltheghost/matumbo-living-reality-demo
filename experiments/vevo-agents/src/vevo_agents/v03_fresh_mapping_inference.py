@@ -667,6 +667,15 @@ def _evaluation_summary_markdown(report: dict) -> str:
         )
     lines.extend([
         "",
+        "## Resources and artifact preservation",
+        "",
+        f"- Wall-clock: `{_markdown_value(report.get('runtime', {}).get('wall_clock_seconds'))}` seconds of `{_markdown_value(report.get('runtime', {}).get('wall_clock_cap_seconds'))}` capped.",
+        f"- CPU: `{_markdown_value(report.get('runtime', {}).get('process_cpu_seconds'))}` seconds; single CPU process: `{report.get('runtime', {}).get('single_cpu_process')}`.",
+        f"- Additional memory high-water: `{_markdown_value(report.get('runtime', {}).get('additional_high_water_kb'))}` KiB of `{_markdown_value(report.get('runtime', {}).get('additional_memory_cap_kb'))}` KiB.",
+        f"- Screening artifacts verified byte-for-byte: `{report.get('preflight', {}).get('screening_artifacts_verified')}`.",
+        f"- Frozen checkpoint manifest: `{report.get('preflight', {}).get('checkpoint_manifest_sha256')}`.",
+        f"- Frozen normalization digest: `{report.get('preflight', {}).get('normalization_digest')}`.",
+        "",
         "## Failures",
         "",
     ])
@@ -714,6 +723,63 @@ def _evaluation_summary_markdown(report: dict) -> str:
                 f"{_markdown_value(metrics.get('joint_accuracy'))} | "
                 f"{_markdown_value(metrics.get('physical_success'))} | "
                 f"{_markdown_value(metrics.get('joint_mean_loss'))} |"
+            )
+        lines.extend([
+            "",
+            "## Per-world metrics",
+            "",
+            "| checkpoint | world | n | gate accuracy | frequency accuracy | joint accuracy | physical success | gate loss | frequency loss | joint loss |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        ])
+        for key in sorted(report["derived_metrics"].get("per_world", {})):
+            for world, metrics in sorted(report["derived_metrics"]["per_world"][key].items(), key=lambda item: int(item[0])):
+                lines.append(
+                    f"| {key} | {world} | {_markdown_value(metrics.get('n'))} | "
+                    f"{_markdown_value(metrics.get('gate_accuracy'))} | "
+                    f"{_markdown_value(metrics.get('frequency_accuracy'))} | "
+                    f"{_markdown_value(metrics.get('joint_accuracy'))} | "
+                    f"{_markdown_value(metrics.get('physical_success'))} | "
+                    f"{_markdown_value(metrics.get('gate_loss'))} | "
+                    f"{_markdown_value(metrics.get('frequency_loss'))} | "
+                    f"{_markdown_value(metrics.get('joint_mean_loss'))} |"
+                )
+        lines.extend([
+            "",
+            "## Paired candidate-versus-legacy gains and losses",
+            "",
+            "Each cell is `gain/loss/tie` over the same sealed cases.",
+            "",
+            "| candidate | legacy | gate | frequency | joint | physical success |",
+            "|---|---|---:|---:|---:|---:|",
+        ])
+        for candidate, comparison in sorted(report["derived_metrics"].get("paired_candidate_vs_legacy", {}).items()):
+            metrics = comparison.get("metrics", {})
+            def gain_loss_tie(metric):
+                values = metrics.get(metric, {})
+                return f"{values.get('gain', 0)}/{values.get('loss', 0)}/{values.get('tie', 0)}"
+            lines.append(
+                f"| {candidate} | {comparison.get('legacy_key')} | "
+                f"{gain_loss_tie('gate_correct')} | {gain_loss_tie('frequency_correct')} | "
+                f"{gain_loss_tie('joint_correct')} | {gain_loss_tie('physical_success')} |"
+            )
+        row_groups = defaultdict(list)
+        for row in report.get("row_relabel", []):
+            row_groups[str(row.get("checkpoint"))].append(row)
+        lines.extend([
+            "",
+            "## Row-relabel probability and tie checks",
+            "",
+            "| checkpoint | checks | gate probability pass | frequency probability pass | context pass | selected-gate passed | selected-gate ties |",
+            "|---|---:|---:|---:|---:|---:|---:|",
+        ])
+        for key, rows in sorted(row_groups.items()):
+            lines.append(
+                f"| {key} | {len(rows)} | "
+                f"{sum(bool(row.get('gate_probability_passed')) for row in rows)} | "
+                f"{sum(bool(row.get('frequency_probability_passed')) for row in rows)} | "
+                f"{sum(bool(row.get('retained_context_unchanged')) for row in rows)} | "
+                f"{sum(row.get('selected_gate_remap_status') == 'passed' for row in rows)} | "
+                f"{sum(row.get('selected_gate_remap_status') == 'not_applicable_tie' for row in rows)} |"
             )
     else:
         lines.extend([
