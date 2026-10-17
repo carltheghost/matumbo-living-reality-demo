@@ -20,7 +20,7 @@
         "metadata_reference_gate": 1,
         "note_goal_id": "delayed-train-goal-0",
         "note_text": "target_hz=0.55; target_phase=0.00; rule=max-response-at-target; variant=delayed-train",
-        "partition": "training_disjoint_never_inspected_mapping_new_world",
+        "partition": "training_disjoint_counterfactual_exposed_mapping_new_world",
         "target_frequency_hz": 0.55,
         "world_seed": 20021
       },
@@ -42,7 +42,7 @@
         "metadata_reference_gate": 2,
         "note_goal_id": "delayed-train-goal-1",
         "note_text": "target_hz=0.75; target_phase=0.00; rule=max-response-at-target; variant=delayed-train",
-        "partition": "training_disjoint_never_inspected_mapping_new_world",
+        "partition": "training_disjoint_counterfactual_exposed_mapping_new_world",
         "target_frequency_hz": 0.75,
         "world_seed": 20021
       },
@@ -64,7 +64,7 @@
         "metadata_reference_gate": 3,
         "note_goal_id": "delayed-train-goal-2",
         "note_text": "target_hz=0.95; target_phase=0.00; rule=max-response-at-target; variant=delayed-train",
-        "partition": "training_disjoint_never_inspected_mapping_new_world",
+        "partition": "training_disjoint_counterfactual_exposed_mapping_new_world",
         "target_frequency_hz": 0.95,
         "world_seed": 20021
       },
@@ -86,7 +86,7 @@
         "metadata_reference_gate": 0,
         "note_goal_id": "delayed-train-goal-3",
         "note_text": "target_hz=1.15; target_phase=0.00; rule=max-response-at-target; variant=delayed-train",
-        "partition": "training_disjoint_never_inspected_mapping_new_world",
+        "partition": "training_disjoint_counterfactual_exposed_mapping_new_world",
         "target_frequency_hz": 1.15,
         "world_seed": 20021
       },
@@ -108,7 +108,7 @@
         "metadata_reference_gate": 1,
         "note_goal_id": "delayed-train-goal-0",
         "note_text": "target_hz=0.55; target_phase=0.00; rule=max-response-at-target; variant=delayed-train",
-        "partition": "training_disjoint_never_inspected_mapping_new_world",
+        "partition": "training_disjoint_counterfactual_exposed_mapping_new_world",
         "target_frequency_hz": 0.55,
         "world_seed": 20023
       },
@@ -130,7 +130,7 @@
         "metadata_reference_gate": 2,
         "note_goal_id": "delayed-train-goal-1",
         "note_text": "target_hz=0.75; target_phase=0.00; rule=max-response-at-target; variant=delayed-train",
-        "partition": "training_disjoint_never_inspected_mapping_new_world",
+        "partition": "training_disjoint_counterfactual_exposed_mapping_new_world",
         "target_frequency_hz": 0.75,
         "world_seed": 20023
       },
@@ -152,7 +152,7 @@
         "metadata_reference_gate": 3,
         "note_goal_id": "delayed-train-goal-2",
         "note_text": "target_hz=0.95; target_phase=0.00; rule=max-response-at-target; variant=delayed-train",
-        "partition": "training_disjoint_never_inspected_mapping_new_world",
+        "partition": "training_disjoint_counterfactual_exposed_mapping_new_world",
         "target_frequency_hz": 0.95,
         "world_seed": 20023
       },
@@ -174,7 +174,7 @@
         "metadata_reference_gate": 0,
         "note_goal_id": "delayed-train-goal-3",
         "note_text": "target_hz=1.15; target_phase=0.00; rule=max-response-at-target; variant=delayed-train",
-        "partition": "training_disjoint_never_inspected_mapping_new_world",
+        "partition": "training_disjoint_counterfactual_exposed_mapping_new_world",
         "target_frequency_hz": 1.15,
         "world_seed": 20023
       },
@@ -484,21 +484,28 @@
     "lexicographic_mapping_limit_K": 8,
     "partition_counts": {
       "seen_training_mapping_new_world": 0,
-      "training_disjoint_never_inspected_mapping_new_world": 4,
+      "training_disjoint_counterfactual_exposed_mapping_new_world": 2,
+      "training_disjoint_never_inspected_mapping_new_world": 2,
       "training_disjoint_previously_inspected_mapping_new_world": 0
     },
-    "seed_range": [
-      20000,
-      30000
-    ],
-    "selected_mapping_count": 2,
-    "selected_mapping_tuples": [
+    "preserved_supplemental_mapping_tuples": [
       [
         1,
         2,
         3,
         0
-      ],
+      ]
+    ],
+    "preserved_supplemental_worlds": [
+      20021,
+      20023
+    ],
+    "seed_range": [
+      20000,
+      30000
+    ],
+    "selected_mapping_count": 1,
+    "selected_mapping_tuples": [
       [
         3,
         2,
@@ -506,9 +513,9 @@
         1
       ]
     ],
-    "selection_algorithm": "sort U lexicographically, take the first K=min(8,|U|) mappings, then scan ascending candidate seeds and take the first two unused seeds per mapping after excluding every known world",
+    "selection_algorithm": "sort U lexicographically, take the first K=min(8,|U|) mappings, scan ascending candidate seeds and take the first two unused seeds per U mapping after excluding every known world, then preserve previously frozen physical worlds for counterfactually exposed mappings under an explicit supplemental partition",
     "selection_metadata": "gate_resonance_hz generated by the fixed simulator seed rule only",
-    "selection_universe": "U = globally_unseen_mapping_tuples from the complete prior inventory",
+    "selection_universe": "U = globally_unseen_mapping_tuples after subtracting physical prior and counterfactual exposure",
     "selection_uses_model_outcomes": false,
     "unselected_training_disjoint_mapping_tuples": [
       [
@@ -651,9 +658,10 @@
           0.75,
           0.95
         ],
+        "mapping_was_counterfactual_exposed": true,
         "mapping_was_prior_inspected": false,
-        "partition": "training_disjoint_never_inspected_mapping_new_world",
-        "selection_basis": "ascending world-seed search using gate-resonance metadata only",
+        "partition": "training_disjoint_counterfactual_exposed_mapping_new_world",
+        "selection_basis": "preserved prior metadata-only selection; relabeled after counterfactual provenance correction; not U evidence",
         "world_seed": 20021,
         "world_was_prior_inspected": false
       },
@@ -675,9 +683,10 @@
           0.75,
           0.95
         ],
+        "mapping_was_counterfactual_exposed": true,
         "mapping_was_prior_inspected": false,
-        "partition": "training_disjoint_never_inspected_mapping_new_world",
-        "selection_basis": "ascending world-seed search using gate-resonance metadata only",
+        "partition": "training_disjoint_counterfactual_exposed_mapping_new_world",
+        "selection_basis": "preserved prior metadata-only selection; relabeled after counterfactual provenance correction; not U evidence",
         "world_seed": 20023,
         "world_was_prior_inspected": false
       },
@@ -699,6 +708,7 @@
           0.75,
           0.55
         ],
+        "mapping_was_counterfactual_exposed": false,
         "mapping_was_prior_inspected": false,
         "partition": "training_disjoint_never_inspected_mapping_new_world",
         "selection_basis": "ascending world-seed search using gate-resonance metadata only",
@@ -723,6 +733,7 @@
           0.75,
           0.55
         ],
+        "mapping_was_counterfactual_exposed": false,
         "mapping_was_prior_inspected": false,
         "partition": "training_disjoint_never_inspected_mapping_new_world",
         "selection_basis": "ascending world-seed search using gate-resonance metadata only",
@@ -890,9 +901,9 @@
     "artifact_commit": "00c60a84f3ee90ef661cfd12482d34ef194c4633",
     "checkpoint_prefix": "v03-neural-shared-row-bundled-screening",
     "output_digests": {
-      "reports/generated/v03-neural-shared-row-bundled-screening-paired.md": "57b3874be881833d30c6e6b0a8f6040ee6204e550406fa750fee4bf443513f2a",
+      "reports/generated/v03-neural-shared-row-bundled-screening-paired.md": "70e5c20e8b8fa1dc18e3018a8c7eb093a46fef30633a76cbb4099c7a2bff54aa",
       "reports/generated/v03-neural-shared-row-bundled-screening-report.json": "bb60e55cb77f5ffe8f2f968c9a7be837e41b85a54e1c2cc1fa3b572b24f28da4",
-      "reports/generated/v03-neural-shared-row-bundled-screening-report.md": "7b1c19cb64fd56a437d207ddf0edd48b60a4f6ce1a07c68b2823a50deece242d"
+      "reports/generated/v03-neural-shared-row-bundled-screening-report.md": "c8bc63d39b2e42c05c12b0b98c9be8c42f0d9684f9c67e6ce8c7410f028d3731"
     },
     "output_filename_deviation": {
       "actual_screening_checkpoint_prefix": "v03-neural-shared-row-bundled-screening",
@@ -927,14 +938,32 @@
       9200,
       9201
     ],
-    "globally_unseen_mapping_count": 2,
-    "globally_unseen_mapping_tuples": [
+    "counterfactual_exposed_mapping_count": 1,
+    "counterfactual_exposed_mapping_tuples": [
       [
         1,
         2,
         3,
         0
+      ]
+    ],
+    "explicit_bijective_override_mapping_tuples": [
+      [
+        0,
+        1,
+        2,
+        3
       ],
+      [
+        1,
+        0,
+        2,
+        3
+      ]
+    ],
+    "explicit_override_record_count": 15,
+    "globally_unseen_mapping_count": 1,
+    "globally_unseen_mapping_tuples": [
       [
         3,
         2,
@@ -1007,6 +1036,7 @@
               1,
               0
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 9300
           },
           {
@@ -1016,6 +1046,7 @@
               1,
               0
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 9301
           },
           {
@@ -1025,6 +1056,7 @@
               2,
               3
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 9302
           },
           {
@@ -1034,6 +1066,7 @@
               1,
               0
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 9303
           },
           {
@@ -1043,6 +1076,7 @@
               0,
               3
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 9304
           },
           {
@@ -1052,6 +1086,7 @@
               2,
               0
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 9305
           },
           {
@@ -1061,6 +1096,7 @@
               0,
               1
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 9306
           },
           {
@@ -1070,6 +1106,7 @@
               1,
               3
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 9307
           }
         ]
@@ -1102,6 +1139,7 @@
               1,
               2
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 9200
           },
           {
@@ -1111,6 +1149,7 @@
               1,
               3
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 9201
           }
         ]
@@ -1201,6 +1240,7 @@
               2,
               1
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 6300
           },
           {
@@ -1210,6 +1250,7 @@
               0,
               2
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 6301
           },
           {
@@ -1219,6 +1260,7 @@
               0,
               3
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 6302
           },
           {
@@ -1228,6 +1270,7 @@
               3,
               2
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 6303
           },
           {
@@ -1237,6 +1280,7 @@
               3,
               2
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 6304
           },
           {
@@ -1246,6 +1290,7 @@
               1,
               2
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 6305
           },
           {
@@ -1255,6 +1300,7 @@
               2,
               1
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 6306
           },
           {
@@ -1264,6 +1310,7 @@
               2,
               0
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 6307
           },
           {
@@ -1273,6 +1320,7 @@
               1,
               2
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 6308
           },
           {
@@ -1282,6 +1330,7 @@
               3,
               1
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 6309
           },
           {
@@ -1291,6 +1340,7 @@
               2,
               3
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 6310
           },
           {
@@ -1300,6 +1350,7 @@
               3,
               2
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 6311
           }
         ]
@@ -1378,6 +1429,7 @@
               0,
               3
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 15300
           },
           {
@@ -1387,6 +1439,7 @@
               0,
               3
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 15301
           },
           {
@@ -1396,6 +1449,7 @@
               2,
               0
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 15302
           },
           {
@@ -1405,6 +1459,7 @@
               2,
               1
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 15303
           },
           {
@@ -1414,6 +1469,7 @@
               3,
               1
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 15304
           },
           {
@@ -1423,6 +1479,7 @@
               0,
               1
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 15305
           },
           {
@@ -1432,6 +1489,7 @@
               0,
               1
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 15306
           },
           {
@@ -1441,6 +1499,7 @@
               0,
               3
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 15307
           },
           {
@@ -1450,6 +1509,7 @@
               2,
               3
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 15308
           },
           {
@@ -1459,6 +1519,7 @@
               2,
               0
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 15309
           },
           {
@@ -1468,6 +1529,7 @@
               3,
               0
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 15310
           },
           {
@@ -1477,6 +1539,7 @@
               0,
               3
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 15311
           }
         ]
@@ -1545,6 +1608,7 @@
               3,
               2
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 6100
           },
           {
@@ -1554,6 +1618,7 @@
               1,
               3
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 6101
           },
           {
@@ -1563,6 +1628,7 @@
               2,
               0
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 6102
           },
           {
@@ -1572,6 +1638,7 @@
               1,
               2
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 6103
           },
           {
@@ -1581,6 +1648,7 @@
               0,
               3
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 6104
           },
           {
@@ -1590,6 +1658,7 @@
               3,
               0
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 6105
           },
           {
@@ -1599,6 +1668,7 @@
               2,
               0
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 6106
           },
           {
@@ -1608,6 +1678,7 @@
               1,
               0
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 6107
           }
         ]
@@ -1654,6 +1725,7 @@
               1,
               0
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 6200
           },
           {
@@ -1663,6 +1735,7 @@
               1,
               2
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 6201
           },
           {
@@ -1672,6 +1745,7 @@
               1,
               2
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 6202
           },
           {
@@ -1681,6 +1755,7 @@
               0,
               3
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 6203
           }
         ]
@@ -1713,6 +1788,7 @@
               0,
               3
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 8300
           },
           {
@@ -1722,6 +1798,7 @@
               2,
               3
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 8301
           }
         ]
@@ -1754,6 +1831,7 @@
               2,
               1
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 7100
           },
           {
@@ -1763,11 +1841,279 @@
               0,
               2
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 7101
           }
         ]
       },
       "v03_protocol_audit_fixtures": {
+        "actual_bijective_override_mapping_tuples": [
+          [
+            0,
+            1,
+            2,
+            3
+          ],
+          [
+            1,
+            0,
+            2,
+            3
+          ]
+        ],
+        "explicit_override_records": [
+          {
+            "bijective": true,
+            "context": "pair_same_measurement_different_notes",
+            "frequency_to_gate": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "gate_resonance_hz": [
+              0.55,
+              0.75,
+              0.95,
+              1.15
+            ],
+            "world_seed": 3100
+          },
+          {
+            "bijective": true,
+            "context": "pair_same_note_different_measurements_first",
+            "frequency_to_gate": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "gate_resonance_hz": [
+              0.55,
+              0.75,
+              0.95,
+              1.15
+            ],
+            "world_seed": 3200
+          },
+          {
+            "bijective": true,
+            "context": "pair_same_note_different_measurements_second",
+            "frequency_to_gate": [
+              1,
+              0,
+              2,
+              3
+            ],
+            "gate_resonance_hz": [
+              0.75,
+              0.55,
+              0.95,
+              1.15
+            ],
+            "world_seed": 3200
+          },
+          {
+            "bijective": true,
+            "context": "parameter_sensitivity_first",
+            "frequency_to_gate": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "gate_resonance_hz": [
+              0.55,
+              0.75,
+              0.95,
+              1.15
+            ],
+            "world_seed": 3300
+          },
+          {
+            "bijective": false,
+            "context": "parameter_sensitivity_second",
+            "frequency_to_gate": null,
+            "gate_resonance_hz": [
+              0.57,
+              0.75,
+              0.95,
+              1.15
+            ],
+            "world_seed": 3300
+          },
+          {
+            "bijective": true,
+            "context": "shared_coupling_energy",
+            "frequency_to_gate": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "gate_resonance_hz": [
+              0.55,
+              0.75,
+              0.95,
+              1.15
+            ],
+            "world_seed": 3302
+          },
+          {
+            "bijective": true,
+            "context": "all_gates_can_open",
+            "frequency_to_gate": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "gate_resonance_hz": [
+              0.55,
+              0.75,
+              0.95,
+              1.15
+            ],
+            "world_seed": 3500
+          },
+          {
+            "bijective": true,
+            "context": "wrong_gate_drive",
+            "frequency_to_gate": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "gate_resonance_hz": [
+              0.55,
+              0.75,
+              0.95,
+              1.15
+            ],
+            "world_seed": 3501
+          },
+          {
+            "bijective": true,
+            "context": "wrong_goal_drive",
+            "frequency_to_gate": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "gate_resonance_hz": [
+              0.55,
+              0.75,
+              0.95,
+              1.15
+            ],
+            "world_seed": 3502
+          },
+          {
+            "bijective": true,
+            "context": "right_goal_drive",
+            "frequency_to_gate": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "gate_resonance_hz": [
+              0.55,
+              0.75,
+              0.95,
+              1.15
+            ],
+            "world_seed": 3503
+          },
+          {
+            "bijective": true,
+            "context": "virtual_probe_work",
+            "frequency_to_gate": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "gate_resonance_hz": [
+              0.55,
+              0.75,
+              0.95,
+              1.15
+            ],
+            "world_seed": 3507
+          },
+          {
+            "bijective": true,
+            "context": "gate_quartic_force",
+            "frequency_to_gate": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "gate_resonance_hz": [
+              0.55,
+              0.75,
+              0.95,
+              1.15
+            ],
+            "world_seed": 3508
+          },
+          {
+            "bijective": true,
+            "context": "internal_coupling",
+            "frequency_to_gate": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "gate_resonance_hz": [
+              0.55,
+              0.75,
+              0.95,
+              1.15
+            ],
+            "world_seed": 3509
+          },
+          {
+            "bijective": true,
+            "context": "timestep_refinement",
+            "frequency_to_gate": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "gate_resonance_hz": [
+              0.55,
+              0.75,
+              0.95,
+              1.15
+            ],
+            "world_seed": 3512
+          },
+          {
+            "bijective": true,
+            "context": "additional_gate_opening",
+            "frequency_to_gate": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "gate_resonance_hz": [
+              0.55,
+              0.75,
+              0.95,
+              1.15
+            ],
+            "world_seed": 3516
+          }
+        ],
+        "mapping_provenance_status": "complete_for_listed_explicit_overrides; one_non_bijective_override_is_outside_the_bijective_mapping_universe",
         "mapping_tuples": [
           [
             0,
@@ -1878,6 +2224,8 @@
             0
           ]
         ],
+        "non_bijective_override_count": 1,
+        "seed_generated_world_mapping_is_not_treated_as_execution_provenance": true,
         "world_count": 38,
         "world_seeds": [
           0,
@@ -1927,6 +2275,7 @@
               3,
               2
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 0
           },
           {
@@ -1936,6 +2285,7 @@
               3,
               1
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 1
           },
           {
@@ -1945,6 +2295,7 @@
               3,
               2
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 2
           },
           {
@@ -1954,6 +2305,7 @@
               0,
               3
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 3
           },
           {
@@ -1963,6 +2315,7 @@
               0,
               2
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 4
           },
           {
@@ -1972,6 +2325,7 @@
               0,
               1
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 5
           },
           {
@@ -1981,6 +2335,7 @@
               3,
               1
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 6
           },
           {
@@ -1990,6 +2345,7 @@
               2,
               1
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 7
           },
           {
@@ -1999,6 +2355,7 @@
               2,
               3
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 8
           },
           {
@@ -2008,6 +2365,7 @@
               3,
               1
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 9
           },
           {
@@ -2017,6 +2375,7 @@
               3,
               2
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 10
           },
           {
@@ -2026,6 +2385,7 @@
               3,
               1
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 11
           },
           {
@@ -2035,6 +2395,7 @@
               2,
               1
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 3100
           },
           {
@@ -2044,6 +2405,7 @@
               3,
               2
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 3200
           },
           {
@@ -2053,6 +2415,7 @@
               1,
               3
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 3300
           },
           {
@@ -2062,6 +2425,7 @@
               1,
               3
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 3301
           },
           {
@@ -2071,6 +2435,7 @@
               0,
               2
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 3302
           },
           {
@@ -2080,6 +2445,7 @@
               3,
               2
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 3400
           },
           {
@@ -2089,6 +2455,7 @@
               0,
               3
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 3500
           },
           {
@@ -2098,6 +2465,7 @@
               3,
               2
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 3501
           },
           {
@@ -2107,6 +2475,7 @@
               1,
               0
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 3502
           },
           {
@@ -2116,6 +2485,7 @@
               2,
               1
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 3503
           },
           {
@@ -2125,6 +2495,7 @@
               2,
               1
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 3504
           },
           {
@@ -2134,6 +2505,7 @@
               0,
               3
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 3505
           },
           {
@@ -2143,6 +2515,7 @@
               1,
               0
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 3506
           },
           {
@@ -2152,6 +2525,7 @@
               0,
               2
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 3507
           },
           {
@@ -2161,6 +2535,7 @@
               3,
               2
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 3508
           },
           {
@@ -2170,6 +2545,7 @@
               3,
               0
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 3509
           },
           {
@@ -2179,6 +2555,7 @@
               2,
               3
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 3510
           },
           {
@@ -2188,6 +2565,7 @@
               0,
               2
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 3511
           },
           {
@@ -2197,6 +2575,7 @@
               2,
               3
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 3512
           },
           {
@@ -2206,6 +2585,7 @@
               3,
               2
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 3513
           },
           {
@@ -2215,6 +2595,7 @@
               3,
               0
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 3514
           },
           {
@@ -2224,6 +2605,7 @@
               2,
               0
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 3515
           },
           {
@@ -2233,6 +2615,7 @@
               2,
               3
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 3516
           },
           {
@@ -2242,6 +2625,7 @@
               0,
               2
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 3517
           },
           {
@@ -2251,6 +2635,7 @@
               3,
               2
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 3518
           },
           {
@@ -2260,13 +2645,17 @@
               3,
               1
             ],
+            "frequency_to_gate_source": "seed_generated_simulator_rule",
             "world_seed": 3519
           }
         ]
       }
     },
-    "inventory_note": "The 24 feasible bijections are not all globally unseen: the prior inventory covers 22/24 mappings. Fresh worlds for the other training-disjoint mappings remain useful transfer cases but are not globally unseen-map evidence.",
+    "inventory_note": "The 24 feasible bijections are not all globally unseen: the physical prior inventory covers 22/24 mappings. The row-relabel diagnostic on development world 9306 exposed (1,2,3,0) only as a counterfactual transformed row order; it was not a physical-world run. Therefore (1,2,3,0) is excluded from U even though fresh physical worlds 20021 and 20023 may be preserved as a supplemental, explicitly counterfactual-exposed partition. The true globally never-inspected complement U is 1/24 mapping(s).",
     "known_prior_world_seed_count": 88,
+    "mapping_exposure_count": 23,
+    "mapping_provenance_status": "complete_for_listed_bijective_protocol_overrides; non_bijective_fixture_recorded_and_excluded_from_bijective_universe",
+    "non_bijective_override_count": 1,
     "prior_inspected_mapping_count": 22,
     "prior_inspected_mapping_tuples": [
       [
@@ -2552,8 +2941,8 @@
       "joint_correct",
       "physical_success"
     ],
-    "per_mapping": "aggregate both selected worlds carrying the same frequency_to_gate tuple, preserving the never-inspected mapping label",
-    "per_partition": "report the selected never-inspected mapping partition; retain explicit zero counts for seen-training and training-disjoint previously-inspected partitions",
+    "per_mapping": "aggregate both selected worlds carrying the same frequency_to_gate tuple, preserving whether the mapping is globally never-inspected or counterfactually exposed",
+    "per_partition": "report the selected never-inspected and preserved counterfactual-exposed partitions; retain explicit zero counts for seen-training and training-disjoint previously-inspected partitions",
     "per_world": "aggregate all four goals for each selected world and each frozen checkpoint family member",
     "physical_success_definition": "unchanged CorrectedEpisode.success after the model-selected gate and frequency actuation"
   },
@@ -3503,8 +3892,9 @@
     "Do not retrain or alter the four frozen shared-row or four c35c2e legacy baseline checkpoints.",
     "Use the frozen shared_max_abs normalization payload exactly for both families; fit no normalization during paired inference.",
     "Use only original note wording and the existing two-step delayed schedule in this evaluation.",
-    "Keep seen-training mappings, training-disjoint previously-inspected mappings, and training-disjoint never-inspected mappings separate in every report.",
+    "Keep seen-training mappings, training-disjoint previously-inspected mappings, training-disjoint never-inspected mappings, and preserved counterfactual-exposed mappings separate in every report.",
     "Do not call training-disjoint previously-inspected mappings globally unseen-map evidence.",
+    "Do not call the preserved (1,2,3,0) worlds globally never-inspected: a prior row-relabel diagnostic exposed that mapping counterfactually on development world 9306.",
     "Use simulator resonance metadata, never model success, to select worlds and derive gate targets.",
     "Report frequency, gate, joint, physical-success, and loss metrics per case, world, mapping, and partition.",
     "Require row-relabel probability equivariance and action remapping; mark near-tie selected-index checks not-applicable.",
@@ -3678,6 +4068,7 @@
     "no_fresh_case_evaluation": true,
     "no_new_training": true,
     "original_note_format_only": true,
+    "preserved_counterfactual_exposed_worlds_are_not_U_evidence": true,
     "source_only": true,
     "varied_wording_or_delays_deferred": true
   },
@@ -3688,7 +4079,7 @@
     "historical_and_screening_artifacts_must_remain_byte_for_byte": true,
     "preregistration": "reports/generated/v03-neural-fresh-mapping-transfer-preregistration.json"
   },
-  "source_sha_at_registration": "0da12c67284b48fb2af8a12a97f0ebc21d90eb42",
+  "source_sha_at_registration": "55ad02a51afe8eb5ffe8f4d36d462c75521f090f",
   "status": "awaiting_independent_review_before_fresh_evaluation",
   "training_started": false
 }
