@@ -53,12 +53,28 @@ the deterministic `gate_resonance_hz` metadata generated from a world seed.
 It never uses model predictions, physical success, or a prior candidate
 outcome.
 
-The inventory covers all 24 feasible bijections:
+The inventory covers all 24 feasible bijections and records the explicit
+protocol-fixture resonance overrides rather than treating a seed-generated
+mapping as the executed mapping. One listed parameter-sensitivity override is
+non-bijective and is recorded for provenance but excluded from the bijective
+mapping universe.
+
+- The inventory covers 22 physical mapping tuples after combining ordinary
+  seed-derived metadata with the listed bijective fixture overrides.
+- A prior development row-relabel diagnostic on world `9306` used physical
+  mapping `(2,3,0,1)` and exposed `(1,2,3,0)` only as a transformed
+  counterfactual row order. That tuple was not a physical-world run.
+- Therefore the globally never-inspected complement `U` contains exactly one
+  tuple, `(3,2,0,1)`, after subtracting both physical prior exposure and the
+  explicit counterfactual exposure.
+
+The candidate training and prior inventory are:
 
 - Candidate training worlds `9200, 9201` use `(3,0,1,2)` and `(0,2,1,3)`. These are the `seen_training_mapping` tuples.
-- The prior train/development/diagnostic/audit inventory covers 22 of 24 mapping tuples.
-- The globally never-inspected complement `U` therefore has exactly two tuples: `(1,2,3,0)` and `(3,2,0,1)`.
-- The other 20 training-disjoint tuples were previously inspected somewhere in the complete inventory. Fresh worlds carrying those tuples would be useful training-disjoint transfer cases, but are not globally unseen-map evidence and are not selected in this bounded stage.
+- The prior train/development/diagnostic/audit inventory covers 22 of 24 physical mapping tuples.
+- The counterfactual-exposed set contains `(1,2,3,0)`; it is not part of `U` despite not having a prior physical-world run.
+- The globally never-inspected complement `U` therefore has exactly one tuple: `(3,2,0,1)`.
+- The other 21 training-disjoint tuples were previously inspected physically or exposed by the recorded counterfactual diagnostic. Fresh worlds carrying those tuples are not globally unseen-map evidence.
 
 The excluded prior world inventory includes v0.3 proof train/validation/test
 and donor worlds, repair micro/future audit worlds, delayed-memory training and
@@ -71,14 +87,24 @@ Use the fixed candidate seed range `[20000, 30000)`, sort `U` lexicographically,
 and take `K = min(8, |U|)`. For each selected mapping, scan candidate seeds in
 ascending order, skip every excluded or already selected seed, derive the
 frequency-to-gate tuple from simulator metadata, and take the first two seeds.
-For the current inventory, `K=2` and the frozen world manifest is:
+For the current inventory, `K=1`, and the true U evidence is:
 
 | partition | mapping tuple | fresh world seeds | goals per world | cases |
 |---|---|---:|---:|---:|
-| training-disjoint, never-inspected mapping | `(1,2,3,0)` | `20021, 20023` | `0..3` | 8 |
 | training-disjoint, never-inspected mapping | `(3,2,0,1)` | `20049, 20050` | `0..3` | 8 |
 
-This is 4 fresh worlds and 16 cases. The upper bound is 8 mappings × 2 worlds
+The previously frozen physical worlds `20021, 20023` carrying `(1,2,3,0)` are
+preserved in the case manifest, but relabeled:
+
+| partition | mapping tuple | fresh world seeds | goals per world | cases |
+|---|---|---:|---:|---:|
+| training-disjoint, counterfactually exposed mapping | `(1,2,3,0)` | `20021, 20023` | `0..3` | 8 |
+
+They are fresh physical worlds and remain useful supplemental transfer cases,
+but they are not U evidence and must never be described as globally
+never-inspected. No outcome-based replacement was made. The complete preserved
+manifest is therefore 4 fresh worlds and 16 cases: 8 U cases plus 8 explicitly
+counterfactual-exposed cases. The upper bound remains 8 mappings × 2 worlds
 per mapping × 4 goals = 64 cases per checkpoint, or 512 paired checkpoint
 evaluations. If `U` were empty, the design would stop and require separate
 review of a clearly labelled fresh-instance/training-disjoint test; it would
@@ -101,7 +127,8 @@ delay variations are deferred to a separate later design.
 
 For each frozen candidate and legacy checkpoint, report learned frequency,
 gate, joint, physical-success, and loss metrics per case, per world, per
-frequency-to-gate mapping, and per selected partition. The gate target is
+frequency-to-gate mapping, and per selected partition. Keep the U and
+counterfactually exposed partitions separate in every report. The gate target is
 derived from simulator resonance metadata only; it is not supplied to policy
 input or selected from model success. `joint_mean_loss` is the arithmetic mean
 of gate and frequency cross-entropies. Physical success is the unchanged

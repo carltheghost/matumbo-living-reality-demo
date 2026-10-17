@@ -10,6 +10,7 @@ from vevo_agents.v03_fresh_mapping_preregistration import (
     FROZEN_INFERENCE_CHECKPOINTS,
     KNOWN_PRIOR_WORLD_SEEDS,
     NORMALIZATION_DIGEST,
+    PARTITION_DISJOINT_COUNTERFACTUAL,
     PARTITION_DISJOINT_NEVER,
     SCREENING_ARTIFACT_COMMIT,
     SCREENING_SOURCE_SHA,
@@ -80,28 +81,40 @@ class V03FreshMappingPreregistrationTests(unittest.TestCase):
         self.assertEqual(inventory["all_feasible_mapping_count"], 24)
         self.assertEqual(inventory["prior_inspected_mapping_count"], 22)
         self.assertEqual(inventory["training_disjoint_mapping_count"], 22)
-        self.assertEqual(inventory["globally_unseen_mapping_count"], 2)
+        self.assertEqual(inventory["explicit_override_record_count"], 15)
+        self.assertEqual(inventory["non_bijective_override_count"], 1)
+        self.assertEqual(inventory["counterfactual_exposed_mapping_count"], 1)
+        self.assertEqual(inventory["globally_unseen_mapping_count"], 1)
         training = {tuple(item) for item in inventory["candidate_training_mapping_tuples"]}
         globally_unseen = {tuple(item) for item in inventory["globally_unseen_mapping_tuples"]}
+        counterfactual = {tuple(item) for item in inventory["counterfactual_exposed_mapping_tuples"]}
         self.assertEqual(training, {(3, 0, 1, 2), (0, 2, 1, 3)})
-        self.assertEqual(globally_unseen, {(1, 2, 3, 0), (3, 2, 0, 1)})
+        self.assertEqual(globally_unseen, {(3, 2, 0, 1)})
+        self.assertEqual(counterfactual, {(1, 2, 3, 0)})
         self.assertTrue(training.isdisjoint(globally_unseen))
         self.assertEqual(
-            len(set(tuple(item) for item in inventory["prior_inspected_mapping_tuples"]) | globally_unseen),
+            len(set(tuple(item) for item in inventory["prior_inspected_mapping_tuples"]) | globally_unseen | counterfactual),
             24,
         )
 
     def test_selection_is_metadata_only_bounded_and_frozen(self):
         selection = self.plan["fresh_world_selection"]
         worlds = selection["worlds"]
-        self.assertEqual(selection["selected_mapping_count"], 2)
+        self.assertEqual(selection["selected_mapping_count"], 1)
         self.assertEqual(selection["lexicographic_mapping_limit_K"], FRESH_MAPPING_LIMIT)
         self.assertEqual(selection["worlds_per_mapping"], FRESH_WORLDS_PER_MAPPING)
         self.assertEqual([item["world_seed"] for item in worlds], [20021, 20023, 20049, 20050])
         self.assertTrue(selection["selection_uses_model_outcomes"] is False)
         self.assertTrue(all(item["world_seed"] not in KNOWN_PRIOR_WORLD_SEEDS for item in worlds))
-        self.assertTrue(all(item["partition"] == PARTITION_DISJOINT_NEVER for item in worlds))
-        self.assertEqual(selection["partition_counts"][PARTITION_DISJOINT_NEVER], 4)
+        self.assertEqual(
+            [item["partition"] for item in worlds],
+            [PARTITION_DISJOINT_COUNTERFACTUAL, PARTITION_DISJOINT_COUNTERFACTUAL,
+             PARTITION_DISJOINT_NEVER, PARTITION_DISJOINT_NEVER],
+        )
+        self.assertEqual(selection["partition_counts"][PARTITION_DISJOINT_NEVER], 2)
+        self.assertEqual(selection["partition_counts"][PARTITION_DISJOINT_COUNTERFACTUAL], 2)
+        self.assertEqual(selection["preserved_supplemental_mapping_tuples"], [[1, 2, 3, 0]])
+        self.assertEqual(selection["preserved_supplemental_worlds"], [20021, 20023])
         self.assertEqual(
             {tuple(item["frequency_to_gate"]) for item in worlds},
             {(1, 2, 3, 0), (3, 2, 0, 1)},
@@ -111,6 +124,8 @@ class V03FreshMappingPreregistrationTests(unittest.TestCase):
                 frequency_to_gate_mapping(item["world_seed"]),
                 tuple(item["frequency_to_gate"]),
             )
+        self.assertTrue(worlds[0]["mapping_was_counterfactual_exposed"])
+        self.assertFalse(worlds[2]["mapping_was_counterfactual_exposed"])
 
     def test_case_manifest_preserves_original_protocol_and_pair_counts(self):
         case_plan = self.plan["case_plan"]

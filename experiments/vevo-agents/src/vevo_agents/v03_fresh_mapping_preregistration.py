@@ -50,7 +50,7 @@ SCREENING_CHECKPOINT_PREFIX = "v03-neural-shared-row-bundled-screening"
 SCREENING_OUTPUT_DIGESTS = {
     SCREENING_REPORT_PATH: "bb60e55cb77f5ffe8f2f968c9a7be837e41b85a54e1c2cc1fa3b572b24f28da4",
     SCREENING_SUMMARY_PATH: "7b1c19cb64fd56a437d207ddf0edd48b60a4f6ce1a07c68b2823a50deece242d",
-    SCREENING_PAIRED_PATH: "57b3874be881833d30c6e6b0a8f6040ee6204e550406fa750fee4bf443513f2a",
+    SCREENING_PAIRED_PATH: "70e5c20e8b8fa1dc18e3018a8c7eb093a46fef30633a76cbb4099c7a2bff54aa",
 }
 
 LEGACY_BASELINE_ARTIFACT_COMMIT = "c35c2e6729dc867b516de8229ddd99adb88bcc44"
@@ -160,6 +160,30 @@ FRESH_WORLD_SEED_STOP_EXCLUSIVE = 30000
 PARTITION_SEEN_TRAINING = "seen_training_mapping_new_world"
 PARTITION_DISJOINT_PRIOR = "training_disjoint_previously_inspected_mapping_new_world"
 PARTITION_DISJOINT_NEVER = "training_disjoint_never_inspected_mapping_new_world"
+PARTITION_DISJOINT_COUNTERFACTUAL = "training_disjoint_counterfactual_exposed_mapping_new_world"
+
+COUNTERFACTUAL_EXPOSED_MAPPING_TUPLES = ((1, 2, 3, 0),)
+
+# Protocol tests contain both seed-generated worlds and explicit resonance
+# arrays.  Keep the explicit arrays in the provenance record instead of
+# silently treating their seed-generated mapping as the executed mapping.
+KNOWN_PROTOCOL_OVERRIDE_RECORDS = (
+    {"world_seed": 3100, "context": "pair_same_measurement_different_notes", "gate_resonance_hz": (0.55, 0.75, 0.95, 1.15), "frequency_to_gate": (0, 1, 2, 3), "bijective": True},
+    {"world_seed": 3200, "context": "pair_same_note_different_measurements_first", "gate_resonance_hz": (0.55, 0.75, 0.95, 1.15), "frequency_to_gate": (0, 1, 2, 3), "bijective": True},
+    {"world_seed": 3200, "context": "pair_same_note_different_measurements_second", "gate_resonance_hz": (0.75, 0.55, 0.95, 1.15), "frequency_to_gate": (1, 0, 2, 3), "bijective": True},
+    {"world_seed": 3300, "context": "parameter_sensitivity_first", "gate_resonance_hz": (0.55, 0.75, 0.95, 1.15), "frequency_to_gate": (0, 1, 2, 3), "bijective": True},
+    {"world_seed": 3300, "context": "parameter_sensitivity_second", "gate_resonance_hz": (0.57, 0.75, 0.95, 1.15), "frequency_to_gate": None, "bijective": False},
+    {"world_seed": 3302, "context": "shared_coupling_energy", "gate_resonance_hz": (0.55, 0.75, 0.95, 1.15), "frequency_to_gate": (0, 1, 2, 3), "bijective": True},
+    {"world_seed": 3500, "context": "all_gates_can_open", "gate_resonance_hz": (0.55, 0.75, 0.95, 1.15), "frequency_to_gate": (0, 1, 2, 3), "bijective": True},
+    {"world_seed": 3501, "context": "wrong_gate_drive", "gate_resonance_hz": (0.55, 0.75, 0.95, 1.15), "frequency_to_gate": (0, 1, 2, 3), "bijective": True},
+    {"world_seed": 3502, "context": "wrong_goal_drive", "gate_resonance_hz": (0.55, 0.75, 0.95, 1.15), "frequency_to_gate": (0, 1, 2, 3), "bijective": True},
+    {"world_seed": 3503, "context": "right_goal_drive", "gate_resonance_hz": (0.55, 0.75, 0.95, 1.15), "frequency_to_gate": (0, 1, 2, 3), "bijective": True},
+    {"world_seed": 3507, "context": "virtual_probe_work", "gate_resonance_hz": (0.55, 0.75, 0.95, 1.15), "frequency_to_gate": (0, 1, 2, 3), "bijective": True},
+    {"world_seed": 3508, "context": "gate_quartic_force", "gate_resonance_hz": (0.55, 0.75, 0.95, 1.15), "frequency_to_gate": (0, 1, 2, 3), "bijective": True},
+    {"world_seed": 3509, "context": "internal_coupling", "gate_resonance_hz": (0.55, 0.75, 0.95, 1.15), "frequency_to_gate": (0, 1, 2, 3), "bijective": True},
+    {"world_seed": 3512, "context": "timestep_refinement", "gate_resonance_hz": (0.55, 0.75, 0.95, 1.15), "frequency_to_gate": (0, 1, 2, 3), "bijective": True},
+    {"world_seed": 3516, "context": "additional_gate_opening", "gate_resonance_hz": (0.55, 0.75, 0.95, 1.15), "frequency_to_gate": (0, 1, 2, 3), "bijective": True},
+)
 
 # These are all prior v0.3 world seeds used by training, validation,
 # development, frozen diagnostics, donor measurements, repair audits, or
@@ -192,7 +216,10 @@ ALL_FREQUENCY_TO_GATE_MAPPINGS = tuple(permutations(range(len(PROBE_FREQUENCIES)
 # The seed choices are frozen outputs of the ascending metadata-only search in
 # [20000, 30000), after excluding KNOWN_PRIOR_WORLD_SEEDS.  This review stage
 # selects the lexicographic first K=min(8, |U|) globally never-inspected
-# mappings, with two fresh worlds per selected mapping.  Here U has size two.
+# mappings, with two fresh worlds per selected mapping.  After the provenance
+# correction below, U has size one; the previously frozen worlds carrying the
+# counterfactually exposed mapping are preserved as a separate supplemental
+# partition rather than silently deleted.
 FRESH_MAPPING_LIMIT = 8
 FRESH_WORLDS_PER_MAPPING = 2
 FROZEN_FRESH_WORLDS_BY_MAPPING = {
@@ -262,6 +289,23 @@ def _mapping_label(mapping: tuple[int, ...]) -> str:
     return "(" + ", ".join(str(int(value)) for value in mapping) + ")"
 
 
+def _override_record_json(record: dict) -> dict:
+    """Return an explicit protocol override in the sealed JSON shape."""
+
+    frequency_to_gate = record.get("frequency_to_gate")
+    return {
+        "world_seed": int(record["world_seed"]),
+        "context": str(record["context"]),
+        "gate_resonance_hz": [float(value) for value in record["gate_resonance_hz"]],
+        "frequency_to_gate": (
+            None
+            if frequency_to_gate is None
+            else _mapping_json(tuple(int(value) for value in frequency_to_gate))
+        ),
+        "bijective": bool(record["bijective"]),
+    }
+
+
 def _prior_inventory() -> dict:
     groups = {}
     for name, seeds in KNOWN_PRIOR_WORLD_SEED_GROUPS.items():
@@ -269,6 +313,7 @@ def _prior_inventory() -> dict:
             {
                 "world_seed": int(seed),
                 "frequency_to_gate": _mapping_json(frequency_to_gate_mapping(seed)),
+                "frequency_to_gate_source": "seed_generated_simulator_rule",
             }
             for seed in sorted(seeds)
         ]
@@ -285,17 +330,48 @@ def _prior_inventory() -> dict:
             _mapping_json(tuple(mapping))
             for mapping in groups[name]["mapping_tuples"]
         ]
-    prior_mappings = tuple(sorted({
+    explicit_override_records = [
+        _override_record_json(record)
+        for record in KNOWN_PROTOCOL_OVERRIDE_RECORDS
+    ]
+    explicit_bijective_mappings = tuple(sorted({
+        tuple(record["frequency_to_gate"])
+        for record in explicit_override_records
+        if record["bijective"] and record["frequency_to_gate"] is not None
+    }))
+    protocol_group = groups["v03_protocol_audit_fixtures"]
+    protocol_group.update({
+        "mapping_provenance_status": (
+            "complete_for_listed_explicit_overrides; one_non_bijective_override_is_outside_"
+            "the_bijective_mapping_universe"
+        ),
+        "explicit_override_records": explicit_override_records,
+        "actual_bijective_override_mapping_tuples": [
+            _mapping_json(mapping) for mapping in explicit_bijective_mappings
+        ],
+        "non_bijective_override_count": sum(
+            not record["bijective"] for record in explicit_override_records
+        ),
+        "seed_generated_world_mapping_is_not_treated_as_execution_provenance": True,
+    })
+    seed_generated_mappings = {
         frequency_to_gate_mapping(seed)
         for seed in KNOWN_PRIOR_WORLD_SEEDS
-    }))
+    }
+    # The seed-derived map is authoritative for ordinary worlds.  For protocol
+    # fixtures, explicit gate arrays above are the executed metadata; include
+    # only their bijective mappings in the physical prior inventory.
+    prior_mappings = tuple(sorted(seed_generated_mappings | set(explicit_bijective_mappings)))
     training_mappings = tuple(sorted({
         frequency_to_gate_mapping(seed)
         for seed in DELAYED_TRAIN_WORLD_SEEDS
     }))
     all_mappings = set(ALL_FREQUENCY_TO_GATE_MAPPINGS)
     training_disjoint = tuple(sorted(all_mappings - set(training_mappings)))
-    globally_unseen = tuple(sorted(all_mappings - set(prior_mappings)))
+    counterfactual_exposed = tuple(sorted(set(COUNTERFACTUAL_EXPOSED_MAPPING_TUPLES)))
+    globally_unseen = tuple(sorted(
+        all_mappings - set(prior_mappings) - set(counterfactual_exposed)
+    ))
     return {
         "candidate_training_world_seeds": [int(seed) for seed in DELAYED_TRAIN_WORLD_SEEDS],
         "candidate_training_mapping_tuples": [_mapping_json(mapping) for mapping in training_mappings],
@@ -303,31 +379,54 @@ def _prior_inventory() -> dict:
         "groups": groups,
         "prior_inspected_mapping_tuples": [_mapping_json(mapping) for mapping in prior_mappings],
         "prior_inspected_mapping_count": len(prior_mappings),
+        "explicit_bijective_override_mapping_tuples": [
+            _mapping_json(mapping) for mapping in explicit_bijective_mappings
+        ],
+        "explicit_override_record_count": len(explicit_override_records),
+        "non_bijective_override_count": sum(
+            not record["bijective"] for record in explicit_override_records
+        ),
+        "mapping_provenance_status": (
+            "complete_for_listed_bijective_protocol_overrides; non_bijective_fixture_"
+            "recorded_and_excluded_from_bijective_universe"
+        ),
         "training_disjoint_mapping_tuples": [_mapping_json(mapping) for mapping in training_disjoint],
         "training_disjoint_mapping_count": len(training_disjoint),
+        "counterfactual_exposed_mapping_tuples": [
+            _mapping_json(mapping) for mapping in counterfactual_exposed
+        ],
+        "counterfactual_exposed_mapping_count": len(counterfactual_exposed),
+        "mapping_exposure_count": len(set(prior_mappings) | set(counterfactual_exposed)),
         "globally_unseen_mapping_tuples": [_mapping_json(mapping) for mapping in globally_unseen],
         "globally_unseen_mapping_count": len(globally_unseen),
         "all_feasible_mapping_count": len(ALL_FREQUENCY_TO_GATE_MAPPINGS),
         "inventory_note": (
-            "The 24 feasible bijections are not all globally unseen: the prior inventory covers "
-            f"{len(prior_mappings)}/24 mappings. Fresh worlds for the other training-disjoint "
-            "mappings remain useful transfer cases but are not globally unseen-map evidence."
+            "The 24 feasible bijections are not all globally unseen: the physical prior inventory "
+            f"covers {len(prior_mappings)}/24 mappings. The row-relabel diagnostic on development "
+            "world 9306 exposed (1,2,3,0) only as a counterfactual transformed row order; it was "
+            "not a physical-world run. Therefore (1,2,3,0) is excluded from U even though fresh "
+            "physical worlds 20021 and 20023 may be preserved as a supplemental, explicitly "
+            "counterfactual-exposed partition. The true globally never-inspected complement U is "
+            f"{len(globally_unseen)}/24 mapping(s)."
         ),
     }
 
 
 def select_fresh_worlds() -> list[dict]:
-    """Select two deterministic fresh worlds for the first K mappings in U."""
+    """Select U worlds plus preserved physical worlds relabeled by provenance."""
 
-    prior_mappings = {
-        frequency_to_gate_mapping(seed)
-        for seed in KNOWN_PRIOR_WORLD_SEEDS
-    }
-    globally_unseen = tuple(sorted(set(ALL_FREQUENCY_TO_GATE_MAPPINGS) - prior_mappings))
+    inventory = _prior_inventory()
+    globally_unseen = tuple(
+        tuple(mapping) for mapping in inventory["globally_unseen_mapping_tuples"]
+    )
     selected_mappings = globally_unseen[:min(FRESH_MAPPING_LIMIT, len(globally_unseen))]
+    supplemental_mappings = tuple(sorted(
+        set(FROZEN_FRESH_WORLDS_BY_MAPPING) - set(selected_mappings)
+    ))
+    output_mappings = tuple(sorted(set(selected_mappings) | set(supplemental_mappings)))
     selected = []
     used_worlds = set(KNOWN_PRIOR_WORLD_SEEDS)
-    for mapping in selected_mappings:
+    for mapping in output_mappings:
         chosen = []
         for candidate in range(FRESH_WORLD_SEED_START, FRESH_WORLD_SEED_STOP_EXCLUSIVE):
             if candidate in used_worlds:
@@ -345,24 +444,41 @@ def select_fresh_worlds() -> list[dict]:
             )
         for world_seed in chosen:
             used_worlds.add(world_seed)
+            is_supplemental = mapping in supplemental_mappings
             selected.append({
                 "world_seed": int(world_seed),
                 "frequency_to_gate": _mapping_json(mapping),
-                "partition": PARTITION_DISJOINT_NEVER,
+                "partition": (
+                    PARTITION_DISJOINT_COUNTERFACTUAL
+                    if is_supplemental
+                    else PARTITION_DISJOINT_NEVER
+                ),
                 "candidate_training_mapping": False,
                 "mapping_was_prior_inspected": False,
+                "mapping_was_counterfactual_exposed": bool(is_supplemental),
                 "world_was_prior_inspected": False,
-                "selection_basis": "ascending world-seed search using gate-resonance metadata only",
+                "selection_basis": (
+                    "preserved prior metadata-only selection; relabeled after counterfactual "
+                    "provenance correction; not U evidence"
+                    if is_supplemental
+                    else "ascending world-seed search using gate-resonance metadata only"
+                ),
                 "candidate_pool": [FRESH_WORLD_SEED_START, FRESH_WORLD_SEED_STOP_EXCLUSIVE],
                 "gate_resonance_hz": [
                     float(value)
                     for value in _gate_resonances(world_seed)
                 ],
             })
-    if len(selected) != len(selected_mappings) * FRESH_WORLDS_PER_MAPPING:
-        raise AssertionError("fresh selection does not match the bounded U plan")
+    if len(selected) != len(output_mappings) * FRESH_WORLDS_PER_MAPPING:
+        raise AssertionError("fresh selection does not match the bounded U plus supplemental plan")
     if len({item["world_seed"] for item in selected}) != len(selected):
         raise AssertionError("fresh selection reused a world seed")
+    if any(
+        item["mapping_was_counterfactual_exposed"]
+        and tuple(item["frequency_to_gate"]) not in COUNTERFACTUAL_EXPOSED_MAPPING_TUPLES
+        for item in selected
+    ):
+        raise AssertionError("supplemental mapping is not in the counterfactual exposure record")
     return selected
 
 
@@ -463,6 +579,7 @@ def build_preregistration() -> dict:
             PARTITION_SEEN_TRAINING,
             PARTITION_DISJOINT_PRIOR,
             PARTITION_DISJOINT_NEVER,
+            PARTITION_DISJOINT_COUNTERFACTUAL,
         )
     }
     checkpoint_count = len(FROZEN_INFERENCE_CHECKPOINTS)
@@ -495,6 +612,7 @@ def build_preregistration() -> dict:
             "no_new_training": True,
             "no_fresh_case_evaluation": True,
             "no_candidate_outcomes_inspected_on_fresh_worlds": True,
+            "preserved_counterfactual_exposed_worlds_are_not_U_evidence": True,
             "original_note_format_only": True,
             "varied_wording_or_delays_deferred": True,
             "fresh_worlds_are_not_generalization_claims_until_reviewed_and_run": True,
@@ -548,20 +666,32 @@ def build_preregistration() -> dict:
             "excluded_world_seeds": sorted(KNOWN_PRIOR_WORLD_SEEDS),
             "selection_uses_model_outcomes": False,
             "selection_metadata": "gate_resonance_hz generated by the fixed simulator seed rule only",
-            "selection_universe": "U = globally_unseen_mapping_tuples from the complete prior inventory",
+            "selection_universe": "U = globally_unseen_mapping_tuples after subtracting physical prior and counterfactual exposure",
             "lexicographic_mapping_limit_K": FRESH_MAPPING_LIMIT,
             "selected_mapping_count": selected_mapping_count,
             "selected_mapping_tuples": [_mapping_json(mapping) for mapping in globally_unseen[:selected_mapping_count]],
             "all_selected_U_mappings_covered": True,
             "all_feasible_mappings_covered": False,
+            "preserved_supplemental_mapping_tuples": [
+                _mapping_json(mapping)
+                for mapping in sorted(set(tuple(item["frequency_to_gate"]) for item in fresh_worlds) - set(globally_unseen))
+            ],
+            "preserved_supplemental_worlds": [
+                int(item["world_seed"])
+                for item in fresh_worlds
+                if item["mapping_was_counterfactual_exposed"]
+            ],
             "worlds_per_mapping": FRESH_WORLDS_PER_MAPPING,
             "partition_counts": partition_counts,
             "worlds": fresh_worlds,
-            "selection_algorithm": "sort U lexicographically, take the first K=min(8,|U|) mappings, then scan ascending candidate seeds and take the first two unused seeds per mapping after excluding every known world",
+            "selection_algorithm": "sort U lexicographically, take the first K=min(8,|U|) mappings, scan ascending candidate seeds and take the first two unused seeds per U mapping after excluding every known world, then preserve previously frozen physical worlds for counterfactually exposed mappings under an explicit supplemental partition",
             "unselected_training_disjoint_mapping_tuples": [
                 mapping
                 for mapping in inventory["training_disjoint_mapping_tuples"]
-                if mapping not in [_mapping_json(item) for item in globally_unseen[:selected_mapping_count]]
+                if tuple(mapping) not in {
+                    tuple(item["frequency_to_gate"])
+                    for item in fresh_worlds
+                }
             ],
             "if_U_empty_alternative": {
                 "status": "not_applicable_U_nonempty",
@@ -606,8 +736,8 @@ def build_preregistration() -> dict:
                 "physical_success",
             ],
             "per_world": "aggregate all four goals for each selected world and each frozen checkpoint family member",
-            "per_mapping": "aggregate both selected worlds carrying the same frequency_to_gate tuple, preserving the never-inspected mapping label",
-            "per_partition": "report the selected never-inspected mapping partition; retain explicit zero counts for seen-training and training-disjoint previously-inspected partitions",
+            "per_mapping": "aggregate both selected worlds carrying the same frequency_to_gate tuple, preserving whether the mapping is globally never-inspected or counterfactually exposed",
+            "per_partition": "report the selected never-inspected and preserved counterfactual-exposed partitions; retain explicit zero counts for seen-training and training-disjoint previously-inspected partitions",
             "loss_definition": "gate and frequency cross-entropies from frozen model probabilities; joint_mean_loss is their arithmetic mean",
             "physical_success_definition": "unchanged CorrectedEpisode.success after the model-selected gate and frequency actuation",
             "frequency_target": "goal index from the original note/task construction",
@@ -669,8 +799,9 @@ def build_preregistration() -> dict:
             "Do not retrain or alter the four frozen shared-row or four c35c2e legacy baseline checkpoints.",
             "Use the frozen shared_max_abs normalization payload exactly for both families; fit no normalization during paired inference.",
             "Use only original note wording and the existing two-step delayed schedule in this evaluation.",
-            "Keep seen-training mappings, training-disjoint previously-inspected mappings, and training-disjoint never-inspected mappings separate in every report.",
+            "Keep seen-training mappings, training-disjoint previously-inspected mappings, training-disjoint never-inspected mappings, and preserved counterfactual-exposed mappings separate in every report.",
             "Do not call training-disjoint previously-inspected mappings globally unseen-map evidence.",
+            "Do not call the preserved (1,2,3,0) worlds globally never-inspected: a prior row-relabel diagnostic exposed that mapping counterfactually on development world 9306.",
             "Use simulator resonance metadata, never model success, to select worlds and derive gate targets.",
             "Report frequency, gate, joint, physical-success, and loss metrics per case, world, mapping, and partition.",
             "Require row-relabel probability equivariance and action remapping; mark near-tie selected-index checks not-applicable.",
