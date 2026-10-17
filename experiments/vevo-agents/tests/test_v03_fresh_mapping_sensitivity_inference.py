@@ -173,6 +173,75 @@ class V03FreshMappingSensitivityInferenceTests(unittest.TestCase):
         self.assertEqual(report["failures"][0]["phase"], "baseline_action_replay")
         self.assertEqual(report["failures"][0]["checkpoint"], "full-seed-107")
         self.assertEqual(report["arms"]["hidden_delay_4"]["status"], "not_started")
+        stored = report["cases"][0]["arms"]["baseline_existing_delay"]["results"]["full-seed-107"]
+        self.assertEqual(stored["raw_run"], actual_run)
+        self.assertTrue(stored["raw_inference_complete"])
+        self.assertFalse(stored["derived_fields_complete"])
+        replay_check = report["baseline_action_replay"]["checks"][0]
+        self.assertEqual(replay_check["actual_run"], actual_run)
+        self.assertEqual(replay_check["expected_run"], expected_run)
+        self.assertEqual(report["arms"]["baseline_existing_delay"]["completed_evaluations"], 1)
+        self.assertIsNone(report["derived_metrics"])
+
+    def test_post_inference_cap_retains_raw_output_before_scoring(self):
+        case = copy.deepcopy(self.plan["case_manifest"][0])
+        arms = copy.deepcopy(self.plan["arms"])
+        run = {
+            "final_action": {"gate": 0, "frequency_index": 0, "frequency": 0.55},
+            "gate_probabilities": [0.7, 0.1, 0.1, 0.1],
+            "frequency_probabilities": [0.7, 0.1, 0.1, 0.1],
+            "success": True,
+            "failure_cause": None,
+        }
+        baseline_report = {
+            "status": "complete",
+            "completed_case_count": 16,
+            "completed_row_relabel_count": 1536,
+            "failures": [],
+            "cases": [{
+                "results": {"full-seed-107": {"raw_run": copy.deepcopy(run)}},
+            }],
+        }
+
+        class _Episode:
+            def snapshot(self):
+                return {"synthetic": True}
+
+        def cap_after_inference(**kwargs):
+            if kwargs["phase"] == "baseline_replay_before_scoring":
+                raise inference.InferenceDeadlineExceeded(
+                    "baseline_replay_before_scoring",
+                    case_index=0,
+                    completed_cases=0,
+                )
+
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(inference, "CANDIDATE_EVALUATION_ORDER", ("full-seed-107",)), \
+                patch.object(inference, "_budget_check", side_effect=cap_after_inference), \
+                patch.object(inference, "_load_sensitivity_design", return_value=({}, "synthetic-design")), \
+                patch.object(inference, "_load_baseline_report", return_value=baseline_report), \
+                patch.object(inference, "_load_design", return_value=({
+                    "normalization": {"candidate_shared_row": {"fixture": {}}},
+                }, "synthetic-base-design")), \
+                patch.object(inference, "_validate_case_manifest", return_value={"cases": [case], "world_order": [case["world_seed"]]}), \
+                patch.object(inference, "_validate_frozen_artifacts", return_value={
+                    "normalization_digest": "synthetic-normalization",
+                    "screening_artifacts_verified": True,
+                }), \
+                patch.object(inference, "_validate_sensitivity_design", return_value={"cases": [case], "arms": arms}), \
+                patch.object(inference, "_load_delayed_checkpoint", return_value=(object(), {"schema": "synthetic", "source_sha": None, "training": {"updates": 1000}})), \
+                patch.object(inference, "_prepare_sensitivity_episode", return_value=(_Episode(), [], {"stage_names": [], "hidden_rows": []})), \
+                patch.object(inference, "run_delayed_episode", return_value=run):
+            report = inference.run_sensitivity_inference(output_path=Path(directory) / "post-inference-cap.json")
+
+        self.assertEqual(report["status"], "partial_memory_cap")
+        self.assertEqual(report["completed_primary_evaluations"], 1)
+        stored = report["cases"][0]["arms"]["baseline_existing_delay"]["results"]["full-seed-107"]
+        self.assertEqual(stored["raw_run"], run)
+        self.assertTrue(stored["raw_inference_complete"])
+        self.assertFalse(stored["derived_fields_complete"])
+        self.assertEqual(report["arms"]["baseline_existing_delay"]["completed_evaluations"], 1)
+        self.assertEqual(report["failures"][0]["phase"], "baseline_replay_before_scoring")
         self.assertIsNone(report["derived_metrics"])
 
 

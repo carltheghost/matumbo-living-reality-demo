@@ -306,14 +306,101 @@ def _attach_arm_checkpoint_result(
     checkpoint: str,
     result: dict,
 ) -> None:
+    """Attach a fully derived result for legacy/test callers.
+
+    The live runner uses :func:`_attach_raw_arm_checkpoint_result` immediately
+    after inference, then calls this function only after all replay and budget
+    gates for derived scoring have passed.  Keeping this compatibility helper
+    complete makes synthetic fixture tests concise without weakening the raw
+    result durability rule.
+    """
+
     if checkpoint in arm_case_record["results"]:
-        raise SensitivityInferenceError(f"duplicate sensitivity checkpoint result: {checkpoint}")
-    arm_case_record["results"][checkpoint] = result
+        existing = arm_case_record["results"][checkpoint]
+        if not existing.get("raw_inference_complete"):
+            raise SensitivityInferenceError(f"duplicate sensitivity checkpoint result: {checkpoint}")
+        existing.update(copy.deepcopy(result))
+        existing["raw_inference_complete"] = True
+        existing["derived_fields_complete"] = True
+        return
+    raw_run = copy.deepcopy(result.get("raw_run", result))
+    arm_case_record["results"][checkpoint] = {
+        "raw_run": raw_run,
+        "raw_inference_complete": True,
+        "derived_fields_complete": True,
+        **copy.deepcopy(result),
+    }
+    arm_case_record["results"][checkpoint]["raw_run"] = raw_run
     arm_case_record["completed_checkpoint_count"] = len(arm_case_record["results"])
     arm_case_record["checkpoint_results_complete"] = (
         arm_case_record["completed_checkpoint_count"] == len(CANDIDATE_EVALUATION_ORDER)
     )
     report["completed_primary_evaluations"] += 1
+
+
+def _attach_raw_arm_checkpoint_result(
+    report: dict,
+    arm_case_record: dict,
+    checkpoint: str,
+    raw_run: dict,
+) -> dict:
+    """Durably attach one completed inference before any derived work.
+
+    A cooperative deadline can fire after a model returns but before replay
+    comparison or scoring.  The raw prediction is therefore the first thing
+    written into the in-memory report prefix; derived fields are intentionally
+    added later and may remain unavailable.
+    """
+
+    if checkpoint in arm_case_record["results"]:
+        raise SensitivityInferenceError(f"duplicate sensitivity checkpoint result: {checkpoint}")
+    record = {
+        "raw_run": copy.deepcopy(raw_run),
+        "raw_inference_complete": True,
+        "derived_fields_complete": False,
+    }
+    arm_case_record["results"][checkpoint] = record
+    arm_case_record["completed_checkpoint_count"] = len(arm_case_record["results"])
+    arm_case_record["checkpoint_results_complete"] = (
+        arm_case_record["completed_checkpoint_count"] == len(CANDIDATE_EVALUATION_ORDER)
+    )
+    report["completed_primary_evaluations"] += 1
+    return record
+
+
+def _complete_arm_checkpoint_result(
+    arm_case_record: dict,
+    checkpoint: str,
+    derived_result: dict,
+) -> None:
+    """Append derived scoring fields without replacing the durable raw run."""
+
+    if checkpoint not in arm_case_record["results"]:
+        raise SensitivityInferenceError(f"missing raw sensitivity checkpoint result: {checkpoint}")
+    record = arm_case_record["results"][checkpoint]
+    if not record.get("raw_inference_complete"):
+        raise SensitivityInferenceError(f"raw sensitivity checkpoint result is incomplete: {checkpoint}")
+    raw_run = record["raw_run"]
+    record.update(copy.deepcopy(derived_result))
+    record["raw_run"] = raw_run
+    record["raw_inference_complete"] = True
+    record["derived_fields_complete"] = True
+
+
+def _refresh_arm_progress(report: dict, arm_id: str, *, status: str | None = None) -> None:
+    """Reflect all retained raw prefixes, including terminal failure prefixes."""
+
+    arm_status = report["arms"][str(arm_id)]
+    if status is not None:
+        arm_status["status"] = str(status)
+    arm_status["completed_case_count"] = sum(
+        bool(case_record.get("arms", {}).get(str(arm_id), {}).get("checkpoint_results_complete"))
+        for case_record in report["cases"]
+    )
+    arm_status["completed_evaluations"] = sum(
+        len(case_record.get("arms", {}).get(str(arm_id), {}).get("results", {}))
+        for case_record in report["cases"]
+    )
 
 
 def _failure_record(exc: Exception, *, phase: str, arm: dict | None = None, case: dict | None = None, checkpoint: str | None = None) -> dict:
@@ -599,6 +686,7 @@ def run_sensitivity_inference(
                         completed_cases=index,
                     )
                     run = run_delayed_episode(models[key], spec, prepared=prepared)
+                    _attach_raw_arm_checkpoint_result(report, arm_case, key, run)
                     _budget_check(
                         deadline=deadline,
                         baseline_rss_kb=baseline_rss_kb,
@@ -619,6 +707,8 @@ def run_sensitivity_inference(
                             run["gate_probabilities"] == expected_run["gate_probabilities"]
                             and run["frequency_probabilities"] == expected_run["frequency_probabilities"]
                         ),
+                        "actual_run": copy.deepcopy(run),
+                        "expected_run": copy.deepcopy(expected_run),
                     }
                     report["baseline_action_replay"]["checks"].append(replay_check)
                     report["baseline_action_replay"]["checked_pairs"] += 1
@@ -640,7 +730,7 @@ def run_sensitivity_inference(
                         "hidden_delay_steps": baseline_arm["hidden_delay_steps"],
                         "note_mode": baseline_arm["note_mode"],
                     })
-                    _attach_arm_checkpoint_result(report, arm_case, key, scored)
+                    _complete_arm_checkpoint_result(arm_case, key, scored)
                     case_results[baseline_arm["id"]][key].append(scored)
                 arm_case["checkpoint_results_complete"] = True
             except InferenceDeadlineExceeded as exc:
@@ -692,6 +782,7 @@ def run_sensitivity_inference(
                             completed_cases=index,
                         )
                         run = run_delayed_episode(models[key], spec, prepared=prepared)
+                        _attach_raw_arm_checkpoint_result(report, arm_case, key, run)
                         _budget_check(
                             deadline=deadline,
                             baseline_rss_kb=baseline_rss_kb,
@@ -714,7 +805,7 @@ def run_sensitivity_inference(
                             "hidden_delay_steps": arm["hidden_delay_steps"],
                             "note_mode": arm["note_mode"],
                         })
-                        _attach_arm_checkpoint_result(report, arm_case, key, scored)
+                        _complete_arm_checkpoint_result(arm_case, key, scored)
                         case_results[arm["id"]][key].append(scored)
                     arm_case["checkpoint_results_complete"] = True
                 except InferenceDeadlineExceeded as exc:
@@ -783,16 +874,7 @@ def run_sensitivity_inference(
             exc.phase.startswith("derived_metrics_")
             or exc.phase.startswith("between_arm_derived_metrics_")
         ):
-            arm_status = report["arms"][active_arm["id"]]
-            arm_status["status"] = status
-            arm_status["completed_case_count"] = sum(
-                bool(case_record.get("arms", {}).get(active_arm["id"], {}).get("checkpoint_results_complete"))
-                for case_record in report["cases"]
-            )
-            arm_status["completed_evaluations"] = sum(
-                len(case_record.get("arms", {}).get(active_arm["id"], {}).get("results", {}))
-                for case_record in report["cases"]
-            )
+            _refresh_arm_progress(report, active_arm["id"], status=status)
         report["baseline_action_replay"]["status"] = (
             report["baseline_action_replay"]["status"]
             if report["baseline_action_replay"]["status"] == "passed"
@@ -812,7 +894,7 @@ def run_sensitivity_inference(
         if report["baseline_action_replay"]["status"] == "running":
             report["baseline_action_replay"]["status"] = "partial"
         if active_arm is not None:
-            report["arms"][active_arm["id"]]["status"] = "partial_failure"
+            _refresh_arm_progress(report, active_arm["id"], status="partial_failure")
         report["derived_metrics_status"] = "unavailable_due_to_failure"
 
     report["status"] = status

@@ -48,6 +48,10 @@ additional count:
 | `hidden_delay_8` | 8 | +6 | original `delayed-train` note |
 | `note_format_variant_baseline_delay` | 2 | 0 | fixed field-reordered semantic equivalent |
 
+Each extra delay step also advances the simulator, so the delay arms test
+schedule robustness under additional simulator time, not isolated memory
+retention alone.
+
 The note-format variant is exactly:
 
 ```text
@@ -80,7 +84,9 @@ additional-memory threshold. It checks the budget before every arm, case, and
 checkpoint evaluation, between arms, between derived-metric stages, and before
 marking the report complete. Completed arm/case/checkpoint prefixes and the
 baseline replay prefix are retained on failure or cap; no later metrics are
-computed after exhaustion.
+computed after exhaustion. The raw prediction from a completed model call is
+retained before replay gates, deadline checks, or derived scoring, so a terminal
+failure cannot erase a completed primary inference.
 
 ## Minimal local-only demo outline
 

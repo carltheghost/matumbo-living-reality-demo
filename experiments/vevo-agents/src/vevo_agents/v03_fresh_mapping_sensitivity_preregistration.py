@@ -280,6 +280,11 @@ def build_preregistration() -> dict:
                 "hidden goal-independent observations after the one shown note and before the "
                 "spectrum/action observation; current baseline has exactly two"
             ),
+            "extra_delay_steps_advance_simulator_time": True,
+            "delay_sensitivity_interpretation": (
+                "schedule robustness under additional simulator advances, not an isolated "
+                "memory-retention-only intervention"
+            ),
             "note_payload_masks_baseline": [0, 1, 0, 0, 0],
             "same_probe_frequencies_hz": [float(value) for value in PROBE_FREQUENCIES],
             "same_work_budget": float(CorrectedEpisode.WORK_BUDGET),
@@ -349,6 +354,7 @@ def build_preregistration() -> dict:
             "preserve_baseline_replay_prefix": True,
             "record_case_checkpoint_arm_identity": True,
             "record_failure_phase_identity_and_exception": True,
+            "retain_raw_inference_before_derived_work": True,
             "do_not_compute_later_metrics_after_cap_or_failure": True,
             "do_not_execute_variants_after_baseline_replay_mismatch": True,
         },
