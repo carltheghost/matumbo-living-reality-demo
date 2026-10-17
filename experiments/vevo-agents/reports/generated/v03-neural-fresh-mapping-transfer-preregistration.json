@@ -4079,7 +4079,7 @@
     "historical_and_screening_artifacts_must_remain_byte_for_byte": true,
     "preregistration": "reports/generated/v03-neural-fresh-mapping-transfer-preregistration.json"
   },
-  "source_sha_at_registration": "55ad02a51afe8eb5ffe8f4d36d462c75521f090f",
+  "source_sha_at_registration": "41bb6c1f10c993680cecd218eb6c74a0bf39947b",
   "status": "awaiting_independent_review_before_fresh_evaluation",
   "training_started": false
 }
