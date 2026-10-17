@@ -93,6 +93,14 @@ ROW_TIE_TOLERANCE = 1e-12
 ROW_PROBABILITY_ATOL = 1e-12
 ROW_PROBABILITY_RTOL = 0.0
 ADDITIONAL_MEMORY_CAP_KB = 512 * 1024
+PARTITION_EXPOSURE_LABELS = {
+    PARTITION_SEEN_TRAINING: "seen training mapping; fresh physical world",
+    PARTITION_DISJOINT_PRIOR: "training-disjoint previously inspected mapping",
+    PARTITION_DISJOINT_NEVER: "globally never-inspected mapping in U; U evidence",
+    PARTITION_DISJOINT_COUNTERFACTUAL: (
+        "fresh physical world with prior counterfactual row-relabel exposure; not U evidence"
+    ),
+}
 
 
 class FrozenInferenceError(RuntimeError):
@@ -474,12 +482,26 @@ def _paired_comparison(case_results: dict[str, list[dict]]) -> dict:
     return comparisons
 
 
-def _aggregate_results(case_results: dict[str, list[dict]]) -> dict:
+def _aggregate_results(case_results: dict[str, list[dict]], *, stage_check=None) -> dict:
+    """Aggregate completed case results with optional inter-stage budget checks."""
+
     result = {"per_checkpoint": {}, "per_world": {}, "per_mapping": {}, "per_partition": {}}
     for key, records in case_results.items():
         result["per_checkpoint"][key] = _metric_summary(records)
+    if stage_check is not None:
+        stage_check("after_per_checkpoint")
+
+    for key, records in case_results.items():
         result["per_world"][key] = _group_metrics(records, lambda record: record["world_seed"])
+    if stage_check is not None:
+        stage_check("after_per_world")
+
+    for key, records in case_results.items():
         result["per_mapping"][key] = _group_metrics(records, lambda record: tuple(record["frequency_to_gate"]))
+    if stage_check is not None:
+        stage_check("after_per_mapping")
+
+    for key, records in case_results.items():
         result["per_partition"][key] = _group_metrics(
             records,
             lambda record: record["partition"],
@@ -490,7 +512,12 @@ def _aggregate_results(case_results: dict[str, list[dict]]) -> dict:
                 PARTITION_DISJOINT_COUNTERFACTUAL,
             ),
         )
+    if stage_check is not None:
+        stage_check("after_per_partition")
+
     result["paired_candidate_vs_legacy"] = _paired_comparison(case_results)
+    if stage_check is not None:
+        stage_check("after_paired_comparison")
     return result
 
 
@@ -561,6 +588,35 @@ def _case_prefix_records(
     return records
 
 
+def _begin_case_report(report: dict, case: dict) -> dict:
+    """Create a durable raw case shell before any checkpoint runs."""
+
+    record = {
+        "case_index": int(case["case_index"]),
+        "world_seed": int(case["world_seed"]),
+        "goal_index": int(case["goal_index"]),
+        "partition": case["partition"],
+        "frequency_to_gate": list(case["frequency_to_gate"]),
+        "results": {},
+        "completed_checkpoint_count": 0,
+        "checkpoint_results_complete": False,
+    }
+    report["cases"].append(record)
+    return record
+
+
+def _attach_checkpoint_result(case_record: dict, checkpoint: str, result: dict) -> None:
+    """Attach one completed checkpoint result before starting the next one."""
+
+    if checkpoint in case_record["results"]:
+        raise FrozenInferenceError(f"duplicate checkpoint result in case {case_record['case_index']}: {checkpoint}")
+    case_record["results"][checkpoint] = result
+    case_record["completed_checkpoint_count"] = len(case_record["results"])
+    case_record["checkpoint_results_complete"] = (
+        case_record["completed_checkpoint_count"] == len(PAIR_EVALUATION_ORDER)
+    )
+
+
 def _markdown_value(value) -> str:
     if value is None:
         return "n/a"
@@ -585,9 +641,35 @@ def _evaluation_summary_markdown(report: dict) -> str:
         "or mutated during inference. If a cap or failure occurs, later aggregate",
         "metrics are intentionally omitted.",
         "",
+        "## Planned case partitions",
+        "",
+        "The two nonzero partitions are reported separately: only the U partition",
+        "is globally never-inspected mapping evidence; the counterfactual-exposed",
+        "partition contains fresh physical worlds but is not U evidence.",
+        "",
+        "| partition | exposure label | planned cases | raw records retained |",
+        "|---|---|---:|---:|",
+    ]
+    planned_partitions = report.get("planned_case_partition_counts", {})
+    actual_partitions = defaultdict(int)
+    for case in report.get("cases", []):
+        actual_partitions[str(case.get("partition"))] += 1
+    for partition in (
+        PARTITION_SEEN_TRAINING,
+        PARTITION_DISJOINT_PRIOR,
+        PARTITION_DISJOINT_NEVER,
+        PARTITION_DISJOINT_COUNTERFACTUAL,
+    ):
+        lines.append(
+            f"| {partition} | {PARTITION_EXPOSURE_LABELS[partition]} | "
+            f"{_markdown_value(planned_partitions.get(partition, 0))} | "
+            f"{_markdown_value(actual_partitions.get(partition, 0))} |"
+        )
+    lines.extend([
+        "",
         "## Failures",
         "",
-    ]
+    ])
     failures = report.get("failures", [])
     if failures:
         lines.extend(
@@ -600,7 +682,32 @@ def _evaluation_summary_markdown(report: dict) -> str:
     if report.get("derived_metrics") is not None and all(
         value == "complete" for value in statuses.values()
     ):
-        lines.extend(["", "## Per-checkpoint metrics", "", "| checkpoint | n | joint accuracy | physical success | joint loss |", "|---|---:|---:|---:|---:|"])
+        lines.extend([
+            "",
+            "## Per-partition metrics",
+            "",
+            "These metrics preserve the U versus counterfactual-exposed distinction.",
+            "",
+            "| checkpoint | partition | n | joint accuracy | physical success | joint loss |",
+            "|---|---|---:|---:|---:|---:|",
+        ])
+        for key in sorted(report["derived_metrics"].get("per_partition", {})):
+            for partition, metrics in sorted(report["derived_metrics"]["per_partition"][key].items()):
+                lines.append(
+                    f"| {key} | {partition} | {_markdown_value(metrics.get('n'))} | "
+                    f"{_markdown_value(metrics.get('joint_accuracy'))} | "
+                    f"{_markdown_value(metrics.get('physical_success'))} | "
+                    f"{_markdown_value(metrics.get('joint_mean_loss'))} |"
+                )
+        lines.extend([
+            "",
+            "## Per-checkpoint metrics",
+            "",
+            "All planned partitions combined; not a globally-never-inspected-only estimate.",
+            "",
+            "| checkpoint | n | joint accuracy | physical success | joint loss |",
+            "|---|---:|---:|---:|---:|",
+        ])
         for key, metrics in sorted(report["derived_metrics"].get("per_checkpoint", {}).items()):
             lines.append(
                 f"| {key} | {_markdown_value(metrics.get('n'))} | "
@@ -619,7 +726,14 @@ def _evaluation_summary_markdown(report: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _failure_record(exc: Exception, *, phase: str, case: dict | None = None) -> dict:
+def _failure_record(
+    exc: Exception,
+    *,
+    phase: str,
+    case: dict | None = None,
+    checkpoint: str | None = None,
+    permutation=None,
+) -> dict:
     record = {
         "phase": str(phase),
         "error_type": type(exc).__name__,
@@ -629,6 +743,10 @@ def _failure_record(exc: Exception, *, phase: str, case: dict | None = None) -> 
         record["case_index"] = int(case["case_index"])
         record["world_seed"] = int(case["world_seed"])
         record["goal_index"] = int(case["goal_index"])
+    if checkpoint is not None:
+        record["checkpoint"] = str(checkpoint)
+    if permutation is not None:
+        record["permutation"] = [int(value) for value in permutation]
     return record
 
 
@@ -644,6 +762,7 @@ def _empty_report(output_path: Path, *, source_sha: str | None, design_sha: str 
         "evaluation_started": True,
         "fresh_model_outcomes_loaded": False,
         "completed_case_count": 0,
+        "partial_case_count": 0,
         "expected_case_count": 16,
         "completed_row_relabel_count": 0,
         "expected_row_relabel_count": 1536,
@@ -692,7 +811,7 @@ def run_frozen_inference(
     })
     failures = []
     case_results = {key: [] for key in PAIR_EVALUATION_ORDER}
-    row_results = []
+    row_results = report["row_relabel"]
     cases = []
     status = "partial_failure"
     try:
@@ -709,6 +828,10 @@ def run_frozen_inference(
             "normalization_digest": artifact_validation["normalization_digest"],
             "screening_artifacts_verified": artifact_validation["screening_artifacts_verified"],
         }
+        planned_case_partition_counts = defaultdict(int)
+        for case in design["case_plan"]["cases"]:
+            planned_case_partition_counts[str(case["partition"])] += 1
+        report["planned_case_partition_counts"] = dict(planned_case_partition_counts)
         models = {}
         for key in PAIR_EVALUATION_ORDER:
             _budget_check(
@@ -750,10 +873,13 @@ def run_frozen_inference(
                 completed_cases=index,
             )
             spec = _case_spec(case)
+            case_record = _begin_case_report(report, case)
+            current_checkpoint = None
             try:
                 prepared = _prepare_delayed_episode(spec)
                 per_checkpoint = {}
                 for key in PAIR_EVALUATION_ORDER:
+                    current_checkpoint = key
                     _budget_check(
                         deadline=deadline,
                         baseline_rss_kb=baseline_rss_kb,
@@ -768,16 +894,28 @@ def run_frozen_inference(
                         "schedule_audit": prepared[2],
                     })
                     per_checkpoint[key] = score_case_result(case, run)
+                    _attach_checkpoint_result(case_record, key, per_checkpoint[key])
                 for key in PAIR_EVALUATION_ORDER:
                     case_results[key].append(per_checkpoint[key])
-            except InferenceDeadlineExceeded:
+                case_record["checkpoint_results_complete"] = True
+            except InferenceDeadlineExceeded as exc:
+                failures.append(_failure_record(
+                    exc,
+                    phase=exc.phase,
+                    case=case,
+                    checkpoint=current_checkpoint,
+                ))
                 raise
             except Exception as exc:
-                failures.append(_failure_record(exc, phase="primary_case", case=case))
+                failures.append(_failure_record(
+                    exc,
+                    phase="primary_case",
+                    case=case,
+                    checkpoint=current_checkpoint,
+                ))
                 break
         completed_cases = len(case_results[PAIR_EVALUATION_ORDER[0]])
         report["completed_case_count"] = completed_cases
-        report["cases"] = _case_prefix_records(cases, case_results, completed_cases)
         if failures:
             raise FrozenInferenceError("primary case failure stopped the sealed prefix")
         if completed_cases != len(cases):
@@ -798,30 +936,74 @@ def run_frozen_inference(
                 "policy_observations": prepared[1],
                 "schedule_audit": prepared[2],
             }
-            for key in sorted(CANDIDATE_KEYS, key=PAIR_EVALUATION_ORDER.index):
-                for permutation in itertools.permutations(range(4)):
-                    _budget_check(
-                        deadline=deadline,
-                        baseline_rss_kb=baseline_rss_kb,
-                        additional_memory_cap_kb=additional_memory_cap_kb,
-                        phase="row_relabel_check",
-                        case_index=case_index,
-                        completed_cases=case_index,
-                    )
-                    row_results.append({
-                        "checkpoint": key,
-                        **row_relabel_result(models[key], case, prepared_record, tuple(permutation)),
-                    })
+            current_checkpoint = None
+            current_permutation = None
+            try:
+                for key in sorted(CANDIDATE_KEYS, key=PAIR_EVALUATION_ORDER.index):
+                    current_checkpoint = key
+                    for permutation in itertools.permutations(range(4)):
+                        current_permutation = tuple(permutation)
+                        _budget_check(
+                            deadline=deadline,
+                            baseline_rss_kb=baseline_rss_kb,
+                            additional_memory_cap_kb=additional_memory_cap_kb,
+                            phase="row_relabel_check",
+                            case_index=case_index,
+                            completed_cases=case_index,
+                        )
+                        row_results.append({
+                            "checkpoint": key,
+                            **row_relabel_result(models[key], case, prepared_record, current_permutation),
+                        })
+            except InferenceDeadlineExceeded as exc:
+                failures.append(_failure_record(
+                    exc,
+                    phase=exc.phase,
+                    case=case,
+                    checkpoint=current_checkpoint,
+                    permutation=current_permutation,
+                ))
+                raise
+            except Exception as exc:
+                failures.append(_failure_record(
+                    exc,
+                    phase="row_relabel",
+                    case=case,
+                    checkpoint=current_checkpoint,
+                    permutation=current_permutation,
+                ))
+                raise
         report["completed_row_relabel_count"] = len(row_results)
         report["row_relabel"] = row_results
         _budget_check(
             deadline=deadline,
             baseline_rss_kb=baseline_rss_kb,
             additional_memory_cap_kb=additional_memory_cap_kb,
-            phase="derived_metrics",
+            phase="derived_metrics_entry",
             completed_cases=len(cases),
         )
-        report["derived_metrics"] = _aggregate_results(case_results)
+
+        def derived_stage_check(stage: str) -> None:
+            _budget_check(
+                deadline=deadline,
+                baseline_rss_kb=baseline_rss_kb,
+                additional_memory_cap_kb=additional_memory_cap_kb,
+                phase=f"derived_metrics_{stage}",
+                completed_cases=len(cases),
+            )
+
+        derived_metrics = _aggregate_results(
+            case_results,
+            stage_check=derived_stage_check,
+        )
+        _budget_check(
+            deadline=deadline,
+            baseline_rss_kb=baseline_rss_kb,
+            additional_memory_cap_kb=additional_memory_cap_kb,
+            phase="derived_metrics_before_complete",
+            completed_cases=len(cases),
+        )
+        report["derived_metrics"] = derived_metrics
         report["derived_metrics_status"] = {
             "per_checkpoint": "complete",
             "per_world": "complete",
@@ -831,16 +1013,11 @@ def run_frozen_inference(
         }
         status = "complete"
     except InferenceDeadlineExceeded as exc:
-        failures.append(_failure_record(exc, phase=exc.phase))
+        if not failures:
+            failures.append(_failure_record(exc, phase=exc.phase))
         status = "partial_wall_clock_cap" if time.perf_counter() >= deadline else "partial_memory_cap"
         report["completed_case_count"] = len(case_results[PAIR_EVALUATION_ORDER[0]])
         report["completed_row_relabel_count"] = len(row_results)
-        report["cases"] = _case_prefix_records(
-            cases,
-            case_results,
-            report["completed_case_count"],
-        )
-        report["row_relabel"] = row_results
         report["derived_metrics_status"] = {
             "per_checkpoint": "unavailable_budget_exhausted",
             "per_world": "unavailable_budget_exhausted",
@@ -854,11 +1031,6 @@ def run_frozen_inference(
         status = "partial_failure"
         report["completed_case_count"] = len(case_results[PAIR_EVALUATION_ORDER[0]])
         report["completed_row_relabel_count"] = len(row_results)
-        report["cases"] = _case_prefix_records(
-            cases,
-            case_results,
-            report["completed_case_count"],
-        )
         report["derived_metrics_status"] = {
             "per_checkpoint": "unavailable_due_to_failure",
             "per_world": "unavailable_due_to_failure",
@@ -866,6 +1038,10 @@ def run_frozen_inference(
             "per_partition": "unavailable_due_to_failure",
             "paired_candidate_vs_legacy": "unavailable_due_to_failure",
         }
+    report["partial_case_count"] = sum(
+        not bool(case.get("checkpoint_results_complete"))
+        for case in report["cases"]
+    )
     report["status"] = status
     report["failures"] = failures
     report["runtime"] = {

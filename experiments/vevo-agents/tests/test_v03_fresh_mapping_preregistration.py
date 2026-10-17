@@ -85,6 +85,9 @@ class V03FreshMappingPreregistrationTests(unittest.TestCase):
         self.assertEqual(inventory["non_bijective_override_count"], 1)
         self.assertEqual(inventory["counterfactual_exposed_mapping_count"], 1)
         self.assertEqual(inventory["globally_unseen_mapping_count"], 1)
+        self.assertFalse(inventory["physical_exposure_census_claim"])
+        self.assertIn("conservative", inventory["mapping_provenance_status"])
+        self.assertIn("not_an_exact_physical_exposure_census", inventory["mapping_provenance_status"])
         training = {tuple(item) for item in inventory["candidate_training_mapping_tuples"]}
         globally_unseen = {tuple(item) for item in inventory["globally_unseen_mapping_tuples"]}
         counterfactual = {tuple(item) for item in inventory["counterfactual_exposed_mapping_tuples"]}

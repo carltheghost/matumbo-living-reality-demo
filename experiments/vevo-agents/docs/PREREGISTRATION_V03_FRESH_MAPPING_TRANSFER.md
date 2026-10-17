@@ -54,13 +54,15 @@ It never uses model predictions, physical success, or a prior candidate
 outcome.
 
 The inventory covers all 24 feasible bijections and records the explicit
-protocol-fixture resonance overrides rather than treating a seed-generated
-mapping as the executed mapping. One listed parameter-sensitivity override is
-non-bijective and is recorded for provenance but excluded from the bijective
-mapping universe.
+protocol-fixture resonance overrides. The prior exclusion set intentionally
+retains a conservative union of seed-derived fixture mappings plus listed
+bijective overrides; it is not an exact physical exposure census. One listed
+parameter-sensitivity override is non-bijective and is recorded for provenance
+but excluded from the bijective mapping universe.
 
-- The inventory covers 22 physical mapping tuples after combining ordinary
-  seed-derived metadata with the listed bijective fixture overrides.
+- The conservative prior exclusion union covers 22 mapping tuples after
+  combining ordinary seed-derived metadata with the listed bijective fixture
+  overrides; this must not be read as an exact physical exposure count.
 - A prior development row-relabel diagnostic on world `9306` used physical
   mapping `(2,3,0,1)` and exposed `(1,2,3,0)` only as a transformed
   counterfactual row order. That tuple was not a physical-world run.
@@ -71,7 +73,7 @@ mapping universe.
 The candidate training and prior inventory are:
 
 - Candidate training worlds `9200, 9201` use `(3,0,1,2)` and `(0,2,1,3)`. These are the `seen_training_mapping` tuples.
-- The prior train/development/diagnostic/audit inventory covers 22 of 24 physical mapping tuples.
+- The conservative prior train/development/diagnostic/audit exclusion union covers 22 of 24 mapping tuples; it is not an exact physical exposure census.
 - The counterfactual-exposed set contains `(1,2,3,0)`; it is not part of `U` despite not having a prior physical-world run.
 - The globally never-inspected complement `U` therefore has exactly one tuple: `(3,2,0,1)`.
 - The other 21 training-disjoint tuples were previously inspected physically or exposed by the recorded counterfactual diagnostic. Fresh worlds carrying those tuples are not globally unseen-map evidence.

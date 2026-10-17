@@ -60,6 +60,46 @@ def _synthetic_prepared():
     }
 
 
+class _SyntheticSnapshot:
+    def snapshot(self):
+        return {"synthetic": True}
+
+
+def _synthetic_runner_case():
+    case = _synthetic_case()
+    case.update({
+        "note_goal_id": "delayed-train-goal-1",
+        "note_text": "synthetic-note",
+        "gate_resonance_hz": [0.55, 0.75, 0.95, 1.15],
+    })
+    return case
+
+
+def _synthetic_runner_design(case):
+    return {
+        "source_sha_at_registration": "synthetic-source",
+        "normalization": {"candidate_shared_row": {"fixture": {}}},
+        "case_plan": {"cases": [case]},
+    }
+
+
+def _synthetic_runner_payload():
+    return {
+        "schema": "synthetic-checkpoint",
+        "source_sha": "synthetic-source",
+        "training": {"updates": 1000},
+    }
+
+
+def _synthetic_runner_run():
+    return {
+        "gate_probabilities": [0.1, 0.2, 0.6, 0.1],
+        "frequency_probabilities": [0.1, 0.6, 0.2, 0.1],
+        "final_action": {"gate": 2, "frequency_index": 1},
+        "success": True,
+    }
+
+
 class V03FreshMappingInferenceTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -132,6 +172,117 @@ class V03FreshMappingInferenceTests(unittest.TestCase):
             summary_text = summary.read_text(encoding="utf-8")
             self.assertIn("partial_wall_clock_cap", summary_text)
             self.assertIn("no later metrics were computed", summary_text)
+            self.assertIn("globally never-inspected mapping in U; U evidence", summary_text)
+            self.assertIn("counterfactual row-relabel exposure; not U evidence", summary_text)
+
+    def test_midcase_failure_retains_completed_checkpoint_prefix_and_identity(self):
+        case = _synthetic_runner_case()
+        calls = 0
+
+        def synthetic_run(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise ValueError("synthetic mid-case checkpoint failure")
+            return _synthetic_runner_run()
+
+        design = _synthetic_runner_design(case)
+        manifest = {"cases": [case], "world_order": [case["world_seed"]]}
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.object(inference, "_load_design", return_value=(design, "synthetic-design")), \
+                mock.patch.object(inference, "_validate_case_manifest", return_value=manifest), \
+                mock.patch.object(inference, "_validate_frozen_artifacts", return_value={
+                    "checkpoint_manifest_sha256": "synthetic-checkpoints",
+                    "normalization_digest": "synthetic-normalization",
+                    "screening_artifacts_verified": True,
+                }), \
+                mock.patch.object(inference, "_load_delayed_checkpoint", return_value=(object(), _synthetic_runner_payload())), \
+                mock.patch.object(inference, "_prepare_delayed_episode", return_value=(_SyntheticSnapshot(), [], {})), \
+                mock.patch.object(inference, "run_delayed_episode", side_effect=synthetic_run):
+            report = inference.run_frozen_inference(output_path=Path(directory) / "midcase.json")
+
+        self.assertEqual(report["status"], "partial_failure")
+        self.assertEqual(report["completed_case_count"], 0)
+        self.assertEqual(report["partial_case_count"], 1)
+        self.assertEqual(len(report["cases"]), 1)
+        self.assertEqual(report["cases"][0]["completed_checkpoint_count"], 1)
+        self.assertEqual(set(report["cases"][0]["results"]), {"full-seed-107"})
+        failure = report["failures"][0]
+        self.assertEqual(failure["case_index"], 0)
+        self.assertEqual(failure["checkpoint"], "legacy-full-seed-107")
+        self.assertNotIn("permutation", failure)
+
+    def test_midpermutation_failure_retains_raw_row_prefix_and_identity(self):
+        case = _synthetic_runner_case()
+        row_calls = 0
+
+        def synthetic_row(*args, **kwargs):
+            nonlocal row_calls
+            row_calls += 1
+            if row_calls == 2:
+                raise ValueError("synthetic mid-permutation failure")
+            return {"case_index": 0, "permutation": [0, 1, 2, 3], "synthetic": True}
+
+        design = _synthetic_runner_design(case)
+        manifest = {"cases": [case], "world_order": [case["world_seed"]]}
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.object(inference, "_load_design", return_value=(design, "synthetic-design")), \
+                mock.patch.object(inference, "_validate_case_manifest", return_value=manifest), \
+                mock.patch.object(inference, "_validate_frozen_artifacts", return_value={
+                    "checkpoint_manifest_sha256": "synthetic-checkpoints",
+                    "normalization_digest": "synthetic-normalization",
+                    "screening_artifacts_verified": True,
+                }), \
+                mock.patch.object(inference, "_load_delayed_checkpoint", return_value=(object(), _synthetic_runner_payload())), \
+                mock.patch.object(inference, "_prepare_delayed_episode", return_value=(_SyntheticSnapshot(), [], {})), \
+                mock.patch.object(inference, "run_delayed_episode", return_value=_synthetic_runner_run()), \
+                mock.patch.object(inference, "row_relabel_result", side_effect=synthetic_row):
+            report = inference.run_frozen_inference(output_path=Path(directory) / "midpermutation.json")
+
+        self.assertEqual(report["status"], "partial_failure")
+        self.assertEqual(report["completed_case_count"], 1)
+        self.assertEqual(report["completed_row_relabel_count"], 1)
+        self.assertEqual(len(report["row_relabel"]), 1)
+        failure = report["failures"][0]
+        self.assertEqual(failure["phase"], "row_relabel")
+        self.assertEqual(failure["case_index"], 0)
+        self.assertEqual(failure["checkpoint"], "full-seed-107")
+        self.assertEqual(failure["permutation"], [0, 1, 3, 2])
+
+    def test_derived_metric_stage_timeout_stops_between_stages(self):
+        record = {
+            "case_index": 0,
+            "world_seed": 20049,
+            "frequency_to_gate": [3, 2, 0, 1],
+            "partition": "training_disjoint_never_inspected_mapping_new_world",
+            "gate_correct": True,
+            "frequency_correct": True,
+            "joint_correct": True,
+            "physical_success": True,
+            "gate_loss": 0.1,
+            "frequency_loss": 0.2,
+            "joint_mean_loss": 0.15,
+        }
+        case_results = {
+            key: [dict(record)]
+            for key in inference.PAIR_EVALUATION_ORDER
+        }
+        stages = []
+
+        def stop_after_mapping(stage):
+            stages.append(stage)
+            if stage == "after_per_mapping":
+                raise inference.InferenceDeadlineExceeded(
+                    "derived_metrics_after_per_mapping",
+                    completed_cases=1,
+                )
+
+        with self.assertRaises(inference.InferenceDeadlineExceeded):
+            inference._aggregate_results(case_results, stage_check=stop_after_mapping)
+        self.assertEqual(
+            stages,
+            ["after_per_checkpoint", "after_per_world", "after_per_mapping"],
+        )
 
     def test_preflight_failure_writes_structured_failure_and_summary(self):
         with tempfile.TemporaryDirectory() as directory:

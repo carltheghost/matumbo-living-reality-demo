@@ -342,7 +342,8 @@ def _prior_inventory() -> dict:
     protocol_group = groups["v03_protocol_audit_fixtures"]
     protocol_group.update({
         "mapping_provenance_status": (
-            "complete_for_listed_explicit_overrides; one_non_bijective_override_is_outside_"
+            "explicit_overrides_recorded; seed_derived_fixture_maps_retained_conservatively; "
+            "not_an_exact_physical_exposure_census; one_non_bijective_override_is_outside_"
             "the_bijective_mapping_universe"
         ),
         "explicit_override_records": explicit_override_records,
@@ -358,9 +359,9 @@ def _prior_inventory() -> dict:
         frequency_to_gate_mapping(seed)
         for seed in KNOWN_PRIOR_WORLD_SEEDS
     }
-    # The seed-derived map is authoritative for ordinary worlds.  For protocol
-    # fixtures, explicit gate arrays above are the executed metadata; include
-    # only their bijective mappings in the physical prior inventory.
+    # Retain the seed-derived fixture union conservatively. Explicit override
+    # arrays are recorded above, but this inventory is not an exact physical
+    # exposure census; it is a conservative exclusion basis for U.
     prior_mappings = tuple(sorted(seed_generated_mappings | set(explicit_bijective_mappings)))
     training_mappings = tuple(sorted({
         frequency_to_gate_mapping(seed)
@@ -387,9 +388,15 @@ def _prior_inventory() -> dict:
             not record["bijective"] for record in explicit_override_records
         ),
         "mapping_provenance_status": (
-            "complete_for_listed_bijective_protocol_overrides; non_bijective_fixture_"
-            "recorded_and_excluded_from_bijective_universe"
+            "conservative_seed_derived_union_with_explicit_override_metadata; "
+            "not_an_exact_physical_exposure_census; non_bijective_fixture_recorded_"
+            "and_excluded_from_bijective_universe"
         ),
+        "prior_mapping_exclusion_basis": (
+            "conservative union of seed-derived fixture mappings and listed bijective "
+            "override mappings; not an exact physical exposure census"
+        ),
+        "physical_exposure_census_claim": False,
         "training_disjoint_mapping_tuples": [_mapping_json(mapping) for mapping in training_disjoint],
         "training_disjoint_mapping_count": len(training_disjoint),
         "counterfactual_exposed_mapping_tuples": [
@@ -401,8 +408,10 @@ def _prior_inventory() -> dict:
         "globally_unseen_mapping_count": len(globally_unseen),
         "all_feasible_mapping_count": len(ALL_FREQUENCY_TO_GATE_MAPPINGS),
         "inventory_note": (
-            "The 24 feasible bijections are not all globally unseen: the physical prior inventory "
-            f"covers {len(prior_mappings)}/24 mappings. The row-relabel diagnostic on development "
+            "The 24 feasible bijections are not all globally unseen under the conservative prior "
+            f"exclusion union, which covers {len(prior_mappings)}/24 mappings. This is not an exact "
+            "physical exposure census: explicit protocol overrides are recorded separately while "
+            "seed-derived fixture mappings remain conservatively excluded. The row-relabel diagnostic on development "
             "world 9306 exposed (1,2,3,0) only as a counterfactual transformed row order; it was "
             "not a physical-world run. Therefore (1,2,3,0) is excluded from U even though fresh "
             "physical worlds 20021 and 20023 may be preserved as a supplemental, explicitly "
