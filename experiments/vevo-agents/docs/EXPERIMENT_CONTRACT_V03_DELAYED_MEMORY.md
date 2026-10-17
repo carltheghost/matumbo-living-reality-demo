@@ -42,13 +42,16 @@ learned inference. Do not infer that five components are better merely from
 their count.
 
 If and only if all four trials complete within the cap and achieve `8/8`
-ordinary delayed training success, evaluate once on a fresh held-out set of
-worlds `(9300, 9301, 9302, 9303, 9304, 9305, 9306, 9307)` × goals `0..3`.
-These world seeds are disjoint from prior recorded v0.3 worlds
-`6300..6311`, `7100, 7101, 8300, 8301`; they are fixed before execution and
-are never used for normalization, gradients, hyperparameters, or checkpoint
-selection. Report world-clustered held-out limitations. If the microset fails,
-stop at the declared diagnosis and do not expand compute or change heads.
+ordinary delayed training success, evaluate once on the fixed inspected
+development cases `(9300, 9301, 9302, 9303, 9304, 9305, 9306, 9307)` × goals
+`0..3`. These worlds have already been inspected by preserved diagnostics; they
+are never fresh generalization evidence. They are disjoint from prior recorded
+v0.3 worlds `6300..6311`, `7100, 7101, 8300, 8301`; they are fixed before
+execution and are never used for normalization, gradients, hyperparameters, or
+checkpoint selection. Report world-clustered development limitations and
+per-case overlap with the preserved historical delayed-memory success sets. If
+the microset fails, stop at the declared diagnosis and do not expand compute or
+change heads.
 
 ## Artifacts and boundaries
 

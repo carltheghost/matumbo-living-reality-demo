@@ -16,6 +16,24 @@
     "single_process": true,
     "wall_clock_cap_seconds_total": 300.0
   },
+  "training_gate": {
+    "description": "Development evaluation is permitted only when all four fixed trials complete within budget and each has 8/8 ordinary delayed training physical successes.",
+    "development_is_not_fresh_generalization": true,
+    "name": "all-four-models-8/8",
+    "required_completed_trial_count": 4,
+    "required_physical_successes_per_trial": 8
+  },
+  "runner_requirements": {
+    "deadline_checks_between_cases": true,
+    "include_development_loss": true,
+    "include_per_case_historical_success_overlap": true,
+    "no_metrics_after_budget_exhaustion": true,
+    "reload_new_checkpoints_before_evaluation": true,
+    "structured_partial_and_failure_reporting": true,
+    "verify_exact_serialized_normalization_before_evaluation": true,
+    "verify_prediction_parity_before_evaluation": true,
+    "write_markdown_summary": true
+  },
   "executed_trials": 0,
   "execution_command_after_review": "PYTHONPATH=src python -m vevo_agents.v03_delayed_memory --output reports/generated/v03-neural-delayed-shared-response-scale-report.json --wall-clock-cap 300 --response-scaling shared_max_abs --checkpoint-prefix v03-neural-delayed-shared-response-scale",
   "hypothesis": "Replacing only the legacy response-block standardization with one positive train-fitted max-absolute scalar will preserve response ordering and reduce out-of-distribution response magnitudes on the eight new-world cases per seed; it is not expected to guarantee physical success or generalization.",
@@ -476,11 +494,26 @@
     "Do not apply v2 normalization to any historical v1 checkpoint.",
     "Do not call the new result a repaired historical model; it is a separately retrained candidate.",
     "Refuse to overwrite the historical delayed-memory report or checkpoints.",
+    "Reload each new candidate checkpoint before evaluation.",
     "Verify serialized v2 normalization exactly round-trips before evaluating a trial.",
-    "Report train and held-out gate, frequency, joint, physical success, loss, and per-case success-set overlap.",
-    "Do not use held-out outcomes for model selection, hyperparameters, or restarts."
+    "Verify exact prediction parity between in-memory and reloaded models before evaluation.",
+    "Report train/development gate, frequency, joint, physical success, development loss, and per-case historical success overlap.",
+    "Label worlds 9300–9307 as inspected development cases, never fresh generalization.",
+    "Do not use development outcomes for model selection, hyperparameters, or restarts."
   ],
   "schedule": {
+    "development_is_fresh_generalization": false,
+    "development_label": "9300–9307 inspected development cases; never fresh generalization",
+    "development_world_seeds_inspected": [
+      9300,
+      9301,
+      9302,
+      9303,
+      9304,
+      9305,
+      9306,
+      9307
+    ],
     "goals_per_world": 4,
     "heldout_used_for_checkpoint_selection": false,
     "heldout_used_for_gradients": false,

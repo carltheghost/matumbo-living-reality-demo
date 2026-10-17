@@ -1,22 +1,32 @@
 import json
+from pathlib import Path
+import tempfile
 import unittest
 
 import numpy as np
 
 from vevo_agents.v03_delayed_memory import (
+    CheckpointValidationError,
     DELAYED_TRAIN_WORLD_SEEDS,
     HELDOUT_WORLD_SEEDS,
     HISTORICAL_WORLD_SEEDS,
+    _load_delayed_checkpoint,
+    _run_case_batch,
+    _save_delayed_checkpoint,
+    _verify_prediction_parity,
     _prepare_delayed_episode,
     build_delayed_examples,
     make_heldout_specs,
     make_training_specs,
+    run_experiment,
 )
 from vevo_agents.v03_model import (
     NOTE_FEATURE_END,
     NOTE_FEATURE_START,
     NOTE_PAYLOAD_MASK_INDEX,
     encode_policy_observation,
+    fit_shared_max_abs_input_normalization,
+    V03FiveBrain,
 )
 
 
@@ -66,6 +76,147 @@ class V03DelayedMemoryScheduleTests(unittest.TestCase):
         self.assertEqual(audit["policy_observation_count"], 5)
         self.assertEqual(audit["note_payload_masks"], [0, 1, 0, 0, 0])
         self.assertTrue(episode.measurement["accepted"])
+
+
+class V03DelayedMemoryRunnerTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.examples = build_delayed_examples(make_training_specs())
+        cls.normalization = fit_shared_max_abs_input_normalization([
+            observation
+            for example in cls.examples
+            for observation in example["policy_observations"]
+        ])
+
+    @staticmethod
+    def _training_state(model):
+        rng = np.random.default_rng(1107)
+        return {
+            "updates": 0,
+            "stopped_reason": None,
+            "rng_state": rng.bit_generator.state,
+            "shuffle_order": list(range(8)),
+            "next_minibatch_index": 0,
+            "next_cycle_requires_shuffle": True,
+            "optimizer_first": {
+                name: np.zeros_like(value)
+                for name, value in model.params.items()
+            },
+            "optimizer_second": {
+                name: np.zeros_like(value)
+                for name, value in model.params.items()
+            },
+        }
+
+    def test_new_checkpoint_reload_requires_exact_normalization_and_parity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "candidate.json"
+            model = V03FiveBrain(107)
+            model.set_input_normalization(self.normalization)
+            _save_delayed_checkpoint(
+                path,
+                model,
+                self._training_state(model),
+                self.normalization,
+                source_sha=None,
+            )
+            restored, payload = _load_delayed_checkpoint(
+                path,
+                model_class=V03FiveBrain,
+                expected_label="full",
+                expected_seed=107,
+                expected_normalization=self.normalization,
+                expected_source_sha=None,
+            )
+            self.assertEqual(payload["normalization"], self.normalization)
+            parity = _verify_prediction_parity(model, restored, self.examples)
+            self.assertTrue(parity["exact"])
+            self.assertEqual(parity["checked_cases"], 8)
+
+            restored.params["c.b_action_gate"][0] += 0.25
+            with self.assertRaises(CheckpointValidationError):
+                _verify_prediction_parity(model, restored, self.examples)
+
+            malformed = json.loads(path.read_text(encoding="utf-8"))
+            malformed["normalization"]["response_scaling"]["scale"] *= 2.0
+            path.write_text(json.dumps(malformed), encoding="utf-8")
+            with self.assertRaises(CheckpointValidationError):
+                _load_delayed_checkpoint(
+                    path,
+                    model_class=V03FiveBrain,
+                    expected_label="full",
+                    expected_seed=107,
+                    expected_normalization=self.normalization,
+                    expected_source_sha=None,
+                )
+
+    def test_case_batch_cap_reports_completed_prefix_without_running_next_case(self):
+        calls = []
+        deadline = 0.0
+        batch = _run_case_batch(
+            make_training_specs()[:2],
+            lambda spec, index: calls.append(index) or {"success": False},
+            deadline=deadline,
+            phase="test_case_batch",
+        )
+        self.assertEqual(batch["status"], "partial_wall_clock_cap")
+        self.assertTrue(batch["budget_exhausted"])
+        self.assertEqual(batch["completed_cases"], 0)
+        self.assertEqual(calls, [])
+        self.assertEqual(batch["next_case_index"], 0)
+
+    def test_zero_cap_writes_structured_json_and_markdown_without_evaluation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "candidate-report.json"
+            report = run_experiment(
+                output_path=output,
+                wall_clock_cap=0.0,
+                response_scaling="shared_max_abs",
+                checkpoint_prefix="test-cap-candidate",
+            )
+            summary = output.with_suffix(".md")
+            self.assertEqual(report["status"], "partial_wall_clock_cap")
+            self.assertTrue(report["runtime"]["cap_termination"])
+            self.assertEqual(report["checkpoint_reload"]["status"], "partial_wall_clock_cap")
+            self.assertIn("evaluation_gate", report["training"])
+            self.assertEqual(report["development"]["status"], "not_evaluated_wall_clock_cap")
+            self.assertFalse(report["development"]["is_fresh_generalization"])
+            self.assertTrue(output.exists())
+            self.assertTrue(summary.exists())
+            summary_text = summary.read_text(encoding="utf-8")
+            self.assertIn("all four models must complete", summary_text)
+            self.assertIn("never fresh generalization", summary_text)
+            self.assertTrue(report["historical_artifacts"]["unchanged"])
+
+    def test_historical_v1_checkpoint_prediction_compatibility(self):
+        project_root = Path(__file__).resolve().parents[1]
+        payload = json.loads(
+            (project_root / "storage/checkpoints/v03-neural-delayed-memory-full-seed-107.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        model = V03FiveBrain(int(payload["seed"]))
+        model.load_state_dict(payload["state"])
+        model.set_input_normalization(payload["normalization"])
+        historical = json.loads(
+            (project_root / "reports/generated/v03-neural-delayed-memory-report.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        historical_runs = historical["retention"]["models"]["full-seed-107"]["ordinary"]["runs"]
+        self.assertEqual(len(historical_runs), len(self.examples))
+        for example, historical_run in zip(self.examples, historical_runs):
+            prediction = model.predict(example["policy_observations"])
+            self.assertEqual(prediction["gate"], historical_run["final_action"]["gate"])
+            self.assertEqual(prediction["frequency_index"], historical_run["final_action"]["frequency_index"])
+            np.testing.assert_array_equal(
+                prediction["trace"]["gate_probs"],
+                np.asarray(historical_run["gate_probabilities"], dtype=np.float64),
+            )
+            np.testing.assert_array_equal(
+                prediction["trace"]["frequency_probs"],
+                np.asarray(historical_run["frequency_probabilities"], dtype=np.float64),
+            )
 
 
 if __name__ == "__main__":

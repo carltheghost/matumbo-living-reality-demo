@@ -11,11 +11,13 @@ from collections import Counter
 import copy
 import hashlib
 import json
+import os
 import platform
 from pathlib import Path
 import resource
 import subprocess
 import sys
+import tempfile
 import time
 
 import numpy as np
@@ -50,12 +52,18 @@ from .v03_protocol import CorrectedEpisode, PROBE_FREQUENCIES
 
 CONTRACT_PATH = "docs/EXPERIMENT_CONTRACT_V03_DELAYED_MEMORY.md"
 REPORT_PATH = "reports/generated/v03-neural-delayed-memory-report.json"
+SUMMARY_PATH = "reports/generated/v03-neural-delayed-memory-report.md"
 CHECKPOINT_PREFIX = "v03-neural-delayed-memory"
+HISTORICAL_DELAYED_REPORT_PATH = "reports/generated/v03-neural-delayed-memory-report.json"
 
 DELAYED_MODEL_SEEDS = (107, 117)
 DELAYED_CONTROL_SEEDS = (141, 143)
 DELAYED_TRAIN_WORLD_SEEDS = (9200, 9201)
-HELDOUT_WORLD_SEEDS = (9300, 9301, 9302, 9303, 9304, 9305, 9306, 9307)
+DEVELOPMENT_WORLD_SEEDS = (9300, 9301, 9302, 9303, 9304, 9305, 9306, 9307)
+# Kept as a source-compatibility alias for the pre-review runner.  These
+# worlds are inspected development cases, not a fresh held-out/generalization
+# set; new reports use the development label explicitly.
+HELDOUT_WORLD_SEEDS = DEVELOPMENT_WORLD_SEEDS
 HISTORICAL_WORLD_SEEDS = frozenset((*range(6300, 6312), 7100, 7101, 8300, 8301))
 MAX_UPDATES = 1000
 WALL_CLOCK_CAP_SECONDS = 300.0
@@ -70,6 +78,60 @@ RETENTION_CONDITIONS = (
     ("recurrent_erase", "recurrent", "recurrent_state_only"),
     ("all_retained_state_erase", "all", "recurrent_state_and_memory"),
 )
+
+
+class DeadlineExceeded(TimeoutError):
+    """The bounded runner reached its deadline before a phase completed."""
+
+    def __init__(self, phase: str, *, case_index: int | None = None, completed_cases: int = 0):
+        self.phase = str(phase)
+        self.case_index = None if case_index is None else int(case_index)
+        self.completed_cases = int(completed_cases)
+        suffix = ""
+        if self.case_index is not None:
+            suffix = f" before case {self.case_index}"
+        super().__init__(f"wall-clock cap in {self.phase}{suffix}")
+
+
+class CheckpointValidationError(ValueError):
+    """A newly generated checkpoint cannot be safely reloaded for evaluation."""
+
+
+def _deadline_expired(deadline: float | None) -> bool:
+    return deadline is not None and time.perf_counter() >= float(deadline)
+
+
+def _check_deadline(
+    deadline: float | None,
+    phase: str,
+    *,
+    case_index: int | None = None,
+    completed_cases: int = 0,
+) -> None:
+    if _deadline_expired(deadline):
+        raise DeadlineExceeded(
+            phase,
+            case_index=case_index,
+            completed_cases=completed_cases,
+        )
+
+
+def _exception_record(exc: Exception, *, phase: str, case_index: int | None = None, spec: dict | None = None) -> dict:
+    record = {
+        "phase": str(phase),
+        "error_type": type(exc).__name__,
+        "error": str(exc),
+    }
+    if case_index is not None:
+        record["case_index"] = int(case_index)
+    if spec is not None:
+        record["identity"] = {
+            "split": str(spec.get("split")),
+            "world_seed": int(spec.get("world_seed")),
+            "goal_index": int(spec.get("goal_index")),
+            "note_goal_id": str(spec.get("note_goal_id")),
+        }
+    return record
 
 
 def _sha256_file(path: Path) -> str:
@@ -111,14 +173,20 @@ def make_training_specs() -> list[dict]:
     ]
 
 
-def make_heldout_specs() -> list[dict]:
-    if set(HELDOUT_WORLD_SEEDS) & HISTORICAL_WORLD_SEEDS:
-        raise AssertionError("held-out world seeds overlap historical reports")
+def make_development_specs() -> list[dict]:
+    if set(DEVELOPMENT_WORLD_SEEDS) & HISTORICAL_WORLD_SEEDS:
+        raise AssertionError("development world seeds overlap historical reports")
     return [
         _spec(world_seed, goal_index, "delayed-heldout")
-        for world_seed in HELDOUT_WORLD_SEEDS
+        for world_seed in DEVELOPMENT_WORLD_SEEDS
         for goal_index in range(len(PROBE_FREQUENCIES))
     ]
+
+
+def make_heldout_specs() -> list[dict]:
+    """Compatibility wrapper for callers of the pre-review runner."""
+
+    return make_development_specs()
 
 
 def _hidden_observation_audit(observation: dict) -> dict:
@@ -264,8 +332,24 @@ def _validate_hidden_normalization(examples: list[dict], normalization: dict) ->
     }
 
 
-def _prediction_metrics(model, examples: list[dict], *, include_loss: bool = True) -> dict:
-    predictions = [model.predict(example["policy_observations"]) for example in examples]
+def _prediction_metrics(
+    model,
+    examples: list[dict],
+    *,
+    include_loss: bool = True,
+    loss_key: str = "full_training_loss",
+    deadline: float | None = None,
+    phase: str = "prediction_metrics",
+) -> dict:
+    predictions = []
+    for index, example in enumerate(examples):
+        _check_deadline(deadline, phase, case_index=index, completed_cases=index)
+        prediction = model.predict(example["policy_observations"])
+        if include_loss:
+            _check_deadline(deadline, phase, case_index=index, completed_cases=index)
+        predictions.append(prediction)
+    if deadline is not None and _deadline_expired(deadline):
+        raise DeadlineExceeded(phase, completed_cases=len(predictions))
     gates = [int(item["gate"]) for item in predictions]
     frequencies = [int(item["frequency_index"]) for item in predictions]
     target_gates = [int(example["target_gate"]) for example in examples]
@@ -283,14 +367,17 @@ def _prediction_metrics(model, examples: list[dict], *, include_loss: bool = Tru
         "joint_action_histogram": dict(sorted(Counter(f"{gate}:{frequency}" for gate, frequency in zip(gates, frequencies)).items())),
     }
     if include_loss:
-        result["full_training_loss"] = float(np.mean([
-            model.loss_only(
+        losses = []
+        for index, example in enumerate(examples):
+            _check_deadline(deadline, phase, case_index=index, completed_cases=index)
+            losses.append(model.loss_only(
                 example["policy_observations"],
                 target_gate=example["target_gate"],
                 target_frequency=example["target_frequency"],
-            )
-            for example in examples
-        ]))
+            ))
+        if deadline is not None and _deadline_expired(deadline):
+            raise DeadlineExceeded(phase, completed_cases=len(examples))
+        result[loss_key] = float(np.mean(losses))
     return result
 
 
@@ -304,7 +391,7 @@ def _train_delayed(model, examples: list[dict], *, seed: int, start_time: float,
     updates = 0
     stopped_reason = None
     for step in range(1, MAX_UPDATES + 1):
-        if time.perf_counter() >= deadline:
+        if _deadline_expired(deadline):
             stopped_reason = "wall_clock_cap"
             break
         if (step - 1) % len(order) == 0:
@@ -319,8 +406,23 @@ def _train_delayed(model, examples: list[dict], *, seed: int, start_time: float,
             model, gradients, first, second, step, LEARNING_RATE
         )
         updates = step
+        # The update itself may consume the remaining budget.  Never start a
+        # metric pass after that point; the checkpoint still records the
+        # completed optimizer update and the cap is reported structurally.
+        if _deadline_expired(deadline):
+            stopped_reason = "wall_clock_cap"
+            break
         if step in METRIC_STEPS:
-            metrics = _prediction_metrics(model, examples)
+            try:
+                metrics = _prediction_metrics(
+                    model,
+                    examples,
+                    deadline=deadline,
+                    phase=f"training_metrics_step_{step}",
+                )
+            except DeadlineExceeded:
+                stopped_reason = "wall_clock_cap"
+                break
             metrics.update({
                 "step": int(step),
                 "last_batch_loss": float(loss),
@@ -347,15 +449,28 @@ def _train_delayed(model, examples: list[dict], *, seed: int, start_time: float,
     }
 
 
-def _run_summary(runs: list[dict]) -> dict:
-    failures = Counter(item.get("failure", item.get("failure_cause")) for item in runs)
+def _run_summary(
+    runs: list[dict],
+    *,
+    deadline: float | None = None,
+    phase: str = "run_summary",
+) -> dict:
+    failures = Counter()
+    successes = 0
+    residuals = []
+    for index, item in enumerate(runs):
+        _check_deadline(deadline, phase, case_index=index, completed_cases=index)
+        failures[item.get("failure", item.get("failure_cause"))] += 1
+        successes += int(bool(item["success"]))
+        residuals.append(abs(item["world_residual"]))
+    _check_deadline(deadline, phase, completed_cases=len(runs))
     failures.pop(None, None)
     return {
         "n": len(runs),
-        "successes": int(sum(bool(item["success"]) for item in runs)),
-        "success_rate": float(np.mean([item["success"] for item in runs])) if runs else 0.0,
+        "successes": int(successes),
+        "success_rate": float(successes / len(runs)) if runs else 0.0,
         "failures": dict(sorted(failures.items())),
-        "max_abs_world_residual": float(max((abs(item["world_residual"]) for item in runs), default=0.0)),
+        "max_abs_world_residual": float(max(residuals, default=0.0)),
     }
 
 
@@ -485,13 +600,165 @@ def _save_delayed_checkpoint(path: Path, model, training: dict, normalization: d
     return _json_digest(payload)
 
 
+def _canonical_json(value):
+    """Return a JSON-only value with deterministic key ordering."""
+
+    return json.loads(json.dumps(value, sort_keys=True, allow_nan=False))
+
+
+def _validate_checkpoint_optimizer_state(model, training: dict) -> None:
+    required = {
+        "updates",
+        "stopped_reason",
+        "rng_state",
+        "shuffle_order",
+        "next_minibatch_index",
+        "next_cycle_requires_shuffle",
+        "optimizer_first",
+        "optimizer_second",
+    }
+    if not isinstance(training, dict) or not required.issubset(training):
+        raise CheckpointValidationError("checkpoint training state is incomplete")
+    for field in ("optimizer_first", "optimizer_second"):
+        moments = training.get(field)
+        if not isinstance(moments, dict) or set(moments) != set(model.params):
+            raise CheckpointValidationError(f"checkpoint {field} parameter names do not match")
+        for name, current in model.params.items():
+            value = np.asarray(moments[name], dtype=np.float64)
+            if value.shape != current.shape or not np.isfinite(value).all():
+                raise CheckpointValidationError(f"checkpoint {field} has invalid parameter {name}")
+    if type(training.get("updates")) is not int or training["updates"] < 0:
+        raise CheckpointValidationError("checkpoint update count is invalid")
+    if not isinstance(training.get("shuffle_order"), list):
+        raise CheckpointValidationError("checkpoint shuffle order is invalid")
+    if type(training.get("next_minibatch_index")) is not int or training["next_minibatch_index"] < 0:
+        raise CheckpointValidationError("checkpoint minibatch position is invalid")
+    if type(training.get("next_cycle_requires_shuffle")) is not bool:
+        raise CheckpointValidationError("checkpoint shuffle-cycle flag is invalid")
+
+
+def _load_delayed_checkpoint(
+    path: str | Path,
+    *,
+    model_class,
+    expected_label: str,
+    expected_seed: int,
+    expected_normalization: dict,
+    expected_source_sha: str | None = None,
+) -> tuple[object, dict]:
+    """Load a new candidate checkpoint with strict schema and normalization checks.
+
+    Historical v1 checkpoints are deliberately not accepted here.  They remain
+    readable through their original model/normalization path and are used only
+    as immutable compatibility references.
+    """
+
+    checkpoint_path = Path(path)
+    try:
+        payload = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise CheckpointValidationError(f"cannot read checkpoint {checkpoint_path}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise CheckpointValidationError("checkpoint root must be an object")
+    if payload.get("schema") != "vevo.v03.neural-delayed-memory-checkpoint.v1":
+        raise CheckpointValidationError("checkpoint schema is not the delayed-memory candidate schema")
+    if payload.get("model_class") != model_class.__name__:
+        raise CheckpointValidationError("checkpoint model class does not match the trial")
+    if type(payload.get("seed")) is not int or int(payload["seed"]) != int(expected_seed):
+        raise CheckpointValidationError("checkpoint model seed does not match the trial")
+    if payload.get("contract_path") != CONTRACT_PATH:
+        raise CheckpointValidationError("checkpoint contract path does not match")
+    if expected_source_sha is not None and payload.get("source_sha") != expected_source_sha:
+        raise CheckpointValidationError("checkpoint source SHA does not match the current run")
+    expected_normalization = _canonical_json(expected_normalization)
+    serialized_normalization = payload.get("normalization")
+    if not isinstance(serialized_normalization, dict):
+        raise CheckpointValidationError("checkpoint normalization is missing")
+    serialized_normalization = _canonical_json(serialized_normalization)
+    if serialized_normalization != expected_normalization:
+        raise CheckpointValidationError("checkpoint normalization does not exactly match the fitted run normalization")
+    if payload.get("brain_count") != int(model_class(expected_seed).brain_count):
+        raise CheckpointValidationError("checkpoint brain count does not match the trial")
+    if payload.get("memory_shape") != list(model_class(expected_seed).central_memory_shape):
+        raise CheckpointValidationError("checkpoint memory shape does not match the trial")
+
+    model = model_class(int(expected_seed))
+    state = payload.get("state")
+    if not isinstance(state, dict):
+        raise CheckpointValidationError("checkpoint model state is missing")
+    try:
+        model.load_state_dict(state)
+        model.set_input_normalization(serialized_normalization)
+    except (TypeError, ValueError) as exc:
+        raise CheckpointValidationError(f"checkpoint model state is invalid: {exc}") from exc
+    if payload.get("parameter_count") != int(model.parameter_count()):
+        raise CheckpointValidationError("checkpoint parameter count does not match the model")
+    if model.normalization_state() != expected_normalization:
+        raise CheckpointValidationError("loaded model normalization is not an exact serialized round-trip")
+    _validate_checkpoint_optimizer_state(model, payload.get("training"))
+    return model, payload
+
+
+def _prediction_signature(prediction: dict) -> dict:
+    """Convert a prediction trace to a strict JSON-comparable signature."""
+
+    def convert(value):
+        if isinstance(value, np.ndarray):
+            return convert(value.tolist())
+        if isinstance(value, np.generic):
+            return convert(value.item())
+        if isinstance(value, dict):
+            return {str(key): convert(value[key]) for key in sorted(value)}
+        if isinstance(value, (list, tuple)):
+            return [convert(item) for item in value]
+        if isinstance(value, float) and not np.isfinite(value):
+            raise CheckpointValidationError("prediction trace contains a non-finite value")
+        return value
+
+    return convert(prediction)
+
+
+def _verify_prediction_parity(
+    original_model,
+    reloaded_model,
+    examples: list[dict],
+    *,
+    deadline: float | None = None,
+) -> dict:
+    """Verify exact prediction traces before any physical evaluation."""
+
+    original_digest_parts = []
+    reloaded_digest_parts = []
+    checked = 0
+    for index, example in enumerate(examples):
+        _check_deadline(deadline, "checkpoint_prediction_parity", case_index=index, completed_cases=checked)
+        original = _prediction_signature(original_model.predict(example["policy_observations"]))
+        reloaded = _prediction_signature(reloaded_model.predict(example["policy_observations"]))
+        original_digest_parts.append(original)
+        reloaded_digest_parts.append(reloaded)
+        if original != reloaded:
+            raise CheckpointValidationError(
+                f"prediction parity mismatch for training case {index} ({example['spec']['note_goal_id']})"
+            )
+        checked += 1
+    _check_deadline(deadline, "checkpoint_prediction_parity", completed_cases=checked)
+    return {
+        "status": "passed",
+        "checked_cases": int(checked),
+        "exact": True,
+        "original_prediction_digest": _json_digest(original_digest_parts),
+        "reloaded_prediction_digest": _json_digest(reloaded_digest_parts),
+    }
+
+
 def _trial_key(label: str, seed: int) -> str:
     return f"{label}-seed-{int(seed)}"
 
 
-def _world_clustered_metrics(runs: list[dict]) -> list[dict]:
+def _world_clustered_metrics(runs: list[dict], *, deadline: float | None = None) -> list[dict]:
     clusters = []
-    for world_seed in HELDOUT_WORLD_SEEDS:
+    for index, world_seed in enumerate(DEVELOPMENT_WORLD_SEEDS):
+        _check_deadline(deadline, "development_world_cluster", case_index=index, completed_cases=index)
         cluster = [run for run in runs if int(run["world_seed"]) == int(world_seed)]
         clusters.append({
             "world_seed": int(world_seed),
@@ -508,7 +775,223 @@ def _world_clustered_metrics(runs: list[dict]) -> list[dict]:
                 for run in cluster
             ],
         })
+    _check_deadline(deadline, "development_world_cluster", completed_cases=len(clusters))
     return clusters
+
+
+def _run_case_batch(
+    specs: list[dict],
+    case_runner,
+    *,
+    deadline: float | None,
+    phase: str,
+) -> dict:
+    """Run cases in order and stop at the first cap or case failure."""
+
+    runs = []
+    failures = []
+    for index, spec in enumerate(specs):
+        try:
+            _check_deadline(deadline, phase, case_index=index, completed_cases=len(runs))
+            run = case_runner(spec, index)
+        except DeadlineExceeded as exc:
+            failures.append(_exception_record(exc, phase=phase, case_index=index, spec=spec))
+            return {
+                "status": "partial_wall_clock_cap",
+                "runs": runs,
+                "failures": failures,
+                "completed_cases": len(runs),
+                "expected_cases": len(specs),
+                "next_case_index": index,
+                "budget_exhausted": True,
+            }
+        except Exception as exc:  # Structured failure; the run stops for review.
+            failures.append(_exception_record(exc, phase=phase, case_index=index, spec=spec))
+            return {
+                "status": "partial_failure",
+                "runs": runs,
+                "failures": failures,
+                "completed_cases": len(runs),
+                "expected_cases": len(specs),
+                "next_case_index": index,
+                "budget_exhausted": False,
+            }
+        runs.append(run)
+        if _deadline_expired(deadline):
+            if index + 1 < len(specs):
+                failures.append(_exception_record(
+                    DeadlineExceeded(phase, case_index=index + 1, completed_cases=len(runs)),
+                    phase=phase,
+                    case_index=index + 1,
+                    spec=specs[index + 1],
+                ))
+                return {
+                    "status": "partial_wall_clock_cap",
+                    "runs": runs,
+                    "failures": failures,
+                    "completed_cases": len(runs),
+                    "expected_cases": len(specs),
+                    "next_case_index": index + 1,
+                    "budget_exhausted": True,
+                }
+            return {
+                "status": "complete_budget_exhausted",
+                "runs": runs,
+                "failures": failures,
+                "completed_cases": len(runs),
+                "expected_cases": len(specs),
+                "next_case_index": None,
+                "budget_exhausted": True,
+            }
+    return {
+        "status": "complete",
+        "runs": runs,
+        "failures": failures,
+        "completed_cases": len(runs),
+        "expected_cases": len(specs),
+        "next_case_index": None,
+        "budget_exhausted": False,
+    }
+
+
+def _case_id(world_seed: int, goal_index: int) -> str:
+    return f"world-{int(world_seed)}/goal-{int(goal_index)}"
+
+
+def _historical_development_successes(project_root: Path) -> dict[str, dict[tuple[int, int], bool]]:
+    """Read only the preserved legacy report's development success outcomes."""
+
+    path = project_root / HISTORICAL_DELAYED_REPORT_PATH
+    if not path.exists():
+        return {}
+    try:
+        report = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    result = {}
+    for key, trial in report.get("heldout", {}).get("runs", {}).items():
+        cases = {}
+        for run in trial.get("runs", []):
+            try:
+                cases[(int(run["world_seed"]), int(run["goal_index"]))] = bool(run["success"])
+            except (KeyError, TypeError, ValueError):
+                continue
+        if cases:
+            result[str(key)] = cases
+    return result
+
+
+def _historical_success_overlap(
+    candidate_runs: list[dict],
+    historical_runs: dict[tuple[int, int], bool] | None,
+    *,
+    deadline: float | None = None,
+) -> dict:
+    """Return all per-case candidate/legacy success comparisons."""
+
+    candidate = {
+        (int(run["world_seed"]), int(run["goal_index"])): bool(run["success"])
+        for run in candidate_runs
+    }
+    historical = {} if historical_runs is None else dict(historical_runs)
+    keys = sorted(set(candidate) | set(historical))
+    per_case = []
+    candidate_successes = set()
+    historical_successes = set()
+    intersection = set()
+    for index, key in enumerate(keys):
+        _check_deadline(deadline, "development_historical_overlap", case_index=index, completed_cases=index)
+        candidate_success = candidate.get(key)
+        historical_success = historical.get(key)
+        case = {
+            "case_id": _case_id(*key),
+            "world_seed": int(key[0]),
+            "goal_index": int(key[1]),
+            "candidate_success": candidate_success,
+            "historical_success": historical_success,
+            "success_match": (
+                None if candidate_success is None or historical_success is None
+                else bool(candidate_success == historical_success)
+            ),
+            "success_overlap": bool(candidate_success and historical_success),
+        }
+        per_case.append(case)
+        if candidate_success:
+            candidate_successes.add(key)
+        if historical_success:
+            historical_successes.add(key)
+        if candidate_success and historical_success:
+            intersection.add(key)
+    _check_deadline(deadline, "development_historical_overlap", completed_cases=len(keys))
+    union = candidate_successes | historical_successes
+    return {
+        "historical_available": bool(historical_runs is not None),
+        "candidate_case_count": len(candidate),
+        "historical_case_count": len(historical),
+        "candidate_count": len(candidate_successes),
+        "historical_count": len(historical_successes),
+        "intersection": [_case_id(*key) for key in sorted(intersection)],
+        "intersection_count": len(intersection),
+        "candidate_only": [_case_id(*key) for key in sorted(candidate_successes - historical_successes)],
+        "historical_only": [_case_id(*key) for key in sorted(historical_successes - candidate_successes)],
+        "union_count": len(union),
+        "jaccard": float(len(intersection) / len(union)) if union else 1.0,
+        "per_case": per_case,
+    }
+
+
+def _development_case_record(model, example: dict, spec: dict, prepared: dict, *, deadline: float | None, index: int) -> dict:
+    _check_deadline(deadline, "development_case", case_index=index, completed_cases=index)
+    prediction = model.predict(example["policy_observations"])
+    development_loss = model.loss_only(
+        example["policy_observations"],
+        target_gate=example["target_gate"],
+        target_frequency=example["target_frequency"],
+    )
+    _check_deadline(deadline, "development_case", case_index=index, completed_cases=index)
+    run = run_delayed_episode(model, spec, prepared=prepared)
+    run["development_loss"] = float(development_loss)
+    run["predicted_action"] = {
+        "gate": int(prediction["gate"]),
+        "frequency_index": int(prediction["frequency_index"]),
+    }
+    return run
+
+
+def _development_metrics(model, examples: list[dict], runs: list[dict], *, deadline: float | None) -> dict:
+    _check_deadline(deadline, "development_metrics", completed_cases=len(runs))
+    if len(runs) != len(examples):
+        raise ValueError("development metrics require a complete case batch")
+    gates = []
+    frequencies = []
+    target_gates = []
+    target_frequencies = []
+    successes = 0
+    losses = []
+    for index, (example, run) in enumerate(zip(examples, runs)):
+        _check_deadline(deadline, "development_metrics", case_index=index, completed_cases=index)
+        gates.append(int(run["final_action"]["gate"]))
+        frequencies.append(int(run["final_action"]["frequency_index"]))
+        target_gates.append(int(example["target_gate"]))
+        target_frequencies.append(int(example["target_frequency"]))
+        successes += int(bool(run["success"]))
+        losses.append(float(run["development_loss"]))
+    _check_deadline(deadline, "development_metrics", completed_cases=len(runs))
+    return {
+        "n": len(runs),
+        "gate_accuracy": float(np.mean(np.asarray(gates) == np.asarray(target_gates))),
+        "frequency_accuracy": float(np.mean(np.asarray(frequencies) == np.asarray(target_frequencies))),
+        "joint_accuracy": float(np.mean(
+            (np.asarray(gates) == np.asarray(target_gates))
+            & (np.asarray(frequencies) == np.asarray(target_frequencies))
+        )),
+        "physical_success": int(successes),
+        "physical_success_rate": float(successes / len(runs)) if runs else 0.0,
+        "development_loss": float(np.mean(losses)) if losses else 0.0,
+        "gate_action_histogram": dict(sorted(Counter(gates).items())),
+        "frequency_action_histogram": dict(sorted(Counter(frequencies).items())),
+        "joint_action_histogram": dict(sorted(Counter(f"{gate}:{frequency}" for gate, frequency in zip(gates, frequencies)).items())),
+    }
 
 
 def _historical_digests(project_root: Path) -> dict[str, str]:
@@ -534,6 +1017,104 @@ def _historical_digests(project_root: Path) -> dict[str, str]:
     }
 
 
+def _summary_path(output_path: Path) -> Path:
+    return output_path.with_suffix(".md") if output_path.suffix == ".json" else Path(f"{output_path}.md")
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temporary_path = Path(handle.name)
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_path, path)
+    finally:
+        if temporary_path is not None and temporary_path.exists():
+            temporary_path.unlink()
+
+
+def _markdown_value(value, *, digits: int = 6) -> str:
+    if value is None:
+        return "—"
+    if isinstance(value, float):
+        return f"{value:.{digits}f}"
+    return str(value)
+
+
+def _markdown_summary(report: dict) -> str:
+    runtime = report.get("runtime", {})
+    training = report.get("training", {})
+    development = report.get("development", {})
+    lines = [
+        "# Delayed-memory shared-response-scale candidate",
+        "",
+        f"Status: `{report.get('status', 'unknown')}`  ",
+        f"Source commit: `{report.get('source_sha')}`  ",
+        f"JSON report: `{report.get('report_path')}`  ",
+        "",
+        "This artifact is a bounded, separately retrained candidate. It does not rewrite or replace the historical v1 report/checkpoints.",
+        "",
+        "## Evaluation gate and scope",
+        "",
+        f"- Existing gate: all four models must complete within budget and each must reach 8/8 delayed training physical successes before any development-case evaluation (`{training.get('all_four_delayed_training_success_8_of_8')}`).",
+        f"- Development worlds: `{', '.join(str(seed) for seed in report.get('data', {}).get('development_world_seeds_inspected', DEVELOPMENT_WORLD_SEEDS))}`; these are previously inspected development cases, never fresh generalization evidence.",
+        f"- Checkpoint reload/parity gate: `{report.get('checkpoint_reload', {}).get('status', 'not completed')}`.",
+        f"- Historical artifacts unchanged byte-for-byte: `{report.get('historical_artifacts', {}).get('unchanged')}`.",
+        "",
+        "## Training results",
+        "",
+        "| trial | status | updates | train loss | gate | frequency | joint | physical |",
+        "|---|---|---:|---:|---:|---:|---:|---:|",
+    ]
+    for trial in training.get("trials", []):
+        metrics = trial.get("training_metrics") or {}
+        lines.append(
+            f"| {trial.get('key', 'unknown')} | {trial.get('status', 'unknown')} | {_markdown_value(trial.get('updates'))} | {_markdown_value(metrics.get('full_training_loss'))} | {_markdown_value(metrics.get('gate_accuracy'))} | {_markdown_value(metrics.get('frequency_accuracy'))} | {_markdown_value(metrics.get('joint_accuracy'))} | {_markdown_value(metrics.get('physical_success'))}/8 |"
+        )
+    lines.extend([
+        "",
+        "## Development cases",
+        "",
+        "The development section is intentionally not named or interpreted as a fresh held-out/generalization set. It reports loss and per-case overlap against the preserved historical delayed-memory report.",
+        "",
+        "| trial | status | n | development loss | gate | frequency | joint | physical | historical overlap |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|",
+    ])
+    for key, value in development.get("runs", {}).items():
+        metrics = value.get("metrics") or {}
+        overlap = value.get("historical_success_overlap") or {}
+        lines.append(
+            f"| {key} | {value.get('status', 'unknown')} | {_markdown_value(metrics.get('n', value.get('completed_cases')))} | {_markdown_value(metrics.get('development_loss'))} | {_markdown_value(metrics.get('gate_accuracy'))} | {_markdown_value(metrics.get('frequency_accuracy'))} | {_markdown_value(metrics.get('joint_accuracy'))} | {_markdown_value(metrics.get('physical_success'))}/32 | {_markdown_value(overlap.get('intersection_count'))} |"
+        )
+    lines.extend([
+        "",
+        "## Runtime and failures",
+        "",
+        f"- Wall-clock cap: `{runtime.get('wall_clock_cap_seconds')}` seconds; elapsed: `{runtime.get('wall_clock_seconds')}`; CPU: `{runtime.get('process_cpu_seconds')}`.",
+        f"- Cap termination: `{runtime.get('cap_termination')}`; within cap: `{runtime.get('within_wall_clock_cap')}`.",
+        f"- Structured failures: `{len(runtime.get('failures', []))}`.",
+    ])
+    for failure in runtime.get("failures", []):
+        lines.append(f"  - `{failure.get('phase', 'unknown')}`: {failure.get('error', failure)}")
+    lines.extend([
+        "",
+        "No PC training, production deployment, paid compute, credentials, merge, or PR action is part of this artifact.",
+        "",
+    ])
+    return "\n".join(lines)
+
+
 def run_experiment(
     *,
     output_path: str | Path = REPORT_PATH,
@@ -543,18 +1124,36 @@ def run_experiment(
 ) -> dict:
     start_wall = time.perf_counter()
     start_cpu = time.process_time()
-    deadline = start_wall + float(wall_clock_cap)
+    wall_clock_cap = float(wall_clock_cap)
+    if not np.isfinite(wall_clock_cap):
+        raise ValueError("wall-clock cap must be finite")
+    deadline = start_wall + wall_clock_cap
     output = Path(output_path)
+    summary_output = _summary_path(output)
     if output.exists():
         raise FileExistsError(f"refusing to overwrite report: {output}")
+    if summary_output.exists():
+        raise FileExistsError(f"refusing to overwrite report summary: {summary_output}")
     if Path(checkpoint_prefix).name != checkpoint_prefix:
         raise ValueError("checkpoint prefix must be a single filename component")
+
     project_root = Path(__file__).resolve().parents[2]
     source_sha = _source_sha()
-    contract_file = project_root / CONTRACT_PATH
     historical_before = _historical_digests(project_root)
+    failures = []
+    cap_termination = False
+    fatal_failure = False
+
+    def stop_with(exc: Exception, *, phase: str, case_index: int | None = None, spec: dict | None = None) -> None:
+        nonlocal cap_termination, fatal_failure
+        failures.append(_exception_record(exc, phase=phase, case_index=case_index, spec=spec))
+        if isinstance(exc, DeadlineExceeded) or _deadline_expired(deadline):
+            cap_termination = True
+        else:
+            fatal_failure = True
+
     train_specs = make_training_specs()
-    heldout_specs = make_heldout_specs()
+    development_specs = make_development_specs()
     train_examples = build_delayed_examples(train_specs)
     normalization = fit_input_normalization(
         _training_observations(train_examples),
@@ -562,170 +1161,355 @@ def run_experiment(
     )
     hidden_normalization = _validate_hidden_normalization(train_examples, normalization)
     prepared_train = _prepared_by_identity(train_specs)
-    failures = []
-    cap_termination = False
+    historical_successes = _historical_development_successes(project_root)
     trial_models = []
     trial_records = []
     checkpoint_records = {}
+    checkpoint_reload = {
+        "status": "pending",
+        "normalization_exact_required": True,
+        "prediction_parity_required": True,
+        "trials": {},
+    }
 
     expected_trials = [
         (V03FiveBrain, "full", seed) for seed in DELAYED_MODEL_SEEDS
     ] + [
         (V03SingleRecurrentMemory, "control", seed) for seed in DELAYED_CONTROL_SEEDS
     ]
-    for model_class, label, model_seed in expected_trials:
+
+    for trial_index, (model_class, label, model_seed) in enumerate(expected_trials):
         key = _trial_key(label, model_seed)
-        if time.perf_counter() >= deadline:
-            cap_termination = True
-            failures.append(f"wall-clock cap before training {key}")
-            trial_records.append({
+        checkpoint_path: Path | None = None
+        base_record = {
+            "key": key,
+            "label": label,
+            "model_seed": int(model_seed),
+            "optimizer_seed": int(model_seed + 1000),
+        }
+        if cap_termination or fatal_failure:
+            base_record["status"] = "not_run_wall_clock_cap" if cap_termination else "not_run_prior_failure"
+            trial_records.append(base_record)
+            continue
+        try:
+            _check_deadline(deadline, "training_trial", case_index=trial_index, completed_cases=trial_index)
+            model = model_class(model_seed)
+            model.set_input_normalization(normalization)
+            training = _train_delayed(
+                model,
+                train_examples,
+                seed=model_seed + 1000,
+                start_time=start_wall,
+                deadline=deadline,
+            )
+            if training["stopped_reason"]:
+                stop_with(
+                    DeadlineExceeded("training_trial", case_index=trial_index, completed_cases=trial_index),
+                    phase="training_trial",
+                )
+            checkpoint_path = project_root / "storage" / "checkpoints" / f"{checkpoint_prefix}-{label}-seed-{model_seed}.json"
+            checkpoint_digest = _save_delayed_checkpoint(checkpoint_path, model, training, normalization, source_sha)
+            checkpoint_record = {
+                "path": str(checkpoint_path.relative_to(project_root)),
+                "digest": checkpoint_digest,
+                "status": "written",
+            }
+            checkpoint_records[key] = checkpoint_record
+            base_record.update({
+                "status": "partial_wall_clock_cap" if training["stopped_reason"] else "trained",
+                "parameter_count": int(model.parameter_count()),
+                "brain_count": int(model.brain_count),
+                "updates": int(training["updates"]),
+                "stopped_reason": training["stopped_reason"],
+                "parameter_delta_l2": float(training["parameter_delta_l2"]),
+                "history": training["history"],
+            })
+            if training["stopped_reason"]:
+                trial_records.append(base_record)
+                continue
+            _check_deadline(deadline, "checkpoint_reload", case_index=trial_index, completed_cases=trial_index)
+            reloaded_model, payload = _load_delayed_checkpoint(
+                checkpoint_path,
+                model_class=model_class,
+                expected_label=label,
+                expected_seed=model_seed,
+                expected_normalization=normalization,
+                expected_source_sha=source_sha,
+            )
+            parity = _verify_prediction_parity(
+                model,
+                reloaded_model,
+                train_examples,
+                deadline=deadline,
+            )
+            checkpoint_record["reload"] = {
+                "status": "passed",
+                "normalization_exact": True,
+                "payload_schema": payload["schema"],
+                "prediction_parity": parity,
+            }
+            checkpoint_reload["trials"][key] = checkpoint_record["reload"]
+            trial_models.append({
+                "key": key,
                 "label": label,
                 "model_seed": int(model_seed),
                 "optimizer_seed": int(model_seed + 1000),
-                "status": "not_run_wall_clock_cap",
+                "model": reloaded_model,
+                "training": training,
             })
-            continue
-        model = model_class(model_seed)
-        model.set_input_normalization(normalization)
-        training = _train_delayed(
-            model,
-            train_examples,
-            seed=model_seed + 1000,
-            start_time=start_wall,
-            deadline=deadline,
-        )
-        if training["stopped_reason"]:
-            cap_termination = True
-            failures.append(f"{key}: {training['stopped_reason']}")
-        checkpoint_path = project_root / "storage" / "checkpoints" / f"{checkpoint_prefix}-{label}-seed-{model_seed}.json"
-        checkpoint_digest = _save_delayed_checkpoint(checkpoint_path, model, training, normalization, source_sha)
-        checkpoint_records[key] = {
-            "path": str(checkpoint_path.relative_to(project_root)),
-            "digest": checkpoint_digest,
-        }
-        trial_models.append({
-            "key": key,
-            "label": label,
-            "model_seed": int(model_seed),
-            "optimizer_seed": int(model_seed + 1000),
-            "model": model,
-            "training": training,
-        })
-        trial_records.append({
-            "key": key,
-            "label": label,
-            "model_seed": int(model_seed),
-            "optimizer_seed": int(model_seed + 1000),
-            "status": "trained",
-            "parameter_count": int(model.parameter_count()),
-            "brain_count": int(model.brain_count),
-            "updates": int(training["updates"]),
-            "stopped_reason": training["stopped_reason"],
-            "parameter_delta_l2": float(training["parameter_delta_l2"]),
-            "history": training["history"],
-        })
+            trial_records.append(base_record)
+        except DeadlineExceeded as exc:
+            stop_with(exc, phase=exc.phase, case_index=exc.case_index)
+            base_record["status"] = "partial_wall_clock_cap"
+            base_record["failure"] = _exception_record(exc, phase=exc.phase, case_index=exc.case_index)
+            trial_records.append(base_record)
+        except Exception as exc:
+            failure_phase = "checkpoint_reload" if checkpoint_path is not None else "training_trial"
+            stop_with(exc, phase=failure_phase)
+            base_record["status"] = "failed"
+            base_record["failure"] = _exception_record(exc, phase=failure_phase)
+            checkpoint_reload["trials"][key] = {
+                "status": "failed",
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+            }
+            trial_records.append(base_record)
 
-    oracle_runs = []
+    if cap_termination:
+        checkpoint_reload["status"] = "partial_wall_clock_cap"
+    elif fatal_failure:
+        checkpoint_reload["status"] = "failed"
+    elif len(checkpoint_reload["trials"]) == len(expected_trials):
+        checkpoint_reload["status"] = "passed"
+    else:
+        checkpoint_reload["status"] = "partial_failure"
+
     references = {"oracle_feasibility": {}, "untrained": {}}
     retention = {}
-    if not cap_termination:
-        oracle_runs = [_oracle_delayed_run(spec, prepared_train[_spec_identity(spec)]) for spec in train_specs]
+    development = {
+        "status": "not_evaluated",
+        "reason": "requires the all-four-models 8/8 training gate",
+        "world_seeds": list(DEVELOPMENT_WORLD_SEEDS),
+        "goal_count_per_world": len(PROBE_FREQUENCIES),
+        "classification": "inspected_development_cases",
+        "is_fresh_generalization": False,
+        "fresh_generalization_claim": False,
+        "normalization_source": "training microset only",
+        "used_for_gradients": False,
+        "used_for_hyperparameters": False,
+        "used_for_checkpoint_selection": False,
+        "runs": {},
+    }
+
+    if not cap_termination and not fatal_failure:
+        oracle_batch = _run_case_batch(
+            train_specs,
+            lambda spec, index: _oracle_delayed_run(spec, prepared_train[_spec_identity(spec)]),
+            deadline=deadline,
+            phase="oracle_feasibility",
+        )
         references["oracle_feasibility"] = {
+            "status": oracle_batch["status"],
             "training_microset": {
-                "runs": oracle_runs,
-                "summary": _run_summary(oracle_runs),
+                "runs": oracle_batch["runs"],
+                "completed_cases": oracle_batch["completed_cases"],
+                "expected_cases": oracle_batch["expected_cases"],
+                "failures": oracle_batch["failures"],
             },
         }
+        if oracle_batch["status"] == "complete":
+            try:
+                _check_deadline(deadline, "oracle_feasibility_summary", completed_cases=oracle_batch["completed_cases"])
+                references["oracle_feasibility"]["training_microset"]["summary"] = _run_summary(
+                    oracle_batch["runs"],
+                    deadline=deadline,
+                    phase="oracle_feasibility_summary",
+                )
+            except DeadlineExceeded as exc:
+                stop_with(exc, phase=exc.phase, case_index=exc.case_index)
+        else:
+            if oracle_batch["budget_exhausted"]:
+                stop_with(DeadlineExceeded("oracle_feasibility", completed_cases=oracle_batch["completed_cases"]), phase="oracle_feasibility")
+            else:
+                stop_with(RuntimeError("oracle feasibility case batch failed"), phase="oracle_feasibility")
 
     for trial in trial_models:
         key = trial["key"]
-        model = trial["model"]
-        prediction_metrics = _prediction_metrics(model, train_examples)
         retention_entry = {
             "architecture": trial["label"],
             "model_seed": trial["model_seed"],
             "ordinary": None,
             "conditions": {},
             "causal_interpretation_allowed": False,
-            "status": "not_run_wall_clock_cap" if cap_termination else "pending",
+            "status": "not_run_prior_failure" if (cap_termination or fatal_failure) else "pending",
         }
-        if cap_termination:
+        if cap_termination or fatal_failure:
             retention[key] = retention_entry
-            trial["training_metrics"] = prediction_metrics
             continue
-        baseline_runs = [
-            run_delayed_episode(
+        model = trial["model"]
+        try:
+            prediction_metrics = _prediction_metrics(
                 model,
-                spec,
-                prepared=prepared_train[_spec_identity(spec)],
+                train_examples,
+                deadline=deadline,
+                phase=f"training_metrics_{key}",
             )
-            for spec in train_specs
-        ]
-        _validate_run_identities(baseline_runs, train_specs)
-        ordinary_summary = _run_summary(baseline_runs)
-        retention_entry["ordinary"] = {
-            "state_scope": "none",
-            "runs": baseline_runs,
-            "summary": ordinary_summary,
-        }
-        retention_entry["causal_interpretation_allowed"] = bool(ordinary_summary["successes"] > 0)
-        retention_entry["causal_interpretation_reason"] = (
-            "ordinary delayed recall has at least one success"
-            if retention_entry["causal_interpretation_allowed"]
-            else "ordinary delayed recall has zero successes; causal erasure evidence is not interpreted"
-        )
-        prediction_metrics["physical_success"] = int(ordinary_summary["successes"])
-        prediction_metrics["physical_success_rate"] = float(ordinary_summary["success_rate"])
-        prediction_metrics["ordinary_run_summary"] = ordinary_summary
-        for condition, erasure, state_scope in RETENTION_CONDITIONS[1:]:
-            if time.perf_counter() >= deadline:
-                cap_termination = True
-                failures.append(f"wall-clock cap during retention {key}/{condition}")
-                retention_entry["status"] = "partial_wall_clock_cap"
-                break
-            runs = [
-                run_delayed_episode(
+            baseline_batch = _run_case_batch(
+                train_specs,
+                lambda spec, index: run_delayed_episode(
                     model,
                     spec,
-                    erasure=erasure,
                     prepared=prepared_train[_spec_identity(spec)],
-                )
-                for spec in train_specs
-            ]
-            _validate_run_identities(runs, train_specs)
-            retention_entry["conditions"][condition] = {
-                "state_scope": state_scope,
-                "runs": runs,
-                "summary": _run_summary(runs),
-                "paired_ablation": _paired_ablation_summary(baseline_runs, runs),
+                ),
+                deadline=deadline,
+                phase=f"retention_ordinary_{key}",
+            )
+            retention_entry["ordinary"] = {
+                "state_scope": "none",
+                "runs": baseline_batch["runs"],
+                "completed_cases": baseline_batch["completed_cases"],
+                "expected_cases": baseline_batch["expected_cases"],
+                "failures": baseline_batch["failures"],
             }
-        retention_entry["status"] = "complete" if not cap_termination else retention_entry["status"]
-        retention[key] = retention_entry
-        trial["training_metrics"] = prediction_metrics
+            if baseline_batch["status"] != "complete":
+                retention_entry["status"] = baseline_batch["status"]
+                if baseline_batch["budget_exhausted"]:
+                    stop_with(DeadlineExceeded(f"retention_ordinary_{key}", completed_cases=baseline_batch["completed_cases"]), phase=f"retention_ordinary_{key}")
+                else:
+                    stop_with(RuntimeError("ordinary retention case batch failed"), phase=f"retention_ordinary_{key}")
+                retention[key] = retention_entry
+                break
+            _validate_run_identities(baseline_batch["runs"], train_specs)
+            _check_deadline(deadline, f"retention_ordinary_summary_{key}", completed_cases=len(train_specs))
+            ordinary_summary = _run_summary(
+                baseline_batch["runs"],
+                deadline=deadline,
+                phase=f"retention_ordinary_summary_{key}",
+            )
+            retention_entry["ordinary"]["summary"] = ordinary_summary
+            retention_entry["causal_interpretation_allowed"] = bool(ordinary_summary["successes"] > 0)
+            retention_entry["causal_interpretation_reason"] = (
+                "ordinary delayed recall has at least one success"
+                if retention_entry["causal_interpretation_allowed"]
+                else "ordinary delayed recall has zero successes; causal erasure evidence is not interpreted"
+            )
+            prediction_metrics["physical_success"] = int(ordinary_summary["successes"])
+            prediction_metrics["physical_success_rate"] = float(ordinary_summary["success_rate"])
+            prediction_metrics["ordinary_run_summary"] = ordinary_summary
+            trial["training_metrics"] = prediction_metrics
 
-    if not cap_termination:
+            for condition, erasure, state_scope in RETENTION_CONDITIONS[1:]:
+                condition_batch = _run_case_batch(
+                    train_specs,
+                    lambda spec, index, erasure=erasure: run_delayed_episode(
+                        model,
+                        spec,
+                        erasure=erasure,
+                        prepared=prepared_train[_spec_identity(spec)],
+                    ),
+                    deadline=deadline,
+                    phase=f"retention_{key}_{condition}",
+                )
+                condition_record = {
+                    "state_scope": state_scope,
+                    "runs": condition_batch["runs"],
+                    "completed_cases": condition_batch["completed_cases"],
+                    "expected_cases": condition_batch["expected_cases"],
+                    "failures": condition_batch["failures"],
+                }
+                if condition_batch["status"] != "complete":
+                    retention_entry["conditions"][condition] = condition_record
+                    retention_entry["status"] = condition_batch["status"]
+                    if condition_batch["budget_exhausted"]:
+                        stop_with(DeadlineExceeded(f"retention_{key}_{condition}", completed_cases=condition_batch["completed_cases"]), phase=f"retention_{key}_{condition}")
+                    else:
+                        stop_with(RuntimeError("retention condition case batch failed"), phase=f"retention_{key}_{condition}")
+                    break
+                _validate_run_identities(condition_batch["runs"], train_specs)
+                _check_deadline(deadline, f"retention_{key}_{condition}_summary", completed_cases=len(train_specs))
+                condition_record["summary"] = _run_summary(
+                    condition_batch["runs"],
+                    deadline=deadline,
+                    phase=f"retention_{key}_{condition}_summary",
+                )
+                _check_deadline(deadline, f"retention_{key}_{condition}_pairing", completed_cases=len(train_specs))
+                paired_ablation = _paired_ablation_summary(
+                    baseline_batch["runs"], condition_batch["runs"]
+                )
+                _check_deadline(deadline, f"retention_{key}_{condition}_pairing", completed_cases=len(train_specs))
+                condition_record["paired_ablation"] = paired_ablation
+                retention_entry["conditions"][condition] = condition_record
+            if not cap_termination and not fatal_failure:
+                retention_entry["status"] = "complete"
+            retention[key] = retention_entry
+        except DeadlineExceeded as exc:
+            stop_with(exc, phase=exc.phase, case_index=exc.case_index)
+            retention_entry["status"] = "partial_wall_clock_cap"
+            retention[key] = retention_entry
+            break
+        except Exception as exc:
+            stop_with(exc, phase=f"retention_{key}")
+            retention_entry["status"] = "failed"
+            retention_entry["failure"] = _exception_record(exc, phase=f"retention_{key}")
+            retention[key] = retention_entry
+            break
+
+    if not cap_termination and not fatal_failure:
         for label, model_class, seed in (
             ("full", V03FiveBrain, DELAYED_MODEL_SEEDS[0]),
             ("control", V03SingleRecurrentMemory, DELAYED_CONTROL_SEEDS[0]),
         ):
-            model = model_class(seed)
-            model.set_input_normalization(normalization)
-            reference_runs = [
-                run_delayed_episode(
-                    model,
-                    spec,
-                    prepared=prepared_train[_spec_identity(spec)],
+            try:
+                _check_deadline(deadline, "untrained_reference", completed_cases=len(references["untrained"]))
+                model = model_class(seed)
+                model.set_input_normalization(normalization)
+                reference_batch = _run_case_batch(
+                    train_specs,
+                    lambda spec, index: run_delayed_episode(
+                        model,
+                        spec,
+                        prepared=prepared_train[_spec_identity(spec)],
+                    ),
+                    deadline=deadline,
+                    phase=f"untrained_reference_{label}",
                 )
-                for spec in train_specs
-            ]
-            references["untrained"][label] = {
-                "model_seed": int(seed),
-                "updates": 0,
-                "metrics": _prediction_metrics(model, train_examples),
-                "physical_success": int(sum(bool(run["success"]) for run in reference_runs)),
-                "runs": reference_runs,
-                "summary": _run_summary(reference_runs),
-            }
+                entry = {
+                    "model_seed": int(seed),
+                    "updates": 0,
+                    "status": reference_batch["status"],
+                    "runs": reference_batch["runs"],
+                    "completed_cases": reference_batch["completed_cases"],
+                    "expected_cases": reference_batch["expected_cases"],
+                    "failures": reference_batch["failures"],
+                }
+                if reference_batch["status"] == "complete":
+                    _check_deadline(deadline, f"untrained_reference_{label}_metrics", completed_cases=len(train_specs))
+                    entry["metrics"] = _prediction_metrics(
+                        model,
+                        train_examples,
+                        deadline=deadline,
+                        phase=f"untrained_reference_{label}_metrics",
+                    )
+                    _check_deadline(deadline, f"untrained_reference_{label}_summary", completed_cases=len(train_specs))
+                    entry["physical_success"] = int(sum(bool(run["success"]) for run in reference_batch["runs"]))
+                    entry["summary"] = _run_summary(
+                        reference_batch["runs"],
+                        deadline=deadline,
+                        phase=f"untrained_reference_{label}_summary",
+                    )
+                references["untrained"][label] = entry
+                if reference_batch["status"] != "complete":
+                    if reference_batch["budget_exhausted"]:
+                        stop_with(DeadlineExceeded(f"untrained_reference_{label}", completed_cases=reference_batch["completed_cases"]), phase=f"untrained_reference_{label}")
+                    else:
+                        stop_with(RuntimeError("untrained reference case batch failed"), phase=f"untrained_reference_{label}")
+                    break
+            except DeadlineExceeded as exc:
+                stop_with(exc, phase=exc.phase, case_index=exc.case_index)
+                break
+            except Exception as exc:
+                stop_with(exc, phase=f"untrained_reference_{label}")
+                break
 
     completed_trial_records = [
         trial for trial in trial_models
@@ -738,54 +1522,102 @@ def run_experiment(
             for trial in completed_trial_records
         )
         and not cap_termination
+        and not fatal_failure
     )
-    heldout = {
-        "status": "not_evaluated",
-        "reason": (
-            "requires all four completed trials to achieve 8/8 delayed training success"
-        ),
-        "world_seeds": list(HELDOUT_WORLD_SEEDS),
-        "goal_count_per_world": len(PROBE_FREQUENCIES),
-        "runs": {},
-    }
-    if all_four_delayed_training_success:
-        heldout_examples = build_delayed_examples(heldout_specs)
-        prepared_heldout = _prepared_by_identity(heldout_specs)
-        heldout["status"] = "evaluated_once"
-        heldout["reason"] = None
-        heldout["normalization_source"] = "delayed training microset only"
-        heldout["used_for_gradients"] = False
-        heldout["used_for_hyperparameters"] = False
-        heldout["used_for_checkpoint_selection"] = False
-        for trial in trial_models:
-            if time.perf_counter() >= deadline:
-                cap_termination = True
-                failures.append(f"wall-clock cap before held-out evaluation {trial['key']}")
-                heldout["status"] = "partial_wall_clock_cap"
-                break
-            runs = [
-                run_delayed_episode(
-                    trial["model"],
-                    spec,
-                    prepared=prepared_heldout[_spec_identity(spec)],
-                )
-                for spec in heldout_specs
-            ]
-            _validate_run_identities(runs, heldout_specs)
-            metrics = _prediction_metrics(trial["model"], heldout_examples, include_loss=False)
-            metrics["physical_success"] = int(sum(bool(run["success"]) for run in runs))
-            metrics["physical_success_rate"] = float(np.mean([run["success"] for run in runs]))
-            heldout["runs"][trial["key"]] = {
-                "architecture": trial["label"],
-                "model_seed": trial["model_seed"],
-                "metrics": metrics,
-                "runs": runs,
-                "summary": _run_summary(runs),
-                "world_clustered": _world_clustered_metrics(runs),
-            }
 
-    if not all_four_delayed_training_success and not cap_termination:
-        heldout["reason"] = "microset failed the 8/8 criterion; stopped at diagnosis without held-out expansion"
+    if all_four_delayed_training_success:
+        try:
+            _check_deadline(deadline, "development_preparation", completed_cases=0)
+            development_examples = build_delayed_examples(development_specs)
+            prepared_development = _prepared_by_identity(development_specs)
+            development["status"] = "evaluating_inspected_cases"
+            development["reason"] = None
+            for trial in trial_models:
+                if cap_termination or fatal_failure:
+                    break
+                examples_by_identity = {
+                    _spec_identity(example["spec"]): example
+                    for example in development_examples
+                }
+                batch = _run_case_batch(
+                    development_specs,
+                    lambda spec, index, trial=trial: _development_case_record(
+                        trial["model"],
+                        examples_by_identity[_spec_identity(spec)],
+                        spec,
+                        prepared_development[_spec_identity(spec)],
+                        deadline=deadline,
+                        index=index,
+                    ),
+                    deadline=deadline,
+                    phase=f"development_cases_{trial['key']}",
+                )
+                entry = {
+                    "architecture": trial["label"],
+                    "model_seed": trial["model_seed"],
+                    "status": batch["status"],
+                    "runs": batch["runs"],
+                    "completed_cases": batch["completed_cases"],
+                    "expected_cases": batch["expected_cases"],
+                    "failures": batch["failures"],
+                }
+                if batch["status"] == "complete":
+                    _validate_run_identities(batch["runs"], development_specs)
+                    _check_deadline(deadline, f"development_metrics_{trial['key']}", completed_cases=batch["completed_cases"])
+                    entry["metrics"] = _development_metrics(
+                        trial["model"],
+                        development_examples,
+                        batch["runs"],
+                        deadline=deadline,
+                    )
+                    _check_deadline(deadline, f"development_overlap_{trial['key']}", completed_cases=batch["completed_cases"])
+                    entry["summary"] = _run_summary(
+                        batch["runs"],
+                        deadline=deadline,
+                        phase=f"development_summary_{trial['key']}",
+                    )
+                    entry["world_clustered"] = _world_clustered_metrics(
+                        batch["runs"],
+                        deadline=deadline,
+                    )
+                    entry["historical_success_overlap"] = _historical_success_overlap(
+                        batch["runs"],
+                        historical_successes.get(trial["key"]),
+                        deadline=deadline,
+                    )
+                development["runs"][trial["key"]] = entry
+                if batch["status"] != "complete":
+                    if batch["budget_exhausted"]:
+                        stop_with(DeadlineExceeded(f"development_cases_{trial['key']}", completed_cases=batch["completed_cases"]), phase=f"development_cases_{trial['key']}")
+                    else:
+                        stop_with(RuntimeError("development case batch failed"), phase=f"development_cases_{trial['key']}")
+                    break
+            if not cap_termination and not fatal_failure:
+                development["status"] = "complete"
+        except DeadlineExceeded as exc:
+            stop_with(exc, phase=exc.phase, case_index=exc.case_index)
+            development["status"] = "partial_wall_clock_cap"
+        except Exception as exc:
+            stop_with(exc, phase="development_preparation")
+            development["status"] = "partial_failure"
+    elif cap_termination:
+        development["status"] = "not_evaluated_wall_clock_cap"
+        development["reason"] = "deadline or earlier partial phase prevented the all-four-models 8/8 gate"
+    elif fatal_failure:
+        development["status"] = "not_evaluated_prior_failure"
+        development["reason"] = "earlier structured failure prevented the all-four-models 8/8 gate"
+    else:
+        development["reason"] = "microset failed the all-four-models 8/8 criterion; stopped at diagnosis without development expansion"
+
+    if not all_four_delayed_training_success and development["status"] == "not_evaluated":
+        development["reason"] = "microset failed the all-four-models 8/8 criterion; stopped at diagnosis without development expansion"
+
+    # Preserve the old top-level name for readers of the pre-review runner,
+    # while making the new report's primary classification unambiguously
+    # inspected development rather than fresh generalization.
+    heldout_compatibility = copy.deepcopy(development)
+    heldout_compatibility["compatibility_alias"] = "development"
+    heldout_compatibility["deprecated_label"] = True
 
     historical_after = _historical_digests(project_root)
     runtime_wall = time.perf_counter() - start_wall
@@ -795,11 +1627,21 @@ def run_experiment(
         trial = trial_by_key.get(trial_record.get("key"))
         if trial is not None:
             trial_record["training_metrics"] = trial.get("training_metrics")
+
+    if cap_termination:
+        report_status = "partial_wall_clock_cap"
+    elif fatal_failure:
+        report_status = "failed"
+    else:
+        report_status = "complete"
     report = {
-        "schema": "vevo.v03.neural-delayed-memory-report.v1",
+        "schema": "vevo.v03.neural-delayed-memory-report.v2",
+        "status": report_status,
         "contract_path": CONTRACT_PATH,
         "source_sha": source_sha,
         "command": " ".join(sys.argv),
+        "report_path": str(output),
+        "summary_path": str(summary_output),
         "architecture": {
             "full_model": "V03FiveBrain",
             "matched_control": "V03SingleRecurrentMemory",
@@ -834,8 +1676,11 @@ def run_experiment(
             "normalization_fit_scope": "five-step delayed training observations only",
             "response_scaling_mode": response_scaling,
             "normalization": normalization,
-            "heldout_world_seeds_predeclared": list(HELDOUT_WORLD_SEEDS),
-            "heldout_world_seeds_disjoint_from_historical": not (set(HELDOUT_WORLD_SEEDS) & HISTORICAL_WORLD_SEEDS),
+            "development_world_seeds_inspected": list(DEVELOPMENT_WORLD_SEEDS),
+            "development_world_seeds_predeclared": list(DEVELOPMENT_WORLD_SEEDS),
+            "development_is_fresh_generalization": False,
+            "development_label": "9300–9307 inspected development cases; never fresh generalization",
+            "development_world_seeds_disjoint_from_historical": not (set(DEVELOPMENT_WORLD_SEEDS) & HISTORICAL_WORLD_SEEDS),
         },
         "optimizer": {
             "method": "balanced size-one minibatches with the existing Adam-style reverse-mode update",
@@ -850,8 +1695,16 @@ def run_experiment(
             "control_seeds": list(DELAYED_CONTROL_SEEDS),
             "trials": trial_records,
             "all_four_delayed_training_success_8_of_8": all_four_delayed_training_success,
-            "microset_diagnosis": "passed 8/8 for all four trials" if all_four_delayed_training_success else "at least one trial did not reach 8/8; no held-out expansion",
+            "evaluation_gate": {
+                "name": "all-four-models-8/8",
+                "required_completed_trial_count": 4,
+                "required_physical_successes_per_trial": len(train_specs),
+                "description": "Development evaluation is permitted only when all four fixed trials complete within budget and each has 8/8 ordinary delayed training physical successes.",
+                "met": all_four_delayed_training_success,
+            },
+            "microset_diagnosis": "passed 8/8 for all four trials" if all_four_delayed_training_success else "at least one trial did not reach 8/8; no development expansion",
         },
+        "checkpoint_reload": checkpoint_reload,
         "retention": {
             "conditions": [
                 {"name": name, "erasure": erasure, "state_scope": scope}
@@ -861,7 +1714,8 @@ def run_experiment(
             "pair_identity_validation": "world_seed, goal_index, and note_goal_id validated for every ordinary/ablation pair",
         },
         "references": references,
-        "heldout": heldout,
+        "development": development,
+        "heldout": heldout_compatibility,
         "checkpoints": checkpoint_records,
         "historical_artifacts": {
             "before": historical_before,
@@ -872,7 +1726,7 @@ def run_experiment(
             "This is a bounded delayed-memory RNN experiment, not a complete EvoCell or general agent.",
             "Causal erasure evidence is interpreted only after ordinary delayed recall succeeds for the same model.",
             "Slot-memory and recurrent-state erasures are distinct interventions; all-state combines them.",
-            "The held-out set, when evaluated, is one fixed fresh world cluster and does not establish broad generalization.",
+            "Worlds 9300–9307 are previously inspected development cases and never fresh generalization evidence.",
             "The fixed schedule does not establish learned tool selection or complete tool-result writeback learning.",
             "Exact optimizer resume remains unverified.",
             "No user-PC, production, deployment, paid compute, credentials, merge, or PR action was used.",
@@ -885,11 +1739,12 @@ def run_experiment(
             "python": platform.python_version(),
             "max_rss_kb": int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss),
             "cap_termination": bool(cap_termination),
-            "within_wall_clock_cap": bool(runtime_wall <= float(wall_clock_cap)),
+            "within_wall_clock_cap": bool(runtime_wall <= wall_clock_cap),
             "failures": failures,
         },
     }
     _atomic_write_json(output, report)
+    _atomic_write_text(summary_output, _markdown_summary(report))
     return report
 
 
@@ -916,7 +1771,8 @@ def main() -> None:
         "schema": report["schema"],
         "source_sha": report["source_sha"],
         "all_four_delayed_training_success_8_of_8": report["training"]["all_four_delayed_training_success_8_of_8"],
-        "heldout_status": report["heldout"]["status"],
+        "development_status": report["development"]["status"],
+        "heldout_status_compatibility_alias": report["heldout"]["status"],
         "runtime": report["runtime"],
     }, indent=2, sort_keys=True))
 
