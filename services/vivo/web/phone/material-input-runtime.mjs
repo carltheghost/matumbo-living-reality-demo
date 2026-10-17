@@ -58,7 +58,7 @@ export class PhoneMaterialInputRuntime {
     };
   }
 
-  capturedMapping(point, nodeQ, dimension) {
+  capturedMapping(point, nodeQ, dimension, nodeId = null, projectionPoint = null) {
     const viewport = this.viewport();
     const renderer = {
       w: Math.max(0.01, finite(this.renderer.w, viewport.width)),
@@ -66,12 +66,17 @@ export class PhoneMaterialInputRuntime {
       yaw: finite(this.renderer.yaw, 0.55), pitch: finite(this.renderer.pitch, 0.68),
       distance: Math.max(0.15, finite(this.renderer.distance, 10.5)),
       origin: Array.isArray(this.renderer.origin) ? [...this.renderer.origin] : [0, 0, 0],
+      projectionProfile: this.renderer.projectionProfile === 'phone' ? 'phone' : 'base',
     };
+    const selectedPoint = projectionPoint || this.renderer.materialNodePoints?.find(item => item?.nodeId === nodeId) || null;
+    const pointDepth = Number(selectedPoint?.depth);
+    const scaleDepth = Number(selectedPoint?.k) > 0 ? Math.min(renderer.w, renderer.h) * 1.18 / Number(selectedPoint.k) : NaN;
+    const depth = Math.max(0.15, Number.isFinite(pointDepth) ? pointDepth : Number.isFinite(scaleDepth) ? scaleDepth : renderer.distance);
     const axes = [0, 2, 1].filter(axis => axis < dimension);
     while (axes.length < 3) for (let axis = 0; axes.length < 3 && axis < dimension; axis++) if (!axes.includes(axis)) axes.push(axis);
     return capturedInverseMapping({
       devicePoint: [Number(point[0]), Number(point[1])], viewport, renderer,
-      axes, depth: renderer.distance, canonicalQ: nodeQ,
+      axes, depth, canonicalQ: nodeQ,
     });
   }
 
@@ -94,7 +99,7 @@ export class PhoneMaterialInputRuntime {
     return this.getEnvelope();
   }
 
-  async begin({ contactId, source, point, nodeId = null, actuator = null, gesture = 'touch' } = {}) {
+  async begin({ contactId, source, point, nodeId = null, projectionPoint = null, actuator = null, gesture = 'touch' } = {}) {
     const id = boundedId(contactId, 'contactId');
     if (this.contacts.has(id)) return this.contacts.get(id).ready;
     const inputSource = {
@@ -114,7 +119,7 @@ export class PhoneMaterialInputRuntime {
         nodeId: hit.nodeId,
         capturedCanonicalPoint: [...node.q],
         capturedAt: this.now(),
-        inverseMapping: this.capturedMapping(point, node.q, identity.dimension),
+        inverseMapping: this.capturedMapping(point, node.q, identity.dimension, hit.nodeId, projectionPoint),
       };
       const result = await this.engine.materialBegin({
         operationId: this.nextOperation('begin', id), contactId: id, source: inputSource,

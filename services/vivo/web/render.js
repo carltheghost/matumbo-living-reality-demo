@@ -3,6 +3,25 @@
  * It does not claim full volumetric higher-dimensional perception or AR anchoring.
  */
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const finite=(value,fallback=0)=>Number.isFinite(Number(value))?Number(value):fallback;
+
+/**
+ * Keep the forward renderer and phone input inverse on the same projection
+ * parameters. The phone route reserves a lower dock on narrow viewports, so
+ * its screen center is intentionally different from the shared desktop
+ * renderer's center.
+ */
+export function rendererProjectionParameters(renderer={},fallback={}){
+ const width=finite(renderer.w,finite(fallback.width)),height=finite(renderer.h,finite(fallback.height));
+ const projectionProfile=renderer.projectionProfile==='phone'?'phone':'base';
+ return {
+  width,height,centerX:width/2,
+  centerY:projectionProfile==='phone'&&width<720?height*.37:height*.52,
+  yaw:finite(renderer.yaw,.55),pitch:finite(renderer.pitch,.68),distance:Math.max(.15,finite(renderer.distance,10.5)),
+  origin:Array.isArray(renderer.origin)?[finite(renderer.origin[0]),finite(renderer.origin[1]),finite(renderer.origin[2])]:[0,0,0],
+  projectionProfile,
+ };
+}
 export function embed(q,g,chart='a'){
  const [u,v,h]=q,R=g.R,r=g.r;
  if(g.kind==='sphere'){const s=u*u+v*v,d=R*R+s;return [2*R*u/d*(R+h),(s-R*R)/d*(R+h)*(chart==='b'?-1:1),2*R*v/d*(R+h)];}
@@ -11,14 +30,14 @@ export function embed(q,g,chart='a'){
  return [u,h,v];
 }
 export class Renderer{
- constructor(canvas,overlay){this.canvas=canvas;this.overlay=overlay;this.ctx=overlay.getContext('2d');this.yaw=.55;this.pitch=.68;this.distance=10.5;this.origin=[0,0,0];this.screen=[];this.gridPoints=[];this.state=null;this.grid=null;this.slice=[];this.overview=false;this.selected=null;this.held=null;this.fps=0;this.last=0;this.pointer=null;this.hand=[];this.route=[];this.backend='Canvas 2D';
+ constructor(canvas,overlay){this.canvas=canvas;this.overlay=overlay;this.ctx=overlay.getContext('2d');this.yaw=.55;this.pitch=.68;this.distance=10.5;this.origin=[0,0,0];this.projectionProfile='base';this.screen=[];this.gridPoints=[];this.state=null;this.grid=null;this.slice=[];this.overview=false;this.selected=null;this.held=null;this.fps=0;this.last=0;this.pointer=null;this.hand=[];this.route=[];this.backend='Canvas 2D';
   try{this.gl=canvas.getContext('webgl',{alpha:true,antialias:false,preserveDrawingBuffer:true});if(this.gl){this.initGL();this.backend='WebGL';}}catch(e){this.gl=null;}
   if(!this.gl)this.fallback=canvas.getContext('2d');
   canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();this.lost=true;});canvas.addEventListener('webglcontextrestored',()=>{this.initGL();this.lost=false;});
  }
  initGL(){const g=this.gl,compile=(type,src)=>{const s=g.createShader(type);g.shaderSource(s,src);g.compileShader(s);if(!g.getShaderParameter(s,g.COMPILE_STATUS))throw Error(g.getShaderInfoLog(s));return s;};const p=g.createProgram();g.attachShader(p,compile(g.VERTEX_SHADER,'attribute vec3 p;attribute vec4 c;varying vec4 col;void main(){gl_Position=vec4(p,1.);col=c;}'));g.attachShader(p,compile(g.FRAGMENT_SHADER,'precision mediump float;varying vec4 col;void main(){gl_FragColor=col;}'));g.linkProgram(p);if(!g.getProgramParameter(p,g.LINK_STATUS))throw Error(g.getProgramInfoLog(p));g.useProgram(p);this.program=p;this.buffer=g.createBuffer();g.bindBuffer(g.ARRAY_BUFFER,this.buffer);for(const [n,size,off]of[['p',3,0],['c',4,12]]){const a=g.getAttribLocation(p,n);g.enableVertexAttribArray(a);g.vertexAttribPointer(a,size,g.FLOAT,false,28,off);}g.enable(g.BLEND);g.blendFunc(g.SRC_ALPHA,g.ONE_MINUS_SRC_ALPHA);g.enable(g.DEPTH_TEST);g.depthFunc(g.LEQUAL);}
  resize(){const w=innerWidth,h=innerHeight;this.w=w;this.h=h;if(this.canvas.width!==w||this.canvas.height!==h){this.canvas.width=w;this.canvas.height=h;this.overlay.width=w;this.overlay.height=h;}if(this.gl)this.gl.viewport(0,0,w,h);}
- project(p){const x=p[0]-this.origin[0],y=p[1]-this.origin[1],z=p[2]-this.origin[2],ca=Math.cos(this.yaw),sa=Math.sin(this.yaw),cp=Math.cos(this.pitch),sp=Math.sin(this.pitch);const xx=ca*x-sa*z,zz=sa*x+ca*z,yy=cp*y-sp*zz,depth=this.distance-(sp*y+cp*zz);const k=Math.min(this.w,this.h)*1.18/Math.max(.15,depth);return {x:this.w/2+xx*k,y:this.h*.52-yy*k,z:clamp((depth-1)/35,-.95,.95),k,visible:depth>.3};}
+ project(p){const projection=rendererProjectionParameters(this),{width,height,centerX,centerY,yaw,pitch,distance,origin}=projection;const x=p[0]-origin[0],y=p[1]-origin[1],z=p[2]-origin[2],ca=Math.cos(yaw),sa=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch);const xx=ca*x-sa*z,zz=sa*x+ca*z,yy=cp*y-sp*zz,depth=distance-(sp*y+cp*zz);const k=Math.min(width,height)*1.18/Math.max(.15,depth);return {x:centerX+xx*k,y:centerY-yy*k,z:clamp((depth-1)/35,-.95,.95),k,depth,visible:depth>.3};}
  inSlice(e){let d=0;for(let i=3;i<e.q.length;i++)d+=(e.q[i]-(this.slice[i]||0))**2;return d<=e.radius**2;}
  sliceRadius(e){let d=0;for(let i=3;i<e.q.length;i++)d+=(e.q[i]-(this.slice[i]||0))**2;return Math.sqrt(Math.max(.001,e.radius**2-d));}
  at(x,y){let best=null,d=42;for(const p of this.screen){const dd=Math.hypot(x-p.x,y-p.y);if(dd<d&&p.interactive){best=p.id;d=dd;}}return best;}

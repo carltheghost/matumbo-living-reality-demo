@@ -1,10 +1,10 @@
-"""Exercise real v13 -> v14 -> v16 -> v17 -> v18 service-worker upgrades.
+"""Exercise real v13 -> v14 -> v16 -> v17 -> v19 service-worker upgrades.
 
 The test serves five deployments from one origin. The first four deployments
 are extracted from pinned repository commits, so the v13 shell is the actual
 pre-house-pool release, the v14 shell is the actual house-pool release, and
 the v16 shell is the exact historical v16 release. The v17 shell is the exact
-deployed current-main base before the phone-route repair, while v18 is the
+deployed current-main base before the phone-route repair, while v19 is the
 current shell. It verifies each cache before poisoning it, retires every cache,
 creates and preserves a house-pool contribution, and reopens the phone route
 offline after each upgrade.
@@ -33,7 +33,7 @@ V13_CACHE = "vivo-phone-shell-2026-10-13-v13"
 V14_CACHE = "vivo-phone-shell-2026-10-13-v14"
 V16_CACHE = "vivo-phone-shell-2026-10-13-v16"
 V17_CACHE = "vivo-phone-shell-2026-10-13-v17"
-V18_CACHE = "vivo-phone-shell-2026-10-13-v18"
+V19_CACHE = "vivo-phone-shell-2026-10-17-v19"
 HISTORICAL_V13_COMMIT = "9f17fac9fd3b5a97ca528c5c1b3bf6abf97ac647"
 HISTORICAL_V14_COMMIT = "a8d5e021671f3c77fc4e3619c1c9e94aee35a892"
 HISTORICAL_V16_COMMIT = "6835db79f863094a93ad4a869ed137cbbdf03f83"
@@ -60,9 +60,10 @@ CHANGED_SHELL_PATHS = [
     "phone/index.html",
     "phone/phone-world.css",
     "phone/static-shared.js",
+    "render.js",
 ]
 V16_TO_V17_ASSERT_PATHS = [*CACHE_ASSERT_PATHS, *CHANGED_SHELL_PATHS]
-V17_TO_V18_ASSERT_PATHS = V16_TO_V17_ASSERT_PATHS
+V17_TO_V19_ASSERT_PATHS = V16_TO_V17_ASSERT_PATHS
 
 
 class DeploymentServer(ThreadingHTTPServer):
@@ -457,20 +458,20 @@ def run() -> dict[str, Any]:
                     page,
                     V17_CACHE,
                     "/* retired v17 cache marker */",
-                    V17_TO_V18_ASSERT_PATHS,
+                    V17_TO_V19_ASSERT_PATHS,
                 )
                 set_deployment(server, web_root)
-                upgraded_v18 = wait_for_upgrade(page, V17_CACHE, V18_CACHE, V17_TO_V18_ASSERT_PATHS)
+                upgraded_v19 = wait_for_upgrade(page, V17_CACHE, V19_CACHE, V17_TO_V19_ASSERT_PATHS)
                 assert_exact_cached_assets(
-                    upgraded_v18,
-                    expected_cached_assets(web_root, V17_TO_V18_ASSERT_PATHS),
+                    upgraded_v19,
+                    expected_cached_assets(web_root, V17_TO_V19_ASSERT_PATHS),
                 )
                 context.set_offline(True)
-                after_v18 = reopen_pool_offline(page, route, before)
-                assert after_v18["worldId"] == before["worldId"], {"before": before, "after": after_v18}
-                assert after_v18["eyeId"] == before["eyeId"], {"before": before, "after": after_v18}
-                assert after_v18["availableTumbo"] == before["availableTumbo"], {"before": before, "after": after_v18}
-                assert after_v18["pool"] == before["pool"], {"before": before, "after": after_v18}
+                after_v19 = reopen_pool_offline(page, route, before)
+                assert after_v19["worldId"] == before["worldId"], {"before": before, "after": after_v19}
+                assert after_v19["eyeId"] == before["eyeId"], {"before": before, "after": after_v19}
+                assert after_v19["availableTumbo"] == before["availableTumbo"], {"before": before, "after": after_v19}
+                assert after_v19["pool"] == before["pool"], {"before": before, "after": after_v19}
                 assert not page_errors, page_errors
                 result = {
                     "v13ToV14": {
@@ -510,29 +511,29 @@ def run() -> dict[str, Any]:
                         "eyeIdentityPreserved": after_v17["eyeId"] == before["eyeId"],
                         "cacheNames": upgraded_v17["names"],
                     },
-                    "v17ToV18": {
+                    "v17ToV19": {
                         "historicalCommit": HISTORICAL_V17_COMMIT,
-                        "oldCacheRetired": V17_CACHE not in upgraded_v18["names"],
-                        "newCachePresent": V18_CACHE in upgraded_v18["names"],
+                        "oldCacheRetired": V17_CACHE not in upgraded_v19["names"],
+                        "newCachePresent": V19_CACHE in upgraded_v19["names"],
                         "exactHistoricalAssets": True,
                         "exactChangedShellAssets": True,
                         "legacyAssetsObserved": all("retired v17 cache marker" in value for value in legacy_v17["assets"].values()),
-                        "newPanelCached": "house-pool:create" in upgraded_v18["assets"][PANEL_PATH],
-                        "newModelCached": "createHousePool" in upgraded_v18["assets"][MODEL_PATH],
-                        "housePoolReopenedOffline": after_v18["pool"] == before["pool"],
-                        "worldIdentityPreserved": after_v18["worldId"] == before["worldId"],
-                        "eyeIdentityPreserved": after_v18["eyeId"] == before["eyeId"],
-                        "cacheNames": upgraded_v18["names"],
+                        "newPanelCached": "house-pool:create" in upgraded_v19["assets"][PANEL_PATH],
+                        "newModelCached": "createHousePool" in upgraded_v19["assets"][MODEL_PATH],
+                        "housePoolReopenedOffline": after_v19["pool"] == before["pool"],
+                        "worldIdentityPreserved": after_v19["worldId"] == before["worldId"],
+                        "eyeIdentityPreserved": after_v19["eyeId"] == before["eyeId"],
+                        "cacheNames": upgraded_v19["names"],
                     },
                     "persistedBalancePreservedAcrossV16": after_v16["availableTumbo"] == before["availableTumbo"],
                     "persistedReceiptPreservedAcrossV16": set(before["receiptIds"]).issubset(after_v16["receiptIds"]),
                     "persistedBalancePreserved": after_v17["availableTumbo"] == before["availableTumbo"],
                     "persistedReceiptPreserved": set(before["receiptIds"]).issubset(after_v17["receiptIds"]),
-                    "persistedBalancePreservedAcrossV18": after_v18["availableTumbo"] == before["availableTumbo"],
-                    "persistedReceiptPreservedAcrossV18": set(before["receiptIds"]).issubset(after_v18["receiptIds"]),
+                    "persistedBalancePreservedAcrossV19": after_v19["availableTumbo"] == before["availableTumbo"],
+                    "persistedReceiptPreservedAcrossV19": set(before["receiptIds"]).issubset(after_v19["receiptIds"]),
                     "housePoolReopenedOffline": True,
-                    "cacheNames": upgraded_v18["names"],
-                    "pool": after_v18["pool"],
+                    "cacheNames": upgraded_v19["names"],
+                    "pool": after_v19["pool"],
                     "pageErrors": page_errors,
                 }
                 print(json.dumps(result, indent=2))

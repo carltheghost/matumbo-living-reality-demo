@@ -568,6 +568,7 @@ function captureContactMapping(dimension = S.state?.geometry?.dimension || 4) {
 }
 function rendererDepthForObject(objectId) {
   const screenPoint = R.screen?.find(point => point.id === objectId);
+  if (Number.isFinite(Number(screenPoint?.depth))) return Math.max(0.15, Math.min(1e6, Number(screenPoint.depth)));
   if (screenPoint?.k) return Math.max(0.15, Math.min(1e6, Math.min(R.w || innerWidth || 1, R.h || innerHeight || 1) * 1.18 / screenPoint.k));
   return Math.max(0.15, Number(R.distance) || 10.5);
 }
@@ -616,7 +617,7 @@ function beginMaterialFinger({ handId, finger, nodeId = null } = {}) {
   const record = {
     contactId, handId, fingerId: finger.fingerId, point: [...finger.point],
     ready: materialInput.begin({
-      contactId, source: finger.source, point: finger.point, nodeId: hit.nodeId, gesture: 'pinch',
+      contactId, source: finger.source, point: finger.point, nodeId: hit.nodeId, projectionPoint: hit, gesture: 'pinch',
     }),
     updates: Promise.resolve(),
   };
@@ -967,8 +968,8 @@ function addPhoneSurface() {
   }
   $('panel')?.append(sheet);
   document.querySelectorAll('[data-local-cap]').forEach(input => { input.checked = localGrants().includes(input.dataset.localCap); input.addEventListener('change', updateLocalGrants); });
-  $('phoneEyeSelect').onchange = () => engine?.selectEye($('phoneEyeSelect').value).catch(error => status(error.message));
-  $('phoneNewEye').onclick = async () => { await engine.createEye(`Eye ${Object.keys((await engine.snapshot()).eyes).length + 1}`); await refreshSnapshot(); };
+  $('phoneEyeSelect').onchange = () => { fenceLocalContacts('eye-switch'); return engine?.selectEye($('phoneEyeSelect').value).catch(error => status(error.message)); };
+  $('phoneNewEye').onclick = async () => { fenceLocalContacts('eye-create'); await engine.createEye(`Eye ${Object.keys((await engine.snapshot()).eyes).length + 1}`); await refreshSnapshot(); };
   $('phonePersist').onclick = async () => {
     try { await reportPersistenceStatus('save', engine.persist()); }
     catch (error) { status(`Local Vivo state could not be saved: ${error.message}. Retry remains available.`); }
@@ -984,8 +985,8 @@ function addPhoneSurface() {
     const id = R.selected, axis = Number($('phoneAxis').value); if (!id) return;
     await engine.translate(id, axis, direction * 0.14); await engine.step(1 / 30); status(`Moved ${id} along x${axis + 1}.`);
   };
-  $('phoneEnterNested').onclick = async () => { fenceHandEdits('nested-enter'); if (R.selected) await engine.enterNested(R.selected); await refreshSnapshot(); };
-  $('phoneExitNested').onclick = async () => { fenceHandEdits('nested-exit'); await engine.exitNested(); await refreshSnapshot(); };
+  $('phoneEnterNested').onclick = async () => { fenceLocalContacts('nested-enter'); if (R.selected) await engine.enterNested(R.selected); await refreshSnapshot(); };
+  $('phoneExitNested').onclick = async () => { fenceLocalContacts('nested-exit'); await engine.exitNested(); await refreshSnapshot(); };
   $('phoneFork').onclick = async () => {
     try {
       await forkPhoneOffline('Phone offline branch'); const current = await refreshSnapshot();
@@ -1176,7 +1177,7 @@ async function startLocal() {
   status('LOCAL VIVO · same persistent objects · independent Eye · no server required.');
 }
 async function forkPhoneOffline(label) {
-  fenceHandEdits('offline-fork');
+  fenceLocalContacts('offline-fork');
   return engine?.forkOffline(label);
 }
 async function refreshNativeTools() {
@@ -1299,12 +1300,15 @@ function releaseObjectTouchContact(record, reason) {
   pointerContacts.delete(record.id);
 }
 function fenceLocalContacts(reason = 'scope-transition') {
+  const fenceReason = /cancel|lost|missing|fence|stop|hidden|ambiguous|worker|disconnect|replaced|two-hand/i.test(String(reason || ''))
+    ? String(reason)
+    : `touch-cancel:${String(reason || 'scope-transition')}`;
   const objectIds = new Set([
     ...[...pointerContacts.values()].map(record => record.target).filter(Boolean),
     ...touchGestures.keys(),
   ]);
-  for (const objectId of objectIds) cancelObjectTouchGesture(objectId, reason);
-  fenceHandEdits(reason);
+  for (const objectId of objectIds) cancelObjectTouchGesture(objectId, fenceReason);
+  fenceHandEdits(fenceReason);
   pointerContacts.clear();
   pinch = null;
 }
@@ -1431,7 +1435,7 @@ canvas.addEventListener('pointerdown', event => {
       record.material = true; record.materialNodeId = materialHit.nodeId;
       record.materialUpdates = Promise.resolve();
       record.materialPromise = materialInput.begin({
-        contactId, point, nodeId: materialHit.nodeId,
+        contactId, point, nodeId: materialHit.nodeId, projectionPoint: materialHit,
         source: { kind: 'touch', sourceId: String(event.pointerId), sessionId: materialInput.sessionId },
         gesture: 'touch',
       }).catch(error => { status(`Material touch could not begin: ${error.message}`); return null; });

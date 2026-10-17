@@ -194,6 +194,7 @@ export class PhoneRenderer extends Renderer {
   constructor(canvas, overlay) {
     super(canvas, overlay);
     this.backend = 'Phone canvas / field projection';
+    this.projectionProfile = 'phone';
     this._lastDraw = 0;
     this.materialPatch = null;
     this.materialProvisional = null;
@@ -214,14 +215,6 @@ export class PhoneRenderer extends Renderer {
     const q = entity.q.map((value, index) => value + Number(preview.delta?.[index] || 0));
     const scale = Math.max(0.05, Math.min(20, Number(preview.geometry?.scale) || 1));
     return { ...entity, q, radius: entity.radius * scale, geometry: preview.geometry, localPreview: true };
-  }
-
-  project(position) {
-    const point = super.project(position);
-    // The mobile field dock occupies the lower part of the viewport. Keep the
-    // spatial objects in the exposed canvas area while preserving hit testing.
-    if (this.w < 720) point.y -= this.h * 0.15;
-    return point;
   }
 
   drawGrid(ctx, grid) {

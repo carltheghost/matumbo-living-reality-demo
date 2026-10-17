@@ -107,10 +107,28 @@ test('queued hand edits fence future commands across contact stop, camera stop a
   const bootstrap = await readFile(new URL('phone/bootstrap.mjs', root), 'utf8');
   assert.match(bootstrap, /new LocalEditQueue\(\)/);
   assert.match(bootstrap, /contact\.editQueue\.enqueue/);
-  assert.match(bootstrap, /fenceHandEdits\('offline-fork'\)/);
+  assert.match(bootstrap, /fenceLocalContacts\('offline-fork'\)/);
   assert.match(bootstrap, /fenceHandEdits\('camera-stop'\)/);
   assert.match(bootstrap, /branchId: contact\.branchId/);
   assert.match(bootstrap, /if \(handContacts\.get\(contactId\) === contact\)/);
+});
+
+test('phone forward and inverse projection share the phone viewport profile and depth fence', async () => {
+  const [render, phoneRender, fabric, materialInput, bootstrap] = await Promise.all([
+    readFile(new URL('render.js', root), 'utf8'),
+    readFile(new URL('phone/phone-render.mjs', root), 'utf8'),
+    readFile(new URL('phone/spatial-fabric.mjs', root), 'utf8'),
+    readFile(new URL('phone/material-input-runtime.mjs', root), 'utf8'),
+    readFile(new URL('phone/bootstrap.mjs', root), 'utf8'),
+  ]);
+  assert.match(render, /rendererProjectionParameters/);
+  assert.match(phoneRender, /projectionProfile = 'phone'/);
+  assert.match(fabric, /rendererProjectionParameters\(renderer/);
+  assert.match(materialInput, /projectionProfile: this\.renderer\.projectionProfile === 'phone' \? 'phone' : 'base'/);
+  assert.match(materialInput, /selectedPoint = projectionPoint \|\| this\.renderer\.materialNodePoints/);
+  assert.match(bootstrap, /fenceLocalContacts\('eye-switch'\)/);
+  assert.match(bootstrap, /fenceLocalContacts\('eye-create'\)/);
+  assert.match(bootstrap, /touch-cancel:/);
 });
 
 test('the phone-owned tracker detects two complete hands without transporting frames', async () => {
@@ -139,7 +157,7 @@ test('the phone-owned tracker detects two complete hands without transporting fr
   assert.match(sw, /request\.mode === 'navigate'/);
   assert.match(sw, /scope\.pathname/);
   assert.match(sw, /shell\.match\(scoped\('index\.html'\)\)/);
-  assert.match(sw, /SHELL_CACHE.*v18/);
+  assert.match(sw, /SHELL_CACHE.*v19/);
   for (const asset of ['phone/material-contract.mjs', 'phone/material-patch.mjs', 'phone/material-input-runtime.mjs', 'phone/fingertip-input.mjs', 'application/conversation-transport.mjs', 'phone/companion.mjs']) assert.match(sw, new RegExp(asset.replaceAll('.', '\\.')));
   assert.doesNotMatch(worker, /\bfetch\s*\(|XMLHttpRequest|WebSocket/);
   assert.doesNotMatch(camera, /\bfetch\s*\(|XMLHttpRequest|WebSocket/);

@@ -122,6 +122,80 @@ def install_pointer_shim(page) -> None:
     )
 
 
+def run_eye_switch_fence_regression(host_page, route: str) -> dict:
+    """A view-scope change cancels a live pair before its stale mapping can apply."""
+    page = host_page.context.new_page()
+    requests: list[str] = []
+    page_errors: list[str] = []
+    page.on("request", lambda request: requests.append(request.url))
+    page.on("pageerror", lambda error: page_errors.append(str(error)))
+    original_world_id = host_page.evaluate("() => localStorage.getItem('vivo.phone.worldId')")
+    regression_world_id = "vivo.phone.eye-switch-fence-regression"
+    try:
+        response = page.goto(route, wait_until="domcontentloaded")
+        assert response is not None and response.status == 200, response
+        page.evaluate("worldId => localStorage.setItem('vivo.phone.worldId', worldId)", regression_world_id)
+        page.reload(wait_until="domcontentloaded")
+        page.wait_for_selector("#enterPhoneLocal")
+        page.get_by_role("button", name="Enter local Vivo").click()
+        open_world_controls(page)
+        page.wait_for_selector("#phoneFieldAtlas")
+        page.wait_for_function("Boolean(window.VivaPhoneEngine && window.VivaPhoneEngine.active)")
+        install_pointer_shim(page)
+        page.locator("#phonePanelButton").click()
+        page.wait_for_selector("#phoneEyeSelect")
+        page.locator("#phoneNewEye").click()
+        page.wait_for_function("() => document.querySelectorAll('#phoneEyeSelect option').length === 2")
+        eye_ids = page.locator("#phoneEyeSelect option").evaluate_all("options => options.map(option => option.value)")
+        initial_eye, alternate_eye = eye_ids
+        page.locator("#phoneEyeSelect").select_option(initial_eye)
+        page.wait_for_function("eyeId => window.VivaPhoneEngine.snapshot().then(value => value.currentEyeId === eyeId)", arg=initial_eye)
+
+        before = snapshot_entity(page, "relic")
+        point = object_point(page, "relic")
+        dispatch_pointer(page, "pointerdown", 701, point["x"] - 10, point["y"])
+        dispatch_pointer(page, "pointerdown", 702, point["x"] + 10, point["y"])
+        dispatch_pointer(page, "pointermove", 701, point["x"] - 28, point["y"] + 12)
+        dispatch_pointer(page, "pointermove", 702, point["x"] + 28, point["y"] - 12)
+        page.wait_for_function("() => window.VivaPhoneEngine.interaction().contacts.filter(item => item.contactId === 'touch:701' || item.contactId === 'touch:702').length === 2")
+        page.locator("#phoneEyeSelect").select_option(alternate_eye)
+        page.wait_for_function(
+            "() => window.VivaPhoneEngine.interaction().contacts.length === 0 && window.VivaPhoneEngine.fieldWorld().previews.length === 0"
+        )
+        after_switch = snapshot_entity(page, "relic")
+        assert after_switch["entity"]["revision"] == before["entity"]["revision"], after_switch
+        assert after_switch["entity"]["q"] == before["entity"]["q"], after_switch
+
+        # Late events from the old pointer must remain inert after the fence.
+        dispatch_pointer(page, "pointermove", 701, point["x"] + 80, point["y"] + 40)
+        dispatch_pointer(page, "pointermove", 702, point["x"] - 80, point["y"] - 40)
+        dispatch_pointer(page, "pointerup", 701, 0, 0)
+        dispatch_pointer(page, "pointerup", 702, 0, 0)
+        page.wait_for_timeout(250)
+        late = snapshot_entity(page, "relic")
+        assert late["entity"]["revision"] == before["entity"]["revision"], late
+        assert late["entity"]["q"] == before["entity"]["q"], late
+
+        # A fresh contact in the new Eye still follows the normal cancel path.
+        fresh = object_point(page, "relic")
+        dispatch_pointer(page, "pointerdown", 703, fresh["x"], fresh["y"])
+        dispatch_pointer(page, "pointermove", 703, fresh["x"] + 12, fresh["y"] - 7)
+        page.wait_for_function("() => window.VivaPhoneEngine.interaction().contacts.some(item => item.contactId === 'touch:703')")
+        dispatch_pointer(page, "pointercancel", 703, 0, 0)
+        page.wait_for_function("() => window.VivaPhoneEngine.interaction().contacts.length === 0 && window.VivaPhoneEngine.fieldWorld().previews.length === 0")
+        canceled = snapshot_entity(page, "relic")
+        assert canceled["entity"]["revision"] == before["entity"]["revision"], canceled
+        assert not page_errors, page_errors
+        assert not any("/readyz" in url or "/healthz" in url for url in requests), requests
+        return {"fenced": True, "lateEventsInert": True, "freshCancelPreserved": True, "cameraCalls": 0}
+    finally:
+        if original_world_id is None:
+            host_page.evaluate("() => localStorage.removeItem('vivo.phone.worldId')")
+        else:
+            host_page.evaluate("worldId => localStorage.setItem('vivo.phone.worldId', worldId)", original_world_id)
+        page.close()
+
+
 def snapshot_entity(page, object_id: str) -> dict:
     return page.evaluate(
         """
@@ -374,6 +448,7 @@ def pinch_hand_at(screen_x: float, screen_y: float, width: float, height: float)
 def run_desktop_flow(page, route: str, requests: list[str], page_errors: list[str]) -> dict:
     enter_local(page, route)
     install_pointer_shim(page)
+    eye_switch = run_eye_switch_fence_regression(page, route)
     independent_refresh = run_independent_preview_refresh_regression(page, route)
     initial = snapshot_entity(page, "relic")
     baseline_pixels = page.evaluate(
@@ -586,6 +661,7 @@ def run_desktop_flow(page, route: str, requests: list[str], page_errors: list[st
         "initialRevision": initial["entity"]["revision"],
         "acceptedGeometry": accepted_geometry,
         "portalGeometry": portal_after_reload["entity"]["geometry"],
+        "eyeSwitch": eye_switch,
         "independentPreviewRefresh": independent_refresh,
         "requestCount": len(requests),
         "cameraCalls": 0,

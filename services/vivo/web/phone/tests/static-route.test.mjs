@@ -153,6 +153,7 @@ test('Pages live hash verifier covers every changed mounted phone module', async
   const required = [
     'services/vivo/web/application/conversation-transport.mjs',
     'services/vivo/web/application/remote-transport.mjs',
+    'services/vivo/web/render.js',
     'services/vivo/web/phone/companion.mjs',
     'services/vivo/web/phone/fingertip-input.mjs',
     'services/vivo/web/phone/material-contract.mjs',
@@ -171,7 +172,7 @@ test('Pages live hash verifier covers every changed mounted phone module', async
     'services/vivo/web/phone/vendor/economy/src/render/token-economy-overview.js',
   ];
   for (const path of required) assert.ok(listed.includes(path), `${path} must be covered by public HTTPS hash verification`);
-  assert.equal(listed.length, 50, 'public HTTPS hash-verifier list must preserve all 50 public assets');
+  assert.equal(listed.length, 51, 'public HTTPS hash-verifier list must preserve all 51 public assets');
   assert.equal(new Set(listed).size, listed.length, 'public HTTPS hash-verifier list must not contain duplicate paths');
 });
 

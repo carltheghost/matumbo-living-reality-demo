@@ -164,8 +164,10 @@ export function normalizeInverseMapping(mapping, dimension) {
       pitch: finiteNumber(mapping.renderer.pitch, 'inverse.renderer.pitch', { min: -1e6, max: 1e6 }),
       distance: finiteNumber(mapping.renderer.distance, 'inverse.renderer.distance', { min: 0.15, max: 1e6 }),
       origin: validateVector(mapping.renderer.origin || [0, 0, 0], 3, 'inverse.renderer.origin'),
+      projectionProfile: mapping.renderer.projectionProfile === undefined ? 'base' : mapping.renderer.projectionProfile,
     }
     : null;
+  if (renderer && !['base', 'phone'].includes(renderer.projectionProfile)) throw materialError('MATERIAL_INVERSE_INVALID', 'The inverse renderer projection profile is unsupported.');
   const depth = finiteNumber(mapping.depth, 'inverse.depth', { min: 0.15, max: 1e6 });
   const canonicalQ = validateVector(mapping.canonicalQ, dimension, 'inverse.canonicalQ');
   if (!devicePoint || !viewport || !renderer) throw materialError('MATERIAL_INVERSE_INVALID', 'The inverse mapping must retain screen, viewport, renderer, depth, and canonical coordinates.');
