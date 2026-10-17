@@ -23,6 +23,8 @@ import time
 import numpy as np
 
 from .v03_model import (
+    GATE_HEAD_CHOICES,
+    LEGACY_GATE_HEAD,
     NOTE_FEATURE_END,
     NOTE_FEATURE_START,
     NOTE_PAYLOAD_MASK_INDEX,
@@ -31,6 +33,7 @@ from .v03_model import (
     encode_policy_observation,
     fit_input_normalization,
     normalize_policy_vector,
+    _validate_gate_head,
 )
 from .v03_neural_proof import (
     _atomic_write_json,
@@ -575,6 +578,7 @@ def _save_delayed_checkpoint(path: Path, model, training: dict, normalization: d
         "source_sha": source_sha,
         "model_class": type(model).__name__,
         "seed": int(model.seed),
+        "gate_head": str(getattr(model, "gate_head", LEGACY_GATE_HEAD)),
         "brain_count": int(model.brain_count),
         "parameter_count": int(model.parameter_count()),
         "memory_shape": list(model.central_memory_shape),
@@ -645,6 +649,7 @@ def _load_delayed_checkpoint(
     expected_seed: int,
     expected_normalization: dict,
     expected_source_sha: str | None = None,
+    expected_gate_head: str | None = None,
 ) -> tuple[object, dict]:
     """Load a new candidate checkpoint with strict schema and normalization checks.
 
@@ -668,6 +673,17 @@ def _load_delayed_checkpoint(
         raise CheckpointValidationError("checkpoint model seed does not match the trial")
     if payload.get("contract_path") != CONTRACT_PATH:
         raise CheckpointValidationError("checkpoint contract path does not match")
+    try:
+        saved_gate_head = _validate_gate_head(payload.get("gate_head", LEGACY_GATE_HEAD))
+    except (TypeError, ValueError) as exc:
+        raise CheckpointValidationError(f"checkpoint gate head is invalid: {exc}") from exc
+    if expected_gate_head is not None:
+        try:
+            expected_gate_head = _validate_gate_head(expected_gate_head)
+        except (TypeError, ValueError) as exc:
+            raise CheckpointValidationError(f"expected gate head is invalid: {exc}") from exc
+        if saved_gate_head != expected_gate_head:
+            raise CheckpointValidationError("checkpoint gate head does not match the trial")
     if expected_source_sha is not None and payload.get("source_sha") != expected_source_sha:
         raise CheckpointValidationError("checkpoint source SHA does not match the current run")
     expected_normalization = _canonical_json(expected_normalization)
@@ -677,12 +693,12 @@ def _load_delayed_checkpoint(
     serialized_normalization = _canonical_json(serialized_normalization)
     if serialized_normalization != expected_normalization:
         raise CheckpointValidationError("checkpoint normalization does not exactly match the fitted run normalization")
-    if payload.get("brain_count") != int(model_class(expected_seed).brain_count):
+    if payload.get("brain_count") != int(model_class(expected_seed, gate_head=saved_gate_head).brain_count):
         raise CheckpointValidationError("checkpoint brain count does not match the trial")
-    if payload.get("memory_shape") != list(model_class(expected_seed).central_memory_shape):
+    if payload.get("memory_shape") != list(model_class(expected_seed, gate_head=saved_gate_head).central_memory_shape):
         raise CheckpointValidationError("checkpoint memory shape does not match the trial")
 
-    model = model_class(int(expected_seed))
+    model = model_class(int(expected_seed), gate_head=saved_gate_head)
     state = payload.get("state")
     if not isinstance(state, dict):
         raise CheckpointValidationError("checkpoint model state is missing")
@@ -1373,6 +1389,7 @@ def _markdown_summary(report: dict) -> str:
         "",
         "## Evaluation gate and scope",
         "",
+        f"- Gate head: `{report.get('gate_head', report.get('architecture', {}).get('gate_head', LEGACY_GATE_HEAD))}`.",
         f"- Existing gate: all four models must complete within budget and each must reach 8/8 delayed training physical successes before any development-case evaluation (`{training.get('all_four_delayed_training_success_8_of_8')}`).",
         f"- Development worlds: `{', '.join(str(seed) for seed in report.get('data', {}).get('development_world_seeds_inspected', DEVELOPMENT_WORLD_SEEDS))}`; these are previously inspected development cases, never fresh generalization evidence.",
         f"- Checkpoint reload/parity gate: `{report.get('checkpoint_reload', {}).get('status', 'not completed')}`.",
@@ -1430,6 +1447,7 @@ def run_experiment(
     wall_clock_cap: float = WALL_CLOCK_CAP_SECONDS,
     response_scaling: str = "legacy_per_coordinate",
     checkpoint_prefix: str = CHECKPOINT_PREFIX,
+    gate_head: str = LEGACY_GATE_HEAD,
 ) -> dict:
     start_wall = time.perf_counter()
     start_cpu = time.process_time()
@@ -1445,6 +1463,7 @@ def run_experiment(
         raise FileExistsError(f"refusing to overwrite report summary: {summary_output}")
     if Path(checkpoint_prefix).name != checkpoint_prefix:
         raise ValueError("checkpoint prefix must be a single filename component")
+    gate_head = _validate_gate_head(gate_head)
 
     project_root = Path(__file__).resolve().parents[2]
     source_sha = _source_sha()
@@ -1502,7 +1521,7 @@ def run_experiment(
             continue
         try:
             _check_deadline(deadline, "training_trial", case_index=trial_index, completed_cases=trial_index)
-            model = model_class(model_seed)
+            model = model_class(model_seed, gate_head=gate_head)
             model.set_input_normalization(normalization)
             training = _train_delayed(
                 model,
@@ -1544,6 +1563,7 @@ def run_experiment(
                 expected_seed=model_seed,
                 expected_normalization=normalization,
                 expected_source_sha=source_sha,
+                expected_gate_head=gate_head,
             )
             parity = _verify_prediction_parity(
                 model,
@@ -1940,16 +1960,18 @@ def run_experiment(
         "status": report_status,
         "contract_path": CONTRACT_PATH,
         "source_sha": source_sha,
+        "gate_head": gate_head,
         "command": " ".join(sys.argv),
         "report_path": str(output),
         "summary_path": str(summary_output),
         "architecture": {
             "full_model": "V03FiveBrain",
             "matched_control": "V03SingleRecurrentMemory",
+            "gate_head": gate_head,
             "full_brains": 5,
             "control_brains": 1,
-            "full_parameter_count": int(V03FiveBrain(DELAYED_MODEL_SEEDS[0]).parameter_count()),
-            "control_parameter_count": int(V03SingleRecurrentMemory(DELAYED_CONTROL_SEEDS[0]).parameter_count()),
+            "full_parameter_count": int(V03FiveBrain(DELAYED_MODEL_SEEDS[0], gate_head=gate_head).parameter_count()),
+            "control_parameter_count": int(V03SingleRecurrentMemory(DELAYED_CONTROL_SEEDS[0], gate_head=gate_head).parameter_count()),
             "comparison_note": "No five-component superiority claim is made from component count.",
         },
         "schedule": {
@@ -2070,6 +2092,7 @@ def main() -> None:
         choices=("legacy_per_coordinate", "shared_max_abs"),
         default="legacy_per_coordinate",
     )
+    parser.add_argument("--gate-head", choices=GATE_HEAD_CHOICES, default=LEGACY_GATE_HEAD)
     parser.add_argument("--checkpoint-prefix", default=CHECKPOINT_PREFIX)
     args = parser.parse_args()
     report = run_experiment(
@@ -2077,6 +2100,7 @@ def main() -> None:
         wall_clock_cap=args.wall_clock_cap,
         response_scaling=args.response_scaling,
         checkpoint_prefix=args.checkpoint_prefix,
+        gate_head=args.gate_head,
     )
     print(json.dumps({
         "schema": report["schema"],

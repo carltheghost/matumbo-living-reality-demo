@@ -51,6 +51,10 @@ SPECTRUM_FREQUENCY_FEATURE_INDICES = tuple(range(SPECTRUM_FEATURE_START, RESPONS
 LEGACY_INPUT_NORMALIZATION_SCHEMA = "vevo.v03.input-normalization.v1"
 SHARED_RESPONSE_INPUT_NORMALIZATION_SCHEMA = "vevo.v03.input-normalization.v2"
 SHARED_RESPONSE_SCALING_METHOD = "shared_max_abs"
+LEGACY_GATE_HEAD = "legacy_action_matrix"
+SHARED_ROW_GATE_HEAD = "shared_row_scorer"
+GATE_HEAD_CHOICES = (LEGACY_GATE_HEAD, SHARED_ROW_GATE_HEAD)
+SHARED_ROW_FEATURE_DIM = 4
 
 
 def _byte_block(value: str, width: int) -> list[float]:
@@ -454,6 +458,60 @@ def _apply_evaluation_only_input_hook(vector: np.ndarray, hook) -> np.ndarray:
     return transformed.copy()
 
 
+def _validate_gate_head(gate_head: str) -> str:
+    if gate_head not in GATE_HEAD_CHOICES:
+        raise ValueError(f"unsupported gate head: {gate_head}")
+    return str(gate_head)
+
+
+def _validate_shared_row_normalization(gate_head: str, normalization: dict | None) -> None:
+    """Require a row-symmetric response preprocessing path for the shared head."""
+
+    if gate_head != SHARED_ROW_GATE_HEAD or normalization is None:
+        return
+    if normalization.get("schema") != SHARED_RESPONSE_INPUT_NORMALIZATION_SCHEMA:
+        raise ValueError("shared row scorer requires shared-response normalization")
+    response_scaling = normalization.get("response_scaling")
+    if not isinstance(response_scaling, dict) or response_scaling.get("method") != SHARED_RESPONSE_SCALING_METHOD:
+        raise ValueError("shared row scorer requires shared max-absolute response scaling")
+    if response_scaling.get("feature_indices") != [int(index) for index in RESPONSE_FEATURE_INDICES]:
+        raise ValueError("shared row scorer requires the declared response feature block")
+
+
+def _shared_row_gate_logits(
+    params: dict[str, np.ndarray],
+    row_features: np.ndarray,
+    retained_context: np.ndarray,
+    *,
+    prefix: str,
+) -> np.ndarray:
+    """Score every response row with one shared bilinear goal-conditioned function."""
+
+    rows = np.asarray(row_features, dtype=np.float64).reshape(ACTION_DIM, SHARED_ROW_FEATURE_DIM)
+    context = np.asarray(retained_context, dtype=np.float64).reshape(-1)
+    return (
+        rows @ params[prefix + "W_shared_row_context"] @ context
+        + rows @ params[prefix + "w_shared_row"]
+        + params[prefix + "b_shared_row"]
+    )
+
+
+def _shared_row_gate_logits_tensor(
+    params: dict[str, Tensor],
+    row_features: Tensor,
+    retained_context: Tensor,
+    *,
+    prefix: str,
+) -> Tensor:
+    """Autograd equivalent of :func:`_shared_row_gate_logits`."""
+
+    return (
+        row_features @ params[prefix + "W_shared_row_context"] @ retained_context
+        + row_features @ params[prefix + "w_shared_row"]
+        + params[prefix + "b_shared_row"]
+    )
+
+
 @dataclass
 class V03TrainResult:
     model: object
@@ -563,10 +621,11 @@ class V03FiveBrain:
     MEMORY_DIM = MEMORY_DIM
     ACTION_DIM = ACTION_DIM
 
-    def __init__(self, seed: int = 7):
+    def __init__(self, seed: int = 7, *, gate_head: str = LEGACY_GATE_HEAD):
         if type(seed) is not int or seed < 0:
             raise ValueError("model seed must be a non-negative integer")
         self.seed = seed
+        self.gate_head = _validate_gate_head(gate_head)
         self.input_normalization: dict | None = None
         rng = np.random.default_rng(seed)
         self.params: dict[str, np.ndarray] = {}
@@ -596,9 +655,15 @@ class V03FiveBrain:
         normal("c.W_value", (self.MEMORY_DIM, self.CENTER_HIDDEN), 0.12)
         self.params["c.b_value"] = np.zeros(self.MEMORY_DIM, dtype=np.float64)
         action_input = self.CENTER_HIDDEN + self.MEMORY_DIM
-        normal("c.W_action_gate", (self.ACTION_DIM, action_input), 0.16)
-        normal("c.W_action_frequency", (self.ACTION_DIM, action_input), 0.16)
-        self.params["c.b_action_gate"] = np.zeros(self.ACTION_DIM, dtype=np.float64)
+        if self.gate_head == LEGACY_GATE_HEAD:
+            normal("c.W_action_gate", (self.ACTION_DIM, action_input), 0.16)
+            normal("c.W_action_frequency", (self.ACTION_DIM, action_input), 0.16)
+            self.params["c.b_action_gate"] = np.zeros(self.ACTION_DIM, dtype=np.float64)
+        else:
+            normal("c.W_shared_row_context", (SHARED_ROW_FEATURE_DIM, action_input), 0.16)
+            normal("c.w_shared_row", (SHARED_ROW_FEATURE_DIM,), 0.16)
+            self.params["c.b_shared_row"] = np.zeros(1, dtype=np.float64)
+            normal("c.W_action_frequency", (self.ACTION_DIM, action_input), 0.16)
         self.params["c.b_action_frequency"] = np.zeros(self.ACTION_DIM, dtype=np.float64)
 
     @property
@@ -624,8 +689,26 @@ class V03FiveBrain:
         if normalization is None:
             self.input_normalization = None
             return
+        _validate_shared_row_normalization(self.gate_head, normalization)
         normalize_policy_vector(np.zeros(POLICY_VECTOR_DIM, dtype=np.float64), normalization)
         self.input_normalization = deepcopy(normalization)
+
+    def gate_head_audit(self) -> dict:
+        """Describe the selected action head without exposing evaluator labels."""
+
+        action_input = self.CENTER_HIDDEN + self.MEMORY_DIM
+        return {
+            "gate_head": self.gate_head,
+            "shared_row_scorer": self.gate_head == SHARED_ROW_GATE_HEAD,
+            "row_feature_shape": [ACTION_DIM, SHARED_ROW_FEATURE_DIM],
+            "retained_context_dim": action_input,
+            "retained_context_source": "pre-final central state plus pre-final memory read",
+            "response_rows_are_current_observation_only": True,
+            "per_gate_parameters": False if self.gate_head == SHARED_ROW_GATE_HEAD else True,
+            "evaluator_labels_in_inference": False,
+            "frequency_uses_retained_context": self.gate_head == SHARED_ROW_GATE_HEAD,
+            "final_response_hook_scope": "current response rows only; earlier retained state is unchanged",
+        }
 
     def normalization_state(self) -> dict | None:
         return None if self.input_normalization is None else deepcopy(self.input_normalization)
@@ -643,7 +726,7 @@ class V03FiveBrain:
             self.params[name][...] = candidate
 
     def clone(self) -> "V03FiveBrain":
-        result = V03FiveBrain(self.seed)
+        result = V03FiveBrain(self.seed, gate_head=self.gate_head)
         result.load_state_dict(self.state_dict())
         result.input_normalization = self.normalization_state()
         return result
@@ -703,6 +786,7 @@ class V03FiveBrain:
         prior_key = np.tanh(self.params["c.W_key"] @ runtime["central"])
         read_weights_before = _softmax((memory_before @ prior_key) / 0.75)
         read_before = read_weights_before @ memory_before
+        retained_context = np.concatenate((runtime["central"], read_before))
         center_input = np.concatenate((vector, messages_array, read_before))
         center_candidate_pre = np.zeros(self.CENTER_HIDDEN, dtype=np.float64)
         center_update_pre = np.zeros(self.CENTER_HIDDEN, dtype=np.float64)
@@ -734,8 +818,23 @@ class V03FiveBrain:
         read_weights_after = _softmax((memory @ key) / 0.75)
         read_after = read_weights_after @ memory
         action_features = np.concatenate((central, read_after))
-        action_gate_logits = self.params["c.W_action_gate"] @ action_features + self.params["c.b_action_gate"]
-        action_frequency_logits = self.params["c.W_action_frequency"] @ action_features + self.params["c.b_action_frequency"]
+        if self.gate_head == SHARED_ROW_GATE_HEAD:
+            row_features = vector[RESPONSE_FEATURE_START:RESPONSE_FEATURE_END].reshape(
+                ACTION_DIM, SHARED_ROW_FEATURE_DIM
+            )
+            action_gate_logits = _shared_row_gate_logits(
+                self.params,
+                row_features,
+                retained_context,
+                prefix="c.",
+            )
+            action_frequency_logits = (
+                self.params["c.W_action_frequency"] @ retained_context
+                + self.params["c.b_action_frequency"]
+            )
+        else:
+            action_gate_logits = self.params["c.W_action_gate"] @ action_features + self.params["c.b_action_gate"]
+            action_frequency_logits = self.params["c.W_action_frequency"] @ action_features + self.params["c.b_action_frequency"]
         gate_probs = _softmax(action_gate_logits)
         frequency_probs = _softmax(action_frequency_logits)
         next_runtime = {"peripheral": peripheral, "central": central, "memory": memory}
@@ -752,6 +851,13 @@ class V03FiveBrain:
             "frequency_probs": frequency_probs,
             "drive_frequency": float(PROBE_FREQUENCIES[int(np.argmax(frequency_probs))]),
         }
+        if self.gate_head == SHARED_ROW_GATE_HEAD:
+            trace.update({
+                "gate_head": self.gate_head,
+                "retained_goal_context": retained_context.copy(),
+                "row_features": row_features.copy(),
+                "shared_row_gate_logits": np.asarray(action_gate_logits, dtype=np.float64).copy(),
+            })
         if collect_diagnostics:
             trace["diagnostics"] = {
                 "peripheral_pre": peripheral_pre,
@@ -843,6 +949,7 @@ class V03FiveBrain:
         prior_key = tanh(params["c.W_key"] @ central)
         read_weights_before = softmax((memory @ prior_key) / 0.75)
         read_before = read_weights_before @ memory
+        retained_context = concatenate((central, read_before), axis=0)
         center_input = concatenate((Tensor(vector), messages_tensor, read_before), axis=0)
         candidate = tanh(
             params["c.W_in"] @ center_input
@@ -865,8 +972,24 @@ class V03FiveBrain:
         read_weights_after = softmax((memory @ key) / 0.75)
         read_after = read_weights_after @ memory
         action_features = concatenate((central, read_after), axis=0)
-        gate_probs = softmax(params["c.W_action_gate"] @ action_features + params["c.b_action_gate"])
-        frequency_probs = softmax(params["c.W_action_frequency"] @ action_features + params["c.b_action_frequency"])
+        if self.gate_head == SHARED_ROW_GATE_HEAD:
+            row_features = Tensor(
+                vector[RESPONSE_FEATURE_START:RESPONSE_FEATURE_END].reshape(
+                    ACTION_DIM, SHARED_ROW_FEATURE_DIM
+                )
+            )
+            action_gate_logits = _shared_row_gate_logits_tensor(
+                params,
+                row_features,
+                retained_context,
+                prefix="c.",
+            )
+            action_frequency_logits = params["c.W_action_frequency"] @ retained_context + params["c.b_action_frequency"]
+        else:
+            action_gate_logits = params["c.W_action_gate"] @ action_features + params["c.b_action_gate"]
+            action_frequency_logits = params["c.W_action_frequency"] @ action_features + params["c.b_action_frequency"]
+        gate_probs = softmax(action_gate_logits)
+        frequency_probs = softmax(action_frequency_logits)
         return {
             "peripheral": next_peripheral,
             "central": central,
@@ -952,10 +1075,11 @@ class V03SingleRecurrentMemory:
     MEMORY_DIM = MEMORY_DIM
     ACTION_DIM = ACTION_DIM
 
-    def __init__(self, seed: int = 41):
+    def __init__(self, seed: int = 41, *, gate_head: str = LEGACY_GATE_HEAD):
         if type(seed) is not int or seed < 0:
             raise ValueError("model seed must be a non-negative integer")
         self.seed = seed
+        self.gate_head = _validate_gate_head(gate_head)
         rng = np.random.default_rng(seed)
         self.input_normalization: dict | None = None
         self.params = {
@@ -968,11 +1092,19 @@ class V03SingleRecurrentMemory:
             "b_write_gate": np.array([-0.35], dtype=np.float64),
             "W_value": rng.normal(0.0, 0.12, (self.MEMORY_DIM, self.HIDDEN)).astype(np.float64),
             "b_value": np.zeros(self.MEMORY_DIM, dtype=np.float64),
-            "W_action_gate": rng.normal(0.0, 0.16, (self.ACTION_DIM, self.HIDDEN + self.MEMORY_DIM)).astype(np.float64),
-            "W_action_frequency": rng.normal(0.0, 0.16, (self.ACTION_DIM, self.HIDDEN + self.MEMORY_DIM)).astype(np.float64),
-            "b_action_gate": np.zeros(self.ACTION_DIM, dtype=np.float64),
-            "b_action_frequency": np.zeros(self.ACTION_DIM, dtype=np.float64),
         }
+        action_input = self.HIDDEN + self.MEMORY_DIM
+        if self.gate_head == LEGACY_GATE_HEAD:
+            self.params["W_action_gate"] = rng.normal(0.0, 0.16, (self.ACTION_DIM, action_input)).astype(np.float64)
+            self.params["W_action_frequency"] = rng.normal(0.0, 0.16, (self.ACTION_DIM, action_input)).astype(np.float64)
+            self.params["b_action_gate"] = np.zeros(self.ACTION_DIM, dtype=np.float64)
+            self.params["b_action_frequency"] = np.zeros(self.ACTION_DIM, dtype=np.float64)
+        else:
+            self.params["W_shared_row_context"] = rng.normal(0.0, 0.16, (SHARED_ROW_FEATURE_DIM, action_input)).astype(np.float64)
+            self.params["w_shared_row"] = rng.normal(0.0, 0.16, (SHARED_ROW_FEATURE_DIM,)).astype(np.float64)
+            self.params["b_shared_row"] = np.zeros(1, dtype=np.float64)
+            self.params["W_action_frequency"] = rng.normal(0.0, 0.16, (self.ACTION_DIM, action_input)).astype(np.float64)
+            self.params["b_action_frequency"] = np.zeros(self.ACTION_DIM, dtype=np.float64)
 
     @property
     def brain_count(self) -> int:
@@ -992,14 +1124,32 @@ class V03SingleRecurrentMemory:
         if normalization is None:
             self.input_normalization = None
             return
+        _validate_shared_row_normalization(self.gate_head, normalization)
         normalize_policy_vector(np.zeros(POLICY_VECTOR_DIM, dtype=np.float64), normalization)
         self.input_normalization = deepcopy(normalization)
+
+    def gate_head_audit(self) -> dict:
+        """Describe the selected action head without exposing evaluator labels."""
+
+        action_input = self.HIDDEN + self.MEMORY_DIM
+        return {
+            "gate_head": self.gate_head,
+            "shared_row_scorer": self.gate_head == SHARED_ROW_GATE_HEAD,
+            "row_feature_shape": [ACTION_DIM, SHARED_ROW_FEATURE_DIM],
+            "retained_context_dim": action_input,
+            "retained_context_source": "pre-final hidden state plus pre-final memory read",
+            "response_rows_are_current_observation_only": True,
+            "per_gate_parameters": False if self.gate_head == SHARED_ROW_GATE_HEAD else True,
+            "evaluator_labels_in_inference": False,
+            "frequency_uses_retained_context": self.gate_head == SHARED_ROW_GATE_HEAD,
+            "final_response_hook_scope": "current response rows only; earlier retained state is unchanged",
+        }
 
     def normalization_state(self) -> dict | None:
         return None if self.input_normalization is None else deepcopy(self.input_normalization)
 
     def clone(self) -> "V03SingleRecurrentMemory":
-        result = V03SingleRecurrentMemory(self.seed)
+        result = V03SingleRecurrentMemory(self.seed, gate_head=self.gate_head)
         result.load_state_dict(self.state_dict())
         result.input_normalization = self.normalization_state()
         return result
@@ -1055,6 +1205,7 @@ class V03SingleRecurrentMemory:
         prior_key = np.tanh(self.params["W_key"] @ runtime["hidden"])
         read_weights_before = _softmax((memory_before @ prior_key) / 0.75)
         read_before = read_weights_before @ memory_before
+        retained_context = np.concatenate((runtime["hidden"], read_before))
         hidden_pre = self.params["W_in"] @ vector + self.params["W_rec"] @ runtime["hidden"] + self.params["b"]
         hidden = np.tanh(hidden_pre)
         key = np.tanh(self.params["W_key"] @ hidden)
@@ -1069,8 +1220,23 @@ class V03SingleRecurrentMemory:
         read_after = read_weights_after @ memory
         action_memory = read_before + read_after
         action_features = np.concatenate((hidden, action_memory))
-        action_gate_logits = self.params["W_action_gate"] @ action_features + self.params["b_action_gate"]
-        action_frequency_logits = self.params["W_action_frequency"] @ action_features + self.params["b_action_frequency"]
+        if self.gate_head == SHARED_ROW_GATE_HEAD:
+            row_features = vector[RESPONSE_FEATURE_START:RESPONSE_FEATURE_END].reshape(
+                ACTION_DIM, SHARED_ROW_FEATURE_DIM
+            )
+            action_gate_logits = _shared_row_gate_logits(
+                self.params,
+                row_features,
+                retained_context,
+                prefix="",
+            )
+            action_frequency_logits = (
+                self.params["W_action_frequency"] @ retained_context
+                + self.params["b_action_frequency"]
+            )
+        else:
+            action_gate_logits = self.params["W_action_gate"] @ action_features + self.params["b_action_gate"]
+            action_frequency_logits = self.params["W_action_frequency"] @ action_features + self.params["b_action_frequency"]
         gate_probs = _softmax(action_gate_logits)
         frequency_probs = _softmax(action_frequency_logits)
         trace = {
@@ -1085,6 +1251,13 @@ class V03SingleRecurrentMemory:
             "frequency_probs": frequency_probs,
             "drive_frequency": float(PROBE_FREQUENCIES[int(np.argmax(frequency_probs))]),
         }
+        if self.gate_head == SHARED_ROW_GATE_HEAD:
+            trace.update({
+                "gate_head": self.gate_head,
+                "retained_goal_context": retained_context.copy(),
+                "row_features": row_features.copy(),
+                "shared_row_gate_logits": np.asarray(action_gate_logits, dtype=np.float64).copy(),
+            })
         if collect_diagnostics:
             trace["diagnostics"] = {
                 "hidden_pre": np.asarray(hidden_pre, dtype=np.float64).copy(),
@@ -1151,6 +1324,7 @@ class V03SingleRecurrentMemory:
             prior_key = tanh(params["W_key"] @ hidden)
             read_weights_before = softmax((memory @ prior_key) / 0.75)
             read_before = read_weights_before @ memory
+            retained_context = concatenate((hidden, read_before), axis=0)
             hidden = tanh(params["W_in"] @ Tensor(vector) + params["W_rec"] @ hidden + params["b"])
             key = tanh(params["W_key"] @ hidden)
             write_weights = softmax(params["W_addr"] @ hidden)
@@ -1163,8 +1337,24 @@ class V03SingleRecurrentMemory:
             read_after = read_weights_after @ memory
             action_memory = read_before + read_after
             action_features = concatenate((hidden, action_memory), axis=0)
-            gate_probs = softmax(params["W_action_gate"] @ action_features + params["b_action_gate"])
-            frequency_probs = softmax(params["W_action_frequency"] @ action_features + params["b_action_frequency"])
+            if self.gate_head == SHARED_ROW_GATE_HEAD:
+                row_features = Tensor(
+                    np.asarray(vector[RESPONSE_FEATURE_START:RESPONSE_FEATURE_END]).reshape(
+                        ACTION_DIM, SHARED_ROW_FEATURE_DIM
+                    )
+                )
+                action_gate_logits = _shared_row_gate_logits_tensor(
+                    params,
+                    row_features,
+                    retained_context,
+                    prefix="",
+                )
+                action_frequency_logits = params["W_action_frequency"] @ retained_context + params["b_action_frequency"]
+            else:
+                action_gate_logits = params["W_action_gate"] @ action_features + params["b_action_gate"]
+                action_frequency_logits = params["W_action_frequency"] @ action_features + params["b_action_frequency"]
+            gate_probs = softmax(action_gate_logits)
+            frequency_probs = softmax(action_frequency_logits)
             trace.append({
                 "gate_probs": gate_probs.data.copy(),
                 "frequency_probs": frequency_probs.data.copy(),
