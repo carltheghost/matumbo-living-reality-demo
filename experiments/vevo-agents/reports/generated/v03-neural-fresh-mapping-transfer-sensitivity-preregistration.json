@@ -500,7 +500,8 @@
     "preserve_baseline_replay_prefix": true,
     "preserve_completed_arm_case_checkpoint_prefix": true,
     "record_case_checkpoint_arm_identity": true,
-    "record_failure_phase_identity_and_exception": true
+    "record_failure_phase_identity_and_exception": true,
+    "retain_raw_inference_before_derived_work": true
   },
   "frozen_candidate_checkpoints": {
     "control-seed-141": {
@@ -1047,7 +1048,9 @@
   "protocol_contract": {
     "baseline_hidden_delay_steps": 2,
     "delay_definition": "hidden goal-independent observations after the one shown note and before the spectrum/action observation; current baseline has exactly two",
+    "delay_sensitivity_interpretation": "schedule robustness under additional simulator advances, not an isolated memory-retention-only intervention",
     "episode_class": "CorrectedEpisode",
+    "extra_delay_steps_advance_simulator_time": true,
     "note_payload_masks_baseline": [
       0,
       1,
@@ -1120,7 +1123,7 @@
   },
   "sensitivity_cases_evaluated": 0,
   "sensitivity_model_outcomes_loaded": false,
-  "source_sha_at_registration": "4d99c285286a668c3dacbe51fa68ac3c877f620a",
+  "source_sha_at_registration": "b2dc10907da086bae99098dbb56d1de02aeafb52",
   "status": "awaiting_independent_review_before_sensitivity_evaluation",
   "training_started": false
 }
