@@ -2,9 +2,10 @@
 
 Status: `awaiting_review_before_retraining`
 
-This is one paired legacy-versus-shared-row-head comparison across the fixed
-full seeds `107, 117` and matched-control seeds `141, 143`. It is source and
-review gated. No candidate retraining has started under this preregistration.
+This is one paired legacy-versus-shared-row-head bundled action-head/context
+redesign comparison across the fixed full seeds `107, 117` and matched-control
+seeds `141, 143`. It is source and review gated. No candidate retraining has
+started under this preregistration. It is not a pure single-factor ablation.
 
 ## Fixed design
 
@@ -13,11 +14,14 @@ review gated. No candidate retraining has started under this preregistration.
 - Candidate preprocessing: train-only v2 `shared_max_abs` response scaling. Historical v1 normalization is rejected by the shared head.
 - Development worlds `9300–9307` are inspected development cases, never fresh generalization. The existing all-four-models `8/8` training gate remains required before development evaluation.
 - No tuning, sweep, restart, expanded mapping, phase/time signal, frequency-selective resonance mechanism, new paid resource, PC training, merge, deploy, PR, credential, or account-permission action is part of this comparison.
+- The primary historical overlap baseline is the immediately preceding shared-scale legacy-head report/checkpoint set from artifact commit `c35c2e6729dc867b516de8229ddd99adb88bcc44`; the original v1 report remains a clearly labelled secondary comparison.
 
 ## Controlled architecture change
 
 The candidate selects `shared_row_scorer` while the legacy baseline selects
-`legacy_action_matrix`. Only the final action head changes.
+`legacy_action_matrix`. The controlled change is a bundled final action-head
+and context redesign: the gate parameterization changes and the frequency head
+moves from post-response action features to pre-final retained context.
 
 For each current response row (r_i) and retained context (c), the candidate
 uses one shared bilinear scorer:
@@ -45,11 +49,16 @@ provided to inference. The current shared gate receives the current response
 rows, not an injected frequency index. No phase or time signal is synthesized:
 magnitude-only response measurements remain magnitude-only.
 
+The shared replacement head uses an independent architecture-specific RNG
+stream. The legacy gate-matrix draw is reserved on the main stream so common
+body and raw frequency-head parameters match the legacy initialization exactly;
+the replacement head itself is not claimed to be matched-initialized.
+
 ## Required checks before the one run
 
 The source stage must pass:
 
-1. gradient routing through `W_shared_row_context` and `w_shared_row`;
+1. gradient routing through `W_shared_row_context` and `w_shared_row`, including a finite-difference check and an upstream retained-context gradient;
 2. row-permutation probability/selection parity with exact-tie handling;
 3. serialization and exact prediction parity;
 4. rejection of legacy normalization for the shared head;
@@ -57,7 +66,7 @@ The source stage must pass:
 6. frozen diagnostics of training-world maps/confusions, model agreement,
    confidence/margins, success-set overlap, and the inspected development
    cases; and
-7. preservation of historical reports/checkpoints byte-for-byte.
+7. preservation of the c35c2e shared-scale baseline identities and all historical reports/checkpoints byte-for-byte.
 
 The diagnostic's structural shared-head replay is untrained and is not
 performance evidence. It only verifies the controlled head's symmetry.

@@ -55,6 +55,8 @@ LEGACY_GATE_HEAD = "legacy_action_matrix"
 SHARED_ROW_GATE_HEAD = "shared_row_scorer"
 GATE_HEAD_CHOICES = (LEGACY_GATE_HEAD, SHARED_ROW_GATE_HEAD)
 SHARED_ROW_FEATURE_DIM = 4
+SHARED_ROW_HEAD_RNG_SALT_FULL = 0x5EED5101
+SHARED_ROW_HEAD_RNG_SALT_CONTROL = 0x5EED5102
 
 
 def _byte_block(value: str, width: int) -> list[float]:
@@ -464,6 +466,12 @@ def _validate_gate_head(gate_head: str) -> str:
     return str(gate_head)
 
 
+def _shared_row_head_rng(seed: int, *, architecture_salt: int) -> np.random.Generator:
+    """Use an independent stream so shared-head additions do not shift body/frequency draws."""
+
+    return np.random.default_rng(np.random.SeedSequence([int(seed), int(architecture_salt)]))
+
+
 def _validate_shared_row_normalization(gate_head: str, normalization: dict | None) -> None:
     """Require a row-symmetric response preprocessing path for the shared head."""
 
@@ -657,13 +665,25 @@ class V03FiveBrain:
         action_input = self.CENTER_HIDDEN + self.MEMORY_DIM
         if self.gate_head == LEGACY_GATE_HEAD:
             normal("c.W_action_gate", (self.ACTION_DIM, action_input), 0.16)
-            normal("c.W_action_frequency", (self.ACTION_DIM, action_input), 0.16)
-            self.params["c.b_action_gate"] = np.zeros(self.ACTION_DIM, dtype=np.float64)
         else:
-            normal("c.W_shared_row_context", (SHARED_ROW_FEATURE_DIM, action_input), 0.16)
-            normal("c.w_shared_row", (SHARED_ROW_FEATURE_DIM,), 0.16)
+            # Reserve the legacy gate-matrix draws on the main stream so all
+            # shared parameters outside the controlled head retain their
+            # legacy initialization.  The replacement head has its own stream.
+            rng.normal(0.0, 0.16, (self.ACTION_DIM, action_input))
+            head_rng = _shared_row_head_rng(
+                self.seed,
+                architecture_salt=SHARED_ROW_HEAD_RNG_SALT_FULL,
+            )
+            self.params["c.W_shared_row_context"] = head_rng.normal(
+                0.0, 0.16, (SHARED_ROW_FEATURE_DIM, action_input)
+            ).astype(np.float64)
+            self.params["c.w_shared_row"] = head_rng.normal(
+                0.0, 0.16, (SHARED_ROW_FEATURE_DIM,)
+            ).astype(np.float64)
             self.params["c.b_shared_row"] = np.zeros(1, dtype=np.float64)
-            normal("c.W_action_frequency", (self.ACTION_DIM, action_input), 0.16)
+        normal("c.W_action_frequency", (self.ACTION_DIM, action_input), 0.16)
+        if self.gate_head == LEGACY_GATE_HEAD:
+            self.params["c.b_action_gate"] = np.zeros(self.ACTION_DIM, dtype=np.float64)
         self.params["c.b_action_frequency"] = np.zeros(self.ACTION_DIM, dtype=np.float64)
 
     @property
@@ -707,6 +727,9 @@ class V03FiveBrain:
             "per_gate_parameters": False if self.gate_head == SHARED_ROW_GATE_HEAD else True,
             "evaluator_labels_in_inference": False,
             "frequency_uses_retained_context": self.gate_head == SHARED_ROW_GATE_HEAD,
+            "frequency_head_input": "pre-final retained context" if self.gate_head == SHARED_ROW_GATE_HEAD else "post-response action features",
+            "initialization_stream": "independent shared-head stream with legacy body/frequency draws reserved" if self.gate_head == SHARED_ROW_GATE_HEAD else "legacy parameter stream",
+            "legacy_common_parameter_initialization_preserved": True,
             "final_response_hook_scope": "current response rows only; earlier retained state is unchanged",
         }
 
@@ -1096,16 +1119,24 @@ class V03SingleRecurrentMemory:
         action_input = self.HIDDEN + self.MEMORY_DIM
         if self.gate_head == LEGACY_GATE_HEAD:
             self.params["W_action_gate"] = rng.normal(0.0, 0.16, (self.ACTION_DIM, action_input)).astype(np.float64)
-            self.params["W_action_frequency"] = rng.normal(0.0, 0.16, (self.ACTION_DIM, action_input)).astype(np.float64)
-            self.params["b_action_gate"] = np.zeros(self.ACTION_DIM, dtype=np.float64)
-            self.params["b_action_frequency"] = np.zeros(self.ACTION_DIM, dtype=np.float64)
         else:
-            self.params["W_shared_row_context"] = rng.normal(0.0, 0.16, (SHARED_ROW_FEATURE_DIM, action_input)).astype(np.float64)
-            self.params["w_shared_row"] = rng.normal(0.0, 0.16, (SHARED_ROW_FEATURE_DIM,)).astype(np.float64)
+            rng.normal(0.0, 0.16, (self.ACTION_DIM, action_input))
+            head_rng = _shared_row_head_rng(
+                self.seed,
+                architecture_salt=SHARED_ROW_HEAD_RNG_SALT_CONTROL,
+            )
+            self.params["W_shared_row_context"] = head_rng.normal(
+                0.0, 0.16, (SHARED_ROW_FEATURE_DIM, action_input)
+            ).astype(np.float64)
+            self.params["w_shared_row"] = head_rng.normal(
+                0.0, 0.16, (SHARED_ROW_FEATURE_DIM,)
+            ).astype(np.float64)
             self.params["b_shared_row"] = np.zeros(1, dtype=np.float64)
-            self.params["W_action_frequency"] = rng.normal(0.0, 0.16, (self.ACTION_DIM, action_input)).astype(np.float64)
-            self.params["b_action_frequency"] = np.zeros(self.ACTION_DIM, dtype=np.float64)
+        self.params["W_action_frequency"] = rng.normal(0.0, 0.16, (self.ACTION_DIM, action_input)).astype(np.float64)
+        if self.gate_head == LEGACY_GATE_HEAD:
+            self.params["b_action_gate"] = np.zeros(self.ACTION_DIM, dtype=np.float64)
 
+        self.params["b_action_frequency"] = np.zeros(self.ACTION_DIM, dtype=np.float64)
     @property
     def brain_count(self) -> int:
         return 1
@@ -1142,6 +1173,9 @@ class V03SingleRecurrentMemory:
             "per_gate_parameters": False if self.gate_head == SHARED_ROW_GATE_HEAD else True,
             "evaluator_labels_in_inference": False,
             "frequency_uses_retained_context": self.gate_head == SHARED_ROW_GATE_HEAD,
+            "frequency_head_input": "pre-final retained context" if self.gate_head == SHARED_ROW_GATE_HEAD else "post-response action features",
+            "initialization_stream": "independent shared-head stream with legacy body/frequency draws reserved" if self.gate_head == SHARED_ROW_GATE_HEAD else "legacy parameter stream",
+            "legacy_common_parameter_initialization_preserved": True,
             "final_response_hook_scope": "current response rows only; earlier retained state is unchanged",
         }
 

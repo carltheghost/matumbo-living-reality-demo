@@ -21,6 +21,11 @@ import numpy as np
 from .v03_delayed_memory import (
     _atomic_write_json,
     _atomic_write_text,
+    HISTORICAL_DELAYED_REPORT_PATH,
+    PRECEDING_SHARED_SCALE_ARTIFACT_COMMIT,
+    PRECEDING_SHARED_SCALE_ARTIFACT_DIGESTS,
+    PRECEDING_SHARED_SCALE_REPORT_PATH,
+    PRECEDING_SHARED_SCALE_REPORT_SOURCE_SHA,
     build_delayed_examples,
     make_development_specs,
     make_training_specs,
@@ -40,7 +45,7 @@ from .v03_model import (
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-INPUT_REPORT_PATH = PROJECT_ROOT / "reports/generated/v03-neural-delayed-shared-response-scale-report.json"
+INPUT_REPORT_PATH = PROJECT_ROOT / PRECEDING_SHARED_SCALE_REPORT_PATH
 OUTPUT_REPORT_PATH = PROJECT_ROOT / "reports/generated/v03-neural-shared-row-diagnostic-report.json"
 OUTPUT_SUMMARY_PATH = PROJECT_ROOT / "reports/generated/v03-neural-shared-row-diagnostic-report.md"
 RESPONSE_ROW_PERMUTATION = (1, 2, 3, 0)
@@ -89,7 +94,10 @@ def _load_saved_model(report: dict, key: str):
     checkpoint_path = PROJECT_ROOT / checkpoint_record["path"]
     payload = json.loads(checkpoint_path.read_text(encoding="utf-8"))
     model_class = MODEL_CLASSES[payload["model_class"]]
-    model = model_class(int(payload["seed"]))
+    model = model_class(
+        int(payload["seed"]),
+        gate_head=payload.get("gate_head", LEGACY_GATE_HEAD),
+    )
     model.load_state_dict(payload["state"])
     model.set_input_normalization(report["data"]["normalization"])
     return model, payload, checkpoint_path
@@ -252,14 +260,40 @@ def _prediction_compatibility(model, report_runs: list[dict], table: dict) -> di
     }
 
 
+def _development_success_sets(report: dict) -> dict[str, set[str]]:
+    for section_name in ("development", "heldout"):
+        section = report.get(section_name)
+        if not isinstance(section, dict) or not isinstance(section.get("runs"), dict):
+            continue
+        return {
+            key: {
+                _case_id(run["world_seed"], run["goal_index"])
+                for run in trial.get("runs", [])
+                if bool(run.get("success"))
+            }
+            for key, trial in section["runs"].items()
+        }
+    return {}
+
+
+def _set_overlap(candidate: set[str], reference: set[str]) -> dict:
+    intersection = candidate & reference
+    union = candidate | reference
+    return {
+        "candidate_count": len(candidate),
+        "reference_count": len(reference),
+        "intersection": sorted(intersection),
+        "intersection_count": len(intersection),
+        "union_count": len(union),
+        "jaccard": float(len(intersection) / len(union)) if union else 1.0,
+    }
+
+
 def _success_overlap(report: dict) -> dict:
     success_sets = {}
+    report_sets = _development_success_sets(report)
     for key in CHECKPOINT_KEYS:
-        success_sets[key] = {
-            _case_id(run["world_seed"], run["goal_index"])
-            for run in report["development"]["runs"][key]["runs"]
-            if bool(run["success"])
-        }
+        success_sets[key] = set(report_sets.get(key, set()))
     pairwise = {}
     for left, right in combinations(CHECKPOINT_KEYS, 2):
         intersection = success_sets[left] & success_sets[right]
@@ -271,17 +305,46 @@ def _success_overlap(report: dict) -> dict:
             "jaccard": float(len(intersection) / len(union)) if union else 1.0,
         }
     all_intersection = set.intersection(*(success_sets[key] for key in CHECKPOINT_KEYS))
-    return {
+    result = {
         "success_sets": {key: sorted(value) for key, value in success_sets.items()},
         "success_counts": {key: len(value) for key, value in success_sets.items()},
         "pairwise": pairwise,
         "all_four_intersection": sorted(all_intersection),
         "all_four_intersection_count": len(all_intersection),
+        "primary_reference": {
+            "name": "preceding_shared_response_scale",
+            "path": PRECEDING_SHARED_SCALE_REPORT_PATH,
+            "artifact_commit": PRECEDING_SHARED_SCALE_ARTIFACT_COMMIT,
+            "report_source_sha": PRECEDING_SHARED_SCALE_REPORT_SOURCE_SHA,
+            "self_reference": True,
+            "comparison_note": "The saved shared-scale candidates are the immediately preceding legacy-head baseline; no trained shared-row candidate exists yet.",
+        },
+        "original_v1_comparison": {},
         "historical_overlap_from_saved_report": {
-            key: report["development"]["runs"][key]["historical_success_overlap"]
+            key: report.get("development", {}).get("runs", {}).get(key, {}).get("historical_success_overlap")
             for key in CHECKPOINT_KEYS
         },
     }
+    original_path = PROJECT_ROOT / HISTORICAL_DELAYED_REPORT_PATH
+    if original_path.exists():
+        try:
+            original_report = json.loads(original_path.read_text(encoding="utf-8"))
+            original_sets = _development_success_sets(original_report)
+            result["original_v1_comparison"] = {
+                "path": HISTORICAL_DELAYED_REPORT_PATH,
+                "self_reference": False,
+                "reference_report_source_sha": original_report.get("source_sha"),
+                "by_model": {
+                    key: _set_overlap(success_sets[key], set(original_sets.get(key, set())))
+                    for key in CHECKPOINT_KEYS
+                },
+            }
+        except (OSError, json.JSONDecodeError):
+            result["original_v1_comparison"] = {
+                "path": HISTORICAL_DELAYED_REPORT_PATH,
+                "available": False,
+            }
+    return result
 
 
 def _model_agreement(tables: dict[str, dict], examples: list[dict]) -> dict:
@@ -352,6 +415,11 @@ def _permutation_case(model, example: dict) -> dict:
         "row_feature_linf_vs_expected_permutation": None,
         "gate_permutation_check_applicable": model.gate_head == SHARED_ROW_GATE_HEAD,
         "frequency_invariance_check_applicable": model.gate_head == SHARED_ROW_GATE_HEAD,
+        "selected_gate_permutation_status": (
+            "not_applicable_legacy"
+            if model.gate_head != SHARED_ROW_GATE_HEAD
+            else ("not_applicable_tie" if expected_selected is None else "pending")
+        ),
     }
     if model.gate_head == SHARED_ROW_GATE_HEAD:
         retained_base = np.asarray(baseline_trace["retained_goal_context"], dtype=np.float64)
@@ -366,9 +434,13 @@ def _permutation_case(model, example: dict) -> dict:
         result["frequency_invariance_passed"] = bool(np.allclose(new_frequency, base_frequency, atol=1e-12, rtol=0.0))
         result["retained_context_invariant_passed"] = bool(np.array_equal(retained_new, retained_base))
         result["row_feature_permutation_passed"] = bool(np.array_equal(row_new, row_base[list(RESPONSE_ROW_PERMUTATION)]))
-        result["selected_gate_permutation_passed"] = (
-            expected_selected is None or int(np.argmax(new_gate)) == expected_selected
+        result["selected_gate_permutation_passed"] = None if expected_selected is None else (
+            int(np.argmax(new_gate)) == expected_selected
         )
+        if expected_selected is not None:
+            result["selected_gate_permutation_status"] = (
+                "passed" if result["selected_gate_permutation_passed"] else "failed"
+            )
     return result
 
 
@@ -384,7 +456,12 @@ def _permutation_summary(model, examples: list[dict]) -> dict:
             "frequency_invariance_pass_count": sum(case["frequency_invariance_passed"] for case in cases),
             "retained_context_invariant_pass_count": sum(case["retained_context_invariant_passed"] for case in cases),
             "row_feature_permutation_pass_count": sum(case["row_feature_permutation_passed"] for case in cases),
-            "selected_gate_permutation_pass_count": sum(case["selected_gate_permutation_passed"] for case in cases),
+            "selected_gate_permutation_pass_count": sum(
+                case["selected_gate_permutation_passed"] is True for case in cases
+            ),
+            "selected_gate_permutation_not_applicable_count": sum(
+                case["selected_gate_permutation_status"] == "not_applicable_tie" for case in cases
+            ),
             "max_gate_probability_linf": max(case["gate_probability_linf_vs_expected_permutation"] for case in cases),
             "max_frequency_probability_linf": max(case["frequency_probability_linf_vs_baseline"] for case in cases),
             "max_retained_context_linf": max(case["retained_context_linf"] for case in cases),
@@ -442,6 +519,8 @@ def _architecture_audit() -> dict:
     shared_full = V03FiveBrain(107, gate_head=SHARED_ROW_GATE_HEAD)
     legacy_control = V03SingleRecurrentMemory(141, gate_head=LEGACY_GATE_HEAD)
     shared_control = V03SingleRecurrentMemory(141, gate_head=SHARED_ROW_GATE_HEAD)
+    full_common = set(legacy_full.params) & set(shared_full.params)
+    control_common = set(legacy_control.params) & set(shared_control.params)
     return {
         "shared_gate_head": {
             "full": shared_full.gate_head_audit(),
@@ -454,6 +533,22 @@ def _architecture_audit() -> dict:
             "control_legacy": legacy_control.parameter_count(),
             "control_shared": shared_control.parameter_count(),
             "control_delta": shared_control.parameter_count() - legacy_control.parameter_count(),
+        },
+        "initialization_compatibility": {
+            "full_common_parameters_exact_match": all(
+                np.array_equal(legacy_full.params[name], shared_full.params[name])
+                for name in full_common
+            ),
+            "control_common_parameters_exact_match": all(
+                np.array_equal(legacy_control.params[name], shared_control.params[name])
+                for name in control_common
+            ),
+            "frequency_head_raw_parameters_exact_match": bool(
+                np.array_equal(legacy_full.params["c.W_action_frequency"], shared_full.params["c.W_action_frequency"])
+                and np.array_equal(legacy_control.params["W_action_frequency"], shared_control.params["W_action_frequency"])
+            ),
+            "shared_head_stream": "independent architecture-specific stream",
+            "main_stream_legacy_gate_draws_reserved": True,
         },
         "changed_parameter_names": {
             "full_removed": sorted(set(legacy_full.parameter_names()) - set(shared_full.parameter_names())),
@@ -474,6 +569,7 @@ def _architecture_audit() -> dict:
             "retained_frequency_information": "The retained context can carry frequency/goal information encoded during the note and delay; no evaluator gate or frequency label is supplied to inference.",
             "current_observation_to_shared_gate": "Only the current 4x4 response rows enter the shared gate scorer directly; the final post-response recurrent state is not used by the shared action heads.",
             "current_frequency_features": "No separate current frequency index is injected into the scorer. The shared frequency head also uses the retained pre-final context.",
+            "bundled_action_head_context_redesign": True,
             "phase_or_time_signal_added": False,
             "phase_or_time_claim": "Magnitude-only response measurements are not converted into an invented phase or time signal.",
             "trajectory_scope": "final response hook only; this does not claim full-trajectory slot causality",
@@ -495,11 +591,24 @@ def _artifact_integrity(report: dict, checkpoint_paths: dict[str, Path]) -> dict
         key: _file_digest(path)
         for key, path in checkpoint_paths.items()
     }
+    preceding_current = {
+        relative_path: _file_digest(PROJECT_ROOT / relative_path)
+        for relative_path in PRECEDING_SHARED_SCALE_ARTIFACT_DIGESTS
+        if (PROJECT_ROOT / relative_path).exists()
+    }
     return {
         "historical_expected_before": historical_expected,
         "historical_current_before": historical_current,
         "historical_missing": missing,
         "historical_matches_recorded_before": historical_current == historical_expected,
+        "preceding_shared_scale_baseline": {
+            "artifact_commit": PRECEDING_SHARED_SCALE_ARTIFACT_COMMIT,
+            "report_source_sha": PRECEDING_SHARED_SCALE_REPORT_SOURCE_SHA,
+            "expected_digests": PRECEDING_SHARED_SCALE_ARTIFACT_DIGESTS,
+            "current_digests": preceding_current,
+            "all_expected_files_present": set(preceding_current) == set(PRECEDING_SHARED_SCALE_ARTIFACT_DIGESTS),
+            "matches_expected": preceding_current == PRECEDING_SHARED_SCALE_ARTIFACT_DIGESTS,
+        },
         "input_checkpoint_digests_before": checkpoint_digests,
     }
 
@@ -520,12 +629,15 @@ def _markdown(report: dict) -> str:
         f"- Training-world target frequency→gate maps: `{json.dumps(training_maps['target'], sort_keys=True)}`.",
         f"- All four models agree with the target map on the training microset: `{json.dumps({key: value['matches_target'] for key, value in training_maps['models'].items()}, sort_keys=True)}`.",
         f"- All-four development success overlap: `{report['success_set_overlap']['all_four_intersection_count']}` cases.",
+        f"- Primary historical baseline: `{report['success_set_overlap']['primary_reference']['path']}` at `{report['success_set_overlap']['primary_reference']['artifact_commit']}`; original v1 is retained as a secondary comparison.",
         "",
         "## Architecture and symmetry",
         "",
         f"- Full parameter count legacy/shared: `{architecture['parameter_counts']['full_legacy']}` / `{architecture['parameter_counts']['full_shared']}` (delta `{architecture['parameter_counts']['full_delta']}`).",
         f"- Control parameter count legacy/shared: `{architecture['parameter_counts']['control_legacy']}` / `{architecture['parameter_counts']['control_shared']}` (delta `{architecture['parameter_counts']['control_delta']}`).",
         f"- Preprocessing non-response invariance: `{report['preprocessing_symmetry']['non_response_invariant_count']}/{report['preprocessing_symmetry']['case_count']}`; response-row permutation: `{report['preprocessing_symmetry']['response_row_permutation_count']}/{report['preprocessing_symmetry']['case_count']}`.",
+        f"- Common body/frequency initialization exact across legacy/shared variants: full `{architecture['initialization_compatibility']['full_common_parameters_exact_match']}`, control `{architecture['initialization_compatibility']['control_common_parameters_exact_match']}`; frequency raw parameters `{architecture['initialization_compatibility']['frequency_head_raw_parameters_exact_match']}`.",
+        "- This is a bundled action-head/context redesign, not a pure single-factor ablation: the shared gate changes and the frequency head moves to pre-final retained context.",
         "- The shared head uses one bilinear scorer across rows. Its retained context is pre-final recurrent state plus memory read, so the final row permutation does not alter that context.",
         "- The diagnostic scope is the final response hook only; it is not a full-trajectory slot-causality claim.",
         "",
@@ -646,6 +758,15 @@ def run_diagnostic(
     integrity["historical_unchanged"] = integrity["historical_current_before"] == historical_after
     integrity["input_checkpoint_digests_after"] = checkpoint_after
     integrity["input_checkpoints_unchanged"] = integrity["input_checkpoint_digests_before"] == checkpoint_after
+    preceding_after = {
+        relative_path: _file_digest(PROJECT_ROOT / relative_path)
+        for relative_path in PRECEDING_SHARED_SCALE_ARTIFACT_DIGESTS
+        if (PROJECT_ROOT / relative_path).exists()
+    }
+    integrity["preceding_shared_scale_baseline"]["current_digests_after"] = preceding_after
+    integrity["preceding_shared_scale_baseline"]["unchanged"] = (
+        integrity["preceding_shared_scale_baseline"]["current_digests"] == preceding_after
+    )
 
     result = {
         "schema": "vevo.v03.neural-shared-row-diagnostic-report.v1",

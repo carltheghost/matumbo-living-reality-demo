@@ -16,9 +16,14 @@ from .v03_delayed_memory import (
     DELAYED_CONTROL_SEEDS,
     DELAYED_MODEL_SEEDS,
     DELAYED_TRAIN_WORLD_SEEDS,
+    HISTORICAL_DELAYED_REPORT_PATH,
     HELDOUT_WORLD_SEEDS,
     MAX_UPDATES,
     METRIC_STEPS,
+    PRECEDING_SHARED_SCALE_ARTIFACT_COMMIT,
+    PRECEDING_SHARED_SCALE_ARTIFACT_DIGESTS,
+    PRECEDING_SHARED_SCALE_REPORT_PATH,
+    PRECEDING_SHARED_SCALE_REPORT_SOURCE_SHA,
     RETENTION_DELAY_STEPS,
     WALL_CLOCK_CAP_SECONDS,
     _training_observations,
@@ -68,6 +73,27 @@ def _digest(value) -> str:
     ).hexdigest()
 
 
+def _file_digest(path: Path) -> str | None:
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return None
+
+
+def _common_initialization_audit(legacy, shared) -> dict:
+    common = set(legacy.params) & set(shared.params)
+    frequency_name = "W_action_frequency" if "W_action_frequency" in legacy.params else "c.W_action_frequency"
+    return {
+        "common_parameter_names": sorted(common),
+        "common_parameters_exact_match": all(
+            (legacy.params[name] == shared.params[name]).all()
+            for name in common
+        ),
+        "frequency_parameter_name": frequency_name,
+        "frequency_parameter_exact_match": bool((legacy.params[frequency_name] == shared.params[frequency_name]).all()),
+    }
+
+
 def build_preregistration() -> dict:
     """Build the single, review-gated paired comparison design."""
 
@@ -86,14 +112,17 @@ def build_preregistration() -> dict:
         "question": "Does replacing the legacy per-gate action matrix with one shared bilinear response-row scorer improve delayed gate selection while preserving row permutation symmetry and the existing frequency objective?",
         "hypothesis": "A single row-shared bilinear scorer conditioned on retained pre-final state will reduce the four-slot shortcut by forcing the same row scoring rule across physical response rows; this is a structural hypothesis, not a guarantee of physical success, causal slot use, phase inference, or fresh generalization.",
         "comparison_design": {
-            "name": "one paired legacy-versus-shared-row-head comparison",
+            "name": "one paired legacy-versus-shared-row-head bundled redesign comparison",
             "candidate_gate_head": SHARED_ROW_GATE_HEAD,
             "baseline_gate_head": LEGACY_GATE_HEAD,
-            "paired_units": "same model class, model seed, optimizer seed, training examples, schedule, objective, and 1000-update budget",
+            "paired_units": "same model class, model seed, optimizer seed, training examples, schedule, objective, and 1000-update budget; common body/frequency raw initializations are preserved exactly",
             "fixed_trial_count": 4,
-            "no_additional_factors": True,
+            "pure_single_factor_claim": False,
+            "bundled_action_head_context_redesign": True,
+            "no_unreviewed_additional_factors": True,
             "no_sweep_or_tuning": True,
             "expanded_training_mappings": "deferred to a later separately reviewed design; this comparison uses only worlds 9200 and 9201",
+            "comparison_claim_scope": "This comparison changes the shared gate parameterization and moves the shared frequency head from post-response action features to pre-final retained context; it is not a pure single-factor ablation.",
         },
         "architecture": {
             "full_model_class": "V03FiveBrain",
@@ -108,6 +137,10 @@ def build_preregistration() -> dict:
             "control_legacy_parameter_count": int(control_legacy.parameter_count()),
             "control_shared_parameter_count": int(control_shared.parameter_count()),
             "control_parameter_delta": int(control_shared.parameter_count() - control_legacy.parameter_count()),
+            "frequency_head_input_baseline": "post-response action features",
+            "frequency_head_input_candidate": "pre-final retained context",
+            "frequency_head_input_changed": True,
+            "bundled_action_head_context_redesign": True,
             "shared_row_feature_shape": [4, SHARED_ROW_FEATURE_DIM],
             "full_retained_context_dim": 18,
             "control_retained_context_dim": 51,
@@ -126,6 +159,11 @@ def build_preregistration() -> dict:
             "parameter_change_explanation": "The legacy 4xcontext action matrix plus 4-vector bias is replaced by one row-shared bilinear context matrix, one row-feature vector, and one scalar bias. The scalar bias is common to every row and cancels in the gate softmax; it is retained for a stable serialized head schema.",
             "same_scoring_weights_per_physical_row": True,
             "per_gate_bias_or_embedding": False,
+            "common_initialization": {
+                "full": _common_initialization_audit(full_legacy, full_shared),
+                "control": _common_initialization_audit(control_legacy, control_shared),
+            },
+            "replacement_head_initialization": "independent architecture-specific RNG stream; replacement head is not claimed to be matched-initialized to the legacy matrix",
             "legacy_checkpoints_unchanged": True,
         },
         "head_input_and_information_scope": {
@@ -155,6 +193,24 @@ def build_preregistration() -> dict:
             "normalization_digest": _digest(normalization),
             "normalization_fixture": normalization,
             "legacy_normalization_rejected_for_candidate": True,
+        },
+        "historical_reference": {
+            "primary": {
+                "name": "preceding_shared_response_scale",
+                "report_path": PRECEDING_SHARED_SCALE_REPORT_PATH,
+                "artifact_commit": PRECEDING_SHARED_SCALE_ARTIFACT_COMMIT,
+                "report_source_sha": PRECEDING_SHARED_SCALE_REPORT_SOURCE_SHA,
+                "artifact_digests": PRECEDING_SHARED_SCALE_ARTIFACT_DIGESTS,
+                "current_digests": {
+                    path: _file_digest(_project_root() / path)
+                    for path in PRECEDING_SHARED_SCALE_ARTIFACT_DIGESTS
+                },
+                "overlap_role": "primary per-case historical success baseline",
+            },
+            "original_v1_secondary": {
+                "report_path": HISTORICAL_DELAYED_REPORT_PATH,
+                "overlap_role": "retained secondary historical comparison",
+            },
         },
         "schedule": {
             "name": "five-step delayed-memory schedule",
@@ -246,6 +302,10 @@ def build_preregistration() -> dict:
             "serialization_tests_required_before_training": True,
             "preprocessing_symmetry_audit_required_before_training": True,
             "no_evaluator_labels_in_inference": True,
+            "finite_difference_shared_head_check_required_before_training": True,
+            "upstream_retained_context_gradient_check_required_before_training": True,
+            "historical_overlap_primary_reference": PRECEDING_SHARED_SCALE_REPORT_PATH,
+            "historical_overlap_secondary_reference": HISTORICAL_DELAYED_REPORT_PATH,
         },
         "frozen_diagnostic_before_training": {
             "required": True,
@@ -281,7 +341,10 @@ def build_preregistration() -> dict:
             "Label worlds 9300–9307 as inspected development cases, never fresh generalization.",
             "Do not use development outcomes for model selection, hyperparameters, or restarts.",
             "Do not add phase, time, frequency-selective resonance, or other unreviewed mechanisms to this paired comparison.",
-            "Preserve architecture, seeds, schedule, optimizer, objective, and shared-scale preprocessing outside the controlled action head.",
+            "Treat this as a bundled action-head/context redesign, not a pure single-factor ablation.",
+            "Do not claim matched initialization for the replacement head; verify exact common body/frequency initialization compatibility.",
+            "Use the immediately preceding shared-scale legacy-head report at c35c2e6729dc867b516de8229ddd99adb88bcc44 as the primary historical overlap baseline, while retaining original v1 as secondary.",
+            "Preserve architecture, seeds, schedule, optimizer, objective, and shared-scale preprocessing outside the bundled action-head/context redesign.",
         ],
         "allowed_actions": [
             "source review",

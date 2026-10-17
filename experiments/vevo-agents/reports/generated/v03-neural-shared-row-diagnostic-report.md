@@ -10,12 +10,15 @@ This is a frozen source/evidence diagnostic. It does not train, sweep, select ch
 - Training-world target frequency→gate maps: `{"9200": [3, 0, 1, 2], "9201": [0, 2, 1, 3]}`.
 - All four models agree with the target map on the training microset: `{"control-seed-141": true, "control-seed-143": true, "full-seed-107": true, "full-seed-117": true}`.
 - All-four development success overlap: `10` cases.
+- Primary historical baseline: `reports/generated/v03-neural-delayed-shared-response-scale-report.json` at `c35c2e6729dc867b516de8229ddd99adb88bcc44`; original v1 is retained as a secondary comparison.
 
 ## Architecture and symmetry
 
 - Full parameter count legacy/shared: `11183` / `11184` (delta `1`).
 - Control parameter count legacy/shared: `11178` / `11179` (delta `1`).
 - Preprocessing non-response invariance: `32/32`; response-row permutation: `32/32`.
+- Common body/frequency initialization exact across legacy/shared variants: full `True`, control `True`; frequency raw parameters `True`.
+- This is a bundled action-head/context redesign, not a pure single-factor ablation: the shared gate changes and the frequency head moves to pre-final retained context.
 - The shared head uses one bilinear scorer across rows. Its retained context is pre-final recurrent state plus memory read, so the final row permutation does not alter that context.
 - The diagnostic scope is the final response hook only; it is not a full-trajectory slot-causality claim.
 

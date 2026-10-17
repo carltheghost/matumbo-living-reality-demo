@@ -10,12 +10,77 @@
     "shared_row_scorer"
   ],
   "architecture": {
+    "bundled_action_head_context_redesign": true,
+    "common_initialization": {
+      "control": {
+        "common_parameter_names": [
+          "W_action_frequency",
+          "W_addr",
+          "W_in",
+          "W_key",
+          "W_rec",
+          "W_value",
+          "W_write_gate",
+          "b",
+          "b_action_frequency",
+          "b_value",
+          "b_write_gate"
+        ],
+        "common_parameters_exact_match": true,
+        "frequency_parameter_exact_match": true,
+        "frequency_parameter_name": "W_action_frequency"
+      },
+      "full": {
+        "common_parameter_names": [
+          "c.W_action_frequency",
+          "c.W_addr",
+          "c.W_gate_in",
+          "c.W_gate_rec",
+          "c.W_in",
+          "c.W_key",
+          "c.W_rec",
+          "c.W_value",
+          "c.W_write_gate",
+          "c.b",
+          "c.b_action_frequency",
+          "c.b_gate",
+          "c.b_value",
+          "c.b_write_gate",
+          "p0.W_in",
+          "p0.W_msg",
+          "p0.W_rec",
+          "p0.b",
+          "p0.b_msg",
+          "p1.W_in",
+          "p1.W_msg",
+          "p1.W_rec",
+          "p1.b",
+          "p1.b_msg",
+          "p2.W_in",
+          "p2.W_msg",
+          "p2.W_rec",
+          "p2.b",
+          "p2.b_msg",
+          "p3.W_in",
+          "p3.W_msg",
+          "p3.W_rec",
+          "p3.b",
+          "p3.b_msg"
+        ],
+        "common_parameters_exact_match": true,
+        "frequency_parameter_exact_match": true,
+        "frequency_parameter_name": "c.W_action_frequency"
+      }
+    },
     "control_brain_count": 1,
     "control_legacy_parameter_count": 11178,
     "control_model_class": "V03SingleRecurrentMemory",
     "control_parameter_delta": 1,
     "control_retained_context_dim": 51,
     "control_shared_parameter_count": 11179,
+    "frequency_head_input_baseline": "post-response action features",
+    "frequency_head_input_candidate": "pre-final retained context",
+    "frequency_head_input_changed": true,
     "full_brain_count": 5,
     "full_legacy_parameter_count": 11183,
     "full_model_class": "V03FiveBrain",
@@ -26,6 +91,7 @@
     "legacy_gate_head": "legacy_action_matrix",
     "parameter_change_explanation": "The legacy 4xcontext action matrix plus 4-vector bias is replaced by one row-shared bilinear context matrix, one row-feature vector, and one scalar bias. The scalar bias is common to every row and cancels in the gate softmax; it is retained for a stable serialized head schema.",
     "per_gate_bias_or_embedding": false,
+    "replacement_head_initialization": "independent architecture-specific RNG stream; replacement head is not claimed to be matched-initialized to the legacy matrix",
     "same_scoring_weights_per_physical_row": true,
     "shared_gate_head": "shared_row_scorer",
     "shared_parameters": {
@@ -61,13 +127,16 @@
   },
   "comparison_design": {
     "baseline_gate_head": "legacy_action_matrix",
+    "bundled_action_head_context_redesign": true,
     "candidate_gate_head": "shared_row_scorer",
+    "comparison_claim_scope": "This comparison changes the shared gate parameterization and moves the shared frequency head from post-response action features to pre-final retained context; it is not a pure single-factor ablation.",
     "expanded_training_mappings": "deferred to a later separately reviewed design; this comparison uses only worlds 9200 and 9201",
     "fixed_trial_count": 4,
-    "name": "one paired legacy-versus-shared-row-head comparison",
-    "no_additional_factors": true,
+    "name": "one paired legacy-versus-shared-row-head bundled redesign comparison",
     "no_sweep_or_tuning": true,
-    "paired_units": "same model class, model seed, optimizer seed, training examples, schedule, objective, and 1000-update budget"
+    "no_unreviewed_additional_factors": true,
+    "paired_units": "same model class, model seed, optimizer seed, training examples, schedule, objective, and 1000-update budget; common body/frequency raw initializations are preserved exactly",
+    "pure_single_factor_claim": false
   },
   "compute_budget": {
     "bounded_trial_count": 4,
@@ -103,6 +172,35 @@
     "row_features": "the current 4x4 response matrix, represented as four 4-feature rows",
     "row_invariant_context": true,
     "temporal_scope": "The retained state is recurrent, but the preregistration makes no slot-causality claim beyond the final response-hook permutation test."
+  },
+  "historical_reference": {
+    "original_v1_secondary": {
+      "overlap_role": "retained secondary historical comparison",
+      "report_path": "reports/generated/v03-neural-delayed-memory-report.json"
+    },
+    "primary": {
+      "artifact_commit": "c35c2e6729dc867b516de8229ddd99adb88bcc44",
+      "artifact_digests": {
+        "reports/generated/v03-neural-delayed-shared-response-scale-report.json": "0de230b2c3636b4205d9e819a4831588c1df2b259af700a45fc13df4a92f833c",
+        "reports/generated/v03-neural-delayed-shared-response-scale-report.md": "e8016b9434e2a6a9a3d60e369dbf5f6a797187d3fbb75bfc9b477ded66d9ba28",
+        "storage/checkpoints/v03-neural-delayed-shared-response-scale-control-seed-141.json": "27c195ddce0e7524a464ad28963849d97d90a437b783be0dc34344b24d750095",
+        "storage/checkpoints/v03-neural-delayed-shared-response-scale-control-seed-143.json": "a1f622654e00a8195a202a29a3a70beae3cf1213d77e6900af9324b1d227e94c",
+        "storage/checkpoints/v03-neural-delayed-shared-response-scale-full-seed-107.json": "5fe3a3a07c2572a2f51cde5699de36af41f6f39263c601b8e130ebcfba9f6ea6",
+        "storage/checkpoints/v03-neural-delayed-shared-response-scale-full-seed-117.json": "08775a56a4d31c8f7c2bce38aaac105a2169e73619c32aa0890270a3f7223c4d"
+      },
+      "current_digests": {
+        "reports/generated/v03-neural-delayed-shared-response-scale-report.json": "0de230b2c3636b4205d9e819a4831588c1df2b259af700a45fc13df4a92f833c",
+        "reports/generated/v03-neural-delayed-shared-response-scale-report.md": "e8016b9434e2a6a9a3d60e369dbf5f6a797187d3fbb75bfc9b477ded66d9ba28",
+        "storage/checkpoints/v03-neural-delayed-shared-response-scale-control-seed-141.json": "27c195ddce0e7524a464ad28963849d97d90a437b783be0dc34344b24d750095",
+        "storage/checkpoints/v03-neural-delayed-shared-response-scale-control-seed-143.json": "a1f622654e00a8195a202a29a3a70beae3cf1213d77e6900af9324b1d227e94c",
+        "storage/checkpoints/v03-neural-delayed-shared-response-scale-full-seed-107.json": "5fe3a3a07c2572a2f51cde5699de36af41f6f39263c601b8e130ebcfba9f6ea6",
+        "storage/checkpoints/v03-neural-delayed-shared-response-scale-full-seed-117.json": "08775a56a4d31c8f7c2bce38aaac105a2169e73619c32aa0890270a3f7223c4d"
+      },
+      "name": "preceding_shared_response_scale",
+      "overlap_role": "primary per-case historical success baseline",
+      "report_path": "reports/generated/v03-neural-delayed-shared-response-scale-report.json",
+      "report_source_sha": "2d35c0b32c5fb844c94b3909506dbf361d0bc521"
+    }
   },
   "hypothesis": "A single row-shared bilinear scorer conditioned on retained pre-final state will reduce the four-slot shortcut by forcing the same row scoring rule across physical response rows; this is a structural hypothesis, not a guarantee of physical success, causal slot use, phase inference, or fresh generalization.",
   "normalization": {
@@ -597,11 +695,17 @@
     "Label worlds 9300\u20139307 as inspected development cases, never fresh generalization.",
     "Do not use development outcomes for model selection, hyperparameters, or restarts.",
     "Do not add phase, time, frequency-selective resonance, or other unreviewed mechanisms to this paired comparison.",
-    "Preserve architecture, seeds, schedule, optimizer, objective, and shared-scale preprocessing outside the controlled action head."
+    "Treat this as a bundled action-head/context redesign, not a pure single-factor ablation.",
+    "Do not claim matched initialization for the replacement head; verify exact common body/frequency initialization compatibility.",
+    "Use the immediately preceding shared-scale legacy-head report at c35c2e6729dc867b516de8229ddd99adb88bcc44 as the primary historical overlap baseline, while retaining original v1 as secondary.",
+    "Preserve architecture, seeds, schedule, optimizer, objective, and shared-scale preprocessing outside the bundled action-head/context redesign."
   ],
   "runner_requirements": {
     "deadline_checks_between_cases": true,
+    "finite_difference_shared_head_check_required_before_training": true,
     "gradient_tests_required_before_training": true,
+    "historical_overlap_primary_reference": "reports/generated/v03-neural-delayed-shared-response-scale-report.json",
+    "historical_overlap_secondary_reference": "reports/generated/v03-neural-delayed-memory-report.json",
     "include_development_loss": true,
     "include_per_case_historical_success_overlap": true,
     "no_evaluator_labels_in_inference": true,
@@ -612,6 +716,7 @@
     "selectable_gate_head": true,
     "serialization_tests_required_before_training": true,
     "structured_partial_and_failure_reporting": true,
+    "upstream_retained_context_gradient_check_required_before_training": true,
     "verify_exact_serialized_normalization_before_evaluation": true,
     "verify_prediction_parity_before_evaluation": true,
     "write_markdown_summary": true
@@ -705,7 +810,7 @@
     "report": "reports/generated/v03-neural-shared-row-scorer-report.json",
     "summary": "reports/generated/v03-neural-shared-row-scorer-report.md"
   },
-  "source_sha_at_registration": "c35c2e6729dc867b516de8229ddd99adb88bcc44",
+  "source_sha_at_registration": "8d40e5e1c4888c1becd29329c08a96fc5724f21c",
   "status": "awaiting_review_before_retraining",
   "training_gate": {
     "description": "Development evaluation is permitted only when all four fixed candidate trials complete within budget and each reaches 8/8 ordinary delayed training physical successes.",

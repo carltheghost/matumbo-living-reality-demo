@@ -80,6 +80,10 @@ class V03SharedRowScorerTests(unittest.TestCase):
             self.assertFalse(audit["per_gate_parameters"])
             self.assertFalse(audit["evaluator_labels_in_inference"])
             self.assertTrue(audit["frequency_uses_retained_context"])
+            legacy_common = legacy.params.keys() & model.params.keys()
+            self.assertTrue(all(np.array_equal(legacy.params[name], model.params[name]) for name in legacy_common))
+            frequency_name = "c.W_action_frequency" if isinstance(model, V03FiveBrain) else "W_action_frequency"
+            self.assertTrue(np.array_equal(legacy.params[frequency_name], model.params[frequency_name]))
 
     def test_bilinear_head_changes_ranking_with_retained_context(self):
         params = {
@@ -109,18 +113,25 @@ class V03SharedRowScorerTests(unittest.TestCase):
             model.set_input_normalization(self.normalization)
             self.assertEqual(model.normalization_state(), self.normalization)
 
-    def test_preregistration_is_review_gated_and_single_factor(self):
+    def test_preregistration_is_review_gated_and_bundled(self):
         plan = build_preregistration()
         self.assertEqual(plan["status"], "awaiting_review_before_retraining")
         self.assertFalse(plan["training_started"])
         self.assertEqual(plan["executed_trials"], 0)
         self.assertEqual(plan["comparison_design"]["fixed_trial_count"], 4)
-        self.assertTrue(plan["comparison_design"]["no_additional_factors"])
+        self.assertFalse(plan["comparison_design"]["pure_single_factor_claim"])
+        self.assertTrue(plan["comparison_design"]["bundled_action_head_context_redesign"])
+        self.assertTrue(plan["comparison_design"]["no_unreviewed_additional_factors"])
         self.assertTrue(plan["comparison_design"]["no_sweep_or_tuning"])
         self.assertIn("--gate-head shared_row_scorer", plan["execution_command_after_review"])
         self.assertTrue(plan["training_gate"]["explicitly_existing_gate"])
         self.assertFalse(plan["head_input_and_information_scope"]["phase_or_time_signal_added"])
         self.assertTrue(plan["architecture"]["legacy_checkpoints_unchanged"])
+        self.assertTrue(plan["architecture"]["common_initialization"]["full"]["common_parameters_exact_match"])
+        self.assertEqual(
+            plan["historical_reference"]["primary"]["artifact_commit"],
+            "c35c2e6729dc867b516de8229ddd99adb88bcc44",
+        )
 
     def test_gradients_reach_shared_row_parameters(self):
         example = self.training_examples[0]
@@ -138,6 +149,42 @@ class V03SharedRowScorerTests(unittest.TestCase):
             self.assertGreater(float(np.max(np.abs(gradients[context_name]))), 0.0)
             self.assertGreater(float(np.max(np.abs(gradients[row_name]))), 0.0)
             self.assertEqual(len(trace), 5)
+
+    def test_shared_head_finite_difference_and_upstream_retained_context_gradient(self):
+        example = self.training_examples[0]
+        model = V03FiveBrain(107, gate_head=SHARED_ROW_GATE_HEAD)
+        model.set_input_normalization(self.normalization)
+        _, gradients, _, _ = model.loss_and_gradients(
+            example["policy_observations"],
+            target_gate=example["target_gate"],
+            target_frequency=example["target_frequency"],
+        )
+        self.assertGreater(float(np.max(np.abs(gradients["c.W_in"]))), 0.0)
+        parameter_name = "c.W_shared_row_context"
+        index = np.unravel_index(
+            int(np.argmax(np.abs(gradients[parameter_name]))),
+            gradients[parameter_name].shape,
+        )
+        original = float(model.params[parameter_name][index])
+        epsilon = 1e-5
+        try:
+            model.params[parameter_name][index] = original + epsilon
+            plus = model.loss_only(
+                example["policy_observations"],
+                target_gate=example["target_gate"],
+                target_frequency=example["target_frequency"],
+            )
+            model.params[parameter_name][index] = original - epsilon
+            minus = model.loss_only(
+                example["policy_observations"],
+                target_gate=example["target_gate"],
+                target_frequency=example["target_frequency"],
+            )
+        finally:
+            model.params[parameter_name][index] = original
+        finite_difference = (plus - minus) / (2.0 * epsilon)
+        analytic = float(gradients[parameter_name][index])
+        self.assertAlmostEqual(finite_difference, analytic, delta=max(1e-5, abs(analytic) * 2e-4))
 
     def test_final_response_permutation_preserves_shared_head_contract(self):
         example = self.development_examples[0]
@@ -215,6 +262,11 @@ class V03SharedRowScorerTests(unittest.TestCase):
             self.assertFalse(result["fresh_generalization_claim"])
             self.assertTrue(result["artifact_integrity"]["historical_unchanged"])
             self.assertTrue(result["artifact_integrity"]["input_checkpoints_unchanged"])
+            self.assertTrue(result["artifact_integrity"]["preceding_shared_scale_baseline"]["matches_expected"])
+            self.assertEqual(
+                result["success_set_overlap"]["primary_reference"]["artifact_commit"],
+                "c35c2e6729dc867b516de8229ddd99adb88bcc44",
+            )
             self.assertEqual(
                 result["preprocessing_symmetry"]["response_row_permutation_count"],
                 result["preprocessing_symmetry"]["case_count"],

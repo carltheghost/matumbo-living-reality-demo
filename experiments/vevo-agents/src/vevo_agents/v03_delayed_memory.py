@@ -25,6 +25,7 @@ import numpy as np
 from .v03_model import (
     GATE_HEAD_CHOICES,
     LEGACY_GATE_HEAD,
+    SHARED_ROW_GATE_HEAD,
     NOTE_FEATURE_END,
     NOTE_FEATURE_START,
     NOTE_PAYLOAD_MASK_INDEX,
@@ -58,6 +59,18 @@ REPORT_PATH = "reports/generated/v03-neural-delayed-memory-report.json"
 SUMMARY_PATH = "reports/generated/v03-neural-delayed-memory-report.md"
 CHECKPOINT_PREFIX = "v03-neural-delayed-memory"
 HISTORICAL_DELAYED_REPORT_PATH = "reports/generated/v03-neural-delayed-memory-report.json"
+PRECEDING_SHARED_SCALE_REPORT_PATH = "reports/generated/v03-neural-delayed-shared-response-scale-report.json"
+PRECEDING_SHARED_SCALE_SUMMARY_PATH = "reports/generated/v03-neural-delayed-shared-response-scale-report.md"
+PRECEDING_SHARED_SCALE_ARTIFACT_COMMIT = "c35c2e6729dc867b516de8229ddd99adb88bcc44"
+PRECEDING_SHARED_SCALE_REPORT_SOURCE_SHA = "2d35c0b32c5fb844c94b3909506dbf361d0bc521"
+PRECEDING_SHARED_SCALE_ARTIFACT_DIGESTS = {
+    PRECEDING_SHARED_SCALE_REPORT_PATH: "0de230b2c3636b4205d9e819a4831588c1df2b259af700a45fc13df4a92f833c",
+    PRECEDING_SHARED_SCALE_SUMMARY_PATH: "e8016b9434e2a6a9a3d60e369dbf5f6a797187d3fbb75bfc9b477ded66d9ba28",
+    "storage/checkpoints/v03-neural-delayed-shared-response-scale-full-seed-107.json": "5fe3a3a07c2572a2f51cde5699de36af41f6f39263c601b8e130ebcfba9f6ea6",
+    "storage/checkpoints/v03-neural-delayed-shared-response-scale-full-seed-117.json": "08775a56a4d31c8f7c2bce38aaac105a2169e73619c32aa0890270a3f7223c4d",
+    "storage/checkpoints/v03-neural-delayed-shared-response-scale-control-seed-141.json": "27c195ddce0e7524a464ad28963849d97d90a437b783be0dc34344b24d750095",
+    "storage/checkpoints/v03-neural-delayed-shared-response-scale-control-seed-143.json": "a1f622654e00a8195a202a29a3a70beae3cf1213d77e6900af9324b1d227e94c",
+}
 
 DELAYED_MODEL_SEEDS = (107, 117)
 DELAYED_CONTROL_SEEDS = (141, 143)
@@ -874,27 +887,76 @@ def _case_id(world_seed: int, goal_index: int) -> str:
     return f"world-{int(world_seed)}/goal-{int(goal_index)}"
 
 
-def _historical_development_successes(project_root: Path) -> dict[str, dict[tuple[int, int], bool]]:
-    """Read only the preserved legacy report's development success outcomes."""
+def _historical_reference_specs() -> dict[str, dict]:
+    return {
+        "preceding_shared_response_scale": {
+            "path": PRECEDING_SHARED_SCALE_REPORT_PATH,
+            "sections": ("development", "heldout"),
+            "artifact_commit": PRECEDING_SHARED_SCALE_ARTIFACT_COMMIT,
+            "report_source_sha": PRECEDING_SHARED_SCALE_REPORT_SOURCE_SHA,
+            "role": "primary comparison baseline: immediately preceding shared-scale legacy-head report",
+        },
+        "original_v1": {
+            "path": HISTORICAL_DELAYED_REPORT_PATH,
+            "sections": ("heldout", "development"),
+            "artifact_commit": None,
+            "report_source_sha": None,
+            "role": "retained original-v1 historical comparison",
+        },
+    }
 
-    path = project_root / HISTORICAL_DELAYED_REPORT_PATH
+
+def _load_historical_successes(path: Path, sections: tuple[str, ...]) -> tuple[dict[str, dict[tuple[int, int], bool]], dict | None]:
     if not path.exists():
-        return {}
+        return {}, None
     try:
         report = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return {}
+        return {}, None
+    for section in sections:
+        section_value = report.get(section)
+        if not isinstance(section_value, dict) or not isinstance(section_value.get("runs"), dict):
+            continue
+        result = {}
+        for key, trial in section_value["runs"].items():
+            cases = {}
+            for run in trial.get("runs", []):
+                try:
+                    cases[(int(run["world_seed"]), int(run["goal_index"]))] = bool(run["success"])
+                except (KeyError, TypeError, ValueError):
+                    continue
+            if cases:
+                result[str(key)] = cases
+        if result:
+            return result, report
+    return {}, report
+
+
+def _historical_development_successes(project_root: Path) -> dict[str, dict[str, dict[tuple[int, int], bool]]]:
+    """Read the primary shared-scale baseline and retain the original-v1 comparison."""
+
     result = {}
-    for key, trial in report.get("heldout", {}).get("runs", {}).items():
-        cases = {}
-        for run in trial.get("runs", []):
-            try:
-                cases[(int(run["world_seed"]), int(run["goal_index"]))] = bool(run["success"])
-            except (KeyError, TypeError, ValueError):
-                continue
-        if cases:
-            result[str(key)] = cases
+    for source, spec in _historical_reference_specs().items():
+        successes, _ = _load_historical_successes(project_root / spec["path"], spec["sections"])
+        result[source] = successes
     return result
+
+
+def _historical_reference_metadata(project_root: Path) -> dict[str, dict]:
+    metadata = {}
+    for source, spec in _historical_reference_specs().items():
+        path = project_root / spec["path"]
+        _, report = _load_historical_successes(path, spec["sections"])
+        metadata[source] = {
+            "path": spec["path"],
+            "role": spec["role"],
+            "available": report is not None,
+            "report_source_sha": None if report is None else report.get("source_sha"),
+            "expected_report_source_sha": spec["report_source_sha"],
+            "artifact_commit": spec["artifact_commit"],
+            "expected_artifact_commit": spec["artifact_commit"],
+        }
+    return metadata
 
 
 def _historical_success_overlap(
@@ -1032,11 +1094,12 @@ def _mark_development_entry_unavailable(
         entry["failure"] = failure
 
 
-def _untrained_reference_entry_shell(seed: int, batch: dict) -> dict:
+def _untrained_reference_entry_shell(seed: int, batch: dict, *, gate_head: str = LEGACY_GATE_HEAD) -> dict:
     """Create the untrained-reference report entry before derived metrics."""
 
     return {
         "model_seed": int(seed),
+        "gate_head": str(gate_head),
         "updates": 0,
         "status": batch["status"],
         "runs": batch["runs"],
@@ -1181,6 +1244,7 @@ def _finalize_development_entry(
     historical_successes: dict[tuple[int, int], bool] | None,
     deadline: float | None,
     phase_prefix: str,
+    historical_successes_by_source: dict[str, dict[tuple[int, int], bool]] | None = None,
 ) -> dict:
     """Derive development metrics after raw runs are already report-visible."""
 
@@ -1230,11 +1294,27 @@ def _finalize_development_entry(
         )
         entry["derived_metrics_status"]["world_clustered"] = "complete"
 
-        entry["historical_success_overlap"] = _historical_success_overlap(
+        primary_overlap = _historical_success_overlap(
             entry["runs"],
             historical_successes,
             deadline=deadline,
         )
+        entry["historical_success_overlap"] = primary_overlap
+        source_overlaps = {"preceding_shared_response_scale": primary_overlap}
+        for source, source_successes in sorted((historical_successes_by_source or {}).items()):
+            if source == "preceding_shared_response_scale":
+                continue
+            _check_deadline(
+                deadline,
+                f"{phase_prefix}_historical_overlap_{source}",
+                completed_cases=entry["completed_cases"],
+            )
+            source_overlaps[source] = _historical_success_overlap(
+                entry["runs"],
+                source_successes,
+                deadline=deadline,
+            )
+        entry["historical_success_overlap_by_source"] = source_overlaps
         entry["derived_metrics_status"]["historical_success_overlap"] = "complete"
     except DeadlineExceeded as exc:
         failed_stage = next(
@@ -1332,6 +1412,7 @@ def _historical_digests(project_root: Path) -> dict[str, str]:
         "storage/checkpoints/v03-neural-delayed-memory-full-seed-117.json",
         "storage/checkpoints/v03-neural-delayed-memory-control-seed-141.json",
         "storage/checkpoints/v03-neural-delayed-memory-control-seed-143.json",
+        *PRECEDING_SHARED_SCALE_ARTIFACT_DIGESTS.keys(),
     )
     return {
         path: _sha256_file(project_root / path)
@@ -1385,7 +1466,7 @@ def _markdown_summary(report: dict) -> str:
         f"Source commit: `{report.get('source_sha')}`  ",
         f"JSON report: `{report.get('report_path')}`  ",
         "",
-        "This artifact is a bounded, separately retrained candidate. It does not rewrite or replace the historical v1 report/checkpoints.",
+        "This artifact is a bounded, separately retrained candidate. Its primary per-case overlap baseline is the immediately preceding shared-response-scale legacy-head report; the original v1 comparison is retained separately.",
         "",
         "## Evaluation gate and scope",
         "",
@@ -1394,6 +1475,7 @@ def _markdown_summary(report: dict) -> str:
         f"- Development worlds: `{', '.join(str(seed) for seed in report.get('data', {}).get('development_world_seeds_inspected', DEVELOPMENT_WORLD_SEEDS))}`; these are previously inspected development cases, never fresh generalization evidence.",
         f"- Checkpoint reload/parity gate: `{report.get('checkpoint_reload', {}).get('status', 'not completed')}`.",
         f"- Historical artifacts unchanged byte-for-byte: `{report.get('historical_artifacts', {}).get('unchanged')}`.",
+        f"- Primary historical overlap reference: `{report.get('historical_comparisons', {}).get('primary_report_path')}` at artifact commit `{report.get('historical_comparisons', {}).get('primary_artifact_commit')}`.",
         "",
         "## Training results",
         "",
@@ -1489,7 +1571,9 @@ def run_experiment(
     )
     hidden_normalization = _validate_hidden_normalization(train_examples, normalization)
     prepared_train = _prepared_by_identity(train_specs)
-    historical_successes = _historical_development_successes(project_root)
+    historical_successes_by_source = _historical_development_successes(project_root)
+    historical_successes = historical_successes_by_source.get("preceding_shared_response_scale", {})
+    historical_reference_metadata = _historical_reference_metadata(project_root)
     trial_models = []
     trial_records = []
     checkpoint_records = {}
@@ -1790,7 +1874,7 @@ def run_experiment(
         ):
             try:
                 _check_deadline(deadline, "untrained_reference", completed_cases=len(references["untrained"]))
-                model = model_class(seed)
+                model = model_class(seed, gate_head=gate_head)
                 model.set_input_normalization(normalization)
                 reference_batch = _run_case_batch(
                     train_specs,
@@ -1802,7 +1886,7 @@ def run_experiment(
                     deadline=deadline,
                     phase=f"untrained_reference_{label}",
                 )
-                entry = _untrained_reference_entry_shell(seed, reference_batch)
+                entry = _untrained_reference_entry_shell(seed, reference_batch, gate_head=gate_head)
                 # Make the raw completed prefix visible before calculating any
                 # derived metric, so a cap cannot erase evidence already run.
                 references["untrained"][label] = entry
@@ -1891,6 +1975,10 @@ def run_experiment(
                     historical_successes=historical_successes.get(trial["key"]),
                     deadline=deadline,
                     phase_prefix=f"development_{trial['key']}",
+                    historical_successes_by_source={
+                        source: source_runs.get(trial["key"], {})
+                        for source, source_runs in historical_successes_by_source.items()
+                    },
                 )
                 if finalized["status"] == "complete":
                     _check_deadline(
@@ -1972,7 +2060,10 @@ def run_experiment(
             "control_brains": 1,
             "full_parameter_count": int(V03FiveBrain(DELAYED_MODEL_SEEDS[0], gate_head=gate_head).parameter_count()),
             "control_parameter_count": int(V03SingleRecurrentMemory(DELAYED_CONTROL_SEEDS[0], gate_head=gate_head).parameter_count()),
-            "comparison_note": "No five-component superiority claim is made from component count.",
+            "comparison_note": "This is a bundled final action-head/context redesign: the shared row gate and the pre-final frequency-head input change together; no pure single-factor claim is made.",
+            "frequency_head_input": "pre-final retained context" if gate_head == SHARED_ROW_GATE_HEAD else "post-response action features",
+            "common_parameter_initialization_preserved": gate_head == SHARED_ROW_GATE_HEAD,
+            "shared_head_initialization_stream": "independent architecture-specific stream; legacy body/frequency draws reserved" if gate_head == SHARED_ROW_GATE_HEAD else "legacy parameter stream",
         },
         "schedule": {
             "policy_observation_count": 5,
@@ -2037,6 +2128,14 @@ def run_experiment(
             "pair_identity_validation": "world_seed, goal_index, and note_goal_id validated for every ordinary/ablation pair",
         },
         "references": references,
+        "historical_comparisons": {
+            "primary_source": "preceding_shared_response_scale",
+            "primary_report_path": PRECEDING_SHARED_SCALE_REPORT_PATH,
+            "primary_artifact_commit": PRECEDING_SHARED_SCALE_ARTIFACT_COMMIT,
+            "primary_report_source_sha": PRECEDING_SHARED_SCALE_REPORT_SOURCE_SHA,
+            "sources": historical_reference_metadata,
+            "original_v1_retained_as_secondary": True,
+        },
         "development": development,
         "heldout": heldout_compatibility,
         "checkpoints": checkpoint_records,
