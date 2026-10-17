@@ -420,3 +420,112 @@ body:has(#vivo-workshop-ui)::after {
     padding-inline: 6px;
   }
 }
+
+/* The remote task lane stays inside the existing State sheet. It is an
+   application-owned status surface, not a second chat shell. */
+.remote-agent-tasks {
+  border: 1px solid rgba(165, 242, 223, 0.24);
+  border-radius: 14px;
+  background: rgba(5, 18, 25, 0.56);
+  margin-top: 14px;
+  padding: 12px;
+}
+
+.remote-agent-tasks h3 {
+  color: #eafff8;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  margin: 0 0 8px;
+}
+
+.remote-agent-tasks label {
+  color: var(--vivo-muted);
+  display: block;
+  font-size: 10px;
+  margin-top: 8px;
+}
+
+.remote-agent-tasks input:not([type="checkbox"]) {
+  box-sizing: border-box;
+  display: block;
+  margin-top: 5px;
+  min-height: 38px;
+  width: 100%;
+}
+
+.remote-agent-tasks .row {
+  align-items: stretch;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.remote-agent-tasks .row button {
+  flex: 1 1 145px;
+  font-size: 10px;
+}
+
+.remote-agent-tasks code,
+.remote-agent-task-card small {
+  color: var(--vivo-gold);
+}
+
+.remote-agent-task-list {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.remote-agent-task-card {
+  border-left: 2px solid var(--vivo-line);
+  background: rgba(11, 31, 40, 0.52);
+  padding: 8px 9px;
+}
+
+.remote-agent-task-card strong {
+  color: #effff8;
+  display: block;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+.remote-agent-task-card p {
+  color: var(--vivo-muted);
+  font-family: system-ui, sans-serif;
+  font-size: 11px;
+  line-height: 1.35;
+  margin: 5px 0;
+  overflow-wrap: anywhere;
+}
+
+.remote-agent-task-card small {
+  display: block;
+  font-size: 9px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.remote-agent-task-card button {
+  font-size: 9px;
+  margin-top: 7px;
+  min-block-size: 34px;
+  padding: 5px 8px;
+}
+
+.remote-agent-tasks details {
+  margin-top: 10px;
+}
+
+.remote-agent-tasks summary {
+  color: var(--vivo-cyan);
+  cursor: pointer;
+  font-size: 10px;
+}
+
+.remote-agent-tasks pre {
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

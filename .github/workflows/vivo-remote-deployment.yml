@@ -12,6 +12,7 @@ on:
       - 'services/vivo/start-canonical-remote.sh'
       - 'services/vivo/requirements.txt'
       - 'services/vivo/server/**'
+      - 'services/vivo/tasks/**'
       - 'services/vivo/web/**'
       - 'services/vivo/contracts/**'
       - 'services/vivo/models/**'

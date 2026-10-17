@@ -11,9 +11,9 @@ class FakeSocket {
   close(){this.readyState=3;this.onclose?.();}
 }
 
-async function admitted(onError=()=>{}){
+async function admitted(onError=()=>{},fetchImpl=globalThis.fetch){
   FakeSocket.instances.length=0;
-  const transport=new RemoteTransport({url:'ws://vivo.test/ws',token:'x'.repeat(24),WebSocket:FakeSocket,onError,timeoutMs:1000});
+  const transport=new RemoteTransport({url:'ws://vivo.test/ws',token:'x'.repeat(24),WebSocket:FakeSocket,fetch:fetchImpl,onError,timeoutMs:1000});
   const joining=transport.admit();
   const socket=FakeSocket.instances[0];
   socket.open();
@@ -113,4 +113,46 @@ test('unexpected remote socket closure fences an admitted conversation provider'
   await new Promise(resolve=>setTimeout(resolve,0));
   assert.equal(provider.available,false);
   assert.equal(transport.closed,true);
+});
+
+test('durable agent task requests use only exact same-origin routes and never put the bearer in task data',async()=>{
+  const calls=[];
+  const fetchImpl=async(url,init)=>{
+    calls.push({url:String(url),init,body:init.body?JSON.parse(init.body):null});
+    if(init.method==='GET'&&String(url).endsWith('/api/agent/status'))return {ok:true,status:200,json:async()=>({schema:'vivo.agent-task/1',status:'ready',available:true,persistence:'sqlite-wal-full',conversation:{available:false,reason:'provider-not-configured'}})};
+    if(init.method==='GET')return {ok:true,status:200,json:async()=>({schema:'vivo.agent-task/1',status:'ready',tasks:[]})};
+    return {ok:true,status:201,json:async()=>({schema:'vivo.agent-task/1',taskId:'vivo-task-abcdefghijklmnop',status:'queued'})};
+  };
+  const {transport,socket}=await admitted(()=>{},fetchImpl);
+  const status=await transport.agentStatus();
+  assert.equal(status.persistence,'sqlite-wal-full');
+  const result=await transport.createAgentTask({requestId:'task.1',goal:'inspect',permissions:['sample.read'],toolCall:{name:'vivo.sample.inspect',arguments:{sampleId:'field-baseline'}}});
+  assert.equal(result.taskId,'vivo-task-abcdefghijklmnop');
+  assert.equal(calls[1].init.headers.Authorization,'Bearer '+'x'.repeat(24));
+  assert.equal(calls[1].url.includes('x'.repeat(24)),false);
+  assert.equal(JSON.stringify(calls[1].body).includes('x'.repeat(24)),false);
+  await assert.rejects(transport.agentRequest('/api/agent/../leak'),error=>error.code==='AGENT_ROUTE_INVALID');
+  await shutdown(transport,socket);
+});
+
+test('default task fetch keeps its browser global receiver',async()=>{
+  const original=globalThis.fetch;
+  const calls=[];
+  globalThis.fetch=function(url,init){
+    assert.equal(this,globalThis);
+    calls.push({url:String(url),init});
+    return Promise.resolve({ok:true,status:200,json:async()=>({schema:'vivo.agent-task/1',status:'ready',available:true})});
+  };
+  try{
+    FakeSocket.instances.length=0;
+    const transport=new RemoteTransport({url:'ws://vivo.test/ws',token:'x'.repeat(24),WebSocket:FakeSocket,timeoutMs:1000});
+    const joining=transport.admit();
+    const socket=FakeSocket.instances[0];
+    socket.open();
+    socket.emit({type:'joined',role:'owner',actorId:'remote.owner',session:{id:'s'},state:{snapshot:{acceptedSequence:0}}});
+    await joining;
+    await transport.agentStatus();
+    assert.equal(calls.length,1);
+    await shutdown(transport,socket);
+  } finally {globalThis.fetch=original;}
 });

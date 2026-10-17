@@ -73,6 +73,7 @@ class RemoteDeploymentContractTests(unittest.TestCase):
         self.assertIn("FROM node:24.19.0-bookworm-slim", dockerfile)
         self.assertIn("COPY services/vivo/contracts /app/services/vivo/contracts", dockerfile)
         self.assertIn("COPY services/vivo/server /app/services/vivo/server", dockerfile)
+        self.assertIn("COPY services/vivo/tasks /app/services/vivo/tasks", dockerfile)
         self.assertIn("COPY services/vivo/web /app/services/vivo/web", dockerfile)
         self.assertIn("COPY services/vivo_adaptive /app/services/vivo_adaptive", dockerfile)
         self.assertIn("COPY services/vivo_material /app/services/vivo_material", dockerfile)

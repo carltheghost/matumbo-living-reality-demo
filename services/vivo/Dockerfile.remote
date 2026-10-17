@@ -26,6 +26,7 @@ RUN python3 -m venv /opt/vivo-venv \
 COPY services/vivo/contracts /app/services/vivo/contracts
 COPY services/vivo/models /app/services/vivo/models
 COPY services/vivo/server /app/services/vivo/server
+COPY services/vivo/tasks /app/services/vivo/tasks
 COPY services/vivo/start-canonical-remote.sh /app/services/vivo/start-canonical-remote.sh
 COPY services/vivo/web /app/services/vivo/web
 COPY services/vivo_adaptive /app/services/vivo_adaptive

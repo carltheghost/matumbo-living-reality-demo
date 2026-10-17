@@ -5,10 +5,11 @@ import {offlineForkCommand} from './offline-branch.mjs';
 import {createRemoteConversationProvider} from './conversation-transport.mjs';
 
 export class RemoteTransport {
-  constructor({url,token,WebSocket:Socket=globalThis.WebSocket,onState=()=>{},onError=()=>{},timeoutMs=7000}={}) {
+  constructor({url,token,WebSocket:Socket=globalThis.WebSocket,fetch:fetchImpl=typeof globalThis.fetch==='function'?globalThis.fetch.bind(globalThis):globalThis.fetch,onState=()=>{},onError=()=>{},timeoutMs=7000}={}) {
     if(typeof url!=='string'||!url.length||typeof token!=='string'||token.length<20||typeof Socket!=='function')
       throw new TypeError('Remote transport configuration required');
-    this.url=url;this.invitationToken=token;this.Socket=Socket;this.onState=onState;this.onError=onError;this.timeoutMs=timeoutMs;
+    if(typeof fetchImpl!=='function') throw new TypeError('Remote task fetch is unavailable');
+    this.url=url;this.invitationToken=token;this.Socket=Socket;this.fetch=fetchImpl;this.onState=onState;this.onError=onError;this.timeoutMs=timeoutMs;
     this.socket=null;this.session=null;this.actorId=null;this.role=null;this.current=null;
     this.pending=new Map();this.listeners=new Set();this.conversationProviders=new Set();this.serial=0;this.closed=true;
   }
@@ -107,6 +108,26 @@ export class RemoteTransport {
   createInvite(ttlSeconds=3600){return this.call('invite.create',{ttlSeconds});}
   revokeInvite(id){return this.call('invite.revoke',{id});}
   listInvites(){return this.call('invite.list',{});}
+  async agentRequest(path,{method='GET',body}={}){
+    if(this.closed||!this.session)throw Object.assign(new Error('REMOTE_ADMISSION_REQUIRED'),{code:'REMOTE_ADMISSION_REQUIRED'});
+    if(typeof path!=='string'||!/^\/api\/agent\/(?:status|tasks(?:\/vivo-task-[A-Za-z0-9_-]{16,80}(?:\/cancel)?)?)$/.test(path))
+      throw Object.assign(new Error('AGENT_ROUTE_INVALID'),{code:'AGENT_ROUTE_INVALID'});
+    const origin=new URL(this.url).origin.replace(/^ws/,'http');
+    const url=new URL(path,`${origin}/`);
+    let response;
+    try{
+      response=await this.fetch(url.href,{method,headers:{Accept:'application/json',Authorization:`Bearer ${this.invitationToken}`,...(method==='POST'?{'Content-Type':'application/json'}:{})},...(body===undefined?{}:{body:JSON.stringify(body)}),credentials:'omit',cache:'no-store',mode:'same-origin',redirect:'error',referrerPolicy:'no-referrer'});
+    }catch(error){throw Object.assign(new Error('AGENT_NETWORK'),{code:'AGENT_NETWORK',cause:error});}
+    let value=null;try{value=await response.json();}catch{}
+    if(!response.ok){const code=typeof value?.error==='string'?value.error:`AGENT_HTTP_${response.status}`;throw Object.assign(new Error(code),{code,status:response.status});}
+    if(!value||typeof value!=='object'||Array.isArray(value))throw Object.assign(new Error('AGENT_PROTOCOL_ERROR'),{code:'AGENT_PROTOCOL_ERROR'});
+    return value;
+  }
+  agentStatus(){return this.agentRequest('/api/agent/status');}
+  listAgentTasks(){return this.agentRequest('/api/agent/tasks');}
+  createAgentTask(body){return this.agentRequest('/api/agent/tasks',{method:'POST',body});}
+  getAgentTask(taskId){return this.agentRequest(`/api/agent/tasks/${encodeURIComponent(taskId)}`);}
+  cancelAgentTask(taskId){return this.agentRequest(`/api/agent/tasks/${encodeURIComponent(taskId)}/cancel`,{method:'POST'});}
   async close(){
     if(this.closed)return;
     try{if(this.session)await this.call('close',{});}finally{

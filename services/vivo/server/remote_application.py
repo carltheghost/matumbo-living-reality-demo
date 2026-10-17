@@ -28,6 +28,7 @@ from aiohttp import WSMsgType, web
 from .local_application import LocalBridge
 from .application.adaptive_host import AdaptiveApplicationHost
 from .authority.module_routes import install_module_routes
+from .agent_tasks import AgentTaskRuntime, attach_agent_task_routes
 from .conversation import ConversationAdapter, attach_conversation_routes
 from .geometry import Geometry
 
@@ -445,6 +446,9 @@ def remote_index():
 async def make_remote_app(data_dir, owner_token, origin, *, store="posix", conversation_adapter=None):
     gateway = RemoteGateway(Path(data_dir), owner_token, origin, store=store)
     conversation = conversation_adapter or ConversationAdapter.from_env()
+    # Agent tasks have their own durable SQLite journal. They never write into
+    # the canonical world checkpoint and never receive a provider credential.
+    agent_tasks = AgentTaskRuntime(REPOSITORY, Path(data_dir) / "agent-tasks.sqlite")
 
     @web.middleware
     async def security(request, handler):
@@ -465,6 +469,7 @@ async def make_remote_app(data_dir, owner_token, origin, *, store="posix", conve
     app = web.Application(client_max_size=MAX_MESSAGE, middlewares=[security])
     app["gateway"] = gateway
     app["conversation"] = conversation
+    app["agent_tasks"] = agent_tasks
     install_module_routes(app, REPOSITORY)
     grids = {d: Geometry("flat", d).sample_grid() for d in (4, 11)}
 
@@ -511,6 +516,14 @@ async def make_remote_app(data_dir, owner_token, origin, *, store="posix", conve
         authenticate=gateway.authenticate,
         identity_for_token=conversation_identity,
     )
+    attach_agent_task_routes(
+        app,
+        runtime=agent_tasks,
+        origin=origin,
+        authenticate=gateway.authenticate,
+        identity_for_token=conversation_identity,
+        provider_status=conversation.status,
+    )
 
     async def asset(_request, name):
         data = (WEB_ROOT / name).read_bytes()
@@ -532,12 +545,26 @@ async def make_remote_app(data_dir, owner_token, origin, *, store="posix", conve
                            lambda request, n=source_name: asset(request, n))
     app.router.add_static("/vendor/", WEB_ROOT / "vendor", show_index=False, follow_symlinks=False)
     app.on_startup.append(lambda _app: gateway.start())
+
+    async def start_agent_tasks(_app):
+        # aiohttp awaits lifecycle callbacks. The task scheduler itself is
+        # synchronous because it only opens the already-created SQLite journal;
+        # keep that distinction explicit instead of returning None from the
+        # startup signal.
+        agent_tasks.start()
+
+    app.on_startup.append(start_agent_tasks)
     app.on_shutdown.append(lambda _app: gateway.stop())
 
     async def close_conversation(_app):
         await conversation.close()
 
     app.on_cleanup.append(close_conversation)
+
+    async def close_agent_tasks(_app):
+        await agent_tasks.close()
+
+    app.on_cleanup.append(close_agent_tasks)
     return app
 
 
