@@ -231,6 +231,15 @@ body.phone-world:not(.phone-local) #status {
 .field-dock .field-release { color: #f3d28e; }
 .field-dock button:disabled { color: #6c8298; opacity: .55; }
 
+@media (min-width: 761px) {
+  .field-selection-row {
+    background: var(--phone-panel);
+    position: sticky;
+    top: 0;
+    z-index: 4;
+  }
+}
+
 #phoneFieldAtlas {
   background: #07121d;
   border: 1px solid rgba(127, 180, 255, .26);
