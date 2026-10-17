@@ -90,7 +90,7 @@ body.phone-world.camera-live #cameraVideo { z-index: 0; }
 .tone-memory { background: var(--phone-green); box-shadow: 0 0 12px rgba(103,224,162,.6); }
 
 .phone-world #status {
-  bottom: 78px;
+  bottom: calc(78px + env(safe-area-inset-bottom, 0px));
   background: rgba(9, 20, 33, .86);
   border-color: var(--phone-line);
   color: #cbd9e7;
@@ -156,7 +156,7 @@ body.phone-world.camera-live #cameraVideo { z-index: 0; }
   background: var(--phone-panel);
   border: 1px solid var(--phone-line);
   border-radius: var(--phone-radius);
-  bottom: 84px;
+  bottom: calc(128px + env(safe-area-inset-bottom, 0px));
   box-shadow: 0 24px 70px rgba(0,0,0,.32), 0 0 0 1px rgba(127,180,255,.04) inset;
   display: flex;
   flex-direction: column;
@@ -167,7 +167,7 @@ body.phone-world.camera-live #cameraVideo { z-index: 0; }
   position: fixed;
   right: 24px;
   scrollbar-color: rgba(127,180,255,.35) transparent;
-  top: 126px;
+  top: 176px;
   width: min(430px, calc(100vw - 48px));
   z-index: 7;
 }
@@ -190,6 +190,8 @@ body.phone-world:not(.phone-local) #status {
 .eyebrow { color: #7fb4ff; font: 600 9px/1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .14em; text-transform: uppercase; }
 .field-dock-state { color: #91a9c1; font: 9px/1.35 ui-monospace, SFMono-Regular, Consolas, monospace; max-width: 144px; text-align: right; }
 .field-dock-intro { color: var(--phone-muted); font-size: 12px; line-height: 1.45; margin: 0; }
+.field-dock-hint { background: rgba(9, 25, 40, .62); border-left: 2px solid rgba(127, 180, 255, .48); color: #9bb4cc; font: 10px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; margin: 0; padding: 7px 8px; }
+.field-dock-hint b { color: #d6e8fa; font-weight: 650; }
 
 .field-query-row,
 .field-axis-row,
@@ -199,6 +201,16 @@ body.phone-world:not(.phone-local) #status {
 .field-axis-row { align-items: end; grid-template-columns: auto repeat(3, 1fr); }
 .field-selection-row { align-items: end; grid-template-columns: minmax(140px, .9fr) 1.2fr; }
 .field-actions { grid-template-columns: repeat(3, 1fr); }
+.field-secondary-actions { border-top: 1px solid rgba(127, 180, 255, .18); grid-column: 1 / -1; padding-top: 7px; }
+.field-secondary-actions summary { align-items: center; color: #a9c2da; cursor: pointer; display: flex; font: 10px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; justify-content: space-between; letter-spacing: .06em; list-style: none; min-height: 34px; text-transform: uppercase; }
+.field-secondary-actions summary::-webkit-details-marker { display: none; }
+.field-secondary-actions summary::after { color: #7fb4ff; content: '+'; font-size: 16px; }
+.field-secondary-actions[open] summary::after { content: '−'; }
+.field-secondary-actions-list { display: grid; gap: 8px; grid-template-columns: repeat(3, minmax(0, 1fr)); padding-top: 8px; }
+.field-secondary-actions summary:focus-visible,
+.field-dock button:focus-visible,
+.field-dock select:focus-visible,
+.field-dock input:focus-visible { outline: 2px solid var(--phone-blue); outline-offset: 2px; }
 
 .field-dock label { color: #91a9c1; font-size: 10px; margin: 0; }
 .field-dock input,
@@ -319,7 +331,7 @@ body.phone-world:not(.phone-local) #status {
   .phone-world #selection { right: 16px; top: 82px; }
   .world-legend { left: 16px; top: 135px; }
   .field-dock {
-    bottom: max(70px, calc(58px + env(safe-area-inset-bottom)));
+    bottom: max(128px, calc(116px + env(safe-area-inset-bottom, 0px)));
     gap: 8px;
     left: 10px;
     max-height: min(72dvh, calc(100dvh - 128px));
@@ -351,7 +363,7 @@ body.phone-world:not(.phone-local) #status {
     top: 0;
     z-index: 3;
   }
-  .field-actions button:nth-child(4) { grid-column: 1 / 2; }
+  .field-secondary-actions-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .phone-world .toolbar {
     bottom: max(10px, env(safe-area-inset-bottom));
     left: 10px;
@@ -359,7 +371,7 @@ body.phone-world:not(.phone-local) #status {
     right: 10px;
   }
   .phone-world .toolbar button { flex: 1; font-size: 9px; padding: 8px 5px; }
-  .phone-world #status { bottom: max(60px, calc(54px + env(safe-area-inset-bottom))); }
+  .phone-world #status { bottom: max(64px, calc(54px + env(safe-area-inset-bottom, 0px))); }
   .phone-world .metrics { display: none; }
   .phone-world .welcome {
     bottom: max(4px, env(safe-area-inset-bottom));
@@ -588,7 +600,7 @@ body.phone-world:not(.phone-local) #status {
 .companion-minimize { align-items: center; display: inline-flex; gap: 5px; }
 .companion-minimize svg { flex: 0 0 auto; height: 12px; width: 12px; }
 .companion-flow span.is-complete { color: #8ee8bd; }
-.field-dock[data-companion-collapsed="true"] { bottom: 84px; height: auto; max-height: none; overflow: visible; top: auto; }
+.field-dock[data-companion-collapsed="true"] { bottom: calc(128px + env(safe-area-inset-bottom, 0px)); height: auto; max-height: none; overflow: visible; top: auto; }
 .vivo-companion[data-collapsed="true"] { gap: 0; min-height: 0; padding-bottom: 8px; padding-top: 8px; }
 .vivo-companion[data-collapsed="true"] > :not(.companion-kicker):not(.companion-heading) { display: none; }
 .vivo-companion[data-collapsed="true"] .companion-heading { justify-content: flex-end; }
@@ -630,7 +642,7 @@ body.phone-world:not(.phone-local) #status {
   .companion-conversation-summary strong { font-size: 11px; }
   .companion-provider-badge { font-size: 7px; padding: 5px 6px; }
   .companion-chat-unavailable { font-size: 7px; padding: 6px 7px; }
-  .field-dock[data-companion-collapsed="true"] { bottom: max(70px, calc(58px + env(safe-area-inset-bottom))); top: auto; }
+  .field-dock[data-companion-collapsed="true"] { bottom: max(128px, calc(116px + env(safe-area-inset-bottom, 0px))); top: auto; }
 }
 
 @media (prefers-reduced-motion: reduce) {

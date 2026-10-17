@@ -296,6 +296,7 @@ function updateFieldWorld(envelope = fieldEnvelope, options = {}) {
 }
 function updateFieldActionButtons(completedGeneration = null) {
   const preview = fieldWorld?.commitCandidate() || null;
+  if (preview) document.querySelector('.field-secondary-actions')?.setAttribute('open', '');
   const superseded = preview && completedGeneration !== null && preview.generation !== completedGeneration;
   const enabled = Boolean(preview);
   if ($('phoneFieldApply')) $('phoneFieldApply').disabled = !enabled;
@@ -902,6 +903,11 @@ function addPhoneSurface() {
   enter.onclick = () => startLocal().catch(error => status(error.message));
   const nav = button('phonePanelButton', 'Advanced', 'secondary');
   nav.type = 'button'; nav.onclick = openPhonePanel; $('toolbar')?.append(nav);
+  $('panel')?.addEventListener('close', () => {
+    if ($('panel')?.dataset.focusReturn !== 'phone') return;
+    $('panel').dataset.focusReturn = '';
+    requestAnimationFrame(() => nav.focus());
+  });
   // The phone route owns a compact field dock in the page shell. Keep one
   // advanced sheet instance so the existing controls retain their IDs and
   // handlers without duplicating the field controls.
@@ -1107,7 +1113,10 @@ function addPhoneSurface() {
 function openPhonePanel() {
   if (!engine) { status('Enter the local Vivo engine first.'); return; }
   document.querySelectorAll('[data-sheet]').forEach(node => node.classList.toggle('active', node.dataset.sheet === 'phone'));
-  $('panelTitle').textContent = 'Phone engine & capabilities'; $('panel').showModal();
+  $('panelTitle').textContent = 'Phone engine & capabilities';
+  $('panel').dataset.focusReturn = 'phone';
+  $('panel').showModal();
+  $('panelTitle')?.focus();
   refreshSnapshot().catch(error => status(error.message));
 }
 async function startLocal() {

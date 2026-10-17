@@ -61,6 +61,7 @@
       <label class="selected-field-label">Selected field<select id="phoneFieldEntity"></select></label>
       <p id="phoneFieldPreview" class="field-preview-copy">No local edit preview. Preview never enters accepted history.</p>
     </div>
+    <p class="field-dock-hint" id="phoneFieldHint"><b>Select</b> a field, then <b>Move</b> and apply a local edit. Two contacts resize or turn the selected object. <b>Back / save</b> stay in Advanced.</p>
     <div id="phoneEconomyContext" class="context-slot" hidden aria-label="Selected object economy context">
       <button id="phoneEconomyTrigger" type="button" aria-controls="simulated-economy-panel" aria-expanded="false">Open object context</button>
       <p id="phoneEconomyStatus" class="phone-economy-status" role="status" aria-live="polite">TUMBO-SIM local demo initializes after selecting an object.</p>
@@ -68,11 +69,16 @@
     </div>
     <div class="field-actions" aria-label="Selected field actions">
       <button id="phoneFieldPreviewMove" type="button">Preview move</button>
-      <button id="phoneFieldPreviewRotate" type="button">Preview turn</button>
-      <button id="phoneFieldPreviewMix" type="button">Preview mix</button>
       <button id="phoneFieldApply" class="field-apply" type="button" disabled>Apply local edit</button>
-      <button id="phoneFieldDiscard" type="button" disabled>Discard preview</button>
       <button id="phoneReleaseContacts" class="field-release" type="button">Release contacts</button>
+      <details class="field-secondary-actions">
+        <summary>More field actions</summary>
+        <div class="field-secondary-actions-list">
+          <button id="phoneFieldPreviewRotate" type="button">Preview turn</button>
+          <button id="phoneFieldPreviewMix" type="button">Preview mix</button>
+          <button id="phoneFieldDiscard" type="button" disabled>Discard preview</button>
+        </div>
+      </details>
     </div>
     <div class="field-query-row">
       <label>Ask the field<input id="phoneFieldQuery" maxlength="80" placeholder="place, person, memory"></label>
@@ -112,7 +118,7 @@
   </section>
 
   <dialog id="panel">
-    <div class="sheet-top"><div><span class="eyebrow">VIVO CONTROLS</span><h2 id="panelTitle">Controls</h2></div><button id="closePanel" aria-label="Close controls" type="button">×</button></div>
+    <div class="sheet-top"><div><span class="eyebrow">VIVO CONTROLS</span><h2 id="panelTitle" tabindex="-1">Controls</h2></div><button id="closePanel" aria-label="Close controls" type="button">×</button></div>
     <div class="sheet" data-sheet="move"><p>Tap an object, then drag it. The active local phone engine or an explicitly connected shared room accepts movement; offline phone edits never contact a server.</p><p id="moveAuthorityNote" class="muted">No edit authority is active. Enter local Vivo or connect an explicit shared room.</p><label>Movement target<select id="moveTarget"><option value="object">Selected object</option><option value="observer">Your observer</option></select></label><label>Active spatial axis<select id="moveAxis"></select></label><div class="row"><button id="axisMinus" type="button">− along axis</button><button id="axisPlus" type="button">+ along axis</button></div><button id="releaseGrab" type="button">Release object</button><p class="muted">Flat spaces: full-dimensional ball contacts. Curved spaces: chart-local handles with metric/geodesic movement; solid curved-body collision is not implemented.</p></div>
     <div class="sheet" data-sheet="eye"><p>The Eye belongs to you. Changing it does not change your collaborator’s viewpoint.</p><label>View<select id="viewMode"><option value="slice">Local slice</option><option value="overview">Overview / hidden objects as ghosts</option></select></label><label>Hidden-axis slice<select id="sliceAxis"></select></label><input id="sliceValue" type="range" min="-3" max="3" step=".02" value="0"><output id="sliceReadout">0</output><div class="row"><button id="homeView" type="button">Frame the space</button><button id="followSelected" type="button">Meet selected object</button></div><p class="muted">Drag empty space to orbit, pinch or scroll to zoom. Observer axes are explicit. Overview ghosts are a map, not full-dimensional eyesight.</p></div>
     <div class="sheet" data-sheet="camera"><p><b>Camera overlay, not world-anchored AR.</b> Live hand recognition runs locally in a worker. No camera frames are sent to collaborators.</p><div class="row"><button id="frontCamera" type="button">Front + hands</button><button id="backCamera" type="button">Back + hands</button></div><button id="previewCamera" type="button">Camera only / touch</button><button id="stopCamera" type="button">Stop camera / release</button><p id="cameraState" role="status">OFF</p><label>Display profile<select id="visibility"><option value="auto">Auto visibility</option><option value="balanced">Balanced</option><option value="bright">Bright / glare</option><option value="dark">Dark / low glow</option></select></label><div class="row"><button id="torch" type="button">Toggle rear light</button><button id="exposure" type="button">Reduce exposure</button></div><label class="check"><input type="checkbox" id="skeleton" checked> Show hand landmarks</label><p class="muted">Show an open hand first, point, then pinch and move. Missing/stale hands release the object. Darkness does not create usable sensor information. Touch stays available. Eye means observer navigation, not calibrated eye tracking.</p></div>
