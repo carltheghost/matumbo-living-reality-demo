@@ -1,12 +1,25 @@
+import copy
+import hashlib
+import json
+from pathlib import Path
+import shutil
+import tempfile
 import unittest
 
 import numpy as np
 
 from vevo_agents.autograd import Tensor
-from vevo_agents.v03_document_evidence import MAX_REQUESTED_FIELDS, DocumentBundleStore, DocumentEvidenceSession, make_task
+from vevo_agents.v03_document_evidence import (
+    MAX_REQUESTED_FIELDS,
+    DocumentBundleStore,
+    DocumentEvidenceSession,
+    ProtocolViolation,
+    make_task,
+)
 from vevo_agents.v03_document_policy import (
     DOCUMENT_ACTIONS,
     DOCUMENT_CANDIDATE_FEATURE_DIM,
+    DOCUMENT_DISPOSITION_FEATURE_DIM,
     DOCUMENT_MEMORY_SHAPE,
     DOCUMENT_MODEL_INPUT_DIM,
     DOCUMENT_REQUEST_FEATURE_DIM,
@@ -15,6 +28,9 @@ from vevo_agents.v03_document_policy import (
     DocumentObservationEncoder,
     DocumentPolicyInterface,
 )
+
+
+BUNDLE = Path("storage/document_evidence")
 
 
 def candidate_template(**overrides):
@@ -89,7 +105,7 @@ class DocumentPolicyInterfaceTests(unittest.TestCase):
         self.assertEqual(encoded.shape, (1, DOCUMENT_CANDIDATE_FEATURE_DIM))
         self.assertTrue(np.isfinite(encoded).all())
         self.assertEqual(encoder.encode_candidates([]).shape, (0, DOCUMENT_CANDIDATE_FEATURE_DIM))
-        with self.assertRaises(Exception):
+        with self.assertRaises(ProtocolViolation):
             encoder.encode_candidates([{**candidate, "requested": True}], requested_field_ids=("renewal_date",), identity=identity)
 
     def test_real_observation_can_be_encoded_without_private_store_access(self):
@@ -191,13 +207,13 @@ class DocumentPolicyInterfaceTests(unittest.TestCase):
     def test_long_utf8_inputs_are_rejected_or_preserved_without_truncation(self):
         encoder = DocumentObservationEncoder()
         request = [{"field_id": "a" * 129, "value_type": "number", "revision_rule": "latest_non_obsolete"}]
-        with self.assertRaises(Exception):
+        with self.assertRaises(ProtocolViolation):
             encoder.encode_request_types(request)
         identity = DocumentEpisodeIdentity("unicode", ("doc-a",), (("doc-a", "sec-a"),))
         candidate = candidate_template(candidate_id="cand-unicode", field_id="label", section_kind="overview", value_type="enum", value="合同✓")
         encoded = encoder.encode_candidates([candidate], identity=identity)
         self.assertTrue(np.isfinite(encoded).all())
-        with self.assertRaises(Exception):
+        with self.assertRaises(ProtocolViolation):
             encoder.encode_candidates([{**candidate, "value": "✓" * 200}], identity=identity)
 
     def test_untrained_forward_shapes_gradients_and_runtime_snapshot_parity(self):
@@ -267,7 +283,7 @@ class DocumentPolicyInterfaceTests(unittest.TestCase):
         first = interface.forward(obs_a)
         second = interface.forward(obs_b)
         np.testing.assert_array_equal(first["fixed_action_logits"], second["fixed_action_logits"])
-        with self.assertRaises(Exception):
+        with self.assertRaises(ProtocolViolation):
             interface.forward(obs_b, runtime=first["runtime"])
 
     def test_requested_fields_are_rejected_after_step_zero(self):
@@ -277,10 +293,10 @@ class DocumentPolicyInterfaceTests(unittest.TestCase):
         initial = interface.model.make_observation(requested_fields=request, candidates=[], identity=identity, phase="initial_request")
         first = interface.forward(initial)
         response = {"schema": "vevo.v03.document-evidence.response.v1", "phase": "tool_response", "status": "section_observed", "terminal": False}
-        with self.assertRaises(Exception):
+        with self.assertRaises(ProtocolViolation):
             interface.model.make_observation(requested_fields=request, candidates=[], latest_response=response, identity=identity, phase="tool_response")
         subsequent = interface.model.make_observation(candidates=[], latest_response=response, identity=identity, phase="tool_response")
-        with self.assertRaises(Exception):
+        with self.assertRaises(ProtocolViolation):
             interface.forward({**subsequent, "requested_fields": []}, runtime=first["runtime"])
 
     def test_snapshot_binds_actual_parameter_digest_not_only_seed_and_shapes(self):
@@ -293,12 +309,12 @@ class DocumentPolicyInterfaceTests(unittest.TestCase):
         changed = DocumentPolicyInterface(seed=37)
         changed.model.params = {name: value.copy() for name, value in interface.model.params.items()}
         changed.model.params["c.W_action"][0, 0] += 1e-9
-        with self.assertRaises(Exception):
+        with self.assertRaises(ProtocolViolation):
             changed.model.restore_runtime(snapshot)
         self.assertNotEqual(snapshot["model_identity"]["parameter_digest"], changed.model.model_identity()["parameter_digest"])
         malformed = dict(snapshot)
         malformed["dispositions"] = [{"field_id": "not_requested", "disposition": "missing", "candidate_ids": []}]
-        with self.assertRaises(Exception):
+        with self.assertRaises(ProtocolViolation):
             interface.model.restore_runtime(malformed)
 
     def test_context_candidate_interaction_reverses_ranking_and_has_numeric_autograd_parity(self):
@@ -354,6 +370,493 @@ class DocumentPolicyInterfaceTests(unittest.TestCase):
             rtol=1e-12,
             atol=1e-12,
         )
+
+    def test_disposition_scorer_uses_kind_field_and_referenced_candidate_context(self):
+        interface = DocumentPolicyInterface(seed=53)
+        model = interface.model
+        identity = DocumentEpisodeIdentity(
+            "disposition-scorer",
+            ("doc-a", "doc-b"),
+            (("doc-a", "sec-a"), ("doc-b", "sec-b")),
+        )
+        candidate_a = candidate_template(
+            candidate_id="cand-a",
+            field_id="renewal_date",
+            document_handle="doc-a",
+            section_id="sec-a",
+            value="2027-01-01",
+        )
+        candidate_b = {
+            **candidate_a,
+            "candidate_id": "cand-b",
+            "document_handle": "doc-b",
+            "section_id": "sec-b",
+            "value": "2028-01-01",
+        }
+        missing = {
+            "kind": "set_disposition",
+            "field_id": "renewal_date",
+            "disposition": "missing",
+            "candidate_ids": [],
+        }
+        source_a = {
+            "kind": "set_disposition",
+            "field_id": "renewal_date",
+            "disposition": "source",
+            "candidate_ids": ["cand-a"],
+        }
+        source_b = {**source_a, "candidate_ids": ["cand-b"]}
+        context_positive = np.zeros(model.CENTER_HIDDEN + model.MEMORY_DIM, dtype=np.float64)
+        context_negative = context_positive.copy()
+        context_positive[0] = 1.0
+        context_negative[0] = -1.0
+        model.params["c.w_disposition_row"][:] = 0.0
+        model.params["c.w_disposition_context"][:] = 0.0
+        model.params["c.W_disposition_bilinear"][:] = 0.0
+        model.params["c.b_disposition"][:] = 0.0
+        kind_offset = DOCUMENT_DISPOSITION_FEATURE_DIM - model.encoder.candidate_feature_dim - 3
+        model.params["c.W_disposition_bilinear"][kind_offset, 0] = 1.0
+        model.params["c.W_disposition_bilinear"][kind_offset + 1, 0] = -1.0
+        positive_scores = model._score_action_options(
+            [missing, source_a],
+            fixed_logits=np.zeros(4, dtype=np.float64),
+            context=context_positive,
+            identity=identity,
+            observed_candidates=[candidate_a, candidate_b],
+        )
+        negative_scores = model._score_action_options(
+            [missing, source_a],
+            fixed_logits=np.zeros(4, dtype=np.float64),
+            context=context_negative,
+            identity=identity,
+            observed_candidates=[candidate_a, candidate_b],
+        )
+        self.assertGreater(positive_scores[1]["score"], positive_scores[0]["score"])
+        self.assertGreater(negative_scores[0]["score"], negative_scores[1]["score"])
+
+        model.params["c.W_disposition_bilinear"][:] = 0.0
+        candidate_offset = DOCUMENT_DISPOSITION_FEATURE_DIM - model.encoder.candidate_feature_dim
+        model.params["c.w_disposition_row"][:] = 0.0
+        model.params["c.w_disposition_row"][candidate_offset + model.encoder.candidate_feature_dim - 2] = 1.0
+        source_scores = model._score_action_options(
+            [source_a, source_b],
+            fixed_logits=np.zeros(4, dtype=np.float64),
+            context=context_positive,
+            identity=identity,
+            observed_candidates=[candidate_a, candidate_b],
+        )
+        self.assertNotEqual(source_scores[0]["action_id"], source_scores[1]["action_id"])
+        self.assertGreater(source_scores[1]["score"], source_scores[0]["score"])
+
+        model.params["c.w_disposition_row"][:] = 0.0
+        model.params["c.w_disposition_row"][0] = 1.0
+        other_field = {**source_a, "field_id": "account_owner"}
+        field_scores = model._score_action_options(
+            [source_a, other_field],
+            fixed_logits=np.zeros(4, dtype=np.float64),
+            context=context_positive,
+            identity=identity,
+            observed_candidates=[candidate_a, candidate_b],
+        )
+        self.assertNotEqual(field_scores[0]["action_id"], field_scores[1]["action_id"])
+        self.assertNotEqual(field_scores[0]["score"], field_scores[1]["score"])
+
+        request = [{"field_id": "renewal_date", "value_type": "date", "revision_rule": "latest_non_obsolete"}]
+        vector = model.encoder.encode_policy_input(
+            requested_fields=request,
+            candidates=[candidate_a, candidate_b],
+            identity=identity,
+        )
+        candidate_rows = model.encoder.encode_candidates([candidate_a, candidate_b], identity=identity)
+        _, numeric_result = model._numeric_forward(model.initial_runtime(identity=identity), vector, candidate_rows)
+        numeric_score = model._score_action_options(
+            [source_a],
+            fixed_logits=numeric_result["fixed_action_logits"],
+            context=numeric_result["trace"]["context"],
+            identity=identity,
+            observed_candidates=[candidate_a, candidate_b],
+        )[0]["score"]
+        tensor_params = {name: Tensor(value.copy(), requires_grad=False) for name, value in model.params.items()}
+        tensor_runtime = {
+            "peripheral": [Tensor(np.zeros(model.PERIPH_HIDDEN)) for _ in range(model.PERIPHERALS)],
+            "central": Tensor(np.zeros(model.CENTER_HIDDEN)),
+            "memory": Tensor(np.zeros(model.central_memory_shape)),
+        }
+        _, _, _, tensor_trace = model._tensor_forward(tensor_runtime, vector, candidate_rows, tensor_params)
+        row_tensor = Tensor(model._disposition_action_row(
+            source_a,
+            identity=identity,
+            observed_candidates=[candidate_a, candidate_b],
+        ))
+        interaction_vector = row_tensor @ tensor_params["c.W_disposition_bilinear"]
+        tensor_score = (
+            (tensor_params["c.w_disposition_row"].reshape(1, -1) @ row_tensor)[0]
+            + (interaction_vector.reshape(1, -1) @ tensor_trace["context_tensor"])[0]
+            + (tensor_params["c.w_disposition_context"].reshape(1, -1) @ tensor_trace["context_tensor"]
+               + tensor_params["c.b_disposition"])[0]
+        )
+        self.assertAlmostEqual(numeric_score, float(tensor_score.data), places=12)
+
+    def test_disposition_autograd_has_relevant_target_gradients_and_finite_difference_parity(self):
+        interface = DocumentPolicyInterface(seed=59)
+        model = interface.model
+        identity = DocumentEpisodeIdentity(
+            "disposition-gradient",
+            ("doc-a", "doc-b"),
+            (("doc-a", "sec-a"), ("doc-b", "sec-b")),
+        )
+        candidate_a = candidate_template(
+            candidate_id="cand-a",
+            field_id="renewal_date",
+            document_handle="doc-a",
+            section_id="sec-a",
+            value="2027-01-01",
+        )
+        candidate_b = {
+            **candidate_a,
+            "candidate_id": "cand-b",
+            "document_handle": "doc-b",
+            "section_id": "sec-b",
+            "value": "2028-01-01",
+        }
+        request = [{"field_id": "renewal_date", "value_type": "date", "revision_rule": "latest_non_obsolete"}]
+        initial = model.make_observation(
+            requested_fields=request,
+            candidates=[candidate_a, candidate_b],
+            identity=identity,
+            phase="initial_request",
+        )
+        first_response = {
+            "schema": "vevo.v03.document-evidence.response.v1",
+            "phase": "tool_response",
+            "status": "candidate_selected",
+            "terminal": False,
+            "candidate": candidate_a,
+        }
+        first = model.make_observation(
+            candidates=[],
+            latest_response=first_response,
+            identity=identity,
+            phase="tool_response",
+        )
+        second_response = {
+            "schema": "vevo.v03.document-evidence.response.v1",
+            "phase": "tool_response",
+            "status": "candidate_selected",
+            "terminal": False,
+            "candidate": candidate_b,
+        }
+        second = model.make_observation(
+            candidates=[],
+            latest_response=second_response,
+            identity=identity,
+            phase="tool_response",
+        )
+        select_a = {"kind": "select_candidate", "candidate_id": "cand-a"}
+        select_b = {"kind": "select_candidate", "candidate_id": "cand-b"}
+        source_a = {
+            "kind": "set_disposition",
+            "field_id": "renewal_date",
+            "disposition": "source",
+            "candidate_ids": ["cand-a"],
+        }
+        source_b = {**source_a, "candidate_ids": ["cand-b"]}
+        _, gradients_a, _, _ = model.loss_and_gradients(
+            [initial, first, second],
+            target_actions=[select_a, select_b, source_a],
+        )
+        _, gradients_b, _, _ = model.loss_and_gradients(
+            [initial, first, second],
+            target_actions=[select_a, select_b, source_b],
+        )
+        self.assertGreater(float(np.max(np.abs(gradients_a["c.W_disposition_bilinear"]))), 0.0)
+        self.assertFalse(np.allclose(gradients_a["c.W_disposition_bilinear"], gradients_b["c.W_disposition_bilinear"]))
+        parameter_name = "c.w_disposition_row"
+        parameter_index = DOCUMENT_DISPOSITION_FEATURE_DIM - model.encoder.candidate_feature_dim
+        original = model.params[parameter_name][parameter_index]
+        epsilon = 1e-6
+        model.params[parameter_name][parameter_index] = original + epsilon
+        plus = model.loss_only([initial, first, second], target_actions=[select_a, select_b, source_a])
+        model.params[parameter_name][parameter_index] = original - epsilon
+        minus = model.loss_only([initial, first, second], target_actions=[select_a, select_b, source_a])
+        model.params[parameter_name][parameter_index] = original
+        finite_difference = (plus - minus) / (2.0 * epsilon)
+        self.assertAlmostEqual(float(gradients_a[parameter_name][parameter_index]), finite_difference, places=5)
+
+    @staticmethod
+    def _dispatchable(option):
+        return {
+            key: value
+            for key, value in option.items()
+            if key not in {"action_id", "score"}
+        }
+
+    @staticmethod
+    def _latest_candidate(features, field_id, value_type):
+        candidates = [
+            candidate for candidate in features
+            if candidate["field_id"] == field_id
+            and candidate["value_type"] == value_type
+            and candidate["revision_state"] == "current"
+        ]
+        return max(
+            candidates,
+            key=lambda candidate: (
+                candidate["revision"],
+                candidate["published_at"],
+                candidate["candidate_id"],
+            ),
+        )
+
+    def _run_generated_bridge(self, store, task, *, selections, dispositions, expected_status):
+        """Drive the executor only with exact options generated by the policy."""
+
+        session = DocumentEvidenceSession(store, task)
+        initial = session.start()
+        identity = DocumentEpisodeIdentity.from_request(initial)
+        interface = DocumentPolicyInterface(seed=67)
+        observation = interface.model.make_observation(
+            requested_fields=initial["requested_fields"],
+            candidates=[],
+            remaining_action_budget=initial["remaining_action_budget"],
+            identity=identity,
+            phase="initial_request",
+        )
+        runtime = None
+        observed_features = []
+
+        def take(predicate):
+            nonlocal observation, runtime
+            output = interface.forward(observation, runtime=runtime)
+            self.assertTrue(all(
+                isinstance(option.get("action_id"), str) and np.isfinite(option.get("score"))
+                for option in output["action_options"]
+            ))
+            option = next(option for option in output["action_options"] if predicate(option))
+            response = session.dispatch(self._dispatchable(option))
+            self.assertNotIn(response["status"], {"invalid_action", "duplicate_action", "candidate_not_selected"})
+            if response.get("candidates"):
+                observed_features.extend(response["candidates"])
+            runtime = output["runtime"]
+            observation = interface.model.make_observation(
+                candidates=response.get("candidates", []),
+                latest_response=response,
+                remaining_action_budget=response["remaining_action_budget"],
+                identity=identity,
+                phase="tool_response",
+            )
+            return output, option, response
+
+        for document in initial["document_catalog"]:
+            for section in document["sections"]:
+                take(lambda option, handle=document["document_handle"], section_id=section["section_id"]: (
+                    option["kind"] == "inspect_section"
+                    and option["document_handle"] == handle
+                    and option["section_id"] == section_id
+                ))
+        if callable(selections):
+            selections = selections(observed_features)
+        if callable(dispositions):
+            dispositions = dispositions(observed_features)
+        for candidate_id in selections:
+            take(lambda option, candidate_id=candidate_id: (
+                option["kind"] == "select_candidate"
+                and option["candidate_id"] == candidate_id
+            ))
+        for field_id, disposition, candidate_ids in dispositions:
+            take(lambda option, field_id=field_id, disposition=disposition, candidate_ids=list(candidate_ids): (
+                option["kind"] == "set_disposition"
+                and option["field_id"] == field_id
+                and option["disposition"] == disposition
+                and option["candidate_ids"] == candidate_ids
+            ))
+        _, finish_option, result = take(lambda option: option["kind"] == "finish")
+        self.assertEqual(result["status"], expected_status)
+        self.assertEqual(finish_option["kind"], "finish")
+        self.assertIsInstance(finish_option["packet"], dict)
+        return session, observed_features, finish_option, result
+
+    def test_generated_options_bridge_ordinary_executor_completion(self):
+        task = make_task(
+            "bridge-ordinary",
+            ("doc-aurora", "doc-boreal"),
+            (("renewal_date", "date"), ("account_owner", "person")),
+        )
+        session, features, finish_option, result = self._run_generated_bridge(
+            DocumentBundleStore.from_bundled(),
+            task,
+            selections=lambda features: [
+                self._latest_candidate(features, "renewal_date", "date")["candidate_id"],
+                self._latest_candidate(features, "account_owner", "person")["candidate_id"],
+            ],
+            dispositions=lambda features: [
+                (
+                    "renewal_date",
+                    "source",
+                    [self._latest_candidate(features, "renewal_date", "date")["candidate_id"]],
+                ),
+                (
+                    "account_owner",
+                    "source",
+                    [self._latest_candidate(features, "account_owner", "person")["candidate_id"]],
+                ),
+            ],
+            expected_status="verified_complete",
+        )
+        self.assertEqual(result["status"], "verified_complete")
+        self.assertIsNotNone(session.result)
+        self.assertEqual(
+            {entry["field_id"] for entry in finish_option["packet"]["entries"]},
+            {"renewal_date", "account_owner"},
+        )
+
+    def test_generated_options_bridge_duplicates_conflicts_and_missing_cases(self):
+        with tempfile.TemporaryDirectory() as directory:
+            copied = Path(directory) / "document_evidence"
+            shutil.copytree(BUNDLE, copied)
+            source = copied / "doc-boreal.json"
+            document = json.loads(source.read_text())
+            fact = next(
+                fact
+                for section in document["sections"]
+                for fact in section["facts"]
+                if fact["field_id"] == "account_owner"
+            )
+            fact["value"] = "Mara Chen"
+            fact["revision"] = 2
+            fact["published_at"] = "2026-09-15"
+            source.write_text(json.dumps(document, indent=2) + "\n")
+            manifest_path = copied / "bundle_manifest.json"
+            manifest = json.loads(manifest_path.read_text())
+            for entry in manifest["documents"]:
+                if entry["handle"] == "doc-boreal":
+                    entry["sha256"] = hashlib.sha256(source.read_bytes()).hexdigest()
+            manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+            duplicate_store = DocumentBundleStore._from_server_root(copied)
+            duplicate_task = make_task(
+                "bridge-duplicates",
+                ("doc-aurora", "doc-boreal"),
+                (("renewal_date", "date"), ("account_owner", "person")),
+            )
+            duplicate_session, duplicate_features, _, duplicate_result = self._run_generated_bridge(
+                duplicate_store,
+                duplicate_task,
+                selections=lambda features: [
+                    self._latest_candidate(features, "renewal_date", "date")["candidate_id"],
+                    self._latest_candidate(features, "account_owner", "person")["candidate_id"],
+                ],
+                dispositions=lambda features: [
+                    (
+                        "renewal_date",
+                        "source",
+                        [self._latest_candidate(features, "renewal_date", "date")["candidate_id"]],
+                    ),
+                    (
+                        "account_owner",
+                        "source",
+                        [self._latest_candidate(features, "account_owner", "person")["candidate_id"]],
+                    ),
+                ],
+                expected_status="verified_complete",
+            )
+            self.assertEqual(duplicate_result["status"], "verified_complete")
+            self.assertIsNotNone(duplicate_session.result)
+            self.assertEqual(
+                len([
+                    candidate for candidate in duplicate_features
+                    if candidate["field_id"] == "account_owner"
+                    and candidate["value"] == "Mara Chen"
+                    and candidate["revision_state"] == "current"
+                ]),
+                2,
+            )
+
+        conflict_task = make_task(
+            "bridge-conflict",
+            ("doc-aurora", "doc-cinder"),
+            (("alert_threshold", "ratio"), ("account_owner", "person")),
+        )
+        _, _, _, conflict_result = self._run_generated_bridge(
+            DocumentBundleStore.from_bundled(),
+            conflict_task,
+            selections=lambda features: [
+                *[
+                    candidate["candidate_id"]
+                    for candidate in features
+                    if candidate["field_id"] == "alert_threshold"
+                    and candidate["revision_state"] == "current"
+                ],
+                self._latest_candidate(features, "account_owner", "person")["candidate_id"],
+            ],
+            dispositions=lambda features: [
+                (
+                    "alert_threshold",
+                    "conflict",
+                    sorted(
+                        candidate["candidate_id"]
+                        for candidate in features
+                        if candidate["field_id"] == "alert_threshold"
+                        and candidate["revision_state"] == "current"
+                    ),
+                ),
+                (
+                    "account_owner",
+                    "source",
+                    [self._latest_candidate(features, "account_owner", "person")["candidate_id"]],
+                ),
+            ],
+            expected_status="verified_conflict",
+        )
+        self.assertEqual(conflict_result["status"], "verified_conflict")
+
+        missing_task = make_task(
+            "bridge-multiple-missing",
+            ("doc-aurora", "doc-boreal"),
+            (("support_contact", "email"), ("budget_floor", "number")),
+        )
+        _, _, _, missing_result = self._run_generated_bridge(
+            DocumentBundleStore.from_bundled(),
+            missing_task,
+            selections=[],
+            dispositions=[
+                ("support_contact", "missing", []),
+                ("budget_floor", "missing", []),
+            ],
+            expected_status="verified_missing_facts",
+        )
+        self.assertEqual(missing_result["status"], "verified_missing_facts")
+
+        mixed_task = make_task(
+            "bridge-mixed",
+            ("doc-aurora", "doc-cinder"),
+            (("alert_threshold", "ratio"), ("support_contact", "email")),
+        )
+        _, _, _, mixed_result = self._run_generated_bridge(
+            DocumentBundleStore.from_bundled(),
+            mixed_task,
+            selections=lambda features: [
+                candidate["candidate_id"]
+                for candidate in features
+                if candidate["field_id"] == "alert_threshold"
+                and candidate["revision_state"] == "current"
+            ],
+            dispositions=lambda features: [
+                (
+                    "alert_threshold",
+                    "conflict",
+                    sorted(
+                        candidate["candidate_id"]
+                        for candidate in features
+                        if candidate["field_id"] == "alert_threshold"
+                        and candidate["revision_state"] == "current"
+                    ),
+                ),
+                ("support_contact", "missing", []),
+            ],
+            expected_status="verified_conflict",
+        )
+        self.assertEqual(mixed_result["status"], "verified_conflict")
+        self.assertEqual(mixed_result["outcome"]["missing_fields"], ["support_contact"])
 
     def test_legal_action_candidates_are_exact_and_mask_consumed_state(self):
         store = DocumentBundleStore.from_bundled()
@@ -428,13 +931,50 @@ class DocumentPolicyInterfaceTests(unittest.TestCase):
             identity=identity,
             phase="initial_request",
         )
-        with self.assertRaises(Exception):
-            interface.loss_only([observation], target_action="inspect_section")
-        with self.assertRaises(Exception):
-            interface.loss_only(
+        output = interface.forward(observation)
+        inspect_option = next(option for option in output["legal_action_candidates"] if option["kind"] == "inspect_section")
+        self.assertTrue(np.isfinite(interface.model.loss_only([observation], target_action=inspect_option)))
+        with self.assertRaises(ProtocolViolation):
+            interface.model.loss_only([observation], target_action="inspect_section")
+        with self.assertRaises(ProtocolViolation):
+            interface.model.loss_only(
                 [observation],
                 target_action={"kind": "inspect_section", "document_handle": "doc-a"},
             )
+        wrong_field = dict(inspect_option)
+        wrong_field["document_handle"] = "doc-other"
+        with self.assertRaises(ProtocolViolation):
+            interface.model._target_option_index(output["legal_action_candidates"], wrong_field)
+        wrong_section = dict(inspect_option)
+        wrong_section.pop("section_id")
+        with self.assertRaises(ProtocolViolation):
+            interface.model._target_option_index(output["legal_action_candidates"], wrong_section)
+        mismatched_action_id = dict(inspect_option)
+        mismatched_action_id["action_id"] = "0" * 64
+        with self.assertRaises(ProtocolViolation):
+            interface.model._target_option_index(output["legal_action_candidates"], mismatched_action_id)
+
+        runtime = interface.model.initial_runtime(identity=identity)
+        runtime["phase"] = "tool_response"
+        runtime["step"] = 1
+        runtime["requested_fields"] = copy.deepcopy(request)
+        runtime["dispositions"] = [{"field_id": "label", "disposition": "missing", "candidate_ids": []}]
+        finish_base = next(
+            option for option in interface.model._legal_action_candidates(runtime, request)
+            if option["kind"] == "finish"
+        )
+        finish_option = interface.model._score_action_options(
+            [finish_base],
+            fixed_logits=np.zeros(4, dtype=np.float64),
+            context=np.zeros(interface.model.CENTER_HIDDEN + interface.model.MEMORY_DIM, dtype=np.float64),
+            identity=identity,
+            observed_candidates=[],
+        )[0]
+        self.assertEqual(interface.model._target_option_index([finish_option], finish_option), 0)
+        altered_packet = copy.deepcopy(finish_option)
+        altered_packet["packet"]["missing_fields"] = []
+        with self.assertRaises(ProtocolViolation):
+            interface.model._target_option_index([finish_option], altered_packet)
 
 
 if __name__ == "__main__":

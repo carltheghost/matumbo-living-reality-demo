@@ -87,11 +87,12 @@ DOCUMENT_MODEL_INPUT_DIM = (
     + 2  # candidate count and remaining budget
 )
 DOCUMENT_MODEL_SCHEMA = "vevo.v03.document-evidence.neural-model.v1"
-DOCUMENT_MODEL_VERSION = "vevo.v03.document-evidence.typed-action-bilinear.v2"
+DOCUMENT_MODEL_VERSION = "vevo.v03.document-evidence.typed-action-bilinear.v3"
 DOCUMENT_FORWARD_SCHEMA = "vevo.v03.document-evidence.neural-forward.v1"
 DOCUMENT_RUNTIME_SNAPSHOT_SCHEMA = "vevo.v03.document-evidence.neural-runtime.v1"
 DOCUMENT_ENCODER_ID = "vevo.v03.document-evidence.encoder.lossless-identity.v2"
 DOCUMENT_CHECKPOINT_ID = "untrained-random-document-policy"
+DOCUMENT_DISPOSITION_FEATURE_DIM = FIELD_ID_BYTES + len(DISPOSITION_KINDS) + DOCUMENT_CANDIDATE_FEATURE_DIM
 
 
 class DocumentNeuralPolicyUnavailable(RuntimeError):
@@ -550,7 +551,11 @@ class DocumentNeuralPolicy:
         normal("c.W_candidate_bilinear", (self.encoder.candidate_feature_dim, context_dim), 0.02)
         normal("c.w_inspect_row", (INSPECT_ACTION_FEATURE_DIM,), 0.08)
         normal("c.W_inspect_bilinear", (INSPECT_ACTION_FEATURE_DIM, context_dim), 0.02)
+        normal("c.w_disposition_row", (DOCUMENT_DISPOSITION_FEATURE_DIM,), 0.08)
+        normal("c.w_disposition_context", (context_dim,), 0.08)
+        normal("c.W_disposition_bilinear", (DOCUMENT_DISPOSITION_FEATURE_DIM, context_dim), 0.02)
         self.params["c.b_candidate"] = np.zeros(1, dtype=np.float64)
+        self.params["c.b_disposition"] = np.zeros(1, dtype=np.float64)
         self.model_status = DocumentPolicyModelStatus()
 
     @property
@@ -773,6 +778,69 @@ class DocumentNeuralPolicy:
         if not np.isfinite(scores).all():
             raise ProtocolViolation("candidate scorer produced non-finite values")
         return scores
+
+    def _disposition_action_row(
+        self,
+        option: Mapping[str, Any],
+        *,
+        identity: DocumentEpisodeIdentity,
+        observed_candidates: Sequence[Mapping[str, Any]],
+    ) -> np.ndarray:
+        """Encode one typed disposition with its field and cited evidence.
+
+        The row is shared by every source/missing/conflict disposition.  A
+        missing choice has an all-zero cited-candidate block; source and
+        conflict choices carry a permutation-invariant mean of the referenced
+        candidate rows, preserving source identity without an answer mask.
+        """
+
+        if option.get("kind") != "set_disposition":
+            raise ProtocolViolation("disposition feature row requires a disposition action")
+        field_id = option.get("field_id")
+        disposition = option.get("disposition")
+        candidate_ids = option.get("candidate_ids")
+        if (
+            not isinstance(field_id, str)
+            or disposition not in DISPOSITION_KINDS
+            or not isinstance(candidate_ids, list)
+            or not all(isinstance(candidate_id, str) for candidate_id in candidate_ids)
+        ):
+            raise ProtocolViolation("disposition feature identity is invalid")
+        by_id = {str(candidate["candidate_id"]): candidate for candidate in observed_candidates}
+        referenced = []
+        for candidate_id in candidate_ids:
+            if candidate_id not in by_id:
+                raise ProtocolViolation("disposition references an unobserved candidate")
+            referenced.append(by_id[candidate_id])
+        if referenced:
+            referenced_rows = self.encoder.encode_candidates(
+                referenced,
+                requested_field_ids=(),
+                identity=identity,
+            )
+            candidate_summary = np.mean(referenced_rows, axis=0)
+        else:
+            candidate_summary = np.zeros(self.encoder.candidate_feature_dim, dtype=np.float64)
+        row = np.asarray(
+            _bounded_utf8(field_id, FIELD_ID_BYTES, name="disposition field id")
+            + _one_hot(disposition, DISPOSITION_KINDS)
+            + candidate_summary.tolist(),
+            dtype=np.float64,
+        )
+        if row.shape != (DOCUMENT_DISPOSITION_FEATURE_DIM,) or not np.isfinite(row).all():
+            raise ProtocolViolation("invalid disposition feature row")
+        return row
+
+    def _disposition_score_from_row(self, row: np.ndarray, context: np.ndarray) -> float:
+        interaction = (row @ self.params["c.W_disposition_bilinear"] * context).sum()
+        score = (
+            interaction
+            + row @ self.params["c.w_disposition_row"]
+            + float(self.params["c.w_disposition_context"] @ context + self.params["c.b_disposition"][0])
+        )
+        if not math.isfinite(float(score)):
+            raise ProtocolViolation("disposition scorer produced a non-finite value")
+        return float(score)
 
     def _numeric_forward(
         self,
@@ -1109,11 +1177,12 @@ class DocumentNeuralPolicy:
             elif kind == "select_candidate":
                 score = candidate_score_map[str(option["candidate_id"])]
             elif kind == "set_disposition":
-                # The existing fixed terminal logit is the structural score
-                # for a disposition operation; the typed payload carries all
-                # field/candidate identity and is never collapsed into one
-                # semantic mask.
-                score = float(fixed_logits[FIXED_ACTIONS.index("finish")])
+                row = self._disposition_action_row(
+                    option,
+                    identity=identity,
+                    observed_candidates=observed_candidates,
+                )
+                score = self._disposition_score_from_row(row, context)
             else:
                 score = float(fixed_logits[FIXED_ACTIONS.index(kind)])
             scored.append({
@@ -1376,7 +1445,20 @@ class DocumentNeuralPolicy:
                         raise ProtocolViolation("legal select candidate is missing from the encoded observation")
                     action_logits.append(candidate_logit_by_id[candidate_id])
                 elif kind == "set_disposition":
-                    action_logits.append(fixed_logits[FIXED_ACTIONS.index("finish")].reshape(1))
+                    row = self._disposition_action_row(
+                        option,
+                        identity=identity,
+                        observed_candidates=metadata_runtime.get("observed_candidates", []),
+                    )
+                    row_tensor = Tensor(row)
+                    row_score = (params["c.w_disposition_row"].reshape(1, -1) @ row_tensor)[0]
+                    interaction_vector = row_tensor @ params["c.W_disposition_bilinear"]
+                    interaction_score = (interaction_vector.reshape(1, -1) @ step_trace["context_tensor"])[0]
+                    context_score = (
+                        params["c.w_disposition_context"].reshape(1, -1) @ step_trace["context_tensor"]
+                        + params["c.b_disposition"]
+                    )[0]
+                    action_logits.append((row_score + interaction_score + context_score).reshape(1))
                 else:
                     action_logits.append(fixed_logits[FIXED_ACTIONS.index(kind)].reshape(1))
             logits = concatenate(action_logits, axis=0)
@@ -1624,6 +1706,8 @@ class DocumentPolicyInterface:
             "model_status": self.model_status.as_dict(),
             "model_identity": self.model.model_identity(),
             "variable_candidate_set": True,
+            "disposition_feature_dim": DOCUMENT_DISPOSITION_FEATURE_DIM,
+            "disposition_scorer": "shared_contextual_field_kind_and_referenced_candidate_bilinear",
             "imitation_loss": {
                 "aggregation": "mean_per_step",
                 "target_contract": "one exact typed legal action identity per observation step",
@@ -1676,6 +1760,7 @@ __all__ = [
     "DOCUMENT_ACTIONS",
     "DOCUMENT_CANDIDATE_FEATURE_DIM",
     "DOCUMENT_CHECKPOINT_ID",
+    "DOCUMENT_DISPOSITION_FEATURE_DIM",
     "DOCUMENT_ENCODER_ID",
     "DOCUMENT_MEMORY_SHAPE",
     "DOCUMENT_MODEL_VERSION",
