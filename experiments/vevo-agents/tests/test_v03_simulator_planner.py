@@ -1,0 +1,173 @@
+import dataclasses
+import json
+import unittest
+
+from vevo_agents.v03_simulator_planner import (
+    ACTION_DURATION_TICKS,
+    MAX_ACTUAL_CYCLES,
+    MAX_ACTUAL_PHYSICS_STEPS,
+    MAX_VIRTUAL_CANDIDATES,
+    MAX_VIRTUAL_PHYSICS_STEPS,
+    PUBLIC_OBSERVATION_FIELDS,
+    STRATEGIES,
+    BoundedPlanner,
+    KnownSimulatorPredictor,
+    PlannerBudgetError,
+    candidate_actions,
+    compare_frozen_fixtures,
+    default_fixture_specs,
+    freeze_fixtures,
+    render_markdown,
+    run_changed_world_case,
+    run_experiment,
+    run_strategy,
+)
+
+
+class SimulatorPlannerTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.frozen = freeze_fixtures(default_fixture_specs())
+        cls.reachable = tuple(fixture for fixture in cls.frozen if fixture.reachable)
+        cls.unreachable = tuple(fixture for fixture in cls.frozen if not fixture.reachable)
+
+    def test_action_set_and_two_step_virtual_budget_are_exact(self):
+        actions = candidate_actions()
+        self.assertEqual(len(actions), 5)
+        self.assertEqual([action.name for action in actions], [
+            "coast",
+            "drive_positive_port_0",
+            "drive_negative_port_0",
+            "drive_positive_port_1",
+            "drive_negative_port_1",
+        ])
+        self.assertEqual(actions[0].drive_vector, (0.0, 0.0, 0.0, 0.0))
+        self.assertEqual(actions[1].drive_vector, (0.16, 0.0, 0.0, 0.0))
+        self.assertEqual(actions[2].drive_vector, (-0.16, 0.0, 0.0, 0.0))
+        observation = self.reachable[0].initial_observation
+        forecast = BoundedPlanner().plan(
+            observation,
+            self.reachable[0].spec.goal,
+            horizon=2,
+            cycle=0,
+        )
+        self.assertEqual(forecast.candidate_count, 25)
+        self.assertEqual(forecast.virtual_physics_steps, 100)
+        self.assertEqual(MAX_VIRTUAL_CANDIDATES, 100)
+        self.assertEqual(MAX_VIRTUAL_PHYSICS_STEPS, 400)
+
+    def test_virtual_budget_rejects_a_fifth_two_step_forecast_before_work(self):
+        planner = BoundedPlanner()
+        observation = self.reachable[0].initial_observation
+        goal = self.reachable[0].spec.goal
+        for cycle in range(4):
+            planner.plan(observation, goal, horizon=2, cycle=cycle)
+        with self.assertRaises(PlannerBudgetError):
+            planner.plan(observation, goal, horizon=2, cycle=4)
+        self.assertEqual(planner.budget.virtual_candidates, MAX_VIRTUAL_CANDIDATES)
+        self.assertEqual(planner.budget.virtual_physics_steps, MAX_VIRTUAL_PHYSICS_STEPS)
+
+    def test_public_observation_is_whitelisted_and_immutable(self):
+        observation = self.reachable[0].initial_observation
+        payload = observation.as_dict()
+        self.assertEqual(
+            set(payload),
+            set(PUBLIC_OBSERVATION_FIELDS) | {"schema", "fixture_id", "cycle"},
+        )
+        for forbidden in ("target", "calibration", "omega", "hidden_target"):
+            self.assertNotIn(forbidden, payload)
+        with self.assertRaises(dataclasses.FrozenInstanceError):
+            observation.tick = observation.tick + 1
+
+    def test_fixtures_are_frozen_before_comparison_with_separate_unreachable_case(self):
+        self.assertEqual(len(self.reachable), 3)
+        self.assertEqual(len(self.unreachable), 1)
+        self.assertTrue(all(fixture.verification.witness for fixture in self.reachable))
+        self.assertFalse(self.unreachable[0].verification.witness)
+        self.assertTrue(all(fixture.verification.maximum_cycles_checked == MAX_ACTUAL_CYCLES for fixture in self.frozen))
+        comparisons = compare_frozen_fixtures(self.frozen)
+        self.assertEqual(set(comparisons), {fixture.spec.fixture_id for fixture in self.reachable})
+        self.assertTrue(all(set(runs) == set(STRATEGIES) for runs in comparisons.values()))
+
+    def test_predictor_is_known_simulator_not_neural_or_geometry_claim(self):
+        predictor = KnownSimulatorPredictor()
+        self.assertFalse(predictor.trained)
+        self.assertFalse(predictor.neural_world_model)
+        self.assertEqual(predictor.geometry_status, "available_but_not_used")
+        self.assertTrue(predictor.as_dict()["uses_public_observation_whitelist"])
+
+    def test_receding_horizon_replans_after_each_observation_and_stays_bounded(self):
+        run = run_strategy(self.reachable[0], "receding_horizon")
+        self.assertLessEqual(len(run.cycles), MAX_ACTUAL_CYCLES)
+        self.assertEqual(run.terminal.status, "budget_exhausted")
+        self.assertEqual(len(run.cycles), MAX_ACTUAL_CYCLES)
+        self.assertEqual(run.budget.actual_cycles, len(run.cycles))
+        self.assertEqual(run.budget.actual_physics_steps, len(run.cycles) * ACTION_DURATION_TICKS)
+        self.assertEqual(run.budget.virtual_candidates, MAX_VIRTUAL_CANDIDATES)
+        self.assertEqual(run.budget.virtual_physics_steps, MAX_VIRTUAL_PHYSICS_STEPS)
+        self.assertFalse(run.neural_world_model_used)
+        self.assertEqual([cycle.forecast.plan_cycle for cycle in run.cycles], [0, 1, 2, 3])
+        self.assertTrue(all(cycle.forecast.horizon == 2 for cycle in run.cycles))
+        self.assertTrue(all(cycle.forecast.candidate_count == 25 for cycle in run.cycles))
+        self.assertTrue(all(cycle.action == cycle.forecast.actions[0] for cycle in run.cycles))
+        self.assertTrue(all(dataclasses.is_dataclass(cycle) for cycle in run.cycles))
+
+    def test_open_loop_reuses_forecast_while_greedy_can_reach_frozen_goal(self):
+        greedy = run_strategy(self.reachable[0], "greedy")
+        self.assertEqual(greedy.terminal.status, "goal_reached")
+        self.assertLessEqual(len(greedy.cycles), MAX_ACTUAL_CYCLES)
+        self.assertTrue(all(cycle.forecast.horizon == 1 for cycle in greedy.cycles))
+        open_loop = run_strategy(self.reachable[0], "open_loop")
+        self.assertEqual(open_loop.cycles[0].forecast.plan_cycle, 0)
+        self.assertTrue(all(cycle.forecast.plan_cycle == 0 for cycle in open_loop.cycles))
+        self.assertFalse(open_loop.cycles[0].forecast.reused)
+        self.assertTrue(all(cycle.forecast.reused for cycle in open_loop.cycles[1:]))
+        self.assertEqual(open_loop.budget.virtual_candidates, 25)
+
+    def test_cancellation_is_terminal_and_does_not_try_an_alternate_action(self):
+        run = run_strategy(self.reachable[0], "receding_horizon", cancel_before_cycle=0)
+        self.assertEqual(run.terminal.status, "cancelled")
+        self.assertTrue(run.terminal.alternatives_blocked)
+        self.assertEqual(len(run.cycles), 1)
+        self.assertEqual(run.cycles[0].result.status, "cancelled")
+        self.assertEqual(run.cycles[0].result.tick_after, run.cycles[0].result.tick_before)
+        self.assertEqual(run.budget.actual_cycles, 1)
+
+    def test_partial_effect_is_uncertain_and_does_not_continue(self):
+        run = run_strategy(self.reachable[0], "receding_horizon", uncertain_after_ticks=1)
+        self.assertEqual(run.terminal.status, "uncertain_outcome")
+        self.assertTrue(run.terminal.alternatives_blocked)
+        self.assertEqual(len(run.cycles), 1)
+        self.assertEqual(run.cycles[0].result.status, "uncertain_outcome")
+        self.assertEqual(
+            run.cycles[0].result.tick_after,
+            run.cycles[0].result.tick_before + 1,
+        )
+        self.assertEqual(run.budget.actual_cycles, 1)
+
+    def test_changed_world_case_is_recorded_and_receding_horizon_replans(self):
+        change, runs = run_changed_world_case(self.reachable[0])
+        self.assertEqual(change.cycle, 1)
+        self.assertEqual(set(runs), set(STRATEGIES))
+        receding = runs["receding_horizon"]
+        self.assertTrue(any(cycle.result.environment_change_applied for cycle in receding.cycles))
+        changed_cycle = next(cycle for cycle in receding.cycles if cycle.result.environment_change_applied)
+        self.assertEqual(changed_cycle.cycle, 1)
+        self.assertEqual(changed_cycle.forecast.plan_cycle, 1)
+
+    def test_result_and_markdown_preserve_honest_claim_boundary(self):
+        result = run_experiment()
+        self.assertTrue(result["fixtures_frozen_before_comparison"])
+        self.assertEqual(len(result["reachable_fixtures"]), 3)
+        self.assertEqual(len(result["unreachable_fixtures"]), 1)
+        self.assertFalse(result["claims"]["trained_neural_world_model"])
+        self.assertFalse(result["claims"]["geometry_ablation_run"])
+        self.assertFalse(result["claims"]["strategy_superiority_claim"])
+        markdown = render_markdown(result)
+        self.assertIn("No claim is made that receding horizon is superior", markdown)
+        encoded = json.dumps(result, sort_keys=True, allow_nan=False)
+        self.assertIn('"two_step_candidate_count": 25', encoded)
+
+
+if __name__ == "__main__":
+    unittest.main()
