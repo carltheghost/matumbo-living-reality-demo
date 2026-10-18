@@ -22,6 +22,13 @@ does not return fact IDs, request-membership flags, targets, expected values,
 raw documents, or filesystem paths. The in-memory evidence store retains the
 raw value and complete provenance for verification.
 
+Protocol admission requires requested/source field identifiers to fit 128
+UTF-8 bytes and string values to fit 512 UTF-8 bytes; the neural encoder uses
+those same widths and rejects overflow rather than truncating identity. Unicode
+values within the admitted width are preserved. Document and fact publication
+dates are ISO-8601 calendar dates, so verifier ranking and ordered date
+features use the same parsed ordering.
+
 ## Verification and restart
 
 The verifier rereads the manifest-addressed bytes before checking a packet. It
@@ -60,15 +67,25 @@ selection is explicitly unavailable until a new document encoder, new
 training, and a reviewed checkpoint exist. No existing gate output is mapped
 to an arbitrary document tool.
 
-## Frozen benchmark and Jev boundary
+## Benchmark status, feasible first-model scope, and Jev boundary
 
 `v03_document_benchmark.py` builds the preregistration before training. Whole
 document and template families are separated and instance overlap is
 forbidden. Seeded candidate order is implemented; randomized document IDs and
-catalog order remain planned for the future held-out generator. The checked-in
-9300–9302 seeds are development protocol cases, not fresh generalization
-evidence. The held-out manifest has two documents and two unmaterialized test
-seeds; no held-out outcomes are inspected.
+catalog order remain planned for a future generator. The checked-in 9300–9302
+seeds are development protocol cases, not fresh generalization evidence. The
+training generator and held-out task manifest are explicitly pending
+implementation; proposed held-out seeds have no materialized outcomes and are
+not labeled a frozen evaluation set.
+
+The first neural document-policy task is deliberately smaller than the full
+protocol maximum: at most two documents, four sections per document, two
+requested fields, and four selected candidates. Exhaustive inspection therefore
+costs at most 8 inspect actions + 4 select actions + 1 completion/verifier
+action = 13 policy actions within the 16-action budget. The general six-document
+maximum would cost 24 + 4 + 1 = 29 policy actions and is not used for first
+model training. A trustworthy coverage-index variant is deferred until
+explicitly declared and implemented.
 
 The preregistered metrics are source-citation accuracy, verified success,
 false completions, tool calls, missing-fact detection, and restart parity.

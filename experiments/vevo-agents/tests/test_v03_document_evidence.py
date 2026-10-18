@@ -95,6 +95,8 @@ class DocumentEvidenceProtocolTests(unittest.TestCase):
             self.store.open_document("caller/path")
         with self.assertRaises(ProtocolViolation):
             make_task("bad", ("doc-aurora", "caller/path"), (("a", "date"), ("b", "person")))
+        with self.assertRaises(ProtocolViolation):
+            make_task("long-field", ("doc-aurora", "doc-boreal"), (("a" * 129, "date"), ("b", "person")))
 
     def test_initial_request_and_candidates_preserve_legitimate_field_identity(self):
         session = DocumentEvidenceSession(self.store, current_task())
@@ -363,6 +365,33 @@ class DocumentEvidenceProtocolTests(unittest.TestCase):
         self.assertEqual(response["status"], "invalid_action")
         self.assertEqual(session.action_count, 1)
 
+    def test_malformed_conflict_shape_is_structured_and_replayable(self):
+        task = current_task(seed=42)
+        session = DocumentEvidenceSession(self.store, task)
+        session.start()
+        response = session.dispatch({
+            "kind": "report_conflict",
+            "field_id": "renewal_date",
+            "packet": {"entries": [], "missing_fields": [], "conflicts": 7},
+        })
+        self.assertEqual(response["status"], "incomplete_packet")
+        self.assertFalse(response["terminal"])
+        snapshot = session.snapshot()
+        restored = DocumentEvidenceSession.restore(self.store, task, snapshot)
+        self.assertEqual(restored.snapshot(), snapshot)
+
+    def test_reserved_budget_name_is_a_user_action_not_an_internal_transition(self):
+        task = current_task(seed=43)
+        session = DocumentEvidenceSession(self.store, task)
+        session.start()
+        response = session.dispatch({"kind": "__budget_exhausted__"})
+        self.assertEqual(response["status"], "invalid_action")
+        self.assertFalse(response["terminal"])
+        snapshot = session.snapshot()
+        restored = DocumentEvidenceSession.restore(self.store, task, snapshot)
+        self.assertEqual(restored.snapshot(), snapshot)
+        self.assertEqual(restored.dispatch({"kind": "__budget_exhausted__"})["status"], "invalid_action")
+
     def test_duplicate_and_incomplete_actions_are_structured_failures(self):
         session = DocumentEvidenceSession(self.store, current_task())
         session.start()
@@ -491,6 +520,24 @@ class DocumentEvidenceProtocolTests(unittest.TestCase):
             document = json.loads(source.read_text())
             document["sections"][1]["facts"][0]["value"] = float("nan")
             source.write_text(json.dumps(document, allow_nan=True, indent=2) + "\n")
+            manifest_path = copied / "bundle_manifest.json"
+            manifest = json.loads(manifest_path.read_text())
+            for entry in manifest["documents"]:
+                if entry["handle"] == "doc-aurora":
+                    entry["sha256"] = hashlib.sha256(source.read_bytes()).hexdigest()
+            manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+            store = DocumentBundleStore._from_server_root(copied)
+            with self.assertRaises(DocumentIntegrityError):
+                store.open_document("doc-aurora")
+
+    def test_publication_date_is_validated_before_policy_observation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            copied = Path(directory) / "document_evidence"
+            shutil.copytree(BUNDLE, copied)
+            source = copied / "doc-aurora.json"
+            document = json.loads(source.read_text())
+            document["sections"][0]["facts"][0]["published_at"] = "not-an-ordered-date"
+            source.write_text(json.dumps(document, indent=2) + "\n")
             manifest_path = copied / "bundle_manifest.json"
             manifest = json.loads(manifest_path.read_text())
             for entry in manifest["documents"]:

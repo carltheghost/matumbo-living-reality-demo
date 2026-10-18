@@ -7,19 +7,28 @@ document-policy training or evaluation. The current neural model is
 explicitly unavailable; deterministic baselines and verifier tests are the
 only executable decisions in this branch.
 
-## Frozen split
+## Split status and feasible first-model scope
 
-- Whole document and template families are separated.
+- This is **not yet a frozen evaluation split**: development protocol fixtures
+  exist, but the training generator and held-out task manifest are pending
+  implementation.
+- Whole document and template families are specified as separate.
 - No instance overlap is permitted. Seeded candidate order is implemented;
   randomized document IDs and catalog order are planned for a future held-out
   generator.
-- Development families are `supplier-agreement` and `operations-handbook`.
-- The train manifest has one reserved `training-contract` document, the
-  development manifest has three documents and three cases, and the held-out
-  `legacy-appendix` test manifest has two documents and two unmaterialized
-  seeds.
+- The development protocol manifest has three documents and three cases. The
+  train scope has one reserved `training-contract` document but no materialized
+  cases. The held-out `legacy-appendix` scope has two reserved documents and two
+  proposed seeds, with no materialized task outcomes.
 - Checked-in seeds 9300–9302 are development protocol cases, not fresh
   generalization evidence; held-out outcomes are not inspected.
+
+For the first model task only, exhaustive inspection is bounded to at most two
+documents, four sections per document, two requested fields, and four selected
+candidates. The worst case is 8 inspect + 4 select + 1 completion/verifier = 13
+policy actions within the 16-action budget. The full six-document maximum would
+require 29 policy actions and is not used for first-model training. A legitimate
+coverage-index variant is deferred until explicitly implemented.
 
 ## Metrics and gate
 

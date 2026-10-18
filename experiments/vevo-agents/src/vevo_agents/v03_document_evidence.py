@@ -28,7 +28,10 @@ MANIFEST_SCHEMA = "vevo.v03.document-evidence.bundle-manifest.v1"
 REQUEST_SCHEMA = "vevo.v03.document-evidence.request.v1"
 RESPONSE_SCHEMA = "vevo.v03.document-evidence.response.v1"
 CANDIDATE_SCHEMA = "vevo.v03.document-evidence.candidate.v1"
-SNAPSHOT_SCHEMA = "vevo.v03.document-evidence.snapshot.v2"
+SNAPSHOT_SCHEMA = "vevo.v03.document-evidence.snapshot.v3"
+ACTION_JOURNAL_SCHEMA = "vevo.v03.document-evidence.journal.action.v1"
+INVALID_JOURNAL_SCHEMA = "vevo.v03.document-evidence.journal.invalid.v1"
+INTERNAL_JOURNAL_SCHEMA = "vevo.v03.document-evidence.journal.internal.v1"
 
 MAX_DOCUMENTS = 6
 MIN_DOCUMENTS = 2
@@ -36,6 +39,8 @@ MAX_SECTIONS_PER_DOCUMENT = 4
 MIN_REQUESTED_FIELDS = 2
 MAX_REQUESTED_FIELDS = 3
 DEFAULT_ACTION_BUDGET = 16
+MAX_FIELD_ID_UTF8_BYTES = 128
+MAX_VALUE_UTF8_BYTES = 512
 
 VALUE_TYPES = frozenset({
     "date",
@@ -140,6 +145,30 @@ def _require_string(value: Any, name: str, *, pattern: re.Pattern[str] | None = 
     return value
 
 
+def _require_utf8_width(value: str, width: int, *, name: str, error_type: type[Exception]) -> str:
+    """Require a lossless UTF-8 representation for a protocol identity/value."""
+
+    try:
+        encoded_length = len(value.encode("utf-8"))
+    except UnicodeEncodeError as exc:
+        raise error_type(f"{name} is not valid UTF-8") from exc
+    if encoded_length > width:
+        raise error_type(f"{name} exceeds the supported UTF-8 width of {width} bytes")
+    return value
+
+
+def _require_iso_date(value: Any, *, name: str, error_type: type[Exception]) -> str:
+    """Require the calendar-date representation used by ranking and encoding."""
+
+    if not isinstance(value, str) or DATE_RE.fullmatch(value) is None:
+        raise error_type(f"{name} must be an ISO-8601 calendar date")
+    try:
+        date.fromisoformat(value)
+    except ValueError as exc:
+        raise error_type(f"{name} must be an ISO-8601 calendar date") from exc
+    return value
+
+
 def _validate_typed_value(value: Any, value_type: str, *, context: str) -> None:
     if value_type not in VALUE_TYPES:
         raise DocumentIntegrityError(f"unsupported value_type at {context}")
@@ -147,8 +176,14 @@ def _validate_typed_value(value: Any, value_type: str, *, context: str) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
             raise DocumentIntegrityError(f"invalid finite numeric value at {context}")
         return
-    if not isinstance(value, str) or not value or len(value) > 512:
+    if not isinstance(value, str) or not value:
         raise DocumentIntegrityError(f"invalid string value at {context}")
+    _require_utf8_width(
+        value,
+        MAX_VALUE_UTF8_BYTES,
+        name=f"value at {context}",
+        error_type=DocumentIntegrityError,
+    )
     if value_type == "date":
         if DATE_RE.fullmatch(value) is None:
             raise DocumentIntegrityError(f"invalid date value at {context}")
@@ -173,7 +208,7 @@ def _validate_document(document: Any, *, source: str) -> dict[str, Any]:
     version = document.get("version")
     if type(version) is not int or version <= 0:
         raise DocumentIntegrityError(f"invalid version in {source}")
-    _require_string(document.get("published_at"), "published_at")
+    _require_iso_date(document.get("published_at"), name="published_at", error_type=DocumentIntegrityError)
     sections = document.get("sections")
     if not isinstance(sections, list) or not (1 <= len(sections) <= MAX_SECTIONS_PER_DOCUMENT):
         raise DocumentIntegrityError(f"document section bound exceeded in {source}")
@@ -201,7 +236,13 @@ def _validate_document(document: Any, *, source: str) -> dict[str, Any]:
             if fact_id in fact_ids:
                 raise DocumentIntegrityError(f"duplicate fact_id in {source}:{section_id}")
             fact_ids.add(fact_id)
-            _require_string(fact.get("field_id"), "field_id", pattern=FIELD_RE)
+            field_id = _require_string(fact.get("field_id"), "field_id", pattern=FIELD_RE)
+            _require_utf8_width(
+                field_id,
+                MAX_FIELD_ID_UTF8_BYTES,
+                name="field_id",
+                error_type=DocumentIntegrityError,
+            )
             value_type = _require_string(fact.get("value_type"), "value_type")
             _validate_typed_value(fact.get("value"), value_type, context=f"{source}:{fact_id}")
             revision = fact.get("revision")
@@ -210,7 +251,11 @@ def _validate_document(document: Any, *, source: str) -> dict[str, Any]:
             state = fact.get("state")
             if state not in {"current", "obsolete"}:
                 raise DocumentIntegrityError(f"invalid fact state in {source}:{fact_id}")
-            _require_string(fact.get("published_at"), "fact published_at")
+            _require_iso_date(
+                fact.get("published_at"),
+                name="fact published_at",
+                error_type=DocumentIntegrityError,
+            )
             conflict_group = fact.get("conflict_group")
             if conflict_group is not None:
                 _require_string(conflict_group, "conflict_group")
@@ -367,6 +412,12 @@ class RequestedField:
     def __post_init__(self) -> None:
         if FIELD_RE.fullmatch(self.field_id) is None:
             raise ProtocolViolation(f"invalid requested field id: {self.field_id!r}")
+        _require_utf8_width(
+            self.field_id,
+            MAX_FIELD_ID_UTF8_BYTES,
+            name="requested field id",
+            error_type=ProtocolViolation,
+        )
         if self.value_type not in VALUE_TYPES:
             raise ProtocolViolation(f"unsupported requested value type: {self.value_type!r}")
         if self.revision_rule not in REVISION_RULES:
@@ -1066,8 +1117,26 @@ class DocumentEvidenceSession:
         )
 
     def _record_invalid(self, error: str) -> dict[str, Any]:
-        self.action_log.append({"kind": "invalid", "error": error})
+        self.action_log.append({
+            "journal_schema": INVALID_JOURNAL_SCHEMA,
+            "error": str(error),
+        })
         return self._base("invalid_action", terminal=False, error=error)
+
+    def _record_action(self, action: Mapping[str, Any]) -> None:
+        # User-controlled action kinds, including names beginning with
+        # ``__``, are always wrapped as user actions. They cannot collide
+        # with an internal transition journal entry during restore.
+        self.action_log.append({
+            "journal_schema": ACTION_JOURNAL_SCHEMA,
+            "action": deepcopy(dict(action)),
+        })
+
+    def _record_internal_transition(self, event: str) -> None:
+        self.action_log.append({
+            "journal_schema": INTERNAL_JOURNAL_SCHEMA,
+            "event": event,
+        })
 
     def _apply_budget_exhaustion_event(self) -> dict[str, Any]:
         self._budget_exhaustion_logged = True
@@ -1152,9 +1221,12 @@ class DocumentEvidenceSession:
                 not isinstance(missing_fields, list) or field_id not in missing_fields
             ):
                 return self._base("incomplete_packet", terminal=False, error="reported field is not missing")
+            conflicts = packet.get("conflicts", [])
+            if mode == "conflict" and not isinstance(conflicts, list):
+                return self._base("incomplete_packet", terminal=False, error="conflicts must be a list")
             if mode == "conflict" and field_id not in {
                 conflict.get("field_id")
-                for conflict in packet.get("conflicts", [])
+                for conflict in conflicts
                 if isinstance(conflict, dict)
             }:
                 return self._base("incomplete_packet", terminal=False, error="reported field is not conflicted")
@@ -1183,7 +1255,7 @@ class DocumentEvidenceSession:
             return self._base("already_terminal", terminal=True)
         if self.action_count >= self.task.action_budget:
             if not self._budget_exhaustion_logged:
-                self.action_log.append({"kind": "__budget_exhausted__"})
+                self._record_internal_transition("budget_exhausted")
             return self._apply_budget_exhaustion_event()
         self.action_count += 1
         if not isinstance(action, dict):
@@ -1192,7 +1264,7 @@ class DocumentEvidenceSession:
             _assert_json_tree(action)
             if not isinstance(action.get("kind"), str):
                 raise ProtocolViolation("action kind is required")
-            self.action_log.append(deepcopy(action))
+            self._record_action(action)
         except (ProtocolViolation, ValueError) as exc:
             return self._record_invalid(str(exc))
         kind = action["kind"]
@@ -1258,16 +1330,30 @@ class DocumentEvidenceSession:
         action_log = snapshot.get("action_log")
         if not isinstance(action_log, list):
             raise ProtocolViolation("snapshot action_log must be a list")
-        for action in action_log:
-            if not isinstance(action, dict):
+        for entry in action_log:
+            if not isinstance(entry, dict):
                 raise ProtocolViolation("snapshot action log entry must be an object")
-            if action.get("kind") == "__budget_exhausted__":
+            journal_schema = entry.get("journal_schema")
+            if journal_schema == ACTION_JOURNAL_SCHEMA:
+                action = entry.get("action")
+                if not isinstance(action, dict):
+                    raise ProtocolViolation("snapshot user action entry is invalid")
+                session.dispatch(action)
+            elif journal_schema == INVALID_JOURNAL_SCHEMA:
+                error = entry.get("error")
+                if not isinstance(error, str) or not error:
+                    raise ProtocolViolation("snapshot invalid-action entry is invalid")
+                session.action_count += 1
+                session._record_invalid(error)
+            elif journal_schema == INTERNAL_JOURNAL_SCHEMA:
+                if entry.get("event") != "budget_exhausted":
+                    raise ProtocolViolation("snapshot internal transition is invalid")
                 if session.action_count < task.action_budget:
                     raise ProtocolViolation("budget event appeared before action budget was consumed")
-                session.action_log.append(deepcopy(action))
+                session._record_internal_transition("budget_exhausted")
                 session._apply_budget_exhaustion_event()
             else:
-                session.dispatch(action)
+                raise ProtocolViolation("unsupported snapshot journal entry")
         if session.action_count != snapshot.get("action_count"):
             raise ProtocolViolation("snapshot action count mismatch")
         if session._budget_exhaustion_logged != snapshot.get("budget_exhausted"):
@@ -1471,6 +1557,7 @@ def make_task(
 
 
 __all__ = [
+    "ACTION_JOURNAL_SCHEMA",
     "CANDIDATE_SCHEMA",
     "DEFAULT_ACTION_BUDGET",
     "DOCUMENT_ACTIONS",
@@ -1482,6 +1569,10 @@ __all__ = [
     "EvidencePacketVerifier",
     "EvidenceRecord",
     "ForbiddenDocumentHandle",
+    "INTERNAL_JOURNAL_SCHEMA",
+    "INVALID_JOURNAL_SCHEMA",
+    "MAX_FIELD_ID_UTF8_BYTES",
+    "MAX_VALUE_UTF8_BYTES",
     "ObservationLimitedExpert",
     "ProtocolViolation",
     "ReadAllBaseline",

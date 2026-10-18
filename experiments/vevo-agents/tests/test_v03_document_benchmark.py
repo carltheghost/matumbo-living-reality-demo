@@ -26,6 +26,8 @@ class DocumentBenchmarkPreregistrationTests(unittest.TestCase):
     def test_split_separates_whole_families_and_cases_are_development_only(self):
         spec = build_benchmark_preregistration()
         split = spec["frozen_split"]
+        self.assertFalse(split["frozen"])
+        self.assertEqual(split["status"], "partial_scope_pending_generators")
         self.assertTrue(split["whole_document_and_template_family_separation"])
         self.assertTrue(split["no_instance_overlap"])
         self.assertTrue(split["randomized_document_ids"])
@@ -35,6 +37,10 @@ class DocumentBenchmarkPreregistrationTests(unittest.TestCase):
         self.assertEqual(split["train"]["document_count"], 1)
         self.assertEqual(split["development"]["document_count"], 3)
         self.assertEqual(split["test"]["document_count"], 2)
+        self.assertEqual(split["train"]["manifest_status"], "pending_implementation")
+        self.assertEqual(split["test"]["manifest_status"], "pending_implementation")
+        self.assertIsNone(split["train"]["case_count"])
+        self.assertIsNone(split["test"]["case_count"])
         self.assertEqual(split["randomized_candidate_order"]["status"], "implemented")
         self.assertEqual(split["randomized_document_ids"]["status"], "planned")
         self.assertEqual(split["randomized_catalog_order"]["status"], "planned")
@@ -73,6 +79,13 @@ class DocumentBenchmarkPreregistrationTests(unittest.TestCase):
         self.assertEqual(spec["case_generation"]["maximum_documents_per_case"], 6)
         self.assertEqual(spec["case_generation"]["maximum_sections_per_document"], 4)
         self.assertEqual(spec["case_generation"]["action_budget"], 16)
+        self.assertFalse(spec["case_generation"]["task_manifest_materialized"])
+        feasible = spec["first_model_task_scope"]
+        self.assertTrue(feasible["exhaustive_inspection_required"])
+        self.assertEqual(feasible["worst_case_budget_accounting"]["total_policy_action_calls"], 13)
+        self.assertTrue(feasible["worst_case_budget_accounting"]["feasible_within_budget"])
+        self.assertEqual(feasible["current_general_protocol_maximum"]["total_policy_action_calls"], 29)
+        self.assertTrue(feasible["current_general_protocol_maximum"]["exceeds_action_budget"])
         self.assertEqual(spec["jev_comparator"]["eligibility"], "unverified")
         self.assertTrue(spec["jev_comparator"]["same_initial_request"])
         self.assertTrue(spec["jev_comparator"]["same_feedback"])

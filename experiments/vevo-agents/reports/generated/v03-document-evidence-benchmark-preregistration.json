@@ -62,6 +62,7 @@
   "case_generation": {
     "action_budget": 16,
     "development_cases_are_protocol_cases_not_generalization": true,
+    "held_out_manifest_materialized": false,
     "held_out_test_outcomes_are_not_inspected": true,
     "maximum_documents_per_case": 6,
     "maximum_sections_per_document": 4,
@@ -70,7 +71,9 @@
       "maximum": 3,
       "minimum": 2
     },
-    "schema": "vevo.v03.document-evidence.case-generator.v1"
+    "schema": "vevo.v03.document-evidence.case-generator.v1",
+    "status": "pending_implementation",
+    "task_manifest_materialized": false
   },
   "cost_accounting": {
     "end_to_end": [
@@ -174,6 +177,34 @@
     "variable_candidate_scorer": true
   },
   "evaluation_started": false,
+  "first_model_task_scope": {
+    "action_budget": 16,
+    "coverage_index_variant": "later_declared_variant_only; not used in the first model task",
+    "current_general_protocol_maximum": {
+      "completion_verify_action": 1,
+      "exceeds_action_budget": true,
+      "inspect_section_actions": 24,
+      "not_used_for_first_model_training": true,
+      "select_candidate_actions": 4,
+      "total_policy_action_calls": 29
+    },
+    "exhaustive_inspection_required": true,
+    "maximum_documents": 2,
+    "maximum_requested_fields": 2,
+    "maximum_sections_per_document": 4,
+    "maximum_selected_candidates": 4,
+    "purpose": "first neural document-policy task only",
+    "status": "specified_not_materialized",
+    "worst_case_budget_accounting": {
+      "completion_verify_action": 1,
+      "feasible_within_budget": true,
+      "inspect_section_actions": 8,
+      "select_candidate_actions": 4,
+      "server_verification_calls": 1,
+      "total_policy_action_calls": 13,
+      "unused_action_reserve": 3
+    }
+  },
   "frozen_split": {
     "development": {
       "case_count": 3,
@@ -225,6 +256,7 @@
       ],
       "template_family_count": 2
     },
+    "frozen": false,
     "no_instance_overlap": true,
     "randomized_candidate_order": {
       "scope": "seeded_observed_candidates_within_an_episode",
@@ -238,8 +270,10 @@
       "claim": "future held-out generator only; fixed server handles remain in this proof",
       "status": "planned"
     },
+    "status": "partial_scope_pending_generators",
+    "status_reason": "development protocol fixtures exist, but training and held-out task generators/manifests are not implemented",
     "test": {
-      "case_count": 2,
+      "case_count": null,
       "case_seeds": [
         9400,
         9401
@@ -271,7 +305,9 @@
         "appendix-sections-f"
       ],
       "manifest_id": "document-evidence-test-manifest-v1",
+      "manifest_status": "pending_implementation",
       "outcomes_materialized": false,
+      "planned_case_count": 2,
       "scope": "test",
       "template_families": [
         "legacy-appendix"
@@ -279,7 +315,7 @@
       "template_family_count": 1
     },
     "train": {
-      "case_count": 0,
+      "case_count": null,
       "document_count": 1,
       "document_handles": [
         "doc-echo"
@@ -298,6 +334,8 @@
         "column-sections-e"
       ],
       "manifest_id": "document-evidence-train-manifest-v1",
+      "manifest_status": "pending_implementation",
+      "planned_case_count": 0,
       "scope": "train",
       "template_families": [
         "training-contract"
