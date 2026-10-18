@@ -43,6 +43,18 @@ There is one 12-D center, not five interchangeable centers. The four
 peripheral parameter sets are distinct random parameters, but the architecture
 does not assign semantic specialization to a peripheral.
 
+The dimension labels are intentionally separate:
+
+| Dimension role | Current coordinates | Meaning |
+| --- | --- | --- |
+| latent | 4×8 peripheral states, 12-D center, 2×6 memory, `(5,2,2)` oscillator state | internal recurrent and wave state |
+| display/communication | 4-D messages, 4-D attention query/context, 4-D feedback | bounded interfaces between core mechanisms; no UI or renderer authority |
+| physical | each oscillator's Cartesian `(x,y)` disk and cumulative normalized time | the modeled damped-wave variables only; not coordinates of the external world |
+
+The 6-D memory slots are projected into the shared 4-D attention value/key
+space. No current module claims that a display coordinate is a physical
+coordinate or that a latent coordinate is directly observable.
+
 ## Time and oscillator construction
 
 Each of the five compartments has two 2-D oscillator pairs, so the internal
