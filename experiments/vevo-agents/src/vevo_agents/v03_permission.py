@@ -704,7 +704,7 @@ class LocalTestAuthority:
             self._idempotency[key] = (digest, "reserved", reservation_id)
             return _AuthorityDecision("reserved", "authority atomically reserved all live ancestors and leaf", reservation_id, constraints)
 
-    def mark_started(self, grant: GrantHandle, action: Action, reservation_id: str, now: float) -> _AuthorityDecision:
+    def mark_started(self, grant: GrantHandle, action: Action, reservation_id: str, now: float, cancellation: CancellationToken | None = None) -> _AuthorityDecision:
         with self._lock:
             reservation = self._reservations.get(reservation_id)
             if reservation is None or reservation.state != "reserved":
@@ -717,6 +717,9 @@ class LocalTestAuthority:
             if constraints is None:
                 self._cancel_locked(reservation)
                 return _AuthorityDecision("denied", "authority was revoked or expired before execution start")
+            if cancellation is not None and cancellation.cancelled:
+                self._cancel_locked(reservation)
+                return _AuthorityDecision("cancelled", "cancelled before dispatch intent")
             reservation.state = "started"
             reservation.dispatch_intent = True
             reservation.started_at = now
@@ -921,6 +924,16 @@ class PermissionBroker:
                 # Expiry/revocation is intentionally left for the authority's
                 # reserve path so it can return the precise live status.
                 effective = None
+            if effective is not None and not self._delegation_scope_allows(effective, action):
+                return self._receipt(
+                    "denied",
+                    action,
+                    requested,
+                    effective,
+                    ("delegated context does not permit this action",),
+                    "delegation scope denied",
+                    now,
+                )
         if self._effect_free_misclassified(action, capability):
             return self._receipt("denied", action, requested, effective, ("effect-free capability attempted a protected destination",), "effect boundary denied", now)
         if capability.effect_class == EFFECT_FREE:
@@ -943,7 +956,7 @@ class PermissionBroker:
         if executor is None:
             self.authority.cancel(grant, action, reservation_id)
             return self._receipt("unavailable_provider", action, requested, effective, ("no local fixture executor is registered",), "provider unavailable", now)
-        start = self.authority.mark_started(grant, action, reservation_id, float(self._clock()))
+        start = self.authority.mark_started(grant, action, reservation_id, float(self._clock()), token)
         if start.status != "started":
             return self._receipt(start.status, action, requested, effective, (start.reason,), start.reason, now)
         effective = start.constraints.as_permissions() if start.constraints else effective
@@ -1043,6 +1056,17 @@ class PermissionBroker:
         if not isinstance(context, DelegationContext):
             raise PermissionError("delegation context is not authority-issued")
         self.authority.validate_delegation(context)
+
+    @staticmethod
+    def _delegation_scope_allows(effective: Mapping[str, Any], action: Action) -> bool:
+        return (
+            effective.get("capability") == action.capability
+            and action.workspace_id == effective.get("workspace_id")
+            and action.operation in effective.get("operations", ())
+            and action.resource_scope in effective.get("resource_scopes", ())
+            and action.data_destination in effective.get("destinations", ())
+            and action.spend_units <= int(effective.get("remaining_spend_units", 0))
+        )
 
     def _audit(self, digest: str, status: str, reason: str, start: float, end: float) -> AuditReceipt:
         return AuditReceipt(secrets.token_urlsafe(12), digest, status, reason, start, end)

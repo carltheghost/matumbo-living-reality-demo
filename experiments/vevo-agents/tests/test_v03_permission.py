@@ -116,6 +116,19 @@ class CancellingExecutor(HarmlessFixtureExecutor):
         raise ExecutionCancelled("fixture cancelled before side effect")
 
 
+class StartCancellingToken(CancellationToken):
+    """Cancel on the authority's atomic pre-dispatch recheck."""
+
+    def __init__(self):
+        super().__init__()
+        self.reads = 0
+
+    @property
+    def cancelled(self):
+        self.reads += 1
+        return self.reads >= 3
+
+
 class CapturingExecutor(HarmlessFixtureExecutor):
     def __init__(self, descriptor):
         super().__init__(descriptor)
@@ -328,6 +341,22 @@ class V03PermissionTests(unittest.TestCase):
         self.assertEqual(result.status, "cancelled")
         self.assertEqual(executor.call_count, 0)
 
+    def test_cancellation_is_rechecked_atomically_before_dispatch_intent(self):
+        descriptor = capability(name="start-cancellable")
+        executor = HarmlessFixtureExecutor(descriptor)
+        broker = PermissionBroker(self.authority, clock=self.clock)
+        broker.register_capability(descriptor, executor)
+        value = action(capability_name="start-cancellable", idempotency_key="start-cancel")
+        grant = self._approve_with(broker, value, max_uses=1, max_spend=2)
+
+        cancelled = broker.execute(value, grant, cancellation=StartCancellingToken())
+        self.assertEqual(cancelled.status, "cancelled")
+        self.assertEqual(executor.call_count, 0)
+
+        retry = broker.execute(value, grant)
+        self.assertEqual(retry.status, "executed")
+        self.assertEqual(executor.call_count, 1)
+
     def test_nested_delegation_is_intersection_and_cannot_escalate(self):
         broad_action = action(idempotency_key="broad")
         broad_grant = self.approve(broad_action, mode=GRANT_MODE_WORKSPACE_FULL_ACCESS, max_spend=2)
@@ -347,6 +376,33 @@ class V03PermissionTests(unittest.TestCase):
         self.assertEqual(self.broker.execute(escalation, broad_grant, parent=child).status, "denied")
         forged_context = DelegationContext("forged-context")
         self.assertEqual(self.broker.execute(escalation, broad_grant, parent=forged_context).status, "denied")
+
+    def test_delegated_effect_free_execution_cannot_cross_capability_scope(self):
+        pure = capability(
+            name="pure-delegated",
+            effect_class=EFFECT_FREE,
+            execution_kind="internal_learned_skill",
+            operations=("compute",),
+            scopes=(LOCAL_MEMORY_SCOPE,),
+            destinations=("none",),
+        )
+        pure_executor = HarmlessFixtureExecutor(pure)
+        self.broker.register_capability(pure, pure_executor)
+
+        parent_action = action(idempotency_key="protected-parent")
+        parent_grant = self.approve(parent_action, mode=GRANT_MODE_WORKSPACE_FULL_ACCESS, max_spend=2)
+        parent = self.broker.context_for_grant(parent_grant)
+        pure_action = action(
+            capability_name="pure-delegated",
+            operation="compute",
+            resource_scope=LOCAL_MEMORY_SCOPE,
+            data_destination="none",
+            idempotency_key="pure-cross-capability",
+        )
+
+        result = self.broker.execute(pure_action, parent=parent)
+        self.assertEqual(result.status, "denied")
+        self.assertEqual(pure_executor.call_count, 0)
 
     def test_workspace_full_access_is_bounded_and_reports_requested_vs_effective(self):
         first = action(idempotency_key="full-read")
