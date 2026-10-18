@@ -47,6 +47,7 @@ def capability(
     operations=("read", "write"),
     scopes=("local", "remote"),
     destinations=("none", "fixture"),
+    max_output_bytes=4096,
 ):
     return CapabilityDescriptor(
         name=name,
@@ -58,7 +59,7 @@ def capability(
         allowed_resource_scopes=scopes,
         allowed_destinations=destinations,
         max_input_bytes=4096,
-        max_output_bytes=4096,
+        max_output_bytes=max_output_bytes,
         max_spend_units=10,
         resident_weight_bytes=10,
         resident_ram_bytes=20,
@@ -81,6 +82,7 @@ def action(
     arguments=None,
     spend_units=1,
     idempotency_key="request-1",
+    requester="",
 ):
     return Action(
         capability=capability_name,
@@ -92,6 +94,7 @@ def action(
         arguments={} if arguments is None else arguments,
         spend_units=spend_units,
         idempotency_key=idempotency_key,
+        requester=requester,
     )
 
 
@@ -111,6 +114,40 @@ class CancellingExecutor(HarmlessFixtureExecutor):
     def execute(self, action_value, cancellation):
         cancellation.cancel()
         raise ExecutionCancelled("fixture cancelled before side effect")
+
+
+class CapturingExecutor(HarmlessFixtureExecutor):
+    def __init__(self, descriptor):
+        super().__init__(descriptor)
+        self.seen_action = None
+
+    def execute(self, action_value, cancellation):
+        self.seen_action = action_value
+        return super().execute(action_value, cancellation)
+
+
+class RaisingExecutor(HarmlessFixtureExecutor):
+    def execute(self, action_value, cancellation):
+        self.call_count += 1
+        raise RuntimeError("adapter failed after dispatch")
+
+
+class OversizedExecutor(HarmlessFixtureExecutor):
+    def execute(self, action_value, cancellation):
+        self.call_count += 1
+        return {"payload": "x" * 200}
+
+
+class RevokingExecutor(HarmlessFixtureExecutor):
+    def __init__(self, descriptor, authority, grant):
+        super().__init__(descriptor)
+        self.authority = authority
+        self.grant = grant
+
+    def execute(self, action_value, cancellation):
+        self.call_count += 1
+        self.authority.revoke(self.grant, "revoked concurrently after dispatch")
+        return {"effect": "fixture-completed"}
 
 
 class V03PermissionTests(unittest.TestCase):
@@ -298,8 +335,9 @@ class V03PermissionTests(unittest.TestCase):
         narrow_action = action(operation="read", resource_scope="local", idempotency_key="narrow")
         narrow_grant = self.approve(narrow_action, mode=GRANT_MODE_SCOPED, max_spend=10)
         child = self.broker.derive_child_context(parent, narrow_grant)
-        self.assertEqual(child.allowed_operations, frozenset({"read"}))
-        self.assertEqual(child.remaining_spend_units, 2)
+        child_permissions = self.broker.delegation_permissions(child)
+        self.assertEqual(child_permissions["operations"], ["read"])
+        self.assertEqual(child_permissions["remaining_spend_units"], 2)
         self.assertEqual(self.broker.execute(narrow_action, narrow_grant, parent=child).status, "executed")
         second = action(operation="read", resource_scope="local", idempotency_key="narrow-2")
         self.assertEqual(self.broker.execute(second, narrow_grant, parent=child).status, "executed")
@@ -307,15 +345,7 @@ class V03PermissionTests(unittest.TestCase):
         self.assertEqual(self.broker.execute(third, narrow_grant, parent=child).status, "denied")
         escalation = action(operation="write", resource_scope="remote", data_destination="fixture", idempotency_key="escalate")
         self.assertEqual(self.broker.execute(escalation, broad_grant, parent=child).status, "denied")
-        forged_context = DelegationContext(
-            frozenset({"local-tool"}),
-            frozenset({"write"}),
-            frozenset({"remote"}),
-            frozenset({"fixture"}),
-            frozenset({"workspace-a"}),
-            100,
-            object(),
-        )
+        forged_context = DelegationContext("forged-context")
         self.assertEqual(self.broker.execute(escalation, broad_grant, parent=forged_context).status, "denied")
 
     def test_workspace_full_access_is_bounded_and_reports_requested_vs_effective(self):
@@ -388,6 +418,136 @@ class V03PermissionTests(unittest.TestCase):
         handoff_result = broker.execute(handoff_action, handoff_grant)
         self.assertEqual(handoff_result.status, "user_handoff_required")
         self.assertEqual(handoff_executor.call_count, 0)
+
+    def test_ambiguous_safety_and_nonfinite_expiry_fail_closed(self):
+        with self.assertRaises(PermissionError):
+            capability(name="ambiguous-safety", effect_class=EFFECT_SAFETY_CRITICAL)
+        value = action(idempotency_key="nan-expiry")
+        pending = self.broker.request_approval(value, "neural-proposer")
+        with self.assertRaises(PermissionError):
+            self.authority.approve(
+                pending.request_id,
+                "authenticated-test-user",
+                float("nan"),
+                1,
+                1,
+                GRANT_MODE_ONE_TIME,
+                value.workspace_id,
+            )
+
+    def test_nested_action_payload_is_immutable_and_exact(self):
+        descriptor = capability(name="capture")
+        executor = CapturingExecutor(descriptor)
+        broker = PermissionBroker(self.authority, clock=self.clock)
+        broker.register_capability(descriptor, executor)
+        nested = {"inner": {"value": 1}, "items": [1]}
+        value = action(
+            capability_name="capture",
+            arguments=nested,
+            idempotency_key="immutable",
+        )
+        canonical = value.canonical_bytes
+        grant = self._approve_with(broker, value, mode=GRANT_MODE_ONE_TIME, max_uses=1)
+        nested["inner"]["value"] = 99
+        nested["items"].append(2)
+        result = broker.execute(value, grant)
+        self.assertEqual(result.status, "executed")
+        self.assertEqual(executor.seen_action.arguments["inner"]["value"], 1)
+        self.assertEqual(executor.seen_action.arguments["items"], (1,))
+        self.assertEqual(value.canonical_bytes, canonical)
+        with self.assertRaises(TypeError):
+            executor.seen_action.arguments["inner"] = {"value": 2}
+
+    def test_parent_revoke_and_expiry_are_live_not_snapshot(self):
+        parent_value = action(idempotency_key="parent-live")
+        parent_pending = self.broker.request_approval(parent_value, "neural-proposer")
+        parent_grant = self.authority.approve(
+            parent_pending.request_id,
+            "authenticated-test-user",
+            self.clock() + 5,
+            3,
+            3,
+            GRANT_MODE_WORKSPACE_FULL_ACCESS,
+            parent_value.workspace_id,
+        )
+        child_value = action(idempotency_key="child-live")
+        child_grant = self.approve(child_value, max_uses=2, max_spend=10)
+        parent_context = self.broker.context_for_grant(parent_grant)
+        child_context = self.broker.derive_child_context(parent_context, child_grant)
+        self.authority.revoke(parent_grant)
+        self.assertEqual(self.broker.execute(child_value, child_grant, parent=child_context).status, "revoked")
+
+        self.clock.value = 100.0
+        parent_value = action(idempotency_key="parent-expiry")
+        parent_pending = self.broker.request_approval(parent_value, "neural-proposer")
+        parent_grant = self.authority.approve(
+            parent_pending.request_id,
+            "authenticated-test-user",
+            self.clock() + 5,
+            3,
+            3,
+            GRANT_MODE_WORKSPACE_FULL_ACCESS,
+            parent_value.workspace_id,
+        )
+        child_value = action(idempotency_key="child-expiry")
+        child_grant = self.approve(child_value, max_uses=2, max_spend=10)
+        child_context = self.broker.derive_child_context(self.broker.context_for_grant(parent_grant), child_grant)
+        self.clock.advance(6)
+        self.assertEqual(self.broker.execute(child_value, child_grant, parent=child_context).status, "expired")
+
+    def test_generic_executor_failure_is_unknown_and_not_retried(self):
+        descriptor = capability(name="uncertain")
+        executor = RaisingExecutor(descriptor)
+        broker = PermissionBroker(self.authority, clock=self.clock)
+        broker.register_capability(descriptor, executor)
+        value = action(capability_name="uncertain", idempotency_key="unknown")
+        grant = self._approve_with(broker, value, max_uses=2, max_spend=2)
+        first = broker.execute(value, grant)
+        second = broker.execute(value, grant)
+        self.assertEqual(first.status, "uncertain_outcome")
+        self.assertEqual(second.status, "uncertain_outcome")
+        self.assertEqual(executor.call_count, 1)
+        changed = action(capability_name="uncertain", arguments={"changed": True}, idempotency_key="unknown")
+        self.assertEqual(broker.execute(changed, grant).status, "denied")
+
+    def test_output_cap_after_dispatch_is_unknown_and_no_blind_rerun(self):
+        descriptor = capability(name="oversized", max_output_bytes=32)
+        executor = OversizedExecutor(descriptor)
+        broker = PermissionBroker(self.authority, clock=self.clock)
+        broker.register_capability(descriptor, executor)
+        value = action(capability_name="oversized", idempotency_key="oversized")
+        grant = self._approve_with(broker, value, max_uses=2, max_spend=2)
+        self.assertEqual(broker.execute(value, grant).status, "uncertain_outcome")
+        self.assertEqual(broker.execute(value, grant).status, "uncertain_outcome")
+        self.assertEqual(executor.call_count, 1)
+
+    def test_revoke_after_start_is_visible_without_undoing_effect(self):
+        descriptor = capability(name="post-start")
+        value = action(capability_name="post-start", idempotency_key="post-start")
+        pending = self.authority.submit(value, descriptor, "neural-proposer")
+        grant = self.authority.approve(
+            pending.request_id,
+            "authenticated-test-user",
+            self.clock() + 50,
+            2,
+            2,
+            GRANT_MODE_SCOPED,
+            value.workspace_id,
+        )
+        executor = RevokingExecutor(descriptor, self.authority, grant)
+        broker = PermissionBroker(self.authority, clock=self.clock)
+        broker.register_capability(descriptor, executor)
+        result = broker.execute(value, grant)
+        self.assertEqual(result.status, "executed")
+        self.assertIn("revoked_after_start_cannot_undo_effect", result.exceptions)
+        self.assertEqual(broker.execute(value, grant).status, "idempotent_replay")
+        self.assertEqual(executor.call_count, 1)
+
+    def test_authority_advertises_non_durable_prototype_state(self):
+        status = self.authority.durability_status()
+        self.assertFalse(status["durable"])
+        self.assertFalse(status["crash_recovery"])
+        self.assertFalse(status["outbox"])
 
     def test_unavailable_external_adapter_and_total_budget(self):
         external = capability(
