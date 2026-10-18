@@ -1,0 +1,30 @@
+{
+  "schema": "vevo.v03.document-evidence.bundle-manifest.v1",
+  "bundle_id": "document-evidence-fixture-bundle-2026-10-18",
+  "documents": [
+    {
+      "handle": "doc-aurora",
+      "path": "doc-aurora.json",
+      "document_id": "aurora-service-agreement",
+      "sha256": "cc46f2b1560a55d881912037d9d941b5b5c408d24d57b4a81d465eb84fd5dce0"
+    },
+    {
+      "handle": "doc-boreal",
+      "path": "doc-boreal.json",
+      "document_id": "boreal-service-amendment",
+      "sha256": "760af40ebea699ea656ba47cf2a776b6a56cba8808c78bfe52beb6d0e12d1b97"
+    },
+    {
+      "handle": "doc-cinder",
+      "path": "doc-cinder.json",
+      "document_id": "cinder-operations-handbook",
+      "sha256": "f8bcd5624ee8918b199e5aaef331d482ffb1041fc1d2691b7f97b6896dc37ba7"
+    },
+    {
+      "handle": "doc-delta",
+      "path": "doc-delta.json",
+      "document_id": "delta-legacy-appendix",
+      "sha256": "d0731e8c97b6b2df85973ff272bdad116a32f0cd777f7f5fe41c3a04c06f7aa4"
+    }
+  ]
+}

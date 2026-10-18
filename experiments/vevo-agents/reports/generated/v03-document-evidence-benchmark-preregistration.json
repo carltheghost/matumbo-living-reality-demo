@@ -1,0 +1,219 @@
+{
+  "bundle": {
+    "bundle_id": "document-evidence-fixture-bundle-2026-10-18",
+    "documents": [
+      {
+        "document_id": "aurora-service-agreement",
+        "handle": "doc-aurora",
+        "layout_id": "split-sections-a",
+        "section_count": 4,
+        "sha256": "cc46f2b1560a55d881912037d9d941b5b5c408d24d57b4a81d465eb84fd5dce0",
+        "template_family": "supplier-agreement",
+        "version": 4
+      },
+      {
+        "document_id": "boreal-service-amendment",
+        "handle": "doc-boreal",
+        "layout_id": "split-sections-b",
+        "section_count": 4,
+        "sha256": "760af40ebea699ea656ba47cf2a776b6a56cba8808c78bfe52beb6d0e12d1b97",
+        "template_family": "supplier-agreement",
+        "version": 5
+      },
+      {
+        "document_id": "cinder-operations-handbook",
+        "handle": "doc-cinder",
+        "layout_id": "grid-sections-c",
+        "section_count": 4,
+        "sha256": "f8bcd5624ee8918b199e5aaef331d482ffb1041fc1d2691b7f97b6896dc37ba7",
+        "template_family": "operations-handbook",
+        "version": 2
+      },
+      {
+        "document_id": "delta-legacy-appendix",
+        "handle": "doc-delta",
+        "layout_id": "appendix-sections-d",
+        "section_count": 4,
+        "sha256": "d0731e8c97b6b2df85973ff272bdad116a32f0cd777f7f5fe41c3a04c06f7aa4",
+        "template_family": "legacy-appendix",
+        "version": 1
+      }
+    ],
+    "manifest_schema": "vevo.v03.document-evidence.bundle-manifest.v1"
+  },
+  "cost_accounting": {
+    "end_to_end": [
+      "action_calls",
+      "server_verification_calls",
+      "wall_time_seconds"
+    ],
+    "inference": [
+      "policy_steps",
+      "model_forward_calls"
+    ],
+    "separate_inference_and_end_to_end_costs": true
+  },
+  "created_for_branch": "experiments/vevo-agents-document-evidence-2026-10-18",
+  "development_cases": [
+    {
+      "action_budget": 16,
+      "document_handles": [
+        "doc-aurora",
+        "doc-boreal",
+        "doc-cinder"
+      ],
+      "requested_fields": [
+        {
+          "field_id": "renewal_date",
+          "revision_rule": "latest_non_obsolete",
+          "value_type": "date"
+        },
+        {
+          "field_id": "account_owner",
+          "revision_rule": "latest_non_obsolete",
+          "value_type": "person"
+        },
+        {
+          "field_id": "annual_limit",
+          "revision_rule": "latest_non_obsolete",
+          "value_type": "number"
+        }
+      ],
+      "task_id": "task-current-contract"
+    },
+    {
+      "action_budget": 16,
+      "document_handles": [
+        "doc-aurora",
+        "doc-boreal",
+        "doc-cinder"
+      ],
+      "requested_fields": [
+        {
+          "field_id": "support_contact",
+          "revision_rule": "latest_non_obsolete",
+          "value_type": "email"
+        },
+        {
+          "field_id": "account_owner",
+          "revision_rule": "latest_non_obsolete",
+          "value_type": "person"
+        },
+        {
+          "field_id": "annual_limit",
+          "revision_rule": "latest_non_obsolete",
+          "value_type": "number"
+        }
+      ],
+      "task_id": "task-missing-support"
+    },
+    {
+      "action_budget": 16,
+      "document_handles": [
+        "doc-aurora",
+        "doc-boreal",
+        "doc-cinder"
+      ],
+      "requested_fields": [
+        {
+          "field_id": "renewal_date",
+          "revision_rule": "latest_non_obsolete",
+          "value_type": "date"
+        },
+        {
+          "field_id": "annual_limit",
+          "revision_rule": "latest_non_obsolete",
+          "value_type": "number"
+        }
+      ],
+      "task_id": "task-conflict-history"
+    }
+  ],
+  "document_policy_interface": {
+    "backend": "v03-five-brain-addressable-memory-interface",
+    "central_count": 1,
+    "memory_shape": [
+      2,
+      6
+    ],
+    "new_encoder_required": true,
+    "new_training_required": true,
+    "peripheral_count": 4,
+    "variable_candidate_scorer": true
+  },
+  "evaluation_started": false,
+  "frozen_split": {
+    "development": {
+      "case_seeds": [
+        9300,
+        9301,
+        9302
+      ],
+      "document_handles": [
+        "doc-aurora",
+        "doc-boreal",
+        "doc-cinder"
+      ],
+      "template_families": [
+        "supplier-agreement",
+        "operations-handbook"
+      ]
+    },
+    "no_instance_overlap": true,
+    "randomized_candidate_order": true,
+    "randomized_document_ids": true,
+    "test": {
+      "case_seeds": [],
+      "document_handles": [
+        "doc-delta"
+      ],
+      "template_families": [
+        "legacy-appendix"
+      ]
+    },
+    "train": {
+      "document_handles": [],
+      "template_families": [
+        "reserved-document-training-family-not-yet-admitted"
+      ]
+    },
+    "unseen_instances_layouts_conflicts": true,
+    "whole_document_and_template_family_separation": true
+  },
+  "jev_comparator": {
+    "credentials": false,
+    "interface": "typed-task-evidence-packet-budget-comparator-v1",
+    "invented_results": false,
+    "live_calls": false,
+    "results": null,
+    "same_action_budget": true,
+    "same_evidence_store": true,
+    "same_typed_tasks": true
+  },
+  "metrics": [
+    "source_citation_accuracy",
+    "verified_success",
+    "false_completions",
+    "tool_calls",
+    "missing_fact_detection",
+    "restart_parity"
+  ],
+  "model_available": false,
+  "model_status": {
+    "available": false,
+    "existing_v03_gate_checkpoint_reused": false,
+    "gate_outputs_mapped_to_document_actions": false,
+    "reason": "requires new document encoder, training, and reviewed checkpoint"
+  },
+  "prohibitions": {
+    "credentials": true,
+    "deployment": true,
+    "evaluation_sweep": true,
+    "live_external_calls": true,
+    "reuse_existing_gate_weights_as_document_policy": true,
+    "training": true
+  },
+  "schema": "vevo.v03.document-evidence-benchmark-preregistration.v1",
+  "status": "awaiting_document_policy_review_before_training",
+  "training_started": false
+}

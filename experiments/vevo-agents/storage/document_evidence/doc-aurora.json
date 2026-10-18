@@ -1,0 +1,123 @@
+{
+  "schema": "vevo.v03.document-evidence.document.v1",
+  "document_id": "aurora-service-agreement",
+  "template_family": "supplier-agreement",
+  "layout_id": "split-sections-a",
+  "version": 4,
+  "published_at": "2026-09-15",
+  "title": "Aurora service agreement",
+  "sections": [
+    {
+      "section_id": "sec-intro",
+      "section_kind": "overview",
+      "title": "Service overview",
+      "body": "The agreement covers managed observability and support for the Aurora account."
+      ,"facts": [
+        {
+          "fact_id": "aurora-tier-4",
+          "field_id": "service_tier",
+          "value": "gold",
+          "value_type": "enum",
+          "revision": 4,
+          "state": "current",
+          "published_at": "2026-09-15",
+          "conflict_group": null
+        }
+      ]
+    },
+    {
+      "section_id": "sec-commercial",
+      "section_kind": "commercial",
+      "title": "Commercial terms",
+      "body": "Pricing notes and limits are listed here; the display order is not a priority signal.",
+      "facts": [
+        {
+          "fact_id": "aurora-limit-4",
+          "field_id": "annual_limit",
+          "value": 125000.0,
+          "value_type": "number",
+          "revision": 4,
+          "state": "current",
+          "published_at": "2026-09-15",
+          "conflict_group": "annual-limit"
+        },
+        {
+          "fact_id": "aurora-discount-4",
+          "field_id": "discount_rate",
+          "value": 0.12,
+          "value_type": "percentage",
+          "revision": 4,
+          "state": "current",
+          "published_at": "2026-09-15",
+          "conflict_group": null
+        }
+      ]
+    },
+    {
+      "section_id": "sec-contacts",
+      "section_kind": "contacts",
+      "title": "People and contact routing",
+      "body": "Operational contacts are retained for routing and are not all requested facts.",
+      "facts": [
+        {
+          "fact_id": "aurora-owner-2",
+          "field_id": "account_owner",
+          "value": "Mara Chen",
+          "value_type": "person",
+          "revision": 2,
+          "state": "current",
+          "published_at": "2026-09-15",
+          "conflict_group": "account-owner"
+        },
+        {
+          "fact_id": "aurora-phone-1",
+          "field_id": "office_phone",
+          "value": "+1-555-0101",
+          "value_type": "phone",
+          "revision": 1,
+          "state": "current",
+          "published_at": "2026-09-15",
+          "conflict_group": null
+        }
+      ]
+    },
+    {
+      "section_id": "sec-terms",
+      "section_kind": "terms",
+      "title": "Term and renewal schedule",
+      "body": "The current schedule supersedes the older renewal notice retained for audit history.",
+      "facts": [
+        {
+          "fact_id": "aurora-renewal-4",
+          "field_id": "renewal_date",
+          "value": "2027-12-31",
+          "value_type": "date",
+          "revision": 4,
+          "state": "current",
+          "published_at": "2026-09-15",
+          "conflict_group": "renewal-date"
+        },
+        {
+          "fact_id": "aurora-renewal-3",
+          "field_id": "renewal_date",
+          "value": "2026-12-31",
+          "value_type": "date",
+          "revision": 3,
+          "state": "obsolete",
+          "published_at": "2026-01-10",
+          "conflict_group": "renewal-date"
+        },
+        {
+          "fact_id": "aurora-notice-4",
+          "field_id": "notice_period",
+          "value": "90 days",
+          "value_type": "duration",
+          "revision": 4,
+          "state": "current",
+          "published_at": "2026-09-15",
+          "conflict_group": null
+        }
+      ]
+    }
+  ]
+}

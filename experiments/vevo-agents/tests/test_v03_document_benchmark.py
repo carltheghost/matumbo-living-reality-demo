@@ -1,0 +1,91 @@
+import json
+from pathlib import Path
+import unittest
+
+from vevo_agents.v03_document_benchmark import (
+    PREREG_SCHEMA,
+    PREREG_STATUS,
+    build_benchmark_preregistration,
+    document_evidence_tasks,
+    render_preregistration_markdown,
+)
+
+
+class DocumentBenchmarkPreregistrationTests(unittest.TestCase):
+    def test_preregistration_is_review_gated_and_has_no_executed_model(self):
+        spec = build_benchmark_preregistration()
+        self.assertEqual(spec["schema"], PREREG_SCHEMA)
+        self.assertEqual(spec["status"], PREREG_STATUS)
+        self.assertFalse(spec["training_started"])
+        self.assertFalse(spec["evaluation_started"])
+        self.assertFalse(spec["model_available"])
+        self.assertFalse(spec["jev_comparator"]["live_calls"])
+        self.assertFalse(spec["jev_comparator"]["credentials"])
+        self.assertIsNone(spec["jev_comparator"]["results"])
+
+    def test_split_separates_whole_families_and_cases_are_development_only(self):
+        spec = build_benchmark_preregistration()
+        split = spec["frozen_split"]
+        self.assertTrue(split["whole_document_and_template_family_separation"])
+        self.assertTrue(split["no_instance_overlap"])
+        self.assertTrue(split["randomized_document_ids"])
+        self.assertTrue(split["randomized_candidate_order"])
+        self.assertEqual(split["development"]["case_seeds"], [9300, 9301, 9302])
+        self.assertEqual(split["test"]["case_seeds"], [])
+        self.assertNotEqual(
+            set(split["development"]["template_families"]),
+            set(split["test"]["template_families"]),
+        )
+
+    def test_metrics_costs_and_document_interface_are_preregistered(self):
+        spec = build_benchmark_preregistration()
+        self.assertEqual(
+            spec["metrics"],
+            [
+                "source_citation_accuracy",
+                "verified_success",
+                "false_completions",
+                "tool_calls",
+                "missing_fact_detection",
+                "restart_parity",
+            ],
+        )
+        self.assertTrue(spec["cost_accounting"]["separate_inference_and_end_to_end_costs"])
+        interface = spec["document_policy_interface"]
+        self.assertEqual(interface["peripheral_count"], 4)
+        self.assertEqual(interface["central_count"], 1)
+        self.assertEqual(interface["memory_shape"], [2, 6])
+        self.assertTrue(interface["new_encoder_required"])
+        self.assertTrue(interface["new_training_required"])
+
+    def test_tasks_have_bounded_shape_and_no_expected_answer_fields(self):
+        tasks = document_evidence_tasks()
+        self.assertEqual([task.seed for task in tasks], [9300, 9301, 9302])
+        for task in tasks:
+            self.assertLessEqual(len(task.document_handles), 6)
+            self.assertLessEqual(len(task.requested_fields), 3)
+            self.assertEqual(task.action_budget, 16)
+        serialized = json.dumps(build_benchmark_preregistration(), sort_keys=True)
+        for forbidden in ("expected_value", "oracle", "answer", "prediction"):
+            self.assertNotIn(forbidden, serialized.lower())
+
+    def test_markdown_report_states_model_unavailable_and_no_jev_results(self):
+        markdown = render_preregistration_markdown(build_benchmark_preregistration())
+        self.assertIn("awaiting_document_policy_review_before_training", markdown)
+        self.assertIn("not fresh generalization evidence", markdown)
+        self.assertIn("no live calls", markdown)
+        self.assertIn("existing gate weights", markdown)
+
+    def test_checked_in_markdown_has_the_same_review_gate(self):
+        report = Path("docs/V03_DOCUMENT_EVIDENCE_BENCHMARK_PREREGISTRATION.md").read_text()
+        self.assertIn("awaiting_document_policy_review_before_training", report)
+        self.assertIn("9300–9302", report)
+
+    def test_checked_in_json_is_generated_from_current_source_contract(self):
+        artifact = Path("reports/generated/v03-document-evidence-benchmark-preregistration.json")
+        self.assertTrue(artifact.exists())
+        self.assertEqual(json.loads(artifact.read_text()), build_benchmark_preregistration())
+
+
+if __name__ == "__main__":
+    unittest.main()

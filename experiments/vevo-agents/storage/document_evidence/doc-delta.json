@@ -1,0 +1,83 @@
+{
+  "schema": "vevo.v03.document-evidence.document.v1",
+  "document_id": "delta-legacy-appendix",
+  "template_family": "legacy-appendix",
+  "layout_id": "appendix-sections-d",
+  "version": 1,
+  "published_at": "2025-11-04",
+  "title": "Delta legacy appendix",
+  "sections": [
+    {
+      "section_id": "sec-intro",
+      "section_kind": "overview",
+      "title": "Legacy context",
+      "body": "Retained for family and layout split tests; it is not part of the default task scope.",
+      "facts": [
+        {
+          "fact_id": "delta-code-1",
+          "field_id": "legacy_code",
+          "value": "D-17",
+          "value_type": "enum",
+          "revision": 1,
+          "state": "current",
+          "published_at": "2025-11-04",
+          "conflict_group": null
+        }
+      ]
+    },
+    {
+      "section_id": "sec-commercial",
+      "section_kind": "commercial",
+      "title": "Archived commercial note",
+      "body": "This archived value must not be selected for current task requests.",
+      "facts": [
+        {
+          "fact_id": "delta-limit-1",
+          "field_id": "annual_limit",
+          "value": 90000.0,
+          "value_type": "number",
+          "revision": 1,
+          "state": "obsolete",
+          "published_at": "2025-11-04",
+          "conflict_group": "annual-limit"
+        }
+      ]
+    },
+    {
+      "section_id": "sec-contacts",
+      "section_kind": "contacts",
+      "title": "Archived contacts",
+      "body": "An old mailbox is present only to test source-family separation.",
+      "facts": [
+        {
+          "fact_id": "delta-mail-1",
+          "field_id": "support_contact",
+          "value": "legacy-support@example.test",
+          "value_type": "email",
+          "revision": 1,
+          "state": "obsolete",
+          "published_at": "2025-11-04",
+          "conflict_group": "support-contact"
+        }
+      ]
+    },
+    {
+      "section_id": "sec-terms",
+      "section_kind": "terms",
+      "title": "Archived schedule",
+      "body": "No current term is asserted by this appendix.",
+      "facts": [
+        {
+          "fact_id": "delta-cycle-1",
+          "field_id": "review_cycle",
+          "value": "annual",
+          "value_type": "duration",
+          "revision": 1,
+          "state": "obsolete",
+          "published_at": "2025-11-04",
+          "conflict_group": null
+        }
+      ]
+    }
+  ]
+}

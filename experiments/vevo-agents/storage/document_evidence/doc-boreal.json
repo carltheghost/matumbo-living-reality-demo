@@ -1,0 +1,123 @@
+{
+  "schema": "vevo.v03.document-evidence.document.v1",
+  "document_id": "boreal-service-amendment",
+  "template_family": "supplier-agreement",
+  "layout_id": "split-sections-b",
+  "version": 5,
+  "published_at": "2026-10-02",
+  "title": "Boreal service amendment",
+  "sections": [
+    {
+      "section_id": "sec-intro",
+      "section_kind": "overview",
+      "title": "Account overview",
+      "body": "This amendment changes commercial and ownership records while retaining historical material.",
+      "facts": [
+        {
+          "fact_id": "boreal-region-5",
+          "field_id": "service_region",
+          "value": "north",
+          "value_type": "enum",
+          "revision": 5,
+          "state": "current",
+          "published_at": "2026-10-02",
+          "conflict_group": null
+        }
+      ]
+    },
+    {
+      "section_id": "sec-commercial",
+      "section_kind": "commercial",
+      "title": "Revised commercial terms",
+      "body": "The amendment contains a later limit and a separate percentage that should not be conflated.",
+      "facts": [
+        {
+          "fact_id": "boreal-limit-5",
+          "field_id": "annual_limit",
+          "value": 150000.0,
+          "value_type": "number",
+          "revision": 5,
+          "state": "current",
+          "published_at": "2026-10-02",
+          "conflict_group": "annual-limit"
+        },
+        {
+          "fact_id": "boreal-discount-5",
+          "field_id": "discount_rate",
+          "value": 0.1,
+          "value_type": "percentage",
+          "revision": 5,
+          "state": "current",
+          "published_at": "2026-10-02",
+          "conflict_group": null
+        }
+      ]
+    },
+    {
+      "section_id": "sec-contacts",
+      "section_kind": "contacts",
+      "title": "Responsible team",
+      "body": "Ownership is updated in this amendment; unrelated routing identifiers remain in the section.",
+      "facts": [
+        {
+          "fact_id": "boreal-owner-3",
+          "field_id": "account_owner",
+          "value": "Noah Vale",
+          "value_type": "person",
+          "revision": 3,
+          "state": "current",
+          "published_at": "2026-10-02",
+          "conflict_group": "account-owner"
+        },
+        {
+          "fact_id": "boreal-team-5",
+          "field_id": "routing_team",
+          "value": "north-ops",
+          "value_type": "enum",
+          "revision": 5,
+          "state": "current",
+          "published_at": "2026-10-02",
+          "conflict_group": null
+        }
+      ]
+    },
+    {
+      "section_id": "sec-terms",
+      "section_kind": "terms",
+      "title": "Amended term schedule",
+      "body": "The later date is current and the previous date remains only as an obsolete audit fact.",
+      "facts": [
+        {
+          "fact_id": "boreal-renewal-5",
+          "field_id": "renewal_date",
+          "value": "2028-06-30",
+          "value_type": "date",
+          "revision": 5,
+          "state": "current",
+          "published_at": "2026-10-02",
+          "conflict_group": "renewal-date"
+        },
+        {
+          "fact_id": "boreal-renewal-4",
+          "field_id": "renewal_date",
+          "value": "2027-06-30",
+          "value_type": "date",
+          "revision": 4,
+          "state": "obsolete",
+          "published_at": "2026-02-01",
+          "conflict_group": "renewal-date"
+        },
+        {
+          "fact_id": "boreal-notice-5",
+          "field_id": "notice_period",
+          "value": "60 days",
+          "value_type": "duration",
+          "revision": 5,
+          "state": "current",
+          "published_at": "2026-10-02",
+          "conflict_group": null
+        }
+      ]
+    }
+  ]
+}

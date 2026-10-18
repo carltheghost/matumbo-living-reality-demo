@@ -1,0 +1,83 @@
+{
+  "schema": "vevo.v03.document-evidence.document.v1",
+  "document_id": "cinder-operations-handbook",
+  "template_family": "operations-handbook",
+  "layout_id": "grid-sections-c",
+  "version": 2,
+  "published_at": "2026-08-20",
+  "title": "Cinder operations handbook",
+  "sections": [
+    {
+      "section_id": "sec-intro",
+      "section_kind": "overview",
+      "title": "Operational scope",
+      "body": "This handbook provides operational context and intentionally contains unrelated material.",
+      "facts": [
+        {
+          "fact_id": "cinder-risk-2",
+          "field_id": "risk_class",
+          "value": "moderate",
+          "value_type": "enum",
+          "revision": 2,
+          "state": "current",
+          "published_at": "2026-08-20",
+          "conflict_group": null
+        }
+      ]
+    },
+    {
+      "section_id": "sec-commercial",
+      "section_kind": "commercial",
+      "title": "Operational thresholds",
+      "body": "Thresholds are controls for operators, not the agreement's annual limit.",
+      "facts": [
+        {
+          "fact_id": "cinder-threshold-2",
+          "field_id": "alert_threshold",
+          "value": 0.8,
+          "value_type": "ratio",
+          "revision": 2,
+          "state": "current",
+          "published_at": "2026-08-20",
+          "conflict_group": null
+        }
+      ]
+    },
+    {
+      "section_id": "sec-contacts",
+      "section_kind": "contacts",
+      "title": "On-call routing",
+      "body": "The handbook names a rota but not a requested customer support mailbox.",
+      "facts": [
+        {
+          "fact_id": "cinder-rota-2",
+          "field_id": "on_call_rota",
+          "value": "cinder-primary",
+          "value_type": "enum",
+          "revision": 2,
+          "state": "current",
+          "published_at": "2026-08-20",
+          "conflict_group": null
+        }
+      ]
+    },
+    {
+      "section_id": "sec-terms",
+      "section_kind": "terms",
+      "title": "Review cadence",
+      "body": "The review cadence is not a renewal date and should not be used as one.",
+      "facts": [
+        {
+          "fact_id": "cinder-review-2",
+          "field_id": "review_cycle",
+          "value": "quarterly",
+          "value_type": "duration",
+          "revision": 2,
+          "state": "current",
+          "published_at": "2026-08-20",
+          "conflict_group": null
+        }
+      ]
+    }
+  ]
+}
