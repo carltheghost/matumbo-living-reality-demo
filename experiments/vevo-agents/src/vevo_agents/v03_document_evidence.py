@@ -41,6 +41,7 @@ MAX_REQUESTED_FIELDS = 3
 DEFAULT_ACTION_BUDGET = 16
 MAX_FIELD_ID_UTF8_BYTES = 128
 MAX_VALUE_UTF8_BYTES = 512
+MAX_DISPOSITION_CANDIDATES = 4
 
 VALUE_TYPES = frozenset({
     "date",
@@ -56,6 +57,7 @@ VALUE_TYPES = frozenset({
 DOCUMENT_ACTIONS = (
     "inspect_section",
     "select_candidate",
+    "set_disposition",
     "finish",
     "report_missing",
     "report_conflict",
@@ -1049,6 +1051,7 @@ class DocumentEvidenceSession:
         self._action_identities: set[str] = set()
         self._explored_sections: set[tuple[str, str]] = set()
         self._selected_candidate_ids: set[str] = set()
+        self._dispositions: dict[str, dict[str, Any]] = {}
         self._started = False
         self.terminal = False
         self.result: VerificationOutcome | None = None
@@ -1068,6 +1071,10 @@ class DocumentEvidenceSession:
     @property
     def selected_candidate_ids(self) -> frozenset[str]:
         return frozenset(self._selected_candidate_ids)
+
+    @property
+    def dispositions(self) -> dict[str, dict[str, Any]]:
+        return deepcopy(self._dispositions)
 
     def start(self) -> dict[str, Any]:
         if self._started:
@@ -1205,6 +1212,103 @@ class DocumentEvidenceSession:
         self._selected_candidate_ids.add(candidate_id)
         return self._base("candidate_selected", terminal=False, candidate=feature)
 
+    def _set_disposition(self, action: Mapping[str, Any]) -> dict[str, Any]:
+        expected = {"kind", "field_id", "disposition", "candidate_ids"}
+        if set(action) != expected:
+            return self._base("invalid_action", terminal=False, error="set_disposition shape")
+        field_id = action.get("field_id")
+        disposition = action.get("disposition")
+        candidate_ids = action.get("candidate_ids")
+        requested_ids = {field.field_id for field in self.task.requested_fields}
+        if not isinstance(field_id, str) or field_id not in requested_ids:
+            return self._base("invalid_action", terminal=False, error="unknown disposition field")
+        if disposition not in {"source", "missing", "conflict"}:
+            return self._base("invalid_action", terminal=False, error="unknown disposition")
+        if (
+            not isinstance(candidate_ids, list)
+            or not all(isinstance(candidate_id, str) and candidate_id for candidate_id in candidate_ids)
+            or len(set(candidate_ids)) != len(candidate_ids)
+            or len(candidate_ids) > MAX_DISPOSITION_CANDIDATES
+        ):
+            return self._base("invalid_action", terminal=False, error="disposition candidate_ids are invalid")
+        if disposition == "source" and len(candidate_ids) != 1:
+            return self._base("invalid_action", terminal=False, error="source disposition requires one candidate")
+        if disposition == "missing" and candidate_ids:
+            return self._base("invalid_action", terminal=False, error="missing disposition cannot cite candidates")
+        if disposition == "conflict" and not 2 <= len(candidate_ids) <= MAX_DISPOSITION_CANDIDATES:
+            return self._base("invalid_action", terminal=False, error="conflict disposition requires bounded citations")
+        identity = self._action_identity(action)
+        if identity in self._action_identities:
+            return self._base("duplicate_action", terminal=False, field_id=field_id)
+        if field_id in self._dispositions:
+            return self._base("duplicate_disposition", terminal=False, field_id=field_id)
+        if any(candidate_id not in self._selected_candidate_ids for candidate_id in candidate_ids):
+            return self._base("candidate_not_selected", terminal=False, field_id=field_id)
+        self._action_identities.add(identity)
+        # Do not inspect field identity, revision, rank, value equality, or
+        # source state here.  Those are semantic verifier decisions, not a
+        # learned policy legality mask.
+        record = {
+            "field_id": field_id,
+            "disposition": disposition,
+            "candidate_ids": list(candidate_ids),
+        }
+        self._dispositions[field_id] = record
+        return self._base("disposition_set", terminal=False, **record)
+
+    def materialize_dispositions(self) -> dict[str, Any]:
+        """Build a packet from explicit dispositions without semantic solving."""
+
+        requested_ids = [field.field_id for field in self.task.requested_fields]
+        if set(self._dispositions) != set(requested_ids):
+            raise ProtocolViolation("all requested fields need explicit dispositions")
+        by_id = {record.candidate_id: record for record in self.evidence.records()}
+        entries: list[dict[str, Any]] = []
+        missing_fields: list[str] = []
+        conflicts: list[dict[str, Any]] = []
+        for field_id in requested_ids:
+            item = self._dispositions[field_id]
+            candidate_ids = list(item["candidate_ids"])
+            if item["disposition"] == "missing":
+                missing_fields.append(field_id)
+                continue
+            if any(candidate_id not in by_id for candidate_id in candidate_ids):
+                raise ProtocolViolation("disposition cites an unknown candidate")
+            records = [by_id[candidate_id] for candidate_id in candidate_ids]
+            if item["disposition"] == "source":
+                record = records[0]
+                entries.append({
+                    "field_id": field_id,
+                    "candidate_id": record.candidate_id,
+                    "value": deepcopy(record.value),
+                    "value_type": record.value_type,
+                    "citation": {
+                        "document_handle": record.document_handle,
+                        "section_id": record.section_id,
+                        "source_sha256": record.source_sha256,
+                        "fact_digest": record.fact_digest,
+                    },
+                })
+                continue
+            conflicts.append({
+                "field_id": field_id,
+                "candidate_ids": candidate_ids,
+                "value_type": records[0].value_type,
+                "values": [deepcopy(record.value) for record in records],
+                "citations": [
+                    {
+                        "document_handle": record.document_handle,
+                        "section_id": record.section_id,
+                        "source_sha256": record.source_sha256,
+                        "fact_digest": record.fact_digest,
+                    }
+                    for record in records
+                ],
+            })
+        packet = {"entries": entries, "missing_fields": missing_fields, "conflicts": conflicts}
+        _assert_json_tree(packet)
+        return packet
+
     def _verify_action(self, action: Mapping[str, Any], *, mode: str | None = None) -> dict[str, Any]:
         expected = {"kind", "packet"} | ({"field_id"} if mode in {"missing", "conflict"} else set())
         if set(action) != expected:
@@ -1276,6 +1380,8 @@ class DocumentEvidenceSession:
             return self._inspect(action)
         if kind == "select_candidate":
             return self._select(action)
+        if kind == "set_disposition":
+            return self._set_disposition(action)
         if kind == "finish":
             return self._verify_action(action)
         if kind == "report_missing":
@@ -1299,6 +1405,7 @@ class DocumentEvidenceSession:
             "explored_sections": [list(key) for key in sorted(self._explored_sections)],
             "observed_candidate_ids": list(self.evidence.candidate_ids),
             "selected_candidate_ids": sorted(self._selected_candidate_ids),
+            "dispositions": [deepcopy(self._dispositions[field_id]) for field_id in sorted(self._dispositions)],
             "budget_exhausted": self._budget_exhaustion_logged,
             "terminal": self.terminal,
             "result": None if self.result is None else self.result.as_dict(),
@@ -1575,6 +1682,7 @@ __all__ = [
     "ForbiddenDocumentHandle",
     "INTERNAL_JOURNAL_SCHEMA",
     "INVALID_JOURNAL_SCHEMA",
+    "MAX_DISPOSITION_CANDIDATES",
     "MAX_FIELD_ID_UTF8_BYTES",
     "MAX_VALUE_UTF8_BYTES",
     "ObservationLimitedExpert",

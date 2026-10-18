@@ -249,6 +249,278 @@ class DocumentEvidenceProtocolTests(unittest.TestCase):
             features.extend(response.get("candidates", []))
         return features
 
+    def _inspect_sections(self, session, sections):
+        initial = session.start()
+        features = []
+        for handle, section_id in sections:
+            response = session.dispatch({"kind": "inspect_section", "document_handle": handle, "section_id": section_id})
+            self.assertEqual(response["status"], "section_observed")
+            features.extend(response.get("candidates", []))
+        return initial, features
+
+    @staticmethod
+    def _latest(features, field_id, value_type):
+        candidates = [
+            candidate for candidate in features
+            if candidate["field_id"] == field_id
+            and candidate["value_type"] == value_type
+            and candidate["revision_state"] == "current"
+        ]
+        return max(candidates, key=lambda candidate: (candidate["revision"], candidate["published_at"], candidate["candidate_id"]))
+
+    def test_explicit_source_dispositions_materialize_an_ordinary_packet(self):
+        task = make_task(
+            "explicit-ordinary",
+            ("doc-aurora", "doc-boreal"),
+            (("renewal_date", "date"), ("account_owner", "person")),
+        )
+        session = DocumentEvidenceSession(self.store, task)
+        _, features = self._inspect_sections(session, (
+            ("doc-aurora", "sec-contacts"),
+            ("doc-aurora", "sec-terms"),
+            ("doc-boreal", "sec-contacts"),
+            ("doc-boreal", "sec-terms"),
+        ))
+        chosen = [
+            self._latest(features, "renewal_date", "date"),
+            self._latest(features, "account_owner", "person"),
+        ]
+        for candidate in chosen:
+            self.assertEqual(
+                session.dispatch({"kind": "select_candidate", "candidate_id": candidate["candidate_id"]})["status"],
+                "candidate_selected",
+            )
+        for field_id, candidate in zip(("renewal_date", "account_owner"), chosen):
+            self.assertEqual(
+                session.dispatch({
+                    "kind": "set_disposition",
+                    "field_id": field_id,
+                    "disposition": "source",
+                    "candidate_ids": [candidate["candidate_id"]],
+                })["status"],
+                "disposition_set",
+            )
+        packet = session.materialize_dispositions()
+        self.assertEqual({entry["field_id"] for entry in packet["entries"]}, {"renewal_date", "account_owner"})
+        self.assertEqual(packet["conflicts"], [])
+        self.assertTrue(all(
+            candidate_id not in {conflict_id for conflict in packet["conflicts"] for conflict_id in conflict["candidate_ids"]}
+            for candidate_id in (entry["candidate_id"] for entry in packet["entries"])
+        ))
+        snapshot = session.snapshot()
+        restored = DocumentEvidenceSession.restore(self.store, task, snapshot)
+        self.assertEqual(restored.dispositions, session.dispositions)
+        result = session.dispatch({"kind": "finish", "packet": packet})
+        restored_result = restored.dispatch({"kind": "finish", "packet": packet})
+        self.assertEqual(result["status"], "verified_complete")
+        self.assertEqual(restored_result, result)
+
+    def test_same_rank_agreeing_duplicates_allow_a_valid_source_disposition(self):
+        with tempfile.TemporaryDirectory() as directory:
+            copied = Path(directory) / "document_evidence"
+            shutil.copytree(BUNDLE, copied)
+            source = copied / "doc-boreal.json"
+            document = json.loads(source.read_text())
+            fact = next(
+                fact
+                for section in document["sections"]
+                for fact in section["facts"]
+                if fact["field_id"] == "account_owner"
+            )
+            fact["value"] = "Mara Chen"
+            fact["revision"] = 2
+            fact["published_at"] = "2026-09-15"
+            source.write_text(json.dumps(document, indent=2) + "\n")
+            manifest_path = copied / "bundle_manifest.json"
+            manifest = json.loads(manifest_path.read_text())
+            for entry in manifest["documents"]:
+                if entry["handle"] == "doc-boreal":
+                    entry["sha256"] = hashlib.sha256(source.read_bytes()).hexdigest()
+            manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+            store = DocumentBundleStore._from_server_root(copied)
+            task = make_task(
+                "agreeing-duplicates",
+                ("doc-aurora", "doc-boreal"),
+                (("renewal_date", "date"), ("account_owner", "person")),
+            )
+            session = DocumentEvidenceSession(store, task)
+            _, features = self._inspect_sections(session, (
+                ("doc-aurora", "sec-contacts"),
+                ("doc-aurora", "sec-terms"),
+                ("doc-boreal", "sec-contacts"),
+                ("doc-boreal", "sec-terms"),
+            ))
+            chosen = [
+                self._latest(features, "renewal_date", "date"),
+                self._latest(features, "account_owner", "person"),
+            ]
+            for candidate in chosen:
+                session.dispatch({"kind": "select_candidate", "candidate_id": candidate["candidate_id"]})
+            for field_id, candidate in zip(("renewal_date", "account_owner"), chosen):
+                self.assertEqual(
+                    session.dispatch({
+                        "kind": "set_disposition",
+                        "field_id": field_id,
+                        "disposition": "source",
+                        "candidate_ids": [candidate["candidate_id"]],
+                    })["status"],
+                    "disposition_set",
+                )
+            result = session.dispatch({"kind": "finish", "packet": session.materialize_dispositions()})
+            self.assertEqual(result["status"], "verified_complete")
+
+    def test_true_conflict_disposition_keeps_conflict_candidates_out_of_entries(self):
+        task = make_task(
+            "explicit-conflict",
+            ("doc-aurora", "doc-cinder"),
+            (("alert_threshold", "ratio"), ("account_owner", "person")),
+        )
+        session = DocumentEvidenceSession(self.store, task)
+        _, features = self._inspect_sections(session, (
+            ("doc-aurora", "sec-contacts"),
+            ("doc-cinder", "sec-commercial"),
+        ))
+        conflicts = [candidate for candidate in features if candidate["field_id"] == "alert_threshold"]
+        owner = self._latest(features, "account_owner", "person")
+        for candidate in conflicts + [owner]:
+            session.dispatch({"kind": "select_candidate", "candidate_id": candidate["candidate_id"]})
+        session.dispatch({
+            "kind": "set_disposition",
+            "field_id": "alert_threshold",
+            "disposition": "conflict",
+            "candidate_ids": [candidate["candidate_id"] for candidate in conflicts],
+        })
+        session.dispatch({
+            "kind": "set_disposition",
+            "field_id": "account_owner",
+            "disposition": "source",
+            "candidate_ids": [owner["candidate_id"]],
+        })
+        packet = session.materialize_dispositions()
+        self.assertEqual([entry["field_id"] for entry in packet["entries"]], ["account_owner"])
+        self.assertEqual(packet["conflicts"][0]["candidate_ids"], [candidate["candidate_id"] for candidate in conflicts])
+        self.assertTrue({candidate["candidate_id"] for candidate in conflicts}.isdisjoint(
+            {entry["candidate_id"] for entry in packet["entries"]}
+        ))
+        result = session.dispatch({"kind": "finish", "packet": packet})
+        self.assertEqual(result["status"], "verified_conflict")
+
+    def test_multiple_missing_dispositions_complete_only_after_full_exploration(self):
+        task = make_task(
+            "explicit-multiple-missing",
+            ("doc-aurora", "doc-boreal"),
+            (("support_contact", "email"), ("budget_floor", "number")),
+        )
+        session = DocumentEvidenceSession(self.store, task)
+        initial = session.start()
+        for document in initial["document_catalog"]:
+            for section in document["sections"]:
+                response = session.dispatch({
+                    "kind": "inspect_section",
+                    "document_handle": document["document_handle"],
+                    "section_id": section["section_id"],
+                })
+                self.assertEqual(response["status"], "section_observed")
+        for field_id in ("support_contact", "budget_floor"):
+            self.assertEqual(
+                session.dispatch({
+                    "kind": "set_disposition",
+                    "field_id": field_id,
+                    "disposition": "missing",
+                    "candidate_ids": [],
+                })["status"],
+                "disposition_set",
+            )
+        packet = session.materialize_dispositions()
+        self.assertEqual(packet["missing_fields"], ["support_contact", "budget_floor"])
+        self.assertEqual(packet["entries"], [])
+        result = session.dispatch({"kind": "finish", "packet": packet})
+        self.assertEqual(result["status"], "verified_missing_facts")
+
+    def test_mixed_conflict_and_missing_dispositions_are_verified_together(self):
+        task = make_task(
+            "explicit-mixed",
+            ("doc-aurora", "doc-cinder"),
+            (("alert_threshold", "ratio"), ("support_contact", "email")),
+        )
+        session = DocumentEvidenceSession(self.store, task)
+        initial = session.start()
+        features = []
+        for document in initial["document_catalog"]:
+            for section in document["sections"]:
+                response = session.dispatch({
+                    "kind": "inspect_section",
+                    "document_handle": document["document_handle"],
+                    "section_id": section["section_id"],
+                })
+                features.extend(response.get("candidates", []))
+        conflicts = [candidate for candidate in features if candidate["field_id"] == "alert_threshold"]
+        for candidate in conflicts:
+            session.dispatch({"kind": "select_candidate", "candidate_id": candidate["candidate_id"]})
+        session.dispatch({
+            "kind": "set_disposition",
+            "field_id": "alert_threshold",
+            "disposition": "conflict",
+            "candidate_ids": [candidate["candidate_id"] for candidate in conflicts],
+        })
+        session.dispatch({
+            "kind": "set_disposition",
+            "field_id": "support_contact",
+            "disposition": "missing",
+            "candidate_ids": [],
+        })
+        packet = session.materialize_dispositions()
+        self.assertEqual(packet["missing_fields"], ["support_contact"])
+        result = session.dispatch({"kind": "finish", "packet": packet})
+        self.assertEqual(result["status"], "verified_conflict")
+        self.assertEqual(result["outcome"]["missing_fields"], ["support_contact"])
+
+    def test_incorrect_explicit_packet_is_rejected_by_the_verifier(self):
+        task = make_task(
+            "explicit-reject",
+            ("doc-aurora", "doc-cinder"),
+            (("alert_threshold", "ratio"), ("account_owner", "person")),
+        )
+        session = DocumentEvidenceSession(self.store, task)
+        _, features = self._inspect_sections(session, (
+            ("doc-aurora", "sec-contacts"),
+            ("doc-cinder", "sec-commercial"),
+        ))
+        conflicts = [candidate for candidate in features if candidate["field_id"] == "alert_threshold"]
+        owner = self._latest(features, "account_owner", "person")
+        for candidate in conflicts + [owner]:
+            session.dispatch({"kind": "select_candidate", "candidate_id": candidate["candidate_id"]})
+        session.dispatch({
+            "kind": "set_disposition",
+            "field_id": "alert_threshold",
+            "disposition": "conflict",
+            "candidate_ids": [candidate["candidate_id"] for candidate in conflicts],
+        })
+        session.dispatch({
+            "kind": "set_disposition",
+            "field_id": "account_owner",
+            "disposition": "source",
+            "candidate_ids": [owner["candidate_id"]],
+        })
+        packet = session.materialize_dispositions()
+        forged = copy.deepcopy(packet)
+        conflict_candidate = session.evidence.get(conflicts[0]["candidate_id"])
+        forged["entries"].append({
+            "field_id": "alert_threshold",
+            "candidate_id": conflict_candidate.candidate_id,
+            "value": copy.deepcopy(conflict_candidate.value),
+            "value_type": conflict_candidate.value_type,
+            "citation": {
+                "document_handle": conflict_candidate.document_handle,
+                "section_id": conflict_candidate.section_id,
+                "source_sha256": conflict_candidate.source_sha256,
+                "fact_digest": conflict_candidate.fact_digest,
+            },
+        })
+        result = session.dispatch({"kind": "finish", "packet": forged})
+        self.assertEqual(result["status"], "incomplete_packet")
+        self.assertFalse(result["terminal"])
+
     def test_forged_value_and_citation_are_rejected(self):
         task = current_task()
         forged_session = DocumentEvidenceSession(self.store, task)
@@ -364,6 +636,57 @@ class DocumentEvidenceProtocolTests(unittest.TestCase):
         response = session.dispatch({"kind": "select_candidate", "candidate_id": float("nan")})
         self.assertEqual(response["status"], "invalid_action")
         self.assertEqual(session.action_count, 1)
+
+    def test_disposition_schema_enforces_bounds_and_selected_candidate_permissions(self):
+        task = make_task(
+            "disposition-cap",
+            ("doc-aurora", "doc-cinder"),
+            (("renewal_date", "date"), ("account_owner", "person")),
+        )
+        session = DocumentEvidenceSession(self.store, task)
+        session.start()
+        response = session.dispatch({
+            "kind": "inspect_section",
+            "document_handle": "doc-aurora",
+            "section_id": "sec-terms",
+        })
+        candidate = next(item for item in response["candidates"] if item["field_id"] == "renewal_date")
+        too_many = session.dispatch({
+            "kind": "set_disposition",
+            "field_id": "renewal_date",
+            "disposition": "conflict",
+            "candidate_ids": ["a", "b", "c", "d", "e"],
+        })
+        self.assertEqual(too_many["status"], "invalid_action")
+        duplicate_ids = session.dispatch({
+            "kind": "set_disposition",
+            "field_id": "renewal_date",
+            "disposition": "conflict",
+            "candidate_ids": ["a", "a"],
+        })
+        self.assertEqual(duplicate_ids["status"], "invalid_action")
+        unselected = session.dispatch({
+            "kind": "set_disposition",
+            "field_id": "renewal_date",
+            "disposition": "source",
+            "candidate_ids": [candidate["candidate_id"]],
+        })
+        self.assertEqual(unselected["status"], "candidate_not_selected")
+        session.dispatch({"kind": "select_candidate", "candidate_id": candidate["candidate_id"]})
+        accepted = session.dispatch({
+            "kind": "set_disposition",
+            "field_id": "renewal_date",
+            "disposition": "source",
+            "candidate_ids": [candidate["candidate_id"]],
+        })
+        self.assertEqual(accepted["status"], "disposition_set")
+        duplicate_field = session.dispatch({
+            "kind": "set_disposition",
+            "field_id": "renewal_date",
+            "disposition": "missing",
+            "candidate_ids": [],
+        })
+        self.assertEqual(duplicate_field["status"], "duplicate_disposition")
 
     def test_malformed_conflict_shape_is_structured_and_replayable(self):
         task = current_task(seed=42)

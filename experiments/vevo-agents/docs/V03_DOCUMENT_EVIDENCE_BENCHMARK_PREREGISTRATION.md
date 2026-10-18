@@ -20,8 +20,8 @@ This artifact freezes the bounded first-real-task protocol before any document-p
 - Train task generator status: `pending_implementation`; no empty train case set is presented as frozen evaluation.
 - Held-out task manifest status: `pending_implementation`; 2 proposed seeds have no materialized (unmaterialized) outcomes.
 - The checked-in 9300–9302 cases are inspected development protocol cases, not fresh generalization evidence; held-out outcomes are not inspected.
-- First-model feasible scope: at most two documents, four sections each, two requested fields, and four selected candidates. Worst case is 1 catalog read + 8 inspections + 4 selections + 1 completion/verifier action = 14 policy actions within the 16-action budget; a coverage-index variant is deferred.
-- The general 6-document/4-section protocol maximum would require 30 policy actions in the exhaustive baseline and is not used for first-model training.
+- First-model feasible scope: at most two documents, four sections each, two requested fields, and four selected candidates. Worst case is 1 catalog read + 8 inspections + 4 selections + 2 explicit dispositions + 1 completion/verifier action = 16 policy actions; a coverage-index variant is deferred.
+- The general 6-document/4-section protocol maximum would require 33 policy actions (including one explicit disposition per requested field) in the exhaustive baseline and is not used for first-model training.
 - Scenario and layout families are separated before any trace generation; deterministic development seeds are recorded, while train/held-out outcomes remain unmaterialized.
 
 ## Metrics and accounting

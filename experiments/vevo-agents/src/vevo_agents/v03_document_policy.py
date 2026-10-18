@@ -15,6 +15,8 @@ from copy import deepcopy
 from dataclasses import dataclass
 from datetime import date
 import hashlib
+import itertools
+import json
 import math
 from typing import Any, Mapping, Sequence
 
@@ -25,6 +27,7 @@ from .v03_document_evidence import (
     CANDIDATE_SCHEMA,
     DATE_RE,
     DOCUMENT_ACTIONS,
+    MAX_DISPOSITION_CANDIDATES,
     MAX_FIELD_ID_UTF8_BYTES,
     MAX_REQUESTED_FIELDS,
     MAX_VALUE_UTF8_BYTES,
@@ -48,6 +51,7 @@ VALUE_TYPE_VOCABULARY = (
 )
 SECTION_KIND_VOCABULARY = ("overview", "commercial", "contacts", "terms")
 FIXED_ACTIONS = ("inspect_section", "finish", "report_missing", "report_conflict")
+DISPOSITION_KINDS = ("source", "missing", "conflict")
 # Exact inspect targets need a small identity-bearing action row.  The first
 # coordinate is a bias; the remaining coordinates are stable episode-local
 # document/section relations and a normalized section ordinal.
@@ -273,6 +277,23 @@ def _assert_finite_json(value: Any, *, path: str = "$") -> None:
             _assert_finite_json(item, path=f"{path}.{key}")
         return
     raise ProtocolViolation(f"unsupported neural state value at {path}")
+
+
+def _canonical_action(value: Any) -> str:
+    """Return the stable identity used for typed policy-action targets."""
+
+    _assert_finite_json(value)
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+
+
+def _action_base(option: Mapping[str, Any]) -> dict[str, Any]:
+    """Strip model metadata while retaining the complete dispatch payload."""
+
+    return {
+        key: deepcopy(value)
+        for key, value in option.items()
+        if key not in {"action_id", "score"}
+    }
 
 
 def _bounded_utf8(value: Any, width: int, *, name: str = "semantic text") -> list[float]:
@@ -599,6 +620,7 @@ class DocumentNeuralPolicy:
             "selected_candidate_ids": [],
             "observed_candidate_ids": [],
             "observed_candidates": [],
+            "dispositions": [],
             "terminal": False,
         }
 
@@ -618,6 +640,7 @@ class DocumentNeuralPolicy:
             "selected_candidate_ids": list(runtime.get("selected_candidate_ids", [])),
             "observed_candidate_ids": list(runtime.get("observed_candidate_ids", [])),
             "observed_candidates": deepcopy(runtime.get("observed_candidates", [])),
+            "dispositions": deepcopy(runtime.get("dispositions", [])),
             "terminal": bool(runtime.get("terminal", False)),
         }
 
@@ -669,11 +692,52 @@ class DocumentNeuralPolicy:
             for candidate in observed_candidates
         ):
             raise ProtocolViolation("document runtime observed candidate schema is invalid")
+        dispositions = runtime.get("dispositions", [])
+        if not isinstance(dispositions, list):
+            raise ProtocolViolation("document runtime disposition state is invalid")
+        disposition_fields: set[str] = set()
+        requested_ids = {
+            str(field.get("field_id"))
+            for field in (requested_fields or [])
+            if isinstance(field, Mapping) and isinstance(field.get("field_id"), str)
+        }
+        observed_ids = set(runtime.get("observed_candidate_ids", []))
+        selected_ids = set(runtime.get("selected_candidate_ids", []))
+        for disposition in dispositions:
+            if not isinstance(disposition, Mapping) or set(disposition) != {"field_id", "disposition", "candidate_ids"}:
+                raise ProtocolViolation("document runtime disposition schema is invalid")
+            field_id = disposition.get("field_id")
+            kind = disposition.get("disposition")
+            candidate_ids = disposition.get("candidate_ids")
+            if (
+                not isinstance(field_id, str)
+                or not field_id
+                or field_id in disposition_fields
+                or kind not in DISPOSITION_KINDS
+                or not isinstance(candidate_ids, list)
+                or not all(isinstance(candidate_id, str) and candidate_id for candidate_id in candidate_ids)
+                or len(set(candidate_ids)) != len(candidate_ids)
+                or len(candidate_ids) > MAX_DISPOSITION_CANDIDATES
+                or (runtime["step"] > 0 and field_id not in requested_ids)
+                or not set(candidate_ids).issubset(observed_ids)
+                or not set(candidate_ids).issubset(selected_ids)
+            ):
+                raise ProtocolViolation("document runtime disposition values are invalid")
+            if kind == "source" and len(candidate_ids) != 1:
+                raise ProtocolViolation("source disposition requires one candidate")
+            if kind == "missing" and candidate_ids:
+                raise ProtocolViolation("missing disposition cannot cite candidates")
+            if kind == "conflict" and len(candidate_ids) < 2:
+                raise ProtocolViolation("conflict disposition requires at least two candidates")
+            disposition_fields.add(field_id)
+        if runtime["step"] == 0 and dispositions:
+            raise ProtocolViolation("initial runtime cannot carry evidence dispositions")
         if not isinstance(runtime.get("terminal"), bool):
             raise ProtocolViolation("document runtime terminal state is invalid")
         _assert_finite_json(runtime.get("last_tool_response"))
         _assert_finite_json(requested_fields)
         _assert_finite_json(observed_candidates)
+        _assert_finite_json(dispositions)
 
     @staticmethod
     def _request_field_ids(requested_fields: Sequence[Mapping[str, Any]]) -> list[str]:
@@ -759,9 +823,11 @@ class DocumentNeuralPolicy:
             "selected_candidate_ids": list(runtime.get("selected_candidate_ids", [])),
             "observed_candidate_ids": list(runtime.get("observed_candidate_ids", [])),
             "observed_candidates": deepcopy(runtime.get("observed_candidates", [])),
+            "dispositions": deepcopy(runtime.get("dispositions", [])),
             "terminal": bool(runtime.get("terminal", False)),
         }
         trace = {
+            "policy_input": vector.copy(),
             "messages": messages_array,
             "central": central.copy(),
             "memory": memory.copy(),
@@ -847,6 +913,11 @@ class DocumentNeuralPolicy:
         )
         inspected = {tuple(item) for item in next_runtime.get("inspected_section_keys", [])}
         selected = set(next_runtime.get("selected_candidate_ids", []))
+        dispositions = {
+            str(item["field_id"]): deepcopy(dict(item))
+            for item in next_runtime.get("dispositions", [])
+            if isinstance(item, Mapping) and isinstance(item.get("field_id"), str)
+        }
         if isinstance(response, Mapping):
             if response.get("status") == "section_observed":
                 handle = response.get("document_handle")
@@ -857,8 +928,23 @@ class DocumentNeuralPolicy:
                 candidate = response.get("candidate")
                 if isinstance(candidate, Mapping) and isinstance(candidate.get("candidate_id"), str):
                     selected.add(str(candidate["candidate_id"]))
+            if response.get("status") == "disposition_set":
+                field_id = response.get("field_id")
+                disposition = response.get("disposition")
+                candidate_ids = response.get("candidate_ids")
+                if (
+                    isinstance(field_id, str)
+                    and disposition in DISPOSITION_KINDS
+                    and isinstance(candidate_ids, list)
+                ):
+                    dispositions[field_id] = {
+                        "field_id": field_id,
+                        "disposition": disposition,
+                        "candidate_ids": [str(candidate_id) for candidate_id in candidate_ids],
+                    }
         next_runtime["inspected_section_keys"] = [list(item) for item in sorted(inspected)]
         next_runtime["selected_candidate_ids"] = sorted(selected)
+        next_runtime["dispositions"] = [dispositions[key] for key in sorted(dispositions)]
         next_runtime["observed_candidate_ids"] = sorted(
             str(candidate["candidate_id"]) for candidate in next_runtime["observed_candidates"]
         )
@@ -881,67 +967,53 @@ class DocumentNeuralPolicy:
     def _materialize_packet(
         self,
         runtime: Mapping[str, Any],
-        *,
-        missing_fields: Sequence[str] = (),
-        conflicts: Sequence[Mapping[str, Any]] = (),
     ) -> dict[str, Any]:
-        """Serialize only explicitly selected observations.
+        """Serialize only explicit per-field policy dispositions.
 
-        This method never ranks, deduplicates, or selects evidence.  It is a
-        packet serializer for a typed action candidate; choosing a candidate
-        remains an explicit ``select_candidate`` action.
+        No semantic ranking, equality, revision, or missingness decision is
+        made here.  The verifier remains authoritative for those questions.
         """
 
         by_id = {str(candidate["candidate_id"]): candidate for candidate in runtime.get("observed_candidates", [])}
-        entries = []
-        for candidate_id in runtime.get("selected_candidate_ids", []):
-            candidate = by_id.get(str(candidate_id))
-            if candidate is None:
-                continue
-            entries.append({
-                "field_id": candidate["field_id"],
-                "candidate_id": candidate["candidate_id"],
-                "value": deepcopy(candidate["value"]),
-                "value_type": candidate["value_type"],
-                "citation": self._candidate_citation(candidate),
-            })
-        return {
-            "entries": entries,
-            "missing_fields": sorted(str(field_id) for field_id in missing_fields),
-            "conflicts": deepcopy([dict(conflict) for conflict in conflicts]),
+        dispositions = {
+            str(item["field_id"]): item
+            for item in runtime.get("dispositions", [])
+            if isinstance(item, Mapping) and isinstance(item.get("field_id"), str)
         }
-
-    def _observed_conflicts(
-        self,
-        requested_fields: Sequence[Mapping[str, Any]],
-        candidates: Sequence[Mapping[str, Any]],
-    ) -> list[dict[str, Any]]:
+        entries: list[dict[str, Any]] = []
+        missing_fields: list[str] = []
         conflicts: list[dict[str, Any]] = []
-        by_field = {str(field["field_id"]): field for field in requested_fields}
-        for field_id, field in by_field.items():
-            options = [
-                candidate for candidate in candidates
-                if candidate.get("field_id") == field_id
-                and candidate.get("value_type") == field.get("value_type")
-                and candidate.get("revision_state") == "current"
-            ]
-            if not options:
-                continue
-            rank = max((int(candidate["revision"]), str(candidate["published_at"])) for candidate in options)
-            winners = sorted(
-                [candidate for candidate in options if (int(candidate["revision"]), str(candidate["published_at"])) == rank],
-                key=lambda candidate: str(candidate["candidate_id"]),
-            )
-            if len({repr(candidate.get("value")) for candidate in winners}) <= 1:
-                continue
-            conflicts.append({
-                "field_id": field_id,
-                "candidate_ids": [str(candidate["candidate_id"]) for candidate in winners],
-                "value_type": field["value_type"],
-                "values": [deepcopy(candidate["value"]) for candidate in winners],
-                "citations": [self._candidate_citation(candidate) for candidate in winners],
-            })
-        return conflicts
+        for field_id in sorted(dispositions):
+            item = dispositions[field_id]
+            kind = item.get("disposition")
+            candidate_ids = list(item.get("candidate_ids", []))
+            if kind == "missing":
+                missing_fields.append(field_id)
+            elif kind == "source":
+                if len(candidate_ids) != 1 or candidate_ids[0] not in by_id:
+                    raise ProtocolViolation("source disposition cannot be materialized")
+                candidate = by_id[candidate_ids[0]]
+                entries.append({
+                    "field_id": field_id,
+                    "candidate_id": candidate["candidate_id"],
+                    "value": deepcopy(candidate["value"]),
+                    "value_type": candidate["value_type"],
+                    "citation": self._candidate_citation(candidate),
+                })
+            elif kind == "conflict":
+                if len(candidate_ids) < 2 or any(candidate_id not in by_id for candidate_id in candidate_ids):
+                    raise ProtocolViolation("conflict disposition cannot be materialized")
+                selected = [by_id[candidate_id] for candidate_id in candidate_ids]
+                conflicts.append({
+                    "field_id": field_id,
+                    "candidate_ids": candidate_ids,
+                    "value_type": selected[0]["value_type"],
+                    "values": [deepcopy(candidate["value"]) for candidate in selected],
+                    "citations": [self._candidate_citation(candidate) for candidate in selected],
+                })
+            else:
+                raise ProtocolViolation("unknown evidence disposition")
+        return {"entries": entries, "missing_fields": missing_fields, "conflicts": conflicts}
 
     def _legal_action_candidates(
         self,
@@ -954,6 +1026,11 @@ class DocumentNeuralPolicy:
         inspected = {tuple(item) for item in runtime.get("inspected_section_keys", [])}
         selected = set(runtime.get("selected_candidate_ids", []))
         candidates = list(runtime.get("observed_candidates", []))
+        dispositions = {
+            str(item["field_id"]): item
+            for item in runtime.get("dispositions", [])
+            if isinstance(item, Mapping) and isinstance(item.get("field_id"), str)
+        }
         actions: list[dict[str, Any]] = []
         for handle, section_id in identity.section_keys:
             if (handle, section_id) not in inspected:
@@ -962,61 +1039,42 @@ class DocumentNeuralPolicy:
             candidate_id = str(candidate["candidate_id"])
             if candidate_id not in selected:
                 actions.append({"kind": "select_candidate", "candidate_id": candidate_id})
-        conflicts = self._observed_conflicts(requested_fields, candidates)
-        all_inspected = set(identity.section_keys) == inspected
-        if selected:
-            selected_candidates = [candidate for candidate in candidates if str(candidate["candidate_id"]) in selected]
-            valid_finish = True
-            for field in requested_fields:
-                all_options = [
-                    candidate for candidate in candidates
-                    if candidate.get("field_id") == field.get("field_id")
-                    and candidate.get("value_type") == field.get("value_type")
-                    and candidate.get("revision_state") == "current"
-                ]
-                options = [
-                    candidate for candidate in selected_candidates
-                    if candidate.get("field_id") == field.get("field_id")
-                    and candidate.get("value_type") == field.get("value_type")
-                    and candidate.get("revision_state") == "current"
-                ]
-                if not all_options or not options:
-                    valid_finish = False
-                    break
-                rank = max((int(candidate["revision"]), str(candidate["published_at"])) for candidate in all_options)
-                winners = [candidate for candidate in all_options if (int(candidate["revision"]), str(candidate["published_at"])) == rank]
-                selected_winners = [candidate for candidate in options if (int(candidate["revision"]), str(candidate["published_at"])) == rank]
-                if len(winners) != 1 or len(selected_winners) != 1 or selected_winners[0]["candidate_id"] != winners[0]["candidate_id"]:
-                    valid_finish = False
-                    break
-            if valid_finish:
-                actions.append({"kind": "finish", "packet": self._materialize_packet(runtime)})
-        if all_inspected:
-            observed_field_ids = {
-                candidate.get("field_id")
-                for candidate in candidates
-                if candidate.get("revision_state") == "current"
-                and any(
-                    candidate.get("value_type") == field.get("value_type")
-                    and candidate.get("field_id") == field.get("field_id")
-                    for field in requested_fields
-                )
-            }
-            for field in requested_fields:
-                if field.get("field_id") not in observed_field_ids:
-                    field_id = str(field["field_id"])
-                    actions.append({
-                        "kind": "report_missing",
-                        "field_id": field_id,
-                        "packet": self._materialize_packet(runtime, missing_fields=(field_id,)),
-                    })
-        for conflict in conflicts:
-            if set(conflict["candidate_ids"]).issubset(selected):
+        selected_candidates = [candidate for candidate in candidates if str(candidate["candidate_id"]) in selected]
+        for field in requested_fields:
+            field_id = str(field["field_id"])
+            if field_id in dispositions:
+                continue
+            # These options are intentionally syntax/permission masks only.
+            # Whether a field is actually absent, current, latest, or in
+            # conflict is decided by the server verifier after dispatch.
+            actions.append({
+                "kind": "set_disposition",
+                "field_id": field_id,
+                "disposition": "missing",
+                "candidate_ids": [],
+            })
+            matching = [
+                candidate for candidate in selected_candidates
+                if candidate.get("field_id") == field_id
+                and candidate.get("value_type") == field.get("value_type")
+            ]
+            for candidate in matching:
                 actions.append({
-                    "kind": "report_conflict",
-                    "field_id": conflict["field_id"],
-                    "packet": self._materialize_packet(runtime, conflicts=(conflict,)),
+                    "kind": "set_disposition",
+                    "field_id": field_id,
+                    "disposition": "source",
+                    "candidate_ids": [str(candidate["candidate_id"])],
                 })
+            for group_size in range(2, min(4, len(matching)) + 1):
+                for group in itertools.combinations(matching, group_size):
+                    actions.append({
+                        "kind": "set_disposition",
+                        "field_id": field_id,
+                        "disposition": "conflict",
+                        "candidate_ids": [str(candidate["candidate_id"]) for candidate in group],
+                    })
+        if requested_fields and all(str(field["field_id"]) in dispositions for field in requested_fields):
+            actions.append({"kind": "finish", "packet": self._materialize_packet(runtime)})
         return actions
 
     def _score_action_options(
@@ -1050,9 +1108,19 @@ class DocumentNeuralPolicy:
                 )
             elif kind == "select_candidate":
                 score = candidate_score_map[str(option["candidate_id"])]
+            elif kind == "set_disposition":
+                # The existing fixed terminal logit is the structural score
+                # for a disposition operation; the typed payload carries all
+                # field/candidate identity and is never collapsed into one
+                # semantic mask.
+                score = float(fixed_logits[FIXED_ACTIONS.index("finish")])
             else:
                 score = float(fixed_logits[FIXED_ACTIONS.index(kind)])
-            scored.append({**deepcopy(dict(option)), "score": score})
+            scored.append({
+                **deepcopy(dict(option)),
+                "action_id": _canonical_action(option),
+                "score": score,
+            })
         return scored
 
     def make_observation(
@@ -1109,8 +1177,9 @@ class DocumentNeuralPolicy:
             if runtime["identity"] != identity:
                 raise ProtocolViolation("document neural observation identity does not match runtime")
         runtime = self._advance_observation_runtime(runtime, observation, requested_fields or ())
+        network_requested_fields = requested_fields if phase == "initial_request" else ()
         vector = self.encoder.encode_policy_input(
-            requested_fields=requested_fields or (),
+            requested_fields=network_requested_fields,
             candidates=candidates,
             latest_response=observation.get("latest_response"),
             remaining_action_budget=observation.get("remaining_action_budget", 0),
@@ -1118,7 +1187,7 @@ class DocumentNeuralPolicy:
         )
         candidate_rows = self.encoder.encode_candidates(
             candidates,
-            requested_field_ids=self._request_field_ids(requested_fields or ()),
+            requested_field_ids=self._request_field_ids(network_requested_fields),
             identity=identity,
         )
         next_runtime, result = self._numeric_forward(runtime, vector, candidate_rows)
@@ -1130,6 +1199,7 @@ class DocumentNeuralPolicy:
         next_runtime["selected_candidate_ids"] = deepcopy(runtime.get("selected_candidate_ids", []))
         next_runtime["observed_candidates"] = deepcopy(runtime.get("observed_candidates", []))
         next_runtime["observed_candidate_ids"] = deepcopy(runtime.get("observed_candidate_ids", []))
+        next_runtime["dispositions"] = deepcopy(runtime.get("dispositions", []))
         next_runtime["terminal"] = bool(runtime.get("terminal", False))
         legal_options = self._legal_action_candidates(next_runtime, requested_fields or ())
         action_options = self._score_action_options(
@@ -1213,6 +1283,7 @@ class DocumentNeuralPolicy:
             context_score = (params["c.w_candidate_context"].reshape(1, -1) @ context + params["c.b_candidate"])[0]
             candidate_logits.append((row_score + interaction_score + context_score).reshape(1))
         return {"peripheral": next_peripheral, "central": central, "memory": memory}, fixed_logits, candidate_logits, {
+            "policy_input": vector.copy(),
             "fixed_action_logits": fixed_logits.data.copy(),
             "candidate_scores": np.asarray([score.data for score in candidate_logits], dtype=np.float64),
             "memory": memory.data.copy(),
@@ -1265,11 +1336,12 @@ class DocumentNeuralPolicy:
             observation_identity = _coerce_identity(observation.get("identity"), observation.get("candidates", []))
             if observation_identity != identity:
                 raise ProtocolViolation("document neural sequence changes episode identity")
-            _, requested_fields = self._validate_observation_phase(observation, metadata_runtime)
+            phase, requested_fields = self._validate_observation_phase(observation, metadata_runtime)
             metadata_runtime = self._advance_observation_runtime(metadata_runtime, observation, requested_fields or ())
             candidates = list(observation.get("candidates", []))
+            network_requested_fields = requested_fields if phase == "initial_request" else ()
             vector = self.encoder.encode_policy_input(
-                requested_fields=requested_fields or (),
+                requested_fields=network_requested_fields,
                 candidates=candidates,
                 latest_response=observation.get("latest_response"),
                 remaining_action_budget=observation.get("remaining_action_budget", 0),
@@ -1277,7 +1349,7 @@ class DocumentNeuralPolicy:
             )
             rows = self.encoder.encode_candidates(
                 metadata_runtime.get("observed_candidates", []),
-                requested_field_ids=self._request_field_ids(requested_fields or ()),
+                requested_field_ids=self._request_field_ids(network_requested_fields),
                 identity=identity,
             )
             tensor_runtime, fixed_logits, candidate_logits, step_trace = self._tensor_forward(tensor_runtime, vector, rows, params)
@@ -1303,6 +1375,8 @@ class DocumentNeuralPolicy:
                     if candidate_id not in candidate_logit_by_id:
                         raise ProtocolViolation("legal select candidate is missing from the encoded observation")
                     action_logits.append(candidate_logit_by_id[candidate_id])
+                elif kind == "set_disposition":
+                    action_logits.append(fixed_logits[FIXED_ACTIONS.index("finish")].reshape(1))
                 else:
                     action_logits.append(fixed_logits[FIXED_ACTIONS.index(kind)].reshape(1))
             logits = concatenate(action_logits, axis=0)
@@ -1333,26 +1407,17 @@ class DocumentNeuralPolicy:
     @staticmethod
     def _target_option_index(options: Sequence[Mapping[str, Any]], target: str | Mapping[str, Any]) -> int:
         if isinstance(target, str):
-            matches = [index for index, option in enumerate(options) if option.get("kind") == target]
-            if len(matches) != 1:
-                raise ProtocolViolation("string imitation target is ambiguous or not legal; use the exact typed action")
-            return matches[0]
+            raise ProtocolViolation("string imitation target is not allowed; use the exact typed action payload")
         if not isinstance(target, Mapping) or not isinstance(target.get("kind"), str):
             raise ProtocolViolation("typed imitation target is invalid")
-        kind = str(target["kind"])
+        target_base = _action_base(target)
+        if "action_id" in target:
+            action_id = target.get("action_id")
+            if not isinstance(action_id, str) or action_id != _canonical_action(target_base):
+                raise ProtocolViolation("typed imitation action_id does not bind to its payload")
         for index, option in enumerate(options):
-            if kind != option.get("kind"):
-                continue
-            if kind == "inspect_section" and (
-                target.get("document_handle") == option.get("document_handle")
-                and target.get("section_id") == option.get("section_id")
-            ):
+            if _canonical_action(target_base) == _canonical_action(_action_base(option)):
                 return index
-            if kind == "select_candidate" and target.get("candidate_id") == option.get("candidate_id"):
-                return index
-            if kind in {"finish", "report_missing", "report_conflict"}:
-                if kind == "finish" or target.get("field_id") == option.get("field_id"):
-                    return index
         raise ProtocolViolation("exact typed imitation target is not a legal action in this step")
 
     def loss_only(
@@ -1383,6 +1448,7 @@ class DocumentNeuralPolicy:
             "selected_candidate_ids": sorted(str(item) for item in runtime.get("selected_candidate_ids", [])),
             "observed_candidate_ids": sorted(str(item) for item in runtime.get("observed_candidate_ids", [])),
             "observed_candidates": deepcopy(runtime.get("observed_candidates", [])),
+            "dispositions": deepcopy(runtime.get("dispositions", [])),
             "terminal": runtime.get("terminal", False),
         }
         _assert_finite_json(snapshot)
@@ -1416,6 +1482,9 @@ class DocumentNeuralPolicy:
         observed_candidates = snapshot.get("observed_candidates", [])
         if not isinstance(observed_candidates, list):
             raise ProtocolViolation("document neural observed candidate snapshot is invalid")
+        dispositions = snapshot.get("dispositions", [])
+        if not isinstance(dispositions, list):
+            raise ProtocolViolation("document neural disposition snapshot is invalid")
         if snapshot.get("terminal") not in {True, False}:
             raise ProtocolViolation("document neural terminal snapshot is invalid")
         try:
@@ -1433,6 +1502,7 @@ class DocumentNeuralPolicy:
                 "selected_candidate_ids": list(selected_candidate_ids),
                 "observed_candidate_ids": list(observed_candidate_ids),
                 "observed_candidates": deepcopy(observed_candidates),
+                "dispositions": deepcopy(dispositions),
                 "terminal": snapshot.get("terminal"),
             }
         except (TypeError, ValueError) as exc:
@@ -1489,6 +1559,7 @@ class DocumentPolicyInterface:
             "legal_action_schemas": {
                 "inspect_section": {"operation": "inspect one server-catalogued section", "arguments": {"document_handle": "opaque server handle", "section_id": "catalog section id"}},
                 "select_candidate": {"operation": "explicitly select one observed candidate", "arguments": {"candidate_id": "episode-local opaque candidate id"}},
+                "set_disposition": {"operation": "explicitly designate one requested field as source, missing, or conflict", "arguments": {"field_id": "initial-request field id", "disposition": "source|missing|conflict", "candidate_ids": "selected candidate ids"}},
                 "finish": {"operation": "submit entries, missing fields, and/or conflict citations", "arguments": {"packet": "typed evidence packet"}},
                 "report_missing": {"operation": "submit a typed packet with an explicit missing field", "arguments": {"field_id": "initial-request field id", "packet": "typed evidence packet"}},
                 "report_conflict": {"operation": "submit a typed packet with all equal-rank conflict citations", "arguments": {"field_id": "initial-request field id", "packet": "typed evidence packet"}},
@@ -1497,9 +1568,10 @@ class DocumentPolicyInterface:
                 "identity": "kind plus all typed arguments; candidate ids and catalog section keys are episode-local",
                 "inspect_section": "one exact uninspected (document_handle, section_id) pair",
                 "select_candidate": "one exact observed candidate_id not already selected",
-                "terminal": "only structurally applicable finish/missing/conflict candidates with an explicit serialized packet",
-                "masking": ["already_inspected_sections", "already_selected_candidates", "illegal_or_unobserved_candidates", "inapplicable_terminal_outcomes"],
-                "packet_materialization": "serializes selected evidence only; it never calls an expert or chooses evidence",
+                "set_disposition": "one exact unconsumed requested field plus a bounded source/missing/conflict candidate-id payload; verifier decides semantic correctness",
+                "terminal": "finish is offered only after every requested field has an explicit serialized disposition packet",
+                "masking": ["already_inspected_sections", "already_selected_candidates", "already_disposed_fields", "illegal_or_unobserved_candidates"],
+                "packet_materialization": "serializes explicit source/missing/conflict dispositions only; it never ranks evidence or chooses a winner",
             },
             "phase_rules": {
                 "initial_request_only": True,
@@ -1524,7 +1596,7 @@ class DocumentPolicyInterface:
             "recurrent_snapshot_contract": {
                 "schema": DOCUMENT_RUNTIME_SNAPSHOT_SCHEMA,
                 "memory_shape": list(self.memory_shape),
-                "state_fields": ["peripheral_hidden_states[4]", "central_hidden_state", "learned_memory", "phase", "requested_fields_initial_only", "last_tool_response", "remaining_action_budget", "episode_identity_relations", "inspected_section_keys", "selected_candidate_ids", "observed_candidate_ids", "observed_candidates", "terminal"],
+                "state_fields": ["peripheral_hidden_states[4]", "central_hidden_state", "learned_memory", "phase", "requested_fields_initial_only", "last_tool_response", "remaining_action_budget", "episode_identity_relations", "inspected_section_keys", "selected_candidate_ids", "observed_candidate_ids", "observed_candidates", "dispositions", "terminal"],
                 "types": {
                     "peripheral_hidden_states": "finite_float[4,8]",
                     "central_hidden_state": "finite_float[12]",
@@ -1538,6 +1610,7 @@ class DocumentPolicyInterface:
                     "requested_fields": "typed_initial_request_or_null_after_step_zero",
                     "remaining_action_budget": "nonnegative_integer",
                     "episode_identity_relations": "catalog_bound_episode_local_relation_map",
+                    "dispositions": "unique_typed_per_field_source_missing_or_conflict_records",
                 },
                 "identity_requirements": {"encoder_id": self.encoder.encoder_id, "model_identity": self.model.model_identity(), "checkpoint_id": DOCUMENT_CHECKPOINT_ID},
             },

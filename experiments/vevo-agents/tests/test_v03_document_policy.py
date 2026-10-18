@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 
 from vevo_agents.autograd import Tensor
-from vevo_agents.v03_document_evidence import DocumentBundleStore, DocumentEvidenceSession, make_task
+from vevo_agents.v03_document_evidence import MAX_REQUESTED_FIELDS, DocumentBundleStore, DocumentEvidenceSession, make_task
 from vevo_agents.v03_document_policy import (
     DOCUMENT_ACTIONS,
     DOCUMENT_CANDIDATE_FEATURE_DIM,
@@ -224,6 +224,12 @@ class DocumentPolicyInterfaceTests(unittest.TestCase):
         )
         initial_result = interface.forward(initial_observation)
         result = interface.forward(observation, runtime=initial_result["runtime"])
+        request_width = MAX_REQUESTED_FIELDS * DOCUMENT_REQUEST_FEATURE_DIM
+        expected_request_block = np.zeros(request_width, dtype=np.float64)
+        request_rows = interface.encoder.encode_request_types(initial["requested_fields"])
+        expected_request_block[: request_rows.size] = request_rows.reshape(-1)
+        np.testing.assert_array_equal(initial_result["trace"]["policy_input"][:request_width], expected_request_block)
+        np.testing.assert_array_equal(result["trace"]["policy_input"][:request_width], np.zeros(request_width))
         self.assertEqual(result["fixed_action_logits"].shape, (4,))
         self.assertEqual(result["candidate_scores"].shape, (len(response["candidates"]),))
         self.assertTrue(np.isfinite(result["fixed_action_logits"]).all())
@@ -242,6 +248,8 @@ class DocumentPolicyInterfaceTests(unittest.TestCase):
         self.assertTrue(np.isfinite(loss))
         self.assertTrue(np.isfinite(initial_memory_gradient).all())
         self.assertEqual(len(trace), 2)
+        np.testing.assert_array_equal(trace[0]["policy_input"][:request_width], expected_request_block)
+        np.testing.assert_array_equal(trace[1]["policy_input"][:request_width], np.zeros(request_width))
         self.assertTrue(all(np.isfinite(step["loss"]) for step in trace))
         self.assertTrue(all(np.isfinite(value).all() for value in gradients.values()))
         self.assertGreater(float(np.max(np.abs(gradients["c.w_candidate_row"]))), 0.0)
@@ -288,6 +296,10 @@ class DocumentPolicyInterfaceTests(unittest.TestCase):
         with self.assertRaises(Exception):
             changed.model.restore_runtime(snapshot)
         self.assertNotEqual(snapshot["model_identity"]["parameter_digest"], changed.model.model_identity()["parameter_digest"])
+        malformed = dict(snapshot)
+        malformed["dispositions"] = [{"field_id": "not_requested", "disposition": "missing", "candidate_ids": []}]
+        with self.assertRaises(Exception):
+            interface.model.restore_runtime(malformed)
 
     def test_context_candidate_interaction_reverses_ranking_and_has_numeric_autograd_parity(self):
         interface = DocumentPolicyInterface(seed=31)
@@ -359,8 +371,23 @@ class DocumentPolicyInterfaceTests(unittest.TestCase):
         self.assertTrue(all({"document_handle", "section_id", "score"}.issubset(option) for option in inspect_options))
         self.assertFalse(any(option["kind"] == "select_candidate" for option in initial_result["legal_action_candidates"]))
         self.assertFalse(any(option["kind"] in {"finish", "report_missing", "report_conflict"} for option in initial_result["legal_action_candidates"]))
+        self.assertEqual(
+            {
+                (option["field_id"], option["disposition"], tuple(option["candidate_ids"]))
+                for option in initial_result["legal_action_candidates"]
+                if option["kind"] == "set_disposition"
+            },
+            {(field["field_id"], "missing", ()) for field in initial["requested_fields"]},
+        )
 
-        response = session.dispatch({"kind": "inspect_section", "document_handle": "doc-aurora", "section_id": "sec-terms"})
+        def dispatchable(option):
+            return {key: value for key, value in option.items() if key not in {"action_id", "score"}}
+
+        inspect_action = next(
+            option for option in inspect_options
+            if option["document_handle"] == "doc-aurora" and option["section_id"] == "sec-terms"
+        )
+        response = session.dispatch(dispatchable(inspect_action))
         observation = interface.model.make_observation(
             candidates=response["candidates"], latest_response=response, remaining_action_budget=response["remaining_action_budget"], identity=identity, phase="tool_response"
         )
@@ -371,7 +398,11 @@ class DocumentPolicyInterfaceTests(unittest.TestCase):
             and option.get("section_id") == "sec-terms"
             for option in result["legal_action_candidates"]
         ))
-        candidate_id = response["candidates"][0]["candidate_id"]
+        candidate_id = next(
+            candidate["candidate_id"]
+            for candidate in response["candidates"]
+            if candidate["field_id"] == "renewal_date"
+        )
         self.assertTrue(any(option.get("kind") == "select_candidate" and option.get("candidate_id") == candidate_id for option in result["legal_action_candidates"]))
         selected_response = session.dispatch({"kind": "select_candidate", "candidate_id": candidate_id})
         selected_observation = interface.model.make_observation(
@@ -379,6 +410,31 @@ class DocumentPolicyInterfaceTests(unittest.TestCase):
         )
         selected_result = interface.forward(selected_observation, runtime=result["runtime"])
         self.assertFalse(any(option.get("kind") == "select_candidate" and option.get("candidate_id") == candidate_id for option in selected_result["legal_action_candidates"]))
+        source_action = next(
+            option for option in selected_result["legal_action_candidates"]
+            if option.get("kind") == "set_disposition"
+            and option.get("disposition") == "source"
+            and option.get("candidate_ids") == [candidate_id]
+        )
+        self.assertEqual(session.dispatch(dispatchable(source_action))["status"], "disposition_set")
+
+    def test_imitation_targets_require_complete_typed_payloads(self):
+        interface = DocumentPolicyInterface(seed=47)
+        identity = DocumentEpisodeIdentity("exact-target", ("doc-a",), (("doc-a", "sec-a"),))
+        request = [{"field_id": "label", "value_type": "enum", "revision_rule": "latest_non_obsolete"}]
+        observation = interface.model.make_observation(
+            requested_fields=request,
+            candidates=[],
+            identity=identity,
+            phase="initial_request",
+        )
+        with self.assertRaises(Exception):
+            interface.loss_only([observation], target_action="inspect_section")
+        with self.assertRaises(Exception):
+            interface.loss_only(
+                [observation],
+                target_action={"kind": "inspect_section", "document_handle": "doc-a"},
+            )
 
 
 if __name__ == "__main__":

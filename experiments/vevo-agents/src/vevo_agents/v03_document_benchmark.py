@@ -68,8 +68,9 @@ def first_model_budget_accounting(
     catalog_read_actions = FIRST_MODEL_CATALOG_READ_ACTIONS
     inspect_actions = maximum_documents * maximum_sections_per_document
     select_actions = maximum_selected_candidates
+    disposition_actions = maximum_requested_fields
     completion_actions = 1
-    total = catalog_read_actions + inspect_actions + select_actions + completion_actions
+    total = catalog_read_actions + inspect_actions + select_actions + disposition_actions + completion_actions
     return {
         "maximum_documents": maximum_documents,
         "maximum_sections_per_document": maximum_sections_per_document,
@@ -79,12 +80,13 @@ def first_model_budget_accounting(
         "catalog_read_actions": catalog_read_actions,
         "inspect_section_actions": inspect_actions,
         "select_candidate_actions": select_actions,
+        "disposition_actions": disposition_actions,
         "completion_verify_action": completion_actions,
         "total_policy_action_calls": total,
         "server_verification_calls": 1,
         "unused_action_reserve": action_budget - total,
         "feasible_within_budget": total <= action_budget,
-        "admission_rule": "catalog_read + exhaustive section inspections + explicit selections + one terminal verifier call",
+        "admission_rule": "catalog_read + exhaustive section inspections + explicit selections + one disposition per requested field + one terminal verifier call",
     }
 
 
@@ -313,8 +315,9 @@ def build_benchmark_preregistration(store: DocumentBundleStore | None = None) ->
                 "catalog_read_actions": 1,
                 "inspect_section_actions": 24,
                 "select_candidate_actions": 4,
+                "disposition_actions": 3,
                 "completion_verify_action": 1,
-                "total_policy_action_calls": 30,
+                "total_policy_action_calls": 33,
                 "exceeds_action_budget": True,
                 "not_used_for_first_model_training": True,
             },
@@ -355,6 +358,8 @@ def build_benchmark_preregistration(store: DocumentBundleStore | None = None) ->
             "new_training_required": True,
             "imitation_loss_aggregation": "mean_per_step",
             "imitation_target": "exact_typed_legal_action_identity",
+            "explicit_per_field_dispositions": True,
+            "disposition_action_cost": "one_action_per_requested_field",
         },
         "jev_comparator": {
             "interface": "jev-document-evidence-v1",
@@ -418,8 +423,8 @@ def render_preregistration_markdown(spec: Mapping[str, Any]) -> str:
         f"- Train task generator status: `{split['train']['manifest_status']}`; no empty train case set is presented as frozen evaluation.",
         f"- Held-out task manifest status: `{split['test']['manifest_status']}`; {split['test']['planned_case_count']} proposed seeds have no materialized (unmaterialized) outcomes.",
         "- The checked-in 9300–9302 cases are inspected development protocol cases, not fresh generalization evidence; held-out outcomes are not inspected.",
-        "- First-model feasible scope: at most two documents, four sections each, two requested fields, and four selected candidates. Worst case is 1 catalog read + 8 inspections + 4 selections + 1 completion/verifier action = 14 policy actions within the 16-action budget; a coverage-index variant is deferred.",
-        "- The general 6-document/4-section protocol maximum would require 30 policy actions in the exhaustive baseline and is not used for first-model training.",
+        "- First-model feasible scope: at most two documents, four sections each, two requested fields, and four selected candidates. Worst case is 1 catalog read + 8 inspections + 4 selections + 2 explicit dispositions + 1 completion/verifier action = 16 policy actions; a coverage-index variant is deferred.",
+        "- The general 6-document/4-section protocol maximum would require 33 policy actions (including one explicit disposition per requested field) in the exhaustive baseline and is not used for first-model training.",
         "- Scenario and layout families are separated before any trace generation; deterministic development seeds are recorded, while train/held-out outcomes remain unmaterialized.",
         "",
         "## Metrics and accounting",
