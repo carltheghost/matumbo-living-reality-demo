@@ -23,7 +23,7 @@ reviewed runner may consume :func:`pilot_experiment_config` and
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import hashlib
 import json
 import math
@@ -73,12 +73,19 @@ LEARNING_RATE = 1.0e-3
 EVAL_EVERY_UPDATES = 100
 MAX_WALL_CLOCK_SECONDS = 300
 PAIRED_INITIALIZATION_SEEDS = (7, 17, 37)
+CONSTRAINT_NEIGHBOR_THRESHOLD = 0.25
+CONSTRAINT_SUPPLIED_WORK_THRESHOLD = 0.25
 
 # These eight worlds are explicitly inspected development cases, not a fresh
 # generalization set.  They are kept separate from the train and test seeds.
 TRAIN_WORLD_SEEDS = tuple(range(100, 108))
 DEVELOPMENT_WORLD_SEEDS = tuple(range(9300, 9308))
-TEST_WORLD_SEEDS = tuple(range(9400, 9408))
+# These worlds were materialized by the pre-review manifest implementation.
+# They are retained only as exposure history; they are not eligible for the
+# reviewed final test.  The replacement test worlds below are whole new worlds
+# and have not been used for tuning.
+EXPOSED_TEST_WORLD_SEEDS = tuple(range(9400, 9408))
+TEST_WORLD_SEEDS = tuple(range(9500, 9508))
 
 PUBLIC_STATE_FIELDS = (
     "node_displacements",
@@ -169,6 +176,39 @@ class EvaluationReservationError(PredictorContractError):
 
 class RolloutBoundsError(PredictorContractError):
     """A recursive prediction left the declared physical observable bounds."""
+
+
+class EvaluationDeadlineError(PredictorContractError):
+    """A shared evaluation/training budget expired before the next stage."""
+
+
+@dataclass(frozen=True, slots=True)
+class SharedDeadline:
+    """One monotonic deadline shared by training, evaluation, and serialization."""
+
+    deadline_monotonic: float
+    clock: Any = time.monotonic
+
+    def __post_init__(self) -> None:
+        if not math.isfinite(float(self.deadline_monotonic)):
+            raise PredictorContractError("shared deadline must be finite")
+        if not callable(self.clock):
+            raise PredictorContractError("shared deadline clock must be callable")
+
+    @classmethod
+    def from_seconds(cls, seconds: float, *, clock: Any = time.monotonic) -> "SharedDeadline":
+        if not math.isfinite(float(seconds)) or seconds <= 0.0:
+            raise PredictorContractError("shared deadline seconds must be positive and finite")
+        return cls(float(clock()) + float(seconds), clock=clock)
+
+    def expired(self) -> bool:
+        return float(self.clock()) >= float(self.deadline_monotonic)
+
+    def check(self, stage: str) -> None:
+        if not stage:
+            raise PredictorContractError("deadline stage must be non-empty")
+        if self.expired():
+            raise EvaluationDeadlineError(f"shared deadline exhausted at {stage}")
 
 
 def _canonical_bytes(value: Any) -> bytes:
@@ -300,7 +340,7 @@ class WorldCondition:
 
 WORLD_CONDITIONS = {
     "base": WorldCondition("base"),
-    "phase_shifted": WorldCondition("phase_shifted", phase_offset=0.35),
+    "initial_phase_shifted": WorldCondition("initial_phase_shifted", phase_offset=0.35),
     "frequency_shifted": WorldCondition("frequency_shifted", frequency_scale=1.05),
 }
 
@@ -350,7 +390,7 @@ PILOT_SPLITS = (
     SplitSpec(
         "test",
         TEST_WORLD_SEEDS,
-        ("phase_shifted", "frequency_shifted"),
+        ("initial_phase_shifted", "frequency_shifted"),
         "reserved_final_generalization",
         True,
         False,
@@ -384,6 +424,13 @@ def _conditioned_world(seed: int, condition: WorldCondition) -> ResonantWorld:
     world.calibration = calibration
     world.omega[0] = 2.0 * math.pi * calibration["frequency_a"]
     world.omega[1] = 2.0 * math.pi * calibration["frequency_b"]
+    if condition.phase_offset:
+        # Cue/distractor inputs are disabled for dataset trajectories, so a
+        # calibration phase alone would have no physical effect.  Seed a
+        # small public oscillator state with the declared phase instead.
+        amplitude = 0.02
+        world.u[0] = amplitude * math.sin(condition.phase_offset)
+        world.du[0] = amplitude * math.cos(condition.phase_offset)
     return world
 
 
@@ -509,9 +556,17 @@ def _action_sequence(seed: int, condition_name: str) -> tuple[PlannerAction, ...
     return tuple(actions[int(index)] for index in rng.integers(0, len(actions), size=TRAJECTORY_ACTION_COUNT))
 
 
-def generate_trajectory(spec: SplitSpec, seed: int, condition_name: str) -> Trajectory:
+def generate_trajectory(
+    spec: SplitSpec,
+    seed: int,
+    condition_name: str,
+    *,
+    reviewed_selection_artifact: Mapping[str, Any] | None = None,
+) -> Trajectory:
     if seed not in spec.world_seeds or condition_name not in spec.condition_names:
         raise PredictorContractError("trajectory request is outside its split specification")
+    if spec.name == "test":
+        _require_reviewed_final_test_access(reviewed_selection_artifact)
     world = _conditioned_world(seed, WORLD_CONDITIONS[condition_name])
     fixture_id = f"pilot-{spec.name}-{condition_name}-world-{seed}"
     observations = [
@@ -539,21 +594,55 @@ def generate_trajectory(spec: SplitSpec, seed: int, condition_name: str) -> Traj
     )
 
 
-def build_trajectories(split: str, *, include_test: bool = True) -> tuple[Trajectory, ...]:
-    if split == "test" and not include_test:
-        raise EvaluationReservationError("test trajectory materialization was disabled")
+def _require_reviewed_final_test_access(reviewed_selection_artifact: Mapping[str, Any] | None) -> None:
+    if not isinstance(reviewed_selection_artifact, Mapping):
+        raise EvaluationReservationError(
+            "final-test materialization requires a reviewed frozen selection artifact"
+        )
+    if reviewed_selection_artifact.get("status") != "reviewed_and_frozen":
+        raise EvaluationReservationError("final-test selection artifact is not reviewed_and_frozen")
+    if reviewed_selection_artifact.get("selection_frozen") is not True:
+        raise EvaluationReservationError("final-test selection artifact does not freeze selection")
+    if not reviewed_selection_artifact.get("artifact_sha256"):
+        raise EvaluationReservationError("final-test selection artifact lacks provenance hash")
+
+
+def build_trajectories(
+    split: str,
+    *,
+    include_test: bool = False,
+    reviewed_selection_artifact: Mapping[str, Any] | None = None,
+) -> tuple[Trajectory, ...]:
+    if split == "test":
+        if not include_test:
+            raise EvaluationReservationError("final-test trajectory materialization is closed by default")
+        _require_reviewed_final_test_access(reviewed_selection_artifact)
     spec = split_spec(split)
     return tuple(
-        generate_trajectory(spec, seed, condition_name)
+        generate_trajectory(
+            spec,
+            seed,
+            condition_name,
+            reviewed_selection_artifact=reviewed_selection_artifact,
+        )
         for seed in spec.world_seeds
         for condition_name in spec.condition_names
     )
 
 
-def build_examples(split: str, *, include_test: bool = True) -> tuple[TransitionExample, ...]:
+def build_examples(
+    split: str,
+    *,
+    include_test: bool = False,
+    reviewed_selection_artifact: Mapping[str, Any] | None = None,
+) -> tuple[TransitionExample, ...]:
     return tuple(
         example
-        for trajectory in build_trajectories(split, include_test=include_test)
+        for trajectory in build_trajectories(
+            split,
+            include_test=include_test,
+            reviewed_selection_artifact=reviewed_selection_artifact,
+        )
         for example in trajectory.window_examples()
     )
 
@@ -584,6 +673,28 @@ def _manifest_trajectory_summary(trajectory: Trajectory) -> dict[str, Any]:
         "window_ids_sha256": _sha256([example.window_id for example in examples]),
         "feature_fields": list(PUBLIC_STATE_FIELDS) + ["action_drive_vector", "duration_ticks"],
         "hidden_fields_used_as_features": [],
+        "materialized": True,
+    }
+
+
+def _unmaterialized_trajectory_summary(spec: SplitSpec, seed: int, condition_name: str) -> dict[str, Any]:
+    trajectory_id = f"{spec.name}:{condition_name}:world-{seed}"
+    window_ids = [
+        f"{trajectory_id}:window-{index:03d}"
+        for index in range(HISTORY_LENGTH - 1, TRAJECTORY_ACTION_COUNT)
+    ]
+    return {
+        "trajectory_id": trajectory_id,
+        "split": spec.name,
+        "world_seed": seed,
+        "condition_name": condition_name,
+        "public_trajectory_sha256": None,
+        "window_count": len(window_ids),
+        "window_ids": window_ids,
+        "window_ids_sha256": _sha256(window_ids),
+        "feature_fields": list(PUBLIC_STATE_FIELDS) + ["action_drive_vector", "duration_ticks"],
+        "hidden_fields_used_as_features": [],
+        "materialized": False,
     }
 
 
@@ -600,6 +711,11 @@ def verify_split_manifest(manifest: Mapping[str, Any]) -> str:
         raise PredictorContractError("trajectory ids are not unique")
     window_to_split: dict[str, str] = {}
     for item in manifest["trajectories"]:
+        if item["split"] == "test":
+            if item.get("materialized") is not False or item.get("public_trajectory_sha256") is not None:
+                raise PredictorContractError("reserved test trajectory was materialized in the default manifest")
+        elif item.get("materialized") is not True or not item.get("public_trajectory_sha256"):
+            raise PredictorContractError("train/development trajectory summary is incomplete")
         for window_id in item.get("window_ids", []):
             prior = window_to_split.setdefault(window_id, item["split"])
             if prior != item["split"]:
@@ -619,9 +735,16 @@ def build_split_manifest() -> dict[str, Any]:
     trajectories = [
         trajectory
         for spec in PILOT_SPLITS
-        for trajectory in build_trajectories(spec.name, include_test=True)
+        if spec.name != "test"
+        for trajectory in build_trajectories(spec.name, include_test=False)
     ]
     summaries = [_manifest_trajectory_summary(trajectory) for trajectory in trajectories]
+    test_spec = split_spec("test")
+    summaries.extend(
+        _unmaterialized_trajectory_summary(test_spec, seed, condition_name)
+        for seed in test_spec.world_seeds
+        for condition_name in test_spec.condition_names
+    )
     manifest: dict[str, Any] = {
         "schema": SPLIT_MANIFEST_SCHEMA,
         "dataset_schema": DATASET_SCHEMA,
@@ -644,8 +767,20 @@ def build_split_manifest() -> dict[str, Any]:
         "no_overlapping_windows_across_splits": True,
         "test_access": {
             "reserved_until": "development_selection_and_acceptance_frozen",
+            "default_materialization": "closed",
+            "unlock_requires_reviewed_selection_artifact": True,
+            "current_final_test_materialized": False,
             "final_test_metrics_written": False,
             "final_test_data_used_for_cpu_feasibility": False,
+            "historical_pre_review_exposure": {
+                "inputs_generated": True,
+                "world_seeds": list(EXPOSED_TEST_WORLD_SEEDS),
+                "conditions": ["initial_phase_shifted", "frequency_shifted"],
+                "metrics_written": False,
+                "tuning_use_evidence": "no evidence of tuning to those outcomes was found; they are not treated as fresh final-test evidence",
+                "replacement_worlds_required": True,
+            },
+            "replacement_world_seeds": list(TEST_WORLD_SEEDS),
         },
     }
     manifest["trajectory_summary_sha256"] = _sha256(summaries)
@@ -756,12 +891,17 @@ class TrainOnlyNormalizer:
 
 
 def fit_train_normalizers(
-    examples: Sequence[TransitionExample],
+    trajectories: Sequence[Trajectory],
 ) -> tuple[TrainOnlyNormalizer, TrainOnlyNormalizer]:
-    if not examples or any(example.split != "train" for example in examples):
-        raise NormalizerContractError("state/target normalizers require train-only examples")
-    states = [frame.state for example in examples for frame in example.history]
-    targets = [example.target_state for example in examples]
+    if not trajectories or any(
+        not isinstance(trajectory, Trajectory) or trajectory.split != "train"
+        for trajectory in trajectories
+    ):
+        raise NormalizerContractError("state/target normalizers require train-only trajectories")
+    # Each physical observation/action is included once.  Overlapping
+    # transition windows are not used to weight normalization statistics.
+    states = [state for trajectory in trajectories for state in trajectory.observations[:-1]]
+    targets = [state for trajectory in trajectories for state in trajectory.observations[1:]]
     names, units = _component_names_and_units()
     return (
         TrainOnlyNormalizer.fit(states, component_names=names, units=units, split="train"),
@@ -867,6 +1007,26 @@ def _model_parameter_digest(core: V03HybridCore, head_weight: np.ndarray, head_b
     return _sha256(payload)
 
 
+def _ordered_trajectory_examples(
+    trajectory_or_examples: Trajectory | Sequence[TransitionExample],
+) -> tuple[TransitionExample, ...]:
+    if isinstance(trajectory_or_examples, Trajectory):
+        examples = trajectory_or_examples.window_examples()
+    else:
+        examples = tuple(trajectory_or_examples)
+    if not examples or not all(isinstance(example, TransitionExample) for example in examples):
+        raise PredictorContractError("a non-empty trajectory or transition-example sequence is required")
+    trajectory_ids = {example.trajectory_id for example in examples}
+    if len(trajectory_ids) != 1:
+        raise PredictorContractError("one recurrent loss must receive exactly one trajectory")
+    if any(example.split != "train" for example in examples):
+        raise PredictorContractError("task-loss gradient probes require train examples")
+    ordered = tuple(sorted(examples, key=lambda example: example.window_id))
+    if tuple(example.window_id for example in ordered) != tuple(example.window_id for example in examples):
+        raise PredictorContractError("trajectory examples must be in chronological window order")
+    return ordered
+
+
 class LearnedObservablePredictor:
     """Existing hybrid core plus a trainable public-state prediction head."""
 
@@ -956,6 +1116,17 @@ class LearnedObservablePredictor:
             raise PredictorContractError("predictor received an empty history")
         return _numeric_representation(trace), current_runtime
 
+    def _predict_from_representation(
+        self,
+        representation: np.ndarray,
+        *,
+        target_normalizer: TrainOnlyNormalizer,
+    ) -> np.ndarray:
+        raw = self.head_weight @ representation + self.head_bias
+        prediction = _physical_prediction_numeric(raw, target_normalizer)
+        validate_public_state_vector(prediction, name="predictor output")
+        return prediction
+
     def forward_with_runtime(
         self,
         history: Sequence[PredictorFrame],
@@ -969,10 +1140,67 @@ class LearnedObservablePredictor:
             state_normalizer=state_normalizer,
             runtime=runtime,
         )
-        raw = self.head_weight @ representation + self.head_bias
-        prediction = _physical_prediction_numeric(raw, target_normalizer)
-        validate_public_state_vector(prediction, name="predictor output")
-        return prediction, next_runtime
+        return self._predict_from_representation(
+            representation,
+            target_normalizer=target_normalizer,
+        ), next_runtime
+
+    def forward_frame_with_runtime(
+        self,
+        frame: PredictorFrame,
+        *,
+        state_normalizer: TrainOnlyNormalizer,
+        target_normalizer: TrainOnlyNormalizer,
+        runtime: Mapping[str, Any],
+    ) -> tuple[np.ndarray, dict[str, Any]]:
+        """Consume exactly one new trajectory frame from an existing runtime."""
+
+        next_runtime, trace = self.core.step(
+            runtime,
+            _core_input(frame, state_normalizer),
+            dt=DEFAULT_DT,
+        )
+        return self._predict_from_representation(
+            _numeric_representation(trace),
+            target_normalizer=target_normalizer,
+        ), next_runtime
+
+    def forward_trajectory(
+        self,
+        trajectory: Trajectory,
+        *,
+        state_normalizer: TrainOnlyNormalizer,
+        target_normalizer: TrainOnlyNormalizer,
+    ) -> tuple[tuple[np.ndarray, ...], dict[str, Any]]:
+        """Consume one trajectory once, with one runtime reset per episode.
+
+        The first two frames prime the recurrent context.  Every later frame
+        is consumed exactly once.  This is the same contract used by the
+        trajectory loss and recursive rollout; overlapping two-frame windows
+        are never reprocessed while a runtime is carried forward.
+        """
+
+        examples = trajectory.window_examples()
+        if not examples:
+            raise PredictorContractError("trajectory has no evaluation windows")
+        runtime = self.core.initial_runtime()
+        predictions: list[np.ndarray] = []
+        prediction, runtime = self.forward_with_runtime(
+            examples[0].history,
+            state_normalizer=state_normalizer,
+            target_normalizer=target_normalizer,
+            runtime=runtime,
+        )
+        predictions.append(prediction)
+        for example in examples[1:]:
+            prediction, runtime = self.forward_frame_with_runtime(
+                example.history[-1],
+                state_normalizer=state_normalizer,
+                target_normalizer=target_normalizer,
+                runtime=runtime,
+            )
+            predictions.append(prediction)
+        return tuple(predictions), runtime
 
     def forward(
         self,
@@ -989,38 +1217,47 @@ class LearnedObservablePredictor:
 
     def loss_and_gradients(
         self,
-        example: TransitionExample,
+        trajectory_or_examples: Trajectory | Sequence[TransitionExample],
         *,
         state_normalizer: TrainOnlyNormalizer,
         target_normalizer: TrainOnlyNormalizer,
     ) -> tuple[float, dict[str, np.ndarray]]:
-        """Physical-observable target loss and gradients; no optimizer update."""
+        """Sequential physical-observable loss; no optimizer update.
 
-        if example.split != "train":
-            raise PredictorContractError("task-loss gradient probes require train examples")
+        A trajectory resets the recurrent runtime once.  Its first two
+        context frames are consumed once, then each subsequent window adds
+        only its new final frame.  This prevents an overlapping window from
+        being fed twice through a carried recurrent state.
+        """
+
+        examples = _ordered_trajectory_examples(trajectory_or_examples)
         params = self.core.tensor_parameters(requires_grad=True)
         head_weight = Tensor(self.head_weight.copy(), requires_grad=True)
         head_bias = Tensor(self.head_bias.copy(), requires_grad=True)
         runtime = self.core.tensor_initial_runtime()
-        trace = None
-        for frame in example.history:
-            runtime, trace = self.core.tensor_step(
-                runtime,
-                _core_input(frame, state_normalizer),
-                dt=DEFAULT_DT,
-                params=params,
-            )
-        if trace is None:
-            raise PredictorContractError("cannot compute loss for empty history")
-        representation = _tensor_representation(trace)
-        raw = head_weight @ representation + head_bias
-        physical_prediction = _physical_prediction_tensor(raw, target_normalizer)
         target_mean = Tensor(np.asarray(target_normalizer.mean, dtype=np.float64))
         target_scale = Tensor(np.asarray(target_normalizer.scale, dtype=np.float64))
-        normalized_prediction = (physical_prediction - target_mean) / target_scale
-        target = target_normalizer.transform(example.target_state)
-        residual = normalized_prediction - target
-        objective = (residual * residual).sum() / float(PUBLIC_STATE_DIM)
+        objective = Tensor(0.0)
+        for index, example in enumerate(examples):
+            frames = example.history if index == 0 else (example.history[-1],)
+            trace = None
+            for frame in frames:
+                runtime, trace = self.core.tensor_step(
+                    runtime,
+                    _core_input(frame, state_normalizer),
+                    dt=DEFAULT_DT,
+                    params=params,
+                )
+            if trace is None:
+                raise PredictorContractError("cannot compute loss for empty trajectory frame set")
+            representation = _tensor_representation(trace)
+            raw = head_weight @ representation + head_bias
+            physical_prediction = _physical_prediction_tensor(raw, target_normalizer)
+            normalized_prediction = (physical_prediction - target_mean) / target_scale
+            target = target_normalizer.transform(example.target_state)
+            residual = normalized_prediction - target
+            objective = objective + (residual * residual).sum() / float(PUBLIC_STATE_DIM)
+        objective = objective / float(len(examples))
         objective.backward()
         if not math.isfinite(float(objective.data)):
             raise PredictorContractError("observable loss is non-finite")
@@ -1032,6 +1269,59 @@ class LearnedObservablePredictor:
         if not all(np.isfinite(value).all() for value in gradients.values()):
             raise PredictorContractError("observable loss gradient is non-finite")
         return float(objective.data), gradients
+
+    def apply_gradients(
+        self,
+        gradients: Mapping[str, np.ndarray],
+        *,
+        learning_rate: float = LEARNING_RATE,
+        deadline: SharedDeadline | None = None,
+    ) -> dict[str, Any]:
+        """Apply the frozen plain-SGD update to every trainable parameter.
+
+        This is the implementation contract a later runner will use.  The
+        method deliberately requires an exact parameter-key match so a
+        forgotten core or geometry parameter cannot silently remain frozen.
+        It performs no clipping, momentum, schedule change, or selection.
+        """
+
+        if not math.isfinite(float(learning_rate)) or learning_rate <= 0.0:
+            raise PredictorContractError("learning_rate must be positive and finite")
+        if deadline is not None:
+            deadline.check("before_optimizer_update")
+        expected = {
+            *(f"base.{name}" for name in self.core.base.params),
+            *self.core.params.keys(),
+            "predictor.head_weight",
+            "predictor.head_bias",
+        }
+        if set(gradients) != expected:
+            missing = sorted(expected - set(gradients))
+            extra = sorted(set(gradients) - expected)
+            raise PredictorContractError(
+                f"optimizer gradient keys do not match trainable parameters; missing={missing}, extra={extra}"
+            )
+        parameter_arrays: dict[str, np.ndarray] = {
+            **{f"base.{name}": value for name, value in self.core.base.params.items()},
+            **self.core.params,
+            "predictor.head_weight": self.head_weight,
+            "predictor.head_bias": self.head_bias,
+        }
+        for name in sorted(expected):
+            gradient = _finite_array(gradients[name], parameter_arrays[name].shape, name=f"gradient {name}")
+            updated = parameter_arrays[name] - float(learning_rate) * gradient
+            if not np.isfinite(updated).all():
+                raise PredictorContractError(f"optimizer update for {name} is non-finite")
+            parameter_arrays[name][...] = updated
+        self._validate_head()
+        if deadline is not None:
+            deadline.check("after_optimizer_update")
+        return {
+            "optimizer": "sgd",
+            "learning_rate": float(learning_rate),
+            "updated_parameter_count": len(expected),
+            "updated_element_count": int(sum(value.size for value in parameter_arrays.values())),
+        }
 
     def state_dict(self) -> dict[str, Any]:
         return {
@@ -1108,6 +1398,11 @@ def save_checkpoint(
 
 def load_checkpoint(
     path: str | Path,
+    *,
+    expected_split_manifest_sha256: str | None = None,
+    expected_experiment_config_sha256: str | None = None,
+    expected_state_normalizer_sha256: str | None = None,
+    expected_target_normalizer_sha256: str | None = None,
 ) -> tuple[LearnedObservablePredictor, TrainOnlyNormalizer, TrainOnlyNormalizer, dict[str, Any]]:
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
     if payload.get("schema") != CHECKPOINT_SCHEMA:
@@ -1122,7 +1417,45 @@ def load_checkpoint(
     for key in ("split_manifest_sha256", "experiment_config_sha256"):
         if not payload.get(key):
             raise CheckpointContractError(f"checkpoint omits {key}")
+    expected_provenance = {
+        "split_manifest_sha256": expected_split_manifest_sha256,
+        "experiment_config_sha256": expected_experiment_config_sha256,
+        "state_normalizer_sha256": expected_state_normalizer_sha256,
+        "target_normalizer_sha256": expected_target_normalizer_sha256,
+    }
+    actual_provenance = {
+        "split_manifest_sha256": payload.get("split_manifest_sha256"),
+        "experiment_config_sha256": payload.get("experiment_config_sha256"),
+        "state_normalizer_sha256": state_normalizer.train_value_sha256,
+        "target_normalizer_sha256": target_normalizer.train_value_sha256,
+    }
+    for name, expected in expected_provenance.items():
+        if expected is not None and str(expected) != str(actual_provenance[name]):
+            raise CheckpointContractError(
+                f"checkpoint {name} mismatch: expected {expected}, got {actual_provenance[name]}"
+            )
     return model, state_normalizer, target_normalizer, dict(payload)
+
+
+def select_development_checkpoint(records: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Select one complete development record using the preregistered key."""
+
+    if not records:
+        raise PredictorContractError("development checkpoint selection needs at least one record")
+    prepared: list[tuple[tuple[float, float, int], Mapping[str, Any]]] = []
+    for record in records:
+        if not isinstance(record, Mapping) or record.get("status") != "complete":
+            raise PredictorContractError("incomplete development records cannot be selected")
+        try:
+            normalized_mse = float(record["development_normalized_mse"])
+            rollout_rmse = float(record["development_rollout_rmse"])
+            init_seed = int(record["init_seed"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise PredictorContractError("development selection record is missing frozen metrics") from exc
+        if not all(math.isfinite(value) for value in (normalized_mse, rollout_rmse)) or init_seed < 0:
+            raise PredictorContractError("development selection record contains invalid metrics")
+        prepared.append(((normalized_mse, rollout_rmse, init_seed), record))
+    return dict(min(prepared, key=lambda item: item[0])[1])
 
 
 class PersistenceBaseline:
@@ -1135,7 +1468,7 @@ class PersistenceBaseline:
 
 
 class LinearObservableBaseline:
-    """Small public-state ridge baseline, fitted only on train examples."""
+    """Small public-state ridge baseline, fitted only on train trajectories."""
 
     name = "linear_public"
 
@@ -1146,10 +1479,7 @@ class LinearObservableBaseline:
         self.weight: np.ndarray | None = None
 
     @staticmethod
-    def _features(history: Sequence[PredictorFrame]) -> np.ndarray:
-        if len(history) != HISTORY_LENGTH:
-            raise PredictorContractError("linear baseline history has the wrong length")
-        frame = history[-1]
+    def _features_from_frame(frame: PredictorFrame) -> np.ndarray:
         result = np.asarray(
             [
                 *frame.state,
@@ -1163,11 +1493,25 @@ class LinearObservableBaseline:
             raise PredictorContractError("linear baseline features are non-finite")
         return result
 
-    def fit(self, examples: Sequence[TransitionExample]) -> "LinearObservableBaseline":
-        if not examples or any(example.split != "train" for example in examples):
-            raise PredictorContractError("linear baseline fitting requires train-only examples")
-        x = np.vstack([self._features(example.history) for example in examples])
-        y = np.vstack([example.target_state for example in examples])
+    @classmethod
+    def _features(cls, history: Sequence[PredictorFrame]) -> np.ndarray:
+        if not history:
+            raise PredictorContractError("linear baseline history is empty")
+        return cls._features_from_frame(history[-1])
+
+    def fit(self, trajectories: Sequence[Trajectory]) -> "LinearObservableBaseline":
+        if not trajectories or any(
+            not isinstance(trajectory, Trajectory) or trajectory.split != "train"
+            for trajectory in trajectories
+        ):
+            raise PredictorContractError("linear baseline fitting requires train-only trajectories")
+        rows = [
+            (PredictorFrame(trajectory.observations[index], trajectory.actions[index], trajectory.duration_ticks), trajectory.observations[index + 1])
+            for trajectory in trajectories
+            for index in range(len(trajectory.actions))
+        ]
+        x = np.vstack([self._features_from_frame(frame) for frame, _ in rows])
+        y = np.vstack([target for _, target in rows])
         if not np.isfinite(x).all() or not np.isfinite(y).all():
             raise PredictorContractError("linear baseline fit data is non-finite")
         gram = x.T @ x + self.ridge * np.eye(x.shape[1], dtype=np.float64)
@@ -1187,7 +1531,7 @@ def _observation_from_state(state: Sequence[float], *, fixture_id: str = "nomina
     return PublicObservation(
         fixture_id=fixture_id,
         cycle=0,
-        tick=0,
+        tick=int(round(float(vector[TIME_INDEX]) / ResonantWorld.DT)),
         time=float(vector[TIME_INDEX]),
         node_displacements=tuple(vector[:NODE_COUNT]),
         node_velocities=tuple(vector[NODE_COUNT : 2 * NODE_COUNT]),
@@ -1216,6 +1560,15 @@ class NominalSimulatorBaseline:
         predicted = self.predictor.predict_action_ticks(prior, action)[-1]
         # This target representation is still the public observation; no
         # private nominal omega is used to calculate the evaluation target.
+        predicted = replace(
+            predicted,
+            cycle=prior.cycle + 1,
+            tick=prior.tick + action.duration_ticks,
+            time=prior.time + action.duration_ticks * ResonantWorld.DT,
+            # The nominal predictor starts its residual accounting at the
+            # supplied public residual.  Restore the cumulative prior value.
+            residual=prior.residual + predicted.residual,
+        )
         return public_observation_to_vector(predicted)
 
 
@@ -1231,14 +1584,20 @@ def compute_audit() -> dict[str, Any]:
     return {
         "history_length": HISTORY_LENGTH,
         "core_steps_per_one_step_prediction": HISTORY_LENGTH,
+        "core_steps_per_sequential_trajectory": TRAJECTORY_ACTION_COUNT,
         "head_multiply_adds_per_prediction": PUBLIC_STATE_DIM * (REPRESENTATION_DIM + 1),
         "physics_ticks_per_dataset_action": MAX_ACTION_DURATION_TICKS,
         "rollout_horizons_actions": list(ROLL_OUT_HORIZONS),
         "batch_size": BATCH_SIZE,
         "training_updates_proposed": TRAIN_UPDATES,
+        "training_trajectory_count": len(TRAIN_WORLD_SEEDS),
+        "training_window_count": len(TRAIN_WORLD_SEEDS) * (TRAJECTORY_ACTION_COUNT - HISTORY_LENGTH + 1),
+        "manifest_total_trajectory_count": 32,
+        "manifest_total_window_count": 32 * (TRAJECTORY_ACTION_COUNT - HISTORY_LENGTH + 1),
         "paired_geometry_variants": 2,
         "paired_initialization_seeds": list(PAIRED_INITIALIZATION_SEEDS),
-        "accounting_scope": "dataset generation, recurrent core forward, observable head, and recursive evaluation; no hidden simulator-frequency target calculation",
+        "timing_scope": "one trajectory forward and loss/backward probe only; not an end-to-end training estimate",
+        "accounting_scope": "dataset generation, recurrent core forward, observable head, optimizer contract, and recursive evaluation; no hidden simulator-frequency target calculation",
     }
 
 
@@ -1310,10 +1669,28 @@ def pilot_experiment_config(*, split_manifest_sha256: str) -> dict[str, Any]:
             "development_worlds": list(DEVELOPMENT_WORLD_SEEDS),
             "development_label": "worlds 9300-9307 are inspected development cases only, never fresh generalization",
             "test_worlds": list(TEST_WORLD_SEEDS),
-            "test_conditions": ["phase_shifted", "frequency_shifted"],
+            "test_conditions": ["initial_phase_shifted", "frequency_shifted"],
             "whole_trajectory_assignment": True,
             "no_overlapping_windows_across_splits": True,
             "final_test_reserved_until_development_freeze": True,
+            "default_test_materialization": "closed",
+            "reviewed_selection_artifact_required": True,
+            "historical_pre_review_exposure": {
+                "world_seeds": list(EXPOSED_TEST_WORLD_SEEDS),
+                "conditions": ["initial_phase_shifted", "frequency_shifted"],
+                "metrics_written": False,
+                "fresh_final_test_evidence": False,
+            },
+            "replacement_worlds": list(TEST_WORLD_SEEDS),
+        },
+        "recurrent_contract": {
+            "training_unit": "one_complete_trajectory",
+            "trajectory_runtime_reset": True,
+            "history_length": HISTORY_LENGTH,
+            "first_context_frames_consumed_once": True,
+            "subsequent_frames_consumed_once": True,
+            "overlapping_windows_reprocessed_with_carried_runtime": False,
+            "recursive_rollout_uses_same_contract": True,
         },
         "action_coverage": {
             "candidate_action_count": len(candidate_actions()),
@@ -1333,11 +1710,25 @@ def pilot_experiment_config(*, split_manifest_sha256: str) -> dict[str, Any]:
             "updates": TRAIN_UPDATES,
             "batch_size": BATCH_SIZE,
             "learning_rate": LEARNING_RATE,
-            "optimizer": "fixed review proposal: bounded CPU update, implementation deferred until approval",
+            "optimizer": "sgd",
+            "update_rule": "parameter := parameter - learning_rate * reverse_mode_gradient",
+            "gradient_parameter_set": "all_core_and_head_parameters_exact_key_match",
             "schedule": "existing core schedule unchanged",
+            "eval_every_updates": EVAL_EVERY_UPDATES,
             "same_data_updates_selection_geometry_on_off": True,
             "checkpoint_selection": "min_development_normalized_mse_then_min_development_rollout_rmse_then_lowest_init_seed",
             "checkpoint_directory": "storage/checkpoints/v03-learned-predictor-pilot/",
+            "paired_variant_timeout_policy": "shared_deadline; mark both paired variants incomplete when either cannot finish the paired evaluation boundary",
+            "incomplete_run_status": "incomplete_shared_deadline_no_selection_or_final_test",
+            "training_data": {
+                "trajectory_count": len(TRAIN_WORLD_SEEDS),
+                "window_count": len(TRAIN_WORLD_SEEDS) * (TRAJECTORY_ACTION_COUNT - HISTORY_LENGTH + 1),
+            },
+            "upstream_training_gate": {
+                "required_before_development_evaluation": True,
+                "existing_all_four_models_training_success": "8/8",
+                "gate_scope": "pre-existing repair gate; this pilot does not claim to satisfy or rerun it",
+            },
         },
         "rollout_evaluation": {
             "horizons_actions": list(ROLL_OUT_HORIZONS),
@@ -1345,7 +1736,7 @@ def pilot_experiment_config(*, split_manifest_sha256: str) -> dict[str, Any]:
             "teacher_forced_future_observations": False,
             "episode_runtime_reset": True,
             "out_of_bounds": "visible failure; no clipping or substitute predictor",
-            "deadline_checks": "between cases and before metric aggregation; no metrics after budget exhaustion",
+            "deadline_checks": "shared hard deadline between training/evaluation cases, before and after aggregation, checkpoint reload, and serialization; no metrics after budget exhaustion",
         },
         "metrics": {
             "per_component": ["mae", "rmse", "p50_abs", "p95_abs", "max_abs", "physical_unit"],
@@ -1355,7 +1746,7 @@ def pilot_experiment_config(*, split_manifest_sha256: str) -> dict[str, Any]:
             "closed_loop_planning_benefit": "deferred_and_separate_from_prediction_metrics",
         },
         "acceptance_thresholds": {
-            "status": "proposed_before_training; development-only refinement must be frozen before final-test unlock",
+            "status": "frozen_before_training; development-only rationale and coverage are recorded; final-test unlock still requires review",
             "paired_variant_comparison": "same seed and data; no geometry advantage inferred from unequal updates",
             "nonfinite_failures": 0,
             "rollout_bound_violations": 0,
@@ -1365,6 +1756,13 @@ def pilot_experiment_config(*, split_manifest_sha256: str) -> dict[str, Any]:
             "target_or_neighbor_energy_mae_max": 0.25,
             "supplied_work_mae_max": 0.25,
             "constraint_false_negative_rate_max": 0.10,
+            "constraint_thresholds": {
+                "max_neighbor_energy": CONSTRAINT_NEIGHBOR_THRESHOLD,
+                "max_supplied_work": CONSTRAINT_SUPPLIED_WORK_THRESHOLD,
+                "denominator": "actual violation count",
+                "zero_violation_rate": None,
+                "rationale": "development-only safety screen for the inspected cases; not tuned on reserved final-test outcomes",
+            },
         },
         "resource_budget": {
             "wall_clock_seconds": MAX_WALL_CLOCK_SECONDS,
@@ -1372,13 +1770,21 @@ def pilot_experiment_config(*, split_manifest_sha256: str) -> dict[str, Any]:
             "paid_resources": False,
             "credentials_or_network": False,
             "full_retraining_started": False,
+            "hard_deadline_shared_across_training_evaluation_serialization": True,
+            "paired_timeout_is_incomplete_not_success": True,
         },
         "parameter_accounting": parameter_accounting(),
         "compute_audit": compute_audit(),
     }
 
 
-def _prediction_metrics(predictions: Sequence[np.ndarray], targets: Sequence[np.ndarray]) -> dict[str, Any]:
+def _prediction_metrics(
+    predictions: Sequence[np.ndarray],
+    targets: Sequence[np.ndarray],
+    *,
+    target_normalizer: TrainOnlyNormalizer | None = None,
+    deadline: SharedDeadline | None = None,
+) -> dict[str, Any]:
     if len(predictions) != len(targets) or not predictions:
         raise PredictorContractError("prediction/target metric arrays are empty or mismatched")
     pred = np.vstack([validate_public_state_vector(value, name="metric prediction") for value in predictions])
@@ -1387,6 +1793,8 @@ def _prediction_metrics(predictions: Sequence[np.ndarray], targets: Sequence[np.
     names, units = _component_names_and_units()
     per_component = {}
     for index, name in enumerate(names):
+        if deadline is not None:
+            deadline.check(f"metric_component_{index}")
         values = absolute[:, index]
         per_component[name] = {
             "unit": units[index],
@@ -1396,11 +1804,36 @@ def _prediction_metrics(predictions: Sequence[np.ndarray], targets: Sequence[np.
             "p95_abs": float(np.percentile(values, 95)),
             "max_abs": float(values.max()),
         }
+    normalized_per_component: dict[str, dict[str, Any]] | None = None
+    normalized_rmse: float | None = None
+    if target_normalizer is not None:
+        normalized = np.vstack(
+            [
+                target_normalizer.transform(row_pred) - target_normalizer.transform(row_target)
+                for row_pred, row_target in zip(pred, target)
+            ]
+        )
+        normalized_per_component = {}
+        for index, name in enumerate(names):
+            if deadline is not None:
+                deadline.check(f"normalized_metric_component_{index}")
+            values = np.abs(normalized[:, index])
+            normalized_per_component[name] = {
+                "unit": "train-normalized dimensionless units",
+                "mae": float(values.mean()),
+                "rmse": float(np.sqrt(np.mean(normalized[:, index] ** 2))),
+                "p50_abs": float(np.percentile(values, 50)),
+                "p95_abs": float(np.percentile(values, 95)),
+                "max_abs": float(values.max()),
+            }
+        normalized_rmse = float(np.sqrt(np.mean(normalized**2)))
     target_energy = []
     neighbor_energy = []
     false_negatives = 0
-    false_negative_denominator = 0
-    for row_pred, row_target in zip(pred, target):
+    actual_violation_count = 0
+    for row_index, (row_pred, row_target) in enumerate(zip(pred, target)):
+        if deadline is not None:
+            deadline.check(f"constraint_metric_case_{row_index}")
         for port in VALIDATED_PORTS:
             neighbors = (1,) if port == 0 else (0, 2)
             target_energy.append(abs(row_pred[LOCAL_ENERGY_START + port] - row_target[LOCAL_ENERGY_START + port]))
@@ -1410,25 +1843,41 @@ def _prediction_metrics(predictions: Sequence[np.ndarray], targets: Sequence[np.
             )
             actual_bad = (
                 row_target[LOCAL_ENERGY_START + port] < 0.0
-                or max(row_target[LOCAL_ENERGY_START + index] for index in neighbors) > 0.25
-                or row_target[SUPPLIED_WORK_INDEX] > 0.25
+                or max(row_target[LOCAL_ENERGY_START + index] for index in neighbors) > CONSTRAINT_NEIGHBOR_THRESHOLD
+                or row_target[SUPPLIED_WORK_INDEX] > CONSTRAINT_SUPPLIED_WORK_THRESHOLD
             )
             predicted_ok = (
                 row_pred[LOCAL_ENERGY_START + port] >= 0.0
-                and max(row_pred[LOCAL_ENERGY_START + index] for index in neighbors) <= 0.25
-                and row_pred[SUPPLIED_WORK_INDEX] <= 0.25
+                and max(row_pred[LOCAL_ENERGY_START + index] for index in neighbors) <= CONSTRAINT_NEIGHBOR_THRESHOLD
+                and row_pred[SUPPLIED_WORK_INDEX] <= CONSTRAINT_SUPPLIED_WORK_THRESHOLD
             )
-            false_negatives += int(predicted_ok and actual_bad)
-            false_negative_denominator += 1
-    return {
+            if actual_bad:
+                actual_violation_count += 1
+                false_negatives += int(predicted_ok)
+    false_negative_rate = (
+        float(false_negatives / actual_violation_count) if actual_violation_count else None
+    )
+    metrics = {
         "schema": EVALUATION_SCHEMA,
         "sample_count": len(predictions),
         "per_component": per_component,
         "target_energy_mae": float(np.mean(target_energy)),
         "neighbor_energy_mae": float(np.mean(neighbor_energy)),
         "supplied_work_mae": float(np.mean(np.abs(pred[:, SUPPLIED_WORK_INDEX] - target[:, SUPPLIED_WORK_INDEX]))),
-        "constraint_false_negative_rate": float(false_negatives / false_negative_denominator),
+        "constraint_violation_count": actual_violation_count,
+        "constraint_false_negative_count": false_negatives,
+        "constraint_false_negative_rate": false_negative_rate,
+        "constraint_false_negative_denominator": "actual_violation_count",
     }
+    if target_normalizer is not None:
+        metrics.update(
+            {
+                "normalized_rmse": normalized_rmse,
+                "normalized_per_component": normalized_per_component,
+                "target_normalizer_train_value_sha256": target_normalizer.train_value_sha256,
+            }
+        )
+    return metrics
 
 
 @dataclass(frozen=True, slots=True)
@@ -1447,6 +1896,7 @@ def evaluate_examples(
     target_normalizer: TrainOnlyNormalizer | None = None,
     allow_final_test: bool = False,
     development_frozen: bool = False,
+    deadline: SharedDeadline | None = None,
     deadline_monotonic: float | None = None,
 ) -> dict[str, Any]:
     if split == "test" and not (allow_final_test and development_frozen):
@@ -1455,27 +1905,99 @@ def evaluate_examples(
         raise PredictorContractError("unknown evaluation split")
     if not examples or any(example.split != split for example in examples):
         raise PredictorContractError("evaluation examples do not match the requested split")
+    if deadline is not None and deadline_monotonic is not None:
+        raise PredictorContractError("pass either deadline or deadline_monotonic, not both")
+    if deadline is None and deadline_monotonic is not None:
+        deadline = SharedDeadline(float(deadline_monotonic))
+
+    def partial_result(status: str, failures: list[dict[str, Any]], completed: int) -> dict[str, Any]:
+        return {
+            "schema": EVALUATION_SCHEMA,
+            "split": split,
+            "status": status,
+            "cases_requested": len(examples),
+            "cases_completed": completed,
+            "failures": failures,
+            "metrics": None,
+        }
+
+    if deadline is not None:
+        try:
+            deadline.check("evaluation_start")
+        except EvaluationDeadlineError as exc:
+            return partial_result(
+                "partial_deadline_exhausted",
+                [{"stage": "evaluation_start", "error": str(exc), "type": type(exc).__name__}],
+                0,
+            )
+    if target_normalizer is None:
+        raise PredictorContractError("all predictor metrics require the train-only target normalizer")
     results: list[EvaluationCaseResult] = []
     failures: list[dict[str, Any]] = []
     status = "complete"
+    recurrent_runtimes: dict[str, Mapping[str, Any]] = {}
+    recurrent_last_window: dict[str, int] = {}
     for index, example in enumerate(examples):
-        if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
-            status = "partial_deadline_exhausted"
-            failures.append({"case_index": index, "window_id": example.window_id, "error": "deadline_exhausted"})
-            break
+        if deadline is not None:
+            try:
+                deadline.check(f"before_case_{index}")
+            except EvaluationDeadlineError as exc:
+                status = "partial_deadline_exhausted"
+                failures.append(
+                    {
+                        "case_index": index,
+                        "window_id": example.window_id,
+                        "stage": "before_case",
+                        "error": str(exc),
+                        "type": type(exc).__name__,
+                    }
+                )
+                break
         try:
             if isinstance(predictor, LearnedObservablePredictor):
                 if state_normalizer is None or target_normalizer is None:
                     raise PredictorContractError("learned evaluation requires train-only normalizers")
-                prediction = predictor.forward(
-                    example.history,
-                    state_normalizer=state_normalizer,
-                    target_normalizer=target_normalizer,
-                )
+                try:
+                    window_index = int(example.window_id.rsplit(":window-", 1)[1])
+                except (IndexError, ValueError) as exc:
+                    raise PredictorContractError("evaluation window id has no numeric suffix") from exc
+                if example.trajectory_id not in recurrent_runtimes:
+                    prediction, runtime = predictor.forward_with_runtime(
+                        example.history,
+                        state_normalizer=state_normalizer,
+                        target_normalizer=target_normalizer,
+                        runtime=None,
+                    )
+                else:
+                    expected_window = recurrent_last_window[example.trajectory_id] + 1
+                    if window_index != expected_window:
+                        raise PredictorContractError(
+                            f"recurrent evaluation windows are not chronological: expected {expected_window}, got {window_index}"
+                        )
+                    prediction, runtime = predictor.forward_frame_with_runtime(
+                        example.history[-1],
+                        state_normalizer=state_normalizer,
+                        target_normalizer=target_normalizer,
+                        runtime=recurrent_runtimes[example.trajectory_id],
+                    )
+                recurrent_runtimes[example.trajectory_id] = runtime
+                recurrent_last_window[example.trajectory_id] = window_index
             else:
                 prediction = predictor.predict(example.history)
             target = validate_public_state_vector(example.target_state, name="evaluation target")
             results.append(EvaluationCaseResult(example.window_id, tuple(prediction), tuple(target)))
+        except EvaluationDeadlineError as exc:
+            failures.append(
+                {
+                    "case_index": index,
+                    "window_id": example.window_id,
+                    "stage": "case",
+                    "error": str(exc),
+                    "type": type(exc).__name__,
+                }
+            )
+            status = "partial_deadline_exhausted"
+            break
         except (PredictorContractError, ValueError, FloatingPointError) as exc:
             failures.append(
                 {
@@ -1489,25 +2011,24 @@ def evaluate_examples(
             break
     # Do not aggregate partial results as if the requested evaluation finished.
     if status != "complete":
-        return {
-            "schema": EVALUATION_SCHEMA,
-            "split": split,
-            "status": status,
-            "cases_requested": len(examples),
-            "cases_completed": len(results),
-            "failures": failures,
-            "metrics": None,
-        }
-    metrics = _prediction_metrics(
-        [np.asarray(result.prediction) for result in results],
-        [np.asarray(result.target) for result in results],
-    )
-    if isinstance(predictor, LearnedObservablePredictor) and target_normalizer is not None:
-        normalized_errors = [
-            target_normalizer.transform(result.prediction) - target_normalizer.transform(result.target)
-            for result in results
-        ]
-        metrics["normalized_rmse"] = float(np.sqrt(np.mean(np.vstack(normalized_errors) ** 2)))
+        return partial_result(status, failures, len(results))
+    try:
+        if deadline is not None:
+            deadline.check("before_metric_aggregation")
+        metrics = _prediction_metrics(
+            [np.asarray(result.prediction) for result in results],
+            [np.asarray(result.target) for result in results],
+            target_normalizer=target_normalizer,
+            deadline=deadline,
+        )
+        if deadline is not None:
+            deadline.check("after_metric_aggregation")
+    except EvaluationDeadlineError as exc:
+        failures.append({"stage": "metric_aggregation", "error": str(exc), "type": type(exc).__name__})
+        return partial_result("partial_deadline_exhausted", failures, len(results))
+    except (PredictorContractError, ValueError, FloatingPointError) as exc:
+        failures.append({"stage": "metric_aggregation", "error": str(exc), "type": type(exc).__name__})
+        return partial_result("partial_metric_failure", failures, len(results))
     return {
         "schema": EVALUATION_SCHEMA,
         "split": split,
@@ -1516,6 +2037,76 @@ def evaluate_examples(
         "cases_completed": len(results),
         "failures": failures,
         "metrics": metrics,
+    }
+
+
+def evaluate_paired_variants(
+    predictors: Mapping[str, Any],
+    examples: Sequence[TransitionExample],
+    *,
+    split: str,
+    state_normalizer: TrainOnlyNormalizer | None = None,
+    target_normalizer: TrainOnlyNormalizer | None = None,
+    deadline: SharedDeadline,
+    allow_final_test: bool = False,
+    development_frozen: bool = False,
+) -> dict[str, Any]:
+    """Evaluate paired variants under one deadline and selection boundary."""
+
+    if len(predictors) != 2:
+        raise PredictorContractError("paired evaluation requires exactly two variants")
+    if not isinstance(deadline, SharedDeadline):
+        raise PredictorContractError("paired evaluation requires one SharedDeadline")
+    variants: dict[str, Any] = {}
+    for name in sorted(predictors):
+        try:
+            deadline.check(f"before_paired_variant_{name}")
+            result = evaluate_examples(
+                predictors[name],
+                examples,
+                split=split,
+                state_normalizer=state_normalizer,
+                target_normalizer=target_normalizer,
+                allow_final_test=allow_final_test,
+                development_frozen=development_frozen,
+                deadline=deadline,
+            )
+        except EvaluationDeadlineError as exc:
+            result = {
+                "schema": EVALUATION_SCHEMA,
+                "split": split,
+                "status": "partial_deadline_exhausted",
+                "cases_requested": len(examples),
+                "cases_completed": 0,
+                "failures": [{"stage": "paired_variant", "error": str(exc), "type": type(exc).__name__}],
+                "metrics": None,
+            }
+        variants[name] = result
+        if result.get("status") != "complete":
+            return {
+                "schema": EVALUATION_SCHEMA,
+                "status": "incomplete_shared_deadline",
+                "selection_eligible": False,
+                "paired_variant_timeout_policy": "one incomplete variant invalidates the pair",
+                "variants": variants,
+            }
+    try:
+        deadline.check("after_paired_variants")
+    except EvaluationDeadlineError as exc:
+        return {
+            "schema": EVALUATION_SCHEMA,
+            "status": "incomplete_shared_deadline",
+            "selection_eligible": False,
+            "paired_variant_timeout_policy": "one incomplete variant invalidates the pair",
+            "failures": [{"stage": "paired_boundary", "error": str(exc), "type": type(exc).__name__}],
+            "variants": variants,
+        }
+    return {
+        "schema": EVALUATION_SCHEMA,
+        "status": "complete",
+        "selection_eligible": True,
+        "paired_variant_timeout_policy": "one incomplete variant invalidates the pair",
+        "variants": variants,
     }
 
 
@@ -1540,6 +2131,8 @@ def recursive_rollout(
     runtime = None
     predictions: list[np.ndarray] = []
     for action_index in range(horizon):
+        frame_history: tuple[PredictorFrame, ...] | None = None
+        next_frame: PredictorFrame | None = None
         if action_index == 0:
             # The initial public history supplies context, while the caller's
             # first action is the action actually being forecast.  This keeps
@@ -1558,18 +2151,30 @@ def recursive_rollout(
                 tuple(actions[action_index].drive_vector),
                 actions[action_index].duration_ticks,
             )
-            frame_history = (history[-1], next_frame)
-            history = list(frame_history)
+            history = [history[-1], next_frame]
         if isinstance(predictor, LearnedObservablePredictor):
             if state_normalizer is None or target_normalizer is None:
                 raise PredictorContractError("learned rollout requires train-only normalizers")
-            prediction, runtime = predictor.forward_with_runtime(
-                frame_history,
-                state_normalizer=state_normalizer,
-                target_normalizer=target_normalizer,
-                runtime=runtime,
-            )
+            if action_index == 0:
+                assert frame_history is not None
+                prediction, runtime = predictor.forward_with_runtime(
+                    frame_history,
+                    state_normalizer=state_normalizer,
+                    target_normalizer=target_normalizer,
+                    runtime=runtime,
+                )
+            else:
+                assert next_frame is not None and runtime is not None
+                prediction, runtime = predictor.forward_frame_with_runtime(
+                    next_frame,
+                    state_normalizer=state_normalizer,
+                    target_normalizer=target_normalizer,
+                    runtime=runtime,
+                )
         else:
+            assert frame_history is not None or next_frame is not None
+            if frame_history is None:
+                frame_history = tuple(history)
             prediction = predictor.predict(frame_history)
         validate_public_state_vector(prediction, name=f"rollout prediction {action_index}")
         predictions.append(prediction)
@@ -1586,52 +2191,53 @@ def _timing_summary(values: Sequence[float]) -> dict[str, float]:
     }
 
 
-def feasibility_probe(*, repeats: int = 3) -> dict[str, Any]:
-    """Measure forward/loss/backward time on train-world data only.
+def feasibility_probe(*, repeats: int = 3, deadline: SharedDeadline | None = None) -> dict[str, Any]:
+    """Measure one-trajectory forward/loss/backward time on train data only.
 
     No optimizer update is performed and no development/test trajectory is
-    materialized by this function.
+    materialized by this function.  The result is deliberately a micro/probe
+    timing, not an end-to-end six-fit training estimate.
     """
 
     if type(repeats) is not int or repeats <= 0:
         raise PredictorContractError("feasibility repeats must be positive")
-    train_examples = build_examples("train", include_test=False)
-    probe_example = train_examples[0]
-    state_normalizer, target_normalizer = fit_train_normalizers(train_examples)
+    train_trajectories = build_trajectories("train", include_test=False)
+    probe_trajectory = train_trajectories[0]
+    state_normalizer, target_normalizer = fit_train_normalizers(train_trajectories)
     timings: dict[str, Any] = {}
     for geometry_enabled in (False, True):
         model = LearnedObservablePredictor(init_seed=PAIRED_INITIALIZATION_SEEDS[0], geometry_enabled=geometry_enabled)
         forward_seconds = []
         backward_seconds = []
         for _ in range(repeats):
+            if deadline is not None:
+                deadline.check(f"feasibility_before_geometry_{geometry_enabled}")
             started = time.perf_counter()
-            model.forward(
-                probe_example.history,
+            model.forward_trajectory(
+                probe_trajectory,
                 state_normalizer=state_normalizer,
                 target_normalizer=target_normalizer,
             )
             forward_seconds.append(time.perf_counter() - started)
             started = time.perf_counter()
             model.loss_and_gradients(
-                probe_example,
+                probe_trajectory,
                 state_normalizer=state_normalizer,
                 target_normalizer=target_normalizer,
             )
             backward_seconds.append(time.perf_counter() - started)
+        if deadline is not None:
+            deadline.check(f"feasibility_after_geometry_{geometry_enabled}")
         timings["geometry_on" if geometry_enabled else "geometry_off"] = {
             "forward_seconds": _timing_summary(forward_seconds),
             "loss_and_backward_seconds": _timing_summary(backward_seconds),
             "optimizer_updates": 0,
             "data_split": "train",
-            "world_seed": probe_example.world_seed,
+            "world_seed": probe_trajectory.world_seed,
+            "trajectory_id": probe_trajectory.trajectory_id,
+            "windows_in_probe": len(probe_trajectory.window_examples()),
             "final_test_used": False,
         }
-    estimated_seconds = sum(
-        timings[name]["loss_and_backward_seconds"]["median_seconds"]
-        * len(PAIRED_INITIALIZATION_SEEDS)
-        * TRAIN_UPDATES
-        for name in ("geometry_off", "geometry_on")
-    )
     return {
         "schema": "vevo.v03.learned-observable-cpu-feasibility.v1",
         "status": "probe_only_no_training",
@@ -1639,29 +2245,32 @@ def feasibility_probe(*, repeats: int = 3) -> dict[str, Any]:
         "platform": platform.platform(),
         "numpy": np.__version__,
         "repeats": repeats,
-        "train_examples_materialized": len(train_examples),
-        "probe_examples": 1,
+        "train_trajectories_materialized": len(train_trajectories),
+        "train_windows_materialized": len(train_trajectories) * (TRAJECTORY_ACTION_COUNT - HISTORY_LENGTH + 1),
+        "probe_trajectories": 1,
+        "probe_windows": len(probe_trajectory.window_examples()),
         "final_test_materialized": False,
         "timings": timings,
-        "estimate_formula": "paired_variants * paired_initialization_seeds * proposed_updates * median(loss_and_backward_seconds)",
-        "proposed_paired_variants": 2,
-        "proposed_paired_initialization_seeds": len(PAIRED_INITIALIZATION_SEEDS),
-        "proposed_updates": TRAIN_UPDATES,
-        "estimated_paired_training_seconds": float(estimated_seconds),
-        "estimated_paired_training_minutes": float(estimated_seconds / 60.0),
-        "estimated_within_wall_clock_budget": bool(estimated_seconds <= MAX_WALL_CLOCK_SECONDS),
-        "estimate_excludes": ["development_evaluation", "checkpoint_serialization", "final_test"],
+        "probe_scope": "one complete train trajectory per geometry variant; forward plus reverse-mode loss/backward only",
+        "not_end_to_end_training_estimate": True,
+        "end_to_end_training_estimate": None,
+        "estimate_excludes": ["all_optimizer_updates", "paired_initialization_seed_sweep", "development_evaluation", "checkpoint_reload", "serialization", "final_test"],
     }
 
 
 def write_pilot_artifacts(output_dir: str | Path, *, repeats: int = 3) -> dict[str, str]:
     """Write only new review artifacts; no checkpoint or training output."""
 
+    deadline = SharedDeadline.from_seconds(MAX_WALL_CLOCK_SECONDS)
     target = Path(output_dir)
     target.mkdir(parents=True, exist_ok=True)
+    deadline.check("serialization_start")
     manifest = build_split_manifest()
+    deadline.check("after_manifest_generation")
     config = pilot_experiment_config(split_manifest_sha256=manifest[MANIFEST_HASH_EXCLUSION])
-    timing = feasibility_probe(repeats=repeats)
+    deadline.check("after_config_generation")
+    timing = feasibility_probe(repeats=repeats, deadline=deadline)
+    deadline.check("after_feasibility_probe")
     readme = (
         "# v0.3 learned public-observable predictor pilot\n\n"
         "Status: implementation/configuration feasibility checkpoint only. "
@@ -1669,12 +2278,16 @@ def write_pilot_artifacts(output_dir: str | Path, *, repeats: int = 3) -> dict[s
         "or closed-loop planning evaluation was run.\n\n"
         f"- Predictor schema: `{LEARNED_PREDICTOR_SCHEMA}`\n"
         f"- Split manifest SHA-256: `{manifest[MANIFEST_HASH_EXCLUSION]}`\n"
+        "- Training data: 8 complete trajectories and 88 windows; the manifest covers 32 trajectories and 352 windows across all split metadata.\n"
+        "- Existing upstream gate: the all-four-models `8/8` training gate remains required before development evaluation; this pilot does not rerun or claim that gate.\n"
         "- Development cases: worlds 9300--9307, explicitly inspected development only; never fresh generalization.\n"
-        "- Final test: reserved; no final-test data was used in the CPU probe.\n"
+        "- Final test: default materialization is closed; the 9400--9407 inputs were generated before this review and are recorded only as exposure history, while replacement worlds 9500--9507 remain reserved.\n"
+        "- Final-test unlock: requires a reviewed, frozen selection artifact with a provenance hash.\n"
         "- Old reports/checkpoints: untouched.\n\n"
-        "The CPU probe measures one train-world example per paired geometry "
-        "variant and performs forward plus reverse-mode loss/backward only; it "
-        "performs zero optimizer updates.\n"
+        "The CPU probe measures one complete train-world trajectory per paired "
+        "geometry variant and performs forward plus reverse-mode loss/backward "
+        "only; it performs zero optimizer updates. This is a micro/probe timing, "
+        "not an end-to-end training estimate.\n"
     )
     files: dict[str, Any] = {
         "experiment_config.json": config,
@@ -1684,6 +2297,7 @@ def write_pilot_artifacts(output_dir: str | Path, *, repeats: int = 3) -> dict[s
     }
     hashes: dict[str, str] = {}
     for name, value in files.items():
+        deadline.check(f"serialization_before_{name}")
         path = target / name
         if isinstance(value, str):
             encoded = value
@@ -1691,6 +2305,7 @@ def write_pilot_artifacts(output_dir: str | Path, *, repeats: int = 3) -> dict[s
             encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n"
         path.write_text(encoded, encoding="utf-8")
         hashes[name] = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+    deadline.check("serialization_after_pilot_files")
     checkpoint_dir = target.parent.parent / "storage" / "checkpoints" / "v03-learned-predictor-pilot"
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
     checkpoint_readme = checkpoint_dir / "README.md"
@@ -1720,8 +2335,11 @@ __all__ = [
     "ACTION_DRIVE_SCALE",
     "ARTIFACT_SCHEMA",
     "CHECKPOINT_SCHEMA",
+    "CONSTRAINT_NEIGHBOR_THRESHOLD",
+    "CONSTRAINT_SUPPLIED_WORK_THRESHOLD",
     "DATASET_SCHEMA",
     "DEVELOPMENT_WORLD_SEEDS",
+    "EvaluationDeadlineError",
     "EvaluationReservationError",
     "HISTORY_LENGTH",
     "LEARNED_PREDICTOR_SCHEMA",
@@ -1737,12 +2355,15 @@ __all__ = [
     "PredictorContractError",
     "PredictorFrame",
     "RolloutBoundsError",
+    "SharedDeadline",
     "TrainOnlyNormalizer",
     "TransitionExample",
     "build_examples",
+    "build_trajectories",
     "build_split_manifest",
     "compute_audit",
     "evaluate_examples",
+    "evaluate_paired_variants",
     "feasibility_probe",
     "fit_train_normalizers",
     "generate_trajectory",
@@ -1753,6 +2374,7 @@ __all__ = [
     "public_vector_to_observation",
     "recursive_rollout",
     "save_checkpoint",
+    "select_development_checkpoint",
     "split_spec",
     "validate_public_state_vector",
     "verify_split_manifest",
