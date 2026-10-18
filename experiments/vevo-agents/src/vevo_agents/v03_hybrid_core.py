@@ -17,17 +17,34 @@ from __future__ import annotations
 
 import hashlib
 import math
+from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
 import numpy as np
 
 from .autograd import Tensor, concatenate, cos, exp, sigmoid, sin, softmax, sqrt, tanh
+from .v03_hybrid_geometry import (
+    G_MAX,
+    GEOMETRY_MODEL_VERSION,
+    GEOMETRY_SNAPSHOT_SCHEMA,
+    GeometryError,
+    bounded_beta_numeric,
+    bounded_beta_tensor,
+    bounded_spd_metric_numeric,
+    bounded_spd_metric_tensor,
+    curvature_upper_bound,
+    metric_attention_logits_numeric,
+    metric_attention_logits_tensor,
+    metric_tension_energy_numeric,
+    metric_tension_energy_tensor,
+)
 from .v03_model import LEGACY_GATE_HEAD, POLICY_VECTOR_DIM, V03FiveBrain
 
 
 HYBRID_CORE_MODEL_VERSION = "vevo.v03.hybrid-core.v2"
 HYBRID_CORE_SCHEMA = "vevo.v03.hybrid-core.runtime.v2"
 HYBRID_CORE_PARAMETER_SCHEMA = "vevo.v03.hybrid-core.parameters.v2"
+HYBRID_CORE_GEOMETRY_SCHEMA = "vevo.v03.hybrid-core.shared-geometry.v1"
 
 PERIPHERAL_COUNT = 4
 PERIPHERAL_HIDDEN = 8
@@ -71,6 +88,42 @@ class HybridCoreSnapshotError(ValueError):
 
 class HybridCoreParameterBudgetError(ValueError):
     """The explicitly bounded incremental architecture would exceed its cap."""
+
+
+@dataclass(frozen=True, slots=True)
+class SharedGeometryParameters:
+    """One opt-in parameter object shared by attention and tension."""
+
+    enabled: bool
+    raw_B_name: str = "h.geometry.raw_B"
+    raw_beta_name: str = "h.geometry.raw_beta"
+    schema: str = HYBRID_CORE_GEOMETRY_SCHEMA
+    model_version: str = GEOMETRY_MODEL_VERSION
+
+    def numeric(self, params: Mapping[str, np.ndarray]) -> dict[str, Any] | None:
+        if not self.enabled:
+            return None
+        raw_B = np.asarray(params[self.raw_B_name])
+        raw_beta = np.asarray(params[self.raw_beta_name])
+        return {
+            "schema": self.schema,
+            "model_version": self.model_version,
+            "metric": bounded_spd_metric_numeric(raw_B),
+            "raw_beta": bounded_beta_numeric(raw_beta),
+            "raw_B": raw_B.copy(),
+        }
+
+    def tensor(self, params: Mapping[str, Tensor]) -> dict[str, Any] | None:
+        if not self.enabled:
+            return None
+        raw_B = params[self.raw_B_name]
+        raw_beta = params[self.raw_beta_name]
+        return {
+            "schema": self.schema,
+            "model_version": self.model_version,
+            "metric": bounded_spd_metric_tensor(raw_B),
+            "raw_beta": bounded_beta_tensor(raw_beta),
+        }
 
 
 def _sigmoid_numeric(value: np.ndarray | float) -> np.ndarray | float:
@@ -356,10 +409,21 @@ class V03HybridCore:
     ATTENTION_DIM = ATTENTION_DIM
     TENSION_DIM = TENSION_DIM
 
-    def __init__(self, seed: int = 7):
+    def __init__(
+        self,
+        seed: int = 7,
+        *,
+        geometry_enabled: bool = False,
+        geometry_raw_B: np.ndarray | None = None,
+        geometry_raw_beta: float = 0.05,
+    ):
         if type(seed) is not int or seed < 0:
             raise ValueError("core seed must be a non-negative integer")
+        if not isinstance(geometry_enabled, bool):
+            raise ValueError("geometry_enabled must be boolean")
         self.seed = seed
+        self.geometry_enabled = geometry_enabled
+        self.geometry_parameters = SharedGeometryParameters(geometry_enabled)
         self.base = V03FiveBrain(seed, gate_head=LEGACY_GATE_HEAD)
         rng = np.random.default_rng(np.random.SeedSequence([seed, HYBRID_PARAMETER_SEED_SALT]))
         self.params: dict[str, np.ndarray] = {}
@@ -404,6 +468,34 @@ class V03HybridCore:
         self.params["h.alpha_raw"] = np.zeros(PERIPHERAL_COUNT, dtype=np.float64)
         self.params["h.lambda_raw"] = np.zeros(1, dtype=np.float64)
 
+        if geometry_enabled:
+            geometry_rng = np.random.default_rng(
+                np.random.SeedSequence([seed, HYBRID_PARAMETER_SEED_SALT, 1])
+            )
+            if geometry_raw_B is None:
+                raw_B = geometry_rng.normal(0.0, 0.02, (4, 4)).astype(np.float64)
+                if not np.any(raw_B):
+                    raw_B[0, 0] = 0.02
+            else:
+                raw_B = np.asarray(geometry_raw_B)
+                try:
+                    finite = np.isfinite(raw_B).all()
+                except (TypeError, ValueError) as exc:
+                    raise ValueError("geometry_raw_B must be a finite non-boolean (4, 4) array") from exc
+                if raw_B.dtype.kind == "b" or raw_B.shape != (4, 4) or not finite:
+                    raise ValueError("geometry_raw_B must be a finite non-boolean (4, 4) array")
+                raw_B = raw_B.astype(np.float64, copy=True)
+            try:
+                bounded_spd_metric_numeric(raw_B)
+                bounded_beta_numeric(geometry_raw_beta)
+            except GeometryError as exc:
+                raise ValueError(str(exc)) from exc
+            self.params[self.geometry_parameters.raw_B_name] = raw_B
+            self.params[self.geometry_parameters.raw_beta_name] = np.asarray(
+                geometry_raw_beta,
+                dtype=np.float64,
+            )
+
         audit = self.parameter_budget_audit()
         if not audit["within_cap"]:
             raise HybridCoreParameterBudgetError(
@@ -440,7 +532,7 @@ class V03HybridCore:
         return _parameter_digest(self.base.params, self.params)
 
     def model_identity(self) -> dict[str, Any]:
-        return {
+        identity = {
             "schema": HYBRID_CORE_PARAMETER_SCHEMA,
             "model_version": HYBRID_CORE_MODEL_VERSION,
             "seed": self.seed,
@@ -467,6 +559,17 @@ class V03HybridCore:
             "base_action_head": "legacy-comparator-only; no integrated task action adapter",
             "runtime_snapshot_is_weights_checkpoint": False,
         }
+        if self.geometry_enabled:
+            identity["shared_geometry"] = {
+                "enabled": True,
+                "schema": self.geometry_parameters.schema,
+                "model_version": self.geometry_parameters.model_version,
+                "coordinate_dim": 4,
+                "center_state_dim": TENSION_STATE_DIM,
+                "attention_and_tension_share_one_metric": True,
+                "identity_metric_is_external_ablation": True,
+            }
+        return identity
 
     def initial_runtime(
         self,
@@ -613,6 +716,7 @@ class V03HybridCore:
         module_presence: np.ndarray,
         memory_presence: np.ndarray,
         params: Mapping[str, np.ndarray],
+        geometry: Mapping[str, Any] | None = None,
     ) -> dict[str, np.ndarray]:
         messages = np.asarray(messages, dtype=np.float64).reshape(PERIPHERAL_COUNT, MESSAGE_DIM)
         memory = np.asarray(memory, dtype=np.float64).reshape(MEMORY_SLOTS, MEMORY_DIM)
@@ -646,11 +750,22 @@ class V03HybridCore:
                 "masked_logits": np.full_like(zeros, -1.0e9),
                 "weights": zeros,
                 "context": np.zeros(ATTENTION_DIM, dtype=np.float64),
+                **({"geometry_metric": geometry["metric"]} if geometry is not None else {}),
             }
         raw_logits = np.asarray(
             [float(np.dot(query, key) / math.sqrt(ATTENTION_DIM)) for key in keys],
             dtype=np.float64,
         )
+        if geometry is not None:
+            raw_logits = metric_attention_logits_numeric(
+                query,
+                np.asarray(keys, dtype=np.float64),
+                geometry["metric"],
+                geometry["raw_beta"],
+                raw_logits,
+            )
+            if not np.isfinite(raw_logits).all():
+                raise ValueError("geometry attention logits are non-finite")
         bounded_logits = np.asarray([_attention_logit_numeric(value) for value in raw_logits], dtype=np.float64)
         masked_logits = bounded_logits.copy()
         bounded_values = np.asarray(values, dtype=np.float64) * np.asarray(presence, dtype=np.float64)[:, None]
@@ -670,6 +785,7 @@ class V03HybridCore:
             "masked_logits": masked_logits,
             "weights": weights,
             "context": context,
+            **({"geometry_metric": geometry["metric"]} if geometry is not None else {}),
         }
 
     @staticmethod
@@ -681,6 +797,7 @@ class V03HybridCore:
         module_presence: np.ndarray,
         memory_presence: np.ndarray,
         params: Mapping[str, Tensor],
+        geometry: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         module_presence = _validate_presence(module_presence, PERIPHERAL_COUNT, name="module_presence")
         memory_presence = _validate_presence(memory_presence, MEMORY_SLOTS, name="memory_presence")
@@ -711,11 +828,22 @@ class V03HybridCore:
                 "masked_logits": Tensor(np.full(PERIPHERAL_COUNT + MEMORY_SLOTS, -1.0e9, dtype=np.float64)),
                 "weights": zeros,
                 "context": Tensor(np.zeros(ATTENTION_DIM, dtype=np.float64)),
+                **({"geometry_metric": geometry["metric"]} if geometry is not None else {}),
             }
         raw_logits = concatenate(
             [((query * key).sum() / math.sqrt(ATTENTION_DIM)).reshape(1) for key in keys],
             axis=0,
         )
+        if geometry is not None:
+            raw_logits = metric_attention_logits_tensor(
+                query,
+                key_trace,
+                geometry["metric"],
+                geometry["raw_beta"],
+                raw_logits,
+            )
+            if not np.isfinite(raw_logits.data).all():
+                raise ValueError("geometry attention logits are non-finite")
         bounded_logits = _attention_logit_tensor(raw_logits)
         masked_logits = concatenate(
             [
@@ -739,6 +867,7 @@ class V03HybridCore:
             "masked_logits": masked_logits,
             "weights": weights,
             "context": context,
+            **({"geometry_metric": geometry["metric"]} if geometry is not None else {}),
         }
 
     def _tension_coefficients_numeric(
@@ -767,7 +896,18 @@ class V03HybridCore:
         c: np.ndarray,
         proposals: np.ndarray,
         coefficients: Mapping[str, Any],
+        geometry: Mapping[str, Any] | None = None,
     ) -> float:
+        if geometry is not None:
+            return metric_tension_energy_numeric(
+                c,
+                proposals,
+                np.asarray(coefficients["weights"], dtype=np.float64),
+                coefficients["effective_alpha"],
+                coefficients["lambda"],
+                coefficients["prior"],
+                geometry["metric"],
+            )
         energy = 0.5 * float(coefficients["lambda"]) * float(
             np.dot(c - coefficients["prior"], c - coefficients["prior"])
         )
@@ -781,7 +921,17 @@ class V03HybridCore:
         c: np.ndarray,
         proposals: np.ndarray,
         coefficients: Mapping[str, Any],
+        geometry: Mapping[str, Any] | None = None,
     ) -> np.ndarray:
+        if geometry is not None:
+            gradient = float(coefficients["lambda"]) * (c - coefficients["prior"])
+            metric = np.asarray(geometry["metric"], dtype=np.float64)
+            for index, weight in enumerate(coefficients["weights"]):
+                residual = weight @ c - proposals[index]
+                gradient = gradient + float(coefficients["effective_alpha"][index]) * (
+                    weight.T @ (metric @ residual)
+                )
+            return np.asarray(gradient, dtype=np.float64)
         gradient = float(coefficients["lambda"]) * (c - coefficients["prior"])
         for index, weight in enumerate(coefficients["weights"]):
             residual = weight @ c - proposals[index]
@@ -794,6 +944,7 @@ class V03HybridCore:
         c_prior_input: Sequence[float] | np.ndarray,
         *,
         module_presence: Sequence[float] | np.ndarray | None = None,
+        geometry: Mapping[str, Any] | None = None,
     ) -> tuple[np.ndarray, dict[str, Any]]:
         """Run the two fixed-objective projected constraint refinements."""
 
@@ -805,22 +956,28 @@ class V03HybridCore:
             raise ValueError("tension initial state must be a finite 12-D center vector")
         mask = _validate_presence(module_presence, PERIPHERAL_COUNT, name="module_presence")
         c = _project_numeric(c, TENSION_STATE_RADIUS)
+        if geometry is None and self.geometry_enabled:
+            geometry = self.geometry_parameters.numeric(self.params)
         coefficients = self._tension_coefficients_numeric(mask, c)
-        energies = [self._tension_energy_numeric(c, proposals_array, coefficients)]
+        energies = [self._tension_energy_numeric(c, proposals_array, coefficients, geometry)]
         gradients = []
-        step_size = 1.0 / (
-            sum(
+        if geometry is None:
+            curvature = sum(
                 float(coefficients["effective_alpha"][index]) * float(np.sum(weight * weight))
                 for index, weight in enumerate(coefficients["weights"])
+            ) + float(coefficients["lambda"])
+        else:
+            curvature = curvature_upper_bound(
+                np.asarray(coefficients["weights"], dtype=np.float64),
+                coefficients["effective_alpha"],
+                coefficients["lambda"],
             )
-            + float(coefficients["lambda"])
-            + TENSION_EPSILON
-        )
+        step_size = 1.0 / (curvature + TENSION_EPSILON)
         for _ in range(REFINEMENT_STEPS):
-            gradient = self._tension_gradient_numeric(c, proposals_array, coefficients)
+            gradient = self._tension_gradient_numeric(c, proposals_array, coefficients, geometry)
             gradients.append(gradient.copy())
             c = _project_numeric(c - step_size * gradient, TENSION_STATE_RADIUS)
-            energies.append(self._tension_energy_numeric(c, proposals_array, coefficients))
+            energies.append(self._tension_energy_numeric(c, proposals_array, coefficients, geometry))
         return c, {
             "objective_coefficients": {
                 "alpha": coefficients["alpha"].copy(),
@@ -828,11 +985,13 @@ class V03HybridCore:
                 "lambda": float(coefficients["lambda"]),
                 "prior": coefficients["prior"].copy(),
                 "weights": [weight.copy() for weight in coefficients["weights"]],
+                **({"metric": np.asarray(geometry["metric"], dtype=np.float64).copy()} if geometry is not None else {}),
             },
             "energies": energies,
             "gradients": gradients,
             "step_size": float(step_size),
             "refinement_steps": REFINEMENT_STEPS,
+            **({"metric": geometry["metric"]} if geometry is not None else {}),
         }
 
     @staticmethod
@@ -854,7 +1013,27 @@ class V03HybridCore:
         }
 
     @staticmethod
-    def _tension_energy_tensor(c: Tensor, proposals: Sequence[Tensor], coefficients: Mapping[str, Any]) -> Tensor:
+    def _tension_energy_tensor(
+        c: Tensor,
+        proposals: Sequence[Tensor],
+        coefficients: Mapping[str, Any],
+        geometry: Mapping[str, Any] | None = None,
+    ) -> Tensor:
+        if geometry is not None:
+            proposal_matrix = concatenate([proposal.reshape(1, TENSION_DIM) for proposal in proposals], axis=0)
+            weight_matrix = concatenate(
+                [weight.reshape(1, TENSION_DIM, TENSION_STATE_DIM) for weight in coefficients["weights"]],
+                axis=0,
+            )
+            return metric_tension_energy_tensor(
+                c,
+                proposal_matrix,
+                weight_matrix,
+                coefficients["effective_alpha"],
+                coefficients["lambda"],
+                coefficients["prior"],
+                geometry["metric"],
+            )
         residual_prior = c - coefficients["prior"]
         energy = 0.5 * coefficients["lambda"] * (residual_prior * residual_prior).sum()
         for index, weight in enumerate(coefficients["weights"]):
@@ -863,7 +1042,21 @@ class V03HybridCore:
         return energy
 
     @staticmethod
-    def _tension_gradient_tensor(c: Tensor, proposals: Sequence[Tensor], coefficients: Mapping[str, Any]) -> Tensor:
+    def _tension_gradient_tensor(
+        c: Tensor,
+        proposals: Sequence[Tensor],
+        coefficients: Mapping[str, Any],
+        geometry: Mapping[str, Any] | None = None,
+    ) -> Tensor:
+        if geometry is not None:
+            gradient = coefficients["lambda"] * (c - coefficients["prior"])
+            metric = geometry["metric"]
+            for index, weight in enumerate(coefficients["weights"]):
+                residual = weight @ c - proposals[index]
+                gradient = gradient + coefficients["effective_alpha"][index] * (
+                    weight.T @ (metric @ residual)
+                )
+            return gradient
         gradient = coefficients["lambda"] * (c - coefficients["prior"])
         for index, weight in enumerate(coefficients["weights"]):
             residual = weight @ c - proposals[index]
@@ -876,23 +1069,31 @@ class V03HybridCore:
         c_prior_input: Tensor,
         module_presence: np.ndarray,
         params: Mapping[str, Tensor],
+        geometry: Mapping[str, Any] | None = None,
     ) -> tuple[Tensor, dict[str, Any]]:
         module_presence = _validate_presence(module_presence, PERIPHERAL_COUNT, name="module_presence")
+        if geometry is None and self.geometry_enabled:
+            geometry = self.geometry_parameters.tensor(params)
         c = _project_tensor(c_prior_input, TENSION_STATE_RADIUS)
         coefficients = self._tension_coefficients_tensor(params, module_presence, c)
-        energies = [self._tension_energy_tensor(c, proposals, coefficients)]
+        energies = [self._tension_energy_tensor(c, proposals, coefficients, geometry)]
         gradients: list[Tensor] = []
         lipschitz = Tensor(np.zeros(1, dtype=np.float64))
         for index, weight in enumerate(coefficients["weights"]):
             lipschitz = lipschitz + coefficients["effective_alpha"][index] * (weight * weight).sum()
-        step_size = 1.0 / (lipschitz[0] + coefficients["lambda"] + TENSION_EPSILON)
+        if geometry is None:
+            curvature = lipschitz[0] + coefficients["lambda"]
+        else:
+            curvature = G_MAX * lipschitz[0] + coefficients["lambda"]
+        step_size = 1.0 / (curvature + TENSION_EPSILON)
         for _ in range(REFINEMENT_STEPS):
-            gradient = self._tension_gradient_tensor(c, proposals, coefficients)
+            gradient = self._tension_gradient_tensor(c, proposals, coefficients, geometry)
             gradients.append(gradient)
             c = _project_tensor(c - step_size * gradient, TENSION_STATE_RADIUS)
-            energies.append(self._tension_energy_tensor(c, proposals, coefficients))
+            energies.append(self._tension_energy_tensor(c, proposals, coefficients, geometry))
         return c, {
             "objective_coefficients": coefficients,
+            **({"metric": geometry["metric"]} if geometry is not None else {}),
             "energies": energies,
             "gradients": gradients,
             "step_size": step_size,
@@ -1013,6 +1214,7 @@ class V03HybridCore:
             @ np.concatenate((base_next["central"], oscillators[PERIPHERAL_COUNT].reshape(-1)))
             + self.params["h.b_message_c"]
         )
+        geometry_state = self.geometry_parameters.numeric(self.params) if self.geometry_enabled else None
         attention = self._attention_numeric(
             messages[:PERIPHERAL_COUNT],
             base_next["memory"],
@@ -1021,6 +1223,7 @@ class V03HybridCore:
             module_mask,
             memory_mask,
             self.params,
+            geometry_state,
         )
         proposals = messages[:PERIPHERAL_COUNT] * module_mask[:, None]
         contextual_prior = base_next["central"] + np.tanh(
@@ -1030,6 +1233,7 @@ class V03HybridCore:
             proposals,
             contextual_prior,
             module_presence=module_mask,
+            geometry=geometry_state,
         )
         integrated_central = self._integrate_center_numeric(base_next["central"], tension)
         integrated_memory, hybrid_memory_trace = self._hybrid_memory_write_numeric(
@@ -1070,6 +1274,12 @@ class V03HybridCore:
             "memory_presence": memory_mask.copy(),
             "mask_scope": "hybrid_attention_and_tension_only",
         }
+        if self.geometry_enabled:
+            trace["geometry"] = {
+                "schema": self.geometry_parameters.schema,
+                "model_version": self.geometry_parameters.model_version,
+                "metric": geometry_state["metric"].copy(),
+            }
         return next_runtime, trace
 
     def tensor_parameters(self, *, requires_grad: bool = True) -> dict[str, Tensor]:
@@ -1179,6 +1389,7 @@ class V03HybridCore:
             axis=0,
         )
         messages.append(tanh(params["h.W_message_c"] @ center_input + params["h.b_message_c"]))
+        geometry_state = self.geometry_parameters.tensor(params) if self.geometry_enabled else None
         attention = self._attention_tensor(
             messages[:PERIPHERAL_COUNT],
             base_next["memory"],
@@ -1187,6 +1398,7 @@ class V03HybridCore:
             module_presence,
             memory_presence,
             params,
+            geometry_state,
         )
         proposals = [messages[index] * float(module_presence[index]) for index in range(PERIPHERAL_COUNT)]
         contextual_prior = base_next["central"] + tanh(
@@ -1197,6 +1409,7 @@ class V03HybridCore:
             contextual_prior,
             module_presence,
             params,
+            geometry_state,
         )
         integrated_central_tensor = tanh(
             0.5 * base_next["central"] + 0.5 * tension
@@ -1218,7 +1431,7 @@ class V03HybridCore:
             "module_presence": module_presence.copy(),
             "memory_presence": memory_presence.copy(),
         }
-        return next_runtime, {
+        trace = {
             "time": next_runtime["time"],
             "dt": dt,
             "base": base_trace,
@@ -1239,6 +1452,13 @@ class V03HybridCore:
             "memory_presence": memory_presence.copy(),
             "mask_scope": "hybrid_attention_and_tension_only",
         }
+        if self.geometry_enabled:
+            trace["geometry"] = {
+                "schema": self.geometry_parameters.schema,
+                "model_version": self.geometry_parameters.model_version,
+                "metric": geometry_state["metric"],
+            }
+        return next_runtime, trace
 
     def tensor_step(
         self,
@@ -1344,7 +1564,7 @@ class V03HybridCore:
 
     def snapshot_runtime(self, runtime: Mapping[str, Any]) -> dict[str, Any]:
         self._validate_runtime(runtime)
-        return {
+        snapshot = {
             "schema": HYBRID_CORE_SCHEMA,
             "model_version": HYBRID_CORE_MODEL_VERSION,
             "parameter_digest": self.parameter_digest(),
@@ -1361,6 +1581,14 @@ class V03HybridCore:
             "module_presence": np.asarray(runtime["module_presence"], dtype=np.float64).tolist(),
             "memory_presence": np.asarray(runtime["memory_presence"], dtype=np.float64).tolist(),
         }
+        if self.geometry_enabled:
+            snapshot["geometry"] = {
+                "schema": GEOMETRY_SNAPSHOT_SCHEMA,
+                "model_version": GEOMETRY_MODEL_VERSION,
+                "core_schema": self.geometry_parameters.schema,
+                "enabled": True,
+            }
+        return snapshot
 
     def restore_runtime(self, snapshot: Mapping[str, Any]) -> dict[str, Any]:
         if not isinstance(snapshot, Mapping) or snapshot.get("schema") != HYBRID_CORE_SCHEMA:
@@ -1369,6 +1597,19 @@ class V03HybridCore:
             raise HybridCoreSnapshotError("hybrid runtime model version mismatch")
         if snapshot.get("parameter_digest") != self.parameter_digest():
             raise HybridCoreSnapshotError("hybrid runtime parameter digest mismatch")
+        geometry_snapshot = snapshot.get("geometry")
+        if self.geometry_enabled:
+            if not isinstance(geometry_snapshot, Mapping):
+                raise HybridCoreSnapshotError("shared geometry snapshot is missing")
+            if (
+                geometry_snapshot.get("schema") != GEOMETRY_SNAPSHOT_SCHEMA
+                or geometry_snapshot.get("model_version") != GEOMETRY_MODEL_VERSION
+                or geometry_snapshot.get("core_schema") != self.geometry_parameters.schema
+                or geometry_snapshot.get("enabled") is not True
+            ):
+                raise HybridCoreSnapshotError("shared geometry snapshot version mismatch")
+        elif geometry_snapshot is not None:
+            raise HybridCoreSnapshotError("geometry-enabled snapshot cannot restore into default core")
         base = snapshot.get("base_runtime")
         if not isinstance(base, Mapping):
             raise HybridCoreSnapshotError("hybrid runtime base state is missing")
@@ -1408,6 +1649,7 @@ __all__ = [
     "GAMMA_MAX",
     "GAMMA_MIN",
     "HYBRID_CORE_MODEL_VERSION",
+    "HYBRID_CORE_GEOMETRY_SCHEMA",
     "HYBRID_CORE_SCHEMA",
     "HybridCoreParameterBudgetError",
     "HybridCoreSnapshotError",
@@ -1429,5 +1671,6 @@ __all__ = [
     "TENSION_STATE_DIM",
     "TIME_UNIT",
     "V03HybridCore",
+    "SharedGeometryParameters",
     "advance_oscillator",
 ]

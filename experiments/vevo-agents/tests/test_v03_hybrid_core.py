@@ -440,6 +440,80 @@ class V03HybridCoreTests(unittest.TestCase):
         with self.assertRaises(HybridCoreSnapshotError):
             core.restore_runtime(snapshot)
 
+    def test_opt_in_shared_geometry_is_in_the_core_attention_tension_and_downstream_path(self):
+        core = V03HybridCore(47, geometry_enabled=True)
+        self.assertEqual(core.incremental_parameter_count(), 1202)
+        self.assertTrue(np.any(core.params["h.geometry.raw_B"] != 0.0))
+        vector = self._vectors(48, 1)[0]
+        numeric_runtime, numeric_trace = core.step(core.initial_runtime(), vector)
+        tensor_runtime, tensor_trace = core.tensor_step(
+            core.tensor_initial_runtime(),
+            vector,
+            params=core.tensor_parameters(requires_grad=False),
+        )
+        np.testing.assert_allclose(numeric_runtime["central"], tensor_runtime["central"].data, rtol=1e-12, atol=1e-12)
+        np.testing.assert_allclose(numeric_runtime["memory"], tensor_runtime["memory"].data, rtol=1e-12, atol=1e-12)
+        np.testing.assert_allclose(
+            numeric_trace["attention"]["context"],
+            tensor_trace["attention"]["context"].data,
+            rtol=1e-12,
+            atol=1e-12,
+        )
+        np.testing.assert_allclose(
+            numeric_trace["tension_refined"],
+            tensor_trace["tension_refined"].data,
+            rtol=1e-12,
+            atol=1e-12,
+        )
+        self.assertEqual(numeric_trace["tension"]["objective_coefficients"]["weights"][0].shape, (4, 12))
+        self.assertEqual(numeric_trace["geometry"]["metric"].shape, (4, 4))
+        self.assertIs(
+            numeric_trace["attention"]["geometry_metric"],
+            numeric_trace["tension"]["metric"],
+        )
+        self.assertIn("h.geometry.raw_B", core.tensor_parameters(requires_grad=True))
+
+    def test_geometry_raw_metric_finite_difference_reaches_attention_refinement_and_outputs(self):
+        core = V03HybridCore(49, geometry_enabled=True)
+        vector = self._vectors(50, 1)[0]
+        _, gradients, _ = core.loss_and_gradients([vector])
+        index = (0, 1)
+        self.assertGreater(abs(float(gradients["h.geometry.raw_B"][index])), 0.0)
+        original = float(core.params["h.geometry.raw_B"][index])
+        epsilon = 1e-6
+        core.params["h.geometry.raw_B"][index] = original + epsilon
+        plus_loss = core.loss_only([vector])
+        plus_runtime, plus_trace = core.step(core.initial_runtime(), vector)
+        core.params["h.geometry.raw_B"][index] = original - epsilon
+        minus_loss = core.loss_only([vector])
+        minus_runtime, minus_trace = core.step(core.initial_runtime(), vector)
+        core.params["h.geometry.raw_B"][index] = original
+        finite_difference = (plus_loss - minus_loss) / (2.0 * epsilon)
+        self.assertAlmostEqual(float(gradients["h.geometry.raw_B"][index]), float(finite_difference), places=5)
+        self.assertGreater(
+            float(np.linalg.norm(plus_trace["attention"]["context"] - minus_trace["attention"]["context"])),
+            0.0,
+        )
+        self.assertGreater(
+            float(np.linalg.norm(plus_trace["tension_refined"] - minus_trace["tension_refined"])),
+            0.0,
+        )
+        self.assertGreater(float(np.linalg.norm(plus_runtime["central"] - minus_runtime["central"])), 0.0)
+        self.assertGreater(float(np.linalg.norm(plus_runtime["memory"] - minus_runtime["memory"])), 0.0)
+
+    def test_geometry_runtime_snapshot_requires_matching_geometry_version(self):
+        core = V03HybridCore(51, geometry_enabled=True)
+        snapshot = core.snapshot_runtime(core.initial_runtime())
+        restored = core.restore_runtime(snapshot)
+        self._assert_runtime_close(restored, core.initial_runtime())
+        broken = copy.deepcopy(snapshot)
+        broken["geometry"]["model_version"] = "wrong"
+        with self.assertRaises(HybridCoreSnapshotError):
+            core.restore_runtime(broken)
+        default_core = V03HybridCore(51)
+        with self.assertRaises(HybridCoreSnapshotError):
+            default_core.restore_runtime(snapshot)
+
     def test_feedback_is_causal_and_dt_is_validated(self):
         core = V03HybridCore(43)
         vector = self._vectors(44, 1)[0]

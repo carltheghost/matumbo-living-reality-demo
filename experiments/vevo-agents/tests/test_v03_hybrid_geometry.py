@@ -191,6 +191,42 @@ class V03HybridGeometryTests(unittest.TestCase):
                 self.state, self.proposals, self.maps, self.alpha, 0.4, self.prior, asymmetric
             )
 
+    def test_unsafe_raw_metric_coordinates_and_boolean_arrays_fail_before_arithmetic(self):
+        with self.assertRaises(GeometryError):
+            bounded_spd_metric_numeric(np.full((4, 4), 1.0e200))
+        with self.assertRaises(GeometryError):
+            bounded_spd_metric_tensor(Tensor(np.full((4, 4), 1.0e200)))
+        with self.assertRaises(GeometryError):
+            bounded_spd_metric_numeric(np.ones((4, 4), dtype=bool))
+        with self.assertRaises(GeometryError):
+            metric_attention_logits_numeric(self.query, np.asarray(self.keys, dtype=bool), self.metric, 0.0)
+        with self.assertRaises(GeometryError):
+            metric_attention_logits_numeric(np.full(4, 1.0e6), self.keys, self.metric, 0.0)
+
+    def test_dynamic_center_maps_and_count_mismatch_are_validated(self):
+        state = np.linspace(-0.3, 0.3, 12)
+        prior = np.zeros(12)
+        maps = np.zeros((2, 4, 12))
+        maps[0, :, :4] = self.maps[0]
+        maps[1, :, :4] = self.maps[1]
+        energy = metric_tension_energy_numeric(
+            state, self.proposals, maps, self.alpha, 0.4, prior, self.metric
+        )
+        self.assertTrue(np.isfinite(energy))
+        refined, trace = refine_tension_numeric(
+            state, self.proposals, maps, self.alpha, 0.4, prior, self.metric, steps=2
+        )
+        self.assertEqual(refined.shape, (12,))
+        self.assertEqual(len(trace.states), 3)
+        with self.assertRaises(GeometryError):
+            metric_tension_energy_numeric(
+                state, self.proposals[:1], maps, self.alpha, 0.4, prior, self.metric
+            )
+        with self.assertRaises(GeometryError):
+            metric_tension_energy_numeric(
+                state, self.proposals, np.asarray(maps, dtype=bool), self.alpha, 0.4, prior, self.metric
+            )
+
     def test_snapshot_roundtrip_and_version_checks(self):
         encoded = serialize_geometry_snapshot(self.raw_B, 0.25)
         snapshot = restore_geometry_snapshot(encoded)

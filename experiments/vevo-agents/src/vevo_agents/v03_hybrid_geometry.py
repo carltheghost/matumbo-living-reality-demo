@@ -31,6 +31,8 @@ BETA_MAX = 1.0
 REFINEMENT_RADIUS = 2.0
 MAX_REFINEMENT_STEPS = 64
 GEOMETRY_EPSILON = 1.0e-12
+MAX_SAFE_RAW_B_ABS = 1.0e100
+MAX_COORDINATE_ABS = 16.0
 
 
 class GeometryError(ValueError):
@@ -44,6 +46,10 @@ class GeometrySnapshotError(GeometryError):
 def _finite_scalar(value: Any, *, name: str) -> float:
     if isinstance(value, (bool, np.bool_)):
         raise GeometryError(f"{name} must be a finite scalar")
+    if isinstance(value, np.ndarray) and value.shape == ():
+        value = value.item()
+    if isinstance(value, np.generic):
+        value = value.item()
     try:
         result = float(value)
     except (TypeError, ValueError) as exc:
@@ -54,6 +60,9 @@ def _finite_scalar(value: Any, *, name: str) -> float:
 
 
 def _finite_array(value: Any, *, name: str, shape: tuple[int, ...]) -> np.ndarray:
+    raw = np.asarray(value)
+    if raw.dtype.kind == "b":
+        raise GeometryError(f"{name} must not be a boolean array")
     result = np.asarray(value, dtype=np.float64)
     if result.shape != shape or not np.isfinite(result).all():
         raise GeometryError(f"{name} must be finite with shape {shape}")
@@ -61,17 +70,28 @@ def _finite_array(value: Any, *, name: str, shape: tuple[int, ...]) -> np.ndarra
 
 
 def _validate_raw_metric(raw_B: Any) -> np.ndarray:
-    return _finite_array(raw_B, name="raw_B", shape=(SHARED_GEOMETRY_DIM, SHARED_GEOMETRY_DIM))
+    result = _finite_array(raw_B, name="raw_B", shape=(SHARED_GEOMETRY_DIM, SHARED_GEOMETRY_DIM))
+    if np.max(np.abs(result), initial=0.0) > MAX_SAFE_RAW_B_ABS:
+        raise GeometryError("raw_B is too large for safe bounded metric arithmetic")
+    return result
 
 
 def _validate_coordinate(value: Any, *, name: str) -> np.ndarray:
-    return _finite_array(value, name=name, shape=(SHARED_GEOMETRY_DIM,))
+    result = _finite_array(value, name=name, shape=(SHARED_GEOMETRY_DIM,))
+    if np.any(np.abs(result) > MAX_COORDINATE_ABS):
+        raise GeometryError(f"{name} exceeds the bounded coordinate contract")
+    return result
 
 
 def _validate_coordinates(value: Any, *, name: str) -> np.ndarray:
+    raw = np.asarray(value)
+    if raw.dtype.kind == "b":
+        raise GeometryError(f"{name} must not be a boolean array")
     result = np.asarray(value, dtype=np.float64)
     if result.ndim != 2 or result.shape[1] != SHARED_GEOMETRY_DIM or not np.isfinite(result).all():
         raise GeometryError(f"{name} must be finite with shape (n, {SHARED_GEOMETRY_DIM})")
+    if np.any(np.abs(result) > MAX_COORDINATE_ABS):
+        raise GeometryError(f"{name} exceeds the bounded coordinate contract")
     return result.copy()
 
 
@@ -108,6 +128,8 @@ def bounded_spd_metric_tensor(raw_B: Tensor) -> Tensor:
         raise GeometryError("raw_B must be a Tensor with shape (4, 4)")
     if not np.isfinite(raw_B.data).all():
         raise GeometryError("raw_B must be finite")
+    if np.max(np.abs(raw_B.data), initial=0.0) > MAX_SAFE_RAW_B_ABS:
+        raise GeometryError("raw_B is too large for safe bounded metric arithmetic")
     denominator = 1.0 + (raw_B * raw_B).sum()
     gram = raw_B.T @ raw_B
     identity = Tensor(np.eye(SHARED_GEOMETRY_DIM), requires_grad=False)
@@ -225,13 +247,24 @@ def _validate_tension_inputs(
     prior: Any,
     metric: Any,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float, np.ndarray, np.ndarray]:
-    state_value = _validate_coordinate(state, name="state")
+    raw_state = np.asarray(state)
+    if raw_state.dtype.kind == "b":
+        raise GeometryError("state must not be a boolean array")
+    state_value = np.asarray(state, dtype=np.float64)
+    if state_value.ndim != 1 or state_value.size == 0 or not np.isfinite(state_value).all():
+        raise GeometryError("state must be finite with a non-empty 1-D shape")
     proposal_values = _validate_coordinates(proposals, name="proposals")
+    raw_maps = np.asarray(maps)
+    if raw_maps.dtype.kind == "b":
+        raise GeometryError("maps must not be a boolean array")
     map_values = np.asarray(maps, dtype=np.float64)
-    if map_values.shape != (proposal_values.shape[0], SHARED_GEOMETRY_DIM, SHARED_GEOMETRY_DIM):
-        raise GeometryError("maps must have shape (n, 4, 4)")
+    if map_values.shape != (proposal_values.shape[0], SHARED_GEOMETRY_DIM, state_value.shape[0]):
+        raise GeometryError("maps must have shape (n, 4, state_dim) matching proposals")
     if not np.isfinite(map_values).all():
         raise GeometryError("maps must be finite")
+    raw_alpha = np.asarray(alpha)
+    if raw_alpha.dtype.kind == "b":
+        raise GeometryError("alpha must not be a boolean array")
     alpha_values = np.asarray(alpha, dtype=np.float64)
     if alpha_values.shape != (proposal_values.shape[0],) or not np.isfinite(alpha_values).all():
         raise GeometryError("alpha must have shape (n,) and be finite")
@@ -240,7 +273,12 @@ def _validate_tension_inputs(
     lambda_float = _finite_scalar(lambda_value, name="lambda_value")
     if lambda_float < 0.0:
         raise GeometryError("lambda_value must be nonnegative")
-    prior_value = _validate_coordinate(prior, name="prior")
+    raw_prior = np.asarray(prior)
+    if raw_prior.dtype.kind == "b":
+        raise GeometryError("prior must not be a boolean array")
+    prior_value = np.asarray(prior, dtype=np.float64)
+    if prior_value.shape != state_value.shape or not np.isfinite(prior_value).all():
+        raise GeometryError("prior must match the finite state shape")
     metric_value = _validate_metric_numeric(metric)
     return (
         state_value,
@@ -289,26 +327,39 @@ def metric_tension_energy_tensor(
 ) -> Tensor:
     """Autograd tension energy using one shared metric for every residual."""
 
-    state_value = _tensor_matrix(state, name="state", shape=(SHARED_GEOMETRY_DIM,))
+    if not isinstance(state, Tensor) or state.data.ndim != 1 or state.data.size == 0:
+        raise GeometryError("state must be a non-empty 1-D Tensor")
+    if not np.isfinite(state.data).all():
+        raise GeometryError("state must be finite")
+    state_value = state
     proposal_values = _tensor_matrix(
         proposals,
         name="proposals",
         shape=(proposals.shape[0], SHARED_GEOMETRY_DIM),
     )
+    if not isinstance(maps, Tensor) or maps.data.ndim != 3 or maps.shape[0] != proposals.shape[0]:
+        raise GeometryError("maps and proposals must have the same count")
     map_values = _tensor_matrix(
         maps,
         name="maps",
-        shape=(maps.shape[0], SHARED_GEOMETRY_DIM, SHARED_GEOMETRY_DIM),
+        shape=(proposals.shape[0], SHARED_GEOMETRY_DIM, state.shape[0]),
     )
     alpha_values = _tensor_matrix(alpha, name="alpha", shape=(proposals.shape[0],))
-    prior_value = _tensor_matrix(prior, name="prior", shape=(SHARED_GEOMETRY_DIM,))
+    prior_value = _tensor_matrix(prior, name="prior", shape=(state.shape[0],))
     metric_value = _tensor_matrix(
         metric,
         name="metric",
         shape=(SHARED_GEOMETRY_DIM, SHARED_GEOMETRY_DIM),
     )
     _validate_metric_numeric(metric_value.data)
-    lambda_float = _finite_scalar(lambda_value, name="lambda_value")
+    if isinstance(lambda_value, Tensor):
+        if lambda_value.shape != () or not np.isfinite(lambda_value.data).all():
+            raise GeometryError("lambda_value must be a finite scalar Tensor")
+        lambda_tensor = lambda_value
+        lambda_float = float(lambda_value.data)
+    else:
+        lambda_float = _finite_scalar(lambda_value, name="lambda_value")
+        lambda_tensor = Tensor(lambda_float)
     if lambda_float < 0.0:
         raise GeometryError("lambda_value must be nonnegative")
     if np.any(alpha_values.data < 0.0):
@@ -320,7 +371,7 @@ def metric_tension_energy_tensor(
         quadratic = (weighted * residual).sum()
         energy = energy + 0.5 * alpha_values[index] * quadratic
     anchor = state_value - prior_value
-    energy = energy + 0.5 * lambda_float * (anchor * anchor).sum()
+    energy = energy + 0.5 * lambda_tensor * (anchor * anchor).sum()
     if not np.isfinite(energy.data).all():
         raise GeometryError("tension energy is non-finite")
     return energy
@@ -329,11 +380,17 @@ def metric_tension_energy_tensor(
 def curvature_upper_bound(maps: Any, alpha: Any, lambda_value: Any) -> float:
     """Return the prescribed fixed-objective curvature/Lipschitz bound."""
 
+    raw_maps = np.asarray(maps)
+    if raw_maps.dtype.kind == "b":
+        raise GeometryError("maps must not be a boolean array")
     map_values = np.asarray(maps, dtype=np.float64)
-    if map_values.ndim != 3 or map_values.shape[1:] != (SHARED_GEOMETRY_DIM, SHARED_GEOMETRY_DIM):
-        raise GeometryError("maps must have shape (n, 4, 4)")
+    if map_values.ndim != 3 or map_values.shape[1] != SHARED_GEOMETRY_DIM:
+        raise GeometryError("maps must have shape (n, 4, state_dim)")
     if not np.isfinite(map_values).all():
         raise GeometryError("maps must be finite")
+    raw_alpha = np.asarray(alpha)
+    if raw_alpha.dtype.kind == "b":
+        raise GeometryError("alpha must not be a boolean array")
     alpha_values = np.asarray(alpha, dtype=np.float64)
     if alpha_values.shape != (map_values.shape[0],) or not np.isfinite(alpha_values).all():
         raise GeometryError("alpha must have shape (n,) and be finite")
@@ -382,7 +439,7 @@ def _tension_gradient_numeric(
     prior: np.ndarray,
     metric: np.ndarray,
 ) -> np.ndarray:
-    gradient = np.zeros(SHARED_GEOMETRY_DIM, dtype=np.float64)
+    gradient = np.zeros(state.shape[0], dtype=np.float64)
     for coefficient, proposal, map_value in zip(alpha, proposals, maps):
         residual = map_value @ state - proposal
         gradient += coefficient * (map_value.T @ (metric @ residual))
@@ -400,13 +457,13 @@ def refine_tension_numeric(
     metric: Any,
     *,
     steps: int = 2,
-    radius: float = REFINEMENT_RADIUS,
+    radius: float | None = None,
 ) -> tuple[np.ndarray, GeometryRefinementTrace]:
     """Run bounded projected refinement against one frozen metric objective."""
 
     if type(steps) is not int or steps < 0 or steps > MAX_REFINEMENT_STEPS:
         raise GeometryError(f"steps must be an integer in [0, {MAX_REFINEMENT_STEPS}]")
-    radius_value = _finite_scalar(radius, name="radius")
+    radius_value = math.sqrt(float(np.asarray(state).size)) if radius is None else _finite_scalar(radius, name="radius")
     if radius_value <= 0.0:
         raise GeometryError("radius must be positive")
     state_value, proposal_values, map_values, alpha_values, lambda_float, prior_value, metric_value = (
@@ -563,6 +620,8 @@ __all__ = [
     "GEOMETRY_CONTRACT_VERSION",
     "GEOMETRY_MODEL_VERSION",
     "GEOMETRY_SNAPSHOT_SCHEMA",
+    "MAX_COORDINATE_ABS",
+    "MAX_SAFE_RAW_B_ABS",
     "GeometryError",
     "GeometryRefinementTrace",
     "GeometrySnapshot",
