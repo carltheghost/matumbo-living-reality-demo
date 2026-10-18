@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sqlite3
+import stat
 import tempfile
 import unittest
 from pathlib import Path
@@ -14,6 +16,9 @@ try:
     from server.agent_tasks import (
         AGENT_TASK_SCHEMA,
         AgentTaskRuntime,
+        AgentTaskRuntimeError,
+        MAX_CONCURRENT_WORKERS,
+        MAX_QUEUE_DEPTH,
         attach_agent_task_routes,
         validate_typed_tool_call,
     )
@@ -21,6 +26,9 @@ except ModuleNotFoundError:
     from services.vivo.server.agent_tasks import (
         AGENT_TASK_SCHEMA,
         AgentTaskRuntime,
+        AgentTaskRuntimeError,
+        MAX_CONCURRENT_WORKERS,
+        MAX_QUEUE_DEPTH,
         attach_agent_task_routes,
         validate_typed_tool_call,
     )
@@ -29,6 +37,10 @@ except ModuleNotFoundError:
 ROOT = Path(__file__).resolve().parents[4]
 ORIGIN = "https://vivo.test"
 TOKEN = "agent-task-test-token-0123456789"
+
+
+class InjectedCrash(BaseException):
+    pass
 
 
 def request_body(request_id: str = "task.1", *, permissions=None, tool_call=None):
@@ -129,6 +141,26 @@ class AgentTaskRuntimeTests(unittest.IsolatedAsyncioTestCase):
         result = resumed.get_task("actor-a", pending["taskId"])
         self.assertEqual(result["status"], "succeeded")
         self.assertTrue(any(event["type"] == "task.recovered" for event in result["events"]))
+        self.runtime = resumed
+
+    async def test_incomplete_succeeded_state_is_reconciled_before_it_can_be_reported(self):
+        await self.runtime.close()
+        runtime = AgentTaskRuntime(ROOT, self.path)
+        task = runtime.create_task("actor-a", request_body("incomplete-success"))
+        await runtime.close()
+        with sqlite3.connect(self.path) as database:
+            database.execute(
+                "UPDATE agent_tasks SET status='succeeded',artifact_json=?,verification_json=? WHERE task_id=?",
+                (json.dumps({"forged": True}), json.dumps({"status": "verified"}), task["taskId"]),
+            )
+        resumed = AgentTaskRuntime(ROOT, self.path)
+        self.assertEqual(resumed.get_task("actor-a", task["taskId"])["status"], "queued")
+        resumed.start()
+        await resumed.wait_for_idle()
+        result = resumed.get_task("actor-a", task["taskId"])
+        self.assertEqual(result["status"], "succeeded")
+        self.assertNotEqual(result["artifact"], {"forged": True})
+        self.assertTrue(any(event["type"] == "task.reconciled" for event in result["events"]))
         self.runtime = resumed
 
     async def test_queued_cancellation_has_no_tool_effect(self):
@@ -235,6 +267,228 @@ class AgentTaskRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["status"], "failed")
         self.assertEqual(result["error"], "VERIFIER_REJECTED_OUTPUT")
 
+    async def _run_fault_case(self, label: str, index: int):
+        directory = Path(self.temp.name) / f"fault-{index}"
+        directory.mkdir()
+        path = directory / "agent-tasks.sqlite"
+        runtime = AgentTaskRuntime(ROOT, path)
+        task = runtime.create_task("actor-a", request_body(f"fault.{index}"))
+        tripped = False
+
+        def inject(observed):
+            nonlocal tripped
+            if not tripped and observed == label:
+                tripped = True
+                runtime._started = False
+                raise InjectedCrash(label)
+
+        runtime._write_hook = inject
+        runtime.start()
+        await runtime.wait_for_idle()
+        self.assertTrue(tripped, label)
+        before_restart = runtime.get_task("actor-a", task["taskId"])
+        self.assertNotEqual(before_restart["status"], "succeeded", label)
+        await runtime.close()
+
+        resumed = AgentTaskRuntime(ROOT, path)
+        resumed.start()
+        await resumed.wait_for_idle()
+        result = resumed.get_task("actor-a", task["taskId"])
+        self.assertEqual(result["status"], "succeeded", label)
+        self.assertIsNotNone(result["artifact"], label)
+        self.assertEqual(result["verification"]["status"], "verified", label)
+        event_types = [event["type"] for event in result["events"]]
+        for event_type in (
+            "task.created",
+            "task.started",
+            "tool.started",
+            "tool.completed",
+            "task.verifying",
+            "verification.started",
+            "verification.completed",
+            "task.succeeded",
+        ):
+            self.assertEqual(event_types.count(event_type), 1, (label, event_types))
+        with sqlite3.connect(path) as database:
+            self.assertEqual(
+                database.execute(
+                    "SELECT effect_key,status,COUNT(*) FROM agent_task_effects WHERE task_id=? GROUP BY effect_key,status ORDER BY effect_key",
+                    (task["taskId"],),
+                ).fetchall(),
+                [
+                    ("tool:inspect-sample:v1", "completed", 1),
+                    ("verification:independent-file-read:v1", "completed", 1),
+                ],
+            )
+        await resumed.close()
+
+    async def test_every_effect_and_terminal_write_boundary_recovers_atomically(self):
+        # A failure after any one write must roll back the whole boundary. The
+        # next process can then replay the fixed read-only effect by its key.
+        labels = [
+            "task.status:running",
+            "event.task.started",
+            "effect.insert:tool",
+            "event.tool.started",
+            "effect.complete:tool",
+            "task.artifact",
+            "event.tool.completed",
+            "task.status:verifying",
+            "event.task.verifying",
+            "effect.insert:verification",
+            "event.verification.started",
+            "effect.complete:verification",
+            "task.verification",
+            "event.verification.completed",
+            "task.status:succeeded",
+            "event.task.succeeded",
+        ]
+        for index, label in enumerate(labels):
+            await self._run_fault_case(label, index)
+
+    async def test_create_and_blocked_events_are_atomic(self):
+        cases = [
+            ("task.insert", request_body("create-fault")),
+            ("event.task.created", request_body("create-fault")),
+            (
+                "event.task.blocked",
+                request_body(
+                    "blocked-fault",
+                    tool_call={"name": "vivo.sample.inspect", "arguments": {"sampleId": "not-allowed"}},
+                ),
+            ),
+        ]
+        for index, (label, payload) in enumerate(cases):
+            directory = Path(self.temp.name) / f"create-fault-{index}"
+            directory.mkdir()
+            runtime = AgentTaskRuntime(ROOT, directory / "agent-tasks.sqlite")
+
+            def inject(observed, expected=label):
+                if observed == expected:
+                    raise InjectedCrash(expected)
+
+            runtime._write_hook = inject
+            with self.assertRaises(InjectedCrash):
+                runtime.create_task("actor-a", payload)
+            with sqlite3.connect(runtime.database_path) as database:
+                self.assertEqual(database.execute("SELECT COUNT(*) FROM agent_tasks").fetchone()[0], 0)
+                self.assertEqual(database.execute("SELECT COUNT(*) FROM agent_task_events").fetchone()[0], 0)
+            await runtime.close()
+
+    async def test_cancellation_request_and_terminal_writes_are_atomic(self):
+        labels = [
+            "task.cancel.requested",
+            "event.task.cancel.requested",
+            "task.status:cancelled",
+            "event.task.cancelled",
+        ]
+        for index, label in enumerate(labels):
+            directory = Path(self.temp.name) / f"cancel-fault-{index}"
+            directory.mkdir()
+            path = directory / "agent-tasks.sqlite"
+            runtime = AgentTaskRuntime(ROOT, path)
+            task = runtime.create_task("actor-a", request_body(f"cancel-fault.{index}"))
+
+            def inject(observed, expected=label):
+                if observed == expected:
+                    raise InjectedCrash(expected)
+
+            runtime._write_hook = inject
+            with self.assertRaises(InjectedCrash):
+                runtime.cancel_task("actor-a", task["taskId"])
+            await runtime.close()
+
+            resumed = AgentTaskRuntime(ROOT, path)
+            resumed.start()
+            await resumed.wait_for_idle()
+            result = resumed.get_task("actor-a", task["taskId"])
+            self.assertEqual(result["status"], "succeeded", label)
+            self.assertNotIn("task.cancelled", [event["type"] for event in result["events"]])
+            await resumed.close()
+
+    async def test_second_runtime_fails_closed_before_recovery(self):
+        with self.assertRaisesRegex(AgentTaskRuntimeError, "TASK_RUNTIME_ALREADY_OWNED"):
+            AgentTaskRuntime(ROOT, self.path)
+
+    async def test_private_database_and_sidecars_fail_closed(self):
+        await self.runtime.close()
+        cases = []
+
+        insecure_dir = Path(self.temp.name) / "insecure-dir"
+        insecure_dir.mkdir(mode=0o700)
+        insecure_dir.chmod(0o755)
+        cases.append((insecure_dir / "agent-tasks.sqlite", "TASK_STORE_PRIVATE_PATH"))
+
+        insecure_file_dir = Path(self.temp.name) / "insecure-file"
+        insecure_file_dir.mkdir(mode=0o700)
+        insecure_file = insecure_file_dir / "agent-tasks.sqlite"
+        insecure_file.write_bytes(b"")
+        insecure_file.chmod(0o644)
+        cases.append((insecure_file, "TASK_STORE_PRIVATE_PATH"))
+
+        sidecar_dir = Path(self.temp.name) / "symlink-sidecar"
+        sidecar_dir.mkdir(mode=0o700)
+        sidecar_db = sidecar_dir / "agent-tasks.sqlite"
+        sidecar_db.write_bytes(b"")
+        os.symlink(sidecar_db, f"{sidecar_db}-wal")
+        cases.append((sidecar_db, "TASK_STORE_PRIVATE_PATH"))
+
+        symlink_dir = Path(self.temp.name) / "symlink-db"
+        symlink_dir.mkdir(mode=0o700)
+        target = symlink_dir / "target.sqlite"
+        target.write_bytes(b"")
+        link = symlink_dir / "agent-tasks.sqlite"
+        os.symlink(target, link)
+        cases.append((link, "TASK_STORE_PRIVATE_PATH"))
+
+        for path, code in cases:
+            with self.assertRaisesRegex(AgentTaskRuntimeError, code):
+                AgentTaskRuntime(ROOT, path)
+        insecure_dir.chmod(0o700)
+
+    async def test_worker_and_queue_admission_are_bounded(self):
+        await self.runtime.close()
+        entered = asyncio.Event()
+        release = asyncio.Event()
+        entered_count = 0
+
+        async def before_tool(_task_id, _call):
+            nonlocal entered_count
+            entered_count += 1
+            if entered_count == MAX_CONCURRENT_WORKERS:
+                entered.set()
+            await release.wait()
+
+        runtime = AgentTaskRuntime(ROOT, self.path, before_tool=before_tool)
+        runtime.start()
+        tasks = [runtime.create_task("actor-a", request_body(f"bounded.{index}")) for index in range(3)]
+        await entered.wait()
+        self.assertEqual(len(runtime._workers), MAX_CONCURRENT_WORKERS)
+        self.assertEqual(runtime.get_task("actor-a", tasks[-1]["taskId"])["status"], "queued")
+        release.set()
+        await runtime.wait_for_idle()
+        self.assertTrue(all(runtime.get_task("actor-a", task["taskId"])["status"] == "succeeded" for task in tasks))
+        await runtime.close()
+
+        queue_dir = Path(self.temp.name) / "queue-cap"
+        queue_dir.mkdir()
+        queued = AgentTaskRuntime(ROOT, queue_dir / "agent-tasks.sqlite")
+        for index in range(MAX_QUEUE_DEPTH):
+            self.assertEqual(
+                queued.create_task("actor-a", request_body(f"queue.{index}"))["status"],
+                "queued",
+            )
+        with self.assertRaisesRegex(Exception, "TASK_OVERLOADED"):
+            queued.create_task("actor-a", request_body("queue.overload"))
+        await queued.close()
+
+    async def test_extra_capability_names_are_rejected(self):
+        with self.assertRaisesRegex(Exception, "TASK_PERMISSIONS_INVALID"):
+            self.runtime.create_task(
+                "actor-a",
+                request_body("extra-capability", permissions=["sample.read", "sample.write"]),
+            )
+
 
 class AgentTaskRouteTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
@@ -268,6 +522,8 @@ class AgentTaskRouteTests(unittest.IsolatedAsyncioTestCase):
         status_json = await status.json()
         self.assertEqual(status_json["schema"], AGENT_TASK_SCHEMA)
         self.assertFalse(status_json["conversation"]["available"])
+        self.assertEqual(status_json["transport"], "bearer-authenticated-http")
+        self.assertEqual(status_json["limits"]["maxConcurrentWorkers"], 2)
 
         created = await self.client.post(
             "/api/agent/tasks",

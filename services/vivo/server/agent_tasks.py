@@ -13,15 +13,23 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable, Mapping
+from contextlib import contextmanager
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import secrets
 import sqlite3
+import stat
 import time
 from typing import Any
 from urllib.parse import urlsplit
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - the hosted runtime is POSIX-only.
+    fcntl = None
 
 from aiohttp import web
 
@@ -55,6 +63,14 @@ MAX_GOAL_CHARS = 280
 MAX_EVENT_DATA_BYTES = 8 * 1024
 MAX_FIXTURE_BYTES = 64 * 1024
 MAX_ARTIFACT_BYTES = 32 * 1024
+MAX_TASKS_TOTAL = 256
+MAX_TASKS_PER_ACTOR = 32
+MAX_QUEUE_DEPTH = 16
+MAX_CONCURRENT_WORKERS = 2
+MAX_EVENTS_PER_TASK = 64
+MAX_TASK_STORE_BYTES = 8 * 1024 * 1024
+SQLITE_SIDECARS = ("-wal", "-shm", "-journal")
+AGENT_CAPABILITIES = frozenset({"sample.read"})
 
 TOOL_CATALOG = (
     {
@@ -82,6 +98,14 @@ class TaskUnavailable(AgentTaskError):
 
 class TaskFailed(AgentTaskError):
     pass
+
+
+class AgentTaskRuntimeError(RuntimeError):
+    """Fail-closed startup error for ownership and private-storage checks."""
+
+    def __init__(self, code: str):
+        super().__init__(code)
+        self.code = code
 
 
 def _strict_json(text: str) -> Any:
@@ -142,6 +166,8 @@ def _normalize_permissions(value: Any) -> list[str]:
     result: list[str] = []
     for permission in value:
         text = _bounded_text(permission, code="TASK_PERMISSIONS_INVALID", maximum=80, required=True)
+        if text not in AGENT_CAPABILITIES:
+            raise AgentTaskError("TASK_PERMISSIONS_INVALID")
         if text not in result:
             result.append(text)
     return sorted(result)
@@ -228,21 +254,239 @@ class AgentTaskRuntime:
     ) -> None:
         self.repository_root = Path(repository_root).resolve()
         self.fixture_root = Path(fixture_root or self.repository_root / "services/vivo/tasks/fixtures").resolve()
-        self.database_path = Path(database_path).resolve()
+        # Keep the database path lexical until the no-symlink checks have run.
+        # Resolving it here would turn a private-path violation into a different
+        # path and would let SQLite follow a database or sidecar symlink.
+        self.database_path = Path(os.path.abspath(os.fspath(database_path)))
         self.now = now
         self.before_tool = before_tool
-        self.db = self._open_database()
         self._workers: dict[str, asyncio.Task[Any]] = {}
         self._started = False
         self._closed = False
-        self._recover_interrupted_tasks()
+        self._tx_depth = 0
+        self._write_hook: Callable[[str], None] | None = None
+        self._lock_fd: int | None = None
+        self._lock_path = Path(f"{self.database_path}.lock")
+        self.db: sqlite3.Connection | None = None
+        try:
+            self._validate_storage_paths()
+            self._acquire_process_lock()
+            self.db = self._open_database()
+            # Repair states left by older/non-atomic runtimes before recovery
+            # can schedule them. A repaired task is replayed by effect key.
+            self._reconcile_incomplete_tasks()
+            self._recover_interrupted_tasks()
+        except BaseException:
+            if self.db is not None:
+                try:
+                    self.db.close()
+                except Exception:
+                    pass
+                self.db = None
+            self._release_process_lock()
+            raise
+
+    def _runtime_error(self, code: str) -> AgentTaskRuntimeError:
+        return AgentTaskRuntimeError(code)
+
+    @staticmethod
+    def _safe_owner() -> int:
+        if os.name == "nt" or not hasattr(os, "getuid"):
+            raise AgentTaskRuntimeError("TASK_STORE_PRIVACY_UNAVAILABLE")
+        return os.getuid()
+
+    def _validate_private_directory(self, directory: Path) -> None:
+        owner = self._safe_owner()
+        if not directory.is_absolute():
+            raise self._runtime_error("TASK_STORE_PRIVATE_PATH")
+        current = Path(directory.anchor)
+        for part in directory.parts[1:]:
+            current /= part
+            try:
+                info = os.lstat(current)
+            except OSError as error:
+                raise self._runtime_error("TASK_STORE_PRIVATE_PATH") from error
+            if stat.S_ISLNK(info.st_mode):
+                raise self._runtime_error("TASK_STORE_PRIVATE_PATH")
+        try:
+            info = os.lstat(directory)
+        except OSError as error:
+            raise self._runtime_error("TASK_STORE_PRIVATE_PATH") from error
+        if (
+            not stat.S_ISDIR(info.st_mode)
+            or info.st_uid != owner
+            or stat.S_IMODE(info.st_mode) & 0o077
+        ):
+            raise self._runtime_error("TASK_STORE_PRIVATE_PATH")
+
+    def _validate_storage_file(self, path: Path, *, required: bool = False) -> bool:
+        owner = self._safe_owner()
+        try:
+            info = os.lstat(path)
+        except FileNotFoundError:
+            if required:
+                raise self._runtime_error("TASK_STORE_PRIVATE_PATH")
+            return False
+        except OSError as error:
+            raise self._runtime_error("TASK_STORE_PRIVATE_PATH") from error
+        if (
+            stat.S_ISLNK(info.st_mode)
+            or not stat.S_ISREG(info.st_mode)
+            or info.st_nlink != 1
+            or info.st_uid != owner
+            or stat.S_IMODE(info.st_mode) & 0o077
+            or info.st_size > MAX_TASK_STORE_BYTES
+        ):
+            raise self._runtime_error("TASK_STORE_PRIVATE_PATH")
+        return True
+
+    def _validate_storage_paths(self) -> None:
+        if not self.database_path.is_absolute() or not self.database_path.name:
+            raise self._runtime_error("TASK_STORE_PRIVATE_PATH")
+        try:
+            self.database_path.relative_to(self.repository_root)
+        except ValueError:
+            pass
+        else:
+            raise self._runtime_error("TASK_STORE_IN_CHECKOUT")
+        self._validate_private_directory(self.database_path.parent)
+        main_exists = self._validate_storage_file(self.database_path)
+        sidecar_exists = False
+        for suffix in SQLITE_SIDECARS:
+            sidecar_exists = self._validate_storage_file(Path(f"{self.database_path}{suffix}")) or sidecar_exists
+        # An orphan WAL/journal is not a recoverable task store. Refuse it
+        # rather than letting SQLite decide which data to attach.
+        if sidecar_exists and not main_exists:
+            raise self._runtime_error("TASK_STORE_ORPHAN_SIDECAR")
+        self._validate_storage_file(self._lock_path)
+
+    def _prepare_database_file(self) -> None:
+        flags = os.O_RDWR | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+        try:
+            descriptor = os.open(self.database_path, flags, 0o600)
+        except FileExistsError:
+            self._validate_storage_file(self.database_path, required=True)
+            return
+        except OSError as error:
+            raise self._runtime_error("TASK_STORE_PRIVATE_PATH") from error
+        try:
+            info = os.fstat(descriptor)
+            owner = self._safe_owner()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_nlink != 1
+                or info.st_uid != owner
+                or stat.S_IMODE(info.st_mode) & 0o077
+            ):
+                raise self._runtime_error("TASK_STORE_PRIVATE_PATH")
+        finally:
+            os.close(descriptor)
+
+    def _acquire_process_lock(self) -> None:
+        if fcntl is None:
+            raise self._runtime_error("TASK_RUNTIME_OWNERSHIP_UNAVAILABLE")
+        # The lock is a separate private sidecar so a second Python runtime
+        # cannot recover the same task journal while the first still owns it.
+        flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
+        try:
+            descriptor = os.open(self._lock_path, flags, 0o600)
+        except OSError as error:
+            raise self._runtime_error("TASK_STORE_PRIVATE_PATH") from error
+        try:
+            self._validate_storage_file(self._lock_path, required=True)
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as error:
+                raise self._runtime_error("TASK_RUNTIME_ALREADY_OWNED") from error
+            except OSError as error:
+                raise self._runtime_error("TASK_RUNTIME_OWNERSHIP") from error
+            try:
+                os.fchmod(descriptor, 0o600)
+            except OSError as error:
+                raise self._runtime_error("TASK_STORE_PRIVATE_PATH") from error
+            self._lock_fd = descriptor
+        except BaseException:
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
+            except OSError:
+                pass
+            os.close(descriptor)
+            raise
+
+    def _release_process_lock(self) -> None:
+        descriptor = self._lock_fd
+        self._lock_fd = None
+        if descriptor is None:
+            return
+        try:
+            if fcntl is not None:
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
+        except OSError:
+            pass
+        try:
+            os.close(descriptor)
+        except OSError:
+            pass
+
+    @contextmanager
+    def _transaction(self):
+        outer = self._tx_depth == 0
+        if outer:
+            assert self.db is not None
+            self.db.execute("BEGIN IMMEDIATE")
+        self._tx_depth += 1
+        try:
+            yield
+        except BaseException:
+            self._tx_depth -= 1
+            if outer:
+                try:
+                    assert self.db is not None
+                    self.db.execute("ROLLBACK")
+                except Exception:
+                    pass
+            raise
+        else:
+            self._tx_depth -= 1
+            if outer:
+                try:
+                    assert self.db is not None
+                    self.db.execute("COMMIT")
+                except BaseException:
+                    try:
+                        assert self.db is not None
+                        self.db.execute("ROLLBACK")
+                    except Exception:
+                        pass
+                    raise
+
+    def _write(self, label: str, sql: str, params: tuple[Any, ...] = ()) -> sqlite3.Cursor:
+        assert self.db is not None
+        result = self.db.execute(sql, params)
+        if self._write_hook is not None:
+            self._write_hook(label)
+        return result
+
+    def _storage_bytes(self) -> int:
+        total = 0
+        for path in (self.database_path, *(Path(f"{self.database_path}{suffix}") for suffix in SQLITE_SIDECARS)):
+            try:
+                total += os.lstat(path).st_size
+            except FileNotFoundError:
+                continue
+            except OSError as error:
+                raise self._runtime_error("TASK_STORE_PRIVATE_PATH") from error
+        return total
 
     def _open_database(self) -> sqlite3.Connection:
-        self.database_path.parent.mkdir(parents=True, exist_ok=True)
+        self._prepare_database_file()
         connection = sqlite3.connect(self.database_path, isolation_level=None, check_same_thread=False)
         connection.execute("PRAGMA journal_mode=WAL")
         connection.execute("PRAGMA synchronous=FULL")
         connection.execute("PRAGMA foreign_keys=ON")
+        # SQLite may have materialized a WAL/SHM sidecar while selecting WAL;
+        # validate those paths before any application schema write.
+        self._validate_storage_paths()
         connection.execute(
             """CREATE TABLE IF NOT EXISTS agent_tasks(
                 task_id TEXT PRIMARY KEY,
@@ -289,13 +533,102 @@ class AgentTaskRuntime:
                 FOREIGN KEY(task_id) REFERENCES agent_tasks(task_id) ON DELETE CASCADE
             )"""
         )
-        try:
-            self.database_path.chmod(0o600)
-        except OSError:
-            pass
+        self._validate_storage_paths()
         return connection
 
+    def _reconcile_incomplete_tasks(self) -> None:
+        assert self.db is not None
+        rows = self.db.execute(
+            "SELECT task_id,status,artifact_json,verification_json,version FROM agent_tasks"
+        ).fetchall()
+        for task_id, status, artifact_json, verification_json, version in rows:
+            tool = self.db.execute(
+                "SELECT status,output_json FROM agent_task_effects WHERE task_id=? AND effect_key=?",
+                (task_id, "tool:inspect-sample:v1"),
+            ).fetchone()
+            verification = self.db.execute(
+                "SELECT status,output_json FROM agent_task_effects WHERE task_id=? AND effect_key=?",
+                (task_id, "verification:independent-file-read:v1"),
+            ).fetchone()
+            tool_complete = bool(tool and tool[0] == "completed" and tool[1])
+            verification_complete = bool(verification and verification[0] == "completed" and verification[1])
+            reset_tool = bool(tool and tool[0] == "completed" and tool[1] and not artifact_json)
+            reset_verification = bool(
+                verification and verification[0] == "completed" and verification[1] and not verification_json
+            )
+            incomplete_success = status == "succeeded" and not (
+                artifact_json and verification_json and tool_complete and verification_complete
+            )
+            if reset_tool or reset_verification or incomplete_success:
+                clear_artifact = incomplete_success and not tool_complete
+                clear_verification = incomplete_success and not verification_complete
+                with self._transaction():
+                    if reset_tool:
+                        self._write(
+                            "effect.reconcile:tool",
+                            "UPDATE agent_task_effects SET status='started',output_json=NULL,updated_at=? WHERE task_id=? AND effect_key=?",
+                            (self.now(), task_id, "tool:inspect-sample:v1"),
+                        )
+                        self._write(
+                            "task.reconcile:artifact",
+                            "UPDATE agent_tasks SET artifact_json=NULL,updated_at=?,version=version+1 WHERE task_id=?",
+                            (self.now(), task_id),
+                        )
+                    elif clear_artifact:
+                        self._write(
+                            "task.reconcile:artifact-missing-effect",
+                            "UPDATE agent_tasks SET artifact_json=NULL,updated_at=?,version=version+1 WHERE task_id=?",
+                            (self.now(), task_id),
+                        )
+                    if reset_verification:
+                        self._write(
+                            "effect.reconcile:verification",
+                            "UPDATE agent_task_effects SET status='started',output_json=NULL,updated_at=? WHERE task_id=? AND effect_key=?",
+                            (self.now(), task_id, "verification:independent-file-read:v1"),
+                        )
+                        self._write(
+                            "task.reconcile:verification",
+                            "UPDATE agent_tasks SET verification_json=NULL,updated_at=?,version=version+1 WHERE task_id=?",
+                            (self.now(), task_id),
+                        )
+                    elif clear_verification:
+                        self._write(
+                            "task.reconcile:verification-missing-effect",
+                            "UPDATE agent_tasks SET verification_json=NULL,updated_at=?,version=version+1 WHERE task_id=?",
+                            (self.now(), task_id),
+                        )
+                    self._write(
+                        "task.reconcile:status",
+                        "UPDATE agent_tasks SET status='queued',error_code=NULL,cancel_requested=0,updated_at=?,version=version+1 WHERE task_id=?",
+                        (self.now(), task_id),
+                    )
+                    self._append_event(
+                        task_id,
+                        "task.reconciled",
+                        {
+                            "fromStatus": status,
+                            "resume": True,
+                            "missingEvidence": bool(incomplete_success),
+                        },
+                        event_key="task.reconciled",
+                    )
+                continue
+            if status == "succeeded":
+                terminal = self.db.execute(
+                    "SELECT 1 FROM agent_task_events WHERE task_id=? AND event_key='task.succeeded'",
+                    (task_id,),
+                ).fetchone()
+                if not terminal and artifact_json and verification_json:
+                    with self._transaction():
+                        self._append_event(
+                            task_id,
+                            "task.succeeded",
+                            {"verified": True, "reconciled": True},
+                            event_key="task.succeeded",
+                        )
+
     def _recover_interrupted_tasks(self) -> None:
+        assert self.db is not None
         rows = self.db.execute(
             "SELECT task_id,status FROM agent_tasks WHERE status IN ('running','verifying','cancel_requested')"
         ).fetchall()
@@ -303,23 +636,24 @@ class AgentTaskRuntime:
             # A process can stop at any plan/tool/result boundary. The effect
             # table makes completed boundaries replayable; queued recovery is
             # only a scheduler state, not a second effect.
-            self.db.execute(
-                "UPDATE agent_tasks SET status='queued', updated_at=?, version=version+1 WHERE task_id=?",
-                (self.now(), task_id),
-            )
-            self._append_event(
-                task_id,
-                "task.recovered",
-                {"fromStatus": status, "resume": True},
-                event_key="task.recovered",
-            )
+            with self._transaction():
+                self._write(
+                    "task.recover:status",
+                    "UPDATE agent_tasks SET status='queued', updated_at=?, version=version+1 WHERE task_id=?",
+                    (self.now(), task_id),
+                )
+                self._append_event(
+                    task_id,
+                    "task.recovered",
+                    {"fromStatus": status, "resume": True},
+                    event_key="task.recovered",
+                )
 
     def start(self) -> None:
         if self._closed:
             raise RuntimeError("agent task runtime is closed")
         self._started = True
-        for (task_id,) in self.db.execute("SELECT task_id FROM agent_tasks WHERE status='queued'").fetchall():
-            self._schedule(task_id)
+        self._pump()
 
     async def close(self) -> None:
         self._started = False
@@ -328,22 +662,55 @@ class AgentTaskRuntime:
             await asyncio.gather(*workers, return_exceptions=True)
         self._workers.clear()
         if not self._closed:
-            self.db.close()
-            self._closed = True
+            try:
+                if self.db is not None:
+                    self.db.close()
+            finally:
+                self.db = None
+                self._release_process_lock()
+                self._closed = True
 
     def _schedule(self, task_id: str) -> None:
-        if self._closed or not self._started or task_id in self._workers:
+        if (
+            self._closed
+            or not self._started
+            or task_id in self._workers
+            or len(self._workers) >= MAX_CONCURRENT_WORKERS
+        ):
             return
         task = asyncio.create_task(self._run(task_id))
         self._workers[task_id] = task
 
         def done(_task: asyncio.Task[Any]) -> None:
             self._workers.pop(task_id, None)
+            self._pump()
 
         task.add_done_callback(done)
 
+    def _pump(self) -> None:
+        if self._closed or not self._started or self.db is None:
+            return
+        slots = MAX_CONCURRENT_WORKERS - len(self._workers)
+        if slots <= 0:
+            return
+        rows = self.db.execute(
+            "SELECT task_id FROM agent_tasks WHERE status='queued' ORDER BY created_at,task_id LIMIT ?",
+            (MAX_QUEUE_DEPTH,),
+        ).fetchall()
+        for (task_id,) in rows:
+            if len(self._workers) >= MAX_CONCURRENT_WORKERS:
+                break
+            self._schedule(task_id)
+
     async def wait_for_idle(self) -> None:
-        while self._workers:
+        while self._workers or (
+            self._started
+            and self.db is not None
+            and self.db.execute("SELECT 1 FROM agent_tasks WHERE status='queued' LIMIT 1").fetchone()
+        ):
+            self._pump()
+            if not self._workers:
+                break
             await asyncio.gather(*list(self._workers.values()), return_exceptions=True)
 
     @staticmethod
@@ -384,6 +751,7 @@ class AgentTaskRuntime:
         }
 
     def _load(self, task_id: str) -> dict[str, Any] | None:
+        assert self.db is not None
         row = self.db.execute(
             """SELECT task_id,actor_id,request_id,request_fingerprint,goal,permissions_json,
                       tool_call_json,status,error_code,cancel_requested,artifact_json,
@@ -394,6 +762,7 @@ class AgentTaskRuntime:
         return self._row_to_dict(row) if row else None
 
     def _append_event(self, task_id: str, event_type: str, data: Mapping[str, Any], *, event_key: str) -> None:
+        assert self.db is not None
         data_json = _json_text(dict(data))
         existing = self.db.execute(
             "SELECT sequence FROM agent_task_events WHERE task_id=? AND event_key=?",
@@ -401,10 +770,16 @@ class AgentTaskRuntime:
         ).fetchone()
         if existing:
             return
+        event_count = self.db.execute(
+            "SELECT COUNT(*) FROM agent_task_events WHERE task_id=?", (task_id,)
+        ).fetchone()[0]
+        if event_count >= MAX_EVENTS_PER_TASK:
+            raise AgentTaskError("TASK_EVENT_QUOTA", 507)
         sequence = self.db.execute(
             "SELECT COALESCE(MAX(sequence),0)+1 FROM agent_task_events WHERE task_id=?", (task_id,)
         ).fetchone()[0]
-        self.db.execute(
+        self._write(
+            f"event.{event_type}",
             "INSERT INTO agent_task_events(task_id,sequence,event_key,event_type,data_json,created_at) VALUES(?,?,?,?,?,?)",
             (task_id, sequence, event_key, event_type, data_json, self.now()),
         )
@@ -457,17 +832,32 @@ class AgentTaskRuntime:
     ) -> None:
         if status not in TASK_STATUSES:
             raise AgentTaskError("TASK_STORAGE_ERROR", 500)
-        self.db.execute(
-            "UPDATE agent_tasks SET status=?,error_code=?,updated_at=?,version=version+1 WHERE task_id=?",
-            (status, error_code, self.now(), task_id),
-        )
-        self._append_event(task_id, event_type, data or {"status": status}, event_key=event_key)
+        with self._transaction():
+            self._write(
+                f"task.status:{status}",
+                "UPDATE agent_tasks SET status=?,error_code=?,updated_at=?,version=version+1 WHERE task_id=?",
+                (status, error_code, self.now(), task_id),
+            )
+            self._append_event(task_id, event_type, data or {"status": status}, event_key=event_key)
 
     def _task_row_for_actor(self, actor_id: str, task_id: str) -> dict[str, Any]:
         task = self._load(task_id)
         if not task or task["actorId"] != actor_id:
             raise AgentTaskError("TASK_NOT_FOUND", 404)
         return task
+
+    def _check_admission(self, actor_id: str, status: str) -> None:
+        assert self.db is not None
+        if self._storage_bytes() >= MAX_TASK_STORE_BYTES:
+            raise AgentTaskError("TASK_STORAGE_QUOTA", 507)
+        if self.db.execute("SELECT COUNT(*) FROM agent_tasks").fetchone()[0] >= MAX_TASKS_TOTAL:
+            raise AgentTaskError("TASK_STORAGE_QUOTA", 507)
+        if self.db.execute("SELECT COUNT(*) FROM agent_tasks WHERE actor_id=?", (actor_id,)).fetchone()[0] >= MAX_TASKS_PER_ACTOR:
+            raise AgentTaskError("TASK_ACTOR_QUOTA", 429)
+        if status == "queued" and self.db.execute(
+            "SELECT COUNT(*) FROM agent_tasks WHERE status='queued'"
+        ).fetchone()[0] >= MAX_QUEUE_DEPTH:
+            raise AgentTaskError("TASK_OVERLOADED", 429)
 
     def create_task(self, actor_id: str, payload: Mapping[str, Any]) -> dict[str, Any]:
         if not isinstance(actor_id, str) or not actor_id:
@@ -483,19 +873,6 @@ class AgentTaskRuntime:
         fingerprint = _sha256(
             _canonical({"requestId": request_id, "goal": goal, "permissions": permissions, "toolCall": tool_call})
         )
-        previous = self.db.execute(
-            "SELECT task_id,request_fingerprint FROM agent_tasks WHERE actor_id=? AND request_id=?",
-            (actor_id, request_id),
-        ).fetchone()
-        if previous:
-            if previous[1] != fingerprint:
-                raise AgentTaskError("REQUEST_ID_REUSED", 409)
-            task = self._load(previous[0])
-            assert task is not None
-            if self._started and task["status"] == "queued":
-                self._schedule(task["taskId"])
-            return {**self._view(task), "replayed": True}
-
         status = "queued"
         error_code = None
         try:
@@ -506,49 +883,72 @@ class AgentTaskRuntime:
             normalized_call = _clone(tool_call) if isinstance(tool_call, dict) else {"invalid": True}
             status = "blocked"
             error_code = error.code
-        created = self.now()
-        task_id = "vivo-task-" + secrets.token_urlsafe(18).replace("-", "_")
-        while self._load(task_id) is not None:
-            task_id = "vivo-task-" + secrets.token_urlsafe(18).replace("-", "_")
-        self.db.execute(
-            """INSERT INTO agent_tasks(task_id,actor_id,request_id,request_fingerprint,goal,
-                      permissions_json,tool_call_json,status,error_code,cancel_requested,
-                      artifact_json,verification_json,version,created_at,updated_at)
-                   VALUES(?,?,?,?,?,?,?,?,?,0,NULL,NULL,0,?,?)""",
-            (
-                task_id,
-                actor_id,
-                request_id,
-                fingerprint,
-                goal,
-                _json_text(permissions),
-                _json_text(normalized_call),
-                status,
-                error_code,
-                created,
-                created,
-            ),
-        )
-        self._append_event(
-            task_id,
-            "task.created",
-            {"goal": goal, "permissions": permissions, "tool": normalized_call.get("name")},
-            event_key="task.created",
-        )
-        if status == "blocked":
-            self._append_event(
-                task_id,
-                "task.blocked",
-                {"code": error_code},
-                event_key="task.blocked",
-            )
+        replayed = False
+        task_id: str
+        with self._transaction():
+            # Request lookup and insertion share one write transaction. The
+            # UNIQUE(actor_id, request_id) constraint is the final retry fence.
+            assert self.db is not None
+            previous = self.db.execute(
+                "SELECT task_id,request_fingerprint FROM agent_tasks WHERE actor_id=? AND request_id=?",
+                (actor_id, request_id),
+            ).fetchone()
+            if previous:
+                if previous[1] != fingerprint:
+                    raise AgentTaskError("REQUEST_ID_REUSED", 409)
+                task_id = previous[0]
+                replayed = True
+            else:
+                self._check_admission(actor_id, status)
+                created = self.now()
+                task_id = "vivo-task-" + secrets.token_urlsafe(18).replace("-", "_")
+                while self._load(task_id) is not None:
+                    task_id = "vivo-task-" + secrets.token_urlsafe(18).replace("-", "_")
+                self._write(
+                    "task.insert",
+                    """INSERT INTO agent_tasks(task_id,actor_id,request_id,request_fingerprint,goal,
+                              permissions_json,tool_call_json,status,error_code,cancel_requested,
+                              artifact_json,verification_json,version,created_at,updated_at)
+                           VALUES(?,?,?,?,?,?,?,?,?,0,NULL,NULL,0,?,?)""",
+                    (
+                        task_id,
+                        actor_id,
+                        request_id,
+                        fingerprint,
+                        goal,
+                        _json_text(permissions),
+                        _json_text(normalized_call),
+                        status,
+                        error_code,
+                        created,
+                        created,
+                    ),
+                )
+                self._append_event(
+                    task_id,
+                    "task.created",
+                    {"goal": goal, "permissions": permissions, "tool": normalized_call.get("name")},
+                    event_key="task.created",
+                )
+                if status == "blocked":
+                    self._append_event(
+                        task_id,
+                        "task.blocked",
+                        {"code": error_code},
+                        event_key="task.blocked",
+                    )
         task = self._load(task_id)
         assert task is not None
+        if replayed:
+            if self._started and task["status"] == "queued":
+                self._pump()
+            return {**self._view(task), "replayed": True}
         if status == "queued":
-            self._schedule(task_id)
+            self._pump()
         return self._view(task)
 
     def list_tasks(self, actor_id: str) -> list[dict[str, Any]]:
+        assert self.db is not None
         rows = self.db.execute(
             """SELECT task_id,actor_id,request_id,request_fingerprint,goal,permissions_json,
                       tool_call_json,status,error_code,cancel_requested,artifact_json,
@@ -564,26 +964,31 @@ class AgentTaskRuntime:
         return self._view(self._task_row_for_actor(actor_id, task_id))
 
     def cancel_task(self, actor_id: str, task_id: str) -> dict[str, Any]:
-        task = self._task_row_for_actor(actor_id, task_id)
-        if task["status"] in TERMINAL_STATUSES:
-            self._append_event(
-                task_id,
-                "task.cancel.ignored",
-                {"status": task["status"]},
-                event_key=f"task.cancel.ignored:{task['version']}",
-            )
-            return self._view(self._load(task_id) or task)
-        self.db.execute(
-            "UPDATE agent_tasks SET cancel_requested=1,updated_at=?,version=version+1 WHERE task_id=?",
-            (self.now(), task_id),
-        )
-        self._append_event(task_id, "task.cancel.requested", {}, event_key="task.cancel.requested")
-        task = self._load(task_id)
-        assert task is not None
-        if task["status"] == "queued":
-            self._mark_cancelled(task_id, "queued")
-        else:
-            self._schedule(task_id)
+        self._task_row_for_actor(actor_id, task_id)
+        queued = False
+        with self._transaction():
+            task = self._task_row_for_actor(actor_id, task_id)
+            if task["status"] in TERMINAL_STATUSES:
+                self._append_event(
+                    task_id,
+                    "task.cancel.ignored",
+                    {"status": task["status"]},
+                    event_key=f"task.cancel.ignored:{task['version']}",
+                )
+            else:
+                self._write(
+                    "task.cancel.requested",
+                    "UPDATE agent_tasks SET cancel_requested=1,updated_at=?,version=version+1 WHERE task_id=?",
+                    (self.now(), task_id),
+                )
+                self._append_event(task_id, "task.cancel.requested", {}, event_key="task.cancel.requested")
+                task = self._load(task_id)
+                assert task is not None
+                queued = task["status"] == "queued"
+                if queued:
+                    self._mark_cancelled(task_id, "queued")
+        if not queued:
+            self._pump()
         return self._view(self._load(task_id) or task)
 
     def _mark_cancelled(self, task_id: str, phase: str) -> None:
@@ -600,6 +1005,7 @@ class AgentTaskRuntime:
         )
 
     def _get_effect(self, task_id: str, effect_key: str) -> dict[str, Any] | None:
+        assert self.db is not None
         row = self.db.execute(
             "SELECT kind,status,output_json,created_at,updated_at FROM agent_task_effects WHERE task_id=? AND effect_key=?",
             (task_id, effect_key),
@@ -615,21 +1021,32 @@ class AgentTaskRuntime:
         }
 
     def _claim_effect(self, task_id: str, effect_key: str, kind: str) -> dict[str, Any]:
-        effect = self._get_effect(task_id, effect_key)
-        if effect:
-            return effect
-        now = self.now()
-        self.db.execute(
-            "INSERT OR IGNORE INTO agent_task_effects(task_id,effect_key,kind,status,output_json,created_at,updated_at) VALUES(?,?,?,'started',NULL,?,?)",
-            (task_id, effect_key, kind, now, now),
-        )
-        self._append_event(
-            task_id,
-            "tool.started" if kind == "tool" else "verification.started",
-            {"effectKey": effect_key, "kind": kind},
-            event_key=f"{kind}.started",
-        )
-        return self._get_effect(task_id, effect_key) or {"kind": kind, "status": "started", "output": None}
+        with self._transaction():
+            effect = self._get_effect(task_id, effect_key)
+            event_type = "tool.started" if kind == "tool" else "verification.started"
+            if effect:
+                # Repair an older journal that allocated an effect but not its
+                # start event. New allocations are atomic with this event.
+                self._append_event(
+                    task_id,
+                    event_type,
+                    {"effectKey": effect_key, "kind": kind},
+                    event_key=f"{kind}.started",
+                )
+                return effect
+            now = self.now()
+            self._write(
+                f"effect.insert:{kind}",
+                "INSERT INTO agent_task_effects(task_id,effect_key,kind,status,output_json,created_at,updated_at) VALUES(?,?,?,'started',NULL,?,?)",
+                (task_id, effect_key, kind, now, now),
+            )
+            self._append_event(
+                task_id,
+                event_type,
+                {"effectKey": effect_key, "kind": kind},
+                event_key=f"{kind}.started",
+            )
+            return self._get_effect(task_id, effect_key) or {"kind": kind, "status": "started", "output": None}
 
     def _complete_effect(
         self,
@@ -639,29 +1056,40 @@ class AgentTaskRuntime:
         output: dict[str, Any],
     ) -> None:
         output_json = _json_text(output, maximum=MAX_ARTIFACT_BYTES)
-        now = self.now()
-        self.db.execute(
-            "UPDATE agent_task_effects SET status='completed',output_json=?,updated_at=? WHERE task_id=? AND effect_key=?",
-            (output_json, now, task_id, effect_key),
-        )
-        if kind == "tool":
-            self.db.execute(
-                "UPDATE agent_tasks SET artifact_json=?,updated_at=?,version=version+1 WHERE task_id=?",
-                (output_json, now, task_id),
+        with self._transaction():
+            effect = self._get_effect(task_id, effect_key)
+            if not effect or effect["kind"] != kind:
+                raise AgentTaskError("TASK_STORAGE_ERROR", 500)
+            if effect["status"] == "completed":
+                if effect["output"] == output:
+                    return
+                raise AgentTaskError("TASK_STORAGE_ERROR", 500)
+            now = self.now()
+            self._write(
+                f"effect.complete:{kind}",
+                "UPDATE agent_task_effects SET status='completed',output_json=?,updated_at=? WHERE task_id=? AND effect_key=?",
+                (output_json, now, task_id, effect_key),
             )
-            event_type, event_key = "tool.completed", "tool.completed"
-        else:
-            self.db.execute(
-                "UPDATE agent_tasks SET verification_json=?,updated_at=?,version=version+1 WHERE task_id=?",
-                (output_json, now, task_id),
+            if kind == "tool":
+                self._write(
+                    "task.artifact",
+                    "UPDATE agent_tasks SET artifact_json=?,updated_at=?,version=version+1 WHERE task_id=?",
+                    (output_json, now, task_id),
+                )
+                event_type, event_key = "tool.completed", "tool.completed"
+            else:
+                self._write(
+                    "task.verification",
+                    "UPDATE agent_tasks SET verification_json=?,updated_at=?,version=version+1 WHERE task_id=?",
+                    (output_json, now, task_id),
+                )
+                event_type, event_key = "verification.completed", "verification.completed"
+            self._append_event(
+                task_id,
+                event_type,
+                {"effectKey": effect_key, "status": "completed"},
+                event_key=event_key,
             )
-            event_type, event_key = "verification.completed", "verification.completed"
-        self._append_event(
-            task_id,
-            event_type,
-            {"effectKey": effect_key, "status": "completed"},
-            event_key=event_key,
-        )
 
     def _fixture_path(self, sample_id: str) -> Path:
         relative = SAMPLE_FILES.get(sample_id)
@@ -672,14 +1100,19 @@ class AgentTaskRuntime:
             path.relative_to(self.fixture_root)
         except ValueError:
             raise TaskFailed("TOOL_FIXTURE_UNAVAILABLE", 503) from None
-        if not path.is_file():
+        try:
+            info = os.lstat(path)
+        except OSError:
+            raise TaskUnavailable("TOOL_FIXTURE_UNAVAILABLE", 503)
+        if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
             raise TaskUnavailable("TOOL_FIXTURE_UNAVAILABLE", 503)
         return path
 
     def _read_sample_for_tool(self, sample_id: str) -> tuple[bytes, dict[str, Any]]:
         path = self._fixture_path(sample_id)
         try:
-            raw = path.read_bytes()
+            with path.open("rb") as stream:
+                raw = stream.read(MAX_FIXTURE_BYTES + 1)
         except OSError:
             raise TaskUnavailable("TOOL_FIXTURE_UNAVAILABLE", 503) from None
         if len(raw) > MAX_FIXTURE_BYTES:
@@ -727,9 +1160,15 @@ class AgentTaskRuntime:
         sample_id = tool_call["arguments"]["sampleId"]
         path = self._fixture_path(sample_id)
         try:
-            raw = path.read_bytes()
-            sample = _strict_json(raw.decode("utf-8"))
+            with path.open("rb") as stream:
+                raw = stream.read(MAX_FIXTURE_BYTES + 1)
         except (OSError, UnicodeDecodeError, ValueError, TypeError):
+            raise TaskUnavailable("VERIFIER_SOURCE_UNAVAILABLE", 503) from None
+        if len(raw) > MAX_FIXTURE_BYTES:
+            raise TaskFailed("VERIFIER_SOURCE_TOO_LARGE", 500)
+        try:
+            sample = _strict_json(raw.decode("utf-8"))
+        except (UnicodeDecodeError, ValueError, TypeError):
             raise TaskUnavailable("VERIFIER_SOURCE_UNAVAILABLE", 503) from None
         if not isinstance(sample, dict):
             raise TaskFailed("VERIFIER_REJECTED_OUTPUT", 500)
@@ -773,8 +1212,25 @@ class AgentTaskRuntime:
         }
 
     def _cancel_requested(self, task_id: str) -> bool:
+        assert self.db is not None
         row = self.db.execute("SELECT cancel_requested FROM agent_tasks WHERE task_id=?", (task_id,)).fetchone()
         return bool(row and row[0])
+
+    def _finish_error(self, task_id: str, status: str, error_code: str, event_type: str) -> None:
+        # Cancellation wins at a safe boundary if its durable request was
+        # recorded before the terminal transition. Once a terminal transition
+        # commits, cancel_task records an explicit ignored event instead.
+        if self._cancel_requested(task_id):
+            self._mark_cancelled(task_id, "error-boundary")
+            return
+        self._transition(
+            task_id,
+            status,
+            error_code=error_code,
+            event_type=event_type,
+            event_key=event_type,
+            data={"code": error_code},
+        )
 
     async def _run(self, task_id: str) -> None:
         task = self._load(task_id)
@@ -845,33 +1301,12 @@ class AgentTaskRuntime:
         except asyncio.CancelledError:
             raise
         except TaskUnavailable as error:
-            self._transition(
-                task_id,
-                "unavailable",
-                error_code=error.code,
-                event_type="task.unavailable",
-                event_key="task.unavailable",
-                data={"code": error.code},
-            )
+            self._finish_error(task_id, "unavailable", error.code, "task.unavailable")
         except (AgentTaskError, TaskFailed) as error:
-            self._transition(
-                task_id,
-                "failed",
-                error_code=error.code,
-                event_type="task.failed",
-                event_key="task.failed",
-                data={"code": error.code},
-            )
+            self._finish_error(task_id, "failed", error.code, "task.failed")
         except Exception:
             # Do not expose filesystem, SQLite, or provider-adjacent details.
-            self._transition(
-                task_id,
-                "failed",
-                error_code="TASK_RUNTIME_FAILED",
-                event_type="task.failed",
-                event_key="task.failed",
-                data={"code": "TASK_RUNTIME_FAILED"},
-            )
+            self._finish_error(task_id, "failed", "TASK_RUNTIME_FAILED", "task.failed")
 
 
 def _error_response(code: str, status: int) -> web.Response:
@@ -946,6 +1381,15 @@ def attach_agent_task_routes(
                 "status": "ready",
                 "available": True,
                 "persistence": "sqlite-wal-full",
+                "transport": "bearer-authenticated-http",
+                "limits": {
+                    "maxConcurrentWorkers": MAX_CONCURRENT_WORKERS,
+                    "maxQueuedTasks": MAX_QUEUE_DEPTH,
+                    "maxTasksPerActor": MAX_TASKS_PER_ACTOR,
+                    "maxTasksTotal": MAX_TASKS_TOTAL,
+                    "maxStoreBytes": MAX_TASK_STORE_BYTES,
+                    "retention": "operator-managed; no automatic deletion",
+                },
                 "toolCatalog": [dict(tool) for tool in TOOL_CATALOG],
                 "conversation": provider,
             },

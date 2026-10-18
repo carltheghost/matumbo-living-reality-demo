@@ -27,13 +27,26 @@ durability. Startup recovery re-queues interrupted plan/tool/result work;
 effect keys make reconciliation idempotent, so a restart at a boundary does
 not duplicate the tool or verifier effect. A task may end as `succeeded`,
 `cancelled`, `blocked`, `unavailable`, or `failed`; a cancellation request is
-honored at the next safe boundary.
+honored at the next safe boundary. The runtime holds an exclusive private lock
+sidecar before recovery; a second process fails closed. Database, WAL/SHM/journal,
+and lock paths must be regular, owner-private, non-symlink files in an
+owner-private directory. Existing incomplete success records are re-queued
+instead of being reported as successful without evidence.
 
 The UI displays the task state, typed tool, artifact/evidence, verification
 status, and event journal. It also displays the independent conversation
 provider status. This branch does not configure credentials or make a live
 provider request. A Pages/static build cannot run these routes and remains an
 honest unavailable surface.
+
+The task routes are bearer-authenticated HTTP routes after the existing
+WebSocket admission; they are not a server-verified active WebSocket admission
+channel. The fixed sample task accepts only `sample.read`, and fixture text is
+never a capability source. Verification means an independent reread and digest
+recomputation, not an independent semantic model. If cancellation is durably
+requested before a terminal error transition, cancellation wins at that safe
+boundary; once a terminal transition commits, a later cancel is recorded as
+ignored.
 
 ## Routes
 
@@ -44,6 +57,12 @@ All routes require the already-admitted bearer and exact same-origin proof:
 * `POST /api/agent/tasks`
 * `GET /api/agent/tasks/{taskId}`
 * `POST /api/agent/tasks/{taskId}/cancel`
+
+Admission is bounded to 2 concurrent workers, 16 queued tasks, 32 tasks per
+actor, 256 durable tasks total, 64 events per task, and an 8 MiB task-store
+quota. Overload and quota return explicit errors. There is no automatic
+retention or deletion: an operator must export/archive data and remove it
+through a separately reviewed maintenance procedure.
 
 The next integration step is an authorized HTTPS host with a persistent
 private volume, followed by a non-production live provider/device check. No

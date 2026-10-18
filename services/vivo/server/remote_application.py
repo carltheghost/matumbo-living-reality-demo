@@ -539,7 +539,7 @@ async def make_remote_app(data_dir, owner_token, origin, *, store="posix", conve
     app.router.add_get("/ws", gateway.websocket)
     for name in ("shared.css","render.js","camera.js","geometry.js","hand-worker.js"):
         app.router.add_get("/" + name, lambda request, n=name: asset(request, n))
-    for name in ("remote-bootstrap.mjs","remote-transport.mjs","conversation-transport.mjs","offline-branch.mjs","interactions.mjs","adapters.mjs","camera-compat.mjs","remote.css","device-check.mjs","device-check.css","vivo-ui-overlay.mjs","vivo-ui-overlay.css"):
+    for name in ("remote-bootstrap.mjs","remote-transport.mjs","agent-task-ui-state.mjs","conversation-transport.mjs","offline-branch.mjs","interactions.mjs","adapters.mjs","camera-compat.mjs","remote.css","device-check.mjs","device-check.css","vivo-ui-overlay.mjs","vivo-ui-overlay.css"):
         source_name = name if name.startswith("vivo-ui-overlay.") else "application/" + name
         app.router.add_get("/application/" + name,
                            lambda request, n=source_name: asset(request, n))

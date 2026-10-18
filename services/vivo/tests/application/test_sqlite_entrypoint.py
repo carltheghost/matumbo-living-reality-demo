@@ -119,6 +119,9 @@ class SQLiteStartupPrivacyTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as parent:
             directory = Path(parent) / 'public'
             directory.mkdir(mode=0o755)
+            # mkdir(0755) is narrowed by a restrictive process umask on some
+            # runners; make the negative privacy fixture deterministic.
+            directory.chmod(0o755)
             app = make_local_app(directory, store='sqlite')
             self.assertEqual(list(directory.iterdir()), [])
             self.assertEqual(app['hub'].store.db.execute('PRAGMA database_list').fetchall()[0][2], '')
