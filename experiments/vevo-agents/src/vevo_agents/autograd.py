@@ -53,6 +53,21 @@ class Tensor:
     def shape(self):
         return self.data.shape
 
+    @property
+    def T(self):
+        """Transpose a 2-D tensor for the small proof models."""
+
+        if self.data.ndim != 2:
+            raise NotImplementedError("autograd transpose supports only 2-D tensors")
+        out = Tensor(self.data.T, requires_grad=self.requires_grad, parents=(self,))
+
+        def backward():
+            if self.requires_grad:
+                self._add_grad(out.grad.T)
+
+        out._backward = backward
+        return out
+
     def _add_grad(self, value) -> None:
         if self.requires_grad:
             self.grad += np.asarray(value, dtype=np.float64)
@@ -272,6 +287,47 @@ def exp(value) -> Tensor:
     def backward():
         if value.requires_grad:
             value._add_grad(out.grad * data)
+
+    out._backward = backward
+    return out
+
+
+def sin(value) -> Tensor:
+    value = as_tensor(value)
+    data = np.sin(value.data)
+    out = Tensor(data, requires_grad=value.requires_grad, parents=(value,))
+
+    def backward():
+        if value.requires_grad:
+            value._add_grad(out.grad * np.cos(value.data))
+
+    out._backward = backward
+    return out
+
+
+def cos(value) -> Tensor:
+    value = as_tensor(value)
+    data = np.cos(value.data)
+    out = Tensor(data, requires_grad=value.requires_grad, parents=(value,))
+
+    def backward():
+        if value.requires_grad:
+            value._add_grad(-out.grad * np.sin(value.data))
+
+    out._backward = backward
+    return out
+
+
+def sqrt(value) -> Tensor:
+    value = as_tensor(value)
+    if np.any(value.data < 0.0):
+        raise ValueError("sqrt requires non-negative values")
+    data = np.sqrt(value.data)
+    out = Tensor(data, requires_grad=value.requires_grad, parents=(value,))
+
+    def backward():
+        if value.requires_grad:
+            value._add_grad(out.grad / (2.0 * data))
 
     out._backward = backward
     return out
