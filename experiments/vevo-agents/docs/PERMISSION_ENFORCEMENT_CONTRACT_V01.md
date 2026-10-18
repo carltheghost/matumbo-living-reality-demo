@@ -20,17 +20,17 @@ This stage implements a bounded permission broker with an injected authority int
 ## Functional Requirements
 
 - FR-1: The capability descriptor MUST identify one execution kind: `internal_learned_skill`, `local_generated_tool`, `external_tool_adapter`, or `specialist_model_adapter`, plus effect class, tool version, named workspace, allowed operations, resource scopes, destinations, and resource limits.
-- FR-2: The immutable versioned canonical action MUST bind workspace, requester, capability name, exact executor version, operation, complete arguments, resolved resource, destination, data category, cost, input versions, and idempotency key. Unknown authorization fields, including `approved`, MUST be rejected rather than interpreted.
+- FR-2: The immutable versioned canonical action MUST bind workspace, requester, capability name, exact executor version, operation, complete arguments, resolved resource, destination, data category, cost, input versions, and idempotency key. Action inputs MUST be bounded for depth, item count, and serialized size before recursive freezing or serialization. Unknown authorization fields, including `approved`, MUST be rejected rather than interpreted.
 - FR-3: A neural proposer MAY submit an action or approval request, but only the injected authority MAY issue an opaque grant handle. The broker MUST never manufacture, upgrade, or accept a model-created grant.
 - FR-4: Protected effects MUST default deny without an authority-approved grant. Safety-critical effects MUST produce an explicit `user_handoff_required` or `per_action_approval_required` policy outcome; a general blanket grant MUST not bypass that policy.
 - FR-5: A trusted grant MUST bind an authenticated approving identity to the full immutable action digest, a distinct stable operation identity, capability/tool version, operation, resource scope, data destination, use limit, spend limit, expiry, approval mode, and revocation state.
 - FR-5a: The product MUST expose explicit grant modes `one_time`, `scoped`, and `workspace_full_access`. `workspace_full_access` MUST mean full supported access only within a named workspace owned by the authority, with visible effective scope, explicit user approval, expiry, revocation, and audit. It MUST NOT mean globally unrestricted access.
 - FR-5b: Requested permissions and effective permissions MUST be reported separately, with explicit exceptions for system safety floors, denied ownership, mandatory per-action confirmation, and user handoff. A broad workspace grant MUST NOT override those exceptions.
 - FR-6: Permission states MUST remain distinct: `pending`, `approved`, `denied`, `expired`, and `revoked`. A state transition MUST be auditable and an invalid or forged handle MUST not become approved.
-- FR-7: The broker MUST recheck authority, exact canonical action bytes, scope, limits, expiry, revocation, and cancellation immediately before executor invocation. The authority MUST record dispatch intent before invocation and reserve use/spend atomically across every live ancestor and the leaf so concurrent callers cannot double-use a grant.
-- FR-8: Execution MUST support idempotency keys, cancellation before effects, complete audit receipts, and explicit `reserved`, `started`, `completed`, and `unknown` outcomes. An idempotency-key collision with different action material MUST fail closed; an unknown outcome MUST survive expiry/reapproval and block blind rerun.
-- FR-9: Nested or delegated calls MUST carry only opaque authority-owned identifiers. The authority MUST resolve the live intersection of parent and child grant capabilities, operations, scopes, destinations, expiry, revocation, use, and shared spend. Delegation MUST never union or expand authority, and generated tools MUST not approve themselves or escalate capabilities.
-- FR-10: The first executor set MUST be harmless local fixtures. Internal pure numerical capabilities MAY run without a grant only when their descriptor and executor both declare effect-free behavior and the action remains local-memory-only. Any protected destination remains subject to a grant, regardless of execution kind.
+- FR-7: The broker MUST recheck authority, exact canonical action bytes, scope, limits, expiry, revocation, and cancellation immediately before executor invocation. The authority MUST record dispatch intent before invocation and reserve use/spend atomically across every live ancestor and the leaf so concurrent callers cannot double-use a grant. An adapter-proven pre-effect cancellation after dispatch intent MUST reach a terminal no-effect state and release its reserved use/spend; arbitrary exceptions MUST remain unknown.
+- FR-8: Execution MUST support idempotency keys, authority-owned logical operation identities, cancellation before effects, complete audit receipts, and explicit `reserved`, `started`, `completed`, `unknown`, and `cancelled_no_effect` outcomes. An idempotency-key collision with different action material MUST fail closed; an unknown outcome MUST survive expiry/reapproval and block blind rerun. A new user-intended repetition MUST be explicit rather than inferred from a changed idempotency key.
+- FR-9: Nested or delegated calls MUST carry only opaque authority-owned identifiers. The authority MUST resolve the live intersection of parent and child capability, exact executor version, workspace, operations, scopes, destinations, expiry, revocation, use, and shared spend. Every ancestor `one_time` binding MUST be enforced. Delegation MUST never union or expand authority, and generated tools MUST not approve themselves or escalate capabilities.
+- FR-10: The first executor set MUST be harmless local fixtures. Internal pure numerical capabilities MAY run without a grant only when their descriptor explicitly declares `public_read`, both descriptor and executor declare effect-free behavior, and the action remains local-memory-only. Any protected destination remains subject to a grant, regardless of execution kind. Effect-free delegated calls remain grant-dependent and charged.
 - FR-11: Resource accounting MUST include the controller and every resident or called capability, including weights/RAM, latency, input/output bytes, uses, and spend where applicable. A small controller MUST not be represented as the total system cost.
 - FR-12: The permission module MUST provide explicit seams for a durable transactional authority/store without claiming that the current in-memory implementation authenticates identities, survives crashes, or grants real access.
 
@@ -39,7 +39,7 @@ This stage implements a bounded permission broker with an injected authority int
 - NFR-1: The default policy MUST be deny for protected and safety-critical effects.
 - NFR-2: Grant tokens and authority decisions MUST be opaque to the model and must be validated by the injected authority, not by a caller-supplied boolean or dictionary.
 - NFR-3: Check, dispatch-intent recording, and reservation MUST be atomic within the local authority; no check-then-use race may permit concurrent double consumption.
-- NFR-4: Canonical action serialization MUST be deterministic, deeply immutable, finite JSON with sorted keys and no truncation. Material argument, requester, destination, scope, operation, input-version, or tool-version changes MUST change the action digest.
+- NFR-4: Canonical action serialization MUST be deterministic, deeply immutable, finite JSON with sorted keys and no truncation. Material argument, requester, destination, scope, operation, input-version, or tool-version changes MUST change the action digest. Stored and returned receipt mappings MUST be deeply immutable, while serialized receipt views MUST be fresh copies.
 - NFR-5: Denied, expired, revoked, pending, cancelled, and budget-rejected actions MUST invoke no executor side effect.
 - NFR-6: The implementation MUST use local standard-library primitives only and MUST not access network, filesystem, shell, process, credentials, external providers, or account permissions.
 - NFR-7: Audit records MUST expose outcome and action digest without exposing grant secrets; the audit log MUST be append-only within the local test implementation.
@@ -67,13 +67,17 @@ Given an approved grant bound to one action, when its arguments, destination, sc
 
 Given a grant with one remaining use and a finite spend limit, when two concurrent callers race to execute the exact action, then at most one executor call MUST occur and the other result MUST be a typed in-progress, limit, or replay outcome. Given a request over the spend limit, then no reservation or side effect MUST occur.
 
-### AC-6: Idempotency and cancellation (FR-8, NFR-5)
+### AC-6: Idempotency and cancellation (FR-7, FR-8, NFR-5)
 
-Given a completed action with an idempotency key, when the same canonical action is submitted again, then the broker MUST return an idempotent replay without a second executor call. Given the same key with changed material, then it MUST fail closed. Given cancellation before reservation or after reservation but before executor invocation, then the reservation MUST be cancelled and no executor side effect MUST occur. Given a generic executor exception after dispatch, then the outcome MUST be `uncertain_outcome`, the reservation/use/spend MUST remain held, and a same-key retry MUST not invoke the executor again.
+Given a completed action with an idempotency key, when the same canonical action is submitted again, then the broker MUST return an idempotent replay without a second executor call. Given the same key with changed material, then it MUST fail closed. Given cancellation before reservation or after reservation but before executor invocation, then the reservation MUST be cancelled and no executor side effect MUST occur. Given a generic executor exception after dispatch, then the outcome MUST be `uncertain_outcome`, the reservation/use/spend MUST remain held, and a same-key or changed-key retry/reapproval MUST not invoke the executor again. Given an adapter-proven pre-effect cancellation after dispatch intent, then the outcome MUST be `cancelled_no_effect`, its reserved use/spend MUST be released, and retry MUST be allowed.
 
 ### AC-7: Nested intersection and no escalation (FR-9)
 
-Given a parent context permitting capability A, operation `read`, scope `local`, destination `none`, and spend 5, when a child requests a broader operation, scope, destination, capability, or spend, then the child MUST be denied. Given a child grant narrower than the parent, then the derived context MUST be the set intersection and never the union. The context object MUST contain no copied permission fields; revoking or expiring any ancestor after derivation MUST be observed at the next reservation/start check.
+Given a parent context permitting capability A, operation `read`, scope `local`, destination `none`, and spend 5, when a child requests a broader operation, scope, destination, capability, or spend, then the child MUST be denied. Given a child grant narrower than the parent, then the derived context MUST be the set intersection and never the union, including capability, executor version, workspace, and every `one_time` ancestor action binding. The context object MUST contain no copied permission fields; revoking or expiring any ancestor after derivation MUST be observed at the next reservation/start check. Effect-free delegated actions MUST reserve and charge the live chain.
+
+### AC-7a: Logical operation identity and replay read authorization (FR-7, FR-8)
+
+Given an unresolved action, changing only its idempotency key or obtaining a reapproval MUST retain the authority-owned logical operation identity and block blind rerun. A new repetition MUST require an explicit `new_operation` approval request. Given a completed action, a replay MUST perform current grant liveness and scope checks before returning cached output; an expired, revoked, or unrelated grant MUST not disclose that output.
 
 ### AC-8: Safety-critical policy outcome (FR-4)
 
@@ -116,7 +120,7 @@ This is a local Python API and intentionally has no HTTP endpoint.
 ```text
 canonical_action_bytes(action: Action) -> bytes
 action_digest(action: Action) -> str
-request_approval(action: Action, proposer: str) -> PermissionState
+request_approval(action: Action, proposer: str, new_operation: bool = False) -> PermissionState
 execute(action: Action, grant: GrantHandle | None,
         parent: DelegationContext | None, cancellation: CancellationToken | None)
         -> ExecutionReceipt
@@ -132,13 +136,13 @@ The authority and executor are injected interfaces. The broker never exposes a p
 
 | Model | Required fields | Invariants |
 | --- | --- | --- |
-| Capability descriptor | kind, effect class, name, tool version, workspace, operations, scopes, destinations, limits | Exact version/effect identity; workspace is authority-owned; no protected effect-free destination |
-| Action | capability, version, workspace, operation, scope, destination, arguments, spend, idempotency key | Canonical finite JSON; no authorization fields; all material fields digest-bound |
+| Capability descriptor | kind, effect class, name, tool version, workspace, operations, scopes, destinations, limits, `public_read` | Exact version/effect identity; workspace is authority-owned; public read is explicit and local-memory-only |
+| Action | capability, version, workspace, operation, scope, destination, arguments, spend, idempotency key | Canonical finite JSON bounded before recursive freezing; no authorization fields; all material fields digest-bound |
 | Permission state | request id, status, action digest, reason | Status is pending/approved/denied/expired/revoked and transitions are explicit |
 | Grant handle | opaque authority-issued token | Caller cannot mint approval by constructing a matching-looking mapping |
 | Delegation context | opaque authority-owned identifier only | Live ancestor chain is resolved by the authority; no permission snapshot is trusted |
-| Reservation | authority-owned reservation id, operation id, action digest, canonical bytes, chain, dispatch intent, state | Atomically consumes shared ancestor/leaf use/spend and transitions reserved/started/completed/unknown |
-| Execution receipt | status, action digest, requested/effective permissions, exceptions, output/error, audit receipt | No receipt claims success without executor invocation and authority commit |
+| Reservation | authority-owned reservation id, operation id, action digest, canonical bytes, chain, dispatch intent, state | Atomically consumes shared ancestor/leaf use/spend and transitions reserved/started/completed/unknown/cancelled_no_effect |
+| Execution receipt | status, action digest, requested/effective permissions, exceptions, output/error, audit receipt | Nested mappings are deeply frozen; `as_dict()` returns fresh copies; no receipt claims success without executor invocation and authority commit |
 | Audit receipt | id, digest, outcome, reason, timestamps | Append-only local record; no grant secret |
 | Resource estimate | weights/RAM/latency/bytes/cost | Totals include controller and all capabilities |
 

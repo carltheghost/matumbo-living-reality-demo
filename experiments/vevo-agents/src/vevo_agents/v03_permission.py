@@ -42,6 +42,9 @@ GRANT_MODES = (GRANT_MODE_ONE_TIME, GRANT_MODE_SCOPED, GRANT_MODE_WORKSPACE_FULL
 PERMISSION_STATUSES = ("pending", "approved", "denied", "expired", "revoked")
 LOCAL_MEMORY_SCOPE = "local-memory"
 NO_DESTINATION = "none"
+MAX_ACTION_INPUT_DEPTH = 64
+MAX_ACTION_INPUT_BYTES = 1 << 20
+MAX_ACTION_INPUT_ITEMS = 100_000
 
 
 class PermissionError(ValueError):
@@ -81,6 +84,56 @@ def _finite_float(value: Any, *, label: str) -> float:
     if not math.isfinite(result):
         raise PermissionError(f"{label} must be finite")
     return result
+
+
+def _validate_bounded_json(value: Any, *, label: str) -> None:
+    """Reject unsupported, cyclic, too-deep, or oversized JSON before recursion."""
+
+    stack: list[tuple[Any, int]] = [(value, 0)]
+    seen_containers: set[int] = set()
+    item_count = 0
+    estimated_bytes = 0
+    while stack:
+        current, depth = stack.pop()
+        if depth > MAX_ACTION_INPUT_DEPTH:
+            raise PermissionError(f"{label} exceeds maximum nesting depth")
+        item_count += 1
+        if item_count > MAX_ACTION_INPUT_ITEMS:
+            raise PermissionError(f"{label} exceeds maximum item count")
+        if current is None:
+            estimated_bytes += 4
+        elif isinstance(current, bool):
+            estimated_bytes += 5
+        elif type(current) is int:
+            estimated_bytes += 24
+        elif type(current) is float:
+            if not math.isfinite(current):
+                raise PermissionError(f"{label} must contain finite JSON data")
+            estimated_bytes += 24
+        elif isinstance(current, str):
+            estimated_bytes += len(current.encode("utf-8")) + 2
+        elif isinstance(current, Mapping):
+            identity = id(current)
+            if identity in seen_containers:
+                raise PermissionError(f"{label} must not contain repeated or cyclic containers")
+            seen_containers.add(identity)
+            estimated_bytes += 2
+            for key, child in current.items():
+                if not isinstance(key, str):
+                    raise PermissionError(f"{label} object keys must be strings")
+                estimated_bytes += len(key.encode("utf-8")) + 4
+                stack.append((child, depth + 1))
+        elif isinstance(current, (list, tuple)):
+            identity = id(current)
+            if identity in seen_containers:
+                raise PermissionError(f"{label} must not contain repeated or cyclic containers")
+            seen_containers.add(identity)
+            estimated_bytes += 2
+            stack.extend((child, depth + 1) for child in current)
+        else:
+            raise PermissionError(f"{label} must be finite JSON data")
+        if estimated_bytes > MAX_ACTION_INPUT_BYTES:
+            raise PermissionError(f"{label} exceeds maximum serialized size")
 
 
 class _FrozenMapping(Mapping[str, Any]):
@@ -141,7 +194,7 @@ def _canonical_bytes(value: Any, *, label: str) -> bytes:
             separators=(",", ":"),
             allow_nan=False,
         ).encode("utf-8")
-    except (TypeError, ValueError) as exc:
+    except (RecursionError, TypeError, ValueError) as exc:
         raise PermissionError(f"{label} must be finite JSON data") from exc
 
 
@@ -165,6 +218,7 @@ class CapabilityDescriptor:
     workspace_owned: bool = True
     requires_user_handoff: bool = False
     requires_per_action_confirmation: bool = False
+    public_read: bool = False
 
     def __post_init__(self) -> None:
         _nonempty(self.name, label="capability name")
@@ -203,9 +257,19 @@ class CapabilityDescriptor:
             (self.workspace_owned, "workspace_owned"),
             (self.requires_user_handoff, "requires_user_handoff"),
             (self.requires_per_action_confirmation, "requires_per_action_confirmation"),
+            (self.public_read, "public_read"),
         ):
             if not isinstance(value, bool):
                 raise PermissionError(f"{label} must be boolean")
+        if self.public_read and self.effect_class != EFFECT_FREE:
+            raise PermissionError("public_read is only valid for effect-free capabilities")
+        if self.public_read and (
+            self.execution_kind != "internal_learned_skill"
+            or any(operation not in {"read", "compute"} for operation in self.allowed_operations)
+            or LOCAL_MEMORY_SCOPE not in self.allowed_resource_scopes
+            or NO_DESTINATION not in self.allowed_destinations
+        ):
+            raise PermissionError("public_read capabilities must be internal local-memory read/compute operations")
 
     def estimate(self) -> ResourceEstimate:
         return ResourceEstimate(self.resident_weight_bytes, self.resident_ram_bytes, self.max_latency_ms, self.cost_units)
@@ -220,6 +284,7 @@ class CapabilityDescriptor:
             "resource_scopes": list(self.allowed_resource_scopes),
             "destinations": list(self.allowed_destinations),
             "max_spend_units": self.max_spend_units,
+            "public_read": self.public_read,
         }
 
 
@@ -254,6 +319,8 @@ class Action:
             _nonempty(self.resolved_resource, label="resolved_resource")
         if not isinstance(self.arguments, Mapping) or not isinstance(self.input_versions, Mapping):
             raise PermissionError("arguments and input_versions must be mappings")
+        _validate_bounded_json(self.arguments, label="arguments")
+        _validate_bounded_json(self.input_versions, label="input_versions")
         _nonnegative_int(self.spend_units, label="spend_units")
         frozen_args = _freeze_json(self.arguments, label="arguments")
         frozen_versions = _freeze_json(self.input_versions, label="input_versions")
@@ -261,7 +328,10 @@ class Action:
             raise PermissionError("arguments and input_versions must be mappings")
         object.__setattr__(self, "arguments", frozen_args)
         object.__setattr__(self, "input_versions", frozen_versions)
-        object.__setattr__(self, "_canonical", _canonical_bytes(self.canonical_mapping(), label="action"))
+        canonical = _canonical_bytes(self.canonical_mapping(), label="action")
+        if len(canonical) > MAX_ACTION_INPUT_BYTES:
+            raise PermissionError("action exceeds maximum serialized size")
+        object.__setattr__(self, "_canonical", canonical)
 
     def canonical_mapping(self) -> dict[str, Any]:
         return {
@@ -356,17 +426,26 @@ class PermissionState:
     requested_permissions: Mapping[str, Any]
     effective_permissions: Mapping[str, Any] | None = None
     exceptions: tuple[str, ...] = ()
+    operation_id: str = ""
 
     def __post_init__(self) -> None:
         if self.status not in PERMISSION_STATUSES:
             raise PermissionError(f"unsupported permission status: {self.status}")
+        if self.operation_id:
+            _nonempty(self.operation_id, label="operation_id")
+        _validate_bounded_json(self.requested_permissions, label="requested_permissions")
+        object.__setattr__(self, "requested_permissions", _freeze_json(self.requested_permissions, label="requested_permissions"))
+        if self.effective_permissions is not None:
+            _validate_bounded_json(self.effective_permissions, label="effective_permissions")
+            object.__setattr__(self, "effective_permissions", _freeze_json(self.effective_permissions, label="effective_permissions"))
+        object.__setattr__(self, "exceptions", tuple(self.exceptions))
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "status": self.status, "request_id": self.request_id, "action_digest": self.action_digest,
-            "reason": self.reason, "requested_permissions": dict(self.requested_permissions),
-            "effective_permissions": dict(self.effective_permissions) if self.effective_permissions is not None else None,
-            "exceptions": list(self.exceptions),
+            "reason": self.reason, "requested_permissions": _thaw_json(self.requested_permissions),
+            "effective_permissions": _thaw_json(self.effective_permissions) if self.effective_permissions is not None else None,
+            "exceptions": list(self.exceptions), "operation_id": self.operation_id,
         }
 
 
@@ -394,12 +473,27 @@ class ExecutionReceipt:
     exceptions: tuple[str, ...]
     audit: AuditReceipt
 
+    def __post_init__(self) -> None:
+        if self.output_payload is not None:
+            _validate_bounded_json(self.output_payload, label="output_payload")
+            object.__setattr__(self, "output_payload", _freeze_json(self.output_payload, label="output_payload"))
+        _validate_bounded_json(self.requested_permissions, label="requested_permissions")
+        object.__setattr__(self, "requested_permissions", _freeze_json(self.requested_permissions, label="requested_permissions"))
+        if self.effective_permissions is not None:
+            _validate_bounded_json(self.effective_permissions, label="effective_permissions")
+            object.__setattr__(self, "effective_permissions", _freeze_json(self.effective_permissions, label="effective_permissions"))
+        if self.error is not None:
+            _validate_bounded_json(self.error, label="error")
+            object.__setattr__(self, "error", _freeze_json(self.error, label="error"))
+        object.__setattr__(self, "exceptions", tuple(self.exceptions))
+
     def as_dict(self) -> dict[str, Any]:
         return {
             "schema": PERMISSION_RESULT_SCHEMA, "status": self.status, "action_digest": self.action_digest,
-            "output_payload": self.output_payload, "error": dict(self.error) if self.error is not None else None,
-            "requested_permissions": dict(self.requested_permissions),
-            "effective_permissions": dict(self.effective_permissions) if self.effective_permissions is not None else None,
+            "output_payload": _thaw_json(self.output_payload) if self.output_payload is not None else None,
+            "error": _thaw_json(self.error) if self.error is not None else None,
+            "requested_permissions": _thaw_json(self.requested_permissions),
+            "effective_permissions": _thaw_json(self.effective_permissions) if self.effective_permissions is not None else None,
             "exceptions": list(self.exceptions), "audit": self.audit.as_dict(),
         }
 
@@ -482,6 +576,8 @@ class _RequestRecord:
     capability: CapabilityDescriptor
     proposer: str
     bound_action_digest: str
+    operation_id: str
+    semantic_digest: str
     status: str = "pending"
 
 
@@ -517,6 +613,16 @@ class _Reservation:
     dispatch_intent: bool = False
     started_at: float | None = None
     reason: str = ""
+    budget_released: bool = False
+
+
+@dataclass(slots=True)
+class _LogicalOperation:
+    operation_id: str
+    semantic_digest: str
+    state: str = "available"
+    reservation_id: str | None = None
+    action_digest: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -546,19 +652,29 @@ class LocalTestAuthority:
         self._reservations: dict[str, _Reservation] = {}
         self._idempotency: dict[tuple[str, str], tuple[str, str, str]] = {}
         self._receipts: dict[str, ExecutionReceipt] = {}
+        self._operation_aliases: dict[tuple[str, str], str] = {}
+        self._operations: dict[str, _LogicalOperation] = {}
 
     def durability_status(self) -> dict[str, Any]:
         return {"durable": False, "storage_kind": self.storage_kind, "crash_recovery": False, "outbox": False, "production_ready": False}
 
-    def submit(self, action: Action, capability: CapabilityDescriptor, proposer: str) -> PermissionState:
+    def submit(self, action: Action, capability: CapabilityDescriptor, proposer: str, *, new_operation: bool = False) -> PermissionState:
         _nonempty(proposer, label="proposer")
+        if not isinstance(new_operation, bool):
+            raise PermissionError("new_operation must be boolean")
         self._validate_action_capability(action, capability)
         request_id = secrets.token_urlsafe(18)
-        bound_digest = action_digest(action, requester=action.requester or proposer)
-        record = _RequestRecord(request_id, action, capability, proposer, bound_digest)
+        requester = action.requester or proposer
+        bound_digest = action_digest(action, requester=requester)
+        semantic_digest = stable_operation_id(action, requester=requester)
         with self._lock:
+            alias_key = (requester, semantic_digest)
+            operation_id = self._new_operation_id() if new_operation or alias_key not in self._operation_aliases else self._operation_aliases[alias_key]
+            self._operation_aliases[alias_key] = operation_id
+            self._operations.setdefault(operation_id, _LogicalOperation(operation_id, semantic_digest))
+            record = _RequestRecord(request_id, action, capability, proposer, bound_digest, operation_id, semantic_digest)
             self._requests[request_id] = record
-        return PermissionState("pending", request_id, bound_digest, "awaiting independent authority approval", action.requested_permissions())
+        return PermissionState("pending", request_id, bound_digest, "awaiting independent authority approval", action.requested_permissions(), operation_id=operation_id)
 
     def approve(self, request_id: str, approving_identity: str, expires_at: float, max_uses: int, max_spend_units: int, approval_mode: str, workspace_id: str) -> GrantHandle:
         _nonempty(approving_identity, label="approving_identity")
@@ -606,7 +722,7 @@ class LocalTestAuthority:
             if request.status != "pending":
                 raise PermissionError(f"request is not pending: {request.status}")
             request.status = "denied"
-            return PermissionState("denied", request.request_id, request.bound_action_digest, reason, request.action.requested_permissions())
+            return PermissionState("denied", request.request_id, request.bound_action_digest, reason, request.action.requested_permissions(), operation_id=request.operation_id)
 
     def revoke(self, grant: GrantHandle, reason: str = "authority revoked") -> None:
         _nonempty(reason, label="reason")
@@ -617,7 +733,7 @@ class LocalTestAuthority:
         with self._lock:
             record = self._grant(grant)
             status = self._current_status(record, self._clock())
-            return PermissionState(status, record.request.request_id, record.request.bound_action_digest, f"grant is {status}", record.request.action.requested_permissions(), record.constraints.as_permissions())
+            return PermissionState(status, record.request.request_id, record.request.bound_action_digest, f"grant is {status}", record.request.action.requested_permissions(), record.constraints.as_permissions(), operation_id=record.request.operation_id)
 
     def context_for_grant(self, grant: GrantHandle) -> DelegationContext:
         with self._lock:
@@ -653,7 +769,7 @@ class LocalTestAuthority:
                 raise PermissionError("grant is not currently approved")
             return record.constraints
 
-    def reserve(self, grant: GrantHandle, action: Action, capability: CapabilityDescriptor, now: float, *, requires_user_handoff: bool, requires_per_action_confirmation: bool, parent: DelegationContext | None = None) -> _AuthorityDecision:
+    def reserve(self, grant: GrantHandle | None, action: Action, capability: CapabilityDescriptor, now: float, *, requires_user_handoff: bool, requires_per_action_confirmation: bool, parent: DelegationContext | None = None) -> _AuthorityDecision:
         with self._lock:
             try:
                 chain = self._reservation_chain(grant, parent)
@@ -662,6 +778,18 @@ class LocalTestAuthority:
             requester = action.requester or self._grants[chain[0]].request.proposer
             digest = action_digest(action, requester=requester)
             key = (requester, action.idempotency_key)
+            chain_status = self._chain_status(chain, now)
+            if chain_status != "approved":
+                return _AuthorityDecision(chain_status, f"grant is {chain_status}")
+            constraints = self._live_intersection(chain, now)
+            if constraints is None:
+                return _AuthorityDecision("denied", "delegation scope is not live")
+            if not self._binding_allows(chain, action, capability, requester, now):
+                return _AuthorityDecision("denied", "grant binding does not cover this action")
+            if requires_user_handoff:
+                return _AuthorityDecision("user_handoff_required", "policy requires user handoff")
+            if requires_per_action_confirmation and any(self._grants[token].constraints.approval_mode != GRANT_MODE_ONE_TIME for token in chain):
+                return _AuthorityDecision("per_action_approval_required", "policy requires explicit one-time approval")
             prior = self._idempotency.get(key)
             if prior is not None:
                 prior_digest, prior_state, prior_reservation = prior
@@ -672,46 +800,61 @@ class LocalTestAuthority:
                     return _AuthorityDecision(
                         "idempotent_replay",
                         "completed idempotent action",
+                        constraints=constraints,
                         output_payload=receipt.output_payload,
                         audit=receipt.audit,
                     )
                 if prior_state == "unknown":
                     return _AuthorityDecision("uncertain_outcome", "idempotent action has an unresolved outcome; blind rerun is blocked")
-                return _AuthorityDecision("pending", "idempotent action is already in progress")
-            if requires_user_handoff:
-                return _AuthorityDecision("user_handoff_required", "policy requires user handoff")
-            if requires_per_action_confirmation and any(self._grants[token].constraints.approval_mode != GRANT_MODE_ONE_TIME for token in chain):
-                return _AuthorityDecision("per_action_approval_required", "policy requires explicit one-time approval")
-            chain_status = self._chain_status(chain, now)
-            if chain_status != "approved":
-                return _AuthorityDecision(chain_status, f"grant is {chain_status}")
-            constraints = self._live_intersection(chain, now)
-            if constraints is None:
-                return _AuthorityDecision("denied", "delegation scope is not live")
-            if not self._binding_allows(chain, action, capability, requester):
-                return _AuthorityDecision("denied", "grant binding does not cover this action")
+                if prior_state == "cancelled_no_effect":
+                    self._idempotency.pop(key, None)
+                else:
+                    return _AuthorityDecision("pending", "idempotent action is already in progress")
+            operation = self._logical_operation_for(chain, action, requester)
+            if operation.state == "completed":
+                if operation.reservation_id is None or operation.reservation_id not in self._receipts:
+                    return _AuthorityDecision("denied", "completed logical operation has no receipt")
+                receipt = self._receipts[operation.reservation_id]
+                return _AuthorityDecision(
+                    "idempotent_replay",
+                    "completed logical operation",
+                    constraints=constraints,
+                    output_payload=receipt.output_payload,
+                    audit=receipt.audit,
+                )
+            if operation.state == "unknown":
+                return _AuthorityDecision("uncertain_outcome", "logical operation has an unresolved outcome; blind rerun is blocked")
+            if operation.state in {"reserved", "started"}:
+                return _AuthorityDecision("pending", "logical operation is already in progress")
+            if operation.state == "cancelled_no_effect":
+                operation.state = "available"
+                operation.reservation_id = None
+                operation.action_digest = ""
             if any(self._grants[token].used_count >= self._grants[token].max_uses for token in chain):
                 return _AuthorityDecision("denied", "grant use limit exhausted")
             if any(self._grants[token].spent_units + action.spend_units > self._grants[token].max_spend_units for token in chain):
                 return _AuthorityDecision("denied", "grant spend limit exhausted")
             reservation_id = secrets.token_urlsafe(18)
-            reservation = _Reservation(reservation_id, key, digest, stable_operation_id(action, requester=requester), _canonical_without(action, requester=requester), chain, action.spend_units)
+            reservation = _Reservation(reservation_id, key, digest, operation.operation_id, _canonical_without(action, requester=requester), chain, action.spend_units)
             for token in chain:
                 record = self._grants[token]
                 record.used_count += 1
                 record.spent_units += action.spend_units
             self._reservations[reservation_id] = reservation
             self._idempotency[key] = (digest, "reserved", reservation_id)
+            operation.state = "reserved"
+            operation.reservation_id = reservation_id
+            operation.action_digest = digest
             return _AuthorityDecision("reserved", "authority atomically reserved all live ancestors and leaf", reservation_id, constraints)
 
-    def mark_started(self, grant: GrantHandle, action: Action, reservation_id: str, now: float, cancellation: CancellationToken | None = None) -> _AuthorityDecision:
+    def mark_started(self, grant: GrantHandle | None, action: Action, reservation_id: str, now: float, cancellation: CancellationToken | None = None, parent: DelegationContext | None = None) -> _AuthorityDecision:
         with self._lock:
             reservation = self._reservations.get(reservation_id)
             if reservation is None or reservation.state != "reserved":
                 return _AuthorityDecision("denied", "reservation is missing or no longer reserved")
             if reservation.action_digest != action_digest(action, requester=reservation.key[0]) or reservation.action_bytes != _canonical_without(action, requester=reservation.key[0]):
                 return _AuthorityDecision("denied", "canonical action changed before start")
-            if grant.token not in reservation.chain:
+            if not self._reservation_authorized(reservation, grant, parent):
                 return _AuthorityDecision("denied", "grant is not part of reservation chain")
             constraints = self._live_intersection(reservation.chain, now)
             if constraints is None:
@@ -725,10 +868,10 @@ class LocalTestAuthority:
             reservation.started_at = now
             return _AuthorityDecision("started", "dispatch intent recorded before executor invocation", constraints=constraints)
 
-    def commit(self, grant: GrantHandle, action: Action, reservation_id: str, output_payload: Mapping[str, Any], audit: AuditReceipt, now: float) -> tuple[bool, tuple[str, ...]]:
+    def commit(self, grant: GrantHandle | None, action: Action, reservation_id: str, output_payload: Mapping[str, Any], audit: AuditReceipt, now: float, parent: DelegationContext | None = None) -> tuple[bool, tuple[str, ...]]:
         with self._lock:
             reservation = self._reservations.get(reservation_id)
-            if reservation is None or reservation.state != "started" or grant.token not in reservation.chain:
+            if reservation is None or reservation.state != "started" or not self._reservation_authorized(reservation, grant, parent):
                 raise PermissionError("started reservation is missing or mismatched")
             if reservation.action_digest != action_digest(action, requester=reservation.key[0]) or reservation.action_bytes != _canonical_without(action, requester=reservation.key[0]):
                 raise PermissionError("canonical action changed at commit")
@@ -737,32 +880,68 @@ class LocalTestAuthority:
             reservation.state = "completed"
             self._idempotency[reservation.key] = (reservation.action_digest, "completed", reservation_id)
             self._receipts[reservation_id] = ExecutionReceipt("executed", reservation.action_digest, dict(output_payload), None, action.requested_permissions(), current.as_permissions() if current else None, exceptions, audit)
+            operation = self._operations.get(reservation.operation_id)
+            if operation is not None:
+                operation.state = "completed"
+                operation.reservation_id = reservation_id
+                operation.action_digest = reservation.action_digest
             return True, exceptions
 
-    def mark_uncertain(self, grant: GrantHandle, action: Action, reservation_id: str, reason: str, audit: AuditReceipt) -> None:
+    def mark_uncertain(self, grant: GrantHandle | None, action: Action, reservation_id: str, reason: str, audit: AuditReceipt, parent: DelegationContext | None = None) -> None:
         with self._lock:
             reservation = self._reservations.get(reservation_id)
-            if reservation is None or reservation.state != "started" or grant.token not in reservation.chain:
+            if reservation is None or reservation.state != "started" or not self._reservation_authorized(reservation, grant, parent):
                 raise PermissionError("started reservation is missing or mismatched")
-            if reservation.action_digest != action_digest(action, requester=reservation.key[0]):
+            if reservation.action_digest != action_digest(action, requester=reservation.key[0]) or reservation.action_bytes != _canonical_without(action, requester=reservation.key[0]):
                 raise PermissionError("action changed while marking unknown")
             reservation.state = "unknown"
             reservation.reason = reason
             self._idempotency[reservation.key] = (reservation.action_digest, "unknown", reservation_id)
+            operation = self._operations.get(reservation.operation_id)
+            if operation is not None:
+                operation.state = "unknown"
+                operation.reservation_id = reservation_id
+                operation.action_digest = reservation.action_digest
 
-    def cancel(self, grant: GrantHandle, action: Action, reservation_id: str) -> None:
+    def cancel_started_no_effect(self, grant: GrantHandle | None, action: Action, reservation_id: str, reason: str, parent: DelegationContext | None = None) -> None:
         with self._lock:
             reservation = self._reservations.get(reservation_id)
-            if reservation is not None and grant.token in reservation.chain and reservation.state == "reserved":
+            if reservation is None or reservation.state != "started" or not self._reservation_authorized(reservation, grant, parent):
+                raise PermissionError("started reservation is missing or mismatched")
+            if reservation.action_digest != action_digest(action, requester=reservation.key[0]) or reservation.action_bytes != _canonical_without(action, requester=reservation.key[0]):
+                raise PermissionError("canonical action changed while recording no-effect cancellation")
+            self._release_budget_locked(reservation)
+            reservation.state = "cancelled_no_effect"
+            reservation.reason = reason
+            self._idempotency[reservation.key] = (reservation.action_digest, "cancelled_no_effect", reservation_id)
+            operation = self._operations.get(reservation.operation_id)
+            if operation is not None:
+                operation.state = "cancelled_no_effect"
+                operation.reservation_id = reservation_id
+                operation.action_digest = reservation.action_digest
+
+    def cancel(self, grant: GrantHandle | None, action: Action, reservation_id: str, parent: DelegationContext | None = None) -> None:
+        with self._lock:
+            reservation = self._reservations.get(reservation_id)
+            if reservation is not None and self._reservation_authorized(reservation, grant, parent) and reservation.state == "reserved":
                 self._cancel_locked(reservation)
 
     def _cancel_locked(self, reservation: _Reservation) -> None:
+        self._release_budget_locked(reservation)
+        self._idempotency.pop(reservation.key, None)
+        self._reservations.pop(reservation.reservation_id, None)
+        operation = self._operations.get(reservation.operation_id)
+        if operation is not None and operation.reservation_id == reservation.reservation_id:
+            self._operations.pop(reservation.operation_id, None)
+
+    def _release_budget_locked(self, reservation: _Reservation) -> None:
+        if reservation.budget_released:
+            return
         for token in reservation.chain:
             record = self._grants[token]
             record.used_count -= 1
             record.spent_units -= reservation.spend_units
-        self._idempotency.pop(reservation.key, None)
-        self._reservations.pop(reservation.reservation_id, None)
+        reservation.budget_released = True
 
     def _grant(self, grant: GrantHandle) -> _GrantRecord:
         token = self._token(grant)
@@ -770,6 +949,10 @@ class LocalTestAuthority:
         if record is None:
             raise PermissionError("unknown or forged grant handle")
         return record
+
+    @staticmethod
+    def _new_operation_id() -> str:
+        return f"op_{secrets.token_urlsafe(24)}"
 
     def _delegation_chain(self, value: DelegationContext | GrantHandle) -> tuple[str, ...]:
         if isinstance(value, GrantHandle):
@@ -779,12 +962,46 @@ class LocalTestAuthority:
             raise PermissionError("delegation context is unknown or forged")
         return self._delegations[value.token].grant_tokens
 
-    def _reservation_chain(self, grant: GrantHandle, parent: DelegationContext | None) -> tuple[str, ...]:
+    def _reservation_chain(self, grant: GrantHandle | None, parent: DelegationContext | None) -> tuple[str, ...]:
+        if grant is None:
+            if parent is None:
+                raise PermissionError("grant or live delegation context is required")
+            return self._delegation_chain(parent)
         leaf = self._grant(grant)
         if parent is None:
             return (leaf.token,)
         chain = self._delegation_chain(parent)
         return chain if leaf.token in chain else chain + (leaf.token,)
+
+    def _logical_operation_for(self, chain: tuple[str, ...], action: Action, requester: str) -> _LogicalOperation:
+        semantic_digest = stable_operation_id(action, requester=requester)
+        leaf_request = self._grants[chain[-1]].request
+        if semantic_digest == leaf_request.semantic_digest:
+            operation_id = leaf_request.operation_id
+        else:
+            alias_key = (requester, semantic_digest)
+            operation_id = self._operation_aliases.get(alias_key)
+            if operation_id is None:
+                operation_id = self._new_operation_id()
+                self._operation_aliases[alias_key] = operation_id
+                self._operations[operation_id] = _LogicalOperation(operation_id, semantic_digest)
+        operation = self._operations.get(operation_id)
+        if operation is None:
+            operation = _LogicalOperation(operation_id, semantic_digest)
+            self._operations[operation_id] = operation
+        if operation.semantic_digest != semantic_digest:
+            raise PermissionError("logical operation identity conflicts with action material")
+        return operation
+
+    def _reservation_authorized(self, reservation: _Reservation, grant: GrantHandle | None, parent: DelegationContext | None) -> bool:
+        if grant is not None and self._token(grant) in reservation.chain:
+            return True
+        if parent is None:
+            return False
+        try:
+            return self._delegation_chain(parent) == reservation.chain
+        except PermissionError:
+            return False
 
     def validate_delegation(self, context: DelegationContext) -> None:
         """Validate only authority ownership; liveness is checked at reserve/start."""
@@ -814,6 +1031,12 @@ class LocalTestAuthority:
         exceptions = list(first.exceptions)
         for record in records[1:]:
             constraints = record.constraints
+            if (
+                constraints.capability != first.capability
+                or constraints.tool_version != first.tool_version
+                or constraints.workspace_id != first.workspace_id
+            ):
+                return None
             operations &= constraints.operations
             scopes &= constraints.resource_scopes
             destinations &= constraints.destinations
@@ -821,18 +1044,29 @@ class LocalTestAuthority:
             exceptions.extend(item for item in constraints.exceptions if item not in exceptions)
         return _GrantConstraints(first.grant_reference, first.capability, first.tool_version, first.workspace_id, frozenset(operations), frozenset(scopes), frozenset(destinations), max_spend, "delegated_intersection" if len(records) > 1 else first.approval_mode, first.approving_identity, tuple(exceptions))
 
-    def _binding_allows(self, chain: tuple[str, ...], action: Action, capability: CapabilityDescriptor, requester: str) -> bool:
+    def _binding_allows(self, chain: tuple[str, ...], action: Action, capability: CapabilityDescriptor, requester: str, now: float | None = None) -> bool:
         self._validate_action_capability(action, capability)
-        effective = self._live_intersection(chain, self._clock())
-        if effective is None or action.workspace_id != effective.workspace_id or not capability.workspace_owned:
+        effective = self._live_intersection(chain, self._clock() if now is None else now)
+        if (
+            effective is None
+            or action.capability != effective.capability
+            or action.workspace_id != effective.workspace_id
+            or not capability.workspace_owned
+        ):
             return False
-        if action.operation not in effective.operations or action.resource_scope not in effective.resource_scopes or action.data_destination not in effective.destinations:
+        if (
+            action.tool_version != effective.tool_version
+            or action.operation not in effective.operations
+            or action.resource_scope not in effective.resource_scopes
+            or action.data_destination not in effective.destinations
+        ):
             return False
         if action.requester and action.requester != requester:
             return False
-        leaf = self._grants[chain[-1]]
-        if leaf.constraints.approval_mode == GRANT_MODE_ONE_TIME and authorization_digest(action, requester=requester) != authorization_digest(leaf.request.action, requester=leaf.request.proposer):
-            return False
+        for token in chain:
+            grant = self._grants[token]
+            if grant.constraints.approval_mode == GRANT_MODE_ONE_TIME and authorization_digest(action, requester=grant.request.proposer) != authorization_digest(grant.request.action, requester=grant.request.proposer):
+                return False
         return True
 
     @staticmethod
@@ -885,10 +1119,10 @@ class PermissionBroker:
         if executor is not None:
             self._executors[capability.name] = executor
 
-    def request_approval(self, action: Action, proposer: str) -> PermissionState:
+    def request_approval(self, action: Action, proposer: str, *, new_operation: bool = False) -> PermissionState:
         capability = self._get_capability(action)
         self._check_action_shape(action, capability)
-        return self.authority.submit(action, capability, proposer)
+        return self.authority.submit(action, capability, proposer, new_operation=new_operation)
 
     def context_for_grant(self, grant: GrantHandle) -> DelegationContext:
         return self.authority.context_for_grant(grant)
@@ -936,9 +1170,11 @@ class PermissionBroker:
                 )
         if self._effect_free_misclassified(action, capability):
             return self._receipt("denied", action, requested, effective, ("effect-free capability attempted a protected destination",), "effect boundary denied", now)
-        if capability.effect_class == EFFECT_FREE:
+        if capability.effect_class == EFFECT_FREE and grant is None and parent is None:
+            if not capability.public_read:
+                return self._receipt("denied", action, requested, effective, ("grant_required",), "effect-free capability is not explicitly public", now)
             return self._execute_effect_free(action, capability, token, requested, effective, now)
-        if grant is None:
+        if grant is None and parent is None:
             reason = "user_handoff_required" if capability.requires_user_handoff else "grant_required"
             return self._receipt("user_handoff_required" if capability.requires_user_handoff else "denied", action, requested, effective, (reason,), reason, now)
         decision = self.authority.reserve(grant, action, capability, now, requires_user_handoff=capability.requires_user_handoff, requires_per_action_confirmation=capability.requires_per_action_confirmation, parent=parent)
@@ -950,13 +1186,13 @@ class PermissionBroker:
         reservation_id = decision.reservation_id or ""
         effective = decision.constraints.as_permissions() if decision.constraints else effective
         if token.cancelled:
-            self.authority.cancel(grant, action, reservation_id)
+            self.authority.cancel(grant, action, reservation_id, parent=parent)
             return self._receipt("cancelled", action, requested, effective, (), "cancelled before executor", now)
         executor = self._executors.get(capability.name)
         if executor is None:
-            self.authority.cancel(grant, action, reservation_id)
+            self.authority.cancel(grant, action, reservation_id, parent=parent)
             return self._receipt("unavailable_provider", action, requested, effective, ("no local fixture executor is registered",), "provider unavailable", now)
-        start = self.authority.mark_started(grant, action, reservation_id, float(self._clock()), token)
+        start = self.authority.mark_started(grant, action, reservation_id, float(self._clock()), token, parent=parent)
         if start.status != "started":
             return self._receipt(start.status, action, requested, effective, (start.reason,), start.reason, now)
         effective = start.constraints.as_permissions() if start.constraints else effective
@@ -969,18 +1205,21 @@ class PermissionBroker:
                 raise PermissionError("executor output exceeds capability output limit")
         except ExecutionCancelled as exc:
             if exc.started:
-                return self._unknown(grant, action, reservation_id, requested, effective, str(exc), now)
-            self.authority.cancel(grant, action, reservation_id)
-            return self._receipt("cancelled", action, requested, effective, (str(exc),), str(exc), now)
+                return self._unknown(grant, action, reservation_id, requested, effective, str(exc), now, parent=parent)
+            try:
+                self.authority.cancel_started_no_effect(grant, action, reservation_id, str(exc), parent=parent)
+            except PermissionError as authority_exc:
+                return self._unknown(grant, action, reservation_id, requested, effective, f"proven no-effect cancellation could not be recorded: {authority_exc}", now, parent=parent)
+            return self._cancelled_no_effect(action, requested, effective, str(exc), now)
         except Exception as exc:
-            return self._unknown(grant, action, reservation_id, requested, effective, str(exc), now)
+            return self._unknown(grant, action, reservation_id, requested, effective, str(exc), now, parent=parent)
         completed_at = float(self._clock())
         audit = self._audit(action_digest(action), "executed", "authority-approved fixture execution", now, completed_at)
         try:
-            _, exceptions = self.authority.commit(grant, action, reservation_id, output, audit, completed_at)
+            _, exceptions = self.authority.commit(grant, action, reservation_id, output, audit, completed_at, parent=parent)
         except PermissionError as exc:
             try:
-                self.authority.mark_uncertain(grant, action, reservation_id, str(exc), audit)
+                self.authority.mark_uncertain(grant, action, reservation_id, str(exc), audit, parent=parent)
             except PermissionError:
                 pass
             return self._receipt("uncertain_outcome", action, requested, effective, (str(exc),), "authority commit failed after dispatch", completed_at)
@@ -1012,11 +1251,16 @@ class PermissionBroker:
         self.audit_log.append(audit)
         return ExecutionReceipt("executed", action_digest(action), dict(output), None, requested, effective or capability.as_permissions(), (), audit)
 
-    def _unknown(self, grant: GrantHandle, action: Action, reservation_id: str, requested: Mapping[str, Any], effective: Mapping[str, Any] | None, reason: str, now: float) -> ExecutionReceipt:
+    def _unknown(self, grant: GrantHandle | None, action: Action, reservation_id: str, requested: Mapping[str, Any], effective: Mapping[str, Any] | None, reason: str, now: float, *, parent: DelegationContext | None = None) -> ExecutionReceipt:
         audit = self._audit(action_digest(action), "unknown", "executor outcome is unresolved", now, float(self._clock()))
-        self.authority.mark_uncertain(grant, action, reservation_id, reason, audit)
+        self.authority.mark_uncertain(grant, action, reservation_id, reason, audit, parent=parent)
         self.audit_log.append(audit)
         return ExecutionReceipt("uncertain_outcome", action_digest(action), None, {"code": "uncertain_outcome", "reason": reason}, requested, effective, (reason, "blind rerun blocked by idempotency state"), audit)
+
+    def _cancelled_no_effect(self, action: Action, requested: Mapping[str, Any], effective: Mapping[str, Any] | None, reason: str, now: float) -> ExecutionReceipt:
+        audit = self._audit(action_digest(action), "cancelled_no_effect", "adapter proved no effect before side effect", now, float(self._clock()))
+        self.audit_log.append(audit)
+        return ExecutionReceipt("cancelled_no_effect", action_digest(action), None, {"code": "cancelled_no_effect", "reason": reason}, requested, effective, (reason, "adapter_proved_no_effect"), audit)
 
     def _get_capability(self, action: Action) -> CapabilityDescriptor:
         if action.capability not in self._capabilities:
@@ -1061,6 +1305,7 @@ class PermissionBroker:
     def _delegation_scope_allows(effective: Mapping[str, Any], action: Action) -> bool:
         return (
             effective.get("capability") == action.capability
+            and effective.get("tool_version") == action.tool_version
             and action.workspace_id == effective.get("workspace_id")
             and action.operation in effective.get("operations", ())
             and action.resource_scope in effective.get("resource_scopes", ())
@@ -1078,5 +1323,5 @@ class PermissionBroker:
 
 
 __all__ = [
-    "ACTION_CANONICAL_SCHEMA", "Action", "AuditLog", "AuditReceipt", "AuthorityStore", "CapabilityDescriptor", "CancellationToken", "DelegationContext", "EFFECT_CLASSES", "EFFECT_FREE", "EFFECT_PROTECTED", "EFFECT_SAFETY_CRITICAL", "ExecutionCancelled", "ExecutionReceipt", "FixtureExecutor", "GRANT_MODE_ONE_TIME", "GRANT_MODE_SCOPED", "GRANT_MODE_WORKSPACE_FULL_ACCESS", "GRANT_MODES", "GrantHandle", "HarmlessFixtureExecutor", "LOCAL_MEMORY_SCOPE", "LocalTestAuthority", "NO_DESTINATION", "PERMISSION_CONTRACT_VERSION", "PERMISSION_RESULT_SCHEMA", "PermissionBroker", "PermissionError", "PermissionState", "SystemBudgetReport", "SystemResourceBudget", "action_digest", "action_from_mapping", "authorization_digest", "canonical_action_bytes", "stable_operation_id",
+    "ACTION_CANONICAL_SCHEMA", "Action", "AuditLog", "AuditReceipt", "AuthorityStore", "CapabilityDescriptor", "CancellationToken", "DelegationContext", "EFFECT_CLASSES", "EFFECT_FREE", "EFFECT_PROTECTED", "EFFECT_SAFETY_CRITICAL", "ExecutionCancelled", "ExecutionReceipt", "FixtureExecutor", "GRANT_MODE_ONE_TIME", "GRANT_MODE_SCOPED", "GRANT_MODE_WORKSPACE_FULL_ACCESS", "GRANT_MODES", "GrantHandle", "HarmlessFixtureExecutor", "LOCAL_MEMORY_SCOPE", "LocalTestAuthority", "MAX_ACTION_INPUT_BYTES", "MAX_ACTION_INPUT_DEPTH", "MAX_ACTION_INPUT_ITEMS", "NO_DESTINATION", "PERMISSION_CONTRACT_VERSION", "PERMISSION_RESULT_SCHEMA", "PermissionBroker", "PermissionError", "PermissionState", "SystemBudgetReport", "SystemResourceBudget", "action_digest", "action_from_mapping", "authorization_digest", "canonical_action_bytes", "stable_operation_id",
 ]

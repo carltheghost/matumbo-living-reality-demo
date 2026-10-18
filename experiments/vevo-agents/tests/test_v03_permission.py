@@ -9,6 +9,8 @@ from vevo_agents.v03_permission import (
     GRANT_MODE_SCOPED,
     GRANT_MODE_WORKSPACE_FULL_ACCESS,
     LOCAL_MEMORY_SCOPE,
+    MAX_ACTION_INPUT_BYTES,
+    MAX_ACTION_INPUT_DEPTH,
     Action,
     CancellationToken,
     CapabilityDescriptor,
@@ -40,6 +42,7 @@ def capability(
     *,
     effect_class=EFFECT_PROTECTED,
     execution_kind="local_generated_tool",
+    tool_version="v1",
     workspace_id="workspace-a",
     workspace_owned=True,
     requires_user_handoff=False,
@@ -48,10 +51,11 @@ def capability(
     scopes=("local", "remote"),
     destinations=("none", "fixture"),
     max_output_bytes=4096,
+    public_read=False,
 ):
     return CapabilityDescriptor(
         name=name,
-        tool_version="v1",
+        tool_version=tool_version,
         execution_kind=execution_kind,
         effect_class=effect_class,
         workspace_id=workspace_id,
@@ -68,6 +72,7 @@ def capability(
         workspace_owned=workspace_owned,
         requires_user_handoff=requires_user_handoff,
         requires_per_action_confirmation=requires_per_action_confirmation,
+        public_read=public_read,
     )
 
 
@@ -114,6 +119,21 @@ class CancellingExecutor(HarmlessFixtureExecutor):
     def execute(self, action_value, cancellation):
         cancellation.cancel()
         raise ExecutionCancelled("fixture cancelled before side effect")
+
+
+class ProvenNoEffectOnceExecutor(HarmlessFixtureExecutor):
+    def execute(self, action_value, cancellation):
+        self.call_count += 1
+        if self.call_count == 1:
+            cancellation.cancel()
+            raise ExecutionCancelled("fixture proved no effect before side effect")
+        return {"effect": "fixture-completed"}
+
+
+class NestedOutputExecutor(HarmlessFixtureExecutor):
+    def execute(self, action_value, cancellation):
+        self.call_count += 1
+        return {"nested": {"items": [1, {"value": "stable"}]}}
 
 
 class StartCancellingToken(CancellationToken):
@@ -172,8 +192,8 @@ class V03PermissionTests(unittest.TestCase):
         self.executor = HarmlessFixtureExecutor(self.descriptor)
         self.broker.register_capability(self.descriptor, self.executor)
 
-    def approve(self, action_value, *, mode=GRANT_MODE_SCOPED, max_uses=3, max_spend=10):
-        pending = self.broker.request_approval(action_value, "neural-proposer")
+    def approve(self, action_value, *, mode=GRANT_MODE_SCOPED, max_uses=3, max_spend=10, new_operation=False):
+        pending = self.broker.request_approval(action_value, "neural-proposer", new_operation=new_operation)
         return self.authority.approve(
             pending.request_id,
             "authenticated-test-user",
@@ -224,6 +244,7 @@ class V03PermissionTests(unittest.TestCase):
             operations=("compute",),
             scopes=(LOCAL_MEMORY_SCOPE,),
             destinations=("none",),
+            public_read=True,
         )
         numerical_executor = HarmlessFixtureExecutor(numerical)
         self.broker.register_capability(numerical, numerical_executor)
@@ -289,6 +310,52 @@ class V03PermissionTests(unittest.TestCase):
         self.assertEqual(self.broker.execute(changed_version, grant).status, "denied")
         self.assertEqual(self.executor.call_count, 0)
 
+    def test_every_allow_once_ancestor_binding_is_enforced(self):
+        parent_value = action(arguments={"parent": 1}, idempotency_key="ancestor-once")
+        parent_pending = self.broker.request_approval(parent_value, "neural-proposer")
+        parent_grant = self.authority.approve(
+            parent_pending.request_id,
+            "authenticated-test-user",
+            self.clock() + 50.0,
+            1,
+            2,
+            GRANT_MODE_ONE_TIME,
+            parent_value.workspace_id,
+        )
+        child_value = action(arguments={"child": 2}, idempotency_key="child-scoped")
+        child_grant = self.approve(child_value, max_uses=2, max_spend=2)
+        child_context = self.broker.derive_child_context(self.broker.context_for_grant(parent_grant), child_grant)
+
+        result = self.broker.execute(child_value, child_grant, parent=child_context)
+        self.assertEqual(result.status, "denied")
+        self.assertEqual(self.executor.call_count, 0)
+
+    def test_delegation_intersection_requires_capability_version_and_workspace_match(self):
+        parent_value = action(idempotency_key="intersection-parent")
+        parent_grant = self.approve(parent_value, mode=GRANT_MODE_WORKSPACE_FULL_ACCESS, max_spend=5)
+        parent = self.broker.context_for_grant(parent_grant)
+        cases = (
+            capability(name="other-capability"),
+            capability(name="other-version", tool_version="v2"),
+            capability(name="other-workspace", workspace_id="workspace-b"),
+        )
+        for descriptor in cases:
+            with self.subTest(descriptor=descriptor.name):
+                executor = HarmlessFixtureExecutor(descriptor)
+                self.broker.register_capability(descriptor, executor)
+                value = action(
+                    capability_name=descriptor.name,
+                    tool_version=descriptor.tool_version,
+                    workspace_id=descriptor.workspace_id,
+                    idempotency_key=f"{descriptor.name}-child",
+                )
+                child_grant = self.approve(value, max_spend=5)
+                child = self.broker.derive_child_context(parent, child_grant)
+                with self.assertRaises(PermissionError):
+                    self.broker.delegation_permissions(child)
+                self.assertEqual(self.broker.execute(value, child_grant, parent=child).status, "denied")
+                self.assertEqual(executor.call_count, 0)
+
     def test_atomic_use_race_idempotency_and_spend_limit(self):
         descriptor = capability(name="raced")
         executor = BlockingExecutor(descriptor)
@@ -314,8 +381,8 @@ class V03PermissionTests(unittest.TestCase):
         over = action(capability_name="raced", spend_units=3, idempotency_key="over")
         self.assertEqual(broker.execute(over, grant).status, "denied")
 
-    def _approve_with(self, broker, action_value, *, mode=GRANT_MODE_SCOPED, max_uses=3, max_spend=10):
-        pending = broker.request_approval(action_value, "neural-proposer")
+    def _approve_with(self, broker, action_value, *, mode=GRANT_MODE_SCOPED, max_uses=3, max_spend=10, new_operation=False):
+        pending = broker.request_approval(action_value, "neural-proposer", new_operation=new_operation)
         return self.authority.approve(
             pending.request_id,
             "authenticated-test-user",
@@ -338,7 +405,7 @@ class V03PermissionTests(unittest.TestCase):
         self.assertEqual(broker.execute(value, grant, cancellation=token).status, "cancelled")
         self.assertEqual(executor.call_count, 0)
         result = broker.execute(value, grant)
-        self.assertEqual(result.status, "cancelled")
+        self.assertEqual(result.status, "cancelled_no_effect")
         self.assertEqual(executor.call_count, 0)
 
     def test_cancellation_is_rechecked_atomically_before_dispatch_intent(self):
@@ -357,6 +424,66 @@ class V03PermissionTests(unittest.TestCase):
         self.assertEqual(retry.status, "executed")
         self.assertEqual(executor.call_count, 1)
 
+    def test_adapter_proven_no_effect_after_start_releases_and_allows_retry(self):
+        descriptor = capability(name="proven-no-effect")
+        executor = ProvenNoEffectOnceExecutor(descriptor)
+        broker = PermissionBroker(self.authority, clock=self.clock)
+        broker.register_capability(descriptor, executor)
+        value = action(capability_name="proven-no-effect", idempotency_key="proven-no-effect")
+        grant = self._approve_with(broker, value, max_uses=1, max_spend=2)
+
+        first = broker.execute(value, grant)
+        self.assertEqual(first.status, "cancelled_no_effect")
+        self.assertIn("adapter_proved_no_effect", first.exceptions)
+        retry = broker.execute(value, grant)
+        self.assertEqual(retry.status, "executed")
+        self.assertEqual(executor.call_count, 2)
+
+    def test_delegated_effect_free_execution_is_live_and_accounted(self):
+        pure = capability(
+            name="pure-delegated-live",
+            effect_class=EFFECT_FREE,
+            execution_kind="internal_learned_skill",
+            operations=("compute",),
+            scopes=(LOCAL_MEMORY_SCOPE,),
+            destinations=("none",),
+        )
+        executor = HarmlessFixtureExecutor(pure)
+        self.broker.register_capability(pure, executor)
+        parent_value = action(
+            capability_name="pure-delegated-live",
+            operation="compute",
+            resource_scope=LOCAL_MEMORY_SCOPE,
+            data_destination="none",
+            idempotency_key="pure-parent",
+        )
+        parent_grant = self._approve_with(self.broker, parent_value, max_uses=1, max_spend=2)
+        parent = self.broker.context_for_grant(parent_grant)
+        self.assertEqual(self.broker.execute(parent_value, parent=parent).status, "executed")
+        spent = self.authority._grants[parent_grant.token]
+        self.assertEqual(spent.used_count, 1)
+        self.assertEqual(spent.spent_units, 1)
+        over = action(
+            capability_name="pure-delegated-live",
+            operation="compute",
+            resource_scope=LOCAL_MEMORY_SCOPE,
+            data_destination="none",
+            arguments={"sequence": 2},
+            idempotency_key="pure-over",
+        )
+        self.assertEqual(self.broker.execute(over, parent=parent).status, "denied")
+        self.authority.revoke(parent_grant)
+        revoked = action(
+            capability_name="pure-delegated-live",
+            operation="compute",
+            resource_scope=LOCAL_MEMORY_SCOPE,
+            data_destination="none",
+            arguments={"sequence": 3},
+            idempotency_key="pure-revoked",
+        )
+        self.assertEqual(self.broker.execute(revoked, parent=parent).status, "revoked")
+        self.assertEqual(executor.call_count, 1)
+
     def test_nested_delegation_is_intersection_and_cannot_escalate(self):
         broad_action = action(idempotency_key="broad")
         broad_grant = self.approve(broad_action, mode=GRANT_MODE_WORKSPACE_FULL_ACCESS, max_spend=2)
@@ -368,9 +495,9 @@ class V03PermissionTests(unittest.TestCase):
         self.assertEqual(child_permissions["operations"], ["read"])
         self.assertEqual(child_permissions["remaining_spend_units"], 2)
         self.assertEqual(self.broker.execute(narrow_action, narrow_grant, parent=child).status, "executed")
-        second = action(operation="read", resource_scope="local", idempotency_key="narrow-2")
+        second = action(operation="read", resource_scope="local", arguments={"sequence": 2}, idempotency_key="narrow-2")
         self.assertEqual(self.broker.execute(second, narrow_grant, parent=child).status, "executed")
-        third = action(operation="read", resource_scope="local", idempotency_key="narrow-3")
+        third = action(operation="read", resource_scope="local", arguments={"sequence": 3}, idempotency_key="narrow-3")
         self.assertEqual(self.broker.execute(third, narrow_grant, parent=child).status, "denied")
         escalation = action(operation="write", resource_scope="remote", data_destination="fixture", idempotency_key="escalate")
         self.assertEqual(self.broker.execute(escalation, broad_grant, parent=child).status, "denied")
@@ -416,7 +543,7 @@ class V03PermissionTests(unittest.TestCase):
         )
         result = self.broker.execute(broader, grant)
         self.assertEqual(result.status, "executed")
-        self.assertEqual(result.requested_permissions["operations"], ["write"])
+        self.assertEqual(list(result.requested_permissions["operations"]), ["write"])
         self.assertEqual(set(result.effective_permissions["operations"]), {"read", "write"})
         outside = action(workspace_id="workspace-b", idempotency_key="outside")
         self.assertEqual(self.broker.execute(outside, grant).status, "denied")
@@ -566,6 +693,74 @@ class V03PermissionTests(unittest.TestCase):
         changed = action(capability_name="uncertain", arguments={"changed": True}, idempotency_key="unknown")
         self.assertEqual(broker.execute(changed, grant).status, "denied")
 
+    def test_logical_operation_survives_key_change_and_reapproval_but_allows_explicit_new_operation(self):
+        descriptor = capability(name="logical-operation")
+        executor = RaisingExecutor(descriptor)
+        broker = PermissionBroker(self.authority, clock=self.clock)
+        broker.register_capability(descriptor, executor)
+        first_action = action(capability_name="logical-operation", arguments={"value": 1}, idempotency_key="logical-one")
+        first_grant = self._approve_with(broker, first_action, max_uses=3, max_spend=3)
+        self.assertEqual(broker.execute(first_action, first_grant).status, "uncertain_outcome")
+
+        changed_key = action(capability_name="logical-operation", arguments={"value": 1}, idempotency_key="logical-two")
+        self.assertEqual(broker.execute(changed_key, first_grant).status, "uncertain_outcome")
+        self.assertEqual(executor.call_count, 1)
+
+        self.clock.advance(60.0)
+        reapproved = action(capability_name="logical-operation", arguments={"value": 1}, idempotency_key="logical-three")
+        reapproved_grant = self._approve_with(broker, reapproved, max_uses=3, max_spend=3)
+        self.assertEqual(broker.execute(reapproved, reapproved_grant).status, "uncertain_outcome")
+        self.assertEqual(executor.call_count, 1)
+
+        explicit_new = action(capability_name="logical-operation", arguments={"value": 1}, idempotency_key="logical-four")
+        new_grant = self._approve_with(broker, explicit_new, max_uses=3, max_spend=3, new_operation=True)
+        self.assertEqual(broker.execute(explicit_new, new_grant).status, "uncertain_outcome")
+        self.assertEqual(executor.call_count, 2)
+
+    def test_completed_replay_requires_current_read_authorization(self):
+        value = action(idempotency_key="cached-output")
+        original_grant = self.approve(value, max_uses=2, max_spend=2)
+        self.assertEqual(self.broker.execute(value, original_grant).status, "executed")
+        self.clock.advance(60.0)
+        self.assertEqual(self.broker.execute(value, original_grant).status, "expired")
+
+        self.clock.value = 100.0
+        unrelated = action(resource_scope="remote", idempotency_key="unrelated-scope")
+        unrelated_grant = self.approve(unrelated, max_uses=2, max_spend=2)
+        denied = self.broker.execute(value, unrelated_grant)
+        self.assertEqual(denied.status, "denied")
+        self.assertEqual(self.executor.call_count, 1)
+
+    def test_receipts_deep_freeze_nested_payloads_and_return_copies(self):
+        descriptor = capability(name="nested-output")
+        executor = NestedOutputExecutor(descriptor)
+        broker = PermissionBroker(self.authority, clock=self.clock)
+        broker.register_capability(descriptor, executor)
+        value = action(capability_name="nested-output", idempotency_key="nested-output")
+        grant = self._approve_with(broker, value)
+        result = broker.execute(value, grant)
+        with self.assertRaises(TypeError):
+            result.output_payload["nested"]["items"][1]["value"] = "mutated"
+        serialized = result.as_dict()
+        serialized["output_payload"]["nested"]["items"][1]["value"] = "mutated"
+        self.assertEqual(result.output_payload["nested"]["items"][1]["value"], "stable")
+        replay = broker.execute(value, grant)
+        self.assertEqual(replay.status, "idempotent_replay")
+        self.assertEqual(replay.output_payload["nested"]["items"][1]["value"], "stable")
+
+    def test_action_input_depth_size_and_cycles_fail_before_recursive_freeze(self):
+        nested = "leaf"
+        for _ in range(MAX_ACTION_INPUT_DEPTH + 2):
+            nested = {"next": nested}
+        with self.assertRaises(PermissionError):
+            action(arguments=nested, idempotency_key="too-deep")
+        with self.assertRaises(PermissionError):
+            action(arguments={"large": "x" * (MAX_ACTION_INPUT_BYTES + 1)}, idempotency_key="too-large")
+        cyclic = {}
+        cyclic["self"] = cyclic
+        with self.assertRaises(PermissionError):
+            action(arguments=cyclic, idempotency_key="cyclic")
+
     def test_output_cap_after_dispatch_is_unknown_and_no_blind_rerun(self):
         descriptor = capability(name="oversized", max_output_bytes=32)
         executor = OversizedExecutor(descriptor)
@@ -596,7 +791,7 @@ class V03PermissionTests(unittest.TestCase):
         result = broker.execute(value, grant)
         self.assertEqual(result.status, "executed")
         self.assertIn("revoked_after_start_cannot_undo_effect", result.exceptions)
-        self.assertEqual(broker.execute(value, grant).status, "idempotent_replay")
+        self.assertEqual(broker.execute(value, grant).status, "revoked")
         self.assertEqual(executor.call_count, 1)
 
     def test_authority_advertises_non_durable_prototype_state(self):
