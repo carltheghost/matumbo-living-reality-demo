@@ -698,32 +698,42 @@ class V03HybridCore:
             slot = memory[index]
             keys.append(tanh(params["h.W_key_memory"] @ slot))
             values.append(tanh(params["h.W_value_memory"] @ slot) * presence[PERIPHERAL_COUNT + index])
+        key_trace = concatenate([key.reshape(1, ATTENTION_DIM) for key in keys], axis=0)
+        value_trace = concatenate([value.reshape(1, ATTENTION_DIM) for value in values], axis=0)
         if not any(presence):
             zeros = Tensor(np.zeros(PERIPHERAL_COUNT + MEMORY_SLOTS, dtype=np.float64))
             return {
                 "query": query,
-                "keys": keys,
-                "values": values,
-                "raw_logits": [Tensor(np.zeros(1, dtype=np.float64)) for _ in presence],
-                "bounded_logits": [Tensor(np.zeros(1, dtype=np.float64)) for _ in presence],
-                "masked_logits": [Tensor(np.full(1, -1.0e9, dtype=np.float64)) for _ in presence],
+                "keys": key_trace,
+                "values": Tensor(np.zeros((PERIPHERAL_COUNT + MEMORY_SLOTS, ATTENTION_DIM), dtype=np.float64)),
+                "raw_logits": zeros,
+                "bounded_logits": Tensor(np.zeros(PERIPHERAL_COUNT + MEMORY_SLOTS, dtype=np.float64)),
+                "masked_logits": Tensor(np.full(PERIPHERAL_COUNT + MEMORY_SLOTS, -1.0e9, dtype=np.float64)),
                 "weights": zeros,
                 "context": Tensor(np.zeros(ATTENTION_DIM, dtype=np.float64)),
             }
-        raw_logits = [((query * key).sum() / math.sqrt(ATTENTION_DIM)).reshape(1) for key in keys]
-        bounded_logits = [_attention_logit_tensor(logit[0]).reshape(1) for logit in raw_logits]
-        masked_logits = [
-            logit + (0.0 if present else -1.0e9)
-            for logit, present in zip(bounded_logits, presence)
-        ]
-        weights = softmax(concatenate(masked_logits, axis=0))
+        raw_logits = concatenate(
+            [((query * key).sum() / math.sqrt(ATTENTION_DIM)).reshape(1) for key in keys],
+            axis=0,
+        )
+        bounded_logits = _attention_logit_tensor(raw_logits)
+        masked_logits = concatenate(
+            [
+                bounded_logits[index].reshape(1)
+                if present
+                else Tensor(np.asarray([-1.0e9], dtype=np.float64))
+                for index, present in enumerate(presence)
+            ],
+            axis=0,
+        )
+        weights = softmax(masked_logits)
         context = Tensor(np.zeros(ATTENTION_DIM, dtype=np.float64))
-        for index, value in enumerate(values):
-            context = context + weights[index] * value
+        for index in range(PERIPHERAL_COUNT + MEMORY_SLOTS):
+            context = context + weights[index] * value_trace[index]
         return {
             "query": query,
-            "keys": keys,
-            "values": values,
+            "keys": key_trace,
+            "values": value_trace,
             "raw_logits": raw_logits,
             "bounded_logits": bounded_logits,
             "masked_logits": masked_logits,

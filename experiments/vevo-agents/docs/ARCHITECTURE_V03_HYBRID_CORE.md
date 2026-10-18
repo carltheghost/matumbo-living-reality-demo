@@ -153,6 +153,10 @@ energy non-increase, outside-ball numeric/Tensor parity, and finite analytic
 gradients. This is a structural constraint-refinement mechanism, not a factual
 verifier and not an unqualified agreement loss.
 
+The energy guarantee stops at those two projected refinement iterates. It does
+not cover the subsequent `tanh` blend that integrates the refined center into
+the recurrent state, nor the later recurrent, memory, or feedback trajectory.
+
 ## Causal feedback and state
 
 The causal order within one step is:
@@ -173,6 +177,12 @@ still occurs inside the legacy backbone step before this hybrid write. Current
 module/memory masks scope only the hybrid attention and tension computations;
 they do not erase modules or memory from the legacy backbone, which continues
 to read the full input and memory state.
+
+There are therefore two writes in one causal step: the legacy write uses the
+legacy base center, then the hybrid write uses the final integrated center.
+The hybrid write is an additional path, not a replacement or replay of the
+legacy write. Attributing any benefit to that extra write requires a matched
+control that keeps the rest of the untrained architecture and schedule fixed.
 
 The refined center is mapped to a bounded 4-D signal, combined with the
 attention context, and passed through a distinct output map for each of the
@@ -263,4 +273,6 @@ document supported scope or claim to solve that issue.
 This module is not a full Transformer; it has one small masked attention
 exchange and no Transformer stack. It is not trained, does not select actions,
 and does not demonstrate factual correctness, generalization, or production
-readiness.
+readiness. No task loss, document/action adapter, learned geometry extension,
+or training run is implemented here; all such work remains outside this
+untrained numerical-core review.

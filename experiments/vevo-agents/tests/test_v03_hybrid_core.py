@@ -226,6 +226,14 @@ class V03HybridCoreTests(unittest.TestCase):
             rtol=1e-12,
             atol=1e-12,
         )
+        for attention_key in ("keys", "values", "raw_logits", "bounded_logits", "masked_logits"):
+            with self.subTest(attention_key=attention_key):
+                np.testing.assert_allclose(
+                    numeric_trace["attention"][attention_key],
+                    tensor_trace["attention"][attention_key].data,
+                    rtol=1e-12,
+                    atol=1e-12,
+                )
         np.testing.assert_allclose(
             numeric_trace["tension_refined"],
             tensor_trace["tension_refined"].data,
@@ -369,6 +377,35 @@ class V03HybridCoreTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertGreater(abs(float(gradients[name][index])), 0.0)
                 target = core.base.params[name[5:]] if name.startswith("base.") else core.params[name]
+                original = float(target[index])
+                epsilon = 1e-6
+                target[index] = original + epsilon
+                plus = core.loss_only(vectors)
+                target[index] = original - epsilon
+                minus = core.loss_only(vectors)
+                target[index] = original
+                finite_difference = (plus - minus) / (2.0 * epsilon)
+                self.assertAlmostEqual(
+                    float(gradients[name][index]),
+                    float(finite_difference),
+                    places=5,
+                )
+
+    def test_downstream_finite_difference_reaches_central_oscillator_and_query_message(self):
+        """Central paths are checked through downstream outputs, not oscillator probes."""
+
+        core = V03HybridCore(45)
+        vectors = self._vectors(46, 2)
+        _, gradients, _ = core.loss_and_gradients(vectors)
+        probes = [
+            ("h.oscillator_omega_raw", (4, 0)),
+            ("h.oscillator_gamma_raw", (4, 0)),
+            ("h.W_query_central_message", (0, 0)),
+        ]
+        for name, index in probes:
+            with self.subTest(name=name):
+                self.assertGreater(abs(float(gradients[name][index])), 0.0)
+                target = core.params[name]
                 original = float(target[index])
                 epsilon = 1e-6
                 target[index] = original + epsilon
