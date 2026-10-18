@@ -68,6 +68,9 @@ MAX_TASKS_PER_ACTOR = 32
 MAX_QUEUE_DEPTH = 16
 MAX_CONCURRENT_WORKERS = 2
 MAX_EVENTS_PER_TASK = 64
+# Admission threshold, not a hard total-byte ceiling. Existing stores may be
+# larger after a committed write; new tasks are refused until an operator
+# archives/removes data through a separate maintenance procedure.
 MAX_TASK_STORE_BYTES = 8 * 1024 * 1024
 SQLITE_SIDECARS = ("-wal", "-shm", "-journal")
 AGENT_CAPABILITIES = frozenset({"sample.read"})
@@ -335,7 +338,6 @@ class AgentTaskRuntime:
             or info.st_nlink != 1
             or info.st_uid != owner
             or stat.S_IMODE(info.st_mode) & 0o077
-            or info.st_size > MAX_TASK_STORE_BYTES
         ):
             raise self._runtime_error("TASK_STORE_PRIVATE_PATH")
         return True
@@ -539,9 +541,11 @@ class AgentTaskRuntime:
     def _reconcile_incomplete_tasks(self) -> None:
         assert self.db is not None
         rows = self.db.execute(
-            "SELECT task_id,status,artifact_json,verification_json,version FROM agent_tasks"
+            """SELECT task_id,status,artifact_json,verification_json,tool_call_json,
+                      permissions_json,cancel_requested
+                 FROM agent_tasks"""
         ).fetchall()
-        for task_id, status, artifact_json, verification_json, version in rows:
+        for task_id, status, artifact_json, verification_json, tool_call_json, permissions_json, cancel_requested in rows:
             tool = self.db.execute(
                 "SELECT status,output_json FROM agent_task_effects WHERE task_id=? AND effect_key=?",
                 (task_id, "tool:inspect-sample:v1"),
@@ -550,18 +554,62 @@ class AgentTaskRuntime:
                 "SELECT status,output_json FROM agent_task_effects WHERE task_id=? AND effect_key=?",
                 (task_id, "verification:independent-file-read:v1"),
             ).fetchone()
-            tool_complete = bool(tool and tool[0] == "completed" and tool[1])
-            verification_complete = bool(verification and verification[0] == "completed" and verification[1])
-            reset_tool = bool(tool and tool[0] == "completed" and tool[1] and not artifact_json)
+            tool_effect_completed = bool(tool and tool[0] == "completed")
+            verification_effect_completed = bool(verification and verification[0] == "completed")
+            stored_artifact = self._decode_record(artifact_json)
+            stored_verification = self._decode_record(verification_json)
+            tool_output = self._decode_record(tool[1] if tool else None)
+            verification_output = self._decode_record(verification[1] if verification else None)
+            normalized_call = None
+            try:
+                normalized_call = validate_typed_tool_call(
+                    _strict_json(tool_call_json), _strict_json(permissions_json)
+                )
+            except (AgentTaskError, TypeError, ValueError):
+                pass
+
+            expected_verification = None
+            tool_evidence_valid = bool(
+                tool_effect_completed
+                and tool_output is not None
+                and stored_artifact is not None
+                and normalized_call is not None
+                and stored_artifact == tool_output
+            )
+            if tool_evidence_valid:
+                try:
+                    # Re-read the trusted, server-owned fixture so an old
+                    # completed record cannot survive a changed fixture.
+                    expected_verification = self._verify_sample_output(
+                        task_id, normalized_call, tool_output
+                    )
+                except AgentTaskError:
+                    tool_evidence_valid = False
+            verification_evidence_valid = bool(
+                tool_evidence_valid
+                and verification_effect_completed
+                and verification_output is not None
+                and stored_verification is not None
+                and verification_output == stored_verification
+                and expected_verification is not None
+                and verification_output == expected_verification
+            )
+            # Any invalidated tool evidence invalidates dependent verification
+            # too. Otherwise a regenerated artifact could be paired with an
+            # old verification digest and reach a false success state.
+            reset_tool = bool(tool and not tool_evidence_valid and tool_effect_completed)
             reset_verification = bool(
-                verification and verification[0] == "completed" and verification[1] and not verification_json
+                verification
+                and not verification_evidence_valid
+                and (verification_effect_completed or reset_tool)
             )
+            clear_artifact = bool(artifact_json) and not tool_evidence_valid
+            clear_verification = bool(verification_json) and not verification_evidence_valid
+            evidence_repaired = reset_tool or reset_verification or clear_artifact or clear_verification
             incomplete_success = status == "succeeded" and not (
-                artifact_json and verification_json and tool_complete and verification_complete
+                tool_evidence_valid and verification_evidence_valid
             )
-            if reset_tool or reset_verification or incomplete_success:
-                clear_artifact = incomplete_success and not tool_complete
-                clear_verification = incomplete_success and not verification_complete
+            if evidence_repaired or incomplete_success:
                 with self._transaction():
                     if reset_tool:
                         self._write(
@@ -569,14 +617,9 @@ class AgentTaskRuntime:
                             "UPDATE agent_task_effects SET status='started',output_json=NULL,updated_at=? WHERE task_id=? AND effect_key=?",
                             (self.now(), task_id, "tool:inspect-sample:v1"),
                         )
+                    if clear_artifact:
                         self._write(
                             "task.reconcile:artifact",
-                            "UPDATE agent_tasks SET artifact_json=NULL,updated_at=?,version=version+1 WHERE task_id=?",
-                            (self.now(), task_id),
-                        )
-                    elif clear_artifact:
-                        self._write(
-                            "task.reconcile:artifact-missing-effect",
                             "UPDATE agent_tasks SET artifact_json=NULL,updated_at=?,version=version+1 WHERE task_id=?",
                             (self.now(), task_id),
                         )
@@ -586,20 +629,15 @@ class AgentTaskRuntime:
                             "UPDATE agent_task_effects SET status='started',output_json=NULL,updated_at=? WHERE task_id=? AND effect_key=?",
                             (self.now(), task_id, "verification:independent-file-read:v1"),
                         )
+                    if clear_verification:
                         self._write(
                             "task.reconcile:verification",
                             "UPDATE agent_tasks SET verification_json=NULL,updated_at=?,version=version+1 WHERE task_id=?",
                             (self.now(), task_id),
                         )
-                    elif clear_verification:
-                        self._write(
-                            "task.reconcile:verification-missing-effect",
-                            "UPDATE agent_tasks SET verification_json=NULL,updated_at=?,version=version+1 WHERE task_id=?",
-                            (self.now(), task_id),
-                        )
                     self._write(
                         "task.reconcile:status",
-                        "UPDATE agent_tasks SET status='queued',error_code=NULL,cancel_requested=0,updated_at=?,version=version+1 WHERE task_id=?",
+                        "UPDATE agent_tasks SET status='queued',error_code=NULL,updated_at=?,version=version+1 WHERE task_id=?",
                         (self.now(), task_id),
                     )
                     self._append_event(
@@ -609,6 +647,9 @@ class AgentTaskRuntime:
                             "fromStatus": status,
                             "resume": True,
                             "missingEvidence": bool(incomplete_success),
+                            "toolEvidenceReset": reset_tool,
+                            "verificationEvidenceReset": reset_verification,
+                            "cancelRequested": bool(cancel_requested),
                         },
                         event_key="task.reconciled",
                     )
@@ -626,6 +667,15 @@ class AgentTaskRuntime:
                             {"verified": True, "reconciled": True},
                             event_key="task.succeeded",
                         )
+
+    @staticmethod
+    def _decode_record(value: str | None) -> Any:
+        if not value:
+            return None
+        try:
+            return _strict_json(value)
+        except (TypeError, ValueError):
+            return None
 
     def _recover_interrupted_tasks(self) -> None:
         assert self.db is not None
@@ -1257,8 +1307,12 @@ class AgentTaskRuntime:
             tool_call = validate_typed_tool_call(task["toolCall"], task["permissions"])
             tool_effect_key = "tool:inspect-sample:v1"
             effect = self._claim_effect(task_id, tool_effect_key, "tool")
-            if effect["status"] == "completed" and effect["output"]:
+            if effect["status"] == "completed" and effect["output"] is not None:
+                if task["artifact"] != effect["output"]:
+                    raise TaskFailed("VERIFIER_REJECTED_OUTPUT", 500)
                 output = effect["output"]
+            elif effect["status"] == "completed":
+                raise TaskFailed("VERIFIER_REJECTED_OUTPUT", 500)
             else:
                 if self.before_tool is not None:
                     await self.before_tool(task_id, _clone(tool_call))
@@ -1283,8 +1337,16 @@ class AgentTaskRuntime:
                 return
             verification_effect_key = "verification:independent-file-read:v1"
             verification_effect = self._claim_effect(task_id, verification_effect_key, "verification")
-            if verification_effect["status"] == "completed" and verification_effect["output"]:
+            if verification_effect["status"] == "completed" and verification_effect["output"] is not None:
+                current = self._load(task_id)
+                if not current or current["artifact"] != output or current["verification"] != verification_effect["output"]:
+                    raise TaskFailed("VERIFIER_REJECTED_OUTPUT", 500)
+                expected = await asyncio.to_thread(self._verify_sample_output, task_id, tool_call, output)
+                if verification_effect["output"] != expected:
+                    raise TaskFailed("VERIFIER_REJECTED_OUTPUT", 500)
                 verification = verification_effect["output"]
+            elif verification_effect["status"] == "completed":
+                raise TaskFailed("VERIFIER_REJECTED_OUTPUT", 500)
             else:
                 verification = await asyncio.to_thread(self._verify_sample_output, task_id, tool_call, output)
                 self._complete_effect(task_id, verification_effect_key, "verification", verification)
@@ -1388,6 +1450,7 @@ def attach_agent_task_routes(
                     "maxTasksPerActor": MAX_TASKS_PER_ACTOR,
                     "maxTasksTotal": MAX_TASKS_TOTAL,
                     "maxStoreBytes": MAX_TASK_STORE_BYTES,
+                    "storageLimitSemantics": "admission-threshold; not a hard total-byte ceiling",
                     "retention": "operator-managed; no automatic deletion",
                 },
                 "toolCatalog": [dict(tool) for tool in TOOL_CATALOG],

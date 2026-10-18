@@ -14,12 +14,14 @@ toolCall: {name: "vivo.sample.inspect", arguments: {sampleId: "field-baseline"}}
 ```
 
 The server validates the typed call and exact permission set before execution.
-The only real tool reads the bundled
-`services/vivo/tasks/fixtures/field-sample.json`; it does not run a shell,
-fetch a URL, call a model, mutate a world, or interpret fixture text as
-instructions. The tool records a content digest and artifact, then an
-independent file-read verifier recomputes both before the task can succeed.
-The fixture is a deterministic test/sample input, not live intelligence.
+The only real tool reads the bundled, trusted server-owned fixture at
+`services/vivo/tasks/fixtures/field-sample.json`; this local POSIX fixture is
+treated as immutable task input for the single process that owns the private
+runtime lock. It does not run a shell, fetch a URL, call a model, mutate a
+world, or interpret fixture text as instructions. The tool records a content
+digest and artifact, then an independent file-read verifier recomputes both
+before the task can succeed. The fixture is a deterministic test/sample input,
+not live intelligence.
 
 Tasks, ordered events, and effect records are stored in a private SQLite
 database in the configured remote `--data-dir` using WAL and FULL synchronous
@@ -60,7 +62,9 @@ All routes require the already-admitted bearer and exact same-origin proof:
 
 Admission is bounded to 2 concurrent workers, 16 queued tasks, 32 tasks per
 actor, 256 durable tasks total, 64 events per task, and an 8 MiB task-store
-quota. Overload and quota return explicit errors. There is no automatic
+admission threshold. The byte threshold is checked before admitting a new
+task; it is not a hard total-byte ceiling for already committed SQLite/WAL
+state. Overload and quota return explicit errors. There is no automatic
 retention or deletion: an operator must export/archive data and remove it
 through a separately reviewed maintenance procedure.
 

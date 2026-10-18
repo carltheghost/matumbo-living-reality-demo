@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import shutil
 import sqlite3
 import stat
 import tempfile
@@ -161,6 +162,95 @@ class AgentTaskRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["status"], "succeeded")
         self.assertNotEqual(result["artifact"], {"forged": True})
         self.assertTrue(any(event["type"] == "task.reconciled" for event in result["events"]))
+        self.runtime = resumed
+
+    def _copy_fixture_root(self) -> Path:
+        fixture_root = Path(self.temp.name) / "fixtures"
+        fixture_root.mkdir()
+        shutil.copy2(ROOT / "services/vivo/tasks/fixtures/field-sample.json", fixture_root / "field-sample.json")
+        return fixture_root
+
+    async def test_partial_old_record_resets_dependent_verification_when_fixture_changes(self):
+        fixture_root = self._copy_fixture_root()
+        await self.runtime.close()
+        runtime = AgentTaskRuntime(ROOT, self.path, fixture_root=fixture_root)
+        runtime.start()
+        task = runtime.create_task("actor-a", request_body("partial-old-record"))
+        await runtime.wait_for_idle()
+        original = runtime.get_task("actor-a", task["taskId"])
+        await runtime.close()
+
+        fixture_path = fixture_root / "field-sample.json"
+        changed = json.loads(fixture_path.read_text())
+        changed["annotation"] = "Changed trusted fixture data"
+        fixture_path.write_text(json.dumps(changed, sort_keys=True) + "\n")
+        with sqlite3.connect(self.path) as database:
+            # Simulate the old partial boundary: the tool effect and its
+            # dependent verification committed, but the task artifact did not.
+            database.execute(
+                "UPDATE agent_tasks SET status='succeeded',artifact_json=NULL WHERE task_id=?",
+                (task["taskId"],),
+            )
+
+        resumed = AgentTaskRuntime(ROOT, self.path, fixture_root=fixture_root)
+        repaired = resumed.get_task("actor-a", task["taskId"])
+        self.assertEqual(repaired["status"], "queued")
+        self.assertIsNone(repaired["artifact"])
+        self.assertIsNone(repaired["verification"])
+        self.assertTrue(any(event["type"] == "task.reconciled" for event in repaired["events"]))
+        self.assertEqual(
+            sqlite3.connect(self.path).execute(
+                "SELECT effect_key,status,output_json FROM agent_task_effects WHERE task_id=? ORDER BY effect_key",
+                (task["taskId"],),
+            ).fetchall(),
+            [
+                ("tool:inspect-sample:v1", "started", None),
+                ("verification:independent-file-read:v1", "started", None),
+            ],
+        )
+        resumed.start()
+        await resumed.wait_for_idle()
+        result = resumed.get_task("actor-a", task["taskId"])
+        self.assertEqual(result["status"], "succeeded")
+        self.assertEqual(
+            result["artifact"]["artifact"]["content"]["summary"]["annotation"],
+            changed["annotation"],
+        )
+        self.assertEqual(result["verification"]["status"], "verified")
+        self.assertNotEqual(result["verification"]["sourceSha256"], original["verification"]["sourceSha256"])
+        self.runtime = resumed
+
+    async def test_reconciliation_preserves_cancel_request_during_partial_repair(self):
+        fixture_root = self._copy_fixture_root()
+        await self.runtime.close()
+        runtime = AgentTaskRuntime(ROOT, self.path, fixture_root=fixture_root)
+        runtime.start()
+        task = runtime.create_task("actor-a", request_body("partial-cancel"))
+        await runtime.wait_for_idle()
+        await runtime.close()
+        with sqlite3.connect(self.path) as database:
+            database.execute(
+                "UPDATE agent_tasks SET status='succeeded',artifact_json=NULL,cancel_requested=1 WHERE task_id=?",
+                (task["taskId"],),
+            )
+
+        resumed = AgentTaskRuntime(ROOT, self.path, fixture_root=fixture_root)
+        repaired = resumed.get_task("actor-a", task["taskId"])
+        self.assertEqual(repaired["status"], "queued")
+        self.assertTrue(repaired["cancelRequested"])
+        self.assertTrue(
+            any(
+                event["type"] == "task.reconciled" and event["data"]["cancelRequested"]
+                for event in repaired["events"]
+            )
+        )
+        resumed.start()
+        await resumed.wait_for_idle()
+        result = resumed.get_task("actor-a", task["taskId"])
+        self.assertEqual(result["status"], "cancelled")
+        self.assertTrue(result["cancelRequested"])
+        self.assertIsNone(result["artifact"])
+        self.assertIsNone(result["verification"])
         self.runtime = resumed
 
     async def test_queued_cancellation_has_no_tool_effect(self):
@@ -524,6 +614,7 @@ class AgentTaskRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(status_json["conversation"]["available"])
         self.assertEqual(status_json["transport"], "bearer-authenticated-http")
         self.assertEqual(status_json["limits"]["maxConcurrentWorkers"], 2)
+        self.assertIn("not a hard total-byte ceiling", status_json["limits"]["storageLimitSemantics"])
 
         created = await self.client.post(
             "/api/agent/tasks",
