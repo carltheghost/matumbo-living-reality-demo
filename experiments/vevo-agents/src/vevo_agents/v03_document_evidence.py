@@ -1224,10 +1224,14 @@ class DocumentEvidenceSession:
             conflicts = packet.get("conflicts", [])
             if mode == "conflict" and not isinstance(conflicts, list):
                 return self._base("incomplete_packet", terminal=False, error="conflicts must be a list")
+            if mode == "conflict" and any(
+                not isinstance(conflict, dict) or not isinstance(conflict.get("field_id"), str)
+                for conflict in conflicts
+            ):
+                return self._base("incomplete_packet", terminal=False, error="conflict field_id must be a string")
             if mode == "conflict" and field_id not in {
                 conflict.get("field_id")
                 for conflict in conflicts
-                if isinstance(conflict, dict)
             }:
                 return self._base("incomplete_packet", terminal=False, error="reported field is not conflicted")
         else:

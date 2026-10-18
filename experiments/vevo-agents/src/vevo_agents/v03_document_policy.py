@@ -14,6 +14,7 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import date
+import hashlib
 import math
 from typing import Any, Mapping, Sequence
 
@@ -47,6 +48,10 @@ VALUE_TYPE_VOCABULARY = (
 )
 SECTION_KIND_VOCABULARY = ("overview", "commercial", "contacts", "terms")
 FIXED_ACTIONS = ("inspect_section", "finish", "report_missing", "report_conflict")
+# Exact inspect targets need a small identity-bearing action row.  The first
+# coordinate is a bias; the remaining coordinates are stable episode-local
+# document/section relations and a normalized section ordinal.
+INSPECT_ACTION_FEATURE_DIM = 4
 RESPONSE_STATUS_VOCABULARY = (
     "request",
     "section_observed",
@@ -78,6 +83,7 @@ DOCUMENT_MODEL_INPUT_DIM = (
     + 2  # candidate count and remaining budget
 )
 DOCUMENT_MODEL_SCHEMA = "vevo.v03.document-evidence.neural-model.v1"
+DOCUMENT_MODEL_VERSION = "vevo.v03.document-evidence.typed-action-bilinear.v2"
 DOCUMENT_FORWARD_SCHEMA = "vevo.v03.document-evidence.neural-forward.v1"
 DOCUMENT_RUNTIME_SNAPSHOT_SCHEMA = "vevo.v03.document-evidence.neural-runtime.v1"
 DOCUMENT_ENCODER_ID = "vevo.v03.document-evidence.encoder.lossless-identity.v2"
@@ -520,6 +526,9 @@ class DocumentNeuralPolicy:
         self.params["c.b_action"] = np.zeros(len(FIXED_ACTIONS), dtype=np.float64)
         normal("c.w_candidate_row", (self.encoder.candidate_feature_dim,), 0.08)
         normal("c.w_candidate_context", (context_dim,), 0.08)
+        normal("c.W_candidate_bilinear", (self.encoder.candidate_feature_dim, context_dim), 0.02)
+        normal("c.w_inspect_row", (INSPECT_ACTION_FEATURE_DIM,), 0.08)
+        normal("c.W_inspect_bilinear", (INSPECT_ACTION_FEATURE_DIM, context_dim), 0.02)
         self.params["c.b_candidate"] = np.zeros(1, dtype=np.float64)
         self.model_status = DocumentPolicyModelStatus()
 
@@ -530,14 +539,36 @@ class DocumentNeuralPolicy:
     def parameter_count(self) -> int:
         return int(sum(value.size for value in self.params.values()))
 
+    def parameter_digest(self) -> str:
+        """Return the digest of the actual immutable parameter payload.
+
+        The seed and tensor shapes identify initialization, not the weights
+        that are actually loaded.  Runtime snapshots therefore bind to this
+        digest so a same-seed model with changed parameters cannot restore a
+        state under a false identity.
+        """
+
+        digest = hashlib.sha256()
+        for name in sorted(self.params):
+            payload = np.ascontiguousarray(self.params[name], dtype=np.float64).tobytes()
+            digest.update(name.encode("utf-8"))
+            digest.update(b"\0")
+            digest.update(str(self.params[name].shape).encode("ascii"))
+            digest.update(b"\0")
+            digest.update(payload)
+        return digest.hexdigest()
+
     def model_identity(self) -> dict[str, Any]:
         return {
             "schema": DOCUMENT_MODEL_SCHEMA,
-            "architecture": "four-peripheral-one-central-recurrent-addressable-memory-v1",
+            "architecture": "four-peripheral-one-central-recurrent-addressable-memory-v2-typed-action-bilinear",
             "encoder_id": self.encoder.encoder_id,
             "checkpoint_id": DOCUMENT_CHECKPOINT_ID,
             "seed": self.seed,
             "parameter_count": self.parameter_count(),
+            "parameter_digest": self.parameter_digest(),
+            "model_version": DOCUMENT_MODEL_VERSION,
+            "encoder_version": self.encoder.encoder_id,
             "decision_service_available": False,
             "weights_status": "random_untrained",
         }
@@ -559,10 +590,16 @@ class DocumentNeuralPolicy:
             "peripheral": [np.zeros(self.PERIPH_HIDDEN, dtype=np.float64) for _ in range(self.PERIPHERALS)],
             "central": np.zeros(self.CENTER_HIDDEN, dtype=np.float64),
             "memory": np.zeros(self.central_memory_shape, dtype=np.float64),
+            "phase": "initial_request",
+            "requested_fields": None,
             "last_tool_response": None,
             "remaining_action_budget": remaining_action_budget,
             "step": 0,
+            "inspected_section_keys": [],
+            "selected_candidate_ids": [],
             "observed_candidate_ids": [],
+            "observed_candidates": [],
+            "terminal": False,
         }
 
     @staticmethod
@@ -572,10 +609,16 @@ class DocumentNeuralPolicy:
             "peripheral": [np.asarray(value, dtype=np.float64).copy() for value in runtime["peripheral"]],
             "central": np.asarray(runtime["central"], dtype=np.float64).copy(),
             "memory": np.asarray(runtime["memory"], dtype=np.float64).copy(),
+            "phase": str(runtime.get("phase", "initial_request")),
+            "requested_fields": deepcopy(runtime.get("requested_fields")),
             "last_tool_response": deepcopy(runtime.get("last_tool_response")),
             "remaining_action_budget": int(runtime.get("remaining_action_budget", 0)),
             "step": int(runtime.get("step", 0)),
+            "inspected_section_keys": [list(key) for key in runtime.get("inspected_section_keys", [])],
+            "selected_candidate_ids": list(runtime.get("selected_candidate_ids", [])),
             "observed_candidate_ids": list(runtime.get("observed_candidate_ids", [])),
+            "observed_candidates": deepcopy(runtime.get("observed_candidates", [])),
+            "terminal": bool(runtime.get("terminal", False)),
         }
 
     def _validate_runtime(self, runtime: Mapping[str, Any]) -> None:
@@ -593,7 +636,79 @@ class DocumentNeuralPolicy:
             raise ProtocolViolation("document runtime budget is invalid")
         if type(runtime.get("step")) is not int or runtime["step"] < 0:
             raise ProtocolViolation("document runtime step is invalid")
+        if runtime.get("phase") not in {"initial_request", "tool_response"}:
+            raise ProtocolViolation("document runtime phase is invalid")
+        if runtime["step"] == 0 and runtime["phase"] != "initial_request":
+            raise ProtocolViolation("initial document runtime phase is invalid")
+        if runtime["step"] > 0 and runtime["phase"] != "tool_response":
+            raise ProtocolViolation("subsequent document runtime phase is invalid")
+        requested_fields = runtime.get("requested_fields")
+        if runtime["step"] == 0:
+            if requested_fields is not None:
+                raise ProtocolViolation("initial runtime cannot carry a request payload")
+        elif not isinstance(requested_fields, list) or not requested_fields:
+            raise ProtocolViolation("subsequent runtime must retain the initial request")
+        inspected = runtime.get("inspected_section_keys", [])
+        if not isinstance(inspected, list) or not all(
+            isinstance(item, (list, tuple)) and len(item) == 2 and all(isinstance(value, str) for value in item)
+            for item in inspected
+        ):
+            raise ProtocolViolation("document runtime inspected-section state is invalid")
+        for candidate_id_key in ("selected_candidate_ids", "observed_candidate_ids"):
+            values = runtime.get(candidate_id_key, [])
+            if not isinstance(values, list) or not all(isinstance(value, str) for value in values):
+                raise ProtocolViolation(f"document runtime {candidate_id_key} state is invalid")
+        observed_candidates = runtime.get("observed_candidates", [])
+        if not isinstance(observed_candidates, list):
+            raise ProtocolViolation("document runtime observed candidate state is invalid")
+        assert_observation_no_hidden_fields(observed_candidates, ())
+        if any(
+            not isinstance(candidate, Mapping)
+            or candidate.get("schema") != CANDIDATE_SCHEMA
+            or not isinstance(candidate.get("candidate_id"), str)
+            for candidate in observed_candidates
+        ):
+            raise ProtocolViolation("document runtime observed candidate schema is invalid")
+        if not isinstance(runtime.get("terminal"), bool):
+            raise ProtocolViolation("document runtime terminal state is invalid")
         _assert_finite_json(runtime.get("last_tool_response"))
+        _assert_finite_json(requested_fields)
+        _assert_finite_json(observed_candidates)
+
+    @staticmethod
+    def _request_field_ids(requested_fields: Sequence[Mapping[str, Any]]) -> list[str]:
+        return [str(field.get("field_id")) for field in requested_fields]
+
+    def _inspect_action_row(self, identity: DocumentEpisodeIdentity, handle: str, section_id: str) -> np.ndarray:
+        document_index = identity.document_index(handle)
+        section_index = identity.section_index(handle, section_id)
+        document_scale = max(1, len(identity.document_handles) - 1)
+        section_scale = max(1, len(identity.section_keys) - 1)
+        row = np.asarray(
+            [
+                1.0,
+                float(document_index / document_scale),
+                float(section_index / section_scale),
+                float((section_index + 1) / max(1, len(identity.section_keys))),
+            ],
+            dtype=np.float64,
+        )
+        if not np.isfinite(row).all():
+            raise ProtocolViolation("inspect action feature is non-finite")
+        return row
+
+    def _candidate_scores_from_rows(self, rows: np.ndarray, context: np.ndarray) -> np.ndarray:
+        if rows.size == 0:
+            return np.zeros(0, dtype=np.float64)
+        interaction = (rows @ self.params["c.W_candidate_bilinear"] * context.reshape(1, -1)).sum(axis=1)
+        scores = (
+            interaction
+            + rows @ self.params["c.w_candidate_row"]
+            + float(self.params["c.w_candidate_context"] @ context + self.params["c.b_candidate"][0])
+        )
+        if not np.isfinite(scores).all():
+            raise ProtocolViolation("candidate scorer produced non-finite values")
+        return scores
 
     def _numeric_forward(
         self,
@@ -627,8 +742,7 @@ class DocumentNeuralPolicy:
         read_after = read_weights_after @ memory
         context = np.concatenate((central, read_after))
         fixed_logits = self.params["c.W_action"] @ context + self.params["c.b_action"]
-        context_score = float(self.params["c.w_candidate_context"] @ context + self.params["c.b_candidate"][0])
-        candidate_scores = candidate_rows @ self.params["c.w_candidate_row"] + context_score if len(candidate_rows) else np.zeros(0, dtype=np.float64)
+        candidate_scores = self._candidate_scores_from_rows(candidate_rows, context)
         if not all(np.isfinite(value).all() for value in (central, memory, fixed_logits, candidate_scores)):
             raise ProtocolViolation("document neural forward produced non-finite values")
         next_runtime = {
@@ -636,10 +750,16 @@ class DocumentNeuralPolicy:
             "peripheral": peripheral,
             "central": central,
             "memory": memory,
+            "phase": runtime.get("phase", "initial_request"),
+            "requested_fields": deepcopy(runtime.get("requested_fields")),
             "last_tool_response": runtime.get("last_tool_response"),
             "remaining_action_budget": runtime.get("remaining_action_budget", 0),
             "step": runtime.get("step", 0) + 1,
+            "inspected_section_keys": deepcopy(runtime.get("inspected_section_keys", [])),
+            "selected_candidate_ids": list(runtime.get("selected_candidate_ids", [])),
             "observed_candidate_ids": list(runtime.get("observed_candidate_ids", [])),
+            "observed_candidates": deepcopy(runtime.get("observed_candidates", [])),
+            "terminal": bool(runtime.get("terminal", False)),
         }
         trace = {
             "messages": messages_array,
@@ -655,42 +775,342 @@ class DocumentNeuralPolicy:
         }
         return next_runtime, {"fixed_action_logits": fixed_logits, "candidate_scores": candidate_scores, "trace": trace}
 
+    def _validate_observation_phase(
+        self,
+        observation: Mapping[str, Any],
+        runtime: Mapping[str, Any] | None,
+    ) -> tuple[str, list[Mapping[str, Any]] | None]:
+        phase = observation.get("phase")
+        if phase not in {"initial_request", "tool_response"}:
+            raise ProtocolViolation("document neural observation phase is invalid")
+        if runtime is None:
+            if phase != "initial_request":
+                raise ProtocolViolation("the first neural observation must be initial_request")
+        else:
+            self._validate_runtime(runtime)
+            expected = "initial_request" if runtime["step"] == 0 else "tool_response"
+            if phase != expected:
+                raise ProtocolViolation("document neural observation phase does not match runtime step")
+        if phase == "initial_request":
+            requested_fields = observation.get("requested_fields")
+            if not isinstance(requested_fields, list) or not requested_fields:
+                raise ProtocolViolation("initial_request must carry the typed request exactly once")
+            if observation.get("latest_response") is not None:
+                raise ProtocolViolation("initial_request cannot carry a tool response")
+            return phase, requested_fields
+        if "requested_fields" in observation:
+            raise ProtocolViolation("requested_fields payload is forbidden after the initial step")
+        if not isinstance(observation.get("latest_response"), Mapping):
+            raise ProtocolViolation("tool_response must carry the latest typed response")
+        if runtime is None or not isinstance(runtime.get("requested_fields"), list):
+            raise ProtocolViolation("tool_response has no retained initial request")
+        return phase, runtime["requested_fields"]
+
+    @staticmethod
+    def _merge_candidates(
+        previous: Sequence[Mapping[str, Any]],
+        current: Sequence[Mapping[str, Any]],
+        response: Mapping[str, Any] | None,
+    ) -> list[dict[str, Any]]:
+        merged: dict[str, dict[str, Any]] = {}
+        values: list[Any] = list(previous) + list(current)
+        if isinstance(response, Mapping):
+            values.extend(response.get("candidates", []) if isinstance(response.get("candidates", []), list) else [])
+            candidate = response.get("candidate")
+            if isinstance(candidate, Mapping):
+                values.append(candidate)
+        for value in values:
+            if not isinstance(value, Mapping) or not isinstance(value.get("candidate_id"), str):
+                continue
+            assert_observation_no_hidden_fields(value, ())
+            candidate_id = str(value["candidate_id"])
+            if candidate_id in merged and merged[candidate_id] != dict(value):
+                raise ProtocolViolation("observed candidate identity changed across responses")
+            merged[candidate_id] = deepcopy(dict(value))
+        return [merged[key] for key in sorted(merged)]
+
+    def _advance_observation_runtime(
+        self,
+        runtime: Mapping[str, Any],
+        observation: Mapping[str, Any],
+        requested_fields: Sequence[Mapping[str, Any]],
+    ) -> dict[str, Any]:
+        next_runtime = self.copy_runtime(runtime)
+        response = observation.get("latest_response")
+        next_runtime["phase"] = str(observation["phase"])
+        if observation["phase"] == "initial_request":
+            next_runtime["requested_fields"] = deepcopy(list(requested_fields))
+        next_runtime["observed_candidates"] = self._merge_candidates(
+            next_runtime.get("observed_candidates", []),
+            observation.get("candidates", []),
+            response,
+        )
+        inspected = {tuple(item) for item in next_runtime.get("inspected_section_keys", [])}
+        selected = set(next_runtime.get("selected_candidate_ids", []))
+        if isinstance(response, Mapping):
+            if response.get("status") == "section_observed":
+                handle = response.get("document_handle")
+                section_id = response.get("section_id")
+                if isinstance(handle, str) and isinstance(section_id, str):
+                    inspected.add((handle, section_id))
+            if response.get("status") == "candidate_selected":
+                candidate = response.get("candidate")
+                if isinstance(candidate, Mapping) and isinstance(candidate.get("candidate_id"), str):
+                    selected.add(str(candidate["candidate_id"]))
+        next_runtime["inspected_section_keys"] = [list(item) for item in sorted(inspected)]
+        next_runtime["selected_candidate_ids"] = sorted(selected)
+        next_runtime["observed_candidate_ids"] = sorted(
+            str(candidate["candidate_id"]) for candidate in next_runtime["observed_candidates"]
+        )
+        next_runtime["last_tool_response"] = deepcopy(response)
+        next_runtime["remaining_action_budget"] = observation.get("remaining_action_budget", 0)
+        if type(next_runtime["remaining_action_budget"]) is not int or next_runtime["remaining_action_budget"] < 0:
+            raise ProtocolViolation("remaining action budget is invalid")
+        next_runtime["terminal"] = bool(response.get("terminal", False)) if isinstance(response, Mapping) else False
+        return next_runtime
+
+    @staticmethod
+    def _candidate_citation(candidate: Mapping[str, Any]) -> dict[str, Any]:
+        return {
+            "document_handle": candidate["document_handle"],
+            "section_id": candidate["section_id"],
+            "source_sha256": candidate["source_sha256"],
+            "fact_digest": candidate["fact_digest"],
+        }
+
+    def _materialize_packet(
+        self,
+        runtime: Mapping[str, Any],
+        *,
+        missing_fields: Sequence[str] = (),
+        conflicts: Sequence[Mapping[str, Any]] = (),
+    ) -> dict[str, Any]:
+        """Serialize only explicitly selected observations.
+
+        This method never ranks, deduplicates, or selects evidence.  It is a
+        packet serializer for a typed action candidate; choosing a candidate
+        remains an explicit ``select_candidate`` action.
+        """
+
+        by_id = {str(candidate["candidate_id"]): candidate for candidate in runtime.get("observed_candidates", [])}
+        entries = []
+        for candidate_id in runtime.get("selected_candidate_ids", []):
+            candidate = by_id.get(str(candidate_id))
+            if candidate is None:
+                continue
+            entries.append({
+                "field_id": candidate["field_id"],
+                "candidate_id": candidate["candidate_id"],
+                "value": deepcopy(candidate["value"]),
+                "value_type": candidate["value_type"],
+                "citation": self._candidate_citation(candidate),
+            })
+        return {
+            "entries": entries,
+            "missing_fields": sorted(str(field_id) for field_id in missing_fields),
+            "conflicts": deepcopy([dict(conflict) for conflict in conflicts]),
+        }
+
+    def _observed_conflicts(
+        self,
+        requested_fields: Sequence[Mapping[str, Any]],
+        candidates: Sequence[Mapping[str, Any]],
+    ) -> list[dict[str, Any]]:
+        conflicts: list[dict[str, Any]] = []
+        by_field = {str(field["field_id"]): field for field in requested_fields}
+        for field_id, field in by_field.items():
+            options = [
+                candidate for candidate in candidates
+                if candidate.get("field_id") == field_id
+                and candidate.get("value_type") == field.get("value_type")
+                and candidate.get("revision_state") == "current"
+            ]
+            if not options:
+                continue
+            rank = max((int(candidate["revision"]), str(candidate["published_at"])) for candidate in options)
+            winners = sorted(
+                [candidate for candidate in options if (int(candidate["revision"]), str(candidate["published_at"])) == rank],
+                key=lambda candidate: str(candidate["candidate_id"]),
+            )
+            if len({repr(candidate.get("value")) for candidate in winners}) <= 1:
+                continue
+            conflicts.append({
+                "field_id": field_id,
+                "candidate_ids": [str(candidate["candidate_id"]) for candidate in winners],
+                "value_type": field["value_type"],
+                "values": [deepcopy(candidate["value"]) for candidate in winners],
+                "citations": [self._candidate_citation(candidate) for candidate in winners],
+            })
+        return conflicts
+
+    def _legal_action_candidates(
+        self,
+        runtime: Mapping[str, Any],
+        requested_fields: Sequence[Mapping[str, Any]],
+    ) -> list[dict[str, Any]]:
+        if runtime.get("terminal", False):
+            return []
+        identity = runtime["identity"]
+        inspected = {tuple(item) for item in runtime.get("inspected_section_keys", [])}
+        selected = set(runtime.get("selected_candidate_ids", []))
+        candidates = list(runtime.get("observed_candidates", []))
+        actions: list[dict[str, Any]] = []
+        for handle, section_id in identity.section_keys:
+            if (handle, section_id) not in inspected:
+                actions.append({"kind": "inspect_section", "document_handle": handle, "section_id": section_id})
+        for candidate in candidates:
+            candidate_id = str(candidate["candidate_id"])
+            if candidate_id not in selected:
+                actions.append({"kind": "select_candidate", "candidate_id": candidate_id})
+        conflicts = self._observed_conflicts(requested_fields, candidates)
+        all_inspected = set(identity.section_keys) == inspected
+        if selected:
+            selected_candidates = [candidate for candidate in candidates if str(candidate["candidate_id"]) in selected]
+            valid_finish = True
+            for field in requested_fields:
+                all_options = [
+                    candidate for candidate in candidates
+                    if candidate.get("field_id") == field.get("field_id")
+                    and candidate.get("value_type") == field.get("value_type")
+                    and candidate.get("revision_state") == "current"
+                ]
+                options = [
+                    candidate for candidate in selected_candidates
+                    if candidate.get("field_id") == field.get("field_id")
+                    and candidate.get("value_type") == field.get("value_type")
+                    and candidate.get("revision_state") == "current"
+                ]
+                if not all_options or not options:
+                    valid_finish = False
+                    break
+                rank = max((int(candidate["revision"]), str(candidate["published_at"])) for candidate in all_options)
+                winners = [candidate for candidate in all_options if (int(candidate["revision"]), str(candidate["published_at"])) == rank]
+                selected_winners = [candidate for candidate in options if (int(candidate["revision"]), str(candidate["published_at"])) == rank]
+                if len(winners) != 1 or len(selected_winners) != 1 or selected_winners[0]["candidate_id"] != winners[0]["candidate_id"]:
+                    valid_finish = False
+                    break
+            if valid_finish:
+                actions.append({"kind": "finish", "packet": self._materialize_packet(runtime)})
+        if all_inspected:
+            observed_field_ids = {
+                candidate.get("field_id")
+                for candidate in candidates
+                if candidate.get("revision_state") == "current"
+                and any(
+                    candidate.get("value_type") == field.get("value_type")
+                    and candidate.get("field_id") == field.get("field_id")
+                    for field in requested_fields
+                )
+            }
+            for field in requested_fields:
+                if field.get("field_id") not in observed_field_ids:
+                    field_id = str(field["field_id"])
+                    actions.append({
+                        "kind": "report_missing",
+                        "field_id": field_id,
+                        "packet": self._materialize_packet(runtime, missing_fields=(field_id,)),
+                    })
+        for conflict in conflicts:
+            if set(conflict["candidate_ids"]).issubset(selected):
+                actions.append({
+                    "kind": "report_conflict",
+                    "field_id": conflict["field_id"],
+                    "packet": self._materialize_packet(runtime, conflicts=(conflict,)),
+                })
+        return actions
+
+    def _score_action_options(
+        self,
+        options: Sequence[Mapping[str, Any]],
+        *,
+        fixed_logits: np.ndarray,
+        context: np.ndarray,
+        identity: DocumentEpisodeIdentity,
+        observed_candidates: Sequence[Mapping[str, Any]],
+    ) -> list[dict[str, Any]]:
+        candidate_rows = self.encoder.encode_candidates(
+            observed_candidates,
+            requested_field_ids=(),
+            identity=identity,
+        )
+        candidate_scores = self._candidate_scores_from_rows(candidate_rows, context)
+        candidate_score_map = {
+            str(candidate["candidate_id"]): float(score)
+            for candidate, score in zip(observed_candidates, candidate_scores)
+        }
+        scored: list[dict[str, Any]] = []
+        for option in options:
+            kind = option["kind"]
+            if kind == "inspect_section":
+                row = self._inspect_action_row(identity, option["document_handle"], option["section_id"])
+                score = float(
+                    fixed_logits[0]
+                    + row @ self.params["c.w_inspect_row"]
+                    + (row @ self.params["c.W_inspect_bilinear"] * context).sum()
+                )
+            elif kind == "select_candidate":
+                score = candidate_score_map[str(option["candidate_id"])]
+            else:
+                score = float(fixed_logits[FIXED_ACTIONS.index(kind)])
+            scored.append({**deepcopy(dict(option)), "score": score})
+        return scored
+
     def make_observation(
         self,
         *,
-        requested_fields: Sequence[Mapping[str, Any]],
+        requested_fields: Sequence[Mapping[str, Any]] | None = None,
         candidates: Sequence[Mapping[str, Any]],
         latest_response: Mapping[str, Any] | None = None,
         remaining_action_budget: int = 0,
         identity: DocumentEpisodeIdentity | Mapping[str, Any] | None = None,
+        phase: str | None = None,
     ) -> dict[str, Any]:
         candidates = list(candidates)
         episode_identity = _coerce_identity(identity, candidates)
-        return {
+        if phase is None:
+            phase = "initial_request" if latest_response is None else "tool_response"
+        if phase not in {"initial_request", "tool_response"}:
+            raise ProtocolViolation("document neural observation phase is invalid")
+        if phase == "initial_request":
+            if not isinstance(requested_fields, Sequence) or isinstance(requested_fields, (str, bytes)) or not list(requested_fields):
+                raise ProtocolViolation("initial_request requires a typed request")
+            if latest_response is not None:
+                raise ProtocolViolation("initial_request cannot carry a tool response")
+        elif requested_fields is not None:
+            raise ProtocolViolation("requested_fields payload is forbidden after the initial step")
+        if type(remaining_action_budget) is not int or remaining_action_budget < 0:
+            raise ProtocolViolation("remaining action budget is invalid")
+        observation = {
             "schema": DOCUMENT_FORWARD_SCHEMA,
-            "requested_fields": deepcopy(list(requested_fields)),
+            "phase": phase,
             "candidates": deepcopy(candidates),
             "latest_response": deepcopy(latest_response),
             "remaining_action_budget": remaining_action_budget,
             "identity": episode_identity.as_dict(),
         }
+        if phase == "initial_request":
+            observation["requested_fields"] = deepcopy(list(requested_fields or ()))
+        return observation
 
     def forward(self, observation: Mapping[str, Any], runtime: Mapping[str, Any] | None = None) -> dict[str, Any]:
         if not isinstance(observation, Mapping) or observation.get("schema") != DOCUMENT_FORWARD_SCHEMA:
             raise ProtocolViolation("unsupported document neural observation")
-        requested_fields = observation.get("requested_fields")
         candidates = observation.get("candidates")
-        if not isinstance(requested_fields, list) or not isinstance(candidates, list):
+        if not isinstance(candidates, list):
             raise ProtocolViolation("document neural observation is not typed")
         identity = _coerce_identity(observation.get("identity"), candidates)
+        phase, requested_fields = self._validate_observation_phase(observation, runtime)
         if runtime is None:
-            runtime = self.initial_runtime(identity=identity, remaining_action_budget=int(observation.get("remaining_action_budget", 0)))
+            runtime = self.initial_runtime(
+                identity=identity,
+                remaining_action_budget=int(observation.get("remaining_action_budget", 0)),
+            )
         else:
-            self._validate_runtime(runtime)
             if runtime["identity"] != identity:
                 raise ProtocolViolation("document neural observation identity does not match runtime")
+        runtime = self._advance_observation_runtime(runtime, observation, requested_fields or ())
         vector = self.encoder.encode_policy_input(
-            requested_fields=requested_fields,
+            requested_fields=requested_fields or (),
             candidates=candidates,
             latest_response=observation.get("latest_response"),
             remaining_action_budget=observation.get("remaining_action_budget", 0),
@@ -698,19 +1118,27 @@ class DocumentNeuralPolicy:
         )
         candidate_rows = self.encoder.encode_candidates(
             candidates,
-            requested_field_ids=[str(field.get("field_id")) for field in requested_fields],
+            requested_field_ids=self._request_field_ids(requested_fields or ()),
             identity=identity,
         )
         next_runtime, result = self._numeric_forward(runtime, vector, candidate_rows)
+        next_runtime["phase"] = "tool_response"
+        next_runtime["requested_fields"] = deepcopy(list(requested_fields or ()))
         next_runtime["last_tool_response"] = deepcopy(observation.get("latest_response"))
         next_runtime["remaining_action_budget"] = int(observation.get("remaining_action_budget", 0))
-        next_runtime["observed_candidate_ids"] = sorted(set(next_runtime.get("observed_candidate_ids", [])) | {str(candidate["candidate_id"]) for candidate in candidates})
-        action_options = [
-            {"kind": kind, "score": float(score)} for kind, score in zip(FIXED_ACTIONS, result["fixed_action_logits"])
-        ] + [
-            {"kind": "select_candidate", "candidate_id": str(candidate["candidate_id"]), "score": float(score)}
-            for candidate, score in zip(candidates, result["candidate_scores"])
-        ]
+        next_runtime["inspected_section_keys"] = deepcopy(runtime.get("inspected_section_keys", []))
+        next_runtime["selected_candidate_ids"] = deepcopy(runtime.get("selected_candidate_ids", []))
+        next_runtime["observed_candidates"] = deepcopy(runtime.get("observed_candidates", []))
+        next_runtime["observed_candidate_ids"] = deepcopy(runtime.get("observed_candidate_ids", []))
+        next_runtime["terminal"] = bool(runtime.get("terminal", False))
+        legal_options = self._legal_action_candidates(next_runtime, requested_fields or ())
+        action_options = self._score_action_options(
+            legal_options,
+            fixed_logits=result["fixed_action_logits"],
+            context=result["trace"]["context"],
+            identity=identity,
+            observed_candidates=next_runtime["observed_candidates"],
+        )
         return {
             "schema": DOCUMENT_FORWARD_SCHEMA,
             "model_identity": self.model_identity(),
@@ -720,6 +1148,7 @@ class DocumentNeuralPolicy:
             "fixed_action_logits": result["fixed_action_logits"].copy(),
             "candidate_scores": result["candidate_scores"].copy(),
             "candidate_ids": [str(candidate["candidate_id"]) for candidate in candidates],
+            "legal_action_candidates": deepcopy(action_options),
             "runtime": next_runtime,
             "trace": result["trace"],
         }
@@ -740,10 +1169,7 @@ class DocumentNeuralPolicy:
         context_array = np.zeros(self.CENTER_HIDDEN + self.MEMORY_DIM, dtype=np.float64) if context is None else np.asarray(context, dtype=np.float64)
         if context_array.shape != (self.CENTER_HIDDEN + self.MEMORY_DIM,) or not np.isfinite(context_array).all():
             raise ProtocolViolation("candidate scorer context is invalid")
-        scores = rows @ self.params["c.w_candidate_row"] + float(self.params["c.w_candidate_context"] @ context_array + self.params["c.b_candidate"][0])
-        if not np.isfinite(scores).all():
-            raise ProtocolViolation("candidate scorer produced non-finite values")
-        return scores
+        return self._candidate_scores_from_rows(rows, context_array)
 
     def _tensor_forward(
         self,
@@ -779,89 +1205,164 @@ class DocumentNeuralPolicy:
         read_after = read_weights_after @ memory
         context = concatenate((central, read_after), axis=0)
         fixed_logits = params["c.W_action"] @ context + params["c.b_action"]
-        context_score = (params["c.w_candidate_context"].reshape(1, -1) @ context + params["c.b_candidate"])[0]
         candidate_logits: list[Tensor] = []
         for row in candidate_rows:
             row_score = (params["c.w_candidate_row"].reshape(1, -1) @ Tensor(row))[0]
-            candidate_logits.append((row_score + context_score).reshape(1))
+            interaction_vector = Tensor(row) @ params["c.W_candidate_bilinear"]
+            interaction_score = (interaction_vector.reshape(1, -1) @ context)[0]
+            context_score = (params["c.w_candidate_context"].reshape(1, -1) @ context + params["c.b_candidate"])[0]
+            candidate_logits.append((row_score + interaction_score + context_score).reshape(1))
         return {"peripheral": next_peripheral, "central": central, "memory": memory}, fixed_logits, candidate_logits, {
             "fixed_action_logits": fixed_logits.data.copy(),
             "candidate_scores": np.asarray([score.data for score in candidate_logits], dtype=np.float64),
             "memory": memory.data.copy(),
             "central": central.data.copy(),
+            "context": context.data.copy(),
+            "context_tensor": context,
         }
 
     def loss_and_gradients(
         self,
         observations: Sequence[Mapping[str, Any]],
         *,
-        target_action: str | Mapping[str, Any],
+        target_action: str | Mapping[str, Any] | None = None,
+        target_actions: Sequence[str | Mapping[str, Any]] | None = None,
         initial_memory: np.ndarray | None = None,
     ) -> tuple[float, dict[str, np.ndarray], np.ndarray, list[dict[str, Any]]]:
         if not observations:
             raise ProtocolViolation("document neural observations are required")
+        if target_action is not None and target_actions is not None:
+            raise ProtocolViolation("provide target_action or target_actions, not both")
+        if target_actions is None:
+            if target_action is None:
+                raise ProtocolViolation("document neural imitation targets are required")
+            targets = [target_action for _ in observations]
+        else:
+            targets = list(target_actions)
+            if len(targets) != len(observations):
+                raise ProtocolViolation("one exact imitation target is required per observation step")
         params = {name: Tensor(value.copy(), requires_grad=True) for name, value in self.params.items()}
         first = observations[0]
         if not isinstance(first, Mapping) or first.get("schema") != DOCUMENT_FORWARD_SCHEMA:
             raise ProtocolViolation("unsupported document neural observation")
         identity = _coerce_identity(first.get("identity"), first.get("candidates", []))
-        runtime: dict[str, Any] = {
+        if first.get("phase") != "initial_request":
+            raise ProtocolViolation("gradient sequences must begin with initial_request")
+        metadata_runtime: dict[str, Any] = self.initial_runtime(identity=identity, remaining_action_budget=0)
+        tensor_runtime: dict[str, Any] = {
             "peripheral": [Tensor(np.zeros(self.PERIPH_HIDDEN)) for _ in range(self.PERIPHERALS)],
             "central": Tensor(np.zeros(self.CENTER_HIDDEN)),
             "memory": Tensor(np.zeros(self.central_memory_shape, dtype=np.float64) if initial_memory is None else np.asarray(initial_memory, dtype=np.float64), requires_grad=True),
         }
-        initial_memory_tensor = runtime["memory"]
+        initial_memory_tensor = tensor_runtime["memory"]
         if initial_memory_tensor.data.shape != self.central_memory_shape or not np.isfinite(initial_memory_tensor.data).all():
             raise ProtocolViolation("invalid initial neural memory")
         trace: list[dict[str, Any]] = []
-        fixed_logits: Tensor | None = None
-        candidate_logits: list[Tensor] = []
-        candidate_ids: list[str] = []
-        for observation in observations:
+        step_losses: list[Tensor] = []
+        for step_index, (observation, target) in enumerate(zip(observations, targets)):
             if not isinstance(observation, Mapping) or observation.get("schema") != DOCUMENT_FORWARD_SCHEMA:
                 raise ProtocolViolation("unsupported document neural observation")
             observation_identity = _coerce_identity(observation.get("identity"), observation.get("candidates", []))
             if observation_identity != identity:
                 raise ProtocolViolation("document neural sequence changes episode identity")
+            _, requested_fields = self._validate_observation_phase(observation, metadata_runtime)
+            metadata_runtime = self._advance_observation_runtime(metadata_runtime, observation, requested_fields or ())
             candidates = list(observation.get("candidates", []))
             vector = self.encoder.encode_policy_input(
-                requested_fields=observation.get("requested_fields", []),
+                requested_fields=requested_fields or (),
                 candidates=candidates,
                 latest_response=observation.get("latest_response"),
                 remaining_action_budget=observation.get("remaining_action_budget", 0),
                 identity=identity,
             )
-            rows = self.encoder.encode_candidates(candidates, requested_field_ids=[str(field.get("field_id")) for field in observation.get("requested_fields", [])], identity=identity)
-            runtime, fixed_logits, candidate_logits, step_trace = self._tensor_forward(runtime, vector, rows, params)
-            candidate_ids = [str(candidate["candidate_id"]) for candidate in candidates]
+            rows = self.encoder.encode_candidates(
+                metadata_runtime.get("observed_candidates", []),
+                requested_field_ids=self._request_field_ids(requested_fields or ()),
+                identity=identity,
+            )
+            tensor_runtime, fixed_logits, candidate_logits, step_trace = self._tensor_forward(tensor_runtime, vector, rows, params)
+            legal_options = self._legal_action_candidates(metadata_runtime, requested_fields or ())
+            if not legal_options:
+                raise ProtocolViolation("document neural observation has no legal action candidates")
+            candidate_ids = [str(candidate["candidate_id"]) for candidate in metadata_runtime.get("observed_candidates", [])]
+            candidate_logit_by_id = {
+                candidate_id: logit for candidate_id, logit in zip(candidate_ids, candidate_logits)
+            }
+            action_logits: list[Tensor] = []
+            for option in legal_options:
+                kind = option["kind"]
+                if kind == "inspect_section":
+                    row = self._inspect_action_row(identity, option["document_handle"], option["section_id"])
+                    row_tensor = Tensor(row)
+                    row_score = (params["c.w_inspect_row"].reshape(1, -1) @ row_tensor)[0]
+                    interaction_vector = row_tensor @ params["c.W_inspect_bilinear"]
+                    interaction_score = (interaction_vector.reshape(1, -1) @ step_trace["context_tensor"])[0]
+                    action_logits.append((fixed_logits[0] + row_score + interaction_score).reshape(1))
+                elif kind == "select_candidate":
+                    candidate_id = str(option["candidate_id"])
+                    if candidate_id not in candidate_logit_by_id:
+                        raise ProtocolViolation("legal select candidate is missing from the encoded observation")
+                    action_logits.append(candidate_logit_by_id[candidate_id])
+                else:
+                    action_logits.append(fixed_logits[FIXED_ACTIONS.index(kind)].reshape(1))
+            logits = concatenate(action_logits, axis=0)
+            target_index = self._target_option_index(legal_options, target)
+            probabilities = softmax(logits)
+            step_loss = -log(probabilities[target_index] + 1e-12)
+            step_losses.append(step_loss)
+            step_trace["loss"] = float(step_loss.data)
+            step_trace["legal_action_count"] = len(legal_options)
+            step_trace["target_action"] = deepcopy(target)
+            step_trace.pop("context_tensor", None)
             trace.append(step_trace)
-        if fixed_logits is None:
-            raise ProtocolViolation("document neural forward produced no step")
-        if isinstance(target_action, Mapping):
-            target_kind = target_action.get("kind")
-            target_candidate_id = target_action.get("candidate_id")
-        else:
-            target_kind = target_action
-            target_candidate_id = None
-        if target_kind in FIXED_ACTIONS:
-            target_index = FIXED_ACTIONS.index(str(target_kind))
-        elif target_kind == "select_candidate":
-            if not isinstance(target_candidate_id, str) or target_candidate_id not in candidate_ids:
-                raise ProtocolViolation("select-candidate target is not in the final candidate set")
-            target_index = len(FIXED_ACTIONS) + candidate_ids.index(target_candidate_id)
-        else:
-            raise ProtocolViolation("unsupported typed neural target action")
-        logits = fixed_logits if not candidate_logits else concatenate((fixed_logits, concatenate(candidate_logits, axis=0)), axis=0)
-        probabilities = softmax(logits)
-        total = -log(probabilities[target_index] + 1e-12) + 0.0002 * (params["c.W_rec"] * params["c.W_rec"]).sum()
+            metadata_runtime["phase"] = "tool_response"
+            metadata_runtime["step"] += 1
+        imitation_total = step_losses[0]
+        for step_loss in step_losses[1:]:
+            imitation_total = imitation_total + step_loss
+        total = (
+            imitation_total / float(len(step_losses))
+            + 0.0002 * (params["c.W_rec"] * params["c.W_rec"]).sum()
+        )
         total.backward()
         gradients = {name: tensor.grad.copy() for name, tensor in params.items()}
         if not np.isfinite(total.data) or not all(np.isfinite(gradient).all() for gradient in gradients.values()):
             raise ProtocolViolation("document neural gradient path produced non-finite values")
         return float(total.data), gradients, initial_memory_tensor.grad.copy(), trace
 
-    def loss_only(self, observations: Sequence[Mapping[str, Any]], *, target_action: str | Mapping[str, Any]) -> float:
-        return self.loss_and_gradients(observations, target_action=target_action)[0]
+    @staticmethod
+    def _target_option_index(options: Sequence[Mapping[str, Any]], target: str | Mapping[str, Any]) -> int:
+        if isinstance(target, str):
+            matches = [index for index, option in enumerate(options) if option.get("kind") == target]
+            if len(matches) != 1:
+                raise ProtocolViolation("string imitation target is ambiguous or not legal; use the exact typed action")
+            return matches[0]
+        if not isinstance(target, Mapping) or not isinstance(target.get("kind"), str):
+            raise ProtocolViolation("typed imitation target is invalid")
+        kind = str(target["kind"])
+        for index, option in enumerate(options):
+            if kind != option.get("kind"):
+                continue
+            if kind == "inspect_section" and (
+                target.get("document_handle") == option.get("document_handle")
+                and target.get("section_id") == option.get("section_id")
+            ):
+                return index
+            if kind == "select_candidate" and target.get("candidate_id") == option.get("candidate_id"):
+                return index
+            if kind in {"finish", "report_missing", "report_conflict"}:
+                if kind == "finish" or target.get("field_id") == option.get("field_id"):
+                    return index
+        raise ProtocolViolation("exact typed imitation target is not a legal action in this step")
+
+    def loss_only(
+        self,
+        observations: Sequence[Mapping[str, Any]],
+        *,
+        target_action: str | Mapping[str, Any] | None = None,
+        target_actions: Sequence[str | Mapping[str, Any]] | None = None,
+    ) -> float:
+        return self.loss_and_gradients(observations, target_action=target_action, target_actions=target_actions)[0]
 
     def snapshot_runtime(self, runtime: Mapping[str, Any]) -> dict[str, Any]:
         self._validate_runtime(runtime)
@@ -876,7 +1377,13 @@ class DocumentNeuralPolicy:
             "last_tool_response": deepcopy(runtime.get("last_tool_response")),
             "remaining_action_budget": runtime["remaining_action_budget"],
             "step": runtime["step"],
+            "phase": runtime["phase"],
+            "requested_fields": deepcopy(runtime.get("requested_fields")),
+            "inspected_section_keys": [list(key) for key in runtime.get("inspected_section_keys", [])],
+            "selected_candidate_ids": sorted(str(item) for item in runtime.get("selected_candidate_ids", [])),
             "observed_candidate_ids": sorted(str(item) for item in runtime.get("observed_candidate_ids", [])),
+            "observed_candidates": deepcopy(runtime.get("observed_candidates", [])),
+            "terminal": runtime.get("terminal", False),
         }
         _assert_finite_json(snapshot)
         return snapshot
@@ -897,16 +1404,36 @@ class DocumentNeuralPolicy:
         observed_candidate_ids = snapshot.get("observed_candidate_ids", [])
         if not isinstance(observed_candidate_ids, list) or not all(isinstance(item, str) for item in observed_candidate_ids):
             raise ProtocolViolation("document neural candidate identity snapshot is invalid")
+        selected_candidate_ids = snapshot.get("selected_candidate_ids", [])
+        if not isinstance(selected_candidate_ids, list) or not all(isinstance(item, str) for item in selected_candidate_ids):
+            raise ProtocolViolation("document neural selected candidate snapshot is invalid")
+        inspected_section_keys = snapshot.get("inspected_section_keys", [])
+        if not isinstance(inspected_section_keys, list) or not all(
+            isinstance(item, list) and len(item) == 2 and all(isinstance(value, str) for value in item)
+            for item in inspected_section_keys
+        ):
+            raise ProtocolViolation("document neural inspected-section snapshot is invalid")
+        observed_candidates = snapshot.get("observed_candidates", [])
+        if not isinstance(observed_candidates, list):
+            raise ProtocolViolation("document neural observed candidate snapshot is invalid")
+        if snapshot.get("terminal") not in {True, False}:
+            raise ProtocolViolation("document neural terminal snapshot is invalid")
         try:
             runtime = {
                 "identity": identity,
                 "peripheral": [np.asarray(value, dtype=np.float64).reshape(self.PERIPH_HIDDEN).copy() for value in peripheral_values],
                 "central": np.asarray(snapshot.get("central_hidden_state"), dtype=np.float64).reshape(self.CENTER_HIDDEN).copy(),
                 "memory": np.asarray(snapshot.get("learned_memory"), dtype=np.float64).reshape(self.central_memory_shape).copy(),
+                "phase": snapshot.get("phase"),
+                "requested_fields": deepcopy(snapshot.get("requested_fields")),
                 "last_tool_response": deepcopy(snapshot.get("last_tool_response")),
                 "remaining_action_budget": snapshot.get("remaining_action_budget"),
                 "step": snapshot.get("step"),
+                "inspected_section_keys": deepcopy(inspected_section_keys),
+                "selected_candidate_ids": list(selected_candidate_ids),
                 "observed_candidate_ids": list(observed_candidate_ids),
+                "observed_candidates": deepcopy(observed_candidates),
+                "terminal": snapshot.get("terminal"),
             }
         except (TypeError, ValueError) as exc:
             raise ProtocolViolation("document neural runtime state shapes are invalid") from exc
@@ -966,8 +1493,19 @@ class DocumentPolicyInterface:
                 "report_missing": {"operation": "submit a typed packet with an explicit missing field", "arguments": {"field_id": "initial-request field id", "packet": "typed evidence packet"}},
                 "report_conflict": {"operation": "submit a typed packet with all equal-rank conflict citations", "arguments": {"field_id": "initial-request field id", "packet": "typed evidence packet"}},
             },
+            "typed_action_candidates": {
+                "identity": "kind plus all typed arguments; candidate ids and catalog section keys are episode-local",
+                "inspect_section": "one exact uninspected (document_handle, section_id) pair",
+                "select_candidate": "one exact observed candidate_id not already selected",
+                "terminal": "only structurally applicable finish/missing/conflict candidates with an explicit serialized packet",
+                "masking": ["already_inspected_sections", "already_selected_candidates", "illegal_or_unobserved_candidates", "inapplicable_terminal_outcomes"],
+                "packet_materialization": "serializes selected evidence only; it never calls an expert or chooses evidence",
+            },
             "phase_rules": {
                 "initial_request_only": True,
+                "initial_phase_name": "initial_request",
+                "subsequent_phase_name": "tool_response",
+                "requested_fields_rejected_after_step_zero": True,
                 "initial_request_contains_field_ids": True,
                 "candidate_observations_contain_source_field_ids": True,
                 "latest_tool_response_visible": True,
@@ -986,7 +1524,7 @@ class DocumentPolicyInterface:
             "recurrent_snapshot_contract": {
                 "schema": DOCUMENT_RUNTIME_SNAPSHOT_SCHEMA,
                 "memory_shape": list(self.memory_shape),
-                "state_fields": ["peripheral_hidden_states[4]", "central_hidden_state", "learned_memory", "last_tool_response", "remaining_action_budget", "episode_identity_relations", "observed_candidate_ids"],
+                "state_fields": ["peripheral_hidden_states[4]", "central_hidden_state", "learned_memory", "phase", "requested_fields_initial_only", "last_tool_response", "remaining_action_budget", "episode_identity_relations", "inspected_section_keys", "selected_candidate_ids", "observed_candidate_ids", "observed_candidates", "terminal"],
                 "types": {
                     "peripheral_hidden_states": "finite_float[4,8]",
                     "central_hidden_state": "finite_float[12]",
@@ -996,6 +1534,8 @@ class DocumentPolicyInterface:
                     # authoritative contract.
                     "memory": "finite_float[2,6]",
                     "last_tool_response": "typed_json_or_null",
+                    "phase": "initial_request_or_tool_response",
+                    "requested_fields": "typed_initial_request_or_null_after_step_zero",
                     "remaining_action_budget": "nonnegative_integer",
                     "episode_identity_relations": "catalog_bound_episode_local_relation_map",
                 },
@@ -1011,25 +1551,32 @@ class DocumentPolicyInterface:
             "model_status": self.model_status.as_dict(),
             "model_identity": self.model.model_identity(),
             "variable_candidate_set": True,
+            "imitation_loss": {
+                "aggregation": "mean_per_step",
+                "target_contract": "one exact typed legal action identity per observation step",
+                "regularization": "small recurrent-weight penalty added after step-loss mean",
+            },
         }
 
     def encode_observation(
         self,
         *,
-        requested_fields: Sequence[Mapping[str, Any]],
+        requested_fields: Sequence[Mapping[str, Any]] | None = None,
         candidates: Sequence[Mapping[str, Any]],
         requested_field_ids: Sequence[str] = (),
         latest_response: Mapping[str, Any] | None = None,
         remaining_action_budget: int = 0,
         identity: DocumentEpisodeIdentity | Mapping[str, Any] | None = None,
+        phase: str | None = None,
     ) -> dict[str, Any]:
         candidates = list(candidates)
         episode_identity = _coerce_identity(identity, candidates)
-        observation = self.model.make_observation(requested_fields=requested_fields, candidates=candidates, latest_response=latest_response, remaining_action_budget=remaining_action_budget, identity=episode_identity)
+        observation = self.model.make_observation(requested_fields=requested_fields, candidates=candidates, latest_response=latest_response, remaining_action_budget=remaining_action_budget, identity=episode_identity, phase=phase)
+        encoded_request_fields = list(requested_fields or ())
         return {
-            "request_types": self.encoder.encode_request_types(requested_fields),
+            "request_types": self.encoder.encode_request_types(encoded_request_fields) if observation["phase"] == "initial_request" else None,
             "candidates": self.encoder.encode_candidates(candidates, requested_field_ids=requested_field_ids, identity=episode_identity),
-            "model_input": self.encoder.encode_policy_input(requested_fields=requested_fields, candidates=candidates, latest_response=latest_response, remaining_action_budget=remaining_action_budget, identity=episode_identity),
+            "model_input": self.encoder.encode_policy_input(requested_fields=encoded_request_fields, candidates=candidates, latest_response=latest_response, remaining_action_budget=remaining_action_budget, identity=episode_identity),
             "identity": episode_identity.as_dict(),
             "observation": observation,
         }
@@ -1037,8 +1584,14 @@ class DocumentPolicyInterface:
     def forward(self, observation: Mapping[str, Any], runtime: Mapping[str, Any] | None = None) -> dict[str, Any]:
         return self.model.forward(observation, runtime=runtime)
 
-    def loss_and_gradients(self, observations: Sequence[Mapping[str, Any]], *, target_action: str | Mapping[str, Any]):
-        return self.model.loss_and_gradients(observations, target_action=target_action)
+    def loss_and_gradients(
+        self,
+        observations: Sequence[Mapping[str, Any]],
+        *,
+        target_action: str | Mapping[str, Any] | None = None,
+        target_actions: Sequence[str | Mapping[str, Any]] | None = None,
+    ):
+        return self.model.loss_and_gradients(observations, target_action=target_action, target_actions=target_actions)
 
     def select_action(self, observation: Mapping[str, Any]) -> dict[str, Any]:
         if not isinstance(observation, Mapping):
@@ -1052,6 +1605,7 @@ __all__ = [
     "DOCUMENT_CHECKPOINT_ID",
     "DOCUMENT_ENCODER_ID",
     "DOCUMENT_MEMORY_SHAPE",
+    "DOCUMENT_MODEL_VERSION",
     "DOCUMENT_MODEL_INPUT_DIM",
     "DOCUMENT_POLICY_BACKEND",
     "DOCUMENT_REQUEST_FEATURE_DIM",

@@ -22,6 +22,12 @@ DEVELOPMENT_DOCUMENT_HANDLES = ("doc-aurora", "doc-boreal", "doc-cinder")
 TEST_DOCUMENT_HANDLES = ("doc-delta", "doc-foxtrot")
 DEVELOPMENT_CASE_SEEDS = (9300, 9301, 9302)
 TEST_CASE_SEEDS = (9400, 9401)
+FIRST_MODEL_CATALOG_READ_ACTIONS = 1
+FIRST_MODEL_MAX_DOCUMENTS = 2
+FIRST_MODEL_MAX_SECTIONS_PER_DOCUMENT = 4
+FIRST_MODEL_MAX_REQUESTED_FIELDS = 2
+FIRST_MODEL_MAX_SELECTED_CANDIDATES = 4
+FIRST_MODEL_ACTION_BUDGET = 16
 
 
 def document_evidence_tasks() -> tuple[DocumentTask, ...]:
@@ -47,6 +53,61 @@ def document_evidence_tasks() -> tuple[DocumentTask, ...]:
             seed=9302,
         ),
     )
+
+
+def first_model_budget_accounting(
+    *,
+    maximum_documents: int = FIRST_MODEL_MAX_DOCUMENTS,
+    maximum_sections_per_document: int = FIRST_MODEL_MAX_SECTIONS_PER_DOCUMENT,
+    maximum_requested_fields: int = FIRST_MODEL_MAX_REQUESTED_FIELDS,
+    maximum_selected_candidates: int = FIRST_MODEL_MAX_SELECTED_CANDIDATES,
+    action_budget: int = FIRST_MODEL_ACTION_BUDGET,
+) -> dict[str, Any]:
+    """Admit the first bounded scope using every action-bearing operation."""
+
+    catalog_read_actions = FIRST_MODEL_CATALOG_READ_ACTIONS
+    inspect_actions = maximum_documents * maximum_sections_per_document
+    select_actions = maximum_selected_candidates
+    completion_actions = 1
+    total = catalog_read_actions + inspect_actions + select_actions + completion_actions
+    return {
+        "maximum_documents": maximum_documents,
+        "maximum_sections_per_document": maximum_sections_per_document,
+        "maximum_requested_fields": maximum_requested_fields,
+        "maximum_selected_candidates": maximum_selected_candidates,
+        "action_budget": action_budget,
+        "catalog_read_actions": catalog_read_actions,
+        "inspect_section_actions": inspect_actions,
+        "select_candidate_actions": select_actions,
+        "completion_verify_action": completion_actions,
+        "total_policy_action_calls": total,
+        "server_verification_calls": 1,
+        "unused_action_reserve": action_budget - total,
+        "feasible_within_budget": total <= action_budget,
+        "admission_rule": "catalog_read + exhaustive section inspections + explicit selections + one terminal verifier call",
+    }
+
+
+def generate_development_case_manifest(store: DocumentBundleStore | None = None) -> tuple[dict[str, Any], ...]:
+    """Generate only the deterministic inspected development manifest.
+
+    This is a metadata generator, not a trace runner: it never opens a held-out
+    outcome and never stores an expected answer or prediction.
+    """
+
+    bundle = store or DocumentBundleStore.from_bundled()
+    bundle.verify_integrity(DEVELOPMENT_DOCUMENT_HANDLES)
+    records = []
+    for task in document_evidence_tasks():
+        records.append({
+            **_task_request(task),
+            "scenario_seed": task.seed,
+            "scenario_family": "development_protocol_fixture",
+            "layout_family_scope": "development_manifest_only",
+            "trace_generation": "not_run",
+            "outcomes_materialized": False,
+        })
+    return tuple(records)
 
 
 def _task_request(task: DocumentTask) -> dict[str, Any]:
@@ -110,12 +171,45 @@ def _scope_manifest(store: DocumentBundleStore, handles: tuple[str, ...], *, sco
     }
 
 
+def _scenario_layout_family_partition(store: DocumentBundleStore) -> dict[str, Any]:
+    """Materialize split metadata before any trace or outcome generation."""
+
+    scopes = {
+        "train": _scope_manifest(store, TRAIN_DOCUMENT_HANDLES, scope="train"),
+        "development": _scope_manifest(store, DEVELOPMENT_DOCUMENT_HANDLES, scope="development"),
+        "test": _scope_manifest(store, TEST_DOCUMENT_HANDLES, scope="test"),
+    }
+    for left_name, left in scopes.items():
+        for right_name, right in scopes.items():
+            if left_name >= right_name:
+                continue
+            if set(left["document_handles"]) & set(right["document_handles"]):
+                raise ValueError("scenario split document handles overlap")
+            if set(left["template_families"]) & set(right["template_families"]):
+                raise ValueError("scenario split template families overlap")
+            if set(left["layout_ids"]) & set(right["layout_ids"]):
+                raise ValueError("scenario split layout ids overlap")
+    return {
+        "status": "materialized_before_trace_generation",
+        "partition_keys": ["document_handle", "template_family", "layout_id"],
+        "scopes": {
+            name: {
+                "document_handles": scope["document_handles"],
+                "template_families": scope["template_families"],
+                "layout_ids": scope["layout_ids"],
+            }
+            for name, scope in scopes.items()
+        },
+        "pairwise_disjoint_across_splits": True,
+        "outcomes_materialized": False,
+    }
+
+
 def build_benchmark_preregistration(store: DocumentBundleStore | None = None) -> dict[str, Any]:
     """Build the review artifact without materializing labels or predictions."""
 
     bundle = store or DocumentBundleStore.from_bundled()
     bundle.verify_integrity()
-    tasks = document_evidence_tasks()
     return {
         "schema": PREREG_SCHEMA,
         "status": PREREG_STATUS,
@@ -130,6 +224,7 @@ def build_benchmark_preregistration(store: DocumentBundleStore | None = None) ->
             "gate_outputs_mapped_to_document_actions": False,
         },
         "bundle": _bundle_identity(bundle),
+        "scenario_layout_family_partition": _scenario_layout_family_partition(bundle),
         "frozen_split": {
             "status": "partial_scope_pending_generators",
             "frozen": False,
@@ -147,6 +242,12 @@ def build_benchmark_preregistration(store: DocumentBundleStore | None = None) ->
             "randomized_catalog_order": {
                 "status": "planned",
                 "claim": "future held-out generator only; current manifests preserve declared order",
+            },
+            "scenario_layout_family_separation": {
+                "status": "implemented_for_development_manifest_only",
+                "before_trace_generation": True,
+                "partition_keys": ["document_handle", "template_family", "layout_id"],
+                "held_out_outcomes_inspected": False,
             },
             "unseen_instances_layouts_conflicts": {
                 "status": "planned",
@@ -177,9 +278,16 @@ def build_benchmark_preregistration(store: DocumentBundleStore | None = None) ->
         },
         "case_generation": {
             "schema": "vevo.v03.document-evidence.case-generator.v1",
-            "status": "pending_implementation",
-            "task_manifest_materialized": False,
+            "status": "development_manifest_generator_implemented_train_and_heldout_pending",
+            "task_manifest_materialized": True,
             "held_out_manifest_materialized": False,
+            "scenario_generator": "generate_development_case_manifest",
+            "scenario_layout_families_separated_before_trace_generation": True,
+            "deterministic_seed_manifest": {
+                "development": list(DEVELOPMENT_CASE_SEEDS),
+                "held_out_proposed": list(TEST_CASE_SEEDS),
+                "held_out_outcomes_materialized": False,
+            },
             "minimum_documents_per_case": 2,
             "maximum_documents_per_case": 6,
             "maximum_sections_per_document": 4,
@@ -189,34 +297,29 @@ def build_benchmark_preregistration(store: DocumentBundleStore | None = None) ->
             "held_out_test_outcomes_are_not_inspected": True,
         },
         "first_model_task_scope": {
-            "status": "specified_not_materialized",
+            "status": "admitted_bounded_scope_not_materialized",
             "purpose": "first neural document-policy task only",
-            "maximum_documents": 2,
-            "maximum_sections_per_document": 4,
-            "maximum_requested_fields": 2,
-            "maximum_selected_candidates": 4,
-            "action_budget": 16,
+            "maximum_documents": FIRST_MODEL_MAX_DOCUMENTS,
+            "maximum_sections_per_document": FIRST_MODEL_MAX_SECTIONS_PER_DOCUMENT,
+            "maximum_requested_fields": FIRST_MODEL_MAX_REQUESTED_FIELDS,
+            "maximum_selected_candidates": FIRST_MODEL_MAX_SELECTED_CANDIDATES,
+            "action_budget": FIRST_MODEL_ACTION_BUDGET,
             "exhaustive_inspection_required": True,
             "coverage_index_variant": "later_declared_variant_only; not used in the first model task",
-            "worst_case_budget_accounting": {
-                "inspect_section_actions": 8,
-                "select_candidate_actions": 4,
-                "completion_verify_action": 1,
-                "total_policy_action_calls": 13,
-                "server_verification_calls": 1,
-                "unused_action_reserve": 3,
-                "feasible_within_budget": True,
-            },
+            "scenario_generator": "generate_development_case_manifest",
+            "whole_scenario_and_layout_families_separated_before_trace_generation": True,
+            "worst_case_budget_accounting": first_model_budget_accounting(),
             "current_general_protocol_maximum": {
+                "catalog_read_actions": 1,
                 "inspect_section_actions": 24,
                 "select_candidate_actions": 4,
                 "completion_verify_action": 1,
-                "total_policy_action_calls": 29,
+                "total_policy_action_calls": 30,
                 "exceeds_action_budget": True,
                 "not_used_for_first_model_training": True,
             },
         },
-        "development_cases": [_task_request(task) for task in tasks],
+        "development_cases": list(generate_development_case_manifest(bundle)),
         "metrics": [
             "source_citation_accuracy",
             "verified_success",
@@ -250,6 +353,8 @@ def build_benchmark_preregistration(store: DocumentBundleStore | None = None) ->
             "variable_candidate_scorer": True,
             "new_encoder_required": True,
             "new_training_required": True,
+            "imitation_loss_aggregation": "mean_per_step",
+            "imitation_target": "exact_typed_legal_action_identity",
         },
         "jev_comparator": {
             "interface": "jev-document-evidence-v1",
@@ -312,9 +417,10 @@ def render_preregistration_markdown(spec: Mapping[str, Any]) -> str:
         f"- Development protocol manifest: `{split['development']['manifest_id']}` with {split['development']['document_count']} documents and {split['development']['case_count']} checked-in cases.",
         f"- Train task generator status: `{split['train']['manifest_status']}`; no empty train case set is presented as frozen evaluation.",
         f"- Held-out task manifest status: `{split['test']['manifest_status']}`; {split['test']['planned_case_count']} proposed seeds have no materialized (unmaterialized) outcomes.",
-        "- The checked-in 9300–9302 cases are development protocol cases, not fresh generalization evidence; held-out outcomes are not inspected.",
-        "- First-model feasible scope: at most two documents, four sections each, two requested fields, and four selected candidates. Worst case is 8 inspections + 4 selections + 1 completion/verifier action = 13 policy actions within the 16-action budget; a coverage-index variant is deferred.",
-        "- The general 6-document/4-section protocol maximum would require 29 policy actions in the exhaustive baseline and is not used for first-model training.",
+        "- The checked-in 9300–9302 cases are inspected development protocol cases, not fresh generalization evidence; held-out outcomes are not inspected.",
+        "- First-model feasible scope: at most two documents, four sections each, two requested fields, and four selected candidates. Worst case is 1 catalog read + 8 inspections + 4 selections + 1 completion/verifier action = 14 policy actions within the 16-action budget; a coverage-index variant is deferred.",
+        "- The general 6-document/4-section protocol maximum would require 30 policy actions in the exhaustive baseline and is not used for first-model training.",
+        "- Scenario and layout families are separated before any trace generation; deterministic development seeds are recorded, while train/held-out outcomes remain unmaterialized.",
         "",
         "## Metrics and accounting",
         "",
@@ -339,5 +445,7 @@ __all__ = [
     "STATIC_PREREG_RELATIVE_PATH",
     "build_benchmark_preregistration",
     "document_evidence_tasks",
+    "first_model_budget_accounting",
+    "generate_development_case_manifest",
     "render_preregistration_markdown",
 ]

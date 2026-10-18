@@ -380,6 +380,25 @@ class DocumentEvidenceProtocolTests(unittest.TestCase):
         restored = DocumentEvidenceSession.restore(self.store, task, snapshot)
         self.assertEqual(restored.snapshot(), snapshot)
 
+    def test_nested_malformed_conflict_field_id_is_structured_and_replayable(self):
+        task = current_task(seed=44)
+        session = DocumentEvidenceSession(self.store, task)
+        session.start()
+        response = session.dispatch({
+            "kind": "report_conflict",
+            "field_id": "renewal_date",
+            "packet": {
+                "entries": [],
+                "missing_fields": [],
+                "conflicts": [{"field_id": []}],
+            },
+        })
+        self.assertEqual(response["status"], "incomplete_packet")
+        self.assertFalse(response["terminal"])
+        snapshot = session.snapshot()
+        restored = DocumentEvidenceSession.restore(self.store, task, snapshot)
+        self.assertEqual(restored.snapshot(), snapshot)
+
     def test_reserved_budget_name_is_a_user_action_not_an_internal_transition(self):
         task = current_task(seed=43)
         session = DocumentEvidenceSession(self.store, task)

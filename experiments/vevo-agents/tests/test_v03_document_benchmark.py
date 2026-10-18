@@ -7,6 +7,8 @@ from vevo_agents.v03_document_benchmark import (
     PREREG_STATUS,
     build_benchmark_preregistration,
     document_evidence_tasks,
+    first_model_budget_accounting,
+    generate_development_case_manifest,
     render_preregistration_markdown,
 )
 
@@ -45,6 +47,9 @@ class DocumentBenchmarkPreregistrationTests(unittest.TestCase):
         self.assertEqual(split["randomized_document_ids"]["status"], "planned")
         self.assertEqual(split["randomized_catalog_order"]["status"], "planned")
         self.assertFalse(split["test"]["outcomes_materialized"])
+        self.assertTrue(split["scenario_layout_family_separation"]["before_trace_generation"])
+        self.assertTrue(spec["scenario_layout_family_partition"]["pairwise_disjoint_across_splits"])
+        self.assertFalse(spec["scenario_layout_family_partition"]["outcomes_materialized"])
         development_handles = set(split["development"]["document_handles"])
         test_handles = set(split["test"]["document_handles"])
         self.assertTrue(development_handles.isdisjoint(test_handles))
@@ -73,19 +78,24 @@ class DocumentBenchmarkPreregistrationTests(unittest.TestCase):
         self.assertEqual(interface["memory_shape"], [2, 6])
         self.assertTrue(interface["new_encoder_required"])
         self.assertTrue(interface["new_training_required"])
+        self.assertEqual(interface["imitation_loss_aggregation"], "mean_per_step")
         self.assertEqual(spec["selection_rule"]["scope"], "development_only")
         self.assertEqual(spec["selection_rule"]["minimum_thresholds"]["source_citation_accuracy"], 1.0)
         self.assertEqual(spec["case_generation"]["minimum_documents_per_case"], 2)
         self.assertEqual(spec["case_generation"]["maximum_documents_per_case"], 6)
         self.assertEqual(spec["case_generation"]["maximum_sections_per_document"], 4)
         self.assertEqual(spec["case_generation"]["action_budget"], 16)
-        self.assertFalse(spec["case_generation"]["task_manifest_materialized"])
+        self.assertTrue(spec["case_generation"]["task_manifest_materialized"])
+        self.assertTrue(spec["case_generation"]["scenario_layout_families_separated_before_trace_generation"])
         feasible = spec["first_model_task_scope"]
         self.assertTrue(feasible["exhaustive_inspection_required"])
-        self.assertEqual(feasible["worst_case_budget_accounting"]["total_policy_action_calls"], 13)
+        self.assertEqual(feasible["worst_case_budget_accounting"]["catalog_read_actions"], 1)
+        self.assertEqual(feasible["worst_case_budget_accounting"]["total_policy_action_calls"], 14)
         self.assertTrue(feasible["worst_case_budget_accounting"]["feasible_within_budget"])
-        self.assertEqual(feasible["current_general_protocol_maximum"]["total_policy_action_calls"], 29)
+        self.assertEqual(feasible["current_general_protocol_maximum"]["total_policy_action_calls"], 30)
         self.assertTrue(feasible["current_general_protocol_maximum"]["exceeds_action_budget"])
+        self.assertTrue(feasible["whole_scenario_and_layout_families_separated_before_trace_generation"])
+        self.assertEqual(first_model_budget_accounting()["unused_action_reserve"], 2)
         self.assertEqual(spec["jev_comparator"]["eligibility"], "unverified")
         self.assertTrue(spec["jev_comparator"]["same_initial_request"])
         self.assertTrue(spec["jev_comparator"]["same_feedback"])
@@ -98,6 +108,10 @@ class DocumentBenchmarkPreregistrationTests(unittest.TestCase):
             self.assertLessEqual(len(task.document_handles), 6)
             self.assertLessEqual(len(task.requested_fields), 3)
             self.assertEqual(task.action_budget, 16)
+        manifest = generate_development_case_manifest()
+        self.assertEqual([item["scenario_seed"] for item in manifest], [9300, 9301, 9302])
+        self.assertTrue(all(item["trace_generation"] == "not_run" for item in manifest))
+        self.assertTrue(all(not item["outcomes_materialized"] for item in manifest))
         serialized = json.dumps(build_benchmark_preregistration(), sort_keys=True)
         for forbidden in ("expected_value", "oracle", "answer", "prediction"):
             self.assertNotIn(forbidden, serialized.lower())

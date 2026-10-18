@@ -61,6 +61,18 @@
   },
   "case_generation": {
     "action_budget": 16,
+    "deterministic_seed_manifest": {
+      "development": [
+        9300,
+        9301,
+        9302
+      ],
+      "held_out_outcomes_materialized": false,
+      "held_out_proposed": [
+        9400,
+        9401
+      ]
+    },
     "development_cases_are_protocol_cases_not_generalization": true,
     "held_out_manifest_materialized": false,
     "held_out_test_outcomes_are_not_inspected": true,
@@ -71,9 +83,11 @@
       "maximum": 3,
       "minimum": 2
     },
+    "scenario_generator": "generate_development_case_manifest",
+    "scenario_layout_families_separated_before_trace_generation": true,
     "schema": "vevo.v03.document-evidence.case-generator.v1",
-    "status": "pending_implementation",
-    "task_manifest_materialized": false
+    "status": "development_manifest_generator_implemented_train_and_heldout_pending",
+    "task_manifest_materialized": true
   },
   "cost_accounting": {
     "end_to_end": [
@@ -98,6 +112,8 @@
         "doc-boreal",
         "doc-cinder"
       ],
+      "layout_family_scope": "development_manifest_only",
+      "outcomes_materialized": false,
       "requested_fields": [
         {
           "field_id": "renewal_date",
@@ -115,7 +131,10 @@
           "value_type": "number"
         }
       ],
-      "task_id": "task-current-contract"
+      "scenario_family": "development_protocol_fixture",
+      "scenario_seed": 9300,
+      "task_id": "task-current-contract",
+      "trace_generation": "not_run"
     },
     {
       "action_budget": 16,
@@ -124,6 +143,8 @@
         "doc-boreal",
         "doc-cinder"
       ],
+      "layout_family_scope": "development_manifest_only",
+      "outcomes_materialized": false,
       "requested_fields": [
         {
           "field_id": "support_contact",
@@ -141,7 +162,10 @@
           "value_type": "number"
         }
       ],
-      "task_id": "task-missing-support"
+      "scenario_family": "development_protocol_fixture",
+      "scenario_seed": 9301,
+      "task_id": "task-missing-support",
+      "trace_generation": "not_run"
     },
     {
       "action_budget": 16,
@@ -149,6 +173,8 @@
         "doc-aurora",
         "doc-cinder"
       ],
+      "layout_family_scope": "development_manifest_only",
+      "outcomes_materialized": false,
       "requested_fields": [
         {
           "field_id": "alert_threshold",
@@ -161,12 +187,17 @@
           "value_type": "person"
         }
       ],
-      "task_id": "task-conflict-history"
+      "scenario_family": "development_protocol_fixture",
+      "scenario_seed": 9302,
+      "task_id": "task-conflict-history",
+      "trace_generation": "not_run"
     }
   ],
   "document_policy_interface": {
     "backend": "v03-five-brain-addressable-memory-interface",
     "central_count": 1,
+    "imitation_loss_aggregation": "mean_per_step",
+    "imitation_target": "exact_typed_legal_action_identity",
     "memory_shape": [
       2,
       6
@@ -181,12 +212,13 @@
     "action_budget": 16,
     "coverage_index_variant": "later_declared_variant_only; not used in the first model task",
     "current_general_protocol_maximum": {
+      "catalog_read_actions": 1,
       "completion_verify_action": 1,
       "exceeds_action_budget": true,
       "inspect_section_actions": 24,
       "not_used_for_first_model_training": true,
       "select_candidate_actions": 4,
-      "total_policy_action_calls": 29
+      "total_policy_action_calls": 30
     },
     "exhaustive_inspection_required": true,
     "maximum_documents": 2,
@@ -194,15 +226,24 @@
     "maximum_sections_per_document": 4,
     "maximum_selected_candidates": 4,
     "purpose": "first neural document-policy task only",
-    "status": "specified_not_materialized",
+    "scenario_generator": "generate_development_case_manifest",
+    "status": "admitted_bounded_scope_not_materialized",
+    "whole_scenario_and_layout_families_separated_before_trace_generation": true,
     "worst_case_budget_accounting": {
+      "action_budget": 16,
+      "admission_rule": "catalog_read + exhaustive section inspections + explicit selections + one terminal verifier call",
+      "catalog_read_actions": 1,
       "completion_verify_action": 1,
       "feasible_within_budget": true,
       "inspect_section_actions": 8,
+      "maximum_documents": 2,
+      "maximum_requested_fields": 2,
+      "maximum_sections_per_document": 4,
+      "maximum_selected_candidates": 4,
       "select_candidate_actions": 4,
       "server_verification_calls": 1,
-      "total_policy_action_calls": 13,
-      "unused_action_reserve": 3
+      "total_policy_action_calls": 14,
+      "unused_action_reserve": 2
     }
   },
   "frozen_split": {
@@ -269,6 +310,16 @@
     "randomized_document_ids": {
       "claim": "future held-out generator only; fixed server handles remain in this proof",
       "status": "planned"
+    },
+    "scenario_layout_family_separation": {
+      "before_trace_generation": true,
+      "held_out_outcomes_inspected": false,
+      "partition_keys": [
+        "document_handle",
+        "template_family",
+        "layout_id"
+      ],
+      "status": "implemented_for_development_manifest_only"
     },
     "status": "partial_scope_pending_generators",
     "status_reason": "development protocol fixtures exist, but training and held-out task generators/manifests are not implemented",
@@ -404,6 +455,58 @@
     "live_external_calls": true,
     "reuse_existing_gate_weights_as_document_policy": true,
     "training": true
+  },
+  "scenario_layout_family_partition": {
+    "outcomes_materialized": false,
+    "pairwise_disjoint_across_splits": true,
+    "partition_keys": [
+      "document_handle",
+      "template_family",
+      "layout_id"
+    ],
+    "scopes": {
+      "development": {
+        "document_handles": [
+          "doc-aurora",
+          "doc-boreal",
+          "doc-cinder"
+        ],
+        "layout_ids": [
+          "grid-sections-c",
+          "split-sections-a",
+          "split-sections-b"
+        ],
+        "template_families": [
+          "operations-handbook",
+          "supplier-agreement"
+        ]
+      },
+      "test": {
+        "document_handles": [
+          "doc-delta",
+          "doc-foxtrot"
+        ],
+        "layout_ids": [
+          "appendix-sections-d",
+          "appendix-sections-f"
+        ],
+        "template_families": [
+          "legacy-appendix"
+        ]
+      },
+      "train": {
+        "document_handles": [
+          "doc-echo"
+        ],
+        "layout_ids": [
+          "column-sections-e"
+        ],
+        "template_families": [
+          "training-contract"
+        ]
+      }
+    },
+    "status": "materialized_before_trace_generation"
   },
   "schema": "vevo.v03.document-evidence-benchmark-preregistration.v1",
   "selection_rule": {

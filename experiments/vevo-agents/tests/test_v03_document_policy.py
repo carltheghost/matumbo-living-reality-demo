@@ -2,6 +2,7 @@ import unittest
 
 import numpy as np
 
+from vevo_agents.autograd import Tensor
 from vevo_agents.v03_document_evidence import DocumentBundleStore, DocumentEvidenceSession, make_task
 from vevo_agents.v03_document_policy import (
     DOCUMENT_ACTIONS,
@@ -63,6 +64,8 @@ class DocumentPolicyInterfaceTests(unittest.TestCase):
         self.assertEqual(specification["ordered_date_features"], ["ordinal_days", "year", "month", "day"])
         self.assertFalse(specification["provenance_digests_as_scalar_features"])
         self.assertFalse(specification["arbitrary_value_hashes_as_scalar_features"])
+        self.assertEqual(specification["imitation_loss"]["aggregation"], "mean_per_step")
+        self.assertTrue(specification["phase_rules"]["requested_fields_rejected_after_step_zero"])
 
     def test_neural_decision_is_explicitly_unavailable_but_structural_scorer_is_finite(self):
         interface = DocumentPolicyInterface()
@@ -97,15 +100,23 @@ class DocumentPolicyInterfaceTests(unittest.TestCase):
         identity = DocumentEpisodeIdentity.from_request(initial)
         response = session.dispatch({"kind": "inspect_section", "document_handle": "doc-aurora", "section_id": "sec-terms"})
         interface = DocumentPolicyInterface()
-        encoded = interface.encode_observation(
+        initial_encoded = interface.encode_observation(
             requested_fields=initial["requested_fields"],
+            candidates=[],
+            remaining_action_budget=initial["remaining_action_budget"],
+            identity=identity,
+            phase="initial_request",
+        )
+        encoded = interface.encode_observation(
             candidates=response["candidates"],
             requested_field_ids=("renewal_date", "account_owner"),
             latest_response=response,
             remaining_action_budget=response["remaining_action_budget"],
             identity=identity,
+            phase="tool_response",
         )
-        self.assertEqual(encoded["request_types"].shape, (2, DOCUMENT_REQUEST_FEATURE_DIM))
+        self.assertEqual(initial_encoded["request_types"].shape, (2, DOCUMENT_REQUEST_FEATURE_DIM))
+        self.assertIsNone(encoded["request_types"])
         self.assertEqual(encoded["candidates"].shape[1], DOCUMENT_CANDIDATE_FEATURE_DIM)
         self.assertEqual(encoded["model_input"].shape, (DOCUMENT_MODEL_INPUT_DIM,))
 
@@ -197,14 +208,22 @@ class DocumentPolicyInterfaceTests(unittest.TestCase):
         identity = DocumentEpisodeIdentity.from_request(initial)
         response = session.dispatch({"kind": "inspect_section", "document_handle": "doc-aurora", "section_id": "sec-terms"})
         interface = DocumentPolicyInterface(seed=19)
-        observation = interface.model.make_observation(
+        initial_observation = interface.model.make_observation(
             requested_fields=initial["requested_fields"],
+            candidates=[],
+            remaining_action_budget=initial["remaining_action_budget"],
+            identity=identity,
+            phase="initial_request",
+        )
+        observation = interface.model.make_observation(
             candidates=response["candidates"],
             latest_response=response,
             remaining_action_budget=response["remaining_action_budget"],
             identity=identity,
+            phase="tool_response",
         )
-        result = interface.forward(observation)
+        initial_result = interface.forward(initial_observation)
+        result = interface.forward(observation, runtime=initial_result["runtime"])
         self.assertEqual(result["fixed_action_logits"].shape, (4,))
         self.assertEqual(result["candidate_scores"].shape, (len(response["candidates"]),))
         self.assertTrue(np.isfinite(result["fixed_action_logits"]).all())
@@ -215,29 +234,151 @@ class DocumentPolicyInterfaceTests(unittest.TestCase):
         repeated = interface.forward(observation, runtime=result["runtime"])
         np.testing.assert_array_equal(continued["fixed_action_logits"], repeated["fixed_action_logits"])
         np.testing.assert_array_equal(continued["candidate_scores"], repeated["candidate_scores"])
-        loss, gradients, initial_memory_gradient, trace = interface.loss_and_gradients([observation], target_action="finish")
+        inspect_target = {"kind": "inspect_section", "document_handle": "doc-aurora", "section_id": "sec-terms"}
+        select_target = {"kind": "select_candidate", "candidate_id": response["candidates"][0]["candidate_id"]}
+        loss, gradients, initial_memory_gradient, trace = interface.loss_and_gradients(
+            [initial_observation, observation], target_actions=[inspect_target, select_target]
+        )
         self.assertTrue(np.isfinite(loss))
         self.assertTrue(np.isfinite(initial_memory_gradient).all())
-        self.assertEqual(len(trace), 1)
+        self.assertEqual(len(trace), 2)
+        self.assertTrue(all(np.isfinite(step["loss"]) for step in trace))
         self.assertTrue(all(np.isfinite(value).all() for value in gradients.values()))
-        candidate_target = {"kind": "select_candidate", "candidate_id": response["candidates"][0]["candidate_id"]}
-        candidate_loss, candidate_gradients, _, _ = interface.loss_and_gradients([observation], target_action=candidate_target)
-        self.assertTrue(np.isfinite(candidate_loss))
-        self.assertGreater(float(np.max(np.abs(candidate_gradients["c.w_candidate_row"]))), 0.0)
+        self.assertGreater(float(np.max(np.abs(gradients["c.w_candidate_row"]))), 0.0)
+        self.assertGreater(float(np.max(np.abs(gradients["c.W_candidate_bilinear"]))), 0.0)
+        self.assertGreater(float(np.max(np.abs(gradients["c.W_in"]))), 0.0)
+        self.assertGreater(float(np.max(np.abs(gradients["c.W_value"]))), 0.0)
 
     def test_runtime_identity_and_state_isolation(self):
         interface = DocumentPolicyInterface(seed=23)
         identity_a = DocumentEpisodeIdentity("episode-a", ("doc-a",), (("doc-a", "sec-a"),))
         identity_b = DocumentEpisodeIdentity("episode-b", ("doc-b",), (("doc-b", "sec-b"),))
         request = [{"field_id": "label", "value_type": "enum", "revision_rule": "latest_non_obsolete"}]
-        response = {"schema": "vevo.v03.document-evidence.response.v1", "status": "request", "remaining_action_budget": 2}
-        obs_a = interface.model.make_observation(requested_fields=request, candidates=[], latest_response=response, remaining_action_budget=2, identity=identity_a)
-        obs_b = interface.model.make_observation(requested_fields=request, candidates=[], latest_response=response, remaining_action_budget=2, identity=identity_b)
+        obs_a = interface.model.make_observation(requested_fields=request, candidates=[], remaining_action_budget=2, identity=identity_a, phase="initial_request")
+        obs_b = interface.model.make_observation(requested_fields=request, candidates=[], remaining_action_budget=2, identity=identity_b, phase="initial_request")
         first = interface.forward(obs_a)
         second = interface.forward(obs_b)
         np.testing.assert_array_equal(first["fixed_action_logits"], second["fixed_action_logits"])
         with self.assertRaises(Exception):
             interface.forward(obs_b, runtime=first["runtime"])
+
+    def test_requested_fields_are_rejected_after_step_zero(self):
+        interface = DocumentPolicyInterface(seed=29)
+        identity = DocumentEpisodeIdentity("phase-test", ("doc-a",), (("doc-a", "sec-a"),))
+        request = [{"field_id": "label", "value_type": "enum", "revision_rule": "latest_non_obsolete"}]
+        initial = interface.model.make_observation(requested_fields=request, candidates=[], identity=identity, phase="initial_request")
+        first = interface.forward(initial)
+        response = {"schema": "vevo.v03.document-evidence.response.v1", "phase": "tool_response", "status": "section_observed", "terminal": False}
+        with self.assertRaises(Exception):
+            interface.model.make_observation(requested_fields=request, candidates=[], latest_response=response, identity=identity, phase="tool_response")
+        subsequent = interface.model.make_observation(candidates=[], latest_response=response, identity=identity, phase="tool_response")
+        with self.assertRaises(Exception):
+            interface.forward({**subsequent, "requested_fields": []}, runtime=first["runtime"])
+
+    def test_snapshot_binds_actual_parameter_digest_not_only_seed_and_shapes(self):
+        interface = DocumentPolicyInterface(seed=37)
+        identity = DocumentEpisodeIdentity("digest-runtime", ("doc-a",), (("doc-a", "sec-a"),))
+        request = [{"field_id": "label", "value_type": "enum", "revision_rule": "latest_non_obsolete"}]
+        observation = interface.model.make_observation(requested_fields=request, candidates=[], identity=identity, phase="initial_request")
+        result = interface.forward(observation)
+        snapshot = interface.model.snapshot_runtime(result["runtime"])
+        changed = DocumentPolicyInterface(seed=37)
+        changed.model.params = {name: value.copy() for name, value in interface.model.params.items()}
+        changed.model.params["c.W_action"][0, 0] += 1e-9
+        with self.assertRaises(Exception):
+            changed.model.restore_runtime(snapshot)
+        self.assertNotEqual(snapshot["model_identity"]["parameter_digest"], changed.model.model_identity()["parameter_digest"])
+
+    def test_context_candidate_interaction_reverses_ranking_and_has_numeric_autograd_parity(self):
+        interface = DocumentPolicyInterface(seed=31)
+        model = interface.model
+        model.params["c.w_candidate_row"][:] = 0.0
+        model.params["c.w_candidate_context"][:] = 0.0
+        model.params["c.b_candidate"][:] = 0.0
+        model.params["c.W_candidate_bilinear"][:] = 0.0
+        model.params["c.W_candidate_bilinear"][0, 0] = 1.0
+        model.params["c.W_candidate_bilinear"][1, 1] = 1.0
+        rows = np.zeros((2, model.encoder.candidate_feature_dim), dtype=np.float64)
+        rows[0, 0] = 1.0
+        rows[1, 1] = 1.0
+        context_a = np.zeros(model.CENTER_HIDDEN + model.MEMORY_DIM, dtype=np.float64)
+        context_b = context_a.copy()
+        context_a[0] = 2.0
+        context_b[1] = 2.0
+        scores_a = model._candidate_scores_from_rows(rows, context_a)
+        scores_b = model._candidate_scores_from_rows(rows, context_b)
+        self.assertGreater(scores_a[0], scores_a[1])
+        self.assertGreater(scores_b[1], scores_b[0])
+
+        identity = DocumentEpisodeIdentity("interaction-parity", ("doc-a",), (("doc-a", "sec-a"),))
+        first = candidate_template(candidate_id="cand-a", document_handle="doc-a", section_id="sec-a")
+        second = {**first, "candidate_id": "cand-b", "field_id": "other", "value": "2028-01-01"}
+        request = [{"field_id": "renewal_date", "value_type": "date", "revision_rule": "latest_non_obsolete"}]
+        observation = model.make_observation(requested_fields=request, candidates=[first, second], identity=identity, phase="initial_request")
+        _, gradients, _, _ = model.loss_and_gradients([observation], target_action={"kind": "select_candidate", "candidate_id": "cand-a"})
+        epsilon = 1e-6
+        original = model.params["c.W_candidate_bilinear"][0, 0]
+        model.params["c.W_candidate_bilinear"][0, 0] = original + epsilon
+        plus = model.loss_only([observation], target_action={"kind": "select_candidate", "candidate_id": "cand-a"})
+        model.params["c.W_candidate_bilinear"][0, 0] = original - epsilon
+        minus = model.loss_only([observation], target_action={"kind": "select_candidate", "candidate_id": "cand-a"})
+        model.params["c.W_candidate_bilinear"][0, 0] = original
+        finite_difference = (plus - minus) / (2.0 * epsilon)
+        self.assertAlmostEqual(float(gradients["c.W_candidate_bilinear"][0, 0]), finite_difference, places=5)
+
+        vector = model.encoder.encode_policy_input(requested_fields=request, candidates=[first, second], identity=identity)
+        rows = model.encoder.encode_candidates([first, second], requested_field_ids=["renewal_date"], identity=identity)
+        _, numeric_result = model._numeric_forward(model.initial_runtime(identity=identity), vector, rows)
+        tensor_params = {name: Tensor(value.copy(), requires_grad=False) for name, value in model.params.items()}
+        tensor_runtime = {
+            "peripheral": [Tensor(np.zeros(model.PERIPH_HIDDEN)) for _ in range(model.PERIPHERALS)],
+            "central": Tensor(np.zeros(model.CENTER_HIDDEN)),
+            "memory": Tensor(np.zeros(model.central_memory_shape)),
+        }
+        _, _, tensor_candidate_logits, _ = model._tensor_forward(tensor_runtime, vector, rows, tensor_params)
+        np.testing.assert_allclose(
+            numeric_result["candidate_scores"],
+            np.asarray([logit.data[0] for logit in tensor_candidate_logits], dtype=np.float64),
+            rtol=1e-12,
+            atol=1e-12,
+        )
+
+    def test_legal_action_candidates_are_exact_and_mask_consumed_state(self):
+        store = DocumentBundleStore.from_bundled()
+        task = make_task("typed-actions", ("doc-aurora", "doc-boreal"), (("renewal_date", "date"), ("account_owner", "person")))
+        session = DocumentEvidenceSession(store, task)
+        initial = session.start()
+        identity = DocumentEpisodeIdentity.from_request(initial)
+        interface = DocumentPolicyInterface(seed=41)
+        initial_observation = interface.model.make_observation(
+            requested_fields=initial["requested_fields"], candidates=[], identity=identity, phase="initial_request"
+        )
+        initial_result = interface.forward(initial_observation)
+        inspect_options = [option for option in initial_result["legal_action_candidates"] if option["kind"] == "inspect_section"]
+        self.assertEqual(len(inspect_options), len(identity.section_keys))
+        self.assertTrue(all({"document_handle", "section_id", "score"}.issubset(option) for option in inspect_options))
+        self.assertFalse(any(option["kind"] == "select_candidate" for option in initial_result["legal_action_candidates"]))
+        self.assertFalse(any(option["kind"] in {"finish", "report_missing", "report_conflict"} for option in initial_result["legal_action_candidates"]))
+
+        response = session.dispatch({"kind": "inspect_section", "document_handle": "doc-aurora", "section_id": "sec-terms"})
+        observation = interface.model.make_observation(
+            candidates=response["candidates"], latest_response=response, remaining_action_budget=response["remaining_action_budget"], identity=identity, phase="tool_response"
+        )
+        result = interface.forward(observation, runtime=initial_result["runtime"])
+        self.assertFalse(any(
+            option.get("kind") == "inspect_section"
+            and option.get("document_handle") == "doc-aurora"
+            and option.get("section_id") == "sec-terms"
+            for option in result["legal_action_candidates"]
+        ))
+        candidate_id = response["candidates"][0]["candidate_id"]
+        self.assertTrue(any(option.get("kind") == "select_candidate" and option.get("candidate_id") == candidate_id for option in result["legal_action_candidates"]))
+        selected_response = session.dispatch({"kind": "select_candidate", "candidate_id": candidate_id})
+        selected_observation = interface.model.make_observation(
+            candidates=[], latest_response=selected_response, remaining_action_budget=selected_response["remaining_action_budget"], identity=identity, phase="tool_response"
+        )
+        selected_result = interface.forward(selected_observation, runtime=result["runtime"])
+        self.assertFalse(any(option.get("kind") == "select_candidate" and option.get("candidate_id") == candidate_id for option in selected_result["legal_action_candidates"]))
 
 
 if __name__ == "__main__":
