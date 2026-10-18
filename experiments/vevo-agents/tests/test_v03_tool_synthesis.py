@@ -225,9 +225,11 @@ class V03ToolSynthesisTests(unittest.TestCase):
             invalid["operations"][0],
             invalid["operations"][1],
             dict(invalid["operations"][0]),
+            invalid["operations"][3],
         ]
-        with self.assertRaises(SpecParseError):
+        with self.assertRaises(SpecParseError) as raised:
             parse_spec(json.dumps(invalid))
+        self.assertEqual(raised.exception.message, "filter must precede project")
 
     def test_final_output_rows_are_charged_independently(self):
         document = json.loads(DEVELOPMENT_SPEC_DOCUMENT)

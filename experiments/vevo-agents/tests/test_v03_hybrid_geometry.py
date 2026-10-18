@@ -96,6 +96,8 @@ class V03HybridGeometryTests(unittest.TestCase):
     def test_bounded_beta_and_gradient(self):
         self.assertGreaterEqual(bounded_beta_numeric(-100.0), 0.0)
         self.assertLessEqual(bounded_beta_numeric(100.0), BETA_MAX)
+        with self.assertRaises(GeometryError):
+            bounded_beta_numeric(np.asarray(True))
         raw_beta = Tensor(0.3, requires_grad=True)
         beta = bounded_beta_tensor(raw_beta)
         self.assertGreater(float(beta.data), 0.0)

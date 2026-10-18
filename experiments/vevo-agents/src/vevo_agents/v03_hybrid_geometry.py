@@ -54,6 +54,8 @@ def _finite_scalar(value: Any, *, name: str) -> float:
         value = value.item()
     if isinstance(value, np.generic):
         value = value.item()
+    if isinstance(value, (bool, np.bool_)):
+        raise GeometryError(f"{name} must be a finite scalar")
     try:
         result = float(value)
     except (TypeError, ValueError) as exc:

@@ -29,6 +29,11 @@ backward intermediates finite in float64. Shared attention and tension
 coordinates are also bounded by `max(abs(coordinate)) <= 16.0` on both numeric
 and Tensor paths.
 
+The repository's `Tensor` constructor normalizes inputs to float64. Therefore,
+Tensor helpers cannot recover whether an already-constructed value originated
+as boolean; boolean provenance is rejected on NumPy inputs before Tensor
+construction.
+
 ## Functional Requirements
 
 - FR-1: The module MUST use dimension four for shared message, memory, query, key, and tension-proposal coordinates.
