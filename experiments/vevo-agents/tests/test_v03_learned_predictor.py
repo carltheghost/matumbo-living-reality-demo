@@ -87,7 +87,7 @@ class LearnedPredictorTests(unittest.TestCase):
         self.assertEqual(len(test_summaries), 16)
         self.assertTrue(all(item["materialized"] is False for item in test_summaries))
         self.assertTrue(all(item["public_trajectory_sha256"] is None for item in test_summaries))
-        self.assertEqual(manifest["test_access"]["replacement_world_seeds"], list(range(9500, 9508)))
+        self.assertEqual(manifest["test_access"]["replacement_world_seeds"], list(range(9600, 9608)))
         self.assertEqual(
             manifest["test_access"]["historical_pre_review_exposure"]["world_seeds"],
             list(range(9400, 9408)),
@@ -96,6 +96,11 @@ class LearnedPredictorTests(unittest.TestCase):
             manifest["test_access"]["historical_pre_review_exposure"]["conditions"],
             ["phase_shifted", "frequency_shifted"],
         )
+        self.assertEqual(
+            manifest["test_access"]["additional_review_exposure"]["world_seeds"],
+            [9500],
+        )
+        self.assertFalse(manifest["test_access"]["additional_review_exposure"]["metrics_written"])
         windows = {}
         for trajectory in manifest["trajectories"]:
             for window in trajectory["window_ids"]:
@@ -205,7 +210,8 @@ class LearnedPredictorTests(unittest.TestCase):
 
     def test_initial_phase_condition_changes_public_state(self):
         # Use an inspected development seed for the physics unit check; the
-        # 9500--9507 final-test range remains metadata-only and unmaterialized.
+        # 9600--9607 final-test range remains metadata-only and unmaterialized;
+        # world 9500 is explicitly recorded as prior review exposure.
         base_world = _conditioned_world(9300, WORLD_CONDITIONS["base"])
         phase_world = _conditioned_world(9300, WORLD_CONDITIONS["initial_phase_shifted"])
         base = public_observation_to_vector(PublicObservation.from_world(base_world, fixture_id="base", cycle=0))
@@ -451,6 +457,7 @@ class LearnedPredictorTests(unittest.TestCase):
             experiment_config_sha256="b" * 64,
             selected_checkpoints=[binding],
         )
+        self.assertEqual(artifact["final_test_world_seeds"], list(range(9600, 9608)))
         self.assertEqual(selection_artifact_digest(artifact), artifact["artifact_sha256"])
         self.assertEqual(
             verify_frozen_selection_artifact(

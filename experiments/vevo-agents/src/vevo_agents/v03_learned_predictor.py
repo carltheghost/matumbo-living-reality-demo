@@ -84,10 +84,12 @@ TRAIN_WORLD_SEEDS = tuple(range(100, 108))
 DEVELOPMENT_WORLD_SEEDS = tuple(range(9300, 9308))
 # These worlds were materialized by the pre-review manifest implementation.
 # They are retained only as exposure history; they are not eligible for the
-# reviewed final test.  The replacement test worlds below are whole new worlds
-# and have not been used for tuning.
+# reviewed final test.  World 9500 was also directly constructed by an earlier
+# phase-condition unit test and is recorded separately below.  The replacement
+# test worlds below are whole new worlds and have not been used for tuning.
 EXPOSED_TEST_WORLD_SEEDS = tuple(range(9400, 9408))
-TEST_WORLD_SEEDS = tuple(range(9500, 9508))
+REVIEW_EXPOSED_TEST_WORLD_SEEDS = (9500,)
+TEST_WORLD_SEEDS = tuple(range(9600, 9608))
 
 PUBLIC_STATE_FIELDS = (
     "node_displacements",
@@ -883,6 +885,8 @@ def verify_split_manifest(manifest: Mapping[str, Any]) -> str:
     seed_sets = [set(item["world_seeds"]) for item in manifest["split_definitions"]]
     if any(left & right for index, left in enumerate(seed_sets) for right in seed_sets[index + 1 :]):
         raise PredictorContractError("world seeds overlap across splits")
+    if set(TEST_WORLD_SEEDS) & (set(EXPOSED_TEST_WORLD_SEEDS) | set(REVIEW_EXPOSED_TEST_WORLD_SEEDS)):
+        raise PredictorContractError("reserved final-test worlds overlap historical review exposure")
     trajectory_ids = [item["trajectory_id"] for item in manifest.get("trajectories", [])]
     if len(trajectory_ids) != len(set(trajectory_ids)):
         raise PredictorContractError("trajectory ids are not unique")
@@ -957,6 +961,14 @@ def build_split_manifest() -> dict[str, Any]:
                 "metrics_written": False,
                 "tuning_use_evidence": "no evidence of tuning to those outcomes was found; they are not treated as fresh final-test evidence",
                 "replacement_worlds_required": True,
+            },
+            "additional_review_exposure": {
+                "inputs_directly_constructed": True,
+                "world_seeds": list(REVIEW_EXPOSED_TEST_WORLD_SEEDS),
+                "conditions": ["base", "initial_phase_shifted"],
+                "metrics_written": False,
+                "fresh_final_test_evidence": False,
+                "reason": "A prior review unit test directly constructed world 9500 for the phase-condition physics check; it is exposed history, not a final-test case.",
             },
             "replacement_world_seeds": list(TEST_WORLD_SEEDS),
         },
@@ -1952,6 +1964,13 @@ def pilot_experiment_config(*, split_manifest_sha256: str) -> dict[str, Any]:
                 "phase_condition_effect": "pre-review phase_shifted changed calibration only while cues/distractors were disabled; the replacement initial_phase_shifted condition seeds a public oscillator state",
                 "metrics_written": False,
                 "fresh_final_test_evidence": False,
+            },
+            "additional_review_exposure": {
+                "world_seeds": list(REVIEW_EXPOSED_TEST_WORLD_SEEDS),
+                "conditions": ["base", "initial_phase_shifted"],
+                "metrics_written": False,
+                "fresh_final_test_evidence": False,
+                "reason": "A prior review unit test directly constructed world 9500 for the phase-condition physics check; it is exposed history, not a final-test case.",
             },
             "replacement_worlds": list(TEST_WORLD_SEEDS),
         },
@@ -3113,7 +3132,7 @@ def write_pilot_artifacts(output_dir: str | Path, *, repeats: int = 3) -> dict[s
         f"- Probe-based optimizer lower bound for six fits × 100 updates: `{timing['probe_based_six_fit_optimizer_seconds']:.3f}` seconds; this excludes evaluation, checkpoint, and serialization overhead.\n"
         "- Existing upstream gate: the all-four-models `8/8` training gate remains required before development evaluation; this pilot does not rerun or claim that gate.\n"
         "- Development cases: worlds 9300--9307, explicitly inspected development only; never fresh generalization.\n"
-        "- Final test: default materialization is closed; the 9400--9407 inputs were generated before this review and are recorded only as exposure history (the old `phase_shifted` condition was calibration-only), while replacement worlds 9500--9507 remain reserved.\n"
+        "- Final test: default materialization is closed; the 9400--9407 inputs and prior direct world-9500 phase unit fixture are recorded only as exposure history, while genuinely fresh worlds 9600--9607 remain reserved.\n"
         "- Final-test unlock: requires a digest-verified frozen selection artifact bound exactly to the manifest, config, and selected checkpoint files.\n"
         "- Runner contract: six learned fits (geometry on/off × seeds 7, 17, 37), 100 equal updates per variant/seed, one shared 300-second cap, and one development evaluation boundary at update 100.\n"
         "- Normalizer/checkpoint provenance: canonical mean/scale plus train-source digests are verified on reload; prediction parity is checked before development evaluation.\n"
@@ -3133,7 +3152,7 @@ def write_pilot_artifacts(output_dir: str | Path, *, repeats: int = 3) -> dict[s
         "- Paired timeout: an incomplete variant invalidates the pair; no selection or final-test access is emitted.\n"
         "- Checkpoint safety: normalizer digests cover canonical mean/scale plus training-source provenance; reloaded predictions require exact parity.\n"
         "- Optimizer safety: all gradients and updated arrays are validated before an atomic parameter commit.\n"
-        "- Final test: replacement worlds 9500--9507 remain metadata-only and closed; a canonical digest-bound frozen selection artifact is required.\n"
+        "- Final test: world 9500 is exposed review history; genuinely fresh worlds 9600--9607 remain metadata-only and closed, with a canonical digest-bound frozen selection artifact required.\n"
         "- Development: worlds 9300--9307 are inspected development cases only, never fresh generalization.\n"
         f"- Timing: the probe-based optimizer lower bound is `{timing['probe_based_six_fit_optimizer_seconds']:.3f}` seconds before overhead; an invoked runner must report actual elapsed time.\n"
         "- Historical reports and checkpoints were not modified.\n"
@@ -3203,6 +3222,7 @@ __all__ = [
     "PUBLIC_STATE_DIM",
     "PUBLIC_STATE_FIELDS",
     "PUBLIC_STATE_UNITS",
+    "REVIEW_EXPOSED_TEST_WORLD_SEEDS",
     "PersistenceBaseline",
     "PredictorContractError",
     "PredictorFrame",

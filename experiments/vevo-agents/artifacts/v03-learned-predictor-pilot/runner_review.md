@@ -7,7 +7,7 @@ Status: concrete runner implemented; it was not invoked for this artifact.
 - Paired timeout: an incomplete variant invalidates the pair; no selection or final-test access is emitted.
 - Checkpoint safety: normalizer digests cover canonical mean/scale plus training-source provenance; reloaded predictions require exact parity.
 - Optimizer safety: all gradients and updated arrays are validated before an atomic parameter commit.
-- Final test: replacement worlds 9500--9507 remain metadata-only and closed; a canonical digest-bound frozen selection artifact is required.
+- Final test: world 9500 is exposed review history; genuinely fresh worlds 9600--9607 remain metadata-only and closed, with a canonical digest-bound frozen selection artifact required.
 - Development: worlds 9300--9307 are inspected development cases only, never fresh generalization.
-- Timing: the probe-based optimizer lower bound is `93.155` seconds before overhead; an invoked runner must report actual elapsed time.
+- Timing: the probe-based optimizer lower bound is `104.466` seconds before overhead; an invoked runner must report actual elapsed time.
 - Historical reports and checkpoints were not modified.
