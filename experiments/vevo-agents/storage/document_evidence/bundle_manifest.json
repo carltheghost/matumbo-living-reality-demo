@@ -6,7 +6,7 @@
       "handle": "doc-aurora",
       "path": "doc-aurora.json",
       "document_id": "aurora-service-agreement",
-      "sha256": "cc46f2b1560a55d881912037d9d941b5b5c408d24d57b4a81d465eb84fd5dce0"
+      "sha256": "bb7b865774b796f7ca19ac58344943cac2c10d06c657d701c64d46b7c93b0212"
     },
     {
       "handle": "doc-boreal",
@@ -18,13 +18,25 @@
       "handle": "doc-cinder",
       "path": "doc-cinder.json",
       "document_id": "cinder-operations-handbook",
-      "sha256": "f8bcd5624ee8918b199e5aaef331d482ffb1041fc1d2691b7f97b6896dc37ba7"
+      "sha256": "642a979db90873a3987417d9cc6cf2073ee06a36c055fb0d1b1f7668e5fc6811"
     },
     {
       "handle": "doc-delta",
       "path": "doc-delta.json",
       "document_id": "delta-legacy-appendix",
       "sha256": "d0731e8c97b6b2df85973ff272bdad116a32f0cd777f7f5fe41c3a04c06f7aa4"
+    },
+    {
+      "handle": "doc-echo",
+      "path": "doc-echo.json",
+      "document_id": "echo-training-contract",
+      "sha256": "b0ea7ee52278be05afa6bf0eb6ad30cf939201d9c1c6dcb1b04b4c26c7ef6bd7"
+    },
+    {
+      "handle": "doc-foxtrot",
+      "path": "doc-foxtrot.json",
+      "document_id": "foxtrot-heldout-appendix",
+      "sha256": "bb249ee52dbae249d048a28cb0f5ad73224db025e75e6373e187624ef76c05ff"
     }
   ]
 }

@@ -1,0 +1,83 @@
+{
+  "schema": "vevo.v03.document-evidence.document.v1",
+  "document_id": "foxtrot-heldout-appendix",
+  "template_family": "legacy-appendix",
+  "layout_id": "appendix-sections-f",
+  "version": 2,
+  "published_at": "2025-12-18",
+  "title": "Foxtrot held-out appendix",
+  "sections": [
+    {
+      "section_id": "sec-intro",
+      "section_kind": "overview",
+      "title": "Held-out context",
+      "body": "This document is reserved for future held-out generator cases.",
+      "facts": [
+        {
+          "fact_id": "foxtrot-region-2",
+          "field_id": "service_region",
+          "value": "west",
+          "value_type": "enum",
+          "revision": 2,
+          "state": "current",
+          "published_at": "2025-12-18",
+          "conflict_group": null
+        }
+      ]
+    },
+    {
+      "section_id": "sec-commercial",
+      "section_kind": "commercial",
+      "title": "Held-out commercial note",
+      "body": "This archived family uses a separate section arrangement.",
+      "facts": [
+        {
+          "fact_id": "foxtrot-limit-1",
+          "field_id": "annual_limit",
+          "value": 97000.0,
+          "value_type": "number",
+          "revision": 1,
+          "state": "obsolete",
+          "published_at": "2025-12-18",
+          "conflict_group": "annual-limit"
+        }
+      ]
+    },
+    {
+      "section_id": "sec-contacts",
+      "section_kind": "contacts",
+      "title": "Held-out contact note",
+      "body": "No current requested contact is asserted here.",
+      "facts": [
+        {
+          "fact_id": "foxtrot-mail-1",
+          "field_id": "support_contact",
+          "value": "foxtrot-archive@example.test",
+          "value_type": "email",
+          "revision": 1,
+          "state": "obsolete",
+          "published_at": "2025-12-18",
+          "conflict_group": "support-contact"
+        }
+      ]
+    },
+    {
+      "section_id": "sec-terms",
+      "section_kind": "terms",
+      "title": "Held-out schedule",
+      "body": "Future held-out cases may vary this schedule without reusing instances.",
+      "facts": [
+        {
+          "fact_id": "foxtrot-cycle-1",
+          "field_id": "review_cycle",
+          "value": "semiannual",
+          "value_type": "duration",
+          "revision": 1,
+          "state": "obsolete",
+          "published_at": "2025-12-18",
+          "conflict_group": null
+        }
+      ]
+    }
+  ]
+}

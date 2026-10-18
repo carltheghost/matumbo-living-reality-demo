@@ -22,6 +22,16 @@
           "state": "current",
           "published_at": "2026-08-20",
           "conflict_group": null
+        },
+        {
+          "fact_id": "cinder-special-2",
+          "field_id": "special_contact",
+          "value": "Uma Reed",
+          "value_type": "person",
+          "revision": 2,
+          "state": "current",
+          "published_at": "2026-08-20",
+          "conflict_group": null
         }
       ]
     },
@@ -36,6 +46,26 @@
           "field_id": "alert_threshold",
           "value": 0.8,
           "value_type": "ratio",
+          "revision": 2,
+          "state": "current",
+          "published_at": "2026-08-20",
+          "conflict_group": "alert-threshold"
+        },
+        {
+          "fact_id": "cinder-threshold-2-alt",
+          "field_id": "alert_threshold",
+          "value": 0.75,
+          "value_type": "ratio",
+          "revision": 2,
+          "state": "current",
+          "published_at": "2026-08-20",
+          "conflict_group": "alert-threshold"
+        },
+        {
+          "fact_id": "cinder-floor-2",
+          "field_id": "budget_floor",
+          "value": 100000.0,
+          "value_type": "number",
           "revision": 2,
           "state": "current",
           "published_at": "2026-08-20",
@@ -54,6 +84,16 @@
           "field_id": "on_call_rota",
           "value": "cinder-primary",
           "value_type": "enum",
+          "revision": 2,
+          "state": "current",
+          "published_at": "2026-08-20",
+          "conflict_group": null
+        },
+        {
+          "fact_id": "cinder-contact-2",
+          "field_id": "on_call_contact",
+          "value": "Rhea Stone",
+          "value_type": "person",
           "revision": 2,
           "state": "current",
           "published_at": "2026-08-20",

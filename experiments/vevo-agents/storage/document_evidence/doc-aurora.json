@@ -42,6 +42,16 @@
           "conflict_group": "annual-limit"
         },
         {
+          "fact_id": "aurora-limit-old-9",
+          "field_id": "annual_limit",
+          "value": 999999.0,
+          "value_type": "number",
+          "revision": 9,
+          "state": "obsolete",
+          "published_at": "2026-10-01",
+          "conflict_group": "annual-limit"
+        },
+        {
           "fact_id": "aurora-discount-4",
           "field_id": "discount_rate",
           "value": 0.12,

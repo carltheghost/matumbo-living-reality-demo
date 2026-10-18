@@ -1,0 +1,83 @@
+{
+  "schema": "vevo.v03.document-evidence.document.v1",
+  "document_id": "echo-training-contract",
+  "template_family": "training-contract",
+  "layout_id": "column-sections-e",
+  "version": 3,
+  "published_at": "2026-07-12",
+  "title": "Echo training contract",
+  "sections": [
+    {
+      "section_id": "sec-intro",
+      "section_kind": "overview",
+      "title": "Training overview",
+      "body": "Reserved for future document-policy training fixtures.",
+      "facts": [
+        {
+          "fact_id": "echo-tier-3",
+          "field_id": "service_tier",
+          "value": "silver",
+          "value_type": "enum",
+          "revision": 3,
+          "state": "current",
+          "published_at": "2026-07-12",
+          "conflict_group": null
+        }
+      ]
+    },
+    {
+      "section_id": "sec-commercial",
+      "section_kind": "commercial",
+      "title": "Training commercial terms",
+      "body": "The training fixture includes ordinary typed commercial evidence.",
+      "facts": [
+        {
+          "fact_id": "echo-limit-3",
+          "field_id": "annual_limit",
+          "value": 110000.0,
+          "value_type": "number",
+          "revision": 3,
+          "state": "current",
+          "published_at": "2026-07-12",
+          "conflict_group": null
+        }
+      ]
+    },
+    {
+      "section_id": "sec-contacts",
+      "section_kind": "contacts",
+      "title": "Training contacts",
+      "body": "Contact evidence is retained for future training generation.",
+      "facts": [
+        {
+          "fact_id": "echo-owner-3",
+          "field_id": "account_owner",
+          "value": "Iris Cole",
+          "value_type": "person",
+          "revision": 3,
+          "state": "current",
+          "published_at": "2026-07-12",
+          "conflict_group": null
+        }
+      ]
+    },
+    {
+      "section_id": "sec-terms",
+      "section_kind": "terms",
+      "title": "Training dates",
+      "body": "The training fixture uses a separate layout and family.",
+      "facts": [
+        {
+          "fact_id": "echo-renewal-3",
+          "field_id": "renewal_date",
+          "value": "2027-03-31",
+          "value_type": "date",
+          "revision": 3,
+          "state": "current",
+          "published_at": "2026-07-12",
+          "conflict_group": null
+        }
+      ]
+    }
+  ]
+}

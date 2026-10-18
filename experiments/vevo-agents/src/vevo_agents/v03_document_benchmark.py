@@ -7,10 +7,8 @@ training, evaluation sweep, live calls, or credentialed actions.
 
 from __future__ import annotations
 
-from copy import deepcopy
-import json
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping
 
 from .v03_document_evidence import DocumentBundleStore, DocumentTask, make_task
 
@@ -19,6 +17,11 @@ PREREG_SCHEMA = "vevo.v03.document-evidence-benchmark-preregistration.v1"
 PREREG_STATUS = "awaiting_document_policy_review_before_training"
 STATIC_PREREG_RELATIVE_PATH = Path("reports/generated/v03-document-evidence-benchmark-preregistration.json")
 MARKDOWN_REPORT_RELATIVE_PATH = Path("docs/V03_DOCUMENT_EVIDENCE_BENCHMARK_PREREGISTRATION.md")
+TRAIN_DOCUMENT_HANDLES = ("doc-echo",)
+DEVELOPMENT_DOCUMENT_HANDLES = ("doc-aurora", "doc-boreal", "doc-cinder")
+TEST_DOCUMENT_HANDLES = ("doc-delta", "doc-foxtrot")
+DEVELOPMENT_CASE_SEEDS = (9300, 9301, 9302)
+TEST_CASE_SEEDS = (9400, 9401)
 
 
 def document_evidence_tasks() -> tuple[DocumentTask, ...]:
@@ -39,8 +42,8 @@ def document_evidence_tasks() -> tuple[DocumentTask, ...]:
         ),
         make_task(
             "task-conflict-history",
-            ("doc-aurora", "doc-boreal", "doc-cinder"),
-            (("renewal_date", "date"), ("annual_limit", "number")),
+            ("doc-aurora", "doc-cinder"),
+            (("alert_threshold", "ratio"), ("account_owner", "person")),
             seed=9302,
         ),
     )
@@ -83,6 +86,30 @@ def _bundle_identity(store: DocumentBundleStore) -> dict[str, Any]:
     }
 
 
+def _scope_manifest(store: DocumentBundleStore, handles: tuple[str, ...], *, scope: str) -> dict[str, Any]:
+    documents = []
+    for handle in handles:
+        document = store.open_document(handle)
+        entry = store.manifest_entry(handle)
+        documents.append({
+            "handle": handle,
+            "document_id": entry["document_id"],
+            "template_family": document["template_family"],
+            "layout_id": document["layout_id"],
+            "sha256": entry["sha256"],
+        })
+    return {
+        "manifest_id": f"document-evidence-{scope}-manifest-v1",
+        "scope": scope,
+        "document_handles": list(handles),
+        "document_count": len(handles),
+        "template_family_count": len({document["template_family"] for document in documents}),
+        "template_families": sorted({document["template_family"] for document in documents}),
+        "layout_ids": sorted({document["layout_id"] for document in documents}),
+        "documents": documents,
+    }
+
+
 def build_benchmark_preregistration(store: DocumentBundleStore | None = None) -> dict[str, Any]:
     """Build the review artifact without materializing labels or predictions."""
 
@@ -106,23 +133,50 @@ def build_benchmark_preregistration(store: DocumentBundleStore | None = None) ->
         "frozen_split": {
             "whole_document_and_template_family_separation": True,
             "no_instance_overlap": True,
-            "randomized_document_ids": True,
-            "randomized_candidate_order": True,
-            "unseen_instances_layouts_conflicts": True,
+            "randomized_candidate_order": {
+                "status": "implemented",
+                "scope": "seeded_observed_candidates_within_an_episode",
+            },
+            "randomized_document_ids": {
+                "status": "planned",
+                "claim": "future held-out generator only; fixed server handles remain in this proof",
+            },
+            "randomized_catalog_order": {
+                "status": "planned",
+                "claim": "future held-out generator only; current manifests preserve declared order",
+            },
+            "unseen_instances_layouts_conflicts": {
+                "status": "planned",
+                "claim": "not proven because no held-out outcomes are materialized",
+            },
             "train": {
-                "template_families": ["reserved-document-training-family-not-yet-admitted"],
-                "document_handles": [],
+                **_scope_manifest(bundle, TRAIN_DOCUMENT_HANDLES, scope="train"),
+                "case_count": 0,
+                "generator": "future-public-or-synthetic-document-generator-v1",
             },
             "development": {
-                "template_families": ["supplier-agreement", "operations-handbook"],
-                "document_handles": ["doc-aurora", "doc-boreal", "doc-cinder"],
-                "case_seeds": [9300, 9301, 9302],
+                **_scope_manifest(bundle, DEVELOPMENT_DOCUMENT_HANDLES, scope="development"),
+                "case_count": len(DEVELOPMENT_CASE_SEEDS),
+                "case_seeds": list(DEVELOPMENT_CASE_SEEDS),
+                "generator": "fixed-manifest-request-v1",
             },
             "test": {
-                "template_families": ["legacy-appendix"],
-                "document_handles": ["doc-delta"],
-                "case_seeds": [],
+                **_scope_manifest(bundle, TEST_DOCUMENT_HANDLES, scope="test"),
+                "case_count": len(TEST_CASE_SEEDS),
+                "case_seeds": list(TEST_CASE_SEEDS),
+                "generator": "unseen-layout-conflict-generator-v1",
+                "outcomes_materialized": False,
             },
+        },
+        "case_generation": {
+            "schema": "vevo.v03.document-evidence.case-generator.v1",
+            "minimum_documents_per_case": 2,
+            "maximum_documents_per_case": 6,
+            "maximum_sections_per_document": 4,
+            "requested_field_count": {"minimum": 2, "maximum": 3},
+            "action_budget": 16,
+            "development_cases_are_protocol_cases_not_generalization": True,
+            "held_out_test_outcomes_are_not_inspected": True,
         },
         "development_cases": [_task_request(task) for task in tasks],
         "metrics": [
@@ -135,8 +189,20 @@ def build_benchmark_preregistration(store: DocumentBundleStore | None = None) ->
         ],
         "cost_accounting": {
             "inference": ["policy_steps", "model_forward_calls"],
-            "end_to_end": ["action_calls", "server_verification_calls", "wall_time_seconds"],
+            "end_to_end": ["action_calls", "server_verification_calls", "wall_time_seconds", "latency_seconds", "monetary_cost"],
             "separate_inference_and_end_to_end_costs": True,
+        },
+        "selection_rule": {
+            "scope": "development_only",
+            "primary_metric": "verified_success",
+            "minimum_thresholds": {
+                "source_citation_accuracy": 1.0,
+                "false_completion_rate": 0.0,
+                "missing_fact_detection": 1.0,
+                "restart_parity": 1.0,
+            },
+            "tie_breakers": ["false_completion_rate", "action_calls", "end_to_end_latency_seconds"],
+            "model_selection_status": "not_run_model_unavailable",
         },
         "document_policy_interface": {
             "backend": "v03-five-brain-addressable-memory-interface",
@@ -148,10 +214,23 @@ def build_benchmark_preregistration(store: DocumentBundleStore | None = None) ->
             "new_training_required": True,
         },
         "jev_comparator": {
-            "interface": "typed-task-evidence-packet-budget-comparator-v1",
+            "interface": "jev-document-evidence-v1",
+            "eligibility": "unverified",
+            "eligibility_reason": "no authorized Jev version or interface has been verified in this branch",
             "same_typed_tasks": True,
             "same_evidence_store": True,
             "same_action_budget": True,
+            "same_initial_request": True,
+            "same_observations": True,
+            "same_legal_actions": True,
+            "same_feedback": True,
+            "same_history_access": True,
+            "adapters": {"task": "typed-task-v1", "evidence": "verified-evidence-packet-v1", "policy": "document-policy-v1"},
+            "tuning_split": "development_only",
+            "data_policy": "public_or_synthetic_only",
+            "retries": 0,
+            "timeouts": {"per_case_seconds": 30, "per_action_seconds": 2},
+            "latency_cost_accounting": {"inference": True, "end_to_end": True, "monetary_cost": True},
             "live_calls": False,
             "credentials": False,
             "invented_results": False,
@@ -190,16 +269,16 @@ def render_preregistration_markdown(spec: Mapping[str, Any]) -> str:
         "## Frozen split",
         "",
         f"- Whole-document/template-family separation: `{split['whole_document_and_template_family_separation']}`.",
-        f"- No instance overlap: `{split['no_instance_overlap']}`; document IDs and candidate order are randomized.",
-        f"- Development families: `{', '.join(split['development']['template_families'])}`.",
-        f"- Held-out test family: `{', '.join(split['test']['template_families'])}`.",
-        "- The checked-in cases are development protocol cases, not fresh generalization evidence.",
+        f"- No instance overlap: `{split['no_instance_overlap']}`; seeded candidate order is implemented, while randomized IDs/catalog order are planned for a future generator.",
+        f"- Development manifest: `{split['development']['manifest_id']}` with {split['development']['document_count']} documents and {split['development']['case_count']} cases.",
+        f"- Held-out test manifest: `{split['test']['manifest_id']}` with {split['test']['document_count']} documents and {split['test']['case_count']} unmaterialized cases.",
+        "- The checked-in 9300–9302 cases are development protocol cases, not fresh generalization evidence; held-out outcomes are not inspected.",
         "",
         "## Metrics and accounting",
         "",
         "- Metrics: source-citation accuracy, verified success, false completions, tool calls, missing-fact detection, and restart parity.",
         "- Inference costs (policy steps and model forward calls) remain separate from end-to-end action/server/wall-time costs.",
-        "- The Jev comparator is an interface only: no live calls, credentials, or invented results.",
+        "- The Jev comparator is unverified and interface-only: public/synthetic data, fixed adapters, zero retries, declared timeouts, no live calls, credentials, or invented results.",
         "",
         "## Model gate",
         "",

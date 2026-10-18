@@ -7,7 +7,7 @@
         "handle": "doc-aurora",
         "layout_id": "split-sections-a",
         "section_count": 4,
-        "sha256": "cc46f2b1560a55d881912037d9d941b5b5c408d24d57b4a81d465eb84fd5dce0",
+        "sha256": "bb7b865774b796f7ca19ac58344943cac2c10d06c657d701c64d46b7c93b0212",
         "template_family": "supplier-agreement",
         "version": 4
       },
@@ -25,7 +25,7 @@
         "handle": "doc-cinder",
         "layout_id": "grid-sections-c",
         "section_count": 4,
-        "sha256": "f8bcd5624ee8918b199e5aaef331d482ffb1041fc1d2691b7f97b6896dc37ba7",
+        "sha256": "642a979db90873a3987417d9cc6cf2073ee06a36c055fb0d1b1f7668e5fc6811",
         "template_family": "operations-handbook",
         "version": 2
       },
@@ -37,15 +37,48 @@
         "sha256": "d0731e8c97b6b2df85973ff272bdad116a32f0cd777f7f5fe41c3a04c06f7aa4",
         "template_family": "legacy-appendix",
         "version": 1
+      },
+      {
+        "document_id": "echo-training-contract",
+        "handle": "doc-echo",
+        "layout_id": "column-sections-e",
+        "section_count": 4,
+        "sha256": "b0ea7ee52278be05afa6bf0eb6ad30cf939201d9c1c6dcb1b04b4c26c7ef6bd7",
+        "template_family": "training-contract",
+        "version": 3
+      },
+      {
+        "document_id": "foxtrot-heldout-appendix",
+        "handle": "doc-foxtrot",
+        "layout_id": "appendix-sections-f",
+        "section_count": 4,
+        "sha256": "bb249ee52dbae249d048a28cb0f5ad73224db025e75e6373e187624ef76c05ff",
+        "template_family": "legacy-appendix",
+        "version": 2
       }
     ],
     "manifest_schema": "vevo.v03.document-evidence.bundle-manifest.v1"
+  },
+  "case_generation": {
+    "action_budget": 16,
+    "development_cases_are_protocol_cases_not_generalization": true,
+    "held_out_test_outcomes_are_not_inspected": true,
+    "maximum_documents_per_case": 6,
+    "maximum_sections_per_document": 4,
+    "minimum_documents_per_case": 2,
+    "requested_field_count": {
+      "maximum": 3,
+      "minimum": 2
+    },
+    "schema": "vevo.v03.document-evidence.case-generator.v1"
   },
   "cost_accounting": {
     "end_to_end": [
       "action_calls",
       "server_verification_calls",
-      "wall_time_seconds"
+      "wall_time_seconds",
+      "latency_seconds",
+      "monetary_cost"
     ],
     "inference": [
       "policy_steps",
@@ -111,19 +144,18 @@
       "action_budget": 16,
       "document_handles": [
         "doc-aurora",
-        "doc-boreal",
         "doc-cinder"
       ],
       "requested_fields": [
         {
-          "field_id": "renewal_date",
+          "field_id": "alert_threshold",
           "revision_rule": "latest_non_obsolete",
-          "value_type": "date"
+          "value_type": "ratio"
         },
         {
-          "field_id": "annual_limit",
+          "field_id": "account_owner",
           "revision_rule": "latest_non_obsolete",
-          "value_type": "number"
+          "value_type": "person"
         }
       ],
       "task_id": "task-conflict-history"
@@ -144,51 +176,173 @@
   "evaluation_started": false,
   "frozen_split": {
     "development": {
+      "case_count": 3,
       "case_seeds": [
         9300,
         9301,
         9302
       ],
+      "document_count": 3,
       "document_handles": [
         "doc-aurora",
         "doc-boreal",
         "doc-cinder"
       ],
+      "documents": [
+        {
+          "document_id": "aurora-service-agreement",
+          "handle": "doc-aurora",
+          "layout_id": "split-sections-a",
+          "sha256": "bb7b865774b796f7ca19ac58344943cac2c10d06c657d701c64d46b7c93b0212",
+          "template_family": "supplier-agreement"
+        },
+        {
+          "document_id": "boreal-service-amendment",
+          "handle": "doc-boreal",
+          "layout_id": "split-sections-b",
+          "sha256": "760af40ebea699ea656ba47cf2a776b6a56cba8808c78bfe52beb6d0e12d1b97",
+          "template_family": "supplier-agreement"
+        },
+        {
+          "document_id": "cinder-operations-handbook",
+          "handle": "doc-cinder",
+          "layout_id": "grid-sections-c",
+          "sha256": "642a979db90873a3987417d9cc6cf2073ee06a36c055fb0d1b1f7668e5fc6811",
+          "template_family": "operations-handbook"
+        }
+      ],
+      "generator": "fixed-manifest-request-v1",
+      "layout_ids": [
+        "grid-sections-c",
+        "split-sections-a",
+        "split-sections-b"
+      ],
+      "manifest_id": "document-evidence-development-manifest-v1",
+      "scope": "development",
       "template_families": [
-        "supplier-agreement",
-        "operations-handbook"
-      ]
+        "operations-handbook",
+        "supplier-agreement"
+      ],
+      "template_family_count": 2
     },
     "no_instance_overlap": true,
-    "randomized_candidate_order": true,
-    "randomized_document_ids": true,
+    "randomized_candidate_order": {
+      "scope": "seeded_observed_candidates_within_an_episode",
+      "status": "implemented"
+    },
+    "randomized_catalog_order": {
+      "claim": "future held-out generator only; current manifests preserve declared order",
+      "status": "planned"
+    },
+    "randomized_document_ids": {
+      "claim": "future held-out generator only; fixed server handles remain in this proof",
+      "status": "planned"
+    },
     "test": {
-      "case_seeds": [],
-      "document_handles": [
-        "doc-delta"
+      "case_count": 2,
+      "case_seeds": [
+        9400,
+        9401
       ],
+      "document_count": 2,
+      "document_handles": [
+        "doc-delta",
+        "doc-foxtrot"
+      ],
+      "documents": [
+        {
+          "document_id": "delta-legacy-appendix",
+          "handle": "doc-delta",
+          "layout_id": "appendix-sections-d",
+          "sha256": "d0731e8c97b6b2df85973ff272bdad116a32f0cd777f7f5fe41c3a04c06f7aa4",
+          "template_family": "legacy-appendix"
+        },
+        {
+          "document_id": "foxtrot-heldout-appendix",
+          "handle": "doc-foxtrot",
+          "layout_id": "appendix-sections-f",
+          "sha256": "bb249ee52dbae249d048a28cb0f5ad73224db025e75e6373e187624ef76c05ff",
+          "template_family": "legacy-appendix"
+        }
+      ],
+      "generator": "unseen-layout-conflict-generator-v1",
+      "layout_ids": [
+        "appendix-sections-d",
+        "appendix-sections-f"
+      ],
+      "manifest_id": "document-evidence-test-manifest-v1",
+      "outcomes_materialized": false,
+      "scope": "test",
       "template_families": [
         "legacy-appendix"
-      ]
+      ],
+      "template_family_count": 1
     },
     "train": {
-      "document_handles": [],
+      "case_count": 0,
+      "document_count": 1,
+      "document_handles": [
+        "doc-echo"
+      ],
+      "documents": [
+        {
+          "document_id": "echo-training-contract",
+          "handle": "doc-echo",
+          "layout_id": "column-sections-e",
+          "sha256": "b0ea7ee52278be05afa6bf0eb6ad30cf939201d9c1c6dcb1b04b4c26c7ef6bd7",
+          "template_family": "training-contract"
+        }
+      ],
+      "generator": "future-public-or-synthetic-document-generator-v1",
+      "layout_ids": [
+        "column-sections-e"
+      ],
+      "manifest_id": "document-evidence-train-manifest-v1",
+      "scope": "train",
       "template_families": [
-        "reserved-document-training-family-not-yet-admitted"
-      ]
+        "training-contract"
+      ],
+      "template_family_count": 1
     },
-    "unseen_instances_layouts_conflicts": true,
+    "unseen_instances_layouts_conflicts": {
+      "claim": "not proven because no held-out outcomes are materialized",
+      "status": "planned"
+    },
     "whole_document_and_template_family_separation": true
   },
   "jev_comparator": {
+    "adapters": {
+      "evidence": "verified-evidence-packet-v1",
+      "policy": "document-policy-v1",
+      "task": "typed-task-v1"
+    },
     "credentials": false,
-    "interface": "typed-task-evidence-packet-budget-comparator-v1",
+    "data_policy": "public_or_synthetic_only",
+    "eligibility": "unverified",
+    "eligibility_reason": "no authorized Jev version or interface has been verified in this branch",
+    "interface": "jev-document-evidence-v1",
     "invented_results": false,
+    "latency_cost_accounting": {
+      "end_to_end": true,
+      "inference": true,
+      "monetary_cost": true
+    },
     "live_calls": false,
     "results": null,
+    "retries": 0,
     "same_action_budget": true,
     "same_evidence_store": true,
-    "same_typed_tasks": true
+    "same_feedback": true,
+    "same_history_access": true,
+    "same_initial_request": true,
+    "same_legal_actions": true,
+    "same_observations": true,
+    "same_typed_tasks": true,
+    "timeouts": {
+      "per_action_seconds": 2,
+      "per_case_seconds": 30
+    },
+    "tuning_split": "development_only"
   },
   "metrics": [
     "source_citation_accuracy",
@@ -214,6 +368,22 @@
     "training": true
   },
   "schema": "vevo.v03.document-evidence-benchmark-preregistration.v1",
+  "selection_rule": {
+    "minimum_thresholds": {
+      "false_completion_rate": 0.0,
+      "missing_fact_detection": 1.0,
+      "restart_parity": 1.0,
+      "source_citation_accuracy": 1.0
+    },
+    "model_selection_status": "not_run_model_unavailable",
+    "primary_metric": "verified_success",
+    "scope": "development_only",
+    "tie_breakers": [
+      "false_completion_rate",
+      "action_calls",
+      "end_to_end_latency_seconds"
+    ]
+  },
   "status": "awaiting_document_policy_review_before_training",
   "training_started": false
 }

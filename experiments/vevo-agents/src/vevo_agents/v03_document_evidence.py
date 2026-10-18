@@ -28,7 +28,7 @@ MANIFEST_SCHEMA = "vevo.v03.document-evidence.bundle-manifest.v1"
 REQUEST_SCHEMA = "vevo.v03.document-evidence.request.v1"
 RESPONSE_SCHEMA = "vevo.v03.document-evidence.response.v1"
 CANDIDATE_SCHEMA = "vevo.v03.document-evidence.candidate.v1"
-SNAPSHOT_SCHEMA = "vevo.v03.document-evidence.snapshot.v1"
+SNAPSHOT_SCHEMA = "vevo.v03.document-evidence.snapshot.v2"
 
 MAX_DOCUMENTS = 6
 MIN_DOCUMENTS = 2
@@ -48,6 +48,13 @@ VALUE_TYPES = frozenset({
     "duration",
     "ratio",
 })
+DOCUMENT_ACTIONS = (
+    "inspect_section",
+    "select_candidate",
+    "finish",
+    "report_missing",
+    "report_conflict",
+)
 REVISION_RULES = frozenset({"latest_non_obsolete"})
 SECTION_KINDS = frozenset({"overview", "commercial", "contacts", "terms"})
 HANDLE_RE = re.compile(r"^doc-[a-z0-9-]+$")
@@ -398,6 +405,26 @@ class DocumentTask:
         if type(self.seed) is not int or self.seed < 0:
             raise ProtocolViolation("task seed must be a non-negative integer")
 
+    def request_payload(self) -> dict[str, Any]:
+        return {
+            "schema": REQUEST_SCHEMA,
+            "task_id": self.task_id,
+            "document_handles": list(self.document_handles),
+            "requested_fields": [
+                {
+                    "field_id": field.field_id,
+                    "value_type": field.value_type,
+                    "revision_rule": field.revision_rule,
+                }
+                for field in self.requested_fields
+            ],
+            "action_budget": self.action_budget,
+        }
+
+    @property
+    def request_fingerprint(self) -> str:
+        return _json_digest(self.request_payload())
+
 
 @dataclass(frozen=True)
 class EvidenceRecord:
@@ -422,6 +449,10 @@ class EvidenceRecord:
         return {
             "schema": CANDIDATE_SCHEMA,
             "candidate_id": self.candidate_id,
+            # The source field identity is legitimate evidence.  It is not a
+            # repeated requested/not-requested flag: a policy compares this
+            # observed source identity with the initial typed request.
+            "field_id": self.field_id,
             "document_handle": self.document_handle,
             "section_id": self.section_id,
             "section_kind": self.section_kind,
@@ -480,19 +511,23 @@ def _outcome(
         source_citation_accuracy=source_citation_accuracy,
         false_completion=false_completion,
         missing_fact_detection=missing_fact_detection,
-        selected_candidate_ids=tuple(selected_candidate_ids),
+        selected_candidate_ids=tuple(sorted(selected_candidate_ids)),
         requested_field_count=requested_field_count,
         details=tuple((key, deepcopy(value)) for key, value in details.items()),
     )
 
 
 _HIDDEN_OBSERVATION_KEYS = frozenset({
-    "field_id",
     "fact_id",
     "requested_fields",
     "target",
     "oracle",
     "expected",
+    "answer",
+    "requested",
+    "is_requested",
+    "not_requested",
+    "request_match",
     "raw_document",
     "source_path",
     "filesystem_path",
@@ -500,9 +535,12 @@ _HIDDEN_OBSERVATION_KEYS = frozenset({
 
 
 def assert_observation_no_hidden_fields(observation: Any, requested_field_ids: Iterable[str]) -> None:
-    """Fail closed if a policy observation leaks request/oracle labels."""
+    """Fail closed if an observation adds oracle or request-match labels.
 
-    forbidden_strings = set(requested_field_ids)
+    Source ``field_id`` is intentionally allowed: it is the document fact's
+    semantic identity and is needed to distinguish two fields with the same
+    value type.  Request membership is never emitted as a separate boolean.
+    """
 
     def visit(value: Any, path: str) -> None:
         if isinstance(value, dict):
@@ -513,8 +551,9 @@ def assert_observation_no_hidden_fields(observation: Any, requested_field_ids: I
         elif isinstance(value, list):
             for index, item in enumerate(value):
                 visit(item, f"{path}[{index}]")
-        elif isinstance(value, str) and value in forbidden_strings:
-            raise ProtocolViolation(f"requested field label leaked at {path}")
+        # Field names and typed values are legitimate observations.  The
+        # forbidden vocabulary is enforced structurally by object keys above,
+        # not by suppressing a real source field identity.
 
     visit(observation, "$")
 
@@ -662,18 +701,18 @@ class EvidencePacketVerifier:
             self.store.verify_integrity(self.task.document_handles)
         except DocumentIntegrityError:
             return self._invalid_packet("source_changed", selected=selected_candidate_ids)
-        if not isinstance(packet, dict) or set(packet) != {"entries", "missing_fields"}:
+        if not isinstance(packet, dict) or not set(packet).issubset({"entries", "missing_fields", "conflicts"}):
             return self._invalid_packet("incomplete_packet", selected=selected_candidate_ids)
         entries = packet.get("entries")
         missing = packet.get("missing_fields")
-        if not isinstance(entries, list) or not isinstance(missing, list):
+        conflicts = packet.get("conflicts", [])
+        if not isinstance(entries, list) or not isinstance(missing, list) or not isinstance(conflicts, list):
             return self._invalid_packet("incomplete_packet", selected=selected_candidate_ids)
         if any(not isinstance(field_id, str) for field_id in missing):
             return self._invalid_packet("incomplete_packet", selected=selected_candidate_ids)
         if len(set(missing)) != len(missing):
             return self._invalid_packet("incomplete_packet", selected=selected_candidate_ids)
         entry_fields: list[str] = []
-        citation_ok = True
         validated_records: dict[str, EvidenceRecord] = {}
         for entry in entries:
             if not isinstance(entry, dict) or set(entry) != {"field_id", "candidate_id", "value", "value_type", "citation"}:
@@ -688,16 +727,31 @@ class EvidencePacketVerifier:
             try:
                 record = self.evidence.get(candidate_id)
             except ProtocolViolation:
-                return self._invalid_packet("citation_mismatch", selected=selected_candidate_ids)
+                return self._invalid_packet("incomplete_packet", selected=selected_candidate_ids)
             if candidate_id not in selected_candidate_ids:
-                return self._invalid_packet("candidate_not_selected", selected=selected_candidate_ids)
+                return self._invalid_packet("incomplete_packet", selected=selected_candidate_ids)
             if record.field_id != field_id:
-                return self._invalid_packet("candidate_field_mismatch", selected=selected_candidate_ids)
+                return _outcome(
+                    "verification_failed",
+                    false_completion=True,
+                    selected_candidate_ids=selected_candidate_ids,
+                    requested_field_count=len(self.task.requested_fields),
+                )
             field = self._requested[field_id]
             if record.value_type != field.value_type or entry["value_type"] != field.value_type:
-                return self._invalid_packet("forged_value", selected=selected_candidate_ids)
+                return _outcome(
+                    "verification_failed",
+                    false_completion=True,
+                    selected_candidate_ids=selected_candidate_ids,
+                    requested_field_count=len(self.task.requested_fields),
+                )
             if not self._same_value(entry["value"], record.value):
-                return self._invalid_packet("forged_value", selected=selected_candidate_ids)
+                return _outcome(
+                    "verification_failed",
+                    false_completion=True,
+                    selected_candidate_ids=selected_candidate_ids,
+                    requested_field_count=len(self.task.requested_fields),
+                )
             citation = entry["citation"]
             expected_citation = {
                 "document_handle": record.document_handle,
@@ -706,14 +760,92 @@ class EvidencePacketVerifier:
                 "fact_digest": record.fact_digest,
             }
             if citation != expected_citation:
-                citation_ok = False
-                return self._invalid_packet(
-                    "citation_mismatch",
-                    selected=selected_candidate_ids,
+                return _outcome(
+                    "verification_failed",
+                    false_completion=True,
+                    selected_candidate_ids=selected_candidate_ids,
+                    requested_field_count=len(self.task.requested_fields),
                 )
             validated_records[field_id] = record
+        validated_conflicts: dict[str, tuple[EvidenceRecord, ...]] = {}
+        for conflict in conflicts:
+            if not isinstance(conflict, dict) or set(conflict) != {
+                "field_id", "candidate_ids", "value_type", "values", "citations"
+            }:
+                return self._invalid_packet("incomplete_packet", selected=selected_candidate_ids)
+            field_id = conflict["field_id"]
+            candidate_ids = conflict["candidate_ids"]
+            values = conflict["values"]
+            citations = conflict["citations"]
+            if not isinstance(field_id, str) or field_id not in self._requested:
+                return self._invalid_packet("incomplete_packet", selected=selected_candidate_ids)
+            if field_id in validated_conflicts or field_id in entry_fields:
+                return self._invalid_packet("incomplete_packet", selected=selected_candidate_ids)
+            if (
+                not isinstance(candidate_ids, list)
+                or len(candidate_ids) < 2
+                or not all(isinstance(candidate_id, str) for candidate_id in candidate_ids)
+                or len(set(candidate_ids)) != len(candidate_ids)
+                or not isinstance(values, list)
+                or len(values) != len(candidate_ids)
+                or not isinstance(citations, list)
+                or len(citations) != len(candidate_ids)
+            ):
+                return self._invalid_packet("incomplete_packet", selected=selected_candidate_ids)
+            records: list[EvidenceRecord] = []
+            field = self._requested[field_id]
+            for candidate_id, value, citation in zip(candidate_ids, values, citations):
+                try:
+                    record = self.evidence.get(candidate_id)
+                except ProtocolViolation:
+                    return self._invalid_packet("incomplete_packet", selected=selected_candidate_ids)
+                if candidate_id not in selected_candidate_ids:
+                    return self._invalid_packet("incomplete_packet", selected=selected_candidate_ids)
+                if record.field_id != field_id or record.value_type != field.value_type:
+                    return _outcome(
+                        "verification_failed",
+                        false_completion=True,
+                        selected_candidate_ids=selected_candidate_ids,
+                        requested_field_count=len(self.task.requested_fields),
+                    )
+                if conflict["value_type"] != field.value_type or not self._same_value(value, record.value):
+                    return _outcome(
+                        "verification_failed",
+                        false_completion=True,
+                        selected_candidate_ids=selected_candidate_ids,
+                        requested_field_count=len(self.task.requested_fields),
+                    )
+                expected_citation = {
+                    "document_handle": record.document_handle,
+                    "section_id": record.section_id,
+                    "source_sha256": record.source_sha256,
+                    "fact_digest": record.fact_digest,
+                }
+                if citation != expected_citation:
+                    return _outcome(
+                        "verification_failed",
+                        false_completion=True,
+                        selected_candidate_ids=selected_candidate_ids,
+                        requested_field_count=len(self.task.requested_fields),
+                    )
+                records.append(record)
+            if len({self._canonical_value_key(record.value) for record in records}) < 2:
+                return _outcome(
+                    "verification_failed",
+                    false_completion=True,
+                    selected_candidate_ids=selected_candidate_ids,
+                    requested_field_count=len(self.task.requested_fields),
+                )
+            validated_conflicts[field_id] = tuple(records)
         requested_ids = set(self._requested)
-        if set(entry_fields) | set(missing) != requested_ids or set(entry_fields) & set(missing):
+        conflict_fields = set(validated_conflicts)
+        if set(entry_fields) | set(missing) | conflict_fields != requested_ids:
+            return self._invalid_packet("incomplete_packet", selected=selected_candidate_ids)
+        if (
+            set(entry_fields) & set(missing)
+            or set(entry_fields) & conflict_fields
+            or set(missing) & conflict_fields
+        ):
             return self._invalid_packet("incomplete_packet", selected=selected_candidate_ids)
         full_exploration = self._full_exploration(explored_sections)
         for field_id in missing:
@@ -730,12 +862,10 @@ class EvidencePacketVerifier:
                 )
             if winner is not None:
                 return _outcome(
-                    "false_missing_claim",
+                    "verification_failed",
                     false_completion=True,
-                    missing_fact_detection=False,
                     selected_candidate_ids=selected_candidate_ids,
                     requested_field_count=len(self.task.requested_fields),
-                    false_missing_field=field_id,
                 )
         for field_id, record in validated_records.items():
             try:
@@ -744,21 +874,17 @@ class EvidencePacketVerifier:
                 return self._invalid_packet("source_changed", selected=selected_candidate_ids)
             if conflicting:
                 return _outcome(
-                    "conflicting_revisions",
+                    "verification_failed",
                     false_completion=True,
-                    source_citation_accuracy=1.0,
                     selected_candidate_ids=selected_candidate_ids,
                     requested_field_count=len(self.task.requested_fields),
-                    conflicting_field=field_id,
                 )
             if winner is None:
                 return _outcome(
-                    "revision_rule_violation",
+                    "verification_failed",
                     false_completion=True,
-                    source_citation_accuracy=1.0,
                     selected_candidate_ids=selected_candidate_ids,
                     requested_field_count=len(self.task.requested_fields),
-                    revision_field=field_id,
                 )
             if not any(
                 record.source_sha256 == candidate["source_sha256"]
@@ -766,14 +892,60 @@ class EvidencePacketVerifier:
                 for candidate in winners
             ):
                 return _outcome(
-                    "revision_rule_violation",
+                    "verification_failed",
                     false_completion=True,
-                    source_citation_accuracy=1.0,
                     selected_candidate_ids=selected_candidate_ids,
                     requested_field_count=len(self.task.requested_fields),
-                    revision_field=field_id,
                 )
+        verified_conflicts: list[dict[str, Any]] = []
+        for field_id, records in validated_conflicts.items():
+            try:
+                winner, winners, conflicting = self._authoritative_current(field_id)
+            except DocumentIntegrityError:
+                return self._invalid_packet("source_changed", selected=selected_candidate_ids)
+            if winner is None or not conflicting:
+                return _outcome(
+                    "verification_failed",
+                    false_completion=True,
+                    selected_candidate_ids=selected_candidate_ids,
+                    requested_field_count=len(self.task.requested_fields),
+                )
+            observed_refs = {(record.source_sha256, record.fact_digest) for record in records}
+            authoritative_refs = {(fact["source_sha256"], fact["fact_digest"]) for fact in winners}
+            if observed_refs != authoritative_refs:
+                return _outcome(
+                    "verification_failed",
+                    false_completion=True,
+                    selected_candidate_ids=selected_candidate_ids,
+                    requested_field_count=len(self.task.requested_fields),
+                )
+            verified_conflicts.append({
+                "field_id": field_id,
+                "candidate_ids": [record.candidate_id for record in records],
+                "citations": [
+                    {
+                        "document_handle": record.document_handle,
+                        "section_id": record.section_id,
+                        "source_sha256": record.source_sha256,
+                        "fact_digest": record.fact_digest,
+                    }
+                    for record in records
+                ],
+            })
         missing_verified = bool(missing)
+        if verified_conflicts:
+            return _outcome(
+                "verified_conflict",
+                task_success=True,
+                source_citation_accuracy=1.0,
+                false_completion=False,
+                missing_fact_detection=missing_verified,
+                selected_candidate_ids=selected_candidate_ids,
+                requested_field_count=len(self.task.requested_fields),
+                verified_conflicts=verified_conflicts,
+                missing_fields=list(missing),
+                full_exploration=full_exploration,
+            )
         return _outcome(
             "verified_missing_facts" if missing_verified else "verified_complete",
             task_success=True,
@@ -786,13 +958,19 @@ class EvidencePacketVerifier:
             full_exploration=full_exploration,
         )
 
+    @staticmethod
+    def _canonical_value_key(value: Any) -> str:
+        return _canonical_json(value)
+
 
 def _response(status: str, *, action_count: int, action_budget: int, terminal: bool, **payload: Any) -> dict[str, Any]:
     response = {
         "schema": RESPONSE_SCHEMA,
+        "phase": "tool_response",
         "status": status,
         "action_count": action_count,
         "action_budget": action_budget,
+        "remaining_action_budget": max(0, action_budget - action_count),
         "terminal": terminal,
     }
     response.update(deepcopy(payload))
@@ -824,6 +1002,11 @@ class DocumentEvidenceSession:
         self.terminal = False
         self.result: VerificationOutcome | None = None
         self._catalog = self.store.section_catalog(self.task.document_handles)
+        self._pinned_source_hashes = {
+            handle: self.store.manifest_entry(handle)["sha256"]
+            for handle in self.task.document_handles
+        }
+        self._budget_exhaustion_logged = False
         self._catalog_keys = {(item["document_handle"], item["section_id"]) for item in self._catalog}
         self._verifier = EvidencePacketVerifier(self.store, self.task, self.evidence)
 
@@ -868,6 +1051,7 @@ class DocumentEvidenceSession:
                 for handle in self.task.document_handles
             ],
             "action_budget": self.task.action_budget,
+            "remaining_action_budget": self.task.action_budget,
         }
         _assert_json_tree(request)
         return request
@@ -884,6 +1068,13 @@ class DocumentEvidenceSession:
     def _record_invalid(self, error: str) -> dict[str, Any]:
         self.action_log.append({"kind": "invalid", "error": error})
         return self._base("invalid_action", terminal=False, error=error)
+
+    def _apply_budget_exhaustion_event(self) -> dict[str, Any]:
+        self._budget_exhaustion_logged = True
+        self.terminal = True
+        outcome = _outcome("budget_exhausted", selected_candidate_ids=self._selected_candidate_ids)
+        self.result = outcome
+        return self._base("budget_exhausted", terminal=True, outcome=outcome.as_dict())
 
     def _action_identity(self, action: Mapping[str, Any]) -> str:
         return _canonical_json(action)
@@ -945,17 +1136,28 @@ class DocumentEvidenceSession:
         self._selected_candidate_ids.add(candidate_id)
         return self._base("candidate_selected", terminal=False, candidate=feature)
 
-    def _verify_action(self, action: Mapping[str, Any], *, missing_action: bool) -> dict[str, Any]:
-        expected = {"kind", "packet"} | ({"field_id"} if missing_action else set())
+    def _verify_action(self, action: Mapping[str, Any], *, mode: str | None = None) -> dict[str, Any]:
+        expected = {"kind", "packet"} | ({"field_id"} if mode in {"missing", "conflict"} else set())
         if set(action) != expected:
             return self._base("invalid_action", terminal=False, error="completion action shape")
-        if missing_action:
+        if mode in {"missing", "conflict"}:
             field_id = action.get("field_id")
             if not isinstance(field_id, str) or field_id not in {field.field_id for field in self.task.requested_fields}:
                 return self._base("invalid_action", terminal=False, error="unknown missing field")
             packet = action.get("packet")
-            if not isinstance(packet, dict) or field_id not in packet.get("missing_fields", []):
+            if not isinstance(packet, dict):
+                return self._base("incomplete_packet", terminal=False, error="completion packet is not an object")
+            missing_fields = packet.get("missing_fields", [])
+            if mode == "missing" and (
+                not isinstance(missing_fields, list) or field_id not in missing_fields
+            ):
                 return self._base("incomplete_packet", terminal=False, error="reported field is not missing")
+            if mode == "conflict" and field_id not in {
+                conflict.get("field_id")
+                for conflict in packet.get("conflicts", [])
+                if isinstance(conflict, dict)
+            }:
+                return self._base("incomplete_packet", terminal=False, error="reported field is not conflicted")
         else:
             packet = action.get("packet")
         outcome = self._verifier.verify(
@@ -964,7 +1166,13 @@ class DocumentEvidenceSession:
             explored_sections=self._explored_sections,
         )
         self.result = outcome
-        terminal = outcome.status in {"verified_complete", "verified_missing_facts", "source_changed"}
+        terminal = outcome.status in {
+            "verified_complete",
+            "verified_missing_facts",
+            "verified_conflict",
+            "verification_failed",
+            "source_changed",
+        }
         self.terminal = terminal
         return self._base(outcome.status, terminal=terminal, outcome=outcome.as_dict())
 
@@ -974,10 +1182,9 @@ class DocumentEvidenceSession:
         if self.terminal:
             return self._base("already_terminal", terminal=True)
         if self.action_count >= self.task.action_budget:
-            self.terminal = True
-            outcome = _outcome("budget_exhausted", selected_candidate_ids=self._selected_candidate_ids)
-            self.result = outcome
-            return self._base("budget_exhausted", terminal=True, outcome=outcome.as_dict())
+            if not self._budget_exhaustion_logged:
+                self.action_log.append({"kind": "__budget_exhausted__"})
+            return self._apply_budget_exhaustion_event()
         self.action_count += 1
         if not isinstance(action, dict):
             return self._record_invalid("action must be an object")
@@ -994,15 +1201,21 @@ class DocumentEvidenceSession:
         if kind == "select_candidate":
             return self._select(action)
         if kind == "finish":
-            return self._verify_action(action, missing_action=False)
+            return self._verify_action(action)
         if kind == "report_missing":
-            return self._verify_action(action, missing_action=True)
+            return self._verify_action(action, mode="missing")
+        if kind == "report_conflict":
+            return self._verify_action(action, mode="conflict")
         return self._base("invalid_action", terminal=False, error=f"unknown action kind: {kind}")
 
     def snapshot(self) -> dict[str, Any]:
         snapshot = {
             "schema": SNAPSHOT_SCHEMA,
             "task_id": self.task.task_id,
+            "request_fingerprint": self.task.request_fingerprint,
+            "document_scope": list(self.task.document_handles),
+            "bundle_id": self.store.bundle_id,
+            "pinned_source_hashes": deepcopy(self._pinned_source_hashes),
             "seed": self.seed,
             "action_count": self.action_count,
             "action_budget": self.task.action_budget,
@@ -1010,6 +1223,7 @@ class DocumentEvidenceSession:
             "explored_sections": [list(key) for key in sorted(self._explored_sections)],
             "observed_candidate_ids": list(self.evidence.candidate_ids),
             "selected_candidate_ids": sorted(self._selected_candidate_ids),
+            "budget_exhausted": self._budget_exhaustion_logged,
             "terminal": self.terminal,
             "result": None if self.result is None else self.result.as_dict(),
         }
@@ -1021,10 +1235,23 @@ class DocumentEvidenceSession:
         _assert_json_tree(snapshot)
         if not isinstance(snapshot, dict) or snapshot.get("schema") != SNAPSHOT_SCHEMA:
             raise ProtocolViolation("unsupported session snapshot")
-        if snapshot.get("task_id") != task.task_id or snapshot.get("action_budget") != task.action_budget:
+        if (
+            snapshot.get("task_id") != task.task_id
+            or snapshot.get("request_fingerprint") != task.request_fingerprint
+            or snapshot.get("document_scope") != list(task.document_handles)
+            or snapshot.get("action_budget") != task.action_budget
+        ):
             raise ProtocolViolation("snapshot task mismatch")
         if snapshot.get("seed") != task.seed:
             raise ProtocolViolation("snapshot seed mismatch")
+        if snapshot.get("bundle_id") != store.bundle_id:
+            raise ProtocolViolation("snapshot bundle mismatch")
+        expected_hashes = {
+            handle: store.manifest_entry(handle)["sha256"]
+            for handle in task.document_handles
+        }
+        if snapshot.get("pinned_source_hashes") != expected_hashes:
+            raise ProtocolViolation("snapshot source pin mismatch")
         store.verify_integrity(task.document_handles)
         session = cls(store, task, seed=task.seed)
         session.start()
@@ -1032,11 +1259,19 @@ class DocumentEvidenceSession:
         if not isinstance(action_log, list):
             raise ProtocolViolation("snapshot action_log must be a list")
         for action in action_log:
-            if not isinstance(action, dict) or action.get("kind") == "invalid":
-                raise ProtocolViolation("snapshot contains non-replayable action")
-            session.dispatch(action)
+            if not isinstance(action, dict):
+                raise ProtocolViolation("snapshot action log entry must be an object")
+            if action.get("kind") == "__budget_exhausted__":
+                if session.action_count < task.action_budget:
+                    raise ProtocolViolation("budget event appeared before action budget was consumed")
+                session.action_log.append(deepcopy(action))
+                session._apply_budget_exhaustion_event()
+            else:
+                session.dispatch(action)
         if session.action_count != snapshot.get("action_count"):
             raise ProtocolViolation("snapshot action count mismatch")
+        if session._budget_exhaustion_logged != snapshot.get("budget_exhausted"):
+            raise ProtocolViolation("snapshot budget transition mismatch")
         if session.snapshot() != snapshot:
             raise ProtocolViolation("snapshot replay mismatch")
         return session
@@ -1069,22 +1304,49 @@ class ReadAllBaseline:
 
 
 def _packet_from_candidates(requested: list[dict[str, Any]], candidates: list[dict[str, Any]]) -> tuple[dict[str, Any], list[str]]:
-    by_type: dict[str, list[dict[str, Any]]] = {}
+    """Build a packet using exact source identity and current facts only."""
+
+    by_field: dict[str, list[dict[str, Any]]] = {}
     for candidate in candidates:
-        by_type.setdefault(candidate["value_type"], []).append(candidate)
+        by_field.setdefault(candidate["field_id"], []).append(candidate)
     selected: list[str] = []
     entries: list[dict[str, Any]] = []
     missing: list[str] = []
+    conflicts: list[dict[str, Any]] = []
     for field in requested:
-        options = by_type.get(field["value_type"], [])
+        options = [
+            candidate
+            for candidate in by_field.get(field["field_id"], [])
+            if candidate["value_type"] == field["value_type"]
+            and candidate["revision_state"] == "current"
+        ]
         if not options:
             missing.append(field["field_id"])
             continue
-        chosen = sorted(
-            options,
-            key=lambda candidate: (int(candidate["revision"]), candidate["published_at"], candidate["candidate_id"]),
-            reverse=True,
-        )[0]
+        rank = max((int(candidate["revision"]), candidate["published_at"]) for candidate in options)
+        winners = sorted(
+            [candidate for candidate in options if (int(candidate["revision"]), candidate["published_at"]) == rank],
+            key=lambda candidate: candidate["candidate_id"],
+        )
+        if len({_canonical_json(candidate["value"]) for candidate in winners}) > 1:
+            selected.extend(candidate["candidate_id"] for candidate in winners)
+            conflicts.append({
+                "field_id": field["field_id"],
+                "candidate_ids": [candidate["candidate_id"] for candidate in winners],
+                "value_type": field["value_type"],
+                "values": [deepcopy(candidate["value"]) for candidate in winners],
+                "citations": [
+                    {
+                        "document_handle": candidate["document_handle"],
+                        "section_id": candidate["section_id"],
+                        "source_sha256": candidate["source_sha256"],
+                        "fact_digest": candidate["fact_digest"],
+                    }
+                    for candidate in winners
+                ],
+            })
+            continue
+        chosen = winners[0]
         selected.append(chosen["candidate_id"])
         entries.append({
             "field_id": field["field_id"],
@@ -1098,7 +1360,7 @@ def _packet_from_candidates(requested: list[dict[str, Any]], candidates: list[di
                 "fact_digest": chosen["fact_digest"],
             },
         })
-    return {"entries": entries, "missing_fields": missing}, selected
+    return {"entries": entries, "missing_fields": missing, "conflicts": conflicts}, selected
 
 
 def _run_policy(session: DocumentEvidenceSession, policy: Any, *, read_all: bool) -> dict[str, Any]:
@@ -1113,18 +1375,28 @@ def _run_policy(session: DocumentEvidenceSession, policy: Any, *, read_all: bool
     if read_all:
         inspection_queue = [(handle, section_id) for handle, section_id, _ in all_sections]
     else:
-        needed_kinds = {ObservationLimitedExpert.PREFERRED_KINDS[field["value_type"]] for field in requested}
-        inspection_queue = [
+        needed_kinds = {ObservationLimitedExpert.PREFERRED_KINDS.get(field["value_type"]) for field in requested}
+        preferred = [
             (handle, section_id)
             for handle, section_id, kind in all_sections
             if kind in needed_kinds
         ]
+        remainder = [
+            (handle, section_id)
+            for handle, section_id, kind in all_sections
+            if kind not in needed_kinds
+        ]
+        # The expert is still observation-limited: it only chooses the order
+        # from the request/catalog and then inspects the complete bounded
+        # scope before making a semantic completion claim.  This protects
+        # unusual section placement without reading the store privately.
+        inspection_queue = preferred + remainder
     transcripts = [initial]
     candidates: list[dict[str, Any]] = []
     explored: set[tuple[str, str]] = set()
     selected: set[str] = set()
     queue = list(inspection_queue)
-    full_queue_added = read_all
+    full_queue_added = True
     while True:
         if queue:
             handle, section_id = queue.pop(0)
@@ -1137,14 +1409,6 @@ def _run_policy(session: DocumentEvidenceSession, policy: Any, *, read_all: bool
                 break
             continue
         packet, selected_ids = _packet_from_candidates(requested, candidates)
-        if not full_queue_added and packet["missing_fields"]:
-            queue = [
-                (handle, section_id)
-                for handle, section_id, _ in all_sections
-                if (handle, section_id) not in explored
-            ]
-            full_queue_added = True
-            continue
         for candidate_id in selected_ids:
             if candidate_id not in selected:
                 response = session.dispatch({"kind": "select_candidate", "candidate_id": candidate_id})
@@ -1153,7 +1417,13 @@ def _run_policy(session: DocumentEvidenceSession, policy: Any, *, read_all: bool
                     selected.add(candidate_id)
                 if response.get("terminal"):
                     return {"initial": initial, "transcript": transcripts, "outcome": response.get("outcome")}
-        if packet["missing_fields"]:
+        if packet["conflicts"]:
+            response = session.dispatch({
+                "kind": "report_conflict",
+                "field_id": packet["conflicts"][0]["field_id"],
+                "packet": packet,
+            })
+        elif packet["missing_fields"]:
             response = session.dispatch({
                 "kind": "report_missing",
                 "field_id": packet["missing_fields"][0],
@@ -1203,6 +1473,7 @@ def make_task(
 __all__ = [
     "CANDIDATE_SCHEMA",
     "DEFAULT_ACTION_BUDGET",
+    "DOCUMENT_ACTIONS",
     "DocumentBundleStore",
     "DocumentEvidenceError",
     "DocumentEvidenceSession",
