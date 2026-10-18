@@ -109,14 +109,20 @@ measurements, results, and all planning cycles.
 
 Every run is a new seeded run; it never resumes a previous world. Forecast
 residuals compare public predicted and realized observations explicitly, even
-for cancellation or partial uncertainty. Because the nominal predictor resets
+for complete action intervals. Reused full-episode forecasts retain the
+predicted start observation for each suffix action, so their supplied-work and
+residual increments are measured from predicted start to predicted end; actual
+increments use the actual cycle start and end. Because the nominal predictor resets
 initial energy, signed work, and dissipation for each forecast from the public
 state, `predicted.residual` is a forecast increment and is compared with
 `realized.residual - prior.residual`; the analogous supplied-work increment is
-also serialized. These residuals are diagnostic measurements only: they are
-not control feedback, action-score inputs, or adaptation signals. Execution
-exceptions are not counted as prediction errors. The separation threshold is
-only `1e-8`, a tiny development threshold, and does not support a meaningful
+also serialized. Partial, cancelled, uncertain, or failed action intervals
+are marked unavailable with a reason unless an exactly matching prefix
+prediction exists; this implementation stores no such prefix, so it never
+compares a full two-tick forecast with a shorter actual interval. These
+residuals are diagnostic measurements only: they are not control feedback,
+action-score inputs, or adaptation signals. The separation threshold is only
+`1e-8`, a tiny development threshold, and does not support a meaningful
 spatial-navigation claim.
 
 ## Reproduction

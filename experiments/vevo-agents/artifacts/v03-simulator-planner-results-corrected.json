@@ -246,6 +246,52 @@
                   "total_energy": 0.0
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 0,
+                "fixture_id": "planner-reachable-seed-0-port-0",
+                "local_oscillator_energies": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_displacements": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "residual": 0.0,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0,
+                "tick": 1,
+                "time": 0.035,
+                "total_energy": 0.0
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -258,6 +304,7 @@
             "forecast_residual": {
               "actual_tick": 3,
               "actual_time": 0.10500000000000001,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
               "predicted_residual_delta": 0.0,
@@ -269,7 +316,8 @@
               "realized_supplied_work_delta": 0.0,
               "residual_increment_abs_error": 0.0,
               "supplied_work_increment_abs_error": 0.0,
-              "total_energy_abs_error": 0.0
+              "total_energy_abs_error": 0.0,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 0,
@@ -509,6 +557,52 @@
                   "total_energy": 0.0
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 1,
+                "fixture_id": "planner-reachable-seed-0-port-0",
+                "local_oscillator_energies": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_displacements": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "residual": 0.0,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0,
+                "tick": 3,
+                "time": 0.10500000000000001,
+                "total_energy": 0.0
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -521,6 +615,7 @@
             "forecast_residual": {
               "actual_tick": 5,
               "actual_time": 0.17500000000000002,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 3.1270570742298615e-12,
               "predicted_residual_delta": 0.0,
@@ -532,7 +627,8 @@
               "realized_supplied_work_delta": 3.605421118459892e-05,
               "residual_increment_abs_error": 9.901963286359718e-06,
               "supplied_work_increment_abs_error": 3.605421118459892e-05,
-              "total_energy_abs_error": 2.6039623117610003e-05
+              "total_energy_abs_error": 2.6039623117610003e-05,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 1,
@@ -772,6 +868,52 @@
                   "total_energy": 2.6855819867423375e-05
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 2,
+                "fixture_id": "planner-reachable-seed-0-port-0",
+                "local_oscillator_energies": [
+                  0.0,
+                  3.3169576908191074e-12,
+                  2.595776439980941e-05,
+                  4.3928912498417845e-12
+                ],
+                "neighbor_amplitude_means": [
+                  8.913712500000004e-08,
+                  0.0001802710559229946,
+                  9.453937500000005e-08,
+                  0.0003605421118459892
+                ],
+                "node_displacements": [
+                  0.0,
+                  -2.07467376611703e-12,
+                  -2.5157653738006047e-13,
+                  2.326139281194628e-12
+                ],
+                "node_velocities": [
+                  0.0,
+                  -5.927618812500004e-11,
+                  -7.184992500000002e-12,
+                  6.646118062500003e-11
+                ],
+                "oscillator_amplitudes": [
+                  0.0,
+                  8.913712500000004e-08,
+                  0.0003605421118459892,
+                  9.994162500000005e-08
+                ],
+                "oscillator_velocities": [
+                  0.0,
+                  2.546775000000001e-06,
+                  0.00680120319559969,
+                  2.8554750000000012e-06
+                ],
+                "residual": -9.901963286359718e-06,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 3.605421118459892e-05,
+                "tick": 5,
+                "time": 0.17500000000000002,
+                "total_energy": 2.6039623117610003e-05
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -784,6 +926,7 @@
             "forecast_residual": {
               "actual_tick": 7,
               "actual_time": 0.24500000000000002,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 4.322743131364442e-13,
               "predicted_residual_delta": 1.212502911585417e-06,
@@ -795,7 +938,8 @@
               "realized_supplied_work_delta": 0.0,
               "residual_increment_abs_error": 1.585656657154556e-08,
               "supplied_work_increment_abs_error": 0.0,
-              "total_energy_abs_error": 2.834591387991211e-07
+              "total_energy_abs_error": 2.834591387991211e-07,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 2,
@@ -1035,6 +1179,52 @@
                   "total_energy": 2.5080096555259733e-05
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 3,
+                "fixture_id": "planner-reachable-seed-0-port-0",
+                "local_oscillator_energies": [
+                  9.369027798977334e-17,
+                  2.4820881375787164e-10,
+                  2.677219296484457e-05,
+                  3.2773508606900797e-10
+                ],
+                "neighbor_amplitude_means": [
+                  1.196862981768378e-06,
+                  0.000381993680729325,
+                  1.250984616761682e-06,
+                  0.0007639868051324197
+                ],
+                "node_displacements": [
+                  -3.035919832932052e-14,
+                  -8.824463382239855e-11,
+                  -1.0678125050844756e-11,
+                  9.895284591721065e-11
+                ],
+                "node_velocities": [
+                  -7.988920651289729e-13,
+                  -1.889683569768469e-09,
+                  -2.2857651561315966e-10,
+                  2.1190589774467572e-09
+                ],
+                "oscillator_amplitudes": [
+                  5.563262301998158e-10,
+                  1.196862981768378e-06,
+                  0.0007639868051324197,
+                  1.3051062517549858e-06
+                ],
+                "oscillator_velocities": [
+                  1.3592623209814348e-08,
+                  2.1673977590086058e-05,
+                  0.005304145294617017,
+                  2.34027348202203e-05
+                ],
+                "residual": -8.673603808202756e-06,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 3.605421118459892e-05,
+                "tick": 7,
+                "time": 0.24500000000000002,
+                "total_energy": 2.7139279006222496e-05
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -1047,6 +1237,7 @@
             "forecast_residual": {
               "actual_tick": 9,
               "actual_time": 0.31500000000000006,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 1.4332730585105468e-12,
               "predicted_residual_delta": -8.250538126901148e-07,
@@ -1058,7 +1249,8 @@
               "realized_supplied_work_delta": 0.0,
               "residual_increment_abs_error": 2.89709037738187e-07,
               "supplied_work_increment_abs_error": 0.0,
-              "total_energy_abs_error": 8.984236470636618e-07
+              "total_energy_abs_error": 8.984236470636618e-07,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 3,
@@ -1435,6 +1627,52 @@
                   "total_energy": 6.360325156216276e-05
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 0,
+                "fixture_id": "planner-reachable-seed-0-port-0",
+                "local_oscillator_energies": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_displacements": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "residual": 0.0,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0,
+                "tick": 1,
+                "time": 0.035,
+                "total_energy": 0.0
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -1447,6 +1685,7 @@
             "forecast_residual": {
               "actual_tick": 3,
               "actual_time": 0.10500000000000001,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
               "predicted_residual_delta": -2.971062781763816e-05,
@@ -1458,7 +1697,8 @@
               "realized_supplied_work_delta": 9.366593535569068e-05,
               "residual_increment_abs_error": 1.84448873525545e-07,
               "supplied_work_increment_abs_error": 5.380508640717577e-08,
-              "total_energy_abs_error": 1.310551734594453e-07
+              "total_energy_abs_error": 1.310551734594453e-07,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 0,
@@ -1698,6 +1938,52 @@
                   "total_energy": 0.00025333419713557763
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 1,
+                "fixture_id": "planner-reachable-seed-0-port-0",
+                "local_oscillator_energies": [
+                  6.33458008113258e-05,
+                  1.3107495912179348e-11,
+                  0.0,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  1.771938000000001e-07,
+                  0.00029270604798653337,
+                  8.859690000000004e-08,
+                  0.0
+                ],
+                "node_displacements": [
+                  -6.5986971120000046e-12,
+                  6.5987215691620804e-12,
+                  0.0,
+                  0.0
+                ],
+                "node_velocities": [
+                  -1.8853420320000012e-10,
+                  1.8853420320000012e-10,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  0.0005854120959730667,
+                  1.771938000000001e-07,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  0.01112605988494476,
+                  5.062680000000002e-06,
+                  0.0,
+                  0.0
+                ],
+                "residual": -2.9895076691163705e-05,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 9.366593535569068e-05,
+                "tick": 3,
+                "time": 0.10500000000000001,
+                "total_energy": 6.347219638870332e-05
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -1710,6 +1996,7 @@
             "forecast_residual": {
               "actual_tick": 5,
               "actual_time": 0.17500000000000002,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 2.8903302576762615e-12,
               "predicted_residual_delta": -2.237790308679843e-05,
@@ -1721,7 +2008,8 @@
               "realized_supplied_work_delta": 0.0002501160168777641,
               "residual_increment_abs_error": 1.0952820594751207e-05,
               "supplied_work_increment_abs_error": 3.669270379647109e-05,
-              "total_energy_abs_error": 2.5378322016027775e-05
+              "total_energy_abs_error": 2.5378322016027775e-05,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 1,
@@ -1961,6 +2249,52 @@
                   "total_energy": 0.0005909825136784599
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 2,
+                "fixture_id": "planner-reachable-seed-0-port-0",
+                "local_oscillator_energies": [
+                  0.00025131074364295844,
+                  1.4196513305280786e-09,
+                  2.595792628555921e-05,
+                  4.392900497156619e-12
+                ],
+                "neighbor_amplitude_means": [
+                  2.6988789739559516e-06,
+                  0.0011419204135985376,
+                  1.3994103520738138e-06,
+                  0.00036054300196795505
+                ],
+                "node_displacements": [
+                  -3.693326079027166e-10,
+                  3.672220305617202e-10,
+                  -2.1582735598713043e-13,
+                  2.326139281194628e-12
+                ],
+                "node_velocities": [
+                  -8.495071641716032e-09,
+                  8.434918225642013e-09,
+                  -6.308037303049929e-12,
+                  6.646145337706913e-11
+                ],
+                "oscillator_amplitudes": [
+                  0.0019232978252291203,
+                  2.6988789739559516e-06,
+                  0.00036054300196795505,
+                  9.994173019167592e-08
+                ],
+                "oscillator_velocities": [
+                  0.021709306158555323,
+                  5.1997685702636975e-05,
+                  0.006801224943796756,
+                  2.8554780054764545e-06
+                ],
+                "residual": -6.322580037271334e-05,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0003437819522334548,
+                "tick": 5,
+                "time": 0.17500000000000002,
+                "total_energy": 0.0002787125191516054
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -1973,6 +2307,7 @@
             "forecast_residual": {
               "actual_tick": 7,
               "actual_time": 0.24500000000000002,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 4.766562138962289e-12,
               "predicted_residual_delta": -9.25490414891667e-06,
@@ -1984,7 +2319,8 @@
               "realized_supplied_work_delta": 0.000324375343818757,
               "residual_increment_abs_error": 2.3828266545544777e-06,
               "supplied_work_increment_abs_error": 1.8320848389813318e-06,
-              "total_energy_abs_error": 2.9111891134492654e-06
+              "total_energy_abs_error": 2.9111891134492654e-06,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 2,
@@ -2224,6 +2560,52 @@
                   "total_energy": 0.0010114198908529786
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 3,
+                "fixture_id": "planner-reachable-seed-0-port-0",
+                "local_oscillator_energies": [
+                  0.0005551956880228159,
+                  1.9305628412574934e-08,
+                  2.6773563785572754e-05,
+                  3.2773787026877654e-10
+                ],
+                "neighbor_amplitude_means": [
+                  1.3040057041971987e-05,
+                  0.0023573204083795385,
+                  7.172583912999225e-06,
+                  0.0007639970926627252
+                ],
+                "node_displacements": [
+                  -3.6193839373985932e-09,
+                  3.530920222871714e-09,
+                  -1.0490497359683104e-11,
+                  9.895373409563035e-11
+                ],
+                "node_velocities": [
+                  -6.629521970173915e-08,
+                  6.440194859362028e-08,
+                  -2.258123303141902e-10,
+                  2.1190834384330574e-09
+                ],
+                "oscillator_amplitudes": [
+                  0.003950643724096352,
+                  1.3040057041971987e-05,
+                  0.0007639970926627252,
+                  1.305110784026464e-06
+                ],
+                "oscillator_velocities": [
+                  0.03127635713064214,
+                  0.00018827376341977654,
+                  0.005304339224692779,
+                  2.340283779520511e-05
+                ],
+                "residual": -7.486353117618449e-05,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0006681572960522118,
+                "tick": 7,
+                "time": 0.24500000000000002,
+                "total_energy": 0.0005880713245650106
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -2236,6 +2618,7 @@
             "forecast_residual": {
               "actual_tick": 9,
               "actual_time": 0.31500000000000006,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 1.7587044957336532e-11,
               "predicted_residual_delta": 2.8664877084060374e-06,
@@ -2247,7 +2630,8 @@
               "realized_supplied_work_delta": 0.00041969226187669323,
               "residual_increment_abs_error": 4.101030049231914e-06,
               "supplied_work_increment_abs_error": 3.578872743588077e-06,
-              "total_energy_abs_error": 1.0357839060616894e-05
+              "total_energy_abs_error": 1.0357839060616894e-05,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 3,
@@ -2846,6 +3230,52 @@
                   "total_energy": 0.0009716468695397807
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 0,
+                "fixture_id": "planner-reachable-seed-0-port-0",
+                "local_oscillator_energies": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_displacements": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "residual": 0.0,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0,
+                "tick": 1,
+                "time": 0.035,
+                "total_energy": 0.0
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 158,
               "rejection_counts": {
@@ -2860,6 +3290,7 @@
             "forecast_residual": {
               "actual_tick": 3,
               "actual_time": 0.10500000000000001,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
               "predicted_residual_delta": -2.971062781763816e-05,
@@ -2871,7 +3302,8 @@
               "realized_supplied_work_delta": 9.366593535569068e-05,
               "residual_increment_abs_error": 1.84448873525545e-07,
               "supplied_work_increment_abs_error": 5.380508640717577e-08,
-              "total_energy_abs_error": 1.310551734594453e-07
+              "total_energy_abs_error": 1.310551734594453e-07,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 0,
@@ -3259,6 +3691,52 @@
                   "total_energy": 0.0009716468695397807
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 1,
+                "fixture_id": "planner-reachable-seed-0-port-0",
+                "local_oscillator_energies": [
+                  6.347700112780694e-05,
+                  1.3163981993496607e-11,
+                  0.0,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  1.771938000000001e-07,
+                  0.0002925379070915109,
+                  8.859690000000004e-08,
+                  0.0
+                ],
+                "node_displacements": [
+                  -6.5986971120000046e-12,
+                  6.5987215691620804e-12,
+                  0.0,
+                  0.0
+                ],
+                "node_velocities": [
+                  -1.8853420320000012e-10,
+                  1.8853420320000012e-10,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  0.0005850758141830218,
+                  1.771938000000001e-07,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  0.011116451833800622,
+                  5.062680000000002e-06,
+                  0.0,
+                  0.0
+                ],
+                "residual": -2.971062781763816e-05,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 9.36121302692835e-05,
+                "tick": 3,
+                "time": 0.10500000000000001,
+                "total_energy": 6.360325156216276e-05
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -3271,18 +3749,20 @@
             "forecast_residual": {
               "actual_tick": 5,
               "actual_time": 0.17500000000000002,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 2.771000630812423e-12,
               "predicted_residual_delta": -2.2384820804700003e-05,
-              "predicted_supplied_work_delta": 0.00021326499316728237,
+              "predicted_supplied_work_delta": 0.00021331879825368954,
               "predicted_tick": 5,
               "predicted_time": 0.17500000000000002,
               "prediction_source": "reused_forecast",
               "realized_residual_delta": -3.333072368154964e-05,
               "realized_supplied_work_delta": 0.0002501160168777641,
               "residual_increment_abs_error": 1.0945902876849634e-05,
-              "supplied_work_increment_abs_error": 3.685102371048173e-05,
-              "total_energy_abs_error": 2.559732949892297e-05
+              "supplied_work_increment_abs_error": 3.679721862407455e-05,
+              "total_energy_abs_error": 2.559732949892297e-05,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 1,
@@ -3596,6 +4076,52 @@
                   "total_energy": 0.0009716468695397807
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 2,
+                "fixture_id": "planner-reachable-seed-0-port-0",
+                "local_oscillator_energies": [
+                  0.000251759680502916,
+                  1.2888045016879943e-09,
+                  2.5203408783467767e-16,
+                  4.830969202534203e-24
+                ],
+                "neighbor_amplitude_means": [
+                  2.6022194583625444e-06,
+                  0.0009591595966208868,
+                  1.30110978177711e-06,
+                  8.89973192426376e-10
+                ],
+                "node_displacements": [
+                  -3.685308078355366e-10,
+                  3.6846525830469545e-10,
+                  6.52811138479592e-14,
+                  0.0
+                ],
+                "node_velocities": [
+                  -8.474094221794636e-09,
+                  8.472367972427957e-09,
+                  1.7261165195386799e-12,
+                  1.3284714030774628e-16
+                ],
+                "oscillator_amplitudes": [
+                  0.0019183183032685813,
+                  2.6022194583625444e-06,
+                  8.89973192426376e-10,
+                  1.0519167569309858e-13
+                ],
+                "oscillator_velocities": [
+                  0.021614804151927968,
+                  4.926698611125194e-05,
+                  2.1743946395887217e-08,
+                  3.005476448374245e-12
+                ],
+                "residual": -2.2384820804700003e-05,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.00030693092852297305,
+                "tick": 5,
+                "time": 0.17500000000000002,
+                "total_energy": 0.00025311518965268244
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -3608,18 +4134,20 @@
             "forecast_residual": {
               "actual_tick": 7,
               "actual_time": 0.24500000000000002,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 1.218132466378016e-10,
               "predicted_residual_delta": -1.0558017308706614e-05,
-              "predicted_supplied_work_delta": 0.0002846745409722869,
+              "predicted_supplied_work_delta": 0.0003215255646827686,
               "predicted_tick": 7,
               "predicted_time": 0.24500000000000002,
               "prediction_source": "reused_forecast",
               "realized_residual_delta": -1.1637730803471148e-05,
               "realized_supplied_work_delta": 0.000324375343818757,
               "residual_increment_abs_error": 1.0797134947645345e-06,
-              "supplied_work_increment_abs_error": 3.970080284647012e-05,
-              "total_energy_abs_error": 2.7180984363196444e-05
+              "supplied_work_increment_abs_error": 2.849779135988392e-06,
+              "total_energy_abs_error": 2.7180984363196444e-05,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 2,
@@ -3859,6 +4387,52 @@
                   "total_energy": 0.0009716468695397807
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 3,
+                "fixture_id": "planner-reachable-seed-0-port-0",
+                "local_oscillator_energies": [
+                  0.0005552162426899284,
+                  1.5136301565534177e-08,
+                  2.0861063002714814e-14,
+                  5.907999153066563e-21
+                ],
+                "neighbor_amplitude_means": [
+                  1.1755235586396825e-05,
+                  0.0019639316816804234,
+                  5.877620063124126e-06,
+                  1.0280824962061581e-08
+                ],
+                "node_displacements": [
+                  -3.599875802259184e-09,
+                  3.5981235768645092e-09,
+                  1.7510437544387969e-12,
+                  4.440892098500626e-16
+                ],
+                "node_velocities": [
+                  -6.587365128817725e-08,
+                  6.583530133680742e-08,
+                  3.833691064556695e-11,
+                  1.3040724263254065e-14
+                ],
+                "oscillator_amplitudes": [
+                  0.003927853082535885,
+                  1.1755235586396825e-05,
+                  1.0280824962061581e-08,
+                  4.53985142731335e-12
+                ],
+                "oscillator_velocities": [
+                  0.03095422320444701,
+                  0.0001649362610950566,
+                  1.9377677974792564e-07,
+                  1.0317135149373343e-10
+                ],
+                "residual": -1.0558017308706614e-05,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0006284564932057417,
+                "tick": 7,
+                "time": 0.24500000000000002,
+                "total_energy": 0.0005608903402018142
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -3871,18 +4445,20 @@
             "forecast_residual": {
               "actual_tick": 9,
               "actual_time": 0.31500000000000006,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 6.60122660671114e-10,
               "predicted_residual_delta": 3.3165299387081266e-06,
-              "predicted_supplied_work_delta": 0.0003729791871973449,
+              "predicted_supplied_work_delta": 0.00041267999004381505,
               "predicted_tick": 9,
               "predicted_time": 0.31500000000000006,
               "prediction_source": "reused_forecast",
               "realized_residual_delta": -1.2345423408258762e-06,
               "realized_supplied_work_delta": 0.00041969226187669323,
               "residual_increment_abs_error": 4.551072279534003e-06,
-              "supplied_work_increment_abs_error": 4.67130746793483e-05,
-              "total_energy_abs_error": 2.941518225258095e-05
+              "supplied_work_increment_abs_error": 7.012271832878181e-06,
+              "total_energy_abs_error": 2.941518225258095e-05,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 3,
@@ -4333,6 +4909,52 @@
                   "total_energy": 0.00025311518965268244
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 0,
+                "fixture_id": "planner-reachable-seed-0-port-0",
+                "local_oscillator_energies": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_displacements": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "residual": 0.0,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0,
+                "tick": 1,
+                "time": 0.035,
+                "total_energy": 0.0
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 2,
               "rejection_counts": {
@@ -4347,6 +4969,7 @@
             "forecast_residual": {
               "actual_tick": 3,
               "actual_time": 0.10500000000000001,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
               "predicted_residual_delta": -2.971062781763816e-05,
@@ -4358,7 +4981,8 @@
               "realized_supplied_work_delta": 9.366593535569068e-05,
               "residual_increment_abs_error": 1.84448873525545e-07,
               "supplied_work_increment_abs_error": 5.380508640717577e-08,
-              "total_energy_abs_error": 1.310551734594453e-07
+              "total_energy_abs_error": 1.310551734594453e-07,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 0,
@@ -4672,6 +5296,52 @@
                   "total_energy": 0.0005612139572519835
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 1,
+                "fixture_id": "planner-reachable-seed-0-port-0",
+                "local_oscillator_energies": [
+                  6.33458008113258e-05,
+                  1.3107495912179348e-11,
+                  0.0,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  1.771938000000001e-07,
+                  0.00029270604798653337,
+                  8.859690000000004e-08,
+                  0.0
+                ],
+                "node_displacements": [
+                  -6.5986971120000046e-12,
+                  6.5987215691620804e-12,
+                  0.0,
+                  0.0
+                ],
+                "node_velocities": [
+                  -1.8853420320000012e-10,
+                  1.8853420320000012e-10,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  0.0005854120959730667,
+                  1.771938000000001e-07,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  0.01112605988494476,
+                  5.062680000000002e-06,
+                  0.0,
+                  0.0
+                ],
+                "residual": -2.9895076691163705e-05,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 9.366593535569068e-05,
+                "tick": 3,
+                "time": 0.10500000000000001,
+                "total_energy": 6.347219638870332e-05
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 2,
               "rejection_counts": {
@@ -4686,6 +5356,7 @@
             "forecast_residual": {
               "actual_tick": 5,
               "actual_time": 0.17500000000000002,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 2.8903302576762615e-12,
               "predicted_residual_delta": -2.237790308679843e-05,
@@ -4697,7 +5368,8 @@
               "realized_supplied_work_delta": 0.0002501160168777641,
               "residual_increment_abs_error": 1.0952820594751207e-05,
               "supplied_work_increment_abs_error": 3.669270379647109e-05,
-              "total_energy_abs_error": 2.5378322016027775e-05
+              "total_energy_abs_error": 2.5378322016027775e-05,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 1,
@@ -5011,6 +5683,52 @@
                   "total_energy": 0.0010018782423607923
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 2,
+                "fixture_id": "planner-reachable-seed-0-port-0",
+                "local_oscillator_energies": [
+                  0.00025131074364295844,
+                  1.4196513305280786e-09,
+                  2.595792628555921e-05,
+                  4.392900497156619e-12
+                ],
+                "neighbor_amplitude_means": [
+                  2.6988789739559516e-06,
+                  0.0011419204135985376,
+                  1.3994103520738138e-06,
+                  0.00036054300196795505
+                ],
+                "node_displacements": [
+                  -3.693326079027166e-10,
+                  3.672220305617202e-10,
+                  -2.1582735598713043e-13,
+                  2.326139281194628e-12
+                ],
+                "node_velocities": [
+                  -8.495071641716032e-09,
+                  8.434918225642013e-09,
+                  -6.308037303049929e-12,
+                  6.646145337706913e-11
+                ],
+                "oscillator_amplitudes": [
+                  0.0019232978252291203,
+                  2.6988789739559516e-06,
+                  0.00036054300196795505,
+                  9.994173019167592e-08
+                ],
+                "oscillator_velocities": [
+                  0.021709306158555323,
+                  5.1997685702636975e-05,
+                  0.006801224943796756,
+                  2.8554780054764545e-06
+                ],
+                "residual": -6.322580037271334e-05,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0003437819522334548,
+                "tick": 5,
+                "time": 0.17500000000000002,
+                "total_energy": 0.0002787125191516054
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 2,
               "rejection_counts": {
@@ -5025,6 +5743,7 @@
             "forecast_residual": {
               "actual_tick": 7,
               "actual_time": 0.24500000000000002,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 4.766562138962289e-12,
               "predicted_residual_delta": -9.25490414891667e-06,
@@ -5036,7 +5755,8 @@
               "realized_supplied_work_delta": 0.000324375343818757,
               "residual_increment_abs_error": 2.3828266545544777e-06,
               "supplied_work_increment_abs_error": 1.8320848389813318e-06,
-              "total_energy_abs_error": 2.9111891134492654e-06
+              "total_energy_abs_error": 2.9111891134492654e-06,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 2,
@@ -5276,6 +5996,52 @@
                   "total_energy": 0.0010114198908529786
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 3,
+                "fixture_id": "planner-reachable-seed-0-port-0",
+                "local_oscillator_energies": [
+                  0.0005551956880228159,
+                  1.9305628412574934e-08,
+                  2.6773563785572754e-05,
+                  3.2773787026877654e-10
+                ],
+                "neighbor_amplitude_means": [
+                  1.3040057041971987e-05,
+                  0.0023573204083795385,
+                  7.172583912999225e-06,
+                  0.0007639970926627252
+                ],
+                "node_displacements": [
+                  -3.6193839373985932e-09,
+                  3.530920222871714e-09,
+                  -1.0490497359683104e-11,
+                  9.895373409563035e-11
+                ],
+                "node_velocities": [
+                  -6.629521970173915e-08,
+                  6.440194859362028e-08,
+                  -2.258123303141902e-10,
+                  2.1190834384330574e-09
+                ],
+                "oscillator_amplitudes": [
+                  0.003950643724096352,
+                  1.3040057041971987e-05,
+                  0.0007639970926627252,
+                  1.305110784026464e-06
+                ],
+                "oscillator_velocities": [
+                  0.03127635713064214,
+                  0.00018827376341977654,
+                  0.005304339224692779,
+                  2.340283779520511e-05
+                ],
+                "residual": -7.486353117618449e-05,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0006681572960522118,
+                "tick": 7,
+                "time": 0.24500000000000002,
+                "total_energy": 0.0005880713245650106
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -5288,6 +6054,7 @@
             "forecast_residual": {
               "actual_tick": 9,
               "actual_time": 0.31500000000000006,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 1.7587044957336532e-11,
               "predicted_residual_delta": 2.8664877084060374e-06,
@@ -5299,7 +6066,8 @@
               "realized_supplied_work_delta": 0.00041969226187669323,
               "residual_increment_abs_error": 4.101030049231914e-06,
               "supplied_work_increment_abs_error": 3.578872743588077e-06,
-              "total_energy_abs_error": 1.0357839060616894e-05
+              "total_energy_abs_error": 1.0357839060616894e-05,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 3,
@@ -5696,6 +6464,52 @@
                   "total_energy": 0.0
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 0,
+                "fixture_id": "planner-reachable-seed-0-port-0",
+                "local_oscillator_energies": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_displacements": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "residual": 0.0,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0,
+                "tick": 1,
+                "time": 0.035,
+                "total_energy": 0.0
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -5708,6 +6522,7 @@
             "forecast_residual": {
               "actual_tick": 3,
               "actual_time": 0.10500000000000001,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
               "predicted_residual_delta": 0.0,
@@ -5719,7 +6534,8 @@
               "realized_supplied_work_delta": 0.0,
               "residual_increment_abs_error": 0.0,
               "supplied_work_increment_abs_error": 0.0,
-              "total_energy_abs_error": 0.0
+              "total_energy_abs_error": 0.0,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 0,
@@ -5959,6 +6775,52 @@
                   "total_energy": 0.0
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 1,
+                "fixture_id": "planner-reachable-seed-0-port-0",
+                "local_oscillator_energies": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_displacements": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "residual": 0.0,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0,
+                "tick": 3,
+                "time": 0.10500000000000001,
+                "total_energy": 0.0
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -5971,6 +6833,7 @@
             "forecast_residual": {
               "actual_tick": 5,
               "actual_time": 0.17500000000000002,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
               "predicted_residual_delta": 0.0,
@@ -5982,7 +6845,8 @@
               "realized_supplied_work_delta": 0.0,
               "residual_increment_abs_error": 0.0,
               "supplied_work_increment_abs_error": 0.0,
-              "total_energy_abs_error": 0.0
+              "total_energy_abs_error": 0.0,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 1,
@@ -6222,6 +7086,52 @@
                   "total_energy": 0.0
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 2,
+                "fixture_id": "planner-reachable-seed-0-port-0",
+                "local_oscillator_energies": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_displacements": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "residual": 0.0,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0,
+                "tick": 5,
+                "time": 0.17500000000000002,
+                "total_energy": 0.0
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -6234,6 +7144,7 @@
             "forecast_residual": {
               "actual_tick": 7,
               "actual_time": 0.24500000000000002,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
               "predicted_residual_delta": 0.0,
@@ -6245,7 +7156,8 @@
               "realized_supplied_work_delta": 0.0,
               "residual_increment_abs_error": 0.0,
               "supplied_work_increment_abs_error": 0.0,
-              "total_energy_abs_error": 0.0
+              "total_energy_abs_error": 0.0,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 2,
@@ -6485,6 +7397,52 @@
                   "total_energy": 0.0
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 3,
+                "fixture_id": "planner-reachable-seed-0-port-0",
+                "local_oscillator_energies": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_displacements": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "residual": 0.0,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0,
+                "tick": 7,
+                "time": 0.24500000000000002,
+                "total_energy": 0.0
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -6497,6 +7455,7 @@
             "forecast_residual": {
               "actual_tick": 9,
               "actual_time": 0.31500000000000006,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
               "predicted_residual_delta": 0.0,
@@ -6508,7 +7467,8 @@
               "realized_supplied_work_delta": 0.0,
               "residual_increment_abs_error": 0.0,
               "supplied_work_increment_abs_error": 0.0,
-              "total_energy_abs_error": 0.0
+              "total_energy_abs_error": 0.0,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 3,
@@ -6885,6 +7845,52 @@
                   "total_energy": 6.360325156216276e-05
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 0,
+                "fixture_id": "planner-reachable-seed-0-port-0",
+                "local_oscillator_energies": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_displacements": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "residual": 0.0,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0,
+                "tick": 1,
+                "time": 0.035,
+                "total_energy": 0.0
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -6897,6 +7903,7 @@
             "forecast_residual": {
               "actual_tick": 3,
               "actual_time": 0.10500000000000001,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
               "predicted_residual_delta": -2.971062781763816e-05,
@@ -6908,7 +7915,8 @@
               "realized_supplied_work_delta": 9.366593535569068e-05,
               "residual_increment_abs_error": 1.84448873525545e-07,
               "supplied_work_increment_abs_error": 5.380508640717577e-08,
-              "total_energy_abs_error": 1.310551734594453e-07
+              "total_energy_abs_error": 1.310551734594453e-07,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 0,
@@ -7148,6 +8156,52 @@
                   "total_energy": 0.00025333419713557763
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 1,
+                "fixture_id": "planner-reachable-seed-0-port-0",
+                "local_oscillator_energies": [
+                  6.33458008113258e-05,
+                  1.3107495912179348e-11,
+                  0.0,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  1.771938000000001e-07,
+                  0.00029270604798653337,
+                  8.859690000000004e-08,
+                  0.0
+                ],
+                "node_displacements": [
+                  -6.5986971120000046e-12,
+                  6.5987215691620804e-12,
+                  0.0,
+                  0.0
+                ],
+                "node_velocities": [
+                  -1.8853420320000012e-10,
+                  1.8853420320000012e-10,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  0.0005854120959730667,
+                  1.771938000000001e-07,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  0.01112605988494476,
+                  5.062680000000002e-06,
+                  0.0,
+                  0.0
+                ],
+                "residual": -2.9895076691163705e-05,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 9.366593535569068e-05,
+                "tick": 3,
+                "time": 0.10500000000000001,
+                "total_energy": 6.347219638870332e-05
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -7160,6 +8214,7 @@
             "forecast_residual": {
               "actual_tick": 5,
               "actual_time": 0.17500000000000002,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 5.667185748934893e-13,
               "predicted_residual_delta": -2.237790308679843e-05,
@@ -7171,7 +8226,8 @@
               "realized_supplied_work_delta": 0.00021406171668096857,
               "residual_increment_abs_error": 1.0503768406667157e-06,
               "supplied_work_increment_abs_error": 6.38403599675561e-07,
-              "total_energy_abs_error": 6.609085420751612e-07
+              "total_energy_abs_error": 6.609085420751612e-07,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 1,
@@ -7411,6 +8467,52 @@
                   "total_energy": 0.0005641298277177741
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 2,
+                "fixture_id": "planner-reachable-seed-0-port-0",
+                "local_oscillator_energies": [
+                  0.00025131074364295844,
+                  1.2860652294993174e-09,
+                  2.537388707606287e-16,
+                  4.866540990484237e-24
+                ],
+                "neighbor_amplitude_means": [
+                  2.6097418489535126e-06,
+                  0.0009616493576755443,
+                  1.3048709770725942e-06,
+                  8.901219683305237e-10
+                ],
+                "node_displacements": [
+                  -3.693326079027166e-10,
+                  3.6926706137307974e-10,
+                  6.52811138479592e-14,
+                  0.0
+                ],
+                "node_velocities": [
+                  -8.495071641716032e-09,
+                  8.493343903498975e-09,
+                  1.7276053699187298e-12,
+                  1.3284714030774628e-16
+                ],
+                "oscillator_amplitudes": [
+                  0.0019232978252291203,
+                  2.6097418489535126e-06,
+                  8.901219683305237e-10,
+                  1.0519167569309858e-13
+                ],
+                "oscillator_velocities": [
+                  0.021709306158555323,
+                  4.94509107025673e-05,
+                  2.1748197136005722e-08,
+                  3.005476448374245e-12
+                ],
+                "residual": -5.332335661862885e-05,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.00030772765203665925,
+                "tick": 5,
+                "time": 0.17500000000000002,
+                "total_energy": 0.0002526732885935025
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -7423,6 +8525,7 @@
             "forecast_residual": {
               "actual_tick": 7,
               "actual_time": 0.24500000000000002,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 4.5504561976994385e-12,
               "predicted_residual_delta": -1.0464602476440173e-05,
@@ -7434,7 +8537,8 @@
               "realized_supplied_work_delta": 0.00032437525480656415,
               "residual_increment_abs_error": 2.398672101724098e-06,
               "supplied_work_increment_abs_error": 1.832084760029079e-06,
-              "total_energy_abs_error": 3.194637653163219e-06
+              "total_energy_abs_error": 3.194637653163219e-06,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 2,
@@ -7674,6 +8778,52 @@
                   "total_energy": 0.000986348570714268
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 3,
+                "fixture_id": "planner-reachable-seed-0-port-0",
+                "local_oscillator_energies": [
+                  0.0005551952442815987,
+                  1.5182770026726848e-08,
+                  2.1108173699419687e-14,
+                  5.951839514892255e-21
+                ],
+                "neighbor_amplitude_means": [
+                  1.1843194059891817e-05,
+                  0.0019753267276503687,
+                  5.921599296081654e-06,
+                  1.0287530591597415e-08
+                ],
+                "node_displacements": [
+                  -3.6199004612307466e-09,
+                  3.618143340489155e-09,
+                  1.7563728249569976e-12,
+                  4.440892098500626e-16
+                ],
+                "node_velocities": [
+                  -6.630836461899912e-08,
+                  6.626988853088212e-08,
+                  3.8463023238667e-11,
+                  1.3064878318095681e-14
+                ],
+                "oscillator_amplitudes": [
+                  0.003950643167770146,
+                  1.1843194059891817e-05,
+                  1.0287530591597415e-08,
+                  4.532271491956808e-12
+                ],
+                "oscillator_velocities": [
+                  0.03127634353801959,
+                  0.00016659978582201035,
+                  1.9393008274616238e-07,
+                  1.0297498525951642e-10
+                ],
+                "residual": -6.618663119679312e-05,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0006321029068432234,
+                "tick": 7,
+                "time": 0.24500000000000002,
+                "total_energy": 0.0005609351900646109
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -7686,6 +8836,7 @@
             "forecast_residual": {
               "actual_tick": 9,
               "actual_time": 0.31500000000000006,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 1.6895273100797948e-11,
               "predicted_residual_delta": 3.697893147555794e-06,
@@ -7697,7 +8848,8 @@
               "realized_supplied_work_delta": 0.000419691411148144,
               "residual_increment_abs_error": 3.8111614768469843e-06,
               "supplied_work_increment_abs_error": 3.578871098973294e-06,
-              "total_energy_abs_error": 1.1256081544946213e-05
+              "total_energy_abs_error": 1.1256081544946213e-05,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 3,
@@ -8296,6 +9448,52 @@
                   "total_energy": 0.0009716468695397807
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 0,
+                "fixture_id": "planner-reachable-seed-0-port-0",
+                "local_oscillator_energies": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_displacements": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "residual": 0.0,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0,
+                "tick": 1,
+                "time": 0.035,
+                "total_energy": 0.0
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 158,
               "rejection_counts": {
@@ -8310,6 +9508,7 @@
             "forecast_residual": {
               "actual_tick": 3,
               "actual_time": 0.10500000000000001,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
               "predicted_residual_delta": -2.971062781763816e-05,
@@ -8321,7 +9520,8 @@
               "realized_supplied_work_delta": 9.366593535569068e-05,
               "residual_increment_abs_error": 1.84448873525545e-07,
               "supplied_work_increment_abs_error": 5.380508640717577e-08,
-              "total_energy_abs_error": 1.310551734594453e-07
+              "total_energy_abs_error": 1.310551734594453e-07,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 0,
@@ -8709,6 +9909,52 @@
                   "total_energy": 0.0009716468695397807
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 1,
+                "fixture_id": "planner-reachable-seed-0-port-0",
+                "local_oscillator_energies": [
+                  6.347700112780694e-05,
+                  1.3163981993496607e-11,
+                  0.0,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  1.771938000000001e-07,
+                  0.0002925379070915109,
+                  8.859690000000004e-08,
+                  0.0
+                ],
+                "node_displacements": [
+                  -6.5986971120000046e-12,
+                  6.5987215691620804e-12,
+                  0.0,
+                  0.0
+                ],
+                "node_velocities": [
+                  -1.8853420320000012e-10,
+                  1.8853420320000012e-10,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  0.0005850758141830218,
+                  1.771938000000001e-07,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  0.011116451833800622,
+                  5.062680000000002e-06,
+                  0.0,
+                  0.0
+                ],
+                "residual": -2.971062781763816e-05,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 9.36121302692835e-05,
+                "tick": 3,
+                "time": 0.10500000000000001,
+                "total_energy": 6.360325156216276e-05
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -8721,18 +9967,20 @@
             "forecast_residual": {
               "actual_tick": 5,
               "actual_time": 0.17500000000000002,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 1.133918651491492e-12,
               "predicted_residual_delta": -2.2384820804700003e-05,
-              "predicted_supplied_work_delta": 0.00021326499316728237,
+              "predicted_supplied_work_delta": 0.00021331879825368954,
               "predicted_tick": 5,
               "predicted_time": 0.17500000000000002,
               "prediction_source": "reused_forecast",
               "realized_residual_delta": -2.3428279927465146e-05,
               "realized_supplied_work_delta": 0.00021406171668096857,
               "residual_increment_abs_error": 1.0434591227651426e-06,
-              "supplied_work_increment_abs_error": 7.967235136862021e-07,
-              "total_energy_abs_error": 4.4190105917996537e-07
+              "supplied_work_increment_abs_error": 7.429184272790264e-07,
+              "total_energy_abs_error": 4.4190105917996537e-07,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 1,
@@ -9046,6 +10294,52 @@
                   "total_energy": 0.0009716468695397807
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 2,
+                "fixture_id": "planner-reachable-seed-0-port-0",
+                "local_oscillator_energies": [
+                  0.000251759680502916,
+                  1.2888045016879943e-09,
+                  2.5203408783467767e-16,
+                  4.830969202534203e-24
+                ],
+                "neighbor_amplitude_means": [
+                  2.6022194583625444e-06,
+                  0.0009591595966208868,
+                  1.30110978177711e-06,
+                  8.89973192426376e-10
+                ],
+                "node_displacements": [
+                  -3.685308078355366e-10,
+                  3.6846525830469545e-10,
+                  6.52811138479592e-14,
+                  0.0
+                ],
+                "node_velocities": [
+                  -8.474094221794636e-09,
+                  8.472367972427957e-09,
+                  1.7261165195386799e-12,
+                  1.3284714030774628e-16
+                ],
+                "oscillator_amplitudes": [
+                  0.0019183183032685813,
+                  2.6022194583625444e-06,
+                  8.89973192426376e-10,
+                  1.0519167569309858e-13
+                ],
+                "oscillator_velocities": [
+                  0.021614804151927968,
+                  4.926698611125194e-05,
+                  2.1743946395887217e-08,
+                  3.005476448374245e-12
+                ],
+                "residual": -2.2384820804700003e-05,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.00030693092852297305,
+                "tick": 5,
+                "time": 0.17500000000000002,
+                "total_energy": 0.00025311518965268244
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -9058,18 +10352,20 @@
             "forecast_residual": {
               "actual_tick": 7,
               "actual_time": 0.24500000000000002,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 2.8315683479532254e-11,
               "predicted_residual_delta": -1.0558017308706614e-05,
-              "predicted_supplied_work_delta": 0.0003207288411690824,
+              "predicted_supplied_work_delta": 0.0003215255646827686,
               "predicted_tick": 7,
               "predicted_time": 0.24500000000000002,
               "prediction_source": "reused_forecast",
               "realized_residual_delta": -1.2863274578164271e-05,
               "realized_supplied_work_delta": 0.00032437525480656415,
               "residual_increment_abs_error": 2.3052572694576575e-06,
-              "supplied_work_increment_abs_error": 3.6464136374817413e-06,
-              "total_energy_abs_error": 4.48498627967156e-08
+              "supplied_work_increment_abs_error": 2.849690123795539e-06,
+              "total_energy_abs_error": 4.48498627967156e-08,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 2,
@@ -9309,6 +10605,52 @@
                   "total_energy": 0.0009716468695397807
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 3,
+                "fixture_id": "planner-reachable-seed-0-port-0",
+                "local_oscillator_energies": [
+                  0.0005552162426899284,
+                  1.5136301565534177e-08,
+                  2.0861063002714814e-14,
+                  5.907999153066563e-21
+                ],
+                "neighbor_amplitude_means": [
+                  1.1755235586396825e-05,
+                  0.0019639316816804234,
+                  5.877620063124126e-06,
+                  1.0280824962061581e-08
+                ],
+                "node_displacements": [
+                  -3.599875802259184e-09,
+                  3.5981235768645092e-09,
+                  1.7510437544387969e-12,
+                  4.440892098500626e-16
+                ],
+                "node_velocities": [
+                  -6.587365128817725e-08,
+                  6.583530133680742e-08,
+                  3.833691064556695e-11,
+                  1.3040724263254065e-14
+                ],
+                "oscillator_amplitudes": [
+                  0.003927853082535885,
+                  1.1755235586396825e-05,
+                  1.0280824962061581e-08,
+                  4.53985142731335e-12
+                ],
+                "oscillator_velocities": [
+                  0.03095422320444701,
+                  0.0001649362610950566,
+                  1.9377677974792564e-07,
+                  1.0317135149373343e-10
+                ],
+                "residual": -1.0558017308706614e-05,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0006284564932057417,
+                "tick": 7,
+                "time": 0.24500000000000002,
+                "total_energy": 0.0005608903402018142
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -9321,18 +10663,20 @@
             "forecast_residual": {
               "actual_tick": 9,
               "actual_time": 0.31500000000000006,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 2.5836719790316983e-10,
               "predicted_residual_delta": 3.3165299387081266e-06,
-              "predicted_supplied_work_delta": 0.0004090335764063333,
+              "predicted_supplied_work_delta": 0.00041267999004381505,
               "predicted_tick": 9,
               "predicted_time": 0.31500000000000006,
               "prediction_source": "reused_forecast",
               "realized_residual_delta": -1.1326832929119048e-07,
               "realized_supplied_work_delta": 0.000419691411148144,
               "residual_increment_abs_error": 3.429798267999317e-06,
-              "supplied_work_increment_abs_error": 1.0657834741810684e-05,
-              "total_energy_abs_error": 3.4456196295409598e-06
+              "supplied_work_increment_abs_error": 7.0114211043289425e-06,
+              "total_energy_abs_error": 3.4456196295409598e-06,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 3,
@@ -9783,6 +11127,52 @@
                   "total_energy": 0.00025311518965268244
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 0,
+                "fixture_id": "planner-reachable-seed-0-port-0",
+                "local_oscillator_energies": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_displacements": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "residual": 0.0,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0,
+                "tick": 1,
+                "time": 0.035,
+                "total_energy": 0.0
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 2,
               "rejection_counts": {
@@ -9797,6 +11187,7 @@
             "forecast_residual": {
               "actual_tick": 3,
               "actual_time": 0.10500000000000001,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
               "predicted_residual_delta": -2.971062781763816e-05,
@@ -9808,7 +11199,8 @@
               "realized_supplied_work_delta": 9.366593535569068e-05,
               "residual_increment_abs_error": 1.84448873525545e-07,
               "supplied_work_increment_abs_error": 5.380508640717577e-08,
-              "total_energy_abs_error": 1.310551734594453e-07
+              "total_energy_abs_error": 1.310551734594453e-07,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 0,
@@ -10122,6 +11514,52 @@
                   "total_energy": 0.0005612139572519835
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 1,
+                "fixture_id": "planner-reachable-seed-0-port-0",
+                "local_oscillator_energies": [
+                  6.33458008113258e-05,
+                  1.3107495912179348e-11,
+                  0.0,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  1.771938000000001e-07,
+                  0.00029270604798653337,
+                  8.859690000000004e-08,
+                  0.0
+                ],
+                "node_displacements": [
+                  -6.5986971120000046e-12,
+                  6.5987215691620804e-12,
+                  0.0,
+                  0.0
+                ],
+                "node_velocities": [
+                  -1.8853420320000012e-10,
+                  1.8853420320000012e-10,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  0.0005854120959730667,
+                  1.771938000000001e-07,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  0.01112605988494476,
+                  5.062680000000002e-06,
+                  0.0,
+                  0.0
+                ],
+                "residual": -2.9895076691163705e-05,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 9.366593535569068e-05,
+                "tick": 3,
+                "time": 0.10500000000000001,
+                "total_energy": 6.347219638870332e-05
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 2,
               "rejection_counts": {
@@ -10136,6 +11574,7 @@
             "forecast_residual": {
               "actual_tick": 5,
               "actual_time": 0.17500000000000002,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 5.667185748934893e-13,
               "predicted_residual_delta": -2.237790308679843e-05,
@@ -10147,7 +11586,8 @@
               "realized_supplied_work_delta": 0.00021406171668096857,
               "residual_increment_abs_error": 1.0503768406667157e-06,
               "supplied_work_increment_abs_error": 6.38403599675561e-07,
-              "total_energy_abs_error": 6.609085420751612e-07
+              "total_energy_abs_error": 6.609085420751612e-07,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 1,
@@ -10461,6 +11901,52 @@
                   "total_energy": 0.0009758995140749654
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 2,
+                "fixture_id": "planner-reachable-seed-0-port-0",
+                "local_oscillator_energies": [
+                  0.00025131074364295844,
+                  1.2860652294993174e-09,
+                  2.537388707606287e-16,
+                  4.866540990484237e-24
+                ],
+                "neighbor_amplitude_means": [
+                  2.6097418489535126e-06,
+                  0.0009616493576755443,
+                  1.3048709770725942e-06,
+                  8.901219683305237e-10
+                ],
+                "node_displacements": [
+                  -3.693326079027166e-10,
+                  3.6926706137307974e-10,
+                  6.52811138479592e-14,
+                  0.0
+                ],
+                "node_velocities": [
+                  -8.495071641716032e-09,
+                  8.493343903498975e-09,
+                  1.7276053699187298e-12,
+                  1.3284714030774628e-16
+                ],
+                "oscillator_amplitudes": [
+                  0.0019232978252291203,
+                  2.6097418489535126e-06,
+                  8.901219683305237e-10,
+                  1.0519167569309858e-13
+                ],
+                "oscillator_velocities": [
+                  0.021709306158555323,
+                  4.94509107025673e-05,
+                  2.1748197136005722e-08,
+                  3.005476448374245e-12
+                ],
+                "residual": -5.332335661862885e-05,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.00030772765203665925,
+                "tick": 5,
+                "time": 0.17500000000000002,
+                "total_energy": 0.0002526732885935025
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 2,
               "rejection_counts": {
@@ -10475,6 +11961,7 @@
             "forecast_residual": {
               "actual_tick": 7,
               "actual_time": 0.24500000000000002,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 4.5504561976994385e-12,
               "predicted_residual_delta": -1.0464602476440173e-05,
@@ -10486,7 +11973,8 @@
               "realized_supplied_work_delta": 0.00032437525480656415,
               "residual_increment_abs_error": 2.398672101724098e-06,
               "supplied_work_increment_abs_error": 1.832084760029079e-06,
-              "total_energy_abs_error": 3.194637653163219e-06
+              "total_energy_abs_error": 3.194637653163219e-06,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 2,
@@ -10726,6 +12214,52 @@
                   "total_energy": 0.000986348570714268
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 3,
+                "fixture_id": "planner-reachable-seed-0-port-0",
+                "local_oscillator_energies": [
+                  0.0005551952442815987,
+                  1.5182770026726848e-08,
+                  2.1108173699419687e-14,
+                  5.951839514892255e-21
+                ],
+                "neighbor_amplitude_means": [
+                  1.1843194059891817e-05,
+                  0.0019753267276503687,
+                  5.921599296081654e-06,
+                  1.0287530591597415e-08
+                ],
+                "node_displacements": [
+                  -3.6199004612307466e-09,
+                  3.618143340489155e-09,
+                  1.7563728249569976e-12,
+                  4.440892098500626e-16
+                ],
+                "node_velocities": [
+                  -6.630836461899912e-08,
+                  6.626988853088212e-08,
+                  3.8463023238667e-11,
+                  1.3064878318095681e-14
+                ],
+                "oscillator_amplitudes": [
+                  0.003950643167770146,
+                  1.1843194059891817e-05,
+                  1.0287530591597415e-08,
+                  4.532271491956808e-12
+                ],
+                "oscillator_velocities": [
+                  0.03127634353801959,
+                  0.00016659978582201035,
+                  1.9393008274616238e-07,
+                  1.0297498525951642e-10
+                ],
+                "residual": -6.618663119679312e-05,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0006321029068432234,
+                "tick": 7,
+                "time": 0.24500000000000002,
+                "total_energy": 0.0005609351900646109
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -10738,6 +12272,7 @@
             "forecast_residual": {
               "actual_tick": 9,
               "actual_time": 0.31500000000000006,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 1.6895273100797948e-11,
               "predicted_residual_delta": 3.697893147555794e-06,
@@ -10749,7 +12284,8 @@
               "realized_supplied_work_delta": 0.000419691411148144,
               "residual_increment_abs_error": 3.8111614768469843e-06,
               "supplied_work_increment_abs_error": 3.578871098973294e-06,
-              "total_energy_abs_error": 1.1256081544946213e-05
+              "total_energy_abs_error": 1.1256081544946213e-05,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 3,
@@ -11128,6 +12664,52 @@
                   "total_energy": 0.0
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 0,
+                "fixture_id": "planner-reachable-seed-1-port-1",
+                "local_oscillator_energies": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_displacements": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "residual": 0.0,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0,
+                "tick": 1,
+                "time": 0.035,
+                "total_energy": 0.0
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -11140,6 +12722,7 @@
             "forecast_residual": {
               "actual_tick": 3,
               "actual_time": 0.10500000000000001,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
               "predicted_residual_delta": 0.0,
@@ -11151,7 +12734,8 @@
               "realized_supplied_work_delta": 0.0,
               "residual_increment_abs_error": 0.0,
               "supplied_work_increment_abs_error": 0.0,
-              "total_energy_abs_error": 0.0
+              "total_energy_abs_error": 0.0,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 0,
@@ -11391,6 +12975,52 @@
                   "total_energy": 0.0
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 1,
+                "fixture_id": "planner-reachable-seed-1-port-1",
+                "local_oscillator_energies": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_displacements": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "residual": 0.0,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0,
+                "tick": 3,
+                "time": 0.10500000000000001,
+                "total_energy": 0.0
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -11403,6 +13033,7 @@
             "forecast_residual": {
               "actual_tick": 5,
               "actual_time": 0.17500000000000002,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
               "predicted_residual_delta": 0.0,
@@ -11414,7 +13045,8 @@
               "realized_supplied_work_delta": 0.0,
               "residual_increment_abs_error": 0.0,
               "supplied_work_increment_abs_error": 0.0,
-              "total_energy_abs_error": 0.0
+              "total_energy_abs_error": 0.0,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 1,
@@ -11654,6 +13286,52 @@
                   "total_energy": 0.0
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 2,
+                "fixture_id": "planner-reachable-seed-1-port-1",
+                "local_oscillator_energies": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_displacements": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "residual": 0.0,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0,
+                "tick": 5,
+                "time": 0.17500000000000002,
+                "total_energy": 0.0
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -11666,6 +13344,7 @@
             "forecast_residual": {
               "actual_tick": 7,
               "actual_time": 0.24500000000000002,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
               "predicted_residual_delta": 0.0,
@@ -11677,7 +13356,8 @@
               "realized_supplied_work_delta": 0.0,
               "residual_increment_abs_error": 0.0,
               "supplied_work_increment_abs_error": 0.0,
-              "total_energy_abs_error": 0.0
+              "total_energy_abs_error": 0.0,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 2,
@@ -11917,6 +13597,52 @@
                   "total_energy": 0.0
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 3,
+                "fixture_id": "planner-reachable-seed-1-port-1",
+                "local_oscillator_energies": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_displacements": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "residual": 0.0,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0,
+                "tick": 7,
+                "time": 0.24500000000000002,
+                "total_energy": 0.0
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -11929,6 +13655,7 @@
             "forecast_residual": {
               "actual_tick": 9,
               "actual_time": 0.31500000000000006,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
               "predicted_residual_delta": 0.0,
@@ -11940,7 +13667,8 @@
               "realized_supplied_work_delta": 0.0,
               "residual_increment_abs_error": 0.0,
               "supplied_work_increment_abs_error": 0.0,
-              "total_energy_abs_error": 0.0
+              "total_energy_abs_error": 0.0,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 3,
@@ -12318,6 +14046,52 @@
                   "total_energy": 6.479162755436488e-05
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 0,
+                "fixture_id": "planner-reachable-seed-1-port-1",
+                "local_oscillator_energies": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_displacements": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "residual": 0.0,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0,
+                "tick": 1,
+                "time": 0.035,
+                "total_energy": 0.0
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -12330,6 +14104,7 @@
             "forecast_residual": {
               "actual_tick": 3,
               "actual_time": 0.10500000000000001,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
               "predicted_residual_delta": -2.802927563791295e-05,
@@ -12341,7 +14116,8 @@
               "realized_supplied_work_delta": 9.321880333382305e-05,
               "residual_increment_abs_error": 3.4689073711080946e-07,
               "supplied_work_increment_abs_error": 1.0343057187984931e-07,
-              "total_energy_abs_error": 2.4424498852441447e-07
+              "total_energy_abs_error": 2.4424498852441447e-07,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 0,
@@ -12581,6 +14357,52 @@
                   "total_energy": 0.0002570175656709364
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 1,
+                "fixture_id": "planner-reachable-seed-1-port-1",
+                "local_oscillator_energies": [
+                  1.3018194066611889e-11,
+                  6.432141723289905e-05,
+                  8.679849768040686e-12,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  0.0005826175208363941,
+                  1.599066000000001e-07,
+                  0.00029130876041819705,
+                  1.426194000000001e-07
+                ],
+                "node_displacements": [
+                  -6.5986971120000046e-12,
+                  1.2876366639602566e-12,
+                  5.311306949806749e-12,
+                  0.0
+                ],
+                "node_velocities": [
+                  -1.8853420320000012e-10,
+                  3.678716160000001e-11,
+                  1.517470416000001e-10,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  1.771938000000001e-07,
+                  0.0005826175208363941,
+                  1.426194000000001e-07,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  5.062680000000002e-06,
+                  0.01104621488103983,
+                  4.074840000000002e-06,
+                  0.0
+                ],
+                "residual": -2.837616637502376e-05,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 9.321880333382305e-05,
+                "tick": 3,
+                "time": 0.10500000000000001,
+                "total_energy": 6.454738256584046e-05
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -12593,6 +14415,7 @@
             "forecast_residual": {
               "actual_tick": 5,
               "actual_time": 0.17500000000000002,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 9.83968293031079e-13,
               "predicted_residual_delta": -1.3369547997034876e-05,
@@ -12604,7 +14427,8 @@
               "realized_supplied_work_delta": 0.0002079269626661307,
               "residual_increment_abs_error": 1.8046693635475287e-06,
               "supplied_work_increment_abs_error": 1.2121043142841e-06,
-              "total_energy_abs_error": 1.0659060165027793e-06
+              "total_energy_abs_error": 1.0659060165027793e-06,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 1,
@@ -12844,6 +14668,52 @@
                   "total_energy": 0.0005630720089800556
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 2,
+                "fixture_id": "planner-reachable-seed-1-port-1",
+                "local_oscillator_energies": [
+                  1.2566843492200359e-09,
+                  0.0002535961579173329,
+                  8.362655791735126e-10,
+                  2.0698630076837708e-16
+                ],
+                "neighbor_amplitude_means": [
+                  0.0018821610374997108,
+                  2.332929403665651e-06,
+                  0.0009410809174212917,
+                  2.0641857439699863e-06
+                ],
+                "node_displacements": [
+                  -3.627904245653592e-10,
+                  7.066724982962569e-11,
+                  2.9205837748236263e-10,
+                  6.483702463810914e-14
+                ],
+                "node_velocities": [
+                  -8.323991416933217e-09,
+                  1.6210079825651465e-09,
+                  6.701272937048185e-09,
+                  1.7104973198860674e-12
+                ],
+                "oscillator_amplitudes": [
+                  2.6016730633613165e-06,
+                  0.0018821610374997108,
+                  2.0641857439699863e-06,
+                  7.973428724073781e-10
+                ],
+                "oscillator_velocities": [
+                  4.925359550089668e-05,
+                  0.020929944506072502,
+                  3.8913947104573036e-05,
+                  1.9456766711918372e-08
+                ],
+                "residual": -4.3550383735606165e-05,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.00030114576599995374,
+                "tick": 5,
+                "time": 0.17500000000000002,
+                "total_energy": 0.00025595165965443365
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -12856,6 +14726,7 @@
             "forecast_residual": {
               "actual_tick": 7,
               "actual_time": 0.24500000000000002,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 7.62829633876967e-12,
               "predicted_residual_delta": 7.381552118644575e-06,
@@ -12867,7 +14738,8 @@
               "realized_supplied_work_delta": 0.00030111348631233566,
               "residual_increment_abs_error": 3.4807448840638004e-06,
               "supplied_work_increment_abs_error": 3.4130318633320304e-06,
-              "total_energy_abs_error": 4.901030364539739e-06
+              "total_energy_abs_error": 4.901030364539739e-06,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 2,
@@ -13107,6 +14979,52 @@
                   "total_energy": 0.0009555992873683508
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 3,
+                "fixture_id": "planner-reachable-seed-1-port-1",
+                "local_oscillator_energies": [
+                  1.4472766681702226e-08,
+                  0.0005487636226682935,
+                  9.497779638962681e-09,
+                  1.657890191305338e-14
+                ],
+                "neighbor_amplitude_means": [
+                  0.0037641203269518086,
+                  1.0429857936731994e-05,
+                  0.001882064677022146,
+                  9.111113001297318e-06
+                ],
+                "node_displacements": [
+                  -3.4585312045164384e-09,
+                  6.716804890061212e-10,
+                  2.7851410067114557e-09,
+                  1.709743457922741e-12
+                ],
+                "node_velocities": [
+                  -6.281260351132314e-08,
+                  1.2187257575064116e-08,
+                  5.058801221238089e-08,
+                  3.733372387813019e-11
+                ],
+                "oscillator_amplitudes": [
+                  1.1748602872166668e-05,
+                  0.0037641203269518086,
+                  9.111113001297318e-06,
+                  9.027092483349796e-09
+                ],
+                "oscillator_velocities": [
+                  0.0001648095327732792,
+                  0.028653759426345942,
+                  0.00012614564706571585,
+                  1.69173018111216e-07
+                ],
+                "residual": -3.964957650102539e-05,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0006022592523122894,
+                "tick": 7,
+                "time": 0.24500000000000002,
+                "total_energy": 0.0005581709786155159
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -13119,6 +15037,7 @@
             "forecast_residual": {
               "actual_tick": 9,
               "actual_time": 0.31500000000000006,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 2.6850170574252544e-11,
               "predicted_residual_delta": 2.5328177916769366e-05,
@@ -13130,7 +15049,8 @@
               "realized_supplied_work_delta": 0.0003634187152531575,
               "residual_increment_abs_error": 4.058054639089217e-06,
               "supplied_work_increment_abs_error": 6.478878602908392e-06,
-              "total_energy_abs_error": 1.6797473944731045e-05
+              "total_energy_abs_error": 1.6797473944731045e-05,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 3,
@@ -13730,6 +15650,52 @@
                   "total_energy": 0.0009282582046771478
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 0,
+                "fixture_id": "planner-reachable-seed-1-port-1",
+                "local_oscillator_energies": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_displacements": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "residual": 0.0,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0,
+                "tick": 1,
+                "time": 0.035,
+                "total_energy": 0.0
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 168,
               "rejection_counts": {
@@ -13744,6 +15710,7 @@
             "forecast_residual": {
               "actual_tick": 3,
               "actual_time": 0.10500000000000001,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
               "predicted_residual_delta": -2.802927563791295e-05,
@@ -13755,7 +15722,8 @@
               "realized_supplied_work_delta": 9.321880333382305e-05,
               "residual_increment_abs_error": 3.4689073711080946e-07,
               "supplied_work_increment_abs_error": 1.0343057187984931e-07,
-              "total_energy_abs_error": 2.4424498852441447e-07
+              "total_energy_abs_error": 2.4424498852441447e-07,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 0,
@@ -14143,6 +16111,52 @@
                   "total_energy": 0.0009282582046771478
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 1,
+                "fixture_id": "planner-reachable-seed-1-port-1",
+                "local_oscillator_energies": [
+                  1.2970305547776274e-11,
+                  6.456616349625086e-05,
+                  8.703661808484847e-12,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  0.0005819710797621449,
+                  1.599066000000001e-07,
+                  0.00029098553988107247,
+                  1.426194000000001e-07
+                ],
+                "node_displacements": [
+                  -6.5986971120000046e-12,
+                  1.2876366639602566e-12,
+                  5.311306949806749e-12,
+                  0.0
+                ],
+                "node_velocities": [
+                  -1.8853420320000012e-10,
+                  3.678716160000001e-11,
+                  1.517470416000001e-10,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  1.771938000000001e-07,
+                  0.0005819710797621449,
+                  1.426194000000001e-07,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  5.062680000000002e-06,
+                  0.011027745136061282,
+                  4.074840000000002e-06,
+                  0.0
+                ],
+                "residual": -2.802927563791295e-05,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 9.31153727619432e-05,
+                "tick": 3,
+                "time": 0.10500000000000001,
+                "total_energy": 6.479162755436488e-05
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -14155,18 +16169,20 @@
             "forecast_residual": {
               "actual_tick": 5,
               "actual_time": 0.17500000000000002,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 1.9697544078631356e-12,
               "predicted_residual_delta": -1.3396109474256619e-05,
-              "predicted_supplied_work_delta": 0.00020641699554432806,
+              "predicted_supplied_work_delta": 0.0002065204261162079,
               "predicted_tick": 5,
               "predicted_time": 0.17500000000000002,
               "prediction_source": "reused_forecast",
               "realized_residual_delta": -1.5174217360582404e-05,
               "realized_supplied_work_delta": 0.0002079269626661307,
               "residual_increment_abs_error": 1.7781078863257858e-06,
-              "supplied_work_increment_abs_error": 1.5099671218026336e-06,
-              "total_energy_abs_error": 6.346582181362536e-07
+              "supplied_work_increment_abs_error": 1.4065365499227843e-06,
+              "total_energy_abs_error": 6.346582181362536e-07,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 1,
@@ -14480,6 +16496,52 @@
                   "total_energy": 0.0009282582046771478
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 2,
+                "fixture_id": "planner-reachable-seed-1-port-1",
+                "local_oscillator_energies": [
+                  1.2470342009211304e-09,
+                  0.00025425439172327587,
+                  8.350213451089018e-10,
+                  2.068237540361411e-16
+                ],
+                "neighbor_amplitude_means": [
+                  0.0018727237429884444,
+                  2.3301766752205364e-06,
+                  0.0009363622697244979,
+                  2.058133892052474e-06
+                ],
+                "node_displacements": [
+                  -3.612732436664297e-10,
+                  7.03710423266557e-11,
+                  2.908375762444848e-10,
+                  6.483702463810914e-14
+                ],
+                "node_velocities": [
+                  -8.284336969532493e-09,
+                  1.613268854427201e-09,
+                  6.669360449270544e-09,
+                  1.7076658347471837e-12
+                ],
+                "oscillator_amplitudes": [
+                  2.6022194583885987e-06,
+                  0.0018727237429884444,
+                  2.058133892052474e-06,
+                  7.964605513309213e-10
+                ],
+                "oscillator_velocities": [
+                  4.9266986111965615e-05,
+                  0.020751580910046787,
+                  3.8766163909625945e-05,
+                  1.9431557538305326e-08
+                ],
+                "residual": -1.3396109474256619e-05,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0002996357988781511,
+                "tick": 5,
+                "time": 0.17500000000000002,
+                "total_energy": 0.0002565863178725699
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -14492,18 +16554,20 @@
             "forecast_residual": {
               "actual_tick": 7,
               "actual_time": 0.24500000000000002,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 4.7761261077424024e-11,
               "predicted_residual_delta": 7.055511938734593e-06,
-              "predicted_supplied_work_delta": 0.00029435660055484897,
+              "predicted_supplied_work_delta": 0.0002958665676766516,
               "predicted_tick": 7,
               "predicted_time": 0.24500000000000002,
               "prediction_source": "reused_forecast",
               "realized_residual_delta": 3.900807234580775e-06,
               "realized_supplied_work_delta": 0.00030111348631233566,
               "residual_increment_abs_error": 3.1547047041538184e-06,
-              "supplied_work_increment_abs_error": 6.756885757486686e-06,
-              "total_energy_abs_error": 1.3598286446745095e-06
+              "supplied_work_increment_abs_error": 5.2469186356840524e-06,
+              "total_energy_abs_error": 1.3598286446745095e-06,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 2,
@@ -14743,6 +16807,52 @@
                   "total_energy": 0.0009282582046771478
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 3,
+                "fixture_id": "planner-reachable-seed-1-port-1",
+                "local_oscillator_energies": [
+                  1.4283903542410928e-08,
+                  0.0005476138932279726,
+                  9.406549267853377e-09,
+                  1.6461718704996014e-14
+                ],
+                "neighbor_amplitude_means": [
+                  0.003721889790967517,
+                  1.039851437055749e-05,
+                  0.0018609493901159907,
+                  9.041793153094876e-06
+                ],
+                "node_displacements": [
+                  -3.421739367399141e-09,
+                  6.644929051446979e-10,
+                  2.7555464576778377e-09,
+                  1.7004175845158898e-12
+                ],
+                "node_velocities": [
+                  -6.20179802725787e-08,
+                  1.2032002674931412e-08,
+                  4.9948877394582586e-08,
+                  3.710020306469151e-11
+                ],
+                "oscillator_amplitudes": [
+                  1.1755235588020107e-05,
+                  0.003721889790967517,
+                  9.041793153094876e-06,
+                  8.989264464441198e-09
+                ],
+                "oscillator_velocities": [
+                  0.000164936261134011,
+                  0.028064417520146986,
+                  0.000124842216650311,
+                  1.683141517929584e-07
+                ],
+                "residual": 7.055511938734593e-06,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0005955023665548027,
+                "tick": 7,
+                "time": 0.24500000000000002,
+                "total_energy": 0.0005568111499708413
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -14755,18 +16865,20 @@
             "forecast_residual": {
               "actual_tick": 9,
               "actual_time": 0.31500000000000006,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 4.186003549042847e-10,
               "predicted_residual_delta": 2.420035729982186e-05,
-              "predicted_supplied_work_delta": 0.00034427482215850967,
+              "predicted_supplied_work_delta": 0.00035103170791599635,
               "predicted_tick": 9,
               "predicted_time": 0.31500000000000006,
               "prediction_source": "reused_forecast",
               "realized_residual_delta": 2.127012327768015e-05,
               "realized_supplied_work_delta": 0.0003634187152531575,
               "residual_increment_abs_error": 2.9302340221417098e-06,
-              "supplied_work_increment_abs_error": 1.9143893094647826e-05,
-              "total_energy_abs_error": 1.054360874647197e-05
+              "supplied_work_increment_abs_error": 1.238700733716114e-05,
+              "total_energy_abs_error": 1.054360874647197e-05,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 3,
@@ -15218,6 +17330,52 @@
                   "total_energy": 0.0002565863178725699
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 0,
+                "fixture_id": "planner-reachable-seed-1-port-1",
+                "local_oscillator_energies": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_displacements": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "residual": 0.0,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0,
+                "tick": 1,
+                "time": 0.035,
+                "total_energy": 0.0
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 2,
               "rejection_counts": {
@@ -15232,6 +17390,7 @@
             "forecast_residual": {
               "actual_tick": 3,
               "actual_time": 0.10500000000000001,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
               "predicted_residual_delta": -2.802927563791295e-05,
@@ -15243,7 +17402,8 @@
               "realized_supplied_work_delta": 9.321880333382305e-05,
               "residual_increment_abs_error": 3.4689073711080946e-07,
               "supplied_work_increment_abs_error": 1.0343057187984931e-07,
-              "total_energy_abs_error": 2.4424498852441447e-07
+              "total_energy_abs_error": 2.4424498852441447e-07,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 0,
@@ -15557,6 +17717,52 @@
                   "total_energy": 0.0005574336277255182
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 1,
+                "fixture_id": "planner-reachable-seed-1-port-1",
+                "local_oscillator_energies": [
+                  1.3018194066611889e-11,
+                  6.432141723289905e-05,
+                  8.679849768040686e-12,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  0.0005826175208363941,
+                  1.599066000000001e-07,
+                  0.00029130876041819705,
+                  1.426194000000001e-07
+                ],
+                "node_displacements": [
+                  -6.5986971120000046e-12,
+                  1.2876366639602566e-12,
+                  5.311306949806749e-12,
+                  0.0
+                ],
+                "node_velocities": [
+                  -1.8853420320000012e-10,
+                  3.678716160000001e-11,
+                  1.517470416000001e-10,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  1.771938000000001e-07,
+                  0.0005826175208363941,
+                  1.426194000000001e-07,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  5.062680000000002e-06,
+                  0.01104621488103983,
+                  4.074840000000002e-06,
+                  0.0
+                ],
+                "residual": -2.837616637502376e-05,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 9.321880333382305e-05,
+                "tick": 3,
+                "time": 0.10500000000000001,
+                "total_energy": 6.454738256584046e-05
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 2,
               "rejection_counts": {
@@ -15571,6 +17777,7 @@
             "forecast_residual": {
               "actual_tick": 5,
               "actual_time": 0.17500000000000002,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 9.83968293031079e-13,
               "predicted_residual_delta": -1.3369547997034876e-05,
@@ -15582,7 +17789,8 @@
               "realized_supplied_work_delta": 0.0002079269626661307,
               "residual_increment_abs_error": 1.8046693635475287e-06,
               "supplied_work_increment_abs_error": 1.2121043142841e-06,
-              "total_energy_abs_error": 1.0659060165027793e-06
+              "total_energy_abs_error": 1.0659060165027793e-06,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 1,
@@ -15896,6 +18104,52 @@
                   "total_energy": 0.0009362410103266072
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 2,
+                "fixture_id": "planner-reachable-seed-1-port-1",
+                "local_oscillator_energies": [
+                  1.2566843492200359e-09,
+                  0.0002535961579173329,
+                  8.362655791735126e-10,
+                  2.0698630076837708e-16
+                ],
+                "neighbor_amplitude_means": [
+                  0.0018821610374997108,
+                  2.332929403665651e-06,
+                  0.0009410809174212917,
+                  2.0641857439699863e-06
+                ],
+                "node_displacements": [
+                  -3.627904245653592e-10,
+                  7.066724982962569e-11,
+                  2.9205837748236263e-10,
+                  6.483702463810914e-14
+                ],
+                "node_velocities": [
+                  -8.323991416933217e-09,
+                  1.6210079825651465e-09,
+                  6.701272937048185e-09,
+                  1.7104973198860674e-12
+                ],
+                "oscillator_amplitudes": [
+                  2.6016730633613165e-06,
+                  0.0018821610374997108,
+                  2.0641857439699863e-06,
+                  7.973428724073781e-10
+                ],
+                "oscillator_velocities": [
+                  4.925359550089668e-05,
+                  0.020929944506072502,
+                  3.8913947104573036e-05,
+                  1.9456766711918372e-08
+                ],
+                "residual": -4.3550383735606165e-05,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.00030114576599995374,
+                "tick": 5,
+                "time": 0.17500000000000002,
+                "total_energy": 0.00025595165965443365
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 2,
               "rejection_counts": {
@@ -15910,6 +18164,7 @@
             "forecast_residual": {
               "actual_tick": 7,
               "actual_time": 0.24500000000000002,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 7.62829633876967e-12,
               "predicted_residual_delta": 7.381552118644575e-06,
@@ -15921,7 +18176,8 @@
               "realized_supplied_work_delta": 0.00030111348631233566,
               "residual_increment_abs_error": 3.4807448840638004e-06,
               "supplied_work_increment_abs_error": 3.4130318633320304e-06,
-              "total_energy_abs_error": 4.901030364539739e-06
+              "total_energy_abs_error": 4.901030364539739e-06,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 2,
@@ -16161,6 +18417,52 @@
                   "total_energy": 0.0009555992873683508
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 3,
+                "fixture_id": "planner-reachable-seed-1-port-1",
+                "local_oscillator_energies": [
+                  1.4472766681702226e-08,
+                  0.0005487636226682935,
+                  9.497779638962681e-09,
+                  1.657890191305338e-14
+                ],
+                "neighbor_amplitude_means": [
+                  0.0037641203269518086,
+                  1.0429857936731994e-05,
+                  0.001882064677022146,
+                  9.111113001297318e-06
+                ],
+                "node_displacements": [
+                  -3.4585312045164384e-09,
+                  6.716804890061212e-10,
+                  2.7851410067114557e-09,
+                  1.709743457922741e-12
+                ],
+                "node_velocities": [
+                  -6.281260351132314e-08,
+                  1.2187257575064116e-08,
+                  5.058801221238089e-08,
+                  3.733372387813019e-11
+                ],
+                "oscillator_amplitudes": [
+                  1.1748602872166668e-05,
+                  0.0037641203269518086,
+                  9.111113001297318e-06,
+                  9.027092483349796e-09
+                ],
+                "oscillator_velocities": [
+                  0.0001648095327732792,
+                  0.028653759426345942,
+                  0.00012614564706571585,
+                  1.69173018111216e-07
+                ],
+                "residual": -3.964957650102539e-05,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0006022592523122894,
+                "tick": 7,
+                "time": 0.24500000000000002,
+                "total_energy": 0.0005581709786155159
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -16173,6 +18475,7 @@
             "forecast_residual": {
               "actual_tick": 9,
               "actual_time": 0.31500000000000006,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 2.6850170574252544e-11,
               "predicted_residual_delta": 2.5328177916769366e-05,
@@ -16184,7 +18487,8 @@
               "realized_supplied_work_delta": 0.0003634187152531575,
               "residual_increment_abs_error": 4.058054639089217e-06,
               "supplied_work_increment_abs_error": 6.478878602908392e-06,
-              "total_energy_abs_error": 1.6797473944731045e-05
+              "total_energy_abs_error": 1.6797473944731045e-05,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 3,
@@ -16564,6 +18868,52 @@
                   "total_energy": 0.0
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 0,
+                "fixture_id": "planner-reachable-seed-2-port-0",
+                "local_oscillator_energies": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_displacements": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "residual": 0.0,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0,
+                "tick": 1,
+                "time": 0.035,
+                "total_energy": 0.0
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -16576,6 +18926,7 @@
             "forecast_residual": {
               "actual_tick": 3,
               "actual_time": 0.10500000000000001,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
               "predicted_residual_delta": 0.0,
@@ -16587,7 +18938,8 @@
               "realized_supplied_work_delta": 0.0,
               "residual_increment_abs_error": 0.0,
               "supplied_work_increment_abs_error": 0.0,
-              "total_energy_abs_error": 0.0
+              "total_energy_abs_error": 0.0,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 0,
@@ -16827,6 +19179,52 @@
                   "total_energy": 0.0
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 1,
+                "fixture_id": "planner-reachable-seed-2-port-0",
+                "local_oscillator_energies": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_displacements": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "residual": 0.0,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0,
+                "tick": 3,
+                "time": 0.10500000000000001,
+                "total_energy": 0.0
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -16839,6 +19237,7 @@
             "forecast_residual": {
               "actual_tick": 5,
               "actual_time": 0.17500000000000002,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
               "predicted_residual_delta": 0.0,
@@ -16850,7 +19249,8 @@
               "realized_supplied_work_delta": 0.0,
               "residual_increment_abs_error": 0.0,
               "supplied_work_increment_abs_error": 0.0,
-              "total_energy_abs_error": 0.0
+              "total_energy_abs_error": 0.0,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 1,
@@ -17090,6 +19490,52 @@
                   "total_energy": 0.0
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 2,
+                "fixture_id": "planner-reachable-seed-2-port-0",
+                "local_oscillator_energies": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_displacements": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "residual": 0.0,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0,
+                "tick": 5,
+                "time": 0.17500000000000002,
+                "total_energy": 0.0
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -17102,6 +19548,7 @@
             "forecast_residual": {
               "actual_tick": 7,
               "actual_time": 0.24500000000000002,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
               "predicted_residual_delta": 0.0,
@@ -17113,7 +19560,8 @@
               "realized_supplied_work_delta": 0.0,
               "residual_increment_abs_error": 0.0,
               "supplied_work_increment_abs_error": 0.0,
-              "total_energy_abs_error": 0.0
+              "total_energy_abs_error": 0.0,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 2,
@@ -17353,6 +19801,52 @@
                   "total_energy": 0.0
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 3,
+                "fixture_id": "planner-reachable-seed-2-port-0",
+                "local_oscillator_energies": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_displacements": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "residual": 0.0,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0,
+                "tick": 7,
+                "time": 0.24500000000000002,
+                "total_energy": 0.0
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -17365,6 +19859,7 @@
             "forecast_residual": {
               "actual_tick": 9,
               "actual_time": 0.31500000000000006,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
               "predicted_residual_delta": 0.0,
@@ -17376,7 +19871,8 @@
               "realized_supplied_work_delta": 0.0,
               "residual_increment_abs_error": 0.0,
               "supplied_work_increment_abs_error": 0.0,
-              "total_energy_abs_error": 0.0
+              "total_energy_abs_error": 0.0,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 3,
@@ -17753,6 +20249,52 @@
                   "total_energy": 6.360325156216276e-05
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 0,
+                "fixture_id": "planner-reachable-seed-2-port-0",
+                "local_oscillator_energies": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_displacements": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "residual": 0.0,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0,
+                "tick": 1,
+                "time": 0.035,
+                "total_energy": 0.0
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -17765,6 +20307,7 @@
             "forecast_residual": {
               "actual_tick": 3,
               "actual_time": 0.10500000000000001,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
               "predicted_residual_delta": -2.971062781763816e-05,
@@ -17776,7 +20319,8 @@
               "realized_supplied_work_delta": 9.365945117327279e-05,
               "residual_increment_abs_error": 1.6219613288904987e-07,
               "supplied_work_increment_abs_error": 4.732090398928924e-08,
-              "total_energy_abs_error": 1.1523701923290262e-07
+              "total_energy_abs_error": 1.1523701923290262e-07,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 0,
@@ -18016,6 +20560,52 @@
                   "total_energy": 0.00025330779897424303
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 1,
+                "fixture_id": "planner-reachable-seed-2-port-0",
+                "local_oscillator_energies": [
+                  6.336163635354922e-05,
+                  1.322226923790149e-11,
+                  0.0,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  1.771938000000001e-07,
+                  0.0002926857849164775,
+                  8.859690000000004e-08,
+                  0.0
+                ],
+                "node_displacements": [
+                  -6.5986971120000046e-12,
+                  6.5987215691620804e-12,
+                  0.0,
+                  0.0
+                ],
+                "node_velocities": [
+                  -1.8853420320000012e-10,
+                  1.8853420320000012e-10,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  0.000585371569832955,
+                  1.771938000000001e-07,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  0.011124901995227284,
+                  5.062680000000002e-06,
+                  0.0,
+                  0.0
+                ],
+                "residual": -2.987282395052721e-05,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 9.365945117327279e-05,
+                "tick": 3,
+                "time": 0.10500000000000001,
+                "total_energy": 6.348801454292986e-05
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -18028,6 +20618,7 @@
             "forecast_residual": {
               "actual_tick": 5,
               "actual_time": 0.17500000000000002,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 4.991924253406872e-13,
               "predicted_residual_delta": -2.2378736872175655e-05,
@@ -18039,7 +20630,8 @@
               "realized_supplied_work_delta": 0.0002139721174661806,
               "residual_increment_abs_error": 9.230277481772617e-07,
               "supplied_work_increment_abs_error": 5.613997221095212e-07,
-              "total_energy_abs_error": 5.805310760659071e-07
+              "total_energy_abs_error": 5.805310760659071e-07,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 1,
@@ -18279,6 +20871,52 @@
                   "total_energy": 0.0005637385865236203
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 2,
+                "fixture_id": "planner-reachable-seed-2-port-0",
+                "local_oscillator_energies": [
+                  0.0002513655475356801,
+                  1.2966481812627785e-09,
+                  2.5214900985632323e-16,
+                  4.8504314296102795e-24
+                ],
+                "neighbor_amplitude_means": [
+                  2.598497928346611e-06,
+                  0.0009613490966882865,
+                  1.2992490167691433e-06,
+                  8.893799893641188e-10
+                ],
+                "node_displacements": [
+                  -3.692364977064921e-10,
+                  3.6917113810375213e-10,
+                  6.52811138479592e-14,
+                  0.0
+                ],
+                "node_velocities": [
+                  -8.492558422950077e-09,
+                  8.490830871414637e-09,
+                  1.727418688298683e-12,
+                  1.3284714030774628e-16
+                ],
+                "oscillator_amplitudes": [
+                  0.0019226973039965837,
+                  2.598497928346611e-06,
+                  8.893799893641188e-10,
+                  1.0519167569309858e-13
+                ],
+                "oscillator_velocities": [
+                  0.021697907041622604,
+                  4.917604355459473e-05,
+                  2.172699773696558e-08,
+                  3.005476448374245e-12
+                ],
+                "residual": -5.3174588570880126e-05,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0003076315686394534,
+                "tick": 5,
+                "time": 0.17500000000000002,
+                "total_energy": 0.0002527272678981771
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -18291,6 +20929,7 @@
             "forecast_residual": {
               "actual_tick": 7,
               "actual_time": 0.24500000000000002,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 4.0296718362113394e-12,
               "predicted_residual_delta": -1.047586867517294e-05,
@@ -18302,7 +20941,8 @@
               "realized_supplied_work_delta": 0.0003240310862500268,
               "residual_increment_abs_error": 2.1048387400812136e-06,
               "supplied_work_increment_abs_error": 1.6106692948794805e-06,
-              "total_energy_abs_error": 2.8040217359408693e-06
+              "total_energy_abs_error": 2.8040217359408693e-06,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 2,
@@ -18542,6 +21182,52 @@
                   "total_energy": 0.0009845665898087872
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 3,
+                "fixture_id": "planner-reachable-seed-2-port-0",
+                "local_oscillator_energies": [
+                  0.0005552021716320628,
+                  1.524586446635944e-08,
+                  2.0804303504467498e-14,
+                  5.9145402265679106e-21
+                ],
+                "neighbor_amplitude_means": [
+                  1.1712110703016667e-05,
+                  0.0019739509240640192,
+                  5.856057616388835e-06,
+                  1.0255068787316241e-08
+                ],
+                "node_displacements": [
+                  -3.617536802387689e-09,
+                  3.6157805638481477e-09,
+                  1.7554846465372975e-12,
+                  4.440892098500626e-16
+                ],
+                "node_velocities": [
+                  -6.625718885698299e-08,
+                  6.621872993477687e-08,
+                  3.8445869405024716e-11,
+                  1.3052801102068353e-14
+                ],
+                "oscillator_amplitudes": [
+                  0.003947891593059251,
+                  1.1712110703016667e-05,
+                  1.0255068787316241e-08,
+                  4.529761002190379e-12
+                ],
+                "oscillator_velocities": [
+                  0.031237427343755154,
+                  0.00016412271636183926,
+                  1.9319095796031807e-07,
+                  1.029098323723603e-10
+                ],
+                "residual": -6.575529598613428e-05,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0006316626548894802,
+                "tick": 7,
+                "time": 0.24500000000000002,
+                "total_energy": 0.0005609345647876794
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -18554,6 +21240,7 @@
             "forecast_residual": {
               "actual_tick": 9,
               "actual_time": 0.31500000000000006,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 1.5085884808869123e-11,
               "predicted_residual_delta": 3.6518062951579454e-06,
@@ -18565,7 +21252,8 @@
               "realized_supplied_work_delta": 0.00041884282823571655,
               "residual_increment_abs_error": 3.3358841559119478e-06,
               "supplied_work_increment_abs_error": 3.1450573692768345e-06,
-              "total_energy_abs_error": 9.872043965779439e-06
+              "total_energy_abs_error": 9.872043965779439e-06,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 3,
@@ -19164,6 +21852,52 @@
                   "total_energy": 0.0009716468695397807
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 0,
+                "fixture_id": "planner-reachable-seed-2-port-0",
+                "local_oscillator_energies": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_displacements": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "residual": 0.0,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0,
+                "tick": 1,
+                "time": 0.035,
+                "total_energy": 0.0
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 158,
               "rejection_counts": {
@@ -19178,6 +21912,7 @@
             "forecast_residual": {
               "actual_tick": 3,
               "actual_time": 0.10500000000000001,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
               "predicted_residual_delta": -2.971062781763816e-05,
@@ -19189,7 +21924,8 @@
               "realized_supplied_work_delta": 9.365945117327279e-05,
               "residual_increment_abs_error": 1.6219613288904987e-07,
               "supplied_work_increment_abs_error": 4.732090398928924e-08,
-              "total_energy_abs_error": 1.1523701923290262e-07
+              "total_energy_abs_error": 1.1523701923290262e-07,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 0,
@@ -19577,6 +22313,52 @@
                   "total_energy": 0.0009716468695397807
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 1,
+                "fixture_id": "planner-reachable-seed-2-port-0",
+                "local_oscillator_energies": [
+                  6.347700112780694e-05,
+                  1.3163981993496607e-11,
+                  0.0,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  1.771938000000001e-07,
+                  0.0002925379070915109,
+                  8.859690000000004e-08,
+                  0.0
+                ],
+                "node_displacements": [
+                  -6.5986971120000046e-12,
+                  6.5987215691620804e-12,
+                  0.0,
+                  0.0
+                ],
+                "node_velocities": [
+                  -1.8853420320000012e-10,
+                  1.8853420320000012e-10,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  0.0005850758141830218,
+                  1.771938000000001e-07,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  0.011116451833800622,
+                  5.062680000000002e-06,
+                  0.0,
+                  0.0
+                ],
+                "residual": -2.971062781763816e-05,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 9.36121302692835e-05,
+                "tick": 3,
+                "time": 0.10500000000000001,
+                "total_energy": 6.360325156216276e-05
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -19589,18 +22371,20 @@
             "forecast_residual": {
               "actual_tick": 5,
               "actual_time": 0.17500000000000002,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 9.98130494817931e-13,
               "predicted_residual_delta": -2.2384820804700003e-05,
-              "predicted_supplied_work_delta": 0.00021327147734970025,
+              "predicted_supplied_work_delta": 0.00021331879825368954,
               "predicted_tick": 5,
               "predicted_time": 0.17500000000000002,
               "prediction_source": "reused_forecast",
               "realized_residual_delta": -2.3301764620352917e-05,
               "realized_supplied_work_delta": 0.0002139721174661806,
               "residual_increment_abs_error": 9.169438156529132e-07,
-              "supplied_work_increment_abs_error": 7.006401164803464e-07,
-              "total_energy_abs_error": 3.8792175450531874e-07
+              "supplied_work_increment_abs_error": 6.533192124910572e-07,
+              "total_energy_abs_error": 3.8792175450531874e-07,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 1,
@@ -19914,6 +22698,52 @@
                   "total_energy": 0.0009716468695397807
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 2,
+                "fixture_id": "planner-reachable-seed-2-port-0",
+                "local_oscillator_energies": [
+                  0.000251759680502916,
+                  1.2888045016879943e-09,
+                  2.5203408783467767e-16,
+                  4.830969202534203e-24
+                ],
+                "neighbor_amplitude_means": [
+                  2.6022194583625444e-06,
+                  0.0009591595966208868,
+                  1.30110978177711e-06,
+                  8.89973192426376e-10
+                ],
+                "node_displacements": [
+                  -3.685308078355366e-10,
+                  3.6846525830469545e-10,
+                  6.52811138479592e-14,
+                  0.0
+                ],
+                "node_velocities": [
+                  -8.474094221794636e-09,
+                  8.472367972427957e-09,
+                  1.7261165195386799e-12,
+                  1.3284714030774628e-16
+                ],
+                "oscillator_amplitudes": [
+                  0.0019183183032685813,
+                  2.6022194583625444e-06,
+                  8.89973192426376e-10,
+                  1.0519167569309858e-13
+                ],
+                "oscillator_velocities": [
+                  0.021614804151927968,
+                  4.926698611125194e-05,
+                  2.1743946395887217e-08,
+                  3.005476448374245e-12
+                ],
+                "residual": -2.2384820804700003e-05,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.00030693092852297305,
+                "tick": 5,
+                "time": 0.17500000000000002,
+                "total_energy": 0.00025311518965268244
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -19926,18 +22756,20 @@
             "forecast_residual": {
               "actual_tick": 7,
               "actual_time": 0.24500000000000002,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 2.497358874092671e-11,
               "predicted_residual_delta": -1.0558017308706614e-05,
-              "predicted_supplied_work_delta": 0.00032082492456628827,
+              "predicted_supplied_work_delta": 0.0003215255646827686,
               "predicted_tick": 7,
               "predicted_time": 0.24500000000000002,
               "prediction_source": "reused_forecast",
               "realized_residual_delta": -1.2580707415254154e-05,
               "realized_supplied_work_delta": 0.0003240310862500268,
               "residual_increment_abs_error": 2.0226901065475403e-06,
-              "supplied_work_increment_abs_error": 3.20616168373851e-06,
-              "total_energy_abs_error": 4.422458586524677e-08
+              "supplied_work_increment_abs_error": 2.5055215672581638e-06,
+              "total_energy_abs_error": 4.422458586524677e-08,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 2,
@@ -20177,6 +23009,52 @@
                   "total_energy": 0.0009716468695397807
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 3,
+                "fixture_id": "planner-reachable-seed-2-port-0",
+                "local_oscillator_energies": [
+                  0.0005552162426899284,
+                  1.5136301565534177e-08,
+                  2.0861063002714814e-14,
+                  5.907999153066563e-21
+                ],
+                "neighbor_amplitude_means": [
+                  1.1755235586396825e-05,
+                  0.0019639316816804234,
+                  5.877620063124126e-06,
+                  1.0280824962061581e-08
+                ],
+                "node_displacements": [
+                  -3.599875802259184e-09,
+                  3.5981235768645092e-09,
+                  1.7510437544387969e-12,
+                  4.440892098500626e-16
+                ],
+                "node_velocities": [
+                  -6.587365128817725e-08,
+                  6.583530133680742e-08,
+                  3.833691064556695e-11,
+                  1.3040724263254065e-14
+                ],
+                "oscillator_amplitudes": [
+                  0.003927853082535885,
+                  1.1755235586396825e-05,
+                  1.0280824962061581e-08,
+                  4.53985142731335e-12
+                ],
+                "oscillator_velocities": [
+                  0.03095422320444701,
+                  0.0001649362610950566,
+                  1.9377677974792564e-07,
+                  1.0317135149373343e-10
+                ],
+                "residual": -1.0558017308706614e-05,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0006284564932057417,
+                "tick": 7,
+                "time": 0.24500000000000002,
+                "total_energy": 0.0005608903402018142
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -20189,18 +23067,20 @@
             "forecast_residual": {
               "actual_tick": 9,
               "actual_time": 0.31500000000000006,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 2.2850494975140344e-10,
               "predicted_residual_delta": 3.3165299387081266e-06,
-              "predicted_supplied_work_delta": 0.00040947382836007654,
+              "predicted_supplied_work_delta": 0.00041267999004381505,
               "predicted_tick": 9,
               "predicted_time": 0.31500000000000006,
               "prediction_source": "reused_forecast",
               "realized_residual_delta": 3.159221392459976e-07,
               "realized_supplied_work_delta": 0.00041884282823571655,
               "residual_increment_abs_error": 3.000607799462129e-06,
-              "supplied_work_increment_abs_error": 9.368999875640016e-06,
-              "total_energy_abs_error": 3.0476763032270164e-06
+              "supplied_work_increment_abs_error": 6.162838191901506e-06,
+              "total_energy_abs_error": 3.0476763032270164e-06,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 3,
@@ -20651,6 +23531,52 @@
                   "total_energy": 0.00025311518965268244
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 0,
+                "fixture_id": "planner-reachable-seed-2-port-0",
+                "local_oscillator_energies": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_displacements": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "node_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "residual": 0.0,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0,
+                "tick": 1,
+                "time": 0.035,
+                "total_energy": 0.0
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 2,
               "rejection_counts": {
@@ -20665,6 +23591,7 @@
             "forecast_residual": {
               "actual_tick": 3,
               "actual_time": 0.10500000000000001,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
               "predicted_residual_delta": -2.971062781763816e-05,
@@ -20676,7 +23603,8 @@
               "realized_supplied_work_delta": 9.365945117327279e-05,
               "residual_increment_abs_error": 1.6219613288904987e-07,
               "supplied_work_increment_abs_error": 4.732090398928924e-08,
-              "total_energy_abs_error": 1.1523701923290262e-07
+              "total_energy_abs_error": 1.1523701923290262e-07,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 0,
@@ -20990,6 +23918,52 @@
                   "total_energy": 0.0005611749522877277
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 1,
+                "fixture_id": "planner-reachable-seed-2-port-0",
+                "local_oscillator_energies": [
+                  6.336163635354922e-05,
+                  1.322226923790149e-11,
+                  0.0,
+                  0.0
+                ],
+                "neighbor_amplitude_means": [
+                  1.771938000000001e-07,
+                  0.0002926857849164775,
+                  8.859690000000004e-08,
+                  0.0
+                ],
+                "node_displacements": [
+                  -6.5986971120000046e-12,
+                  6.5987215691620804e-12,
+                  0.0,
+                  0.0
+                ],
+                "node_velocities": [
+                  -1.8853420320000012e-10,
+                  1.8853420320000012e-10,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_amplitudes": [
+                  0.000585371569832955,
+                  1.771938000000001e-07,
+                  0.0,
+                  0.0
+                ],
+                "oscillator_velocities": [
+                  0.011124901995227284,
+                  5.062680000000002e-06,
+                  0.0,
+                  0.0
+                ],
+                "residual": -2.987282395052721e-05,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 9.365945117327279e-05,
+                "tick": 3,
+                "time": 0.10500000000000001,
+                "total_energy": 6.348801454292986e-05
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 2,
               "rejection_counts": {
@@ -21004,6 +23978,7 @@
             "forecast_residual": {
               "actual_tick": 5,
               "actual_time": 0.17500000000000002,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 4.991924253406872e-13,
               "predicted_residual_delta": -2.2378736872175655e-05,
@@ -21015,7 +23990,8 @@
               "realized_supplied_work_delta": 0.0002139721174661806,
               "residual_increment_abs_error": 9.230277481772617e-07,
               "supplied_work_increment_abs_error": 5.613997221095212e-07,
-              "total_energy_abs_error": 5.805310760659071e-07
+              "total_energy_abs_error": 5.805310760659071e-07,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 1,
@@ -21329,6 +24305,52 @@
                   "total_energy": 0.0009753860455613221
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 2,
+                "fixture_id": "planner-reachable-seed-2-port-0",
+                "local_oscillator_energies": [
+                  0.0002513655475356801,
+                  1.2966481812627785e-09,
+                  2.5214900985632323e-16,
+                  4.8504314296102795e-24
+                ],
+                "neighbor_amplitude_means": [
+                  2.598497928346611e-06,
+                  0.0009613490966882865,
+                  1.2992490167691433e-06,
+                  8.893799893641188e-10
+                ],
+                "node_displacements": [
+                  -3.692364977064921e-10,
+                  3.6917113810375213e-10,
+                  6.52811138479592e-14,
+                  0.0
+                ],
+                "node_velocities": [
+                  -8.492558422950077e-09,
+                  8.490830871414637e-09,
+                  1.727418688298683e-12,
+                  1.3284714030774628e-16
+                ],
+                "oscillator_amplitudes": [
+                  0.0019226973039965837,
+                  2.598497928346611e-06,
+                  8.893799893641188e-10,
+                  1.0519167569309858e-13
+                ],
+                "oscillator_velocities": [
+                  0.021697907041622604,
+                  4.917604355459473e-05,
+                  2.172699773696558e-08,
+                  3.005476448374245e-12
+                ],
+                "residual": -5.3174588570880126e-05,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0003076315686394534,
+                "tick": 5,
+                "time": 0.17500000000000002,
+                "total_energy": 0.0002527272678981771
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 2,
               "rejection_counts": {
@@ -21343,6 +24365,7 @@
             "forecast_residual": {
               "actual_tick": 7,
               "actual_time": 0.24500000000000002,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 4.0296718362113394e-12,
               "predicted_residual_delta": -1.047586867517294e-05,
@@ -21354,7 +24377,8 @@
               "realized_supplied_work_delta": 0.0003240310862500268,
               "residual_increment_abs_error": 2.1048387400812136e-06,
               "supplied_work_increment_abs_error": 1.6106692948794805e-06,
-              "total_energy_abs_error": 2.8040217359408693e-06
+              "total_energy_abs_error": 2.8040217359408693e-06,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 2,
@@ -21594,6 +24618,52 @@
                   "total_energy": 0.0009845665898087872
                 }
               ],
+              "predicted_start_observation": {
+                "cycle": 3,
+                "fixture_id": "planner-reachable-seed-2-port-0",
+                "local_oscillator_energies": [
+                  0.0005552021716320628,
+                  1.524586446635944e-08,
+                  2.0804303504467498e-14,
+                  5.9145402265679106e-21
+                ],
+                "neighbor_amplitude_means": [
+                  1.1712110703016667e-05,
+                  0.0019739509240640192,
+                  5.856057616388835e-06,
+                  1.0255068787316241e-08
+                ],
+                "node_displacements": [
+                  -3.617536802387689e-09,
+                  3.6157805638481477e-09,
+                  1.7554846465372975e-12,
+                  4.440892098500626e-16
+                ],
+                "node_velocities": [
+                  -6.625718885698299e-08,
+                  6.621872993477687e-08,
+                  3.8445869405024716e-11,
+                  1.3052801102068353e-14
+                ],
+                "oscillator_amplitudes": [
+                  0.003947891593059251,
+                  1.1712110703016667e-05,
+                  1.0255068787316241e-08,
+                  4.529761002190379e-12
+                ],
+                "oscillator_velocities": [
+                  0.031237427343755154,
+                  0.00016412271636183926,
+                  1.9319095796031807e-07,
+                  1.029098323723603e-10
+                ],
+                "residual": -6.575529598613428e-05,
+                "schema": "vevo.v03.public-world-observation.v1",
+                "supplied_work": 0.0006316626548894802,
+                "tick": 7,
+                "time": 0.24500000000000002,
+                "total_energy": 0.0005609345647876794
+              },
               "predictor_schema": "vevo.v03.known-simulator-predictor.v2",
               "rejected_candidate_count": 0,
               "rejection_counts": {},
@@ -21606,6 +24676,7 @@
             "forecast_residual": {
               "actual_tick": 9,
               "actual_time": 0.31500000000000006,
+              "comparison_available": true,
               "comparison_status": "compared",
               "node_displacement_l2_error": 1.5085884808869123e-11,
               "predicted_residual_delta": 3.6518062951579454e-06,
@@ -21617,7 +24688,8 @@
               "realized_supplied_work_delta": 0.00041884282823571655,
               "residual_increment_abs_error": 3.3358841559119478e-06,
               "supplied_work_increment_abs_error": 3.1450573692768345e-06,
-              "total_energy_abs_error": 9.872043965779439e-06
+              "total_energy_abs_error": 9.872043965779439e-06,
+              "unavailable_reason": null
             },
             "observation": {
               "cycle": 3,

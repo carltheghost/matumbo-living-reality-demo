@@ -187,6 +187,21 @@ class SimulatorPlannerTests(unittest.TestCase):
         self.assertEqual(open_loop.budget.virtual_candidates, FULL_EPISODE_CANDIDATE_COUNT)
         self.assertEqual(open_loop.budget.virtual_physics_steps, FULL_EPISODE_VIRTUAL_PHYSICS_STEPS)
         self.assertTrue(all(cycle.action.name != "coast" for cycle in open_loop.cycles))
+        second_cycle = open_loop.cycles[1]
+        predicted_start = second_cycle.forecast.predicted_start_observation
+        predicted_end = second_cycle.forecast.predicted_observations[0]
+        self.assertIsNotNone(predicted_start)
+        self.assertAlmostEqual(
+            second_cycle.forecast_residual.predicted_supplied_work_delta,
+            predicted_end.supplied_work - predicted_start.supplied_work,
+        )
+        self.assertGreater(
+            abs(
+                second_cycle.forecast_residual.predicted_supplied_work_delta
+                - (predicted_end.supplied_work - second_cycle.observation.supplied_work)
+            ),
+            1.0e-12,
+        )
 
     def test_cancellation_is_terminal_and_does_not_try_an_alternate_action(self):
         run = run_strategy(self.reachable[0], "receding_horizon", cancel_before_cycle=0)
@@ -201,6 +216,8 @@ class SimulatorPlannerTests(unittest.TestCase):
         self.assertEqual(run.budget.in_flight_uncertain_physics_steps, 0)
         self.assertEqual(run.budget.never_dispatched_physics_steps, ACTION_DURATION_TICKS)
         self.assertEqual(run.cycles[0].forecast_residual.comparison_status, "cancelled_before_dispatch")
+        self.assertFalse(run.cycles[0].forecast_residual.comparison_available)
+        self.assertIn("not a known complete interval", run.cycles[0].forecast_residual.unavailable_reason)
 
     def test_partial_effect_is_uncertain_and_does_not_continue(self):
         run = run_strategy(self.reachable[0], "receding_horizon", uncertain_after_ticks=1)
@@ -217,6 +234,8 @@ class SimulatorPlannerTests(unittest.TestCase):
         self.assertEqual(run.budget.in_flight_uncertain_physics_steps, 0)
         self.assertEqual(run.budget.never_dispatched_physics_steps, 1)
         self.assertEqual(run.cycles[0].forecast_residual.comparison_status, "uncertain_outcome")
+        self.assertFalse(run.cycles[0].forecast_residual.comparison_available)
+        self.assertIn("action outcome is not a known complete interval", run.cycles[0].forecast_residual.unavailable_reason)
 
     def test_cancellation_after_first_tick_keeps_remainder_never_dispatched(self):
         run = run_strategy(self.reachable[0], "receding_horizon", cancel_after_ticks=1)
@@ -228,6 +247,10 @@ class SimulatorPlannerTests(unittest.TestCase):
         self.assertEqual(run.budget.known_executed_physics_steps, 1)
         self.assertEqual(run.budget.in_flight_uncertain_physics_steps, 0)
         self.assertEqual(run.budget.never_dispatched_physics_steps, 1)
+        residual = run.cycles[0].forecast_residual
+        self.assertFalse(residual.comparison_available)
+        self.assertIsNone(residual.predicted_supplied_work_delta)
+        self.assertIn("no exactly matching prefix prediction", residual.unavailable_reason)
 
     def test_exception_on_first_tick_marks_only_that_tick_in_flight(self):
         world = ResonantWorld(seed=0)
@@ -258,6 +281,18 @@ class SimulatorPlannerTests(unittest.TestCase):
         self.assertEqual(result.known_executed_ticks, 1)
         self.assertEqual(result.in_flight_uncertain_ticks, 1)
         self.assertEqual(result.never_dispatched_ticks, 0)
+
+    def test_post_tick_assessment_failure_preserves_completed_tick_accounting(self):
+        world = ResonantWorld(seed=0)
+        action = candidate_actions()[1]
+        goal = self.reachable[0].spec.goal
+        with patch.object(PlanningGoal, "assess", side_effect=RuntimeError("assessment failure")):
+            result = _execute_action(world, action, fixture_id="assessment-failure", cycle=0, goal=goal)
+        self.assertEqual(result.status, "error")
+        self.assertEqual(result.known_executed_ticks, 1)
+        self.assertEqual(result.in_flight_uncertain_ticks, 0)
+        self.assertEqual(result.never_dispatched_ticks, 1)
+        self.assertEqual(result.tick_after, result.tick_before + 1)
 
     def test_changed_world_case_is_recorded_and_receding_horizon_replans(self):
         change, runs = run_changed_world_case(self.reachable[0])
@@ -315,6 +350,7 @@ class SimulatorPlannerTests(unittest.TestCase):
         residual = payload["cycles"][0]["forecast_residual"]
         self.assertIn("node_displacement_l2_error", residual)
         self.assertIn("residual_increment_abs_error", residual)
+        self.assertTrue(residual["comparison_available"])
         self.assertAlmostEqual(
             residual["realized_residual_delta"],
             run.cycles[0].observation_after.residual - run.cycles[0].observation.residual,

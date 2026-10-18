@@ -519,6 +519,7 @@ class ForecastRecord:
     predicted_assessments: tuple[GoalAssessment, ...]
     selected_index: int
     score: float
+    predicted_start_observation: PublicObservation | None = None
     planning_horizon: int | None = None
     feasible_candidate_count: int = 0
     rejected_candidate_count: int = 0
@@ -572,6 +573,11 @@ class ForecastRecord:
             "predicted_assessments": [assessment.as_dict() for assessment in self.predicted_assessments],
             "selected_index": self.selected_index,
             "score": self.score,
+            "predicted_start_observation": (
+                self.predicted_start_observation.as_dict()
+                if self.predicted_start_observation is not None
+                else None
+            ),
             "reused": self.reused,
         }
 
@@ -592,23 +598,27 @@ class ForecastResidual:
         "constraint_violation",
         "budget_exhausted",
     ]
+    comparison_available: bool
+    unavailable_reason: str | None
     prediction_source: Literal["fresh_forecast", "reused_forecast", "coast_diagnostic"]
-    predicted_tick: int
-    actual_tick: int
-    predicted_time: float
-    actual_time: float
-    node_displacement_l2_error: float
-    total_energy_abs_error: float
-    predicted_residual_delta: float
-    realized_residual_delta: float
-    residual_increment_abs_error: float
-    predicted_supplied_work_delta: float
-    realized_supplied_work_delta: float
-    supplied_work_increment_abs_error: float
+    predicted_tick: int | None
+    actual_tick: int | None
+    predicted_time: float | None
+    actual_time: float | None
+    node_displacement_l2_error: float | None
+    total_energy_abs_error: float | None
+    predicted_residual_delta: float | None
+    realized_residual_delta: float | None
+    residual_increment_abs_error: float | None
+    predicted_supplied_work_delta: float | None
+    realized_supplied_work_delta: float | None
+    supplied_work_increment_abs_error: float | None
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "comparison_status": self.comparison_status,
+            "comparison_available": self.comparison_available,
+            "unavailable_reason": self.unavailable_reason,
             "prediction_source": self.prediction_source,
             "predicted_tick": self.predicted_tick,
             "actual_tick": self.actual_tick,
@@ -1083,6 +1093,7 @@ class BoundedPlanner:
             predicted_assessments=(assessment,),
             selected_index=0,
             score=assessment.score(goal),
+            predicted_start_observation=observation,
             planning_horizon=1,
             feasible_candidate_count=int(all(item.hard_constraints_ok for item in tick_assessments)),
             rejected_candidate_count=int(not all(item.hard_constraints_ok for item in tick_assessments)),
@@ -1144,6 +1155,7 @@ class BoundedPlanner:
             predicted_assessments=assessments,
             selected_index=selected_index,
             score=score,
+            predicted_start_observation=observation,
             planning_horizon=horizon,
             feasible_candidate_count=feasible_candidate_count,
             rejected_candidate_count=candidate_count - feasible_candidate_count,
@@ -1169,6 +1181,11 @@ def _truncate_reused_forecast(
         raise PlannerError("reused forecast cannot be truncated to the remaining horizon")
     start = consumed_actions
     stop = start + remaining_horizon
+    predicted_start_observation = (
+        forecast.predicted_observations[start - 1]
+        if start > 0
+        else forecast.predicted_start_observation
+    )
     return replace(
         forecast,
         horizon=remaining_horizon,
@@ -1181,6 +1198,7 @@ def _truncate_reused_forecast(
         rejection_counts=(),
         virtual_physics_steps=0,
         selected_index=0,
+        predicted_start_observation=predicted_start_observation,
         reused=True,
     )
 
@@ -1231,18 +1249,21 @@ def _execute_action(
         raise PlannerError("uncertain_after_ticks must be a positive integer")
     environment_applied = False
     ticks_done = 0
+    in_flight_tick = False
     try:
         for _ in range(action.duration_ticks):
             external = np.zeros(NODE_COUNT, dtype=np.float64)
             if environment_change is not None and environment_change.cycle == cycle:
                 external = np.asarray(environment_change.external_drive, dtype=np.float64)
                 environment_applied = True
+            in_flight_tick = True
             world.step(
                 np.asarray(action.drive_vector, dtype=np.float64),
                 external=external,
                 include_cue=False,
                 include_distractors=False,
             )
+            in_flight_tick = False
             ticks_done += 1
             if goal is not None:
                 tick_observation = _public_observation(world, fixture_id, cycle + 1)
@@ -1323,8 +1344,8 @@ def _execute_action(
             supplied_work_delta=float(world.supplied_work - work_before),
             environment_change_applied=environment_applied,
             known_executed_ticks=ticks_done,
-            in_flight_uncertain_ticks=int(ticks_done < action.duration_ticks),
-            never_dispatched_ticks=max(0, action.duration_ticks - ticks_done - 1),
+            in_flight_uncertain_ticks=int(in_flight_tick),
+            never_dispatched_ticks=max(0, action.duration_ticks - ticks_done - int(in_flight_tick)),
             error=str(exc),
         )
     return ActionResult(
@@ -1391,6 +1412,46 @@ def _forecast_residual(
         status = "budget_exhausted"
     else:
         status = "compared"
+    comparison_available = (
+        result.status in {"executed", "constraint_violation", "budget_exhausted"}
+        and result.known_executed_ticks == result.action.duration_ticks
+        and result.in_flight_uncertain_ticks == 0
+        and result.never_dispatched_ticks == 0
+    )
+    if not comparison_available:
+        if result.status in {"cancelled", "uncertain_outcome", "error"}:
+            unavailable_reason = (
+                f"residual comparison unavailable for {result.status}: the action outcome is not a "
+                "known complete interval"
+            )
+            if result.known_executed_ticks != result.action.duration_ticks:
+                unavailable_reason += "; no exactly matching prefix prediction is stored"
+        else:
+            unavailable_reason = (
+                "residual comparison unavailable: no exactly matching prefix prediction is stored "
+                f"for known={result.known_executed_ticks}, "
+                f"in_flight_uncertain={result.in_flight_uncertain_ticks}, "
+                f"never_dispatched={result.never_dispatched_ticks}"
+            )
+        return ForecastResidual(
+            comparison_status=status,
+            comparison_available=False,
+            unavailable_reason=unavailable_reason,
+            prediction_source=prediction_source,
+            predicted_tick=None,
+            actual_tick=None,
+            predicted_time=None,
+            actual_time=None,
+            node_displacement_l2_error=None,
+            total_energy_abs_error=None,
+            predicted_residual_delta=None,
+            realized_residual_delta=None,
+            residual_increment_abs_error=None,
+            predicted_supplied_work_delta=None,
+            realized_supplied_work_delta=None,
+            supplied_work_increment_abs_error=None,
+        )
+    predicted_prior = forecast.predicted_start_observation or prior
     displacement_error = float(
         np.linalg.norm(
             np.asarray(predicted.node_displacements, dtype=np.float64)
@@ -1399,6 +1460,8 @@ def _forecast_residual(
     )
     return ForecastResidual(
         comparison_status=status,
+        comparison_available=True,
+        unavailable_reason=None,
         prediction_source=prediction_source,
         predicted_tick=predicted.tick,
         actual_tick=realized.tick,
@@ -1409,10 +1472,10 @@ def _forecast_residual(
         predicted_residual_delta=predicted.residual,
         realized_residual_delta=realized.residual - prior.residual,
         residual_increment_abs_error=abs(predicted.residual - (realized.residual - prior.residual)),
-        predicted_supplied_work_delta=predicted.supplied_work - prior.supplied_work,
+        predicted_supplied_work_delta=predicted.supplied_work - predicted_prior.supplied_work,
         realized_supplied_work_delta=realized.supplied_work - prior.supplied_work,
         supplied_work_increment_abs_error=abs(
-            (predicted.supplied_work - prior.supplied_work)
+            (predicted.supplied_work - predicted_prior.supplied_work)
             - (realized.supplied_work - prior.supplied_work)
         ),
     )
