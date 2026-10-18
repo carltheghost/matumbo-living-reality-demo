@@ -16,16 +16,19 @@ from vevo_agents.v03_learned_predictor import (
     TIME_INDEX,
     WORLD_CONDITIONS,
     DEVELOPMENT_WORLD_SEEDS,
+    EvaluationDeadlineError,
     EvaluationReservationError,
     LearnedObservablePredictor,
     LinearObservableBaseline,
     NominalSimulatorBaseline,
     PersistenceBaseline,
+    NormalizerContractError,
     PredictorContractError,
     RolloutBoundsError,
     SharedDeadline,
     TrainOnlyNormalizer,
     build_examples,
+    build_frozen_selection_artifact,
     build_trajectories,
     build_split_manifest,
     compute_audit,
@@ -37,9 +40,13 @@ from vevo_agents.v03_learned_predictor import (
     pilot_experiment_config,
     public_observation_to_vector,
     recursive_rollout,
+    run_pilot_training,
     save_checkpoint,
+    selection_artifact_digest,
+    select_development_checkpoint,
     validate_public_state_vector,
     verify_split_manifest,
+    verify_frozen_selection_artifact,
     write_pilot_artifacts,
     _prediction_metrics,
     _conditioned_world,
@@ -197,8 +204,10 @@ class LearnedPredictorTests(unittest.TestCase):
         self.assertEqual(calls, 2 + 3)
 
     def test_initial_phase_condition_changes_public_state(self):
-        base_world = _conditioned_world(9500, WORLD_CONDITIONS["base"])
-        phase_world = _conditioned_world(9500, WORLD_CONDITIONS["initial_phase_shifted"])
+        # Use an inspected development seed for the physics unit check; the
+        # 9500--9507 final-test range remains metadata-only and unmaterialized.
+        base_world = _conditioned_world(9300, WORLD_CONDITIONS["base"])
+        phase_world = _conditioned_world(9300, WORLD_CONDITIONS["initial_phase_shifted"])
         base = public_observation_to_vector(PublicObservation.from_world(base_world, fixture_id="base", cycle=0))
         phase = public_observation_to_vector(PublicObservation.from_world(phase_world, fixture_id="phase", cycle=0))
         self.assertGreater(float(np.linalg.norm(base - phase)), 0.0)
@@ -312,6 +321,32 @@ class LearnedPredictorTests(unittest.TestCase):
         with self.assertRaises(PredictorContractError):
             model.apply_gradients({name: value for name, value in gradients.items() if name != "predictor.head_bias"})
 
+    def test_optimizer_stages_all_parameters_before_rejecting_late_invalid_gradient(self):
+        model = LearnedObservablePredictor(init_seed=7, geometry_enabled=True)
+        _, gradients = model.loss_and_gradients(
+            self.train_trajectories[0],
+            state_normalizer=self.state_normalizer,
+            target_normalizer=self.target_normalizer,
+        )
+        before = model.parameter_digest()
+        gradients["predictor.head_weight"] = gradients["predictor.head_weight"].copy()
+        gradients["predictor.head_weight"][0, 0] = np.nan
+        with self.assertRaises(PredictorContractError):
+            model.apply_gradients(gradients)
+        self.assertEqual(model.parameter_digest(), before)
+
+    def test_normalizer_provenance_binds_mean_scale_and_training_source(self):
+        payload = self.state_normalizer.as_dict()
+        tampered = dict(payload)
+        tampered["mean"] = list(payload["mean"])
+        tampered["mean"][0] += 1.0
+        with self.assertRaises(NormalizerContractError):
+            TrainOnlyNormalizer.from_dict(tampered)
+        tampered_source = dict(payload)
+        tampered_source["train_value_sha256"] = "0" * 64
+        with self.assertRaises(NormalizerContractError):
+            TrainOnlyNormalizer.from_dict(tampered_source)
+
     def test_representative_core_and_geometry_gradients_match_finite_difference(self):
         model = LearnedObservablePredictor(init_seed=7, geometry_enabled=True)
         trajectory = self.train_trajectories[0]
@@ -374,6 +409,81 @@ class LearnedPredictorTests(unittest.TestCase):
         self.assertFalse(result["selection_eligible"])
         self.assertEqual(result["variants"]["geometry_off"]["metrics"], None)
 
+    def test_deadline_is_checked_across_recursive_rollout_save_load_and_selection(self):
+        expired = SharedDeadline(0.0, clock=lambda: 1.0)
+        with self.assertRaises(EvaluationDeadlineError):
+            recursive_rollout(
+                PersistenceBaseline(),
+                self.train_examples[0].history,
+                candidate_actions(),
+                horizon=2,
+                deadline=expired,
+            )
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "checkpoint.json"
+            model = LearnedObservablePredictor(init_seed=7, geometry_enabled=False)
+            save_checkpoint(
+                path,
+                model,
+                state_normalizer=self.state_normalizer,
+                target_normalizer=self.target_normalizer,
+                split_manifest_sha256="manifest-hash",
+                experiment_config_sha256="config-hash",
+            )
+            with self.assertRaises(EvaluationDeadlineError):
+                load_checkpoint(path, deadline=expired)
+        with self.assertRaises(EvaluationDeadlineError):
+            select_development_checkpoint(
+                [{"status": "complete", "development_normalized_mse": 1.0, "development_rollout_rmse": 1.0, "init_seed": 7}],
+                deadline=expired,
+            )
+
+    def test_frozen_selection_digest_and_exact_provenance_binding(self):
+        binding = {
+            "variant": "learned_geometry_off",
+            "init_seed": 7,
+            "checkpoint_sha256": "c" * 64,
+            "state_normalizer_provenance_sha256": self.state_normalizer.provenance_sha256,
+            "target_normalizer_provenance_sha256": self.target_normalizer.provenance_sha256,
+        }
+        artifact = build_frozen_selection_artifact(
+            split_manifest_sha256="a" * 64,
+            experiment_config_sha256="b" * 64,
+            selected_checkpoints=[binding],
+        )
+        self.assertEqual(selection_artifact_digest(artifact), artifact["artifact_sha256"])
+        self.assertEqual(
+            verify_frozen_selection_artifact(
+                artifact,
+                expected_split_manifest_sha256="a" * 64,
+                expected_experiment_config_sha256="b" * 64,
+                expected_selected_checkpoints=[artifact["selected_checkpoints"][0]],
+            ),
+            artifact["artifact_sha256"],
+        )
+        tampered = dict(artifact)
+        tampered["experiment_config_sha256"] = "d" * 64
+        with self.assertRaises(EvaluationReservationError):
+            verify_frozen_selection_artifact(tampered)
+        with self.assertRaises(EvaluationReservationError):
+            verify_frozen_selection_artifact(
+                artifact,
+                expected_split_manifest_sha256="e" * 64,
+                expected_experiment_config_sha256="b" * 64,
+                expected_selected_checkpoints=[artifact["selected_checkpoints"][0]],
+            )
+
+    def test_runner_timeout_is_structured_without_starting_optimization(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            result = run_pilot_training(
+                Path(temporary) / "checkpoints",
+                deadline=SharedDeadline(0.0, clock=lambda: 1.0),
+            )
+        self.assertEqual(result["status"], "incomplete_shared_deadline")
+        self.assertEqual(result["pairs"], [])
+        self.assertFalse(result["final_test_materialized"])
+        self.assertIsNone(result["selection"])
+
     def test_case_failure_is_structured_and_metrics_are_omitted(self):
         class FailingBaseline:
             def predict(self, history):
@@ -411,11 +521,20 @@ class LearnedPredictorTests(unittest.TestCase):
             self.assertEqual(restored.parameter_digest(), model.parameter_digest())
             self.assertEqual(state.train_value_sha256, self.state_normalizer.train_value_sha256)
             self.assertEqual(target.train_value_sha256, self.target_normalizer.train_value_sha256)
+            self.assertEqual(state.provenance_sha256, self.state_normalizer.provenance_sha256)
+            self.assertEqual(target.provenance_sha256, self.target_normalizer.provenance_sha256)
             self.assertEqual(provenance["split_manifest_sha256"], "manifest-hash")
             with self.assertRaises(PredictorContractError):
                 load_checkpoint(path, expected_split_manifest_sha256="wrong-manifest")
             with self.assertRaises(PredictorContractError):
                 load_checkpoint(path, expected_state_normalizer_sha256="wrong-normalizer")
+
+            tampered_path = Path(temporary) / "tampered-normalizer.json"
+            tampered_payload = json.loads(path.read_text())
+            tampered_payload["state_normalizer"]["scale"][0] *= 2.0
+            tampered_path.write_text(json.dumps(tampered_payload, sort_keys=True, separators=(",", ":")) + "\n")
+            with self.assertRaises(NormalizerContractError):
+                load_checkpoint(tampered_path)
 
     def test_checkpoint_serialization_mismatch_is_rejected(self):
         model = LearnedObservablePredictor(init_seed=7, geometry_enabled=False)
@@ -434,6 +553,9 @@ class LearnedPredictorTests(unittest.TestCase):
         self.assertEqual(config["compute_audit"]["training_window_count"], 88)
         self.assertEqual(config["compute_audit"]["manifest_total_window_count"], 352)
         self.assertEqual(config["training"]["optimizer"], "sgd")
+        self.assertEqual(config["training"]["updates"], 100)
+        self.assertEqual(config["training"]["fit_count"], 6)
+        self.assertEqual(config["training"]["eval_every_updates"], 100)
         self.assertEqual(config["training"]["upstream_training_gate"]["existing_all_four_models_training_success"], "8/8")
         self.assertIsNone(config["acceptance_thresholds"]["constraint_thresholds"]["zero_violation_rate"])
 
@@ -446,6 +568,8 @@ class LearnedPredictorTests(unittest.TestCase):
         self.assertEqual(result["train_trajectories_materialized"], 8)
         self.assertEqual(result["train_windows_materialized"], 88)
         self.assertTrue(result["not_end_to_end_training_estimate"])
+        self.assertGreater(result["probe_based_six_fit_optimizer_seconds"], 0.0)
+        self.assertEqual(result["runner_budget"]["updates_per_variant_seed"], 100)
 
     def test_artifact_writer_creates_only_new_pilot_files(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -453,12 +577,12 @@ class LearnedPredictorTests(unittest.TestCase):
             hashes = write_pilot_artifacts(output, repeats=1)
             self.assertEqual(
                 set(hashes),
-                {"experiment_config.json", "split_manifest.json", "cpu_feasibility.json", "README.md", "checkpoint_README.md"},
+                {"experiment_config.json", "split_manifest.json", "cpu_feasibility.json", "README.md", "runner_review.md", "checkpoint_README.md"},
             )
             self.assertTrue((output / "experiment_config.json").exists())
             self.assertTrue((output / "split_manifest.json").exists())
             config = json.loads((output / "experiment_config.json").read_text())
-            self.assertEqual(config["status"], "implementation_and_configuration_only_no_training")
+            self.assertEqual(config["status"], "runner_implemented_configuration_only_no_training")
             self.assertFalse(config["resource_budget"]["full_retraining_started"])
 
 

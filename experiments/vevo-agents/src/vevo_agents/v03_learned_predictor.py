@@ -1,7 +1,7 @@
-"""Versioned learned public-observable predictor pilot contract.
+"""Versioned learned public-observable predictor pilot contract and runner.
 
-This module is a reviewable experiment boundary, not a training runner.  It
-uses the existing four-peripheral/one-center hybrid core as a recurrent
+This module is a reviewable experiment boundary and an opt-in training runner.
+It uses the existing four-peripheral/one-center hybrid core as a recurrent
 representation and adds a small, explicitly trainable observable head.  The
 world model is deliberately restricted to the public observation whitelist:
 no target, calibration, natural frequency, seed, fixture goal, or future
@@ -15,9 +15,9 @@ The implementation has three purposes before training is authorized:
 * measure a small CPU forward/backward feasibility probe without updating a
   parameter or reading the reserved final-test outcomes.
 
-The actual optimizer loop is intentionally absent.  A later, separately
-reviewed runner may consume :func:`pilot_experiment_config` and
-:func:`save_checkpoint` after the source/configuration review.
+The concrete runner is deliberately separate from the command-line artifact
+writer.  It can execute the preregistered six-fit development pilot under one
+shared deadline, but this module does not invoke it during artifact creation.
 """
 
 from __future__ import annotations
@@ -57,6 +57,8 @@ NORMALIZER_SCHEMA = "vevo.v03.learned-observable-normalizer.v1"
 CHECKPOINT_SCHEMA = "vevo.v03.learned-observable-checkpoint.v1"
 EVALUATION_SCHEMA = "vevo.v03.learned-observable-evaluation.v1"
 ARTIFACT_SCHEMA = "vevo.v03.learned-observable-pilot-artifacts.v1"
+SELECTION_ARTIFACT_SCHEMA = "vevo.v03.learned-observable-selection.v1"
+PILOT_RUN_SCHEMA = "vevo.v03.learned-observable-pilot-run.v1"
 
 HEAD_SEED_SALT = 0x4C504844
 ACTION_SEED_SALT = 0x4143544E
@@ -67,7 +69,7 @@ MAX_ACTION_DURATION_TICKS = PLANNER_ACTION_DURATION_TICKS
 HISTORY_LENGTH = 2
 TRAJECTORY_ACTION_COUNT = 12
 ROLL_OUT_HORIZONS = (2, 4)
-TRAIN_UPDATES = 1_000
+TRAIN_UPDATES = 100
 BATCH_SIZE = 1
 LEARNING_RATE = 1.0e-3
 EVAL_EVERY_UPDATES = 100
@@ -218,6 +220,11 @@ def _canonical_bytes(value: Any) -> bytes:
 def _sha256(value: Any) -> str:
     payload = value if isinstance(value, bytes) else _canonical_bytes(value)
     return hashlib.sha256(payload).hexdigest()
+
+
+def _is_sha256(value: Any) -> bool:
+    text = str(value)
+    return len(text) == 64 and all(char in "0123456789abcdef" for char in text)
 
 
 def _finite_array(value: Any, shape: tuple[int, ...], *, name: str) -> np.ndarray:
@@ -562,11 +569,19 @@ def generate_trajectory(
     condition_name: str,
     *,
     reviewed_selection_artifact: Mapping[str, Any] | None = None,
+    expected_split_manifest_sha256: str | None = None,
+    expected_experiment_config_sha256: str | None = None,
+    expected_selected_checkpoints: Sequence[Mapping[str, Any]] | None = None,
 ) -> Trajectory:
     if seed not in spec.world_seeds or condition_name not in spec.condition_names:
         raise PredictorContractError("trajectory request is outside its split specification")
     if spec.name == "test":
-        _require_reviewed_final_test_access(reviewed_selection_artifact)
+        _require_reviewed_final_test_access(
+            reviewed_selection_artifact,
+            expected_split_manifest_sha256=expected_split_manifest_sha256,
+            expected_experiment_config_sha256=expected_experiment_config_sha256,
+            expected_selected_checkpoints=expected_selected_checkpoints,
+        )
     world = _conditioned_world(seed, WORLD_CONDITIONS[condition_name])
     fixture_id = f"pilot-{spec.name}-{condition_name}-world-{seed}"
     observations = [
@@ -594,17 +609,162 @@ def generate_trajectory(
     )
 
 
-def _require_reviewed_final_test_access(reviewed_selection_artifact: Mapping[str, Any] | None) -> None:
-    if not isinstance(reviewed_selection_artifact, Mapping):
-        raise EvaluationReservationError(
-            "final-test materialization requires a reviewed frozen selection artifact"
-        )
-    if reviewed_selection_artifact.get("status") != "reviewed_and_frozen":
+def _canonical_checkpoint_bindings(value: Any, *, name: str) -> list[dict[str, Any]]:
+    if not isinstance(value, (list, tuple)) or not value:
+        raise EvaluationReservationError(f"{name} must be a non-empty checkpoint binding list")
+    bindings = []
+    identities = set()
+    for index, item in enumerate(value):
+        if not isinstance(item, Mapping):
+            raise EvaluationReservationError(f"{name}[{index}] is not a mapping")
+        binding = dict(item)
+        for required in ("variant", "init_seed", "checkpoint_sha256"):
+            if required not in binding or binding[required] in (None, ""):
+                raise EvaluationReservationError(f"{name}[{index}] lacks {required}")
+        try:
+            binding["init_seed"] = int(binding["init_seed"])
+        except (TypeError, ValueError) as exc:
+            raise EvaluationReservationError(f"{name}[{index}] has an invalid init_seed") from exc
+        checkpoint_sha = str(binding["checkpoint_sha256"])
+        if not _is_sha256(checkpoint_sha):
+            raise EvaluationReservationError(f"{name}[{index}] has an invalid checkpoint_sha256")
+        binding["checkpoint_sha256"] = checkpoint_sha
+        _validate_no_hidden_fields(binding)
+        identity = (str(binding["variant"]), binding["init_seed"], checkpoint_sha)
+        if identity in identities:
+            raise EvaluationReservationError(f"{name}[{index}] duplicates a selected checkpoint")
+        identities.add(identity)
+        bindings.append(binding)
+    return sorted(bindings, key=lambda item: _canonical_bytes(item))
+
+
+def _verify_checkpoint_files(bindings: Sequence[Mapping[str, Any]]) -> None:
+    for index, binding in enumerate(bindings):
+        checkpoint_path = binding.get("checkpoint_path")
+        if checkpoint_path in (None, ""):
+            continue
+        try:
+            actual = hashlib.sha256(Path(str(checkpoint_path)).read_bytes()).hexdigest()
+        except OSError as exc:
+            raise EvaluationReservationError(
+                f"selected checkpoint {index} cannot be read for provenance verification"
+            ) from exc
+        if actual != str(binding["checkpoint_sha256"]):
+            raise EvaluationReservationError(f"selected checkpoint {index} file digest mismatch")
+
+
+def selection_artifact_digest(artifact: Mapping[str, Any]) -> str:
+    """Hash a frozen selection artifact without its self-referential digest."""
+
+    if not isinstance(artifact, Mapping):
+        raise EvaluationReservationError("selection artifact must be a mapping")
+    body = dict(artifact)
+    body.pop("artifact_sha256", None)
+    return _sha256(body)
+
+
+def build_frozen_selection_artifact(
+    *,
+    split_manifest_sha256: str,
+    experiment_config_sha256: str,
+    selected_checkpoints: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Create the canonical, provenance-bound artifact required for final test."""
+
+    if not split_manifest_sha256 or not experiment_config_sha256:
+        raise EvaluationReservationError("selection artifact provenance hashes are required")
+    bindings = _canonical_checkpoint_bindings(selected_checkpoints, name="selected_checkpoints")
+    for name, value in (
+        ("split_manifest_sha256", split_manifest_sha256),
+        ("experiment_config_sha256", experiment_config_sha256),
+    ):
+        text = str(value)
+        if not _is_sha256(text):
+            raise EvaluationReservationError(f"{name} is not a canonical SHA-256 digest")
+    for binding in bindings:
+        binding["split_manifest_sha256"] = str(split_manifest_sha256)
+        binding["experiment_config_sha256"] = str(experiment_config_sha256)
+    body = {
+        "schema": SELECTION_ARTIFACT_SCHEMA,
+        "status": "reviewed_and_frozen",
+        "selection_frozen": True,
+        "split_manifest_sha256": str(split_manifest_sha256),
+        "experiment_config_sha256": str(experiment_config_sha256),
+        "selected_checkpoints": bindings,
+        "final_test_world_seeds": list(TEST_WORLD_SEEDS),
+    }
+    body["artifact_sha256"] = selection_artifact_digest(body)
+    return body
+
+
+def verify_frozen_selection_artifact(
+    artifact: Mapping[str, Any],
+    *,
+    expected_split_manifest_sha256: str | None = None,
+    expected_experiment_config_sha256: str | None = None,
+    expected_selected_checkpoints: Sequence[Mapping[str, Any]] | None = None,
+) -> str:
+    """Verify the digest and exact provenance binding of a frozen selection."""
+
+    if not isinstance(artifact, Mapping):
+        raise EvaluationReservationError("final-test selection artifact must be a mapping")
+    if artifact.get("schema") != SELECTION_ARTIFACT_SCHEMA:
+        raise EvaluationReservationError("final-test selection artifact schema is incompatible")
+    if artifact.get("status") != "reviewed_and_frozen":
         raise EvaluationReservationError("final-test selection artifact is not reviewed_and_frozen")
-    if reviewed_selection_artifact.get("selection_frozen") is not True:
+    if artifact.get("selection_frozen") is not True:
         raise EvaluationReservationError("final-test selection artifact does not freeze selection")
-    if not reviewed_selection_artifact.get("artifact_sha256"):
-        raise EvaluationReservationError("final-test selection artifact lacks provenance hash")
+    supplied_digest = artifact.get("artifact_sha256")
+    actual_digest = selection_artifact_digest(artifact)
+    if not isinstance(supplied_digest, str) or supplied_digest != actual_digest:
+        raise EvaluationReservationError("final-test selection artifact digest mismatch")
+    if list(artifact.get("final_test_world_seeds", [])) != list(TEST_WORLD_SEEDS):
+        raise EvaluationReservationError("final-test selection artifact binds the wrong test worlds")
+    actual_manifest = str(artifact.get("split_manifest_sha256", ""))
+    actual_config = str(artifact.get("experiment_config_sha256", ""))
+    if not _is_sha256(actual_manifest) or not _is_sha256(actual_config) or not _is_sha256(supplied_digest):
+        raise EvaluationReservationError("final-test selection artifact has a non-canonical provenance digest")
+    if expected_split_manifest_sha256 is not None and actual_manifest != str(expected_split_manifest_sha256):
+        raise EvaluationReservationError("final-test selection artifact split manifest binding mismatch")
+    if expected_experiment_config_sha256 is not None and actual_config != str(expected_experiment_config_sha256):
+        raise EvaluationReservationError("final-test selection artifact experiment config binding mismatch")
+    bindings = _canonical_checkpoint_bindings(
+        artifact.get("selected_checkpoints"), name="selected_checkpoints"
+    )
+    for index, binding in enumerate(bindings):
+        if binding.get("split_manifest_sha256") != actual_manifest:
+            raise EvaluationReservationError(f"selected checkpoint {index} has a split manifest mismatch")
+        if binding.get("experiment_config_sha256") != actual_config:
+            raise EvaluationReservationError(f"selected checkpoint {index} has an experiment config mismatch")
+    if expected_selected_checkpoints is not None:
+        expected = _canonical_checkpoint_bindings(expected_selected_checkpoints, name="expected_selected_checkpoints")
+        if _canonical_bytes(bindings) != _canonical_bytes(expected):
+            raise EvaluationReservationError("final-test selection artifact checkpoint binding mismatch")
+        _verify_checkpoint_files(expected)
+    return actual_digest
+
+
+def _require_reviewed_final_test_access(
+    reviewed_selection_artifact: Mapping[str, Any] | None,
+    *,
+    expected_split_manifest_sha256: str | None = None,
+    expected_experiment_config_sha256: str | None = None,
+    expected_selected_checkpoints: Sequence[Mapping[str, Any]] | None = None,
+) -> None:
+    if expected_split_manifest_sha256 is None or expected_experiment_config_sha256 is None:
+        raise EvaluationReservationError(
+            "final-test materialization requires expected manifest and config provenance"
+        )
+    if expected_selected_checkpoints is None:
+        raise EvaluationReservationError(
+            "final-test materialization requires expected selected checkpoint provenance"
+        )
+    verify_frozen_selection_artifact(
+        reviewed_selection_artifact,
+        expected_split_manifest_sha256=expected_split_manifest_sha256,
+        expected_experiment_config_sha256=expected_experiment_config_sha256,
+        expected_selected_checkpoints=expected_selected_checkpoints,
+    )
 
 
 def build_trajectories(
@@ -612,11 +772,19 @@ def build_trajectories(
     *,
     include_test: bool = False,
     reviewed_selection_artifact: Mapping[str, Any] | None = None,
+    expected_split_manifest_sha256: str | None = None,
+    expected_experiment_config_sha256: str | None = None,
+    expected_selected_checkpoints: Sequence[Mapping[str, Any]] | None = None,
 ) -> tuple[Trajectory, ...]:
     if split == "test":
         if not include_test:
             raise EvaluationReservationError("final-test trajectory materialization is closed by default")
-        _require_reviewed_final_test_access(reviewed_selection_artifact)
+        _require_reviewed_final_test_access(
+            reviewed_selection_artifact,
+            expected_split_manifest_sha256=expected_split_manifest_sha256,
+            expected_experiment_config_sha256=expected_experiment_config_sha256,
+            expected_selected_checkpoints=expected_selected_checkpoints,
+        )
     spec = split_spec(split)
     return tuple(
         generate_trajectory(
@@ -624,6 +792,9 @@ def build_trajectories(
             seed,
             condition_name,
             reviewed_selection_artifact=reviewed_selection_artifact,
+            expected_split_manifest_sha256=expected_split_manifest_sha256,
+            expected_experiment_config_sha256=expected_experiment_config_sha256,
+            expected_selected_checkpoints=expected_selected_checkpoints,
         )
         for seed in spec.world_seeds
         for condition_name in spec.condition_names
@@ -635,6 +806,9 @@ def build_examples(
     *,
     include_test: bool = False,
     reviewed_selection_artifact: Mapping[str, Any] | None = None,
+    expected_split_manifest_sha256: str | None = None,
+    expected_experiment_config_sha256: str | None = None,
+    expected_selected_checkpoints: Sequence[Mapping[str, Any]] | None = None,
 ) -> tuple[TransitionExample, ...]:
     return tuple(
         example
@@ -642,6 +816,9 @@ def build_examples(
             split,
             include_test=include_test,
             reviewed_selection_artifact=reviewed_selection_artifact,
+            expected_split_manifest_sha256=expected_split_manifest_sha256,
+            expected_experiment_config_sha256=expected_experiment_config_sha256,
+            expected_selected_checkpoints=expected_selected_checkpoints,
         )
         for example in trajectory.window_examples()
     )
@@ -865,7 +1042,16 @@ class TrainOnlyNormalizer:
             raise NormalizerContractError("normalizer inverse produced a non-finite value")
         return result
 
-    def as_dict(self) -> dict[str, Any]:
+    def _provenance_payload(self) -> dict[str, Any]:
+        """Return the canonical payload whose digest binds this normalizer.
+
+        ``train_value_sha256`` identifies the source training observations, but
+        it is not sufficient on its own: a checkpoint can otherwise carry a
+        modified mean or scale while retaining the source-data digest.  The
+        provenance digest therefore covers both the fitted parameters and the
+        training-data provenance.
+        """
+
         return {
             "schema": self.schema,
             "component_names": list(self.component_names),
@@ -877,9 +1063,18 @@ class TrainOnlyNormalizer:
             "train_value_sha256": self.train_value_sha256,
         }
 
+    @property
+    def provenance_sha256(self) -> str:
+        return _sha256(self._provenance_payload())
+
+    def as_dict(self) -> dict[str, Any]:
+        payload = self._provenance_payload()
+        payload["provenance_sha256"] = self.provenance_sha256
+        return payload
+
     @classmethod
     def from_dict(cls, payload: Mapping[str, Any]) -> "TrainOnlyNormalizer":
-        return cls(
+        normalizer = cls(
             tuple(payload["component_names"]),
             tuple(payload["units"]),
             tuple(payload["mean"]),
@@ -889,6 +1084,10 @@ class TrainOnlyNormalizer:
             str(payload["train_value_sha256"]),
             str(payload.get("schema", "")),
         )
+        supplied_digest = payload.get("provenance_sha256")
+        if not isinstance(supplied_digest, str) or supplied_digest != normalizer.provenance_sha256:
+            raise NormalizerContractError("normalizer provenance digest mismatch")
+        return normalizer
 
 
 def fit_train_normalizers(
@@ -1280,10 +1479,12 @@ class LearnedObservablePredictor:
     ) -> dict[str, Any]:
         """Apply the frozen plain-SGD update to every trainable parameter.
 
-        This is the implementation contract a later runner will use.  The
-        method deliberately requires an exact parameter-key match so a
+        The method deliberately requires an exact parameter-key match so a
         forgotten core or geometry parameter cannot silently remain frozen.
-        It performs no clipping, momentum, schedule change, or selection.
+        Every gradient and resulting value is validated and staged before any
+        live parameter is mutated.  This prevents a late invalid gradient or
+        deadline from exposing a partial update.  It performs no clipping,
+        momentum, schedule change, or selection.
         """
 
         if not math.isfinite(float(learning_rate)) or learning_rate <= 0.0:
@@ -1308,20 +1509,26 @@ class LearnedObservablePredictor:
             "predictor.head_weight": self.head_weight,
             "predictor.head_bias": self.head_bias,
         }
+        staged: dict[str, np.ndarray] = {}
         for name in sorted(expected):
+            if deadline is not None:
+                deadline.check(f"before_optimizer_stage_{name}")
             gradient = _finite_array(gradients[name], parameter_arrays[name].shape, name=f"gradient {name}")
             updated = parameter_arrays[name] - float(learning_rate) * gradient
             if not np.isfinite(updated).all():
                 raise PredictorContractError(f"optimizer update for {name} is non-finite")
-            parameter_arrays[name][...] = updated
-        self._validate_head()
+            staged[name] = updated
         if deadline is not None:
-            deadline.check("after_optimizer_update")
+            deadline.check("before_optimizer_commit")
+        for name in sorted(expected):
+            parameter_arrays[name][...] = staged[name]
+        self._validate_head()
         return {
             "optimizer": "sgd",
             "learning_rate": float(learning_rate),
             "updated_parameter_count": len(expected),
             "updated_element_count": int(sum(value.size for value in parameter_arrays.values())),
+            "commit_atomic_after_validation": True,
         }
 
     def state_dict(self) -> dict[str, Any]:
@@ -1372,9 +1579,12 @@ def save_checkpoint(
     split_manifest_sha256: str,
     experiment_config_sha256: str,
     selection: Mapping[str, Any] | None = None,
-) -> None:
-    """Save a complete, versioned checkpoint; not called by pilot setup."""
+    deadline: SharedDeadline | None = None,
+) -> str:
+    """Save a complete, versioned checkpoint and return its file digest."""
 
+    if deadline is not None:
+        deadline.check("checkpoint_save_start")
     if not split_manifest_sha256 or not experiment_config_sha256:
         raise CheckpointContractError("checkpoint provenance hashes are required")
     payload = {
@@ -1390,11 +1600,21 @@ def save_checkpoint(
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = target.with_suffix(target.suffix + ".tmp")
-    temporary.write_text(
-        json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n",
-        encoding="utf-8",
-    )
-    temporary.replace(target)
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n"
+    if deadline is not None:
+        deadline.check("checkpoint_save_before_write")
+    try:
+        temporary.write_text(encoded, encoding="utf-8")
+        if deadline is not None:
+            deadline.check("checkpoint_save_before_replace")
+        temporary.replace(target)
+    except EvaluationDeadlineError:
+        if temporary.exists():
+            temporary.unlink()
+        raise
+    if deadline is not None:
+        deadline.check("checkpoint_save_after_replace")
+    return hashlib.sha256(target.read_bytes()).hexdigest()
 
 
 def load_checkpoint(
@@ -1404,17 +1624,38 @@ def load_checkpoint(
     expected_experiment_config_sha256: str | None = None,
     expected_state_normalizer_sha256: str | None = None,
     expected_target_normalizer_sha256: str | None = None,
+    expected_state_normalizer_provenance_sha256: str | None = None,
+    expected_target_normalizer_provenance_sha256: str | None = None,
+    expected_checkpoint_sha256: str | None = None,
+    deadline: SharedDeadline | None = None,
 ) -> tuple[LearnedObservablePredictor, TrainOnlyNormalizer, TrainOnlyNormalizer, dict[str, Any]]:
-    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    if deadline is not None:
+        deadline.check("checkpoint_load_start")
+    checkpoint_path = Path(path)
+    raw = checkpoint_path.read_bytes()
+    checkpoint_sha256 = hashlib.sha256(raw).hexdigest()
+    if expected_checkpoint_sha256 is not None and str(expected_checkpoint_sha256) != checkpoint_sha256:
+        raise CheckpointContractError(
+            f"checkpoint file digest mismatch: expected {expected_checkpoint_sha256}, got {checkpoint_sha256}"
+        )
+    if deadline is not None:
+        deadline.check("checkpoint_load_after_read")
+    payload = json.loads(raw.decode("utf-8"))
     if payload.get("schema") != CHECKPOINT_SCHEMA:
         raise CheckpointContractError("checkpoint schema is incompatible")
+    if deadline is not None:
+        deadline.check("checkpoint_load_before_model")
     model = LearnedObservablePredictor(
         init_seed=int(payload["init_seed"]),
         geometry_enabled=bool(payload["geometry_enabled"]),
     )
     model.load_state_dict(payload)
+    if deadline is not None:
+        deadline.check("checkpoint_load_after_model")
     state_normalizer = TrainOnlyNormalizer.from_dict(payload["state_normalizer"])
     target_normalizer = TrainOnlyNormalizer.from_dict(payload["target_normalizer"])
+    if deadline is not None:
+        deadline.check("checkpoint_load_after_normalizers")
     for key in ("split_manifest_sha256", "experiment_config_sha256"):
         if not payload.get(key):
             raise CheckpointContractError(f"checkpoint omits {key}")
@@ -1427,24 +1668,48 @@ def load_checkpoint(
     actual_provenance = {
         "split_manifest_sha256": payload.get("split_manifest_sha256"),
         "experiment_config_sha256": payload.get("experiment_config_sha256"),
-        "state_normalizer_sha256": state_normalizer.train_value_sha256,
-        "target_normalizer_sha256": target_normalizer.train_value_sha256,
+        "state_normalizer_sha256": state_normalizer.provenance_sha256,
+        "target_normalizer_sha256": target_normalizer.provenance_sha256,
     }
+    expected_provenance["state_normalizer_sha256"] = (
+        expected_state_normalizer_provenance_sha256
+        if expected_state_normalizer_provenance_sha256 is not None
+        else expected_state_normalizer_sha256
+    )
+    expected_provenance["target_normalizer_sha256"] = (
+        expected_target_normalizer_provenance_sha256
+        if expected_target_normalizer_provenance_sha256 is not None
+        else expected_target_normalizer_sha256
+    )
     for name, expected in expected_provenance.items():
         if expected is not None and str(expected) != str(actual_provenance[name]):
             raise CheckpointContractError(
                 f"checkpoint {name} mismatch: expected {expected}, got {actual_provenance[name]}"
             )
-    return model, state_normalizer, target_normalizer, dict(payload)
+    if deadline is not None:
+        deadline.check("checkpoint_load_complete")
+    returned_payload = dict(payload)
+    returned_payload["checkpoint_sha256"] = checkpoint_sha256
+    returned_payload["state_normalizer_provenance_sha256"] = state_normalizer.provenance_sha256
+    returned_payload["target_normalizer_provenance_sha256"] = target_normalizer.provenance_sha256
+    return model, state_normalizer, target_normalizer, returned_payload
 
 
-def select_development_checkpoint(records: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+def select_development_checkpoint(
+    records: Sequence[Mapping[str, Any]],
+    *,
+    deadline: SharedDeadline | None = None,
+) -> dict[str, Any]:
     """Select one complete development record using the preregistered key."""
 
     if not records:
         raise PredictorContractError("development checkpoint selection needs at least one record")
+    if deadline is not None:
+        deadline.check("selection_start")
     prepared: list[tuple[tuple[float, float, int], Mapping[str, Any]]] = []
-    for record in records:
+    for index, record in enumerate(records):
+        if deadline is not None:
+            deadline.check(f"selection_record_{index}")
         if not isinstance(record, Mapping) or record.get("status") != "complete":
             raise PredictorContractError("incomplete development records cannot be selected")
         try:
@@ -1456,7 +1721,10 @@ def select_development_checkpoint(records: Sequence[Mapping[str, Any]]) -> dict[
         if not all(math.isfinite(value) for value in (normalized_mse, rollout_rmse)) or init_seed < 0:
             raise PredictorContractError("development selection record contains invalid metrics")
         prepared.append(((normalized_mse, rollout_rmse, init_seed), record))
-    return dict(min(prepared, key=lambda item: item[0])[1])
+    selected = dict(min(prepared, key=lambda item: item[0])[1])
+    if deadline is not None:
+        deadline.check("selection_complete")
+    return selected
 
 
 class PersistenceBaseline:
@@ -1597,7 +1865,9 @@ def compute_audit() -> dict[str, Any]:
         "manifest_total_window_count": 32 * (TRAJECTORY_ACTION_COUNT - HISTORY_LENGTH + 1),
         "paired_geometry_variants": 2,
         "paired_initialization_seeds": list(PAIRED_INITIALIZATION_SEEDS),
-        "timing_scope": "one trajectory forward and loss/backward probe only; not an end-to-end training estimate",
+        "timing_scope": "one trajectory forward and loss/backward probe only; no extrapolated six-fit estimate",
+        "end_to_end_training_estimate": None,
+        "timing_note": "The concrete runner records actual elapsed wall time; the probe is not a six-fit estimate.",
         "accounting_scope": "dataset generation, recurrent core forward, observable head, optimizer contract, and recursive evaluation; no hidden simulator-frequency target calculation",
     }
 
@@ -1631,7 +1901,7 @@ def pilot_experiment_config(*, split_manifest_sha256: str) -> dict[str, Any]:
         "predictor_schema": LEARNED_PREDICTOR_SCHEMA,
         "dataset_schema": DATASET_SCHEMA,
         "core_model_version": "vevo.v03.hybrid-core.v2",
-        "status": "implementation_and_configuration_only_no_training",
+        "status": "runner_implemented_configuration_only_no_training",
         "architecture_unchanged": True,
         "five_brain_core": {
             "peripheral_brains": 4,
@@ -1710,13 +1980,19 @@ def pilot_experiment_config(*, split_manifest_sha256: str) -> dict[str, Any]:
         "training": {
             "paired_initialization_seeds": list(PAIRED_INITIALIZATION_SEEDS),
             "updates": TRAIN_UPDATES,
+            "fit_count": len(PAIRED_INITIALIZATION_SEEDS) * 2,
+            "updates_per_variant_seed": TRAIN_UPDATES,
             "batch_size": BATCH_SIZE,
             "learning_rate": LEARNING_RATE,
             "optimizer": "sgd",
             "update_rule": "parameter := parameter - learning_rate * reverse_mode_gradient",
             "gradient_parameter_set": "all_core_and_head_parameters_exact_key_match",
             "schedule": "existing core schedule unchanged",
+            "trajectory_schedule": "deterministic frozen train-trajectory order repeated modulo update index; identical for both paired geometries",
             "eval_every_updates": EVAL_EVERY_UPDATES,
+            "evaluation_cadence_rationale": "one development boundary after the frozen 100-update budget; minimizes overhead under the shared 300-second cap",
+            "runner": "run_pilot_training",
+            "runner_invoked_for_artifact_generation": False,
             "same_data_updates_selection_geometry_on_off": True,
             "checkpoint_selection": "min_development_normalized_mse_then_min_development_rollout_rmse_then_lowest_init_seed",
             "checkpoint_directory": "storage/checkpoints/v03-learned-predictor-pilot/",
@@ -1772,6 +2048,7 @@ def pilot_experiment_config(*, split_manifest_sha256: str) -> dict[str, Any]:
             "paid_resources": False,
             "credentials_or_network": False,
             "full_retraining_started": False,
+            "pilot_runner_invoked": False,
             "hard_deadline_shared_across_training_evaluation_serialization": True,
             "paired_timeout_is_incomplete_not_success": True,
         },
@@ -1889,6 +2166,24 @@ class EvaluationCaseResult:
     target: tuple[float, ...]
 
 
+def _verify_evaluation_provenance(
+    expected_provenance: Mapping[str, Any] | None,
+    checkpoint_provenance: Mapping[str, Any] | None,
+) -> None:
+    if expected_provenance is None:
+        return
+    if not isinstance(checkpoint_provenance, Mapping):
+        raise CheckpointContractError("evaluation expected provenance lacks a loaded checkpoint binding")
+    for name, expected in expected_provenance.items():
+        if expected is None:
+            continue
+        if name not in checkpoint_provenance or str(checkpoint_provenance[name]) != str(expected):
+            raise CheckpointContractError(
+                f"evaluation checkpoint provenance mismatch for {name}: "
+                f"expected {expected}, got {checkpoint_provenance.get(name)}"
+            )
+
+
 def evaluate_examples(
     predictor: Any,
     examples: Sequence[TransitionExample],
@@ -1900,6 +2195,12 @@ def evaluate_examples(
     development_frozen: bool = False,
     deadline: SharedDeadline | None = None,
     deadline_monotonic: float | None = None,
+    checkpoint_provenance: Mapping[str, Any] | None = None,
+    expected_provenance: Mapping[str, Any] | None = None,
+    reviewed_selection_artifact: Mapping[str, Any] | None = None,
+    expected_split_manifest_sha256: str | None = None,
+    expected_experiment_config_sha256: str | None = None,
+    expected_selected_checkpoints: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     if split == "test" and not (allow_final_test and development_frozen):
         raise EvaluationReservationError("final test is reserved until development choices are frozen")
@@ -1911,6 +2212,31 @@ def evaluate_examples(
         raise PredictorContractError("pass either deadline or deadline_monotonic, not both")
     if deadline is None and deadline_monotonic is not None:
         deadline = SharedDeadline(float(deadline_monotonic))
+    if split == "test":
+        _require_reviewed_final_test_access(
+            reviewed_selection_artifact,
+            expected_split_manifest_sha256=expected_split_manifest_sha256,
+            expected_experiment_config_sha256=expected_experiment_config_sha256,
+            expected_selected_checkpoints=expected_selected_checkpoints,
+        )
+    if isinstance(predictor, LearnedObservablePredictor):
+        if split == "test" and (
+            not expected_provenance
+            or any(
+                name not in expected_provenance
+                for name in (
+                    "split_manifest_sha256",
+                    "experiment_config_sha256",
+                    "checkpoint_sha256",
+                    "state_normalizer_sha256",
+                    "target_normalizer_sha256",
+                )
+            )
+        ):
+            raise EvaluationReservationError(
+                "final-test learned evaluation requires expected checkpoint provenance"
+            )
+        _verify_evaluation_provenance(expected_provenance, checkpoint_provenance)
 
     def partial_result(status: str, failures: list[dict[str, Any]], completed: int) -> dict[str, Any]:
         return {
@@ -2052,6 +2378,12 @@ def evaluate_paired_variants(
     deadline: SharedDeadline,
     allow_final_test: bool = False,
     development_frozen: bool = False,
+    checkpoint_provenance: Mapping[str, Mapping[str, Any]] | None = None,
+    expected_provenance: Mapping[str, Any] | None = None,
+    reviewed_selection_artifact: Mapping[str, Any] | None = None,
+    expected_split_manifest_sha256: str | None = None,
+    expected_experiment_config_sha256: str | None = None,
+    expected_selected_checkpoints: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Evaluate paired variants under one deadline and selection boundary."""
 
@@ -2063,6 +2395,9 @@ def evaluate_paired_variants(
     for name in sorted(predictors):
         try:
             deadline.check(f"before_paired_variant_{name}")
+            variant_expected_provenance = expected_provenance
+            if isinstance(expected_provenance, Mapping) and isinstance(expected_provenance.get(name), Mapping):
+                variant_expected_provenance = expected_provenance[name]
             result = evaluate_examples(
                 predictors[name],
                 examples,
@@ -2072,6 +2407,12 @@ def evaluate_paired_variants(
                 allow_final_test=allow_final_test,
                 development_frozen=development_frozen,
                 deadline=deadline,
+                checkpoint_provenance=(checkpoint_provenance or {}).get(name),
+                expected_provenance=variant_expected_provenance,
+                reviewed_selection_artifact=reviewed_selection_artifact,
+                expected_split_manifest_sha256=expected_split_manifest_sha256,
+                expected_experiment_config_sha256=expected_experiment_config_sha256,
+                expected_selected_checkpoints=expected_selected_checkpoints,
             )
         except EvaluationDeadlineError as exc:
             result = {
@@ -2120,6 +2461,7 @@ def recursive_rollout(
     state_normalizer: TrainOnlyNormalizer | None = None,
     target_normalizer: TrainOnlyNormalizer | None = None,
     horizon: int,
+    deadline: SharedDeadline | None = None,
 ) -> tuple[np.ndarray, ...]:
     """Roll out recursively, feeding predictions rather than future targets."""
 
@@ -2129,10 +2471,14 @@ def recursive_rollout(
         raise PredictorContractError("rollout horizon is outside the preregistered set")
     if len(actions) < horizon:
         raise PredictorContractError("rollout action sequence is shorter than its horizon")
+    if deadline is not None:
+        deadline.check("rollout_start")
     history = list(initial_history)
     runtime = None
     predictions: list[np.ndarray] = []
     for action_index in range(horizon):
+        if deadline is not None:
+            deadline.check(f"rollout_before_case_{action_index}")
         frame_history: tuple[PredictorFrame, ...] | None = None
         next_frame: PredictorFrame | None = None
         if action_index == 0:
@@ -2180,7 +2526,474 @@ def recursive_rollout(
             prediction = predictor.predict(frame_history)
         validate_public_state_vector(prediction, name=f"rollout prediction {action_index}")
         predictions.append(prediction)
+        if deadline is not None:
+            deadline.check(f"rollout_after_case_{action_index}")
+    if deadline is not None:
+        deadline.check("rollout_complete")
     return tuple(predictions)
+
+
+def _runner_failure(stage: str, exc: BaseException, **fields: Any) -> dict[str, Any]:
+    failure = {
+        "stage": stage,
+        "error": str(exc),
+        "type": type(exc).__name__,
+    }
+    failure.update(fields)
+    return failure
+
+
+def _checkpoint_file_sha256(path: str | Path) -> str:
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def _checkpoint_provenance(
+    payload: Mapping[str, Any],
+    *,
+    checkpoint_sha256: str,
+) -> dict[str, Any]:
+    required = (
+        "split_manifest_sha256",
+        "experiment_config_sha256",
+        "state_normalizer_sha256",
+        "target_normalizer_sha256",
+    )
+    provenance = {
+        "split_manifest_sha256": payload.get("split_manifest_sha256"),
+        "experiment_config_sha256": payload.get("experiment_config_sha256"),
+        "state_normalizer_sha256": payload.get("state_normalizer_provenance_sha256"),
+        "target_normalizer_sha256": payload.get("target_normalizer_provenance_sha256"),
+        "checkpoint_sha256": checkpoint_sha256,
+    }
+    if any(provenance[name] in (None, "") for name in required):
+        raise CheckpointContractError("loaded checkpoint provenance is incomplete")
+    return provenance
+
+
+def _check_prediction_parity(
+    original: LearnedObservablePredictor,
+    restored: LearnedObservablePredictor,
+    example: TransitionExample,
+    *,
+    state_normalizer: TrainOnlyNormalizer,
+    target_normalizer: TrainOnlyNormalizer,
+    restored_state_normalizer: TrainOnlyNormalizer,
+    restored_target_normalizer: TrainOnlyNormalizer,
+    deadline: SharedDeadline,
+) -> dict[str, Any]:
+    deadline.check("checkpoint_prediction_parity_before")
+    original_prediction = original.forward(
+        example.history,
+        state_normalizer=state_normalizer,
+        target_normalizer=target_normalizer,
+    )
+    deadline.check("checkpoint_prediction_parity_after_original")
+    restored_prediction = restored.forward(
+        example.history,
+        state_normalizer=restored_state_normalizer,
+        target_normalizer=restored_target_normalizer,
+    )
+    deadline.check("checkpoint_prediction_parity_after_reload")
+    if not np.array_equal(original_prediction, restored_prediction):
+        raise CheckpointContractError("checkpoint prediction parity mismatch")
+    original_digest = _sha256(np.asarray(original_prediction, dtype=np.float64).tolist())
+    restored_digest = _sha256(np.asarray(restored_prediction, dtype=np.float64).tolist())
+    return {
+        "status": "passed",
+        "exact": True,
+        "checked_window_id": example.window_id,
+        "original_prediction_sha256": original_digest,
+        "reloaded_prediction_sha256": restored_digest,
+    }
+
+
+def _evaluate_development_model(
+    model: LearnedObservablePredictor,
+    development_trajectories: Sequence[Trajectory],
+    development_examples: Sequence[TransitionExample],
+    *,
+    state_normalizer: TrainOnlyNormalizer,
+    target_normalizer: TrainOnlyNormalizer,
+    checkpoint_provenance: Mapping[str, Any],
+    expected_provenance: Mapping[str, Any],
+    deadline: SharedDeadline,
+) -> dict[str, Any]:
+    """Evaluate one reloaded learned predictor without touching final test."""
+
+    one_step = evaluate_examples(
+        model,
+        development_examples,
+        split="development",
+        state_normalizer=state_normalizer,
+        target_normalizer=target_normalizer,
+        deadline=deadline,
+        checkpoint_provenance=checkpoint_provenance,
+        expected_provenance=expected_provenance,
+    )
+    if one_step.get("status") != "complete":
+        return {
+            "status": one_step.get("status", "partial_case_failure"),
+            "one_step": one_step,
+            "rollout": None,
+            "metrics": None,
+            "failures": list(one_step.get("failures", [])),
+        }
+
+    predictions_by_horizon: dict[int, list[np.ndarray]] = {horizon: [] for horizon in ROLL_OUT_HORIZONS}
+    targets_by_horizon: dict[int, list[np.ndarray]] = {horizon: [] for horizon in ROLL_OUT_HORIZONS}
+    failures: list[dict[str, Any]] = []
+    for trajectory_index, trajectory in enumerate(development_trajectories):
+        try:
+            deadline.check(f"development_rollout_before_trajectory_{trajectory_index}")
+            first_history = trajectory.window_examples()[0].history
+            actions = tuple(
+                _action_from_drive(action, trajectory.duration_ticks)
+                for action in trajectory.actions[1:]
+            )
+            for horizon in ROLL_OUT_HORIZONS:
+                deadline.check(f"development_rollout_before_horizon_{trajectory_index}_{horizon}")
+                predictions = recursive_rollout(
+                    model,
+                    first_history,
+                    actions,
+                    state_normalizer=state_normalizer,
+                    target_normalizer=target_normalizer,
+                    horizon=horizon,
+                    deadline=deadline,
+                )
+                targets = trajectory.observations[HISTORY_LENGTH : HISTORY_LENGTH + horizon]
+                predictions_by_horizon[horizon].extend(predictions)
+                targets_by_horizon[horizon].extend(np.asarray(target, dtype=np.float64) for target in targets)
+                deadline.check(f"development_rollout_after_horizon_{trajectory_index}_{horizon}")
+        except EvaluationDeadlineError as exc:
+            failures.append(_runner_failure("development_rollout", exc, trajectory_index=trajectory_index))
+            return {
+                "status": "partial_deadline_exhausted",
+                "one_step": one_step,
+                "rollout": None,
+                "metrics": None,
+                "failures": failures,
+            }
+        except (PredictorContractError, ValueError, FloatingPointError) as exc:
+            failures.append(_runner_failure("development_rollout", exc, trajectory_index=trajectory_index))
+            return {
+                "status": "partial_case_failure",
+                "one_step": one_step,
+                "rollout": None,
+                "metrics": None,
+                "failures": failures,
+            }
+
+    try:
+        deadline.check("development_rollout_before_metric_aggregation")
+        rollout_metrics: dict[str, Any] = {}
+        squared_rmse: list[float] = []
+        for horizon in ROLL_OUT_HORIZONS:
+            metric = _prediction_metrics(
+                predictions_by_horizon[horizon],
+                targets_by_horizon[horizon],
+                target_normalizer=target_normalizer,
+                deadline=deadline,
+            )
+            rollout_metrics[str(horizon)] = metric
+            squared_rmse.append(float(metric["normalized_rmse"]) ** 2)
+        deadline.check("development_rollout_after_metric_aggregation")
+    except EvaluationDeadlineError as exc:
+        return {
+            "status": "partial_deadline_exhausted",
+            "one_step": one_step,
+            "rollout": None,
+            "metrics": None,
+            "failures": [_runner_failure("development_rollout_metric_aggregation", exc)],
+        }
+    except (PredictorContractError, ValueError, FloatingPointError) as exc:
+        return {
+            "status": "partial_metric_failure",
+            "one_step": one_step,
+            "rollout": None,
+            "metrics": None,
+            "failures": [_runner_failure("development_rollout_metric_aggregation", exc)],
+        }
+    return {
+        "status": "complete",
+        "one_step": one_step,
+        "rollout": rollout_metrics,
+        "metrics": {
+            "development_normalized_mse": float(one_step["metrics"]["normalized_rmse"]) ** 2,
+            "development_rollout_rmse": float(math.sqrt(np.mean(squared_rmse))),
+            "one_step_normalized_rmse": float(one_step["metrics"]["normalized_rmse"]),
+        },
+        "failures": failures,
+    }
+
+
+def run_pilot_training(
+    checkpoint_dir: str | Path,
+    *,
+    deadline: SharedDeadline | None = None,
+    wall_clock_seconds: float = MAX_WALL_CLOCK_SECONDS,
+) -> dict[str, Any]:
+    """Run the frozen six-fit development pilot under one shared deadline.
+
+    This function is executable but is intentionally not called by
+    :func:`write_pilot_artifacts`.  It materializes train/development data
+    only, performs exactly 100 updates for each geometry/seed pair when the
+    shared cap permits, reloads each candidate before development evaluation,
+    and never opens the reserved final-test split.
+    """
+
+    if deadline is not None and not isinstance(deadline, SharedDeadline):
+        raise PredictorContractError("runner deadline must be a SharedDeadline")
+    shared_deadline = deadline or SharedDeadline.from_seconds(wall_clock_seconds)
+    checkpoint_root = Path(checkpoint_dir)
+    result: dict[str, Any] = {
+        "schema": PILOT_RUN_SCHEMA,
+        "status": "not_started",
+        "wall_clock_seconds": float(wall_clock_seconds),
+        "updates_per_variant": TRAIN_UPDATES,
+        "evaluation_every_updates": EVAL_EVERY_UPDATES,
+        "paired_initialization_seeds": list(PAIRED_INITIALIZATION_SEEDS),
+        "final_test_materialized": False,
+        "final_test_selection_artifact": None,
+        "pairs": [],
+        "selection": None,
+        "failures": [],
+    }
+    try:
+        shared_deadline.check("runner_start")
+        manifest = build_split_manifest()
+        shared_deadline.check("after_split_manifest")
+        config = pilot_experiment_config(split_manifest_sha256=manifest[MANIFEST_HASH_EXCLUSION])
+        config_hash = _sha256(config)
+        shared_deadline.check("after_experiment_config")
+        train_trajectories = build_trajectories("train", include_test=False)
+        development_trajectories = build_trajectories("development", include_test=False)
+        shared_deadline.check("after_train_development_materialization")
+        train_examples = tuple(
+            example for trajectory in train_trajectories for example in trajectory.window_examples()
+        )
+        development_examples = tuple(
+            example for trajectory in development_trajectories for example in trajectory.window_examples()
+        )
+        state_normalizer, target_normalizer = fit_train_normalizers(train_trajectories)
+        shared_deadline.check("after_train_normalization")
+        result["split_manifest_sha256"] = manifest[MANIFEST_HASH_EXCLUSION]
+        result["experiment_config_sha256"] = config_hash
+        result["normalizer_provenance"] = {
+            "state_normalizer_sha256": state_normalizer.provenance_sha256,
+            "target_normalizer_sha256": target_normalizer.provenance_sha256,
+        }
+        result["training_data"] = {
+            "trajectory_count": len(train_trajectories),
+            "window_count": len(train_examples),
+            "development_trajectory_count": len(development_trajectories),
+            "development_window_count": len(development_examples),
+        }
+    except EvaluationDeadlineError as exc:
+        result["status"] = "incomplete_shared_deadline"
+        result["failures"].append(_runner_failure("runner_setup", exc))
+        return result
+    except (PredictorContractError, ValueError, FloatingPointError) as exc:
+        result["status"] = "partial_failure"
+        result["failures"].append(_runner_failure("runner_setup", exc))
+        return result
+
+    common_expected_provenance = {
+        "split_manifest_sha256": manifest[MANIFEST_HASH_EXCLUSION],
+        "experiment_config_sha256": config_hash,
+        "state_normalizer_sha256": state_normalizer.provenance_sha256,
+        "target_normalizer_sha256": target_normalizer.provenance_sha256,
+    }
+    selection_records: list[dict[str, Any]] = []
+    for seed in PAIRED_INITIALIZATION_SEEDS:
+        pair: dict[str, Any] = {
+            "init_seed": seed,
+            "status": "not_started",
+            "updates_completed": 0,
+            "variants": {},
+            "failures": [],
+        }
+        models = {
+            "learned_geometry_off": LearnedObservablePredictor(init_seed=seed, geometry_enabled=False),
+            "learned_geometry_on": LearnedObservablePredictor(init_seed=seed, geometry_enabled=True),
+        }
+        try:
+            for update_index in range(1, TRAIN_UPDATES + 1):
+                shared_deadline.check(f"before_paired_update_seed_{seed}_{update_index}")
+                trajectory = train_trajectories[(update_index - 1) % len(train_trajectories)]
+                gradients: dict[str, dict[str, np.ndarray]] = {}
+                losses: dict[str, float] = {}
+                for name in ("learned_geometry_off", "learned_geometry_on"):
+                    shared_deadline.check(f"before_gradient_seed_{seed}_{update_index}_{name}")
+                    losses[name], gradients[name] = models[name].loss_and_gradients(
+                        trajectory,
+                        state_normalizer=state_normalizer,
+                        target_normalizer=target_normalizer,
+                    )
+                    shared_deadline.check(f"after_gradient_seed_{seed}_{update_index}_{name}")
+                # Both gradients have been fully computed before either model
+                # is committed.  The per-model update itself stages all
+                # parameters before mutating them.
+                shared_deadline.check(f"before_paired_commit_seed_{seed}_{update_index}")
+                update_info = {}
+                for name in ("learned_geometry_off", "learned_geometry_on"):
+                    update_info[name] = models[name].apply_gradients(
+                        gradients[name],
+                        learning_rate=LEARNING_RATE,
+                    )
+                pair["updates_completed"] = update_index
+                pair["last_update_losses"] = losses
+                pair["last_update"] = update_info
+                shared_deadline.check(f"after_paired_update_seed_{seed}_{update_index}")
+
+            shared_deadline.check(f"before_checkpoint_boundary_seed_{seed}")
+            loaded_models: dict[str, LearnedObservablePredictor] = {}
+            loaded_normalizers: dict[str, tuple[TrainOnlyNormalizer, TrainOnlyNormalizer]] = {}
+            loaded_provenance: dict[str, dict[str, Any]] = {}
+            parity: dict[str, Any] = {}
+            for name in ("learned_geometry_off", "learned_geometry_on"):
+                checkpoint_path = checkpoint_root / f"{name}-seed-{seed}.json"
+                checkpoint_sha256 = save_checkpoint(
+                    checkpoint_path,
+                    models[name],
+                    state_normalizer=state_normalizer,
+                    target_normalizer=target_normalizer,
+                    split_manifest_sha256=manifest[MANIFEST_HASH_EXCLUSION],
+                    experiment_config_sha256=config_hash,
+                    selection={"split": "development", "selection_frozen": False, "init_seed": seed, "variant": name},
+                    deadline=shared_deadline,
+                )
+                restored, restored_state, restored_target, payload = load_checkpoint(
+                    checkpoint_path,
+                    expected_split_manifest_sha256=manifest[MANIFEST_HASH_EXCLUSION],
+                    expected_experiment_config_sha256=config_hash,
+                    expected_state_normalizer_provenance_sha256=state_normalizer.provenance_sha256,
+                    expected_target_normalizer_provenance_sha256=target_normalizer.provenance_sha256,
+                    expected_checkpoint_sha256=checkpoint_sha256,
+                    deadline=shared_deadline,
+                )
+                loaded_models[name] = restored
+                loaded_normalizers[name] = (restored_state, restored_target)
+                loaded_provenance[name] = _checkpoint_provenance(
+                    payload,
+                    checkpoint_sha256=checkpoint_sha256,
+                )
+                parity[name] = _check_prediction_parity(
+                    models[name],
+                    restored,
+                    train_examples[0],
+                    state_normalizer=state_normalizer,
+                    target_normalizer=target_normalizer,
+                    restored_state_normalizer=restored_state,
+                    restored_target_normalizer=restored_target,
+                    deadline=shared_deadline,
+                )
+                shared_deadline.check(f"after_checkpoint_reload_seed_{seed}_{name}")
+
+            evaluations: dict[str, Any] = {}
+            pair_status = "complete"
+            for name in ("learned_geometry_off", "learned_geometry_on"):
+                shared_deadline.check(f"before_development_evaluation_seed_{seed}_{name}")
+                expected = {**common_expected_provenance, "checkpoint_sha256": loaded_provenance[name]["checkpoint_sha256"]}
+                evaluations[name] = _evaluate_development_model(
+                    loaded_models[name],
+                    development_trajectories,
+                    development_examples,
+                    state_normalizer=loaded_normalizers[name][0],
+                    target_normalizer=loaded_normalizers[name][1],
+                    checkpoint_provenance=loaded_provenance[name],
+                    expected_provenance=expected,
+                    deadline=shared_deadline,
+                )
+                if evaluations[name].get("status") != "complete":
+                    pair_status = "incomplete_shared_deadline" if evaluations[name].get("status") == "partial_deadline_exhausted" else "partial_failure"
+                    break
+            shared_deadline.check(f"after_development_pair_seed_{seed}")
+            pair["parity"] = parity
+            pair["evaluations"] = evaluations
+            pair["checkpoints"] = {
+                name: {
+                    "path": str(checkpoint_root / f"{name}-seed-{seed}.json"),
+                    "checkpoint_sha256": loaded_provenance[name]["checkpoint_sha256"],
+                    "provenance": loaded_provenance[name],
+                }
+                for name in loaded_provenance
+            }
+            if pair_status != "complete":
+                pair["status"] = pair_status
+                pair["failures"].extend(
+                    failure
+                    for evaluation in evaluations.values()
+                    for failure in evaluation.get("failures", [])
+                )
+                result["pairs"].append(pair)
+                result["status"] = pair_status
+                if pair["failures"]:
+                    result["failures"].extend(pair["failures"])
+                else:
+                    result["failures"].append(
+                        {
+                            "stage": "paired_development_evaluation",
+                            "error": "paired evaluation incomplete",
+                            "type": pair_status,
+                            "init_seed": seed,
+                        }
+                    )
+                break
+            pair["status"] = "complete"
+            result["pairs"].append(pair)
+            for name, evaluation in evaluations.items():
+                selection_records.append(
+                    {
+                        "status": "complete",
+                        "variant": name,
+                        "init_seed": seed,
+                        "development_normalized_mse": evaluation["metrics"]["development_normalized_mse"],
+                        "development_rollout_rmse": evaluation["metrics"]["development_rollout_rmse"],
+                        "checkpoint_sha256": loaded_provenance[name]["checkpoint_sha256"],
+                        "checkpoint_path": str(checkpoint_root / f"{name}-seed-{seed}.json"),
+                        "state_normalizer_provenance_sha256": state_normalizer.provenance_sha256,
+                        "target_normalizer_provenance_sha256": target_normalizer.provenance_sha256,
+                        "split_manifest_sha256": manifest[MANIFEST_HASH_EXCLUSION],
+                        "experiment_config_sha256": config_hash,
+                    }
+                )
+        except EvaluationDeadlineError as exc:
+            pair["status"] = "incomplete_shared_deadline"
+            pair["failures"].append(_runner_failure("paired_training_or_serialization", exc, init_seed=seed))
+            result["pairs"].append(pair)
+            result["status"] = "incomplete_shared_deadline"
+            result["failures"].append(pair["failures"][-1])
+            break
+        except (PredictorContractError, ValueError, FloatingPointError) as exc:
+            pair["status"] = "partial_failure"
+            pair["failures"].append(_runner_failure("paired_training_or_serialization", exc, init_seed=seed))
+            result["pairs"].append(pair)
+            result["status"] = "partial_failure"
+            result["failures"].append(pair["failures"][-1])
+            break
+
+    if result["status"] == "not_started" or all(pair.get("status") == "complete" for pair in result["pairs"]):
+        try:
+            shared_deadline.check("before_development_selection")
+            selected = select_development_checkpoint(selection_records, deadline=shared_deadline)
+            result["selection"] = {
+                "status": "development_selected",
+                "selected_record": selected,
+                "final_test_unlocked": False,
+                "selection_artifact": None,
+            }
+            shared_deadline.check("after_development_selection")
+            result["status"] = "complete_development_pilot_final_test_closed"
+        except EvaluationDeadlineError as exc:
+            result["status"] = "incomplete_shared_deadline"
+            result["failures"].append(_runner_failure("development_selection", exc))
+        except (PredictorContractError, ValueError, FloatingPointError) as exc:
+            result["status"] = "partial_failure"
+            result["failures"].append(_runner_failure("development_selection", exc))
+    result["selection_records"] = selection_records
+    result["selection_eligible"] = result["status"] == "complete_development_pilot_final_test_closed"
+    return result
 
 
 def _timing_summary(values: Sequence[float]) -> dict[str, float]:
@@ -2240,6 +3053,14 @@ def feasibility_probe(*, repeats: int = 3, deadline: SharedDeadline | None = Non
             "windows_in_probe": len(probe_trajectory.window_examples()),
             "final_test_used": False,
         }
+    probe_optimizer_seconds = float(
+        len(PAIRED_INITIALIZATION_SEEDS)
+        * TRAIN_UPDATES
+        * sum(
+            timings[key]["loss_and_backward_seconds"]["mean_seconds"]
+            for key in ("geometry_off", "geometry_on")
+        )
+    )
     return {
         "schema": "vevo.v03.learned-observable-cpu-feasibility.v1",
         "status": "probe_only_no_training",
@@ -2256,6 +3077,14 @@ def feasibility_probe(*, repeats: int = 3, deadline: SharedDeadline | None = Non
         "probe_scope": "one complete train trajectory per geometry variant; forward plus reverse-mode loss/backward only",
         "not_end_to_end_training_estimate": True,
         "end_to_end_training_estimate": None,
+        "probe_based_six_fit_optimizer_seconds": probe_optimizer_seconds,
+        "timing_note": "Probe-based optimizer lower bound only; excludes paired overhead, development evaluation, checkpoint reload, and serialization. The runner reports actual elapsed time when explicitly invoked.",
+        "runner_budget": {
+            "fit_count": len(PAIRED_INITIALIZATION_SEEDS) * 2,
+            "updates_per_variant_seed": TRAIN_UPDATES,
+            "eval_every_updates": EVAL_EVERY_UPDATES,
+            "shared_wall_clock_seconds": MAX_WALL_CLOCK_SECONDS,
+        },
         "estimate_excludes": ["all_optimizer_updates", "paired_initialization_seed_sweep", "development_evaluation", "checkpoint_reload", "serialization", "final_test"],
     }
 
@@ -2281,21 +3110,40 @@ def write_pilot_artifacts(output_dir: str | Path, *, repeats: int = 3) -> dict[s
         f"- Predictor schema: `{LEARNED_PREDICTOR_SCHEMA}`\n"
         f"- Split manifest SHA-256: `{manifest[MANIFEST_HASH_EXCLUSION]}`\n"
         "- Training data: 8 complete trajectories and 88 windows; the manifest covers 32 trajectories and 352 windows across all split metadata.\n"
+        f"- Probe-based optimizer lower bound for six fits × 100 updates: `{timing['probe_based_six_fit_optimizer_seconds']:.3f}` seconds; this excludes evaluation, checkpoint, and serialization overhead.\n"
         "- Existing upstream gate: the all-four-models `8/8` training gate remains required before development evaluation; this pilot does not rerun or claim that gate.\n"
         "- Development cases: worlds 9300--9307, explicitly inspected development only; never fresh generalization.\n"
         "- Final test: default materialization is closed; the 9400--9407 inputs were generated before this review and are recorded only as exposure history (the old `phase_shifted` condition was calibration-only), while replacement worlds 9500--9507 remain reserved.\n"
-        "- Final-test unlock: requires a reviewed, frozen selection artifact with a provenance hash.\n"
+        "- Final-test unlock: requires a digest-verified frozen selection artifact bound exactly to the manifest, config, and selected checkpoint files.\n"
+        "- Runner contract: six learned fits (geometry on/off × seeds 7, 17, 37), 100 equal updates per variant/seed, one shared 300-second cap, and one development evaluation boundary at update 100.\n"
+        "- Normalizer/checkpoint provenance: canonical mean/scale plus train-source digests are verified on reload; prediction parity is checked before development evaluation.\n"
         "- Old reports/checkpoints: untouched.\n\n"
         "The CPU probe measures one complete train-world trajectory per paired "
         "geometry variant and performs forward plus reverse-mode loss/backward "
         "only; it performs zero optimizer updates. This is a micro/probe timing, "
         "not an end-to-end training estimate.\n"
     )
+    runner_review = (
+        "# Learned predictor runner source review\n\n"
+        "Status: concrete runner implemented; it was not invoked for this artifact.\n\n"
+        f"- Scope: six learned fits (geometry on/off × seeds `{', '.join(str(seed) for seed in PAIRED_INITIALIZATION_SEEDS)}`), "
+        f"exactly `{TRAIN_UPDATES}` equal SGD updates per variant/seed, and evaluation at update `{EVAL_EVERY_UPDATES}`.\n"
+        f"- Budget: one cooperative shared `{MAX_WALL_CLOCK_SECONDS}`-second deadline across setup, paired updates, development cases, "
+        "checkpoint save/reload, parity, aggregation, selection, and serialization.\n"
+        "- Paired timeout: an incomplete variant invalidates the pair; no selection or final-test access is emitted.\n"
+        "- Checkpoint safety: normalizer digests cover canonical mean/scale plus training-source provenance; reloaded predictions require exact parity.\n"
+        "- Optimizer safety: all gradients and updated arrays are validated before an atomic parameter commit.\n"
+        "- Final test: replacement worlds 9500--9507 remain metadata-only and closed; a canonical digest-bound frozen selection artifact is required.\n"
+        "- Development: worlds 9300--9307 are inspected development cases only, never fresh generalization.\n"
+        f"- Timing: the probe-based optimizer lower bound is `{timing['probe_based_six_fit_optimizer_seconds']:.3f}` seconds before overhead; an invoked runner must report actual elapsed time.\n"
+        "- Historical reports and checkpoints were not modified.\n"
+    )
     files: dict[str, Any] = {
         "experiment_config.json": config,
         "split_manifest.json": manifest,
         "cpu_feasibility.json": timing,
         "README.md": readme,
+        "runner_review.md": runner_review,
     }
     hashes: dict[str, str] = {}
     for name, value in files.items():
@@ -2348,7 +3196,9 @@ __all__ = [
     "LearnedObservablePredictor",
     "LinearObservableBaseline",
     "NominalSimulatorBaseline",
+    "NormalizerContractError",
     "PAIRED_INITIALIZATION_SEEDS",
+    "PILOT_RUN_SCHEMA",
     "PILOT_SPLITS",
     "PUBLIC_STATE_DIM",
     "PUBLIC_STATE_FIELDS",
@@ -2357,10 +3207,12 @@ __all__ = [
     "PredictorContractError",
     "PredictorFrame",
     "RolloutBoundsError",
+    "SELECTION_ARTIFACT_SCHEMA",
     "SharedDeadline",
     "TrainOnlyNormalizer",
     "TransitionExample",
     "build_examples",
+    "build_frozen_selection_artifact",
     "build_trajectories",
     "build_split_manifest",
     "compute_audit",
@@ -2375,10 +3227,13 @@ __all__ = [
     "public_observation_to_vector",
     "public_vector_to_observation",
     "recursive_rollout",
+    "run_pilot_training",
     "save_checkpoint",
+    "selection_artifact_digest",
     "select_development_checkpoint",
     "split_spec",
     "validate_public_state_vector",
     "verify_split_manifest",
+    "verify_frozen_selection_artifact",
     "write_pilot_artifacts",
 ]
