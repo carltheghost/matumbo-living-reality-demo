@@ -49,7 +49,7 @@ The dimension labels are intentionally separate:
 | --- | --- | --- |
 | latent | 4×8 peripheral states, 12-D center, 2×6 memory, `(5,2,2)` oscillator state | internal recurrent and wave state |
 | display/communication | 4-D messages, 4-D attention query/context, 4-D feedback | bounded interfaces between core mechanisms; no UI or renderer authority |
-| physical | each oscillator's Cartesian `(x,y)` disk and cumulative normalized time | the modeled damped-wave variables only; not coordinates of the external world |
+| modeled dynamics | each oscillator's Cartesian `(x,y)` disk and cumulative normalized time | internal numerical coordinates and time only; neither is a measurement of the external world |
 
 The 6-D memory slots are projected into the shared 4-D attention value/key
 space. No current module claims that a display coordinate is a physical
@@ -96,9 +96,10 @@ update preserves the unit-ball bound. This statement is only about that
 isolated oscillator update; it is not a claim about whole-network gradient
 stability. The core uses Cartesian quadratures. It does not use `atan2`.
 
-The old magnitude-only observation cannot identify physical oscillator phase.
-The full `(x, y)` state is therefore retained internally; no physical phase is
-retroactively inferred from an old magnitude-only measurement.
+The old magnitude-only observation cannot identify oscillator phase. The full
+`(x, y)` state is therefore retained internally; no external physical phase is
+retroactively inferred from an old magnitude-only measurement. The oscillator
+coordinates are latent numerical quadratures, not physical measurements.
 
 ## Attention exchange
 
@@ -109,26 +110,33 @@ The single attention exchange has six tokens:
 | peripheral messages | 4 | 4-D message | `tanh(Kx)`, `tanh(Vx)` in 4-D |
 | memory slots | 2 | 6-D slot | `tanh(Kx)`, `tanh(Vx)` in 4-D |
 
-The center supplies a bounded 4-D query. Binary module and memory presence
-masks set illegal token logits to a masked sentinel and zero their values.
-Legal-token logits are bounded with a scaled `tanh`; values and query/key
-projections are bounded. The returned attention weights and context are
-recipient-neutral; recipient-specific feedback is produced afterward.
+The center and the current central 4-D message supply a bounded query through
+separate learned maps. This makes the central oscillator path causal: central
+oscillator state → central message → query → attention context. Binary module
+and memory presence masks set illegal token logits to a masked sentinel and
+zero their values. If all six tokens are absent, both numeric and Tensor paths
+return explicit all-zero weights and context. Legal-token logits are bounded
+with a scaled `tanh`; values and query/key projections are bounded. The
+returned attention weights and context are recipient-neutral;
+recipient-specific feedback is produced afterward.
 
 ## Tension and refinement
 
-The four 4-D messages are proposals `p_i`. Each learned `W_i` maps the 12-D
-center variable `c` to proposal space. The refinement objective is
+The four peripheral 4-D messages are proposals `p_i`. Each learned `W_i` maps
+the 12-D center variable `c` to proposal space. The refinement objective is
 
 \[
 E(c)=\frac12\sum_i \alpha_i\lVert W_i c-p_i\rVert^2
      +\frac12\lambda\lVert c-c_{prior}\rVert^2,
 \]
 
-where `alpha_i` and `lambda` are positive bounded parameters and `c_prior` is
-bounded. The initial 12-D center state receives a bounded attention projection.
-The objective coefficients are copied/frozen for exactly two refinement
-steps. Each step uses the analytic gradient
+where `alpha_i` and `lambda` are positive bounded parameters. At the start of
+each step, the current base center plus a bounded attention projection is
+projected into the state ball and copied as the contextual `c_prior`; there is
+no static learned prior parameter. The initial point and the frozen prior are
+therefore feasible in both numeric and Tensor paths. The objective
+coefficients are copied/frozen for exactly two refinement steps. Each step uses
+the analytic gradient
 
 \[
 \nabla E(c)=\sum_i\alpha_i W_i^T(W_i c-p_i)+\lambda(c-c_{prior})
@@ -141,11 +149,30 @@ and step size
 \]
 
 The result is projected to the radius `sqrt(12)`. Tests assert fixed-objective
-energy non-increase and finite analytic gradients. This is a structural
-constraint-refinement mechanism, not a factual verifier and not an
-unqualified agreement loss.
+energy non-increase, outside-ball numeric/Tensor parity, and finite analytic
+gradients. This is a structural constraint-refinement mechanism, not a factual
+verifier and not an unqualified agreement loss.
 
 ## Causal feedback and state
+
+The causal order within one step is:
+
+```text
+legacy backbone step (reads all modules and memory)
+  → oscillator updates and five messages
+  → six-token masked attention
+  → contextual two-step tension refinement
+  → bounded integration of base center and refined center
+  → hybrid write of the integrated center into current memory
+  → bounded recipient-specific feedback for the next backbone step
+```
+
+The integrated center becomes the next runtime center, and the hybrid memory
+write consumes that same integrated center. The existing backbone memory write
+still occurs inside the legacy backbone step before this hybrid write. Current
+module/memory masks scope only the hybrid attention and tension computations;
+they do not erase modules or memory from the legacy backbone, which continues
+to read the full input and memory state.
 
 The refined center is mapped to a bounded 4-D signal, combined with the
 attention context, and passed through a distinct output map for each of the
@@ -155,8 +182,15 @@ recurrent states. Current-step outputs do not feed the current-step backbone.
 
 Snapshots bind the complete recurrent, memory, oscillator, feedback, presence,
 step, and cumulative-time state to the model version and a digest of both
-backbone and incremental parameters. Restoring after a parameter mutation is
-rejected. All weights are explicitly `random_untrained`.
+backbone and incremental parameters. They are runtime-state snapshots, not
+weight or optimizer checkpoints. Restoring after a parameter mutation or
+schema/state mismatch is rejected. All weights are explicitly
+`random_untrained`.
+
+This file describes the numerical core only. No task loss, document-loss
+adapter, or integrated action head is available here; the unchanged legacy
+backbone action/gate head is retained only as a comparator boundary and is not
+claimed as a hybrid-core decision service.
 
 ## Incremental parameter budget
 
@@ -166,9 +200,9 @@ existing recurrent/memory backbone:
 | Quantity | Count |
 | --- | ---: |
 | existing v0.3 backbone | 11,183 |
-| incremental hybrid parameters | 1,181 |
+| incremental hybrid parameters | 1,185 |
 | incremental cap | 2,500 |
-| total object parameters | 12,364 |
+| total object parameters | 12,368 |
 
 The constructor checks this budget and raises an explicit budget error if a
 future edit exceeds it; it never silently grows past the cap.
@@ -196,11 +230,15 @@ extensions changes the current implementation or its tests.
 ## Structural tests and planned learning benchmarks
 
 Implemented tests cover oscillator `dt=0` identity, damping decay,
-fixed-forcing split-step composition, small-`dt` stability, unit-ball bounds,
-attention masks and message influence, fixed-objective tension energy
-non-increase, analytic tension gradients, numeric/Tensor parity, finite
-differences reaching frequency/damping/attention/tension/memory parameters,
-state isolation, and snapshot next-step parity.
+fixed-forcing split-step composition, small-`dt` stability, pair-wise unit-disk
+bounds, attention masks and message influence, all-absent numeric/Tensor
+attention parity, central and peripheral downstream connectivity,
+fixed-objective tension energy non-increase from an outside-ball start,
+outside-ball numeric/Tensor tension parity, analytic tension gradients,
+numeric/Tensor step parity including integrated center/memory, exact binary
+masks, legacy-backbone mask scope, finite differences reaching
+frequency/damping/attention/tension/memory parameters, state isolation,
+fractional-step rejection, JSON serialization, and snapshot next-step parity.
 
 The following are planned ablations/learning benchmarks only; they were not
 run and no training or held-out outcome evaluation is implied:

@@ -1,9 +1,11 @@
 import copy
+import json
 import math
 import unittest
 
 import numpy as np
 
+from vevo_agents.autograd import Tensor
 from vevo_agents.v03_hybrid_core import (
     DEFAULT_DT,
     INCREMENTAL_PARAMETER_CAP,
@@ -39,7 +41,7 @@ class V03HybridCoreTests(unittest.TestCase):
         self.assertEqual(core.base.PERIPH_HIDDEN, 8)
         self.assertEqual(core.base.CENTER_HIDDEN, 12)
         self.assertEqual(core.base.central_memory_shape, (2, 6))
-        self.assertEqual(audit["incremental_parameter_count"], 1181)
+        self.assertEqual(audit["incremental_parameter_count"], 1185)
         self.assertLessEqual(audit["incremental_parameter_count"], INCREMENTAL_PARAMETER_CAP)
         self.assertTrue(audit["within_cap"])
         self.assertEqual(core.model_identity()["weights_status"], "random_untrained")
@@ -95,30 +97,64 @@ class V03HybridCoreTests(unittest.TestCase):
         module_presence = np.asarray([1.0, 0.0, 0.0, 0.0])
         memory_presence = np.asarray([0.0, 0.0])
         first = core._attention_numeric(
-            messages, memory, central, module_presence, memory_presence, core.params
+            messages, memory, central, np.zeros(4), module_presence, memory_presence, core.params
         )
         altered_absent = messages.copy()
         altered_absent[1:] += 100.0
         second = core._attention_numeric(
-            altered_absent, memory, central, module_presence, memory_presence, core.params
+            altered_absent, memory, central, np.zeros(4), module_presence, memory_presence, core.params
         )
         np.testing.assert_allclose(first["context"], second["context"], rtol=1e-12, atol=1e-12)
         self.assertTrue(np.all(first["weights"][1:] == 0.0))
         altered_legal = messages.copy()
         altered_legal[0] += 0.5
         third = core._attention_numeric(
-            altered_legal, memory, central, module_presence, memory_presence, core.params
+            altered_legal, memory, central, np.zeros(4), module_presence, memory_presence, core.params
         )
         self.assertGreater(float(np.linalg.norm(first["context"] - third["context"])), 0.0)
         self.assertLessEqual(float(np.max(np.abs(first["query"]))), 1.0)
         self.assertLessEqual(float(np.max(np.abs(first["keys"]))), 1.0)
         self.assertLessEqual(float(np.max(np.abs(first["values"]))), 1.0)
 
+    def test_all_absent_attention_is_zero_and_numeric_tensor_match(self):
+        core = V03HybridCore(20)
+        rng = np.random.default_rng(21)
+        messages = rng.normal(size=(4, 4))
+        memory = rng.normal(size=(2, 6))
+        central = rng.normal(size=12)
+        central_message = rng.normal(size=4)
+        module_presence = np.zeros(4)
+        memory_presence = np.zeros(2)
+        numeric = core._attention_numeric(
+            messages,
+            memory,
+            central,
+            central_message,
+            module_presence,
+            memory_presence,
+            core.params,
+        )
+        tensor = core._attention_tensor(
+            [Tensor(row) for row in messages],
+            Tensor(memory),
+            Tensor(central),
+            Tensor(central_message),
+            module_presence,
+            memory_presence,
+            core.tensor_parameters(requires_grad=False),
+        )
+        np.testing.assert_array_equal(numeric["weights"], np.zeros(6))
+        np.testing.assert_array_equal(numeric["context"], np.zeros(4))
+        np.testing.assert_array_equal(tensor["weights"].data, np.zeros(6))
+        np.testing.assert_array_equal(tensor["context"].data, np.zeros(4))
+        np.testing.assert_array_equal(numeric["weights"], tensor["weights"].data)
+        np.testing.assert_array_equal(numeric["context"], tensor["context"].data)
+
     def test_tension_analytic_gradient_and_fixed_objective_nonincrease(self):
         core = V03HybridCore(23)
         rng = np.random.default_rng(5)
         proposals = rng.normal(0.0, 0.4, size=(4, 4))
-        initial = rng.normal(0.0, 0.7, size=12)
+        initial = np.full(12, 4.0, dtype=np.float64)
         refined, trace = core.refine_tension(proposals, initial)
         energies = np.asarray(trace["energies"], dtype=np.float64)
         self.assertEqual(len(energies), REFINEMENT_STEPS + 1)
@@ -127,15 +163,32 @@ class V03HybridCoreTests(unittest.TestCase):
         coefficients = trace["objective_coefficients"]
         coordinate = 3
         epsilon = 1e-6
-        plus_state = initial.copy()
+        projected_initial = initial * (TENSION_STATE_RADIUS / np.linalg.norm(initial))
+        np.testing.assert_allclose(trace["objective_coefficients"]["prior"], projected_initial)
+        plus_state = projected_initial.copy()
         plus_state[coordinate] += epsilon
-        minus_state = initial.copy()
+        minus_state = projected_initial.copy()
         minus_state[coordinate] -= epsilon
         plus = core._tension_energy_numeric(plus_state, proposals, coefficients)
         minus = core._tension_energy_numeric(minus_state, proposals, coefficients)
         finite_difference = (plus - minus) / (2.0 * epsilon)
-        analytic = core._tension_gradient_numeric(initial, proposals, coefficients)[coordinate]
+        analytic = core._tension_gradient_numeric(projected_initial, proposals, coefficients)[coordinate]
         self.assertAlmostEqual(float(analytic), float(finite_difference), places=6)
+
+        tensor_proposals = [Tensor(value) for value in proposals]
+        tensor_refined, tensor_trace = core._refine_tension_tensor(
+            tensor_proposals,
+            Tensor(initial),
+            np.ones(4),
+            core.tensor_parameters(requires_grad=False),
+        )
+        np.testing.assert_allclose(refined, tensor_refined.data, rtol=1e-12, atol=1e-12)
+        np.testing.assert_allclose(
+            energies,
+            np.asarray([value.data for value in tensor_trace["energies"]], dtype=np.float64),
+            rtol=1e-12,
+            atol=1e-12,
+        )
 
     def test_numeric_tensor_parity_and_feedback_shapes(self):
         core = V03HybridCore(29)
@@ -179,9 +232,127 @@ class V03HybridCoreTests(unittest.TestCase):
             rtol=1e-12,
             atol=1e-12,
         )
+        np.testing.assert_allclose(
+            numeric_trace["contextual_prior"],
+            tensor_trace["contextual_prior"].data,
+            rtol=1e-12,
+            atol=1e-12,
+        )
+        np.testing.assert_allclose(
+            numeric_trace["integrated_central"],
+            tensor_trace["integrated_central"].data,
+            rtol=1e-12,
+            atol=1e-12,
+        )
+        np.testing.assert_allclose(
+            numeric_trace["integrated_memory"],
+            tensor_trace["integrated_memory"].data,
+            rtol=1e-12,
+            atol=1e-12,
+        )
+        np.testing.assert_allclose(
+            numeric_runtime["memory"],
+            numeric_trace["integrated_memory"],
+            rtol=1e-12,
+            atol=1e-12,
+        )
+        self.assertGreater(
+            float(np.linalg.norm(numeric_trace["integrated_memory"] - numeric_trace["base"]["memory"])),
+            0.0,
+        )
         self.assertEqual(numeric_trace["messages"].shape, (5, 4))
         self.assertEqual(numeric_trace["attention"]["weights"].shape, (6,))
         self.assertEqual(numeric_runtime["feedback"].shape, (5, 4))
+
+    def test_masks_are_exact_and_legacy_backbone_remains_unmasked(self):
+        core = V03HybridCore(32)
+        vector = self._vectors(33, 1)[0]
+        runtime = core.initial_runtime(memory=np.full((2, 6), 0.2))
+        _, all_present = core.step(
+            runtime,
+            vector,
+            module_presence=np.ones(4),
+            memory_presence=np.ones(2),
+        )
+        _, all_absent = core.step(
+            runtime,
+            vector,
+            module_presence=np.zeros(4),
+            memory_presence=np.zeros(2),
+        )
+        np.testing.assert_allclose(all_present["base"]["central"], all_absent["base"]["central"])
+        np.testing.assert_allclose(all_present["base"]["memory"], all_absent["base"]["memory"])
+        self.assertEqual(all_present["mask_scope"], "hybrid_attention_and_tension_only")
+        self.assertEqual(all_absent["mask_scope"], "hybrid_attention_and_tension_only")
+        np.testing.assert_array_equal(all_absent["attention"]["weights"], np.zeros(6))
+        np.testing.assert_array_equal(all_absent["attention"]["context"], np.zeros(4))
+        with self.assertRaises(ValueError):
+            core.initial_runtime(module_presence=[0.5, 1.0, 1.0, 1.0])
+        with self.assertRaises(ValueError):
+            core.tensor_initial_runtime(memory_presence=[0.0, 0.25])
+
+    def test_central_and_peripheral_oscillators_reach_downstream_outputs(self):
+        core = V03HybridCore(34)
+        core.params["h.W_query_central_message"][:] = np.eye(4)
+        vector = self._vectors(35, 1)[0]
+        base_runtime = core.initial_runtime()
+        central_runtime = copy.deepcopy(base_runtime)
+        central_runtime["oscillators"][4, 0] = np.asarray([0.8, 0.0])
+        peripheral_runtime = copy.deepcopy(base_runtime)
+        peripheral_runtime["oscillators"][0, 0] = np.asarray([0.8, 0.0])
+        _, base_trace = core.step(base_runtime, vector)
+        _, central_trace = core.step(central_runtime, vector)
+        _, peripheral_trace = core.step(peripheral_runtime, vector)
+        for trace in (central_trace, peripheral_trace):
+            self.assertGreater(
+                float(np.linalg.norm(base_trace["attention"]["context"] - trace["attention"]["context"])),
+                0.0,
+            )
+            self.assertGreater(
+                float(np.linalg.norm(base_trace["integrated_central"] - trace["integrated_central"])),
+                0.0,
+            )
+            self.assertGreater(
+                float(np.linalg.norm(base_trace["integrated_memory"] - trace["integrated_memory"])),
+                0.0,
+            )
+            self.assertGreater(
+                float(np.linalg.norm(base_trace["feedback"] - trace["feedback"])),
+                0.0,
+            )
+
+    def test_runtime_pair_bounds_fractional_steps_and_serialization(self):
+        core = V03HybridCore(36)
+        vector = self._vectors(37, 1)[0]
+        bad_runtime = core.initial_runtime()
+        bad_runtime["oscillators"][0, 0] = np.asarray([1.0, 1.0])
+        with self.assertRaises(ValueError):
+            core.step(bad_runtime, vector)
+        bad_tensor_runtime = core.tensor_initial_runtime()
+        bad_tensor_runtime["oscillators"].data[0, 0] = np.asarray([1.0, 1.0])
+        with self.assertRaises(ValueError):
+            core.tensor_step(bad_tensor_runtime, vector, params=core.tensor_parameters(requires_grad=False))
+        with self.assertRaises(ValueError):
+            advance_oscillator([1.0, 1.0], [0.0, 0.0], 0.7, 1.2, 0.0)
+
+        runtime = core.initial_runtime()
+        snapshot = core.snapshot_runtime(runtime)
+        json.dumps(snapshot, sort_keys=True)
+        snapshot["oscillators"][0][0] = [1.0, 1.0]
+        with self.assertRaises(HybridCoreSnapshotError):
+            core.restore_runtime(snapshot)
+        snapshot = core.snapshot_runtime(runtime)
+        snapshot["step"] = 1.5
+        with self.assertRaises(HybridCoreSnapshotError):
+            core.restore_runtime(snapshot)
+        fractional_runtime = core.initial_runtime()
+        fractional_runtime["step"] = 1.5
+        with self.assertRaises(ValueError):
+            core.step(fractional_runtime, vector)
+        mismatched = core.snapshot_runtime(runtime)
+        mismatched["schema"] = "vevo.v03.hybrid-core.runtime.v1"
+        with self.assertRaises(HybridCoreSnapshotError):
+            core.restore_runtime(mismatched)
 
     def test_gradient_probe_reaches_frequency_damping_attention_tension_and_memory(self):
         core = V03HybridCore(37)

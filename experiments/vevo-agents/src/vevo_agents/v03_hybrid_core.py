@@ -25,9 +25,9 @@ from .autograd import Tensor, concatenate, cos, exp, sigmoid, sin, softmax, sqrt
 from .v03_model import LEGACY_GATE_HEAD, POLICY_VECTOR_DIM, V03FiveBrain
 
 
-HYBRID_CORE_MODEL_VERSION = "vevo.v03.hybrid-core.v1"
-HYBRID_CORE_SCHEMA = "vevo.v03.hybrid-core.runtime.v1"
-HYBRID_CORE_PARAMETER_SCHEMA = "vevo.v03.hybrid-core.parameters.v1"
+HYBRID_CORE_MODEL_VERSION = "vevo.v03.hybrid-core.v2"
+HYBRID_CORE_SCHEMA = "vevo.v03.hybrid-core.runtime.v2"
+HYBRID_CORE_PARAMETER_SCHEMA = "vevo.v03.hybrid-core.parameters.v2"
 
 PERIPHERAL_COUNT = 4
 PERIPHERAL_HIDDEN = 8
@@ -78,6 +78,13 @@ def _sigmoid_numeric(value: np.ndarray | float) -> np.ndarray | float:
     return 1.0 / (1.0 + np.exp(-clipped))
 
 
+def _softmax_numeric(value: np.ndarray) -> np.ndarray:
+    value = np.asarray(value, dtype=np.float64)
+    shifted = value - np.max(value)
+    result = np.exp(shifted)
+    return result / np.sum(result)
+
+
 def _validate_dt(dt: float) -> float:
     if isinstance(dt, (bool, np.bool_)):
         raise ValueError("dt must be a finite non-negative scalar")
@@ -110,9 +117,26 @@ def _validate_presence(
     result = np.asarray(value, dtype=np.float64)
     if result.shape != (width,) or not np.isfinite(result).all():
         raise ValueError(f"{name} must be a finite binary mask of shape ({width},)")
-    if not np.all(np.isclose(result, 0.0) | np.isclose(result, 1.0)):
+    if not np.all((result == 0.0) | (result == 1.0)):
         raise ValueError(f"{name} must contain only 0/1 presence values")
     return result.copy()
+
+
+def _validate_step_counter(value: Any, *, name: str = "step") -> int:
+    if type(value) is not int or value < 0:
+        raise ValueError(f"{name} must be a non-negative integer")
+    return value
+
+
+def _validate_oscillator_pairs(value: np.ndarray, *, name: str = "oscillators") -> np.ndarray:
+    value = np.asarray(value, dtype=np.float64)
+    if not np.isfinite(value).all():
+        raise ValueError(f"{name} must be finite")
+    if value.ndim == 0 or value.shape[-1] != OSCILLATOR_DIM:
+        raise ValueError(f"{name} must use 2-D oscillator pairs")
+    if np.any(np.linalg.norm(value, axis=-1) > OSCILLATOR_STATE_RADIUS + 1e-9):
+        raise ValueError(f"{name} contains a pair outside the unit disk")
+    return value
 
 
 def _project_numeric(value: np.ndarray, radius: float) -> np.ndarray:
@@ -264,15 +288,20 @@ def advance_oscillator(
     forcing = np.asarray(forcing, dtype=np.float64)
     if z.shape != (2,) or forcing.shape != (2,) or not np.isfinite(z).all() or not np.isfinite(forcing).all():
         raise ValueError("oscillator state and forcing must be finite 2-D vectors")
+    if float(np.linalg.norm(z)) > OSCILLATOR_STATE_RADIUS + 1e-9:
+        raise ValueError("oscillator state must be inside the unit disk")
     decay, cosine, sine, i0, i1 = _oscillator_coefficients_numeric(gamma, omega, dt)
     u = forcing / math.sqrt(1.0 + float(np.dot(forcing, forcing)))
-    return np.asarray(
+    result = np.asarray(
         [
             decay * (cosine * z[0] - sine * z[1]) + gamma * (i0 * u[0] - i1 * u[1]),
             decay * (sine * z[0] + cosine * z[1]) + gamma * (i1 * u[0] + i0 * u[1]),
         ],
         dtype=np.float64,
     )
+    if float(np.linalg.norm(result)) > OSCILLATOR_STATE_RADIUS + 1e-9:
+        raise ValueError("oscillator update exceeded the unit disk")
+    return result
 
 
 def _advance_oscillator_tensor(
@@ -282,15 +311,22 @@ def _advance_oscillator_tensor(
     omega: Tensor,
     dt: float,
 ) -> Tensor:
+    if z.data.shape != (OSCILLATOR_DIM,) or not np.isfinite(z.data).all():
+        raise ValueError("oscillator state must be a finite 2-D tensor")
+    if float(np.linalg.norm(z.data)) > OSCILLATOR_STATE_RADIUS + 1e-9:
+        raise ValueError("oscillator state must be inside the unit disk")
     decay, cosine, sine, i0, i1 = _oscillator_coefficients_tensor(gamma, omega, dt)
     u = forcing / sqrt(1.0 + (forcing * forcing).sum())
-    return concatenate(
+    result = concatenate(
         (
             (decay * (cosine * z[0] - sine * z[1]) + gamma * (i0 * u[0] - i1 * u[1])).reshape(1),
             (decay * (sine * z[0] + cosine * z[1]) + gamma * (i1 * u[0] + i0 * u[1])).reshape(1),
         ),
         axis=0,
     )
+    if not np.isfinite(result.data).all() or float(np.linalg.norm(result.data)) > OSCILLATOR_STATE_RADIUS + 1e-9:
+        raise ValueError("oscillator update exceeded the unit disk")
+    return result
 
 
 def _attention_logit_numeric(value: float) -> float:
@@ -348,6 +384,7 @@ class V03HybridCore:
         # One six-token attention exchange: four message tokens and two
         # memory-slot tokens.  Q/K/V are bounded at the operation boundary.
         normal("h.W_query", (ATTENTION_DIM, CENTER_HIDDEN), 0.12)
+        normal("h.W_query_central_message", (ATTENTION_DIM, MESSAGE_DIM), 0.12)
         normal("h.W_key_message", (ATTENTION_DIM, MESSAGE_DIM), 0.12)
         normal("h.W_value_message", (ATTENTION_DIM, MESSAGE_DIM), 0.12)
         normal("h.W_key_memory", (ATTENTION_DIM, MEMORY_DIM), 0.12)
@@ -366,7 +403,6 @@ class V03HybridCore:
             normal(f"h.W_tension_{index}", (TENSION_DIM, CENTER_HIDDEN), 0.12)
         self.params["h.alpha_raw"] = np.zeros(PERIPHERAL_COUNT, dtype=np.float64)
         self.params["h.lambda_raw"] = np.zeros(1, dtype=np.float64)
-        self.params["h.c_prior_raw"] = np.zeros(TENSION_STATE_DIM, dtype=np.float64)
 
         audit = self.parameter_budget_audit()
         if not audit["within_cap"]:
@@ -427,6 +463,9 @@ class V03HybridCore:
             "weights_status": "random_untrained",
             "competence_claim": False,
             "decision_service_available": False,
+            "task_loss_available": False,
+            "base_action_head": "legacy-comparator-only; no integrated task action adapter",
+            "runtime_snapshot_is_weights_checkpoint": False,
         }
 
     def initial_runtime(
@@ -467,7 +506,7 @@ class V03HybridCore:
             "oscillators": np.asarray(runtime["oscillators"], dtype=np.float64).copy(),
             "feedback": np.asarray(runtime["feedback"], dtype=np.float64).copy(),
             "time": float(runtime["time"]),
-            "step": int(runtime["step"]),
+            "step": _validate_step_counter(runtime["step"]),
             "module_presence": np.asarray(runtime["module_presence"], dtype=np.float64).copy(),
             "memory_presence": np.asarray(runtime["memory_presence"], dtype=np.float64).copy(),
         }
@@ -491,15 +530,51 @@ class V03HybridCore:
             array = np.asarray(runtime.get(key), dtype=np.float64)
             if array.shape != shape or not np.isfinite(array).all():
                 raise ValueError(f"invalid hybrid runtime field {key}")
-        if np.any(np.abs(np.asarray(runtime["oscillators"], dtype=np.float64)) > 1.0 + 1e-9):
-            raise ValueError("oscillator state exceeds its unit-ball contract")
+        _validate_oscillator_pairs(
+            np.asarray(runtime["oscillators"], dtype=np.float64),
+            name="oscillators",
+        )
         if np.any(np.abs(np.asarray(runtime["feedback"], dtype=np.float64)) > 1.0 + 1e-9):
             raise ValueError("feedback exceeds its bounded contract")
         time_value = float(runtime.get("time"))
         if not math.isfinite(time_value) or time_value < 0.0:
             raise ValueError("hybrid runtime time is invalid")
-        if type(runtime.get("step")) is not int or runtime["step"] < 0:
-            raise ValueError("hybrid runtime step is invalid")
+        _validate_step_counter(runtime.get("step"), name="hybrid runtime step")
+        _validate_presence(runtime.get("module_presence"), PERIPHERAL_COUNT, name="module_presence")
+        _validate_presence(runtime.get("memory_presence"), MEMORY_SLOTS, name="memory_presence")
+
+    def _validate_tensor_runtime(self, runtime: Mapping[str, Any]) -> None:
+        """Validate a runtime whose state values may be eager ``Tensor`` objects."""
+
+        if not isinstance(runtime, Mapping):
+            raise ValueError("hybrid tensor runtime must be a mapping")
+        peripheral = runtime.get("peripheral")
+        if not isinstance(peripheral, list) or len(peripheral) != PERIPHERAL_COUNT:
+            raise ValueError("hybrid tensor runtime must contain four peripheral states")
+
+        def payload(value: Any) -> np.ndarray:
+            return value.data.copy() if isinstance(value, Tensor) else np.asarray(value, dtype=np.float64)
+
+        for value in peripheral:
+            array = payload(value)
+            if array.shape != (PERIPHERAL_HIDDEN,) or not np.isfinite(array).all():
+                raise ValueError("invalid tensor peripheral state")
+        for key, shape in (
+            ("central", (CENTER_HIDDEN,)),
+            ("memory", self.central_memory_shape),
+            ("oscillators", (COMPARTMENT_COUNT, OSCILLATOR_PAIRS, OSCILLATOR_DIM)),
+            ("feedback", (COMPARTMENT_COUNT, MESSAGE_DIM)),
+        ):
+            array = payload(runtime.get(key))
+            if array.shape != shape or not np.isfinite(array).all():
+                raise ValueError(f"invalid tensor runtime field {key}")
+        _validate_oscillator_pairs(payload(runtime["oscillators"]), name="tensor oscillators")
+        if np.any(np.abs(payload(runtime["feedback"])) > 1.0 + 1e-9):
+            raise ValueError("tensor feedback exceeds its bounded contract")
+        time_value = float(runtime.get("time"))
+        if not math.isfinite(time_value) or time_value < 0.0:
+            raise ValueError("hybrid tensor runtime time is invalid")
+        _validate_step_counter(runtime.get("step"), name="hybrid tensor runtime step")
         _validate_presence(runtime.get("module_presence"), PERIPHERAL_COUNT, name="module_presence")
         _validate_presence(runtime.get("memory_presence"), MEMORY_SLOTS, name="memory_presence")
 
@@ -534,6 +609,7 @@ class V03HybridCore:
         messages: np.ndarray,
         memory: np.ndarray,
         central: np.ndarray,
+        central_message: np.ndarray,
         module_presence: np.ndarray,
         memory_presence: np.ndarray,
         params: Mapping[str, np.ndarray],
@@ -541,7 +617,13 @@ class V03HybridCore:
         messages = np.asarray(messages, dtype=np.float64).reshape(PERIPHERAL_COUNT, MESSAGE_DIM)
         memory = np.asarray(memory, dtype=np.float64).reshape(MEMORY_SLOTS, MEMORY_DIM)
         central = np.asarray(central, dtype=np.float64).reshape(CENTER_HIDDEN)
-        query = np.tanh(params["h.W_query"] @ central)
+        central_message = np.asarray(central_message, dtype=np.float64).reshape(MESSAGE_DIM)
+        module_presence = _validate_presence(module_presence, PERIPHERAL_COUNT, name="module_presence")
+        memory_presence = _validate_presence(memory_presence, MEMORY_SLOTS, name="memory_presence")
+        query = np.tanh(
+            params["h.W_query"] @ central
+            + params["h.W_query_central_message"] @ central_message
+        )
         keys = []
         values = []
         presence = []
@@ -553,6 +635,18 @@ class V03HybridCore:
             keys.append(np.tanh(params["h.W_key_memory"] @ memory[index]))
             values.append(np.tanh(params["h.W_value_memory"] @ memory[index]))
             presence.append(float(memory_presence[index]))
+        if not any(presence):
+            zeros = np.zeros(PERIPHERAL_COUNT + MEMORY_SLOTS, dtype=np.float64)
+            return {
+                "query": query,
+                "keys": np.asarray(keys, dtype=np.float64),
+                "values": np.zeros((PERIPHERAL_COUNT + MEMORY_SLOTS, ATTENTION_DIM), dtype=np.float64),
+                "raw_logits": zeros.copy(),
+                "bounded_logits": zeros.copy(),
+                "masked_logits": np.full_like(zeros, -1.0e9),
+                "weights": zeros,
+                "context": np.zeros(ATTENTION_DIM, dtype=np.float64),
+            }
         raw_logits = np.asarray(
             [float(np.dot(query, key) / math.sqrt(ATTENTION_DIM)) for key in keys],
             dtype=np.float64,
@@ -583,11 +677,17 @@ class V03HybridCore:
         messages: Sequence[Tensor],
         memory: Tensor,
         central: Tensor,
+        central_message: Tensor,
         module_presence: np.ndarray,
         memory_presence: np.ndarray,
         params: Mapping[str, Tensor],
     ) -> dict[str, Any]:
-        query = tanh(params["h.W_query"] @ central)
+        module_presence = _validate_presence(module_presence, PERIPHERAL_COUNT, name="module_presence")
+        memory_presence = _validate_presence(memory_presence, MEMORY_SLOTS, name="memory_presence")
+        query = tanh(
+            params["h.W_query"] @ central
+            + params["h.W_query_central_message"] @ central_message
+        )
         keys: list[Tensor] = []
         values: list[Tensor] = []
         presence = [float(value) for value in module_presence] + [float(value) for value in memory_presence]
@@ -598,6 +698,18 @@ class V03HybridCore:
             slot = memory[index]
             keys.append(tanh(params["h.W_key_memory"] @ slot))
             values.append(tanh(params["h.W_value_memory"] @ slot) * presence[PERIPHERAL_COUNT + index])
+        if not any(presence):
+            zeros = Tensor(np.zeros(PERIPHERAL_COUNT + MEMORY_SLOTS, dtype=np.float64))
+            return {
+                "query": query,
+                "keys": keys,
+                "values": values,
+                "raw_logits": [Tensor(np.zeros(1, dtype=np.float64)) for _ in presence],
+                "bounded_logits": [Tensor(np.zeros(1, dtype=np.float64)) for _ in presence],
+                "masked_logits": [Tensor(np.full(1, -1.0e9, dtype=np.float64)) for _ in presence],
+                "weights": zeros,
+                "context": Tensor(np.zeros(ATTENTION_DIM, dtype=np.float64)),
+            }
         raw_logits = [((query * key).sum() / math.sqrt(ATTENTION_DIM)).reshape(1) for key in keys]
         bounded_logits = [_attention_logit_tensor(logit[0]).reshape(1) for logit in raw_logits]
         masked_logits = [
@@ -619,7 +731,11 @@ class V03HybridCore:
             "context": context,
         }
 
-    def _tension_coefficients_numeric(self, module_presence: np.ndarray) -> dict[str, Any]:
+    def _tension_coefficients_numeric(
+        self,
+        module_presence: np.ndarray,
+        contextual_prior: np.ndarray,
+    ) -> dict[str, Any]:
         weights = [np.asarray(self.params[f"h.W_tension_{index}"], dtype=np.float64).copy() for index in range(PERIPHERAL_COUNT)]
         alpha = _bounded_parameter_numeric(self.params["h.alpha_raw"], ALPHA_MIN, ALPHA_MAX)
         effective_alpha = np.asarray(alpha, dtype=np.float64) * np.asarray(module_presence, dtype=np.float64)
@@ -628,13 +744,12 @@ class V03HybridCore:
             + (LAMBDA_MAX - LAMBDA_MIN)
             * _sigmoid_numeric(self.params["h.lambda_raw"])[0]
         )
-        prior = np.tanh(self.params["h.c_prior_raw"])
         return {
             "weights": weights,
             "alpha": np.asarray(alpha, dtype=np.float64),
             "effective_alpha": effective_alpha,
             "lambda": lambda_value,
-            "prior": np.asarray(prior, dtype=np.float64),
+            "prior": np.asarray(contextual_prior, dtype=np.float64).copy(),
         }
 
     @staticmethod
@@ -679,7 +794,8 @@ class V03HybridCore:
         if c.shape != (TENSION_STATE_DIM,) or not np.isfinite(c).all():
             raise ValueError("tension initial state must be a finite 12-D center vector")
         mask = _validate_presence(module_presence, PERIPHERAL_COUNT, name="module_presence")
-        coefficients = self._tension_coefficients_numeric(mask)
+        c = _project_numeric(c, TENSION_STATE_RADIUS)
+        coefficients = self._tension_coefficients_numeric(mask, c)
         energies = [self._tension_energy_numeric(c, proposals_array, coefficients)]
         gradients = []
         step_size = 1.0 / (
@@ -713,18 +829,18 @@ class V03HybridCore:
     def _tension_coefficients_tensor(
         params: Mapping[str, Tensor],
         module_presence: np.ndarray,
+        contextual_prior: Tensor,
     ) -> dict[str, Any]:
         weights = [params[f"h.W_tension_{index}"] for index in range(PERIPHERAL_COUNT)]
         alpha = ALPHA_MIN + (ALPHA_MAX - ALPHA_MIN) * sigmoid(params["h.alpha_raw"])
         effective_alpha = alpha * Tensor(module_presence)
         lambda_value = LAMBDA_MIN + (LAMBDA_MAX - LAMBDA_MIN) * sigmoid(params["h.lambda_raw"])[0]
-        prior = tanh(params["h.c_prior_raw"])
         return {
             "weights": weights,
             "alpha": alpha,
             "effective_alpha": effective_alpha,
             "lambda": lambda_value,
-            "prior": prior,
+            "prior": contextual_prior,
         }
 
     @staticmethod
@@ -751,8 +867,9 @@ class V03HybridCore:
         module_presence: np.ndarray,
         params: Mapping[str, Tensor],
     ) -> tuple[Tensor, dict[str, Any]]:
-        coefficients = self._tension_coefficients_tensor(params, module_presence)
+        module_presence = _validate_presence(module_presence, PERIPHERAL_COUNT, name="module_presence")
         c = _project_tensor(c_prior_input, TENSION_STATE_RADIUS)
+        coefficients = self._tension_coefficients_tensor(params, module_presence, c)
         energies = [self._tension_energy_tensor(c, proposals, coefficients)]
         gradients: list[Tensor] = []
         lipschitz = Tensor(np.zeros(1, dtype=np.float64))
@@ -770,6 +887,45 @@ class V03HybridCore:
             "gradients": gradients,
             "step_size": step_size,
             "refinement_steps": REFINEMENT_STEPS,
+        }
+
+    @staticmethod
+    def _integrate_center_numeric(base_central: np.ndarray, refined_central: np.ndarray) -> np.ndarray:
+        """Blend the refined center into the current bounded recurrent state."""
+
+        return np.tanh(0.5 * np.asarray(base_central, dtype=np.float64) + 0.5 * np.asarray(refined_central, dtype=np.float64))
+
+    def _hybrid_memory_write_numeric(
+        self,
+        memory: np.ndarray,
+        integrated_central: np.ndarray,
+    ) -> tuple[np.ndarray, dict[str, np.ndarray | float]]:
+        """Write the integrated center into the existing learned memory maps."""
+
+        address = _softmax_numeric(self.base.params["c.W_addr"] @ integrated_central)
+        gate = float(_sigmoid_numeric(self.base.params["c.W_write_gate"] @ integrated_central + self.base.params["c.b_write_gate"])[0])
+        value = np.tanh(self.base.params["c.W_value"] @ integrated_central + self.base.params["c.b_value"])
+        updated = np.asarray(memory, dtype=np.float64) + gate * address[:, None] * (value[None, :] - memory)
+        return updated, {
+            "address": address,
+            "gate": gate,
+            "value": value,
+        }
+
+    @staticmethod
+    def _hybrid_memory_write_tensor(
+        memory: Tensor,
+        integrated_central: Tensor,
+        params: Mapping[str, Tensor],
+    ) -> tuple[Tensor, dict[str, Tensor]]:
+        address = softmax(params["c.W_addr"] @ integrated_central)
+        gate = sigmoid(params["c.W_write_gate"] @ integrated_central + params["c.b_write_gate"])[0]
+        value = tanh(params["c.W_value"] @ integrated_central + params["c.b_value"])
+        updated = memory + gate * address.reshape(MEMORY_SLOTS, 1) * (value.reshape(1, MEMORY_DIM) - memory)
+        return updated, {
+            "address": address,
+            "gate": gate,
+            "value": value,
         }
 
     def _feedback_numeric(self, tension: np.ndarray, attention_context: np.ndarray) -> np.ndarray:
@@ -851,28 +1007,34 @@ class V03HybridCore:
             messages[:PERIPHERAL_COUNT],
             base_next["memory"],
             base_next["central"],
+            messages[PERIPHERAL_COUNT],
             module_mask,
             memory_mask,
             self.params,
         )
         proposals = messages[:PERIPHERAL_COUNT] * module_mask[:, None]
-        tension_start = base_next["central"] + np.tanh(
+        contextual_prior = base_next["central"] + np.tanh(
             self.params["h.W_attention_to_tension"] @ attention["context"]
         )
         tension, tension_trace = self.refine_tension(
             proposals,
-            tension_start,
+            contextual_prior,
             module_presence=module_mask,
+        )
+        integrated_central = self._integrate_center_numeric(base_next["central"], tension)
+        integrated_memory, hybrid_memory_trace = self._hybrid_memory_write_numeric(
+            base_next["memory"],
+            integrated_central,
         )
         feedback = self._feedback_numeric(tension, attention["context"])
         next_runtime = {
             "peripheral": [value.copy() for value in base_next["peripheral"]],
-            "central": base_next["central"].copy(),
-            "memory": base_next["memory"].copy(),
+            "central": integrated_central,
+            "memory": integrated_memory,
             "oscillators": oscillators,
             "feedback": feedback,
             "time": float(runtime["time"]) + dt,
-            "step": int(runtime["step"]) + 1,
+            "step": _validate_step_counter(runtime["step"]) + 1,
             "module_presence": module_mask,
             "memory_presence": memory_mask,
         }
@@ -887,11 +1049,16 @@ class V03HybridCore:
             "omega": omega.copy(),
             "messages": messages.copy(),
             "attention": attention,
+            "contextual_prior": contextual_prior.copy(),
             "tension": tension_trace,
             "tension_refined": tension.copy(),
+            "integrated_central": integrated_central.copy(),
+            "integrated_memory": integrated_memory.copy(),
+            "hybrid_memory_write": hybrid_memory_trace,
             "feedback": feedback.copy(),
             "module_presence": module_mask.copy(),
             "memory_presence": memory_mask.copy(),
+            "mask_scope": "hybrid_attention_and_tension_only",
         }
         return next_runtime, trace
 
@@ -956,6 +1123,7 @@ class V03HybridCore:
         memory_presence: np.ndarray,
         params: Mapping[str, Tensor],
     ) -> tuple[dict[str, Any], dict[str, Any]]:
+        self._validate_tensor_runtime(runtime)
         vector = _validate_vector(vector)
         dt = _validate_dt(dt)
         base_params = {name[5:]: value for name, value in params.items() if name.startswith("base.")}
@@ -1005,29 +1173,38 @@ class V03HybridCore:
             messages[:PERIPHERAL_COUNT],
             base_next["memory"],
             base_next["central"],
+            messages[PERIPHERAL_COUNT],
             module_presence,
             memory_presence,
             params,
         )
         proposals = [messages[index] * float(module_presence[index]) for index in range(PERIPHERAL_COUNT)]
-        tension_start = base_next["central"] + tanh(
+        contextual_prior = base_next["central"] + tanh(
             params["h.W_attention_to_tension"] @ attention["context"]
         )
         tension, tension_trace = self._refine_tension_tensor(
             proposals,
-            tension_start,
+            contextual_prior,
             module_presence,
             params,
+        )
+        integrated_central_tensor = tanh(
+            0.5 * base_next["central"] + 0.5 * tension
+        )
+        integrated_memory, hybrid_memory_trace = self._hybrid_memory_write_tensor(
+            base_next["memory"],
+            integrated_central_tensor,
+            base_params,
         )
         feedback = self._feedback_tensor(tension, attention["context"], params)
         next_runtime = {
             "peripheral": base_next["peripheral"],
-            "central": base_next["central"],
-            "memory": base_next["memory"],
+            "central": integrated_central_tensor,
+            "memory": integrated_memory,
             "oscillators": oscillators,
             "feedback": feedback,
             "time": float(runtime["time"]) + dt,
-            "step": int(runtime["step"]) + 1,
+            "step": _validate_step_counter(runtime["step"]) + 1,
             "module_presence": module_presence.copy(),
             "memory_presence": memory_presence.copy(),
         }
@@ -1041,11 +1218,16 @@ class V03HybridCore:
             "omega": omega,
             "messages": messages,
             "attention": attention,
+            "contextual_prior": contextual_prior,
             "tension": tension_trace,
             "tension_refined": tension,
+            "integrated_central": integrated_central_tensor,
+            "integrated_memory": integrated_memory,
+            "hybrid_memory_write": hybrid_memory_trace,
             "feedback": feedback,
             "module_presence": module_presence.copy(),
             "memory_presence": memory_presence.copy(),
+            "mask_scope": "hybrid_attention_and_tension_only",
         }
 
     def tensor_step(
@@ -1060,6 +1242,7 @@ class V03HybridCore:
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """Advance the same core with existing eager reverse-mode tensors."""
 
+        self._validate_tensor_runtime(runtime)
         if params is None:
             params = self.tensor_parameters(requires_grad=True)
         module_mask = _validate_presence(
@@ -1114,25 +1297,25 @@ class V03HybridCore:
                 "oscillators": Tensor(initial_runtime["oscillators"]),
                 "feedback": Tensor(initial_runtime["feedback"]),
                 "time": float(initial_runtime["time"]),
-                "step": int(initial_runtime["step"]),
+                "step": _validate_step_counter(initial_runtime["step"]),
                 "module_presence": np.asarray(initial_runtime["module_presence"], dtype=np.float64).copy(),
                 "memory_presence": np.asarray(initial_runtime["memory_presence"], dtype=np.float64).copy(),
             }
         objective = Tensor(0.0)
         traces = []
-        oscillator_probe = Tensor(self._probe_array((COMPARTMENT_COUNT, OSCILLATOR_PAIRS, OSCILLATOR_DIM), 0.07))
         attention_probe = Tensor(self._probe_array((ATTENTION_DIM,), 0.13))
         tension_probe = Tensor(self._probe_array((TENSION_STATE_DIM,), 0.19))
+        central_probe = Tensor(self._probe_array((CENTER_HIDDEN,), 0.21))
         feedback_probe = Tensor(self._probe_array((COMPARTMENT_COUNT, MESSAGE_DIM), 0.23))
         memory_probe = Tensor(self._probe_array(self.central_memory_shape, 0.29))
         for vector in vectors:
             runtime, trace = self.tensor_step(runtime, vector, dt=dt, params=params)
             traces.append(trace)
-            objective = objective + 0.11 * (trace["oscillators"] * oscillator_probe).sum()
             objective = objective + 0.17 * (trace["attention"]["context"] * attention_probe).sum()
             objective = objective + 0.19 * (trace["tension_refined"] * tension_probe).sum()
+            objective = objective + 0.11 * (trace["integrated_central"] * central_probe).sum()
             objective = objective + 0.13 * (trace["feedback"] * feedback_probe).sum()
-            objective = objective + 0.07 * (runtime["memory"] * memory_probe).sum()
+            objective = objective + 0.07 * (trace["integrated_memory"] * memory_probe).sum()
         objective = objective / float(len(vectors))
         objective.backward()
         gradients = {name: value.grad.copy() for name, value in params.items()}
@@ -1164,7 +1347,7 @@ class V03HybridCore:
             "oscillators": np.asarray(runtime["oscillators"], dtype=np.float64).tolist(),
             "feedback": np.asarray(runtime["feedback"], dtype=np.float64).tolist(),
             "time": float(runtime["time"]),
-            "step": int(runtime["step"]),
+            "step": _validate_step_counter(runtime["step"]),
             "module_presence": np.asarray(runtime["module_presence"], dtype=np.float64).tolist(),
             "memory_presence": np.asarray(runtime["memory_presence"], dtype=np.float64).tolist(),
         }
@@ -1191,7 +1374,7 @@ class V03HybridCore:
                     COMPARTMENT_COUNT, MESSAGE_DIM
                 ).copy(),
                 "time": float(snapshot["time"]),
-                "step": int(snapshot["step"]),
+                "step": _validate_step_counter(snapshot["step"], name="snapshot step"),
                 "module_presence": np.asarray(snapshot["module_presence"], dtype=np.float64).reshape(PERIPHERAL_COUNT).copy(),
                 "memory_presence": np.asarray(snapshot["memory_presence"], dtype=np.float64).reshape(MEMORY_SLOTS).copy(),
             }
