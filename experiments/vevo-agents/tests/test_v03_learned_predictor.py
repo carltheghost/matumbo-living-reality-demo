@@ -85,6 +85,10 @@ class LearnedPredictorTests(unittest.TestCase):
             manifest["test_access"]["historical_pre_review_exposure"]["world_seeds"],
             list(range(9400, 9408)),
         )
+        self.assertEqual(
+            manifest["test_access"]["historical_pre_review_exposure"]["conditions"],
+            ["phase_shifted", "frequency_shifted"],
+        )
         windows = {}
         for trajectory in manifest["trajectories"]:
             for window in trajectory["window_ids"]:

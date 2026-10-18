@@ -775,7 +775,8 @@ def build_split_manifest() -> dict[str, Any]:
             "historical_pre_review_exposure": {
                 "inputs_generated": True,
                 "world_seeds": list(EXPOSED_TEST_WORLD_SEEDS),
-                "conditions": ["initial_phase_shifted", "frequency_shifted"],
+                "conditions": ["phase_shifted", "frequency_shifted"],
+                "phase_condition_effect": "pre-review phase_shifted changed calibration only while cues/distractors were disabled; the replacement initial_phase_shifted condition seeds a public oscillator state",
                 "metrics_written": False,
                 "tuning_use_evidence": "no evidence of tuning to those outcomes was found; they are not treated as fresh final-test evidence",
                 "replacement_worlds_required": True,
@@ -1677,7 +1678,8 @@ def pilot_experiment_config(*, split_manifest_sha256: str) -> dict[str, Any]:
             "reviewed_selection_artifact_required": True,
             "historical_pre_review_exposure": {
                 "world_seeds": list(EXPOSED_TEST_WORLD_SEEDS),
-                "conditions": ["initial_phase_shifted", "frequency_shifted"],
+                "conditions": ["phase_shifted", "frequency_shifted"],
+                "phase_condition_effect": "pre-review phase_shifted changed calibration only while cues/distractors were disabled; the replacement initial_phase_shifted condition seeds a public oscillator state",
                 "metrics_written": False,
                 "fresh_final_test_evidence": False,
             },
@@ -2281,7 +2283,7 @@ def write_pilot_artifacts(output_dir: str | Path, *, repeats: int = 3) -> dict[s
         "- Training data: 8 complete trajectories and 88 windows; the manifest covers 32 trajectories and 352 windows across all split metadata.\n"
         "- Existing upstream gate: the all-four-models `8/8` training gate remains required before development evaluation; this pilot does not rerun or claim that gate.\n"
         "- Development cases: worlds 9300--9307, explicitly inspected development only; never fresh generalization.\n"
-        "- Final test: default materialization is closed; the 9400--9407 inputs were generated before this review and are recorded only as exposure history, while replacement worlds 9500--9507 remain reserved.\n"
+        "- Final test: default materialization is closed; the 9400--9407 inputs were generated before this review and are recorded only as exposure history (the old `phase_shifted` condition was calibration-only), while replacement worlds 9500--9507 remain reserved.\n"
         "- Final-test unlock: requires a reviewed, frozen selection artifact with a provenance hash.\n"
         "- Old reports/checkpoints: untouched.\n\n"
         "The CPU probe measures one complete train-world trajectory per paired "
