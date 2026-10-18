@@ -11,6 +11,8 @@ Corrected bounded comparison using a nominal mechanical/oscillator simulator pre
 - Virtual rollout candidate limit: `100`
 - Predictor parameterization: `nominal_not_calibrated`; mismatch expected: `True`
 - Neural geometry status: `not_used`
+- Virtual physics-step semantics: `worst_case_reserved_compute`
+- Forecast residual role: `diagnostic_measurement_only`; control feedback: `False`
 
 ## Fixtures
 
@@ -51,4 +53,4 @@ Fixture `planner-reachable-seed-0-port-0`: controlled positive neighbor-node dis
 
 All receding-horizon plan cycles: `[0, 1, 2, 3]`; cycles after the cycle-1 change became observable: `[2, 3]` (first observable cycle `2`).
 
-No physical-safety guarantee, meaningful spatial-navigation claim, neural/geometry benefit, or strategy-superiority claim is made. The full JSON preserves forecasts, forecast-versus-realized residuals, observations, results, errors, and budgets.
+No physical-safety guarantee, meaningful spatial-navigation claim, neural/geometry benefit, or strategy-superiority claim is made. Forecast residuals are diagnostic measurements only, never control feedback. Virtual physics steps are worst-case reserved compute, not measured execution. The full JSON preserves forecasts, forecast-versus-realized residuals, observations, results, errors, and budgets.

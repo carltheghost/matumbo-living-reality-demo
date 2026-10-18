@@ -81,7 +81,8 @@
     "validated_ports": [
       0,
       1
-    ]
+    ],
+    "virtual_physics_steps_semantics": "worst_case_reserved_compute"
   },
   "changed_world_case": {
     "change_execution_cycle": 1,
@@ -113,16 +114,18 @@
         "budget": {
           "actual_cycle_limit": 4,
           "actual_physics_step_limit": 8,
+          "in_flight_uncertain_physics_steps": 0,
           "known_executed_physics_steps": 8,
+          "never_dispatched_physics_steps": 0,
           "reserved_actual_cycles": 4,
           "reserved_actual_physics_steps": 8,
           "supplied_work": 3.605421118459892e-05,
-          "unknown_outcome_physics_steps": 0,
           "virtual_budget_kind": "coast",
           "virtual_candidate_limit": 4,
           "virtual_candidates": 4,
           "virtual_physics_step_limit": 8,
-          "virtual_physics_steps": 8
+          "virtual_physics_steps": 8,
+          "virtual_physics_steps_semantics": "worst_case_reserved_compute"
         },
         "cycles": [
           {
@@ -142,16 +145,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 2,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 1,
               "reserved_actual_physics_steps": 2,
               "supplied_work": 0.0,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "coast",
               "virtual_candidate_limit": 4,
               "virtual_candidates": 1,
               "virtual_physics_step_limit": 8,
-              "virtual_physics_steps": 2
+              "virtual_physics_steps": 2,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 0,
             "error": null,
@@ -247,18 +252,23 @@
               "reused": false,
               "score": 7.016666666666667,
               "selected_index": 0,
-              "virtual_physics_steps": 2
+              "virtual_physics_steps": 2,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 3,
               "actual_time": 0.10500000000000001,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
+              "predicted_residual_delta": 0.0,
+              "predicted_supplied_work_delta": 0.0,
               "predicted_tick": 3,
               "predicted_time": 0.10500000000000001,
               "prediction_source": "coast_diagnostic",
-              "residual_abs_error": 0.0,
-              "supplied_work_abs_error": 0.0,
+              "realized_residual_delta": 0.0,
+              "realized_supplied_work_delta": 0.0,
+              "residual_increment_abs_error": 0.0,
+              "supplied_work_increment_abs_error": 0.0,
               "total_energy_abs_error": 0.0
             },
             "observation": {
@@ -372,12 +382,13 @@
               "energy_before": 0.0,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.0,
               "tick_after": 3,
-              "tick_before": 1,
-              "unknown_outcome_ticks": 0
+              "tick_before": 1
             }
           },
           {
@@ -397,16 +408,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 4,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 2,
               "reserved_actual_physics_steps": 4,
               "supplied_work": 3.605421118459892e-05,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "coast",
               "virtual_candidate_limit": 4,
               "virtual_candidates": 2,
               "virtual_physics_step_limit": 8,
-              "virtual_physics_steps": 4
+              "virtual_physics_steps": 4,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 1,
             "error": null,
@@ -502,18 +515,23 @@
               "reused": false,
               "score": 7.027777777777778,
               "selected_index": 0,
-              "virtual_physics_steps": 2
+              "virtual_physics_steps": 2,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 5,
               "actual_time": 0.17500000000000002,
               "comparison_status": "compared",
               "node_displacement_l2_error": 3.1270570742298615e-12,
+              "predicted_residual_delta": 0.0,
+              "predicted_supplied_work_delta": 0.0,
               "predicted_tick": 5,
               "predicted_time": 0.17500000000000002,
               "prediction_source": "coast_diagnostic",
-              "residual_abs_error": 9.901963286359718e-06,
-              "supplied_work_abs_error": 3.605421118459892e-05,
+              "realized_residual_delta": -9.901963286359718e-06,
+              "realized_supplied_work_delta": 3.605421118459892e-05,
+              "residual_increment_abs_error": 9.901963286359718e-06,
+              "supplied_work_increment_abs_error": 3.605421118459892e-05,
               "total_energy_abs_error": 2.6039623117610003e-05
             },
             "observation": {
@@ -627,12 +645,13 @@
               "energy_before": 0.0,
               "environment_change_applied": true,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 3.605421118459892e-05,
               "tick_after": 5,
-              "tick_before": 3,
-              "unknown_outcome_ticks": 0
+              "tick_before": 3
             }
           },
           {
@@ -652,16 +671,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 6,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 3,
               "reserved_actual_physics_steps": 6,
               "supplied_work": 3.605421118459892e-05,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "coast",
               "virtual_candidate_limit": 4,
               "virtual_candidates": 3,
               "virtual_physics_step_limit": 8,
-              "virtual_physics_steps": 6
+              "virtual_physics_steps": 6,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 2,
             "error": null,
@@ -757,18 +778,23 @@
               "reused": false,
               "score": 7.013840800793922,
               "selected_index": 0,
-              "virtual_physics_steps": 2
+              "virtual_physics_steps": 2,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 7,
               "actual_time": 0.24500000000000002,
               "comparison_status": "compared",
               "node_displacement_l2_error": 4.322743131364442e-13,
+              "predicted_residual_delta": 1.212502911585417e-06,
+              "predicted_supplied_work_delta": 0.0,
               "predicted_tick": 7,
               "predicted_time": 0.24500000000000002,
               "prediction_source": "coast_diagnostic",
-              "residual_abs_error": 9.886106719788173e-06,
-              "supplied_work_abs_error": 0.0,
+              "realized_residual_delta": 1.2283594781569625e-06,
+              "realized_supplied_work_delta": 0.0,
+              "residual_increment_abs_error": 1.585656657154556e-08,
+              "supplied_work_increment_abs_error": 0.0,
               "total_energy_abs_error": 2.834591387991211e-07
             },
             "observation": {
@@ -882,12 +908,13 @@
               "energy_before": 2.6039623117610003e-05,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.0,
               "tick_after": 7,
-              "tick_before": 5,
-              "unknown_outcome_ticks": 0
+              "tick_before": 5
             }
           },
           {
@@ -907,16 +934,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 8,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 4,
               "reserved_actual_physics_steps": 8,
               "supplied_work": 3.605421118459892e-05,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "coast",
               "virtual_candidate_limit": 4,
               "virtual_candidates": 4,
               "virtual_physics_step_limit": 8,
-              "virtual_physics_steps": 8
+              "virtual_physics_steps": 8,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 3,
             "error": null,
@@ -1012,18 +1041,23 @@
               "reused": false,
               "score": 6.903330779094669,
               "selected_index": 0,
-              "virtual_physics_steps": 2
+              "virtual_physics_steps": 2,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 9,
               "actual_time": 0.31500000000000006,
               "comparison_status": "compared",
               "node_displacement_l2_error": 1.4332730585105468e-12,
+              "predicted_residual_delta": -8.250538126901148e-07,
+              "predicted_supplied_work_delta": 0.0,
               "predicted_tick": 9,
               "predicted_time": 0.31500000000000006,
               "prediction_source": "coast_diagnostic",
-              "residual_abs_error": 8.963312845940943e-06,
-              "supplied_work_abs_error": 0.0,
+              "realized_residual_delta": -1.1147628504283018e-06,
+              "realized_supplied_work_delta": 0.0,
+              "residual_increment_abs_error": 2.89709037738187e-07,
+              "supplied_work_increment_abs_error": 0.0,
               "total_energy_abs_error": 8.984236470636618e-07
             },
             "observation": {
@@ -1137,12 +1171,13 @@
               "energy_before": 2.7139279006222496e-05,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.0,
               "tick_after": 9,
-              "tick_before": 7,
-              "unknown_outcome_ticks": 0
+              "tick_before": 7
             }
           }
         ],
@@ -1268,16 +1303,18 @@
         "budget": {
           "actual_cycle_limit": 4,
           "actual_physics_step_limit": 8,
+          "in_flight_uncertain_physics_steps": 0,
           "known_executed_physics_steps": 8,
+          "never_dispatched_physics_steps": 0,
           "reserved_actual_cycles": 4,
           "reserved_actual_physics_steps": 8,
           "supplied_work": 0.001087849557928905,
-          "unknown_outcome_physics_steps": 0,
           "virtual_budget_kind": "greedy",
           "virtual_candidate_limit": 20,
           "virtual_candidates": 20,
           "virtual_physics_step_limit": 40,
-          "virtual_physics_steps": 40
+          "virtual_physics_steps": 40,
+          "virtual_physics_steps_semantics": "worst_case_reserved_compute"
         },
         "cycles": [
           {
@@ -1297,16 +1334,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 2,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 1,
               "reserved_actual_physics_steps": 2,
               "supplied_work": 9.366593535569068e-05,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "greedy",
               "virtual_candidate_limit": 20,
               "virtual_candidates": 5,
               "virtual_physics_step_limit": 40,
-              "virtual_physics_steps": 10
+              "virtual_physics_steps": 10,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 0,
             "error": null,
@@ -1402,18 +1441,23 @@
               "reused": false,
               "score": 6.678063940475234,
               "selected_index": 1,
-              "virtual_physics_steps": 10
+              "virtual_physics_steps": 10,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 3,
               "actual_time": 0.10500000000000001,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
+              "predicted_residual_delta": -2.971062781763816e-05,
+              "predicted_supplied_work_delta": 9.36121302692835e-05,
               "predicted_tick": 3,
               "predicted_time": 0.10500000000000001,
               "prediction_source": "fresh_forecast",
-              "residual_abs_error": 1.84448873525545e-07,
-              "supplied_work_abs_error": 5.380508640717577e-08,
+              "realized_residual_delta": -2.9895076691163705e-05,
+              "realized_supplied_work_delta": 9.366593535569068e-05,
+              "residual_increment_abs_error": 1.84448873525545e-07,
+              "supplied_work_increment_abs_error": 5.380508640717577e-08,
               "total_energy_abs_error": 1.310551734594453e-07
             },
             "observation": {
@@ -1527,12 +1571,13 @@
               "energy_before": 0.0,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 9.366593535569068e-05,
               "tick_after": 3,
-              "tick_before": 1,
-              "unknown_outcome_ticks": 0
+              "tick_before": 1
             }
           },
           {
@@ -1552,16 +1597,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 4,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 2,
               "reserved_actual_physics_steps": 4,
               "supplied_work": 0.0003437819522334548,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "greedy",
               "virtual_candidate_limit": 20,
               "virtual_candidates": 10,
               "virtual_physics_step_limit": 40,
-              "virtual_physics_steps": 20
+              "virtual_physics_steps": 20,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 1,
             "error": null,
@@ -1657,18 +1704,23 @@
               "reused": false,
               "score": 5.475354825813363,
               "selected_index": 1,
-              "virtual_physics_steps": 10
+              "virtual_physics_steps": 10,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 5,
               "actual_time": 0.17500000000000002,
               "comparison_status": "compared",
               "node_displacement_l2_error": 2.8903302576762615e-12,
+              "predicted_residual_delta": -2.237790308679843e-05,
+              "predicted_supplied_work_delta": 0.000213423313081293,
               "predicted_tick": 5,
               "predicted_time": 0.17500000000000002,
               "prediction_source": "fresh_forecast",
-              "residual_abs_error": 4.084789728591491e-05,
-              "supplied_work_abs_error": 3.669270379647109e-05,
+              "realized_residual_delta": -3.333072368154964e-05,
+              "realized_supplied_work_delta": 0.0002501160168777641,
+              "residual_increment_abs_error": 1.0952820594751207e-05,
+              "supplied_work_increment_abs_error": 3.669270379647109e-05,
               "total_energy_abs_error": 2.5378322016027775e-05
             },
             "observation": {
@@ -1782,12 +1834,13 @@
               "energy_before": 6.347219638870332e-05,
               "environment_change_applied": true,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.0002501160168777641,
               "tick_after": 5,
-              "tick_before": 3,
-              "unknown_outcome_ticks": 0
+              "tick_before": 3
             }
           },
           {
@@ -1807,16 +1860,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 6,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 3,
               "reserved_actual_physics_steps": 6,
               "supplied_work": 0.0006681572960522118,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "greedy",
               "virtual_candidate_limit": 20,
               "virtual_candidates": 15,
               "virtual_physics_step_limit": 40,
-              "virtual_physics_steps": 30
+              "virtual_physics_steps": 30,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 2,
             "error": null,
@@ -1912,18 +1967,23 @@
               "reused": false,
               "score": 1.9453190417460722,
               "selected_index": 1,
-              "virtual_physics_steps": 10
+              "virtual_physics_steps": 10,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 7,
               "actual_time": 0.24500000000000002,
               "comparison_status": "compared",
               "node_displacement_l2_error": 4.766562138962289e-12,
+              "predicted_residual_delta": -9.25490414891667e-06,
+              "predicted_supplied_work_delta": 0.00032254325897977567,
               "predicted_tick": 7,
               "predicted_time": 0.24500000000000002,
               "prediction_source": "fresh_forecast",
-              "residual_abs_error": 6.560862702726782e-05,
-              "supplied_work_abs_error": 1.8320848389813318e-06,
+              "realized_residual_delta": -1.1637730803471148e-05,
+              "realized_supplied_work_delta": 0.000324375343818757,
+              "residual_increment_abs_error": 2.3828266545544777e-06,
+              "supplied_work_increment_abs_error": 1.8320848389813318e-06,
               "total_energy_abs_error": 2.9111891134492654e-06
             },
             "observation": {
@@ -2037,12 +2097,13 @@
               "energy_before": 0.0002787125191516054,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.000324375343818757,
               "tick_after": 7,
-              "tick_before": 5,
-              "unknown_outcome_ticks": 0
+              "tick_before": 5
             }
           },
           {
@@ -2062,16 +2123,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 8,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 4,
               "reserved_actual_physics_steps": 8,
               "supplied_work": 0.001087849557928905,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "greedy",
               "virtual_candidate_limit": 20,
               "virtual_candidates": 20,
               "virtual_physics_step_limit": 40,
-              "virtual_physics_steps": 40
+              "virtual_physics_steps": 40,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 3,
             "error": null,
@@ -2167,18 +2230,23 @@
               "reused": false,
               "score": 0.09517794521605488,
               "selected_index": 1,
-              "virtual_physics_steps": 10
+              "virtual_physics_steps": 10,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 9,
               "actual_time": 0.31500000000000006,
               "comparison_status": "compared",
               "node_displacement_l2_error": 1.7587044957336532e-11,
+              "predicted_residual_delta": 2.8664877084060374e-06,
+              "predicted_supplied_work_delta": 0.00041611338913310515,
               "predicted_tick": 9,
               "predicted_time": 0.31500000000000006,
               "prediction_source": "fresh_forecast",
-              "residual_abs_error": 7.89645612254164e-05,
-              "supplied_work_abs_error": 3.578872743588077e-06,
+              "realized_residual_delta": -1.2345423408258762e-06,
+              "realized_supplied_work_delta": 0.00041969226187669323,
+              "residual_increment_abs_error": 4.101030049231914e-06,
+              "supplied_work_increment_abs_error": 3.578872743588077e-06,
               "total_energy_abs_error": 1.0357839060616894e-05
             },
             "observation": {
@@ -2292,12 +2360,13 @@
               "energy_before": 0.0005880713245650106,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.00041969226187669323,
               "tick_after": 9,
-              "tick_before": 7,
-              "unknown_outcome_ticks": 0
+              "tick_before": 7
             }
           }
         ],
@@ -2423,16 +2492,18 @@
         "budget": {
           "actual_cycle_limit": 4,
           "actual_physics_step_limit": 8,
+          "in_flight_uncertain_physics_steps": 0,
           "known_executed_physics_steps": 8,
+          "never_dispatched_physics_steps": 0,
           "reserved_actual_cycles": 4,
           "reserved_actual_physics_steps": 8,
           "supplied_work": 0.001087849557928905,
-          "unknown_outcome_physics_steps": 0,
           "virtual_budget_kind": "open_loop_full_episode",
           "virtual_candidate_limit": 625,
           "virtual_candidates": 625,
           "virtual_physics_step_limit": 5000,
-          "virtual_physics_steps": 5000
+          "virtual_physics_steps": 5000,
+          "virtual_physics_steps_semantics": "worst_case_reserved_compute"
         },
         "cycles": [
           {
@@ -2452,16 +2523,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 2,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 1,
               "reserved_actual_physics_steps": 2,
               "supplied_work": 9.366593535569068e-05,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "open_loop_full_episode",
               "virtual_candidate_limit": 625,
               "virtual_candidates": 625,
               "virtual_physics_step_limit": 5000,
-              "virtual_physics_steps": 5000
+              "virtual_physics_steps": 5000,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 0,
             "error": null,
@@ -2781,18 +2854,23 @@
               "reused": false,
               "score": 0.09338068680206488,
               "selected_index": 156,
-              "virtual_physics_steps": 5000
+              "virtual_physics_steps": 5000,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 3,
               "actual_time": 0.10500000000000001,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
+              "predicted_residual_delta": -2.971062781763816e-05,
+              "predicted_supplied_work_delta": 9.36121302692835e-05,
               "predicted_tick": 3,
               "predicted_time": 0.10500000000000001,
               "prediction_source": "fresh_forecast",
-              "residual_abs_error": 1.84448873525545e-07,
-              "supplied_work_abs_error": 5.380508640717577e-08,
+              "realized_residual_delta": -2.9895076691163705e-05,
+              "realized_supplied_work_delta": 9.366593535569068e-05,
+              "residual_increment_abs_error": 1.84448873525545e-07,
+              "supplied_work_increment_abs_error": 5.380508640717577e-08,
               "total_energy_abs_error": 1.310551734594453e-07
             },
             "observation": {
@@ -2906,12 +2984,13 @@
               "energy_before": 0.0,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 9.366593535569068e-05,
               "tick_after": 3,
-              "tick_before": 1,
-              "unknown_outcome_ticks": 0
+              "tick_before": 1
             }
           },
           {
@@ -2931,16 +3010,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 4,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 2,
               "reserved_actual_physics_steps": 4,
               "supplied_work": 0.0003437819522334548,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "open_loop_full_episode",
               "virtual_candidate_limit": 625,
               "virtual_candidates": 625,
               "virtual_physics_step_limit": 5000,
-              "virtual_physics_steps": 5000
+              "virtual_physics_steps": 5000,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 1,
             "error": null,
@@ -3184,18 +3265,23 @@
               "reused": true,
               "score": 0.09338068680206488,
               "selected_index": 0,
-              "virtual_physics_steps": 0
+              "virtual_physics_steps": 0,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 5,
               "actual_time": 0.17500000000000002,
               "comparison_status": "compared",
               "node_displacement_l2_error": 2.771000630812423e-12,
+              "predicted_residual_delta": -2.2384820804700003e-05,
+              "predicted_supplied_work_delta": 0.00021326499316728237,
               "predicted_tick": 5,
               "predicted_time": 0.17500000000000002,
               "prediction_source": "reused_forecast",
-              "residual_abs_error": 4.084097956801334e-05,
-              "supplied_work_abs_error": 3.685102371048173e-05,
+              "realized_residual_delta": -3.333072368154964e-05,
+              "realized_supplied_work_delta": 0.0002501160168777641,
+              "residual_increment_abs_error": 1.0945902876849634e-05,
+              "supplied_work_increment_abs_error": 3.685102371048173e-05,
               "total_energy_abs_error": 2.559732949892297e-05
             },
             "observation": {
@@ -3309,12 +3395,13 @@
               "energy_before": 6.347219638870332e-05,
               "environment_change_applied": true,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.0002501160168777641,
               "tick_after": 5,
-              "tick_before": 3,
-              "unknown_outcome_ticks": 0
+              "tick_before": 3
             }
           },
           {
@@ -3334,16 +3421,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 6,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 3,
               "reserved_actual_physics_steps": 6,
               "supplied_work": 0.0006681572960522118,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "open_loop_full_episode",
               "virtual_candidate_limit": 625,
               "virtual_candidates": 625,
               "virtual_physics_step_limit": 5000,
-              "virtual_physics_steps": 5000
+              "virtual_physics_steps": 5000,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 2,
             "error": null,
@@ -3513,18 +3602,23 @@
               "reused": true,
               "score": 0.09338068680206488,
               "selected_index": 0,
-              "virtual_physics_steps": 0
+              "virtual_physics_steps": 0,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 7,
               "actual_time": 0.24500000000000002,
               "comparison_status": "compared",
               "node_displacement_l2_error": 1.218132466378016e-10,
+              "predicted_residual_delta": -1.0558017308706614e-05,
+              "predicted_supplied_work_delta": 0.0002846745409722869,
               "predicted_tick": 7,
               "predicted_time": 0.24500000000000002,
               "prediction_source": "reused_forecast",
-              "residual_abs_error": 6.430551386747788e-05,
-              "supplied_work_abs_error": 3.970080284647012e-05,
+              "realized_residual_delta": -1.1637730803471148e-05,
+              "realized_supplied_work_delta": 0.000324375343818757,
+              "residual_increment_abs_error": 1.0797134947645345e-06,
+              "supplied_work_increment_abs_error": 3.970080284647012e-05,
               "total_energy_abs_error": 2.7180984363196444e-05
             },
             "observation": {
@@ -3638,12 +3732,13 @@
               "energy_before": 0.0002787125191516054,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.000324375343818757,
               "tick_after": 7,
-              "tick_before": 5,
-              "unknown_outcome_ticks": 0
+              "tick_before": 5
             }
           },
           {
@@ -3663,16 +3758,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 8,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 4,
               "reserved_actual_physics_steps": 8,
               "supplied_work": 0.001087849557928905,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "open_loop_full_episode",
               "virtual_candidate_limit": 625,
               "virtual_candidates": 625,
               "virtual_physics_step_limit": 5000,
-              "virtual_physics_steps": 5000
+              "virtual_physics_steps": 5000,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 3,
             "error": null,
@@ -3768,18 +3865,23 @@
               "reused": true,
               "score": 0.09338068680206488,
               "selected_index": 0,
-              "virtual_physics_steps": 0
+              "virtual_physics_steps": 0,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 9,
               "actual_time": 0.31500000000000006,
               "comparison_status": "compared",
               "node_displacement_l2_error": 6.60122660671114e-10,
+              "predicted_residual_delta": 3.3165299387081266e-06,
+              "predicted_supplied_work_delta": 0.0003729791871973449,
               "predicted_tick": 9,
               "predicted_time": 0.31500000000000006,
               "prediction_source": "reused_forecast",
-              "residual_abs_error": 7.94146034557185e-05,
-              "supplied_work_abs_error": 4.67130746793483e-05,
+              "realized_residual_delta": -1.2345423408258762e-06,
+              "realized_supplied_work_delta": 0.00041969226187669323,
+              "residual_increment_abs_error": 4.551072279534003e-06,
+              "supplied_work_increment_abs_error": 4.67130746793483e-05,
               "total_energy_abs_error": 2.941518225258095e-05
             },
             "observation": {
@@ -3893,12 +3995,13 @@
               "energy_before": 0.0005880713245650106,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.00041969226187669323,
               "tick_after": 9,
-              "tick_before": 7,
-              "unknown_outcome_ticks": 0
+              "tick_before": 7
             }
           }
         ],
@@ -4024,16 +4127,18 @@
         "budget": {
           "actual_cycle_limit": 4,
           "actual_physics_step_limit": 8,
+          "in_flight_uncertain_physics_steps": 0,
           "known_executed_physics_steps": 8,
+          "never_dispatched_physics_steps": 0,
           "reserved_actual_cycles": 4,
           "reserved_actual_physics_steps": 8,
           "supplied_work": 0.001087849557928905,
-          "unknown_outcome_physics_steps": 0,
           "virtual_budget_kind": "receding_horizon",
           "virtual_candidate_limit": 100,
           "virtual_candidates": 80,
           "virtual_physics_step_limit": 400,
-          "virtual_physics_steps": 310
+          "virtual_physics_steps": 310,
+          "virtual_physics_steps_semantics": "worst_case_reserved_compute"
         },
         "cycles": [
           {
@@ -4053,16 +4158,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 2,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 1,
               "reserved_actual_physics_steps": 2,
               "supplied_work": 9.366593535569068e-05,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "receding_horizon",
               "virtual_candidate_limit": 100,
               "virtual_candidates": 25,
               "virtual_physics_step_limit": 400,
-              "virtual_physics_steps": 100
+              "virtual_physics_steps": 100,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 0,
             "error": null,
@@ -4234,18 +4341,23 @@
               "reused": false,
               "score": 5.476749450608613,
               "selected_index": 6,
-              "virtual_physics_steps": 100
+              "virtual_physics_steps": 100,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 3,
               "actual_time": 0.10500000000000001,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
+              "predicted_residual_delta": -2.971062781763816e-05,
+              "predicted_supplied_work_delta": 9.36121302692835e-05,
               "predicted_tick": 3,
               "predicted_time": 0.10500000000000001,
               "prediction_source": "fresh_forecast",
-              "residual_abs_error": 1.84448873525545e-07,
-              "supplied_work_abs_error": 5.380508640717577e-08,
+              "realized_residual_delta": -2.9895076691163705e-05,
+              "realized_supplied_work_delta": 9.366593535569068e-05,
+              "residual_increment_abs_error": 1.84448873525545e-07,
+              "supplied_work_increment_abs_error": 5.380508640717577e-08,
               "total_energy_abs_error": 1.310551734594453e-07
             },
             "observation": {
@@ -4359,12 +4471,13 @@
               "energy_before": 0.0,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 9.366593535569068e-05,
               "tick_after": 3,
-              "tick_before": 1,
-              "unknown_outcome_ticks": 0
+              "tick_before": 1
             }
           },
           {
@@ -4384,16 +4497,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 4,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 2,
               "reserved_actual_physics_steps": 4,
               "supplied_work": 0.0003437819522334548,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "receding_horizon",
               "virtual_candidate_limit": 100,
               "virtual_candidates": 50,
               "virtual_physics_step_limit": 400,
-              "virtual_physics_steps": 200
+              "virtual_physics_steps": 200,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 1,
             "error": null,
@@ -4565,18 +4680,23 @@
               "reused": false,
               "score": 1.9406558386620674,
               "selected_index": 6,
-              "virtual_physics_steps": 100
+              "virtual_physics_steps": 100,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 5,
               "actual_time": 0.17500000000000002,
               "comparison_status": "compared",
               "node_displacement_l2_error": 2.8903302576762615e-12,
+              "predicted_residual_delta": -2.237790308679843e-05,
+              "predicted_supplied_work_delta": 0.000213423313081293,
               "predicted_tick": 5,
               "predicted_time": 0.17500000000000002,
               "prediction_source": "fresh_forecast",
-              "residual_abs_error": 4.084789728591491e-05,
-              "supplied_work_abs_error": 3.669270379647109e-05,
+              "realized_residual_delta": -3.333072368154964e-05,
+              "realized_supplied_work_delta": 0.0002501160168777641,
+              "residual_increment_abs_error": 1.0952820594751207e-05,
+              "supplied_work_increment_abs_error": 3.669270379647109e-05,
               "total_energy_abs_error": 2.5378322016027775e-05
             },
             "observation": {
@@ -4690,12 +4810,13 @@
               "energy_before": 6.347219638870332e-05,
               "environment_change_applied": true,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.0002501160168777641,
               "tick_after": 5,
-              "tick_before": 3,
-              "unknown_outcome_ticks": 0
+              "tick_before": 3
             }
           },
           {
@@ -4715,16 +4836,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 6,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 3,
               "reserved_actual_physics_steps": 6,
               "supplied_work": 0.0006681572960522118,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "receding_horizon",
               "virtual_candidate_limit": 100,
               "virtual_candidates": 75,
               "virtual_physics_step_limit": 400,
-              "virtual_physics_steps": 300
+              "virtual_physics_steps": 300,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 2,
             "error": null,
@@ -4896,18 +5019,23 @@
               "reused": false,
               "score": 0.09499691069583577,
               "selected_index": 6,
-              "virtual_physics_steps": 100
+              "virtual_physics_steps": 100,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 7,
               "actual_time": 0.24500000000000002,
               "comparison_status": "compared",
               "node_displacement_l2_error": 4.766562138962289e-12,
+              "predicted_residual_delta": -9.25490414891667e-06,
+              "predicted_supplied_work_delta": 0.00032254325897977567,
               "predicted_tick": 7,
               "predicted_time": 0.24500000000000002,
               "prediction_source": "fresh_forecast",
-              "residual_abs_error": 6.560862702726782e-05,
-              "supplied_work_abs_error": 1.8320848389813318e-06,
+              "realized_residual_delta": -1.1637730803471148e-05,
+              "realized_supplied_work_delta": 0.000324375343818757,
+              "residual_increment_abs_error": 2.3828266545544777e-06,
+              "supplied_work_increment_abs_error": 1.8320848389813318e-06,
               "total_energy_abs_error": 2.9111891134492654e-06
             },
             "observation": {
@@ -5021,12 +5149,13 @@
               "energy_before": 0.0002787125191516054,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.000324375343818757,
               "tick_after": 7,
-              "tick_before": 5,
-              "unknown_outcome_ticks": 0
+              "tick_before": 5
             }
           },
           {
@@ -5046,16 +5175,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 8,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 4,
               "reserved_actual_physics_steps": 8,
               "supplied_work": 0.001087849557928905,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "receding_horizon",
               "virtual_candidate_limit": 100,
               "virtual_candidates": 80,
               "virtual_physics_step_limit": 400,
-              "virtual_physics_steps": 310
+              "virtual_physics_steps": 310,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 3,
             "error": null,
@@ -5151,18 +5282,23 @@
               "reused": false,
               "score": 0.09517794521605488,
               "selected_index": 1,
-              "virtual_physics_steps": 10
+              "virtual_physics_steps": 10,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 9,
               "actual_time": 0.31500000000000006,
               "comparison_status": "compared",
               "node_displacement_l2_error": 1.7587044957336532e-11,
+              "predicted_residual_delta": 2.8664877084060374e-06,
+              "predicted_supplied_work_delta": 0.00041611338913310515,
               "predicted_tick": 9,
               "predicted_time": 0.31500000000000006,
               "prediction_source": "fresh_forecast",
-              "residual_abs_error": 7.89645612254164e-05,
-              "supplied_work_abs_error": 3.578872743588077e-06,
+              "realized_residual_delta": -1.2345423408258762e-06,
+              "realized_supplied_work_delta": 0.00041969226187669323,
+              "residual_increment_abs_error": 4.101030049231914e-06,
+              "supplied_work_increment_abs_error": 3.578872743588077e-06,
               "total_energy_abs_error": 1.0357839060616894e-05
             },
             "observation": {
@@ -5276,12 +5412,13 @@
               "energy_before": 0.0005880713245650106,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.00041969226187669323,
               "tick_after": 9,
-              "tick_before": 7,
-              "unknown_outcome_ticks": 0
+              "tick_before": 7
             }
           }
         ],
@@ -5413,6 +5550,8 @@
     "physical_safety_guarantee": false,
     "predictor_mismatch_expected": true,
     "predictor_parameterization": "nominal_not_calibrated",
+    "residual_role": "diagnostic_measurement_only",
+    "residuals_control_feedback": false,
     "separation_threshold_interpretation": "1e-8 is a tiny development threshold, not meaningful navigation",
     "spatial_navigation_claim": false,
     "strategy_superiority_claim": false,
@@ -5425,16 +5564,18 @@
         "budget": {
           "actual_cycle_limit": 4,
           "actual_physics_step_limit": 8,
+          "in_flight_uncertain_physics_steps": 0,
           "known_executed_physics_steps": 8,
+          "never_dispatched_physics_steps": 0,
           "reserved_actual_cycles": 4,
           "reserved_actual_physics_steps": 8,
           "supplied_work": 0.0,
-          "unknown_outcome_physics_steps": 0,
           "virtual_budget_kind": "coast",
           "virtual_candidate_limit": 4,
           "virtual_candidates": 4,
           "virtual_physics_step_limit": 8,
-          "virtual_physics_steps": 8
+          "virtual_physics_steps": 8,
+          "virtual_physics_steps_semantics": "worst_case_reserved_compute"
         },
         "cycles": [
           {
@@ -5454,16 +5595,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 2,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 1,
               "reserved_actual_physics_steps": 2,
               "supplied_work": 0.0,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "coast",
               "virtual_candidate_limit": 4,
               "virtual_candidates": 1,
               "virtual_physics_step_limit": 8,
-              "virtual_physics_steps": 2
+              "virtual_physics_steps": 2,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 0,
             "error": null,
@@ -5559,18 +5702,23 @@
               "reused": false,
               "score": 7.016666666666667,
               "selected_index": 0,
-              "virtual_physics_steps": 2
+              "virtual_physics_steps": 2,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 3,
               "actual_time": 0.10500000000000001,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
+              "predicted_residual_delta": 0.0,
+              "predicted_supplied_work_delta": 0.0,
               "predicted_tick": 3,
               "predicted_time": 0.10500000000000001,
               "prediction_source": "coast_diagnostic",
-              "residual_abs_error": 0.0,
-              "supplied_work_abs_error": 0.0,
+              "realized_residual_delta": 0.0,
+              "realized_supplied_work_delta": 0.0,
+              "residual_increment_abs_error": 0.0,
+              "supplied_work_increment_abs_error": 0.0,
               "total_energy_abs_error": 0.0
             },
             "observation": {
@@ -5684,12 +5832,13 @@
               "energy_before": 0.0,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.0,
               "tick_after": 3,
-              "tick_before": 1,
-              "unknown_outcome_ticks": 0
+              "tick_before": 1
             }
           },
           {
@@ -5709,16 +5858,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 4,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 2,
               "reserved_actual_physics_steps": 4,
               "supplied_work": 0.0,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "coast",
               "virtual_candidate_limit": 4,
               "virtual_candidates": 2,
               "virtual_physics_step_limit": 8,
-              "virtual_physics_steps": 4
+              "virtual_physics_steps": 4,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 1,
             "error": null,
@@ -5814,18 +5965,23 @@
               "reused": false,
               "score": 7.027777777777778,
               "selected_index": 0,
-              "virtual_physics_steps": 2
+              "virtual_physics_steps": 2,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 5,
               "actual_time": 0.17500000000000002,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
+              "predicted_residual_delta": 0.0,
+              "predicted_supplied_work_delta": 0.0,
               "predicted_tick": 5,
               "predicted_time": 0.17500000000000002,
               "prediction_source": "coast_diagnostic",
-              "residual_abs_error": 0.0,
-              "supplied_work_abs_error": 0.0,
+              "realized_residual_delta": 0.0,
+              "realized_supplied_work_delta": 0.0,
+              "residual_increment_abs_error": 0.0,
+              "supplied_work_increment_abs_error": 0.0,
               "total_energy_abs_error": 0.0
             },
             "observation": {
@@ -5939,12 +6095,13 @@
               "energy_before": 0.0,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.0,
               "tick_after": 5,
-              "tick_before": 3,
-              "unknown_outcome_ticks": 0
+              "tick_before": 3
             }
           },
           {
@@ -5964,16 +6121,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 6,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 3,
               "reserved_actual_physics_steps": 6,
               "supplied_work": 0.0,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "coast",
               "virtual_candidate_limit": 4,
               "virtual_candidates": 3,
               "virtual_physics_step_limit": 8,
-              "virtual_physics_steps": 6
+              "virtual_physics_steps": 6,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 2,
             "error": null,
@@ -6069,18 +6228,23 @@
               "reused": false,
               "score": 7.038888888888889,
               "selected_index": 0,
-              "virtual_physics_steps": 2
+              "virtual_physics_steps": 2,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 7,
               "actual_time": 0.24500000000000002,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
+              "predicted_residual_delta": 0.0,
+              "predicted_supplied_work_delta": 0.0,
               "predicted_tick": 7,
               "predicted_time": 0.24500000000000002,
               "prediction_source": "coast_diagnostic",
-              "residual_abs_error": 0.0,
-              "supplied_work_abs_error": 0.0,
+              "realized_residual_delta": 0.0,
+              "realized_supplied_work_delta": 0.0,
+              "residual_increment_abs_error": 0.0,
+              "supplied_work_increment_abs_error": 0.0,
               "total_energy_abs_error": 0.0
             },
             "observation": {
@@ -6194,12 +6358,13 @@
               "energy_before": 0.0,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.0,
               "tick_after": 7,
-              "tick_before": 5,
-              "unknown_outcome_ticks": 0
+              "tick_before": 5
             }
           },
           {
@@ -6219,16 +6384,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 8,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 4,
               "reserved_actual_physics_steps": 8,
               "supplied_work": 0.0,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "coast",
               "virtual_candidate_limit": 4,
               "virtual_candidates": 4,
               "virtual_physics_step_limit": 8,
-              "virtual_physics_steps": 8
+              "virtual_physics_steps": 8,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 3,
             "error": null,
@@ -6324,18 +6491,23 @@
               "reused": false,
               "score": 7.05,
               "selected_index": 0,
-              "virtual_physics_steps": 2
+              "virtual_physics_steps": 2,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 9,
               "actual_time": 0.31500000000000006,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
+              "predicted_residual_delta": 0.0,
+              "predicted_supplied_work_delta": 0.0,
               "predicted_tick": 9,
               "predicted_time": 0.31500000000000006,
               "prediction_source": "coast_diagnostic",
-              "residual_abs_error": 0.0,
-              "supplied_work_abs_error": 0.0,
+              "realized_residual_delta": 0.0,
+              "realized_supplied_work_delta": 0.0,
+              "residual_increment_abs_error": 0.0,
+              "supplied_work_increment_abs_error": 0.0,
               "total_energy_abs_error": 0.0
             },
             "observation": {
@@ -6449,12 +6621,13 @@
               "energy_before": 0.0,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.0,
               "tick_after": 9,
-              "tick_before": 7,
-              "unknown_outcome_ticks": 0
+              "tick_before": 7
             }
           }
         ],
@@ -6580,16 +6753,18 @@
         "budget": {
           "actual_cycle_limit": 4,
           "actual_physics_step_limit": 8,
+          "in_flight_uncertain_physics_steps": 0,
           "known_executed_physics_steps": 8,
+          "never_dispatched_physics_steps": 0,
           "reserved_actual_cycles": 4,
           "reserved_actual_physics_steps": 8,
           "supplied_work": 0.0010517943179913674,
-          "unknown_outcome_physics_steps": 0,
           "virtual_budget_kind": "greedy",
           "virtual_candidate_limit": 20,
           "virtual_candidates": 20,
           "virtual_physics_step_limit": 40,
-          "virtual_physics_steps": 40
+          "virtual_physics_steps": 40,
+          "virtual_physics_steps_semantics": "worst_case_reserved_compute"
         },
         "cycles": [
           {
@@ -6609,16 +6784,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 2,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 1,
               "reserved_actual_physics_steps": 2,
               "supplied_work": 9.366593535569068e-05,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "greedy",
               "virtual_candidate_limit": 20,
               "virtual_candidates": 5,
               "virtual_physics_step_limit": 40,
-              "virtual_physics_steps": 10
+              "virtual_physics_steps": 10,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 0,
             "error": null,
@@ -6714,18 +6891,23 @@
               "reused": false,
               "score": 6.678063940475234,
               "selected_index": 1,
-              "virtual_physics_steps": 10
+              "virtual_physics_steps": 10,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 3,
               "actual_time": 0.10500000000000001,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
+              "predicted_residual_delta": -2.971062781763816e-05,
+              "predicted_supplied_work_delta": 9.36121302692835e-05,
               "predicted_tick": 3,
               "predicted_time": 0.10500000000000001,
               "prediction_source": "fresh_forecast",
-              "residual_abs_error": 1.84448873525545e-07,
-              "supplied_work_abs_error": 5.380508640717577e-08,
+              "realized_residual_delta": -2.9895076691163705e-05,
+              "realized_supplied_work_delta": 9.366593535569068e-05,
+              "residual_increment_abs_error": 1.84448873525545e-07,
+              "supplied_work_increment_abs_error": 5.380508640717577e-08,
               "total_energy_abs_error": 1.310551734594453e-07
             },
             "observation": {
@@ -6839,12 +7021,13 @@
               "energy_before": 0.0,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 9.366593535569068e-05,
               "tick_after": 3,
-              "tick_before": 1,
-              "unknown_outcome_ticks": 0
+              "tick_before": 1
             }
           },
           {
@@ -6864,16 +7047,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 4,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 2,
               "reserved_actual_physics_steps": 4,
               "supplied_work": 0.00030772765203665925,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "greedy",
               "virtual_candidate_limit": 20,
               "virtual_candidates": 10,
               "virtual_physics_step_limit": 40,
-              "virtual_physics_steps": 20
+              "virtual_physics_steps": 20,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 1,
             "error": null,
@@ -6969,18 +7154,23 @@
               "reused": false,
               "score": 5.475354825813363,
               "selected_index": 1,
-              "virtual_physics_steps": 10
+              "virtual_physics_steps": 10,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 5,
               "actual_time": 0.17500000000000002,
               "comparison_status": "compared",
               "node_displacement_l2_error": 5.667185748934893e-13,
+              "predicted_residual_delta": -2.237790308679843e-05,
+              "predicted_supplied_work_delta": 0.000213423313081293,
               "predicted_tick": 5,
               "predicted_time": 0.17500000000000002,
               "prediction_source": "fresh_forecast",
-              "residual_abs_error": 3.094545353183042e-05,
-              "supplied_work_abs_error": 6.38403599675561e-07,
+              "realized_residual_delta": -2.3428279927465146e-05,
+              "realized_supplied_work_delta": 0.00021406171668096857,
+              "residual_increment_abs_error": 1.0503768406667157e-06,
+              "supplied_work_increment_abs_error": 6.38403599675561e-07,
               "total_energy_abs_error": 6.609085420751612e-07
             },
             "observation": {
@@ -7094,12 +7284,13 @@
               "energy_before": 6.347219638870332e-05,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.00021406171668096857,
               "tick_after": 5,
-              "tick_before": 3,
-              "unknown_outcome_ticks": 0
+              "tick_before": 3
             }
           },
           {
@@ -7119,16 +7310,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 6,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 3,
               "reserved_actual_physics_steps": 6,
               "supplied_work": 0.0006321029068432234,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "greedy",
               "virtual_candidate_limit": 20,
               "virtual_candidates": 15,
               "virtual_physics_step_limit": 40,
-              "virtual_physics_steps": 30
+              "virtual_physics_steps": 30,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 2,
             "error": null,
@@ -7224,18 +7417,23 @@
               "reused": false,
               "score": 1.917412045265903,
               "selected_index": 1,
-              "virtual_physics_steps": 10
+              "virtual_physics_steps": 10,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 7,
               "actual_time": 0.24500000000000002,
               "comparison_status": "compared",
               "node_displacement_l2_error": 4.5504561976994385e-12,
+              "predicted_residual_delta": -1.0464602476440173e-05,
+              "predicted_supplied_work_delta": 0.00032254317004653507,
               "predicted_tick": 7,
               "predicted_time": 0.24500000000000002,
               "prediction_source": "fresh_forecast",
-              "residual_abs_error": 5.572202872035295e-05,
-              "supplied_work_abs_error": 1.832084760029079e-06,
+              "realized_residual_delta": -1.2863274578164271e-05,
+              "realized_supplied_work_delta": 0.00032437525480656415,
+              "residual_increment_abs_error": 2.398672101724098e-06,
+              "supplied_work_increment_abs_error": 1.832084760029079e-06,
               "total_energy_abs_error": 3.194637653163219e-06
             },
             "observation": {
@@ -7349,12 +7547,13 @@
               "energy_before": 0.0002526732885935025,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.00032437525480656415,
               "tick_after": 7,
-              "tick_before": 5,
-              "unknown_outcome_ticks": 0
+              "tick_before": 5
             }
           },
           {
@@ -7374,16 +7573,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 8,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 4,
               "reserved_actual_physics_steps": 8,
               "supplied_work": 0.0010517943179913674,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "greedy",
               "virtual_candidate_limit": 20,
               "virtual_candidates": 20,
               "virtual_physics_step_limit": 40,
-              "virtual_physics_steps": 40
+              "virtual_physics_steps": 40,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 3,
             "error": null,
@@ -7479,18 +7680,23 @@
               "reused": false,
               "score": 0.09367564362051642,
               "selected_index": 1,
-              "virtual_physics_steps": 10
+              "virtual_physics_steps": 10,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 9,
               "actual_time": 0.31500000000000006,
               "comparison_status": "compared",
               "node_displacement_l2_error": 1.6895273100797948e-11,
+              "predicted_residual_delta": 3.697893147555794e-06,
+              "predicted_supplied_work_delta": 0.0004161125400491707,
               "predicted_tick": 9,
               "predicted_time": 0.31500000000000006,
               "prediction_source": "fresh_forecast",
-              "residual_abs_error": 6.99977926736401e-05,
-              "supplied_work_abs_error": 3.578871098973294e-06,
+              "realized_residual_delta": -1.1326832929119048e-07,
+              "realized_supplied_work_delta": 0.000419691411148144,
+              "residual_increment_abs_error": 3.8111614768469843e-06,
+              "supplied_work_increment_abs_error": 3.578871098973294e-06,
               "total_energy_abs_error": 1.1256081544946213e-05
             },
             "observation": {
@@ -7604,12 +7810,13 @@
               "energy_before": 0.0005609351900646109,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.000419691411148144,
               "tick_after": 9,
-              "tick_before": 7,
-              "unknown_outcome_ticks": 0
+              "tick_before": 7
             }
           }
         ],
@@ -7735,16 +7942,18 @@
         "budget": {
           "actual_cycle_limit": 4,
           "actual_physics_step_limit": 8,
+          "in_flight_uncertain_physics_steps": 0,
           "known_executed_physics_steps": 8,
+          "never_dispatched_physics_steps": 0,
           "reserved_actual_cycles": 4,
           "reserved_actual_physics_steps": 8,
           "supplied_work": 0.0010517943179913674,
-          "unknown_outcome_physics_steps": 0,
           "virtual_budget_kind": "open_loop_full_episode",
           "virtual_candidate_limit": 625,
           "virtual_candidates": 625,
           "virtual_physics_step_limit": 5000,
-          "virtual_physics_steps": 5000
+          "virtual_physics_steps": 5000,
+          "virtual_physics_steps_semantics": "worst_case_reserved_compute"
         },
         "cycles": [
           {
@@ -7764,16 +7973,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 2,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 1,
               "reserved_actual_physics_steps": 2,
               "supplied_work": 9.366593535569068e-05,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "open_loop_full_episode",
               "virtual_candidate_limit": 625,
               "virtual_candidates": 625,
               "virtual_physics_step_limit": 5000,
-              "virtual_physics_steps": 5000
+              "virtual_physics_steps": 5000,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 0,
             "error": null,
@@ -8093,18 +8304,23 @@
               "reused": false,
               "score": 0.09338068680206488,
               "selected_index": 156,
-              "virtual_physics_steps": 5000
+              "virtual_physics_steps": 5000,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 3,
               "actual_time": 0.10500000000000001,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
+              "predicted_residual_delta": -2.971062781763816e-05,
+              "predicted_supplied_work_delta": 9.36121302692835e-05,
               "predicted_tick": 3,
               "predicted_time": 0.10500000000000001,
               "prediction_source": "fresh_forecast",
-              "residual_abs_error": 1.84448873525545e-07,
-              "supplied_work_abs_error": 5.380508640717577e-08,
+              "realized_residual_delta": -2.9895076691163705e-05,
+              "realized_supplied_work_delta": 9.366593535569068e-05,
+              "residual_increment_abs_error": 1.84448873525545e-07,
+              "supplied_work_increment_abs_error": 5.380508640717577e-08,
               "total_energy_abs_error": 1.310551734594453e-07
             },
             "observation": {
@@ -8218,12 +8434,13 @@
               "energy_before": 0.0,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 9.366593535569068e-05,
               "tick_after": 3,
-              "tick_before": 1,
-              "unknown_outcome_ticks": 0
+              "tick_before": 1
             }
           },
           {
@@ -8243,16 +8460,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 4,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 2,
               "reserved_actual_physics_steps": 4,
               "supplied_work": 0.00030772765203665925,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "open_loop_full_episode",
               "virtual_candidate_limit": 625,
               "virtual_candidates": 625,
               "virtual_physics_step_limit": 5000,
-              "virtual_physics_steps": 5000
+              "virtual_physics_steps": 5000,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 1,
             "error": null,
@@ -8496,18 +8715,23 @@
               "reused": true,
               "score": 0.09338068680206488,
               "selected_index": 0,
-              "virtual_physics_steps": 0
+              "virtual_physics_steps": 0,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 5,
               "actual_time": 0.17500000000000002,
               "comparison_status": "compared",
               "node_displacement_l2_error": 1.133918651491492e-12,
+              "predicted_residual_delta": -2.2384820804700003e-05,
+              "predicted_supplied_work_delta": 0.00021326499316728237,
               "predicted_tick": 5,
               "predicted_time": 0.17500000000000002,
               "prediction_source": "reused_forecast",
-              "residual_abs_error": 3.093853581392885e-05,
-              "supplied_work_abs_error": 7.967235136862021e-07,
+              "realized_residual_delta": -2.3428279927465146e-05,
+              "realized_supplied_work_delta": 0.00021406171668096857,
+              "residual_increment_abs_error": 1.0434591227651426e-06,
+              "supplied_work_increment_abs_error": 7.967235136862021e-07,
               "total_energy_abs_error": 4.4190105917996537e-07
             },
             "observation": {
@@ -8621,12 +8845,13 @@
               "energy_before": 6.347219638870332e-05,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.00021406171668096857,
               "tick_after": 5,
-              "tick_before": 3,
-              "unknown_outcome_ticks": 0
+              "tick_before": 3
             }
           },
           {
@@ -8646,16 +8871,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 6,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 3,
               "reserved_actual_physics_steps": 6,
               "supplied_work": 0.0006321029068432234,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "open_loop_full_episode",
               "virtual_candidate_limit": 625,
               "virtual_candidates": 625,
               "virtual_physics_step_limit": 5000,
-              "virtual_physics_steps": 5000
+              "virtual_physics_steps": 5000,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 2,
             "error": null,
@@ -8825,18 +9052,23 @@
               "reused": true,
               "score": 0.09338068680206488,
               "selected_index": 0,
-              "virtual_physics_steps": 0
+              "virtual_physics_steps": 0,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 7,
               "actual_time": 0.24500000000000002,
               "comparison_status": "compared",
               "node_displacement_l2_error": 2.8315683479532254e-11,
+              "predicted_residual_delta": -1.0558017308706614e-05,
+              "predicted_supplied_work_delta": 0.0003207288411690824,
               "predicted_tick": 7,
               "predicted_time": 0.24500000000000002,
               "prediction_source": "reused_forecast",
-              "residual_abs_error": 5.562861388808651e-05,
-              "supplied_work_abs_error": 3.6464136374817413e-06,
+              "realized_residual_delta": -1.2863274578164271e-05,
+              "realized_supplied_work_delta": 0.00032437525480656415,
+              "residual_increment_abs_error": 2.3052572694576575e-06,
+              "supplied_work_increment_abs_error": 3.6464136374817413e-06,
               "total_energy_abs_error": 4.48498627967156e-08
             },
             "observation": {
@@ -8950,12 +9182,13 @@
               "energy_before": 0.0002526732885935025,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.00032437525480656415,
               "tick_after": 7,
-              "tick_before": 5,
-              "unknown_outcome_ticks": 0
+              "tick_before": 5
             }
           },
           {
@@ -8975,16 +9208,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 8,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 4,
               "reserved_actual_physics_steps": 8,
               "supplied_work": 0.0010517943179913674,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "open_loop_full_episode",
               "virtual_candidate_limit": 625,
               "virtual_candidates": 625,
               "virtual_physics_step_limit": 5000,
-              "virtual_physics_steps": 5000
+              "virtual_physics_steps": 5000,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 3,
             "error": null,
@@ -9080,18 +9315,23 @@
               "reused": true,
               "score": 0.09338068680206488,
               "selected_index": 0,
-              "virtual_physics_steps": 0
+              "virtual_physics_steps": 0,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 9,
               "actual_time": 0.31500000000000006,
               "comparison_status": "compared",
               "node_displacement_l2_error": 2.5836719790316983e-10,
+              "predicted_residual_delta": 3.3165299387081266e-06,
+              "predicted_supplied_work_delta": 0.0004090335764063333,
               "predicted_tick": 9,
               "predicted_time": 0.31500000000000006,
               "prediction_source": "reused_forecast",
-              "residual_abs_error": 6.961642946479244e-05,
-              "supplied_work_abs_error": 1.0657834741810684e-05,
+              "realized_residual_delta": -1.1326832929119048e-07,
+              "realized_supplied_work_delta": 0.000419691411148144,
+              "residual_increment_abs_error": 3.429798267999317e-06,
+              "supplied_work_increment_abs_error": 1.0657834741810684e-05,
               "total_energy_abs_error": 3.4456196295409598e-06
             },
             "observation": {
@@ -9205,12 +9445,13 @@
               "energy_before": 0.0005609351900646109,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.000419691411148144,
               "tick_after": 9,
-              "tick_before": 7,
-              "unknown_outcome_ticks": 0
+              "tick_before": 7
             }
           }
         ],
@@ -9336,16 +9577,18 @@
         "budget": {
           "actual_cycle_limit": 4,
           "actual_physics_step_limit": 8,
+          "in_flight_uncertain_physics_steps": 0,
           "known_executed_physics_steps": 8,
+          "never_dispatched_physics_steps": 0,
           "reserved_actual_cycles": 4,
           "reserved_actual_physics_steps": 8,
           "supplied_work": 0.0010517943179913674,
-          "unknown_outcome_physics_steps": 0,
           "virtual_budget_kind": "receding_horizon",
           "virtual_candidate_limit": 100,
           "virtual_candidates": 80,
           "virtual_physics_step_limit": 400,
-          "virtual_physics_steps": 310
+          "virtual_physics_steps": 310,
+          "virtual_physics_steps_semantics": "worst_case_reserved_compute"
         },
         "cycles": [
           {
@@ -9365,16 +9608,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 2,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 1,
               "reserved_actual_physics_steps": 2,
               "supplied_work": 9.366593535569068e-05,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "receding_horizon",
               "virtual_candidate_limit": 100,
               "virtual_candidates": 25,
               "virtual_physics_step_limit": 400,
-              "virtual_physics_steps": 100
+              "virtual_physics_steps": 100,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 0,
             "error": null,
@@ -9546,18 +9791,23 @@
               "reused": false,
               "score": 5.476749450608613,
               "selected_index": 6,
-              "virtual_physics_steps": 100
+              "virtual_physics_steps": 100,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 3,
               "actual_time": 0.10500000000000001,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
+              "predicted_residual_delta": -2.971062781763816e-05,
+              "predicted_supplied_work_delta": 9.36121302692835e-05,
               "predicted_tick": 3,
               "predicted_time": 0.10500000000000001,
               "prediction_source": "fresh_forecast",
-              "residual_abs_error": 1.84448873525545e-07,
-              "supplied_work_abs_error": 5.380508640717577e-08,
+              "realized_residual_delta": -2.9895076691163705e-05,
+              "realized_supplied_work_delta": 9.366593535569068e-05,
+              "residual_increment_abs_error": 1.84448873525545e-07,
+              "supplied_work_increment_abs_error": 5.380508640717577e-08,
               "total_energy_abs_error": 1.310551734594453e-07
             },
             "observation": {
@@ -9671,12 +9921,13 @@
               "energy_before": 0.0,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 9.366593535569068e-05,
               "tick_after": 3,
-              "tick_before": 1,
-              "unknown_outcome_ticks": 0
+              "tick_before": 1
             }
           },
           {
@@ -9696,16 +9947,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 4,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 2,
               "reserved_actual_physics_steps": 4,
               "supplied_work": 0.00030772765203665925,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "receding_horizon",
               "virtual_candidate_limit": 100,
               "virtual_candidates": 50,
               "virtual_physics_step_limit": 400,
-              "virtual_physics_steps": 200
+              "virtual_physics_steps": 200,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 1,
             "error": null,
@@ -9877,18 +10130,23 @@
               "reused": false,
               "score": 1.9406558386620674,
               "selected_index": 6,
-              "virtual_physics_steps": 100
+              "virtual_physics_steps": 100,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 5,
               "actual_time": 0.17500000000000002,
               "comparison_status": "compared",
               "node_displacement_l2_error": 5.667185748934893e-13,
+              "predicted_residual_delta": -2.237790308679843e-05,
+              "predicted_supplied_work_delta": 0.000213423313081293,
               "predicted_tick": 5,
               "predicted_time": 0.17500000000000002,
               "prediction_source": "fresh_forecast",
-              "residual_abs_error": 3.094545353183042e-05,
-              "supplied_work_abs_error": 6.38403599675561e-07,
+              "realized_residual_delta": -2.3428279927465146e-05,
+              "realized_supplied_work_delta": 0.00021406171668096857,
+              "residual_increment_abs_error": 1.0503768406667157e-06,
+              "supplied_work_increment_abs_error": 6.38403599675561e-07,
               "total_energy_abs_error": 6.609085420751612e-07
             },
             "observation": {
@@ -10002,12 +10260,13 @@
               "energy_before": 6.347219638870332e-05,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.00021406171668096857,
               "tick_after": 5,
-              "tick_before": 3,
-              "unknown_outcome_ticks": 0
+              "tick_before": 3
             }
           },
           {
@@ -10027,16 +10286,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 6,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 3,
               "reserved_actual_physics_steps": 6,
               "supplied_work": 0.0006321029068432234,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "receding_horizon",
               "virtual_candidate_limit": 100,
               "virtual_candidates": 75,
               "virtual_physics_step_limit": 400,
-              "virtual_physics_steps": 300
+              "virtual_physics_steps": 300,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 2,
             "error": null,
@@ -10208,18 +10469,23 @@
               "reused": false,
               "score": 0.09349460911310786,
               "selected_index": 6,
-              "virtual_physics_steps": 100
+              "virtual_physics_steps": 100,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 7,
               "actual_time": 0.24500000000000002,
               "comparison_status": "compared",
               "node_displacement_l2_error": 4.5504561976994385e-12,
+              "predicted_residual_delta": -1.0464602476440173e-05,
+              "predicted_supplied_work_delta": 0.00032254317004653507,
               "predicted_tick": 7,
               "predicted_time": 0.24500000000000002,
               "prediction_source": "fresh_forecast",
-              "residual_abs_error": 5.572202872035295e-05,
-              "supplied_work_abs_error": 1.832084760029079e-06,
+              "realized_residual_delta": -1.2863274578164271e-05,
+              "realized_supplied_work_delta": 0.00032437525480656415,
+              "residual_increment_abs_error": 2.398672101724098e-06,
+              "supplied_work_increment_abs_error": 1.832084760029079e-06,
               "total_energy_abs_error": 3.194637653163219e-06
             },
             "observation": {
@@ -10333,12 +10599,13 @@
               "energy_before": 0.0002526732885935025,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.00032437525480656415,
               "tick_after": 7,
-              "tick_before": 5,
-              "unknown_outcome_ticks": 0
+              "tick_before": 5
             }
           },
           {
@@ -10358,16 +10625,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 8,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 4,
               "reserved_actual_physics_steps": 8,
               "supplied_work": 0.0010517943179913674,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "receding_horizon",
               "virtual_candidate_limit": 100,
               "virtual_candidates": 80,
               "virtual_physics_step_limit": 400,
-              "virtual_physics_steps": 310
+              "virtual_physics_steps": 310,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 3,
             "error": null,
@@ -10463,18 +10732,23 @@
               "reused": false,
               "score": 0.09367564362051642,
               "selected_index": 1,
-              "virtual_physics_steps": 10
+              "virtual_physics_steps": 10,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 9,
               "actual_time": 0.31500000000000006,
               "comparison_status": "compared",
               "node_displacement_l2_error": 1.6895273100797948e-11,
+              "predicted_residual_delta": 3.697893147555794e-06,
+              "predicted_supplied_work_delta": 0.0004161125400491707,
               "predicted_tick": 9,
               "predicted_time": 0.31500000000000006,
               "prediction_source": "fresh_forecast",
-              "residual_abs_error": 6.99977926736401e-05,
-              "supplied_work_abs_error": 3.578871098973294e-06,
+              "realized_residual_delta": -1.1326832929119048e-07,
+              "realized_supplied_work_delta": 0.000419691411148144,
+              "residual_increment_abs_error": 3.8111614768469843e-06,
+              "supplied_work_increment_abs_error": 3.578871098973294e-06,
               "total_energy_abs_error": 1.1256081544946213e-05
             },
             "observation": {
@@ -10588,12 +10862,13 @@
               "energy_before": 0.0005609351900646109,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.000419691411148144,
               "tick_after": 9,
-              "tick_before": 7,
-              "unknown_outcome_ticks": 0
+              "tick_before": 7
             }
           }
         ],
@@ -10721,16 +10996,18 @@
         "budget": {
           "actual_cycle_limit": 4,
           "actual_physics_step_limit": 8,
+          "in_flight_uncertain_physics_steps": 0,
           "known_executed_physics_steps": 8,
+          "never_dispatched_physics_steps": 0,
           "reserved_actual_cycles": 4,
           "reserved_actual_physics_steps": 8,
           "supplied_work": 0.0,
-          "unknown_outcome_physics_steps": 0,
           "virtual_budget_kind": "coast",
           "virtual_candidate_limit": 4,
           "virtual_candidates": 4,
           "virtual_physics_step_limit": 8,
-          "virtual_physics_steps": 8
+          "virtual_physics_steps": 8,
+          "virtual_physics_steps_semantics": "worst_case_reserved_compute"
         },
         "cycles": [
           {
@@ -10750,16 +11027,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 2,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 1,
               "reserved_actual_physics_steps": 2,
               "supplied_work": 0.0,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "coast",
               "virtual_candidate_limit": 4,
               "virtual_candidates": 1,
               "virtual_physics_step_limit": 8,
-              "virtual_physics_steps": 2
+              "virtual_physics_steps": 2,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 0,
             "error": null,
@@ -10855,18 +11134,23 @@
               "reused": false,
               "score": 7.016666666666667,
               "selected_index": 0,
-              "virtual_physics_steps": 2
+              "virtual_physics_steps": 2,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 3,
               "actual_time": 0.10500000000000001,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
+              "predicted_residual_delta": 0.0,
+              "predicted_supplied_work_delta": 0.0,
               "predicted_tick": 3,
               "predicted_time": 0.10500000000000001,
               "prediction_source": "coast_diagnostic",
-              "residual_abs_error": 0.0,
-              "supplied_work_abs_error": 0.0,
+              "realized_residual_delta": 0.0,
+              "realized_supplied_work_delta": 0.0,
+              "residual_increment_abs_error": 0.0,
+              "supplied_work_increment_abs_error": 0.0,
               "total_energy_abs_error": 0.0
             },
             "observation": {
@@ -10980,12 +11264,13 @@
               "energy_before": 0.0,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.0,
               "tick_after": 3,
-              "tick_before": 1,
-              "unknown_outcome_ticks": 0
+              "tick_before": 1
             }
           },
           {
@@ -11005,16 +11290,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 4,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 2,
               "reserved_actual_physics_steps": 4,
               "supplied_work": 0.0,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "coast",
               "virtual_candidate_limit": 4,
               "virtual_candidates": 2,
               "virtual_physics_step_limit": 8,
-              "virtual_physics_steps": 4
+              "virtual_physics_steps": 4,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 1,
             "error": null,
@@ -11110,18 +11397,23 @@
               "reused": false,
               "score": 7.027777777777778,
               "selected_index": 0,
-              "virtual_physics_steps": 2
+              "virtual_physics_steps": 2,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 5,
               "actual_time": 0.17500000000000002,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
+              "predicted_residual_delta": 0.0,
+              "predicted_supplied_work_delta": 0.0,
               "predicted_tick": 5,
               "predicted_time": 0.17500000000000002,
               "prediction_source": "coast_diagnostic",
-              "residual_abs_error": 0.0,
-              "supplied_work_abs_error": 0.0,
+              "realized_residual_delta": 0.0,
+              "realized_supplied_work_delta": 0.0,
+              "residual_increment_abs_error": 0.0,
+              "supplied_work_increment_abs_error": 0.0,
               "total_energy_abs_error": 0.0
             },
             "observation": {
@@ -11235,12 +11527,13 @@
               "energy_before": 0.0,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.0,
               "tick_after": 5,
-              "tick_before": 3,
-              "unknown_outcome_ticks": 0
+              "tick_before": 3
             }
           },
           {
@@ -11260,16 +11553,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 6,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 3,
               "reserved_actual_physics_steps": 6,
               "supplied_work": 0.0,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "coast",
               "virtual_candidate_limit": 4,
               "virtual_candidates": 3,
               "virtual_physics_step_limit": 8,
-              "virtual_physics_steps": 6
+              "virtual_physics_steps": 6,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 2,
             "error": null,
@@ -11365,18 +11660,23 @@
               "reused": false,
               "score": 7.038888888888889,
               "selected_index": 0,
-              "virtual_physics_steps": 2
+              "virtual_physics_steps": 2,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 7,
               "actual_time": 0.24500000000000002,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
+              "predicted_residual_delta": 0.0,
+              "predicted_supplied_work_delta": 0.0,
               "predicted_tick": 7,
               "predicted_time": 0.24500000000000002,
               "prediction_source": "coast_diagnostic",
-              "residual_abs_error": 0.0,
-              "supplied_work_abs_error": 0.0,
+              "realized_residual_delta": 0.0,
+              "realized_supplied_work_delta": 0.0,
+              "residual_increment_abs_error": 0.0,
+              "supplied_work_increment_abs_error": 0.0,
               "total_energy_abs_error": 0.0
             },
             "observation": {
@@ -11490,12 +11790,13 @@
               "energy_before": 0.0,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.0,
               "tick_after": 7,
-              "tick_before": 5,
-              "unknown_outcome_ticks": 0
+              "tick_before": 5
             }
           },
           {
@@ -11515,16 +11816,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 8,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 4,
               "reserved_actual_physics_steps": 8,
               "supplied_work": 0.0,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "coast",
               "virtual_candidate_limit": 4,
               "virtual_candidates": 4,
               "virtual_physics_step_limit": 8,
-              "virtual_physics_steps": 8
+              "virtual_physics_steps": 8,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 3,
             "error": null,
@@ -11620,18 +11923,23 @@
               "reused": false,
               "score": 7.05,
               "selected_index": 0,
-              "virtual_physics_steps": 2
+              "virtual_physics_steps": 2,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 9,
               "actual_time": 0.31500000000000006,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
+              "predicted_residual_delta": 0.0,
+              "predicted_supplied_work_delta": 0.0,
               "predicted_tick": 9,
               "predicted_time": 0.31500000000000006,
               "prediction_source": "coast_diagnostic",
-              "residual_abs_error": 0.0,
-              "supplied_work_abs_error": 0.0,
+              "realized_residual_delta": 0.0,
+              "realized_supplied_work_delta": 0.0,
+              "residual_increment_abs_error": 0.0,
+              "supplied_work_increment_abs_error": 0.0,
               "total_energy_abs_error": 0.0
             },
             "observation": {
@@ -11745,12 +12053,13 @@
               "energy_before": 0.0,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.0,
               "tick_after": 9,
-              "tick_before": 7,
-              "unknown_outcome_ticks": 0
+              "tick_before": 7
             }
           }
         ],
@@ -11877,16 +12186,18 @@
         "budget": {
           "actual_cycle_limit": 4,
           "actual_physics_step_limit": 8,
+          "in_flight_uncertain_physics_steps": 0,
           "known_executed_physics_steps": 8,
+          "never_dispatched_physics_steps": 0,
           "reserved_actual_cycles": 4,
           "reserved_actual_physics_steps": 8,
           "supplied_work": 0.0009656779675654469,
-          "unknown_outcome_physics_steps": 0,
           "virtual_budget_kind": "greedy",
           "virtual_candidate_limit": 20,
           "virtual_candidates": 20,
           "virtual_physics_step_limit": 40,
-          "virtual_physics_steps": 40
+          "virtual_physics_steps": 40,
+          "virtual_physics_steps_semantics": "worst_case_reserved_compute"
         },
         "cycles": [
           {
@@ -11906,16 +12217,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 2,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 1,
               "reserved_actual_physics_steps": 2,
               "supplied_work": 9.321880333382305e-05,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "greedy",
               "virtual_candidate_limit": 20,
               "virtual_candidates": 5,
               "virtual_physics_step_limit": 40,
-              "virtual_physics_steps": 10
+              "virtual_physics_steps": 10,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 0,
             "error": null,
@@ -12011,18 +12324,23 @@
               "reused": false,
               "score": 6.6738277017522885,
               "selected_index": 3,
-              "virtual_physics_steps": 10
+              "virtual_physics_steps": 10,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 3,
               "actual_time": 0.10500000000000001,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
+              "predicted_residual_delta": -2.802927563791295e-05,
+              "predicted_supplied_work_delta": 9.31153727619432e-05,
               "predicted_tick": 3,
               "predicted_time": 0.10500000000000001,
               "prediction_source": "fresh_forecast",
-              "residual_abs_error": 3.4689073711080946e-07,
-              "supplied_work_abs_error": 1.0343057187984931e-07,
+              "realized_residual_delta": -2.837616637502376e-05,
+              "realized_supplied_work_delta": 9.321880333382305e-05,
+              "residual_increment_abs_error": 3.4689073711080946e-07,
+              "supplied_work_increment_abs_error": 1.0343057187984931e-07,
               "total_energy_abs_error": 2.4424498852441447e-07
             },
             "observation": {
@@ -12136,12 +12454,13 @@
               "energy_before": 0.0,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 9.321880333382305e-05,
               "tick_after": 3,
-              "tick_before": 1,
-              "unknown_outcome_ticks": 0
+              "tick_before": 1
             }
           },
           {
@@ -12161,16 +12480,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 4,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 2,
               "reserved_actual_physics_steps": 4,
               "supplied_work": 0.00030114576599995374,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "greedy",
               "virtual_candidate_limit": 20,
               "virtual_candidates": 10,
               "virtual_physics_step_limit": 40,
-              "virtual_physics_steps": 20
+              "virtual_physics_steps": 20,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 1,
             "error": null,
@@ -12266,18 +12587,23 @@
               "reused": false,
               "score": 5.552210857955497,
               "selected_index": 3,
-              "virtual_physics_steps": 10
+              "virtual_physics_steps": 10,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 5,
               "actual_time": 0.17500000000000002,
               "comparison_status": "compared",
               "node_displacement_l2_error": 9.83968293031079e-13,
+              "predicted_residual_delta": -1.3369547997034876e-05,
+              "predicted_supplied_work_delta": 0.0002067148583518466,
               "predicted_tick": 5,
               "predicted_time": 0.17500000000000002,
               "prediction_source": "fresh_forecast",
-              "residual_abs_error": 3.018083573857129e-05,
-              "supplied_work_abs_error": 1.2121043142841e-06,
+              "realized_residual_delta": -1.5174217360582404e-05,
+              "realized_supplied_work_delta": 0.0002079269626661307,
+              "residual_increment_abs_error": 1.8046693635475287e-06,
+              "supplied_work_increment_abs_error": 1.2121043142841e-06,
               "total_energy_abs_error": 1.0659060165027793e-06
             },
             "observation": {
@@ -12391,12 +12717,13 @@
               "energy_before": 6.454738256584046e-05,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.0002079269626661307,
               "tick_after": 5,
-              "tick_before": 3,
-              "unknown_outcome_ticks": 0
+              "tick_before": 3
             }
           },
           {
@@ -12416,16 +12743,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 6,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 3,
               "reserved_actual_physics_steps": 6,
               "supplied_work": 0.0006022592523122894,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "greedy",
               "virtual_candidate_limit": 20,
               "virtual_candidates": 15,
               "virtual_physics_step_limit": 40,
-              "virtual_physics_steps": 30
+              "virtual_physics_steps": 30,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 2,
             "error": null,
@@ -12521,18 +12850,23 @@
               "reused": false,
               "score": 2.8734419246311482,
               "selected_index": 3,
-              "virtual_physics_steps": 10
+              "virtual_physics_steps": 10,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 7,
               "actual_time": 0.24500000000000002,
               "comparison_status": "compared",
               "node_displacement_l2_error": 7.62829633876967e-12,
+              "predicted_residual_delta": 7.381552118644575e-06,
+              "predicted_supplied_work_delta": 0.00029770045444900363,
               "predicted_tick": 7,
               "predicted_time": 0.24500000000000002,
               "prediction_source": "fresh_forecast",
-              "residual_abs_error": 4.7031128619669966e-05,
-              "supplied_work_abs_error": 3.4130318633320304e-06,
+              "realized_residual_delta": 3.900807234580775e-06,
+              "realized_supplied_work_delta": 0.00030111348631233566,
+              "residual_increment_abs_error": 3.4807448840638004e-06,
+              "supplied_work_increment_abs_error": 3.4130318633320304e-06,
               "total_energy_abs_error": 4.901030364539739e-06
             },
             "observation": {
@@ -12646,12 +12980,13 @@
               "energy_before": 0.00025595165965443365,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.00030111348631233566,
               "tick_after": 7,
-              "tick_before": 5,
-              "unknown_outcome_ticks": 0
+              "tick_before": 5
             }
           },
           {
@@ -12671,16 +13006,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 8,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 4,
               "reserved_actual_physics_steps": 8,
               "supplied_work": 0.0009656779675654469,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "greedy",
               "virtual_candidate_limit": 20,
               "virtual_candidates": 20,
               "virtual_physics_step_limit": 40,
-              "virtual_physics_steps": 40
+              "virtual_physics_steps": 40,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 3,
             "error": null,
@@ -12776,18 +13113,23 @@
               "reused": false,
               "score": 0.08996662870677244,
               "selected_index": 3,
-              "virtual_physics_steps": 10
+              "virtual_physics_steps": 10,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 9,
               "actual_time": 0.31500000000000006,
               "comparison_status": "compared",
               "node_displacement_l2_error": 2.6850170574252544e-11,
+              "predicted_residual_delta": 2.5328177916769366e-05,
+              "predicted_supplied_work_delta": 0.0003569398366502491,
               "predicted_tick": 9,
               "predicted_time": 0.31500000000000006,
               "prediction_source": "fresh_forecast",
-              "residual_abs_error": 4.370763114011461e-05,
-              "supplied_work_abs_error": 6.478878602908392e-06,
+              "realized_residual_delta": 2.127012327768015e-05,
+              "realized_supplied_work_delta": 0.0003634187152531575,
+              "residual_increment_abs_error": 4.058054639089217e-06,
+              "supplied_work_increment_abs_error": 6.478878602908392e-06,
               "total_energy_abs_error": 1.6797473944731045e-05
             },
             "observation": {
@@ -12901,12 +13243,13 @@
               "energy_before": 0.0005581709786155159,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.0003634187152531575,
               "tick_after": 9,
-              "tick_before": 7,
-              "unknown_outcome_ticks": 0
+              "tick_before": 7
             }
           }
         ],
@@ -13033,16 +13376,18 @@
         "budget": {
           "actual_cycle_limit": 4,
           "actual_physics_step_limit": 8,
+          "in_flight_uncertain_physics_steps": 0,
           "known_executed_physics_steps": 8,
+          "never_dispatched_physics_steps": 0,
           "reserved_actual_cycles": 4,
           "reserved_actual_physics_steps": 8,
           "supplied_work": 0.0009656779675654469,
-          "unknown_outcome_physics_steps": 0,
           "virtual_budget_kind": "open_loop_full_episode",
           "virtual_candidate_limit": 625,
           "virtual_candidates": 625,
           "virtual_physics_step_limit": 5000,
-          "virtual_physics_steps": 5000
+          "virtual_physics_steps": 5000,
+          "virtual_physics_steps_semantics": "worst_case_reserved_compute"
         },
         "cycles": [
           {
@@ -13062,16 +13407,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 2,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 1,
               "reserved_actual_physics_steps": 2,
               "supplied_work": 9.321880333382305e-05,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "open_loop_full_episode",
               "virtual_candidate_limit": 625,
               "virtual_candidates": 625,
               "virtual_physics_step_limit": 5000,
-              "virtual_physics_steps": 5000
+              "virtual_physics_steps": 5000,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 0,
             "error": null,
@@ -13391,18 +13738,23 @@
               "reused": false,
               "score": 0.08943891976961664,
               "selected_index": 468,
-              "virtual_physics_steps": 5000
+              "virtual_physics_steps": 5000,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 3,
               "actual_time": 0.10500000000000001,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
+              "predicted_residual_delta": -2.802927563791295e-05,
+              "predicted_supplied_work_delta": 9.31153727619432e-05,
               "predicted_tick": 3,
               "predicted_time": 0.10500000000000001,
               "prediction_source": "fresh_forecast",
-              "residual_abs_error": 3.4689073711080946e-07,
-              "supplied_work_abs_error": 1.0343057187984931e-07,
+              "realized_residual_delta": -2.837616637502376e-05,
+              "realized_supplied_work_delta": 9.321880333382305e-05,
+              "residual_increment_abs_error": 3.4689073711080946e-07,
+              "supplied_work_increment_abs_error": 1.0343057187984931e-07,
               "total_energy_abs_error": 2.4424498852441447e-07
             },
             "observation": {
@@ -13516,12 +13868,13 @@
               "energy_before": 0.0,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 9.321880333382305e-05,
               "tick_after": 3,
-              "tick_before": 1,
-              "unknown_outcome_ticks": 0
+              "tick_before": 1
             }
           },
           {
@@ -13541,16 +13894,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 4,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 2,
               "reserved_actual_physics_steps": 4,
               "supplied_work": 0.00030114576599995374,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "open_loop_full_episode",
               "virtual_candidate_limit": 625,
               "virtual_candidates": 625,
               "virtual_physics_step_limit": 5000,
-              "virtual_physics_steps": 5000
+              "virtual_physics_steps": 5000,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 1,
             "error": null,
@@ -13794,18 +14149,23 @@
               "reused": true,
               "score": 0.08943891976961664,
               "selected_index": 0,
-              "virtual_physics_steps": 0
+              "virtual_physics_steps": 0,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 5,
               "actual_time": 0.17500000000000002,
               "comparison_status": "compared",
               "node_displacement_l2_error": 1.9697544078631356e-12,
+              "predicted_residual_delta": -1.3396109474256619e-05,
+              "predicted_supplied_work_delta": 0.00020641699554432806,
               "predicted_tick": 5,
               "predicted_time": 0.17500000000000002,
               "prediction_source": "reused_forecast",
-              "residual_abs_error": 3.015427426134955e-05,
-              "supplied_work_abs_error": 1.5099671218026336e-06,
+              "realized_residual_delta": -1.5174217360582404e-05,
+              "realized_supplied_work_delta": 0.0002079269626661307,
+              "residual_increment_abs_error": 1.7781078863257858e-06,
+              "supplied_work_increment_abs_error": 1.5099671218026336e-06,
               "total_energy_abs_error": 6.346582181362536e-07
             },
             "observation": {
@@ -13919,12 +14279,13 @@
               "energy_before": 6.454738256584046e-05,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.0002079269626661307,
               "tick_after": 5,
-              "tick_before": 3,
-              "unknown_outcome_ticks": 0
+              "tick_before": 3
             }
           },
           {
@@ -13944,16 +14305,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 6,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 3,
               "reserved_actual_physics_steps": 6,
               "supplied_work": 0.0006022592523122894,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "open_loop_full_episode",
               "virtual_candidate_limit": 625,
               "virtual_candidates": 625,
               "virtual_physics_step_limit": 5000,
-              "virtual_physics_steps": 5000
+              "virtual_physics_steps": 5000,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 2,
             "error": null,
@@ -14123,18 +14486,23 @@
               "reused": true,
               "score": 0.08943891976961664,
               "selected_index": 0,
-              "virtual_physics_steps": 0
+              "virtual_physics_steps": 0,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 7,
               "actual_time": 0.24500000000000002,
               "comparison_status": "compared",
               "node_displacement_l2_error": 4.7761261077424024e-11,
+              "predicted_residual_delta": 7.055511938734593e-06,
+              "predicted_supplied_work_delta": 0.00029435660055484897,
               "predicted_tick": 7,
               "predicted_time": 0.24500000000000002,
               "prediction_source": "reused_forecast",
-              "residual_abs_error": 4.6705088439759985e-05,
-              "supplied_work_abs_error": 6.756885757486686e-06,
+              "realized_residual_delta": 3.900807234580775e-06,
+              "realized_supplied_work_delta": 0.00030111348631233566,
+              "residual_increment_abs_error": 3.1547047041538184e-06,
+              "supplied_work_increment_abs_error": 6.756885757486686e-06,
               "total_energy_abs_error": 1.3598286446745095e-06
             },
             "observation": {
@@ -14248,12 +14616,13 @@
               "energy_before": 0.00025595165965443365,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.00030111348631233566,
               "tick_after": 7,
-              "tick_before": 5,
-              "unknown_outcome_ticks": 0
+              "tick_before": 5
             }
           },
           {
@@ -14273,16 +14642,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 8,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 4,
               "reserved_actual_physics_steps": 8,
               "supplied_work": 0.0009656779675654469,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "open_loop_full_episode",
               "virtual_candidate_limit": 625,
               "virtual_candidates": 625,
               "virtual_physics_step_limit": 5000,
-              "virtual_physics_steps": 5000
+              "virtual_physics_steps": 5000,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 3,
             "error": null,
@@ -14378,18 +14749,23 @@
               "reused": true,
               "score": 0.08943891976961664,
               "selected_index": 0,
-              "virtual_physics_steps": 0
+              "virtual_physics_steps": 0,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 9,
               "actual_time": 0.31500000000000006,
               "comparison_status": "compared",
               "node_displacement_l2_error": 4.186003549042847e-10,
+              "predicted_residual_delta": 2.420035729982186e-05,
+              "predicted_supplied_work_delta": 0.00034427482215850967,
               "predicted_tick": 9,
               "predicted_time": 0.31500000000000006,
               "prediction_source": "reused_forecast",
-              "residual_abs_error": 4.25798105231671e-05,
-              "supplied_work_abs_error": 1.9143893094647826e-05,
+              "realized_residual_delta": 2.127012327768015e-05,
+              "realized_supplied_work_delta": 0.0003634187152531575,
+              "residual_increment_abs_error": 2.9302340221417098e-06,
+              "supplied_work_increment_abs_error": 1.9143893094647826e-05,
               "total_energy_abs_error": 1.054360874647197e-05
             },
             "observation": {
@@ -14503,12 +14879,13 @@
               "energy_before": 0.0005581709786155159,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.0003634187152531575,
               "tick_after": 9,
-              "tick_before": 7,
-              "unknown_outcome_ticks": 0
+              "tick_before": 7
             }
           }
         ],
@@ -14635,16 +15012,18 @@
         "budget": {
           "actual_cycle_limit": 4,
           "actual_physics_step_limit": 8,
+          "in_flight_uncertain_physics_steps": 0,
           "known_executed_physics_steps": 8,
+          "never_dispatched_physics_steps": 0,
           "reserved_actual_cycles": 4,
           "reserved_actual_physics_steps": 8,
           "supplied_work": 0.0009656779675654469,
-          "unknown_outcome_physics_steps": 0,
           "virtual_budget_kind": "receding_horizon",
           "virtual_candidate_limit": 100,
           "virtual_candidates": 80,
           "virtual_physics_step_limit": 400,
-          "virtual_physics_steps": 310
+          "virtual_physics_steps": 310,
+          "virtual_physics_steps_semantics": "worst_case_reserved_compute"
         },
         "cycles": [
           {
@@ -14664,16 +15043,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 2,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 1,
               "reserved_actual_physics_steps": 2,
               "supplied_work": 9.321880333382305e-05,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "receding_horizon",
               "virtual_candidate_limit": 100,
               "virtual_candidates": 25,
               "virtual_physics_step_limit": 400,
-              "virtual_physics_steps": 100
+              "virtual_physics_steps": 100,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 0,
             "error": null,
@@ -14845,18 +15226,23 @@
               "reused": false,
               "score": 5.5547458944089705,
               "selected_index": 18,
-              "virtual_physics_steps": 100
+              "virtual_physics_steps": 100,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 3,
               "actual_time": 0.10500000000000001,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
+              "predicted_residual_delta": -2.802927563791295e-05,
+              "predicted_supplied_work_delta": 9.31153727619432e-05,
               "predicted_tick": 3,
               "predicted_time": 0.10500000000000001,
               "prediction_source": "fresh_forecast",
-              "residual_abs_error": 3.4689073711080946e-07,
-              "supplied_work_abs_error": 1.0343057187984931e-07,
+              "realized_residual_delta": -2.837616637502376e-05,
+              "realized_supplied_work_delta": 9.321880333382305e-05,
+              "residual_increment_abs_error": 3.4689073711080946e-07,
+              "supplied_work_increment_abs_error": 1.0343057187984931e-07,
               "total_energy_abs_error": 2.4424498852441447e-07
             },
             "observation": {
@@ -14970,12 +15356,13 @@
               "energy_before": 0.0,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 9.321880333382305e-05,
               "tick_after": 3,
-              "tick_before": 1,
-              "unknown_outcome_ticks": 0
+              "tick_before": 1
             }
           },
           {
@@ -14995,16 +15382,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 4,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 2,
               "reserved_actual_physics_steps": 4,
               "supplied_work": 0.00030114576599995374,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "receding_horizon",
               "virtual_candidate_limit": 100,
               "virtual_candidates": 50,
               "virtual_physics_step_limit": 400,
-              "virtual_physics_steps": 200
+              "virtual_physics_steps": 200,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 1,
             "error": null,
@@ -15176,18 +15565,23 @@
               "reused": false,
               "score": 2.9116180739236954,
               "selected_index": 18,
-              "virtual_physics_steps": 100
+              "virtual_physics_steps": 100,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 5,
               "actual_time": 0.17500000000000002,
               "comparison_status": "compared",
               "node_displacement_l2_error": 9.83968293031079e-13,
+              "predicted_residual_delta": -1.3369547997034876e-05,
+              "predicted_supplied_work_delta": 0.0002067148583518466,
               "predicted_tick": 5,
               "predicted_time": 0.17500000000000002,
               "prediction_source": "fresh_forecast",
-              "residual_abs_error": 3.018083573857129e-05,
-              "supplied_work_abs_error": 1.2121043142841e-06,
+              "realized_residual_delta": -1.5174217360582404e-05,
+              "realized_supplied_work_delta": 0.0002079269626661307,
+              "residual_increment_abs_error": 1.8046693635475287e-06,
+              "supplied_work_increment_abs_error": 1.2121043142841e-06,
               "total_energy_abs_error": 1.0659060165027793e-06
             },
             "observation": {
@@ -15301,12 +15695,13 @@
               "energy_before": 6.454738256584046e-05,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.0002079269626661307,
               "tick_after": 5,
-              "tick_before": 3,
-              "unknown_outcome_ticks": 0
+              "tick_before": 3
             }
           },
           {
@@ -15326,16 +15721,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 6,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 3,
               "reserved_actual_physics_steps": 6,
               "supplied_work": 0.0006022592523122894,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "receding_horizon",
               "virtual_candidate_limit": 100,
               "virtual_candidates": 75,
               "virtual_physics_step_limit": 400,
-              "virtual_physics_steps": 300
+              "virtual_physics_steps": 300,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 2,
             "error": null,
@@ -15507,18 +15904,23 @@
               "reused": false,
               "score": 0.08963842812378772,
               "selected_index": 18,
-              "virtual_physics_steps": 100
+              "virtual_physics_steps": 100,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 7,
               "actual_time": 0.24500000000000002,
               "comparison_status": "compared",
               "node_displacement_l2_error": 7.62829633876967e-12,
+              "predicted_residual_delta": 7.381552118644575e-06,
+              "predicted_supplied_work_delta": 0.00029770045444900363,
               "predicted_tick": 7,
               "predicted_time": 0.24500000000000002,
               "prediction_source": "fresh_forecast",
-              "residual_abs_error": 4.7031128619669966e-05,
-              "supplied_work_abs_error": 3.4130318633320304e-06,
+              "realized_residual_delta": 3.900807234580775e-06,
+              "realized_supplied_work_delta": 0.00030111348631233566,
+              "residual_increment_abs_error": 3.4807448840638004e-06,
+              "supplied_work_increment_abs_error": 3.4130318633320304e-06,
               "total_energy_abs_error": 4.901030364539739e-06
             },
             "observation": {
@@ -15632,12 +16034,13 @@
               "energy_before": 0.00025595165965443365,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.00030111348631233566,
               "tick_after": 7,
-              "tick_before": 5,
-              "unknown_outcome_ticks": 0
+              "tick_before": 5
             }
           },
           {
@@ -15657,16 +16060,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 8,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 4,
               "reserved_actual_physics_steps": 8,
               "supplied_work": 0.0009656779675654469,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "receding_horizon",
               "virtual_candidate_limit": 100,
               "virtual_candidates": 80,
               "virtual_physics_step_limit": 400,
-              "virtual_physics_steps": 310
+              "virtual_physics_steps": 310,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 3,
             "error": null,
@@ -15762,18 +16167,23 @@
               "reused": false,
               "score": 0.08996662870677244,
               "selected_index": 3,
-              "virtual_physics_steps": 10
+              "virtual_physics_steps": 10,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 9,
               "actual_time": 0.31500000000000006,
               "comparison_status": "compared",
               "node_displacement_l2_error": 2.6850170574252544e-11,
+              "predicted_residual_delta": 2.5328177916769366e-05,
+              "predicted_supplied_work_delta": 0.0003569398366502491,
               "predicted_tick": 9,
               "predicted_time": 0.31500000000000006,
               "prediction_source": "fresh_forecast",
-              "residual_abs_error": 4.370763114011461e-05,
-              "supplied_work_abs_error": 6.478878602908392e-06,
+              "realized_residual_delta": 2.127012327768015e-05,
+              "realized_supplied_work_delta": 0.0003634187152531575,
+              "residual_increment_abs_error": 4.058054639089217e-06,
+              "supplied_work_increment_abs_error": 6.478878602908392e-06,
               "total_energy_abs_error": 1.6797473944731045e-05
             },
             "observation": {
@@ -15887,12 +16297,13 @@
               "energy_before": 0.0005581709786155159,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.0003634187152531575,
               "tick_after": 9,
-              "tick_before": 7,
-              "unknown_outcome_ticks": 0
+              "tick_before": 7
             }
           }
         ],
@@ -16021,16 +16432,18 @@
         "budget": {
           "actual_cycle_limit": 4,
           "actual_physics_step_limit": 8,
+          "in_flight_uncertain_physics_steps": 0,
           "known_executed_physics_steps": 8,
+          "never_dispatched_physics_steps": 0,
           "reserved_actual_cycles": 4,
           "reserved_actual_physics_steps": 8,
           "supplied_work": 0.0,
-          "unknown_outcome_physics_steps": 0,
           "virtual_budget_kind": "coast",
           "virtual_candidate_limit": 4,
           "virtual_candidates": 4,
           "virtual_physics_step_limit": 8,
-          "virtual_physics_steps": 8
+          "virtual_physics_steps": 8,
+          "virtual_physics_steps_semantics": "worst_case_reserved_compute"
         },
         "cycles": [
           {
@@ -16050,16 +16463,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 2,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 1,
               "reserved_actual_physics_steps": 2,
               "supplied_work": 0.0,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "coast",
               "virtual_candidate_limit": 4,
               "virtual_candidates": 1,
               "virtual_physics_step_limit": 8,
-              "virtual_physics_steps": 2
+              "virtual_physics_steps": 2,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 0,
             "error": null,
@@ -16155,18 +16570,23 @@
               "reused": false,
               "score": 7.016666666666667,
               "selected_index": 0,
-              "virtual_physics_steps": 2
+              "virtual_physics_steps": 2,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 3,
               "actual_time": 0.10500000000000001,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
+              "predicted_residual_delta": 0.0,
+              "predicted_supplied_work_delta": 0.0,
               "predicted_tick": 3,
               "predicted_time": 0.10500000000000001,
               "prediction_source": "coast_diagnostic",
-              "residual_abs_error": 0.0,
-              "supplied_work_abs_error": 0.0,
+              "realized_residual_delta": 0.0,
+              "realized_supplied_work_delta": 0.0,
+              "residual_increment_abs_error": 0.0,
+              "supplied_work_increment_abs_error": 0.0,
               "total_energy_abs_error": 0.0
             },
             "observation": {
@@ -16280,12 +16700,13 @@
               "energy_before": 0.0,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.0,
               "tick_after": 3,
-              "tick_before": 1,
-              "unknown_outcome_ticks": 0
+              "tick_before": 1
             }
           },
           {
@@ -16305,16 +16726,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 4,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 2,
               "reserved_actual_physics_steps": 4,
               "supplied_work": 0.0,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "coast",
               "virtual_candidate_limit": 4,
               "virtual_candidates": 2,
               "virtual_physics_step_limit": 8,
-              "virtual_physics_steps": 4
+              "virtual_physics_steps": 4,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 1,
             "error": null,
@@ -16410,18 +16833,23 @@
               "reused": false,
               "score": 7.027777777777778,
               "selected_index": 0,
-              "virtual_physics_steps": 2
+              "virtual_physics_steps": 2,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 5,
               "actual_time": 0.17500000000000002,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
+              "predicted_residual_delta": 0.0,
+              "predicted_supplied_work_delta": 0.0,
               "predicted_tick": 5,
               "predicted_time": 0.17500000000000002,
               "prediction_source": "coast_diagnostic",
-              "residual_abs_error": 0.0,
-              "supplied_work_abs_error": 0.0,
+              "realized_residual_delta": 0.0,
+              "realized_supplied_work_delta": 0.0,
+              "residual_increment_abs_error": 0.0,
+              "supplied_work_increment_abs_error": 0.0,
               "total_energy_abs_error": 0.0
             },
             "observation": {
@@ -16535,12 +16963,13 @@
               "energy_before": 0.0,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.0,
               "tick_after": 5,
-              "tick_before": 3,
-              "unknown_outcome_ticks": 0
+              "tick_before": 3
             }
           },
           {
@@ -16560,16 +16989,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 6,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 3,
               "reserved_actual_physics_steps": 6,
               "supplied_work": 0.0,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "coast",
               "virtual_candidate_limit": 4,
               "virtual_candidates": 3,
               "virtual_physics_step_limit": 8,
-              "virtual_physics_steps": 6
+              "virtual_physics_steps": 6,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 2,
             "error": null,
@@ -16665,18 +17096,23 @@
               "reused": false,
               "score": 7.038888888888889,
               "selected_index": 0,
-              "virtual_physics_steps": 2
+              "virtual_physics_steps": 2,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 7,
               "actual_time": 0.24500000000000002,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
+              "predicted_residual_delta": 0.0,
+              "predicted_supplied_work_delta": 0.0,
               "predicted_tick": 7,
               "predicted_time": 0.24500000000000002,
               "prediction_source": "coast_diagnostic",
-              "residual_abs_error": 0.0,
-              "supplied_work_abs_error": 0.0,
+              "realized_residual_delta": 0.0,
+              "realized_supplied_work_delta": 0.0,
+              "residual_increment_abs_error": 0.0,
+              "supplied_work_increment_abs_error": 0.0,
               "total_energy_abs_error": 0.0
             },
             "observation": {
@@ -16790,12 +17226,13 @@
               "energy_before": 0.0,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.0,
               "tick_after": 7,
-              "tick_before": 5,
-              "unknown_outcome_ticks": 0
+              "tick_before": 5
             }
           },
           {
@@ -16815,16 +17252,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 8,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 4,
               "reserved_actual_physics_steps": 8,
               "supplied_work": 0.0,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "coast",
               "virtual_candidate_limit": 4,
               "virtual_candidates": 4,
               "virtual_physics_step_limit": 8,
-              "virtual_physics_steps": 8
+              "virtual_physics_steps": 8,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 3,
             "error": null,
@@ -16920,18 +17359,23 @@
               "reused": false,
               "score": 7.05,
               "selected_index": 0,
-              "virtual_physics_steps": 2
+              "virtual_physics_steps": 2,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 9,
               "actual_time": 0.31500000000000006,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
+              "predicted_residual_delta": 0.0,
+              "predicted_supplied_work_delta": 0.0,
               "predicted_tick": 9,
               "predicted_time": 0.31500000000000006,
               "prediction_source": "coast_diagnostic",
-              "residual_abs_error": 0.0,
-              "supplied_work_abs_error": 0.0,
+              "realized_residual_delta": 0.0,
+              "realized_supplied_work_delta": 0.0,
+              "residual_increment_abs_error": 0.0,
+              "supplied_work_increment_abs_error": 0.0,
               "total_energy_abs_error": 0.0
             },
             "observation": {
@@ -17045,12 +17489,13 @@
               "energy_before": 0.0,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.0,
               "tick_after": 9,
-              "tick_before": 7,
-              "unknown_outcome_ticks": 0
+              "tick_before": 7
             }
           }
         ],
@@ -17176,16 +17621,18 @@
         "budget": {
           "actual_cycle_limit": 4,
           "actual_physics_step_limit": 8,
+          "in_flight_uncertain_physics_steps": 0,
           "known_executed_physics_steps": 8,
+          "never_dispatched_physics_steps": 0,
           "reserved_actual_cycles": 4,
           "reserved_actual_physics_steps": 8,
           "supplied_work": 0.0010505054831251967,
-          "unknown_outcome_physics_steps": 0,
           "virtual_budget_kind": "greedy",
           "virtual_candidate_limit": 20,
           "virtual_candidates": 20,
           "virtual_physics_step_limit": 40,
-          "virtual_physics_steps": 40
+          "virtual_physics_steps": 40,
+          "virtual_physics_steps_semantics": "worst_case_reserved_compute"
         },
         "cycles": [
           {
@@ -17205,16 +17652,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 2,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 1,
               "reserved_actual_physics_steps": 2,
               "supplied_work": 9.365945117327279e-05,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "greedy",
               "virtual_candidate_limit": 20,
               "virtual_candidates": 5,
               "virtual_physics_step_limit": 40,
-              "virtual_physics_steps": 10
+              "virtual_physics_steps": 10,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 0,
             "error": null,
@@ -17310,18 +17759,23 @@
               "reused": false,
               "score": 6.678063940475234,
               "selected_index": 1,
-              "virtual_physics_steps": 10
+              "virtual_physics_steps": 10,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 3,
               "actual_time": 0.10500000000000001,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
+              "predicted_residual_delta": -2.971062781763816e-05,
+              "predicted_supplied_work_delta": 9.36121302692835e-05,
               "predicted_tick": 3,
               "predicted_time": 0.10500000000000001,
               "prediction_source": "fresh_forecast",
-              "residual_abs_error": 1.6219613288904987e-07,
-              "supplied_work_abs_error": 4.732090398928924e-08,
+              "realized_residual_delta": -2.987282395052721e-05,
+              "realized_supplied_work_delta": 9.365945117327279e-05,
+              "residual_increment_abs_error": 1.6219613288904987e-07,
+              "supplied_work_increment_abs_error": 4.732090398928924e-08,
               "total_energy_abs_error": 1.1523701923290262e-07
             },
             "observation": {
@@ -17435,12 +17889,13 @@
               "energy_before": 0.0,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 9.365945117327279e-05,
               "tick_after": 3,
-              "tick_before": 1,
-              "unknown_outcome_ticks": 0
+              "tick_before": 1
             }
           },
           {
@@ -17460,16 +17915,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 4,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 2,
               "reserved_actual_physics_steps": 4,
               "supplied_work": 0.0003076315686394534,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "greedy",
               "virtual_candidate_limit": 20,
               "virtual_candidates": 10,
               "virtual_physics_step_limit": 40,
-              "virtual_physics_steps": 20
+              "virtual_physics_steps": 20,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 1,
             "error": null,
@@ -17565,18 +18022,23 @@
               "reused": false,
               "score": 5.47552288279142,
               "selected_index": 1,
-              "virtual_physics_steps": 10
+              "virtual_physics_steps": 10,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 5,
               "actual_time": 0.17500000000000002,
               "comparison_status": "compared",
               "node_displacement_l2_error": 4.991924253406872e-13,
+              "predicted_residual_delta": -2.2378736872175655e-05,
+              "predicted_supplied_work_delta": 0.00021341071774407108,
               "predicted_tick": 5,
               "predicted_time": 0.17500000000000002,
               "prediction_source": "fresh_forecast",
-              "residual_abs_error": 3.0795851698704475e-05,
-              "supplied_work_abs_error": 5.613997221095212e-07,
+              "realized_residual_delta": -2.3301764620352917e-05,
+              "realized_supplied_work_delta": 0.0002139721174661806,
+              "residual_increment_abs_error": 9.230277481772617e-07,
+              "supplied_work_increment_abs_error": 5.613997221095212e-07,
               "total_energy_abs_error": 5.805310760659071e-07
             },
             "observation": {
@@ -17690,12 +18152,13 @@
               "energy_before": 6.348801454292986e-05,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.0002139721174661806,
               "tick_after": 5,
-              "tick_before": 3,
-              "unknown_outcome_ticks": 0
+              "tick_before": 3
             }
           },
           {
@@ -17715,16 +18178,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 6,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 3,
               "reserved_actual_physics_steps": 6,
               "supplied_work": 0.0006316626548894802,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "greedy",
               "virtual_candidate_limit": 20,
               "virtual_candidates": 15,
               "virtual_physics_step_limit": 40,
-              "virtual_physics_steps": 30
+              "virtual_physics_steps": 30,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 2,
             "error": null,
@@ -17820,18 +18285,23 @@
               "reused": false,
               "score": 1.920665570987908,
               "selected_index": 1,
-              "virtual_physics_steps": 10
+              "virtual_physics_steps": 10,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 7,
               "actual_time": 0.24500000000000002,
               "comparison_status": "compared",
               "node_displacement_l2_error": 4.0296718362113394e-12,
+              "predicted_residual_delta": -1.047586867517294e-05,
+              "predicted_supplied_work_delta": 0.0003224204169551473,
               "predicted_tick": 7,
               "predicted_time": 0.24500000000000002,
               "prediction_source": "fresh_forecast",
-              "residual_abs_error": 5.527942731096134e-05,
-              "supplied_work_abs_error": 1.6106692948794805e-06,
+              "realized_residual_delta": -1.2580707415254154e-05,
+              "realized_supplied_work_delta": 0.0003240310862500268,
+              "residual_increment_abs_error": 2.1048387400812136e-06,
+              "supplied_work_increment_abs_error": 1.6106692948794805e-06,
               "total_energy_abs_error": 2.8040217359408693e-06
             },
             "observation": {
@@ -17945,12 +18415,13 @@
               "energy_before": 0.0002527272678981771,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.0003240310862500268,
               "tick_after": 7,
-              "tick_before": 5,
-              "unknown_outcome_ticks": 0
+              "tick_before": 5
             }
           },
           {
@@ -17970,16 +18441,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 8,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 4,
               "reserved_actual_physics_steps": 8,
               "supplied_work": 0.0010505054831251967,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "greedy",
               "virtual_candidate_limit": 20,
               "virtual_candidates": 20,
               "virtual_physics_step_limit": 40,
-              "virtual_physics_steps": 40
+              "virtual_physics_steps": 40,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 3,
             "error": null,
@@ -18075,18 +18548,23 @@
               "reused": false,
               "score": 0.09364001773983001,
               "selected_index": 1,
-              "virtual_physics_steps": 10
+              "virtual_physics_steps": 10,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 9,
               "actual_time": 0.31500000000000006,
               "comparison_status": "compared",
               "node_displacement_l2_error": 1.5085884808869123e-11,
+              "predicted_residual_delta": 3.6518062951579454e-06,
+              "predicted_supplied_work_delta": 0.0004156977708664397,
               "predicted_tick": 9,
               "predicted_time": 0.31500000000000006,
               "prediction_source": "fresh_forecast",
-              "residual_abs_error": 6.909118014204622e-05,
-              "supplied_work_abs_error": 3.1450573692768345e-06,
+              "realized_residual_delta": 3.159221392459976e-07,
+              "realized_supplied_work_delta": 0.00041884282823571655,
+              "residual_increment_abs_error": 3.3358841559119478e-06,
+              "supplied_work_increment_abs_error": 3.1450573692768345e-06,
               "total_energy_abs_error": 9.872043965779439e-06
             },
             "observation": {
@@ -18200,12 +18678,13 @@
               "energy_before": 0.0005609345647876794,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.00041884282823571655,
               "tick_after": 9,
-              "tick_before": 7,
-              "unknown_outcome_ticks": 0
+              "tick_before": 7
             }
           }
         ],
@@ -18331,16 +18810,18 @@
         "budget": {
           "actual_cycle_limit": 4,
           "actual_physics_step_limit": 8,
+          "in_flight_uncertain_physics_steps": 0,
           "known_executed_physics_steps": 8,
+          "never_dispatched_physics_steps": 0,
           "reserved_actual_cycles": 4,
           "reserved_actual_physics_steps": 8,
           "supplied_work": 0.0010505054831251967,
-          "unknown_outcome_physics_steps": 0,
           "virtual_budget_kind": "open_loop_full_episode",
           "virtual_candidate_limit": 625,
           "virtual_candidates": 625,
           "virtual_physics_step_limit": 5000,
-          "virtual_physics_steps": 5000
+          "virtual_physics_steps": 5000,
+          "virtual_physics_steps_semantics": "worst_case_reserved_compute"
         },
         "cycles": [
           {
@@ -18360,16 +18841,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 2,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 1,
               "reserved_actual_physics_steps": 2,
               "supplied_work": 9.365945117327279e-05,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "open_loop_full_episode",
               "virtual_candidate_limit": 625,
               "virtual_candidates": 625,
               "virtual_physics_step_limit": 5000,
-              "virtual_physics_steps": 5000
+              "virtual_physics_steps": 5000,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 0,
             "error": null,
@@ -18689,18 +19172,23 @@
               "reused": false,
               "score": 0.09338068680206488,
               "selected_index": 156,
-              "virtual_physics_steps": 5000
+              "virtual_physics_steps": 5000,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 3,
               "actual_time": 0.10500000000000001,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
+              "predicted_residual_delta": -2.971062781763816e-05,
+              "predicted_supplied_work_delta": 9.36121302692835e-05,
               "predicted_tick": 3,
               "predicted_time": 0.10500000000000001,
               "prediction_source": "fresh_forecast",
-              "residual_abs_error": 1.6219613288904987e-07,
-              "supplied_work_abs_error": 4.732090398928924e-08,
+              "realized_residual_delta": -2.987282395052721e-05,
+              "realized_supplied_work_delta": 9.365945117327279e-05,
+              "residual_increment_abs_error": 1.6219613288904987e-07,
+              "supplied_work_increment_abs_error": 4.732090398928924e-08,
               "total_energy_abs_error": 1.1523701923290262e-07
             },
             "observation": {
@@ -18814,12 +19302,13 @@
               "energy_before": 0.0,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 9.365945117327279e-05,
               "tick_after": 3,
-              "tick_before": 1,
-              "unknown_outcome_ticks": 0
+              "tick_before": 1
             }
           },
           {
@@ -18839,16 +19328,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 4,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 2,
               "reserved_actual_physics_steps": 4,
               "supplied_work": 0.0003076315686394534,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "open_loop_full_episode",
               "virtual_candidate_limit": 625,
               "virtual_candidates": 625,
               "virtual_physics_step_limit": 5000,
-              "virtual_physics_steps": 5000
+              "virtual_physics_steps": 5000,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 1,
             "error": null,
@@ -19092,18 +19583,23 @@
               "reused": true,
               "score": 0.09338068680206488,
               "selected_index": 0,
-              "virtual_physics_steps": 0
+              "virtual_physics_steps": 0,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 5,
               "actual_time": 0.17500000000000002,
               "comparison_status": "compared",
               "node_displacement_l2_error": 9.98130494817931e-13,
+              "predicted_residual_delta": -2.2384820804700003e-05,
+              "predicted_supplied_work_delta": 0.00021327147734970025,
               "predicted_tick": 5,
               "predicted_time": 0.17500000000000002,
               "prediction_source": "reused_forecast",
-              "residual_abs_error": 3.078976776618012e-05,
-              "supplied_work_abs_error": 7.006401164803464e-07,
+              "realized_residual_delta": -2.3301764620352917e-05,
+              "realized_supplied_work_delta": 0.0002139721174661806,
+              "residual_increment_abs_error": 9.169438156529132e-07,
+              "supplied_work_increment_abs_error": 7.006401164803464e-07,
               "total_energy_abs_error": 3.8792175450531874e-07
             },
             "observation": {
@@ -19217,12 +19713,13 @@
               "energy_before": 6.348801454292986e-05,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.0002139721174661806,
               "tick_after": 5,
-              "tick_before": 3,
-              "unknown_outcome_ticks": 0
+              "tick_before": 3
             }
           },
           {
@@ -19242,16 +19739,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 6,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 3,
               "reserved_actual_physics_steps": 6,
               "supplied_work": 0.0006316626548894802,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "open_loop_full_episode",
               "virtual_candidate_limit": 625,
               "virtual_candidates": 625,
               "virtual_physics_step_limit": 5000,
-              "virtual_physics_steps": 5000
+              "virtual_physics_steps": 5000,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 2,
             "error": null,
@@ -19421,18 +19920,23 @@
               "reused": true,
               "score": 0.09338068680206488,
               "selected_index": 0,
-              "virtual_physics_steps": 0
+              "virtual_physics_steps": 0,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 7,
               "actual_time": 0.24500000000000002,
               "comparison_status": "compared",
               "node_displacement_l2_error": 2.497358874092671e-11,
+              "predicted_residual_delta": -1.0558017308706614e-05,
+              "predicted_supplied_work_delta": 0.00032082492456628827,
               "predicted_tick": 7,
               "predicted_time": 0.24500000000000002,
               "prediction_source": "reused_forecast",
-              "residual_abs_error": 5.5197278677427665e-05,
-              "supplied_work_abs_error": 3.20616168373851e-06,
+              "realized_residual_delta": -1.2580707415254154e-05,
+              "realized_supplied_work_delta": 0.0003240310862500268,
+              "residual_increment_abs_error": 2.0226901065475403e-06,
+              "supplied_work_increment_abs_error": 3.20616168373851e-06,
               "total_energy_abs_error": 4.422458586524677e-08
             },
             "observation": {
@@ -19546,12 +20050,13 @@
               "energy_before": 0.0002527272678981771,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.0003240310862500268,
               "tick_after": 7,
-              "tick_before": 5,
-              "unknown_outcome_ticks": 0
+              "tick_before": 5
             }
           },
           {
@@ -19571,16 +20076,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 8,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 4,
               "reserved_actual_physics_steps": 8,
               "supplied_work": 0.0010505054831251967,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "open_loop_full_episode",
               "virtual_candidate_limit": 625,
               "virtual_candidates": 625,
               "virtual_physics_step_limit": 5000,
-              "virtual_physics_steps": 5000
+              "virtual_physics_steps": 5000,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 3,
             "error": null,
@@ -19676,18 +20183,23 @@
               "reused": true,
               "score": 0.09338068680206488,
               "selected_index": 0,
-              "virtual_physics_steps": 0
+              "virtual_physics_steps": 0,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 9,
               "actual_time": 0.31500000000000006,
               "comparison_status": "compared",
               "node_displacement_l2_error": 2.2850494975140344e-10,
+              "predicted_residual_delta": 3.3165299387081266e-06,
+              "predicted_supplied_work_delta": 0.00040947382836007654,
               "predicted_tick": 9,
               "predicted_time": 0.31500000000000006,
               "prediction_source": "reused_forecast",
-              "residual_abs_error": 6.875590378559641e-05,
-              "supplied_work_abs_error": 9.368999875640016e-06,
+              "realized_residual_delta": 3.159221392459976e-07,
+              "realized_supplied_work_delta": 0.00041884282823571655,
+              "residual_increment_abs_error": 3.000607799462129e-06,
+              "supplied_work_increment_abs_error": 9.368999875640016e-06,
               "total_energy_abs_error": 3.0476763032270164e-06
             },
             "observation": {
@@ -19801,12 +20313,13 @@
               "energy_before": 0.0005609345647876794,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.00041884282823571655,
               "tick_after": 9,
-              "tick_before": 7,
-              "unknown_outcome_ticks": 0
+              "tick_before": 7
             }
           }
         ],
@@ -19932,16 +20445,18 @@
         "budget": {
           "actual_cycle_limit": 4,
           "actual_physics_step_limit": 8,
+          "in_flight_uncertain_physics_steps": 0,
           "known_executed_physics_steps": 8,
+          "never_dispatched_physics_steps": 0,
           "reserved_actual_cycles": 4,
           "reserved_actual_physics_steps": 8,
           "supplied_work": 0.0010505054831251967,
-          "unknown_outcome_physics_steps": 0,
           "virtual_budget_kind": "receding_horizon",
           "virtual_candidate_limit": 100,
           "virtual_candidates": 80,
           "virtual_physics_step_limit": 400,
-          "virtual_physics_steps": 310
+          "virtual_physics_steps": 310,
+          "virtual_physics_steps_semantics": "worst_case_reserved_compute"
         },
         "cycles": [
           {
@@ -19961,16 +20476,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 2,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 1,
               "reserved_actual_physics_steps": 2,
               "supplied_work": 9.365945117327279e-05,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "receding_horizon",
               "virtual_candidate_limit": 100,
               "virtual_candidates": 25,
               "virtual_physics_step_limit": 400,
-              "virtual_physics_steps": 100
+              "virtual_physics_steps": 100,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 0,
             "error": null,
@@ -20142,18 +20659,23 @@
               "reused": false,
               "score": 5.476749450608613,
               "selected_index": 6,
-              "virtual_physics_steps": 100
+              "virtual_physics_steps": 100,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 3,
               "actual_time": 0.10500000000000001,
               "comparison_status": "compared",
               "node_displacement_l2_error": 0.0,
+              "predicted_residual_delta": -2.971062781763816e-05,
+              "predicted_supplied_work_delta": 9.36121302692835e-05,
               "predicted_tick": 3,
               "predicted_time": 0.10500000000000001,
               "prediction_source": "fresh_forecast",
-              "residual_abs_error": 1.6219613288904987e-07,
-              "supplied_work_abs_error": 4.732090398928924e-08,
+              "realized_residual_delta": -2.987282395052721e-05,
+              "realized_supplied_work_delta": 9.365945117327279e-05,
+              "residual_increment_abs_error": 1.6219613288904987e-07,
+              "supplied_work_increment_abs_error": 4.732090398928924e-08,
               "total_energy_abs_error": 1.1523701923290262e-07
             },
             "observation": {
@@ -20267,12 +20789,13 @@
               "energy_before": 0.0,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 9.365945117327279e-05,
               "tick_after": 3,
-              "tick_before": 1,
-              "unknown_outcome_ticks": 0
+              "tick_before": 1
             }
           },
           {
@@ -20292,16 +20815,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 4,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 2,
               "reserved_actual_physics_steps": 4,
               "supplied_work": 0.0003076315686394534,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "receding_horizon",
               "virtual_candidate_limit": 100,
               "virtual_candidates": 50,
               "virtual_physics_step_limit": 400,
-              "virtual_physics_steps": 200
+              "virtual_physics_steps": 200,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 1,
             "error": null,
@@ -20473,18 +20998,23 @@
               "reused": false,
               "score": 1.9411217005590813,
               "selected_index": 6,
-              "virtual_physics_steps": 100
+              "virtual_physics_steps": 100,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 5,
               "actual_time": 0.17500000000000002,
               "comparison_status": "compared",
               "node_displacement_l2_error": 4.991924253406872e-13,
+              "predicted_residual_delta": -2.2378736872175655e-05,
+              "predicted_supplied_work_delta": 0.00021341071774407108,
               "predicted_tick": 5,
               "predicted_time": 0.17500000000000002,
               "prediction_source": "fresh_forecast",
-              "residual_abs_error": 3.0795851698704475e-05,
-              "supplied_work_abs_error": 5.613997221095212e-07,
+              "realized_residual_delta": -2.3301764620352917e-05,
+              "realized_supplied_work_delta": 0.0002139721174661806,
+              "residual_increment_abs_error": 9.230277481772617e-07,
+              "supplied_work_increment_abs_error": 5.613997221095212e-07,
               "total_energy_abs_error": 5.805310760659071e-07
             },
             "observation": {
@@ -20598,12 +21128,13 @@
               "energy_before": 6.348801454292986e-05,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.0002139721174661806,
               "tick_after": 5,
-              "tick_before": 3,
-              "unknown_outcome_ticks": 0
+              "tick_before": 3
             }
           },
           {
@@ -20623,16 +21154,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 6,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 3,
               "reserved_actual_physics_steps": 6,
               "supplied_work": 0.0006316626548894802,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "receding_horizon",
               "virtual_candidate_limit": 100,
               "virtual_candidates": 75,
               "virtual_physics_step_limit": 400,
-              "virtual_physics_steps": 300
+              "virtual_physics_steps": 300,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 2,
             "error": null,
@@ -20804,18 +21337,23 @@
               "reused": false,
               "score": 0.09348086707935249,
               "selected_index": 6,
-              "virtual_physics_steps": 100
+              "virtual_physics_steps": 100,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 7,
               "actual_time": 0.24500000000000002,
               "comparison_status": "compared",
               "node_displacement_l2_error": 4.0296718362113394e-12,
+              "predicted_residual_delta": -1.047586867517294e-05,
+              "predicted_supplied_work_delta": 0.0003224204169551473,
               "predicted_tick": 7,
               "predicted_time": 0.24500000000000002,
               "prediction_source": "fresh_forecast",
-              "residual_abs_error": 5.527942731096134e-05,
-              "supplied_work_abs_error": 1.6106692948794805e-06,
+              "realized_residual_delta": -1.2580707415254154e-05,
+              "realized_supplied_work_delta": 0.0003240310862500268,
+              "residual_increment_abs_error": 2.1048387400812136e-06,
+              "supplied_work_increment_abs_error": 1.6106692948794805e-06,
               "total_energy_abs_error": 2.8040217359408693e-06
             },
             "observation": {
@@ -20929,12 +21467,13 @@
               "energy_before": 0.0002527272678981771,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.0003240310862500268,
               "tick_after": 7,
-              "tick_before": 5,
-              "unknown_outcome_ticks": 0
+              "tick_before": 5
             }
           },
           {
@@ -20954,16 +21493,18 @@
             "budget": {
               "actual_cycle_limit": 4,
               "actual_physics_step_limit": 8,
+              "in_flight_uncertain_physics_steps": 0,
               "known_executed_physics_steps": 8,
+              "never_dispatched_physics_steps": 0,
               "reserved_actual_cycles": 4,
               "reserved_actual_physics_steps": 8,
               "supplied_work": 0.0010505054831251967,
-              "unknown_outcome_physics_steps": 0,
               "virtual_budget_kind": "receding_horizon",
               "virtual_candidate_limit": 100,
               "virtual_candidates": 80,
               "virtual_physics_step_limit": 400,
-              "virtual_physics_steps": 310
+              "virtual_physics_steps": 310,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "cycle": 3,
             "error": null,
@@ -21059,18 +21600,23 @@
               "reused": false,
               "score": 0.09364001773983001,
               "selected_index": 1,
-              "virtual_physics_steps": 10
+              "virtual_physics_steps": 10,
+              "virtual_physics_steps_semantics": "worst_case_reserved_compute"
             },
             "forecast_residual": {
               "actual_tick": 9,
               "actual_time": 0.31500000000000006,
               "comparison_status": "compared",
               "node_displacement_l2_error": 1.5085884808869123e-11,
+              "predicted_residual_delta": 3.6518062951579454e-06,
+              "predicted_supplied_work_delta": 0.0004156977708664397,
               "predicted_tick": 9,
               "predicted_time": 0.31500000000000006,
               "prediction_source": "fresh_forecast",
-              "residual_abs_error": 6.909118014204622e-05,
-              "supplied_work_abs_error": 3.1450573692768345e-06,
+              "realized_residual_delta": 3.159221392459976e-07,
+              "realized_supplied_work_delta": 0.00041884282823571655,
+              "residual_increment_abs_error": 3.3358841559119478e-06,
+              "supplied_work_increment_abs_error": 3.1450573692768345e-06,
               "total_energy_abs_error": 9.872043965779439e-06
             },
             "observation": {
@@ -21184,12 +21730,13 @@
               "energy_before": 0.0005609345647876794,
               "environment_change_applied": false,
               "error": null,
+              "in_flight_uncertain_ticks": 0,
               "known_executed_ticks": 2,
+              "never_dispatched_ticks": 0,
               "status": "executed",
               "supplied_work_delta": 0.00041884282823571655,
               "tick_after": 9,
-              "tick_before": 7,
-              "unknown_outcome_ticks": 0
+              "tick_before": 7
             }
           }
         ],
@@ -21378,6 +21925,7 @@
       "seed": 0,
       "verification": {
         "candidate_sequences": 312,
+        "constraint_check_granularity": "initial_state_and_every_physics_tick",
         "maximum_cycles_checked": 4,
         "reason": "public observation verifier found a bounded witness",
         "status": "reachable",
@@ -21503,6 +22051,7 @@
       "seed": 1,
       "verification": {
         "candidate_sequences": 624,
+        "constraint_check_granularity": "initial_state_and_every_physics_tick",
         "maximum_cycles_checked": 4,
         "reason": "public observation verifier found a bounded witness",
         "status": "reachable",
@@ -21627,6 +22176,7 @@
       "seed": 2,
       "verification": {
         "candidate_sequences": 312,
+        "constraint_check_granularity": "initial_state_and_every_physics_tick",
         "maximum_cycles_checked": 4,
         "reason": "public observation verifier found a bounded witness",
         "status": "reachable",
@@ -21751,6 +22301,7 @@
       "seed": 3,
       "verification": {
         "candidate_sequences": 780,
+        "constraint_check_granularity": "initial_state_and_every_physics_tick",
         "maximum_cycles_checked": 4,
         "reason": "no candidate sequence satisfied the goal within the bounded verification horizon",
         "status": "unreachable",

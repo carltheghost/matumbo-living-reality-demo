@@ -1,7 +1,9 @@
 import dataclasses
 import json
 import unittest
+from unittest.mock import patch
 
+from vevo_agents.physics import ResonantWorld
 from vevo_agents.v03_simulator_planner import (
     ACTION_DURATION_TICKS,
     FULL_EPISODE_CANDIDATE_COUNT,
@@ -27,6 +29,7 @@ from vevo_agents.v03_simulator_planner import (
     run_changed_world_case,
     run_experiment,
     run_strategy,
+    _execute_action,
 )
 
 
@@ -72,12 +75,12 @@ class SimulatorPlannerTests(unittest.TestCase):
             min_target_oscillator_energy=0.0,
             max_neighbor_oscillator_energy=1.0,
             min_node_separation_delta=0.0,
-            max_time=observation.time + ACTION_DURATION_TICKS * 0.035 + 1.0e-12,
+            max_time=observation.time + 0.035 + 1.0e-12,
             max_work=1.0,
-            max_cycles=2,
+            max_cycles=1,
         )
         with self.assertRaises(PlannerError):
-            BoundedPlanner().plan(observation, goal, horizon=2, cycle=0)
+            BoundedPlanner().plan(observation, goal, horizon=1, cycle=0)
 
     def test_virtual_budget_rejects_a_fifth_two_step_forecast_before_work(self):
         planner = BoundedPlanner()
@@ -156,7 +159,8 @@ class SimulatorPlannerTests(unittest.TestCase):
         self.assertEqual(run.budget.reserved_actual_cycles, len(run.cycles))
         self.assertEqual(run.budget.reserved_actual_physics_steps, len(run.cycles) * ACTION_DURATION_TICKS)
         self.assertEqual(run.budget.known_executed_physics_steps, len(run.cycles) * ACTION_DURATION_TICKS)
-        self.assertEqual(run.budget.unknown_outcome_physics_steps, 0)
+        self.assertEqual(run.budget.in_flight_uncertain_physics_steps, 0)
+        self.assertEqual(run.budget.never_dispatched_physics_steps, 0)
         self.assertEqual(run.budget.virtual_candidates, 80)
         self.assertEqual(run.budget.virtual_physics_steps, 310)
         self.assertFalse(run.neural_world_model_used)
@@ -194,7 +198,8 @@ class SimulatorPlannerTests(unittest.TestCase):
         self.assertEqual(run.budget.reserved_actual_cycles, 1)
         self.assertEqual(run.budget.reserved_actual_physics_steps, ACTION_DURATION_TICKS)
         self.assertEqual(run.budget.known_executed_physics_steps, 0)
-        self.assertEqual(run.budget.unknown_outcome_physics_steps, 0)
+        self.assertEqual(run.budget.in_flight_uncertain_physics_steps, 0)
+        self.assertEqual(run.budget.never_dispatched_physics_steps, ACTION_DURATION_TICKS)
         self.assertEqual(run.cycles[0].forecast_residual.comparison_status, "cancelled_before_dispatch")
 
     def test_partial_effect_is_uncertain_and_does_not_continue(self):
@@ -209,8 +214,50 @@ class SimulatorPlannerTests(unittest.TestCase):
         )
         self.assertEqual(run.budget.reserved_actual_cycles, 1)
         self.assertEqual(run.budget.known_executed_physics_steps, 1)
-        self.assertEqual(run.budget.unknown_outcome_physics_steps, 1)
+        self.assertEqual(run.budget.in_flight_uncertain_physics_steps, 0)
+        self.assertEqual(run.budget.never_dispatched_physics_steps, 1)
         self.assertEqual(run.cycles[0].forecast_residual.comparison_status, "uncertain_outcome")
+
+    def test_cancellation_after_first_tick_keeps_remainder_never_dispatched(self):
+        run = run_strategy(self.reachable[0], "receding_horizon", cancel_after_ticks=1)
+        result = run.cycles[0].result
+        self.assertEqual(result.status, "uncertain_outcome")
+        self.assertEqual(result.known_executed_ticks, 1)
+        self.assertEqual(result.in_flight_uncertain_ticks, 0)
+        self.assertEqual(result.never_dispatched_ticks, 1)
+        self.assertEqual(run.budget.known_executed_physics_steps, 1)
+        self.assertEqual(run.budget.in_flight_uncertain_physics_steps, 0)
+        self.assertEqual(run.budget.never_dispatched_physics_steps, 1)
+
+    def test_exception_on_first_tick_marks_only_that_tick_in_flight(self):
+        world = ResonantWorld(seed=0)
+        action = candidate_actions()[1]
+        with patch.object(world, "step", side_effect=RuntimeError("first tick failure")):
+            result = _execute_action(world, action, fixture_id="exception-first", cycle=0)
+        self.assertEqual(result.status, "error")
+        self.assertEqual(result.known_executed_ticks, 0)
+        self.assertEqual(result.in_flight_uncertain_ticks, 1)
+        self.assertEqual(result.never_dispatched_ticks, 1)
+
+    def test_exception_on_second_tick_preserves_first_completed_tick(self):
+        world = ResonantWorld(seed=0)
+        action = candidate_actions()[1]
+        original_step = world.step
+        calls = 0
+
+        def fail_second(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise RuntimeError("second tick failure")
+            return original_step(*args, **kwargs)
+
+        with patch.object(world, "step", side_effect=fail_second):
+            result = _execute_action(world, action, fixture_id="exception-second", cycle=0)
+        self.assertEqual(result.status, "error")
+        self.assertEqual(result.known_executed_ticks, 1)
+        self.assertEqual(result.in_flight_uncertain_ticks, 1)
+        self.assertEqual(result.never_dispatched_ticks, 0)
 
     def test_changed_world_case_is_recorded_and_receding_horizon_replans(self):
         change, runs = run_changed_world_case(self.reachable[0])
@@ -229,13 +276,49 @@ class SimulatorPlannerTests(unittest.TestCase):
         run = run_strategy(self.reachable[0], "receding_horizon", environment_change=change)
         self.assertEqual(run.terminal.status, "constraint_violation")
         self.assertEqual(len(run.cycles), 1)
+        result = run.cycles[0].result
+        self.assertEqual(result.known_executed_ticks, 1)
+        self.assertEqual(result.in_flight_uncertain_ticks, 0)
+        self.assertEqual(result.never_dispatched_ticks, 1)
+
+    def test_actual_tick_cap_stops_before_second_tick(self):
+        world = ResonantWorld(seed=0)
+        observation = PublicObservation.from_world(world, fixture_id="tick-cap", cycle=0)
+        goal = PlanningGoal(
+            goal_id="one-tick-time-cap",
+            target_port=0,
+            min_target_oscillator_energy=0.0,
+            max_neighbor_oscillator_energy=1.0,
+            min_node_separation_delta=0.0,
+            max_time=observation.time + 0.5 * ResonantWorld.DT,
+            max_work=1.0,
+            max_cycles=1,
+        )
+        result = _execute_action(
+            world,
+            candidate_actions()[1],
+            fixture_id="tick-cap",
+            cycle=0,
+            goal=goal,
+        )
+        self.assertEqual(result.status, "budget_exhausted")
+        self.assertEqual(result.known_executed_ticks, 1)
+        self.assertEqual(result.in_flight_uncertain_ticks, 0)
+        self.assertEqual(result.never_dispatched_ticks, 1)
+        self.assertEqual(result.tick_after, result.tick_before + 1)
 
     def test_forecast_residuals_are_serialized_separately_from_errors(self):
         run = run_strategy(self.reachable[0], "greedy")
         payload = run.as_dict()
         self.assertIn("forecast_residual", payload["cycles"][0])
         self.assertEqual(payload["errors"], [])
-        self.assertIn("node_displacement_l2_error", payload["cycles"][0]["forecast_residual"])
+        residual = payload["cycles"][0]["forecast_residual"]
+        self.assertIn("node_displacement_l2_error", residual)
+        self.assertIn("residual_increment_abs_error", residual)
+        self.assertAlmostEqual(
+            residual["realized_residual_delta"],
+            run.cycles[0].observation_after.residual - run.cycles[0].observation.residual,
+        )
 
     def test_result_and_markdown_preserve_honest_claim_boundary(self):
         result = run_experiment()
@@ -250,8 +333,13 @@ class SimulatorPlannerTests(unittest.TestCase):
         self.assertFalse(result["claims"]["physical_safety_guarantee"])
         self.assertFalse(result["claims"]["spatial_navigation_claim"])
         self.assertFalse(result["claims"]["strategy_superiority_claim"])
+        self.assertEqual(result["claims"]["residual_role"], "diagnostic_measurement_only")
+        self.assertFalse(result["claims"]["residuals_control_feedback"])
+        self.assertEqual(result["bounds"]["virtual_physics_steps_semantics"], "worst_case_reserved_compute")
         markdown = render_markdown(result)
         self.assertIn("No physical-safety guarantee", markdown)
+        self.assertIn("diagnostic measurements only", markdown)
+        self.assertIn("worst-case reserved compute", markdown)
         encoded = json.dumps(result, sort_keys=True, allow_nan=False)
         self.assertIn('"two_step_candidate_count": 25', encoded)
         self.assertIn('"full_episode_candidate_count": 625', encoded)

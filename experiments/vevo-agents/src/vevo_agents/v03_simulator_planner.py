@@ -14,8 +14,11 @@ The prototype is intentionally small and auditable:
 * virtual rollout accounting is separate from the four-cycle actual budget and
   the full-episode open-loop baseline has its own larger, explicit cost;
 * only the first receding-horizon action is executed before a fresh observation;
-* cancellation, execution errors, and uncertain effects are terminal and never
-  bypassed by trying another action.
+* cancellation, execution errors, uncertain effects, and realized hard
+  constraint violations are terminal and never bypassed by trying another
+  action;
+* forecast residuals are diagnostic measurements only and never control
+  feedback.
 """
 
 from __future__ import annotations
@@ -413,7 +416,8 @@ class BudgetSnapshot:
     reserved_actual_cycles: int
     reserved_actual_physics_steps: int
     known_executed_physics_steps: int
-    unknown_outcome_physics_steps: int
+    in_flight_uncertain_physics_steps: int
+    never_dispatched_physics_steps: int
     virtual_candidates: int
     virtual_physics_steps: int
     supplied_work: float
@@ -428,7 +432,9 @@ class BudgetSnapshot:
             "reserved_actual_cycles": self.reserved_actual_cycles,
             "reserved_actual_physics_steps": self.reserved_actual_physics_steps,
             "known_executed_physics_steps": self.known_executed_physics_steps,
-            "unknown_outcome_physics_steps": self.unknown_outcome_physics_steps,
+            "in_flight_uncertain_physics_steps": self.in_flight_uncertain_physics_steps,
+            "never_dispatched_physics_steps": self.never_dispatched_physics_steps,
+            "virtual_physics_steps_semantics": "worst_case_reserved_compute",
             "virtual_candidates": self.virtual_candidates,
             "virtual_physics_steps": self.virtual_physics_steps,
             "supplied_work": self.supplied_work,
@@ -455,7 +461,8 @@ class _BudgetState:
         self.reserved_actual_cycles = 0
         self.reserved_actual_physics_steps = 0
         self.known_executed_physics_steps = 0
-        self.unknown_outcome_physics_steps = 0
+        self.in_flight_uncertain_physics_steps = 0
+        self.never_dispatched_physics_steps = 0
         self.virtual_candidates = 0
         self.virtual_physics_steps = 0
 
@@ -479,7 +486,8 @@ class _BudgetState:
 
     def record_action_result(self, result: "ActionResult") -> None:
         self.known_executed_physics_steps += result.known_executed_ticks
-        self.unknown_outcome_physics_steps += result.unknown_outcome_ticks
+        self.in_flight_uncertain_physics_steps += result.in_flight_uncertain_ticks
+        self.never_dispatched_physics_steps += result.never_dispatched_ticks
 
     def snapshot(self, supplied_work: float) -> BudgetSnapshot:
         return BudgetSnapshot(
@@ -491,7 +499,8 @@ class _BudgetState:
             reserved_actual_cycles=self.reserved_actual_cycles,
             reserved_actual_physics_steps=self.reserved_actual_physics_steps,
             known_executed_physics_steps=self.known_executed_physics_steps,
-            unknown_outcome_physics_steps=self.unknown_outcome_physics_steps,
+            in_flight_uncertain_physics_steps=self.in_flight_uncertain_physics_steps,
+            never_dispatched_physics_steps=self.never_dispatched_physics_steps,
             virtual_candidates=self.virtual_candidates,
             virtual_physics_steps=self.virtual_physics_steps,
             supplied_work=float(supplied_work),
@@ -557,6 +566,7 @@ class ForecastRecord:
             "rejected_candidate_count": self.rejected_candidate_count,
             "rejection_counts": {name: count for name, count in self.rejection_counts},
             "virtual_physics_steps": self.virtual_physics_steps,
+            "virtual_physics_steps_semantics": "worst_case_reserved_compute",
             "actions": [action.as_dict() for action in self.actions],
             "predicted_observations": [observation.as_dict() for observation in self.predicted_observations],
             "predicted_assessments": [assessment.as_dict() for assessment in self.predicted_assessments],
@@ -568,13 +578,19 @@ class ForecastRecord:
 
 @dataclass(frozen=True, slots=True)
 class ForecastResidual:
-    """Public forecast-versus-realized residuals for one action cycle."""
+    """Diagnostic-only public forecast-versus-realized measurements.
+
+    These values are recorded for audit and comparison.  They are not fed back
+    into action scoring, model adaptation, or any other control decision.
+    """
 
     comparison_status: Literal[
         "compared",
         "cancelled_before_dispatch",
         "uncertain_outcome",
         "execution_error",
+        "constraint_violation",
+        "budget_exhausted",
     ]
     prediction_source: Literal["fresh_forecast", "reused_forecast", "coast_diagnostic"]
     predicted_tick: int
@@ -583,8 +599,12 @@ class ForecastResidual:
     actual_time: float
     node_displacement_l2_error: float
     total_energy_abs_error: float
-    residual_abs_error: float
-    supplied_work_abs_error: float
+    predicted_residual_delta: float
+    realized_residual_delta: float
+    residual_increment_abs_error: float
+    predicted_supplied_work_delta: float
+    realized_supplied_work_delta: float
+    supplied_work_increment_abs_error: float
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -596,14 +616,25 @@ class ForecastResidual:
             "actual_time": self.actual_time,
             "node_displacement_l2_error": self.node_displacement_l2_error,
             "total_energy_abs_error": self.total_energy_abs_error,
-            "residual_abs_error": self.residual_abs_error,
-            "supplied_work_abs_error": self.supplied_work_abs_error,
+            "predicted_residual_delta": self.predicted_residual_delta,
+            "realized_residual_delta": self.realized_residual_delta,
+            "residual_increment_abs_error": self.residual_increment_abs_error,
+            "predicted_supplied_work_delta": self.predicted_supplied_work_delta,
+            "realized_supplied_work_delta": self.realized_supplied_work_delta,
+            "supplied_work_increment_abs_error": self.supplied_work_increment_abs_error,
         }
 
 
 @dataclass(frozen=True, slots=True)
 class ActionResult:
-    status: Literal["executed", "cancelled", "uncertain_outcome", "error"]
+    status: Literal[
+        "executed",
+        "cancelled",
+        "uncertain_outcome",
+        "error",
+        "constraint_violation",
+        "budget_exhausted",
+    ]
     cycle: int
     action: PlannerAction
     tick_before: int
@@ -613,8 +644,20 @@ class ActionResult:
     supplied_work_delta: float
     environment_change_applied: bool
     known_executed_ticks: int
-    unknown_outcome_ticks: int
+    in_flight_uncertain_ticks: int
+    never_dispatched_ticks: int
     error: str | None = None
+
+    def __post_init__(self) -> None:
+        counts = (
+            self.known_executed_ticks,
+            self.in_flight_uncertain_ticks,
+            self.never_dispatched_ticks,
+        )
+        if any(type(value) is not int or value < 0 for value in counts):
+            raise PlannerError("action tick accounting must be non-negative integers")
+        if sum(counts) != self.action.duration_ticks:
+            raise PlannerError("action tick accounting must partition the fixed action duration")
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -628,7 +671,8 @@ class ActionResult:
             "supplied_work_delta": self.supplied_work_delta,
             "environment_change_applied": self.environment_change_applied,
             "known_executed_ticks": self.known_executed_ticks,
-            "unknown_outcome_ticks": self.unknown_outcome_ticks,
+            "in_flight_uncertain_ticks": self.in_flight_uncertain_ticks,
+            "never_dispatched_ticks": self.never_dispatched_ticks,
             "error": self.error,
         }
 
@@ -790,6 +834,7 @@ class FixtureVerification:
             "candidate_sequences": self.candidate_sequences,
             "maximum_cycles_checked": self.maximum_cycles_checked,
             "witness": [action.as_dict() for action in self.witness],
+            "constraint_check_granularity": "initial_state_and_every_physics_tick",
             "reason": self.reason,
         }
 
@@ -871,20 +916,40 @@ class KnownSimulatorPredictor:
         world.events = []
         return world
 
+    def predict_action_ticks(
+        self,
+        observation: PublicObservation,
+        action: PlannerAction,
+    ) -> tuple[PublicObservation, ...]:
+        """Forecast every physics tick of one action from public state."""
+
+        if not isinstance(action, PlannerAction):
+            raise PlannerError("predictor received an invalid action")
+        world = self._world_from_public_observation(observation)
+        ticks: list[PublicObservation] = []
+        for _ in range(action.duration_ticks):
+            world.step(
+                np.asarray(action.drive_vector, dtype=np.float64),
+                include_cue=False,
+                include_distractors=False,
+            )
+            ticks.append(
+                PublicObservation.from_world(
+                    world,
+                    fixture_id=observation.fixture_id,
+                    cycle=observation.cycle,
+                )
+            )
+        return tuple(ticks)
+
     def predict(self, observation: PublicObservation, actions: Sequence[PlannerAction]) -> PublicObservation:
         if len(actions) > FULL_EPISODE_OPEN_LOOP_HORIZON:
             raise PlannerError("predictor horizon exceeds the bounded horizon")
-        world = self._world_from_public_observation(observation)
+        current = observation
         for action in actions:
-            if not isinstance(action, PlannerAction):
-                raise PlannerError("predictor received an invalid action")
-            for _ in range(action.duration_ticks):
-                world.step(
-                    np.asarray(action.drive_vector, dtype=np.float64),
-                    include_cue=False,
-                    include_distractors=False,
-                )
-        return PublicObservation.from_world(world, fixture_id=observation.fixture_id, cycle=observation.cycle + len(actions))
+            ticks = self.predict_action_ticks(current, action)
+            current = replace(ticks[-1], cycle=current.cycle + 1)
+        return current
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -916,11 +981,22 @@ def _public_observation(world: ResonantWorld, fixture_id: str, cycle: int) -> Pu
     return PublicObservation.from_world(world, fixture_id=fixture_id, cycle=cycle)
 
 
-def _run_actions_publicly(world: ResonantWorld, actions: Sequence[PlannerAction]) -> PublicObservation:
-    for action in actions:
+def _run_action_trace_publicly(
+    world: ResonantWorld,
+    actions: Sequence[PlannerAction],
+    *,
+    fixture_id: str = "fixture-verification",
+) -> tuple[PublicObservation, ...]:
+    observations: list[PublicObservation] = []
+    for action_index, action in enumerate(actions, start=1):
         for _ in range(action.duration_ticks):
             world.step(np.asarray(action.drive_vector), include_cue=False, include_distractors=False)
-    return _public_observation(world, "fixture-verification", len(actions))
+            observations.append(_public_observation(world, fixture_id, action_index))
+    return tuple(observations)
+
+
+def _run_actions_publicly(world: ResonantWorld, actions: Sequence[PlannerAction]) -> PublicObservation:
+    return _run_action_trace_publicly(world, actions)[-1]
 
 
 def verify_fixture_reachability(spec: FixtureSpec) -> FrozenFixture:
@@ -934,8 +1010,12 @@ def verify_fixture_reachability(spec: FixtureSpec) -> FrozenFixture:
         for sequence in itertools.product(actions, repeat=cycle_count):
             checked += 1
             world = _world_for_fixture(spec)
-            observation = _run_actions_publicly(world, sequence)
-            if spec.goal.assess(observation).reached:
+            trace = _run_action_trace_publicly(world, sequence)
+            initial_assessment = spec.goal.assess(initial)
+            prefix_constraints_ok = initial_assessment.hard_constraints_ok and all(
+                spec.goal.assess(observation).hard_constraints_ok for observation in trace
+            )
+            if prefix_constraints_ok and spec.goal.assess(trace[-1]).reached:
                 return FrozenFixture(
                     spec=spec,
                     initial_observation=initial,
@@ -983,8 +1063,15 @@ class BoundedPlanner:
 
         action = candidate_actions()[0]
         self.budget.reserve_virtual(1, ACTION_DURATION_TICKS)
-        predicted = self.predictor.predict(observation, (action,))
+        tick_predictions = self.predictor.predict_action_ticks(observation, action)
+        tick_assessments = tuple(goal.assess(item) for item in tick_predictions)
+        predicted = replace(tick_predictions[-1], cycle=observation.cycle + 1)
         assessment = goal.assess(predicted)
+        failures = tuple(
+            failure
+            for item in tick_assessments
+            for failure in item.hard_constraint_failures
+        )
         return ForecastRecord(
             predictor_schema=self.predictor.predictor_schema,
             plan_cycle=cycle,
@@ -997,9 +1084,9 @@ class BoundedPlanner:
             selected_index=0,
             score=assessment.score(goal),
             planning_horizon=1,
-            feasible_candidate_count=int(assessment.hard_constraints_ok),
-            rejected_candidate_count=int(not assessment.hard_constraints_ok),
-            rejection_counts=tuple((name, 1) for name in assessment.hard_constraint_failures),
+            feasible_candidate_count=int(all(item.hard_constraints_ok for item in tick_assessments)),
+            rejected_candidate_count=int(not all(item.hard_constraints_ok for item in tick_assessments)),
+            rejection_counts=tuple((name, failures.count(name)) for name in sorted(set(failures))),
         )
 
     def plan(self, observation: PublicObservation, goal: PlanningGoal, *, horizon: int, cycle: int) -> ForecastRecord:
@@ -1019,15 +1106,20 @@ class BoundedPlanner:
             assessments: list[GoalAssessment] = []
             valid = True
             for action in sequence:
-                current = self.predictor.predict(current, (action,))
+                tick_predictions = self.predictor.predict_action_ticks(current, action)
+                for tick_prediction in tick_predictions:
+                    tick_assessment = goal.assess(tick_prediction)
+                    if not tick_assessment.hard_constraints_ok:
+                        for failure in tick_assessment.hard_constraint_failures:
+                            rejection_counts[failure] = rejection_counts.get(failure, 0) + 1
+                        valid = False
+                        break
+                if not valid:
+                    break
+                current = replace(tick_predictions[-1], cycle=current.cycle + 1)
                 predicted.append(current)
                 assessment = goal.assess(current)
                 assessments.append(assessment)
-                if not assessment.hard_constraints_ok:
-                    for failure in assessment.hard_constraint_failures:
-                        rejection_counts[failure] = rejection_counts.get(failure, 0) + 1
-                    valid = False
-                    break
             if not valid:
                 continue
             feasible_candidate_count += 1
@@ -1099,12 +1191,20 @@ def _execute_action(
     *,
     fixture_id: str,
     cycle: int,
+    goal: PlanningGoal | None = None,
     environment_change: EnvironmentChange | None = None,
     cancel_before: bool = False,
     cancel_after_ticks: int | None = None,
     uncertain_after_ticks: int | None = None,
 ) -> ActionResult:
-    """Execute exactly one action; partial effects become terminal uncertainty."""
+    """Execute one action with post-tick hard-constraint checks.
+
+    A completed tick is known completed.  If a cancellation arrives after a
+    completed tick, the remaining ticks were never dispatched.  If ``step``
+    raises while invoking a tick, only that currently invoked tick is
+    in-flight uncertain; earlier ticks remain known and later ticks remain
+    never dispatched.
+    """
 
     tick_before = int(world.tick)
     energy_before = float(world.energy())
@@ -1121,7 +1221,8 @@ def _execute_action(
             supplied_work_delta=0.0,
             environment_change_applied=False,
             known_executed_ticks=0,
-            unknown_outcome_ticks=0,
+            in_flight_uncertain_ticks=0,
+            never_dispatched_ticks=action.duration_ticks,
             error="cancelled before action dispatch",
         )
     if cancel_after_ticks is not None and (type(cancel_after_ticks) is not int or cancel_after_ticks < 1):
@@ -1143,6 +1244,41 @@ def _execute_action(
                 include_distractors=False,
             )
             ticks_done += 1
+            if goal is not None:
+                tick_observation = _public_observation(world, fixture_id, cycle + 1)
+                tick_assessment = goal.assess(tick_observation)
+                if not tick_assessment.neighbor_energy_ok:
+                    return ActionResult(
+                        status="constraint_violation",
+                        cycle=cycle,
+                        action=action,
+                        tick_before=tick_before,
+                        tick_after=int(world.tick),
+                        energy_before=energy_before,
+                        energy_after=float(world.energy()),
+                        supplied_work_delta=float(world.supplied_work - work_before),
+                        environment_change_applied=environment_applied,
+                        known_executed_ticks=ticks_done,
+                        in_flight_uncertain_ticks=0,
+                        never_dispatched_ticks=action.duration_ticks - ticks_done,
+                        error="actual neighbor energy exceeded the hard constraint",
+                    )
+                if not tick_assessment.time_ok or not tick_assessment.work_ok:
+                    return ActionResult(
+                        status="budget_exhausted",
+                        cycle=cycle,
+                        action=action,
+                        tick_before=tick_before,
+                        tick_after=int(world.tick),
+                        energy_before=energy_before,
+                        energy_after=float(world.energy()),
+                        supplied_work_delta=float(world.supplied_work - work_before),
+                        environment_change_applied=environment_applied,
+                        known_executed_ticks=ticks_done,
+                        in_flight_uncertain_ticks=0,
+                        never_dispatched_ticks=action.duration_ticks - ticks_done,
+                        error="actual time or supplied-work constraint exceeded",
+                    )
             if uncertain_after_ticks is not None and ticks_done >= uncertain_after_ticks:
                 return ActionResult(
                     status="uncertain_outcome",
@@ -1155,7 +1291,8 @@ def _execute_action(
                     supplied_work_delta=float(world.supplied_work - work_before),
                     environment_change_applied=environment_applied,
                     known_executed_ticks=ticks_done,
-                    unknown_outcome_ticks=action.duration_ticks - ticks_done,
+                    in_flight_uncertain_ticks=0,
+                    never_dispatched_ticks=action.duration_ticks - ticks_done,
                     error="effect became uncertain after partial dispatch",
                 )
             if cancel_after_ticks is not None and ticks_done >= cancel_after_ticks:
@@ -1170,7 +1307,8 @@ def _execute_action(
                     supplied_work_delta=float(world.supplied_work - work_before),
                     environment_change_applied=environment_applied,
                     known_executed_ticks=ticks_done,
-                    unknown_outcome_ticks=action.duration_ticks - ticks_done,
+                    in_flight_uncertain_ticks=0,
+                    never_dispatched_ticks=action.duration_ticks - ticks_done,
                     error="cancellation arrived after dispatch began",
                 )
     except Exception as exc:  # pragma: no cover - exercised through a test hook
@@ -1185,7 +1323,8 @@ def _execute_action(
             supplied_work_delta=float(world.supplied_work - work_before),
             environment_change_applied=environment_applied,
             known_executed_ticks=ticks_done,
-            unknown_outcome_ticks=action.duration_ticks - ticks_done,
+            in_flight_uncertain_ticks=int(ticks_done < action.duration_ticks),
+            never_dispatched_ticks=max(0, action.duration_ticks - ticks_done - 1),
             error=str(exc),
         )
     return ActionResult(
@@ -1199,7 +1338,8 @@ def _execute_action(
         supplied_work_delta=float(world.supplied_work - work_before),
         environment_change_applied=environment_applied,
         known_executed_ticks=action.duration_ticks,
-        unknown_outcome_ticks=0,
+        in_flight_uncertain_ticks=0,
+        never_dispatched_ticks=0,
     )
 
 
@@ -1208,15 +1348,15 @@ def _precheck_action_budget(
     action: PlannerAction,
     goal: PlanningGoal,
 ) -> str | None:
-    """Reject a pulse before dispatch when a deterministic bound is known."""
+    """Reject a pulse only when the current public state is already over cap.
 
-    projected_time = observation.time + action.duration_ticks * ResonantWorld.DT
-    if projected_time > goal.max_time + 1.0e-12:
-        return "deterministic elapsed-time budget would be exceeded before dispatch"
-    # Supplied work is monotone.  A safe upper bound for an arbitrary external
-    # disturbance is not available from the public observation, so only an
-    # already-exhausted work budget is prechecked; realized work is checked
-    # immediately after dispatch.
+    Future time and supplied-work caps are checked after every physics tick by
+    ``_execute_action``.  In particular, this permits the first tick of a
+    two-tick action to complete when only the second tick would exceed a cap.
+    """
+
+    if observation.time > goal.max_time + 1.0e-12:
+        return "elapsed-time budget was already exhausted before dispatch"
     if observation.supplied_work > goal.max_work + 1.0e-12:
         return "supplied-work budget was already exhausted before dispatch"
     return None
@@ -1224,19 +1364,31 @@ def _precheck_action_budget(
 
 def _forecast_residual(
     forecast: ForecastRecord,
+    prior: PublicObservation,
     realized: PublicObservation,
     result: ActionResult,
     *,
     prediction_source: Literal["fresh_forecast", "reused_forecast", "coast_diagnostic"],
 ) -> ForecastResidual:
     predicted = forecast.predicted_observations[0]
-    status: Literal["compared", "cancelled_before_dispatch", "uncertain_outcome", "execution_error"]
+    status: Literal[
+        "compared",
+        "cancelled_before_dispatch",
+        "uncertain_outcome",
+        "execution_error",
+        "constraint_violation",
+        "budget_exhausted",
+    ]
     if result.status == "cancelled":
         status = "cancelled_before_dispatch"
     elif result.status == "uncertain_outcome":
         status = "uncertain_outcome"
     elif result.status == "error":
         status = "execution_error"
+    elif result.status == "constraint_violation":
+        status = "constraint_violation"
+    elif result.status == "budget_exhausted":
+        status = "budget_exhausted"
     else:
         status = "compared"
     displacement_error = float(
@@ -1254,8 +1406,15 @@ def _forecast_residual(
         actual_time=realized.time,
         node_displacement_l2_error=displacement_error,
         total_energy_abs_error=abs(predicted.total_energy - realized.total_energy),
-        residual_abs_error=abs(predicted.residual - realized.residual),
-        supplied_work_abs_error=abs(predicted.supplied_work - realized.supplied_work),
+        predicted_residual_delta=predicted.residual,
+        realized_residual_delta=realized.residual - prior.residual,
+        residual_increment_abs_error=abs(predicted.residual - (realized.residual - prior.residual)),
+        predicted_supplied_work_delta=predicted.supplied_work - prior.supplied_work,
+        realized_supplied_work_delta=realized.supplied_work - prior.supplied_work,
+        supplied_work_increment_abs_error=abs(
+            (predicted.supplied_work - prior.supplied_work)
+            - (realized.supplied_work - prior.supplied_work)
+        ),
     )
 
 
@@ -1377,6 +1536,7 @@ def run_strategy(
             action,
             fixture_id=fixture.spec.fixture_id,
             cycle=cycle,
+            goal=fixture.spec.goal,
             environment_change=environment_change,
             cancel_before=cancel_before,
             cancel_after_ticks=cancel_after_ticks,
@@ -1386,6 +1546,7 @@ def run_strategy(
         budget.record_action_result(result)
         residual = _forecast_residual(
             forecast,
+            observation,
             after,
             result,
             prediction_source=prediction_source,
@@ -1409,7 +1570,13 @@ def run_strategy(
             )
         )
         if result.status != "executed":
-            terminal_status: Literal["cancelled", "uncertain_outcome", "execution_error"]
+            terminal_status: Literal[
+                "cancelled",
+                "uncertain_outcome",
+                "execution_error",
+                "constraint_violation",
+                "budget_exhausted",
+            ]
             terminal_status = "execution_error" if result.status == "error" else result.status
             terminal = TerminalOutcome(terminal_status, cycle, result.error or result.status, True)
             observation = after
@@ -1549,6 +1716,7 @@ def run_experiment() -> dict[str, Any]:
             "max_actual_physics_steps": MAX_ACTUAL_PHYSICS_STEPS,
             "max_virtual_candidates": MAX_VIRTUAL_CANDIDATES,
             "max_virtual_physics_steps": MAX_VIRTUAL_PHYSICS_STEPS,
+            "virtual_physics_steps_semantics": "worst_case_reserved_compute",
         },
         "strategy_definitions": {
             strategy: {
@@ -1596,6 +1764,8 @@ def run_experiment() -> dict[str, Any]:
             "spatial_navigation_claim": False,
             "separation_threshold_interpretation": "1e-8 is a tiny development threshold, not meaningful navigation",
             "strategy_superiority_claim": False,
+            "residual_role": "diagnostic_measurement_only",
+            "residuals_control_feedback": False,
             "interpretation": "bounded development evidence only; strategy outcomes are reported without manufacturing superiority",
         },
     }
@@ -1618,6 +1788,8 @@ def render_markdown(result: dict[str, Any]) -> str:
         f"- Virtual rollout candidate limit: `{result['bounds']['max_virtual_candidates']}`",
         f"- Predictor parameterization: `{result['claims']['predictor_parameterization']}`; mismatch expected: `{result['claims']['predictor_mismatch_expected']}`",
         f"- Neural geometry status: `{result['claims']['neural_geometry_integration']}`",
+        f"- Virtual physics-step semantics: `{result['bounds']['virtual_physics_steps_semantics']}`",
+        f"- Forecast residual role: `{result['claims']['residual_role']}`; control feedback: `{result['claims']['residuals_control_feedback']}`",
         "",
         "## Fixtures",
         "",
@@ -1649,7 +1821,7 @@ def render_markdown(result: dict[str, Any]) -> str:
             "",
             f"All receding-horizon plan cycles: `{changed['receding_horizon_replanned_after_change']}`; cycles after the cycle-1 change became observable: `{changed['receding_horizon_plan_cycles_after_change_observable']}` (first observable cycle `{changed['change_first_observable_cycle']}`).",
             "",
-            "No physical-safety guarantee, meaningful spatial-navigation claim, neural/geometry benefit, or strategy-superiority claim is made. The full JSON preserves forecasts, forecast-versus-realized residuals, observations, results, errors, and budgets.",
+            "No physical-safety guarantee, meaningful spatial-navigation claim, neural/geometry benefit, or strategy-superiority claim is made. Forecast residuals are diagnostic measurements only, never control feedback. Virtual physics steps are worst-case reserved compute, not measured execution. The full JSON preserves forecasts, forecast-versus-realized residuals, observations, results, errors, and budgets.",
             "",
         ]
     )

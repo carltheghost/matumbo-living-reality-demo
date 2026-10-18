@@ -40,7 +40,9 @@ ticks because each action lasts two ticks. Virtual candidate and virtual
 physics-step budgets are tracked separately by strategy: the two-step
 receding planner has a 100-candidate/400-step cap, while the fair full-episode
 open-loop baseline evaluates `5**4 == 625` candidates and 5,000 virtual
-physics steps once.
+physics steps once. These virtual physics-step values are worst-case reserved
+compute for the declared candidate/horizon envelope, not measured simulator
+execution; candidates may terminate early after a failed tick check.
 
 ## Goal and fixture protocol
 
@@ -75,18 +77,29 @@ fixtures:
 The old two-step-open-loop result is retained unchanged alongside the corrected
 comparison as `v03-simulator-planner-results-original.json` and `.md`.
 
-Candidate scoring rejects any sequence whose intermediate or terminal forecast
-violates neighbor energy, elapsed time, or supplied-work constraints. Actual
-execution performs a deterministic time/work precheck where possible and
-terminates immediately on a realized neighbor-energy violation. This is
-constraint accounting, not a safety guarantee under nominal-model mismatch.
+Candidate scoring rejects any sequence whose every-physics-tick forecast
+violates neighbor energy, elapsed time, or supplied-work constraints. A
+reachability witness is accepted only when the initial state and every physics
+tick of every witness action satisfy those hard constraints, not merely when
+the final state does. Actual execution applies the same hard checks after each
+physics tick and stops before dispatching the next tick when a completed tick
+violates one. Only already-exhausted public budgets are prechecked before
+dispatch, so a two-tick action can report one known completed tick plus one
+never-dispatched tick when its first tick remains feasible but its second would
+exceed a cap. This is constraint accounting, not a safety guarantee under
+nominal-model mismatch.
 
-The actual budget is at most four cycles and eight physics steps. Forecasts,
-observations, actions, results, errors, terminal outcomes, and budgets are
-frozen dataclass records (serialized as JSON only at the artifact boundary).
-Cancellation before dispatch, partial/uncertain effects, and execution errors
-are terminal. They set `alternatives_blocked=true`; the planner does not try a
-second action after an uncertain or cancelled action.
+The actual budget is at most four cycles and eight physics steps. The reserved
+actual budget remains separate from its accounting partition: completed ticks
+are `known_executed_ticks`, a tick whose invocation raised is
+`in_flight_uncertain_ticks`, and the remaining ticks are
+`never_dispatched_ticks`. Cancellation after a completed tick therefore does
+not make that tick unknown. Forecasts, observations, actions, results, errors,
+terminal outcomes, and budgets are frozen dataclass records (serialized as JSON
+only at the artifact boundary). Cancellation before or after dispatch, partial
+effects, and execution errors are terminal. They set
+`alternatives_blocked=true`; the planner does not try a second action after an
+uncertain, cancelled, or failed action.
 
 A controlled changed-world case applies a deterministic external drive during
 cycle 1. The observation after that action is the first changed observation,
@@ -96,10 +109,15 @@ measurements, results, and all planning cycles.
 
 Every run is a new seeded run; it never resumes a previous world. Forecast
 residuals compare public predicted and realized observations explicitly, even
-for cancellation or partial uncertainty; execution exceptions are not counted
-as prediction errors. The separation threshold is only `1e-8`, a tiny
-development threshold, and does not support a meaningful spatial-navigation
-claim.
+for cancellation or partial uncertainty. Because the nominal predictor resets
+initial energy, signed work, and dissipation for each forecast from the public
+state, `predicted.residual` is a forecast increment and is compared with
+`realized.residual - prior.residual`; the analogous supplied-work increment is
+also serialized. These residuals are diagnostic measurements only: they are
+not control feedback, action-score inputs, or adaptation signals. Execution
+exceptions are not counted as prediction errors. The separation threshold is
+only `1e-8`, a tiny development threshold, and does not support a meaningful
+spatial-navigation claim.
 
 ## Reproduction
 
