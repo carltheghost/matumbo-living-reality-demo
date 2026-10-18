@@ -465,6 +465,9 @@ class V03HybridCoreTests(unittest.TestCase):
             rtol=1e-12,
             atol=1e-12,
         )
+        geometry_energies = np.asarray(numeric_trace["tension"]["energies"], dtype=np.float64)
+        self.assertTrue(np.all(np.diff(geometry_energies) <= 1e-10))
+        self.assertTrue(np.all(np.isfinite(geometry_energies)))
         self.assertEqual(numeric_trace["tension"]["objective_coefficients"]["weights"][0].shape, (4, 12))
         self.assertEqual(numeric_trace["geometry"]["metric"].shape, (4, 4))
         self.assertIs(
@@ -513,6 +516,29 @@ class V03HybridCoreTests(unittest.TestCase):
         default_core = V03HybridCore(51)
         with self.assertRaises(HybridCoreSnapshotError):
             default_core.restore_runtime(snapshot)
+
+    def test_geometry_runtime_snapshot_replays_next_step_from_nonzero_state(self):
+        core = V03HybridCore(53, geometry_enabled=True)
+        first_vector, second_vector = self._vectors(54, 2)
+        first_runtime, _ = core.step(core.initial_runtime(), first_vector)
+        self.assertGreater(float(np.linalg.norm(first_runtime["central"])), 0.0)
+        snapshot = core.snapshot_runtime(first_runtime)
+        restored = core.restore_runtime(snapshot)
+        next_a, trace_a = core.step(first_runtime, second_vector)
+        next_b, trace_b = core.step(restored, second_vector)
+        self._assert_runtime_close(next_a, next_b)
+        np.testing.assert_allclose(
+            trace_a["attention"]["context"],
+            trace_b["attention"]["context"],
+            rtol=1e-12,
+            atol=1e-12,
+        )
+        np.testing.assert_allclose(
+            trace_a["tension"]["energies"],
+            trace_b["tension"]["energies"],
+            rtol=1e-12,
+            atol=1e-12,
+        )
 
     def test_feedback_is_causal_and_dt_is_validated(self):
         core = V03HybridCore(43)

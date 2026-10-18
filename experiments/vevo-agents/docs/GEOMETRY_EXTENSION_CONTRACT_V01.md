@@ -23,11 +23,17 @@ G = g_min I + (g_max - g_min) B^T B / (1 + ||B||_F^2)
 
 with fixed untuned bounds `g_min = 0.5` and `g_max = 2.0`. The metric is a constant SPD matrix during each attention/refinement evaluation. It is a flat coordinate metric, not a curved manifold, not physical extra dimensions, and not a circle or hyperbolic expansion.
 
+The implementation accepts only `max(abs(B)) <= 1.0e6`. This explicit domain
+keeps the 16-entry square/sum, Gram products, and the local-autograd quotient
+backward intermediates finite in float64. Shared attention and tension
+coordinates are also bounded by `max(abs(coordinate)) <= 16.0` on both numeric
+and Tensor paths.
+
 ## Functional Requirements
 
 - FR-1: The module MUST use dimension four for shared message, memory, query, key, and tension-proposal coordinates.
 - FR-2: Numeric metric construction MUST implement the exact bounded SPD formula above, preserve symmetry, and return finite eigenvalues in `[0.5, 2.0]`.
-- FR-3: Tensor metric construction MUST implement the same formula using the repository autograd Tensor operations and MUST expose gradients to raw `B`.
+- FR-3: Tensor metric construction MUST implement the same formula using the repository autograd Tensor operations, MUST expose gradients to raw `B`, and MUST reject raw values outside the finite backward-safe domain.
 - FR-4: A learned attention inverse-temperature/distance coefficient MUST be bounded by a fixed `beta_max = 1.0` through a differentiable sigmoid parameterization; the same metric MUST be used for every attention distance penalty.
 - FR-5: The metric MUST enter the attention logit as a negative bounded-beta multiple of squared metric distance, with an explicit exact no-distance ablation.
 - FR-6: The metric MUST enter the proposal tension quadratic through `r_i^T G r_i`, with shared 4D residual coordinates, `n x 4 x 12` maps from the retained 12D center, and a fixed Euclidean anchor term. Numeric and Tensor energy functions MUST agree.
@@ -41,7 +47,7 @@ with fixed untuned bounds `g_min = 0.5` and `g_max = 2.0`. The metric is a const
 
 - NFR-1: The module MUST use NumPy and the repository's existing local autograd implementation only; no network, provider, credential, or paid resource is permitted.
 - NFR-2: Numeric and Tensor paths MUST be deterministic for identical inputs and MUST use the same formula and coordinate ordering.
-- NFR-3: Every public numeric input MUST be finite and shape-checked; boolean, ragged, non-finite, wrong-dimensional, mismatched-count, and unsafe raw-magnitude inputs MUST fail explicitly before arithmetic.
+- NFR-3: Every public numeric or Tensor input MUST be finite and shape-checked; boolean, ragged, non-finite, wrong-dimensional, mismatched-count, out-of-contract coordinate, and unsafe raw-magnitude inputs MUST fail explicitly before arithmetic.
 - NFR-4: The metric MUST be bounded by construction; callers MUST NOT tune `g_min`, `g_max`, or `beta_max` through runtime arguments.
 - NFR-5: A constant SPD metric MUST be documented as flat geometry. The implementation MUST NOT imply curvature, physical extra dimensions, circle expansion, or hyperbolic expansion.
 - NFR-6: Checkpoint serialization MUST be canonical and version-sensitive; a failed restore MUST not mutate a caller's arrays.
@@ -54,7 +60,7 @@ Given finite message, memory, query, key, proposal, and residual coordinates, wh
 
 ### AC-2: Exact bounded SPD formula (FR-2, NFR-4)
 
-Given a finite raw 4x4 matrix `B`, when the numeric constructor runs, then its result MUST equal the stated formula, be symmetric to floating-point tolerance, and have eigenvalues between `0.5` and `2.0`.
+Given a finite raw 4x4 matrix `B` within the explicit `1.0e6` absolute-entry domain, when the numeric constructor runs, then its result MUST equal the stated formula, be symmetric to floating-point tolerance, and have eigenvalues between `0.5` and `2.0`. Values outside that domain MUST be rejected before squaring.
 
 ### AC-3: Numeric/autograd metric parity (FR-2, FR-3, NFR-2)
 
@@ -96,6 +102,7 @@ Given `V03HybridCore(geometry_enabled=True)`, when one numeric and one Tensor st
 
 - EC-1: A zero raw matrix MUST produce `0.5 I`, not an unbounded or singular matrix.
 - EC-2: A raw matrix with very large unsafe finite entries MUST be rejected before `B^T B`; accepted finite values remain within the fixed upper eigenbound.
+- EC-2a: An accepted raw matrix at the `1.0e6` boundary MUST have finite numeric and Tensor forward values and finite raw-matrix gradients.
 - EC-3: A zero-dimensional, 3D, 5D, ragged, or non-finite matrix MUST be rejected.
 - EC-4: A metric with an asymmetric perturbation MUST be rejected by metric validation rather than silently symmetrized at the public boundary.
 - EC-5: A zero-length key list MUST return an empty logit vector with no fabricated attention mass.

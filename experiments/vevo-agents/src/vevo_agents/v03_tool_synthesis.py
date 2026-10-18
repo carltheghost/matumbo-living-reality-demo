@@ -476,12 +476,16 @@ def _parse_operation(value: Any, constants: Mapping[str, Scalar]) -> Operation:
     if not isinstance(value, dict) or "op" not in value:
         raise SpecParseError("operation must be a JSON object with op")
     kind = value["op"]
+    if not isinstance(kind, str):
+        raise SpecParseError("operation kind must be a string", operation=kind)
     if kind not in _OPERATION_KEYS:
         raise UnsupportedOperationError("operation is unsupported", operation=kind)
     if set(value) != _OPERATION_KEYS[kind]:
         raise SpecParseError("operation has unexpected or missing fields", operation=kind)
     if kind == "filter":
         operator = value["operator"]
+        if not isinstance(operator, str):
+            raise SpecParseError("filter operator must be a string", operator=operator)
         if operator not in _COMPARISON_OPERATORS:
             raise SpecParseError("filter operator is unsupported", operator=operator)
         return FilterOp(
@@ -493,6 +497,8 @@ def _parse_operation(value: Any, constants: Mapping[str, Scalar]) -> Operation:
         return ProjectOp(_validate_output_columns(value["columns"], constants))
     if kind == "derive":
         operator = value["operator"]
+        if not isinstance(operator, str):
+            raise SpecParseError("derive operator must be a string", operator=operator)
         if operator not in _ARITHMETIC_OPERATORS:
             raise SpecParseError("derive operator is unsupported", operator=operator)
         return DeriveOp(

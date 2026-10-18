@@ -119,6 +119,22 @@ class V03ToolSynthesisTests(unittest.TestCase):
         with self.assertRaises(Exception):
             parse_spec(json.dumps(nonfinite))
 
+    def test_operation_and_operator_types_fail_with_typed_parser_errors(self):
+        malformed_operation = json.loads(DEVELOPMENT_SPEC_DOCUMENT)
+        malformed_operation["operations"][0] = {"op": [], "left": {}, "operator": "ge", "right": {}}
+        with self.assertRaises(SpecParseError):
+            parse_spec(json.dumps(malformed_operation))
+
+        malformed_filter = json.loads(DEVELOPMENT_SPEC_DOCUMENT)
+        malformed_filter["operations"][0]["operator"] = []
+        with self.assertRaises(SpecParseError):
+            parse_spec(json.dumps(malformed_filter))
+
+        malformed_derive = json.loads(DEVELOPMENT_SPEC_DOCUMENT)
+        malformed_derive["operations"][2]["operator"] = {}
+        with self.assertRaises(SpecParseError):
+            parse_spec(json.dumps(malformed_derive))
+
     def test_independent_resource_caps_fail_without_truncation(self):
         cases = (
             (ResourceLimits(max_input_bytes=1), "input_bytes"),
@@ -206,12 +222,35 @@ class V03ToolSynthesisTests(unittest.TestCase):
     def test_filters_after_projects_are_rejected_by_static_order_contract(self):
         invalid = json.loads(DEVELOPMENT_SPEC_DOCUMENT)
         invalid["operations"] = [
-            invalid["operations"][1],
             invalid["operations"][0],
-            invalid["operations"][3],
+            invalid["operations"][1],
+            dict(invalid["operations"][0]),
         ]
         with self.assertRaises(SpecParseError):
             parse_spec(json.dumps(invalid))
+
+    def test_final_output_rows_are_charged_independently(self):
+        document = json.loads(DEVELOPMENT_SPEC_DOCUMENT)
+        document["operations"] = [
+            {
+                "op": "explicit_output",
+                "columns": [
+                    {"source": {"kind": "field", "name": "id"}, "as": "id"},
+                    {"source": {"kind": "field", "name": "score"}, "as": "score"},
+                ],
+            }
+        ]
+        spec = parse_spec(json.dumps(document))
+        table = {
+            "schema": "vevo.v03.tool-synthesis.table.v1",
+            "columns": ["id", "score"],
+            "rows": [{"id": "a", "score": 1}, {"id": "b", "score": 2}],
+        }
+        limited = execute(spec, table, ResourceLimits(max_steps=2))
+        self.assertEqual(limited.status, "failure")
+        self.assertEqual(limited.error["context"]["resource"], "steps")
+        empty = dict(table, rows=[])
+        self.assertEqual(execute(spec, empty, ResourceLimits(max_steps=1)).status, "success")
 
     def test_empty_gold_set_is_inconclusive(self):
         report = verify_gold_cases(self.spec, ())

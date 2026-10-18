@@ -12,6 +12,8 @@ from vevo_agents.v03_hybrid_geometry import (
     GEOMETRY_MODEL_VERSION,
     GEOMETRY_SNAPSHOT_SCHEMA,
     GeometryError,
+    MAX_COORDINATE_ABS,
+    MAX_SAFE_RAW_B_ABS,
     bounded_beta_numeric,
     bounded_beta_tensor,
     bounded_spd_metric_numeric,
@@ -81,6 +83,16 @@ class V03HybridGeometryTests(unittest.TestCase):
         self.assertTrue(np.isfinite(raw_tensor.grad).all())
         self.assertGreater(float(np.linalg.norm(raw_tensor.grad)), 0.0)
 
+    def test_extreme_accepted_raw_metric_has_finite_forward_and_backward(self):
+        raw = np.full((4, 4), MAX_SAFE_RAW_B_ABS * 0.99, dtype=np.float64)
+        numeric = bounded_spd_metric_numeric(raw)
+        self.assertTrue(np.isfinite(numeric).all())
+        raw_tensor = Tensor(raw, requires_grad=True)
+        tensor_metric = bounded_spd_metric_tensor(raw_tensor)
+        self.assertTrue(np.isfinite(tensor_metric.data).all())
+        (tensor_metric * tensor_metric).sum().backward()
+        self.assertTrue(np.isfinite(raw_tensor.grad).all())
+
     def test_bounded_beta_and_gradient(self):
         self.assertGreaterEqual(bounded_beta_numeric(-100.0), 0.0)
         self.assertLessEqual(bounded_beta_numeric(100.0), BETA_MAX)
@@ -130,6 +142,38 @@ class V03HybridGeometryTests(unittest.TestCase):
         self.assertTrue(np.isfinite(tensor_beta.grad).all())
         self.assertGreater(float(np.linalg.norm(tensor_metric.grad)), 0.0)
 
+    def test_attention_rejects_boolean_logits_and_unbounded_tensor_coordinates(self):
+        with self.assertRaises(GeometryError):
+            metric_attention_logits_numeric(
+                self.query,
+                self.keys,
+                self.metric,
+                0.0,
+                np.asarray(True),
+            )
+        with self.assertRaises(GeometryError):
+            metric_attention_logits_numeric(
+                self.query,
+                self.keys,
+                self.metric,
+                0.0,
+                np.asarray([True, False]),
+            )
+        with self.assertRaises(GeometryError):
+            metric_attention_logits_tensor(
+                Tensor(np.full(4, MAX_COORDINATE_ABS + 1.0)),
+                Tensor(self.keys),
+                Tensor(self.metric),
+                Tensor(0.0),
+            )
+        with self.assertRaises(GeometryError):
+            metric_attention_logits_tensor(
+                Tensor(self.query),
+                Tensor(np.vstack((self.keys, np.full(4, MAX_COORDINATE_ABS + 1.0)))),
+                Tensor(self.metric),
+                Tensor(0.0),
+            )
+
     def test_tension_energy_parity_and_gradients(self):
         numeric = metric_tension_energy_numeric(
             self.state, self.proposals, self.maps, self.alpha, 0.4, self.prior, self.metric
@@ -146,6 +190,18 @@ class V03HybridGeometryTests(unittest.TestCase):
         for parameter in (state, proposals, maps, alpha, prior, metric):
             self.assertTrue(np.isfinite(parameter.grad).all())
         self.assertGreater(float(np.linalg.norm(metric.grad)), 0.0)
+
+    def test_tensor_tension_rejects_unbounded_proposals_like_numeric_path(self):
+        with self.assertRaises(GeometryError):
+            metric_tension_energy_tensor(
+                Tensor(self.state),
+                Tensor(np.full_like(self.proposals, MAX_COORDINATE_ABS + 1.0)),
+                Tensor(self.maps),
+                Tensor(self.alpha),
+                0.4,
+                Tensor(self.prior),
+                Tensor(self.metric),
+            )
 
     def test_curvature_bound_and_frozen_projected_refinement(self):
         expected_bound = G_MAX * float(np.sum(self.alpha * np.sum(self.maps * self.maps, axis=(1, 2)))) + 0.4

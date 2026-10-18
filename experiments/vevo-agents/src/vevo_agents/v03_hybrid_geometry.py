@@ -31,7 +31,11 @@ BETA_MAX = 1.0
 REFINEMENT_RADIUS = 2.0
 MAX_REFINEMENT_STEPS = 64
 GEOMETRY_EPSILON = 1.0e-12
-MAX_SAFE_RAW_B_ABS = 1.0e100
+# The raw metric formula squares and sums 16 entries and its Tensor quotient
+# backward path also squares the denominator.  This bound keeps every forward
+# product, Gram sum, and quotient-backward intermediate comfortably finite in
+# float64 for both the numeric and local-autograd implementations.
+MAX_SAFE_RAW_B_ABS = 1.0e6
 MAX_COORDINATE_ABS = 16.0
 
 
@@ -126,6 +130,8 @@ def bounded_spd_metric_tensor(raw_B: Tensor) -> Tensor:
 
     if not isinstance(raw_B, Tensor) or raw_B.shape != (SHARED_GEOMETRY_DIM, SHARED_GEOMETRY_DIM):
         raise GeometryError("raw_B must be a Tensor with shape (4, 4)")
+    if raw_B.data.dtype.kind == "b":
+        raise GeometryError("raw_B must not be a boolean array")
     if not np.isfinite(raw_B.data).all():
         raise GeometryError("raw_B must be finite")
     if np.max(np.abs(raw_B.data), initial=0.0) > MAX_SAFE_RAW_B_ABS:
@@ -157,7 +163,13 @@ def bounded_beta_tensor(raw_beta: Tensor) -> Tensor:
 
 
 def _validate_base_logits(base_logits: Any, count: int) -> np.ndarray:
-    result = np.zeros(count, dtype=np.float64) if base_logits is None else np.asarray(base_logits, dtype=np.float64)
+    if base_logits is None:
+        result = np.zeros(count, dtype=np.float64)
+    else:
+        raw = np.asarray(base_logits)
+        if raw.dtype.kind == "b":
+            raise GeometryError("base_logits must not be a boolean array")
+        result = np.asarray(base_logits, dtype=np.float64)
     if result.shape != (count,) or not np.isfinite(result).all():
         raise GeometryError(f"base_logits must be finite with shape ({count},)")
     return result.copy()
@@ -192,8 +204,16 @@ def metric_attention_logits_numeric(
 def _tensor_matrix(value: Tensor, *, name: str, shape: tuple[int, ...]) -> Tensor:
     if not isinstance(value, Tensor) or value.shape != shape:
         raise GeometryError(f"{name} must be a Tensor with shape {shape}")
+    if value.data.dtype.kind == "b":
+        raise GeometryError(f"{name} must not be a boolean array")
     if not np.isfinite(value.data).all():
         raise GeometryError(f"{name} must be finite")
+    return value
+
+
+def _validate_tensor_coordinates(value: Tensor, *, name: str) -> Tensor:
+    if np.any(np.abs(value.data) > MAX_COORDINATE_ABS):
+        raise GeometryError(f"{name} exceeds the bounded coordinate contract")
     return value
 
 
@@ -208,8 +228,16 @@ def metric_attention_logits_tensor(
 ) -> Tensor:
     """Autograd attention logits using the same shared metric formula."""
 
-    query_value = _tensor_matrix(query, name="query", shape=(SHARED_GEOMETRY_DIM,))
-    key_values = _tensor_matrix(keys, name="keys", shape=(keys.shape[0], SHARED_GEOMETRY_DIM))
+    query_value = _validate_tensor_coordinates(
+        _tensor_matrix(query, name="query", shape=(SHARED_GEOMETRY_DIM,)),
+        name="query",
+    )
+    if not isinstance(keys, Tensor) or keys.data.ndim != 2 or keys.shape[1] != SHARED_GEOMETRY_DIM:
+        raise GeometryError(f"keys must be a Tensor with shape (n, {SHARED_GEOMETRY_DIM})")
+    key_values = _validate_tensor_coordinates(
+        _tensor_matrix(keys, name="keys", shape=(keys.shape[0], SHARED_GEOMETRY_DIM)),
+        name="keys",
+    )
     metric_value = _tensor_matrix(
         metric,
         name="metric",
@@ -332,10 +360,15 @@ def metric_tension_energy_tensor(
     if not np.isfinite(state.data).all():
         raise GeometryError("state must be finite")
     state_value = state
-    proposal_values = _tensor_matrix(
-        proposals,
+    if not isinstance(proposals, Tensor) or proposals.data.ndim != 2 or proposals.shape[1] != SHARED_GEOMETRY_DIM:
+        raise GeometryError(f"proposals must be a Tensor with shape (n, {SHARED_GEOMETRY_DIM})")
+    proposal_values = _validate_tensor_coordinates(
+        _tensor_matrix(
+            proposals,
+            name="proposals",
+            shape=(proposals.shape[0], SHARED_GEOMETRY_DIM),
+        ),
         name="proposals",
-        shape=(proposals.shape[0], SHARED_GEOMETRY_DIM),
     )
     if not isinstance(maps, Tensor) or maps.data.ndim != 3 or maps.shape[0] != proposals.shape[0]:
         raise GeometryError("maps and proposals must have the same count")

@@ -171,6 +171,15 @@ class OversizedExecutor(HarmlessFixtureExecutor):
         return {"payload": "x" * 200}
 
 
+class DeepOutputExecutor(HarmlessFixtureExecutor):
+    def execute(self, action_value, cancellation):
+        self.call_count += 1
+        output = {"leaf": "stable"}
+        for _ in range(MAX_ACTION_INPUT_DEPTH + 2):
+            output = {"next": output}
+        return output
+
+
 class RevokingExecutor(HarmlessFixtureExecutor):
     def __init__(self, descriptor, authority, grant):
         super().__init__(descriptor)
@@ -717,6 +726,44 @@ class V03PermissionTests(unittest.TestCase):
         self.assertEqual(broker.execute(explicit_new, new_grant).status, "uncertain_outcome")
         self.assertEqual(executor.call_count, 2)
 
+    def test_pending_new_operation_cannot_replace_unknown_alias_for_old_grant(self):
+        descriptor = capability(name="pending-alias")
+        executor = RaisingExecutor(descriptor)
+        broker = PermissionBroker(self.authority, clock=self.clock)
+        broker.register_capability(descriptor, executor)
+        original = action(capability_name="pending-alias", arguments={"variant": "A"}, idempotency_key="a")
+        grant = self._approve_with(broker, original, max_uses=5, max_spend=5)
+        variant = action(capability_name="pending-alias", arguments={"variant": "B"}, idempotency_key="b-first")
+        self.assertEqual(broker.execute(variant, grant).status, "uncertain_outcome")
+        pending = broker.request_approval(
+            action(capability_name="pending-alias", arguments={"variant": "B"}, idempotency_key="b-pending"),
+            "neural-proposer",
+            new_operation=True,
+        )
+        self.assertEqual(pending.status, "pending")
+        retry = action(capability_name="pending-alias", arguments={"variant": "B"}, idempotency_key="b-retry-pending")
+        self.assertEqual(broker.execute(retry, grant).status, "uncertain_outcome")
+        self.assertEqual(executor.call_count, 1)
+
+    def test_denied_new_operation_cannot_replace_unknown_alias_for_old_grant(self):
+        descriptor = capability(name="denied-alias")
+        executor = RaisingExecutor(descriptor)
+        broker = PermissionBroker(self.authority, clock=self.clock)
+        broker.register_capability(descriptor, executor)
+        original = action(capability_name="denied-alias", arguments={"variant": "A"}, idempotency_key="a")
+        grant = self._approve_with(broker, original, max_uses=5, max_spend=5)
+        variant = action(capability_name="denied-alias", arguments={"variant": "B"}, idempotency_key="b-first")
+        self.assertEqual(broker.execute(variant, grant).status, "uncertain_outcome")
+        pending = broker.request_approval(
+            action(capability_name="denied-alias", arguments={"variant": "B"}, idempotency_key="b-denied"),
+            "neural-proposer",
+            new_operation=True,
+        )
+        self.assertEqual(self.authority.deny(pending.request_id).status, "denied")
+        retry = action(capability_name="denied-alias", arguments={"variant": "B"}, idempotency_key="b-retry-denied")
+        self.assertEqual(broker.execute(retry, grant).status, "uncertain_outcome")
+        self.assertEqual(executor.call_count, 1)
+
     def test_completed_replay_requires_current_read_authorization(self):
         value = action(idempotency_key="cached-output")
         original_grant = self.approve(value, max_uses=2, max_spend=2)
@@ -767,6 +814,17 @@ class V03PermissionTests(unittest.TestCase):
         broker = PermissionBroker(self.authority, clock=self.clock)
         broker.register_capability(descriptor, executor)
         value = action(capability_name="oversized", idempotency_key="oversized")
+        grant = self._approve_with(broker, value, max_uses=2, max_spend=2)
+        self.assertEqual(broker.execute(value, grant).status, "uncertain_outcome")
+        self.assertEqual(broker.execute(value, grant).status, "uncertain_outcome")
+        self.assertEqual(executor.call_count, 1)
+
+    def test_receipt_validation_failure_after_dispatch_is_unknown_and_no_blind_rerun(self):
+        descriptor = capability(name="deep-output")
+        executor = DeepOutputExecutor(descriptor)
+        broker = PermissionBroker(self.authority, clock=self.clock)
+        broker.register_capability(descriptor, executor)
+        value = action(capability_name="deep-output", idempotency_key="deep-output")
         grant = self._approve_with(broker, value, max_uses=2, max_spend=2)
         self.assertEqual(broker.execute(value, grant).status, "uncertain_outcome")
         self.assertEqual(broker.execute(value, grant).status, "uncertain_outcome")

@@ -578,6 +578,7 @@ class _RequestRecord:
     bound_action_digest: str
     operation_id: str
     semantic_digest: str
+    new_operation: bool = False
     status: str = "pending"
 
 
@@ -670,9 +671,8 @@ class LocalTestAuthority:
         with self._lock:
             alias_key = (requester, semantic_digest)
             operation_id = self._new_operation_id() if new_operation or alias_key not in self._operation_aliases else self._operation_aliases[alias_key]
-            self._operation_aliases[alias_key] = operation_id
             self._operations.setdefault(operation_id, _LogicalOperation(operation_id, semantic_digest))
-            record = _RequestRecord(request_id, action, capability, proposer, bound_digest, operation_id, semantic_digest)
+            record = _RequestRecord(request_id, action, capability, proposer, bound_digest, operation_id, semantic_digest, new_operation)
             self._requests[request_id] = record
         return PermissionState("pending", request_id, bound_digest, "awaiting independent authority approval", action.requested_permissions(), operation_id=operation_id)
 
@@ -709,6 +709,7 @@ class LocalTestAuthority:
                 operations, scopes, destinations = (frozenset({request.action.operation}), frozenset({request.action.resource_scope}), frozenset({request.action.data_destination}))
             token = secrets.token_urlsafe(32)
             constraints = _GrantConstraints(hashlib.sha256(token.encode()).hexdigest()[:24], capability.name, capability.tool_version, capability.workspace_id, operations, scopes, destinations, max_spend_units, approval_mode, approving_identity)
+            self._activate_operation_locked(request)
             self._grants[token] = _GrantRecord(token, request, constraints, expiry, max_uses, max_spend_units)
             request.status = "approved"
             return GrantHandle(token)
@@ -877,9 +878,10 @@ class LocalTestAuthority:
                 raise PermissionError("canonical action changed at commit")
             current = self._live_intersection(reservation.chain, now, allow_nonlive=True)
             exceptions = ("revoked_after_start_cannot_undo_effect",) if current is None else ()
+            stored_receipt = ExecutionReceipt("executed", reservation.action_digest, dict(output_payload), None, action.requested_permissions(), current.as_permissions() if current else None, exceptions, audit)
             reservation.state = "completed"
             self._idempotency[reservation.key] = (reservation.action_digest, "completed", reservation_id)
-            self._receipts[reservation_id] = ExecutionReceipt("executed", reservation.action_digest, dict(output_payload), None, action.requested_permissions(), current.as_permissions() if current else None, exceptions, audit)
+            self._receipts[reservation_id] = stored_receipt
             operation = self._operations.get(reservation.operation_id)
             if operation is not None:
                 operation.state = "completed"
@@ -953,6 +955,15 @@ class LocalTestAuthority:
     @staticmethod
     def _new_operation_id() -> str:
         return f"op_{secrets.token_urlsafe(24)}"
+
+    def _activate_operation_locked(self, request: _RequestRecord) -> None:
+        alias_key = (request.action.requester or request.proposer, request.semantic_digest)
+        current = self._operation_aliases.get(alias_key)
+        if request.new_operation or current is None:
+            self._operation_aliases[alias_key] = request.operation_id
+        elif current != request.operation_id:
+            request.operation_id = current
+        self._operations.setdefault(request.operation_id, _LogicalOperation(request.operation_id, request.semantic_digest))
 
     def _delegation_chain(self, value: DelegationContext | GrantHandle) -> tuple[str, ...]:
         if isinstance(value, GrantHandle):
