@@ -205,6 +205,7 @@ class ResourceLimits:
     max_ast_nodes: int = 256
     max_steps: int = 4096
     max_output_bytes: int = 64 * 1024
+    max_nesting_depth: int = 32
 
     def __post_init__(self) -> None:
         values = (
@@ -217,6 +218,7 @@ class ResourceLimits:
             ("max_ast_nodes", self.max_ast_nodes),
             ("max_steps", self.max_steps),
             ("max_output_bytes", self.max_output_bytes),
+            ("max_nesting_depth", self.max_nesting_depth),
         )
         for name, value in values:
             if type(value) is not int or value <= 0:
@@ -323,7 +325,40 @@ def _reject_json_constant(value: str) -> Any:
     raise SpecParseError("non-finite JSON number is not permitted", value=value)
 
 
-def _load_json_document(document: bytes | str, *, label: str) -> tuple[Any, bytes]:
+def _lexical_nesting_depth(raw: bytes) -> int:
+    """Bound structural nesting before handing bytes to json.loads."""
+
+    depth = 0
+    maximum = 0
+    in_string = False
+    escaped = False
+    for byte in raw:
+        character = chr(byte)
+        if in_string:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == '"':
+                in_string = False
+            continue
+        if character == '"':
+            in_string = True
+        elif character in "[{":
+            depth += 1
+            maximum = max(maximum, depth)
+        elif character in "]}":
+            depth = max(0, depth - 1)
+    return maximum
+
+
+def _load_json_document(
+    document: bytes | str,
+    *,
+    label: str,
+    max_bytes: int | None = None,
+    max_nesting_depth: int | None = None,
+) -> tuple[Any, bytes]:
     if isinstance(document, bytes):
         raw = document
         try:
@@ -335,6 +370,13 @@ def _load_json_document(document: bytes | str, *, label: str) -> tuple[Any, byte
         text = document
     else:
         raise SpecParseError(f"{label} must be bytes or str JSON", label=label)
+    if max_bytes is not None and len(raw) > max_bytes:
+        resource = "spec_bytes" if label == "specification" else "input_bytes"
+        raise ResourceLimitError(resource, len(raw), max_bytes)
+    if max_nesting_depth is not None:
+        nesting = _lexical_nesting_depth(raw)
+        if nesting > max_nesting_depth:
+            raise ResourceLimitError("nesting_depth", nesting, max_nesting_depth)
     try:
         value = json.loads(
             text,
@@ -343,31 +385,48 @@ def _load_json_document(document: bytes | str, *, label: str) -> tuple[Any, byte
         )
     except ToolSynthesisError:
         raise
+    except RecursionError as exc:
+        limit = max_nesting_depth if max_nesting_depth is not None else 0
+        raise ResourceLimitError("nesting_depth", limit + 1, limit) from exc
     except (TypeError, ValueError, json.JSONDecodeError) as exc:
         raise SpecParseError(f"{label} is not valid JSON", label=label) from exc
     return value, raw
 
 
-def _json_token_count(value: Any) -> int:
-    """Count one token for each scalar/key/container in canonical JSON data."""
+def _json_token_count(value: Any, *, max_depth: int | None = None) -> int:
+    """Count JSON tokens iteratively, with an explicit structural depth bound."""
 
-    if isinstance(value, dict):
-        return 1 + sum(1 + _json_token_count(item) for item in value.values())
-    if isinstance(value, list):
-        return 1 + sum(_json_token_count(item) for item in value)
-    return 1
+    count = 0
+    stack: list[tuple[Any, int]] = [(value, 0)]
+    while stack:
+        current, depth = stack.pop()
+        if max_depth is not None and depth > max_depth:
+            raise ResourceLimitError("nesting_depth", depth, max_depth)
+        count += 1
+        if isinstance(current, dict):
+            count += len(current)
+            stack.extend((item, depth + 1) for item in current.values())
+        elif isinstance(current, list):
+            stack.extend((item, depth + 1) for item in current)
+    return count
 
 
 def _literal_stats(value: Any) -> tuple[int, int]:
     """Return scalar literal count and canonical byte size, excluding object keys."""
 
-    if isinstance(value, dict):
-        counts = [_literal_stats(item) for item in value.values()]
-        return sum(item[0] for item in counts), sum(item[1] for item in counts)
-    if isinstance(value, list):
-        counts = [_literal_stats(item) for item in value]
-        return sum(item[0] for item in counts), sum(item[1] for item in counts)
-    return 1, len(_canonical_json_bytes(value))
+    count = 0
+    size = 0
+    stack = [value]
+    while stack:
+        current = stack.pop()
+        if isinstance(current, dict):
+            stack.extend(current.values())
+        elif isinstance(current, list):
+            stack.extend(current)
+        else:
+            count += 1
+            size += len(_canonical_json_bytes(current))
+    return count, size
 
 
 def _canonical_json_bytes(value: Any) -> bytes:
@@ -474,7 +533,7 @@ def _spec_from_mapping(value: Any) -> ToolSpec:
         raise SpecParseError("exactly one explicit_output must be final")
     filter_positions = [index for index, operation in enumerate(operations) if isinstance(operation, FilterOp)]
     project_positions = [index for index, operation in enumerate(operations) if isinstance(operation, ProjectOp)]
-    if filter_positions and project_positions and filter_positions[0] > project_positions[0]:
+    if filter_positions and project_positions and max(filter_positions) > min(project_positions):
         raise SpecParseError("filter must precede project")
     if sum(isinstance(operation, DeriveOp) for operation in operations) > 1:
         raise SpecParseError("only one derive operation is permitted")
@@ -537,22 +596,28 @@ def serialize_spec(spec: ToolSpec) -> bytes:
 
 
 def parse_spec(document: bytes | str, *, limits: ResourceLimits = DEFAULT_RESOURCE_LIMITS) -> ToolSpec:
-    value, raw = _load_json_document(document, label="specification")
-    if len(raw) > limits.max_spec_bytes:
-        raise ResourceLimitError("spec_bytes", len(raw), limits.max_spec_bytes)
-    token_count = _json_token_count(value)
-    if token_count > limits.max_spec_tokens:
-        raise ResourceLimitError("spec_tokens", token_count, limits.max_spec_tokens)
-    literal_count, literal_bytes = _literal_stats(value)
-    if literal_count > limits.max_literals:
-        raise ResourceLimitError("literal_count", literal_count, limits.max_literals)
-    if literal_bytes > limits.max_literal_bytes:
-        raise ResourceLimitError("literal_bytes", literal_bytes, limits.max_literal_bytes)
-    spec = _spec_from_mapping(value)
-    ast_nodes = _estimate_ast_nodes(spec)
-    if ast_nodes > limits.max_ast_nodes:
-        raise ResourceLimitError("ast_nodes", ast_nodes, limits.max_ast_nodes)
-    return spec
+    try:
+        value, raw = _load_json_document(
+            document,
+            label="specification",
+            max_bytes=limits.max_spec_bytes,
+            max_nesting_depth=limits.max_nesting_depth,
+        )
+        token_count = _json_token_count(value, max_depth=limits.max_nesting_depth)
+        if token_count > limits.max_spec_tokens:
+            raise ResourceLimitError("spec_tokens", token_count, limits.max_spec_tokens)
+        literal_count, literal_bytes = _literal_stats(value)
+        if literal_count > limits.max_literals:
+            raise ResourceLimitError("literal_count", literal_count, limits.max_literals)
+        if literal_bytes > limits.max_literal_bytes:
+            raise ResourceLimitError("literal_bytes", literal_bytes, limits.max_literal_bytes)
+        spec = _spec_from_mapping(value)
+        ast_nodes = _estimate_ast_nodes(spec)
+        if ast_nodes > limits.max_ast_nodes:
+            raise ResourceLimitError("ast_nodes", ast_nodes, limits.max_ast_nodes)
+        return spec
+    except RecursionError as exc:
+        raise ResourceLimitError("nesting_depth", limits.max_nesting_depth + 1, limits.max_nesting_depth) from exc
 
 
 def _estimate_ast_nodes(spec: ToolSpec) -> int:
@@ -598,24 +663,60 @@ def _validate_table_mapping(value: Any, *, expected_schema: str = TOOL_SYNTHESIS
     return Table(expected_schema, tuple(columns), tuple(rows))
 
 
+def _validate_evolving_references(spec: ToolSpec, initial_columns: tuple[str, ...]) -> None:
+    """Validate every field reference against the schema at its operation point."""
+
+    current = tuple(initial_columns)
+
+    def check(reference: Ref) -> None:
+        if isinstance(reference, FieldRef) and reference.name not in current:
+            raise MissingFieldError("field is missing from the current table", field=reference.name)
+
+    for operation in spec.operations:
+        if isinstance(operation, FilterOp):
+            check(operation.left)
+            check(operation.right)
+        elif isinstance(operation, ProjectOp):
+            for column in operation.columns:
+                check(column.source)
+            current = tuple(column.name for column in operation.columns)
+        elif isinstance(operation, DeriveOp):
+            check(operation.left)
+            check(operation.right)
+            if operation.name in current:
+                raise TypeValidationError("derived field already exists", field=operation.name)
+            current = current + (operation.name,)
+        elif isinstance(operation, ExplicitOutputOp):
+            for column in operation.columns:
+                check(column.source)
+
+
 def validate_table(
     table: bytes | str | Mapping[str, Any],
     *,
     limits: ResourceLimits = DEFAULT_RESOURCE_LIMITS,
 ) -> Table:
-    if isinstance(table, (bytes, str)):
-        value, raw = _load_json_document(table, label="table")
-    elif isinstance(table, Mapping):
-        value = dict(table)
-        raw = _canonical_json_bytes(value)
-    else:
-        raise TableValidationError("table must be JSON bytes, str, or mapping")
-    if len(raw) > limits.max_input_bytes:
-        raise ResourceLimitError("input_bytes", len(raw), limits.max_input_bytes)
-    token_count = _json_token_count(value)
-    if token_count > limits.max_input_tokens:
-        raise ResourceLimitError("input_tokens", token_count, limits.max_input_tokens)
-    return _validate_table_mapping(value)
+    try:
+        if isinstance(table, (bytes, str)):
+            value, raw = _load_json_document(
+                table,
+                label="table",
+                max_bytes=limits.max_input_bytes,
+                max_nesting_depth=limits.max_nesting_depth,
+            )
+        elif isinstance(table, Mapping):
+            value = dict(table)
+            raw = _canonical_json_bytes(value)
+            if len(raw) > limits.max_input_bytes:
+                raise ResourceLimitError("input_bytes", len(raw), limits.max_input_bytes)
+        else:
+            raise TableValidationError("table must be JSON bytes, str, or mapping")
+        token_count = _json_token_count(value, max_depth=limits.max_nesting_depth)
+        if token_count > limits.max_input_tokens:
+            raise ResourceLimitError("input_tokens", token_count, limits.max_input_tokens)
+        return _validate_table_mapping(value)
+    except RecursionError as exc:
+        raise ResourceLimitError("nesting_depth", limits.max_nesting_depth + 1, limits.max_nesting_depth) from exc
 
 
 def _enforce_limit(resource: str, observed: int, limit: int) -> None:
@@ -718,23 +819,30 @@ def execute(
         spec_mapping = spec_to_mapping(spec)
         spec_bytes = _canonical_json_bytes(spec_mapping)
         usage.spec_bytes = len(spec_bytes)
-        usage.spec_tokens = _json_token_count(spec_mapping)
+        usage.spec_tokens = _json_token_count(spec_mapping, max_depth=limits.max_nesting_depth)
         spec_literals, spec_literal_bytes = _literal_stats(spec_mapping)
         usage.literal_count = spec_literals
         usage.literal_bytes = spec_literal_bytes
         _enforce_limit("spec_bytes", usage.spec_bytes, limits.max_spec_bytes)
         _enforce_limit("spec_tokens", usage.spec_tokens, limits.max_spec_tokens)
-        _enforce_limit("ast_nodes", _estimate_ast_nodes(spec), limits.max_ast_nodes)
+        usage.ast_nodes = _estimate_ast_nodes(spec)
+        _enforce_limit("ast_nodes", usage.ast_nodes, limits.max_ast_nodes)
 
         if isinstance(table, (bytes, str)):
-            table_value, table_raw = _load_json_document(table, label="table")
+            table_value, table_raw = _load_json_document(
+                table,
+                label="table",
+                max_bytes=limits.max_input_bytes,
+                max_nesting_depth=limits.max_nesting_depth,
+            )
         elif isinstance(table, Mapping):
             table_value = dict(table)
             table_raw = _canonical_json_bytes(table_value)
+            _enforce_limit("input_bytes", len(table_raw), limits.max_input_bytes)
         else:
             raise TableValidationError("table must be JSON bytes, str, or mapping")
         usage.input_bytes = len(table_raw)
-        usage.input_tokens = _json_token_count(table_value)
+        usage.input_tokens = _json_token_count(table_value, max_depth=limits.max_nesting_depth)
         table_literals, table_literal_bytes = _literal_stats(table_value)
         usage.literal_count += table_literals
         usage.literal_bytes += table_literal_bytes
@@ -743,6 +851,7 @@ def execute(
         _enforce_limit("literal_count", usage.literal_count, limits.max_literals)
         _enforce_limit("literal_bytes", usage.literal_bytes, limits.max_literal_bytes)
         current_table = _validate_table_mapping(table_value)
+        _validate_evolving_references(spec, current_table.columns)
 
         current_columns = current_table.columns
         current_rows = current_table.rows
@@ -787,6 +896,8 @@ def execute(
                 explicit_output = operation
         if explicit_output is None:
             raise SpecParseError("specification has no explicit output")
+        usage.steps += len(current_rows)
+        _enforce_limit("steps", usage.steps, limits.max_steps)
         output_columns, output_rows = _execute_columns(
             explicit_output.columns, current_columns, current_rows, spec.constants
         )
@@ -794,9 +905,12 @@ def execute(
         output_mapping = output_table.as_mapping(output=True)
         output_bytes = _canonical_json_bytes(output_mapping)
         usage.output_bytes = len(output_bytes)
-        usage.output_tokens = _json_token_count(output_mapping)
+        usage.output_tokens = _json_token_count(output_mapping, max_depth=limits.max_nesting_depth)
         _enforce_limit("output_bytes", usage.output_bytes, limits.max_output_bytes)
         return ExecutionResult("success", output_mapping, output_bytes, usage.snapshot())
+    except RecursionError as exc:
+        error = ResourceLimitError("nesting_depth", limits.max_nesting_depth + 1, limits.max_nesting_depth)
+        return ExecutionResult("failure", None, None, usage.snapshot(), error.as_dict())
     except ToolSynthesisError as exc:
         return ExecutionResult("failure", None, None, usage.snapshot(), exc.as_dict())
     except (TypeError, ValueError, OverflowError) as exc:

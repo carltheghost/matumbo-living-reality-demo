@@ -4,9 +4,9 @@ This artifact records what is implemented at the first review boundary and what 
 
 ## Implemented now
 
-- `v03_tool_synthesis.py` defines a versioned typed AST, strict JSON parser, canonical serializer, pure table interpreter, independent resource counters, and structured failure reporting.
+- `v03_tool_synthesis.py` defines a versioned typed AST, strict JSON parser, pre-load byte/nesting guards, canonical serializer, pure table interpreter, evolving-schema validation, independent resource counters, and structured failure reporting.
 - The executable language has only `filter`, `project`, one numeric `derive`, and final `explicit_output`.
-- `v03_tool_synthesis_verifier.py` contains two hand-authored development gold cases, including duplicate-row retention and an empty table. Expected outputs are written independently of the interpreter, and the report is explicitly marked `complete_benchmark: false`.
+- `v03_tool_synthesis_verifier.py` contains two hand-authored development gold cases, including duplicate-row retention and an empty table. Expected outputs are written independently of the interpreter; output-table bytes must agree with execution bytes; an empty gold set is `inconclusive`; and the report is explicitly marked `complete_benchmark: false`.
 - `v03_specialist_interface.py` defines typed capability/request/result, verification state, memory-feedback state, four explicit execution kinds (internal learned skill, local generated tool, external tool adapter, and specialist-model adapter), and total-system budget accounting. The local registry has no provider and returns `unavailable_provider` without output.
 
 All accepted data is in-memory JSON. There is no shell, import, filesystem, process, network, external model, credential, or paid-resource path. Resource failures reject the complete execution; they never truncate a table or return a partial success.

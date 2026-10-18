@@ -44,7 +44,7 @@ The first implementation MUST support these ordered operations and no others:
 3. at most one `derive`, with one numeric left reference, one arithmetic operator, one numeric right reference, and one output name; and
 4. exactly one final `explicit_output`, with one or more named output columns.
 
-Programs MUST contain `filter` before `project` when both are present, MUST contain `derive` before `explicit_output`, and MUST end at `explicit_output`. The parser MUST reject loops, recursion, branching, imports, calls, lambdas, shell fragments, file paths, network addresses, embedded code, and unrecognized prose.
+Programs MUST contain every `filter` before every `project` when both are present, MUST contain `derive` before `explicit_output`, and MUST end at `explicit_output`. Field references MUST be checked against the evolving schema at every operation, including when the input has zero rows. The parser MUST reject loops, recursion, branching, imports, calls, lambdas, shell fragments, file paths, network addresses, embedded code, and unrecognized prose.
 
 - FR-4: Pure table semantics
 
@@ -62,7 +62,7 @@ Constants MUST be scalar JSON values and MUST be stored exactly as parsed. Non-f
 
 ### Independent resource bounds
 
-Input bytes, input tokens, specification tokens, literal count, literal bytes, AST nodes, interpreter steps, and output bytes MUST each have an independently enforced limit. Limits MUST be checked before work that could exceed them. A limit failure MUST return a typed failure with the resource name, observed amount, and configured limit. No output or partial result MUST be returned as a successful execution after a limit failure.
+Input bytes, input tokens, specification bytes/tokens, literal count, literal bytes, AST nodes, interpreter steps, output bytes, and JSON nesting depth MUST each have an independently enforced limit. Byte and nesting limits MUST be checked before JSON loading; recursion failures MUST become structured resource failures. Output projection work MUST be charged per row. A limit failure MUST return a typed failure with the resource name, observed amount, and configured limit. No output or partial result MUST be returned as a successful execution after a limit failure.
 
 - FR-7: Deterministic execution and result reporting
 
@@ -74,7 +74,7 @@ For a fixed specification, table, and limits, execution MUST be deterministic. A
 
 ### Independent verification
 
-The verifier MUST be a separate module from the parser/interpreter and MUST compare generated execution with hand-authored expected outputs for explicit development gold cases. It MUST use an independently defined canonical comparison path and MUST report every case result, not only an aggregate. A deliberately wrong program MUST fail verification. The development cases are smoke-level gold cases only; they MUST NOT be described as a complete training, validation, test, or generalization benchmark.
+The verifier MUST be a separate module from the parser/interpreter and MUST compare generated execution with hand-authored expected outputs for explicit development gold cases. It MUST use an independently defined canonical comparison path, require execution `output_bytes` to match the canonical output table, and MUST report every case result, not only an aggregate. An empty gold set MUST be `inconclusive`, not passed. A deliberately wrong program MUST fail verification. The development cases are smoke-level gold cases only; they MUST NOT be described as a complete training, validation, test, or generalization benchmark.
 
 - FR-9: Stable neural-construction boundary
 
@@ -201,7 +201,7 @@ verify_gold_cases(spec: ToolSpec, cases: sequence[GoldCase]) -> VerificationRepo
 ToolSpec(schema, version, name, constants, operations)
 ResourceLimits(max_input_bytes, max_input_tokens, max_spec_tokens,
                max_literals, max_literal_bytes, max_ast_nodes,
-               max_steps, max_output_bytes)
+               max_steps, max_output_bytes, max_nesting_depth)
 ExecutionResult(status, output_table, output_bytes, usage, error)
 SpecialistCapability(name, execution_kind, description, input_schema, output_schema,
                      max_input_bytes, max_output_bytes, max_latency_ms,

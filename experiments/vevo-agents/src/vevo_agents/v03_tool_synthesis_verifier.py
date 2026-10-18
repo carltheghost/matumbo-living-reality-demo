@@ -75,6 +75,13 @@ def verify_gold_cases(
     spec: ToolSpec,
     cases: tuple[GoldCase, ...],
 ) -> VerificationReport:
+    if not cases:
+        return VerificationReport(
+            status="inconclusive",
+            purpose="tiny explicit development gold cases",
+            complete_benchmark=False,
+            cases=(),
+        )
     results: list[CaseVerification] = []
     for case in cases:
         result: ExecutionResult = execute(spec, case.input_table)
@@ -84,13 +91,20 @@ def verify_gold_cases(
             if result.output_table is not None
             else None
         )
-        passed = result.status == "success" and observed_bytes == expected_bytes
+        output_bytes_consistent = (
+            result.output_bytes is not None
+            and observed_bytes is not None
+            and result.output_bytes == observed_bytes
+        )
+        passed = result.status == "success" and output_bytes_consistent and observed_bytes == expected_bytes
         error = None if passed else (result.error or {"code": "output_mismatch"})
         if not passed and result.status == "success":
             error = {
                 "code": "output_mismatch",
                 "expected_bytes": expected_bytes.decode("utf-8"),
                 "observed_bytes": observed_bytes.decode("utf-8") if observed_bytes else None,
+                "execution_output_bytes": result.output_bytes.decode("utf-8") if result.output_bytes else None,
+                "output_bytes_consistent": output_bytes_consistent,
             }
         results.append(CaseVerification(case.case_id, passed, expected_bytes, observed_bytes, error))
     return VerificationReport(

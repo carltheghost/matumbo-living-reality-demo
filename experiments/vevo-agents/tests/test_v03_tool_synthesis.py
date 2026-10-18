@@ -1,5 +1,6 @@
 import json
 import unittest
+from unittest.mock import patch
 
 from vevo_agents.v03_specialist_interface import (
     LocalSpecialistRegistry,
@@ -11,6 +12,8 @@ from vevo_agents.v03_specialist_interface import (
 )
 from vevo_agents.v03_tool_synthesis import (
     DEFAULT_RESOURCE_LIMITS,
+    ExecutionResult,
+    ResourceLimitError,
     ResourceLimits,
     SpecParseError,
     TOOL_SYNTHESIS_OUTPUT_SCHEMA,
@@ -154,6 +157,75 @@ class V03ToolSynthesisTests(unittest.TestCase):
         wrong_report = verify_gold_cases(parse_spec(json.dumps(wrong)), DEVELOPMENT_GOLD_CASES)
         self.assertFalse(wrong_report.passed)
         self.assertTrue(any(not case.passed for case in wrong_report.cases))
+
+    def test_empty_and_filter_to_empty_tables_cannot_hide_bad_field_refs(self):
+        missing = json.loads(DEVELOPMENT_SPEC_DOCUMENT)
+        missing["operations"][0]["left"]["name"] = "missing_score"
+        empty_table = DEVELOPMENT_GOLD_CASES[1].input_table
+        result = execute(parse_spec(json.dumps(missing)), empty_table)
+        self.assertEqual(result.status, "failure")
+        self.assertEqual(result.error["code"], "missing_field")
+
+        filtered = json.loads(DEVELOPMENT_SPEC_DOCUMENT)
+        filtered["operations"][2]["left"]["name"] = "missing_after_filter"
+        result = execute(parse_spec(json.dumps(filtered)), empty_table)
+        self.assertEqual(result.status, "failure")
+        self.assertEqual(result.error["code"], "missing_field")
+
+    def test_byte_caps_and_nesting_caps_precede_json_loading(self):
+        oversized_invalid = b"{" + b"x" * 1000
+        with self.assertRaises(ResourceLimitError) as raised:
+            parse_spec(oversized_invalid, limits=ResourceLimits(max_spec_bytes=16))
+        self.assertEqual(raised.exception.resource, "spec_bytes")
+
+        deep = "1"
+        for _ in range(40):
+            deep = "[" + deep + "]"
+        with self.assertRaises(ResourceLimitError) as raised:
+            parse_spec(
+                '{"schema":"vevo.v03.tool-synthesis.spec.v1","version":1,"name":"x","constants":{},"operations":[],"extra":'
+                + deep
+                + "}",
+                limits=ResourceLimits(max_nesting_depth=8),
+            )
+        self.assertEqual(raised.exception.resource, "nesting_depth")
+
+        result = execute(
+            self.spec,
+            oversized_invalid,
+            ResourceLimits(max_input_bytes=16),
+        )
+        self.assertEqual(result.status, "failure")
+        self.assertEqual(result.error["context"]["resource"], "input_bytes")
+
+    def test_actual_ast_and_projection_work_are_charged(self):
+        result = execute(self.spec, DEVELOPMENT_GOLD_CASES[0].input_table)
+        self.assertGreater(result.usage.ast_nodes, 0)
+        self.assertGreaterEqual(result.usage.steps, len(DEVELOPMENT_GOLD_CASES[0].expected_output["rows"]))
+
+    def test_filters_after_projects_are_rejected_by_static_order_contract(self):
+        invalid = json.loads(DEVELOPMENT_SPEC_DOCUMENT)
+        invalid["operations"] = [
+            invalid["operations"][1],
+            invalid["operations"][0],
+            invalid["operations"][3],
+        ]
+        with self.assertRaises(SpecParseError):
+            parse_spec(json.dumps(invalid))
+
+    def test_empty_gold_set_is_inconclusive(self):
+        report = verify_gold_cases(self.spec, ())
+        self.assertEqual(report.status, "inconclusive")
+        self.assertFalse(report.passed)
+
+    def test_verifier_requires_execution_bytes_to_match_output_table(self):
+        normal = execute(self.spec, DEVELOPMENT_GOLD_CASES[0].input_table)
+        tampered = ExecutionResult(normal.status, normal.output_table, b"{}", normal.usage, normal.error)
+        with patch("vevo_agents.v03_tool_synthesis_verifier.execute", return_value=tampered):
+            report = verify_gold_cases(self.spec, (DEVELOPMENT_GOLD_CASES[0],))
+        self.assertFalse(report.passed)
+        self.assertFalse(report.cases[0].passed)
+        self.assertFalse(report.cases[0].error["output_bytes_consistent"])
 
     def test_specialist_unavailable_state_never_fabricates_output(self):
         capability = SpecialistCapability(
