@@ -27,15 +27,15 @@
       "source": "src/domains/token-config.js",
       "staged": "services/vivo/web/phone/vendor/economy/src/domains/token-config.js",
       "bytes": 4333,
-      "sha256": "67f33a69ff16b71861185ace1aea52716fd1b6894b8c085f59f76fff5c7dbfb5",
-      "gitBlob": "07f18e49ac31e0c743cd37559790ad0998ca556a"
+      "sha256": "f42505beb8ea75261425007e009a83fdb88cf99f29c7b13e82bd77c3594bef7b",
+      "gitBlob": "81efa605a3b83112b435b225de6eb45b762c524c"
     },
     {
       "source": "src/domains/token-supply-policy.js",
       "staged": "services/vivo/web/phone/vendor/economy/src/domains/token-supply-policy.js",
       "bytes": 5908,
-      "sha256": "8753900ddff83d5a8dc70cf6c3f73012bf426d6bde6b4e9f8b58ff3fd972f384",
-      "gitBlob": "e33c199e69b63d2a89cd954163582ddfe3dbf3d2"
+      "sha256": "64ec3e1331d96412872139eaba715269fa9fe645fd69fbeeb08a4e8ea39f0f64",
+      "gitBlob": "21f5095c197a4834faafea263b9a3e5930fe9455"
     },
     {
       "source": "src/domains/token-economy-overview.js",

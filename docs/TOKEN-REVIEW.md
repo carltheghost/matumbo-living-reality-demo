@@ -2,6 +2,8 @@
 
 **Date:** 2026-09-20 | **Reviewer:** token-review workstream | **Baseline:** `docs/TOKEN-CONTRACT.md` on `main` (canonical v1): 1 TUMBO-SIM = 1,000 fluff; `REVERSE_WINDOW_TICKS`=1000; `VOID_TITHE_BPS`=10; `RIBBON_CAP`=5000; config in `src/domains/token-config.js`; accounts `u:<name>`/`b:<name>`/`sys:*`; idempotency keys + `IDEM_MISMATCH`; EchoProof hash chain; `tumbo:token`/`tumbo:tip` events; three.js r179.1 only; simulated labels everywhere.
 
+**Current status (2026-10-20):** The unresolved supply notes below describe the September review baseline and are superseded. The intended simulation-only maximum is now 40,000,000,000,000 TUMBO-SIM (40,000,000,000,000,000 fluff); current issued demo supply remains 10,000,000 TUMBO-SIM (10,000,000,000 fluff). See `docs/TOKEN.md`, `docs/TOKEN-CONTRACT.md`, and `src/domains/token-supply-policy.js`.
+
 ## Verdicts
 
 | PR | Branch | Verdict |

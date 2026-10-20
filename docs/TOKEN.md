@@ -14,9 +14,9 @@ This document describes the in-demo token system for maTumbo. Everything here is
 
 - **Label:** Always shown as TUMBO-SIM (or clearly marked simulated).
 - **Scope:** Demo state only. No screen may imply convertibility to fiat, crypto, prizes, or real-world value.
-- **Source of truth for tunables:** `src/domains/token-config.js` (supply constant, fluff scale, reverse window, Void tithe, ribbon cap).
+- **Source of truth for tunables:** `src/domains/token-config.js` (current simulated supply, intended maximum, fluff scale, reverse window, Void tithe, ribbon cap); exact JSON-safe maximum metadata is exposed by `src/domains/token-supply-policy.js`.
 
-Public supply figure: **undecided**. Do not invent or display a max-supply number in UI. The constitutional draft discusses options; product has not chosen a public figure.
+**Intended fixed maximum:** 40,000,000,000,000 TUMBO-SIM (40,000,000,000,000,000 fluff). This is read-only simulation policy metadata, not an issued amount or real-world token supply. The demo currently records 10,000,000 TUMBO-SIM (10,000,000,000 fluff) as its issued simulation supply. UI may show both only with clear labels, and must not imply the maximum has been minted or allocated.
 
 ---
 
@@ -105,14 +105,15 @@ Mascot framing is culture, not a legal shield. Simulation tonight; any real toke
 
 | Concern | Location |
 |--------|----------|
-| Tunables (supply constant, fluff, reverse window, Void tithe, ribbon cap) | `src/domains/token-config.js` |
+| Tunables (current simulation supply, intended maximum, fluff, reverse window, Void tithe, ribbon cap) | `src/domains/token-config.js` |
+| Exact, JSON-safe intended maximum policy metadata | `src/domains/token-supply-policy.js` |
 | Launch allocation projection (demo fixture) | `src/domains/asset-token.js` |
 | Aggregate recipient registry | `src/domains/distribution-registry.js` |
 | Decimal-safe Money helper | `src/domains/ledger-core/money.js` |
 | EchoProof / ledger core | `src/domains/ledger-core/` |
 | Launch rehearsal receipt UI | `src/render/launch-receipt.js` |
 
-**Public max supply is undecided (`TUMBO_MAX_SUPPLY = null`).** Demo projection math may use an internal rehearsal fixture for reconciliation only; that fixture is not a public commitment and must not be presented as “the” supply in user-facing copy.
+**Intended maximum policy:** 40,000,000,000,000 TUMBO-SIM (40,000,000,000,000,000 fluff), stored as exact policy metadata. This is not the currently issued quantity: the simulation supply remains 10,000,000 TUMBO-SIM (10,000,000,000 fluff). Neither number represents real issuance. Demo projection fixtures remain separate from both policy metadata and live simulation balances.
 
 ---
 

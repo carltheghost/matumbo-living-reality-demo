@@ -26,22 +26,22 @@ import {
 test("the fixed maximum is exact BigInt arithmetic and exceeds safe fluff integers", () => {
   assert.equal(typeof TUMBO_INTENDED_MAX_SUPPLY_TUMBO, "bigint");
   assert.equal(typeof TUMBO_INTENDED_MAX_SUPPLY_FLUFF, "bigint");
-  assert.equal(TUMBO_INTENDED_MAX_SUPPLY_TUMBO, 42_000_000_000_000n);
-  assert.equal(TUMBO_INTENDED_MAX_SUPPLY_FLUFF, 42_000_000_000_000_000n);
+  assert.equal(TUMBO_INTENDED_MAX_SUPPLY_TUMBO, 40_000_000_000_000n);
+  assert.equal(TUMBO_INTENDED_MAX_SUPPLY_FLUFF, 40_000_000_000_000_000n);
   assert.equal(TUMBO_INTENDED_MAX_SUPPLY_FLUFF, TUMBO_INTENDED_MAX_SUPPLY_TUMBO * BigInt(FLUFF_PER_TUMBO));
   assert.ok(TUMBO_INTENDED_MAX_SUPPLY_FLUFF > BigInt(Number.MAX_SAFE_INTEGER));
-  assert.equal(TUMBO_INTENDED_MAX_SUPPLY_TUMBO_DECIMAL, "42000000000000");
-  assert.equal(TUMBO_INTENDED_MAX_SUPPLY_FLUFF_DECIMAL, "42000000000000000");
+  assert.equal(TUMBO_INTENDED_MAX_SUPPLY_TUMBO_DECIMAL, "40000000000000");
+  assert.equal(TUMBO_INTENDED_MAX_SUPPLY_FLUFF_DECIMAL, "40000000000000000");
 });
 
 test("exact-unit helpers reject Number coercion and fractional whole-token values", () => {
-  assert.equal(tumboToFluffExact(42_000_000_000_000n), 42_000_000_000_000_000n);
-  assert.equal(fluffToTumboExact(42_000_000_000_000_000n), 42_000_000_000_000n);
+  assert.equal(tumboToFluffExact(40_000_000_000_000n), 40_000_000_000_000_000n);
+  assert.equal(fluffToTumboExact(40_000_000_000_000_000n), 40_000_000_000_000n);
   assert.throws(() => tumboToFluffExact(Number.MAX_SAFE_INTEGER), /bigint/);
-  assert.throws(() => fluffToTumboExact(42_000_000_000_000_001n), /whole-TUMBO/);
+  assert.throws(() => fluffToTumboExact(40_000_000_000_000_001n), /whole-TUMBO/);
   assert.throws(() => parseCanonicalUintDecimal(Number.MAX_SAFE_INTEGER + 1, "unsafe"), /canonical unsigned decimal string/);
   assert.equal(parseCanonicalUintDecimal("9007199254740992"), 9_007_199_254_740_992n);
-  assert.equal(formatExactInteger(42_000_000_000_000_000n), "42,000,000,000,000,000");
+  assert.equal(formatExactInteger(40_000_000_000_000_000n), "40,000,000,000,000,000");
 });
 
 test("policy metadata keeps current issued simulation supply distinct from intended maximum", () => {
@@ -66,7 +66,8 @@ test("policy metadata keeps current issued simulation supply distinct from inten
 test("policy serialization is canonical string-only JSON and round-trips exactly", () => {
   const raw = serializeTumboSupplyPolicy();
   assert.equal(raw, JSON.stringify(getTumboSupplyPolicy()));
-  assert.equal(raw.includes("42000000000000000"), true);
+  assert.equal(raw.includes("40000000000000000"), true);
+  assert.equal(raw.includes("42000000000000000"), false);
   assert.equal(/(?:\d)n(?:[,}\]])/.test(raw), false, "serialized policy must not contain BigInt syntax");
   assert.deepEqual(loadTumboSupplyPolicy(raw), getTumboSupplyPolicy());
   assert.deepEqual(loadTumboSupplyPolicy(JSON.parse(raw)), getTumboSupplyPolicy());
@@ -75,11 +76,12 @@ test("policy serialization is canonical string-only JSON and round-trips exactly
 test("policy loader rejects rounded, historical, numeric, and extra-field values", () => {
   const base = JSON.parse(serializeTumboSupplyPolicy());
   const cases = [
-    ["rounded fluff", { ...base, intendedMaximum: { ...base.intendedMaximum, fluff: "42000000000000001" } }],
-    ["historical whole-token cap", { ...base, intendedMaximum: { ...base.intendedMaximum, wholeTumbo: "40000000000000" } }],
-    ["leading zero", { ...base, intendedMaximum: { ...base.intendedMaximum, fluff: "042000000000000000" } }],
-    ["numeric cap", { ...base, intendedMaximum: { ...base.intendedMaximum, fluff: 42000000000000000 } }],
-    ["fractional cap", { ...base, intendedMaximum: { ...base.intendedMaximum, fluff: "42000000000000000.0" } }],
+    ["historical fluff cap", { ...base, intendedMaximum: { ...base.intendedMaximum, fluff: "42000000000000000" } }],
+    ["rounded fluff", { ...base, intendedMaximum: { ...base.intendedMaximum, fluff: "40000000000000001" } }],
+    ["historical whole-token cap", { ...base, intendedMaximum: { ...base.intendedMaximum, wholeTumbo: "42000000000000" } }],
+    ["leading zero", { ...base, intendedMaximum: { ...base.intendedMaximum, fluff: "040000000000000000" } }],
+    ["numeric cap", { ...base, intendedMaximum: { ...base.intendedMaximum, fluff: 40000000000000000 } }],
+    ["fractional cap", { ...base, intendedMaximum: { ...base.intendedMaximum, fluff: "40000000000000000.0" } }],
     ["extra policy field", { ...base, policyRevision: 2 }],
   ];
   for (const [label, value] of cases) {

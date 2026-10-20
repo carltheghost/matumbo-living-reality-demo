@@ -16,9 +16,12 @@ Proof of Presence) and simulated x402-style bot micropayments.
 - **Base unit:** integer `fluff`. `1 TUMBO-SIM = 1,000 fluff`. All amounts are integers.
   Every amount must satisfy `Number.isSafeInteger` and be `>= 0` at the boundary.
   (A production port must use BigInt; the prototype asserts safe-integer range.)
-- **Assets (fixed supply, simulation):**
-  - `TUMBO` — the native sim coin. Supply: **420,000,000,000 TUMBO**
-    (= 420,000,000,000,000 fluff), matching tokenomics v3 baseline under review.
+- **Assets (simulation balances and supply policy):**
+  - `TUMBO` — the native sim coin. Current issued simulation supply: **10,000,000 TUMBO-SIM**
+    (= **10,000,000,000 fluff**), from `TOKEN_TOTAL_SUPPLY`. Its separate intended fixed maximum is
+    **40,000,000,000,000 TUMBO-SIM** (= **40,000,000,000,000,000 fluff**), represented by exact
+    BigInt/decimal-string policy metadata. That ceiling does not change demo genesis or minting.
+    The prototype keeps balances in safe integers, so the maximum is metadata only.
   - `sMIMAS` — synthetic asset for the demo's synthetic market (Mimas futures,
     story-flavoured). Supply: **21,000,000 sMIMAS** (= 21,000,000,000 fluff),
     held at genesis by the `market` account. Never sold as real; pure demo.

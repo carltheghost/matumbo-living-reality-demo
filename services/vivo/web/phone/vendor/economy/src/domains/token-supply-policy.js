@@ -8,7 +8,7 @@
  *
  * BigInt is used for internal unit arithmetic. The policy codec emits only
  * canonical decimal strings so it is safe to JSON serialize and cannot round
- * the 42 quadrillion-fluff maximum through Number.
+ * the 40 quadrillion-fluff maximum through Number.
  */
 
 import {
